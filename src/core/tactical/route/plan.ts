@@ -1,5 +1,4 @@
-import { Tile, World } from "../geometry/coordinate.js";
-import type { TilePosition, WorldPosition } from "../geometry/coordinate.js";
+import { Tile, World, type TilePosition, type WorldPosition } from "../geometry/coordinate.js";
 import type { NavigationGoal } from "../navigation/request.js";
 import { nextCheckpointIndex } from "./execution.js";
 import type { RouteState } from "./state.js";
@@ -20,30 +19,36 @@ export type RoutePredictionTarget =
 
 export function predictRouteTarget(state: Readonly<RouteState>): RoutePredictionTarget {
     const progress = state.progress;
+
     if (progress.phase === "COMPLETED") {
         return { type: "COMPLETED" };
     }
+
     if (progress.phase === "CHECKPOINTS") {
         let index = progress.checkpointIndex;
+
         while (index < state.definition.checkpoints.length) {
             const checkpoint = state.definition.checkpoints[index]!;
+
             switch (checkpoint.type) {
                 case "MOVE":
                 case "PATROL_MOVE":
                 case "MAP_OFFSET_MOVE": {
-                    const goal =
-                        index === progress.checkpointIndex && progress.checkpoint.type === "MOVE"
-                            ? progress.checkpoint.goal
-                            : {
-                                  position:
-                                      checkpoint.type === "MAP_OFFSET_MOVE"
-                                          ? World.translate(
-                                                Tile.center(checkpoint.target.position),
-                                                checkpoint.target.reachOffset,
-                                            )
-                                          : Tile.center(checkpoint.target.position),
-                                  reachDistance: Math.max(checkpoint.target.reachDistance, 0.05),
-                              };
+                    let goal: NavigationGoal;
+
+                    if (index === progress.checkpointIndex && progress.checkpoint.type === "MOVE") {
+                        goal = progress.checkpoint.goal;
+                    } else {
+                        const center = Tile.center(checkpoint.target.position);
+                        goal = {
+                            position:
+                                checkpoint.type === "MAP_OFFSET_MOVE"
+                                    ? World.translate(center, checkpoint.target.reachOffset)
+                                    : center,
+                            reachDistance: Math.max(checkpoint.target.reachDistance, 0.05),
+                        };
+                    }
+
                     return {
                         type: "CHECKPOINT_TARGET",
                         checkpointIndex: index,
@@ -51,11 +56,20 @@ export function predictRouteTarget(state: Readonly<RouteState>): RoutePrediction
                         goal,
                     };
                 }
+
+                case "ALERT":
+                case "APPEAR_AT_POS":
+                case "DISAPPEAR":
+                case "WAIT_CURRENT_FRAGMENT_TICKS":
+                case "WAIT_CURRENT_WAVE_TICKS":
+                case "WAIT_FOR_PLAY_TICK":
+                case "WAIT_FOR_TICKS":
                 default:
                     index = nextCheckpointIndex(state.definition, index);
             }
         }
     }
+
     return {
         type: "END_TARGET",
         targetTile: state.definition.endPosition,
@@ -71,6 +85,7 @@ export function isRouteEndReached(
     locatorPosition: WorldPosition,
 ): boolean {
     const progress = state.progress;
+
     if (progress.phase === "COMPLETED") {
         return true;
     }
@@ -81,8 +96,10 @@ export function isRouteEndReached(
     ) {
         return false;
     }
+
     const end = state.definition.endPosition;
     const tile = World.toTile(locatorPosition);
+
     return (
         tile[0] === end[0] &&
         tile[1] === end[1] &&
@@ -92,9 +109,11 @@ export function isRouteEndReached(
 
 export function isRouteCheckpointReady(state: Readonly<RouteState>): boolean {
     const progress = state.progress;
+
     if (progress.phase !== "CHECKPOINTS") {
         return false;
     }
+
     return (
         progress.checkpoint.type === "ENTERED" ||
         (progress.checkpoint.type === "WAIT" && progress.checkpoint.remainingTicks <= 0)
@@ -107,12 +126,14 @@ export function isRouteMoveCheckpointReached(
     spatiallyReachable: boolean,
 ): boolean {
     const progress = state.progress;
+
     if (progress.phase !== "CHECKPOINTS" || progress.checkpoint.type !== "MOVE") {
         return false;
     }
     if (!state.alwaysCheckCurrentPoint && !spatiallyReachable) {
         return true;
     }
+
     return World.withinDistance(
         locatorPosition,
         progress.checkpoint.goal.position,

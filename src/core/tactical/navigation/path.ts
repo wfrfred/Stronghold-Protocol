@@ -77,5 +77,6 @@ export function createNavigationPath<I extends NavigationIntent>(
     ) {
         throw new RangeError("navigation field does not match the request");
     }
+
     return Object.freeze({ request, field });
 }

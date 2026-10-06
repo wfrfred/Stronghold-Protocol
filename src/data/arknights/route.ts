@@ -1,9 +1,9 @@
 import type { TilePosition, WorldOffset } from "../../core/tactical/geometry/coordinate.js";
-import { createRouteDefinition } from "../../core/tactical/route/definition.js";
-import type {
-    RouteCheckpoint,
-    RouteDefinition,
-    RouteMoveTarget,
+import {
+    createRouteDefinition,
+    type RouteCheckpoint,
+    type RouteDefinition,
+    type RouteMoveTarget,
 } from "../../core/tactical/route/definition.js";
 import { secondsToTicks } from "./tick.js";
 
@@ -13,11 +13,13 @@ function object(value: unknown, name: string, fields: readonly string[]): Record
     }
 
     const data = value as Record<string, unknown>;
+
     for (const key of Object.keys(data)) {
         if (!fields.includes(key)) {
             throw new TypeError(`${name} has unsupported field ${key}`);
         }
     }
+
     return data;
 }
 
@@ -39,11 +41,13 @@ function boolean(value: unknown, name: string): boolean {
 
 function position(value: unknown, name: string): TilePosition {
     const data = object(value, name, ["row", "col"]);
+
     return [number(data.row, `${name}.row`), number(data.col, `${name}.col`)];
 }
 
 function offset(value: unknown, name: string): WorldOffset {
     const data = object(value, name, ["x", "y"]);
+
     return [number(data.x, `${name}.x`), number(data.y, `${name}.y`)];
 }
 
@@ -65,11 +69,13 @@ function checkpoint(value: unknown): RouteCheckpoint {
         "randomizeReachOffset",
         "reachDistance",
     ]);
+
     switch (data.type) {
         case "MOVE":
         case "PATROL_MOVE":
         case "MAP_OFFSET_MOVE":
             return { type: data.type, target: moveTarget(data) };
+
         case "WAIT_FOR_SECONDS":
             return {
                 type: "WAIT_FOR_TICKS",
@@ -78,6 +84,7 @@ function checkpoint(value: unknown): RouteCheckpoint {
                     secondsToTicks(number(data.time, "checkpoint.time"), "checkpoint.time"),
                 ),
             };
+
         case "WAIT_FOR_PLAY_TIME":
             return {
                 type: "WAIT_FOR_PLAY_TICK",
@@ -86,6 +93,7 @@ function checkpoint(value: unknown): RouteCheckpoint {
                     secondsToTicks(number(data.time, "checkpoint.time"), "checkpoint.time"),
                 ),
             };
+
         case "WAIT_CURRENT_FRAGMENT_TIME":
             return {
                 type: "WAIT_CURRENT_FRAGMENT_TICKS",
@@ -94,6 +102,7 @@ function checkpoint(value: unknown): RouteCheckpoint {
                     secondsToTicks(number(data.time, "checkpoint.time"), "checkpoint.time"),
                 ),
             };
+
         case "WAIT_CURRENT_WAVE_TIME":
             return {
                 type: "WAIT_CURRENT_WAVE_TICKS",
@@ -102,15 +111,18 @@ function checkpoint(value: unknown): RouteCheckpoint {
                     secondsToTicks(number(data.time, "checkpoint.time"), "checkpoint.time"),
                 ),
             };
+
         case "APPEAR_AT_POS":
             return {
                 type: data.type,
                 position: position(data.position, "checkpoint.position"),
                 reachOffset: offset(data.reachOffset, "checkpoint.reachOffset"),
             };
+
         case "DISAPPEAR":
         case "ALERT":
             return { type: data.type };
+
         default:
             throw new RangeError("unsupported Arknights route checkpoint type");
     }
@@ -130,6 +142,7 @@ export function parseRouteDefinition(value: unknown): RouteDefinition {
         "visitEveryCheckPoint",
     ]);
     const pathMotionMode = data.motionMode;
+
     if (pathMotionMode !== "WALK" && pathMotionMode !== "FLY") {
         throw new RangeError("unsupported Arknights route motion mode");
     }
@@ -138,8 +151,10 @@ export function parseRouteDefinition(value: unknown): RouteDefinition {
     }
 
     const checkpoints: RouteCheckpoint[] = [];
+
     for (let index = 0; index < data.checkpoints.length; index++) {
-        const value = data.checkpoints[index];
+        const value: unknown = data.checkpoints[index];
+
         if (!Object.hasOwn(data.checkpoints, index) || value === undefined) {
             throw new TypeError("route.checkpoints must be dense");
         }

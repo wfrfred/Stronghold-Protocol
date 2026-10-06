@@ -5,8 +5,7 @@ import type {
     SpatialEffectSource,
     SpatialEffectRegion,
 } from "../battlefield/navigation-effect.js";
-import { createWorldPosition } from "../geometry/coordinate.js";
-import type { WorldPosition } from "../geometry/coordinate.js";
+import { createWorldPosition, type WorldPosition } from "../geometry/coordinate.js";
 import type { Direction } from "../geometry/direction.js";
 import type { RangeGrid } from "../geometry/range.js";
 import type { Unit, UnitDefinition } from "../unit/unit.js";
@@ -72,7 +71,9 @@ export function createPredefinedInstanceDefinition(
     if (typeof definition.initiallyPresent !== "boolean") {
         throw new TypeError("predefined presence must be boolean");
     }
+
     const creation = definition.creation;
+
     return Object.freeze({
         id: definition.id,
         alias: definition.alias,
@@ -106,18 +107,23 @@ export function predefinedIdsForAlias(
 
 function nextIdentity(value: number): number {
     const next = value + 1;
+
     if (!Number.isSafeInteger(value) || value < 0 || !Number.isSafeInteger(next)) {
         throw new RangeError("predefined instance identity overflow");
     }
+
     return next;
 }
 
 function initializeUnit(creation: PredefinedUnitCreation, id: number): Unit {
     const unit: Unit = { id, definition: creation.definition, position: creation.position };
+
     if (!hasVitalityDefinition(creation.definition)) {
         return unit;
     }
+
     const initialized = { ...unit, vitality: { hp: creation.definition.vitality.maxHp } };
+
     return initialized;
 }
 
@@ -130,19 +136,25 @@ export function changePredefinedInstances(
     if (commands.length === 0) {
         return { presence: initialPresence, execution: initialExecution, changes: [] };
     }
+
     const presence = new Map(initialPresence.map((binding) => [binding.definitionId, binding]));
     const changes: BattlefieldChange[] = [];
     let execution = initialExecution;
+
     for (const command of commands) {
         const definition = definitions.find((definition) => definition.id === command.definitionId);
+
         if (definition === undefined) {
             throw new RangeError(`unknown predefined definition: ${command.definitionId}`);
         }
+
         const binding = presence.get(command.definitionId);
+
         if (command.type === "REMOVE_PREDEFINED") {
             if (binding === undefined) {
                 continue;
             }
+
             changes.push(
                 binding.source.type === "UNIT"
                     ? { type: "REMOVE_UNIT", unitId: binding.source.unitId, reason: command.reason }
@@ -158,12 +170,14 @@ export function changePredefinedInstances(
         if (binding !== undefined) {
             continue;
         }
+
         const creation = definition.creation;
         let source: SpatialEffectSource;
         let contributions: readonly {
             readonly definition: NavigationEffectDefinition;
             readonly region: SpatialEffectRegion;
         }[];
+
         if (creation.type === "UNIT") {
             source = Object.freeze({ type: "UNIT", unitId: execution.nextUnitId });
             changes.push({
@@ -193,7 +207,9 @@ export function changePredefinedInstances(
             contributions = creation.navigationEffects;
             execution = { ...execution, nextMechanismId: nextIdentity(execution.nextMechanismId) };
         }
+
         presence.set(command.definitionId, { definitionId: command.definitionId, source });
+
         for (const contribution of contributions) {
             changes.push({
                 type: "ADD_EFFECT",
@@ -212,6 +228,7 @@ export function changePredefinedInstances(
             };
         }
     }
+
     return {
         presence: changes.length === 0 ? initialPresence : [...presence.values()],
         execution,
@@ -232,6 +249,7 @@ export function createPredefinedSystem(
 } {
     return {
         createState: () => [],
+
         step(input, state) {
             const commands = input.commands.filter(
                 (command): command is PredefinedCommand =>
@@ -243,6 +261,7 @@ export function createPredefinedSystem(
                 commands,
                 input.execution,
             );
+
             return {
                 state: changed.presence,
                 changes: changed.changes,

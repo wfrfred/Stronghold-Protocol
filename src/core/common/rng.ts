@@ -59,18 +59,24 @@ export function createRng(seed: Seed): Rng {
         let t = rngState;
         t = Math.imul(t ^ (t >>> 15), t | 1);
         t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+
         return ((t ^ (t >>> 14)) >>> 0) / UINT32_RANGE;
     }
 
     function int(a: number, b?: number): number {
         const lower = b === undefined ? 0 : a;
-        const upper = b === undefined ? a : b;
+        let upper = a;
+
+        if (b !== undefined) {
+            upper = b;
+        }
 
         if (!Number.isSafeInteger(lower) || !Number.isSafeInteger(upper) || lower >= upper) {
             throw new RangeError(`invalid integer range [${lower}, ${upper})`);
         }
 
         const width = upper - lower;
+
         if (width > UINT32_RANGE) {
             throw new RangeError("integer range width must not exceed 2 ** 32");
         }
@@ -128,8 +134,8 @@ export function createRng(seed: Seed): Rng {
 
         for (let i = result.length - 1; i > 0; i--) {
             const j = int(i + 1);
-
             const tmp = result[i]!;
+
             result[i] = result[j]!;
             result[j] = tmp;
         }

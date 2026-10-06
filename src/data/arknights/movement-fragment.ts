@@ -1,6 +1,5 @@
 import type { Seed } from "../../core/common/rng.js";
-import { createBattleSpec } from "../../core/tactical/battle/spec.js";
-import type { BattleSpec } from "../../core/tactical/battle/spec.js";
+import { createBattleSpec, type BattleSpec } from "../../core/tactical/battle/spec.js";
 import type { ScheduledEnemySpawn } from "../../core/tactical/battle/spawning.js";
 import { createRouteTiming } from "../../core/tactical/route/state.js";
 import type { ArknightsLevelDefinition } from "./level.js";
@@ -33,19 +32,23 @@ export function compileLevelMovementFragment(
     if (selection.waveIndex !== 0 || selection.fragmentIndex !== 0) {
         throw new RangeError("later wave and fragment start times require a wave scheduler");
     }
+
     const wave = level.waves[0];
     const fragment = wave?.fragments[0];
+
     if (wave === undefined || fragment === undefined) {
         throw new RangeError("selected fragment does not exist");
     }
     if (wave.advancedWaveTag !== null) {
         throw new RangeError("advanced wave tags require a wave scheduler");
     }
+
     for (const predefines of [level.predefines, level.hardPredefines]) {
         if (predefines.characterInsts.length !== 0 || predefines.tokenInsts.length !== 0) {
             throw new RangeError("predefined instances require a content initializer");
         }
     }
+
     if (
         !level.options.steeringEnabled ||
         level.options.functionDisableMask !== "NONE" ||
@@ -53,7 +56,9 @@ export function compileLevelMovementFragment(
     ) {
         throw new RangeError("unsupported level movement controls");
     }
+
     const selected = new Set<number>();
+
     for (const index of selection.actionIndices) {
         if (
             !Number.isSafeInteger(index) ||
@@ -63,11 +68,13 @@ export function compileLevelMovementFragment(
         ) {
             throw new RangeError("action selection requires unique existing indices");
         }
+
         selected.add(index);
     }
     if (selected.size === 0) {
         throw new RangeError("movement fragment must select at least one action");
     }
+
     const fragmentStartedAtSeconds = wave.preDelay + fragment.preDelay;
     const timing = createRouteTiming({
         waveStartedAtTick: 0,
@@ -75,20 +82,23 @@ export function compileLevelMovementFragment(
     });
     const spawns: ScheduledEnemySpawn[] = [];
     const omittedActions: string[] = [];
+
     for (let waveIndex = 0; waveIndex < level.waves.length; waveIndex++) {
-        for (
-            let fragmentIndex = 0;
-            fragmentIndex < level.waves[waveIndex]!.fragments.length;
-            fragmentIndex++
-        ) {
-            const currentFragment = level.waves[waveIndex]!.fragments[fragmentIndex]!;
+        const fragments = level.waves[waveIndex]!.fragments;
+
+        for (let fragmentIndex = 0; fragmentIndex < fragments.length; fragmentIndex++) {
+            const currentFragment = fragments[fragmentIndex]!;
+
             for (let actionIndex = 0; actionIndex < currentFragment.actions.length; actionIndex++) {
                 const path = `waves[${waveIndex}].fragments[${fragmentIndex}].actions[${actionIndex}]`;
+
                 if (waveIndex !== 0 || fragmentIndex !== 0 || !selected.has(actionIndex)) {
                     omittedActions.push(path);
                     continue;
                 }
+
                 const action = currentFragment.actions[actionIndex]!;
+
                 if (
                     !action.managedByScheduler ||
                     action.blockFragment ||
@@ -99,12 +109,14 @@ export function compileLevelMovementFragment(
                         "fragment requires unconditional scheduled SPAWN actions without blocking rules",
                     );
                 }
+
                 const spawn = resolveActionSpawn(
                     level,
                     action,
                     level.routes[action.routeIndex]!,
                     options.resolveEnemy,
                 );
+
                 for (let index = 0; index < action.count; index++) {
                     spawns.push({
                         ...spawn,
@@ -117,6 +129,7 @@ export function compileLevelMovementFragment(
             }
         }
     }
+
     return Object.freeze({
         spec: createBattleSpec({
             map: level.map,

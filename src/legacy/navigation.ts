@@ -44,18 +44,23 @@ export function navigationMapFromGrid(
     options: LegacyNavigationOptions = {},
 ): NavigationMap {
     let snapshot = snapshots.get(grid);
-    if (snapshot === undefined || snapshot.version !== grid.version) {
+
+    if (snapshot?.version !== grid.version) {
         snapshot = { version: grid.version, maps: new Map() };
         snapshots.set(grid, snapshot);
     }
+
     const pathMotionMode = options.pathMotionMode ?? "WALK";
     const ignoreObstacles = options.ignoreObstacles ?? false;
     const key = `${pathMotionMode}:${ignoreObstacles}`;
     const cached = snapshot.maps.get(key);
+
     if (cached !== undefined) {
         return cached;
     }
+
     const cells = [];
+
     for (let row = 0; row < grid.rows; row++) {
         for (let col = 0; col < grid.cols; col++) {
             cells.push({
@@ -71,6 +76,7 @@ export function navigationMapFromGrid(
             });
         }
     }
+
     const map = createNavigationMap({
         rows: grid.rows,
         columns: grid.cols,
@@ -79,6 +85,7 @@ export function navigationMapFromGrid(
         cells,
     });
     snapshot.maps.set(key, map);
+
     return map;
 }
 
@@ -90,23 +97,28 @@ export function flowFieldForGrid(
 ): LegacyFlowField {
     const map = navigationMapFromGrid(grid, options);
     let mapFields = fields.get(map);
+
     if (mapFields === undefined) {
         mapFields = new Map();
         fields.set(map, mapFields);
     }
+
     const allowDiagonalMove = options.allowDiagonal ?? true;
     const key = `${targetRow}:${targetCol}:${allowDiagonalMove}`;
     const cached = mapFields.get(key);
+
     if (cached !== undefined) {
         return cached;
     }
+
     const field = buildNavigationField(map, {
         targetTile: [targetRow, targetCol],
         allowDiagonalMove,
     });
-    const dist: number[] = [],
-        parent: number[] = [],
-        next: number[] = [];
+    const dist: number[] = [];
+    const parent: number[] = [];
+    const next: number[] = [];
+
     for (const node of field.nodes) {
         dist.push(node.type === "UNREACHABLE" ? -1 : node.distance);
         parent.push(
@@ -114,6 +126,7 @@ export function flowFieldForGrid(
         );
         next.push(node.type === "REACHABLE" ? node.next[0] * map.columns + node.next[1] : -1);
     }
+
     const result = Object.freeze({
         field,
         dest: targetRow * map.columns + targetCol,
@@ -123,6 +136,7 @@ export function flowFieldForGrid(
         version: map.revision,
     });
     mapFields.set(key, result);
+
     return result;
 }
 
@@ -135,22 +149,28 @@ export function waypointsForGrid(
     options: LegacyNavigationOptions = {},
 ): readonly TilePosition[] | null {
     const map = navigationMapFromGrid(grid, options);
+
     if (
         !NavigationMap.contains(map, [startRow, startCol]) ||
         !NavigationMap.contains(map, [targetRow, targetCol])
     ) {
         return null;
     }
+
     const flow = flowFieldForGrid(grid, targetRow, targetCol, options);
     const start = startRow * map.columns + startCol;
+
     if (flow.dist[start]! < 0) {
         return null;
     }
+
     const positions: TilePosition[] = [Object.freeze([startRow, startCol])];
     let current = start;
+
     while (current !== flow.dest) {
         current = flow.next[current]!;
         positions.push(Object.freeze([Math.floor(current / map.columns), current % map.columns]));
     }
+
     return Object.freeze(positions);
 }

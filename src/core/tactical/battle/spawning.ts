@@ -1,7 +1,5 @@
-import { initializeRoutedEnemy } from "../unit/enemy.js";
-import type { RoutedEnemy } from "../unit/enemy.js";
+import { initializeRoutedEnemy, type RoutedEnemy, type EnemyDefinition } from "../unit/enemy.js";
 import type { BattleExecutionState } from "./state.js";
-import type { EnemyDefinition } from "../unit/enemy.js";
 import type { RouteDefinition } from "../route/definition.js";
 import type { RouteTiming } from "../route/state.js";
 import type { UnitRouteSignal } from "./route-control.js";
@@ -16,11 +14,9 @@ import {
     isSpawnScheduleCompleted,
     recordScheduleSpawns,
     resolveScheduleUnits,
-} from "./schedule.js";
-import type {
-    SpawnScheduleDefinition,
-    SpawnScheduleState,
-    SpawnScheduleTrigger,
+    type SpawnScheduleDefinition,
+    type SpawnScheduleState,
+    type SpawnScheduleTrigger,
 } from "./schedule.js";
 
 export interface EnemySpawnDefinition {
@@ -49,6 +45,7 @@ export function spawnEnemies(
     let { rngState, nextUnitId, nextNavigationRequestId } = execution;
     const enemies: RoutedEnemy[] = [];
     const signals: UnitRouteSignal[] = [];
+
     for (const spawn of spawns) {
         const initialized = initializeRoutedEnemy({
             id: nextUnitId,
@@ -60,18 +57,23 @@ export function spawnEnemies(
             rngState,
             nextNavigationRequestId,
         });
+
         enemies.push(initialized.enemy);
         signals.push(
             ...initialized.signals.map((signal) => ({ ...signal, unitId: initialized.enemy.id })),
         );
         rngState = initialized.rngState;
         nextNavigationRequestId = initialized.nextNavigationRequestId;
-        const next = nextUnitId + 1;
-        if (!Number.isSafeInteger(next)) {
+
+        const nextIdentity = nextUnitId + 1;
+
+        if (!Number.isSafeInteger(nextIdentity)) {
             throw new RangeError("unit identity overflow");
         }
-        nextUnitId = next;
+
+        nextUnitId = nextIdentity;
     }
+
     return {
         enemies,
         signals,
@@ -84,18 +86,23 @@ export function spawnEnemies(
 
 function enemySpawnEvents(spawned: SpawnedEnemies, tick: number): BattleEvent[] {
     const signalsByUnit = new Map<UnitId, UnitRouteSignal[]>();
+
     for (const signal of spawned.signals) {
         const signals = signalsByUnit.get(signal.unitId) ?? [];
         signals.push(signal);
         signalsByUnit.set(signal.unitId, signals);
     }
+
     const events: BattleEvent[] = [];
+
     for (const enemy of spawned.enemies) {
         events.push({ type: "ENEMY_SPAWNED", unitId: enemy.id, tick });
+
         for (const signal of signalsByUnit.get(enemy.id) ?? []) {
             events.push({ type: "ROUTE", ...signal, tick });
         }
     }
+
     return events;
 }
 
@@ -112,6 +119,7 @@ export function createSpawnScheduleSystem(
 } {
     return {
         createState: () => createSpawnScheduleState(definition),
+
         spawn(input, state) {
             const triggers: SpawnScheduleTrigger[] = input.commands.filter(
                 (command) => command.type === "TRIGGER_BRANCH",
@@ -121,6 +129,7 @@ export function createSpawnScheduleSystem(
                 triggers,
             });
             const spawned = spawnEnemies(scheduled.spawns, input.execution, input.tick);
+
             return {
                 state: recordScheduleSpawns(
                     scheduled.state,
@@ -132,6 +141,7 @@ export function createSpawnScheduleSystem(
                 execution: spawned.execution,
             };
         },
+
         resolve(input, state) {
             return {
                 state: resolveScheduleUnits(
@@ -143,6 +153,7 @@ export function createSpawnScheduleSystem(
                 execution: input.execution,
             };
         },
+
         isCompleted: (state) => isSpawnScheduleCompleted(definition, state),
         counts: (state) => ({
             spawnedCount: getSpawnedCount(state),

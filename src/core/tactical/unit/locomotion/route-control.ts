@@ -1,9 +1,7 @@
-import { World } from "../../geometry/coordinate.js";
-import type { WorldOffset, WorldPosition } from "../../geometry/coordinate.js";
+import { World, type WorldOffset, type WorldPosition } from "../../geometry/coordinate.js";
 import type { NavigationFieldCache } from "../../navigation/cache.js";
 import type { NavigationMaps } from "../../navigation/map.js";
-import { createNavigationPath } from "../../navigation/path.js";
-import type { NavigationPredictionSelection } from "../../navigation/path.js";
+import { createNavigationPath, type NavigationPredictionSelection } from "../../navigation/path.js";
 import {
     initializeNavigationCursor,
     selectNavigationPredictionTarget,
@@ -16,14 +14,19 @@ import {
     getNavigationRequest,
     predictNavigation,
     startNavigationRequest,
+    type NavigationState,
 } from "../../navigation/state.js";
-import type { NavigationState } from "../../navigation/state.js";
 import type { RouteDefinition } from "../../route/definition.js";
-import { advanceRoute, enterRoute, routeNavigationOptions } from "../../route/execution.js";
-import type { RouteExecutionContext, RouteSignal, RouteTransition } from "../../route/execution.js";
+import {
+    advanceRoute,
+    enterRoute,
+    routeNavigationOptions,
+    type RouteExecutionContext,
+    type RouteSignal,
+    type RouteTransition,
+} from "../../route/execution.js";
 import { predictRouteTarget } from "../../route/plan.js";
-import { createRouteState } from "../../route/state.js";
-import type { RouteState, RouteTiming } from "../../route/state.js";
+import { createRouteState, type RouteState, type RouteTiming } from "../../route/state.js";
 import type { RouteControlState } from "./state.js";
 
 export interface LocatedRouteSignal {
@@ -57,6 +60,7 @@ function applyTransition(
     present: boolean,
 ): RouteControlTransition {
     const signals: LocatedRouteSignal[] = [];
+
     for (const signal of transition.signals) {
         if (signal.type === "DISAPPEAR") {
             present = false;
@@ -64,14 +68,18 @@ function applyTransition(
             position = signal.position;
             present = true;
         }
+
         signals.push({ signal, position });
     }
-    const navigation =
-        transition.request !== undefined
-            ? startNavigationRequest(control.navigation, transition.request)
-            : transition.state === control.route || isMovingRoute(transition.state)
-              ? control.navigation
-              : clearNavigationRequest(control.navigation);
+
+    let navigation = control.navigation;
+
+    if (transition.request !== undefined) {
+        navigation = startNavigationRequest(navigation, transition.request);
+    } else if (transition.state !== control.route && !isMovingRoute(transition.state)) {
+        navigation = clearNavigationRequest(navigation);
+    }
+
     return {
         control:
             transition.state === control.route && navigation === control.navigation
@@ -129,17 +137,22 @@ export function bindRouteNavigation(
     const navigation = control.navigation;
     const activity = navigation.execution.activity;
     const map = context.maps[navigation.pathMotionMode];
+
     if (
         (activity.type === "FOLLOWING" || activity.type === "UNREACHABLE") &&
         activity.path.field.map === map
     ) {
         return control;
     }
+
     const request = getNavigationRequest(navigation);
+
     if (request === null) {
         throw new Error("moving route requires a navigation request");
     }
+
     const path = createNavigationPath(request, context.fieldCache.get(map, request));
+
     return { ...control, navigation: bindNavigationPath(navigation, path, position).state };
 }
 
@@ -154,19 +167,25 @@ export function predictRouteControl(
     if (isMovingRoute(control.route)) {
         control = bindRouteNavigation(control, position, context);
         const activity = control.navigation.execution.activity;
+
         if (activity.type !== "FOLLOWING" && activity.type !== "UNREACHABLE") {
             return { control, selection: null };
         }
+
         const prediction = predictNavigation(control.navigation, position);
+
         return {
             control: { ...control, navigation: prediction.state },
             selection: prediction.selection,
         };
     }
+
     const target = predictRouteTarget(control.route);
+
     if (target.type === "COMPLETED") {
         return { control, selection: null };
     }
+
     const navigation = control.navigation;
     const map = context.maps[navigation.pathMotionMode];
     const previous = navigation.execution.activity;
@@ -187,9 +206,11 @@ export function predictRouteControl(
     const initialization = samePreview
         ? { type: "READY" as const, cursor: previous.cursor }
         : initializeNavigationCursor(path, position, navigation.execution.locatorOffset);
+
     if (initialization.type !== "READY") {
         return { control, selection: null };
     }
+
     const selection = selectNavigationPredictionTarget(
         path,
         initialization.cursor,
@@ -205,6 +226,7 @@ export function predictRouteControl(
             activity: { type: "PREVIEWING", path, cursor: selection.cursor },
         },
     };
+
     return { control: { ...control, navigation: next }, selection };
 }
 

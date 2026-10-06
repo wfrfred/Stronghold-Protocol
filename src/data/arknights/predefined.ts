@@ -14,6 +14,7 @@ function object(value: unknown, name: string): Record<string, unknown> {
     if (value === null || typeof value !== "object" || Array.isArray(value)) {
         throw new TypeError(`${name} must be an object`);
     }
+
     return value as Record<string, unknown>;
 }
 
@@ -22,18 +23,23 @@ function characterPhase(
     characterValue: unknown,
 ): Record<string, unknown> {
     const character = object(characterValue, "predefined character record");
+
     if (!Array.isArray(character.phases)) {
         throw new TypeError("predefined character phases must be an array");
     }
+
     const phaseIndex = Number(instance.inst.phase.slice(-1));
+
     return object(character.phases[phaseIndex], "predefined character phase");
 }
 
 function phasePrefabKey(phase: Record<string, unknown>): string {
     const key = phase.characterPrefabKey;
+
     if (typeof key !== "string" || key.length === 0) {
         throw new TypeError("predefined character prefab key must be nonempty");
     }
+
     return key;
 }
 
@@ -60,10 +66,13 @@ function predefinedCharacter(
             `unsupported predefined character customization for ${instance.inst.characterKey}`,
         );
     }
+
     const phase = characterPhase(instance, characterValue);
+
     if (phasePrefabKey(phase) !== profile.prefabKey) {
         throw new TypeError(`predefined character prefab does not match ${profile.prefabKey}`);
     }
+
     return phase;
 }
 
@@ -77,12 +86,15 @@ function unitDefinition(
     if (!Array.isArray(phase.attributesKeyFrames) || phase.attributesKeyFrames.length === 0) {
         throw new TypeError("predefined unit requires attribute keyframes");
     }
+
     let maxHp: number | undefined;
     let minimumLevel = Infinity;
     let maximumLevel = -Infinity;
+
     for (const value of phase.attributesKeyFrames) {
         const frame = object(value, "predefined attribute keyframe");
         const attributes = object(frame.data, "predefined keyframe attributes");
+
         if (
             typeof frame.level !== "number" ||
             !Number.isSafeInteger(frame.level) ||
@@ -90,20 +102,25 @@ function unitDefinition(
         ) {
             throw new RangeError("predefined keyframe level must be a positive safe integer");
         }
+
         const hp = attributes.maxHp;
+
         if (typeof hp !== "number" || !Number.isFinite(hp) || hp <= 0) {
             throw new RangeError("predefined maxHp must be finite and positive");
         }
         if (maxHp !== undefined && maxHp !== hp) {
             throw new TypeError("varying predefined unit attributes are not supported");
         }
+
         maxHp = hp;
         minimumLevel = Math.min(minimumLevel, frame.level);
         maximumLevel = Math.max(maximumLevel, frame.level);
     }
+
     if (instance.inst.level < minimumLevel || instance.inst.level > maximumLevel) {
         throw new RangeError("predefined unit level is outside attribute keyframes");
     }
+
     return Object.freeze({
         id: instance.inst.characterKey,
         vitality: Object.freeze({ maxHp: maxHp! }),
@@ -117,6 +134,7 @@ export function parsePredefinedInstanceDefinition(
     characterValue: unknown,
 ): PredefinedInstanceDefinition {
     const phase = predefinedCharacter(instance, profile, characterValue);
+
     if (profile.type === "MECHANISM") {
         return createPredefinedInstanceDefinition({
             id,
@@ -129,11 +147,13 @@ export function parsePredefinedInstanceDefinition(
             },
         });
     }
+
     const effect = createNavigationEffectDefinition({
         id: `${profile.prefabKey}:tile-navigation`,
         WALK: { denyPassage: false, deniedDepartures: [], costFloor: profile.walkCostFloor },
         FLY: null,
     });
+
     return createPredefinedInstanceDefinition({
         id,
         alias: instance.alias,

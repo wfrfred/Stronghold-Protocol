@@ -3,9 +3,10 @@ import {
     createWorldOffset,
     isTilePosition,
     isWorldPosition,
+    type TilePosition,
+    type WorldOffset,
 } from "../geometry/coordinate.js";
-import type { TilePosition, WorldOffset } from "../geometry/coordinate.js";
-import type { PathMotionMode } from "../navigation/map.js";
+import { PathMotionMode } from "../navigation/map.js";
 
 export interface RouteMoveTarget {
     readonly position: TilePosition;
@@ -109,7 +110,9 @@ function boolean(value: boolean, name: string): boolean {
 }
 
 function copyTarget(target: RouteMoveTarget): RouteMoveTarget {
-    if (target === null || typeof target !== "object") {
+    const value: unknown = target;
+
+    if (value === null || typeof value !== "object") {
         throw new TypeError("route move target must be an object");
     }
 
@@ -122,7 +125,9 @@ function copyTarget(target: RouteMoveTarget): RouteMoveTarget {
 }
 
 function copyCheckpoint(checkpoint: RouteCheckpoint): RouteCheckpoint {
-    if (checkpoint === null || typeof checkpoint !== "object") {
+    const value: unknown = checkpoint;
+
+    if (value === null || typeof value !== "object") {
         throw new TypeError("route checkpoint must be an object");
     }
 
@@ -131,47 +136,58 @@ function copyCheckpoint(checkpoint: RouteCheckpoint): RouteCheckpoint {
         case "PATROL_MOVE":
         case "MAP_OFFSET_MOVE":
             return Object.freeze({ type: checkpoint.type, target: copyTarget(checkpoint.target) });
+
         case "WAIT_FOR_TICKS":
             return Object.freeze({
                 type: checkpoint.type,
                 durationTicks: ticks(checkpoint.durationTicks, "durationTicks"),
             });
+
         case "WAIT_FOR_PLAY_TICK":
             return Object.freeze({
                 type: checkpoint.type,
                 targetPlayTick: ticks(checkpoint.targetPlayTick, "targetPlayTick"),
             });
+
         case "WAIT_CURRENT_FRAGMENT_TICKS":
         case "WAIT_CURRENT_WAVE_TICKS":
             return Object.freeze({
                 type: checkpoint.type,
                 targetElapsedTicks: ticks(checkpoint.targetElapsedTicks, "targetElapsedTicks"),
             });
+
         case "APPEAR_AT_POS":
             return Object.freeze({
                 type: checkpoint.type,
                 position: copyPosition(checkpoint.position),
                 reachOffset: copyOffset(checkpoint.reachOffset),
             });
+
         case "DISAPPEAR":
         case "ALERT":
             return Object.freeze({ type: checkpoint.type });
+
         default:
             throw new RangeError("unsupported route checkpoint type");
     }
 }
 
 export function createRouteDefinition(definition: RouteDefinition): RouteDefinition {
-    if (definition.pathMotionMode !== "WALK" && definition.pathMotionMode !== "FLY") {
+    if (!PathMotionMode.is(definition.pathMotionMode)) {
         throw new RangeError("unsupported route path motion mode");
     }
-    if (!Array.isArray(definition.checkpoints)) {
+
+    const checkpointsAreArray: boolean = Array.isArray(definition.checkpoints);
+
+    if (!checkpointsAreArray) {
         throw new TypeError("route checkpoints must be an array");
     }
 
     const checkpoints: RouteCheckpoint[] = [];
+
     for (let index = 0; index < definition.checkpoints.length; index++) {
         const checkpoint = definition.checkpoints[index];
+
         if (!Object.hasOwn(definition.checkpoints, index) || checkpoint === undefined) {
             throw new TypeError("route checkpoints must be dense");
         }

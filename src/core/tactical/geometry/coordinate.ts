@@ -34,6 +34,7 @@ function requireFinite(value: number, name: string): number {
     if (!Number.isFinite(value)) {
         throw new RangeError(`${name} must be finite`);
     }
+
     return value === 0 ? 0 : value;
 }
 
@@ -41,19 +42,23 @@ function requireSafeInteger(value: number, name: string): number {
     if (!Number.isSafeInteger(value)) {
         throw new RangeError(`${name} must be a safe integer`);
     }
+
     return value === 0 ? 0 : value;
 }
 
 function roundTiesToEven(value: number): number {
     requireFinite(value, "world coordinate");
+
     const lower = Math.floor(value);
     const fraction = value - lower;
+
     if (fraction < 0.5) {
         return lower;
     }
     if (fraction > 0.5) {
         return lower + 1;
     }
+
     return lower % 2 === 0 ? lower : lower + 1;
 }
 
@@ -84,10 +89,10 @@ export const Tile = {
 
     rotate(offset: TileOffset, direction: Direction): TileOffset {
         const [dRow, dCol] = offset;
-        const [fr, fc] = Direction.vector(direction);
+        const [forwardRow, forwardCol] = Direction.vector(direction);
 
-        const row = dRow * fc + dCol * fr;
-        const col = -dRow * fr + dCol * fc;
+        const row = dRow * forwardCol + dCol * forwardRow;
+        const col = -dRow * forwardRow + dCol * forwardCol;
 
         return createTileOffset(row, col);
     },
@@ -120,18 +125,21 @@ export const World = {
 
     clampMagnitude(offset: WorldOffset, maximum: number): WorldOffset {
         const magnitude = requireFinite(Math.hypot(offset[0], offset[1]), "world magnitude");
+
         return magnitude > maximum ? World.scale(offset, maximum / magnitude) : offset;
     },
 
     distanceSquared(a: WorldPosition, b: WorldPosition): number {
         const dx = a[0] - b[0];
         const dy = a[1] - b[1];
+
         return requireFinite(dx * dx + dy * dy, "squared world distance");
     },
 
     withinDistance(a: WorldPosition, b: WorldPosition, radius: number): boolean {
         const distanceSquared = World.distanceSquared(a, b);
         const radiusSquared = requireFinite(radius * radius, "squared radius");
+
         return distanceSquared <= radiusSquared;
     },
 

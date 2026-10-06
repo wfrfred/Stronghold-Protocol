@@ -5,30 +5,40 @@ export type RangeGrid = readonly TileOffset[];
 
 export const RangeGrid = {
     create(offsets: readonly TileOffset[]): RangeGrid {
-        if (!Array.isArray(offsets)) {
+        const offsetsAreArray: boolean = Array.isArray(offsets);
+
+        if (!offsetsAreArray) {
             throw new RangeError("range grid must be an array");
         }
+
         const seen = new Set<string>();
         const snapshot: TileOffset[] = [];
+
         for (let index = 0; index < offsets.length; index++) {
-            const offset = offsets[index];
-            if (
-                !Object.hasOwn(offsets, index) ||
-                !Array.isArray(offset) ||
-                offset.length !== 2 ||
-                !Object.hasOwn(offset, 0) ||
-                !Object.hasOwn(offset, 1)
-            ) {
+            const offset = offsets[index]!;
+            const coordinates: readonly unknown[] = offset;
+            const validCoordinates: boolean =
+                Object.hasOwn(offsets, index) &&
+                Array.isArray(coordinates) &&
+                coordinates.length === 2 &&
+                Object.hasOwn(coordinates, 0) &&
+                Object.hasOwn(coordinates, 1);
+
+            if (!validCoordinates) {
                 throw new RangeError(`range offset ${index} must contain exactly two coordinates`);
             }
+
             const copy = createTileOffset(offset[0], offset[1]);
             const key = `${copy[0]},${copy[1]}`;
+
             if (seen.has(key)) {
                 throw new RangeError(`duplicate range offset at index ${index}`);
             }
+
             seen.add(key);
             snapshot.push(copy);
         }
+
         return Object.freeze(snapshot);
     },
 
@@ -36,6 +46,7 @@ export const RangeGrid = {
         return Object.freeze(
             range.map((offset) => {
                 const rotated = Tile.rotate(offset, direction);
+
                 return Tile.translate(origin, rotated);
             }),
         );

@@ -1,12 +1,13 @@
-import type { NavigationMaps } from "../../navigation/map.js";
 import { createWorldOffset } from "../../geometry/coordinate.js";
-import { copyNavigationState, invalidateNavigationPath } from "../../navigation/state.js";
-import type { NavigationState } from "../../navigation/state.js";
-import { copyRouteState } from "../../route/state.js";
-import type { RouteState } from "../../route/state.js";
-import { createSteeringState } from "./steering.js";
-import type { SteeringParameters, SteeringState } from "./steering.js";
+import type { NavigationMaps } from "../../navigation/map.js";
+import {
+    copyNavigationState,
+    invalidateNavigationPath,
+    type NavigationState,
+} from "../../navigation/state.js";
+import { copyRouteState, type RouteState } from "../../route/state.js";
 import type { Unit, UnitDefinition } from "../unit.js";
+import { createSteeringState, type SteeringParameters, type SteeringState } from "./steering.js";
 
 export interface LocomotionDefinition {
     readonly moveSpeedPerTick: number;
@@ -76,9 +77,11 @@ export function copyLocomotionState(state: Readonly<LocomotionState>): Locomotio
                 : createWorldOffset(...state.steering.lastVelocity),
         },
     };
+
     if (!("mainRoute" in state)) {
         return snapshot;
     }
+
     const routed = state as Readonly<RoutedLocomotionState>;
     const copied: RoutedLocomotionState = {
         ...snapshot,
@@ -88,6 +91,7 @@ export function copyLocomotionState(state: Readonly<LocomotionState>): Locomotio
                 ? null
                 : copyRouteControlState(routed.alternativeRoute),
     };
+
     return copied;
 }
 
@@ -99,6 +103,7 @@ function reconcileRouteNavigation(
         state.navigation,
         maps[state.navigation.pathMotionMode],
     );
+
     return navigation === state.navigation ? state : { ...state, navigation };
 }
 
@@ -117,16 +122,20 @@ export function reconcileLocomotionNavigation(
     if (!("mainRoute" in state)) {
         return state;
     }
+
     const routed = state as RoutedLocomotionState;
     const mainRoute = reconcileRouteNavigation(routed.mainRoute, maps);
     const alternativeRoute =
         routed.alternativeRoute === null
             ? null
             : reconcileRouteNavigation(routed.alternativeRoute, maps);
+
     if (mainRoute === routed.mainRoute && alternativeRoute === routed.alternativeRoute) {
         return state;
     }
+
     const next: RoutedLocomotionState = { ...routed, mainRoute, alternativeRoute };
+
     return next;
 }
 

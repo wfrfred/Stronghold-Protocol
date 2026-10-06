@@ -1,6 +1,7 @@
 import type { WorldPosition } from "../geometry/coordinate.js";
 
 export type UnitId = number;
+
 export type UnitDefinitionId = string;
 
 export interface UnitDefinition {

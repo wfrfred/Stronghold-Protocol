@@ -1,8 +1,12 @@
-import { Tile, World } from "../geometry/coordinate.js";
-import type { TilePosition, WorldOffset, WorldPosition } from "../geometry/coordinate.js";
+import {
+    Tile,
+    World,
+    type TilePosition,
+    type WorldOffset,
+    type WorldPosition,
+} from "../geometry/coordinate.js";
 import { NavigationMap } from "./map.js";
-import { isNavigationGoalReached } from "./request.js";
-import type { NavigationIntent } from "./request.js";
+import { isNavigationGoalReached, type NavigationIntent } from "./request.js";
 import type {
     NavigationCursorInitialization,
     NavigationPath,
@@ -23,23 +27,27 @@ export function canTraverseNavigationSegment(
 ): boolean {
     let [row, col] = World.toTile(from);
     const [endRow, endCol] = World.toTile(to);
+
     if (
         NavigationMap.get(map, [row, col])?.passable !== true ||
         NavigationMap.get(map, [endRow, endCol])?.passable !== true
     ) {
         return false;
     }
+
     const dx = to[0] - from[0];
     const dy = to[1] - from[1];
     const rowStep = Math.sign(dy);
     const colStep = Math.sign(dx);
     const rowDirection = rowStep > 0 ? "UP" : "DOWN";
     const colDirection = colStep > 0 ? "RIGHT" : "LEFT";
+
     while (row !== endRow || col !== endCol) {
         const rowTime = row === endRow ? Infinity : (row + rowStep * 0.5 - from[1]) / dy;
         const colTime = col === endCol ? Infinity : (col + colStep * 0.5 - from[0]) / dx;
         const crossRow = rowTime <= colTime || Math.abs(rowTime - colTime) <= Number.EPSILON;
         const crossCol = colTime <= rowTime || Math.abs(rowTime - colTime) <= Number.EPSILON;
+
         if (crossRow && !NavigationMap.canDepart(map, [row, col], rowDirection)) {
             return false;
         }
@@ -54,6 +62,7 @@ export function canTraverseNavigationSegment(
         ) {
             return false;
         }
+
         if (crossRow) {
             row += rowStep;
         }
@@ -64,11 +73,14 @@ export function canTraverseNavigationSegment(
             return false;
         }
     }
+
     return true;
 }
 
 function safeNext(path: NavigationPath<NavigationIntent>, tile: TilePosition): TilePosition {
-    const node = path.field.nodes[tile[0] * path.field.map.columns + tile[1]]!;
+    const index = tile[0] * path.field.map.columns + tile[1];
+    const node = path.field.nodes[index]!;
+
     return node.type === "REACHABLE" ? node.next : tile;
 }
 
@@ -78,14 +90,17 @@ function cursorAt(
     previous?: NavigationPathCursor,
 ): NavigationPathCursor {
     const isTarget = sameTile(tile, path.request.targetTile);
-    if (
-        previous !== undefined &&
-        (isTarget
+
+    if (previous !== undefined) {
+        const tracksTile = isTarget
             ? previous.type === "GOAL"
-            : previous.type === "FIELD" && sameTile(tile, previous.nextNode))
-    ) {
-        return previous;
+            : previous.type === "FIELD" && sameTile(tile, previous.nextNode);
+
+        if (tracksTile) {
+            return previous;
+        }
     }
+
     return isTarget ? { type: "GOAL" } : { type: "FIELD", nextNode: tile };
 }
 
@@ -114,41 +129,53 @@ function selectCenter(
 ): CenterSelection {
     let cursor = initialCursor;
     let visits = initialVisits;
+
     if (cursor.type === "GOAL" && !sameTile(tile, path.request.targetTile)) {
         cursor = cursorAt(path, safeNext(path, tile), cursor);
     }
+
     const options = path.request.options;
+
     if (options.visitEveryTileCenter) {
         if (!hasVisited(visits, tile)) {
             const center = Tile.center(tile);
+
             if (!World.withinDistance(locator, center, 0.05)) {
                 return { cursor, visits, target: center };
             }
+
             visits = visit(visits, tile);
         }
     } else if (options.visitEveryNodeCenter || options.visitEveryNodeStably) {
         let tracked = cursor.type === "FIELD" ? cursor.nextNode : path.request.targetTile;
+
         if (!sameTile(tile, tracked)) {
             tracked = safeNext(path, tile);
             cursor = cursorAt(path, tracked, cursor);
         }
+
         if (options.visitEveryNodeCenter) {
             if (!hasVisited(visits, tracked)) {
                 const center = Tile.center(tracked);
+
                 if (!World.withinDistance(locator, center, 0.05)) {
                     return { cursor, visits, target: center };
                 }
+
                 visits = visit(visits, tracked);
                 cursor = cursorAt(path, safeNext(path, tracked), cursor);
             }
         } else if (NavigationMap.get(path.field.map, tracked)?.passable) {
             const center = Tile.center(tracked);
+
             if (!World.withinDistance(locator, center, 0.25)) {
                 return { cursor, visits, target: center };
             }
+
             cursor = cursorAt(path, safeNext(path, tracked), cursor);
         }
     }
+
     return { cursor, visits, target: null };
 }
 
@@ -158,9 +185,11 @@ export function initializeNavigationCursor(
     locatorOffset: WorldOffset,
 ): NavigationCursorInitialization {
     const tile = World.toTile(World.translate(position, locatorOffset));
+
     if (!NavigationMap.contains(path.field.map, tile)) {
         return { type: "OUTSIDE_MAP" };
     }
+
     return { type: "READY", cursor: cursorAt(path, tile) };
 }
 
@@ -173,6 +202,7 @@ export function selectNavigationPredictionTarget(
 ): NavigationPredictionSelection {
     const locator = World.translate(position, locatorOffset);
     const tile = World.toTile(locator);
+
     if (!NavigationMap.contains(path.field.map, tile)) {
         return {
             cursor,
@@ -180,7 +210,9 @@ export function selectNavigationPredictionTarget(
             decision: { type: "OUTSIDE_MAP" },
         };
     }
+
     const center = selectCenter(path, cursor, visits, locator, tile);
+
     return {
         cursor: center.cursor,
         visits: center.visits,
@@ -203,6 +235,7 @@ export function selectNavigationSteeringTarget(
 ): NavigationSelection {
     const locator = World.translate(position, locatorOffset);
     const tile = World.toTile(locator);
+
     if (!NavigationMap.contains(path.field.map, tile)) {
         return {
             cursor,
@@ -210,7 +243,9 @@ export function selectNavigationSteeringTarget(
             decision: { type: "OUTSIDE_MAP" },
         };
     }
+
     const center = selectCenter(path, cursor, visits, locator, tile);
+
     if (center.target !== null) {
         return {
             cursor: center.cursor,
@@ -221,6 +256,7 @@ export function selectNavigationSteeringTarget(
             },
         };
     }
+
     if (isNavigationGoalReached(path.request, locator)) {
         return {
             cursor: cursorAt(path, path.request.targetTile, center.cursor),
@@ -228,10 +264,12 @@ export function selectNavigationSteeringTarget(
             decision: { type: "ARRIVED" },
         };
     }
+
     const map = path.field.map;
     const targetTile = path.request.targetTile;
     const targetNode = path.field.nodes[targetTile[0] * map.columns + targetTile[1]]!;
     const node = path.field.nodes[tile[0] * map.columns + tile[1]]!;
+
     if (targetNode.type === "UNREACHABLE" || node.type === "UNREACHABLE") {
         return {
             cursor: center.cursor,
@@ -245,8 +283,10 @@ export function selectNavigationSteeringTarget(
             },
         };
     }
+
     const next = safeNext(path, tile);
     const target = sameTile(next, targetTile) ? path.request.goal.position : Tile.center(next);
+
     return {
         cursor: center.cursor,
         visits: center.visits,

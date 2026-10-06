@@ -1,20 +1,21 @@
-import { createRng } from "../../common/rng.js";
-import type { Seed } from "../../common/rng.js";
+import { createRng, type Seed } from "../../common/rng.js";
 import type { NavigationRequestId } from "../navigation/request.js";
 import type { NavigationOutcome } from "../navigation/state.js";
 import type { RouteDefinition } from "../route/definition.js";
 import { createRouteExecution } from "../route/execution.js";
 import { initializeRouteSpawn } from "../route/spawn.js";
 import type { RouteTiming } from "../route/state.js";
-import { createRoutedLocomotionState } from "./locomotion/state.js";
-import { initializeRouteControl } from "./locomotion/route-control.js";
-import type { LocatedRouteSignal } from "./locomotion/route-control.js";
+import { initializeRouteControl, type LocatedRouteSignal } from "./locomotion/route-control.js";
+import {
+    createRoutedLocomotionState,
+    type Locomotion,
+    type LocomotiveUnitDefinition,
+    type RoutedLocomotion,
+} from "./locomotion/state.js";
+import { stepRoutedUnit, type RoutedLocomotionStepContext } from "./locomotion/step.js";
 import type { SpatialPresence } from "./presence.js";
-import type { Locomotion, LocomotiveUnitDefinition, RoutedLocomotion } from "./locomotion/state.js";
-import { stepRoutedUnit } from "./locomotion/step.js";
-import type { RoutedLocomotionStepContext } from "./locomotion/step.js";
-import type { Vitality, VitalUnitDefinition } from "./vitality.js";
 import type { Unit, UnitId } from "./unit.js";
+import type { Vitality, VitalUnitDefinition } from "./vitality.js";
 
 export interface EnemyDefinition extends VitalUnitDefinition, LocomotiveUnitDefinition {}
 
@@ -63,6 +64,7 @@ export function createEnemyDefinition(definition: EnemyDefinition): EnemyDefinit
     ) {
         throw new RangeError("enemy moveSpeedPerTick must be finite and non-negative");
     }
+
     return Object.freeze({
         id: definition.id,
         vitality: Object.freeze({ maxHp: definition.vitality.maxHp }),
@@ -77,6 +79,7 @@ export function initializeRoutedEnemy(spawn: RoutedEnemySpawn): RoutedEnemyIniti
     if (!Number.isSafeInteger(spawn.id) || spawn.id < 0) {
         throw new RangeError("enemy id must be a nonnegative safe integer");
     }
+
     const rng = createRng(spawn.rngState);
     const location = initializeRouteSpawn(spawn.route, rng);
     const execution = createRouteExecution(rng, spawn.nextNavigationRequestId, spawn.tick);
@@ -88,6 +91,7 @@ export function initializeRoutedEnemy(spawn: RoutedEnemySpawn): RoutedEnemyIniti
         location.position,
         execution,
     );
+
     return {
         enemy: {
             id: spawn.id,
@@ -110,6 +114,7 @@ export function stepRoutedEnemy(
     context: RoutedEnemyStepContext,
 ): RoutedEnemyStep {
     const step = stepRoutedUnit(enemy, context);
+
     return {
         enemy: step.unit,
         signals: step.signals,

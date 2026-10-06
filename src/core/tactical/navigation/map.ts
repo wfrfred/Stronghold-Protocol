@@ -30,6 +30,7 @@ export const PathMotionMode = {
 export const NavigationMap = {
     contains(map: NavigationMap, position: TilePosition): boolean {
         const [row, col] = position;
+
         return row >= 0 && row < map.rows && col >= 0 && col < map.columns;
     },
 
@@ -37,11 +38,13 @@ export const NavigationMap = {
         if (!NavigationMap.contains(map, position)) {
             return undefined;
         }
+
         return map.cells[position[0] * map.columns + position[1]];
     },
 
     canDepart(map: NavigationMap, position: TilePosition, direction: Direction): boolean {
         const cell = NavigationMap.get(map, position);
+
         return cell !== undefined && cell.passable && cell.departures[direction];
     },
 };
@@ -63,14 +66,20 @@ export function createNavigationMap(map: NavigationMap): NavigationMap {
     if (!Number.isSafeInteger(map.revision) || map.revision < 0) {
         throw new RangeError("navigation revision must be a nonnegative safe integer");
     }
-    if (!Array.isArray(map.cells) || map.cells.length !== map.rows * map.columns) {
+
+    const cellsAreArray: boolean = Array.isArray(map.cells);
+
+    if (!cellsAreArray || map.cells.length !== map.rows * map.columns) {
         throw new RangeError("navigation cells must match map dimensions");
     }
 
     const cells: NavigationCell[] = [];
+
     for (let index = 0; index < map.cells.length; index++) {
         const cell = map.cells[index];
-        if (!Object.hasOwn(map.cells, index) || cell === undefined || cell === null) {
+        const cellValue: unknown = cell;
+
+        if (!Object.hasOwn(map.cells, index) || cell === undefined || cellValue === null) {
             throw new RangeError(`missing navigation cell at index ${index}`);
         }
         if (typeof cell.passable !== "boolean") {
@@ -82,13 +91,17 @@ export function createNavigationMap(map: NavigationMap): NavigationMap {
         if (map.pathMotionMode === "FLY" && cell.moveCost !== 1) {
             throw new RangeError("FLY navigation costs must be 1");
         }
+
+        const departureValues: unknown = cell.departures;
+
         if (
-            cell.departures === null ||
-            typeof cell.departures !== "object" ||
+            departureValues === null ||
+            typeof departureValues !== "object" ||
             DIRECTIONS.some((direction) => typeof cell.departures[direction] !== "boolean")
         ) {
             throw new TypeError(`invalid departure directions at index ${index}`);
         }
+
         cells.push(
             Object.freeze({
                 passable: cell.passable,

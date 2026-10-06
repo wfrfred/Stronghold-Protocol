@@ -4,11 +4,10 @@ import {
     changePredefinedInstances,
     copyPredefinedPresence,
     createPredefinedSystem,
+    type PredefinedPresence,
 } from "./predefined.js";
-import type { PredefinedPresence } from "./predefined.js";
 import type { BattleCommand, BattleEvent, BattleResult } from "./contract.js";
-import { cloneScheduleState } from "./schedule.js";
-import type { SpawnScheduleState } from "./schedule.js";
+import { cloneScheduleState, type SpawnScheduleState } from "./schedule.js";
 import { createSpawnScheduleSystem } from "./spawning.js";
 import type { BattleSpec } from "./spec.js";
 import type { BattleExecutionState } from "./state.js";
@@ -24,10 +23,14 @@ function bindPhase<K extends keyof BattleSystemStates>(
     phase: BattlePhase<BattleSystemStates[K]>,
 ): BattlePhase<BattleSystemStates> {
     return (input, states) => {
-        const stepped = phase(input, states[slot]);
+        const phaseResult = phase(input, states[slot]);
+
         return {
-            ...stepped,
-            state: stepped.state === states[slot] ? states : { ...states, [slot]: stepped.state },
+            ...phaseResult,
+            state:
+                phaseResult.state === states[slot]
+                    ? states
+                    : { ...states, [slot]: phaseResult.state },
         };
     };
 }
@@ -40,13 +43,16 @@ export function createBattleSystems(spec: BattleSpec) {
     const predefined = createPredefinedSystem(spec.predefines);
     const schedule = createSpawnScheduleSystem(spec.schedule);
     const movement = createMovementSystem({ moveMultiplier: spec.moveMultiplier });
+
     const prepare: BattlePhase<readonly PredefinedPresence[]> = (input, state) => {
         const prepared = predefined.step(input, state);
+
         return {
             ...prepared,
             changes: [{ type: "EXPIRE_EFFECTS", tick: input.tick }, ...prepared.changes],
         };
     };
+
     const phases = Object.freeze([
         bindPhase("predefined", prepare),
         bindPhase("schedule", schedule.spawn),
@@ -68,6 +74,7 @@ export function createBattleSystems(spec: BattleSpec) {
                     })),
                 execution,
             );
+
             battlefield.apply([
                 ...spec.initialMechanisms.map((mechanism) => ({
                     type: "REGISTER_MECHANISM" as const,
@@ -76,10 +83,12 @@ export function createBattleSystems(spec: BattleSpec) {
                 ...spec.initialEffects.map((effect) => ({ type: "ADD_EFFECT" as const, effect })),
                 ...initialized.changes,
             ]);
+
             const states: BattleSystemStates = {
                 predefined: initialized.presence,
                 schedule: schedule.createState(),
             };
+
             return { states, execution: initialized.execution };
         },
 
@@ -99,22 +108,27 @@ export function createBattleSystems(spec: BattleSpec) {
         ) {
             const events: BattleEvent[] = [];
             const removedUnits: BattlefieldChangeResult["removedUnits"][number][] = [];
+
             for (const phase of phases) {
-                const stepped = phase(
+                const phaseResult = phase(
                     { battlefield: battlefield.view, execution, tick, commands, removedUnits },
                     states,
                 );
-                if (stepped.changes.length > 0) {
-                    const committed = battlefield.commit(stepped.changes);
+
+                if (phaseResult.changes.length > 0) {
+                    const committed = battlefield.commit(phaseResult.changes);
                     removedUnits.push(...committed.removedUnits);
                 }
-                states = stepped.state;
-                execution = stepped.execution;
-                events.push(...stepped.events);
+
+                states = phaseResult.state;
+                execution = phaseResult.execution;
+                events.push(...phaseResult.events);
             }
+
             for (const removed of removedUnits) {
                 events.push({ type: "UNIT_REMOVED", ...removed, tick });
             }
+
             return {
                 states,
                 execution,
@@ -131,9 +145,11 @@ export function createBattleSystems(spec: BattleSpec) {
             remainingUnitIds: BattleResult["remainingUnitIds"],
         ): BattleResult | null {
             const completed = schedule.isCompleted(states.schedule);
+
             if (!completed && elapsedTicks < spec.maxTicks) {
                 return null;
             }
+
             return {
                 reason: completed ? "SCHEDULE_COMPLETED" : "TIME_LIMIT",
                 elapsedTicks,

@@ -14,6 +14,7 @@ export function createMechanismDefinition(definition: MechanismDefinition): Mech
     if (typeof definition.id !== "string" || definition.id.length === 0) {
         throw new TypeError("mechanism definition id must be nonempty");
     }
+
     return Object.freeze({ id: definition.id });
 }
 
@@ -26,5 +27,6 @@ export function createMechanismRuntime<D extends MechanismDefinition>(
     if (typeof runtime.active !== "boolean") {
         throw new TypeError("mechanism active must be boolean");
     }
+
     return { id: runtime.id, definition: runtime.definition, active: runtime.active };
 }

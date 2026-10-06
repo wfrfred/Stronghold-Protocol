@@ -1,5 +1,4 @@
-import { World } from "../geometry/coordinate.js";
-import type { TilePosition } from "../geometry/coordinate.js";
+import { World, type TilePosition } from "../geometry/coordinate.js";
 import { RangeGrid } from "../geometry/range.js";
 import type { Unit, UnitId } from "../unit/unit.js";
 import { isSpatiallyPresent } from "../unit/presence.js";
@@ -35,18 +34,22 @@ export function spatialEffectSourceKey(source: SpatialEffectSource): string {
 
 function indexId<K, V>(index: Map<K, Set<V>>, key: K, id: V): void {
     let ids = index.get(key);
+
     if (ids === undefined) {
         ids = new Set();
         index.set(key, ids);
     }
+
     ids.add(id);
 }
 
-function requireEntry<K, V>(entries: ReadonlyMap<K, V>, id: K, name: string): V {
+function requireEntry<K extends number, V>(entries: ReadonlyMap<K, V>, id: K, name: string): V {
     const entry = entries.get(id);
+
     if (entry === undefined) {
         throw new RangeError(`unknown ${name}: ${id}`);
     }
+
     return entry;
 }
 
@@ -66,15 +69,19 @@ export function projectBattlefieldSpatial(
         if (!isSpatiallyPresent(unit)) {
             continue;
         }
-        const key = battlefieldTileKey(map, World.toTile(unit.position));
-        if (key !== undefined) {
-            indexId(unitsByTile, key, unit.id);
+
+        const tileKey = battlefieldTileKey(map, World.toTile(unit.position));
+
+        if (tileKey !== undefined) {
+            indexId(unitsByTile, tileKey, unit.id);
         }
     }
 
     for (const effect of effects.values()) {
         indexId(effectsBySource, spatialEffectSourceKey(effect.source), effect.id);
+
         let sourceActive: boolean;
+
         if (effect.source.type === "UNIT") {
             sourceActive = isSpatiallyPresent(
                 requireEntry(units, effect.source.unitId, "effect source unit"),
@@ -90,6 +97,7 @@ export function projectBattlefieldSpatial(
         const region = effect.region;
         let origin: TilePosition;
         let anchorActive = true;
+
         if (region.type === "FIXED") {
             origin = region.position;
         } else {
@@ -98,6 +106,7 @@ export function projectBattlefieldSpatial(
             anchorActive = isSpatiallyPresent(anchor);
             origin = World.toTile(anchor.position);
         }
+
         if (!effect.active || !sourceActive || !anchorActive) {
             continue;
         }
@@ -105,9 +114,11 @@ export function projectBattlefieldSpatial(
         const positions = RangeGrid.project(region.range, origin, region.direction).filter(
             (position) => BattlefieldMap.contains(map, position),
         );
+
         for (const position of positions) {
             indexId(effectsByTile, battlefieldTileKey(map, position)!, effect.id);
         }
+
         navigationEffects.push({ definition: effect.definition, positions });
     }
 

@@ -10,10 +10,10 @@ import { isSpatiallyPresent } from "../core/tactical/unit/presence.js";
 import type { Unit } from "../core/tactical/unit/unit.js";
 import { TICKS_PER_SECOND } from "../core/tactical/tick.js";
 import { getUnspawnedCount } from "../core/tactical/battle/schedule.js";
-import { loadMovementScenario } from "../data/arknights/movement-scenario.js";
-import type {
-    ArknightsMovementCatalog,
-    ArknightsMovementSelection,
+import {
+    loadMovementScenario,
+    type ArknightsMovementCatalog,
+    type ArknightsMovementSelection,
 } from "../data/arknights/movement-scenario.js";
 
 interface LegacyData {
@@ -101,20 +101,23 @@ const fixtureCache = new Map<string, Promise<unknown>>();
 
 function fixture(name: string): Promise<unknown> {
     let loaded = fixtureCache.get(name);
+
     if (loaded === undefined) {
         loaded = fetch(`/fixtures/${name}.json`)
             .then((response) => {
                 if (!response.ok) {
                     throw new Error(`cannot load ${name}: HTTP ${response.status}`);
                 }
+
                 return response.json() as Promise<unknown>;
             })
-            .catch((error) => {
+            .catch((error: unknown) => {
                 fixtureCache.delete(name);
                 throw error;
             });
         fixtureCache.set(name, loaded);
     }
+
     return loaded;
 }
 
@@ -131,10 +134,12 @@ function text(value: unknown, fallback: string): string {
 function stageRows(map: BattlefieldMap): string[] {
     const rows: string[][] = [];
     const mechanisms = { MIRE: "m", DEEPSEA: "d", SMOG: "g", INFECTION: "i" } as const;
+
     for (let row = 0; row < map.rows; row++) {
         rows.push(
             Array.from({ length: map.columns }, (_, col) => {
                 const tile = map.tiles[row * map.columns + col]!;
+
                 if (tile.mechanism !== null) {
                     return mechanisms[tile.mechanism.type];
                 }
@@ -144,14 +149,18 @@ function stageRows(map: BattlefieldMap): string[] {
                 if (tile.heightType === "HIGHLAND") {
                     return tile.buildableType === "NONE" ? "#" : "h";
                 }
+
                 return tile.buildableType === "NONE" ? "r" : "f";
             }),
         );
     }
+
     const glyph = { START: "S", END: "E", TELEPORT_IN: "I", TELEPORT_OUT: "O" } as const;
+
     for (const marker of map.markers) {
         rows[marker.position[0]]![marker.position[1]] = glyph[marker.type];
     }
+
     return rows.map((row) => row.join(""));
 }
 
@@ -160,6 +169,7 @@ function unitInfo(unit: Unit, data: LegacyData): LegacyUnitInfo {
     const assetId =
         unit.definition.id === "enemy_1000_gopro" ? "enemy_1000_gopro_2" : unit.definition.id;
     const metadata = record(data.lookup(routed ? "enemies" : "tokens", assetId));
+
     return {
         id: unit.id,
         kind: routed ? "enemy" : "device",
@@ -179,6 +189,7 @@ function unitInfo(unit: Unit, data: LegacyData): LegacyUnitInfo {
 function unitTuple(unit: Unit): number[] {
     const routed = hasRoutedLocomotion(unit);
     const flying = routed && unit.locomotion.mainRoute.navigation.pathMotionMode === "FLY";
+
     return [
         unit.id,
         ...unit.position,
@@ -193,9 +204,11 @@ function unitTuple(unit: Unit): number[] {
 
 export async function createTacticalDemo(view: LegacyView, options: TacticalDemoOptions) {
     const { stageId, data, seed = 123 } = options;
+
     if (!STAGE_IDS.has(stageId)) {
         throw new RangeError(`unsupported demo stage: ${stageId}`);
     }
+
     const [rawLevel, entries] = await Promise.all([
         fixture(`level_${stageId}`),
         Promise.all(FIXTURES.map(async (name) => [name, await fixture(name)] as const)),
@@ -207,26 +220,30 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
         prefab: (key) => records.get(`prefab_${key}`),
         enemy: (key) => records.get(key === "enemy_1000_gopro_2" ? "enemy_1000_gopro" : key),
     };
+
     const rawPredefines = record(record(rawLevel).predefines).tokenInsts;
     const supported = new Set(["trap_1105_accrate", "trap_098_mire", "trap_042_tidectrl"]);
+    let predefines: ArknightsMovementSelection["predefines"] = [];
+
+    if (Array.isArray(rawPredefines)) {
+        predefines = rawPredefines.flatMap((value, index) => {
+            const characterKey = String(record(record(value).inst).characterKey);
+
+            if (!supported.has(characterKey)) {
+                return [];
+            }
+
+            return [{ source: "predefines" as const, collection: "tokenInsts" as const, index }];
+        });
+    }
+
     const selection: ArknightsMovementSelection = {
         actions: [{ waveIndex: 0, fragmentIndex: 0, actionIndex: 0 }],
         branches: stageId === "act1autochess_01" ? ["dragon"] : [],
-        predefines: Array.isArray(rawPredefines)
-            ? rawPredefines.flatMap((value, index) =>
-                  supported.has(String(record(record(value).inst).characterKey))
-                      ? [
-                            {
-                                source: "predefines" as const,
-                                collection: "tokenInsts" as const,
-                                index,
-                            },
-                        ]
-                      : [],
-              )
-            : [],
+        predefines,
     };
     const scenario = loadMovementScenario(rawLevel, selection, catalog, seed);
+
     const legacyStage = record(data.lookup("stages", stageId));
     const renderedStageId = `ts-demo:${stageId}`;
     const stage = {
@@ -240,10 +257,12 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
     const rect =
         kind === "boss" ? { r0: 0, r1: 6, c0: 0, c1: 20 } : { r0: 6, r1: 13, c0: 0, c1: 20 };
     const fieldId = "ts-tactical-demo";
+
     const commands = new Map<number, readonly BattleCommand[]>();
     const crateIds = scenario.spec.predefines
         .filter((definition) => definition.creation.type === "UNIT")
         .map((definition) => definition.id);
+
     let runtime = new BattleRuntime(scenario.spec);
     let snapshot = runtime.snapshot();
     let knownUnits = new Set<number>();
@@ -254,6 +273,7 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
     function publish(events: readonly BattleEvent[] = []): void {
         const visible = snapshot.units.filter(isSpatiallyPresent);
         const fresh = visible.filter((unit) => !knownUnits.has(unit.id));
+
         if (fresh.length > 0) {
             view.pushEvents({
                 fieldId,
@@ -261,6 +281,7 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
                 ev: fresh.map((unit) => ["spawn", unitInfo(unit, data)] as const),
             });
         }
+
         knownUnits = new Set(visible.map((unit) => unit.id));
         view.pushSnapshot({
             fieldId,
@@ -272,6 +293,7 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
                 snapshot.spawning.spawnedCount +
                 getUnspawnedCount(scenario.spec.schedule, snapshot.spawning),
         });
+
         for (const event of events) {
             if (event.type === "ENEMY_SPAWNED" || event.type === "UNIT_REMOVED") {
                 options.onEvent?.(event);
@@ -302,6 +324,7 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
     ): readonly BattleEvent[] {
         const result = runtime.step(requested);
         snapshot = runtime.snapshot();
+
         return result.events;
     }
 
@@ -309,6 +332,7 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
         if (stopped || runtime.result !== null) {
             return;
         }
+
         publish(advance());
     }
 
@@ -316,6 +340,7 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
         if (stopped) {
             return;
         }
+
         const target = Math.max(
             0,
             Math.min(scenario.spec.maxTicks, Math.round(seconds * TICKS_PER_SECOND)),
@@ -323,20 +348,25 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
         runtime = new BattleRuntime(scenario.spec);
         snapshot = runtime.snapshot();
         accumulatedTicks = 0;
+
         while (snapshot.tickIndex < target && runtime.result === null) {
             advance();
         }
+
         enter();
     }
 
     enter();
+
     return {
         stageId,
         seed,
         duration: scenario.spec.maxTicks / TICKS_PER_SECOND,
+
         get time() {
             return snapshot.tickIndex / TICKS_PER_SECOND;
         },
+
         snapshot: () => runtime.snapshot(),
         stats: () => ({
             tickIndex: snapshot.tickIndex,
@@ -348,55 +378,71 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
             result: runtime.result,
             seed,
         }),
+
         step() {
             step();
             view.debug.interp.snapToNewest();
         },
+
         tick(seconds: number): void {
             if (stopped) {
                 return;
             }
             if (seconds <= 0) {
                 view.debug.interp.snapToNewest();
+
                 return;
             }
+
             accumulatedTicks += seconds * TICKS_PER_SECOND;
+
             while (accumulatedTicks >= 1 && runtime.result === null) {
                 step();
                 accumulatedTicks -= 1;
             }
+
             if (runtime.result !== null) {
                 view.debug.interp.snapToNewest();
             }
         },
+
         seek,
         reset(): void {
             commands.clear();
             seek(0);
         },
+
         command(type: TacticalDemoCommand): void {
             if (stopped || runtime.result !== null) {
                 return;
             }
+
             const tick = snapshot.tickIndex;
-            const requested: readonly BattleCommand[] =
-                type === "TRIGGER_DRAGON"
-                    ? [{ type: "TRIGGER_BRANCH", branchId: "dragon", isLoop: true }]
-                    : crateIds.map((definitionId) =>
-                          type === "APPEAR_CRATES"
-                              ? { type: "APPEAR_PREDEFINED", definitionId }
-                              : { type: "REMOVE_PREDEFINED", definitionId, reason: "SCRIPT" },
-                      );
+            let requested: readonly BattleCommand[];
+
+            if (type === "TRIGGER_DRAGON") {
+                requested = [{ type: "TRIGGER_BRANCH", branchId: "dragon", isLoop: true }];
+            } else {
+                requested = crateIds.map((definitionId) =>
+                    type === "APPEAR_CRATES"
+                        ? { type: "APPEAR_PREDEFINED", definitionId }
+                        : { type: "REMOVE_PREDEFINED", definitionId, reason: "SCRIPT" },
+                );
+            }
+
             const events = advance(requested);
+
             for (const future of commands.keys()) {
                 if (future >= tick) {
                     commands.delete(future);
                 }
             }
+
             commands.set(tick, requested);
             publish(events);
             view.debug.interp.snapToNewest();
         },
+
         stop(): void {
             stopped = true;
             view.setLocalFeed({ on: false });

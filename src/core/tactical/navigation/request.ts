@@ -4,8 +4,9 @@ import {
     isTilePosition,
     isWorldPosition,
     World,
+    type TilePosition,
+    type WorldPosition,
 } from "../geometry/coordinate.js";
-import type { TilePosition, WorldPosition } from "../geometry/coordinate.js";
 
 export type NavigationRequestId = number;
 
@@ -40,10 +41,12 @@ export function isNavigationGoalReached(
 ): boolean {
     if (request.arrivalRule === "TARGET_TILE_AND_DISTANCE") {
         const tile = World.toTile(locatorPosition);
+
         if (tile[0] !== request.targetTile[0] || tile[1] !== request.targetTile[1]) {
             return false;
         }
     }
+
     return World.withinDistance(locatorPosition, request.goal.position, request.goal.reachDistance);
 }
 
@@ -54,15 +57,22 @@ export function createNavigationRequest(request: NavigationRequest): NavigationR
     if (!isTilePosition(request.targetTile) || !isWorldPosition(request.goal.position)) {
         throw new RangeError("navigation coordinates must be valid pairs");
     }
+
     const [row, col] = request.targetTile;
     const [x, y] = request.goal.position;
+
     if (!Number.isFinite(request.goal.reachDistance) || request.goal.reachDistance < 0) {
         throw new RangeError("navigation reach distance must be finite and nonnegative");
     }
-    if (request.arrivalRule !== "DISTANCE" && request.arrivalRule !== "TARGET_TILE_AND_DISTANCE") {
+
+    const fields: { readonly arrivalRule: unknown } = request;
+
+    if (fields.arrivalRule !== "DISTANCE" && fields.arrivalRule !== "TARGET_TILE_AND_DISTANCE") {
         throw new TypeError("invalid navigation arrival rule");
     }
+
     const options = request.options;
+
     if (
         typeof options.allowDiagonalMove !== "boolean" ||
         typeof options.visitEveryTileCenter !== "boolean" ||
@@ -71,6 +81,7 @@ export function createNavigationRequest(request: NavigationRequest): NavigationR
     ) {
         throw new TypeError("navigation options must be explicit booleans");
     }
+
     return Object.freeze({
         id: request.id,
         targetTile: createTilePosition(row, col),

@@ -1,12 +1,9 @@
-import { createBattlefieldRuntime } from "../battlefield/runtime.js";
-import type { BattlefieldRuntime } from "../battlefield/runtime.js";
+import { createBattlefieldRuntime, type BattlefieldRuntime } from "../battlefield/runtime.js";
 import type { NavigationMaps } from "../navigation/map.js";
-import { createBattleSpec } from "./spec.js";
-import type { BattleSpec } from "./spec.js";
+import { createBattleSpec, type BattleSpec } from "./spec.js";
 import type { BattleExecutionState } from "./state.js";
 import { predefinedIdsForAlias } from "./predefined.js";
-import { createBattleSystems } from "./systems.js";
-import type { BattleSystemStates } from "./systems.js";
+import { createBattleSystems, type BattleSystemStates } from "./systems.js";
 import type { BattleCommand, BattleResult, BattleSnapshot, BattleStep } from "./contract.js";
 
 export type {
@@ -28,9 +25,11 @@ interface BattleRuntimeState {
 
 function nextIdentityAfter(ids: readonly number[]): number {
     const next = ids.reduce((next, id) => Math.max(next, id + 1), 0);
+
     if (!Number.isSafeInteger(next)) {
         throw new RangeError("initial instance identity overflow");
     }
+
     return next;
 }
 
@@ -46,6 +45,7 @@ export class BattleRuntime {
     constructor(spec: BattleSpec) {
         this.#spec = createBattleSpec(spec);
         this.#systems = createBattleSystems(this.#spec);
+
         const battlefield = createBattlefieldRuntime({ map: this.#spec.map });
         const initialized = this.#systems.initialize(battlefield, {
             rngState: this.#spec.rngState,
@@ -58,6 +58,7 @@ export class BattleRuntime {
                 this.#spec.initialEffects.map((effect) => effect.id),
             ),
         });
+
         this.#state = {
             battlefield,
             systems: initialized.states,
@@ -83,6 +84,7 @@ export class BattleRuntime {
     snapshot(): BattleSnapshot {
         const { battlefield, tickIndex, systems, execution, completedRouteCount, result } =
             this.#state;
+
         return {
             tickIndex,
             ...this.#systems.snapshot(systems),
@@ -99,40 +101,47 @@ export class BattleRuntime {
         if (this.#state.result !== null) {
             return { events: [], result: this.result };
         }
-        const working: BattleRuntimeState = {
+
+        const workingState: BattleRuntimeState = {
             ...this.#state,
             battlefield: this.#state.battlefield.fork(),
         };
-        const advanced = working.battlefield.transact(() => this.#advance(working, commands));
+        const advanced = workingState.battlefield.transact(() =>
+            this.#advance(workingState, commands),
+        );
+
         this.#state = advanced.state;
+
         return advanced.output;
     }
 
     #advance(
-        working: BattleRuntimeState,
+        workingState: BattleRuntimeState,
         commands: readonly BattleCommand[],
     ): {
         readonly state: BattleRuntimeState;
         readonly output: BattleStep;
     } {
         const stepped = this.#systems.step(
-            working.battlefield,
-            working.systems,
-            working.execution,
-            working.tickIndex,
+            workingState.battlefield,
+            workingState.systems,
+            workingState.execution,
+            workingState.tickIndex,
             commands,
         );
-        const tickIndex = working.tickIndex + 1;
-        const completedRouteCount = working.completedRouteCount + stepped.completedRouteCount;
+
+        const tickIndex = workingState.tickIndex + 1;
+        const completedRouteCount = workingState.completedRouteCount + stepped.completedRouteCount;
         const result = this.#systems.finish(
             stepped.states,
             tickIndex,
             completedRouteCount,
-            working.battlefield.unitIds,
+            workingState.battlefield.unitIds,
         );
+
         return {
             state: {
-                ...working,
+                ...workingState,
                 tickIndex,
                 completedRouteCount,
                 result,
@@ -146,8 +155,10 @@ export class BattleRuntime {
 
 export function simulateBattle(spec: BattleSpec): BattleResult {
     const runtime = new BattleRuntime(spec);
+
     while (runtime.result === null) {
         runtime.step();
     }
+
     return runtime.result;
 }

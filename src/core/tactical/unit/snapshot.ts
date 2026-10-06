@@ -1,5 +1,5 @@
-import type { NavigationMaps } from "../navigation/map.js";
 import { createWorldPosition } from "../geometry/coordinate.js";
+import type { NavigationMaps } from "../navigation/map.js";
 import {
     copyLocomotionState,
     hasLocomotion,
@@ -16,6 +16,7 @@ export function copyUnitSnapshot<D extends UnitDefinition>(unit: Readonly<Unit<D
             ? unit.position
             : createWorldPosition(...unit.position),
     };
+
     if (hasVitality(unit)) {
         Object.assign(snapshot, { vitality: copyVitalityState(unit.vitality) });
     }
@@ -27,6 +28,7 @@ export function copyUnitSnapshot<D extends UnitDefinition>(unit: Readonly<Unit<D
             spatialPresence: copySpatialPresenceState(unit.spatialPresence),
         });
     }
+
     return snapshot;
 }
 
@@ -34,6 +36,8 @@ export function reconcileUnitNavigation<U extends Unit>(unit: U, maps: Navigatio
     if (!hasLocomotion(unit)) {
         return unit;
     }
+
     const locomotion = reconcileLocomotionNavigation(unit.locomotion, maps);
+
     return locomotion === unit.locomotion ? unit : { ...unit, locomotion };
 }

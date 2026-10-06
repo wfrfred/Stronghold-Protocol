@@ -4,11 +4,11 @@ import type { PredefinedInstanceDefinition } from "../../core/tactical/battle/pr
 import type { ArknightsBlackboardEntry } from "./blackboard.js";
 import type { ArknightsTileContext } from "./map.js";
 import { parseEnemyMovementContent, resolveEnemyMovementPrefabKey } from "./enemy.js";
-import { parseLevelDefinition } from "./level.js";
-import type {
-    ArknightsLevelDefinition,
-    ArknightsLevelMapContext,
-    ArknightsPredefinedInstance,
+import {
+    parseLevelDefinition,
+    type ArknightsLevelDefinition,
+    type ArknightsLevelMapContext,
+    type ArknightsPredefinedInstance,
 } from "./level.js";
 import { parsePredefinedInstanceDefinition, resolvePredefinedPrefabKey } from "./predefined.js";
 import { parseEnemyMovementPrefab, parsePredefinedPrefab } from "./prefab.js";
@@ -59,6 +59,7 @@ function predefinedPath(selection: ArknightsPredefinedSelection): string {
 
 function locatePredefines(context: ArknightsLevelMapContext): readonly LocatedPredefined[] {
     const instances: LocatedPredefined[] = [];
+
     for (const source of ["predefines", "hardPredefines"] as const) {
         for (const collection of ["characterInsts", "tokenInsts"] as const) {
             for (const [index, instance] of context[source][collection].entries()) {
@@ -70,6 +71,7 @@ function locatePredefines(context: ArknightsLevelMapContext): readonly LocatedPr
             }
         }
     }
+
     return instances;
 }
 
@@ -85,11 +87,14 @@ export function loadMovementScenario(
         context: ArknightsTileContext;
         entry: ArknightsBlackboardEntry;
     }[] = [];
+
     const level = parseLevelDefinition(rawLevel, (context) => {
         const located = locatePredefines(context);
         const selected = new Set<string>();
+
         for (const item of selection.predefines) {
             const path = predefinedPath(item);
+
             if (
                 !Number.isSafeInteger(item.index) ||
                 item.index < 0 ||
@@ -100,14 +105,18 @@ export function loadMovementScenario(
                     `predefined selection requires unique existing instances: ${path}`,
                 );
             }
+
             selected.add(path);
         }
+
         const controllers: ArknightsTerrainController[] = [];
+
         for (const { id, path, instance } of located) {
             if (!selected.has(path)) {
                 omittedPredefines.push(path);
                 continue;
             }
+
             const character = catalog.character(instance.inst.characterKey);
             const skillId = resolvePredefinedSkillId(instance, character);
             const skill = resolvePredefinedSkillBlackboard(
@@ -120,16 +129,20 @@ export function loadMovementScenario(
                 catalog.prefab(prefabKey),
                 skill.prefabKey === null ? undefined : catalog.prefab(skill.prefabKey),
             );
+
             if (profile.type === "MECHANISM") {
                 if (instance.hidden) {
                     throw new RangeError(
                         "hidden terrain controllers require dynamic terrain activation",
                     );
                 }
+
                 controllers.push({ profile, skill });
             }
+
             predefines.push(parsePredefinedInstanceDefinition(id, instance, profile, character));
         }
+
         return {
             ...resolveTerrainMapOptions(controllers),
             consumeTileBlackboard: (context, entry) => {
@@ -139,14 +152,18 @@ export function loadMovementScenario(
                 if (entry.valueStr !== null || (entry.value !== 0 && entry.value !== 1)) {
                     throw new TypeError(`invalid movement-external tile flag ${entry.key}`);
                 }
+
                 unappliedTileBlackboard.push(Object.freeze({ context, entry }));
+
                 return true;
             },
         };
     });
+
     if (!level.options.steeringEnabled || level.options.functionDisableMask !== "NONE") {
         throw new RangeError("unsupported level movement controls");
     }
+
     const compiled = compileSpawnSchedule(level, selection, (reference) => {
         const rawEnemy = catalog.enemy(reference.id);
         const prefabKey = resolveEnemyMovementPrefabKey(
@@ -155,6 +172,7 @@ export function loadMovementScenario(
             reference.overwrittenData,
         );
         const profile = parseEnemyMovementPrefab(catalog.prefab(prefabKey));
+
         return parseEnemyMovementContent(
             rawEnemy,
             reference.level,
@@ -162,6 +180,7 @@ export function loadMovementScenario(
             reference.overwrittenData,
         );
     });
+
     return Object.freeze({
         level,
         spec: createBattleSpec({

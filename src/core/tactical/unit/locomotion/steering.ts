@@ -1,5 +1,9 @@
-import { createWorldOffset, World } from "../../geometry/coordinate.js";
-import type { WorldOffset, WorldPosition } from "../../geometry/coordinate.js";
+import {
+    createWorldOffset,
+    World,
+    type WorldOffset,
+    type WorldPosition,
+} from "../../geometry/coordinate.js";
 
 export interface SteeringState {
     readonly lastVelocity: WorldOffset;
@@ -21,12 +25,14 @@ export function createSteeringState(): SteeringState {
 
 export function createSteeringParameters(parameters: SteeringParameters): SteeringParameters {
     const { steeringFactor, maxSteeringForce } = parameters;
+
     if (!Number.isFinite(steeringFactor) || steeringFactor < 0) {
         throw new RangeError("steeringFactor must be finite and non-negative");
     }
     if (!Number.isFinite(maxSteeringForce) || maxSteeringForce < 0) {
         throw new RangeError("maxSteeringForce must be finite and non-negative");
     }
+
     return Object.freeze({ steeringFactor, maxSteeringForce });
 }
 
@@ -59,6 +65,7 @@ export function integrateSteeringDirection(
             state,
         };
     }
+
     const magnitude = Math.hypot(direction[0], direction[1]);
     const heading =
         magnitude === 0 ? createWorldOffset(0, 0) : World.scale(direction, 1 / magnitude);
@@ -69,6 +76,7 @@ export function integrateSteeringDirection(
     );
     const velocity = World.clampMagnitude(World.add(state.lastVelocity, force), moveSpeedPerTick);
     const nextPosition = World.translate(position, velocity);
+
     return {
         position: nextPosition,
         state: { lastVelocity: velocity },

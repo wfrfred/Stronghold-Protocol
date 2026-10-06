@@ -3,8 +3,10 @@ import type { BattlefieldChange } from "../battlefield/runtime.js";
 import { createWorldOffset } from "../geometry/coordinate.js";
 import type { RouteDefinition } from "../route/definition.js";
 import { createRouteExecution } from "../route/execution.js";
-import { initializeRouteControl } from "../unit/locomotion/route-control.js";
-import type { LocatedRouteSignal } from "../unit/locomotion/route-control.js";
+import {
+    initializeRouteControl,
+    type LocatedRouteSignal,
+} from "../unit/locomotion/route-control.js";
 import { hasRoutedLocomotion } from "../unit/locomotion/state.js";
 import { isSpatiallyPresent } from "../unit/presence.js";
 import type { Unit, UnitId } from "../unit/unit.js";
@@ -37,19 +39,23 @@ export function changeAlternativeRoutes(
 ): AlternativeRouteChanges {
     const units = new Map<UnitId, Unit>();
     const signals: UnitRouteSignal[] = [];
+
     for (const command of commands) {
         const unit = units.get(command.unitId) ?? getUnit(command.unitId);
+
         if (unit === undefined) {
             throw new RangeError(`unknown alternative route unit: ${command.unitId}`);
         }
         if (!hasRoutedLocomotion(unit)) {
             throw new RangeError(`unit has no routed locomotion: ${command.unitId}`);
         }
+
         if (command.type === "CLEAR_ALTERNATIVE_ROUTE") {
             const cleared = { ...unit, locomotion: { ...unit.locomotion, alternativeRoute: null } };
             units.set(unit.id, cleared);
             continue;
         }
+
         const context = createRouteExecution(
             createRng(execution.rngState),
             execution.nextNavigationRequestId,
@@ -64,6 +70,7 @@ export function changeAlternativeRoutes(
             context,
             isSpatiallyPresent(unit),
         );
+
         const updated = {
             ...unit,
             position: initialized.position,
@@ -74,6 +81,7 @@ export function changeAlternativeRoutes(
         execution = { ...execution, ...context.state() };
         signals.push(...initialized.signals.map((signal) => ({ ...signal, unitId: unit.id })));
     }
+
     return {
         changes: [...units.values()].map((unit) => ({ type: "UPDATE_UNIT", unit })),
         execution,

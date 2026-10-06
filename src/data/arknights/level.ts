@@ -2,8 +2,8 @@ import type { BattlefieldMap } from "../../core/tactical/battlefield/map.js";
 import { createTilePosition, type TilePosition } from "../../core/tactical/geometry/coordinate.js";
 import { Direction } from "../../core/tactical/geometry/direction.js";
 import type { RouteDefinition } from "../../core/tactical/route/definition.js";
-import { parseBattlefieldMap, type ArknightsMapOptions } from "./map.js";
 import { parseBlackboard, type ArknightsBlackboardEntry } from "./blackboard.js";
+import { parseBattlefieldMap, type ArknightsMapOptions } from "./map.js";
 import { parseRouteDefinition } from "./route.js";
 
 export type ArknightsJsonValue =
@@ -148,7 +148,9 @@ function object(value: unknown, name: string, fields?: readonly string[]): Recor
     if (value === null || typeof value !== "object" || Array.isArray(value)) {
         throw new TypeError(`${name} must be an object`);
     }
+
     const source = value as Record<string, unknown>;
+
     if (fields !== undefined) {
         for (const key of Object.keys(source)) {
             if (!fields.includes(key)) {
@@ -156,6 +158,7 @@ function object(value: unknown, name: string, fields?: readonly string[]): Recor
             }
         }
     }
+
     return source;
 }
 
@@ -167,13 +170,17 @@ function array<T>(
     if (!Array.isArray(value)) {
         throw new TypeError(`${name} must be an array`);
     }
+
     const result: T[] = [];
+
     for (let index = 0; index < value.length; index++) {
         if (!Object.hasOwn(value, index) || value[index] === undefined) {
             throw new TypeError(`${name} must be dense`);
         }
+
         result.push(parse(value[index], `${name}[${index}]`));
     }
+
     return Object.freeze(result);
 }
 
@@ -181,14 +188,17 @@ function string(value: unknown, name: string): string {
     if (typeof value !== "string") {
         throw new TypeError(`${name} must be a string`);
     }
+
     return value;
 }
 
 function identifier(value: unknown, name: string): string {
     const result = string(value, name);
+
     if (result.length === 0) {
         throw new TypeError(`${name} must not be empty`);
     }
+
     return result;
 }
 
@@ -200,14 +210,17 @@ function number(value: unknown, name: string, minimum = -Infinity): number {
     if (typeof value !== "number" || !Number.isFinite(value) || value < minimum) {
         throw new RangeError(`${name} must be finite and at least ${minimum}`);
     }
+
     return value;
 }
 
 function integer(value: unknown, name: string, minimum = 0): number {
     const result = number(value, name, minimum);
+
     if (!Number.isSafeInteger(result)) {
         throw new RangeError(`${name} must be a safe integer`);
     }
+
     return result;
 }
 
@@ -215,11 +228,13 @@ function boolean(value: unknown, name: string): boolean {
     if (typeof value !== "boolean") {
         throw new TypeError(`${name} must be boolean`);
     }
+
     return value;
 }
 
 function position(value: unknown, name: string): TilePosition {
     const source = object(value, name, ["row", "col"]);
+
     return createTilePosition(
         integer(source.row, `${name}.row`, -Number.MAX_SAFE_INTEGER),
         integer(source.col, `${name}.col`, -Number.MAX_SAFE_INTEGER),
@@ -230,6 +245,7 @@ function emptyArray(value: unknown, name: string): readonly never[] {
     if (!Array.isArray(value) || value.length !== 0) {
         throw new TypeError(`${name} is not supported unless empty`);
     }
+
     return Object.freeze([]);
 }
 
@@ -250,8 +266,10 @@ function json(value: unknown, name: string, ancestors = new Set<object>()): Arkn
     if (ancestors.has(value)) {
         throw new TypeError(`${name} must not be cyclic`);
     }
+
     ancestors.add(value);
     let result: ArknightsJsonValue;
+
     if (Array.isArray(value)) {
         result = array(value, name, (item, path) => json(item, path, ancestors));
     } else {
@@ -264,7 +282,9 @@ function json(value: unknown, name: string, ancestors = new Set<object>()): Arkn
             ),
         );
     }
+
     ancestors.delete(value);
+
     return result;
 }
 
@@ -272,6 +292,7 @@ function blackboard(value: unknown, name: string): readonly ArknightsBlackboardE
     if (value === null) {
         return null;
     }
+
     return parseBlackboard(value, name);
 }
 
@@ -292,6 +313,7 @@ function options(value: unknown): ArknightsLevelOptions {
         "functionDisableMask",
         "configBlackBoard",
     ]);
+
     return Object.freeze({
         characterLimit: integer(source.characterLimit, "level.options.characterLimit"),
         maxLifePoint: integer(source.maxLifePoint, "level.options.maxLifePoint"),
@@ -325,10 +347,13 @@ function enemyDbRef(
     unsupported: ArknightsUnsupportedRule[],
 ): ArknightsEnemyDbRef {
     const source = object(value, name, ["useDb", "id", "level", "overwrittenData"]);
+
     if (source.useDb !== true) {
         throw new TypeError(`${name}.useDb=false is not supported`);
     }
+
     let overwrittenData: ArknightsJsonValue = null;
+
     if (source.overwrittenData !== null) {
         object(source.overwrittenData, `${name}.overwrittenData`, [
             "name",
@@ -356,6 +381,7 @@ function enemyDbRef(
             }),
         );
     }
+
     return Object.freeze({
         useDb: true,
         id: identifier(source.id, `${name}.id`),
@@ -391,17 +417,23 @@ function action(
         "dontBlockWave",
         "forceBlockWaveInBranch",
     ]);
+
     if (source.actionType !== "SPAWN") {
         throw new RangeError(`${name} has unsupported actionType ${String(source.actionType)}`);
     }
+
     const routeIndex = integer(source.routeIndex, `${name}.routeIndex`);
+
     if (routeIndex >= routeCount) {
         throw new RangeError(`${name} references missing route ${routeIndex}`);
     }
+
     const key = identifier(source.key, `${name}.key`);
+
     if (!enemyIds.has(key)) {
         throw new RangeError(`${name} references missing enemy ${key}`);
     }
+
     return Object.freeze({
         actionType: "SPAWN",
         managedByScheduler: boolean(source.managedByScheduler, `${name}.managedByScheduler`),
@@ -444,6 +476,7 @@ function fragment(
     enemyIds: ReadonlySet<string>,
 ): ArknightsFragment {
     const source = object(value, name, ["preDelay", "actions"]);
+
     return Object.freeze({
         preDelay: number(source.preDelay, `${name}.preDelay`, 0),
         actions: array(source.actions, `${name}.actions`, (item, path) =>
@@ -481,15 +514,20 @@ function predefinedInstance(
         "potentialRank",
     ]);
     const phase = inst.phase;
+
     if (phase !== "PHASE_0" && phase !== "PHASE_1" && phase !== "PHASE_2") {
         throw new RangeError(`${name}.inst.phase is unsupported`);
     }
+
     const direction = source.direction;
+
     if (!Direction.is(direction)) {
         throw new RangeError(`${name}.direction is unsupported`);
     }
+
     for (const key of ["uniEquipIds", "masterInfos", "overrideTalents"] as const) {
         const value = source[key];
+
         if (value !== null && (!Array.isArray(value) || value.length !== 0)) {
             unsupported.push(
                 Object.freeze({
@@ -499,6 +537,7 @@ function predefinedInstance(
             );
         }
     }
+
     return Object.freeze({
         position: position(source.position, `${name}.position`),
         direction,
@@ -537,6 +576,7 @@ function predefines(
         "characterCards",
         "tokenCards",
     ]);
+
     return Object.freeze({
         characterInsts: array(source.characterInsts, `${name}.characterInsts`, (item, path) =>
             predefinedInstance(item, path, unsupported),
@@ -583,20 +623,26 @@ export function parseLevelDefinition(
         "operaConfig",
         "cameraPlugin",
     ]);
+
     const unsupported: ArknightsUnsupportedRule[] = [];
     const routes = array(source.routes, "level.routes", (item) => parseRouteDefinition(item));
     const extraRoutes = array(source.extraRoutes, "level.extraRoutes", (item) =>
         parseRouteDefinition(item),
     );
+
     const enemyIds = new Set<string>();
     const enemyDbRefs = array(source.enemyDbRefs, "level.enemyDbRefs", (item, path) => {
         const reference = enemyDbRef(item, path, unsupported);
+
         if (enemyIds.has(reference.id)) {
             throw new TypeError(`level.enemyDbRefs has duplicate enemy ${reference.id}`);
         }
+
         enemyIds.add(reference.id);
+
         return reference;
     });
+
     const waves = array(source.waves, "level.waves", (item, path) => {
         const wave = object(item, path, [
             "preDelay",
@@ -610,9 +656,11 @@ export function parseLevelDefinition(
             `${path}.maxTimeWaitingForNextWave`,
             -1,
         );
+
         if (maxTimeWaitingForNextWave < 0 && maxTimeWaitingForNextWave !== -1) {
             throw new RangeError(`${path}.maxTimeWaitingForNextWave must be -1 or non-negative`);
         }
+
         return Object.freeze({
             preDelay: number(wave.preDelay, `${path}.preDelay`, 0),
             postDelay: number(wave.postDelay, `${path}.postDelay`, 0),
@@ -623,25 +671,25 @@ export function parseLevelDefinition(
             advancedWaveTag: nullableString(wave.advancedWaveTag, `${path}.advancedWaveTag`),
         });
     });
-    const branches = Object.freeze(
-        Object.fromEntries(
-            Object.entries(
-                source.branches === null ? {} : object(source.branches, "level.branches"),
-            ).map(([key, item]) => {
-                identifier(key, "level branch name");
-                const path = `level.branches.${key}`;
-                const branch = object(item, path, ["phases"]);
-                return [
-                    key,
-                    Object.freeze({
-                        phases: array(branch.phases, `${path}.phases`, (part, name) =>
-                            fragment(part, name, extraRoutes.length, enemyIds),
-                        ),
-                    }),
-                ];
+
+    const branchEntries = Object.entries(
+        source.branches === null ? {} : object(source.branches, "level.branches"),
+    ).map(([key, item]): [string, ArknightsBranch] => {
+        identifier(key, "level branch name");
+        const path = `level.branches.${key}`;
+        const branch = object(item, path, ["phases"]);
+
+        return [
+            key,
+            Object.freeze({
+                phases: array(branch.phases, `${path}.phases`, (part, name) =>
+                    fragment(part, name, extraRoutes.length, enemyIds),
+                ),
             }),
-        ),
-    );
+        ];
+    });
+    const branches = Object.freeze(Object.fromEntries(branchEntries));
+
     const predefined = predefines(source.predefines, "level.predefines", unsupported);
     const hardPredefined = predefines(source.hardPredefines, "level.hardPredefines", unsupported);
     const levelOptions = options(source.options);
@@ -650,10 +698,13 @@ export function parseLevelDefinition(
         hardPredefines: hardPredefined,
         options: levelOptions,
     });
+
     const randomSeed = integer(source.randomSeed, "level.randomSeed", -(2 ** 31));
+
     if (randomSeed >= 2 ** 31) {
         throw new RangeError("level.randomSeed must be a signed 32-bit integer");
     }
+
     return Object.freeze({
         map: parseBattlefieldMap(source.mapData, mapOptions),
         routes,

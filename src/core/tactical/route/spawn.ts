@@ -1,6 +1,11 @@
 import type { Rng } from "../../common/rng.js";
-import { createWorldOffset, Tile, World } from "../geometry/coordinate.js";
-import type { WorldOffset, WorldPosition } from "../geometry/coordinate.js";
+import {
+    createWorldOffset,
+    Tile,
+    World,
+    type WorldOffset,
+    type WorldPosition,
+} from "../geometry/coordinate.js";
 import type { RouteDefinition } from "./definition.js";
 
 export interface RouteSpawn {
@@ -10,10 +15,12 @@ export interface RouteSpawn {
 
 export function initializeRouteSpawn(definition: RouteDefinition, rng: Rng): RouteSpawn {
     const center = Tile.center(definition.startPosition);
+
     for (let axis = 0; axis < 2; axis++) {
         const range = definition.spawnRandomRange[axis]!;
         const offset = definition.spawnOffset[axis]!;
         const centerCoordinate = center[axis]!;
+
         if (
             !Number.isFinite(range * 2) ||
             !Number.isFinite(offset - range) ||

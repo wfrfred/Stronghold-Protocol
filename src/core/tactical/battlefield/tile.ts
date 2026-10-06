@@ -58,14 +58,17 @@ function requireFinite(value: number, name: string): number {
     if (!Number.isFinite(value)) {
         throw new RangeError(`${name} must be finite`);
     }
+
     return value === 0 ? 0 : value;
 }
 
 function requireNonnegative(value: number, name: string): number {
     requireFinite(value, name);
+
     if (value < 0) {
         throw new RangeError(`${name} must be nonnegative`);
     }
+
     return value === 0 ? 0 : value;
 }
 
@@ -73,6 +76,7 @@ function requireTick(value: number, name: string): number {
     if (!Number.isSafeInteger(value) || value < 0) {
         throw new RangeError(`${name} must be a nonnegative safe integer`);
     }
+
     return value === 0 ? 0 : value;
 }
 
@@ -87,6 +91,7 @@ function copyMechanism(mechanism: TileMechanism | null): TileMechanism | null {
     switch (mechanism.type) {
         case "INFECTION": {
             const params = mechanism.params;
+
             return Object.freeze({
                 type: "INFECTION",
                 params: Object.freeze({
@@ -103,18 +108,21 @@ function copyMechanism(mechanism: TileMechanism | null): TileMechanism | null {
                 }),
             });
         }
+
         case "MIRE": {
             const params = mechanism.params;
             const stackIntervalTicks = requireTick(
                 params.stackIntervalTicks,
                 "mire stack interval",
             );
+
             if (stackIntervalTicks === 0) {
                 throw new RangeError("mire stack interval must be positive");
             }
             if (!Number.isSafeInteger(params.maxStacks) || params.maxStacks <= 0) {
                 throw new RangeError("mire maximum stacks must be a positive safe integer");
             }
+
             return Object.freeze({
                 type: "MIRE",
                 params: Object.freeze({
@@ -131,10 +139,13 @@ function copyMechanism(mechanism: TileMechanism | null): TileMechanism | null {
                 }),
             });
         }
+
         case "SMOG":
             return Object.freeze({ type: "SMOG" });
+
         case "DEEPSEA": {
             const params = mechanism.params;
+
             return Object.freeze({
                 type: "DEEPSEA",
                 params: Object.freeze({
@@ -150,16 +161,22 @@ function copyMechanism(mechanism: TileMechanism | null): TileMechanism | null {
                 }),
             });
         }
+
         default:
             throw new TypeError("unsupported tile mechanism");
     }
 }
 
 export function createTile(tile: Tile): Tile {
-    if (tile === null || typeof tile !== "object") {
+    const input: unknown = tile;
+
+    if (input === null || typeof input !== "object") {
         throw new TypeError("invalid tile");
     }
-    if (tile.heightType !== "LOWLAND" && tile.heightType !== "HIGHLAND") {
+
+    const fields: { readonly heightType: unknown } = tile;
+
+    if (fields.heightType !== "LOWLAND" && fields.heightType !== "HIGHLAND") {
         throw new TypeError("invalid tile height type");
     }
     if (!["NONE", "MELEE", "RANGED", "ALL"].includes(tile.buildableType)) {
