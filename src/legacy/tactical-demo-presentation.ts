@@ -245,6 +245,9 @@ export class TacticalDemoPresentation {
                     break;
 
                 case "ENEMY_SPAWNED":
+                case "UNIT_DEPLOYED":
+                case "UNIT_RELOCATED":
+                case "SUPPORT_LOST":
                 case "NAVIGATION":
                 case "ROUTE":
                     break;

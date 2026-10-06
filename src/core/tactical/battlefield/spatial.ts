@@ -2,6 +2,11 @@ import { World, type TilePosition } from "../geometry/coordinate.js";
 import { RangeGrid } from "../geometry/range.js";
 import type { Unit, UnitId } from "../unit/unit.js";
 import { isSpatiallyPresent } from "../unit/capability/presence.js";
+import {
+    hasOccupancy,
+    isOccupancyClaimActive,
+    type OccupancySlot,
+} from "../unit/capability/occupancy.js";
 import { BattlefieldMap } from "./map.js";
 import type { MechanismId, MechanismRuntime } from "./mechanism.js";
 import type {
@@ -13,6 +18,7 @@ import type { ProjectedNavigationEffect } from "./navigation-projection.js";
 
 export interface BattlefieldSpatialView {
     readonly unitsByTile: ReadonlyMap<number, ReadonlySet<UnitId>>;
+    readonly occupancyBySlot: ReadonlyMap<string, ReadonlySet<UnitId>>;
     readonly effectsByTile: ReadonlyMap<number, ReadonlySet<SpatialEffectId>>;
     readonly effectsBySource: ReadonlyMap<string, ReadonlySet<SpatialEffectId>>;
     readonly effectsByAnchor: ReadonlyMap<UnitId, ReadonlySet<SpatialEffectId>>;
@@ -30,6 +36,16 @@ export function battlefieldTileKey(
 
 export function spatialEffectSourceKey(source: SpatialEffectSource): string {
     return source.type === "UNIT" ? `UNIT:${source.unitId}` : `MECHANISM:${source.mechanismId}`;
+}
+
+export function battlefieldOccupancyKey(
+    map: BattlefieldMap,
+    position: TilePosition,
+    slot: OccupancySlot,
+): string | undefined {
+    const key = battlefieldTileKey(map, position);
+
+    return key === undefined ? undefined : `${key}:${slot}`;
 }
 
 function indexId<K, V>(index: Map<K, Set<V>>, key: K, id: V): void {
@@ -60,12 +76,35 @@ export function projectBattlefieldSpatial(
     effects: ReadonlyMap<SpatialEffectId, NavigationSpatialEffect>,
 ): BattlefieldSpatialView {
     const unitsByTile = new Map<number, Set<UnitId>>();
+    const occupancyBySlot = new Map<string, Set<UnitId>>();
     const effectsByTile = new Map<number, Set<SpatialEffectId>>();
     const effectsBySource = new Map<string, Set<SpatialEffectId>>();
     const effectsByAnchor = new Map<UnitId, Set<SpatialEffectId>>();
     const navigationEffects: ProjectedNavigationEffect[] = [];
 
     for (const unit of units.values()) {
+        if (hasOccupancy(unit)) {
+            for (const claim of unit.occupancy.claims) {
+                if (!isOccupancyClaimActive(unit, claim)) {
+                    continue;
+                }
+
+                const key = battlefieldOccupancyKey(map, claim.position, claim.slot);
+
+                if (key === undefined) {
+                    throw new RangeError("occupancy claim is outside the battlefield");
+                }
+
+                const occupants = occupancyBySlot.get(key);
+
+                if (occupants !== undefined && !occupants.has(unit.id)) {
+                    throw new RangeError("occupancy slot is already claimed");
+                }
+
+                indexId(occupancyBySlot, key, unit.id);
+            }
+        }
+
         if (!isSpatiallyPresent(unit)) {
             continue;
         }
@@ -122,5 +161,12 @@ export function projectBattlefieldSpatial(
         navigationEffects.push({ definition: effect.definition, positions });
     }
 
-    return { unitsByTile, effectsByTile, effectsBySource, effectsByAnchor, navigationEffects };
+    return {
+        unitsByTile,
+        occupancyBySlot,
+        effectsByTile,
+        effectsBySource,
+        effectsByAnchor,
+        navigationEffects,
+    };
 }

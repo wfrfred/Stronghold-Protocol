@@ -50,6 +50,7 @@ export interface Tile {
     readonly buildableType: BuildableType;
     readonly passableMask: PassableMask;
     readonly playerSideMask: PlayerSideMask;
+    readonly advancedBuildableMask?: number;
     readonly terrain: TileTerrain;
     readonly mechanism: TileMechanism | null;
 }
@@ -192,11 +193,22 @@ export function createTile(tile: Tile): Tile {
         throw new TypeError("invalid tile terrain");
     }
 
+    const advancedBuildableMask = tile.advancedBuildableMask ?? 0;
+
+    if (
+        !Number.isSafeInteger(advancedBuildableMask) ||
+        advancedBuildableMask < 0 ||
+        advancedBuildableMask > 0xffff_ffff
+    ) {
+        throw new RangeError("invalid advanced buildable mask");
+    }
+
     return Object.freeze({
         heightType: tile.heightType,
         buildableType: tile.buildableType,
         passableMask: tile.passableMask,
         playerSideMask: tile.playerSideMask,
+        advancedBuildableMask,
         terrain: tile.terrain,
         mechanism: copyMechanism(tile.mechanism),
     });

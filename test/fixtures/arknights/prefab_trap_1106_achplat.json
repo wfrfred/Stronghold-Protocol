@@ -1,0 +1,86 @@
+{
+  "prefabKey": "trap_1106_achplat",
+  "source": {
+    "bundle": "pkgrps/btl_pfb_tokens_4.ab",
+    "cab": "CAB-425a845ff37dbe17e203e6b341c4f664",
+    "unityVersion": "2021.3.39f1",
+    "filtered": true,
+    "selection": "root token deployment fields and its referenced initial tile mode"
+  },
+  "components": [
+    {
+      "object": {
+        "id": "-6692598461155940031"
+      },
+      "fields": {
+        "_modes": [
+          {
+            "m_FileID": 0,
+            "m_PathID": "188846094545021249"
+          }
+        ],
+        "_motionMode": 0,
+        "_blockMode": 0,
+        "_buildCondition": {
+          "buildableType": 1,
+          "isTryingOverlapCharacater": false,
+          "needSpecifyDirection": true,
+          "limitByHostAttackRange": false,
+          "limitByHostAbilityRange": false,
+          "canNotBuildInHostAttackRange": false,
+          "abilityName": "",
+          "tileKey": "",
+          "extraBuildConditionArray": {
+            "SerializedState": "[]",
+            "SerializedObjectReferences": []
+          },
+          "advancedBuildableMask": 1,
+          "overlapOptions": {
+            "_verifySourceId": false,
+            "_verifySourceIds": [],
+            "_verifySourceProfession": true,
+            "_verifySourceProfessions": 639,
+            "_isAllConditionOR": true,
+            "_overlapPriority": 1000,
+            "_changeTargetGraphicColor": true,
+            "_excludeSourceId": false,
+            "_excludeSourceIds": [],
+            "_verifySourceTargetTokenRelationship": false
+          },
+          "excludeNoTargetTile": false,
+          "extraLocateRange": "",
+          "checkManuallyBuildableType": false,
+          "manuallyBuildableType": 0,
+          "_excludeOccupiedByWalkEnemy": false,
+          "allowWalkEnemyInHostRange": false,
+          "_checkUpdateBuildable": false
+        },
+        "_category": 2,
+        "_rewriteTileOptions": true,
+        "_ignoreBlockAnyRoutes": true,
+        "_withdrawable": false
+      }
+    },
+    {
+      "object": {
+        "id": "188846094545021249"
+      },
+      "fields": {
+        "_tileOptions": {
+          "buildableType": 2,
+          "passableMask": 2,
+          "overrideObstacleLikeMoveCost": true,
+          "advancedBuildMask": 1,
+          "heightType": 1,
+          "forceSetHeightType": false
+        },
+        "_keepCurrentPassableMask": true,
+        "_keepCurrentBuildableType": false,
+        "_rewriteTileHeightType": true,
+        "_rewriteTileHeight": true,
+        "_rewriteHeight": 0.4000000059604645,
+        "_rewriteTileAdvancedBuildMask": false
+      }
+    }
+  ]
+}

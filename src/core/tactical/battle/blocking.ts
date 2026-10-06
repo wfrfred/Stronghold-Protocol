@@ -7,7 +7,11 @@ export function createBlockingSystem(): { readonly step: BattlePhase } {
         const units = new Map<UnitId, Unit>(
             input.battlefield.unitIds.map((id) => [id, input.battlefield.getUnit(id)!]),
         );
-        const relations = acquireBlockingRelations(units, input.battlefield.blockingRelations);
+        const relations = acquireBlockingRelations(
+            units,
+            input.battlefield.blockingRelations,
+            input.battlefield.supportRelations,
+        );
 
         return {
             state: undefined,

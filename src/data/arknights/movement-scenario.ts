@@ -11,7 +11,11 @@ import {
     type ArknightsPredefinedInstance,
 } from "./level.js";
 import { parsePredefinedInstanceDefinition, resolvePredefinedPrefabKey } from "./predefined.js";
-import { parseEnemyMovementPrefab, parsePredefinedPrefab } from "./prefab.js";
+import {
+    parseEnemyMovementPrefab,
+    parsePredefinedPrefab,
+    parseTileDeploymentPrefab,
+} from "./prefab.js";
 import { compileSpawnSchedule, type ArknightsScheduleSelection } from "./schedule.js";
 import { resolvePredefinedSkillBlackboard, resolvePredefinedSkillId } from "./skill.js";
 import { resolveTerrainMapOptions, type ArknightsTerrainController } from "./terrain.js";
@@ -143,8 +147,14 @@ export function loadMovementScenario(
             predefines.push(parsePredefinedInstanceDefinition(id, instance, profile, character));
         }
 
+        const terrain = resolveTerrainMapOptions(controllers);
+
         return {
-            ...resolveTerrainMapOptions(controllers),
+            ...terrain,
+            tileDeploymentPrefabs:
+                terrain.deepsea === undefined
+                    ? []
+                    : [parseTileDeploymentPrefab(catalog.prefab("tile_deepsea"))],
             consumeTileBlackboard: (context, entry) => {
                 if (entry.key !== "isValidHand" && entry.key !== "previewNotAlloed") {
                     return false;

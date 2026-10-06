@@ -13,6 +13,9 @@ import { createBattlefieldRuntime } from '../../dist/core/tactical/battlefield/r
 import { NavigationMap } from '../../dist/core/tactical/navigation/map.js';
 import { loadMovementScenario } from '../../dist/data/arknights/movement-scenario.js';
 import { resolvePredefinedSkillBlackboard } from '../../dist/data/arknights/skill.js';
+import { parsePredefinedPrefab, parseTileDeploymentPrefab } from '../../dist/data/arknights/prefab.js';
+import { createDeploymentProfile } from '../../dist/core/tactical/unit/capability/deployment.js';
+import { evaluateDeployment } from '../../dist/core/tactical/battlefield/deployment.js';
 
 const REAL = { skip: !hasGeneratedData() };
 const ds = getDefaultSource();
@@ -1336,6 +1339,7 @@ test('core act2 mire and tide controller prefabs initialize nonspatial mechanism
     const affected = scenario.spec.map.tiles.filter(tile => tile.mechanism?.type === terrainType);
     assert.equal(affected.length, 12);
     for (const tile of affected) assert.deepEqual(tile.mechanism.params, params);
+    if (terrainType === 'DEEPSEA') assert.ok(affected.every(tile => tile.advancedBuildableMask === 2));
     while (runtime.result === null) runtime.step();
     assert.equal(runtime.result.reason, 'SCHEDULE_COMPLETED');
     assert.equal(runtime.result.remainingUnitIds.length, 4);
@@ -1428,4 +1432,77 @@ test('core failed command batches preserve hidden recipes, battlefield projectio
   assert.equal(runtime.snapshot().tickIndex, 1);
   assert.equal(runtime.snapshot().units[0].id, 0);
   assert.equal(runtime.snapshot().effects[0].id, 0);
+});
+
+test('core raw tile modes distinguish crates from platforms and require the referenced prefab mode', () => {
+  assert.deepEqual(parsePredefinedPrefab(arknightsFixture('prefab_trap_1105_accrate')), {
+    type: 'UNIT', prefabKey: 'trap_1105_accrate', walkCostFloor: 1000,
+    tileBinding: { heightType: null, buildableType: 'NONE', advancedBuildableMask: null },
+    deployment: { buildableType: 'MELEE', advancedBuildableMask: 1 },
+  });
+  const raw = arknightsFixture('prefab_trap_1106_achplat');
+  assert.deepEqual(parsePredefinedPrefab(raw), {
+    type: 'UNIT', prefabKey: 'trap_1106_achplat', walkCostFloor: 1000,
+    tileBinding: { heightType: 'HIGHLAND', buildableType: 'RANGED', advancedBuildableMask: null },
+    deployment: { buildableType: 'MELEE', advancedBuildableMask: 1 },
+  });
+  for (const reference of [
+    { m_FileID: 0, m_PathID: '999999999999999999' },
+    { m_FileID: 1, m_PathID: raw.components[0].fields._modes[0].m_PathID },
+  ]) {
+    const invalid = structuredClone(raw);
+    invalid.components[0].fields._modes[0] = reference;
+    assert.throws(() => parsePredefinedPrefab(invalid));
+  }
+  const rewritten = structuredClone(raw);
+  rewritten.components[1].fields._rewriteTileAdvancedBuildMask = true;
+  assert.equal(parsePredefinedPrefab(rewritten).tileBinding.advancedBuildableMask, 1);
+  const deepsea = arknightsFixture('prefab_tile_deepsea');
+  assert.deepEqual(parseTileDeploymentPrefab(deepsea), { prefabKey: 'tile_deepsea', advancedBuildableMask: 2 });
+  const wrongKey = structuredClone(deepsea);
+  wrongKey.components[0].fields._tileKey = 'tile_road';
+  assert.throws(() => parseTileDeploymentPrefab(wrongKey));
+  const duplicate = structuredClone(deepsea);
+  duplicate.components.push(structuredClone(duplicate.components[0]));
+  assert.throws(() => parseTileDeploymentPrefab(duplicate));
+});
+
+test('core real hidden platforms grant ranged deployment support while retaining passage and a WALK cost of 1000', () => {
+  const raw = arknightsFixture('level_act1autochess_m02');
+  const index = raw.predefines.tokenInsts.findIndex(instance => instance.inst.characterKey === 'trap_1106_achplat');
+  assert.ok(index >= 0);
+  const instance = raw.predefines.tokenInsts[index];
+  assert.equal(instance.hidden, true);
+  const scenario = loadMovementScenario(raw, {
+    actions: [{ waveIndex: 0, fragmentIndex: 0, actionIndex: 0 }], branches: [],
+    predefines: [{ source: 'predefines', collection: 'tokenInsts', index }],
+  }, movementCatalog, 123);
+  const runtime = new BattleRuntime(scenario.spec);
+  const [definitionId] = runtime.predefinedIdsForAlias(instance.alias);
+  const originalMaps = runtime.navigationMaps;
+  const tile = [instance.position.row, instance.position.col];
+  const originalCell = NavigationMap.get(originalMaps.WALK, tile);
+  runtime.step([{ type: 'APPEAR_PREDEFINED', definitionId }]);
+  const appeared = runtime.snapshot();
+  const platform = appeared.units.find(unit => unit.definition.id === 'trap_1106_achplat');
+  assert.deepEqual(platform.definition.tileBinding, { heightType: 'HIGHLAND', buildableType: 'RANGED', advancedBuildableMask: null });
+  assert.deepEqual(platform.occupancy.claims, [{ position: tile, slot: 'SUPPORT', type: 'PRESENT' }]);
+  assert.equal(NavigationMap.get(runtime.navigationMaps.WALK, tile).passable, originalCell.passable);
+  assert.equal(NavigationMap.get(runtime.navigationMaps.WALK, tile).moveCost, 1000);
+  assert.equal(runtime.navigationMaps.FLY, originalMaps.FLY);
+
+  const field = createBattlefieldRuntime({ map: scenario.spec.map });
+  field.apply(appeared.units.map(unit => ({ type: 'REGISTER_UNIT', unit })));
+  assert.deepEqual(field.occupancyAt(tile, 'SUPPORT'), [platform.id]);
+  assert.deepEqual(evaluateDeployment(field, { profile: createDeploymentProfile({ buildableType: 'RANGED' }),
+    tile, playerSide: 'SIDE_A' }), { type: 'ALLOWED', supportUnitId: platform.id });
+  assert.deepEqual(evaluateDeployment(field, { profile: createDeploymentProfile({ buildableType: 'MELEE' }),
+    tile, playerSide: 'SIDE_A' }), { type: 'DENIED', reason: 'BUILDABLE_TYPE' });
+
+  runtime.step([{ type: 'REMOVE_PREDEFINED', definitionId, reason: 'SCRIPT' }]);
+  assert.equal(runtime.snapshot().units.some(unit => unit.id === platform.id), false);
+  assert.deepEqual(NavigationMap.get(runtime.navigationMaps.WALK, tile), originalCell);
+  assert.equal(runtime.navigationMaps.FLY, originalMaps.FLY);
+  field.apply([{ type: 'REMOVE_UNIT', unitId: platform.id, reason: 'SCRIPT' }]);
+  assert.deepEqual(field.occupancyAt(tile, 'SUPPORT'), []);
 });

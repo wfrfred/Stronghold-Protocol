@@ -6,6 +6,13 @@ import { createMechanismDefinition } from "../../core/tactical/battlefield/mecha
 import { createNavigationEffectDefinition } from "../../core/tactical/battlefield/navigation-effect.js";
 import { Tile, createTileOffset } from "../../core/tactical/geometry/coordinate.js";
 import { RangeGrid } from "../../core/tactical/geometry/range.js";
+import {
+    createDeploymentProfile,
+    createTileBindingDefinition,
+    type DeployableUnitDefinition,
+    type TileBoundUnitDefinition,
+} from "../../core/tactical/unit/capability/deployment.js";
+import { createOccupancyState } from "../../core/tactical/unit/capability/occupancy.js";
 import type { VitalUnitDefinition } from "../../core/tactical/unit/capability/vitality.js";
 import type { ArknightsPredefinedInstance } from "./level.js";
 import type { PredefinedPrefab } from "./prefab.js";
@@ -79,7 +86,8 @@ function predefinedCharacter(
 function unitDefinition(
     instance: ArknightsPredefinedInstance,
     phase: Record<string, unknown>,
-): VitalUnitDefinition {
+    profile: Extract<PredefinedPrefab, { readonly type: "UNIT" }>,
+): VitalUnitDefinition & TileBoundUnitDefinition & DeployableUnitDefinition {
     if (instance.inst.potentialRank !== 0 || instance.inst.favorPoint !== 0) {
         throw new TypeError("predefined unit potential and favor modifiers are not supported");
     }
@@ -124,6 +132,8 @@ function unitDefinition(
     return Object.freeze({
         id: instance.inst.characterKey,
         vitality: Object.freeze({ maxHp: maxHp! }),
+        tileBinding: createTileBindingDefinition(profile.tileBinding),
+        deployment: createDeploymentProfile(profile.deployment),
     });
 }
 
@@ -160,8 +170,11 @@ export function parsePredefinedInstanceDefinition(
         initiallyPresent: !instance.hidden,
         creation: {
             type: "UNIT",
-            definition: unitDefinition(instance, phase),
+            definition: unitDefinition(instance, phase, profile),
             position: Tile.center(instance.position),
+            occupancy: createOccupancyState({
+                claims: [{ position: instance.position, slot: "SUPPORT", type: "PRESENT" }],
+            }),
             navigationEffects: [
                 {
                     definition: effect,

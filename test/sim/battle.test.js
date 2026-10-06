@@ -30,6 +30,9 @@ import { compileSpawnSchedule } from '../../dist/data/arknights/schedule.js';
 import { compileLevelMovementFragment } from '../../dist/data/arknights/movement-fragment.js';
 import { loadMovementScenario } from '../../dist/data/arknights/movement-scenario.js';
 import { createLegacyCombatBattle } from '../../dist/legacy/combat.js';
+import { createDeploymentProfile, createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/deployment.js';
+import { createOccupancyState } from '../../dist/core/tactical/unit/capability/occupancy.js';
+import { createPredefinedInstanceDefinition } from '../../dist/core/tactical/battle/predefined.js';
 
 const approx = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
 const guard = (o = {}) => chessRec({ id: 't_guard', profession: 'WARRIOR', stats: { atk: 300, blockCnt: 2 }, skill: null, ...o });
@@ -1888,4 +1891,201 @@ test('core same-position alternative disappearance and appearance replace an exi
   assert.equal(after.units.find(unit => unit.id === 1).spatialPresence.present, true);
   assert.deepEqual(after.blockingRelations, [{ blockerUnitId: 2, blockedUnitId: 1 }]);
   assert.equal(step.result, null);
+});
+
+function deploymentBattleInput(overrides = {}) {
+  const source = routeCommandBattle([{ type: 'WAIT_FOR_TICKS', durationTicks: 100 }], {
+    route: { startPosition: [0, 5], endPosition: [0, 5] }, maxTicks: 100,
+  });
+  return {
+    ...withTimelineSpawns(source, [{ ...source.schedule.spawns[0], tick: 99 }]),
+    map: createBattlefieldMap(1, 6, Array.from({ length: 6 }, () => ({
+      heightType: 'LOWLAND', buildableType: 'ALL', passableMask: 'ALL',
+      playerSideMask: 'ALL', terrain: 'NORMAL', mechanism: null,
+    }))),
+    ...overrides,
+  };
+}
+
+const deployableDefinition = (id = 'test_deployable') => Object.freeze({
+  id, deployment: createDeploymentProfile({ buildableType: 'ALL' }),
+  vitality: Object.freeze({ maxHp: 100 }), allegiance: Object.freeze({ side: 'ALLY' }),
+  targetable: Object.freeze({ layer: 'GROUND', enabled: true }),
+  blocker: Object.freeze({ capacity: 1, contactRadius: 0.7 }),
+});
+
+test('core battle deploys, relocates and retreats units with owned occupancy and attached navigation effects', () => {
+  const definition = deployableDefinition();
+  const runtime = new BattleRuntime(deploymentBattleInput());
+  const maps = runtime.navigationMaps;
+  const deployed = runtime.step([{ type: 'DEPLOY_UNIT', definition, tilePosition: [0, 1], playerSide: 'SIDE_A' }]);
+  const unit = runtime.snapshot().units[0];
+  assert.equal(unit.id, 0);
+  assert.equal(unit.definition, definition);
+  assert.deepEqual(unit.position, [1, 0]);
+  assert.deepEqual(unit.occupancy.claims, [{ position: [0, 1], slot: 'DEPLOYMENT', type: 'PRESENT' }]);
+  assert.deepEqual(deployed.events.filter(event => event.type === 'UNIT_DEPLOYED').map(event => event.unitId), [0]);
+  assert.equal(runtime.navigationMaps, maps);
+
+  runtime.step([{ type: 'RELOCATE_UNIT', unitId: 0, tilePosition: [0, 1], playerSide: 'SIDE_A' }]);
+  const relocated = runtime.step([{ type: 'RELOCATE_UNIT', unitId: 0, tilePosition: [0, 3], playerSide: 'SIDE_A' }]);
+  const moved = runtime.snapshot().units[0];
+  assert.equal(moved.id, unit.id);
+  assert.equal(moved.definition, definition);
+  assert.deepEqual(moved.position, [3, 0]);
+  assert.deepEqual(moved.occupancy.claims, [{ position: [0, 3], slot: 'DEPLOYMENT', type: 'PRESENT' }]);
+  assert.deepEqual(relocated.events.filter(event => event.type === 'UNIT_RELOCATED').map(event => event.unitId), [0]);
+  assert.equal(runtime.navigationMaps, maps);
+
+  runtime.step([{ type: 'DEPLOY_UNIT', definition, tilePosition: [0, 1], playerSide: 'SIDE_B' }]);
+  assert.deepEqual(runtime.snapshot().units.map(value => [value.id, value.position]), [[0, [3, 0]], [1, [1, 0]]]);
+  const retreated = runtime.step([{ type: 'RETREAT_UNIT', unitId: 0 }]);
+  assert.deepEqual(retreated.events.filter(event => event.type === 'UNIT_REMOVED').map(event => event.unitId), [0]);
+  assert.deepEqual(runtime.snapshot().units.map(value => value.id), [1]);
+  runtime.step([{ type: 'DEPLOY_UNIT', definition, tilePosition: [0, 3], playerSide: 'SIDE_A' }]);
+  assert.deepEqual(runtime.snapshot().units.map(value => [value.id, value.position]), [[1, [1, 0]], [2, [3, 0]]]);
+  assert.equal(runtime.navigationMaps, maps);
+
+  const occupancy = createOccupancyState({ claims: [{ position: [0, 5], slot: 'DEPLOYMENT', type: 'RESERVATION' }] });
+  const initialEffects = [{
+    definition: createNavigationEffectDefinition({ id: 'initial_placement_navigation',
+      WALK: { denyPassage: false, deniedDepartures: [], costFloor: 1000 }, FLY: null }),
+    range: [[0, 0]], direction: 'RIGHT',
+  }];
+  const initialInput = createBattleSpec(deploymentBattleInput({
+    initialUnits: [{ definition: Object.freeze({ id: 'reserved_home' }), position: [5, 0], occupancy,
+      navigationEffects: initialEffects }],
+  }));
+  const reserved = new BattleRuntime(initialInput);
+  occupancy.claims[0].position = [0, 4];
+  initialEffects[0].range[0][1] = 1;
+  assert.deepEqual(reserved.snapshot().units[0].occupancy.claims,
+    [{ position: [0, 5], slot: 'DEPLOYMENT', type: 'RESERVATION' }]);
+  assert.deepEqual(initialInput.initialUnits[0].navigationEffects[0].range, [[0, 0]]);
+  assert.deepEqual(reserved.snapshot().effects[0].region.range, [[0, 0]]);
+  assert.deepEqual(reserved.navigationMaps.WALK.cells.map(cell => cell.moveCost), [1, 1, 1, 1, 1, 1000]);
+  const before = reserved.snapshot();
+  assert.throws(() => reserved.step([{ type: 'DEPLOY_UNIT', definition, tilePosition: [0, 5], playerSide: 'SIDE_A' }]));
+  assert.deepEqual(reserved.snapshot(), before);
+
+  const level = parseLevelDefinition(arknightsFixture('level_act1autochess_m02'), () => ({
+    consumeTileBlackboard: (_, entry) => ['isValidHand', 'previewNotAlloed'].includes(entry.key),
+  }));
+  const recipe = parsePredefinedInstanceDefinition(50,
+    level.predefines.tokenInsts.find(instance => instance.inst.characterKey === 'trap_1105_accrate'),
+    parsePredefinedPrefab(arknightsFixture('prefab_trap_1105_accrate')), arknightsFixture('character_trap_1105_accrate'));
+  const crate = recipe.creation.definition;
+  const navigationEffects = recipe.creation.navigationEffects.map(contribution => ({
+    ...contribution, range: contribution.range.map(offset => [...offset]),
+  }));
+  const crates = new BattleRuntime(deploymentBattleInput());
+  const baseline = crates.navigationMaps;
+  crates.step([{ type: 'DEPLOY_UNIT', definition: crate, tilePosition: [0, 1], playerSide: 'SIDE_A', navigationEffects }]);
+  assert.deepEqual(crates.navigationMaps.WALK.cells.map(cell => cell.moveCost), [1, 1000, 1, 1, 1, 1]);
+  assert.deepEqual(crates.navigationMaps.WALK.cells.map(cell => cell.passable), baseline.WALK.cells.map(cell => cell.passable));
+  assert.equal(crates.navigationMaps.FLY, baseline.FLY);
+  const [effect] = crates.snapshot().effects;
+  assert.deepEqual(effect.source, { type: 'UNIT', unitId: 0 });
+  assert.equal(effect.region.type, 'FOLLOW_UNIT');
+  assert.equal(effect.region.unitId, 0);
+  assert.equal(crates.snapshot().units[0].definition, crate);
+  navigationEffects[0].range[0][1] = 1;
+  navigationEffects.push({ ...navigationEffects[0], range: [[0, 2]] });
+  crates.step([{ type: 'RELOCATE_UNIT', unitId: 0, tilePosition: [0, 3], playerSide: 'SIDE_A' }]);
+  assert.deepEqual(crates.navigationMaps.WALK.cells.map(cell => cell.moveCost), [1, 1, 1, 1000, 1, 1]);
+  assert.equal(crates.navigationMaps.FLY, baseline.FLY);
+  assert.equal(crates.snapshot().effects[0].id, effect.id);
+  assert.equal(crates.snapshot().effects.length, 1);
+  assert.deepEqual(crates.snapshot().effects[0].region.range, [[0, 0]]);
+  crates.step([{ type: 'RETREAT_UNIT', unitId: 0 }]);
+  assert.deepEqual(crates.snapshot().units, []);
+  assert.deepEqual(crates.snapshot().effects, []);
+  assert.deepEqual(crates.navigationMaps.WALK.cells, baseline.WALK.cells);
+  assert.equal(crates.navigationMaps.FLY, baseline.FLY);
+});
+
+test('core battle conflicting deployment commands roll back identities, relations and tick state before deterministic retry', () => {
+  const spec = deploymentBattleInput();
+  const runtime = new BattleRuntime(spec), replay = new BattleRuntime(spec);
+  const definition = deployableDefinition();
+  const deploy = tilePosition => ({ type: 'DEPLOY_UNIT', definition, tilePosition, playerSide: 'SIDE_A' });
+  const before = runtime.snapshot(), maps = runtime.navigationMaps;
+  assert.throws(() => runtime.step([deploy([0, 1]), deploy([0, 1])]));
+  assert.deepEqual(runtime.snapshot(), before);
+  assert.equal(runtime.navigationMaps, maps);
+  assert.deepEqual(runtime.step([deploy([0, 1]), deploy([0, 2])]), replay.step([deploy([0, 1]), deploy([0, 2])]));
+  assert.deepEqual(runtime.snapshot(), replay.snapshot());
+
+  const occupied = runtime.snapshot();
+  assert.throws(() => runtime.step([
+    { type: 'RELOCATE_UNIT', unitId: 0, tilePosition: [0, 3], playerSide: 'SIDE_A' },
+    { type: 'RELOCATE_UNIT', unitId: 1, tilePosition: [0, 3], playerSide: 'SIDE_A' },
+  ]));
+  assert.deepEqual(runtime.snapshot(), occupied);
+  assert.equal(runtime.navigationMaps, maps);
+  assert.deepEqual(runtime.step([{ type: 'RETREAT_UNIT', unitId: 0 }, deploy([0, 1])]),
+    replay.step([{ type: 'RETREAT_UNIT', unitId: 0 }, deploy([0, 1])]));
+  assert.deepEqual(runtime.snapshot(), replay.snapshot());
+  assert.deepEqual(runtime.snapshot().units.map(unit => unit.id), [1, 2]);
+});
+
+test('core elevated support disables blocking without changing target layer and reports loss while retaining its occupant', () => {
+  const provider = Object.freeze({ id: 'platform_provider',
+    tileBinding: createTileBindingDefinition({ buildableType: 'ALL', heightType: 'HIGHLAND' }),
+  });
+  const definition = deployableDefinition();
+  const enemyDefinition = Object.freeze({ id: 'standing_enemy',
+    vitality: Object.freeze({ maxHp: 100 }), allegiance: Object.freeze({ side: 'ENEMY' }),
+    targetable: Object.freeze({ layer: 'GROUND', enabled: true }), blockable: Object.freeze({ weight: 1 }),
+  });
+  const occupancy = createOccupancyState({ claims: [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }] });
+  const recipe = createPredefinedInstanceDefinition({ id: 50, alias: 'test_platform', initiallyPresent: true, creation: {
+    type: 'UNIT', definition: provider, position: [1, 0], navigationEffects: [], occupancy,
+  } });
+  occupancy.claims[0].position = [0, 4];
+  occupancy.claims.push({ position: [0, 5], slot: 'SUPPORT', type: 'PRESENT' });
+  assert.deepEqual(recipe.creation.occupancy.claims, [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }]);
+  const claims = [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }];
+  const navigationEffects = [{
+    definition: createNavigationEffectDefinition({ id: 'platform_navigation',
+      WALK: { denyPassage: false, deniedDepartures: [], costFloor: 1000 }, FLY: null }),
+    range: [[0, 0]], direction: 'RIGHT',
+  }];
+  const hiddenRecipe = { ...recipe, initiallyPresent: false,
+    creation: { ...recipe.creation, occupancy: { claims }, navigationEffects } };
+  const runtime = new BattleRuntime(deploymentBattleInput({
+    initialUnits: [{ definition: enemyDefinition, position: [1, 0] }],
+    predefines: [hiddenRecipe],
+  }));
+  claims[0].position[1] = 4;
+  claims.push({ position: [0, 5], slot: 'SUPPORT', type: 'PRESENT' });
+  navigationEffects[0].range[0][1] = 1;
+  navigationEffects[0].direction = 'UP';
+  navigationEffects.push({ ...navigationEffects[0], range: [[0, 2]] });
+  assert.deepEqual(runtime.snapshot().predefinedPresence, []);
+  runtime.step([{ type: 'APPEAR_PREDEFINED', definitionId: 50 }]);
+  const platformId = runtime.snapshot().predefinedPresence[0].source.unitId;
+  const platform = runtime.snapshot().units.find(unit => unit.id === platformId);
+  assert.deepEqual(platform.occupancy.claims, [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }]);
+  assert.deepEqual(runtime.navigationMaps.WALK.cells.map(cell => cell.moveCost), [1, 1000, 1, 1, 1, 1]);
+  assert.equal(runtime.snapshot().effects.length, 1);
+  assert.deepEqual(runtime.snapshot().effects[0].region.range, [[0, 0]]);
+  assert.equal(runtime.snapshot().effects[0].region.direction, 'RIGHT');
+  const deployed = runtime.step([{ type: 'DEPLOY_UNIT', definition, tilePosition: [0, 1], playerSide: 'SIDE_A' }]);
+  const occupantId = deployed.events.find(event => event.type === 'UNIT_DEPLOYED').unitId;
+  const supported = runtime.snapshot();
+  assert.deepEqual(supported.supportRelations, [{ supportedUnitId: occupantId, supportUnitId: platformId }]);
+  assert.deepEqual(supported.blockingRelations, []);
+  assert.equal(supported.units.find(unit => unit.id === occupantId).targetable.layer, 'GROUND');
+  const removed = runtime.step([{ type: 'REMOVE_PREDEFINED', definitionId: 50, reason: 'SCRIPT' }]);
+  assert.deepEqual(removed.events.filter(event => event.type === 'SUPPORT_LOST').map(event => [event.supportedUnitId, event.supportUnitId]),
+    [[occupantId, platformId]]);
+  const after = runtime.snapshot();
+  assert.deepEqual(after.supportRelations, []);
+  assert.equal(after.units.find(unit => unit.id === occupantId).definition, definition);
+  assert.deepEqual(after.units.find(unit => unit.id === occupantId).position, [1, 0]);
+  assert.equal(after.units.find(unit => unit.id === occupantId).vitality.hp, 100);
+  assert.equal(after.units.find(unit => unit.id === occupantId).targetable.layer, 'GROUND');
+  assert.deepEqual(after.blockingRelations, [{ blockerUnitId: occupantId,
+    blockedUnitId: after.units.find(unit => unit.definition === enemyDefinition).id }]);
 });

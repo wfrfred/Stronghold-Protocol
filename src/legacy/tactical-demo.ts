@@ -79,6 +79,7 @@ const FIXTURES = [
     "prefab_trap_1105_accrate",
     "prefab_trap_098_mire",
     "prefab_trap_042_tidectrl",
+    "prefab_tile_deepsea",
     "prefab_sktok_mire",
     "prefab_sktok_tidectrl_3",
 ];

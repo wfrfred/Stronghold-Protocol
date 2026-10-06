@@ -5,6 +5,8 @@ import { isSpatiallyPresent } from "../unit/capability/presence.js";
 import { hasTargetable } from "../unit/capability/targetable.js";
 import { hasVitality } from "../unit/capability/vitality.js";
 import type { Unit, UnitId } from "../unit/unit.js";
+import { hasTileBindingDefinition } from "../unit/capability/deployment.js";
+import type { SupportRelation } from "./support.js";
 
 export interface BlockingRelation {
     readonly blockerUnitId: UnitId;
@@ -26,7 +28,25 @@ function isActive(unit: Unit): boolean {
     return isSpatiallyPresent(unit) && (!hasVitality(unit) || unit.vitality.hp > 0);
 }
 
-function canBlock(blocker: Unit, blocked: Unit): boolean {
+function canBlock(
+    blocker: Unit,
+    blocked: Unit,
+    units: ReadonlyMap<UnitId, Unit>,
+    supports: readonly SupportRelation[],
+): boolean {
+    const supportId = supports.find(
+        (relation) => relation.supportedUnitId === blocker.id,
+    )?.supportUnitId;
+    const support = supportId === undefined ? undefined : units.get(supportId);
+
+    if (
+        support !== undefined &&
+        hasTileBindingDefinition(support.definition) &&
+        support.definition.tileBinding.heightType === "HIGHLAND"
+    ) {
+        return false;
+    }
+
     return (
         hasBlocker(blocker) &&
         blocker.blocker.enabled &&
@@ -42,6 +62,7 @@ function canBlock(blocker: Unit, blocked: Unit): boolean {
 export function reconcileBlockingRelations(
     units: ReadonlyMap<UnitId, Unit>,
     relations: readonly BlockingRelation[],
+    supports: readonly SupportRelation[] = [],
 ): readonly BlockingRelation[] {
     const used = new Map<UnitId, number>();
     const blockedIds = new Set<UnitId>();
@@ -56,7 +77,7 @@ export function reconcileBlockingRelations(
             blocked === undefined ||
             !hasBlocker(blocker) ||
             !hasBlockable(blocked) ||
-            !canBlock(blocker, blocked) ||
+            !canBlock(blocker, blocked, units, supports) ||
             blockedIds.has(blocked.id)
         ) {
             continue;
@@ -101,8 +122,9 @@ export function blockingUsedCapacity(
 export function acquireBlockingRelations(
     units: ReadonlyMap<UnitId, Unit>,
     previous: readonly BlockingRelation[],
+    supports: readonly SupportRelation[] = [],
 ): readonly BlockingRelation[] {
-    const retained = reconcileBlockingRelations(units, previous);
+    const retained = reconcileBlockingRelations(units, previous, supports);
     const blockedIds = new Set(retained.map((relation) => relation.blockedUnitId));
     const used = new Map<UnitId, number>();
     const additions: BlockingRelation[] = [];
@@ -123,7 +145,7 @@ export function acquireBlockingRelations(
 
         for (const blocker of blockers) {
             if (
-                !canBlock(blocker, blocked) ||
+                !canBlock(blocker, blocked, units, supports) ||
                 (used.get(blocker.id) ?? 0) + blocked.blockable.weight > blocker.blocker.capacity
             ) {
                 continue;

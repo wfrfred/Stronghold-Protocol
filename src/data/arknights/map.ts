@@ -19,6 +19,7 @@ import { createTilePosition, type TilePosition } from "../../core/tactical/geome
 import { Direction } from "../../core/tactical/geometry/direction.js";
 import { parseBlackboard, type ArknightsBlackboardEntry } from "./blackboard.js";
 import { perSecondToPerTick, secondsToTicks } from "./tick.js";
+import type { TileDeploymentPrefab } from "./prefab.js";
 
 export interface ArknightsTileContext {
     readonly tileKey: string;
@@ -28,6 +29,7 @@ export interface ArknightsTileContext {
 export interface ArknightsMapOptions {
     readonly mire?: MireParams;
     readonly deepsea?: DeepseaParams;
+    readonly tileDeploymentPrefabs?: readonly TileDeploymentPrefab[];
     readonly consumeTileBlackboard?: (
         context: ArknightsTileContext,
         entry: ArknightsBlackboardEntry,
@@ -143,14 +145,6 @@ function parseTile(
 
     const tileKey = string(source.tileKey, "tile key");
 
-    if (
-        source.advancedBuildableMask !== undefined &&
-        source.advancedBuildableMask !== null &&
-        source.advancedBuildableMask !== 0
-    ) {
-        throw new TypeError(`unsupported advanced buildable mask for ${tileKey}`);
-    }
-
     requireEmpty(source.effects, `${tileKey} effects`);
 
     const blackboard = tileBlackboard(source.blackboard);
@@ -220,6 +214,10 @@ function parseTile(
         buildableType: string(source.buildableType, "tile buildable type") as BuildableType,
         passableMask: string(source.passableMask, "tile passable mask") as PassableMask,
         playerSideMask: string(source.playerSideMask, "tile player side mask") as PlayerSideMask,
+        advancedBuildableMask:
+            options.tileDeploymentPrefabs?.find((prefab) => prefab.prefabKey === tileKey)
+                ?.advancedBuildableMask ??
+            finite(source.advancedBuildableMask ?? 0, "advanced buildable mask"),
         terrain: "NORMAL",
         mechanism,
     };

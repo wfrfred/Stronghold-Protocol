@@ -92,6 +92,7 @@ export class BattleRuntime {
             execution: { ...execution },
             units: battlefield.unitIds.map((id) => battlefield.getUnit(id)!),
             blockingRelations: battlefield.blockingRelations,
+            supportRelations: battlefield.supportRelations,
             mechanisms: battlefield.mechanismIds.map((id) => battlefield.getMechanism(id)!),
             effects: battlefield.effectIds.map((id) => battlefield.getEffect(id)!),
             completedRouteCount,

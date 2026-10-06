@@ -1,8 +1,13 @@
-import type { BattlefieldChangeResult, BattlefieldRuntime } from "../battlefield/runtime.js";
+import type {
+    BattlefieldChange,
+    BattlefieldChangeResult,
+    BattlefieldRuntime,
+} from "../battlefield/runtime.js";
 import { createMovementSystem } from "./movement.js";
 import { createBlockingSystem } from "./blocking.js";
 import { createCombatSystem } from "./combat.js";
-import { initializeUnit } from "../unit/initialize.js";
+import { createDeploymentSystem } from "./deployment.js";
+import { instantiateUnitPlacement } from "./unit-creation.js";
 import {
     changePredefinedInstances,
     copyPredefinedPresence,
@@ -48,6 +53,7 @@ export function createBattleSystems(spec: BattleSpec) {
     const movement = createMovementSystem({ moveMultiplier: spec.moveMultiplier });
     const blocking = createBlockingSystem();
     const combat = createCombatSystem();
+    const deployment = createDeploymentSystem();
 
     const prepare: BattlePhase<readonly PredefinedPresence[]> = (input, state) => {
         const prepared = predefined.step(input, state);
@@ -60,6 +66,7 @@ export function createBattleSystems(spec: BattleSpec) {
 
     const phases = Object.freeze([
         bindPhase("predefined", prepare),
+        bindStatelessPhase(deployment.step),
         bindPhase("schedule", schedule.spawn),
         bindStatelessPhase(movement.reroute),
         bindStatelessPhase(blocking.step),
@@ -72,16 +79,15 @@ export function createBattleSystems(spec: BattleSpec) {
 
     return {
         initialize(battlefield: BattlefieldRuntime, execution: BattleExecutionState) {
-            const placements = spec.initialUnits ?? [];
-            const nextUnitId = execution.nextUnitId + placements.length;
+            const initialChanges: BattlefieldChange[] = [];
 
-            if (!Number.isSafeInteger(nextUnitId)) {
-                throw new RangeError("initial unit identity overflow");
+            for (const placement of spec.initialUnits ?? []) {
+                const instantiated = instantiateUnitPlacement(placement, execution, 0);
+
+                initialChanges.push(...instantiated.changes);
+                execution = instantiated.execution;
             }
 
-            const initialUnits = placements.map((placement, index) =>
-                initializeUnit({ ...placement, id: execution.nextUnitId + index }),
-            );
             const initialized = changePredefinedInstances(
                 spec.predefines,
                 predefined.createState(),
@@ -91,14 +97,11 @@ export function createBattleSystems(spec: BattleSpec) {
                         type: "APPEAR_PREDEFINED",
                         definitionId: definition.id,
                     })),
-                { ...execution, nextUnitId },
+                execution,
             );
 
             battlefield.apply([
-                ...initialUnits.map((unit) => ({
-                    type: "REGISTER_UNIT" as const,
-                    unit,
-                })),
+                ...initialChanges,
                 ...spec.initialMechanisms.map((mechanism) => ({
                     type: "REGISTER_MECHANISM" as const,
                     mechanism,
@@ -141,6 +144,13 @@ export function createBattleSystems(spec: BattleSpec) {
                 if (phaseResult.changes.length > 0) {
                     const committed = battlefield.commit(phaseResult.changes);
                     removedUnits.push(...committed.removedUnits);
+                    events.push(
+                        ...committed.lostSupports.map((relation): BattleEvent => ({
+                            type: "SUPPORT_LOST",
+                            ...relation,
+                            tick,
+                        })),
+                    );
                 }
 
                 states = phaseResult.state;

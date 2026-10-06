@@ -27,6 +27,9 @@ import { createLocomotionState, createRoutedLocomotionState, hasLocomotion, hasR
 import { createRouteDefinition } from '../../dist/core/tactical/route/definition.js';
 import { createRouteState, createRouteTiming } from '../../dist/core/tactical/route/state.js';
 import { createNavigationState } from '../../dist/core/tactical/navigation/state.js';
+import { createDeploymentProfile, createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/deployment.js';
+import { createOccupancyState } from '../../dist/core/tactical/unit/capability/occupancy.js';
+import { evaluateDeployment } from '../../dist/core/tactical/battlefield/deployment.js';
 
 const approx = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
 
@@ -549,6 +552,9 @@ import { hasVitality, type VitalityDefinition } from ${sourceModule('capability/
 import { hasRoutedLocomotion, type LocomotionState, type RoutedLocomotionState } from ${sourceModule('capability/locomotion/state')};
 import { createBattlefieldRuntime } from ${sourceModule('../battlefield/runtime')};
 import type { BattlefieldMap } from ${sourceModule('../battlefield/map')};
+import { instantiateUnitPlacement } from ${sourceModule('../battle/unit-creation')};
+import type { BattleExecutionState } from ${sourceModule('../battle/state')};
+import type { Occupancy, OccupancyState } from ${sourceModule('capability/occupancy')};
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
 type Assert<T extends true> = T;
 interface EnemyProbe extends EnemyDefinition { readonly kind: 'enemy'; readonly enemyCode: 17; }
@@ -558,6 +564,9 @@ declare const enemyDefinition: EnemyProbe;
 declare const unionDefinition: EnemyProbe | DeviceProbe;
 declare const routed: RoutedLocomotionState;
 declare const battlefieldMap: BattlefieldMap;
+declare const execution: BattleExecutionState;
+declare const placement: { readonly definition: EnemyProbe; readonly position: readonly [number, number]; readonly occupancy: OccupancyState }
+  | { readonly definition: DeviceProbe; readonly position: readonly [number, number] };
 `;
   const compile = (name, source) => {
     const path = join(directory, `${name}.mts`);
@@ -587,6 +596,11 @@ type PlainDefinition = Assert<Equal<typeof enemy.definition, EnemyProbe>>;
 type PlainUnit = Assert<Equal<typeof enemy, InitializedUnit<EnemyProbe>>>;
 const union = initializeUnit({ id: 2, definition: unionDefinition, position: [0, 0] });
 type UnionUnit = Assert<Equal<typeof union, InitializedUnit<EnemyProbe | DeviceProbe>>>;
+const placed = instantiateUnitPlacement(placement, execution, 0);
+type PlacementDefinition = Assert<Equal<typeof placed.unit.definition, EnemyProbe | DeviceProbe>>;
+type ExpectedPlacement = (InitializedUnit<EnemyProbe> & Occupancy) | InitializedUnit<DeviceProbe>;
+type PlacementCapabilities = Assert<typeof placed.unit extends ExpectedPlacement ? true : false>;
+type PlacementInput = Assert<ExpectedPlacement extends typeof placed.unit ? true : false>;
 if (union.definition.kind === 'enemy') { const code: 17 = union.definition.enemyCode; }
 else { const code: 29 = union.definition.deviceCode; }
 const prepared = initializeUnit({ id: 3, definition: enemyDefinition, position: [0, 0],
@@ -633,4 +647,134 @@ battlefield.transact(field => {
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+const deploymentTile = (overrides = {}) => ({
+  heightType: 'LOWLAND', buildableType: 'ALL', passableMask: 'ALL',
+  playerSideMask: 'ALL', terrain: 'NORMAL', mechanism: null, ...overrides,
+});
+
+const deploymentUnit = (id, position, definition, claims, present = true) => initializeUnit({
+  id, position, definition: Object.freeze({ id: `deployment_${id}`, ...definition }),
+  states: { occupancy: createOccupancyState({ claims }), spatialPresence: { present } },
+});
+
+test('core deployment uses buildability, side and terrain independently of navigation passability', () => {
+  const map = createBattlefieldMap(1, 8, [
+    deploymentTile({ buildableType: 'MELEE' }),
+    deploymentTile({ buildableType: 'RANGED', heightType: 'HIGHLAND' }),
+    deploymentTile({ passableMask: 'FLY_ONLY' }),
+    deploymentTile({ buildableType: 'NONE' }),
+    deploymentTile({ playerSideMask: 'SIDE_B' }),
+    deploymentTile({ playerSideMask: 'NONE' }),
+    deploymentTile({ terrain: 'HOLE', buildableType: 'NONE' }),
+    deploymentTile({ advancedBuildableMask: 2, mechanism: { type: 'DEEPSEA', params: {
+      damagePerTick: 1, attackSpeedModifier: -60, moveSpeedMultiplier: 0.6,
+    } } }),
+  ]);
+  const runtime = createBattlefieldRuntime({ map });
+  const query = (type, column, playerSide = 'SIDE_A') => evaluateDeployment(runtime, {
+    profile: createDeploymentProfile({ buildableType: type }), tile: [0, column], playerSide,
+  });
+  for (const [type, column, allowed] of [
+    ['MELEE', 0, true], ['RANGED', 0, false], ['ALL', 0, true],
+    ['MELEE', 1, false], ['RANGED', 1, true], ['ALL', 1, true],
+    ['MELEE', 2, true], ['RANGED', 2, true],
+  ]) {
+    assert.deepEqual(query(type, column), allowed
+      ? { type: 'ALLOWED', supportUnitId: null }
+      : { type: 'DENIED', reason: 'BUILDABLE_TYPE' });
+  }
+  assert.equal(runtime.navigationMaps.WALK.cells[2].passable, false);
+  for (const [column, reason] of [[3, 'BUILDABLE_TYPE'], [4, 'PLAYER_SIDE'], [5, 'PLAYER_SIDE'],
+    [6, 'BUILDABLE_TYPE'], [7, 'TERRAIN'], [8, 'OUTSIDE_MAP'], [-1, 'OUTSIDE_MAP']]) {
+    assert.deepEqual(query('ALL', column), { type: 'DENIED', reason });
+  }
+  assert.deepEqual(query('ALL', 4, 'SIDE_B'), { type: 'ALLOWED', supportUnitId: null });
+  assert.deepEqual(evaluateDeployment(runtime, {
+    profile: createDeploymentProfile({ buildableType: 'ALL', advancedBuildableMask: 2 }),
+    tile: [0, 7], playerSide: 'SIDE_A',
+  }), { type: 'ALLOWED', supportUnitId: null });
+  assert.deepEqual(evaluateDeployment(runtime, {
+    profile: createDeploymentProfile({ buildableType: 'ALL', advancedBuildableMask: 3 }),
+    tile: [0, 7], playerSide: 'SIDE_A',
+  }), { type: 'ALLOWED', supportUnitId: null });
+});
+
+test('core occupancy separates present claims, reservations and geometric membership', () => {
+  const runtime = createBattlefieldRuntime({ map: createBattlefieldMap(1, 4,
+    Array.from({ length: 4 }, () => deploymentTile())) });
+  const present = deploymentUnit(1, [1, 0], {}, [
+    { position: [0, 1], slot: 'DEPLOYMENT', type: 'PRESENT' },
+  ], false);
+  const reserved = deploymentUnit(2, [2, 0], {}, [
+    { position: [0, 2], slot: 'DEPLOYMENT', type: 'RESERVATION' },
+  ], false);
+  const enemy = initializeUnit({ id: 3, definition: Object.freeze({ id: 'enemy_without_claim' }), position: [1, 0] });
+  runtime.apply([present, reserved, enemy].map(unit => ({ type: 'REGISTER_UNIT', unit })));
+  assert.deepEqual(runtime.unitsAt([0, 1]).map(unit => unit.id), [3]);
+  assert.deepEqual(runtime.occupancyAt([0, 1], 'DEPLOYMENT'), []);
+  assert.deepEqual(runtime.occupancyAt([0, 2], 'DEPLOYMENT'), [2]);
+  const profile = createDeploymentProfile({ buildableType: 'ALL' });
+  assert.equal(evaluateDeployment(runtime, { profile, tile: [0, 1], playerSide: 'SIDE_A' }).type, 'ALLOWED');
+  assert.deepEqual(evaluateDeployment(runtime, { profile, tile: [0, 2], playerSide: 'SIDE_A' }),
+    { type: 'DENIED', reason: 'OCCUPIED' });
+
+  const restored = runtime.getUnit(1);
+  restored.spatialPresence.present = true;
+  runtime.apply([{ type: 'UPDATE_UNIT', unit: restored }]);
+  assert.deepEqual(runtime.occupancyAt([0, 1], 'DEPLOYMENT'), [1]);
+  assert.deepEqual(runtime.unitsAt([0, 1]).map(unit => unit.id), [1, 3]);
+  restored.occupancy.claims = [];
+  assert.deepEqual(runtime.occupancyAt([0, 1], 'DEPLOYMENT'), [1]);
+  const snapshot = runtime.getUnit(1);
+  snapshot.occupancy.claims[0].slot = 'SUPPORT';
+  snapshot.occupancy.claims.push({ position: [0, 3], slot: 'DEPLOYMENT', type: 'RESERVATION' });
+  assert.deepEqual(runtime.getUnit(1).occupancy.claims,
+    [{ position: [0, 1], slot: 'DEPLOYMENT', type: 'PRESENT' }]);
+  const ids = runtime.occupancyAt([0, 2], 'DEPLOYMENT');
+  ids.push(99);
+  assert.deepEqual(runtime.occupancyAt([0, 2], 'DEPLOYMENT'), [2]);
+});
+
+test('core support allows a platform and occupant to coexist without treating the platform as the occupant', () => {
+  const runtime = createBattlefieldRuntime({ map: createBattlefieldMap(1, 3, [
+    deploymentTile(), deploymentTile({ buildableType: 'NONE' }), deploymentTile(),
+  ]) });
+  const platform = deploymentUnit(1, [1, 0], {
+    vitality: Object.freeze({ maxHp: 100 }),
+    tileBinding: createTileBindingDefinition({ buildableType: 'RANGED', heightType: 'HIGHLAND' }),
+  }, [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }]);
+  runtime.apply([{ type: 'REGISTER_UNIT', unit: platform }]);
+  const profile = createDeploymentProfile({ buildableType: 'RANGED' });
+  assert.deepEqual(evaluateDeployment(runtime, { profile, tile: [0, 1], playerSide: 'SIDE_A' }),
+    { type: 'ALLOWED', supportUnitId: 1 });
+  const occupant = deploymentUnit(2, [1, 0], { deployment: profile }, [
+    { position: [0, 1], slot: 'DEPLOYMENT', type: 'PRESENT' },
+  ]);
+  runtime.apply([{ type: 'REGISTER_UNIT', unit: occupant }, { type: 'SET_SUPPORT_RELATIONS',
+    relations: [{ supportedUnitId: 2, supportUnitId: 1 }] }]);
+  assert.deepEqual(runtime.unitsAt([0, 1]).map(unit => unit.id), [1, 2]);
+  assert.deepEqual(runtime.occupancyAt([0, 1], 'SUPPORT'), [1]);
+  assert.deepEqual(runtime.occupancyAt([0, 1], 'DEPLOYMENT'), [2]);
+  assert.equal(runtime.supportOf(2), 1);
+  assert.deepEqual(runtime.supportedBy(1), [2]);
+  assert.deepEqual(evaluateDeployment(runtime, { profile, tile: [0, 1], playerSide: 'SIDE_A' }),
+    { type: 'DENIED', reason: 'OCCUPIED' });
+  assert.deepEqual(evaluateDeployment(runtime, { profile, tile: [0, 1], playerSide: 'SIDE_A', relocatingUnitId: 2 }),
+    { type: 'ALLOWED', supportUnitId: 1 });
+  const relations = runtime.supportRelations;
+  relations[0].supportUnitId = 99;
+  assert.equal(runtime.supportOf(2), 1);
+  const fork = runtime.fork();
+  const removed = runtime.apply([{ type: 'REMOVE_UNIT', unitId: 1, reason: 'SCRIPT' }]);
+  assert.deepEqual(removed.lostSupports, [{ supportedUnitId: 2, supportUnitId: 1 }]);
+  removed.lostSupports[0].supportUnitId = 99;
+  assert.equal(fork.supportOf(2), 1);
+  assert.deepEqual(fork.supportRelations, [{ supportedUnitId: 2, supportUnitId: 1 }]);
+  assert.equal(runtime.supportOf(2), undefined);
+  assert.deepEqual(runtime.supportedBy(1), []);
+  assert.deepEqual(runtime.supportRelations, []);
+  assert.equal(runtime.getUnit(2).id, 2);
+  assert.deepEqual(runtime.occupancyAt([0, 1], 'DEPLOYMENT'), [2]);
 });

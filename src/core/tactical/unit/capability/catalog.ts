@@ -9,6 +9,7 @@ import {
 } from "./blocking.js";
 import { copyLocomotionState, initializeLocomotionState } from "./locomotion/state.js";
 import { copySpatialPresenceState } from "./presence.js";
+import { copyOccupancyState } from "./occupancy.js";
 import { copyTargetableState, initializeTargetableState } from "./targetable.js";
 import { copyVitalityState, initializeVitalityState } from "./vitality.js";
 
@@ -35,6 +36,7 @@ export const configuredCapabilities = Object.freeze({
 
 export const runtimeCapabilities = Object.freeze({
     spatialPresence: Object.freeze({ copy: copySpatialPresenceState }),
+    occupancy: Object.freeze({ copy: copyOccupancyState }),
 });
 
 const capabilities = { ...configuredCapabilities, ...runtimeCapabilities };

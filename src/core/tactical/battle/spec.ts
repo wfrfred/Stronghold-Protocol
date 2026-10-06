@@ -3,15 +3,15 @@ import type { BattlefieldMap } from "../battlefield/map.js";
 import type { MechanismRuntime } from "../battlefield/mechanism.js";
 import type { NavigationSpatialEffect } from "../battlefield/navigation-effect.js";
 import type { NavigationRequestId } from "../navigation/request.js";
-import type { UnitDefinition, UnitId } from "../unit/unit.js";
-import { createWorldPosition, type WorldPosition } from "../geometry/coordinate.js";
-import type { PredefinedInstanceDefinition } from "./predefined.js";
+import type { UnitId } from "../unit/unit.js";
+import {
+    createPredefinedInstanceDefinition,
+    type PredefinedInstanceDefinition,
+} from "./predefined.js";
+import { createUnitPlacementDefinition, type UnitPlacementDefinition } from "./unit-creation.js";
 import { createSpawnScheduleDefinition, type SpawnScheduleDefinition } from "./schedule.js";
 
-export interface InitialUnitPlacement {
-    readonly definition: UnitDefinition;
-    readonly position: WorldPosition;
-}
+export type InitialUnitPlacement = UnitPlacementDefinition;
 
 export interface BattleSpec {
     readonly map: BattlefieldMap;
@@ -71,15 +71,8 @@ export function createBattleSpec(spec: BattleSpec): BattleSpec {
     return Object.freeze({
         ...spec,
         schedule: createSpawnScheduleDefinition(spec.schedule),
-        predefines: Object.freeze([...spec.predefines]),
-        initialUnits: Object.freeze(
-            (spec.initialUnits ?? []).map((placement) =>
-                Object.freeze({
-                    definition: placement.definition,
-                    position: createWorldPosition(...placement.position),
-                }),
-            ),
-        ),
+        predefines: Object.freeze(spec.predefines.map(createPredefinedInstanceDefinition)),
+        initialUnits: Object.freeze((spec.initialUnits ?? []).map(createUnitPlacementDefinition)),
         initialMechanisms: Object.freeze(
             spec.initialMechanisms.map((mechanism) => Object.freeze({ ...mechanism })),
         ),

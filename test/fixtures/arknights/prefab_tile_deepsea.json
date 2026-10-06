@@ -1,0 +1,128 @@
+{
+  "prefabKey": "tile_deepsea",
+  "source": {
+    "bundle": "battle/prefabs/[uc]tiles.ab",
+    "cab": "CAB-a3035ec54e4c62f1271965a646b6fe4e",
+    "unityVersion": "2021.3.39f1",
+    "filtered": true,
+    "selection": "root dynamic tile deployment field, mode bindings and reset behaviour; rendering omitted"
+  },
+  "components": [
+    {
+      "object": {
+        "id": "2435134832256957087"
+      },
+      "fields": {
+        "m_GameObject": {
+          "m_FileID": 0,
+          "m_PathID": "5036953882682473119"
+        },
+        "m_Enabled": true,
+        "m_Script": {
+          "m_FileID": 1,
+          "m_PathID": "-7560412107378972631"
+        },
+        "_tileKey": "tile_deepsea",
+        "_data": {
+          "tileKey": "",
+          "heightType": 0,
+          "buildableType": 3,
+          "passableMask": 3,
+          "playerSideMask": false,
+          "blackboard": [],
+          "effects": []
+        },
+        "_modeIndex": 0,
+        "_dynamicBuffs": [
+          {
+            "buffs": [
+              {
+                "attributes": {
+                  "abnormalFlags": [],
+                  "abnormalImmunes": [],
+                  "abnormalAntis": [],
+                  "abnormalCombos": [],
+                  "abnormalComboImmunes": [],
+                  "attributeModifiers": []
+                },
+                "buffKey": "under_sea[tile]",
+                "loadFromDB": false,
+                "isDurableBuff": false,
+                "isDamageMissable": false,
+                "isSilenceable": false,
+                "isStunnable": false,
+                "isFreezable": false,
+                "isLevitatable": false,
+                "isGroundBoundable": false,
+                "statusResistable": true,
+                "templateKey": "empty",
+                "disableOverride": false,
+                "overrideKey": "",
+                "overrideType": 0,
+                "maxStackCnt": 1,
+                "refreshRemainingTimeWhenStackMax": false,
+                "clearAllStackCntWhenTimeUp": false,
+                "maxValidStackCnt": -1,
+                "independentCharacterSource": false,
+                "overrideEffectKey": "",
+                "overrideOnEventPriority": false,
+                "onEventPriority": 0,
+                "audioSignal": "",
+                "lifeTimeType": true,
+                "takeSnapshotWhenExtend": false,
+                "durationKey": "",
+                "remainingTimeKey": "",
+                "lifeTime": 0.0,
+                "triggerLifeType": false,
+                "triggerCnt": 0,
+                "triggerInterval": -1.0,
+                "waitFirstTriggerInterval": true,
+                "firstTriggerInterval": -1.0,
+                "priority": -1,
+                "priorityBBKeys": [],
+                "stripBlackboardParamsWithBuffKey": false,
+                "blackboard": [],
+                "enableInitDirectionFromSource": false
+              }
+            ],
+            "effects": []
+          },
+          {
+            "buffs": [],
+            "effects": [
+              "map_S_boat_trap"
+            ]
+          },
+          {
+            "buffs": [],
+            "effects": [
+              "map_S_boat_trap_start"
+            ]
+          }
+        ],
+        "_advancedBuildableMask": 2
+      }
+    },
+    {
+      "object": {
+        "id": "619078602920180383"
+      },
+      "fields": {
+        "m_GameObject": {
+          "m_FileID": 0,
+          "m_PathID": "5036953882682473119"
+        },
+        "m_Enabled": true,
+        "m_Script": {
+          "m_FileID": 1,
+          "m_PathID": "4807631596565248335"
+        },
+        "_excludeKeys": [
+          "trap_040_canoe"
+        ],
+        "_resetTileOptions": true,
+        "_resetTileMode": true
+      }
+    }
+  ]
+}

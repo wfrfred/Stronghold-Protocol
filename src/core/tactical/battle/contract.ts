@@ -11,13 +11,23 @@ import type { PredefinedCommand, PredefinedPresence } from "./predefined.js";
 import type { SpawnScheduleState } from "./schedule.js";
 import type { AlternativeRouteCommand } from "./route-control.js";
 import type { BattleExecutionState } from "./state.js";
+import type { DeploymentCommand } from "./deployment.js";
+import type { SupportRelation } from "../battlefield/support.js";
 
 export type BattleCommand =
     | PredefinedCommand
     | AlternativeRouteCommand
+    | DeploymentCommand
     | { readonly type: "TRIGGER_BRANCH"; readonly branchId: string; readonly isLoop: boolean };
 
 export type BattleEvent =
+    | {
+          readonly type: "UNIT_DEPLOYED" | "UNIT_RELOCATED";
+          readonly unitId: UnitId;
+          readonly position: WorldPosition;
+          readonly tick: number;
+      }
+    | ({ readonly type: "SUPPORT_LOST"; readonly tick: number } & SupportRelation)
     | { readonly type: "ENEMY_SPAWNED"; readonly unitId: UnitId; readonly tick: number }
     | {
           readonly type: "ATTACK";
@@ -72,6 +82,7 @@ export interface BattleSnapshot {
     readonly predefinedPresence: readonly PredefinedPresence[];
     readonly units: readonly Unit[];
     readonly blockingRelations: readonly BlockingRelation[];
+    readonly supportRelations: readonly SupportRelation[];
     readonly mechanisms: readonly MechanismRuntime[];
     readonly effects: readonly NavigationSpatialEffect[];
     readonly completedRouteCount: number;
