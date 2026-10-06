@@ -135,7 +135,7 @@ export class BattleRuntime {
         }
         const predefined = changePredefinedInstances(this.#spec.predefines, this.#predefinedPresence, predefinedCommands, this.#execution);
         const scheduled = advanceSpawnSchedule(this.#spec.schedule, this.#spawning, { tick, triggers });
-        const spawned = spawnEnemies(scheduled.spawns, predefined.execution);
+        const spawned = spawnEnemies(scheduled.spawns, predefined.execution, tick);
         let spawning = recordScheduleSpawns(scheduled.state, scheduled.spawns, spawned.enemies.map(enemy => enemy.id));
         const initialized = this.#battlefield.apply([
             { type: "EXPIRE_EFFECTS", tick },
@@ -150,10 +150,12 @@ export class BattleRuntime {
             const unit = this.#battlefield.getUnit(unitId)!;
             if (!hasRoutedLocomotion(unit)) continue;
             const moved = stepRoutedUnit(unit, {
+                tick,
                 maps: this.#battlefield.navigationMaps,
                 fieldCache: this.#battlefield.fieldCache,
                 moveMultiplier: this.#spec.moveMultiplier,
                 movementAllowed: true,
+                waitTickAllowed: true,
                 routeAdvanceAllowed: true,
                 rngState: execution.rngState,
                 nextNavigationRequestId: execution.nextNavigationRequestId,

@@ -22,8 +22,7 @@ export type PlayerSideMask =
 
 export type TileTerrain =
     | "NORMAL"
-    | "HOLE"
-    | "WORD";
+    | "HOLE";
 
 export interface InfectionParams {
     readonly damagePerTick: number;
@@ -167,7 +166,7 @@ export function createTile(tile: Tile): Tile {
     if (!["NONE", "SIDE_A", "SIDE_B", "ALL"].includes(tile.playerSideMask)) {
         throw new TypeError("invalid tile player side mask");
     }
-    if (!["NORMAL", "HOLE", "WORD"].includes(tile.terrain)) {
+    if (!["NORMAL", "HOLE"].includes(tile.terrain)) {
         throw new TypeError("invalid tile terrain");
     }
 

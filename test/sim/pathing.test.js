@@ -17,6 +17,9 @@ import {
   setNavigationMotionMode, startNavigationRequest, steerNavigation,
 } from '../../dist/core/tactical/navigation/state.js';
 import { createRouteDefinition } from '../../dist/core/tactical/route/definition.js';
+import {
+  advanceRoute, createRouteExecution, enterRoute, nextCheckpointIndex, tickRouteWait,
+} from '../../dist/core/tactical/route/execution.js';
 import { createRouteTiming, createRouteState } from '../../dist/core/tactical/route/state.js';
 import { initializeRouteSpawn } from '../../dist/core/tactical/route/spawn.js';
 import { parseBattlefieldMap } from '../../dist/data/arknights/map.js';
@@ -688,7 +691,10 @@ const coreMove = (column, overrides = {}) => ({
   },
 });
 
-function routedEnemyHarness({ seed = 42, speedPerTick = 10, checkpoints, routeOverrides = {}, alwaysCheckCurrentPoint = true } = {}) {
+function routedEnemyHarness({
+  seed = 42, speedPerTick = 10, checkpoints, routeOverrides = {}, alwaysCheckCurrentPoint = true,
+  initialTick = 0, timing = { waveStartedAtTick: 0, fragmentStartedAtTick: 0 },
+} = {}) {
   const route = createRouteDefinition(coreRoute({
     startPosition: [0, 0], endPosition: [0, 4], spawnOffset: [0, 0], spawnRandomRange: [0, 0],
     checkpoints: checkpoints ?? [coreMove(1), { type: 'WAIT_FOR_TICKS', durationTicks: 3 }], ...routeOverrides,
@@ -699,10 +705,10 @@ function routedEnemyHarness({ seed = 42, speedPerTick = 10, checkpoints, routeOv
       moveSpeedPerTick: speedPerTick,
       steeringParameters: createSteeringParameters({ steeringFactor: 2.5, maxSteeringForce: 4 }),
     } }),
-    route, timing: createRouteTiming({ waveStartedAtTick: 0, fragmentStartedAtTick: 0 }),
+    route, timing: createRouteTiming(timing), tick: initialTick,
     alwaysCheckCurrentPoint, rngState: seed, nextNavigationRequestId: 0,
   });
-  let enemy = initialized.enemy, rngState = initialized.rngState, nextNavigationRequestId = initialized.nextNavigationRequestId, tick = 0;
+  let enemy = initialized.enemy, rngState = initialized.rngState, nextNavigationRequestId = initialized.nextNavigationRequestId, tick = initialTick;
   let maps = Object.freeze({
     WALK: fieldMap(1, 5, Array.from({ length: 5 }, () => fieldCell())),
     FLY: fieldMap(1, 5, Array.from({ length: 5 }, () => fieldCell()), 'FLY'),
@@ -713,6 +719,7 @@ function routedEnemyHarness({ seed = 42, speedPerTick = 10, checkpoints, routeOv
     get enemy() { return enemy; },
     get rngState() { return rngState; },
     get nextNavigationRequestId() { return nextNavigationRequestId; },
+    get tick() { return tick; },
     get maps() { return maps; },
     trace,
     setMaps(next) { maps = next; },
@@ -728,12 +735,12 @@ function routedEnemyHarness({ seed = 42, speedPerTick = 10, checkpoints, routeOv
       };
     },
     step(controls = {}) {
-      tick++;
       const context = {
-        maps, fieldCache, rngState, nextNavigationRequestId,
+        maps, fieldCache, rngState, nextNavigationRequestId, tick,
         moveMultiplier: controls.moveMultiplier ?? 1,
         movementAllowed: controls.movementAllowed ?? true,
         routeAdvanceAllowed: controls.routeAdvanceAllowed ?? true,
+        waitTickAllowed: controls.waitTickAllowed ?? true,
       };
       const before = JSON.stringify({ enemy, context });
       const oldLocomotion = enemy.locomotion, oldMainRoute = oldLocomotion.mainRoute;
@@ -751,6 +758,7 @@ function routedEnemyHarness({ seed = 42, speedPerTick = 10, checkpoints, routeOv
       rngState = result.rngState;
       nextNavigationRequestId = result.nextNavigationRequestId;
       trace.push(JSON.parse(JSON.stringify({ tick, enemy, rngState, nextNavigationRequestId, outcomes: result.outcomes })));
+      tick++;
       return result;
     },
   };
@@ -872,7 +880,7 @@ test('core routed enemy keeps one randomized goal across map changes, motion mod
   serialExpected.next();
   const second = initializeRoutedEnemy({
     id: 2, definition: h.enemy.definition, route: h.enemy.locomotion.mainRoute.route.definition,
-    timing: h.enemy.locomotion.mainRoute.route.timing, alwaysCheckCurrentPoint: true,
+    timing: h.enemy.locomotion.mainRoute.route.timing, tick: h.tick, alwaysCheckCurrentPoint: true,
     rngState: savedRngState, nextNavigationRequestId: h.nextNavigationRequestId,
   });
   const secondRequest = routedEnemyRequest(second.enemy), secondGoal = second.enemy.locomotion.mainRoute.route.progress.checkpoint.goal;
@@ -1005,7 +1013,7 @@ test('core empty routes accept checkpoint flag combinations and complete only at
   }
 });
 
-test('core routed enemy initialization rejects rules outside the serial MOVE-WAIT execution profile', () => {
+test('core routed enemy initialization rejects rules outside the serial route execution profile', () => {
   assert.throws(() => routedEnemyHarness({ routeOverrides: { visitEveryCheckPoint: false } }), RangeError);
   assert.throws(() => routedEnemyHarness({ alwaysCheckCurrentPoint: false }), RangeError);
   assert.throws(() => routedEnemyHarness({ checkpoints: [{ type: 'ALERT' }] }), RangeError);
@@ -1311,7 +1319,7 @@ test('core battlefield invalidates only changed navigation modes and preserves r
   walker.locomotion.alternativeRoute = alternativeRoute;
   const flyRoute = createRouteDefinition(coreRoute({ pathMotionMode: 'FLY', startPosition: [0, 0], endPosition: [0, 4], spawnOffset: [0, 0], spawnRandomRange: [0, 0] }));
   const flyer = initializeRoutedEnemy({ id: 2, definition: walker.definition, route: flyRoute,
-    timing: walker.locomotion.mainRoute.route.timing, alwaysCheckCurrentPoint: true, rngState: h.rngState, nextNavigationRequestId: h.nextNavigationRequestId }).enemy;
+    timing: walker.locomotion.mainRoute.route.timing, tick: h.tick, alwaysCheckCurrentPoint: true, rngState: h.rngState, nextNavigationRequestId: h.nextNavigationRequestId }).enemy;
   const flyRequest = routedEnemyRequest(flyer);
   const flyField = runtime.fieldCache.get(runtime.navigationMaps.FLY, flyRequest);
   flyer.locomotion.mainRoute.navigation = bindNavigationPath(flyer.locomotion.mainRoute.navigation, createNavigationPath(flyRequest, flyField), flyer.position).state;
@@ -1375,8 +1383,10 @@ test('core battlefield invalidates only changed navigation modes and preserves r
   assert.equal(oldMaps.WALK.cells[2].moveCost, 1);
   pending.locomotion.alternativeRoute = null;
   const context = {
+    tick: h.tick,
     maps: runtime.navigationMaps, fieldCache: runtime.fieldCache,
-    moveMultiplier: 0, movementAllowed: true, routeAdvanceAllowed: true, rngState: h.rngState, nextNavigationRequestId: h.nextNavigationRequestId,
+    moveMultiplier: 0, movementAllowed: true, waitTickAllowed: true, routeAdvanceAllowed: true,
+    rngState: h.rngState, nextNavigationRequestId: h.nextNavigationRequestId,
   };
   const stepped = stepRoutedEnemy(pending, context);
   runtime.apply([{ type: 'UPDATE_UNIT', unit: stepped.enemy }]);
@@ -1389,7 +1399,7 @@ test('core battlefield invalidates only changed navigation modes and preserves r
   assert.equal(stepped.nextNavigationRequestId, h.nextNavigationRequestId);
   runtime.apply([{ type: 'ADD_EFFECT', effect: fixedNavigationEffect(2, { type: 'MECHANISM', mechanismId: 1 }, [0, 2],
     effectDefinition('dynamic-wall', walkRestriction({ denyPassage: true }))) }]);
-  const failed = stepRoutedEnemy(runtime.getUnit(1), { ...context, maps: runtime.navigationMaps });
+  const failed = stepRoutedEnemy(runtime.getUnit(1), { ...context, tick: context.tick + 1, maps: runtime.navigationMaps });
   assert.equal(failed.enemy.locomotion.mainRoute.navigation.execution.activity.type, 'UNREACHABLE');
   runtime.apply([{ type: 'UPDATE_UNIT', unit: failed.enemy }]);
   runtime.apply([{ type: 'REMOVE_EFFECT', effectId: 2 }]);
@@ -1472,15 +1482,14 @@ test('core battlefield snapshots isolate nested tiles, markers and edges from th
 test('core static navigation projects mode-specific passability, costs and both edge departures', () => {
   const map = createBattlefieldMap(1, 4, [
     coreGround({ passableMask: 'WALK_ONLY' }), coreGround({ terrain: 'HOLE' }),
-    coreGround({ terrain: 'WORD' }), coreGround({ passableMask: 'FLY_ONLY' }),
+    coreGround(), coreGround({ passableMask: 'FLY_ONLY' }),
   ], [], [
     { position: [0, 1], direction: 'RIGHT', blockMask: 'WALK_ONLY' },
     { position: [0, -1], direction: 'RIGHT', blockMask: 'ALL' },
   ]);
-  assert.throws(() => projectStaticNavigationMap(map, 'WALK', 0), /explicit mechanism cost/);
-  const walk = projectStaticNavigationMap(map, 'WALK', 2, [{ position: [0, 2], moveCost: 1000 }]);
+  const walk = projectStaticNavigationMap(map, 'WALK', 2);
   const fly = projectStaticNavigationMap(map, 'FLY', 2);
-  assert.deepEqual(walk.cells.map(cell => cell.moveCost), [1, 1_000_000, 1000, 1]);
+  assert.deepEqual(walk.cells.map(cell => cell.moveCost), [1, 1_000_000, 1, 1]);
   assert.deepEqual(fly.cells.map(cell => cell.moveCost), [1, 1, 1, 1]);
   assert.deepEqual(walk.cells.map(cell => cell.passable), [true, true, true, false]);
   assert.deepEqual(fly.cells.map(cell => cell.passable), [false, true, true, true]);
@@ -1619,6 +1628,192 @@ test('route constructors keep tick timing explicit, snapshots isolated and progr
   assert.throws(() => createRouteDefinition(coreRoute({ checkpoints: [,] })), TypeError);
   assert.throws(() => createRouteDefinition(coreRoute({ startPosition: [0, 0, 1] })), TypeError);
   assert.throws(() => createRouteDefinition(coreRoute({ spawnOffset: [0, Infinity] })), TypeError);
+});
+
+test('core route waits bind absolute deadlines to explicit play ticks and birth timing', () => {
+  const timing = createRouteTiming({ waveStartedAtTick: 40, fragmentStartedAtTick: 80 });
+  for (const checkpoint of [
+    { type: 'WAIT_FOR_PLAY_TICK', targetPlayTick: 110 },
+    { type: 'WAIT_CURRENT_WAVE_TICKS', targetElapsedTicks: 70 },
+    { type: 'WAIT_CURRENT_FRAGMENT_TICKS', targetElapsedTicks: 30 },
+  ]) {
+    const definition = createRouteDefinition(coreRoute({ checkpoints: [checkpoint] }));
+    const state = createRouteState(definition, timing, true);
+    const execution = createRouteExecution(createRng(42), 0, 100);
+    const entered = enterRoute(state, execution);
+    assert.deepEqual(state.progress.checkpoint, { type: 'NOT_ENTERED' });
+    assert.deepEqual(entered.state.progress.checkpoint, { type: 'WAIT', remainingTicks: 10 });
+    assert.equal(entered.request, undefined);
+    assert.equal(entered.state.timing, timing);
+    assert.equal(enterRoute(entered.state, execution).state, entered.state);
+    const refreshed = tickRouteWait(entered.state, 105);
+    assert.deepEqual(refreshed.progress.checkpoint, { type: 'WAIT', remainingTicks: 5 });
+    assert.equal(tickRouteWait(refreshed, 105), refreshed);
+    const expired = tickRouteWait(refreshed, 110);
+    assert.deepEqual(expired.progress.checkpoint, { type: 'WAIT', remainingTicks: 0 });
+    assert.equal(expired.progress.checkpointIndex, 0);
+    assert.equal(expired.timing, timing);
+    assert.equal(tickRouteWait(expired, 111), expired);
+    const alreadyDue = enterRoute(state, createRouteExecution(createRng(42), 0, 120));
+    assert.deepEqual(alreadyDue.state.progress.checkpoint, { type: 'WAIT', remainingTicks: 0 });
+    assert.deepEqual(execution.state(), { rngState: 42, nextNavigationRequestId: 0 });
+  }
+  const relative = enterRoute(createRouteState(createRouteDefinition(coreRoute({
+    checkpoints: [{ type: 'WAIT_FOR_TICKS', durationTicks: 7 }],
+  })), timing, true), createRouteExecution(createRng(42), 0, 100)).state;
+  assert.deepEqual(tickRouteWait(relative, 105).progress.checkpoint, { type: 'WAIT', remainingTicks: 6 });
+  assert.deepEqual(relative.progress.checkpoint, { type: 'WAIT', remainingTicks: 7 });
+});
+
+test('core route absolute waits reject overflow in derived wave and fragment deadlines', () => {
+  const timing = createRouteTiming({ waveStartedAtTick: Number.MAX_SAFE_INTEGER, fragmentStartedAtTick: Number.MAX_SAFE_INTEGER });
+  for (const type of ['WAIT_CURRENT_WAVE_TICKS', 'WAIT_CURRENT_FRAGMENT_TICKS']) {
+    const definition = createRouteDefinition(coreRoute({ checkpoints: [{ type, targetElapsedTicks: 1 }] }));
+    const state = createRouteState(definition, timing, true);
+    assert.throws(() => enterRoute(state, createRouteExecution(createRng(42), 0, 0)), /target tick overflow/);
+    assert.deepEqual(state.progress.checkpoint, { type: 'NOT_ENTERED' });
+    state.progress.checkpoint = { type: 'WAIT', remainingTicks: 1 };
+    assert.throws(() => tickRouteWait(state, 0), /target tick overflow/);
+    assert.deepEqual(state.progress.checkpoint, { type: 'WAIT', remainingTicks: 1 });
+  }
+});
+
+test('core routed waits distinguish ticking permission from route advancement and movement', () => {
+  const relative = routedEnemyHarness({ checkpoints: [{ type: 'WAIT_FOR_TICKS', durationTicks: 3 }] });
+  relative.step({ movementAllowed: false, waitTickAllowed: false });
+  assert.equal(relative.enemy.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 3);
+  relative.step({ movementAllowed: false, routeAdvanceAllowed: false });
+  assert.equal(relative.enemy.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 2);
+  relative.step({ movementAllowed: false, routeAdvanceAllowed: false });
+  relative.step({ movementAllowed: false, routeAdvanceAllowed: false });
+  assert.equal(relative.enemy.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 0);
+  assert.equal(relative.enemy.locomotion.mainRoute.route.progress.phase, 'CHECKPOINTS');
+  relative.step({ movementAllowed: false, waitTickAllowed: false });
+  assert.equal(relative.enemy.locomotion.mainRoute.route.progress.phase, 'END');
+
+  const absolute = routedEnemyHarness({ initialTick: 100, timing: { waveStartedAtTick: 40, fragmentStartedAtTick: 80 },
+    checkpoints: [{ type: 'WAIT_CURRENT_FRAGMENT_TICKS', targetElapsedTicks: 22 }],
+  });
+  absolute.step({ movementAllowed: false, waitTickAllowed: false });
+  absolute.step({ movementAllowed: false, waitTickAllowed: false });
+  assert.equal(absolute.enemy.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 2);
+  absolute.step({ movementAllowed: false, routeAdvanceAllowed: false });
+  assert.equal(absolute.enemy.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 0);
+  assert.equal(absolute.enemy.locomotion.mainRoute.route.progress.checkpointIndex, 0);
+  absolute.step({ movementAllowed: false });
+  assert.equal(absolute.enemy.locomotion.mainRoute.route.progress.phase, 'END');
+  assert.deepEqual(absolute.enemy.position, [0, 0]);
+});
+
+test('core patrol successors loop only at a patrol tail with a preceding non-MOVE segment', () => {
+  const route = types => createRouteDefinition(coreRoute({ checkpoints: types.map(type => {
+    if (type === 'WAIT_FOR_TICKS') return { type, durationTicks: 1 };
+    if (type === 'ALERT' || type === 'DISAPPEAR') return { type };
+    return { ...coreMove(1), type };
+  }) }));
+  for (const [types, index, expected] of [
+    [['PATROL_MOVE'], 0, 1],
+    [['MOVE', 'PATROL_MOVE'], 1, 2],
+    [['PATROL_MOVE', 'WAIT_FOR_TICKS'], 0, 1],
+    [['PATROL_MOVE', 'WAIT_FOR_TICKS'], 1, 2],
+    [['WAIT_FOR_TICKS', 'PATROL_MOVE', 'MOVE'], 1, 0],
+    [['MOVE', 'WAIT_FOR_TICKS', 'MAP_OFFSET_MOVE', 'PATROL_MOVE', 'MOVE'], 3, 1],
+    [['ALERT', 'DISAPPEAR', 'PATROL_MOVE'], 2, 0],
+    [['PATROL_MOVE', 'PATROL_MOVE', 'PATROL_MOVE'], 2, 0],
+  ]) {
+    const definition = route(types), before = JSON.stringify(definition);
+    assert.equal(nextCheckpointIndex(definition, index), expected);
+    assert.equal(JSON.stringify(definition), before);
+  }
+});
+
+test('core MAP_OFFSET_MOVE adds fixed reach offset while MOVE and PATROL randomization replaces it', () => {
+  for (const type of ['MOVE', 'PATROL_MOVE', 'MAP_OFFSET_MOVE']) {
+    for (const randomizeReachOffset of [false, true]) {
+      const checkpoint = { ...coreMove(2, { reachOffset: [0.25, 0], randomizeReachOffset }), type };
+      const definition = createRouteDefinition(coreRoute({ checkpoints: [checkpoint] }));
+      const rng = createRng(42), expectedRng = createRng(42);
+      let calls = 0;
+      const execution = createRouteExecution({ ...rng, next() { calls++; return rng.next(); } }, 7, 0);
+      const entered = enterRoute(createRouteState(definition, createRouteTiming({ waveStartedAtTick: 0, fragmentStartedAtTick: 0 }), true), execution);
+      let x = 0.25;
+      if (randomizeReachOffset) {
+        x = -0.25 + expectedRng.next() * 0.5 + (type === 'MAP_OFFSET_MOVE' ? 0.25 : 0);
+        expectedRng.next();
+      }
+      assert.deepEqual(entered.request.goal.position, [2 + x, 0]);
+      assert.equal(entered.request.id, 7);
+      assert.equal(entered.state.progress.checkpoint.goal, entered.request.goal);
+      assert.equal(calls, randomizeReachOffset ? 2 : 0);
+      assert.deepEqual(execution.state(), { rngState: expectedRng.state(), nextNavigationRequestId: 8 });
+      assert.equal(enterRoute(entered.state, execution).state, entered.state);
+      assert.equal(calls, randomizeReachOffset ? 2 : 0);
+    }
+  }
+});
+
+test('core patrol reentry creates a new goal and request while pure successor queries preserve RNG and restart budget', () => {
+  const definition = createRouteDefinition(coreRoute({ checkpoints: [
+    { ...coreMove(1, { randomizeReachOffset: true, reachOffset: [0.2, 0.1] }), type: 'PATROL_MOVE' },
+    { ...coreMove(2), type: 'PATROL_MOVE' },
+  ] }));
+  const execution = createRouteExecution(createRng(42), 0, 0), expected = createRng(42);
+  const firstX = -0.2 + expected.next() * 0.4, firstY = -0.1 + expected.next() * 0.2;
+  let state = enterRoute(createRouteState(definition, createRouteTiming({ waveStartedAtTick: 0, fragmentStartedAtTick: 0 }), true), execution).state;
+  const firstGoal = state.progress.checkpoint.goal;
+  assert.deepEqual(firstGoal.position, [1 + firstX, firstY]);
+  state = advanceRoute(state, execution).state;
+  assert.equal(state.progress.checkpointIndex, 1);
+  assert.equal(state.progress.checkpoint.navigationRequestId, 1);
+  const before = execution.state();
+  for (let query = 0; query < 1000; query++) assert.equal(nextCheckpointIndex(definition, 1), 0);
+  assert.deepEqual(execution.state(), before);
+  const secondX = -0.2 + expected.next() * 0.4, secondY = -0.1 + expected.next() * 0.2;
+  state = advanceRoute(state, execution).state;
+  assert.equal(state.progress.checkpointIndex, 0);
+  assert.equal(state.progress.checkpoint.navigationRequestId, 2);
+  assert.notEqual(state.progress.checkpoint.goal, firstGoal);
+  assert.deepEqual(state.progress.checkpoint.goal.position, [1 + secondX, secondY]);
+  assert.equal(execution.state().rngState, expected.state());
+  for (let restart = 1; restart < 51; restart++) {
+    state = advanceRoute(advanceRoute(state, execution).state, execution).state;
+    assert.equal(state.progress.checkpointIndex, 0);
+  }
+  const nextFrame = createRouteExecution(createRng(execution.state().rngState), execution.state().nextNavigationRequestId, 1);
+  const restarted = advanceRoute(advanceRoute(state, nextFrame).state, nextFrame);
+  assert.equal(restarted.state.progress.checkpointIndex, 0);
+  state = advanceRoute(advanceRoute(state, execution).state, execution).state;
+  assert.equal(state.progress.phase, 'END');
+  assert.equal(execution.state().nextNavigationRequestId, 105);
+});
+
+test('core routed patrol and MAP_OFFSET_MOVE remain active through tick movement without reentering on replanning', () => {
+  const patrol = routedEnemyHarness({ checkpoints: [
+    { ...coreMove(1), type: 'PATROL_MOVE' }, { ...coreMove(2), type: 'PATROL_MOVE' },
+  ] });
+  patrol.step();
+  assert.deepEqual(patrol.enemy.position, [1, 0]);
+  assert.equal(patrol.enemy.locomotion.mainRoute.route.progress.checkpointIndex, 1);
+  patrol.step();
+  assert.deepEqual(patrol.enemy.position, [2, 0]);
+  assert.equal(patrol.enemy.locomotion.mainRoute.route.progress.checkpointIndex, 0);
+  assert.equal(patrol.nextNavigationRequestId, 3);
+  patrol.step();
+  assert.deepEqual(patrol.enemy.position, [1, 0]);
+  assert.equal(patrol.enemy.locomotion.mainRoute.route.progress.phase, 'CHECKPOINTS');
+  const offset = routedEnemyHarness({ checkpoints: [
+    { ...coreMove(2, { reachOffset: [0.25, 0], randomizeReachOffset: true }), type: 'MAP_OFFSET_MOVE' },
+  ], routeOverrides: { spawnOffset: [0.1, 0] } });
+  const goal = offset.enemy.locomotion.mainRoute.route.progress.checkpoint.goal;
+  const saved = offset.rngState;
+  offset.setMotionMode('FLY');
+  offset.step({ moveMultiplier: 0 });
+  assert.equal(offset.enemy.locomotion.mainRoute.route.progress.checkpoint.goal, goal);
+  assert.equal(offset.rngState, saved);
+  assert.deepEqual(offset.enemy.locomotion.mainRoute.navigation.execution.locatorOffset, [-0.1, 0]);
+  offset.step();
+  approx(offset.enemy.position[0], goal.position[0] + 0.1, 'MAP_OFFSET world x');
+  assert.equal(offset.enemy.locomotion.mainRoute.route.progress.phase, 'END');
 });
 
 test('raw routes preserve APPEAR fixed offsets and reject mode-specific or unknown instructions', () => {

@@ -16,11 +16,6 @@ export interface NavigationProjection {
     readonly changedModes: readonly PathMotionMode[];
 }
 
-export interface WordTileCost {
-    readonly position: TilePosition;
-    readonly moveCost: number;
-}
-
 function includesMode(mask: PassableMask, mode: PathMotionMode): boolean {
     return mask === "ALL" || mask === (mode === "WALK" ? "WALK_ONLY" : "FLY_ONLY");
 }
@@ -29,50 +24,15 @@ export function projectStaticNavigationMap(
     map: BattlefieldMap,
     pathMotionMode: PathMotionMode,
     revision: NavigationRevision,
-    wordTileCosts: readonly WordTileCost[] = [],
 ): NavigationMap {
     if (!PathMotionMode.is(pathMotionMode)) {
         throw new TypeError("invalid path motion mode");
     }
-    const costs = new Map<number, number>();
-    for (let index = 0; index < wordTileCosts.length; index++) {
-        const cost = wordTileCosts[index];
-        if (!Object.hasOwn(wordTileCosts, index) || cost === undefined) {
-            throw new RangeError(`missing word tile cost at index ${index}`);
-        }
-        const tile = BattlefieldMap.get(map, cost.position);
-        if (tile === undefined || tile.terrain !== "WORD") {
-            throw new RangeError("word tile cost must refer to a word tile");
-        }
-        if (!Number.isInteger(cost.moveCost) || cost.moveCost <= 0 || cost.moveCost > 0x7fffffff) {
-            throw new RangeError("invalid word tile cost");
-        }
-        const key = cost.position[0] * map.columns + cost.position[1];
-        if (costs.has(key)) {
-            throw new RangeError("duplicate word tile cost");
-        }
-        costs.set(key, cost.moveCost);
-    }
-
-    const cells: NavigationCell[] = map.tiles.map((tile, index) => {
-        let moveCost = 1;
-        if (pathMotionMode === "WALK") {
-            if (tile.terrain === "HOLE") {
-                moveCost = 1_000_000;
-            } else if (tile.terrain === "WORD") {
-                const mechanismCost = costs.get(index);
-                if (mechanismCost === undefined) {
-                    throw new RangeError("WALK word tile requires an explicit mechanism cost");
-                }
-                moveCost = Math.max(1, mechanismCost);
-            }
-        }
-        return {
-            passable: includesMode(tile.passableMask, pathMotionMode),
-            moveCost,
-            departures: { UP: true, RIGHT: true, DOWN: true, LEFT: true },
-        };
-    });
+    const cells: NavigationCell[] = map.tiles.map(tile => ({
+        passable: includesMode(tile.passableMask, pathMotionMode),
+        moveCost: pathMotionMode === "WALK" && tile.terrain === "HOLE" ? 1_000_000 : 1,
+        departures: { UP: true, RIGHT: true, DOWN: true, LEFT: true },
+    }));
 
     for (const edge of map.blockEdges) {
         if (!includesMode(edge.blockMask, pathMotionMode)) {

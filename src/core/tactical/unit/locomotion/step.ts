@@ -24,10 +24,12 @@ import type { LocomotionDefinition, RoutedLocomotiveUnit, RoutedLocomotionState 
 import { integrateSteering } from "./steering.js";
 
 export interface RoutedLocomotionStepContext {
+    readonly tick: number;
     readonly maps: NavigationMaps;
     readonly fieldCache: NavigationFieldCache;
     readonly moveMultiplier: number;
     readonly movementAllowed: boolean;
+    readonly waitTickAllowed: boolean;
     readonly routeAdvanceAllowed: boolean;
     readonly rngState: Seed;
     readonly nextNavigationRequestId: NavigationRequestId;
@@ -101,7 +103,7 @@ export function stepRoutedLocomotion(
     if (state.alternativeRoute !== null) {
         throw new RangeError("alternative route execution is not supported");
     }
-    const execution = createRouteExecution(createRng(context.rngState), context.nextNavigationRequestId);
+    const execution = createRouteExecution(createRng(context.rngState), context.nextNavigationRequestId, context.tick);
     const mainRoute = state.mainRoute;
     const initial = enterRoute(mainRoute.route, execution);
     let route = initial.state;
@@ -188,7 +190,7 @@ export function stepRoutedLocomotion(
         }
     }
 
-    route = tickRouteWait(route);
+    if (context.waitTickAllowed) route = tickRouteWait(route, context.tick);
     if (route.progress.phase === "CHECKPOINTS"
         && route.progress.checkpoint.type === "WAIT"
         && route.progress.checkpoint.remainingTicks <= 0) {

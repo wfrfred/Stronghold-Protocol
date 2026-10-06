@@ -29,6 +29,7 @@ export type RoutedEnemy = Enemy & RoutedLocomotion;
 
 export interface RoutedEnemySpawn {
     readonly id: UnitId;
+    readonly tick: number;
     readonly definition: EnemyDefinition;
     readonly route: RouteDefinition;
     readonly timing: RouteTiming;
@@ -79,7 +80,7 @@ export function initializeRoutedEnemy(spawn: RoutedEnemySpawn): RoutedEnemyIniti
     validateRouteExecution(spawn.route, spawn.alwaysCheckCurrentPoint);
     const rng = createRng(spawn.rngState);
     const location = initializeRouteSpawn(spawn.route, rng);
-    const execution = createRouteExecution(rng, spawn.nextNavigationRequestId);
+    const execution = createRouteExecution(rng, spawn.nextNavigationRequestId, spawn.tick);
     const initial = enterRoute(createRouteState(spawn.route, spawn.timing, spawn.alwaysCheckCurrentPoint), execution);
     const navigation = createNavigationState(spawn.route.pathMotionMode, location.locatorOffset);
     return {

@@ -16,6 +16,8 @@ import { createBattleSpec } from '../../dist/core/tactical/battle/spec.js';
 import { BattleRuntime, simulateBattle } from '../../dist/core/tactical/battle/runtime.js';
 import { advanceSpawnSchedule, cloneScheduleState, createSpawnScheduleDefinition, createSpawnScheduleState, getSpawnedCount, getUnspawnedCount, isSpawnScheduleCompleted, recordScheduleSpawns, resolveScheduleUnits } from '../../dist/core/tactical/battle/schedule.js';
 import { createSteeringParameters } from '../../dist/core/tactical/unit/locomotion/steering.js';
+import { createEnemyDefinition } from '../../dist/core/tactical/unit/enemy.js';
+import { createRouteDefinition } from '../../dist/core/tactical/route/definition.js';
 import { TICKS_PER_SECOND } from '../../dist/core/tactical/tick.js';
 import { secondsToTicks } from '../../dist/data/arknights/tick.js';
 import { parseLevelDefinition } from '../../dist/data/arknights/level.js';
@@ -741,6 +743,145 @@ test('core battle snapshots isolate vitality, locomotion, route progress, naviga
   while (replica.snapshot().tickIndex < 91) replica.step();
   assert.deepEqual(runtime.step(), replica.step());
   assert.deepEqual(runtime.snapshot(), replica.snapshot());
+});
+
+test('core battle initializes all route waits at the birth tick and replays their exact completion edges', () => {
+  const { spec } = slimeMovementFragment();
+  const spawn = spec.schedule.spawns[0];
+  const definition = createEnemyDefinition({ ...spawn.definition,
+    locomotion: { ...spawn.definition.locomotion, moveSpeedPerTick: 0 },
+  });
+  const cases = [
+    [{ type: 'WAIT_FOR_TICKS', durationTicks: 3 }, 7],
+    [{ type: 'WAIT_FOR_PLAY_TICK', targetPlayTick: 10 }, 10],
+    [{ type: 'WAIT_CURRENT_WAVE_TICKS', targetElapsedTicks: 10 }, 12],
+    [{ type: 'WAIT_CURRENT_FRAGMENT_TICKS', targetElapsedTicks: 10 }, 13],
+  ];
+  for (const [checkpoint, deadline] of cases) {
+    const route = createRouteDefinition({ ...spawn.route, visitEveryCheckPoint: true, checkpoints: [checkpoint] });
+    const input = { ...withTimelineSpawns(spec, [{ ...spawn, definition, route, alwaysCheckCurrentPoint: true,
+      tick: 5, timing: { waveStartedAtTick: 2, fragmentStartedAtTick: 3 },
+    }]), maxTicks: deadline + 1 };
+    const runtime = new BattleRuntime(input), replay = new BattleRuntime(input);
+    while (runtime.result === null) {
+      const tick = runtime.snapshot().tickIndex;
+      assert.deepEqual(runtime.step(), replay.step());
+      const snapshot = runtime.snapshot();
+      assert.deepEqual(snapshot, replay.snapshot());
+      if (tick < 5) {
+        assert.deepEqual(snapshot.units, []);
+        continue;
+      }
+      const unit = snapshot.units[0], progress = unit.locomotion.mainRoute.route.progress;
+      assert.deepEqual(unit.locomotion.mainRoute.route.timing, { waveStartedAtTick: 2, fragmentStartedAtTick: 3 });
+      assert.deepEqual(unit.position, [10, 9]);
+      if (tick < deadline) {
+        assert.equal(progress.phase, 'CHECKPOINTS');
+        assert.equal(progress.checkpoint.remainingTicks, deadline - tick);
+        assert.equal(snapshot.execution.nextNavigationRequestId, 0);
+      } else {
+        assert.equal(progress.phase, 'END');
+        assert.equal(progress.move.navigationRequestId, 0);
+        assert.equal(snapshot.execution.nextNavigationRequestId, 1);
+      }
+    }
+    assert.equal(runtime.result.reason, 'TIME_LIMIT');
+    assert.equal(runtime.result.completedRouteCount, 0);
+    assert.deepEqual(runtime.snapshot().spawning.managedFinalUnitIds, [0]);
+  }
+});
+
+test('core route absolute waits retain birth timing after the scheduler enters a later wave', () => {
+  const { spec } = slimeMovementFragment();
+  for (const [type, deadline] of [['WAIT_CURRENT_WAVE_TICKS', 8], ['WAIT_CURRENT_FRAGMENT_TICKS', 13]]) {
+    const { schedule } = syntheticSpawnSchedule([
+      nativeWave([nativeFragment([nativeSpawn({ dontBlockWave: true })], 3 / 30)], { preDelay: 2 / 30 }),
+      nativeWave([nativeFragment([nativeSpawn({ preDelay: 10 / 30 })])], { preDelay: 2 / 30 }),
+    ]);
+    const firstWave = schedule.waves[0], fragment = firstWave.fragments[0], action = fragment.actions[0];
+    const route = createRouteDefinition({ ...action.spawn.route, visitEveryCheckPoint: true,
+      checkpoints: [{ type, targetElapsedTicks: 8 }],
+    });
+    const definition = createEnemyDefinition({ ...action.spawn.definition,
+      locomotion: { ...action.spawn.definition.locomotion, moveSpeedPerTick: 0 },
+    });
+    const runtime = new BattleRuntime({ ...spec, maxTicks: 16, schedule: { ...schedule, waves: [
+      { ...firstWave, fragments: [{ ...fragment, actions: [{ ...action,
+        spawn: { ...action.spawn, definition, route, alwaysCheckCurrentPoint: true },
+      }] }] }, schedule.waves[1],
+    ] } });
+    while (runtime.snapshot().tickIndex <= deadline) {
+      const tick = runtime.snapshot().tickIndex;
+      runtime.step();
+      if (tick < 5) continue;
+      const snapshot = runtime.snapshot(), state = snapshot.units[0].locomotion.mainRoute.route;
+      assert.equal(snapshot.spawning.waveIndex, 1);
+      assert.equal(snapshot.spawning.waveStartedAtTick, 5);
+      assert.equal(snapshot.spawning.fragmentStartedAtTick, tick < 7 ? 5 : 7);
+      assert.deepEqual(state.timing, { waveStartedAtTick: 0, fragmentStartedAtTick: 5 });
+      if (tick < deadline) {
+        assert.equal(state.progress.checkpoint.remainingTicks, deadline - tick);
+      } else {
+        assert.equal(state.progress.phase, 'END');
+      }
+    }
+    assert.deepEqual(runtime.snapshot().spawning.managedFinalUnitIds, [0]);
+  }
+});
+
+test('core patrol stays registered and pending in the spawn schedule through deterministic loop reentries', () => {
+  const { spec } = slimeMovementFragment();
+  const spawn = spec.schedule.spawns[0];
+  const route = createRouteDefinition({ ...spawn.route, visitEveryCheckPoint: true, checkpoints: [10, 9].map(column => ({
+    type: 'PATROL_MOVE', target: { position: [9, column], reachOffset: [0, 0], randomizeReachOffset: false, reachDistance: 0 },
+  })) });
+  const definition = createEnemyDefinition({ ...spawn.definition,
+    locomotion: { ...spawn.definition.locomotion, moveSpeedPerTick: 4 },
+  });
+  const input = { ...withTimelineSpawns(spec, [{ ...spawn, tick: 0, definition, route, alwaysCheckCurrentPoint: true }]), maxTicks: 24 };
+  const runtime = new BattleRuntime(input), replay = new BattleRuntime(input), events = [];
+  while (runtime.result === null) {
+    const step = runtime.step();
+    assert.deepEqual(step, replay.step());
+    events.push(...step.events);
+    const snapshot = runtime.snapshot();
+    assert.deepEqual(snapshot, replay.snapshot());
+    assert.deepEqual(snapshot.spawning.managedFinalUnitIds, [0]);
+    assert.equal(snapshot.units[0].locomotion.mainRoute.route.progress.phase, 'CHECKPOINTS');
+  }
+  assert.deepEqual(runtime.result, {
+    reason: 'TIME_LIMIT', elapsedTicks: 24, spawnedCount: 1, completedRouteCount: 0, remainingUnitIds: [0], unspawnedCount: 0,
+  });
+  assert.deepEqual(events.filter(event => event.type === 'ROUTE_COMPLETED' || event.type === 'UNIT_REMOVED'), []);
+  assert.ok(runtime.snapshot().execution.nextNavigationRequestId > 4);
+});
+
+test('core absolute wait overflow rolls back same-tick spawns, expiry, identities and RNG', () => {
+  const { spec } = slimeMovementFragment();
+  const spawn = spec.schedule.spawns[0];
+  const route = createRouteDefinition({ ...spawn.route, visitEveryCheckPoint: true, checkpoints: [
+    { type: 'WAIT_FOR_TICKS', durationTicks: 1 },
+    { type: 'WAIT_CURRENT_WAVE_TICKS', targetElapsedTicks: Number.MAX_SAFE_INTEGER },
+  ] });
+  const mechanism = createMechanismRuntime({ id: 0, definition: createMechanismDefinition({ id: 'wait-expiry' }), active: true });
+  const effect = createNavigationSpatialEffect({
+    id: 0, definition: createNavigationEffectDefinition({ id: 'wait-expiry',
+      WALK: { denyPassage: false, deniedDepartures: [], costFloor: 2 }, FLY: null,
+    }), source: { type: 'MECHANISM', mechanismId: 0 }, active: true,
+    region: createSpatialEffectRegion({ type: 'FIXED', position: [9, 6], range: [[0, 0]], direction: 'RIGHT' }),
+    expiresAtTick: 5,
+  });
+  const runtime = new BattleRuntime({ ...withTimelineSpawns(spec, [
+    { ...spawn, tick: 5 },
+    { ...spawn, tick: 5, route, alwaysCheckCurrentPoint: true, timing: { waveStartedAtTick: 2, fragmentStartedAtTick: 3 } },
+  ]), initialMechanisms: [mechanism], initialEffects: [effect] });
+  while (runtime.snapshot().tickIndex < 5) runtime.step();
+  const before = runtime.snapshot(), maps = runtime.navigationMaps;
+  for (let retry = 0; retry < 2; retry++) {
+    assert.throws(() => runtime.step(), /route wait target tick overflow/);
+    assert.deepEqual(runtime.snapshot(), before);
+    assert.equal(runtime.navigationMaps, maps);
+  }
 });
 
 test('core battle deadline keeps live units separate from spawns due at the excluded final edge', () => {

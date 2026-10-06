@@ -25,12 +25,14 @@ export interface SpawnedEnemies {
 export function spawnEnemies(
     spawns: readonly ScheduledEnemySpawn[],
     execution: BattleExecutionState,
+    tick: number,
 ): SpawnedEnemies {
     let { rngState, nextUnitId, nextNavigationRequestId } = execution;
     const enemies: RoutedEnemy[] = [];
     for (const spawn of spawns) {
         const initialized = initializeRoutedEnemy({
             id: nextUnitId,
+            tick,
             definition: spawn.definition,
             route: spawn.route,
             timing: spawn.timing,

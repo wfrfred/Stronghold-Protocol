@@ -11,7 +11,6 @@ import { createNavigationSpatialEffect } from "./navigation-effect.js";
 import { copyUnitSnapshot, reconcileUnitNavigation } from "../unit/snapshot.js";
 import type { Unit, UnitId } from "../unit/unit.js";
 import { projectNavigationMaps, projectStaticNavigationMap } from "./navigation-projection.js";
-import type { WordTileCost } from "./navigation-projection.js";
 import { battlefieldTileKey, projectBattlefieldSpatial, spatialEffectSourceKey } from "./spatial.js";
 import type { BattlefieldSpatialView } from "./spatial.js";
 
@@ -40,7 +39,6 @@ export interface BattlefieldChangeResult {
 
 export interface BattlefieldRuntimeOptions {
     readonly map: BattlefieldMap;
-    readonly wordTileCosts?: readonly WordTileCost[];
 }
 
 function requireEntry<K, V>(entries: ReadonlyMap<K, V>, id: K, name: string): V {
@@ -70,8 +68,8 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
         this.#copyUnit = copyUnit;
         this.#map = options.map;
         this.#baseline = Object.freeze({
-            WALK: projectStaticNavigationMap(options.map, "WALK", 0, options.wordTileCosts),
-            FLY: projectStaticNavigationMap(options.map, "FLY", 0, options.wordTileCosts),
+            WALK: projectStaticNavigationMap(options.map, "WALK", 0),
+            FLY: projectStaticNavigationMap(options.map, "FLY", 0),
         });
         this.#navigationMaps = this.#baseline;
         this.#spatial = projectBattlefieldSpatial(this.#map, this.#units, this.#mechanisms, this.#effects);
