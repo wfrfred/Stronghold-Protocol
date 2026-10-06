@@ -4,6 +4,8 @@
 // skill trigger grids, token placement grids, support geometry, kit helpers).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { Tile as CoreTile, World, createTilePosition, createWorldPosition } from '../../dist/core/tactical/geometry/coordinate.js';
+import { RangeGrid } from '../../dist/core/tactical/geometry/range.js';
 import {
   DIRS, DIR_VEC, normDir, rotateOffset, toLocal, hSign, mirrorDir, oppositeDir, perpendicular, dirFromDelta, frontOf, offsetTile,
 } from '../../server/sim/dir.js';
@@ -208,4 +210,29 @@ test('the legacy facing setter maps ±1 to RIGHT / LEFT (content that still assi
   u.facing = 1;
   assert.equal(u.dir, 'RIGHT');
   assert.equal(K(10, 4), u.tileR * COLS + u.tileC);
+});
+
+test('core coordinate conversion uses row/y, col/x and ties-to-even without clipping', () => {
+  assert.deepEqual(CoreTile.center(createTilePosition(2, 7)), [7, 2]);
+  for (const [value, rounded] of [[0.5, 0], [1.5, 2], [-0.5, 0], [-1.5, -2], [2.5, 2], [-2.5, -2]]) {
+    assert.deepEqual(World.toTile(createWorldPosition(value, value)), [rounded, rounded]);
+  }
+  assert.deepEqual(World.toTile([0.5 - Number.EPSILON, 0.5 + Number.EPSILON]), [1, 0]);
+  assert.deepEqual(World.toTile([-8.2, 12.7]), [13, -8]);
+  assert.throws(() => World.toTile([0, Infinity]), RangeError);
+  assert.throws(() => World.toTile([0, 0, 1]), RangeError);
+  assert.throws(() => createTilePosition(Number.MAX_SAFE_INTEGER + 1, 0), RangeError);
+  assert.throws(() => CoreTile.translate([Number.MAX_SAFE_INTEGER, 0], [1, 0]), RangeError);
+});
+
+test('core ranges preserve ordered rotation in a snapshot and reject sparse or ambiguous offsets', () => {
+  const offsets = [[0, 0], [0, 2], [1, 1]];
+  const range = RangeGrid.create(offsets);
+  offsets[1][1] = 9;
+  assert.deepEqual(RangeGrid.project(range, [2, 3], 'UP'), [[2, 3], [4, 3], [3, 2]]);
+  assert.deepEqual(RangeGrid.project(range, [0, 0], 'LEFT'), [[0, 0], [0, -2], [-1, -1]]);
+  assert.ok(Object.isFrozen(range) && range.every(Object.isFrozen));
+  assert.throws(() => RangeGrid.create([[0, 0], [0, -0]]), RangeError);
+  assert.throws(() => RangeGrid.create([[0, 0], , [0, 1]]), RangeError);
+  assert.throws(() => RangeGrid.create([[0.5, 0]]), RangeError);
 });

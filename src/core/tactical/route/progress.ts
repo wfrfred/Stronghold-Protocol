@@ -12,11 +12,6 @@ export interface RouteWaitProgress {
     readonly remainingSeconds: number;
 }
 
-export interface RouteBossRushWaitProgress {
-    readonly type: "WAIT_BOSSRUSH_WAVE";
-    readonly targetBossWaveCount: number;
-}
-
 export type RouteCheckpointProgress =
     | {
         readonly type: "NOT_ENTERED";
@@ -25,8 +20,7 @@ export type RouteCheckpointProgress =
         readonly type: "ENTERED";
     }
     | RouteMoveProgress
-    | RouteWaitProgress
-    | RouteBossRushWaitProgress;
+    | RouteWaitProgress;
 
 export type RouteProgress =
     | {
@@ -58,4 +52,53 @@ export interface RouteState {
     readonly clockBinding: RouteClockBinding;
     readonly alwaysCheckCurrentPoint: boolean;
     progress: RouteProgress;
+}
+
+function finite(value: number, name: string): number {
+    if (!Number.isFinite(value)) {
+        throw new RangeError(`${name} must be finite`);
+    }
+
+    return value;
+}
+
+export function createRouteClockBinding(binding: RouteClockBinding): RouteClockBinding {
+    return Object.freeze({
+        waveStartedAtSeconds: finite(binding.waveStartedAtSeconds, "waveStartedAtSeconds"),
+        fragmentStartedAtSeconds: finite(binding.fragmentStartedAtSeconds, "fragmentStartedAtSeconds"),
+    });
+}
+
+export function createRouteClock(clock: RouteClock): RouteClock {
+    const deltaTimeSeconds = finite(clock.deltaTimeSeconds, "deltaTimeSeconds");
+    if (deltaTimeSeconds < 0) {
+        throw new RangeError("deltaTimeSeconds must be non-negative");
+    }
+
+    return Object.freeze({
+        fixedPlayTimeSeconds: finite(clock.fixedPlayTimeSeconds, "fixedPlayTimeSeconds"),
+        userFixedPlayTimeSeconds: finite(clock.userFixedPlayTimeSeconds, "userFixedPlayTimeSeconds"),
+        deltaTimeSeconds,
+    });
+}
+
+export function createRouteState(
+    definition: RouteDefinition,
+    clockBinding: RouteClockBinding,
+    alwaysCheckCurrentPoint: boolean,
+): RouteState {
+    if (typeof alwaysCheckCurrentPoint !== "boolean") {
+        throw new TypeError("alwaysCheckCurrentPoint must be boolean");
+    }
+
+    return {
+        definition,
+        clockBinding: createRouteClockBinding(clockBinding),
+        alwaysCheckCurrentPoint,
+        progress: {
+            phase: "CHECKPOINTS",
+            checkpointIndex: 0,
+            checkpoint: Object.freeze({ type: "NOT_ENTERED" }),
+        },
+    };
 }

@@ -25,6 +25,7 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
+    "pretest": "npm run build:ts",
     "test": "node --test",
     "vendor": "node tools/vendor.mjs",
     "build-data": "node tools/build-data.mjs",

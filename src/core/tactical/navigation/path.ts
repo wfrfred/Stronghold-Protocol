@@ -1,5 +1,7 @@
 import type { TilePosition, WorldPosition } from "../geometry/coordinate.js";
 import type { NavigationField } from "./field.js";
+import { NavigationMap } from "./map.js";
+import { createNavigationRequest } from "./request.js";
 import type { NavigationRequest } from "./request.js";
 
 export interface NavigationPath {
@@ -66,4 +68,20 @@ export interface NavigationPredictionSelection {
         | {
             readonly type: "OUTSIDE_MAP";
         };
+}
+
+export function createNavigationPath(
+    request: NavigationRequest,
+    field: NavigationField,
+): NavigationPath {
+    const snapshot = createNavigationRequest(request);
+    if (!NavigationMap.contains(field.map, snapshot.targetTile)) {
+        throw new RangeError("navigation target is outside the map");
+    }
+    if (field.query.targetTile[0] !== snapshot.targetTile[0]
+        || field.query.targetTile[1] !== snapshot.targetTile[1]
+        || field.query.allowDiagonalMove !== snapshot.options.allowDiagonalMove) {
+        throw new RangeError("navigation field does not match the request");
+    }
+    return Object.freeze({ request: snapshot, field });
 }

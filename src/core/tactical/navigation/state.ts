@@ -1,5 +1,6 @@
+import { createWorldOffset, isWorldPosition } from "../geometry/coordinate.js";
 import type { WorldOffset, WorldPosition } from "../geometry/coordinate.js";
-import type { PathMotionMode } from "./map.js";
+import { PathMotionMode } from "./map.js";
 import type {
     NavigationFailureReason,
     NavigationPath,
@@ -54,3 +55,23 @@ export type NavigationOutcome =
         readonly requestId: NavigationRequestId;
         readonly reason: NavigationFailureReason;
     };
+
+export function createNavigationState(
+    pathMotionMode: PathMotionMode,
+    locatorOffset: WorldOffset,
+): NavigationState {
+    if (!PathMotionMode.is(pathMotionMode)) {
+        throw new TypeError("invalid path motion mode");
+    }
+    if (!isWorldPosition(locatorOffset)) {
+        throw new RangeError("locator offset must be a valid world pair");
+    }
+    return {
+        pathMotionMode,
+        execution: Object.freeze({
+            locatorOffset: createWorldOffset(locatorOffset[0], locatorOffset[1]),
+            visits: Object.freeze({ visitedCenters: Object.freeze([]) }),
+            activity: Object.freeze({ type: "IDLE" }),
+        }),
+    };
+}

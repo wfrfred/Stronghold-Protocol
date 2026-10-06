@@ -1,20 +1,20 @@
 import type { TileOffset } from "./coordinate.js";
 
-export const DIRECTIONS = [
+export const DIRECTIONS = Object.freeze([
     "UP",
     "RIGHT",
     "DOWN",
     "LEFT",
-] as const;
+] as const);
 
 export type Direction = typeof DIRECTIONS[number];
 
-const DIRECTION_VECTOR = {
-    UP: [1, 0],
-    RIGHT: [0, 1],
-    DOWN: [-1, 0],
-    LEFT: [0, -1],
-} as const satisfies Record<Direction, TileOffset>;
+const DIRECTION_VECTOR = Object.freeze({
+    UP: Object.freeze([1, 0] as const),
+    RIGHT: Object.freeze([0, 1] as const),
+    DOWN: Object.freeze([-1, 0] as const),
+    LEFT: Object.freeze([0, -1] as const),
+} satisfies Record<Direction, TileOffset>);
 
 const OPPOSITE_DIRECTION = {
     UP: "DOWN",
@@ -32,15 +32,23 @@ const MIRROR_DIRECTION = {
 
 export const Direction = {
     vector(direction: Direction): TileOffset {
+        if (!Direction.is(direction)) {
+            throw new RangeError("invalid direction");
+        }
         return DIRECTION_VECTOR[direction];
     },
 
     opposite(direction: Direction): Direction {
+        if (!Direction.is(direction)) {
+            throw new RangeError("invalid direction");
+        }
         return OPPOSITE_DIRECTION[direction];
     },
 
-    /** Left-right reflection; UP and DOWN stay unchanged. */
     mirror(direction: Direction): Direction {
+        if (!Direction.is(direction)) {
+            throw new RangeError("invalid direction");
+        }
         return MIRROR_DIRECTION[direction];
     },
 

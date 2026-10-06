@@ -2,6 +2,19 @@
 // cost 1000, Bresenham line-of-sight smoothing; enemies walk tile centre to tile centre along next[tile].
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createBattlefieldMap, BattlefieldMap } from '../../dist/core/tactical/map/map.js';
+import { createTile } from '../../dist/core/tactical/map/tile.js';
+import { projectStaticNavigationMap } from '../../dist/core/tactical/battle/battlefield/navigation.js';
+import { createNavigationMap, NavigationMap } from '../../dist/core/tactical/navigation/map.js';
+import { createNavigationRequest } from '../../dist/core/tactical/navigation/request.js';
+import { createNavigationField, deriveNavigationFieldQuery } from '../../dist/core/tactical/navigation/field.js';
+import { createNavigationPath } from '../../dist/core/tactical/navigation/path.js';
+import { createNavigationState } from '../../dist/core/tactical/navigation/state.js';
+import { createRouteDefinition } from '../../dist/core/tactical/route/definition.js';
+import { createRouteClock, createRouteClockBinding, createRouteState } from '../../dist/core/tactical/route/progress.js';
+import { initializeRouteSpawn } from '../../dist/core/tactical/route/initialize.js';
+import { parseBattlefieldMap } from '../../dist/data/arknights/map.js';
+import { parseRouteDefinition } from '../../dist/data/arknights/route.js';
 import { Grid, OBSTACLE_COST, bresenhamTiles } from '../../server/sim/grid.js';
 import { getDefaultSource, hasGeneratedData } from '../../server/sim/simdata.js';
 import { makeBattle, flatStage, enemyRec } from '../helpers/battleHarness.js';
@@ -229,4 +242,201 @@ test('a pushed ground enemy re-plans from its tile centre: never cuts a fence co
     assert.equal(b.grid.version, ver, 'no obstacle change');
     assert.equal(h.result().perPlayer.p1.leaked.length, 1, 'still reaches the goal');
   }
+});
+
+const coreGround = (overrides = {}) => ({
+  heightType: 'LOWLAND', buildableType: 'MELEE', passableMask: 'ALL', playerSideMask: 'ALL',
+  terrain: 'NORMAL', mechanism: null, ...overrides,
+});
+const coreRequest = (overrides = {}) => ({
+  id: 1, targetTile: [0, 2], goal: { position: [2.2, 0], reachDistance: 0.05 },
+  options: { allowDiagonalMove: true, visitEveryTileCenter: false, visitEveryNodeCenter: false, visitEveryNodeStably: false },
+  arrivalRule: 'DISTANCE', ...overrides,
+});
+const coreRoute = (overrides = {}) => ({
+  pathMotionMode: 'WALK', startPosition: [3, 4], endPosition: [0, 0], spawnOffset: [0.1, -0.2],
+  spawnRandomRange: [0.5, 1], checkpoints: [], allowDiagonalMove: true,
+  visitEveryTileCenter: false, visitEveryNodeCenter: false, visitEveryCheckPoint: true, ...overrides,
+});
+const rawTile = (tileKey, overrides = {}) => ({
+  tileKey, heightType: 'LOWLAND', buildableType: 'MELEE', passableMask: 'ALL',
+  playerSideMask: 'ALL', blackboard: null, effects: [], ...overrides,
+});
+
+test('core battlefield snapshots isolate nested tiles, markers and edges from their input', () => {
+  const tile = coreGround({ mechanism: { type: 'INFECTION', params: {
+    damagePerSecond: 100, attackBonusRatio: 0.2, attackSpeedBonus: 20, activeUntilSeconds: 60,
+  } } });
+  const markers = [{ type: 'START', position: [0, 0] }];
+  const edges = [{ position: [0, 0], direction: 'RIGHT', blockMask: 'WALK_ONLY' }];
+  const map = createBattlefieldMap(1, 2, [tile, coreGround()], markers, edges);
+  tile.mechanism.params.damagePerSecond = 999;
+  markers[0].position[1] = 1;
+  edges[0].blockMask = 'ALL';
+  assert.equal(map.tiles[0].mechanism.params.damagePerSecond, 100);
+  assert.deepEqual(map.markers[0].position, [0, 0]);
+  assert.equal(map.blockEdges[0].blockMask, 'WALK_ONLY');
+  assert.ok(Object.isFrozen(map.tiles[0].mechanism.params) && Object.isFrozen(map.blockEdges));
+  assert.equal(BattlefieldMap.get(map, [0, 2]), undefined);
+  assert.throws(() => createBattlefieldMap(1, 2, [coreGround(), ,]), RangeError);
+  assert.throws(() => createBattlefieldMap(Number.MAX_SAFE_INTEGER, 2, []), RangeError);
+  assert.throws(() => createTile(coreGround({ passableMask: 'E_NUM' })), TypeError);
+});
+
+test('core static navigation projects mode-specific passability, costs and both edge departures', () => {
+  const map = createBattlefieldMap(1, 4, [
+    coreGround({ passableMask: 'WALK_ONLY' }), coreGround({ terrain: 'HOLE' }),
+    coreGround({ terrain: 'WORD' }), coreGround({ passableMask: 'FLY_ONLY' }),
+  ], [], [
+    { position: [0, 1], direction: 'RIGHT', blockMask: 'WALK_ONLY' },
+    { position: [0, -1], direction: 'RIGHT', blockMask: 'ALL' },
+  ]);
+  assert.throws(() => projectStaticNavigationMap(map, 'WALK', 0), /explicit mechanism cost/);
+  const walk = projectStaticNavigationMap(map, 'WALK', 2, [{ position: [0, 2], moveCost: 1000 }]);
+  const fly = projectStaticNavigationMap(map, 'FLY', 2);
+  assert.deepEqual(walk.cells.map(cell => cell.moveCost), [1, 1_000_000, 1000, 1]);
+  assert.deepEqual(fly.cells.map(cell => cell.moveCost), [1, 1, 1, 1]);
+  assert.deepEqual(walk.cells.map(cell => cell.passable), [true, true, true, false]);
+  assert.deepEqual(fly.cells.map(cell => cell.passable), [false, true, true, true]);
+  assert.equal(NavigationMap.canDepart(walk, [0, 1], 'RIGHT'), false);
+  assert.equal(NavigationMap.canDepart(walk, [0, 2], 'LEFT'), false);
+  assert.equal(NavigationMap.canDepart(fly, [0, 1], 'RIGHT'), true);
+  assert.equal(walk.cells[0].departures.LEFT, false);
+  assert.equal(NavigationMap.canDepart(walk, [0, 0], 'UP'), true);
+  assert.throws(() => NavigationMap.contains(walk, [0, 0, 1]), RangeError);
+  assert.ok(Object.isFrozen(walk.cells[0].departures));
+});
+
+test('core navigation rejects malformed costs and preserves raw distance semantics in shared fields', () => {
+  const cell = (moveCost) => ({ passable: true, moveCost, departures: { UP: true, RIGHT: true, DOWN: true, LEFT: true } });
+  const input = { rows: 1, columns: 3, pathMotionMode: 'WALK', revision: 0, cells: [cell(4), cell(1), cell(1)] };
+  const map = createNavigationMap(input);
+  input.cells[0].moveCost = 99;
+  assert.equal(map.cells[0].moveCost, 4);
+  assert.throws(() => createNavigationMap({ ...input, cells: [cell(0), cell(1), cell(1)] }), RangeError);
+  assert.throws(() => createNavigationMap({ ...input, cells: [cell(Infinity), cell(1), cell(1)] }), RangeError);
+  assert.throws(() => createNavigationMap({ ...input, pathMotionMode: 'FLY' }), RangeError);
+  assert.throws(() => createNavigationMap({ ...input, cells: [cell(1), , cell(1)] }), RangeError);
+  const request = createNavigationRequest(coreRequest());
+  const query = deriveNavigationFieldQuery(request);
+  const nodes = [
+    { type: 'REACHABLE', distance: 5, rawNext: [0, 1], next: [0, 2] },
+    { type: 'REACHABLE', distance: 1, rawNext: [0, 2], next: [0, 2] },
+    { type: 'TARGET', distance: 0 },
+  ];
+  const field = createNavigationField(map, query, nodes);
+  const path = createNavigationPath(request, field);
+  nodes[0].next[1] = 0;
+  assert.equal(field.map, map);
+  assert.equal(path.field, field);
+  assert.deepEqual(field.nodes[0].next, [0, 2]);
+  assert.equal(field.nodes[0].distance, 5);
+  assert.throws(() => createNavigationField(map, query, [
+    { type: 'REACHABLE', distance: 4, rawNext: [0, 1], next: [0, 2] }, nodes[1], nodes[2],
+  ]), /departure cost/);
+  assert.throws(() => createNavigationField(map, query, [
+    { type: 'REACHABLE', distance: 5, rawNext: [0, 1], next: [0, 0] }, nodes[1], nodes[2],
+  ]), /decrease distance/);
+  assert.throws(() => createNavigationPath(coreRequest({ targetTile: [0, 1] }), field), /does not match/);
+  assert.throws(() => createNavigationPath(coreRequest({ targetTile: [0, 3] }), field), /outside/);
+});
+
+test('core requests snapshot effective options without quantizing the continuous goal', () => {
+  const input = coreRequest();
+  const request = createNavigationRequest(input);
+  input.options.allowDiagonalMove = false;
+  input.goal.position[0] = 9;
+  assert.equal(request.options.allowDiagonalMove, true);
+  assert.deepEqual(request.goal.position, [2.2, 0]);
+  assert.deepEqual(request.targetTile, [0, 2]);
+  assert.throws(() => createNavigationRequest(coreRequest({ targetTile: [0, 2, 3] })), RangeError);
+  assert.throws(() => createNavigationRequest(coreRequest({ goal: { position: [2, 0], reachDistance: -1 } })), RangeError);
+  const offset = [0.3, -0.4];
+  const state = createNavigationState('FLY', offset);
+  offset[0] = 2;
+  assert.deepEqual(state.execution.locatorOffset, [0.3, -0.4]);
+  assert.equal(state.execution.activity.type, 'IDLE');
+});
+
+test('raw battlefield loading flips matrix rows, extracts markers and preserves static side eligibility', () => {
+  const raw = {
+    map: [[0, 1], [2, 0]], tiles: [rawTile('tile_road'), rawTile('tile_start'), rawTile('tile_end', { playerSideMask: 'SIDE_B' })],
+    blockEdges: [{ pos: { row: 1, col: 0 }, direction: 'RIGHT', blockMask: 'WALK_ONLY' }],
+    effects: [], tags: [], layerRects: [],
+  };
+  const map = parseBattlefieldMap(raw);
+  assert.deepEqual(map.markers, [{ type: 'END', position: [0, 0] }, { type: 'START', position: [1, 1] }]);
+  assert.equal(map.tiles[0].playerSideMask, 'SIDE_B');
+  assert.equal(projectStaticNavigationMap(map, 'WALK', 0).cells[2].departures.RIGHT, false);
+  raw.tiles[2].playerSideMask = 'ALL';
+  assert.equal(map.tiles[0].playerSideMask, 'SIDE_B');
+  assert.throws(() => parseBattlefieldMap({ ...raw, map: [[0], [0, 1]] }), /rectangular/);
+  assert.throws(() => parseBattlefieldMap({ ...raw, map: [[-1]] }), /definition index/);
+  assert.throws(() => parseBattlefieldMap({ ...raw, effects: [{}] }), /not supported/);
+  assert.throws(() => parseBattlefieldMap({ ...raw, tiles: [rawTile('tile_unknown')], map: [[0]] }), /unsupported tile key/);
+});
+
+test('raw tile mechanisms require controller inputs and explicit consumption of other blackboard rules', () => {
+  const oneTile = (tile) => ({ map: [[0]], tiles: [tile], blockEdges: [] });
+  const mire = { stackIntervalSeconds: 1, attackSpeedPerStack: -5, moveSpeedRatioPerStack: -0.1, maxStacks: 5 };
+  assert.throws(() => parseBattlefieldMap(oneTile(rawTile('tile_mire'))), /controller parameters/);
+  assert.deepEqual(parseBattlefieldMap(oneTile(rawTile('tile_mire')), { mire }).tiles[0].mechanism.params, mire);
+  const hand = oneTile(rawTile('tile_achand', { blackboard: [{ key: 'isValidHand', value: 1, valueStr: null }] }));
+  assert.throws(() => parseBattlefieldMap(hand), /unconsumed blackboard/);
+  const consumed = [];
+  parseBattlefieldMap(hand, { consumeTileBlackboard: (context, entry) => {
+    consumed.push([context.position, entry.key]);
+    return entry.key === 'isValidHand';
+  } });
+  assert.deepEqual(consumed, [[[0, 0], 'isValidHand']]);
+});
+
+test('route birth resolution consumes x then y exactly once even for zero ranges', () => {
+  let calls = 0;
+  const spawn = initializeRouteSpawn(createRouteDefinition(coreRoute()), { next: () => [0.25, 0.75][calls++] });
+  approx(spawn.position[0], 3.85, 'spawn x');
+  approx(spawn.position[1], 3.3, 'spawn y');
+  approx(spawn.locatorOffset[0], 0.15, 'locator x');
+  approx(spawn.locatorOffset[1], -0.3, 'locator y');
+  assert.equal(calls, 2);
+  calls = 0;
+  const exact = initializeRouteSpawn(coreRoute({ spawnOffset: [0, 0], spawnRandomRange: [0, 0] }), { next: () => { calls++; return 0.5; } });
+  assert.equal(calls, 2);
+  assert.deepEqual(exact, { position: [4, 3], locatorOffset: [0, 0] });
+  calls = 0;
+  assert.throws(() => initializeRouteSpawn(coreRoute({ spawnRandomRange: [Number.MAX_VALUE, 0] }), { next: () => { calls++; return 0; } }), RangeError);
+  assert.equal(calls, 0);
+});
+
+test('route constructors keep clocks explicit, snapshots isolated and progress local to each instance', () => {
+  const input = coreRoute({ checkpoints: [{ type: 'WAIT_FOR_SECONDS', durationSeconds: -1 }] });
+  const definition = createRouteDefinition(input);
+  input.checkpoints[0].durationSeconds = 9;
+  assert.equal(definition.checkpoints[0].durationSeconds, -1);
+  const binding = createRouteClockBinding({ waveStartedAtSeconds: 10, fragmentStartedAtSeconds: 12 });
+  const a = createRouteState(definition, binding, false), b = createRouteState(definition, binding, true);
+  a.progress.checkpointIndex = 1;
+  assert.equal(b.progress.checkpointIndex, 0);
+  assert.equal(a.definition, definition);
+  const clock = createRouteClock({ fixedPlayTimeSeconds: 15, userFixedPlayTimeSeconds: 13, deltaTimeSeconds: 1 / 30 });
+  assert.notEqual(clock.fixedPlayTimeSeconds, clock.userFixedPlayTimeSeconds);
+  assert.throws(() => createRouteState(definition, binding), TypeError);
+  assert.throws(() => createRouteClock({ ...clock, deltaTimeSeconds: -1 }), RangeError);
+  assert.throws(() => createRouteClockBinding({ waveStartedAtSeconds: 0, fragmentStartedAtSeconds: NaN }), RangeError);
+  assert.throws(() => createRouteDefinition(coreRoute({ checkpoints: [,] })), TypeError);
+});
+
+test('raw routes preserve APPEAR fixed offsets and reject mode-specific or unknown instructions', () => {
+  const raw = {
+    motionMode: 'WALK', startPosition: { row: 3, col: 4 }, endPosition: { row: 0, col: 0 },
+    spawnOffset: { x: 0, y: 0 }, spawnRandomRange: { x: 0, y: 0 },
+    allowDiagonalMove: true, visitEveryTileCenter: false, visitEveryNodeCenter: false, visitEveryCheckPoint: true,
+    checkpoints: [{ type: 'APPEAR_AT_POS', position: { row: 1, col: 2 }, reachOffset: { x: 0.1, y: -0.2 }, randomizeReachOffset: true }],
+  };
+  const definition = parseRouteDefinition(raw);
+  assert.deepEqual(definition.checkpoints[0], { type: 'APPEAR_AT_POS', position: [1, 2], reachOffset: [0.1, -0.2] });
+  assert.throws(() => parseRouteDefinition({ ...raw, motionMode: 'E_NUM' }), /motion mode/);
+  assert.throws(() => parseRouteDefinition({ ...raw, checkpoints: [{ type: 'WAIT_BOSSRUSH_WAVE', time: 1 }] }), /checkpoint type/);
+  assert.throws(() => parseRouteDefinition({ ...raw, checkpoints: [{ type: 'INVALID' }] }), /checkpoint type/);
+  assert.throws(() => parseRouteDefinition({ ...raw, unknownRule: true }), /unsupported field/);
 });
