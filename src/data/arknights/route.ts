@@ -1,4 +1,3 @@
-import { createTilePosition, createWorldOffset } from "../../core/tactical/geometry/coordinate.js";
 import type { TilePosition, WorldOffset } from "../../core/tactical/geometry/coordinate.js";
 import { createRouteDefinition } from "../../core/tactical/route/definition.js";
 import type { RouteCheckpoint, RouteDefinition, RouteMoveTarget } from "../../core/tactical/route/definition.js";
@@ -35,12 +34,12 @@ function boolean(value: unknown, name: string): boolean {
 
 function position(value: unknown, name: string): TilePosition {
     const data = object(value, name, ["row", "col"]);
-    return createTilePosition(number(data.row, `${name}.row`), number(data.col, `${name}.col`));
+    return [number(data.row, `${name}.row`), number(data.col, `${name}.col`)];
 }
 
 function offset(value: unknown, name: string): WorldOffset {
     const data = object(value, name, ["x", "y"]);
-    return createWorldOffset(number(data.x, `${name}.x`), number(data.y, `${name}.y`));
+    return [number(data.x, `${name}.x`), number(data.y, `${name}.y`)];
 }
 
 function moveTarget(data: Record<string, unknown>): RouteMoveTarget {

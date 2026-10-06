@@ -93,7 +93,7 @@ export function createRouteState(
 
     return {
         definition,
-        clockBinding: createRouteClockBinding(clockBinding),
+        clockBinding,
         alwaysCheckCurrentPoint,
         progress: {
             phase: "CHECKPOINTS",

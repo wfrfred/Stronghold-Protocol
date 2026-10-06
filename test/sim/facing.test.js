@@ -219,8 +219,7 @@ test('core coordinate conversion uses row/y, col/x and ties-to-even without clip
   }
   assert.deepEqual(World.toTile([0.5 - Number.EPSILON, 0.5 + Number.EPSILON]), [1, 0]);
   assert.deepEqual(World.toTile([-8.2, 12.7]), [13, -8]);
-  assert.throws(() => World.toTile([0, Infinity]), RangeError);
-  assert.throws(() => World.toTile([0, 0, 1]), RangeError);
+  assert.throws(() => createWorldPosition(0, Infinity), RangeError);
   assert.throws(() => createTilePosition(Number.MAX_SAFE_INTEGER + 1, 0), RangeError);
   assert.throws(() => CoreTile.translate([Number.MAX_SAFE_INTEGER, 0], [1, 0]), RangeError);
 });

@@ -52,18 +52,6 @@ function requireSafeInteger(value: number, name: string): number {
     return value === 0 ? 0 : value;
 }
 
-function requirePair(value: readonly [number, number], name: string): void {
-    if (!Array.isArray(value) || value.length !== 2 || !Object.hasOwn(value, 0) || !Object.hasOwn(value, 1)) {
-        throw new RangeError(`${name} must contain exactly two coordinates`);
-    }
-}
-
-function requireTilePair(value: readonly [number, number], name: string): void {
-    requirePair(value, name);
-    requireSafeInteger(value[0], `${name}[0]`);
-    requireSafeInteger(value[1], `${name}[1]`);
-}
-
 function roundTiesToEven(value: number): number {
     requireFinite(value, "world coordinate");
     const lower = Math.floor(value);
@@ -107,19 +95,14 @@ export function createWorldOffset(dx: number, dy: number): WorldOffset {
 
 export const Tile = {
     translate(position: TilePosition, offset: TileOffset): TilePosition {
-        requireTilePair(position, "tile position");
-        requireTilePair(offset, "tile offset");
         return createTilePosition(position[0] + offset[0], position[1] + offset[1]);
     },
 
     difference(a: TilePosition, b: TilePosition,): TileOffset {
-        requireTilePair(a, "tile position");
-        requireTilePair(b, "tile position");
         return createTileOffset(a[0] - b[0], a[1] - b[1]);
     },
 
     rotate(offset: TileOffset, direction: Direction): TileOffset {
-        requireTilePair(offset, "tile offset");
         const [dRow, dCol] = offset;
         const [fr, fc] = Direction.vector(direction);
 
@@ -130,14 +113,12 @@ export const Tile = {
     },
 
     center(position: TilePosition): WorldPosition {
-        requireTilePair(position, "tile position");
         return createWorldPosition(position[1], position[0]);
     },
 };
 
 export const World = {
     toTile(position: WorldPosition): TilePosition {
-        requirePair(position, "world position");
         return createTilePosition(
             roundTiesToEven(position[1]),
             roundTiesToEven(position[0]),

@@ -32,23 +32,14 @@ const MIRROR_DIRECTION = {
 
 export const Direction = {
     vector(direction: Direction): TileOffset {
-        if (!Direction.is(direction)) {
-            throw new RangeError("invalid direction");
-        }
         return DIRECTION_VECTOR[direction];
     },
 
     opposite(direction: Direction): Direction {
-        if (!Direction.is(direction)) {
-            throw new RangeError("invalid direction");
-        }
         return OPPOSITE_DIRECTION[direction];
     },
 
     mirror(direction: Direction): Direction {
-        if (!Direction.is(direction)) {
-            throw new RangeError("invalid direction");
-        }
         return MIRROR_DIRECTION[direction];
     },
 

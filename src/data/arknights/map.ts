@@ -1,5 +1,4 @@
 import {
-    createTile,
     type BuildableType,
     type DeepseaParams,
     type HeightType,
@@ -206,14 +205,14 @@ function parseTile(
         }
     }
 
-    const tile = createTile({
+    const tile: Tile = {
         heightType: string(source.heightType, "tile height type") as HeightType,
         buildableType: string(source.buildableType, "tile buildable type") as BuildableType,
         passableMask: string(source.passableMask, "tile passable mask") as PassableMask,
         playerSideMask: string(source.playerSideMask, "tile player side mask") as PlayerSideMask,
         terrain: "NORMAL",
         mechanism,
-    });
+    };
     const markerType = MARKER_TYPES[tileKey as keyof typeof MARKER_TYPES];
     return {
         tile,

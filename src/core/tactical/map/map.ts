@@ -24,9 +24,6 @@ export interface BattlefieldMap {
 
 export const BattlefieldMap = {
     contains(map: BattlefieldMap, position: TilePosition): boolean {
-        if (!isTilePosition(position)) {
-            throw new RangeError("tile position must contain exactly two safe integer coordinates");
-        }
         const [row, col] = position;
 
         return row >= 0 && row < map.rows &&
@@ -96,6 +93,9 @@ export function createBattlefieldMap(
         }
         if (!["START", "END", "TELEPORT_IN", "TELEPORT_OUT"].includes(marker.type)) {
             throw new TypeError(`invalid marker type at index ${index}`);
+        }
+        if (!isTilePosition(marker.position)) {
+            throw new RangeError("tile position must contain exactly two safe integer coordinates");
         }
         if (!BattlefieldMap.contains(map, marker.position)) {
             throw new RangeError(`marker at index ${index} is outside the map`);

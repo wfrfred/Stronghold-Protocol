@@ -1,16 +1,3 @@
-// Adversarial cross-check of grid.js against an independent port of the official client pathing (research 08 §3.4,
-// `Torappu.Battle.SPFA`: FIFO SPFA from the destination over the WHOLE level map, UP/RIGHT/DOWN/LEFT, crates cost 1000,
-// strict improvement; row-major in-place Bresenham smoothing with the diagonal corner rule), run on the raw level files
-// in .cache/gamedata (skipped when absent), extended by our blockable-ground preference (grid.js header: a second,
-// preference field = 0.1.0's — equal-length ties to the chain with the fewest non-blockable tiles, a line of sight that
-// covers non-blockable tiles, diagonal-step corners included, only on the own raw chain — whose pointer replaces the
-// official one where its route crosses fewer non-blockable tiles, or as few while only skipping the official waypoint
-// (on the straight line to it, leading there); "crosses" = positive-length intersection with the tile, found here by
-// clipping the segment against each tile, independently of grid.js crossTiles):
-//   * the 8 active stages with their match-start devices: the smoothed chain from EVERY walkable tile of the normal,
-//     联防 and boss rects to every goal equals the full-map reference one (the sim's rect limit changes nothing);
-//   * 400 random crate / block layouts: identical chains to the same algorithm limited to the rect;
-//   * against the PURE official algorithm: identical route lengths everywhere, never more non-blockable tiles crossed.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
@@ -19,6 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { Grid } from '../../server/sim/grid.js';
 import { getDefaultSource, hasGeneratedData } from '../../server/sim/simdata.js';
 import { GEO } from '../../shared/constants.js';
+import { flowFieldForGrid } from '../../dist/legacy/navigation.js';
+import { createNavigationMap } from '../../dist/core/tactical/navigation/map.js';
+import { buildRawNavigationField, buildNavigationField } from '../../dist/core/tactical/navigation/pathfinding.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const LEVELS = join(ROOT, '.cache', 'gamedata', 'levels', 'activities');
@@ -27,12 +17,7 @@ const file = (sid) => join(LEVELS, sid.slice(0, 13), `level_${sid}.json`);
 const SKIP = { skip: (!hasGeneratedData() && 'no generated data') || (!STAGES.every((s) => existsSync(file(s))) && 'no .cache/gamedata levels') };
 const FOUR = [[1, 0], [0, 1], [-1, 0], [0, -1]];
 
-/**
- * The official algorithm on a raw level (non-hidden crates cost 1000; platforms / mounds blocked like the sim [ASSUMED]).
- * `prefer` adds the blockable-ground preference (see the header). Returns dest → (start → chain string), with
- * `.dist(start)` / `.crossedNb(start)` (non-blockable tiles the route crosses, start excluded) on each dest.
- */
-function official(sid, { crates: extraCrates = [], blocks: extraBlocks = [], rect = null, prefer = true } = {}) {
+function legacyReference(sid, { crates: extraCrates = [], blocks: extraBlocks = [], rect = null, prefer = true } = {}) {
   const lv = JSON.parse(readFileSync(file(sid), 'utf8'));
   const md = lv.mapData;
   const H = md.map.length, W = md.map[0].length;
@@ -195,16 +180,18 @@ function simGrid(sid, rect, extra = {}) {
 }
 
 function compare(sid, rect, dests, extra = {}, officialRect = null) {
-  const off = official(sid, { ...extra, rect: officialRect, prefer: true });
+  const off = legacyReference(sid, { ...extra, rect: officialRect, prefer: true });
   const g = simGrid(sid, rect, extra);
   let n = 0;
   for (const dest of dests) {
     const chainOf = off(dest);
+    const core = flowFieldForGrid(g, dest[0], dest[1]);
     for (let r = rect.r0; r <= rect.r1; r++) {
       for (let c = rect.c0; c <= rect.c1; c++) {
         if (!g.walkable(r, c)) continue;
         const wp = g.waypoints(r, c, dest[0], dest[1]);
         assert.equal(wp ? wp.map((p) => `(${p})`).join(' ') : null, chainOf([r, c]), `${sid} (${r},${c}) → (${dest}) ${JSON.stringify(extra)}`);
+        assert.equal(core.dist[r * g.cols + c], chainOf.dist([r, c]), `${sid} core raw (${r},${c}) → (${dest}) ${JSON.stringify(extra)}`);
         n++;
       }
     }
@@ -212,7 +199,7 @@ function compare(sid, rect, dests, extra = {}, officialRect = null) {
   return n;
 }
 
-test('every walkable tile of the normal / 联防 / boss fields of the 8 stages follows the full-map reference chain', SKIP, () => {
+test('legacy road-preference chains and core raw distances match the full-map reference on 8 stages', SKIP, () => {
   let n = 0;
   for (const sid of STAGES) {
     n += compare(sid, GEO.NORMAL_RECT, [[9, 2]]);
@@ -222,7 +209,7 @@ test('every walkable tile of the normal / 联防 / boss fields of the 8 stages f
   assert.ok(n > 1500, `${n} chains`);
 });
 
-test('random crate / block layouts: identical flow fields and smoothing to the reference algorithm (same rect)', SKIP, () => {
+test('random legacy crate / block layouts preserve road-preference chains and core raw distances', SKIP, () => {
   let seed = 7;
   const rnd = () => ((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 4294967296);
   let n = 0;
@@ -236,12 +223,12 @@ test('random crate / block layouts: identical flow fields and smoothing to the r
   assert.ok(n > 5000, `${n} chains`);
 });
 
-test('vs the PURE official algorithm: same route length from every tile, never more non-blockable tiles crossed', SKIP, () => {
+test('legacy blockable-ground preference preserves raw distance and crosses fewer non-blockable tiles', SKIP, () => {
   let n = 0, fewer = 0;
   const fields = [[GEO.NORMAL_RECT, [[9, 2]]], [GEO.UNITE_RECT, [[9, 2]]], [GEO.BOSS_RECT, [[1, 3], [1, 17], [2, 2], [2, 18]]]];
   for (const sid of STAGES) {
-    const pure = official(sid, { prefer: false });
-    const ours = official(sid, { prefer: true });
+    const pure = legacyReference(sid, { prefer: false });
+    const ours = legacyReference(sid, { prefer: true });
     for (const [rect, dests] of fields) {
       const g = simGrid(sid, rect);
       for (const dest of dests) {
@@ -262,6 +249,140 @@ test('vs the PURE official algorithm: same route length from every tile, never m
   }
   assert.ok(n > 1500 && fewer > 0, `${n} chains, ${fewer} with fewer non-blockable tiles`);
   // the user's report: 战场#01 lower gate — official climbs the col-9 floor lane, ours keeps to the col-8 road
-  assert.equal(official('act1autochess_m01', { prefer: false })([9, 2])([9, 10]), '(9,10) (9,9) (12,8) (12,4) (9,4) (9,2)');
-  assert.equal(official('act1autochess_m01', { prefer: true })([9, 2])([9, 10]), '(9,10) (9,8) (12,8) (12,4) (9,4) (9,2)');
+  assert.equal(legacyReference('act1autochess_m01', { prefer: false })([9, 2])([9, 10]), '(9,10) (9,9) (12,8) (12,4) (9,4) (9,2)');
+  assert.equal(legacyReference('act1autochess_m01', { prefer: true })([9, 2])([9, 10]), '(9,10) (9,8) (12,8) (12,4) (9,4) (9,2)');
+});
+
+function dijkstraDistances(map, target) {
+  const distance = Array(map.cells.length).fill(Infinity);
+  const settled = Array(map.cells.length).fill(false);
+  const goal = target[0] * map.columns + target[1];
+  if (!map.cells[goal].passable) return distance.map(() => -1);
+  distance[goal] = 0;
+  while (true) {
+    let current = -1;
+    for (let index = 0; index < distance.length; index++) {
+      if (!settled[index] && distance[index] < (current < 0 ? Infinity : distance[current])) current = index;
+    }
+    if (current < 0) break;
+    settled[current] = true;
+    const row = Math.floor(current / map.columns), col = current % map.columns;
+    for (let source = 0; source < map.cells.length; source++) {
+      const cell = map.cells[source];
+      if (!cell.passable || settled[source]) continue;
+      const sourceRow = Math.floor(source / map.columns), sourceCol = source % map.columns;
+      const dRow = row - sourceRow, dCol = col - sourceCol;
+      if (Math.abs(dRow) + Math.abs(dCol) !== 1) continue;
+      const direction = dRow === 1 ? 'UP' : dRow === -1 ? 'DOWN' : dCol === 1 ? 'RIGHT' : 'LEFT';
+      if (!cell.departures[direction]) continue;
+      distance[source] = Math.min(distance[source], distance[current] + cell.moveCost);
+    }
+  }
+  return distance.map(value => Number.isFinite(value) ? value : -1);
+}
+
+function bellmanFordDistances(map, target) {
+  const distance = Array(map.cells.length).fill(Infinity);
+  const goal = target[0] * map.columns + target[1];
+  if (!map.cells[goal].passable) return distance.map(() => -1);
+  distance[goal] = 0;
+  const edges = [];
+  const offsets = { UP: [1, 0], RIGHT: [0, 1], DOWN: [-1, 0], LEFT: [0, -1] };
+  for (let from = 0; from < map.cells.length; from++) {
+    if (!map.cells[from].passable) continue;
+    const row = Math.floor(from / map.columns), col = from % map.columns;
+    for (const [direction, [dRow, dCol]] of Object.entries(offsets)) {
+      if (!map.cells[from].departures[direction]) continue;
+      const nextRow = row + dRow, nextCol = col + dCol;
+      if (nextRow < 0 || nextRow >= map.rows || nextCol < 0 || nextCol >= map.columns) continue;
+      const to = nextRow * map.columns + nextCol;
+      if (map.cells[to].passable) edges.push([from, to, map.cells[from].moveCost]);
+    }
+  }
+  for (let pass = 0; pass < map.cells.length; pass++) {
+    let changed = false;
+    for (const [from, to, cost] of edges) {
+      if (distance[from] > distance[to] + cost) {
+        distance[from] = distance[to] + cost;
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+  return distance.map(value => Number.isFinite(value) ? value : -1);
+}
+
+function assertFieldInvariants(field) {
+  const { map, query, nodes } = field;
+  const targetIndex = query.targetTile[0] * map.columns + query.targetTile[1];
+  assert.equal(nodes.length, map.rows * map.columns);
+  assert.ok(Object.isFrozen(field) && Object.isFrozen(query) && Object.isFrozen(query.targetTile));
+  assert.ok(Object.isFrozen(nodes) && nodes.every(Object.isFrozen));
+  assert.equal(nodes.filter(node => node.type === 'TARGET').length, map.cells[targetIndex].passable ? 1 : 0);
+  if (!map.cells[targetIndex].passable) assert.ok(nodes.every(node => node.type === 'UNREACHABLE'));
+  for (let index = 0; index < nodes.length; index++) {
+    const node = nodes[index];
+    if (node.type === 'UNREACHABLE') continue;
+    assert.ok(map.cells[index].passable);
+    if (node.type === 'TARGET') {
+      assert.equal(index, targetIndex);
+      assert.equal(node.distance, 0);
+      continue;
+    }
+    assert.equal(node.type, 'REACHABLE');
+    assert.ok(Number.isInteger(node.distance) && node.distance > 0 && node.distance <= 0x7fffffff);
+    for (const next of [node.rawNext, node.next]) {
+      assert.ok(Object.isFrozen(next));
+      assert.ok(Number.isInteger(next[0]) && next[0] >= 0 && next[0] < map.rows);
+      assert.ok(Number.isInteger(next[1]) && next[1] >= 0 && next[1] < map.columns);
+      const successor = nodes[next[0] * map.columns + next[1]];
+      assert.notEqual(successor.type, 'UNREACHABLE');
+      assert.ok(successor.distance < node.distance);
+    }
+    const row = Math.floor(index / map.columns), col = index % map.columns;
+    const dRow = node.rawNext[0] - row, dCol = node.rawNext[1] - col;
+    assert.equal(Math.abs(dRow) + Math.abs(dCol), 1);
+    const direction = dRow === 1 ? 'UP' : dRow === -1 ? 'DOWN' : dCol === 1 ? 'RIGHT' : 'LEFT';
+    assert.ok(map.cells[index].departures[direction]);
+    assert.equal(node.distance, nodes[node.rawNext[0] * map.columns + node.rawNext[1]].distance + map.cells[index].moveCost);
+    if (!query.allowDiagonalMove) assert.ok(node.next[0] === row || node.next[1] === col);
+  }
+}
+
+test('core random directed weighted fields agree with independent Dijkstra and Bellman-Ford distances', () => {
+  let seed = 0x6e617669;
+  const random = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 0x100000000);
+  const costs = [1, 2, 9, 1000, 1_000_000];
+  for (let sample = 0; sample < 200; sample++) {
+    const rows = 1 + Math.floor(random() * 7), columns = 1 + Math.floor(random() * 8);
+    const pathMotionMode = sample % 5 === 0 ? 'FLY' : 'WALK';
+    const cells = Array.from({ length: rows * columns }, () => ({
+      passable: random() >= 0.2,
+      moveCost: pathMotionMode === 'FLY' ? 1 : costs[Math.floor(random() * costs.length)],
+      departures: { UP: random() >= 0.2, RIGHT: random() >= 0.2, DOWN: random() >= 0.2, LEFT: random() >= 0.2 },
+    }));
+    const map = createNavigationMap({ rows, columns, pathMotionMode, revision: sample, cells });
+    const target = [Math.floor(random() * rows), Math.floor(random() * columns)];
+    const query = { targetTile: target, allowDiagonalMove: sample % 2 === 0 };
+    const input = JSON.stringify({ map, query });
+    const raw = buildRawNavigationField(map, query);
+    const rawSnapshot = JSON.stringify(raw);
+    const smooth = buildNavigationField(map, query);
+    assert.equal(JSON.stringify({ map, query }), input);
+    assert.equal(JSON.stringify(raw), rawSnapshot);
+    assertFieldInvariants(raw);
+    assertFieldInvariants(smooth);
+    const actual = raw.nodes.map(node => node.type === 'UNREACHABLE' ? -1 : node.distance);
+    assert.deepEqual(actual, dijkstraDistances(map, target), `Dijkstra sample ${sample}`);
+    assert.deepEqual(actual, bellmanFordDistances(map, target), `Bellman-Ford sample ${sample}`);
+    assert.deepEqual(smooth.nodes.map(node => node.type === 'UNREACHABLE' ? -1 : node.distance), actual, `smoothing sample ${sample}`);
+    for (let index = 0; index < raw.nodes.length; index++) {
+      const node = raw.nodes[index];
+      if (node.type !== 'REACHABLE') continue;
+      assert.deepEqual(node.next, node.rawNext);
+      assert.deepEqual(smooth.nodes[index].rawNext, node.rawNext);
+      const next = smooth.nodes[index].next;
+      assert.ok(actual[next[0] * columns + next[1]] < node.distance, `successor sample ${sample}, node ${index}`);
+    }
+  }
 });

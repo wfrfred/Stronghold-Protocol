@@ -1,5 +1,5 @@
-import { isTilePosition, type TilePosition } from "../geometry/coordinate.js";
-import { Direction, DIRECTIONS } from "../geometry/direction.js";
+import type { TilePosition } from "../geometry/coordinate.js";
+import { DIRECTIONS, type Direction } from "../geometry/direction.js";
 
 export type PathMotionMode =
     | "WALK"
@@ -29,9 +29,6 @@ export const PathMotionMode = {
 
 export const NavigationMap = {
     contains(map: NavigationMap, position: TilePosition): boolean {
-        if (!isTilePosition(position)) {
-            throw new RangeError("navigation tile position must be a pair of safe integers");
-        }
         const [row, col] = position;
         return row >= 0 && row < map.rows && col >= 0 && col < map.columns;
     },
@@ -44,9 +41,6 @@ export const NavigationMap = {
     },
 
     canDepart(map: NavigationMap, position: TilePosition, direction: Direction): boolean {
-        if (!Direction.is(direction)) {
-            throw new TypeError("invalid navigation direction");
-        }
         const cell = NavigationMap.get(map, position);
         return cell !== undefined && cell.passable && cell.departures[direction];
     },

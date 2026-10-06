@@ -1,5 +1,5 @@
 import { Tile, createTileOffset, type TileOffset, type TilePosition } from "./coordinate.js";
-import { Direction } from "./direction.js";
+import type { Direction } from "./direction.js";
 
 export type RangeGrid = readonly TileOffset[];
 
@@ -28,12 +28,7 @@ export const RangeGrid = {
     },
 
     project(range: RangeGrid, origin: TilePosition, direction: Direction,): readonly TilePosition[] {
-        const snapshot = RangeGrid.create(range);
-        Tile.center(origin);
-        if (!Direction.is(direction)) {
-            throw new RangeError("invalid direction");
-        }
-        return Object.freeze(snapshot.map(offset => {
+        return Object.freeze(range.map(offset => {
             const rotated = Tile.rotate(offset, direction);
             return Tile.translate(origin, rotated);
         }));

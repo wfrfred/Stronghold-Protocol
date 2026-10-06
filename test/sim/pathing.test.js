@@ -1,5 +1,3 @@
-// Official ground pathing (research 08 §3): 4-direction SPFA flow field from the goal (UP, RIGHT, DOWN, LEFT), crates
-// cost 1000, Bresenham line-of-sight smoothing; enemies walk tile centre to tile centre along next[tile].
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createBattlefieldMap, BattlefieldMap } from '../../dist/core/tactical/map/map.js';
@@ -7,7 +5,7 @@ import { createTile } from '../../dist/core/tactical/map/tile.js';
 import { projectStaticNavigationMap } from '../../dist/core/tactical/battle/battlefield/navigation.js';
 import { createNavigationMap, NavigationMap } from '../../dist/core/tactical/navigation/map.js';
 import { createNavigationRequest } from '../../dist/core/tactical/navigation/request.js';
-import { createNavigationField, deriveNavigationFieldQuery } from '../../dist/core/tactical/navigation/field.js';
+import { deriveNavigationFieldQuery } from '../../dist/core/tactical/navigation/field.js';
 import { createNavigationPath } from '../../dist/core/tactical/navigation/path.js';
 import { createNavigationState } from '../../dist/core/tactical/navigation/state.js';
 import { createRouteDefinition } from '../../dist/core/tactical/route/definition.js';
@@ -16,6 +14,10 @@ import { initializeRouteSpawn } from '../../dist/core/tactical/route/initialize.
 import { parseBattlefieldMap } from '../../dist/data/arknights/map.js';
 import { parseRouteDefinition } from '../../dist/data/arknights/route.js';
 import { Grid, OBSTACLE_COST, bresenhamTiles } from '../../server/sim/grid.js';
+import { flowFieldForGrid, navigationMapFromGrid, waypointsForGrid } from '../../dist/legacy/navigation.js';
+import { buildRawNavigationField, buildNavigationField } from '../../dist/core/tactical/navigation/pathfinding.js';
+import { createNavigationFieldCache } from '../../dist/core/tactical/navigation/cache.js';
+import { smoothNavigationField } from '../../dist/core/tactical/navigation/smoothing.js';
 import { getDefaultSource, hasGeneratedData } from '../../server/sim/simdata.js';
 import { makeBattle, flatStage, enemyRec } from '../helpers/battleHarness.js';
 import { remainingDistance } from '../../server/sim/ai.js';
@@ -38,9 +40,17 @@ function stageGrid(id) {
 }
 const wp = (g, r, c) => g.waypoints(r, c, 9, 2).map((p) => `(${p})`).join(' ');
 
-test('flow field: 4 directions only, strict-improvement SPFA with the official UP/RIGHT/DOWN/LEFT tie-break', () => {
+function tilesForGrid(g, sr, sc, er, ec, options) {
+  const points = waypointsForGrid(g, sr, sc, er, ec, options);
+  if (points === null) return null;
+  const tiles = [points[0]];
+  for (let i = 1; i < points.length; i++) tiles.push(...bresenhamTiles(points[i - 1], points[i]).slice(1));
+  return tiles;
+}
+
+test('core flow field through legacy input: strict improvement and UP/RIGHT/DOWN/LEFT tie-break', () => {
   const g = new Grid(flatStage(), NORMAL);
-  const f = g.flowField(9, 2);
+  const f = flowFieldForGrid(g, 9, 2);
   assert.equal(f.dist[K(9, 2)], 0);
   assert.equal(f.dist[K(9, 10)], 8, 'Manhattan distance along the open lane');
   assert.equal(f.dist[K(12, 10)], 11, 'no diagonal edges: 3 + 8');
@@ -58,12 +68,12 @@ test('flow field: 4 directions only, strict-improvement SPFA with the official U
   assert.equal(f.dist[K(11, 2)], -1);
 });
 
-test('smoothing: next[] jumps to the farthest ancestor in Bresenham line of sight; diagonal steps need both orthogonals', () => {
+test('core smoothing through legacy input: straight and diagonal hops respect blocked corners', () => {
   const g = new Grid(flatStage(), NORMAL);
-  assert.deepEqual(g.waypoints(9, 10, 9, 2), [[9, 10], [9, 2]], 'straight lane');
-  assert.deepEqual(g.waypoints(12, 10, 9, 2), [[12, 10], [9, 2]], 'open field: one straight line to the goal');
+  assert.deepEqual(waypointsForGrid(g, 9, 10, 9, 2), [[9, 10], [9, 2]], 'straight lane');
+  assert.deepEqual(waypointsForGrid(g, 12, 10, 9, 2), [[12, 10], [9, 2]], 'open field: one straight line to the goal');
   // the crossed tiles form an 8-connected chain that never cuts a corner
-  const p = g.findPath(12, 10, 9, 2);
+  const p = tilesForGrid(g, 12, 10, 9, 2);
   assert.deepEqual(p, bresenhamTiles([12, 10], [9, 2]));
   for (let i = 1; i < p.length; i++) {
     const [r0, c0] = p[i - 1], [r1, c1] = p[i];
@@ -72,11 +82,11 @@ test('smoothing: next[] jumps to the farthest ancestor in Bresenham line of sigh
   }
   // a wall stub at (10,6)…(12,6): the upper route bends around its end instead of cutting through
   for (const r of [10, 11, 12]) g.setObstacle(r, 6, true);
-  const bent = g.waypoints(12, 10, 9, 2);
+  const bent = waypointsForGrid(g, 12, 10, 9, 2);
   assert.ok(bent.length > 2);
-  for (const [r, c] of g.findPath(12, 10, 9, 2)) assert.ok(!(c === 6 && r >= 10), `crosses the wall at (${r},${c})`);
+  for (const [r, c] of tilesForGrid(g, 12, 10, 9, 2)) assert.ok(!(c === 6 && r >= 10), `crosses the wall at (${r},${c})`);
   // allowDiagonal=false: line of sight only along a row / column
-  const fx = g.flowField(9, 2, { allowDiagonal: false });
+  const fx = flowFieldForGrid(g, 9, 2, { allowDiagonal: false });
   let k = K(12, 10);
   while (k !== fx.dest) {
     const n = fx.next[k];
@@ -92,35 +102,38 @@ test('crates: walkable at cost 1000 (blocks line of sight), blocks are impassabl
   assert.ok(g.version > v0 && g.isObstacle(9, 6) && g.isCrate(9, 6) && !g.isBlocked(9, 6));
   assert.equal(g.groundPassable(9, 6), false, 'not a placement / displacement tile');
   assert.equal(g.walkable(9, 6), true, 'but walkable for the flow field');
-  let f = g.flowField(9, 2);
-  assert.equal(f.dist[K(9, 6)], 3 + OBSTACLE_COST, "(9,5) is 3 from the goal, entering the crate costs 1000");
-  assert.ok(!g.findPath(9, 10, 9, 2).some(([r, c]) => r === 9 && c === 6), 'detours around the crate');
+  let f = flowFieldForGrid(g, 9, 2);
+  assert.equal(f.dist[K(9, 6)], 3 + OBSTACLE_COST, "(9,5) is 3 from the goal, departing the crate costs 1000");
+  assert.ok(!tilesForGrid(g, 9, 10, 9, 2).some(([r, c]) => r === 9 && c === 6), 'detours around the crate');
   // wall off every detour: the crate is the only way — the path goes through it (the enemy will break it)
   for (const r of [10, 11, 12]) g.setObstacle(r, 6, true);
-  f = g.flowField(9, 2);
+  f = flowFieldForGrid(g, 9, 2);
   assert.ok(f.dist[K(9, 10)] > OBSTACLE_COST);
-  assert.ok(g.findPath(9, 10, 9, 2).some(([r, c]) => r === 9 && c === 6), 'through the crate');
+  assert.ok(tilesForGrid(g, 9, 10, 9, 2).some(([r, c]) => r === 9 && c === 6), 'through the crate');
   // a crate turned into a platform on the same tile: both bits, order-independent
   g.setObstacle(9, 6, true, 'block');
   g.setObstacle(9, 6, false, 'crate');
   assert.ok(g.isBlocked(9, 6) && !g.isCrate(9, 6));
-  assert.equal(g.findPath(9, 10, 9, 2), null, 'fully walled');
-  assert.ok(g.findPath(9, 10, 9, 2, { ignoreObstacles: true }));
+  assert.equal(tilesForGrid(g, 9, 10, 9, 2), null, 'fully walled');
+  assert.ok(tilesForGrid(g, 9, 10, 9, 2, { ignoreObstacles: true }));
 });
 
-test('flow fields are cached per destination and grid version', () => {
+test('legacy field adapter caches per immutable map, destination and effective options', () => {
   const g = new Grid(flatStage(), NORMAL);
-  const a = g.flowField(9, 2);
-  assert.equal(g.flowField(9, 2), a);
-  assert.notEqual(g.flowField(9, 3), a);
+  const a = flowFieldForGrid(g, 9, 2);
+  assert.equal(flowFieldForGrid(g, 9, 2), a);
+  assert.notEqual(flowFieldForGrid(g, 9, 3), a);
+  assert.notEqual(flowFieldForGrid(g, 9, 2, { allowDiagonal: false }), a);
+  assert.notEqual(navigationMapFromGrid(g, { pathMotionMode: 'FLY' }), a.field.map);
+  assert.notEqual(navigationMapFromGrid(new Grid(flatStage(), NORMAL)), a.field.map);
   g.setObstacle(10, 5, true);
-  assert.notEqual(g.flowField(9, 2), a, 'rebuilt after an obstacle change');
+  assert.notEqual(flowFieldForGrid(g, 9, 2), a, 'rebuilt after an obstacle change');
   g.setObstacle(10, 5, true); // no change → no version bump
-  const b = g.flowField(9, 2);
-  assert.equal(g.flowField(9, 2), b);
+  const b = flowFieldForGrid(g, 9, 2);
+  assert.equal(flowFieldForGrid(g, 9, 2), b);
 });
 
-test('real stages: the official lanes of research 08 §3.2 (crates = non-hidden level predefines, platforms blocking) + blockable-ground preference', REAL, () => {
+test('legacy stage lanes retain blockable-ground preference', REAL, () => {
   // m01 lower gate: equal-length choice between the col-9 floor lane and the col-8 road — the road (blockable) wins
   // (official: (9,9) → (12,8) through the floor of (10,9)); m04 lower gate: the official diagonal (9,10) → (10,7) only
   // brushes the corner of the floor (10,9) and stays (community report D5, test/sim/pathing-official.test.js)
@@ -214,6 +227,157 @@ test('remaining distance follows the smoothed flow-field route (targeting "close
 
 function approx(a, b, msg) { assert.ok(Math.abs(a - b) < 1e-6, `${msg}: ${a} vs ${b}`); }
 
+const fieldCell = (overrides = {}) => ({
+  passable: true, moveCost: 1, departures: { UP: true, RIGHT: true, DOWN: true, LEFT: true }, ...overrides,
+});
+const fieldMap = (rows, columns, cells, pathMotionMode = 'WALK') => createNavigationMap({
+  rows, columns, cells, pathMotionMode, revision: 0,
+});
+const fieldQuery = (targetTile, allowDiagonalMove = true) => ({ targetTile, allowDiagonalMove });
+const distances = (field) => field.nodes.map(node => node.type === 'UNREACHABLE' ? -1 : node.distance);
+
+test('core raw distances charge the departing tile and exclude target cost', () => {
+  const map = fieldMap(1, 3, [fieldCell({ moveCost: 7 }), fieldCell({ moveCost: 3 }), fieldCell({ moveCost: 1000 })]);
+  const query = fieldQuery([0, 2]);
+  const input = JSON.stringify({ map, query });
+  const raw = buildRawNavigationField(map, query);
+  assert.deepEqual(distances(raw), [10, 3, 0]);
+  assert.deepEqual(raw.nodes[0].rawNext, [0, 1]);
+  assert.deepEqual(raw.nodes[0].next, [0, 1]);
+  assert.deepEqual(raw, buildRawNavigationField(map, fieldQuery([0, 2])));
+  assert.equal(raw.map, map);
+  assert.equal(JSON.stringify({ map, query }), input);
+  assert.ok(Object.isFrozen(raw));
+  assert.ok(Object.isFrozen(raw.query));
+  assert.ok(Object.isFrozen(raw.query.targetTile));
+  assert.ok(raw.nodes.every(Object.isFrozen));
+  assert.ok(Object.isFrozen(raw.nodes[0].rawNext));
+  assert.ok(Object.isFrozen(raw.nodes[0].next));
+  assert.ok(Object.isFrozen(raw.nodes));
+  const tie = buildRawNavigationField(fieldMap(3, 3, Array.from({ length: 9 }, () => fieldCell())), fieldQuery([0, 0]));
+  assert.deepEqual(tie.nodes[4].rawNext, [1, 0]);
+});
+
+test('core raw search respects directed departures, blocked targets and disconnected regions', () => {
+  const departures = { UP: true, RIGHT: true, DOWN: true, LEFT: false };
+  const map = fieldMap(1, 3, [fieldCell(), fieldCell({ departures }), fieldCell()]);
+  assert.deepEqual(distances(buildRawNavigationField(map, fieldQuery([0, 0]))), [0, -1, -1]);
+  assert.deepEqual(distances(buildRawNavigationField(map, fieldQuery([0, 2]))), [2, 1, 0]);
+  const goalWithNoDepartures = fieldMap(1, 3, [fieldCell(), fieldCell(), fieldCell({
+    departures: { UP: false, RIGHT: false, DOWN: false, LEFT: false },
+  })]);
+  assert.deepEqual(distances(buildRawNavigationField(goalWithNoDepartures, fieldQuery([0, 2]))), [2, 1, 0]);
+  const blocked = fieldMap(1, 3, [fieldCell(), fieldCell({ passable: false }), fieldCell()]);
+  assert.deepEqual(distances(buildRawNavigationField(blocked, fieldQuery([0, 1]))), [-1, -1, -1]);
+  assert.deepEqual(distances(buildRawNavigationField(blocked, fieldQuery([0, 2]))), [-1, -1, 0]);
+  assert.throws(() => buildRawNavigationField(map, fieldQuery([0, 3])), RangeError);
+  assert.throws(() => buildRawNavigationField(map, fieldQuery([-1, 0])), RangeError);
+});
+
+test('core raw search consumes projected WALK_ONLY, hole costs and FLY masks', () => {
+  const map = createBattlefieldMap(1, 5, [
+    coreGround({ passableMask: 'WALK_ONLY' }), coreGround({ terrain: 'HOLE' }),
+    coreGround({ passableMask: 'NONE' }), coreGround({ passableMask: 'FLY_ONLY' }), coreGround(),
+  ]);
+  const walk = projectStaticNavigationMap(map, 'WALK', 0);
+  const fly = projectStaticNavigationMap(map, 'FLY', 0);
+  assert.deepEqual(distances(buildRawNavigationField(walk, fieldQuery([0, 0]))), [0, 1_000_000, -1, -1, -1]);
+  assert.deepEqual(distances(buildRawNavigationField(walk, fieldQuery([0, 1]))), [1, 0, -1, -1, -1]);
+  assert.deepEqual(distances(buildRawNavigationField(fly, fieldQuery([0, 4]))), [-1, -1, -1, 1, 0]);
+  assert.deepEqual(distances(buildRawNavigationField(fly, fieldQuery([0, 0]))), [-1, -1, -1, -1, -1]);
+});
+
+test('core field rejects signed int32 candidate overflow as a computation error', () => {
+  const map = fieldMap(1, 3, [fieldCell(), fieldCell({ moveCost: 0x7fffffff }), fieldCell()]);
+  assert.throws(() => buildRawNavigationField(map, fieldQuery([0, 0])), RangeError);
+  assert.throws(() => buildNavigationField(map, fieldQuery([0, 0])), RangeError);
+  assert.deepEqual(distances(buildRawNavigationField(fieldMap(1, 1, [fieldCell({ moveCost: 0x7fffffff })]), fieldQuery([0, 0]))), [0]);
+});
+
+test('core diagonal smoothing reads the final tile departure and keeps raw successors', () => {
+  const map = fieldMap(1, 3, [fieldCell(), fieldCell(), fieldCell({
+    departures: { UP: true, RIGHT: false, DOWN: true, LEFT: true },
+  })]);
+  const diagonal = buildNavigationField(map, fieldQuery([0, 2]));
+  const axis = buildNavigationField(map, fieldQuery([0, 2], false));
+  assert.deepEqual(diagonal.nodes[0].rawNext, [0, 1]);
+  assert.deepEqual(diagonal.nodes[0].next, [0, 1]);
+  assert.deepEqual(axis.nodes[0].next, [0, 2]);
+  assert.deepEqual(distances(diagonal), distances(axis));
+});
+
+test('core diagonal smoothing checks narrow rectangles and high costs while axis smoothing only checks collinearity', () => {
+  const cells = Array.from({ length: 8 }, () => fieldCell());
+  cells[4] = fieldCell({ passable: false });
+  const map = fieldMap(2, 4, cells);
+  const field = buildNavigationField(map, fieldQuery([1, 3]));
+  assert.deepEqual(field.nodes[0].rawNext, [0, 1]);
+  assert.deepEqual(field.nodes[0].next, [0, 3]);
+  const costs = fieldMap(1, 3, [fieldCell(), fieldCell({ moveCost: 1000 }), fieldCell()]);
+  const diagonal = buildNavigationField(costs, fieldQuery([0, 2]));
+  const axis = buildNavigationField(costs, fieldQuery([0, 2], false));
+  assert.deepEqual(diagonal.nodes[0].next, [0, 1]);
+  assert.deepEqual(axis.nodes[0].next, [0, 2]);
+  assert.deepEqual(distances(diagonal), [1001, 1000, 0]);
+});
+
+test('core smoothing performs one row-column pass rather than repeating until stable', () => {
+  const cells = Array.from({ length: 6 }, () => fieldCell());
+  cells[2] = fieldCell({ departures: { UP: true, RIGHT: false, DOWN: true, LEFT: true } });
+  const map = fieldMap(2, 3, cells);
+  const query = fieldQuery([1, 2]);
+  const raw = buildRawNavigationField(map, query);
+  const before = JSON.stringify(raw);
+  const first = smoothNavigationField(raw);
+  assert.deepEqual(first, buildNavigationField(map, query));
+  assert.equal(JSON.stringify(raw), before);
+  assert.equal(first.map, raw.map);
+  assert.ok(Object.isFrozen(first) && Object.isFrozen(first.nodes));
+  assert.ok(first.nodes.every(Object.isFrozen));
+  assert.ok(Object.isFrozen(first.nodes[0].rawNext) && Object.isFrozen(first.nodes[0].next));
+  assert.deepEqual(first.nodes[0].rawNext, [0, 1]);
+  assert.deepEqual(first.nodes[0].next, [0, 1]);
+  assert.deepEqual(first.nodes[1].next, [1, 2]);
+  assert.deepEqual(smoothNavigationField(first).nodes[0].next, [1, 2]);
+  assert.deepEqual(first.nodes[0].next, [0, 1]);
+});
+
+test('core field cache shares geometry queries within a battle and isolates actual maps and battle owners', () => {
+  const map = fieldMap(1, 4, Array.from({ length: 4 }, () => fieldCell()));
+  const otherMap = fieldMap(1, 4, Array.from({ length: 4 }, () => fieldCell()));
+  const cache = createNavigationFieldCache(), otherBattle = createNavigationFieldCache();
+  const request = createNavigationRequest(coreRequest({ targetTile: [0, 3], goal: { position: [3, 0], reachDistance: 0.05 } }));
+  const first = cache.get(map, request);
+  const anotherUnit = createNavigationRequest({
+    ...request, id: 2, goal: { position: [3.2, 0.1], reachDistance: 0.25 },
+    options: { ...request.options, visitEveryTileCenter: true, visitEveryNodeStably: true },
+  });
+  assert.equal(cache.get(map, anotherUnit), first);
+  assert.equal(first.map, map);
+  const differentTarget = createNavigationRequest({ ...request, targetTile: [0, 2] });
+  const differentDiagonal = createNavigationRequest({ ...request, options: { ...request.options, allowDiagonalMove: false } });
+  assert.notEqual(cache.get(map, differentTarget), first);
+  assert.notEqual(cache.get(map, differentDiagonal), first);
+  const otherMapField = cache.get(otherMap, request);
+  assert.notEqual(otherMapField, first);
+  assert.notEqual(otherBattle.get(map, request), first);
+  const fly = fieldMap(1, 4, Array.from({ length: 4 }, () => fieldCell()), 'FLY');
+  assert.notEqual(cache.get(fly, request), first);
+  const snapshot = JSON.stringify(first);
+  cache.invalidate(map);
+  assert.equal(cache.get(otherMap, request), otherMapField);
+  const rebuilt = cache.get(map, request);
+  assert.notEqual(rebuilt, first);
+  assert.equal(JSON.stringify(first), snapshot);
+  assert.equal(first.nodes[0].distance, 3);
+  assert.throws(() => { first.nodes[0].distance = 9; }, TypeError);
+  const otherBeforeClear = cache.get(otherMap, request);
+  cache.clear();
+  assert.notEqual(cache.get(map, request), rebuilt);
+  assert.notEqual(cache.get(otherMap, request), otherBeforeClear);
+  assert.equal(JSON.stringify(first), snapshot);
+});
+
 test('a pushed ground enemy re-plans from its tile centre: never cuts a fence corner or breaks the stage crate on it (act1 m03, tile 11,5)', REAL, () => {
   // Regression: after Battle.displace() the enemy steered straight from its off-centre position to next[tile], cut
   // the corner of the FLY-only fence tile (11,5), got blocked by the decorative crate standing there and broke it.
@@ -301,9 +465,11 @@ test('core static navigation projects mode-specific passability, costs and both 
   assert.equal(NavigationMap.canDepart(walk, [0, 1], 'RIGHT'), false);
   assert.equal(NavigationMap.canDepart(walk, [0, 2], 'LEFT'), false);
   assert.equal(NavigationMap.canDepart(fly, [0, 1], 'RIGHT'), true);
+  assert.deepEqual(distances(buildRawNavigationField(walk, fieldQuery([0, 2]))), [-1, -1, 0, -1]);
+  assert.deepEqual(distances(buildNavigationField(walk, fieldQuery([0, 1]))), [1, 0, -1, -1]);
+  assert.deepEqual(distances(buildNavigationField(fly, fieldQuery([0, 3]))), [-1, 2, 1, 0]);
   assert.equal(walk.cells[0].departures.LEFT, false);
   assert.equal(NavigationMap.canDepart(walk, [0, 0], 'UP'), true);
-  assert.throws(() => NavigationMap.contains(walk, [0, 0, 1]), RangeError);
   assert.ok(Object.isFrozen(walk.cells[0].departures));
 });
 
@@ -319,26 +485,18 @@ test('core navigation rejects malformed costs and preserves raw distance semanti
   assert.throws(() => createNavigationMap({ ...input, cells: [cell(1), , cell(1)] }), RangeError);
   const request = createNavigationRequest(coreRequest());
   const query = deriveNavigationFieldQuery(request);
-  const nodes = [
-    { type: 'REACHABLE', distance: 5, rawNext: [0, 1], next: [0, 2] },
-    { type: 'REACHABLE', distance: 1, rawNext: [0, 2], next: [0, 2] },
-    { type: 'TARGET', distance: 0 },
-  ];
-  const field = createNavigationField(map, query, nodes);
+  const field = buildNavigationField(map, query);
   const path = createNavigationPath(request, field);
-  nodes[0].next[1] = 0;
   assert.equal(field.map, map);
+  assert.equal(path.request, request);
   assert.equal(path.field, field);
+  assert.ok(Object.isFrozen(path));
   assert.deepEqual(field.nodes[0].next, [0, 2]);
   assert.equal(field.nodes[0].distance, 5);
-  assert.throws(() => createNavigationField(map, query, [
-    { type: 'REACHABLE', distance: 4, rawNext: [0, 1], next: [0, 2] }, nodes[1], nodes[2],
-  ]), /departure cost/);
-  assert.throws(() => createNavigationField(map, query, [
-    { type: 'REACHABLE', distance: 5, rawNext: [0, 1], next: [0, 0] }, nodes[1], nodes[2],
-  ]), /decrease distance/);
-  assert.throws(() => createNavigationPath(coreRequest({ targetTile: [0, 1] }), field), /does not match/);
-  assert.throws(() => createNavigationPath(coreRequest({ targetTile: [0, 3] }), field), /outside/);
+  assert.throws(() => createNavigationPath(createNavigationRequest(coreRequest({ targetTile: [0, 1] })), field), /does not match/);
+  assert.throws(() => createNavigationPath(createNavigationRequest(coreRequest({
+    options: { ...request.options, allowDiagonalMove: false },
+  })), field), /does not match/);
 });
 
 test('core requests snapshot effective options without quantizing the continuous goal', () => {
@@ -350,6 +508,10 @@ test('core requests snapshot effective options without quantizing the continuous
   assert.deepEqual(request.goal.position, [2.2, 0]);
   assert.deepEqual(request.targetTile, [0, 2]);
   assert.throws(() => createNavigationRequest(coreRequest({ targetTile: [0, 2, 3] })), RangeError);
+  assert.throws(() => createNavigationRequest(coreRequest({ targetTile: [0, 0.5] })), RangeError);
+  assert.throws(() => createNavigationRequest(coreRequest({ options: {
+    visitEveryTileCenter: false, visitEveryNodeCenter: false, visitEveryNodeStably: false,
+  } })), TypeError);
   assert.throws(() => createNavigationRequest(coreRequest({ goal: { position: [2, 0], reachDistance: -1 } })), RangeError);
   const offset = [0.3, -0.4];
   const state = createNavigationState('FLY', offset);
@@ -393,18 +555,22 @@ test('raw tile mechanisms require controller inputs and explicit consumption of 
 
 test('route birth resolution consumes x then y exactly once even for zero ranges', () => {
   let calls = 0;
-  const spawn = initializeRouteSpawn(createRouteDefinition(coreRoute()), { next: () => [0.25, 0.75][calls++] });
+  const definition = createRouteDefinition(coreRoute());
+  const before = JSON.stringify(definition);
+  const spawn = initializeRouteSpawn(definition, { next: () => [0.25, 0.75][calls++] });
   approx(spawn.position[0], 3.85, 'spawn x');
   approx(spawn.position[1], 3.3, 'spawn y');
   approx(spawn.locatorOffset[0], 0.15, 'locator x');
   approx(spawn.locatorOffset[1], -0.3, 'locator y');
   assert.equal(calls, 2);
+  assert.equal(JSON.stringify(definition), before);
+  assert.ok(Object.isFrozen(spawn) && Object.isFrozen(spawn.position) && Object.isFrozen(spawn.locatorOffset));
   calls = 0;
-  const exact = initializeRouteSpawn(coreRoute({ spawnOffset: [0, 0], spawnRandomRange: [0, 0] }), { next: () => { calls++; return 0.5; } });
+  const exact = initializeRouteSpawn(createRouteDefinition(coreRoute({ spawnOffset: [0, 0], spawnRandomRange: [0, 0] })), { next: () => { calls++; return 0.5; } });
   assert.equal(calls, 2);
   assert.deepEqual(exact, { position: [4, 3], locatorOffset: [0, 0] });
   calls = 0;
-  assert.throws(() => initializeRouteSpawn(coreRoute({ spawnRandomRange: [Number.MAX_VALUE, 0] }), { next: () => { calls++; return 0; } }), RangeError);
+  assert.throws(() => initializeRouteSpawn(createRouteDefinition(coreRoute({ spawnRandomRange: [Number.MAX_VALUE, 0] })), { next: () => { calls++; return 0; } }), RangeError);
   assert.equal(calls, 0);
 });
 
@@ -418,12 +584,18 @@ test('route constructors keep clocks explicit, snapshots isolated and progress l
   a.progress.checkpointIndex = 1;
   assert.equal(b.progress.checkpointIndex, 0);
   assert.equal(a.definition, definition);
+  assert.equal(b.definition, definition);
+  assert.equal(a.clockBinding, binding);
+  assert.equal(b.clockBinding, binding);
+  assert.ok(Object.isFrozen(definition) && Object.isFrozen(definition.checkpoints));
   const clock = createRouteClock({ fixedPlayTimeSeconds: 15, userFixedPlayTimeSeconds: 13, deltaTimeSeconds: 1 / 30 });
   assert.notEqual(clock.fixedPlayTimeSeconds, clock.userFixedPlayTimeSeconds);
   assert.throws(() => createRouteState(definition, binding), TypeError);
   assert.throws(() => createRouteClock({ ...clock, deltaTimeSeconds: -1 }), RangeError);
   assert.throws(() => createRouteClockBinding({ waveStartedAtSeconds: 0, fragmentStartedAtSeconds: NaN }), RangeError);
   assert.throws(() => createRouteDefinition(coreRoute({ checkpoints: [,] })), TypeError);
+  assert.throws(() => createRouteDefinition(coreRoute({ startPosition: [0, 0, 1] })), TypeError);
+  assert.throws(() => createRouteDefinition(coreRoute({ spawnOffset: [0, Infinity] })), TypeError);
 });
 
 test('raw routes preserve APPEAR fixed offsets and reject mode-specific or unknown instructions', () => {
