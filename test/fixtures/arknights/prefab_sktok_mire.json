@@ -1,0 +1,273 @@
+{
+  "prefabKey": "sktok_mire",
+  "source": {
+    "bundle": "battle/prefabs/[uc]skills.ab",
+    "cab": "CAB-e39773c4d1462aefe0ea30134bbccdbb",
+    "unityVersion": "2021.3.39f1",
+    "filtered": true,
+    "selection": "movement fields and predefined controller/mode/buff bindings; rendering and unrelated enemy abilities omitted"
+  },
+  "gameObject": {
+    "m_Component": [
+      {
+        "component": {
+          "m_FileID": 0,
+          "m_PathID": "-8423385450723939375"
+        }
+      },
+      {
+        "component": {
+          "m_FileID": 0,
+          "m_PathID": "-1175673264853357615"
+        }
+      },
+      {
+        "component": {
+          "m_FileID": 0,
+          "m_PathID": "8667685768805411793"
+        }
+      },
+      {
+        "component": {
+          "m_FileID": 0,
+          "m_PathID": "4821933916176640977"
+        }
+      }
+    ],
+    "m_Layer": 10,
+    "m_Name": "sktok_mire",
+    "m_Tag": 0,
+    "m_IsActive": 1
+  },
+  "components": [
+    {
+      "object": {
+        "id": "-1175673264853357615",
+        "start": 2270920,
+        "size": 196,
+        "typeid": 16,
+        "classid": 114
+      },
+      "fields": {
+        "m_GameObject": {
+          "m_FileID": 0,
+          "m_PathID": "-5888076453166781487"
+        },
+        "m_Enabled": true,
+        "m_Script": {
+          "m_FileID": 1,
+          "m_PathID": "3308604825214022655"
+        },
+        "m_Name": "",
+        "_maxTriggerTime": -1,
+        "_defaultModeIndex": -1,
+        "_attackBlackboardModeIndex": -1,
+        "_extraAttackBlackboardModeIndices": [],
+        "_rangeIdModeIndex": -1,
+        "_extraRangeIdModeIndices": [],
+        "_extraAbilities": [],
+        "_switchToState": false,
+        "_isInfinity": true
+      },
+      "unityClassId": 114,
+      "serializedType": "builtin:263"
+    },
+    {
+      "object": {
+        "id": "8667685768805411793",
+        "start": 3866376,
+        "size": 568,
+        "typeid": 66,
+        "classid": 114
+      },
+      "fields": {
+        "m_GameObject": {
+          "m_FileID": 0,
+          "m_PathID": "-5888076453166781487"
+        },
+        "m_Enabled": true,
+        "m_Script": {
+          "m_FileID": 1,
+          "m_PathID": "-5793748974791823428"
+        },
+        "m_Name": "",
+        "_selector": {
+          "m_FileID": 0,
+          "m_PathID": 0
+        },
+        "_metadata": {
+          "namedAsAlias": "",
+          "blackboardPrefix": ""
+        },
+        "_interruptAbilityOnDetach": false,
+        "_attachPassiveBuffsOnDummy": true,
+        "_ignoreIfOwnerDead": false,
+        "_forceAsDmgOrHealAbility": false,
+        "_targetValidator": {
+          "m_FileID": 0,
+          "m_PathID": "4821933916176640977"
+        },
+        "_buffs": [
+          {
+            "attributes": {
+              "abnormalFlags": [],
+              "abnormalImmunes": [],
+              "abnormalAntis": [],
+              "abnormalCombos": [],
+              "abnormalComboImmunes": [],
+              "attributeModifiers": []
+            },
+            "buffKey": "buff_mire[mark]",
+            "loadFromDB": false,
+            "isDurableBuff": false,
+            "isDamageMissable": false,
+            "isSilenceable": false,
+            "isStunnable": false,
+            "isFreezable": false,
+            "isLevitatable": false,
+            "isGroundBoundable": false,
+            "statusResistable": true,
+            "templateKey": "buff_mire[mark]",
+            "disableOverride": false,
+            "overrideKey": "",
+            "overrideType": 0,
+            "maxStackCnt": 1,
+            "refreshRemainingTimeWhenStackMax": false,
+            "clearAllStackCntWhenTimeUp": false,
+            "maxValidStackCnt": -1,
+            "independentCharacterSource": false,
+            "overrideEffectKey": "",
+            "overrideOnEventPriority": false,
+            "onEventPriority": 0,
+            "audioSignal": "",
+            "lifeTimeType": true,
+            "takeSnapshotWhenExtend": false,
+            "durationKey": "",
+            "remainingTimeKey": "",
+            "lifeTime": 0.0,
+            "triggerLifeType": true,
+            "triggerCnt": 0,
+            "triggerInterval": -1.0,
+            "waitFirstTriggerInterval": true,
+            "firstTriggerInterval": -1.0,
+            "priority": -1,
+            "priorityBBKeys": [],
+            "stripBlackboardParamsWithBuffKey": false,
+            "blackboard": [],
+            "enableInitDirectionFromSource": false
+          },
+          {
+            "attributes": {
+              "abnormalFlags": [],
+              "abnormalImmunes": [],
+              "abnormalAntis": [],
+              "abnormalCombos": [],
+              "abnormalComboImmunes": [],
+              "attributeModifiers": []
+            },
+            "buffKey": "buff_mire[checker]",
+            "loadFromDB": false,
+            "isDurableBuff": false,
+            "isDamageMissable": false,
+            "isSilenceable": false,
+            "isStunnable": false,
+            "isFreezable": false,
+            "isLevitatable": false,
+            "isGroundBoundable": false,
+            "statusResistable": true,
+            "templateKey": "buff_mire[checker]",
+            "disableOverride": false,
+            "overrideKey": "",
+            "overrideType": 0,
+            "maxStackCnt": 1,
+            "refreshRemainingTimeWhenStackMax": false,
+            "clearAllStackCntWhenTimeUp": false,
+            "maxValidStackCnt": -1,
+            "independentCharacterSource": false,
+            "overrideEffectKey": "",
+            "overrideOnEventPriority": false,
+            "onEventPriority": 0,
+            "audioSignal": "",
+            "lifeTimeType": true,
+            "takeSnapshotWhenExtend": false,
+            "durationKey": "",
+            "remainingTimeKey": "",
+            "lifeTime": 0.0,
+            "triggerLifeType": true,
+            "triggerCnt": 0,
+            "triggerInterval": 0.10000000149011612,
+            "waitFirstTriggerInterval": true,
+            "firstTriggerInterval": -1.0,
+            "priority": -1,
+            "priorityBBKeys": [],
+            "stripBlackboardParamsWithBuffKey": false,
+            "blackboard": [],
+            "enableInitDirectionFromSource": false
+          }
+        ],
+        "_passiveBuffs": [],
+        "_selfOption": 0,
+        "_removeBuffWhenAbilityDetached": true,
+        "_removeBuffIncludeReborning": false,
+        "_onlyDetactTargetWhenStarted": false,
+        "_onlyDetectCurrentMapLayer": false,
+        "_listenUnitRebornEvent": false,
+        "_tryRemoveBuffFirstWhenReborn": false,
+        "_useDurableRallyPointLikeSwitch": false,
+        "_forceRemoveAllBuffsByKey": false,
+        "_effects": [],
+        "_forceTick": true,
+        "_excludeReborningEntity": true,
+        "_interval": 0.10000000149011612,
+        "_clearBuffsWhenDisappear": false
+      },
+      "unityClassId": 114,
+      "serializedType": "builtin:263"
+    },
+    {
+      "object": {
+        "id": "4821933916176640977",
+        "start": 3398512,
+        "size": 112,
+        "typeid": 14,
+        "classid": 114
+      },
+      "fields": {
+        "m_GameObject": {
+          "m_FileID": 0,
+          "m_PathID": "-5888076453166781487"
+        },
+        "m_Enabled": true,
+        "m_Script": {
+          "m_FileID": 1,
+          "m_PathID": "-3637692038217913187"
+        },
+        "m_Name": "",
+        "_targetOptions": {
+          "targetSide": 3,
+          "targetMotion": 1,
+          "targetCategory": 1,
+          "enableAdvancedOptions": true,
+          "ignoreTargetFree": false,
+          "ignoreAllyTargetFree": true,
+          "ignoreHealFree": false,
+          "ignoreMotionMode": false,
+          "ignoreTargetSide": false,
+          "excludeSomeAbnormalFlags": false,
+          "containSomeAbnormalFlags": false,
+          "excludeAbnormalFlag": 0,
+          "containAbnormalFlag": 0,
+          "purposeMask": 0,
+          "professionMask": 767,
+          "checkUnitType": false,
+          "unitTypeMask": 0,
+          "onlyIgnoreSomeOfTargetFreeCase": false,
+          "abnormalFlag": 0,
+          "abnormalCombo": 0
+        }
+      },
+      "unityClassId": 114,
+      "serializedType": "builtin:263"
+    }
+  ]
+}

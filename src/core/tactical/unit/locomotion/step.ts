@@ -20,15 +20,13 @@ import type { NavigationOutcome, NavigationState } from "../../navigation/state.
 import { advanceRoute, createRouteExecution, enterRoute, tickRouteWait } from "../../route/execution.js";
 import type { RouteTransition } from "../../route/execution.js";
 import type { RouteState } from "../../route/state.js";
-import type { RoutedLocomotionState } from "./state.js";
+import type { LocomotionDefinition, RoutedLocomotiveUnit, RoutedLocomotionState } from "./state.js";
 import { integrateSteering } from "./steering.js";
-import type { SteeringParameters } from "./steering.js";
 
 export interface RoutedLocomotionStepContext {
     readonly maps: NavigationMaps;
     readonly fieldCache: NavigationFieldCache;
     readonly moveMultiplier: number;
-    readonly steeringParameters: SteeringParameters;
     readonly movementAllowed: boolean;
     readonly routeAdvanceAllowed: boolean;
     readonly rngState: Seed;
@@ -41,6 +39,26 @@ export interface RoutedLocomotionStep {
     readonly rngState: Seed;
     readonly nextNavigationRequestId: NavigationRequestId;
     readonly outcomes: readonly NavigationOutcome[];
+}
+
+export interface RoutedUnitStep<U extends RoutedLocomotiveUnit = RoutedLocomotiveUnit> {
+    readonly unit: U;
+    readonly rngState: Seed;
+    readonly nextNavigationRequestId: NavigationRequestId;
+    readonly outcomes: readonly NavigationOutcome[];
+}
+
+export function stepRoutedUnit<U extends RoutedLocomotiveUnit>(
+    unit: U,
+    context: RoutedLocomotionStepContext,
+): RoutedUnitStep<U> {
+    const step = stepRoutedLocomotion(unit.locomotion, unit.position, unit.definition.locomotion, context);
+    return {
+        unit: { ...unit, position: step.position, locomotion: step.state },
+        rngState: step.rngState,
+        nextNavigationRequestId: step.nextNavigationRequestId,
+        outcomes: step.outcomes,
+    };
 }
 
 function isMovingRoute(route: RouteState): boolean {
@@ -77,7 +95,7 @@ function bindCurrentPath(
 export function stepRoutedLocomotion(
     state: Readonly<RoutedLocomotionState>,
     position: WorldPosition,
-    baseMoveSpeedPerTick: number,
+    definition: LocomotionDefinition,
     context: RoutedLocomotionStepContext,
 ): RoutedLocomotionStep {
     if (state.alternativeRoute !== null) {
@@ -94,7 +112,7 @@ export function stepRoutedLocomotion(
     const previouslyArrived = mainRoute.navigation.execution.activity.type === "ARRIVED"
         ? mainRoute.navigation.execution.activity.request.id
         : null;
-    const moveSpeedPerTick = baseMoveSpeedPerTick * context.moveMultiplier;
+    const moveSpeedPerTick = definition.moveSpeedPerTick * context.moveMultiplier;
     const stepDistance = moveSpeedPerTick;
     if (!Number.isFinite(moveSpeedPerTick) || moveSpeedPerTick < 0) {
         throw new RangeError("movement budget must be finite and non-negative");
@@ -148,7 +166,7 @@ export function stepRoutedLocomotion(
                                 position,
                                 steering.selection.decision.target,
                                 moveSpeedPerTick,
-                                context.steeringParameters,
+                                definition.steeringParameters,
                             );
                             position = movement.position;
                             steeringState = movement.state;

@@ -1,0 +1,128 @@
+{
+  "prefabKey": "enemy_9012_acloon",
+  "source": {
+    "bundle": "battle/enm_pfb_28.ab",
+    "cab": "CAB-f48eb4b910cd4207d9bd81f9890ceed8",
+    "unityVersion": "2021.3.39f1",
+    "filtered": true,
+    "selection": "movement fields and predefined controller/mode/buff bindings; rendering and unrelated enemy abilities omitted"
+  },
+  "gameObject": {
+    "m_Component": [
+      {
+        "component": {
+          "m_FileID": 0,
+          "m_PathID": "-5488194203453404440"
+        }
+      },
+      {
+        "component": {
+          "m_FileID": 0,
+          "m_PathID": "-2980337133664056600"
+        }
+      },
+      {
+        "component": {
+          "m_FileID": 0,
+          "m_PathID": "6130660340819643112"
+        }
+      },
+      {
+        "component": {
+          "m_FileID": 0,
+          "m_PathID": "3580396302906706664"
+        }
+      },
+      {
+        "component": {
+          "m_FileID": 0,
+          "m_PathID": "-617833206261986584"
+        }
+      }
+    ],
+    "m_Layer": 10,
+    "m_Name": "enemy_9012_acloon",
+    "m_Tag": 5,
+    "m_IsActive": 1
+  },
+  "components": [
+    {
+      "object": {
+        "id": "-2980337133664056600",
+        "start": 685016,
+        "size": 44,
+        "typeid": 20,
+        "classid": 114
+      },
+      "fields": {
+        "m_GameObject": {
+          "m_FileID": 0,
+          "m_PathID": "2642857804358830824"
+        },
+        "m_Enabled": true,
+        "m_Script": {
+          "m_FileID": 1,
+          "m_PathID": "-7073810281583634641"
+        },
+        "m_Name": "",
+        "_steeringFactor": 8.0,
+        "_maxSteeringForce": 10.0,
+        "_halfBodyWidth": 0.20000000298023224
+      },
+      "unityClassId": 114,
+      "serializedType": "builtin:263"
+    },
+    {
+      "object": {
+        "id": "-617833206261986584",
+        "start": 761280,
+        "size": 328,
+        "typeid": 11,
+        "classid": 114
+      },
+      "fields": {
+        "m_GameObject": {
+          "m_FileID": 0,
+          "m_PathID": "2642857804358830824"
+        },
+        "m_Enabled": true,
+        "m_Script": {
+          "m_FileID": 1,
+          "m_PathID": "-6629209555389654693"
+        },
+        "m_Name": "",
+        "_modes": [
+          {
+            "m_FileID": 0,
+            "m_PathID": "1134460789129693928"
+          },
+          {
+            "m_FileID": 0,
+            "m_PathID": "-8605226797208417560"
+          },
+          {
+            "m_FileID": 0,
+            "m_PathID": "2915251979226663656"
+          }
+        ],
+        "_commonAbilities": [
+          {
+            "m_FileID": 0,
+            "m_PathID": "4199524002599881448"
+          },
+          {
+            "m_FileID": 0,
+            "m_PathID": "-5083803520682407192"
+          }
+        ],
+        "_isFixedRotation": false,
+        "_delayToBorn": 0.0,
+        "_onlyDelayToBornOnTileStart": false,
+        "_canNotExit": false,
+        "_alwaysCheckCurrentPoint": false
+      },
+      "unityClassId": 114,
+      "serializedType": "builtin:263"
+    }
+  ]
+}

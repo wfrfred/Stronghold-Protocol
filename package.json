@@ -25,6 +25,8 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
+    "predemo:tactical": "npm run build:ts",
+    "demo:tactical": "node scripts/tactical-demo.mjs",
     "pretest": "npm run build:ts",
     "test": "node --test",
     "vendor": "node tools/vendor.mjs",

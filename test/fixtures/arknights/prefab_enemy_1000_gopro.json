@@ -1,0 +1,111 @@
+{
+  "prefabKey": "enemy_1000_gopro",
+  "source": {
+    "bundle": "battle/enm_pfb_base_0.ab",
+    "cab": "CAB-b2b15d37e92fccb550555511a61b9297",
+    "unityVersion": "2021.3.39f1",
+    "filtered": true,
+    "selection": "movement fields and predefined controller/mode/buff bindings; rendering and unrelated enemy abilities omitted"
+  },
+  "gameObject": {
+    "m_Component": [
+      {
+        "component": {
+          "m_FileID": 0,
+          "m_PathID": "6096182400427198751"
+        }
+      },
+      {
+        "component": {
+          "m_FileID": 0,
+          "m_PathID": "-2249318070340056801"
+        }
+      },
+      {
+        "component": {
+          "m_FileID": 0,
+          "m_PathID": "-1574454698181031649"
+        }
+      },
+      {
+        "component": {
+          "m_FileID": 0,
+          "m_PathID": "4505109231644608799"
+        }
+      },
+      {
+        "component": {
+          "m_FileID": 0,
+          "m_PathID": "-6719724142138259169"
+        }
+      }
+    ],
+    "m_Layer": 9,
+    "m_Name": "enemy_1000_gopro",
+    "m_Tag": 5,
+    "m_IsActive": 1
+  },
+  "components": [
+    {
+      "object": {
+        "id": "-2249318070340056801",
+        "start": 249624,
+        "size": 280,
+        "typeid": 10,
+        "classid": 114
+      },
+      "fields": {
+        "m_GameObject": {
+          "m_FileID": 0,
+          "m_PathID": "3271251570051877151"
+        },
+        "m_Enabled": true,
+        "m_Script": {
+          "m_FileID": 1,
+          "m_PathID": "-6629209555389654693"
+        },
+        "m_Name": "",
+        "_modes": [
+          {
+            "m_FileID": 0,
+            "m_PathID": "762063988910950687"
+          }
+        ],
+        "_commonAbilities": [],
+        "_isFixedRotation": false,
+        "_delayToBorn": 0.0,
+        "_onlyDelayToBornOnTileStart": false,
+        "_canNotExit": false,
+        "_alwaysCheckCurrentPoint": false
+      },
+      "unityClassId": 114,
+      "serializedType": "builtin:263"
+    },
+    {
+      "object": {
+        "id": "-1574454698181031649",
+        "start": 258360,
+        "size": 44,
+        "typeid": 15,
+        "classid": 114
+      },
+      "fields": {
+        "m_GameObject": {
+          "m_FileID": 0,
+          "m_PathID": "3271251570051877151"
+        },
+        "m_Enabled": true,
+        "m_Script": {
+          "m_FileID": 1,
+          "m_PathID": "-7073810281583634641"
+        },
+        "m_Name": "",
+        "_steeringFactor": 8.0,
+        "_maxSteeringForce": 10.0,
+        "_halfBodyWidth": 0.20000000298023224
+      },
+      "unityClassId": 114,
+      "serializedType": "builtin:263"
+    }
+  ]
+}

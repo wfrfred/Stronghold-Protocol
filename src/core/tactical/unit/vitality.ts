@@ -23,6 +23,10 @@ export function hasVitality(unit: Unit): unit is Unit & Vitality {
     return "vitality" in unit;
 }
 
+export function hasVitalityDefinition(definition: UnitDefinition): definition is VitalUnitDefinition {
+    return "vitality" in definition;
+}
+
 export function copyVitalityState(state: Readonly<VitalityState>): VitalityState {
     return { ...state };
 }

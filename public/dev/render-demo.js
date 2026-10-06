@@ -38,6 +38,7 @@ window.__demo = demo;
 
 let demoHover = null;
 const STAGE_IDS = ['act2autochess_m01', 'act2autochess_m02', 'act2autochess_m03', 'act2autochess_m04', 'act1autochess_m01', 'act1autochess_m02', 'act1autochess_m03', 'act1autochess_m04'];
+const CORE_STAGE_IDS = ['act1autochess_01', 'act1autochess_m01', 'act1autochess_m02', 'act2autochess_m02', 'act2autochess_m04'];
 
 async function main() {
   if (q.get('panel') === '0') $('panel').classList.add('is-hidden');
@@ -53,23 +54,37 @@ async function main() {
 
   // ---- UI --------------------------------------------------------------------------------------------------
   const sceneSel = $('scene');
-  const scenes = [{ name: 'prep', title: '休整期 · 拖拽演示' }, ...index.map((r) => ({ name: r.name, title: r.title, rec: r })), { name: 'stress', title: '压力测试 · 120 单位' }, { name: 'fx', title: '特效图鉴 · 全部 fx' }, { name: 'numbers', title: '伤害数字 · 重叠测试' }];
+  const scenes = [{ name: 'prep', title: '休整期 · 拖拽演示' }, { name: 'core', title: 'TS 战场 · 生成与移动' }, ...index.map((r) => ({ name: r.name, title: r.title, rec: r })), { name: 'stress', title: '压力测试 · 120 单位' }, { name: 'fx', title: '特效图鉴 · 全部 fx' }, { name: 'numbers', title: '伤害数字 · 重叠测试' }];
   for (const s of scenes) sceneSel.append(new Option(s.title, s.name));
   const stageSel = $('stage');
   for (const id of STAGE_IDS) { const st = data.lookup('stages', id); if (st) stageSel.append(new Option(st.name || id, id)); }
 
   let current = null;       // active scene controller
+  let currentSceneName = 'prep';
+  let sceneRequest = 0;
+  let sceneLoad = Promise.resolve();
+  let coreStageOptions = false;
   let playing = q.get('paused') !== '1';
   let speed = Number(q.get('speed')) || 1;
   $('speed').value = String(speed);
+  const initialSeed = Number(q.get('seed') ?? 123);
+  $('seed').value = String(Number.isSafeInteger(initialSeed) && initialSeed >= 0 && initialSeed <= 4294967295 ? initialSeed : 123);
   const setPlay = (p) => { playing = p; $('play').textContent = p ? '❚❚' : '▶'; };
   setPlay(playing);
   $('play').onclick = () => setPlay(!playing);
   $('speed').onchange = () => { speed = Number($('speed').value) || 1; };
   sceneSel.onchange = () => setScene(sceneSel.value);
   stageSel.onchange = () => setScene(sceneSel.value, stageSel.value);
-  $('scrub').oninput = () => current?.seek?.((Number($('scrub').value) / 1000) * (current.duration || 0));
+  $('scrub').oninput = () => {
+    if (currentSceneName === 'core') setPlay(false);
+    current?.seek?.((Number($('scrub').value) / 1000) * (current.duration || 0));
+  };
   $('editable').onclick = () => { const on = !$('editable').classList.contains('is-on'); $('editable').classList.toggle('is-on', on); current?.setEditable?.(on); };
+  $('step').onclick = () => { setPlay(false); current?.step?.(); };
+  $('reset').onclick = () => setScene('core', stageSel.value);
+  $('appear-crates').onclick = () => current?.command?.('APPEAR_CRATES');
+  $('remove-crates').onclick = () => current?.command?.('REMOVE_CRATES');
+  $('trigger-dragon').onclick = () => current?.command?.('TRIGGER_DRAGON');
   // board layer toggle (3D official scene ⇄ 2D atlas board) and the official camera framings
   const syncBoardBtn = () => { const on = !!view.stats().board3d?.on; $('board3d').classList.toggle('is-on', on); $('board3d').textContent = on ? '3D' : '2D'; };
   $('board3d').onclick = async () => { await view.setBoardMode?.(view.stats().board3d?.on ? '2d' : '3d'); syncBoardBtn(); };
@@ -83,26 +98,75 @@ async function main() {
     else view.setCamera(kind, { side: side || 'L', half: !!side });
   };
 
-  async function setScene(name, stageId) {
-    try { current?.stop?.(); } catch { /* ignore */ }
+  function setScene(name, stageId) {
     const s = scenes.find((x) => x.name === name) || scenes[0];
+    const core = s.name === 'core';
+    if (core) {
+      $('core-controls').hidden = false;
+      if (!$('seed').reportValidity()) {
+        $('reset').disabled = false;
+        sceneSel.value = currentSceneName;
+        if (current?.stageId) stageSel.value = current.stageId;
+        return Promise.resolve(current);
+      }
+    }
+    const seed = $('seed').valueAsNumber;
+    const request = ++sceneRequest;
+    const requestedStage = stageId || q.get('stage') || (core ? CORE_STAGE_IDS[0] : 'act2autochess_m01');
     sceneSel.value = s.name;
-    $('title').textContent = s.title;
-    if (s.name === 'prep') current = await prepScene(view, stageId || q.get('stage') || 'act2autochess_m01', index);
-    else if (s.name === 'numbers') current = numbersScene(view, stageId || q.get('stage') || 'act2autochess_m02');
-    else if (s.name === 'stress') current = stressScene(view, stageId || q.get('stage') || 'act2autochess_m01');
-    else if (s.name === 'fx') current = fxScene(view, stageId || q.get('stage') || 'act2autochess_m03');
-    else current = await recordingScene(view, s.rec);
-    if (current.stageId) stageSel.value = current.stageId;
-    demo.scene = current;
-    return current;
+    if (core !== coreStageOptions) {
+      stageSel.replaceChildren();
+      for (const id of core ? CORE_STAGE_IDS : STAGE_IDS) {
+        const st = data.lookup('stages', id);
+        if (st || core) stageSel.append(new Option(st?.name || id, id));
+      }
+      coreStageOptions = core;
+    }
+    const selectedStage = core && !CORE_STAGE_IDS.includes(requestedStage) ? CORE_STAGE_IDS[0] : requestedStage;
+    if (core) stageSel.value = selectedStage;
+    for (const id of ['step', 'reset', 'appear-crates', 'remove-crates', 'trigger-dragon']) $(id).disabled = true;
+    sceneLoad = sceneLoad.catch(() => {}).then(async () => {
+      if (request !== sceneRequest) return current;
+      try { current?.stop?.(); } catch { /* ignore */ }
+      current = null;
+      demo.scene = null;
+      $('title').textContent = s.title;
+      let next;
+      if (core) {
+        const { createTacticalDemo } = await import('/dist/legacy/tactical-demo.js');
+        if (request !== sceneRequest) return current;
+        next = await createTacticalDemo(view, { stageId: selectedStage, data, seed, onEvent: log });
+      } else if (s.name === 'prep') next = await prepScene(view, selectedStage, index);
+      else if (s.name === 'numbers') next = numbersScene(view, stageId || q.get('stage') || 'act2autochess_m02');
+      else if (s.name === 'stress') next = stressScene(view, selectedStage);
+      else if (s.name === 'fx') next = fxScene(view, stageId || q.get('stage') || 'act2autochess_m03');
+      else next = await recordingScene(view, s.rec);
+      if (request !== sceneRequest) { next.stop?.(); return null; }
+      current = next;
+      currentSceneName = s.name;
+      sceneSel.value = s.name;
+      $('core-controls').hidden = !core;
+      $('core-scope').hidden = !core;
+      $('editable').hidden = core;
+      if (current.stageId) stageSel.value = current.stageId;
+      $('scrub').value = '0';
+      $('time').textContent = '0.0 s';
+      $('step').disabled = !core;
+      $('reset').disabled = !core;
+      $('appear-crates').disabled = !core || selectedStage === 'act1autochess_01';
+      $('remove-crates').disabled = !core || selectedStage === 'act1autochess_01';
+      $('trigger-dragon').disabled = !core || selectedStage !== 'act1autochess_01';
+      demo.scene = current;
+      return current;
+    });
+    return sceneLoad;
   }
   demo.setScene = setScene;
   demo.showRange = (uid) => (demoHover ? demoHover(uid) : false);
   demo.seek = (t) => current?.seek?.(t);
   demo.play = () => setPlay(true);
   demo.pause = () => setPlay(false);
-  demo.stats = () => ({ ...view.stats(), scene: sceneSel.value, t: current?.time ?? 0, duration: current?.duration ?? 0 });
+  demo.stats = () => ({ ...view.stats(), scene: currentSceneName, t: current?.time ?? 0, duration: current?.duration ?? 0, ...(currentSceneName === 'core' ? { core: current?.stats?.() ?? null } : {}) });
 
   await setScene(q.get('scene') || 'prep');
   const t0 = Number(q.get('t'));
@@ -117,7 +181,7 @@ async function main() {
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     if (current?.tick) {
-      try { current.tick(playing ? dt * speed : 0); } catch (err) { log('tick', err.message); }
+      try { current.tick(playing ? dt * speed : 0); } catch (err) { log('tick', err.message); if (currentSceneName === 'core') setPlay(false); }
       if (current.duration) {
         $('scrub').value = String(Math.round((current.time / current.duration) * 1000));
         $('time').textContent = `${current.time.toFixed(1)} / ${current.duration.toFixed(1)} s`;
@@ -125,6 +189,14 @@ async function main() {
     }
     const st = view.stats();
     $('stats').textContent = `fps ${st.fps.toFixed(0)}  frame ${st.frameMs.toFixed(1)} ms  units ${st.units}  particles ${st.particles}  proj ${st.projectiles}  nums ${st.numbers}\nspine ${st.spine ? `${st.spine.ready} ready / ${st.spine.loading} loading / ${st.spine.failed} failed` : '-'}  rate ${st.rate?.toFixed?.(2) ?? '-'}  buffered ${st.buffered}\nboard ${st.board3d?.on ? `3D · ${st.board3d.calls} calls · ${st.board3d.triangles} tris · ${st.board3d.cpuMs} ms` : '2D atlas'}`;
+    if (currentSceneName === 'core' && current?.stats) {
+      const core = current.stats();
+      $('stats').textContent += `\n逻辑帧 ${core.tickIndex}  已生成 ${core.spawnedCount}  路线完成 ${core.completedRouteCount}\n场上单位 ${core.units}  机制 ${core.mechanisms}  WALK revision ${core.walkRevision}  seed ${core.seed}`;
+      if (core.result) {
+        setPlay(false);
+        $('stats').textContent += `\n${core.result.reason === 'SCHEDULE_COMPLETED' ? '演示完成' : '到达时间上限'}`;
+      }
+    }
     requestAnimationFrame(loop);
   };
   requestAnimationFrame(loop);

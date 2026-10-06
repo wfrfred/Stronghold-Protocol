@@ -1,0 +1,149 @@
+import type { BattlefieldChange, BattlefieldRemovalReason } from "../battlefield/runtime.js";
+import type { MechanismDefinition } from "../battlefield/mechanism.js";
+import type { NavigationEffectDefinition, SpatialEffectSource, SpatialEffectRegion } from "../battlefield/navigation-effect.js";
+import { createWorldPosition } from "../geometry/coordinate.js";
+import type { WorldPosition } from "../geometry/coordinate.js";
+import type { Direction } from "../geometry/direction.js";
+import type { RangeGrid } from "../geometry/range.js";
+import type { Unit, UnitDefinition } from "../unit/unit.js";
+import { hasVitalityDefinition } from "../unit/vitality.js";
+import type { BattleExecutionState } from "./state.js";
+
+export interface PredefinedUnitCreation {
+    readonly type: "UNIT";
+    readonly definition: UnitDefinition;
+    readonly position: WorldPosition;
+    readonly navigationEffects: readonly {
+        readonly definition: NavigationEffectDefinition;
+        readonly range: RangeGrid;
+        readonly direction: Direction;
+    }[];
+}
+
+export interface PredefinedMechanismCreation {
+    readonly type: "MECHANISM";
+    readonly definition: MechanismDefinition;
+    readonly navigationEffects: readonly {
+        readonly definition: NavigationEffectDefinition;
+        readonly region: Extract<SpatialEffectRegion, { readonly type: "FIXED" }>;
+    }[];
+}
+
+export interface PredefinedInstanceDefinition {
+    readonly id: number;
+    readonly alias: string | null;
+    readonly initiallyPresent: boolean;
+    readonly creation: PredefinedUnitCreation | PredefinedMechanismCreation;
+}
+
+export interface PredefinedPresence {
+    readonly definitionId: number;
+    readonly source: SpatialEffectSource;
+}
+
+export type PredefinedCommand =
+    | { readonly type: "APPEAR_PREDEFINED"; readonly definitionId: number; }
+    | { readonly type: "REMOVE_PREDEFINED"; readonly definitionId: number; readonly reason: BattlefieldRemovalReason; };
+
+export interface PredefinedTransition {
+    readonly presence: readonly PredefinedPresence[];
+    readonly execution: BattleExecutionState;
+    readonly changes: readonly BattlefieldChange[];
+}
+
+export function createPredefinedInstanceDefinition(definition: PredefinedInstanceDefinition): PredefinedInstanceDefinition {
+    if (!Number.isSafeInteger(definition.id) || definition.id < 0) {
+        throw new RangeError("predefined definition id must be a nonnegative safe integer");
+    }
+    if (definition.alias !== null && typeof definition.alias !== "string") {
+        throw new TypeError("predefined alias must be a string or null");
+    }
+    if (typeof definition.initiallyPresent !== "boolean") {
+        throw new TypeError("predefined presence must be boolean");
+    }
+    const creation = definition.creation;
+    return Object.freeze({
+        id: definition.id,
+        alias: definition.alias,
+        initiallyPresent: definition.initiallyPresent,
+        creation: creation.type === "UNIT"
+            ? Object.freeze({ ...creation, position: createWorldPosition(...creation.position),
+                navigationEffects: Object.freeze(creation.navigationEffects.map(effect => Object.freeze({ ...effect }))) })
+            : Object.freeze({ ...creation,
+                navigationEffects: Object.freeze(creation.navigationEffects.map(effect => Object.freeze({ ...effect }))) }),
+    });
+}
+
+export function predefinedIdsForAlias(definitions: readonly PredefinedInstanceDefinition[], alias: string): readonly number[] {
+    return definitions.filter(definition => definition.alias === alias).map(definition => definition.id);
+}
+
+function nextIdentity(value: number): number {
+    const next = value + 1;
+    if (!Number.isSafeInteger(value) || value < 0 || !Number.isSafeInteger(next)) {
+        throw new RangeError("predefined instance identity overflow");
+    }
+    return next;
+}
+
+function initializeUnit(creation: PredefinedUnitCreation, id: number): Unit {
+    const unit: Unit = { id, definition: creation.definition, position: creation.position };
+    if (!hasVitalityDefinition(creation.definition)) return unit;
+    const initialized = { ...unit, vitality: { hp: creation.definition.vitality.maxHp } };
+    return initialized;
+}
+
+export function changePredefinedInstances(
+    definitions: readonly PredefinedInstanceDefinition[],
+    initialPresence: readonly PredefinedPresence[],
+    commands: readonly PredefinedCommand[],
+    initialExecution: BattleExecutionState,
+): PredefinedTransition {
+    const presence = new Map(initialPresence.map(binding => [binding.definitionId, binding]));
+    const changes: BattlefieldChange[] = [];
+    let execution = initialExecution;
+    for (const command of commands) {
+        const definition = definitions.find(definition => definition.id === command.definitionId);
+        if (definition === undefined) throw new RangeError(`unknown predefined definition: ${command.definitionId}`);
+        const binding = presence.get(command.definitionId);
+        if (command.type === "REMOVE_PREDEFINED") {
+            if (binding === undefined) continue;
+            changes.push(binding.source.type === "UNIT"
+                ? { type: "REMOVE_UNIT", unitId: binding.source.unitId, reason: command.reason }
+                : { type: "REMOVE_MECHANISM", mechanismId: binding.source.mechanismId, reason: command.reason });
+            presence.delete(command.definitionId);
+            continue;
+        }
+        if (binding !== undefined) continue;
+        const creation = definition.creation;
+        let source: SpatialEffectSource;
+        let contributions: readonly { readonly definition: NavigationEffectDefinition; readonly region: SpatialEffectRegion }[];
+        if (creation.type === "UNIT") {
+            source = Object.freeze({ type: "UNIT", unitId: execution.nextUnitId });
+            changes.push({ type: "REGISTER_UNIT", unit: initializeUnit(creation, execution.nextUnitId) });
+            contributions = creation.navigationEffects.map(effect => ({
+                definition: effect.definition,
+                region: { type: "FOLLOW_UNIT", unitId: execution.nextUnitId, range: effect.range, direction: effect.direction },
+            }));
+            execution = { ...execution, nextUnitId: nextIdentity(execution.nextUnitId) };
+        } else {
+            source = Object.freeze({ type: "MECHANISM", mechanismId: execution.nextMechanismId });
+            changes.push({ type: "REGISTER_MECHANISM", mechanism: { id: execution.nextMechanismId, definition: creation.definition, active: true } });
+            contributions = creation.navigationEffects;
+            execution = { ...execution, nextMechanismId: nextIdentity(execution.nextMechanismId) };
+        }
+        presence.set(command.definitionId, { definitionId: command.definitionId, source });
+        for (const contribution of contributions) {
+            changes.push({ type: "ADD_EFFECT", effect: {
+                id: execution.nextSpatialEffectId,
+                definition: contribution.definition,
+                source,
+                active: true,
+                region: contribution.region,
+                expiresAtTick: null,
+            } });
+            execution = { ...execution, nextSpatialEffectId: nextIdentity(execution.nextSpatialEffectId) };
+        }
+    }
+    return { presence: [...presence.values()], execution, changes };
+}

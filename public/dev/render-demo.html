@@ -24,9 +24,13 @@
     }
     .rd-panel.is-hidden { display: none; }
     .rd-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-    .rd-panel select, .rd-panel button {
+    .rd-panel select, .rd-panel button, .rd-panel input[type=number] {
       background: #1e2421; color: #f2f2f2; border: 1px solid #3e4b45; padding: 4px 8px; font: inherit; cursor: pointer;
     }
+    .rd-panel input[type=number] { width: 86px; cursor: text; }
+    .rd-panel button:disabled { opacity: .4; cursor: default; }
+    .rd-row[hidden] { display: none; }
+    .rd-scope { color: #8a948f; font-size: 11px; }
     .rd-panel button.is-on { border-color: #4ed8af; color: #4ed8af; }
     .rd-panel input[type=range] { flex: 1; accent-color: #4ed8af; }
     .rd-title { font-weight: 700; color: #f2f2f2; }
@@ -48,6 +52,13 @@
       </select>
       <button id="editable" type="button" class="is-on">编辑</button>
     </div>
+    <div class="rd-row" id="core-controls" hidden>
+      <label for="seed">种子</label><input id="seed" type="number" min="0" max="4294967295" step="1" value="123" required />
+      <button id="step" type="button">单帧</button><button id="reset" type="button">重置</button>
+      <button id="appear-crates" type="button">工事出现</button><button id="remove-crates" type="button">移除工事</button>
+      <button id="trigger-dragon" type="button">触发飞行分支</button>
+    </div>
+    <div class="rd-row rd-scope" id="core-scope" hidden>生成与移动演示；地形伤害、部署和交战尚未接入</div>
     <div class="rd-row">
       <span class="rd-micro">BOARD</span>
       <button id="board3d" type="button" class="is-on" title="official 3D board (three.js) / 2D atlas board">3D</button>

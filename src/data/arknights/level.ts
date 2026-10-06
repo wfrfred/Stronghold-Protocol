@@ -411,7 +411,16 @@ function predefines(value: unknown, name: string, unsupported: ArknightsUnsuppor
     });
 }
 
-export function parseLevelDefinition(value: unknown, mapOptions: ArknightsMapOptions = {}): ArknightsLevelDefinition {
+export interface ArknightsLevelMapContext {
+    readonly predefines: ArknightsPredefines;
+    readonly hardPredefines: ArknightsPredefines;
+    readonly options: ArknightsLevelOptions;
+}
+
+export function parseLevelDefinition(
+    value: unknown,
+    resolveMapOptions: (context: ArknightsLevelMapContext) => ArknightsMapOptions = () => ({}),
+): ArknightsLevelDefinition {
     const source = object(value, "level", [
         "options", "levelId", "mapId", "bgmEvent", "environmentSe", "mapData", "tilesDisallowToLocate",
         "runes", "optionalRunes", "globalBuffs", "routes", "extraRoutes", "enemies", "enemyDbRefs", "waves",
@@ -455,6 +464,8 @@ export function parseLevelDefinition(value: unknown, mapOptions: ArknightsMapOpt
     })));
     const predefined = predefines(source.predefines, "level.predefines", unsupported);
     const hardPredefined = predefines(source.hardPredefines, "level.hardPredefines", unsupported);
+    const levelOptions = options(source.options);
+    const mapOptions = resolveMapOptions({ predefines: predefined, hardPredefines: hardPredefined, options: levelOptions });
     const randomSeed = integer(source.randomSeed, "level.randomSeed", -(2 ** 31));
     if (randomSeed >= 2 ** 31) {
         throw new RangeError("level.randomSeed must be a signed 32-bit integer");
@@ -467,7 +478,7 @@ export function parseLevelDefinition(value: unknown, mapOptions: ArknightsMapOpt
         enemyDbRefs,
         waves,
         branches,
-        options: options(source.options),
+        options: levelOptions,
         predefines: predefined,
         hardPredefines: hardPredefined,
         tilesDisallowToLocate: array(source.tilesDisallowToLocate, "level.tilesDisallowToLocate", position),

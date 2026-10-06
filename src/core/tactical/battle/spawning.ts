@@ -1,29 +1,34 @@
 import { initializeRoutedEnemy } from "../unit/enemy.js";
 import type { RoutedEnemy } from "../unit/enemy.js";
-import type { ScheduledEnemySpawn } from "./spec.js";
 import type { BattleExecutionState } from "./state.js";
+import type { EnemyDefinition } from "../unit/enemy.js";
+import type { RouteDefinition } from "../route/definition.js";
+import type { RouteTiming } from "../route/state.js";
 
-export interface SpawnProgress {
-    readonly cursor: number;
+export interface EnemySpawnDefinition {
+    readonly definition: EnemyDefinition;
+    readonly route: RouteDefinition;
+    readonly alwaysCheckCurrentPoint: boolean;
+    readonly notCountInTotal: boolean;
 }
 
-export interface DueEnemySpawns {
-    readonly progress: SpawnProgress;
+export interface ScheduledEnemySpawn extends EnemySpawnDefinition {
+    readonly tick: number;
+    readonly timing: RouteTiming;
+}
+
+export interface SpawnedEnemies {
     readonly execution: BattleExecutionState;
     readonly enemies: readonly RoutedEnemy[];
 }
 
-export function spawnDueEnemies(
-    schedule: readonly ScheduledEnemySpawn[],
-    progress: SpawnProgress,
+export function spawnEnemies(
+    spawns: readonly ScheduledEnemySpawn[],
     execution: BattleExecutionState,
-    tickIndex: number,
-): DueEnemySpawns {
-    let { cursor } = progress;
+): SpawnedEnemies {
     let { rngState, nextUnitId, nextNavigationRequestId } = execution;
     const enemies: RoutedEnemy[] = [];
-    while (cursor < schedule.length && schedule[cursor]!.tick <= tickIndex) {
-        const spawn = schedule[cursor]!;
+    for (const spawn of spawns) {
         const initialized = initializeRoutedEnemy({
             id: nextUnitId,
             definition: spawn.definition,
@@ -36,12 +41,12 @@ export function spawnDueEnemies(
         enemies.push(initialized.enemy);
         rngState = initialized.rngState;
         nextNavigationRequestId = initialized.nextNavigationRequestId;
-        nextUnitId++;
-        cursor++;
+        const next = nextUnitId + 1;
+        if (!Number.isSafeInteger(next)) throw new RangeError("unit identity overflow");
+        nextUnitId = next;
     }
     return {
         enemies,
-        progress: { cursor },
-        execution: { rngState, nextUnitId, nextNavigationRequestId },
+        execution: { ...execution, rngState, nextUnitId, nextNavigationRequestId },
     };
 }

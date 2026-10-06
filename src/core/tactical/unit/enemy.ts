@@ -8,12 +8,11 @@ import { createRouteExecution, enterRoute, validateRouteExecution } from "../rou
 import { initializeRouteSpawn } from "../route/spawn.js";
 import { createRouteState } from "../route/state.js";
 import type { RouteTiming } from "../route/state.js";
-import { copyLocomotionState, createRoutedLocomotionState } from "./locomotion/state.js";
+import { createRoutedLocomotionState } from "./locomotion/state.js";
 import type { Locomotion, LocomotiveUnitDefinition, RoutedLocomotion } from "./locomotion/state.js";
-import { stepRoutedLocomotion } from "./locomotion/step.js";
+import { stepRoutedUnit } from "./locomotion/step.js";
 import type { RoutedLocomotionStepContext } from "./locomotion/step.js";
 import type { Vitality, VitalUnitDefinition } from "./vitality.js";
-import { copyVitalityState } from "./vitality.js";
 import type { Unit, UnitId } from "./unit.js";
 
 export interface EnemyDefinition
@@ -27,14 +26,6 @@ export type Enemy =
     & Locomotion;
 
 export type RoutedEnemy = Enemy & RoutedLocomotion;
-
-export function copyRoutedEnemy(enemy: Readonly<RoutedEnemy>): RoutedEnemy {
-    return {
-        ...enemy,
-        vitality: copyVitalityState(enemy.vitality),
-        locomotion: copyLocomotionState(enemy.locomotion),
-    };
-}
 
 export interface RoutedEnemySpawn {
     readonly id: UnitId;
@@ -74,7 +65,10 @@ export function createEnemyDefinition(definition: EnemyDefinition): EnemyDefinit
     return Object.freeze({
         id: definition.id,
         vitality: Object.freeze({ maxHp: definition.vitality.maxHp }),
-        locomotion: Object.freeze({ moveSpeedPerTick: definition.locomotion.moveSpeedPerTick }),
+        locomotion: Object.freeze({
+            moveSpeedPerTick: definition.locomotion.moveSpeedPerTick,
+            steeringParameters: Object.freeze({ ...definition.locomotion.steeringParameters }),
+        }),
     });
 }
 
@@ -104,13 +98,9 @@ export function initializeRoutedEnemy(spawn: RoutedEnemySpawn): RoutedEnemyIniti
 }
 
 export function stepRoutedEnemy(enemy: RoutedEnemy, context: RoutedEnemyStepContext): RoutedEnemyStep {
-    const step = stepRoutedLocomotion(enemy.locomotion, enemy.position, enemy.definition.locomotion.moveSpeedPerTick, context);
+    const step = stepRoutedUnit(enemy, context);
     return {
-        enemy: {
-            ...enemy,
-            position: step.position,
-            locomotion: step.state,
-        },
+        enemy: step.unit,
         rngState: step.rngState,
         nextNavigationRequestId: step.nextNavigationRequestId,
         outcomes: step.outcomes,

@@ -4,11 +4,12 @@ import type { NavigationState } from "../../navigation/state.js";
 import { copyRouteState } from "../../route/state.js";
 import type { RouteState } from "../../route/state.js";
 import { createSteeringState } from "./steering.js";
-import type { SteeringState } from "./steering.js";
+import type { SteeringParameters, SteeringState } from "./steering.js";
 import type { Unit, UnitDefinition } from "../unit.js";
 
 export interface LocomotionDefinition {
     readonly moveSpeedPerTick: number;
+    readonly steeringParameters: SteeringParameters;
 }
 
 export interface LocomotionState {
@@ -41,11 +42,16 @@ export interface LocomotiveUnitDefinition extends UnitDefinition {
 export type LocomotiveUnit<D extends LocomotiveUnitDefinition = LocomotiveUnitDefinition> =
     Unit<D> & Locomotion;
 
+export type RoutedLocomotiveUnit<D extends LocomotiveUnitDefinition = LocomotiveUnitDefinition> =
+    Unit<D> & RoutedLocomotion;
+
 export function hasLocomotion(unit: Unit): unit is Unit & Locomotion {
     return "locomotion" in unit;
 }
 
-export function hasRoutedLocomotion(unit: Unit): unit is Unit & RoutedLocomotion {
+export function hasRoutedLocomotion<D extends UnitDefinition>(
+    unit: Unit<D>,
+): unit is RoutedLocomotiveUnit<D & LocomotiveUnitDefinition> {
     return hasLocomotion(unit) && "mainRoute" in unit.locomotion;
 }
 

@@ -1,0 +1,148 @@
+{
+  "name": "涨潮控制",
+  "description": null,
+  "sortIndex": 1295,
+  "spTargetType": "NONE",
+  "spTargetId": null,
+  "canUseGeneralPotentialItem": true,
+  "canUseActivityPotentialItem": false,
+  "potentialItemId": null,
+  "activityPotentialItemId": null,
+  "classicPotentialItemId": null,
+  "nationId": null,
+  "groupId": null,
+  "teamId": null,
+  "mainPower": {
+    "nationId": null,
+    "groupId": null,
+    "teamId": null
+  },
+  "subPower": null,
+  "displayNumber": null,
+  "appellation": "Tide Controller",
+  "position": "NONE",
+  "tagList": null,
+  "itemUsage": null,
+  "itemDesc": null,
+  "itemObtainApproach": null,
+  "isNotObtainable": false,
+  "isSpChar": false,
+  "maxPotentialLevel": 0,
+  "rarity": "TIER_1",
+  "profession": "TRAP",
+  "subProfessionId": "notchar2",
+  "trait": null,
+  "phases": [
+    {
+      "characterPrefabKey": "trap_042_tidectrl",
+      "rangeId": null,
+      "maxLevel": 30,
+      "attributesKeyFrames": [
+        {
+          "level": 1,
+          "data": {
+            "maxHp": 100,
+            "atk": 0,
+            "def": 0,
+            "magicResistance": 0.0,
+            "cost": 5,
+            "blockCnt": 0,
+            "moveSpeed": 1.0,
+            "attackSpeed": 100.0,
+            "baseAttackTime": 1.0,
+            "respawnTime": 5,
+            "hpRecoveryPerSec": 0.0,
+            "spRecoveryPerSec": 1.0,
+            "maxDeployCount": 1,
+            "maxDeckStackCnt": 0,
+            "tauntLevel": 0,
+            "massLevel": 0,
+            "baseForceLevel": 0,
+            "stunImmune": false,
+            "silenceImmune": false,
+            "sleepImmune": false,
+            "frozenImmune": false,
+            "levitateImmune": false,
+            "disarmedCombatImmune": false,
+            "fearedImmune": false,
+            "palsyImmune": false,
+            "attractImmune": false,
+            "teleportImmune": false,
+            "groundBoundImmune": false
+          }
+        },
+        {
+          "level": 30,
+          "data": {
+            "maxHp": 100,
+            "atk": 0,
+            "def": 0,
+            "magicResistance": 0.0,
+            "cost": 5,
+            "blockCnt": 0,
+            "moveSpeed": 1.0,
+            "attackSpeed": 100.0,
+            "baseAttackTime": 1.0,
+            "respawnTime": 5,
+            "hpRecoveryPerSec": 0.0,
+            "spRecoveryPerSec": 1.0,
+            "maxDeployCount": 1,
+            "maxDeckStackCnt": 0,
+            "tauntLevel": 0,
+            "massLevel": 0,
+            "baseForceLevel": 0,
+            "stunImmune": false,
+            "silenceImmune": false,
+            "sleepImmune": false,
+            "frozenImmune": false,
+            "levitateImmune": false,
+            "disarmedCombatImmune": false,
+            "fearedImmune": false,
+            "palsyImmune": false,
+            "attractImmune": false,
+            "teleportImmune": false,
+            "groundBoundImmune": false
+          }
+        }
+      ],
+      "evolveCost": null
+    }
+  ],
+  "skills": [
+    {
+      "skillId": "sktok_tidectrl_1",
+      "overridePrefabKey": null,
+      "overrideTokenKey": null,
+      "levelUpCostCond": [],
+      "unlockCond": {
+        "phase": "PHASE_0",
+        "level": 1
+      }
+    },
+    {
+      "skillId": "sktok_tidectrl_2",
+      "overridePrefabKey": null,
+      "overrideTokenKey": null,
+      "levelUpCostCond": [],
+      "unlockCond": {
+        "phase": "PHASE_0",
+        "level": 1
+      }
+    },
+    {
+      "skillId": "sktok_tidectrl_3",
+      "overridePrefabKey": null,
+      "overrideTokenKey": null,
+      "levelUpCostCond": [],
+      "unlockCond": {
+        "phase": "PHASE_0",
+        "level": 1
+      }
+    }
+  ],
+  "displayTokenDict": null,
+  "talents": null,
+  "potentialRanks": [],
+  "favorKeyFrames": null,
+  "allSkillLvlup": []
+}

@@ -695,7 +695,10 @@ function routedEnemyHarness({ seed = 42, speedPerTick = 10, checkpoints, routeOv
   }));
   const initialized = initializeRoutedEnemy({
     id: 1,
-    definition: createEnemyDefinition({ id: 'enemy_core_walker', vitality: { maxHp: 100 }, locomotion: { moveSpeedPerTick: speedPerTick } }),
+    definition: createEnemyDefinition({ id: 'enemy_core_walker', vitality: { maxHp: 100 }, locomotion: {
+      moveSpeedPerTick: speedPerTick,
+      steeringParameters: createSteeringParameters({ steeringFactor: 2.5, maxSteeringForce: 4 }),
+    } }),
     route, timing: createRouteTiming({ waveStartedAtTick: 0, fragmentStartedAtTick: 0 }),
     alwaysCheckCurrentPoint, rngState: seed, nextNavigationRequestId: 0,
   });
@@ -705,7 +708,6 @@ function routedEnemyHarness({ seed = 42, speedPerTick = 10, checkpoints, routeOv
     FLY: fieldMap(1, 5, Array.from({ length: 5 }, () => fieldCell()), 'FLY'),
   });
   const fieldCache = createNavigationFieldCache();
-  const steeringParameters = createSteeringParameters({ steeringFactor: 2.5, maxSteeringForce: 4 });
   const trace = [];
   return {
     get enemy() { return enemy; },
@@ -728,7 +730,7 @@ function routedEnemyHarness({ seed = 42, speedPerTick = 10, checkpoints, routeOv
     step(controls = {}) {
       tick++;
       const context = {
-        maps, fieldCache, steeringParameters, rngState, nextNavigationRequestId,
+        maps, fieldCache, rngState, nextNavigationRequestId,
         moveMultiplier: controls.moveMultiplier ?? 1,
         movementAllowed: controls.movementAllowed ?? true,
         routeAdvanceAllowed: controls.routeAdvanceAllowed ?? true,
@@ -1007,7 +1009,9 @@ test('core routed enemy initialization rejects rules outside the serial MOVE-WAI
   assert.throws(() => routedEnemyHarness({ routeOverrides: { visitEveryCheckPoint: false } }), RangeError);
   assert.throws(() => routedEnemyHarness({ alwaysCheckCurrentPoint: false }), RangeError);
   assert.throws(() => routedEnemyHarness({ checkpoints: [{ type: 'ALERT' }] }), RangeError);
-  assert.throws(() => createEnemyDefinition({ id: 'enemy_bad', vitality: { maxHp: 0 }, locomotion: { moveSpeedPerTick: 1 } }), RangeError);
+  assert.throws(() => createEnemyDefinition({ id: 'enemy_bad', vitality: { maxHp: 0 }, locomotion: {
+    moveSpeedPerTick: 1, steeringParameters: createSteeringParameters({ steeringFactor: 2.5, maxSteeringForce: 4 }),
+  } }), RangeError);
   assert.throws(() => createSteeringParameters({ steeringFactor: Infinity, maxSteeringForce: 4 }), RangeError);
   const h = routedEnemyHarness();
   const alternativeRoute = h.enemy.locomotion.mainRoute;
@@ -1371,7 +1375,7 @@ test('core battlefield invalidates only changed navigation modes and preserves r
   assert.equal(oldMaps.WALK.cells[2].moveCost, 1);
   pending.locomotion.alternativeRoute = null;
   const context = {
-    maps: runtime.navigationMaps, fieldCache: runtime.fieldCache, steeringParameters: createSteeringParameters({ steeringFactor: 2.5, maxSteeringForce: 4 }),
+    maps: runtime.navigationMaps, fieldCache: runtime.fieldCache,
     moveMultiplier: 0, movementAllowed: true, routeAdvanceAllowed: true, rngState: h.rngState, nextNavigationRequestId: h.nextNavigationRequestId,
   };
   const stepped = stepRoutedEnemy(pending, context);

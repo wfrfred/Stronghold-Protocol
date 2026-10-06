@@ -1,0 +1,266 @@
+{
+  "prefabKey": "trap_1105_accrate",
+  "source": {
+    "bundle": "pkgrps/btl_pfb_tokens_4.ab",
+    "cab": "CAB-425a845ff37dbe17e203e6b341c4f664",
+    "unityVersion": "2021.3.39f1",
+    "filtered": true,
+    "selection": "movement fields and predefined controller/mode/buff bindings; rendering and unrelated enemy abilities omitted"
+  },
+  "gameObject": {
+    "m_Component": [
+      {
+        "component": {
+          "m_FileID": 0,
+          "m_PathID": "1977166372567515579"
+        }
+      },
+      {
+        "component": {
+          "m_FileID": 0,
+          "m_PathID": "-7679716313419087429"
+        }
+      },
+      {
+        "component": {
+          "m_FileID": 0,
+          "m_PathID": "2753181041308074427"
+        }
+      },
+      {
+        "component": {
+          "m_FileID": 0,
+          "m_PathID": "4786829004467863995"
+        }
+      }
+    ],
+    "m_Layer": 10,
+    "m_Name": "trap_1105_accrate",
+    "m_Tag": 5,
+    "m_IsActive": 1
+  },
+  "components": [
+    {
+      "object": {
+        "id": "4786829004467863995",
+        "start": 3655208,
+        "size": 1152,
+        "typeid": 29,
+        "classid": 114
+      },
+      "fields": {
+        "m_GameObject": {
+          "m_FileID": 0,
+          "m_PathID": "5626468324592124347"
+        },
+        "m_Enabled": true,
+        "m_Script": {
+          "m_FileID": 1,
+          "m_PathID": "8709571290368341138"
+        },
+        "m_Name": "",
+        "_modes": [
+          {
+            "m_FileID": 0,
+            "m_PathID": "8586248165343953339"
+          }
+        ],
+        "_commonAbilities": [
+          {
+            "m_FileID": 0,
+            "m_PathID": "2951713486264074683"
+          }
+        ],
+        "_motionMode": 0,
+        "_blockMode": 0,
+        "_isFixedRotation": true,
+        "_buildCondition": {
+          "buildableType": 1,
+          "isTryingOverlapCharacater": false,
+          "needSpecifyDirection": false,
+          "limitByHostAttackRange": false,
+          "limitByHostAbilityRange": false,
+          "canNotBuildInHostAttackRange": false,
+          "abilityName": "",
+          "tileKey": "",
+          "extraBuildConditionArray": {
+            "SerializedState": "null",
+            "SerializedObjectReferences": []
+          },
+          "advancedBuildableMask": 1,
+          "overlapOptions": {
+            "_verifySourceId": false,
+            "_verifySourceIds": [],
+            "_verifySourceProfession": false,
+            "_verifySourceProfessions": 0,
+            "_isAllConditionOR": true,
+            "_overlapPriority": 0,
+            "_changeTargetGraphicColor": false,
+            "_excludeSourceId": false,
+            "_excludeSourceIds": [],
+            "_verifySourceTargetTokenRelationship": false
+          },
+          "excludeNoTargetTile": false,
+          "extraLocateRange": "",
+          "checkManuallyBuildableType": false,
+          "manuallyBuildableType": 0,
+          "_excludeOccupiedByWalkEnemy": false,
+          "allowWalkEnemyInHostRange": false,
+          "_checkUpdateBuildable": false
+        },
+        "_traitAbility": {
+          "m_FileID": 0,
+          "m_PathID": 0
+        },
+        "_sideType": 1,
+        "_category": 4,
+        "_rewriteTileOptions": true,
+        "_rewriteTileHeightTypeOnMode": false,
+        "_rewriteTileHeightTypeOnModeBySelf": false,
+        "_ignoreBlockAnyRoutes": true,
+        "_hideTileOptions": false,
+        "_isInfinity": false,
+        "_withdrawable": true,
+        "_disableUIHub": false
+      },
+      "unityClassId": 114,
+      "serializedType": "builtin:263"
+    },
+    {
+      "object": {
+        "id": "8586248165343953339",
+        "start": 3967744,
+        "size": 204,
+        "typeid": 33,
+        "classid": 114
+      },
+      "fields": {
+        "m_GameObject": {
+          "m_FileID": 0,
+          "m_PathID": "-5143034555521695301"
+        },
+        "m_Enabled": true,
+        "m_Script": {
+          "m_FileID": 1,
+          "m_PathID": "-4460612017216576867"
+        },
+        "m_Name": "",
+        "_combat": {
+          "m_FileID": 0,
+          "m_PathID": 0
+        },
+        "_attack": {
+          "m_FileID": 0,
+          "m_PathID": 0
+        },
+        "_attackTrigger": {
+          "m_FileID": 0,
+          "m_PathID": 0
+        },
+        "_generalAbilities": [],
+        "_tileOptions": {
+          "buildableType": 0,
+          "passableMask": 0,
+          "overrideObstacleLikeMoveCost": true,
+          "advancedBuildMask": 0,
+          "heightType": 0,
+          "forceSetHeightType": false
+        },
+        "_keepCurrentPassableMask": true,
+        "_keepCurrentBuildableType": false,
+        "_rewriteTileHeightType": false,
+        "_rewriteTileHeight": true,
+        "_rewriteHeight": 0.4000000059604645,
+        "_rewriteTileAdvancedBuildMask": false,
+        "_doCategoryChangedOperation": false
+      },
+      "unityClassId": 114,
+      "serializedType": "builtin:263"
+    },
+    {
+      "object": {
+        "id": "2951713486264074683",
+        "start": 2897760,
+        "size": 276,
+        "typeid": 19,
+        "classid": 114
+      },
+      "fields": {
+        "m_GameObject": {
+          "m_FileID": 0,
+          "m_PathID": "110088335223292347"
+        },
+        "m_Enabled": true,
+        "m_Script": {
+          "m_FileID": 1,
+          "m_PathID": "3800760148018415462"
+        },
+        "m_Name": "",
+        "_selector": {
+          "m_FileID": 0,
+          "m_PathID": 0
+        },
+        "_metadata": {
+          "namedAsAlias": "",
+          "blackboardPrefix": ""
+        },
+        "_interruptAbilityOnDetach": false,
+        "_attachPassiveBuffsOnDummy": true,
+        "_ignoreIfOwnerDead": false,
+        "_forceAsDmgOrHealAbility": false,
+        "_buffs": [
+          {
+            "attributes": {
+              "abnormalFlags": [],
+              "abnormalImmunes": [],
+              "abnormalAntis": [],
+              "abnormalCombos": [],
+              "abnormalComboImmunes": [],
+              "attributeModifiers": []
+            },
+            "buffKey": "trap_crate_log",
+            "loadFromDB": false,
+            "isDurableBuff": false,
+            "isDamageMissable": false,
+            "isSilenceable": false,
+            "isStunnable": false,
+            "isFreezable": false,
+            "isLevitatable": false,
+            "isGroundBoundable": false,
+            "statusResistable": true,
+            "templateKey": "log_killed",
+            "disableOverride": false,
+            "overrideKey": "",
+            "overrideType": 0,
+            "maxStackCnt": 1,
+            "refreshRemainingTimeWhenStackMax": false,
+            "clearAllStackCntWhenTimeUp": false,
+            "maxValidStackCnt": -1,
+            "independentCharacterSource": false,
+            "overrideEffectKey": "",
+            "overrideOnEventPriority": false,
+            "onEventPriority": 0,
+            "audioSignal": "",
+            "lifeTimeType": true,
+            "takeSnapshotWhenExtend": false,
+            "durationKey": "",
+            "remainingTimeKey": "",
+            "lifeTime": 0.0,
+            "triggerLifeType": false,
+            "triggerCnt": 0,
+            "triggerInterval": -1.0,
+            "waitFirstTriggerInterval": true,
+            "firstTriggerInterval": -1.0,
+            "priority": -1,
+            "priorityBBKeys": [],
+            "stripBlackboardParamsWithBuffKey": false,
+            "blackboard": [],
+            "enableInitDirectionFromSource": false
+          }
+        ]
+      },
+      "unityClassId": 114,
+      "serializedType": "builtin:263"
+    }
+  ]
+}

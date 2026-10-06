@@ -2,11 +2,17 @@
 // Every token of data/tokens.json and every device/terrain kind runs in a real battle through the harness.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { makeBattle, chessRec, enemyRec, checkInvariants } from '../helpers/battleHarness.js';
 import { hasGeneratedData, getDefaultSource } from '../../server/sim/simdata.js';
 import { genericKit } from '../../server/sim/content/generic.js';
 import { spawnYanyou, spawnMapChar, TOKEN_IDS, wolfShadows, tileFree, findSummonTile, summonToken } from '../../server/sim/content/tokens.js';
 import { startColdWind, kjeragColdWind, activateTurrets, terrainAt, deviceOverridesOf } from '../../server/sim/content/devices.js';
+import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
+import { createBattlefieldRuntime } from '../../dist/core/tactical/battlefield/runtime.js';
+import { NavigationMap } from '../../dist/core/tactical/navigation/map.js';
+import { loadMovementScenario } from '../../dist/data/arknights/movement-scenario.js';
+import { resolvePredefinedSkillBlackboard } from '../../dist/data/arknights/skill.js';
 
 const REAL = { skip: !hasGeneratedData() };
 const ds = getDefaultSource();
@@ -20,6 +26,27 @@ const guard = (o = {}) => chessRec({ id: 'test_guard', profession: 'WARRIOR', sk
 const bare = () => ({ skill: null, talents: [] });
 const genericNoSkill = () => ({ skill: null, talents: [], generic: true });
 const tokDef = (id, owner) => ds.getToken(id, owner);
+
+function arknightsFixture(name) {
+  return JSON.parse(readFileSync(new URL(`../fixtures/arknights/${name}.json`, import.meta.url), 'utf8'));
+}
+
+const movementCatalog = {
+  character: (key) => arknightsFixture(`character_${key}`),
+  skill: (key) => arknightsFixture(`skill_${key}`),
+  prefab: (key) => arknightsFixture(`prefab_${key}`),
+  enemy: (key) => arknightsFixture(key === 'enemy_1000_gopro_2' ? 'enemy_1000_gopro' : key),
+};
+
+function predefinedMovementScenario(rawLevel) {
+  return loadMovementScenario(rawLevel, {
+    actions: [{ waveIndex: 0, fragmentIndex: 0, actionIndex: 0 }],
+    branches: [],
+    predefines: rawLevel.predefines.tokenInsts.flatMap((instance, index) =>
+      ['trap_1105_accrate', 'trap_098_mire', 'trap_042_tidectrl'].includes(instance.inst.characterKey)
+        ? [{ source: 'predefines', collection: 'tokenInsts', index }] : []),
+  }, movementCatalog, 123);
+}
 
 function spawnOn(h, owner, tokenId, r, c, opts = {}) {
   const t = h.b.spawnToken(owner, tokenId, r, c, opts);
@@ -1164,4 +1191,241 @@ test('“双眼皮” off-field position (act2 m01 row 8): the turret takes a vo
   h.run(5);
   assert.ok(h.enemy('enemy_dummy').hp < 1e7, 'still shoots its data range (the gate)');
   checkInvariants(h.b);
+});
+
+test('core act1 m01 initializes all 12 raw crates without changing passage or FLY navigation, and keeps them after schedule completion', () => {
+  const rawLevel = arknightsFixture('level_act1autochess_m01');
+  const scenario = predefinedMovementScenario(rawLevel);
+  const runtime = new BattleRuntime(scenario.spec);
+  const baseline = createBattlefieldRuntime({ map: scenario.spec.map }).navigationMaps;
+  const initial = runtime.snapshot();
+  const crates = rawLevel.predefines.tokenInsts.filter(instance => instance.inst.characterKey === 'trap_1105_accrate');
+  assert.equal(crates.length, 12);
+  assert.equal(initial.units.length, 12);
+  assert.equal(initial.effects.length, 12);
+  assert.equal(initial.predefinedPresence.length, 12);
+  assert.deepEqual(initial.mechanisms, []);
+  assert.deepEqual(runtime.navigationMaps.FLY, baseline.FLY);
+  assert.deepEqual(runtime.navigationMaps.WALK.cells.map(cell => cell.passable), baseline.WALK.cells.map(cell => cell.passable));
+  for (const instance of crates) {
+    const [definitionId] = runtime.predefinedIdsForAlias(instance.alias);
+    const binding = initial.predefinedPresence.find(binding => binding.definitionId === definitionId);
+    const unit = initial.units.find(unit => unit.id === binding.source.unitId);
+    assert.equal(unit.definition.id, 'trap_1105_accrate');
+    assert.equal(unit.vitality.hp, 100);
+    assert.deepEqual(unit.position, [instance.position.col, instance.position.row]);
+    const cell = NavigationMap.get(runtime.navigationMaps.WALK, [instance.position.row, instance.position.col]);
+    assert.equal(cell.moveCost, 1000);
+    assert.deepEqual(cell.departures, NavigationMap.get(baseline.WALK, [instance.position.row, instance.position.col]).departures);
+    const [effect] = initial.effects.filter(effect => effect.source.type === 'UNIT' && effect.source.unitId === unit.id);
+    assert.equal(effect.region.type, 'FOLLOW_UNIT');
+    assert.equal(effect.region.unitId, unit.id);
+  }
+  while (runtime.result === null) runtime.step();
+  assert.equal(runtime.result.reason, 'SCHEDULE_COMPLETED');
+  assert.equal(runtime.result.spawnedCount, 1);
+  assert.equal(runtime.result.completedRouteCount, 1);
+  assert.equal(runtime.result.unspawnedCount, 0);
+  assert.deepEqual(runtime.result.remainingUnitIds, initial.units.map(unit => unit.id));
+  assert.deepEqual(runtime.snapshot().units, initial.units);
+  assert.deepEqual(runtime.snapshot().effects, initial.effects);
+});
+
+test('core act1 m02 keeps hidden crate recipes out of the battlefield and applies appearance/removal with fresh identities', () => {
+  const scenario = predefinedMovementScenario(arknightsFixture('level_act1autochess_m02'));
+  const runtime = new BattleRuntime(scenario.spec);
+  assert.equal(scenario.spec.predefines.length, 16);
+  assert.ok(scenario.spec.predefines.every(definition => !definition.initiallyPresent));
+  assert.deepEqual(runtime.snapshot().units, []);
+  assert.deepEqual(runtime.snapshot().effects, []);
+  assert.deepEqual(runtime.snapshot().predefinedPresence, []);
+  const [definitionId] = runtime.predefinedIdsForAlias('trap_1105_accrate#001');
+  const originalMaps = runtime.navigationMaps;
+  const originalCell = NavigationMap.get(originalMaps.WALK, [12, 4]);
+  runtime.step([{ type: 'APPEAR_PREDEFINED', definitionId }]);
+  const appeared = runtime.snapshot();
+  const [unit] = appeared.units;
+  const [effect] = appeared.effects;
+  assert.deepEqual(unit.position, [4, 12]);
+  assert.equal(unit.id, 0);
+  assert.deepEqual(appeared.predefinedPresence, [{ definitionId, source: { type: 'UNIT', unitId: unit.id } }]);
+  assert.deepEqual(effect.source, { type: 'UNIT', unitId: unit.id });
+  assert.equal(effect.region.unitId, unit.id);
+  assert.equal(NavigationMap.get(runtime.navigationMaps.WALK, [12, 4]).moveCost, 1000);
+  assert.equal(NavigationMap.get(runtime.navigationMaps.WALK, [12, 4]).passable, originalCell.passable);
+  assert.equal(runtime.navigationMaps.WALK.revision, originalMaps.WALK.revision + 1);
+  assert.strictEqual(runtime.navigationMaps.FLY, originalMaps.FLY);
+  const appearedMaps = runtime.navigationMaps;
+  runtime.step([{ type: 'APPEAR_PREDEFINED', definitionId }]);
+  assert.deepEqual(runtime.snapshot().units, appeared.units);
+  assert.deepEqual(runtime.snapshot().execution, appeared.execution);
+  assert.strictEqual(runtime.navigationMaps, appearedMaps);
+  const external = runtime.snapshot();
+  external.units[0].vitality.hp = 0;
+  external.effects[0].active = false;
+  external.predefinedPresence[0].source.unitId = 99;
+  assert.deepEqual(runtime.snapshot().units, appeared.units);
+  assert.deepEqual(runtime.snapshot().effects, appeared.effects);
+  assert.deepEqual(runtime.snapshot().predefinedPresence, appeared.predefinedPresence);
+  const removed = runtime.step([{ type: 'REMOVE_PREDEFINED', definitionId, reason: 'SCRIPT' }]);
+  assert.deepEqual(removed.events, [{ type: 'UNIT_REMOVED', unitId: unit.id, reason: 'SCRIPT', tick: 2 }]);
+  assert.deepEqual(runtime.snapshot().units, []);
+  assert.deepEqual(runtime.snapshot().effects, []);
+  assert.deepEqual(runtime.snapshot().predefinedPresence, []);
+  assert.deepEqual(NavigationMap.get(runtime.navigationMaps.WALK, [12, 4]), originalCell);
+  assert.equal(runtime.navigationMaps.WALK.revision, appearedMaps.WALK.revision + 1);
+  assert.strictEqual(runtime.navigationMaps.FLY, originalMaps.FLY);
+  const removedMaps = runtime.navigationMaps;
+  assert.deepEqual(runtime.step([{ type: 'REMOVE_PREDEFINED', definitionId, reason: 'SCRIPT' }]).events, []);
+  assert.strictEqual(runtime.navigationMaps, removedMaps);
+  runtime.step([{ type: 'APPEAR_PREDEFINED', definitionId }]);
+  assert.equal(runtime.snapshot().units[0].id, unit.id + 1);
+  assert.equal(runtime.snapshot().effects[0].id, effect.id + 1);
+  assert.deepEqual(runtime.snapshot().predefinedPresence[0].source, { type: 'UNIT', unitId: unit.id + 1 });
+});
+
+test('core predefined aliases can name two real crate recipes at different positions without merging their instances', () => {
+  const rawLevel = arknightsFixture('level_act1autochess_m02');
+  const crates = rawLevel.predefines.tokenInsts.filter(instance => instance.inst.characterKey === 'trap_1105_accrate');
+  const duplicate = structuredClone(crates[0]);
+  duplicate.position = structuredClone(crates[1].position);
+  rawLevel.predefines.tokenInsts.push(duplicate);
+  const runtime = new BattleRuntime(predefinedMovementScenario(rawLevel).spec);
+  const definitionIds = runtime.predefinedIdsForAlias(crates[0].alias);
+  assert.equal(definitionIds.length, 2);
+  assert.notEqual(definitionIds[0], definitionIds[1]);
+  runtime.step(definitionIds.map(definitionId => ({ type: 'APPEAR_PREDEFINED', definitionId })));
+  assert.deepEqual(runtime.snapshot().units.map(unit => unit.id), [0, 1]);
+  assert.deepEqual(runtime.snapshot().units.map(unit => unit.position), [[4, 12], [5, 12]]);
+  assert.deepEqual(runtime.snapshot().predefinedPresence.map(binding => binding.definitionId), definitionIds);
+  runtime.step([{ type: 'REMOVE_PREDEFINED', definitionId: definitionIds[0], reason: 'SCRIPT' }]);
+  assert.deepEqual(runtime.snapshot().units.map(unit => unit.id), [1]);
+  assert.equal(runtime.snapshot().effects.length, 1);
+  assert.equal(NavigationMap.get(runtime.navigationMaps.WALK, [12, 4]).moveCost, 1);
+  assert.equal(NavigationMap.get(runtime.navigationMaps.WALK, [12, 5]).moveCost, 1000);
+});
+
+test('core act2 mire and tide controller prefabs initialize nonspatial mechanisms and supply the raw terrain parameters', () => {
+  const cases = [
+    ['level_act2autochess_m02', 'trap_098_mire', 'MIRE', {
+      stackIntervalTicks: 90, attackSpeedPerStack: -0.05, moveSpeedRatioPerStack: -0.05, maxStacks: 10,
+    }],
+    ['level_act2autochess_m04', 'trap_042_tidectrl', 'DEEPSEA', {
+      damagePerTick: 40 / 30, attackSpeedModifier: -0.6, moveSpeedMultiplier: 0.6,
+    }],
+  ];
+  for (const [fixture, controllerKey, terrainType, params] of cases) {
+    const scenario = predefinedMovementScenario(arknightsFixture(fixture));
+    const runtime = new BattleRuntime(scenario.spec);
+    const snapshot = runtime.snapshot();
+    assert.equal(snapshot.mechanisms.length, 1);
+    const [mechanism] = snapshot.mechanisms;
+    assert.equal(mechanism.definition.id, controllerKey);
+    assert.equal(mechanism.active, true);
+    assert.ok(!('position' in mechanism));
+    assert.ok(!('hp' in mechanism));
+    assert.ok(!('vitality' in mechanism));
+    assert.equal(snapshot.units.length, 4);
+    assert.ok(snapshot.units.every(unit => unit.definition.id === 'trap_1105_accrate'));
+    assert.equal(snapshot.effects.length, 4);
+    const controller = scenario.spec.predefines.find(definition => definition.creation.definition.id === controllerKey);
+    assert.equal(controller.creation.type, 'MECHANISM');
+    assert.ok(!('position' in controller.creation));
+    assert.deepEqual(snapshot.predefinedPresence.find(binding => binding.definitionId === controller.id).source,
+      { type: 'MECHANISM', mechanismId: mechanism.id });
+    const affected = scenario.spec.map.tiles.filter(tile => tile.mechanism?.type === terrainType);
+    assert.equal(affected.length, 12);
+    for (const tile of affected) assert.deepEqual(tile.mechanism.params, params);
+    while (runtime.result === null) runtime.step();
+    assert.equal(runtime.result.reason, 'SCHEDULE_COMPLETED');
+    assert.equal(runtime.result.remainingUnitIds.length, 4);
+    assert.deepEqual(runtime.snapshot().mechanisms, snapshot.mechanisms);
+  }
+});
+
+test('core controller skill selection clamps the raw level and replaces blackboard keys regardless of case', () => {
+  const rawLevel = arknightsFixture('level_act2autochess_m04');
+  const controller = rawLevel.predefines.tokenInsts.find(instance => instance.inst.characterKey === 'trap_042_tidectrl');
+  controller.mainSkillLvl = 99;
+  controller.overrideSkillBlackboard = [
+    { key: 'SEA_DROWN[ENEMY].DAMAGE', value: 90, valueStr: null },
+    { key: 'Sea_Drown[Enemy].Attack_Speed', value: -0.25, valueStr: null },
+    { key: 'sea_drown[enemy].move_speed', value: 0.75, valueStr: null },
+  ];
+  const scenario = predefinedMovementScenario(rawLevel);
+  const parsed = scenario.level.predefines.tokenInsts.find(instance => instance.inst.characterKey === 'trap_042_tidectrl');
+  const character = arknightsFixture('character_trap_042_tidectrl');
+  const skill = arknightsFixture('skill_sktok_tidectrl_3');
+  const resolved = resolvePredefinedSkillBlackboard(parsed, character, skill);
+  assert.equal(resolved.skillId, 'sktok_tidectrl_3');
+  assert.equal(resolved.prefabKey, 'sktok_tidectrl_3');
+  assert.equal(resolved.level, 2);
+  assert.equal(resolved.blackboard.length, 4);
+  assert.equal(new Set(resolved.blackboard.map(entry => entry.key.toLowerCase())).size, 4);
+  assert.deepEqual(resolved.blackboard.find(entry => entry.key.toLowerCase() === 'sea_drown[enemy].damage'),
+    { key: 'SEA_DROWN[ENEMY].DAMAGE', value: 90, valueStr: null });
+  assert.equal(resolvePredefinedSkillBlackboard({ ...parsed, mainSkillLvl: 0 }, character, skill).level, 1);
+  for (const tile of scenario.spec.map.tiles.filter(tile => tile.mechanism?.type === 'DEEPSEA')) {
+    assert.deepEqual(tile.mechanism.params, { damagePerTick: 3, attackSpeedModifier: -0.25, moveSpeedMultiplier: 0.75 });
+  }
+  const mireLevel = arknightsFixture('level_act2autochess_m02');
+  const mire = mireLevel.predefines.tokenInsts.find(instance => instance.inst.characterKey === 'trap_098_mire');
+  mire.overrideSkillBlackboard = [
+    { key: 'VALUE', value: 1.5, valueStr: null },
+    { key: 'MAX_STACK_CNT', value: 3, valueStr: null },
+  ];
+  const mireScenario = predefinedMovementScenario(mireLevel);
+  for (const tile of mireScenario.spec.map.tiles.filter(tile => tile.mechanism?.type === 'MIRE')) {
+    assert.deepEqual(tile.mechanism.params, {
+      stackIntervalTicks: 45, maxStacks: 3, attackSpeedPerStack: -0.05, moveSpeedRatioPerStack: -0.05,
+    });
+  }
+});
+
+test('core movement scenario reports omitted definitions and movement-external blackboards, while rejecting unknown tile rules', () => {
+  const rawLevel = arknightsFixture('level_act1autochess_m01');
+  const scenario = predefinedMovementScenario(rawLevel);
+  assert.equal(scenario.unappliedLevelBlackboard.length, 32);
+  assert.deepEqual(scenario.unappliedLevelBlackboard, rawLevel.options.configBlackBoard);
+  assert.equal(scenario.unappliedTileBlackboard.length, 37);
+  assert.ok(scenario.unappliedTileBlackboard.every(({ context, entry }) =>
+    context.position.length === 2 && ['isValidHand', 'previewNotAlloed'].includes(entry.key)));
+  assert.equal(scenario.omittedPredefines.length, 13);
+  assert.ok(scenario.omittedPredefines.includes('predefines.tokenInsts[0]'));
+  assert.deepEqual(scenario.omittedActions, []);
+  const omitted = loadMovementScenario(rawLevel, { actions: [], branches: [], predefines: [] }, movementCatalog, 123);
+  assert.deepEqual(omitted.omittedActions, ['waves[0].fragments[0].actions[0]']);
+  assert.deepEqual(scenario.inactiveBranches, Object.keys(rawLevel.branches ?? {}));
+  const invalid = structuredClone(rawLevel);
+  const tile = invalid.mapData.tiles.find(tile => tile.blackboard?.some(entry => entry.key === 'isValidHand'));
+  const entry = tile.blackboard.find(entry => entry.key === 'isValidHand');
+  entry.key = 'future_tile_rule';
+  assert.throws(() => predefinedMovementScenario(invalid), /unconsumed blackboard future_tile_rule/);
+  entry.key = 'isValidHand';
+  entry.value = 2;
+  assert.throws(() => predefinedMovementScenario(invalid), /invalid movement-external tile flag isValidHand/);
+});
+
+test('core failed command batches preserve hidden recipes, battlefield projections and execution counters for retry', () => {
+  const scenario = predefinedMovementScenario(arknightsFixture('level_act1autochess_m02'));
+  const runtime = new BattleRuntime(scenario.spec);
+  const [definitionId] = runtime.predefinedIdsForAlias('trap_1105_accrate#001');
+  const before = runtime.snapshot();
+  const maps = runtime.navigationMaps;
+  assert.throws(() => runtime.step([
+    { type: 'APPEAR_PREDEFINED', definitionId },
+    { type: 'APPEAR_PREDEFINED', definitionId: 9999 },
+  ]), /unknown predefined definition/);
+  assert.deepEqual(runtime.snapshot(), before);
+  assert.strictEqual(runtime.navigationMaps, maps);
+  assert.throws(() => runtime.step([
+    { type: 'APPEAR_PREDEFINED', definitionId },
+    { type: 'TRIGGER_BRANCH', branchId: 'missing', isLoop: false },
+  ]), /unknown scheduler branch/);
+  assert.deepEqual(runtime.snapshot(), before);
+  assert.strictEqual(runtime.navigationMaps, maps);
+  runtime.step([{ type: 'APPEAR_PREDEFINED', definitionId }]);
+  assert.equal(runtime.snapshot().tickIndex, 1);
+  assert.equal(runtime.snapshot().units[0].id, 0);
+  assert.equal(runtime.snapshot().effects[0].id, 0);
 });

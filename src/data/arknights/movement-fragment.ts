@@ -1,12 +1,11 @@
 import type { Seed } from "../../core/common/rng.js";
 import { createBattleSpec } from "../../core/tactical/battle/spec.js";
-import type { BattleSpec, ScheduledEnemySpawn } from "../../core/tactical/battle/spec.js";
+import type { BattleSpec } from "../../core/tactical/battle/spec.js";
+import type { ScheduledEnemySpawn } from "../../core/tactical/battle/spawning.js";
 import { createRouteTiming } from "../../core/tactical/route/state.js";
-import type { EnemyDefinition } from "../../core/tactical/unit/enemy.js";
-import { createSteeringParameters } from "../../core/tactical/unit/locomotion/steering.js";
-import { TICKS_PER_SECOND } from "../../core/tactical/tick.js";
-import { perSecondToPerTick, secondsToTicks } from "./tick.js";
-import type { ArknightsEnemyDbRef, ArknightsLevelDefinition, ArknightsSpawnAction } from "./level.js";
+import type { ArknightsLevelDefinition } from "./level.js";
+import { resolveActionSpawn, type ArknightsEnemyResolver } from "./schedule.js";
+import { secondsToTicks } from "./tick.js";
 
 export interface ArknightsFragmentSelection {
     readonly waveIndex: number;
@@ -14,16 +13,9 @@ export interface ArknightsFragmentSelection {
     readonly actionIndices: readonly number[];
 }
 
-export interface ArknightsSteeringParameters {
-    readonly steeringFactorPerSecond: number;
-    readonly maxSteeringForcePerSecondSquared: number;
-}
-
 export interface ArknightsFragmentOptions {
-    readonly steeringParameters: ArknightsSteeringParameters;
-    readonly alwaysCheckCurrentPoint: boolean;
     readonly rngState: Seed;
-    readonly resolveEnemy: (reference: ArknightsEnemyDbRef) => EnemyDefinition;
+    readonly resolveEnemy: ArknightsEnemyResolver;
 }
 
 export interface ArknightsMovementFragment {
@@ -31,15 +23,6 @@ export interface ArknightsMovementFragment {
     readonly selection: ArknightsFragmentSelection;
     readonly omittedActions: readonly string[];
     readonly inactiveBranches: readonly string[];
-}
-
-function requireScheduledAction(action: ArknightsSpawnAction): void {
-    if (!action.managedByScheduler || action.blockFragment || action.dontBlockWave || action.forceBlockWaveInBranch
-        || action.isUnharmfulAndAlwaysCountAsKilled || action.hiddenGroup !== null
-        || action.randomSpawnGroupKey !== null || action.randomSpawnGroupPackKey !== null
-        || action.randomType !== "ALWAYS" || action.refreshType !== "ALWAYS" || action.weight !== 0) {
-        throw new RangeError("fragment requires unconditional scheduled SPAWN actions without blocking rules");
-    }
 }
 
 export function compileLevelMovementFragment(
@@ -76,9 +59,8 @@ export function compileLevelMovementFragment(
     const spawns: ScheduledEnemySpawn[] = [];
     const omittedActions: string[] = [];
     for (let waveIndex = 0; waveIndex < level.waves.length; waveIndex++) {
-        const currentWave = level.waves[waveIndex]!;
-        for (let fragmentIndex = 0; fragmentIndex < currentWave.fragments.length; fragmentIndex++) {
-            const currentFragment = currentWave.fragments[fragmentIndex]!;
+        for (let fragmentIndex = 0; fragmentIndex < level.waves[waveIndex]!.fragments.length; fragmentIndex++) {
+            const currentFragment = level.waves[waveIndex]!.fragments[fragmentIndex]!;
             for (let actionIndex = 0; actionIndex < currentFragment.actions.length; actionIndex++) {
                 const path = `waves[${waveIndex}].fragments[${fragmentIndex}].actions[${actionIndex}]`;
                 if (waveIndex !== 0 || fragmentIndex !== 0 || !selected.has(actionIndex)) {
@@ -86,18 +68,15 @@ export function compileLevelMovementFragment(
                     continue;
                 }
                 const action = currentFragment.actions[actionIndex]!;
-                requireScheduledAction(action);
-                const reference = level.enemyDbRefs.find(reference => reference.id === action.key)!;
-                if (reference.overwrittenData !== null) throw new RangeError(`${path} requires enemy override resolution`);
-                const definition = options.resolveEnemy(reference);
-                if (definition.id !== action.key) throw new RangeError(`${path} enemy definition does not match its reference`);
+                if (!action.managedByScheduler || action.blockFragment || action.dontBlockWave || action.forceBlockWaveInBranch) {
+                    throw new RangeError("fragment requires unconditional scheduled SPAWN actions without blocking rules");
+                }
+                const spawn = resolveActionSpawn(level, action, level.routes[action.routeIndex]!, options.resolveEnemy);
                 for (let index = 0; index < action.count; index++) {
                     spawns.push({
+                        ...spawn,
                         tick: secondsToTicks(fragmentStartedAtSeconds + action.preDelay + index * action.interval),
-                        definition,
-                        route: level.routes[action.routeIndex]!,
                         timing,
-                        alwaysCheckCurrentPoint: options.alwaysCheckCurrentPoint,
                     });
                 }
             }
@@ -106,15 +85,12 @@ export function compileLevelMovementFragment(
     return Object.freeze({
         spec: createBattleSpec({
             map: level.map,
-            spawns,
+            schedule: { type: "TIMELINE", spawns },
+            predefines: [],
             initialMechanisms: [],
             initialEffects: [],
             maxTicks: secondsToTicks(level.options.maxPlayTime),
             moveMultiplier: level.options.moveMultiplier,
-            steeringParameters: createSteeringParameters({
-                steeringFactor: perSecondToPerTick(options.steeringParameters.steeringFactorPerSecond),
-                maxSteeringForce: options.steeringParameters.maxSteeringForcePerSecondSquared / TICKS_PER_SECOND ** 2,
-            }),
             rngState: options.rngState,
             nextUnitId: 0,
             nextNavigationRequestId: 0,

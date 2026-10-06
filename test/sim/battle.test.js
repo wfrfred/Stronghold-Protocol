@@ -14,11 +14,17 @@ import { createNavigationEffectDefinition, createNavigationSpatialEffect, create
 import { createRng } from '../../dist/core/common/rng.js';
 import { createBattleSpec } from '../../dist/core/tactical/battle/spec.js';
 import { BattleRuntime, simulateBattle } from '../../dist/core/tactical/battle/runtime.js';
+import { advanceSpawnSchedule, cloneScheduleState, createSpawnScheduleDefinition, createSpawnScheduleState, getSpawnedCount, getUnspawnedCount, isSpawnScheduleCompleted, recordScheduleSpawns, resolveScheduleUnits } from '../../dist/core/tactical/battle/schedule.js';
+import { createSteeringParameters } from '../../dist/core/tactical/unit/locomotion/steering.js';
 import { TICKS_PER_SECOND } from '../../dist/core/tactical/tick.js';
 import { secondsToTicks } from '../../dist/data/arknights/tick.js';
 import { parseLevelDefinition } from '../../dist/data/arknights/level.js';
-import { parseEnemyMovementDefinition } from '../../dist/data/arknights/enemy.js';
+import { parseEnemyMovementContent, parseEnemyMovementDefinition } from '../../dist/data/arknights/enemy.js';
+import { parseEnemyMovementPrefab, parsePredefinedPrefab } from '../../dist/data/arknights/prefab.js';
+import { parsePredefinedInstanceDefinition } from '../../dist/data/arknights/predefined.js';
+import { compileSpawnSchedule } from '../../dist/data/arknights/schedule.js';
 import { compileLevelMovementFragment } from '../../dist/data/arknights/movement-fragment.js';
+import { loadMovementScenario } from '../../dist/data/arknights/movement-scenario.js';
 
 const approx = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
 const guard = (o = {}) => chessRec({ id: 't_guard', profession: 'WARRIOR', stats: { atk: 300, blockCnt: 2 }, skill: null, ...o });
@@ -28,17 +34,63 @@ function arknightsFixture(name) {
   return JSON.parse(readFileSync(new URL(`../fixtures/arknights/${name}.json`, import.meta.url), 'utf8'));
 }
 
+function slimeMovementProfile(steeringParameters = createSteeringParameters({ steeringFactor: 10 / 30, maxSteeringForce: 100 / 900 })) {
+  return { ...parseEnemyMovementPrefab(arknightsFixture('prefab_enemy_1007_slime')), steeringParameters };
+}
+
 function slimeMovementFragment(rawLevel = arknightsFixture('level_act1autochess_01'), actionIndices = [0],
-  steeringParameters = { steeringFactorPerSecond: 10, maxSteeringForcePerSecondSquared: 100 }) {
+  steeringParameters = createSteeringParameters({ steeringFactor: 10 / 30, maxSteeringForce: 100 / 900 })) {
   const rawEnemy = arknightsFixture('enemy_1007_slime');
+  const profile = slimeMovementProfile(steeringParameters);
   const level = parseLevelDefinition(rawLevel);
   const fragment = compileLevelMovementFragment(level, { waveIndex: 0, fragmentIndex: 0, actionIndices }, {
-    steeringParameters,
-    alwaysCheckCurrentPoint: false,
     rngState: 123,
-    resolveEnemy: reference => parseEnemyMovementDefinition(rawEnemy, reference.level),
+    resolveEnemy: reference => parseEnemyMovementContent(rawEnemy, reference.level, profile, reference.overwrittenData),
   });
   return { rawLevel, level, ...fragment };
+}
+
+function withTimelineSpawns(spec, spawns) {
+  return { ...spec, schedule: { type: 'TIMELINE', spawns } };
+}
+
+function nativeSpawn(overrides = {}) {
+  return { ...arknightsFixture('level_act1autochess_01').waves[0].fragments[0].actions[0],
+    count: 1, preDelay: 0, interval: 0, ...overrides };
+}
+
+function nativeFragment(actions, preDelay = 0) {
+  return { preDelay, actions };
+}
+
+function nativeWave(fragments, overrides = {}) {
+  return { preDelay: 0, postDelay: 0, maxTimeWaitingForNextWave: -1, advancedWaveTag: null, fragments, ...overrides };
+}
+
+function syntheticSpawnSchedule(waves, branches = {}, ignoredKeys = []) {
+  const raw = arknightsFixture('level_act1autochess_01');
+  const rawEnemy = arknightsFixture('enemy_1007_slime');
+  const profile = slimeMovementProfile();
+  raw.waves = waves;
+  raw.branches = branches;
+  const actions = waves.flatMap(wave => wave.fragments.flatMap(fragment => fragment.actions));
+  const branchActions = Object.values(branches).flatMap(branch => branch.phases.flatMap(phase => phase.actions));
+  raw.enemyDbRefs = [...new Set([...actions, ...branchActions].map(action => action.key))].map(id => ({
+    useDb: true, id, level: 0,
+    overwrittenData: ignoredKeys.includes(id) ? { attributes: {}, notCountInTotal: { m_defined: true, m_value: true } } : null,
+  }));
+  const level = parseLevelDefinition(raw);
+  const compilation = compileSpawnSchedule(level, {
+    actions: waves.flatMap((wave, waveIndex) => wave.fragments.flatMap((fragment, fragmentIndex) =>
+      fragment.actions.map((_, actionIndex) => ({ waveIndex, fragmentIndex, actionIndex })))),
+    branches: Object.keys(branches),
+  }, reference => parseEnemyMovementContent({ ...rawEnemy, Key: reference.id }, reference.level, profile, reference.overwrittenData));
+  return { level, schedule: createSpawnScheduleDefinition(compilation.schedule) };
+}
+
+function dispatchSchedule(schedule, state, tick, unitIds = [], triggers = []) {
+  const advanced = advanceSpawnSchedule(schedule, state, { tick, triggers });
+  return { spawns: advanced.spawns, state: recordScheduleSpawns(advanced.state, advanced.spawns, unitIds) };
 }
 
 test('initial deployment order: top→bottom then left→right; right boss side right→left', () => {
@@ -570,14 +622,14 @@ test('core raw 01 slime fragment preserves map, route flags and stats; spawns at
   assert.equal(spec.map, level.map);
   assert.equal(spec.map.rows, rawLevel.mapData.map.length);
   assert.equal(spec.map.columns, rawLevel.mapData.map[0].length);
-  assert.deepEqual(spec.spawns.map(spawn => spawn.tick), [90, 240]);
-  assert.equal(spec.spawns[0].route, level.routes[0]);
-  assert.equal(spec.spawns[1].route, level.routes[0]);
-  assert.equal(spec.spawns[0].route.visitEveryCheckPoint, false);
-  assert.equal(spec.spawns[0].alwaysCheckCurrentPoint, false);
-  assert.deepEqual(spec.spawns[0].route.checkpoints, []);
-  assert.equal(spec.spawns[0].definition.vitality.maxHp, 550);
-  assert.equal(spec.spawns[0].definition.locomotion.moveSpeedPerTick, 1 / 30);
+  assert.deepEqual(spec.schedule.spawns.map(spawn => spawn.tick), [90, 240]);
+  assert.equal(spec.schedule.spawns[0].route, level.routes[0]);
+  assert.equal(spec.schedule.spawns[1].route, level.routes[0]);
+  assert.equal(spec.schedule.spawns[0].route.visitEveryCheckPoint, false);
+  assert.equal(spec.schedule.spawns[0].alwaysCheckCurrentPoint, false);
+  assert.deepEqual(spec.schedule.spawns[0].route.checkpoints, []);
+  assert.equal(spec.schedule.spawns[0].definition.vitality.maxHp, 550);
+  assert.equal(spec.schedule.spawns[0].definition.locomotion.moveSpeedPerTick, 1 / 30);
   assert.equal(spec.moveMultiplier, 0.5);
   assert.equal(spec.maxTicks, 1350);
   assert.deepEqual(omittedActions, ['waves[0].fragments[0].actions[1]', 'waves[0].fragments[0].actions[2]']);
@@ -592,8 +644,10 @@ test('core raw 01 slime fragment preserves map, route flags and stats; spawns at
   expectedRng.next();
   expectedRng.next();
   const first = runtime.snapshot();
-  assert.deepEqual(first.spawning, { cursor: 1 });
-  assert.deepEqual(first.execution, { rngState: expectedRng.state(), nextUnitId: 1, nextNavigationRequestId: 1 });
+  assert.equal(first.spawning.cursor, 1);
+  assert.equal(first.spawning.spawnedCount, 1);
+  assert.deepEqual(first.spawning.managedFinalUnitIds, [0]);
+  assert.deepEqual(first.execution, { rngState: expectedRng.state(), nextUnitId: 1, nextNavigationRequestId: 1, nextMechanismId: 0, nextSpatialEffectId: 0 });
   assert.equal(first.units[0].vitality.hp, 550);
   assert.equal(first.units[0].locomotion.mainRoute.route.progress.move.navigationRequestId, 0);
   assert.deepEqual(first.units[0].locomotion.mainRoute.route.timing, { waveStartedAtTick: 0, fragmentStartedAtTick: 0 });
@@ -607,17 +661,19 @@ test('core raw 01 slime fragment preserves map, route flags and stats; spawns at
   expectedRng.next();
   expectedRng.next();
   const second = runtime.snapshot();
-  assert.deepEqual(second.spawning, { cursor: 2 });
-  assert.deepEqual(second.execution, { rngState: expectedRng.state(), nextUnitId: 2, nextNavigationRequestId: 2 });
+  assert.equal(second.spawning.cursor, 2);
+  assert.equal(second.spawning.spawnedCount, 2);
+  assert.deepEqual(second.spawning.managedFinalUnitIds, [0, 1]);
+  assert.deepEqual(second.execution, { rngState: expectedRng.state(), nextUnitId: 2, nextNavigationRequestId: 2, nextMechanismId: 0, nextSpatialEffectId: 0 });
   assert.deepEqual(second.units.map(unit => unit.locomotion.mainRoute.route.progress.move.navigationRequestId), [0, 1]);
   assert.deepEqual(second.units.map(unit => unit.locomotion.mainRoute.route.timing), [
     { waveStartedAtTick: 0, fragmentStartedAtTick: 0 },
     { waveStartedAtTick: 0, fragmentStartedAtTick: 0 },
   ]);
-  const { spec: forceLimited } = slimeMovementFragment(rawLevel, [0], {
-    steeringFactorPerSecond: 100, maxSteeringForcePerSecondSquared: 0.3,
-  });
-  const forceRuntime = new BattleRuntime({ ...forceLimited, spawns: [{ ...forceLimited.spawns[0], tick: 0 }] });
+  const { spec: forceLimited } = slimeMovementFragment(rawLevel, [0], createSteeringParameters({
+    steeringFactor: 100 / 30, maxSteeringForce: 0.3 / 900,
+  }));
+  const forceRuntime = new BattleRuntime(withTimelineSpawns(forceLimited, [{ ...forceLimited.schedule.spawns[0], tick: 0 }]));
   forceRuntime.step();
   approx(10 - forceRuntime.snapshot().units[0].position[0], 1 / 3000);
 });
@@ -635,7 +691,7 @@ test('core raw 01 movement fragment replays every tick and completes routes with
     events.push(...step.events);
   }
   assert.deepEqual(first.snapshot(), second.snapshot());
-  assert.equal(first.result.reason, 'ROUTES_COMPLETED');
+  assert.equal(first.result.reason, 'SCHEDULE_COMPLETED');
   assert.equal(first.result.spawnedCount, 2);
   assert.equal(first.result.completedRouteCount, 2);
   assert.equal(first.result.unspawnedCount, 0);
@@ -653,10 +709,10 @@ test('core raw 01 movement fragment replays every tick and completes routes with
 
 test('core battle snapshots isolate vitality, locomotion, route progress, navigation and counters', () => {
   const { spec } = slimeMovementFragment();
-  const inputTiming = { ...spec.spawns[0].timing };
-  const isolated = createBattleSpec({ ...spec, spawns: [{ ...spec.spawns[0], timing: inputTiming }] });
+  const inputTiming = { ...spec.schedule.spawns[0].timing };
+  const isolated = createBattleSpec(withTimelineSpawns(spec, [{ ...spec.schedule.spawns[0], timing: inputTiming }]));
   inputTiming.fragmentStartedAtTick = 99;
-  assert.equal(isolated.spawns[0].timing.fragmentStartedAtTick, 0);
+  assert.equal(isolated.schedule.spawns[0].timing.fragmentStartedAtTick, 0);
   const runtime = new BattleRuntime(spec);
   while (runtime.snapshot().tickIndex < 91) runtime.step();
   const before = runtime.snapshot();
@@ -670,6 +726,7 @@ test('core battle snapshots isolate vitality, locomotion, route progress, naviga
   unit.locomotion.mainRoute.navigation.execution.visits.visitedCenters.push([99, 99]);
   unit.locomotion.mainRoute.navigation.execution.activity.cursor = { type: 'GOAL' };
   snapshot.spawning.cursor = 99;
+  snapshot.spawning.managedFinalUnitIds.push(99);
   snapshot.execution.rngState = 99;
   snapshot.execution.nextUnitId = 99;
   snapshot.execution.nextNavigationRequestId = 99;
@@ -718,11 +775,11 @@ test('core fragment binds wave and fragment starts and preserves original action
   actions[1] = { ...actions[0], count: 1, routeIndex: 1 };
   const { level, spec, selection } = slimeMovementFragment(rawLevel, [1, 0]);
   assert.deepEqual(selection.actionIndices, [0, 1]);
-  assert.deepEqual(spec.spawns.map(spawn => spawn.tick), [180, 180, 330]);
-  assert.equal(spec.spawns[0].route, level.routes[0]);
-  assert.equal(spec.spawns[1].route, level.routes[1]);
-  assert.equal(spec.spawns[2].route, level.routes[0]);
-  assert.deepEqual(spec.spawns.map(spawn => spawn.timing), [
+  assert.deepEqual(spec.schedule.spawns.map(spawn => spawn.tick), [180, 180, 330]);
+  assert.equal(spec.schedule.spawns[0].route, level.routes[0]);
+  assert.equal(spec.schedule.spawns[1].route, level.routes[1]);
+  assert.equal(spec.schedule.spawns[2].route, level.routes[0]);
+  assert.deepEqual(spec.schedule.spawns.map(spawn => spawn.timing), [
     { waveStartedAtTick: 0, fragmentStartedAtTick: 90 },
     { waveStartedAtTick: 0, fragmentStartedAtTick: 90 },
     { waveStartedAtTick: 0, fragmentStartedAtTick: 90 },
@@ -745,43 +802,45 @@ test('core fragment binds wave and fragment starts and preserves original action
 
 test('raw enemy movement levels inherit only defined values and reject sparse, unknown and invalid entries', () => {
   const fixture = arknightsFixture('enemy_1007_slime');
-  assert.deepEqual(parseEnemyMovementDefinition(fixture, 0), {
-    id: 'enemy_1007_slime', vitality: { maxHp: 550 }, locomotion: { moveSpeedPerTick: 1 / 30 },
+  const profile = slimeMovementProfile();
+  const parseMovement = (value, level) => parseEnemyMovementDefinition(value, level, profile);
+  assert.deepEqual(parseMovement(fixture, 0), {
+    id: 'enemy_1007_slime', vitality: { maxHp: 550 }, locomotion: { moveSpeedPerTick: 1 / 30, steeringParameters: profile.steeringParameters },
   });
-  assert.deepEqual(parseEnemyMovementDefinition(fixture, 1), {
-    id: 'enemy_1007_slime', vitality: { maxHp: 2050 }, locomotion: { moveSpeedPerTick: 1 / 30 },
+  assert.deepEqual(parseMovement(fixture, 1), {
+    id: 'enemy_1007_slime', vitality: { maxHp: 2050 }, locomotion: { moveSpeedPerTick: 1 / 30, steeringParameters: profile.steeringParameters },
   });
-  assert.deepEqual(parseEnemyMovementDefinition({ ...fixture, Value: [...fixture.Value].reverse() }, 1), parseEnemyMovementDefinition(fixture, 1));
+  assert.deepEqual(parseMovement({ ...fixture, Value: [...fixture.Value].reverse() }, 1), parseMovement(fixture, 1));
   const ignored = structuredClone(fixture);
   ignored.Value[1].enemyData.attributes.moveSpeed.m_value = NaN;
-  assert.equal(parseEnemyMovementDefinition(ignored, 1).locomotion.moveSpeedPerTick, 1 / 30);
+  assert.equal(parseMovement(ignored, 1).locomotion.moveSpeedPerTick, 1 / 30);
   ignored.Value.push({ level: 2, enemyData: { attributes: {
     maxHp: { m_defined: false, m_value: 0 }, moveSpeed: { m_defined: false, m_value: 0 },
   } } });
-  assert.equal(parseEnemyMovementDefinition(ignored, 2).vitality.maxHp, 550);
+  assert.equal(parseMovement(ignored, 2).vitality.maxHp, 550);
   const stationary = structuredClone(fixture);
   stationary.Value[1].enemyData.attributes.moveSpeed = { m_defined: true, m_value: 0 };
-  assert.equal(parseEnemyMovementDefinition(stationary, 1).locomotion.moveSpeedPerTick, 0);
-  assert.throws(() => parseEnemyMovementDefinition(fixture, 2), /unknown enemy level/);
-  assert.throws(() => parseEnemyMovementDefinition({ ...fixture, Value: [...fixture.Value, fixture.Value[0]] }, 0), /duplicate enemy level/);
+  assert.equal(parseMovement(stationary, 1).locomotion.moveSpeedPerTick, 0);
+  assert.throws(() => parseMovement(fixture, 2), /unknown enemy level/);
+  assert.throws(() => parseMovement({ ...fixture, Value: [...fixture.Value, fixture.Value[0]] }, 0), /duplicate enemy level/);
   const sparse = structuredClone(fixture);
   delete sparse.Value[0];
-  assert.throws(() => parseEnemyMovementDefinition(sparse, 1), /dense/);
-  assert.throws(() => parseEnemyMovementDefinition({ ...fixture, Value: [fixture.Value[1]] }, 1), /requires level 0/);
+  assert.throws(() => parseMovement(sparse, 1), /dense/);
+  assert.throws(() => parseMovement({ ...fixture, Value: [fixture.Value[1]] }, 1), /requires level 0/);
   const missing = structuredClone(fixture);
   missing.Value[0].enemyData.attributes.moveSpeed.m_defined = false;
-  assert.throws(() => parseEnemyMovementDefinition(missing, 1), /requires a defined value/);
+  assert.throws(() => parseMovement(missing, 1), /requires a defined value/);
   for (const level of [-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
-    assert.throws(() => parseEnemyMovementDefinition(fixture, level), /enemy level/);
+    assert.throws(() => parseMovement(fixture, level), /enemy level/);
   }
   for (const [name, value] of [['maxHp', 0], ['maxHp', -1], ['maxHp', NaN], ['moveSpeed', -1], ['moveSpeed', Infinity], ['moveSpeed', '1']]) {
     const invalid = structuredClone(fixture);
     invalid.Value[0].enemyData.attributes[name].m_value = value;
-    assert.throws(() => parseEnemyMovementDefinition(invalid, 0), /defined enemy/);
+    assert.throws(() => parseMovement(invalid, 0), /defined enemy/);
   }
   const invalidFlag = structuredClone(fixture);
   invalidFlag.Value[1].enemyData.attributes.moveSpeed.m_defined = 0;
-  assert.throws(() => parseEnemyMovementDefinition(invalidFlag, 1), /m_defined must be boolean/);
+  assert.throws(() => parseMovement(invalidFlag, 1), /m_defined must be boolean/);
 });
 
 test('core fragment projects periodic spawns from absolute source times without accumulating interval rounding', () => {
@@ -792,7 +851,7 @@ test('core fragment projects periodic spawns from absolute source times without 
   action.count = 8;
   const { spec } = slimeMovementFragment(rawLevel);
   const expected = [2, 6, 11, 15, 20, 24, 29, 33];
-  assert.deepEqual(spec.spawns.map(spawn => spawn.tick), expected);
+  assert.deepEqual(spec.schedule.spawns.map(spawn => spawn.tick), expected);
   const runtime = new BattleRuntime({ ...spec, maxTicks: 34 });
   const events = [];
   while (runtime.result === null) events.push(...runtime.step().events);
@@ -817,8 +876,8 @@ test('core battle uses integer tick boundaries for spawning, effect expiry and d
   assert.equal(secondsToTicks(0), 0);
   assert.equal(secondsToTicks(0.15), 5);
   for (const seconds of [NaN, Infinity, Number.MAX_VALUE]) assert.throws(() => secondsToTicks(seconds), RangeError);
-  const boundary = createBattleSpec({ ...spec, maxTicks: secondsToTicks(1.2),
-    spawns: [{ ...spec.spawns[0], tick: secondsToTicks(0.9) }], initialMechanisms: [mechanism], initialEffects: [effect],
+  const boundary = createBattleSpec({ ...withTimelineSpawns(spec, [{ ...spec.schedule.spawns[0], tick: secondsToTicks(0.9) }]),
+    maxTicks: secondsToTicks(1.2), initialMechanisms: [mechanism], initialEffects: [effect],
   });
   const runtime = new BattleRuntime(boundary);
   for (let index = 0; index < 27; index++) assert.deepEqual(runtime.step().events, []);
@@ -847,11 +906,11 @@ test('core battle uses integer tick boundaries for spawning, effect expiry and d
     assert.throws(() => createBattleSpec({ ...boundary, maxTicks }), /tick budget/);
   }
   for (const tick of [-1, 0.5, NaN, Number.MAX_SAFE_INTEGER + 1]) {
-    assert.throws(() => createBattleSpec({ ...boundary, spawns: [{ ...boundary.spawns[0], tick }] }), /spawn.tick/);
+    assert.throws(() => createBattleSpec(withTimelineSpawns(boundary, [{ ...boundary.schedule.spawns[0], tick }])), /spawn.tick/);
   }
-  assert.throws(() => createBattleSpec({ ...boundary, spawns: [{ ...boundary.spawns[0],
+  assert.throws(() => createBattleSpec(withTimelineSpawns(boundary, [{ ...boundary.schedule.spawns[0],
     timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0.5 },
-  }] }), /fragmentStartedAtTick/);
+  }])), /fragmentStartedAtTick/);
 });
 
 test('core battle rolls back spawning, expiry, RNG and tick progress when movement cannot be computed', () => {
@@ -865,14 +924,22 @@ test('core battle rolls back spawning, expiry, RNG and tick progress when moveme
     source: { type: 'MECHANISM', mechanismId: 0 }, active: true, region, expiresAtTick: null,
   });
   const expired = createNavigationSpatialEffect({ ...effect, id: 1, expiresAtTick: 0 });
-  const runtime = new BattleRuntime({ ...spec, spawns: [{ ...spec.spawns[0], tick: 0 }],
-    initialMechanisms: [mechanism], initialEffects: [effect, expired],
+  const predefinedLevel = parseLevelDefinition(arknightsFixture('level_act1autochess_m02'), () => ({
+    consumeTileBlackboard: (_, entry) => ['isValidHand', 'previewNotAlloed'].includes(entry.key),
+  }));
+  const hiddenCrate = parsePredefinedInstanceDefinition(0, predefinedLevel.predefines.tokenInsts[13],
+    parsePredefinedPrefab(arknightsFixture('prefab_trap_1105_accrate')), arknightsFixture('character_trap_1105_accrate'));
+  const runtime = new BattleRuntime({ ...withTimelineSpawns(spec, [{ ...spec.schedule.spawns[0], tick: 0 }]),
+    predefines: [hiddenCrate], initialMechanisms: [mechanism], initialEffects: [effect, expired],
   });
   const before = runtime.snapshot();
-  assert.throws(() => runtime.step(), /distance exceeds int32/);
+  const maps = runtime.navigationMaps;
+  assert.throws(() => runtime.step([{ type: 'APPEAR_PREDEFINED', definitionId: 0 }]), /distance exceeds int32/);
   assert.deepEqual(runtime.snapshot(), before);
-  assert.throws(() => runtime.step(), /distance exceeds int32/);
+  assert.equal(runtime.navigationMaps, maps);
+  assert.throws(() => runtime.step([{ type: 'APPEAR_PREDEFINED', definitionId: 0 }]), /distance exceeds int32/);
   assert.deepEqual(runtime.snapshot(), before);
+  assert.equal(runtime.navigationMaps, maps);
 });
 
 test('raw levels preserve predefined configuration and keep unsupported inputs outside the movement fragment', () => {
@@ -921,6 +988,310 @@ test('raw levels preserve predefined configuration and keep unsupported inputs o
   ]) {
     const unsupported = arknightsFixture('level_act1autochess_01');
     mutate(unsupported);
-    assert.throws(() => slimeMovementFragment(unsupported), /requires|unsupported/);
+    assert.throws(() => slimeMovementFragment(unsupported), /require|unsupported/);
   }
+});
+
+test('native-format waves exhaust each queue before advancing, and SPAWN callbacks unblock fragments before units disappear', () => {
+  const { schedule } = syntheticSpawnSchedule([
+    nativeWave([
+      nativeFragment([], 100),
+      nativeFragment([nativeSpawn({ count: 2, preDelay: 1 / 30, interval: 2 / 30, blockFragment: true })], 1 / 30),
+      nativeFragment([nativeSpawn()]),
+    ], { preDelay: 2 / 30, postDelay: 2 / 30 }),
+    nativeWave([nativeFragment([nativeSpawn()])], { preDelay: 1 / 30, postDelay: 1 / 30, maxTimeWaitingForNextWave: 0 }),
+  ]);
+  const initial = createSpawnScheduleState(schedule);
+  let step = dispatchSchedule(schedule, initial, 0);
+  assert.equal(step.state.main.phase, 'PRE_DELAY');
+  assert.equal(getUnspawnedCount(schedule, step.state), 4);
+  step = dispatchSchedule(schedule, step.state, 2);
+  assert.equal(step.spawns.length, 0);
+  assert.equal(step.state.main.fragmentIndex, 1);
+  assert.equal(step.state.fragmentStartedAtTick, 3);
+  step = dispatchSchedule(schedule, step.state, 4, [0]);
+  assert.deepEqual(step.spawns.map(spawn => spawn.tick), [4]);
+  assert.deepEqual(step.state.managedWaveUnitIds, [0]);
+  assert.equal(step.state.main.phase, 'FRAGMENTS');
+  step = dispatchSchedule(schedule, step.state, 5);
+  assert.equal(step.spawns.length, 0);
+  assert.equal(step.state.main.fragmentIndex, 1);
+  step = dispatchSchedule(schedule, step.state, 6, [1, 2]);
+  assert.deepEqual(step.spawns.map(spawn => spawn.tick), [6, 6]);
+  assert.deepEqual(step.spawns.map(spawn => spawn.timing), [
+    { waveStartedAtTick: 0, fragmentStartedAtTick: 3 },
+    { waveStartedAtTick: 0, fragmentStartedAtTick: 6 },
+  ]);
+  assert.equal(step.state.main.phase, 'WAITING');
+  assert.deepEqual(step.state.managedWaveUnitIds, [0, 1, 2]);
+  assert.equal(getUnspawnedCount(schedule, step.state), 1);
+  assert.deepEqual(initial, createSpawnScheduleState(schedule));
+  const resolved = resolveScheduleUnits(step.state, [0, 1, 2]);
+  step = dispatchSchedule(schedule, resolved, 7);
+  assert.equal(step.state.main.phase, 'POST_DELAY');
+  step = dispatchSchedule(schedule, step.state, 8);
+  assert.equal(step.state.waveIndex, 0);
+  step = dispatchSchedule(schedule, step.state, 9);
+  assert.equal(step.state.waveIndex, 1);
+  assert.equal(step.state.main.phase, 'PRE_DELAY');
+  step = dispatchSchedule(schedule, step.state, 10, [3]);
+  assert.deepEqual(step.spawns[0].timing, { waveStartedAtTick: 9, fragmentStartedAtTick: 10 });
+  step = dispatchSchedule(schedule, step.state, 100);
+  assert.equal(step.state.main.phase, 'WAITING');
+  assert.equal(isSpawnScheduleCompleted(schedule, step.state), false);
+  step = dispatchSchedule(schedule, resolveScheduleUnits(step.state, [3]), 101);
+  assert.equal(step.state.main.phase, 'POST_DELAY');
+  step = dispatchSchedule(schedule, step.state, 102);
+  assert.equal(isSpawnScheduleCompleted(schedule, step.state), true);
+  assert.equal(getSpawnedCount(step.state), 4);
+  assert.equal(getUnspawnedCount(schedule, step.state), 0);
+});
+
+test('scheduler wave and final ownership follow managed, dontBlockWave, forceBlockWaveInBranch and enemy notCountInTotal', () => {
+  const { schedule } = syntheticSpawnSchedule([
+    nativeWave([nativeFragment([
+      nativeSpawn(),
+      nativeSpawn({ managedByScheduler: false }),
+      nativeSpawn({ dontBlockWave: true }),
+      nativeSpawn({ key: 'ignored' }),
+      nativeSpawn({ forceBlockWaveInBranch: true }),
+    ])]),
+  ], { extra: { phases: [nativeFragment([
+    nativeSpawn(),
+    nativeSpawn({ forceBlockWaveInBranch: true }),
+    nativeSpawn({ forceBlockWaveInBranch: true, dontBlockWave: true }),
+    nativeSpawn({ key: 'ignored', forceBlockWaveInBranch: true }),
+    nativeSpawn({ managedByScheduler: false, forceBlockWaveInBranch: true }),
+  ])] } }, ['ignored']);
+  let step = dispatchSchedule(schedule, createSpawnScheduleState(schedule), 0, [0, 1, 2, 3, 4]);
+  assert.deepEqual(step.state.managedWaveUnitIds, [0, 4]);
+  assert.deepEqual(step.state.managedFinalUnitIds, [0, 2, 4]);
+  assert.equal(step.spawns[3].notCountInTotal, true);
+  step = dispatchSchedule(schedule, step.state, 1, [5, 6, 7, 8, 9], [{ branchId: 'extra', isLoop: false }]);
+  assert.deepEqual(step.state.managedWaveUnitIds, [0, 4, 6]);
+  assert.deepEqual(step.state.managedFinalUnitIds, [0, 2, 4, 5, 6, 7]);
+  assert.equal(getSpawnedCount(step.state), 10);
+  assert.equal(getUnspawnedCount(schedule, step.state), 0);
+  step = dispatchSchedule(schedule, resolveScheduleUnits(step.state, [0, 4, 6]), 2);
+  assert.equal(step.state.main.phase, 'COMPLETED');
+  assert.deepEqual(step.state.managedFinalUnitIds, [2, 5, 7]);
+  assert.equal(isSpawnScheduleCompleted(schedule, step.state), false);
+  assert.equal(isSpawnScheduleCompleted(schedule, resolveScheduleUnits(step.state, [2, 5, 7])), true);
+});
+
+test('wave timeout starts after its last queued action, clears only wave ownership, and final waves ignore that timeout', () => {
+  const { schedule } = syntheticSpawnSchedule([
+    nativeWave([nativeFragment([nativeSpawn({ count: 2, interval: 5 / 30 })])],
+      { maxTimeWaitingForNextWave: 3 / 30, postDelay: 2 / 30 }),
+    nativeWave([nativeFragment([nativeSpawn()])], { maxTimeWaitingForNextWave: 0 }),
+  ]);
+  let step = dispatchSchedule(schedule, createSpawnScheduleState(schedule), 0, [0]);
+  step = dispatchSchedule(schedule, step.state, 4);
+  assert.equal(step.state.main.phase, 'FRAGMENTS');
+  assert.equal(step.state.waveIndex, 0);
+  step = dispatchSchedule(schedule, step.state, 5, [1]);
+  assert.equal(step.state.main.phase, 'WAITING');
+  assert.equal(step.state.main.startedAtTick, 5);
+  step = dispatchSchedule(schedule, step.state, 7);
+  assert.equal(step.state.main.phase, 'WAITING');
+  step = dispatchSchedule(schedule, step.state, 8);
+  assert.equal(step.state.main.phase, 'POST_DELAY');
+  assert.deepEqual(step.state.managedWaveUnitIds, []);
+  assert.deepEqual(step.state.managedFinalUnitIds, [0, 1]);
+  step = dispatchSchedule(schedule, step.state, 9);
+  assert.equal(step.state.waveIndex, 0);
+  step = dispatchSchedule(schedule, step.state, 10, [2]);
+  assert.equal(step.state.waveIndex, 1);
+  assert.deepEqual(step.state.managedWaveUnitIds, [2]);
+  assert.deepEqual(step.state.managedFinalUnitIds, [0, 1, 2]);
+  step = dispatchSchedule(schedule, step.state, 100);
+  assert.equal(step.state.main.phase, 'WAITING');
+  step = dispatchSchedule(schedule, resolveScheduleUnits(step.state, [2]), 101);
+  assert.equal(step.state.main.phase, 'COMPLETED');
+  assert.equal(isSpawnScheduleCompleted(schedule, step.state), false);
+  assert.equal(isSpawnScheduleCompleted(schedule, resolveScheduleUnits(step.state, [0, 1])), true);
+});
+
+test('same-tick zero timeout never registers an old wave spawn as a new wave blocker', () => {
+  const { schedule } = syntheticSpawnSchedule([
+    nativeWave([nativeFragment([nativeSpawn()])], { maxTimeWaitingForNextWave: 0 }),
+    nativeWave([nativeFragment([nativeSpawn()])]),
+  ]);
+  const advanced = advanceSpawnSchedule(schedule, createSpawnScheduleState(schedule), { tick: 0 });
+  assert.deepEqual(advanced.spawns.map(spawn => spawn.schedule.waveIndex), [0, 1]);
+  assert.equal(isSpawnScheduleCompleted(schedule, advanced.state), false);
+  assert.throws(() => advanceSpawnSchedule(schedule, advanced.state, { tick: 1 }), /must be recorded/);
+  assert.throws(() => recordScheduleSpawns(advanced.state, advanced.spawns, [0]), /pending spawn batch/);
+  const state = recordScheduleSpawns(advanced.state, advanced.spawns, [0, 1]);
+  assert.equal(state.waveIndex, 1);
+  assert.deepEqual(state.managedWaveUnitIds, [1]);
+  assert.deepEqual(state.managedFinalUnitIds, [0, 1]);
+});
+
+test('branches require explicit triggers, consume one phase each, support loops and allow overlapping phase queues', () => {
+  const { level, schedule } = syntheticSpawnSchedule([
+    nativeWave([nativeFragment([nativeSpawn({ preDelay: 1 })])]),
+  ], { extra: { phases: [
+    nativeFragment([nativeSpawn({ preDelay: 3 / 30 })]),
+    nativeFragment([nativeSpawn()]),
+  ] } });
+  let step = dispatchSchedule(schedule, createSpawnScheduleState(schedule), 0);
+  assert.equal(step.state.branchCursors.extra, 0);
+  assert.equal(step.state.activeBranches.length, 0);
+  assert.equal(getUnspawnedCount(schedule, step.state), 1);
+  step = dispatchSchedule(schedule, step.state, 1, [], [{ branchId: 'extra', isLoop: false }]);
+  assert.equal(step.state.branchCursors.extra, 1);
+  assert.equal(getUnspawnedCount(schedule, step.state), 2);
+  step = dispatchSchedule(schedule, step.state, 2, [0], [{ branchId: 'extra', isLoop: false }]);
+  assert.equal(step.state.branchCursors.extra, 2);
+  assert.equal(step.state.activeBranches.length, 1);
+  assert.equal(step.spawns[0].route, level.extraRoutes[0]);
+  assert.deepEqual(step.spawns[0].timing, { waveStartedAtTick: 0, fragmentStartedAtTick: 0 });
+  assert.deepEqual(step.state.managedWaveUnitIds, []);
+  step = dispatchSchedule(schedule, step.state, 3, [], [{ branchId: 'extra', isLoop: false }]);
+  assert.equal(step.spawns.length, 0);
+  step = dispatchSchedule(schedule, step.state, 4, [1]);
+  assert.equal(step.state.activeBranches.length, 0);
+  step = dispatchSchedule(schedule, step.state, 5, [2], [
+    { branchId: 'extra', isLoop: true }, { branchId: 'extra', isLoop: true },
+  ]);
+  assert.equal(step.spawns.length, 1);
+  assert.equal(step.state.branchCursors.extra, 2);
+  assert.equal(step.state.activeBranches.length, 1);
+  const snapshot = cloneScheduleState(step.state);
+  snapshot.branchCursors.extra = 99;
+  snapshot.activeBranches[0].spawns.length = 0;
+  snapshot.main.queue.spawns.length = 0;
+  snapshot.managedFinalUnitIds.push(99);
+  assert.equal(step.state.branchCursors.extra, 2);
+  assert.equal(step.state.activeBranches[0].spawns.length, 1);
+  assert.equal(step.state.main.queue.spawns.length, 1);
+  assert.deepEqual(step.state.managedFinalUnitIds, [0, 1, 2]);
+  step = dispatchSchedule(schedule, step.state, 8, [3]);
+  assert.equal(getSpawnedCount(step.state), 4);
+  assert.equal(getUnspawnedCount(schedule, step.state), 1);
+  const before = cloneScheduleState(step.state);
+  assert.throws(() => advanceSpawnSchedule(schedule, step.state, { tick: 9, triggers: [{ branchId: 'missing', isLoop: false }] }), /unknown scheduler branch/);
+  assert.deepEqual(step.state, before);
+});
+
+test('WAVES projection rounds absolute action times, including fractional fragment delays, without periodic drift', () => {
+  const { schedule } = syntheticSpawnSchedule([
+    nativeWave([nativeFragment([nativeSpawn({ preDelay: 0.05, interval: 0.15, count: 8 })], 0.05)]),
+  ]);
+  let state = createSpawnScheduleState(schedule);
+  const ticks = [];
+  for (let tick = 0; tick <= 35; tick++) {
+    const advanced = advanceSpawnSchedule(schedule, state, { tick });
+    ticks.push(...advanced.spawns.map(spawn => spawn.tick));
+    state = recordScheduleSpawns(advanced.state, advanced.spawns, advanced.spawns.map((_, index) => ticks.length - advanced.spawns.length + index));
+  }
+  assert.deepEqual(ticks, [3, 8, 12, 17, 21, 26, 30, 35]);
+  assert.equal(getUnspawnedCount(schedule, state), 0);
+});
+
+test('delayed branch births snapshot the current main fragment and wave at dispatch rather than at their trigger', () => {
+  const { level, schedule } = syntheticSpawnSchedule([
+    nativeWave([
+      nativeFragment([nativeSpawn({ preDelay: 1 / 30, dontBlockWave: true })]),
+      nativeFragment([nativeSpawn({ preDelay: 2 / 30, dontBlockWave: true })], 1 / 30),
+    ], { postDelay: 1 / 30 }),
+    nativeWave([nativeFragment([nativeSpawn({ preDelay: 2 / 30 })], 2 / 30)], { preDelay: 1 / 30 }),
+  ], { extra: { phases: [nativeFragment([
+    nativeSpawn({ preDelay: 3 / 30 }), nativeSpawn({ preDelay: 8 / 30 }),
+  ])] } });
+  let state = createSpawnScheduleState(schedule);
+  let nextUnitId = 0;
+  const births = [];
+  for (let tick = 0; tick <= 10; tick++) {
+    const triggers = tick === 0 ? [{ branchId: 'extra', isLoop: false }] : [];
+    const advanced = advanceSpawnSchedule(schedule, state, { tick, triggers });
+    for (const spawn of advanced.spawns) births.push({
+      tick: spawn.tick, branch: spawn.route === level.extraRoutes[0], timing: spawn.timing,
+    });
+    state = recordScheduleSpawns(advanced.state, advanced.spawns, advanced.spawns.map(() => nextUnitId++));
+  }
+  assert.deepEqual(births, [
+    { tick: 1, branch: false, timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 } },
+    { tick: 3, branch: true, timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 2 } },
+    { tick: 4, branch: false, timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 2 } },
+    { tick: 8, branch: true, timing: { waveStartedAtTick: 5, fragmentStartedAtTick: 8 } },
+    { tick: 10, branch: false, timing: { waveStartedAtTick: 5, fragmentStartedAtTick: 8 } },
+  ]);
+});
+
+test('same-tick branch dispatch reads the main snapshot before that tick enters its first fragment', () => {
+  const { schedule } = syntheticSpawnSchedule([
+    nativeWave([nativeFragment([nativeSpawn()], 1)]),
+  ], { extra: { phases: [nativeFragment([nativeSpawn()])] } });
+  const step = dispatchSchedule(schedule, createSpawnScheduleState(schedule), 0, [0], [{ branchId: 'extra', isLoop: false }]);
+  assert.deepEqual(step.spawns[0].timing, { waveStartedAtTick: 0, fragmentStartedAtTick: 0 });
+  assert.equal(step.state.fragmentStartedAtTick, 30);
+  assert.equal(step.state.main.queue.spawns[0].tick, 30);
+});
+
+test('battle schedule completion can leave unmanaged live units, and branch command failures roll back the whole tick', () => {
+  const { spec } = slimeMovementFragment();
+  const unmanaged = syntheticSpawnSchedule([nativeWave([nativeFragment([nativeSpawn({ managedByScheduler: false })])])]);
+  const runtime = new BattleRuntime({ ...spec, schedule: unmanaged.schedule });
+  const completed = runtime.step();
+  assert.equal(completed.result.reason, 'SCHEDULE_COMPLETED');
+  assert.equal(completed.result.spawnedCount, 1);
+  assert.equal(completed.result.completedRouteCount, 0);
+  assert.deepEqual(completed.result.remainingUnitIds, [0]);
+  const branches = syntheticSpawnSchedule([nativeWave([nativeFragment([nativeSpawn({ preDelay: 1 })])])],
+    { extra: { phases: [nativeFragment([nativeSpawn()])] } });
+  const branchRuntime = new BattleRuntime({ ...spec, schedule: branches.schedule });
+  branchRuntime.step();
+  const before = branchRuntime.snapshot();
+  assert.throws(() => branchRuntime.step([
+    { type: 'TRIGGER_BRANCH', branchId: 'extra', isLoop: false },
+    { type: 'TRIGGER_BRANCH', branchId: 'missing', isLoop: false },
+  ]), /unknown scheduler branch/);
+  assert.deepEqual(branchRuntime.snapshot(), before);
+  const spawned = branchRuntime.step([{ type: 'TRIGGER_BRANCH', branchId: 'extra', isLoop: false }]);
+  assert.deepEqual(spawned.events.filter(event => event.type === 'ENEMY_SPAWNED'), [{ type: 'ENEMY_SPAWNED', unitId: 0, tick: 1 }]);
+  assert.equal(branchRuntime.snapshot().units[0].locomotion.mainRoute.route.definition, branches.level.extraRoutes[0]);
+});
+
+test('raw 01 dragon branch waits for an explicit trigger and uses its own actual flying prefab and extra route', () => {
+  const raw = arknightsFixture('level_act1autochess_01');
+  const catalog = {
+    character: () => assert.fail('no selected predefined characters'),
+    skill: () => assert.fail('no selected predefined skills'),
+    enemy: key => arknightsFixture(key),
+    prefab: key => arknightsFixture(`prefab_${key}`),
+  };
+  const selection = { actions: [{ waveIndex: 0, fragmentIndex: 0, actionIndex: 0 }], branches: ['dragon'], predefines: [] };
+  const scenario = loadMovementScenario(raw, selection, catalog, 123);
+  assert.deepEqual(scenario.inactiveBranches, []);
+  const runtime = new BattleRuntime(scenario.spec);
+  assert.deepEqual(runtime.snapshot().spawning.activeBranches, []);
+  while (runtime.snapshot().tickIndex < 95) runtime.step();
+  assert.deepEqual(runtime.snapshot().units.map(unit => unit.definition.id), ['enemy_1007_slime']);
+  const first = runtime.step([{ type: 'TRIGGER_BRANCH', branchId: 'dragon', isLoop: false }]);
+  assert.deepEqual(first.events.filter(event => event.type === 'ENEMY_SPAWNED'), [{ type: 'ENEMY_SPAWNED', unitId: 1, tick: 95 }]);
+  const dragon = runtime.snapshot().units.find(unit => unit.id === 1);
+  assert.equal(dragon.definition.id, 'enemy_9012_acloon');
+  assert.equal(dragon.definition.locomotion.steeringParameters.steeringFactor, 8 / 30);
+  assert.equal(dragon.definition.locomotion.steeringParameters.maxSteeringForce, 10 / 900);
+  assert.equal(dragon.locomotion.mainRoute.route.definition, scenario.level.extraRoutes[0]);
+  assert.equal(dragon.locomotion.mainRoute.navigation.pathMotionMode, 'FLY');
+  assert.deepEqual(dragon.locomotion.mainRoute.route.timing, { waveStartedAtTick: 0, fragmentStartedAtTick: 0 });
+  assert.deepEqual(runtime.snapshot().spawning.managedWaveUnitIds, [0]);
+  assert.deepEqual(runtime.snapshot().spawning.managedFinalUnitIds, [0, 1]);
+  assert.equal(runtime.step([{ type: 'TRIGGER_BRANCH', branchId: 'dragon', isLoop: false }])
+    .events.filter(event => event.type === 'ENEMY_SPAWNED').length, 0);
+  assert.deepEqual(runtime.step([{ type: 'TRIGGER_BRANCH', branchId: 'dragon', isLoop: true }])
+    .events.filter(event => event.type === 'ENEMY_SPAWNED'), [{ type: 'ENEMY_SPAWNED', unitId: 2, tick: 97 }]);
+  while (runtime.result === null) runtime.step();
+  assert.equal(runtime.result.reason, 'SCHEDULE_COMPLETED');
+  assert.equal(runtime.result.spawnedCount, 4);
+  assert.equal(runtime.result.completedRouteCount, 4);
+  assert.deepEqual(runtime.result.remainingUnitIds, []);
+  const delayed = arknightsFixture('prefab_enemy_1007_slime');
+  delayed.components.find(component => Object.hasOwn(component.fields, '_delayToBorn')).fields._delayToBorn = 1;
+  assert.throws(() => loadMovementScenario(raw, selection, {
+    ...catalog, prefab: key => key === 'enemy_1007_slime' ? delayed : catalog.prefab(key),
+  }, 123), /synchronous enemy births/);
 });

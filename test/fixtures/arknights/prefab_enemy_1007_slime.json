@@ -1,0 +1,111 @@
+{
+  "prefabKey": "enemy_1007_slime",
+  "source": {
+    "bundle": "battle/enm_pfb_base_0.ab",
+    "cab": "CAB-b2b15d37e92fccb550555511a61b9297",
+    "unityVersion": "2021.3.39f1",
+    "filtered": true,
+    "selection": "movement fields and predefined controller/mode/buff bindings; rendering and unrelated enemy abilities omitted"
+  },
+  "gameObject": {
+    "m_Component": [
+      {
+        "component": {
+          "m_FileID": 0,
+          "m_PathID": "2285795184637376630"
+        }
+      },
+      {
+        "component": {
+          "m_FileID": 0,
+          "m_PathID": "-7649195752727250826"
+        }
+      },
+      {
+        "component": {
+          "m_FileID": 0,
+          "m_PathID": "-880301016012097418"
+        }
+      },
+      {
+        "component": {
+          "m_FileID": 0,
+          "m_PathID": "6109069551144794230"
+        }
+      },
+      {
+        "component": {
+          "m_FileID": 0,
+          "m_PathID": "6341770982929004662"
+        }
+      }
+    ],
+    "m_Layer": 9,
+    "m_Name": "enemy_1007_slime",
+    "m_Tag": 5,
+    "m_IsActive": 1
+  },
+  "components": [
+    {
+      "object": {
+        "id": "-7649195752727250826",
+        "start": 195920,
+        "size": 280,
+        "typeid": 10,
+        "classid": 114
+      },
+      "fields": {
+        "m_GameObject": {
+          "m_FileID": 0,
+          "m_PathID": "8956784030688802934"
+        },
+        "m_Enabled": true,
+        "m_Script": {
+          "m_FileID": 1,
+          "m_PathID": "-6629209555389654693"
+        },
+        "m_Name": "",
+        "_modes": [
+          {
+            "m_FileID": 0,
+            "m_PathID": "-5561636795247101834"
+          }
+        ],
+        "_commonAbilities": [],
+        "_isFixedRotation": false,
+        "_delayToBorn": 0.0,
+        "_onlyDelayToBornOnTileStart": false,
+        "_canNotExit": false,
+        "_alwaysCheckCurrentPoint": false
+      },
+      "unityClassId": 114,
+      "serializedType": "builtin:263"
+    },
+    {
+      "object": {
+        "id": "-880301016012097418",
+        "start": 264544,
+        "size": 44,
+        "typeid": 15,
+        "classid": 114
+      },
+      "fields": {
+        "m_GameObject": {
+          "m_FileID": 0,
+          "m_PathID": "8956784030688802934"
+        },
+        "m_Enabled": true,
+        "m_Script": {
+          "m_FileID": 1,
+          "m_PathID": "-7073810281583634641"
+        },
+        "m_Name": "",
+        "_steeringFactor": 8.0,
+        "_maxSteeringForce": 10.0,
+        "_halfBodyWidth": 0.20000000298023224
+      },
+      "unityClassId": 114,
+      "serializedType": "builtin:263"
+    }
+  ]
+}
