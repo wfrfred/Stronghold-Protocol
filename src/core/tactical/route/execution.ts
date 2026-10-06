@@ -1,14 +1,40 @@
-import type { Rng } from "../../common/rng.js";
+import type { Rng, Seed } from "../../common/rng.js";
 import { createWorldOffset, Tile, World } from "../geometry/coordinate.js";
 import type { WorldPosition } from "../geometry/coordinate.js";
 import { createNavigationRequest } from "../navigation/request.js";
 import type { NavigationRequest, NavigationRequestId } from "../navigation/request.js";
 import type { RouteDefinition, RouteMoveTarget } from "./definition.js";
-import type { RouteClock, RouteMoveProgress, RouteProgress, RouteState } from "./state.js";
+import type { RouteMoveProgress, RouteProgress, RouteState } from "./state.js";
 
 export interface RouteExecutionContext {
     readonly rng: Rng;
     readonly nextNavigationRequestId: () => NavigationRequestId;
+}
+
+export interface RouteExecution extends RouteExecutionContext {
+    state(): {
+        readonly rngState: Seed;
+        readonly nextNavigationRequestId: NavigationRequestId;
+    };
+}
+
+export function createRouteExecution(rng: Rng, initialNextNavigationRequestId: NavigationRequestId): RouteExecution {
+    let nextNavigationRequestId = initialNextNavigationRequestId;
+    return {
+        rng,
+        nextNavigationRequestId() {
+            const id = nextNavigationRequestId;
+            const next = id + 1;
+            if (!Number.isSafeInteger(id) || id < 0 || !Number.isSafeInteger(next)) {
+                throw new RangeError("navigation request identity overflow");
+            }
+            nextNavigationRequestId = next;
+            return id;
+        },
+        state() {
+            return { rngState: rng.state(), nextNavigationRequestId };
+        },
+    };
 }
 
 export interface RouteTransition {
@@ -19,7 +45,7 @@ export interface RouteTransition {
 function withProgress(state: RouteState, progress: RouteProgress): RouteState {
     return {
         definition: state.definition,
-        clockBinding: state.clockBinding,
+        timing: state.timing,
         alwaysCheckCurrentPoint: state.alwaysCheckCurrentPoint,
         progress,
     };
@@ -83,14 +109,14 @@ export function validateRouteExecution(
     definition: RouteDefinition,
     alwaysCheckCurrentPoint: boolean,
 ): void {
-    if (!alwaysCheckCurrentPoint) {
+    if (definition.checkpoints.length > 0 && !alwaysCheckCurrentPoint) {
         throw new RangeError("route execution requires alwaysCheckCurrentPoint");
     }
-    if (!definition.visitEveryCheckPoint) {
+    if (definition.checkpoints.length > 0 && !definition.visitEveryCheckPoint) {
         throw new RangeError("route execution does not support skipping checkpoints or reaching the end early");
     }
     for (const checkpoint of definition.checkpoints) {
-        if (checkpoint.type !== "MOVE" && checkpoint.type !== "WAIT_FOR_SECONDS") {
+        if (checkpoint.type !== "MOVE" && checkpoint.type !== "WAIT_FOR_TICKS") {
             throw new RangeError(`unsupported route execution checkpoint: ${checkpoint.type}`);
         }
     }
@@ -122,14 +148,14 @@ export function enterRoute(state: RouteState, context: RouteExecutionContext): R
                 request,
             };
         }
-        case "WAIT_FOR_SECONDS":
+        case "WAIT_FOR_TICKS":
             return {
                 state: withProgress(state, {
                     phase: "CHECKPOINTS",
                     checkpointIndex: progress.checkpointIndex,
                     checkpoint: {
                         type: "WAIT",
-                        remainingSeconds: checkpoint.durationSeconds,
+                        remainingTicks: checkpoint.durationTicks,
                     },
                 }),
             };
@@ -156,18 +182,18 @@ export function advanceRoute(state: RouteState, context: RouteExecutionContext):
     }), context);
 }
 
-export function tickRouteWait(state: RouteState, clock: RouteClock): RouteState {
+export function tickRouteWait(state: RouteState): RouteState {
     const progress = state.progress;
     if (progress.phase !== "CHECKPOINTS" || progress.checkpoint.type !== "WAIT") {
         return state;
     }
-    const remainingSeconds = Math.max(0, progress.checkpoint.remainingSeconds - clock.deltaTimeSeconds);
-    if (remainingSeconds === progress.checkpoint.remainingSeconds) {
+    const remainingTicks = Math.max(0, progress.checkpoint.remainingTicks - 1);
+    if (remainingTicks === progress.checkpoint.remainingTicks) {
         return state;
     }
     return withProgress(state, {
         phase: "CHECKPOINTS",
         checkpointIndex: progress.checkpointIndex,
-        checkpoint: { type: "WAIT", remainingSeconds },
+        checkpoint: { type: "WAIT", remainingTicks },
     });
 }

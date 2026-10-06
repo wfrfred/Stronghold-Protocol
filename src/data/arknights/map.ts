@@ -20,12 +20,8 @@ import {
     type TilePosition,
 } from "../../core/tactical/geometry/coordinate.js";
 import { Direction } from "../../core/tactical/geometry/direction.js";
-
-export interface ArknightsTileBlackboardEntry {
-    readonly key: string;
-    readonly value: number;
-    readonly valueStr: string | null;
-}
+import { perSecondToPerTick, secondsToTicks } from "./tick.js";
+import { parseBlackboard, type ArknightsBlackboardEntry } from "./blackboard.js";
 
 export interface ArknightsTileContext {
     readonly tileKey: string;
@@ -37,7 +33,7 @@ export interface ArknightsMapOptions {
     readonly deepsea?: DeepseaParams;
     readonly consumeTileBlackboard?: (
         context: ArknightsTileContext,
-        entry: ArknightsTileBlackboardEntry,
+        entry: ArknightsBlackboardEntry,
     ) => boolean;
 }
 
@@ -112,30 +108,11 @@ function requireEmpty(value: unknown, name: string): void {
     }
 }
 
-function parseBlackboard(value: unknown): readonly ArknightsTileBlackboardEntry[] {
+function tileBlackboard(value: unknown): readonly ArknightsBlackboardEntry[] {
     if (value === null || value === undefined) {
         return Object.freeze([]);
     }
-    const keys = new Set<string>();
-    const entries: ArknightsTileBlackboardEntry[] = [];
-    for (const item of array(value, "tile blackboard")) {
-        const source = record(item, "blackboard entry");
-        requireKnownFields(source, ["key", "value", "valueStr"], "blackboard entry");
-        const key = string(source.key, "blackboard key");
-        if (keys.has(key)) {
-            throw new TypeError(`duplicate tile blackboard key ${key}`);
-        }
-        keys.add(key);
-        const valueStr = source.valueStr === undefined || source.valueStr === null
-            ? null
-            : string(source.valueStr, "blackboard string value");
-        entries.push(Object.freeze({
-            key,
-            value: finite(source.value, `blackboard ${key}`),
-            valueStr,
-        }));
-    }
-    return Object.freeze(entries);
+    return parseBlackboard(value, "tile blackboard", { allowEmptyKeys: true, allowMissingValueStr: true });
 }
 
 function parseTile(
@@ -154,7 +131,7 @@ function parseTile(
         throw new TypeError(`unsupported advanced buildable mask for ${tileKey}`);
     }
     requireEmpty(source.effects, `${tileKey} effects`);
-    const blackboard = parseBlackboard(source.blackboard);
+    const blackboard = tileBlackboard(source.blackboard);
     const consumed = new Set<string>();
     let mechanism: TileMechanism | null = null;
 
@@ -169,10 +146,10 @@ function parseTile(
                 return entry.value;
             }
             const params: InfectionParams = {
-                damagePerSecond: parameter("damage"),
+                damagePerTick: perSecondToPerTick(parameter("damage")),
                 attackBonusRatio: parameter("atk"),
                 attackSpeedBonus: parameter("attack_speed"),
-                activeUntilSeconds: parameter("duration"),
+                activeUntilTick: secondsToTicks(parameter("duration"), "infection duration"),
             };
             mechanism = { type: "INFECTION", params };
             break;

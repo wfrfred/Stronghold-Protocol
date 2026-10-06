@@ -1,6 +1,7 @@
 import type { TilePosition, WorldOffset } from "../../core/tactical/geometry/coordinate.js";
 import { createRouteDefinition } from "../../core/tactical/route/definition.js";
 import type { RouteCheckpoint, RouteDefinition, RouteMoveTarget } from "../../core/tactical/route/definition.js";
+import { secondsToTicks } from "./tick.js";
 
 function object(value: unknown, name: string, fields: readonly string[]): Record<string, unknown> {
     if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -61,12 +62,25 @@ function checkpoint(value: unknown): RouteCheckpoint {
         case "MAP_OFFSET_MOVE":
             return { type: data.type, target: moveTarget(data) };
         case "WAIT_FOR_SECONDS":
-            return { type: data.type, durationSeconds: number(data.time, "checkpoint.time") };
+            return {
+                type: "WAIT_FOR_TICKS",
+                durationTicks: Math.max(0, secondsToTicks(number(data.time, "checkpoint.time"), "checkpoint.time")),
+            };
         case "WAIT_FOR_PLAY_TIME":
-            return { type: data.type, targetPlayTimeSeconds: number(data.time, "checkpoint.time") };
+            return {
+                type: "WAIT_FOR_PLAY_TICK",
+                targetPlayTick: Math.max(0, secondsToTicks(number(data.time, "checkpoint.time"), "checkpoint.time")),
+            };
         case "WAIT_CURRENT_FRAGMENT_TIME":
+            return {
+                type: "WAIT_CURRENT_FRAGMENT_TICKS",
+                targetElapsedTicks: Math.max(0, secondsToTicks(number(data.time, "checkpoint.time"), "checkpoint.time")),
+            };
         case "WAIT_CURRENT_WAVE_TIME":
-            return { type: data.type, targetElapsedSeconds: number(data.time, "checkpoint.time") };
+            return {
+                type: "WAIT_CURRENT_WAVE_TICKS",
+                targetElapsedTicks: Math.max(0, secondsToTicks(number(data.time, "checkpoint.time"), "checkpoint.time")),
+            };
         case "APPEAR_AT_POS":
             return {
                 type: data.type,

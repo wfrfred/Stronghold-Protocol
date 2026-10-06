@@ -8,7 +8,7 @@ import type { SteeringState } from "./steering.js";
 import type { Unit, UnitDefinition } from "../unit.js";
 
 export interface LocomotionDefinition {
-    readonly moveSpeed: number;
+    readonly moveSpeedPerTick: number;
 }
 
 export interface LocomotionState {

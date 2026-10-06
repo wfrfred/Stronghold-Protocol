@@ -9,7 +9,7 @@ export interface RouteMoveProgress {
 
 export interface RouteWaitProgress {
     readonly type: "WAIT";
-    readonly remainingSeconds: number;
+    readonly remainingTicks: number;
 }
 
 export type RouteCheckpointProgress =
@@ -36,20 +36,14 @@ export type RouteProgress =
         readonly phase: "COMPLETED";
     };
 
-export interface RouteClockBinding {
-    readonly waveStartedAtSeconds: number;
-    readonly fragmentStartedAtSeconds: number;
-}
-
-export interface RouteClock {
-    readonly fixedPlayTimeSeconds: number;
-    readonly userFixedPlayTimeSeconds: number;
-    readonly deltaTimeSeconds: number;
+export interface RouteTiming {
+    readonly waveStartedAtTick: number;
+    readonly fragmentStartedAtTick: number;
 }
 
 export interface RouteState {
     readonly definition: RouteDefinition;
-    readonly clockBinding: RouteClockBinding;
+    readonly timing: RouteTiming;
     readonly alwaysCheckCurrentPoint: boolean;
     progress: RouteProgress;
 }
@@ -71,37 +65,24 @@ export function copyRouteState(state: Readonly<RouteState>): RouteState {
     return { ...state, progress: copiedProgress };
 }
 
-function finite(value: number, name: string): number {
-    if (!Number.isFinite(value)) {
-        throw new RangeError(`${name} must be finite`);
+function ticks(value: number, name: string): number {
+    if (!Number.isSafeInteger(value) || value < 0) {
+        throw new RangeError(`${name} must be a non-negative safe integer`);
     }
 
     return value;
 }
 
-export function createRouteClockBinding(binding: RouteClockBinding): RouteClockBinding {
+export function createRouteTiming(timing: RouteTiming): RouteTiming {
     return Object.freeze({
-        waveStartedAtSeconds: finite(binding.waveStartedAtSeconds, "waveStartedAtSeconds"),
-        fragmentStartedAtSeconds: finite(binding.fragmentStartedAtSeconds, "fragmentStartedAtSeconds"),
-    });
-}
-
-export function createRouteClock(clock: RouteClock): RouteClock {
-    const deltaTimeSeconds = finite(clock.deltaTimeSeconds, "deltaTimeSeconds");
-    if (deltaTimeSeconds < 0) {
-        throw new RangeError("deltaTimeSeconds must be non-negative");
-    }
-
-    return Object.freeze({
-        fixedPlayTimeSeconds: finite(clock.fixedPlayTimeSeconds, "fixedPlayTimeSeconds"),
-        userFixedPlayTimeSeconds: finite(clock.userFixedPlayTimeSeconds, "userFixedPlayTimeSeconds"),
-        deltaTimeSeconds,
+        waveStartedAtTick: ticks(timing.waveStartedAtTick, "waveStartedAtTick"),
+        fragmentStartedAtTick: ticks(timing.fragmentStartedAtTick, "fragmentStartedAtTick"),
     });
 }
 
 export function createRouteState(
     definition: RouteDefinition,
-    clockBinding: RouteClockBinding,
+    timing: RouteTiming,
     alwaysCheckCurrentPoint: boolean,
 ): RouteState {
     if (typeof alwaysCheckCurrentPoint !== "boolean") {
@@ -110,7 +91,7 @@ export function createRouteState(
 
     return {
         definition,
-        clockBinding,
+        timing,
         alwaysCheckCurrentPoint,
         progress: {
             phase: "CHECKPOINTS",

@@ -1,0 +1,46 @@
+{
+  "position": {
+    "row": 18,
+    "col": 1
+  },
+  "direction": "UP",
+  "hidden": false,
+  "alias": null,
+  "uniEquipIds": null,
+  "showSpIllust": false,
+  "masterInfos": null,
+  "inst": {
+    "characterKey": "trap_098_mire",
+    "level": 1,
+    "phase": "PHASE_0",
+    "favorPoint": 0,
+    "potentialRank": 0
+  },
+  "skillIndex": 0,
+  "mainSkillLvl": 1,
+  "skinId": "",
+  "tmplId": null,
+  "overrideSkillBlackboard": [
+    {
+      "key": "attack_speed",
+      "value": -0.05,
+      "valueStr": null
+    },
+    {
+      "key": "max_stack_cnt",
+      "value": 10.0,
+      "valueStr": null
+    },
+    {
+      "key": "move_speed",
+      "value": -0.05,
+      "valueStr": null
+    },
+    {
+      "key": "value",
+      "value": 3.0,
+      "valueStr": null
+    }
+  ],
+  "overrideTalents": null
+}

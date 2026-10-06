@@ -23,20 +23,20 @@ export type RouteCheckpoint =
         readonly target: RouteMoveTarget;
     }
     | {
-        readonly type: "WAIT_FOR_SECONDS";
-        readonly durationSeconds: number;
+        readonly type: "WAIT_FOR_TICKS";
+        readonly durationTicks: number;
     }
     | {
-        readonly type: "WAIT_FOR_PLAY_TIME";
-        readonly targetPlayTimeSeconds: number;
+        readonly type: "WAIT_FOR_PLAY_TICK";
+        readonly targetPlayTick: number;
     }
     | {
-        readonly type: "WAIT_CURRENT_FRAGMENT_TIME";
-        readonly targetElapsedSeconds: number;
+        readonly type: "WAIT_CURRENT_FRAGMENT_TICKS";
+        readonly targetElapsedTicks: number;
     }
     | {
-        readonly type: "WAIT_CURRENT_WAVE_TIME";
-        readonly targetElapsedSeconds: number;
+        readonly type: "WAIT_CURRENT_WAVE_TICKS";
+        readonly targetElapsedTicks: number;
     }
     | {
         readonly type: "DISAPPEAR";
@@ -87,6 +87,14 @@ function finite(value: number, name: string): number {
     return value;
 }
 
+function ticks(value: number, name: string): number {
+    if (!Number.isSafeInteger(value) || value < 0) {
+        throw new RangeError(`${name} must be a non-negative safe integer`);
+    }
+
+    return value;
+}
+
 function boolean(value: boolean, name: string): boolean {
     if (typeof value !== "boolean") {
         throw new TypeError(`${name} must be boolean`);
@@ -118,21 +126,21 @@ function copyCheckpoint(checkpoint: RouteCheckpoint): RouteCheckpoint {
         case "PATROL_MOVE":
         case "MAP_OFFSET_MOVE":
             return Object.freeze({ type: checkpoint.type, target: copyTarget(checkpoint.target) });
-        case "WAIT_FOR_SECONDS":
+        case "WAIT_FOR_TICKS":
             return Object.freeze({
                 type: checkpoint.type,
-                durationSeconds: finite(checkpoint.durationSeconds, "durationSeconds"),
+                durationTicks: ticks(checkpoint.durationTicks, "durationTicks"),
             });
-        case "WAIT_FOR_PLAY_TIME":
+        case "WAIT_FOR_PLAY_TICK":
             return Object.freeze({
                 type: checkpoint.type,
-                targetPlayTimeSeconds: finite(checkpoint.targetPlayTimeSeconds, "targetPlayTimeSeconds"),
+                targetPlayTick: ticks(checkpoint.targetPlayTick, "targetPlayTick"),
             });
-        case "WAIT_CURRENT_FRAGMENT_TIME":
-        case "WAIT_CURRENT_WAVE_TIME":
+        case "WAIT_CURRENT_FRAGMENT_TICKS":
+        case "WAIT_CURRENT_WAVE_TICKS":
             return Object.freeze({
                 type: checkpoint.type,
-                targetElapsedSeconds: finite(checkpoint.targetElapsedSeconds, "targetElapsedSeconds"),
+                targetElapsedTicks: ticks(checkpoint.targetElapsedTicks, "targetElapsedTicks"),
             });
         case "APPEAR_AT_POS":
             return Object.freeze({

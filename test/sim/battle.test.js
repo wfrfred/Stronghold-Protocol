@@ -2,16 +2,44 @@
 // fields, shared boss pool, wire format, determinism, robustness, deployment order.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { Battle } from '../../server/sim/Battle.js';
 import { makeBattle, chessRec, enemyRec, flatStage, hashOf, checkInvariants } from '../helpers/battleHarness.js';
 import { UF, ANIM, BOND_LAYER_CAP } from '../../shared/constants.js';
 import { EV } from '../../shared/protocol.js';
 import { getDefaultSource, spawnsFromTemplate, hasGeneratedData } from '../../server/sim/simdata.js';
 import { LocalBossPool } from '../../server/sim/spec.js';
+import { createMechanismDefinition, createMechanismRuntime } from '../../dist/core/tactical/battlefield/mechanism.js';
+import { createNavigationEffectDefinition, createNavigationSpatialEffect, createSpatialEffectRegion } from '../../dist/core/tactical/battlefield/navigation-effect.js';
+import { createRng } from '../../dist/core/common/rng.js';
+import { createBattleSpec } from '../../dist/core/tactical/battle/spec.js';
+import { BattleRuntime, simulateBattle } from '../../dist/core/tactical/battle/runtime.js';
+import { TICKS_PER_SECOND } from '../../dist/core/tactical/tick.js';
+import { secondsToTicks } from '../../dist/data/arknights/tick.js';
+import { parseLevelDefinition } from '../../dist/data/arknights/level.js';
+import { parseEnemyMovementDefinition } from '../../dist/data/arknights/enemy.js';
+import { compileLevelMovementFragment } from '../../dist/data/arknights/movement-fragment.js';
 
 const approx = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
 const guard = (o = {}) => chessRec({ id: 't_guard', profession: 'WARRIOR', stats: { atk: 300, blockCnt: 2 }, skill: null, ...o });
 const walker = (o = {}) => enemyRec({ key: 'enemy_walker', hp: 1e6, speed: 1, ...o });
+
+function arknightsFixture(name) {
+  return JSON.parse(readFileSync(new URL(`../fixtures/arknights/${name}.json`, import.meta.url), 'utf8'));
+}
+
+function slimeMovementFragment(rawLevel = arknightsFixture('level_act1autochess_01'), actionIndices = [0],
+  steeringParameters = { steeringFactorPerSecond: 10, maxSteeringForcePerSecondSquared: 100 }) {
+  const rawEnemy = arknightsFixture('enemy_1007_slime');
+  const level = parseLevelDefinition(rawLevel);
+  const fragment = compileLevelMovementFragment(level, { waveIndex: 0, fragmentIndex: 0, actionIndices }, {
+    steeringParameters,
+    alwaysCheckCurrentPoint: false,
+    rngState: 123,
+    resolveEnemy: reference => parseEnemyMovementDefinition(rawEnemy, reference.level),
+  });
+  return { rawLevel, level, ...fragment };
+}
 
 test('initial deployment order: top→bottom then left→right; right boss side right→left', () => {
   const h = makeBattle({
@@ -535,4 +563,364 @@ test('content modules: a throwing install() is logged and skipped; units outside
   assert.equal(h.b.allyUnits.filter((u) => u.deployed || u.alive).length, 1);
   assert.equal(r.reason, 'cleared');
   checkInvariants(h.b);
+});
+
+test('core raw 01 slime fragment preserves map, route flags and stats; spawns at tick left edges 90 and 240', () => {
+  const { rawLevel, level, spec, omittedActions, inactiveBranches } = slimeMovementFragment();
+  assert.equal(spec.map, level.map);
+  assert.equal(spec.map.rows, rawLevel.mapData.map.length);
+  assert.equal(spec.map.columns, rawLevel.mapData.map[0].length);
+  assert.deepEqual(spec.spawns.map(spawn => spawn.tick), [90, 240]);
+  assert.equal(spec.spawns[0].route, level.routes[0]);
+  assert.equal(spec.spawns[1].route, level.routes[0]);
+  assert.equal(spec.spawns[0].route.visitEveryCheckPoint, false);
+  assert.equal(spec.spawns[0].alwaysCheckCurrentPoint, false);
+  assert.deepEqual(spec.spawns[0].route.checkpoints, []);
+  assert.equal(spec.spawns[0].definition.vitality.maxHp, 550);
+  assert.equal(spec.spawns[0].definition.locomotion.moveSpeedPerTick, 1 / 30);
+  assert.equal(spec.moveMultiplier, 0.5);
+  assert.equal(spec.maxTicks, 1350);
+  assert.deepEqual(omittedActions, ['waves[0].fragments[0].actions[1]', 'waves[0].fragments[0].actions[2]']);
+  assert.deepEqual(inactiveBranches, ['dragon']);
+  const runtime = new BattleRuntime(spec);
+  const expectedRng = createRng(123);
+  while (runtime.snapshot().tickIndex < 90) assert.deepEqual(runtime.step().events, []);
+  assert.equal(runtime.snapshot().tickIndex, 90);
+  assert.deepEqual(runtime.snapshot().units, []);
+  const firstStep = runtime.step();
+  assert.deepEqual(firstStep.events, [{ type: 'ENEMY_SPAWNED', unitId: 0, tick: 90 }]);
+  expectedRng.next();
+  expectedRng.next();
+  const first = runtime.snapshot();
+  assert.deepEqual(first.spawning, { cursor: 1 });
+  assert.deepEqual(first.execution, { rngState: expectedRng.state(), nextUnitId: 1, nextNavigationRequestId: 1 });
+  assert.equal(first.units[0].vitality.hp, 550);
+  assert.equal(first.units[0].locomotion.mainRoute.route.progress.move.navigationRequestId, 0);
+  assert.deepEqual(first.units[0].locomotion.mainRoute.route.timing, { waveStartedAtTick: 0, fragmentStartedAtTick: 0 });
+  assert.equal(first.units[0].position[1], 9);
+  approx(10 - first.units[0].position[0], 0.5 * 10 / TICKS_PER_SECOND ** 2);
+  while (runtime.snapshot().tickIndex < 240) runtime.step();
+  assert.equal(runtime.snapshot().tickIndex, 240);
+  assert.deepEqual(runtime.snapshot().units.map(unit => unit.id), [0]);
+  const secondStep = runtime.step();
+  assert.deepEqual(secondStep.events, [{ type: 'ENEMY_SPAWNED', unitId: 1, tick: 240 }]);
+  expectedRng.next();
+  expectedRng.next();
+  const second = runtime.snapshot();
+  assert.deepEqual(second.spawning, { cursor: 2 });
+  assert.deepEqual(second.execution, { rngState: expectedRng.state(), nextUnitId: 2, nextNavigationRequestId: 2 });
+  assert.deepEqual(second.units.map(unit => unit.locomotion.mainRoute.route.progress.move.navigationRequestId), [0, 1]);
+  assert.deepEqual(second.units.map(unit => unit.locomotion.mainRoute.route.timing), [
+    { waveStartedAtTick: 0, fragmentStartedAtTick: 0 },
+    { waveStartedAtTick: 0, fragmentStartedAtTick: 0 },
+  ]);
+  const { spec: forceLimited } = slimeMovementFragment(rawLevel, [0], {
+    steeringFactorPerSecond: 100, maxSteeringForcePerSecondSquared: 0.3,
+  });
+  const forceRuntime = new BattleRuntime({ ...forceLimited, spawns: [{ ...forceLimited.spawns[0], tick: 0 }] });
+  forceRuntime.step();
+  approx(10 - forceRuntime.snapshot().units[0].position[0], 1 / 3000);
+});
+
+test('core raw 01 movement fragment replays every tick and completes routes with SCRIPT removals', () => {
+  const { spec } = slimeMovementFragment();
+  const first = new BattleRuntime(spec);
+  const second = new BattleRuntime(spec);
+  const events = [];
+  const tickBudget = spec.maxTicks;
+  for (let tick = 0; tick < tickBudget && first.result === null; tick++) {
+    assert.deepEqual(first.snapshot(), second.snapshot());
+    const step = first.step();
+    assert.deepEqual(step, second.step());
+    events.push(...step.events);
+  }
+  assert.deepEqual(first.snapshot(), second.snapshot());
+  assert.equal(first.result.reason, 'ROUTES_COMPLETED');
+  assert.equal(first.result.spawnedCount, 2);
+  assert.equal(first.result.completedRouteCount, 2);
+  assert.equal(first.result.unspawnedCount, 0);
+  assert.deepEqual(first.result.remainingUnitIds, []);
+  assert.equal(Object.hasOwn(first.result, 'killed'), false);
+  assert.deepEqual(first.snapshot().units, []);
+  assert.deepEqual(events.filter(event => event.type === 'ROUTE_COMPLETED').map(event => event.unitId), [0, 1]);
+  assert.deepEqual(events.filter(event => event.type === 'UNIT_REMOVED').map(event => [event.unitId, event.reason]), [[0, 'SCRIPT'], [1, 'SCRIPT']]);
+  assert.deepEqual(events.filter(event => event.type === 'NAVIGATION' && event.outcome.type === 'ARRIVED').map(event => event.outcome.requestId), [0, 1]);
+  assert.deepEqual(simulateBattle(spec), first.result);
+  const finished = first.snapshot();
+  assert.deepEqual(first.step(), { events: [], result: first.result });
+  assert.deepEqual(first.snapshot(), finished);
+});
+
+test('core battle snapshots isolate vitality, locomotion, route progress, navigation and counters', () => {
+  const { spec } = slimeMovementFragment();
+  const inputTiming = { ...spec.spawns[0].timing };
+  const isolated = createBattleSpec({ ...spec, spawns: [{ ...spec.spawns[0], timing: inputTiming }] });
+  inputTiming.fragmentStartedAtTick = 99;
+  assert.equal(isolated.spawns[0].timing.fragmentStartedAtTick, 0);
+  const runtime = new BattleRuntime(spec);
+  while (runtime.snapshot().tickIndex < 91) runtime.step();
+  const before = runtime.snapshot();
+  const snapshot = runtime.snapshot();
+  const unit = snapshot.units[0];
+  unit.vitality.hp = 1;
+  unit.locomotion.moving = false;
+  unit.locomotion.steering.lastVelocity = [100, 100];
+  unit.locomotion.mainRoute.route.progress.move.navigationRequestId = 99;
+  unit.locomotion.mainRoute.navigation.pathMotionMode = 'FLY';
+  unit.locomotion.mainRoute.navigation.execution.visits.visitedCenters.push([99, 99]);
+  unit.locomotion.mainRoute.navigation.execution.activity.cursor = { type: 'GOAL' };
+  snapshot.spawning.cursor = 99;
+  snapshot.execution.rngState = 99;
+  snapshot.execution.nextUnitId = 99;
+  snapshot.execution.nextNavigationRequestId = 99;
+  snapshot.units.push(unit);
+  snapshot.completedRouteCount = 99;
+  snapshot.tickIndex = 99;
+  assert.throws(() => { unit.position[0] = 99; }, TypeError);
+  assert.throws(() => { unit.definition.vitality.maxHp = 99; }, TypeError);
+  assert.throws(() => { unit.locomotion.mainRoute.route.timing.fragmentStartedAtTick = 99; }, TypeError);
+  assert.deepEqual(runtime.snapshot(), before);
+  const replica = new BattleRuntime(spec);
+  while (replica.snapshot().tickIndex < 91) replica.step();
+  assert.deepEqual(runtime.step(), replica.step());
+  assert.deepEqual(runtime.snapshot(), replica.snapshot());
+});
+
+test('core battle deadline keeps live units separate from spawns due at the excluded final edge', () => {
+  const { spec } = slimeMovementFragment();
+  const limited = createBattleSpec({ ...spec, maxTicks: 240 });
+  const runtime = new BattleRuntime(limited);
+  const events = [];
+  while (runtime.result === null) events.push(...runtime.step().events);
+  assert.deepEqual(runtime.result, {
+    reason: 'TIME_LIMIT', elapsedTicks: 240, spawnedCount: 1, completedRouteCount: 0,
+    remainingUnitIds: [0], unspawnedCount: 1,
+  });
+  assert.deepEqual(events.filter(event => event.type === 'ENEMY_SPAWNED'), [{ type: 'ENEMY_SPAWNED', unitId: 0, tick: 90 }]);
+  assert.deepEqual(events.filter(event => event.type === 'UNIT_REMOVED' || event.type === 'ROUTE_COMPLETED'), []);
+  assert.equal(runtime.snapshot().units[0].vitality.hp, 550);
+  assert.deepEqual(simulateBattle(limited), runtime.result);
+  const result = runtime.result;
+  const snapshot = runtime.snapshot();
+  result.remainingUnitIds.push(99);
+  snapshot.result.remainingUnitIds[0] = 99;
+  assert.deepEqual(runtime.result.remainingUnitIds, [0]);
+  const finished = runtime.snapshot();
+  assert.deepEqual(runtime.step(), { events: [], result: runtime.result });
+  assert.deepEqual(runtime.snapshot(), finished);
+});
+
+test('core fragment binds wave and fragment starts and preserves original action order for simultaneous spawns', () => {
+  const rawLevel = arknightsFixture('level_act1autochess_01');
+  rawLevel.waves[0].preDelay = 2;
+  rawLevel.waves[0].fragments[0].preDelay = 1;
+  const actions = rawLevel.waves[0].fragments[0].actions;
+  actions[1] = { ...actions[0], count: 1, routeIndex: 1 };
+  const { level, spec, selection } = slimeMovementFragment(rawLevel, [1, 0]);
+  assert.deepEqual(selection.actionIndices, [0, 1]);
+  assert.deepEqual(spec.spawns.map(spawn => spawn.tick), [180, 180, 330]);
+  assert.equal(spec.spawns[0].route, level.routes[0]);
+  assert.equal(spec.spawns[1].route, level.routes[1]);
+  assert.equal(spec.spawns[2].route, level.routes[0]);
+  assert.deepEqual(spec.spawns.map(spawn => spawn.timing), [
+    { waveStartedAtTick: 0, fragmentStartedAtTick: 90 },
+    { waveStartedAtTick: 0, fragmentStartedAtTick: 90 },
+    { waveStartedAtTick: 0, fragmentStartedAtTick: 90 },
+  ]);
+  const runtime = new BattleRuntime(spec);
+  while (runtime.snapshot().tickIndex < 180) assert.deepEqual(runtime.step().events, []);
+  assert.deepEqual(runtime.step().events, [
+    { type: 'ENEMY_SPAWNED', unitId: 0, tick: 180 },
+    { type: 'ENEMY_SPAWNED', unitId: 1, tick: 180 },
+  ]);
+  const units = runtime.snapshot().units;
+  assert.deepEqual(units.map(unit => unit.id), [0, 1]);
+  assert.equal(units[0].locomotion.mainRoute.route.definition, level.routes[0]);
+  assert.equal(units[1].locomotion.mainRoute.route.definition, level.routes[1]);
+  assert.deepEqual(units.map(unit => unit.locomotion.mainRoute.route.timing), [
+    { waveStartedAtTick: 0, fragmentStartedAtTick: 90 },
+    { waveStartedAtTick: 0, fragmentStartedAtTick: 90 },
+  ]);
+});
+
+test('raw enemy movement levels inherit only defined values and reject sparse, unknown and invalid entries', () => {
+  const fixture = arknightsFixture('enemy_1007_slime');
+  assert.deepEqual(parseEnemyMovementDefinition(fixture, 0), {
+    id: 'enemy_1007_slime', vitality: { maxHp: 550 }, locomotion: { moveSpeedPerTick: 1 / 30 },
+  });
+  assert.deepEqual(parseEnemyMovementDefinition(fixture, 1), {
+    id: 'enemy_1007_slime', vitality: { maxHp: 2050 }, locomotion: { moveSpeedPerTick: 1 / 30 },
+  });
+  assert.deepEqual(parseEnemyMovementDefinition({ ...fixture, Value: [...fixture.Value].reverse() }, 1), parseEnemyMovementDefinition(fixture, 1));
+  const ignored = structuredClone(fixture);
+  ignored.Value[1].enemyData.attributes.moveSpeed.m_value = NaN;
+  assert.equal(parseEnemyMovementDefinition(ignored, 1).locomotion.moveSpeedPerTick, 1 / 30);
+  ignored.Value.push({ level: 2, enemyData: { attributes: {
+    maxHp: { m_defined: false, m_value: 0 }, moveSpeed: { m_defined: false, m_value: 0 },
+  } } });
+  assert.equal(parseEnemyMovementDefinition(ignored, 2).vitality.maxHp, 550);
+  const stationary = structuredClone(fixture);
+  stationary.Value[1].enemyData.attributes.moveSpeed = { m_defined: true, m_value: 0 };
+  assert.equal(parseEnemyMovementDefinition(stationary, 1).locomotion.moveSpeedPerTick, 0);
+  assert.throws(() => parseEnemyMovementDefinition(fixture, 2), /unknown enemy level/);
+  assert.throws(() => parseEnemyMovementDefinition({ ...fixture, Value: [...fixture.Value, fixture.Value[0]] }, 0), /duplicate enemy level/);
+  const sparse = structuredClone(fixture);
+  delete sparse.Value[0];
+  assert.throws(() => parseEnemyMovementDefinition(sparse, 1), /dense/);
+  assert.throws(() => parseEnemyMovementDefinition({ ...fixture, Value: [fixture.Value[1]] }, 1), /requires level 0/);
+  const missing = structuredClone(fixture);
+  missing.Value[0].enemyData.attributes.moveSpeed.m_defined = false;
+  assert.throws(() => parseEnemyMovementDefinition(missing, 1), /requires a defined value/);
+  for (const level of [-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => parseEnemyMovementDefinition(fixture, level), /enemy level/);
+  }
+  for (const [name, value] of [['maxHp', 0], ['maxHp', -1], ['maxHp', NaN], ['moveSpeed', -1], ['moveSpeed', Infinity], ['moveSpeed', '1']]) {
+    const invalid = structuredClone(fixture);
+    invalid.Value[0].enemyData.attributes[name].m_value = value;
+    assert.throws(() => parseEnemyMovementDefinition(invalid, 0), /defined enemy/);
+  }
+  const invalidFlag = structuredClone(fixture);
+  invalidFlag.Value[1].enemyData.attributes.moveSpeed.m_defined = 0;
+  assert.throws(() => parseEnemyMovementDefinition(invalidFlag, 1), /m_defined must be boolean/);
+});
+
+test('core fragment projects periodic spawns from absolute source times without accumulating interval rounding', () => {
+  const rawLevel = arknightsFixture('level_act1autochess_01');
+  const action = rawLevel.waves[0].fragments[0].actions[0];
+  action.preDelay = 0.05;
+  action.interval = 0.15;
+  action.count = 8;
+  const { spec } = slimeMovementFragment(rawLevel);
+  const expected = [2, 6, 11, 15, 20, 24, 29, 33];
+  assert.deepEqual(spec.spawns.map(spawn => spawn.tick), expected);
+  const runtime = new BattleRuntime({ ...spec, maxTicks: 34 });
+  const events = [];
+  while (runtime.result === null) events.push(...runtime.step().events);
+  assert.deepEqual(events.filter(event => event.type === 'ENEMY_SPAWNED').map(event => event.tick), expected);
+  assert.equal(runtime.result.spawnedCount, 8);
+  assert.equal(runtime.result.elapsedTicks, 34);
+});
+
+test('core battle uses integer tick boundaries for spawning, effect expiry and deadlines', () => {
+  const { spec } = slimeMovementFragment();
+  const mechanism = createMechanismRuntime({ id: 0, definition: createMechanismDefinition({ id: 'expiry' }), active: true });
+  const effect = createNavigationSpatialEffect({
+    id: 0,
+    definition: createNavigationEffectDefinition({ id: 'expiry', WALK: { denyPassage: false, deniedDepartures: [], costFloor: 2 }, FLY: null }),
+    source: { type: 'MECHANISM', mechanismId: 0 },
+    active: true,
+    region: createSpatialEffectRegion({ type: 'FIXED', position: [9, 6], range: [[0, 0]], direction: 'RIGHT' }),
+    expiresAtTick: secondsToTicks(0.9),
+  });
+  assert.equal(secondsToTicks(0.1 + 0.2), 9);
+  assert.equal(secondsToTicks(1e-18), 1);
+  assert.equal(secondsToTicks(0), 0);
+  assert.equal(secondsToTicks(0.15), 5);
+  for (const seconds of [NaN, Infinity, Number.MAX_VALUE]) assert.throws(() => secondsToTicks(seconds), RangeError);
+  const boundary = createBattleSpec({ ...spec, maxTicks: secondsToTicks(1.2),
+    spawns: [{ ...spec.spawns[0], tick: secondsToTicks(0.9) }], initialMechanisms: [mechanism], initialEffects: [effect],
+  });
+  const runtime = new BattleRuntime(boundary);
+  for (let index = 0; index < 27; index++) assert.deepEqual(runtime.step().events, []);
+  assert.equal(runtime.snapshot().effects.length, 1);
+  const step = runtime.step();
+  assert.equal(step.events[0].type, 'ENEMY_SPAWNED');
+  assert.equal(step.events[0].tick, 27);
+  assert.equal(runtime.snapshot().effects.length, 0);
+  assert.equal(runtime.snapshot().tickIndex, 28);
+  while (runtime.result === null) runtime.step();
+  assert.equal(runtime.result.reason, 'TIME_LIMIT');
+  assert.equal(runtime.result.elapsedTicks, 36);
+  const deadline = new BattleRuntime({ ...boundary, maxTicks: secondsToTicks(0.9) });
+  for (let index = 0; index < 27; index++) deadline.step();
+  assert.equal(deadline.snapshot().tickIndex, 27);
+  assert.equal(deadline.result.reason, 'TIME_LIMIT');
+  assert.equal(deadline.result.spawnedCount, 0);
+  assert.equal(deadline.result.unspawnedCount, 1);
+  assert.equal(deadline.result.elapsedTicks, 27);
+  const rounded = simulateBattle({ ...boundary, maxTicks: secondsToTicks(0.91) });
+  assert.equal(rounded.elapsedTicks, 28);
+  for (const rngState of [-1, 2 ** 32, 0.5, NaN]) {
+    assert.throws(() => new BattleRuntime({ ...boundary, rngState }), /unsigned 32-bit/);
+  }
+  for (const maxTicks of [0, -1, 0.5, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => createBattleSpec({ ...boundary, maxTicks }), /tick budget/);
+  }
+  for (const tick of [-1, 0.5, NaN, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => createBattleSpec({ ...boundary, spawns: [{ ...boundary.spawns[0], tick }] }), /spawn.tick/);
+  }
+  assert.throws(() => createBattleSpec({ ...boundary, spawns: [{ ...boundary.spawns[0],
+    timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0.5 },
+  }] }), /fragmentStartedAtTick/);
+});
+
+test('core battle rolls back spawning, expiry, RNG and tick progress when movement cannot be computed', () => {
+  const { spec } = slimeMovementFragment();
+  const mechanism = createMechanismRuntime({ id: 0, definition: createMechanismDefinition({ id: 'overflow' }), active: true });
+  const region = createSpatialEffectRegion({ type: 'FIXED', position: [0, 0], direction: 'RIGHT',
+    range: Array.from({ length: spec.map.rows }, (_, row) => Array.from({ length: spec.map.columns }, (_, col) => [row, col])).flat(),
+  });
+  const effect = createNavigationSpatialEffect({ id: 0,
+    definition: createNavigationEffectDefinition({ id: 'overflow', WALK: { denyPassage: false, deniedDepartures: [], costFloor: 0x7fffffff }, FLY: null }),
+    source: { type: 'MECHANISM', mechanismId: 0 }, active: true, region, expiresAtTick: null,
+  });
+  const expired = createNavigationSpatialEffect({ ...effect, id: 1, expiresAtTick: 0 });
+  const runtime = new BattleRuntime({ ...spec, spawns: [{ ...spec.spawns[0], tick: 0 }],
+    initialMechanisms: [mechanism], initialEffects: [effect, expired],
+  });
+  const before = runtime.snapshot();
+  assert.throws(() => runtime.step(), /distance exceeds int32/);
+  assert.deepEqual(runtime.snapshot(), before);
+  assert.throws(() => runtime.step(), /distance exceeds int32/);
+  assert.deepEqual(runtime.snapshot(), before);
+});
+
+test('raw levels preserve predefined configuration and keep unsupported inputs outside the movement fragment', () => {
+  const raw = arknightsFixture('level_act1autochess_01');
+  const instance = arknightsFixture('trap_098_mire');
+  instance.hidden = true;
+  raw.predefines.tokenInsts.push(instance);
+  const parsed = parseLevelDefinition(raw);
+  const predefined = parsed.predefines.tokenInsts[0];
+  assert.deepEqual(predefined.position, [18, 1]);
+  assert.equal(predefined.direction, 'UP');
+  assert.equal(predefined.hidden, true);
+  assert.equal(predefined.inst.characterKey, 'trap_098_mire');
+  assert.equal(predefined.skillIndex, 0);
+  assert.equal(predefined.mainSkillLvl, 1);
+  assert.deepEqual(predefined.overrideSkillBlackboard, instance.overrideSkillBlackboard);
+  assert.equal(parsed.branches.dragon.phases[0].actions[0].key, 'enemy_9012_acloon');
+  instance.inst.level = 99;
+  instance.overrideSkillBlackboard[0].value = 99;
+  raw.routes[0].endPosition.col = 99;
+  assert.equal(predefined.inst.level, 1);
+  assert.equal(predefined.overrideSkillBlackboard[0].value, -0.05);
+  assert.deepEqual(parsed.routes[0].endPosition, [9, 2]);
+  assert.throws(() => { predefined.overrideSkillBlackboard[0].value = 1; }, TypeError);
+  assert.throws(() => slimeMovementFragment(raw), /predefined instances/);
+  for (const mutate of [
+    raw => { raw.waves[0].fragments[0].actions[0].routeIndex = 3; },
+    raw => { raw.branches.dragon.phases[0].actions[0].routeIndex = 1; },
+    raw => { raw.waves[0].fragments[0].actions[0].key = 'missing'; },
+    raw => { raw.enemyDbRefs.push(raw.enemyDbRefs[0]); },
+    raw => { raw.waves[0].fragments[0].actions[0].actionType = 'ACTIVATE_PREDEFINE'; },
+    raw => { raw.waves[0].fragments[0].actions[0].unknownRule = true; },
+    raw => { delete raw.waves[0].fragments[0].actions[0]; },
+    raw => { raw.predefines.tokenCards.push({}); },
+    raw => { raw.runes = [{}]; },
+  ]) {
+    const invalid = arknightsFixture('level_act1autochess_01');
+    mutate(invalid);
+    assert.throws(() => parseLevelDefinition(invalid));
+  }
+  for (const mutate of [
+    raw => { raw.waves[0].fragments[0].actions[0].blockFragment = true; },
+    raw => { raw.waves[0].fragments[0].actions[0].managedByScheduler = false; },
+    raw => { raw.waves[0].fragments[0].actions[0].randomType = 'RANDOM'; },
+    raw => { raw.options.steeringEnabled = false; },
+  ]) {
+    const unsupported = arknightsFixture('level_act1autochess_01');
+    mutate(unsupported);
+    assert.throws(() => slimeMovementFragment(unsupported), /requires|unsupported/);
+  }
 });

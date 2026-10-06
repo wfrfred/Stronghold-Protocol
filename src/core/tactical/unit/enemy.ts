@@ -4,15 +4,16 @@ import type { NavigationRequestId } from "../navigation/request.js";
 import { createNavigationState, startNavigationRequest } from "../navigation/state.js";
 import type { NavigationOutcome } from "../navigation/state.js";
 import type { RouteDefinition } from "../route/definition.js";
-import { enterRoute, validateRouteExecution } from "../route/execution.js";
+import { createRouteExecution, enterRoute, validateRouteExecution } from "../route/execution.js";
 import { initializeRouteSpawn } from "../route/spawn.js";
 import { createRouteState } from "../route/state.js";
-import type { RouteClockBinding } from "../route/state.js";
-import { createRoutedLocomotionState } from "./locomotion/state.js";
+import type { RouteTiming } from "../route/state.js";
+import { copyLocomotionState, createRoutedLocomotionState } from "./locomotion/state.js";
 import type { Locomotion, LocomotiveUnitDefinition, RoutedLocomotion } from "./locomotion/state.js";
 import { stepRoutedLocomotion } from "./locomotion/step.js";
 import type { RoutedLocomotionStepContext } from "./locomotion/step.js";
 import type { Vitality, VitalUnitDefinition } from "./vitality.js";
+import { copyVitalityState } from "./vitality.js";
 import type { Unit, UnitId } from "./unit.js";
 
 export interface EnemyDefinition
@@ -27,11 +28,19 @@ export type Enemy =
 
 export type RoutedEnemy = Enemy & RoutedLocomotion;
 
+export function copyRoutedEnemy(enemy: Readonly<RoutedEnemy>): RoutedEnemy {
+    return {
+        ...enemy,
+        vitality: copyVitalityState(enemy.vitality),
+        locomotion: copyLocomotionState(enemy.locomotion),
+    };
+}
+
 export interface RoutedEnemySpawn {
     readonly id: UnitId;
     readonly definition: EnemyDefinition;
     readonly route: RouteDefinition;
-    readonly clockBinding: RouteClockBinding;
+    readonly timing: RouteTiming;
     readonly alwaysCheckCurrentPoint: boolean;
     readonly rngState: Seed;
     readonly nextNavigationRequestId: NavigationRequestId;
@@ -59,13 +68,13 @@ export function createEnemyDefinition(definition: EnemyDefinition): EnemyDefinit
     if (!Number.isFinite(definition.vitality.maxHp) || definition.vitality.maxHp <= 0) {
         throw new RangeError("enemy maxHp must be finite and positive");
     }
-    if (!Number.isFinite(definition.locomotion.moveSpeed) || definition.locomotion.moveSpeed < 0) {
-        throw new RangeError("enemy moveSpeed must be finite and non-negative");
+    if (!Number.isFinite(definition.locomotion.moveSpeedPerTick) || definition.locomotion.moveSpeedPerTick < 0) {
+        throw new RangeError("enemy moveSpeedPerTick must be finite and non-negative");
     }
     return Object.freeze({
         id: definition.id,
         vitality: Object.freeze({ maxHp: definition.vitality.maxHp }),
-        locomotion: Object.freeze({ moveSpeed: definition.locomotion.moveSpeed }),
+        locomotion: Object.freeze({ moveSpeedPerTick: definition.locomotion.moveSpeedPerTick }),
     });
 }
 
@@ -76,19 +85,8 @@ export function initializeRoutedEnemy(spawn: RoutedEnemySpawn): RoutedEnemyIniti
     validateRouteExecution(spawn.route, spawn.alwaysCheckCurrentPoint);
     const rng = createRng(spawn.rngState);
     const location = initializeRouteSpawn(spawn.route, rng);
-    let nextNavigationRequestId = spawn.nextNavigationRequestId;
-    const initial = enterRoute(createRouteState(spawn.route, spawn.clockBinding, spawn.alwaysCheckCurrentPoint), {
-        rng,
-        nextNavigationRequestId() {
-            const id = nextNavigationRequestId;
-            const next = id + 1;
-            if (!Number.isSafeInteger(id) || id < 0 || !Number.isSafeInteger(next)) {
-                throw new RangeError("navigation request identity overflow");
-            }
-            nextNavigationRequestId = next;
-            return id;
-        },
-    });
+    const execution = createRouteExecution(rng, spawn.nextNavigationRequestId);
+    const initial = enterRoute(createRouteState(spawn.route, spawn.timing, spawn.alwaysCheckCurrentPoint), execution);
     const navigation = createNavigationState(spawn.route.pathMotionMode, location.locatorOffset);
     return {
         enemy: {
@@ -101,13 +99,12 @@ export function initializeRoutedEnemy(spawn: RoutedEnemySpawn): RoutedEnemyIniti
                 initial.request === undefined ? navigation : startNavigationRequest(navigation, initial.request),
             ),
         },
-        rngState: rng.state(),
-        nextNavigationRequestId,
+        ...execution.state(),
     };
 }
 
 export function stepRoutedEnemy(enemy: RoutedEnemy, context: RoutedEnemyStepContext): RoutedEnemyStep {
-    const step = stepRoutedLocomotion(enemy.locomotion, enemy.position, enemy.definition.locomotion.moveSpeed, context);
+    const step = stepRoutedLocomotion(enemy.locomotion, enemy.position, enemy.definition.locomotion.moveSpeedPerTick, context);
     return {
         enemy: {
             ...enemy,

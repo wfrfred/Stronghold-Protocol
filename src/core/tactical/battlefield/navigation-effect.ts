@@ -48,7 +48,7 @@ export interface NavigationSpatialEffect {
     readonly source: SpatialEffectSource;
     active: boolean;
     region: SpatialEffectRegion;
-    expiresAtSeconds: number | null;
+    expiresAtTick: number | null;
 }
 
 function identity(value: number, name: string): number {
@@ -156,16 +156,15 @@ export function createNavigationSpatialEffect(effect: NavigationSpatialEffect): 
     if (typeof effect.active !== "boolean") {
         throw new TypeError("spatial effect active must be boolean");
     }
-    if (effect.expiresAtSeconds !== null
-        && (!Number.isFinite(effect.expiresAtSeconds) || effect.expiresAtSeconds < 0)) {
-        throw new RangeError("spatial effect expiry must be finite and nonnegative or null");
-    }
+    const expiresAtTick = effect.expiresAtTick === null
+        ? null
+        : identity(effect.expiresAtTick, "spatial effect expiry tick");
     return {
         id: identity(effect.id, "spatial effect id"),
         definition: effect.definition,
         source: source(effect.source),
         active: effect.active,
         region: createSpatialEffectRegion(effect.region),
-        expiresAtSeconds: effect.expiresAtSeconds,
+        expiresAtTick,
     };
 }

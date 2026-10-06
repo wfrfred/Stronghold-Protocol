@@ -17,15 +17,14 @@ import {
     steerNavigation,
 } from "../../navigation/state.js";
 import type { NavigationOutcome, NavigationState } from "../../navigation/state.js";
-import { advanceRoute, enterRoute, tickRouteWait } from "../../route/execution.js";
-import type { RouteExecutionContext, RouteTransition } from "../../route/execution.js";
-import type { RouteClock, RouteState } from "../../route/state.js";
+import { advanceRoute, createRouteExecution, enterRoute, tickRouteWait } from "../../route/execution.js";
+import type { RouteTransition } from "../../route/execution.js";
+import type { RouteState } from "../../route/state.js";
 import type { RoutedLocomotionState } from "./state.js";
 import { integrateSteering } from "./steering.js";
 import type { SteeringParameters } from "./steering.js";
 
 export interface RoutedLocomotionStepContext {
-    readonly clock: RouteClock;
     readonly maps: NavigationMaps;
     readonly fieldCache: NavigationFieldCache;
     readonly moveMultiplier: number;
@@ -78,26 +77,13 @@ function bindCurrentPath(
 export function stepRoutedLocomotion(
     state: Readonly<RoutedLocomotionState>,
     position: WorldPosition,
-    baseMoveSpeed: number,
+    baseMoveSpeedPerTick: number,
     context: RoutedLocomotionStepContext,
 ): RoutedLocomotionStep {
     if (state.alternativeRoute !== null) {
         throw new RangeError("alternative route execution is not supported");
     }
-    const rng = createRng(context.rngState);
-    let nextNavigationRequestId = context.nextNavigationRequestId;
-    const execution: RouteExecutionContext = {
-        rng,
-        nextNavigationRequestId() {
-            const id = nextNavigationRequestId;
-            const next = id + 1;
-            if (!Number.isSafeInteger(id) || id < 0 || !Number.isSafeInteger(next)) {
-                throw new RangeError("navigation request identity overflow");
-            }
-            nextNavigationRequestId = next;
-            return id;
-        },
-    };
+    const execution = createRouteExecution(createRng(context.rngState), context.nextNavigationRequestId);
     const mainRoute = state.mainRoute;
     const initial = enterRoute(mainRoute.route, execution);
     let route = initial.state;
@@ -108,9 +94,9 @@ export function stepRoutedLocomotion(
     const previouslyArrived = mainRoute.navigation.execution.activity.type === "ARRIVED"
         ? mainRoute.navigation.execution.activity.request.id
         : null;
-    const moveSpeed = baseMoveSpeed * context.moveMultiplier;
-    const stepDistance = moveSpeed * context.clock.deltaTimeSeconds;
-    if (!Number.isFinite(moveSpeed) || moveSpeed < 0 || !Number.isFinite(stepDistance)) {
+    const moveSpeedPerTick = baseMoveSpeedPerTick * context.moveMultiplier;
+    const stepDistance = moveSpeedPerTick;
+    if (!Number.isFinite(moveSpeedPerTick) || moveSpeedPerTick < 0) {
         throw new RangeError("movement budget must be finite and non-negative");
     }
 
@@ -140,7 +126,7 @@ export function stepRoutedLocomotion(
                 while (isMovingRoute(route)
                     || (route.progress.phase === "CHECKPOINTS"
                         && route.progress.checkpoint.type === "WAIT"
-                        && route.progress.checkpoint.remainingSeconds <= 0)) {
+                        && route.progress.checkpoint.remainingTicks <= 0)) {
                     if (!isMovingRoute(route)) {
                         if (!context.routeAdvanceAllowed) break;
                         advance();
@@ -161,8 +147,7 @@ export function stepRoutedLocomotion(
                                 steeringState,
                                 position,
                                 steering.selection.decision.target,
-                                moveSpeed,
-                                context.clock.deltaTimeSeconds,
+                                moveSpeedPerTick,
                                 context.steeringParameters,
                             );
                             position = movement.position;
@@ -185,10 +170,10 @@ export function stepRoutedLocomotion(
         }
     }
 
-    route = tickRouteWait(route, context.clock);
+    route = tickRouteWait(route);
     if (route.progress.phase === "CHECKPOINTS"
         && route.progress.checkpoint.type === "WAIT"
-        && route.progress.checkpoint.remainingSeconds <= 0) {
+        && route.progress.checkpoint.remainingTicks <= 0) {
         if (context.routeAdvanceAllowed) advance();
     } else if (isMovingRoute(route)) {
         const request = getNavigationRequest(navigation);
@@ -207,8 +192,7 @@ export function stepRoutedLocomotion(
             steering: steeringState,
             mainRoute: { route, navigation },
         },
-        rngState: rng.state(),
-        nextNavigationRequestId,
+        ...execution.state(),
         outcomes,
     };
 }

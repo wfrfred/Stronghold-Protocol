@@ -7,6 +7,7 @@ import type { MechanismId, MechanismRuntime } from "./mechanism.js";
 import type {
     NavigationSpatialEffect, SpatialEffectId, SpatialEffectRegion, SpatialEffectSource,
 } from "./navigation-effect.js";
+import { createNavigationSpatialEffect } from "./navigation-effect.js";
 import { copyUnitSnapshot, reconcileUnitNavigation } from "../unit/snapshot.js";
 import type { Unit, UnitId } from "../unit/unit.js";
 import { projectNavigationMaps, projectStaticNavigationMap } from "./navigation-projection.js";
@@ -28,7 +29,7 @@ export type BattlefieldChange<U extends Unit = Unit> =
     | { readonly type: "SET_EFFECT_ACTIVE"; readonly effectId: SpatialEffectId; readonly active: boolean; }
     | { readonly type: "SET_EFFECT_REGION"; readonly effectId: SpatialEffectId; readonly region: SpatialEffectRegion; }
     | { readonly type: "REMOVE_EFFECT"; readonly effectId: SpatialEffectId; }
-    | { readonly type: "EXPIRE_EFFECTS"; readonly elapsedSeconds: number; };
+    | { readonly type: "EXPIRE_EFFECTS"; readonly tick: number; };
 
 export interface BattlefieldChangeResult {
     readonly changedNavigationModes: readonly PathMotionMode[];
@@ -63,6 +64,7 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
     #mechanisms = new Map<MechanismId, MechanismRuntime>();
     #effects = new Map<SpatialEffectId, NavigationSpatialEffect>();
     #spatial: BattlefieldSpatialView;
+    #pendingInvalidations: Set<NavigationMaps[PathMotionMode]> | null = null;
 
     constructor(options: BattlefieldRuntimeOptions, copyUnit: (unit: Readonly<U>) => U) {
         this.#copyUnit = copyUnit;
@@ -114,6 +116,31 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
 
     effectsFollowing(unitId: UnitId): readonly SpatialEffectId[] {
         return [...(this.#spatial.effectsByAnchor.get(unitId) ?? [])];
+    }
+
+    transact<T>(operation: (battlefield: BattlefieldRuntime<U>) => T): T {
+        if (this.#pendingInvalidations !== null) throw new Error("battlefield transaction is already active");
+        const units = this.#units;
+        const mechanisms = this.#mechanisms;
+        const effects = this.#effects;
+        const spatial = this.#spatial;
+        const maps = this.#navigationMaps;
+        const invalidations = new Set<NavigationMaps[PathMotionMode]>();
+        this.#pendingInvalidations = invalidations;
+        try {
+            const result = operation(this);
+            for (const map of invalidations) this.#fieldCache.invalidate(map);
+            return result;
+        } catch (error) {
+            this.#units = units;
+            this.#mechanisms = mechanisms;
+            this.#effects = effects;
+            this.#spatial = spatial;
+            this.#navigationMaps = maps;
+            throw error;
+        } finally {
+            this.#pendingInvalidations = null;
+        }
     }
 
     apply(changes: readonly BattlefieldChange<U>[]): BattlefieldChangeResult {
@@ -174,7 +201,7 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
                     }
                     break;
                 case "ADD_EFFECT":
-                    register(effects, change.effect.id, { ...change.effect }, "effect");
+                    register(effects, change.effect.id, createNavigationSpatialEffect(change.effect), "effect");
                     break;
                 case "SET_EFFECT_ACTIVE":
                     effects.set(change.effectId, { ...requireEntry(effects, change.effectId, "effect"), active: change.active });
@@ -187,9 +214,9 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
                     removeEffect(change.effectId);
                     break;
                 case "EXPIRE_EFFECTS":
-                    if (!Number.isFinite(change.elapsedSeconds) || change.elapsedSeconds < 0) throw new RangeError("invalid effect expiry time");
+                    if (!Number.isSafeInteger(change.tick) || change.tick < 0) throw new RangeError("effect expiry tick must be a nonnegative safe integer");
                     for (const effect of effects.values()) {
-                        if (effect.expiresAtSeconds !== null && effect.expiresAtSeconds <= change.elapsedSeconds) removeEffect(effect.id);
+                        if (effect.expiresAtTick !== null && effect.expiresAtTick <= change.tick) removeEffect(effect.id);
                     }
                     break;
             }
@@ -203,7 +230,10 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
         this.#effects = effects;
         this.#spatial = spatial;
         this.#navigationMaps = projection.maps;
-        for (const mode of projection.changedModes) this.#fieldCache.invalidate(previousMaps[mode]);
+        for (const mode of projection.changedModes) {
+            if (this.#pendingInvalidations === null) this.#fieldCache.invalidate(previousMaps[mode]);
+            else this.#pendingInvalidations.add(previousMaps[mode]);
+        }
         return {
             changedNavigationModes: projection.changedModes,
             removedUnits, removedMechanisms, removedEffects: [...removedEffects],

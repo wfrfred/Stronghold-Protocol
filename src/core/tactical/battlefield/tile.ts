@@ -26,21 +26,21 @@ export type TileTerrain =
     | "WORD";
 
 export interface InfectionParams {
-    readonly damagePerSecond: number;
+    readonly damagePerTick: number;
     readonly attackBonusRatio: number;
     readonly attackSpeedBonus: number;
-    readonly activeUntilSeconds: number;
+    readonly activeUntilTick: number;
 }
 
 export interface MireParams {
-    readonly stackIntervalSeconds: number;
+    readonly stackIntervalTicks: number;
     readonly attackSpeedPerStack: number;
     readonly moveSpeedRatioPerStack: number;
     readonly maxStacks: number;
 }
 
 export interface DeepseaParams {
-    readonly damagePerSecond: number;
+    readonly damagePerTick: number;
     readonly attackSpeedModifier: number;
     readonly moveSpeedMultiplier: number;
 }
@@ -86,6 +86,13 @@ function requireNonnegative(value: number, name: string): number {
     return value === 0 ? 0 : value;
 }
 
+function requireTick(value: number, name: string): number {
+    if (!Number.isSafeInteger(value) || value < 0) {
+        throw new RangeError(`${name} must be a nonnegative safe integer`);
+    }
+    return value === 0 ? 0 : value;
+}
+
 function copyMechanism(mechanism: TileMechanism | null): TileMechanism | null {
     if (mechanism === null) {
         return null;
@@ -100,17 +107,17 @@ function copyMechanism(mechanism: TileMechanism | null): TileMechanism | null {
             return Object.freeze({
                 type: "INFECTION",
                 params: Object.freeze({
-                    damagePerSecond: requireNonnegative(params.damagePerSecond, "infection damage"),
+                    damagePerTick: requireNonnegative(params.damagePerTick, "infection damage"),
                     attackBonusRatio: requireFinite(params.attackBonusRatio, "infection attack bonus"),
                     attackSpeedBonus: requireFinite(params.attackSpeedBonus, "infection attack speed bonus"),
-                    activeUntilSeconds: requireNonnegative(params.activeUntilSeconds, "infection duration"),
+                    activeUntilTick: requireTick(params.activeUntilTick, "infection expiry tick"),
                 }),
             });
         }
         case "MIRE": {
             const params = mechanism.params;
-            requireFinite(params.stackIntervalSeconds, "mire stack interval");
-            if (params.stackIntervalSeconds <= 0) {
+            const stackIntervalTicks = requireTick(params.stackIntervalTicks, "mire stack interval");
+            if (stackIntervalTicks === 0) {
                 throw new RangeError("mire stack interval must be positive");
             }
             if (!Number.isSafeInteger(params.maxStacks) || params.maxStacks <= 0) {
@@ -119,7 +126,7 @@ function copyMechanism(mechanism: TileMechanism | null): TileMechanism | null {
             return Object.freeze({
                 type: "MIRE",
                 params: Object.freeze({
-                    stackIntervalSeconds: params.stackIntervalSeconds,
+                    stackIntervalTicks,
                     attackSpeedPerStack: requireFinite(params.attackSpeedPerStack, "mire attack speed per stack"),
                     moveSpeedRatioPerStack: requireFinite(params.moveSpeedRatioPerStack, "mire move speed per stack"),
                     maxStacks: params.maxStacks,
@@ -133,7 +140,7 @@ function copyMechanism(mechanism: TileMechanism | null): TileMechanism | null {
             return Object.freeze({
                 type: "DEEPSEA",
                 params: Object.freeze({
-                    damagePerSecond: requireNonnegative(params.damagePerSecond, "deepsea damage"),
+                    damagePerTick: requireNonnegative(params.damagePerTick, "deepsea damage"),
                     attackSpeedModifier: requireFinite(params.attackSpeedModifier, "deepsea attack speed modifier"),
                     moveSpeedMultiplier: requireNonnegative(params.moveSpeedMultiplier, "deepsea move speed multiplier"),
                 }),
