@@ -61,7 +61,7 @@ async function serve(request, response) {
     return finish(403, 'Forbidden');
   }
   if (pathname === '/') {
-    response.writeHead(302, { Location: '/dev/render-demo.html?scene=core&stage=act1autochess_m01' });
+    response.writeHead(302, { Location: '/dev/render-demo.html?scene=core&mode=combat&stage=act1autochess_m01' });
     return response.end();
   }
   const [prefix, directory] = mounts.find(([prefix]) => pathname.startsWith(prefix));

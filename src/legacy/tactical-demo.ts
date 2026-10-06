@@ -4,10 +4,6 @@ import {
     type BattleEvent,
 } from "../core/tactical/battle/runtime.js";
 import type { BattlefieldMap } from "../core/tactical/battlefield/map.js";
-import { hasRoutedLocomotion } from "../core/tactical/unit/locomotion/state.js";
-import { hasVitality, hasVitalityDefinition } from "../core/tactical/unit/vitality.js";
-import { isSpatiallyPresent } from "../core/tactical/unit/presence.js";
-import type { Unit } from "../core/tactical/unit/unit.js";
 import { TICKS_PER_SECOND } from "../core/tactical/tick.js";
 import { getUnspawnedCount } from "../core/tactical/battle/schedule.js";
 import {
@@ -15,25 +11,13 @@ import {
     type ArknightsMovementCatalog,
     type ArknightsMovementSelection,
 } from "../data/arknights/movement-scenario.js";
-
-interface LegacyData {
-    lookup(file: string, key: string): unknown;
-}
-
-interface LegacyUnitInfo {
-    id: number;
-    kind: "enemy" | "device";
-    side: "enemy" | "ally";
-    defId: string;
-    name: string;
-    spine: string;
-    avatar: string;
-    x: number;
-    y: number;
-    facing: number;
-    maxHp: number;
-    motion: "WALK" | "FLY";
-}
+import { createTacticalCombatDemoSpec } from "./tactical-demo-combat.js";
+import {
+    TacticalDemoPresentation,
+    type LegacyData,
+    type LegacyUnitInfo,
+    type LegacyVisualEvent,
+} from "./tactical-demo-presentation.js";
 
 interface LegacyView {
     setStage(stage: Record<string, unknown>): unknown;
@@ -57,7 +41,7 @@ interface LegacyView {
     pushEvents(events: {
         fieldId: string;
         gt: number;
-        ev: readonly (readonly ["spawn", LegacyUnitInfo])[];
+        ev: readonly (LegacyVisualEvent | readonly ["spawn", LegacyUnitInfo])[];
     }): unknown;
     debug: { interp: { snapToNewest(): unknown; maxExtrapolate: number } };
 }
@@ -66,6 +50,7 @@ export interface TacticalDemoOptions {
     readonly stageId: string;
     readonly data: LegacyData;
     readonly seed?: number;
+    readonly mode?: "MOVEMENT" | "COMBAT";
     readonly onEvent?: (event: unknown) => void;
 }
 
@@ -127,10 +112,6 @@ function record(value: unknown): Record<string, unknown> {
         : {};
 }
 
-function text(value: unknown, fallback: string): string {
-    return typeof value === "string" && value.length > 0 ? value : fallback;
-}
-
 function stageRows(map: BattlefieldMap): string[] {
     const rows: string[][] = [];
     const mechanisms = { MIRE: "m", DEEPSEA: "d", SMOG: "g", INFECTION: "i" } as const;
@@ -164,49 +145,15 @@ function stageRows(map: BattlefieldMap): string[] {
     return rows.map((row) => row.join(""));
 }
 
-function unitInfo(unit: Unit, data: LegacyData): LegacyUnitInfo {
-    const routed = hasRoutedLocomotion(unit);
-    const assetId =
-        unit.definition.id === "enemy_1000_gopro" ? "enemy_1000_gopro_2" : unit.definition.id;
-    const metadata = record(data.lookup(routed ? "enemies" : "tokens", assetId));
-
-    return {
-        id: unit.id,
-        kind: routed ? "enemy" : "device",
-        side: routed ? "enemy" : "ally",
-        defId: unit.definition.id,
-        name: text(metadata.name, routed ? unit.definition.id : "阻隔工事"),
-        spine: text(metadata.spine, assetId),
-        avatar: text(metadata.iconId, assetId),
-        x: unit.position[0],
-        y: unit.position[1],
-        facing: routed && unit.locomotion.steering.lastVelocity[0] > 0 ? 1 : -1,
-        maxHp: hasVitalityDefinition(unit.definition) ? unit.definition.vitality.maxHp : 0,
-        motion: routed ? unit.locomotion.mainRoute.navigation.pathMotionMode : "WALK",
-    };
-}
-
-function unitTuple(unit: Unit): number[] {
-    const routed = hasRoutedLocomotion(unit);
-    const flying = routed && unit.locomotion.mainRoute.navigation.pathMotionMode === "FLY";
-
-    return [
-        unit.id,
-        ...unit.position,
-        hasVitality(unit) ? unit.vitality.hp : 0,
-        hasVitalityDefinition(unit.definition) ? unit.definition.vitality.maxHp : 0,
-        0,
-        0,
-        flying ? 512 : 0,
-        routed && unit.locomotion.moving ? 1 : 0,
-    ];
-}
-
 export async function createTacticalDemo(view: LegacyView, options: TacticalDemoOptions) {
-    const { stageId, data, seed = 123 } = options;
+    const { stageId, data, seed = 123, mode = "MOVEMENT" } = options;
 
     if (!STAGE_IDS.has(stageId)) {
         throw new RangeError(`unsupported demo stage: ${stageId}`);
+    }
+
+    if (mode === "COMBAT" && stageId !== "act1autochess_m01") {
+        throw new RangeError(`unsupported combat demo stage: ${stageId}`);
     }
 
     const [rawLevel, entries] = await Promise.all([
@@ -244,88 +191,102 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
     };
     const scenario = loadMovementScenario(rawLevel, selection, catalog, seed);
 
+    const route = scenario.level.routes[0]!;
+    const spec =
+        mode === "COMBAT"
+            ? createTacticalCombatDemoSpec(scenario.spec.map, route, data, seed)
+            : scenario.spec;
+    const presentation = new TacticalDemoPresentation(data);
+
     const legacyStage = record(data.lookup("stages", stageId));
     const renderedStageId = `ts-demo:${stageId}`;
     const stage = {
         ...legacyStage,
         id: renderedStageId,
-        rows: Array.isArray(legacyStage.rows) ? legacyStage.rows : stageRows(scenario.spec.map),
+        rows: Array.isArray(legacyStage.rows) ? legacyStage.rows : stageRows(spec.map),
         devices: [],
     };
-    const route = scenario.level.routes[0]!;
     const kind = route.startPosition[0] <= 6 ? "boss" : "normal";
     const rect =
         kind === "boss" ? { r0: 0, r1: 6, c0: 0, c1: 20 } : { r0: 6, r1: 13, c0: 0, c1: 20 };
     const fieldId = "ts-tactical-demo";
 
     const commands = new Map<number, readonly BattleCommand[]>();
-    const crateIds = scenario.spec.predefines
+    const crateIds = spec.predefines
         .filter((definition) => definition.creation.type === "UNIT")
         .map((definition) => definition.id);
 
-    let runtime = new BattleRuntime(scenario.spec);
+    let runtime = new BattleRuntime(spec);
     let snapshot = runtime.snapshot();
     let knownUnits = new Set<number>();
     let accumulatedTicks = 0;
     let stopped = false;
     const previousExtrapolate = view.debug.interp.maxExtrapolate;
 
-    function publish(events: readonly BattleEvent[] = []): void {
-        const visible = snapshot.units.filter(isSpatiallyPresent);
-        const fresh = visible.filter((unit) => !knownUnits.has(unit.id));
+    function publish(
+        events: readonly BattleEvent[] = [],
+        visuals: readonly LegacyVisualEvent[] = [],
+    ): void {
+        const visible = presentation.units(snapshot);
+        const fresh = visible.filter((unit) => !knownUnits.has(unit.info.id));
 
-        if (fresh.length > 0) {
+        if (fresh.length > 0 || visuals.length > 0) {
             view.pushEvents({
                 fieldId,
                 gt: snapshot.tickIndex / TICKS_PER_SECOND,
-                ev: fresh.map((unit) => ["spawn", unitInfo(unit, data)] as const),
+                ev: [...fresh.map((unit) => ["spawn", unit.info] as const), ...visuals],
             });
         }
 
-        knownUnits = new Set(visible.map((unit) => unit.id));
+        knownUnits = new Set(visible.map((unit) => unit.info.id));
         view.pushSnapshot({
             fieldId,
             gt: snapshot.tickIndex / TICKS_PER_SECOND,
-            units: visible.map(unitTuple),
+            units: visible.map((unit) => unit.tuple),
             dp: 0,
-            killed: 0,
+            killed: presentation.stats().killedCount,
             total:
                 snapshot.spawning.spawnedCount +
-                getUnspawnedCount(scenario.spec.schedule, snapshot.spawning),
+                getUnspawnedCount(spec.schedule, snapshot.spawning),
         });
 
         for (const event of events) {
-            if (event.type === "ENEMY_SPAWNED" || event.type === "UNIT_REMOVED") {
+            if (
+                event.type === "ENEMY_SPAWNED" ||
+                event.type === "UNIT_REMOVED" ||
+                event.type === "ATTACK" ||
+                event.type === "DAMAGE"
+            ) {
                 options.onEvent?.(event);
             }
         }
     }
 
     function enter(): void {
-        const visible = snapshot.units.filter(isSpatiallyPresent);
+        const visible = presentation.units(snapshot);
         view.setStage(stage);
         view.enterBattle({
             fieldId,
             kind,
             rect,
             stageId: renderedStageId,
-            units: visible.map((unit) => unitInfo(unit, data)),
+            units: visible.map((unit) => unit.info),
         });
         view.setCamera(kind, { rect, instant: true });
         view.setLocalFeed({ on: true, speed: 1 });
         view.debug.interp.maxExtrapolate = 0;
-        knownUnits = new Set(visible.map((unit) => unit.id));
-        publish();
+        knownUnits = new Set(visible.map((unit) => unit.info.id));
+        publish([], presentation.replayEvents(snapshot));
         view.debug.interp.snapToNewest();
     }
 
-    function advance(
-        requested: readonly BattleCommand[] = commands.get(snapshot.tickIndex) ?? [],
-    ): readonly BattleEvent[] {
+    function advance(requested: readonly BattleCommand[] = commands.get(snapshot.tickIndex) ?? []) {
+        const before = snapshot;
         const result = runtime.step(requested);
         snapshot = runtime.snapshot();
+        const visuals = presentation.advance(before, snapshot, result.events);
 
-        return result.events;
+        return { events: result.events, visuals };
     }
 
     function step(): void {
@@ -333,7 +294,8 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
             return;
         }
 
-        publish(advance());
+        const result = advance();
+        publish(result.events, result.visuals);
     }
 
     function seek(seconds: number): void {
@@ -341,13 +303,11 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
             return;
         }
 
-        const target = Math.max(
-            0,
-            Math.min(scenario.spec.maxTicks, Math.round(seconds * TICKS_PER_SECOND)),
-        );
-        runtime = new BattleRuntime(scenario.spec);
+        const target = Math.max(0, Math.min(spec.maxTicks, Math.round(seconds * TICKS_PER_SECOND)));
+        runtime = new BattleRuntime(spec);
         snapshot = runtime.snapshot();
         accumulatedTicks = 0;
+        presentation.reset();
 
         while (snapshot.tickIndex < target && runtime.result === null) {
             advance();
@@ -361,7 +321,7 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
     return {
         stageId,
         seed,
-        duration: scenario.spec.maxTicks / TICKS_PER_SECOND,
+        duration: spec.maxTicks / TICKS_PER_SECOND,
 
         get time() {
             return snapshot.tickIndex / TICKS_PER_SECOND;
@@ -369,6 +329,9 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
 
         snapshot: () => runtime.snapshot(),
         stats: () => ({
+            mode,
+            ...presentation.stats(),
+            blockingCount: snapshot.blockingRelations.length,
             tickIndex: snapshot.tickIndex,
             units: snapshot.units.length,
             mechanisms: snapshot.mechanisms.length,
@@ -413,7 +376,7 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
         },
 
         command(type: TacticalDemoCommand): void {
-            if (stopped || runtime.result !== null) {
+            if (stopped || runtime.result !== null || mode === "COMBAT") {
                 return;
             }
 
@@ -430,7 +393,7 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
                 );
             }
 
-            const events = advance(requested);
+            const result = advance(requested);
 
             for (const future of commands.keys()) {
                 if (future >= tick) {
@@ -439,7 +402,7 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
             }
 
             commands.set(tick, requested);
-            publish(events);
+            publish(result.events, result.visuals);
             view.debug.interp.snapToNewest();
         },
 

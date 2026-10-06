@@ -1,6 +1,7 @@
 import type { BattlefieldChange } from "../battlefield/runtime.js";
-import { hasRoutedLocomotion } from "../unit/locomotion/state.js";
-import { stepRoutedUnit } from "../unit/locomotion/step.js";
+import { hasRoutedLocomotion } from "../unit/capability/locomotion/state.js";
+import { hasAction } from "../unit/capability/action.js";
+import { stepRoutedUnit } from "../unit/capability/locomotion/step.js";
 import { changeAlternativeRoutes, type AlternativeRouteCommand } from "./route-control.js";
 import type { BattleEvent } from "./contract.js";
 import type { BattlePhase } from "./system.js";
@@ -52,7 +53,9 @@ export function createMovementSystem({ moveMultiplier }: { readonly moveMultipli
                 maps: battlefield.navigationMaps,
                 fieldCache: battlefield.fieldCache,
                 moveMultiplier,
-                movementAllowed: true,
+                movementAllowed:
+                    battlefield.blockerOf(unitId) === undefined &&
+                    (!hasAction(unit) || tick >= unit.action.recoveryUntilTick),
                 waitTickAllowed: true,
                 routeAdvanceAllowed: true,
                 rngState: execution.rngState,
@@ -67,11 +70,22 @@ export function createMovementSystem({ moveMultiplier }: { readonly moveMultipli
             for (const signal of moved.signals) {
                 events.push({ type: "ROUTE", unitId, ...signal, tick });
             }
+
+            const releasesBlocking = moved.signals.some(
+                ({ signal }) => signal.type === "APPEAR_AT_POS" || signal.type === "DISAPPEAR",
+            );
+
+            if (releasesBlocking) {
+                changes.push({ type: "RELEASE_BLOCKING_RELATIONS", unitId });
+            }
             for (const outcome of moved.outcomes) {
                 events.push({ type: "NAVIGATION", unitId, outcome, tick });
             }
 
-            if (moved.unit.locomotion.mainRoute.route.progress.phase === "COMPLETED") {
+            if (
+                moved.unit.locomotion.mainRoute.route.progress.phase === "COMPLETED" &&
+                (battlefield.blockerOf(unitId) === undefined || releasesBlocking)
+            ) {
                 changes.push({ type: "REMOVE_UNIT", unitId, reason: "SCRIPT" });
                 events.push({ type: "ROUTE_COMPLETED", unitId, tick });
             } else {

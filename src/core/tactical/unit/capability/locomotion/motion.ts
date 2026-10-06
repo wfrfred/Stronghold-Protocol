@@ -4,8 +4,8 @@ import {
     World,
     type WorldOffset,
     type WorldPosition,
-} from "../../geometry/coordinate.js";
-import { NavigationMap } from "../../navigation/map.js";
+} from "../../../geometry/coordinate.js";
+import { NavigationMap } from "../../../navigation/map.js";
 import {
     integrateSteeringDirection,
     type SteeringParameters,

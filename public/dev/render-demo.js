@@ -39,6 +39,8 @@ window.__demo = demo;
 let demoHover = null;
 const STAGE_IDS = ['act2autochess_m01', 'act2autochess_m02', 'act2autochess_m03', 'act2autochess_m04', 'act1autochess_m01', 'act1autochess_m02', 'act1autochess_m03', 'act1autochess_m04'];
 const CORE_STAGE_IDS = ['act1autochess_01', 'act1autochess_m01', 'act1autochess_m02', 'act2autochess_m02', 'act2autochess_m04'];
+const COMBAT_STAGE_IDS = ['act1autochess_m01'];
+const isCoreScene = (name) => name === 'core' || name === 'core-combat';
 
 async function main() {
   if (q.get('panel') === '0') $('panel').classList.add('is-hidden');
@@ -54,7 +56,7 @@ async function main() {
 
   // ---- UI --------------------------------------------------------------------------------------------------
   const sceneSel = $('scene');
-  const scenes = [{ name: 'prep', title: '休整期 · 拖拽演示' }, { name: 'core', title: 'TS 战场 · 生成与移动' }, ...index.map((r) => ({ name: r.name, title: r.title, rec: r })), { name: 'stress', title: '压力测试 · 120 单位' }, { name: 'fx', title: '特效图鉴 · 全部 fx' }, { name: 'numbers', title: '伤害数字 · 重叠测试' }];
+  const scenes = [{ name: 'prep', title: '休整期 · 拖拽演示' }, { name: 'core-combat', title: '交战演示 · 普攻与阻挡', mode: 'COMBAT' }, { name: 'core', title: 'TS 战场 · 生成与移动', mode: 'MOVEMENT' }, ...index.map((r) => ({ name: r.name, title: r.title, rec: r })), { name: 'stress', title: '压力测试 · 120 单位' }, { name: 'fx', title: '特效图鉴 · 全部 fx' }, { name: 'numbers', title: '伤害数字 · 重叠测试' }];
   for (const s of scenes) sceneSel.append(new Option(s.title, s.name));
   const stageSel = $('stage');
   for (const id of STAGE_IDS) { const st = data.lookup('stages', id); if (st) stageSel.append(new Option(st.name || id, id)); }
@@ -63,7 +65,8 @@ async function main() {
   let currentSceneName = 'prep';
   let sceneRequest = 0;
   let sceneLoad = Promise.resolve();
-  let coreStageOptions = false;
+  let stageOptionsMode = 'LEGACY';
+  let completionLogged = false;
   let playing = q.get('paused') !== '1';
   let speed = Number(q.get('speed')) || 1;
   $('speed').value = String(speed);
@@ -76,12 +79,12 @@ async function main() {
   sceneSel.onchange = () => setScene(sceneSel.value);
   stageSel.onchange = () => setScene(sceneSel.value, stageSel.value);
   $('scrub').oninput = () => {
-    if (currentSceneName === 'core') setPlay(false);
+    if (isCoreScene(currentSceneName)) setPlay(false);
     current?.seek?.((Number($('scrub').value) / 1000) * (current.duration || 0));
   };
   $('editable').onclick = () => { const on = !$('editable').classList.contains('is-on'); $('editable').classList.toggle('is-on', on); current?.setEditable?.(on); };
   $('step').onclick = () => { setPlay(false); current?.step?.(); };
-  $('reset').onclick = () => setScene('core', stageSel.value);
+  $('reset').onclick = () => setScene(currentSceneName, stageSel.value);
   $('appear-crates').onclick = () => current?.command?.('APPEAR_CRATES');
   $('remove-crates').onclick = () => current?.command?.('REMOVE_CRATES');
   $('trigger-dragon').onclick = () => current?.command?.('TRIGGER_DRAGON');
@@ -100,7 +103,9 @@ async function main() {
 
   function setScene(name, stageId) {
     const s = scenes.find((x) => x.name === name) || scenes[0];
-    const core = s.name === 'core';
+    const core = isCoreScene(s.name);
+    const combat = s.mode === 'COMBAT';
+    const stageIds = combat ? COMBAT_STAGE_IDS : CORE_STAGE_IDS;
     if (core) {
       $('core-controls').hidden = false;
       if (!$('seed').reportValidity()) {
@@ -112,17 +117,18 @@ async function main() {
     }
     const seed = $('seed').valueAsNumber;
     const request = ++sceneRequest;
-    const requestedStage = stageId || q.get('stage') || (core ? CORE_STAGE_IDS[0] : 'act2autochess_m01');
+    const requestedStage = stageId || q.get('stage') || (core ? stageIds[0] : 'act2autochess_m01');
     sceneSel.value = s.name;
-    if (core !== coreStageOptions) {
+    const requestedStageOptionsMode = core ? s.mode : 'LEGACY';
+    if (requestedStageOptionsMode !== stageOptionsMode) {
       stageSel.replaceChildren();
-      for (const id of core ? CORE_STAGE_IDS : STAGE_IDS) {
+      for (const id of core ? stageIds : STAGE_IDS) {
         const st = data.lookup('stages', id);
         if (st || core) stageSel.append(new Option(st?.name || id, id));
       }
-      coreStageOptions = core;
+      stageOptionsMode = requestedStageOptionsMode;
     }
-    const selectedStage = core && !CORE_STAGE_IDS.includes(requestedStage) ? CORE_STAGE_IDS[0] : requestedStage;
+    const selectedStage = core && !stageIds.includes(requestedStage) ? stageIds[0] : requestedStage;
     if (core) stageSel.value = selectedStage;
     for (const id of ['step', 'reset', 'appear-crates', 'remove-crates', 'trigger-dragon']) $(id).disabled = true;
     sceneLoad = sceneLoad.catch(() => {}).then(async () => {
@@ -135,7 +141,7 @@ async function main() {
       if (core) {
         const { createTacticalDemo } = await import('/dist/legacy/tactical-demo.js');
         if (request !== sceneRequest) return current;
-        next = await createTacticalDemo(view, { stageId: selectedStage, data, seed, onEvent: log });
+        next = await createTacticalDemo(view, { stageId: selectedStage, data, seed, mode: s.mode, onEvent: log });
       } else if (s.name === 'prep') next = await prepScene(view, selectedStage, index);
       else if (s.name === 'numbers') next = numbersScene(view, stageId || q.get('stage') || 'act2autochess_m02');
       else if (s.name === 'stress') next = stressScene(view, selectedStage);
@@ -144,18 +150,21 @@ async function main() {
       if (request !== sceneRequest) { next.stop?.(); return null; }
       current = next;
       currentSceneName = s.name;
+      completionLogged = false;
       sceneSel.value = s.name;
       $('core-controls').hidden = !core;
       $('core-scope').hidden = !core;
+      $('core-scope').textContent = combat ? '普攻与阻挡演示；技能、天赋与地形效果暂未接入' : '生成与移动演示；地形伤害、部署和交战尚未接入';
+      $('core-result').hidden = true;
       $('editable').hidden = core;
       if (current.stageId) stageSel.value = current.stageId;
       $('scrub').value = '0';
       $('time').textContent = '0.0 s';
       $('step').disabled = !core;
       $('reset').disabled = !core;
-      $('appear-crates').disabled = !core || selectedStage === 'act1autochess_01';
-      $('remove-crates').disabled = !core || selectedStage === 'act1autochess_01';
-      $('trigger-dragon').disabled = !core || selectedStage !== 'act1autochess_01';
+      $('appear-crates').disabled = !core || combat || selectedStage === 'act1autochess_01';
+      $('remove-crates').disabled = !core || combat || selectedStage === 'act1autochess_01';
+      $('trigger-dragon').disabled = !core || combat || selectedStage !== 'act1autochess_01';
       demo.scene = current;
       return current;
     });
@@ -166,9 +175,10 @@ async function main() {
   demo.seek = (t) => current?.seek?.(t);
   demo.play = () => setPlay(true);
   demo.pause = () => setPlay(false);
-  demo.stats = () => ({ ...view.stats(), scene: currentSceneName, t: current?.time ?? 0, duration: current?.duration ?? 0, ...(currentSceneName === 'core' ? { core: current?.stats?.() ?? null } : {}) });
+  demo.stats = () => ({ ...view.stats(), scene: currentSceneName, t: current?.time ?? 0, duration: current?.duration ?? 0, ...(isCoreScene(currentSceneName) ? { core: current?.stats?.() ?? null } : {}) });
 
-  await setScene(q.get('scene') || 'prep');
+  const initialScene = q.get('scene') === 'core' && q.get('mode') === 'combat' ? 'core-combat' : q.get('scene') || 'prep';
+  await setScene(initialScene);
   const t0 = Number(q.get('t'));
   if (Number.isFinite(t0) && t0 > 0) current?.seek?.(t0);
   // ?cam=prep|normal|unite|boss|pen|bossPrep[&side=L|R&half=1&shop=0]: override the scene's camera (official framings)
@@ -181,7 +191,7 @@ async function main() {
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     if (current?.tick) {
-      try { current.tick(playing ? dt * speed : 0); } catch (err) { log('tick', err.message); if (currentSceneName === 'core') setPlay(false); }
+      try { current.tick(playing ? dt * speed : 0); } catch (err) { log('tick', err.message); if (isCoreScene(currentSceneName)) setPlay(false); }
       if (current.duration) {
         $('scrub').value = String(Math.round((current.time / current.duration) * 1000));
         $('time').textContent = `${current.time.toFixed(1)} / ${current.duration.toFixed(1)} s`;
@@ -189,13 +199,23 @@ async function main() {
     }
     const st = view.stats();
     $('stats').textContent = `fps ${st.fps.toFixed(0)}  frame ${st.frameMs.toFixed(1)} ms  units ${st.units}  particles ${st.particles}  proj ${st.projectiles}  nums ${st.numbers}\nspine ${st.spine ? `${st.spine.ready} ready / ${st.spine.loading} loading / ${st.spine.failed} failed` : '-'}  rate ${st.rate?.toFixed?.(2) ?? '-'}  buffered ${st.buffered}\nboard ${st.board3d?.on ? `3D · ${st.board3d.calls} calls · ${st.board3d.triangles} tris · ${st.board3d.cpuMs} ms` : '2D atlas'}`;
-    if (currentSceneName === 'core' && current?.stats) {
+    if (isCoreScene(currentSceneName) && current?.stats) {
       const core = current.stats();
       $('stats').textContent += `\n逻辑帧 ${core.tickIndex}  已生成 ${core.spawnedCount}  路线完成 ${core.completedRouteCount}\n场上单位 ${core.units}  机制 ${core.mechanisms}  WALK revision ${core.walkRevision}  seed ${core.seed}`;
+      if (core.mode === 'COMBAT') $('stats').textContent += `\n击败 ${core.killedCount}  攻击 ${core.attackCount}  伤害 ${core.damageCount}  当前阻挡 ${core.blockingCount}`;
+      $('step').disabled = core.result !== null;
+      $('core-result').hidden = core.result === null;
       if (core.result) {
         setPlay(false);
-        $('stats').textContent += `\n${core.result.reason === 'SCHEDULE_COMPLETED' ? '演示完成' : '到达时间上限'}`;
-      }
+        if (core.result.reason !== 'SCHEDULE_COMPLETED') $('core-result').textContent = '达到演示时间上限';
+        else if (core.mode === 'COMBAT') $('core-result').textContent = `交战结束 · 击败 ${core.killedCount} 名敌人`;
+        else $('core-result').textContent = '移动演示完成';
+        $('stats').textContent += `\n${core.result.reason}`;
+        if (!completionLogged) {
+          log('BATTLE_FINISHED', { reason: core.result.reason, tick: core.tickIndex, killedCount: core.killedCount });
+          completionLogged = true;
+        }
+      } else completionLogged = false;
     }
     requestAnimationFrame(loop);
   };

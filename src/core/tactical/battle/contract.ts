@@ -1,4 +1,6 @@
 import type { BattlefieldRemovalReason } from "../battlefield/runtime.js";
+import type { BlockingRelation } from "../battlefield/blocking.js";
+import type { DamageType } from "../unit/capability/action.js";
 import type { MechanismRuntime } from "../battlefield/mechanism.js";
 import type { NavigationSpatialEffect } from "../battlefield/navigation-effect.js";
 import type { NavigationOutcome } from "../navigation/state.js";
@@ -17,6 +19,22 @@ export type BattleCommand =
 
 export type BattleEvent =
     | { readonly type: "ENEMY_SPAWNED"; readonly unitId: UnitId; readonly tick: number }
+    | {
+          readonly type: "ATTACK";
+          readonly sourceUnitId: UnitId;
+          readonly targetUnitId: UnitId;
+          readonly damageType: DamageType;
+          readonly tick: number;
+      }
+    | {
+          readonly type: "DAMAGE";
+          readonly sourceUnitId: UnitId;
+          readonly targetUnitId: UnitId;
+          readonly damageType: DamageType;
+          readonly amount: number;
+          readonly hp: number;
+          readonly tick: number;
+      }
     | {
           readonly type: "ROUTE";
           readonly unitId: UnitId;
@@ -53,6 +71,7 @@ export interface BattleSnapshot {
     readonly execution: BattleExecutionState;
     readonly predefinedPresence: readonly PredefinedPresence[];
     readonly units: readonly Unit[];
+    readonly blockingRelations: readonly BlockingRelation[];
     readonly mechanisms: readonly MechanismRuntime[];
     readonly effects: readonly NavigationSpatialEffect[];
     readonly completedRouteCount: number;

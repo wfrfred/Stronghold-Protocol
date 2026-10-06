@@ -3,7 +3,12 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { SnapshotBuffer, normalizeSnapshot, isCosmeticEvent, frameTime } from '../../public/js/render/interp.js';
+import { chessRec, enemyRec } from '../helpers/battleHarness.js';
+import { createRouteDefinition } from '../../dist/core/tactical/route/definition.js';
+import { createLegacyCombatBattle } from '../../dist/legacy/combat.js';
+import { TacticalDemoPresentation } from '../../dist/legacy/tactical-demo-presentation.js';
 
 const fxFormOf = (e) => (e && e[0] === 'fx' && e[4] && Object.hasOwn(e[4], 'form') ? e[4].form : undefined);
 const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
@@ -45,6 +50,121 @@ describe('normalizeSnapshot', () => {
     assert.ok(near(b.newestT, 1.0));
     const due = b.takeEvents(0.55);
     assert.equal(due.length, 6, 'events stamped 0.0 … 0.5 are due at 0.55');
+  });
+});
+
+describe('TacticalDemoPresentation', () => {
+  const chess = JSON.parse(readFileSync(new URL('../../data/chess.json', import.meta.url), 'utf8'));
+  const enemies = JSON.parse(readFileSync(new URL('../../data/enemies.json', import.meta.url), 'utf8'));
+  const data = { lookup: (file, key) => ({ chess, enemies }[file] ?? {})[key] };
+  const route = createRouteDefinition({
+    pathMotionMode: 'WALK', startPosition: [0, 3], endPosition: [0, 0],
+    spawnOffset: [0, 0], spawnRandomRange: [0, 0], checkpoints: [],
+    allowDiagonalMove: false, visitEveryTileCenter: false,
+    visitEveryNodeCenter: false, visitEveryCheckPoint: true,
+  });
+  const battle = () => createLegacyCombatBattle({
+    rows: 1, columns: 5, maxTicks: 100,
+    operators: [{ definition: chessRec({
+      id: 'chess_char_1_12_a', profession: 'WARRIOR', skill: null,
+      stats: { maxHp: 100, atk: 10, def: 0, blockCnt: 1, bat: 0.1 },
+    }), position: [0, 1], direction: 'LEFT' }],
+    enemies: [0, 60].map(tick => ({
+      definition: enemyRec({ key: 'enemy_1000_gopro', hp: 15, atk: 1, speed: 60, bat: 0.1 }), route, tick,
+    })),
+  });
+  const step = (runtime, presentation) => {
+    const before = runtime.snapshot();
+    const result = runtime.step();
+    const after = runtime.snapshot();
+    return { snapshot: after, visual: presentation.advance(before, after, result.events) };
+  };
+
+  test('projects real core combat metadata, flags and death poses for a bounded window', () => {
+    const runtime = battle();
+    const presentation = new TacticalDemoPresentation(data);
+    const operator = presentation.units(runtime.snapshot())[0];
+    assert.equal(operator.info.kind, 'op');
+    assert.equal(operator.info.side, 'ally');
+    assert.equal(operator.info.name, chess.chess_char_1_12_a.name);
+    assert.equal(operator.info.spine, chess.chess_char_1_12_a.assets.spine);
+    assert.equal(operator.info.avatar, chess.chess_char_1_12_a.assets.avatar);
+    assert.equal(operator.info.dir, 'LEFT');
+    assert.equal(operator.info.facing, -1);
+    step(runtime, presentation);
+    const moving = presentation.units(runtime.snapshot()).find(unit => unit.info.id === 1);
+    assert.equal(moving.info.kind, 'enemy');
+    assert.equal(moving.info.defId, 'enemy_1000_gopro');
+    assert.equal(moving.info.spine, 'enemy_1000_gopro_2');
+    assert.equal(moving.info.avatar, enemies.enemy_1000_gopro_2.iconId);
+    assert.equal(moving.tuple[8], 1);
+    step(runtime, presentation);
+    assert.equal(presentation.units(runtime.snapshot()).find(unit => unit.info.id === 1).tuple[7] & 1, 1);
+    const exchange = step(runtime, presentation);
+    assert.deepEqual(exchange.visual, [
+      ['atk', 0, 1, 'none'], ['dmg', 1, 10, 'phys'],
+      ['atk', 1, 0, 'none'], ['dmg', 0, 1, 'phys'],
+    ]);
+    step(runtime, presentation);
+    step(runtime, presentation);
+    const killed = step(runtime, presentation);
+    assert.deepEqual(killed.visual, [['atk', 0, 1, 'none'], ['dmg', 1, 5, 'phys'], ['die', 1, 'killed']]);
+    assert.deepEqual(presentation.stats(), { killedCount: 1, attackCount: 3, damageCount: 3 });
+    const corpse = presentation.units(killed.snapshot).find(unit => unit.info.id === 1);
+    assert.deepEqual(corpse.tuple, [1, 1, 0, 0, 15, 0, 0, 0, 4]);
+    assert.deepEqual(normalizeSnapshot({ gt: killed.snapshot.tickIndex / 30, units: presentation.units(killed.snapshot).map(unit => unit.tuple) }).units.get(1), corpse.tuple);
+    while (runtime.snapshot().tickIndex < killed.snapshot.tickIndex + 23) step(runtime, presentation);
+    assert.ok(presentation.units(runtime.snapshot()).some(unit => unit.info.id === 1));
+    step(runtime, presentation);
+    assert.equal(presentation.units(runtime.snapshot()).some(unit => unit.info.id === 1), false);
+  });
+
+  test('resetting and replaying core frames reproduces visuals and counts without replaying damage', () => {
+    const presentation = new TacticalDemoPresentation(data);
+    const run = () => {
+      const runtime = battle();
+      const frames = [];
+      for (let tick = 0; tick < 15; tick++) {
+        const frame = step(runtime, presentation);
+        const stats = presentation.stats();
+        const replay = presentation.replayEvents(frame.snapshot);
+        assert.ok(replay.every(event => event[0] === 'atk'));
+        assert.deepEqual(presentation.stats(), stats);
+        frames.push({ ...frame, units: presentation.units(frame.snapshot), stats, replay });
+      }
+      return frames;
+    };
+    const first = run();
+    assert.deepEqual(first[2].replay, [['atk', 0, 1, 'none'], ['atk', 1, 0, 'none']]);
+    assert.deepEqual(first[5].replay, [['atk', 0, 1, 'none']]);
+    assert.deepEqual(first[13].replay, []);
+    presentation.reset();
+    assert.deepEqual(presentation.stats(), { killedCount: 0, attackCount: 0, damageCount: 0 });
+    assert.deepEqual(presentation.units(first[5].snapshot).map(unit => unit.info.id), [0]);
+    assert.deepEqual(presentation.replayEvents(first[5].snapshot), []);
+    assert.deepEqual(run(), first);
+  });
+
+  test('only completed routes emit leaks and air eligibility remains independent of walk navigation', () => {
+    const runtime = createLegacyCombatBattle({
+      rows: 1, columns: 5, maxTicks: 10, operators: [],
+      enemies: [{ definition: enemyRec({ key: 'enemy_1000_gopro', speed: 60, motion: 'FLY' }), route }],
+    });
+    const presentation = new TacticalDemoPresentation(data);
+    step(runtime, presentation);
+    const flying = presentation.units(runtime.snapshot())[0];
+    assert.equal(flying.info.motion, 'FLY');
+    assert.equal(flying.tuple[7], 512);
+    assert.equal(runtime.snapshot().units[0].locomotion.mainRoute.navigation.pathMotionMode, 'WALK');
+    let leaks = [];
+    while (runtime.result === null) leaks.push(...step(runtime, presentation).visual);
+    assert.deepEqual(leaks, [['leak', 0]]);
+    assert.deepEqual(presentation.stats(), { killedCount: 0, attackCount: 0, damageCount: 0 });
+    assert.deepEqual(presentation.units(runtime.snapshot()), []);
+    const removed = presentation.advance(runtime.snapshot(), runtime.snapshot(), [
+      { type: 'UNIT_REMOVED', unitId: 99, reason: 'SCRIPT', tick: 10 },
+    ]);
+    assert.deepEqual(removed, []);
   });
 });
 

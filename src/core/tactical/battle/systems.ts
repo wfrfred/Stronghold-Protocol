@@ -1,5 +1,8 @@
 import type { BattlefieldChangeResult, BattlefieldRuntime } from "../battlefield/runtime.js";
 import { createMovementSystem } from "./movement.js";
+import { createBlockingSystem } from "./blocking.js";
+import { createCombatSystem } from "./combat.js";
+import { initializeUnit } from "../unit/initialize.js";
 import {
     changePredefinedInstances,
     copyPredefinedPresence,
@@ -43,6 +46,8 @@ export function createBattleSystems(spec: BattleSpec) {
     const predefined = createPredefinedSystem(spec.predefines);
     const schedule = createSpawnScheduleSystem(spec.schedule);
     const movement = createMovementSystem({ moveMultiplier: spec.moveMultiplier });
+    const blocking = createBlockingSystem();
+    const combat = createCombatSystem();
 
     const prepare: BattlePhase<readonly PredefinedPresence[]> = (input, state) => {
         const prepared = predefined.step(input, state);
@@ -57,12 +62,26 @@ export function createBattleSystems(spec: BattleSpec) {
         bindPhase("predefined", prepare),
         bindPhase("schedule", schedule.spawn),
         bindStatelessPhase(movement.reroute),
+        bindStatelessPhase(blocking.step),
+        bindStatelessPhase(combat.step),
         bindStatelessPhase(movement.step),
+        bindStatelessPhase(blocking.step),
+        bindPhase("predefined", predefined.resolve),
         bindPhase("schedule", schedule.resolve),
     ]);
 
     return {
         initialize(battlefield: BattlefieldRuntime, execution: BattleExecutionState) {
+            const placements = spec.initialUnits ?? [];
+            const nextUnitId = execution.nextUnitId + placements.length;
+
+            if (!Number.isSafeInteger(nextUnitId)) {
+                throw new RangeError("initial unit identity overflow");
+            }
+
+            const initialUnits = placements.map((placement, index) =>
+                initializeUnit({ ...placement, id: execution.nextUnitId + index }),
+            );
             const initialized = changePredefinedInstances(
                 spec.predefines,
                 predefined.createState(),
@@ -72,10 +91,14 @@ export function createBattleSystems(spec: BattleSpec) {
                         type: "APPEAR_PREDEFINED",
                         definitionId: definition.id,
                     })),
-                execution,
+                { ...execution, nextUnitId },
             );
 
             battlefield.apply([
+                ...initialUnits.map((unit) => ({
+                    type: "REGISTER_UNIT" as const,
+                    unit,
+                })),
                 ...spec.initialMechanisms.map((mechanism) => ({
                     type: "REGISTER_MECHANISM" as const,
                     mechanism,

@@ -1,7 +1,7 @@
 import { World, type TilePosition } from "../geometry/coordinate.js";
 import { RangeGrid } from "../geometry/range.js";
 import type { Unit, UnitId } from "../unit/unit.js";
-import { isSpatiallyPresent } from "../unit/presence.js";
+import { isSpatiallyPresent } from "../unit/capability/presence.js";
 import { BattlefieldMap } from "./map.js";
 import type { MechanismId, MechanismRuntime } from "./mechanism.js";
 import type {

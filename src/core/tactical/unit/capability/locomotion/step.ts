@@ -1,14 +1,14 @@
-import { createRng, type Seed } from "../../../common/rng.js";
+import { createRng, type Seed } from "../../../../common/rng.js";
 import {
     createWorldOffset,
     World,
     type WorldOffset,
     type WorldPosition,
-} from "../../geometry/coordinate.js";
-import type { NavigationFieldCache } from "../../navigation/cache.js";
-import { NavigationMap, type NavigationMaps } from "../../navigation/map.js";
-import { canTraverseNavigationSegment } from "../../navigation/query.js";
-import { isNavigationGoalReached, type NavigationRequestId } from "../../navigation/request.js";
+} from "../../../geometry/coordinate.js";
+import type { NavigationFieldCache } from "../../../navigation/cache.js";
+import { NavigationMap, type NavigationMaps } from "../../../navigation/map.js";
+import { canTraverseNavigationSegment } from "../../../navigation/query.js";
+import { isNavigationGoalReached, type NavigationRequestId } from "../../../navigation/request.js";
 import {
     clearNavigationRequest,
     canCompleteNavigationSegment,
@@ -16,13 +16,13 @@ import {
     markNavigationArrived,
     steerNavigation,
     type NavigationOutcome,
-} from "../../navigation/state.js";
-import { createRouteExecution, tickRouteWait } from "../../route/execution.js";
+} from "../../../navigation/state.js";
+import { createRouteExecution, tickRouteWait } from "../../../route/execution.js";
 import {
     isRouteCheckpointReady,
     isRouteEndReached,
     isRouteMoveCheckpointReached,
-} from "../../route/plan.js";
+} from "../../../route/plan.js";
 import { hasSpatialPresence, isSpatiallyPresent } from "../presence.js";
 import {
     applyMotionOverride,

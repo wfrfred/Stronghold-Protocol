@@ -1,12 +1,12 @@
-import { createWorldOffset } from "../../geometry/coordinate.js";
-import type { NavigationMaps } from "../../navigation/map.js";
+import { createWorldOffset } from "../../../geometry/coordinate.js";
+import type { NavigationMaps } from "../../../navigation/map.js";
 import {
     copyNavigationState,
     invalidateNavigationPath,
     type NavigationState,
-} from "../../navigation/state.js";
-import { copyRouteState, type RouteState } from "../../route/state.js";
-import type { Unit, UnitDefinition } from "../unit.js";
+} from "../../../navigation/state.js";
+import { copyRouteState, type RouteState } from "../../../route/state.js";
+import type { Unit, UnitDefinition } from "../../unit.js";
 import { createSteeringState, type SteeringParameters, type SteeringState } from "./steering.js";
 
 export interface LocomotionDefinition {

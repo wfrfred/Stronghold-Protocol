@@ -3,7 +3,7 @@ import {
     World,
     type WorldOffset,
     type WorldPosition,
-} from "../../geometry/coordinate.js";
+} from "../../../geometry/coordinate.js";
 
 export interface SteeringState {
     readonly lastVelocity: WorldOffset;

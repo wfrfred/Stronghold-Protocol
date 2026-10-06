@@ -9,9 +9,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseStage, buildTileQuads, splitQuadGroups, sortQuadOrder, rowDepthKey, boxDepthKey, ROW_KEY } from '../../public/js/render/tiles.js';
 import { unitDepthKey, groundZ, placeOnGround } from '../../public/js/render/units.js';
-import { windUpPlan, MAX_WIND_SPEEDUP } from '../../public/js/render/spine.js';
+import { SpineActor, windUpPlan, MAX_WIND_SPEEDUP } from '../../public/js/render/spine.js';
 import { presetCamera } from '../../public/js/render/projection.js';
 import { SnapshotBuffer } from '../../public/js/render/interp.js';
+import { installFakePixi } from './fakepixi.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const stages = JSON.parse(readFileSync(path.join(ROOT, 'data/stages.json'), 'utf8'));
@@ -169,5 +170,64 @@ describe('interp: hp clamp and look-ahead', () => {
     assert.deepEqual(b.takeEvents(1.0).map((e) => e[1]), [1, 2]);
     assert.equal(b.events.length, 1);
     assert.doesNotThrow(() => b.forEachUpcoming(NaN, NaN, () => { throw new Error('called'); }));
+  });
+});
+
+
+describe('event-driven ordinary attack animation', () => {
+  const entry = JSON.parse(readFileSync(path.join(ROOT, 'data/assets.json'), 'utf8')).chars.char_263_skadi.spine.front;
+  const createActor = () => new SpineActor({ animations: Object.keys(entry.animations).map(name => ({ name })) }, entry);
+  const advance = (actor, seconds) => {
+    const steps = Math.ceil(seconds * 60);
+    for (let i = 0; i < steps; i++) actor.update(seconds / steps);
+  };
+
+  test('three Skadi attacks finish their recovery without a fourth looping attack', () => {
+    const fake = installFakePixi();
+    try {
+      const actor = createActor();
+      const played = [];
+      const setAnimation = actor.spine.state.setAnimation;
+      actor.spine.state.setAnimation = (...args) => {
+        played.push(args);
+        return setAnimation(...args);
+      };
+      for (let hit = 0; hit < 3; hit++) {
+        actor.attack(1.5);
+        assert.equal(actor.spine.state.tracks[0].loop, false);
+        assert.equal(actor.spine.state.tracks[0].trackTime, entry.hits.Attack[0]);
+        advance(actor, 0.7);
+        assert.equal(actor.mode, 'base');
+        assert.equal(actor.current, 'Idle');
+        advance(actor, 0.8);
+      }
+      advance(actor, 3);
+      assert.equal(played.filter(([, name]) => name === 'Attack').length, 3);
+      assert.equal(actor.current, 'Idle');
+    } finally {
+      fake.restore();
+    }
+  });
+
+  test('a queued attack winds up once, recovers and waits for another actual event', () => {
+    const fake = installFakePixi();
+    try {
+      const actor = createActor();
+      assert.equal(actor.windUp(1.5, 0.2), true);
+      assert.equal(actor.spine.state.tracks[0].loop, false);
+      const windingTrack = actor.spine.state.tracks[0];
+      advance(actor, 0.2);
+      actor.attack(1.5);
+      assert.equal(actor.spine.state.tracks[0], windingTrack);
+      advance(actor, 0.7);
+      assert.equal(actor.mode, 'base');
+      assert.equal(actor.current, 'Idle');
+      advance(actor, 3);
+      assert.equal(actor.current, 'Idle');
+      assert.equal(actor.windUp(1.5, 0.2), true);
+      assert.equal(actor.spine.state.tracks[0].loop, false);
+    } finally {
+      fake.restore();
+    }
   });
 });

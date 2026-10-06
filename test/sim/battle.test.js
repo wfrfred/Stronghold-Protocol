@@ -10,13 +10,14 @@ import { EV } from '../../shared/protocol.js';
 import { getDefaultSource, spawnsFromTemplate, hasGeneratedData } from '../../server/sim/simdata.js';
 import { LocalBossPool } from '../../server/sim/spec.js';
 import { BattlefieldRuntime } from '../../dist/core/tactical/battlefield/runtime.js';
+import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map.js';
 import { createMechanismDefinition, createMechanismRuntime } from '../../dist/core/tactical/battlefield/mechanism.js';
 import { createNavigationEffectDefinition, createNavigationSpatialEffect, createSpatialEffectRegion } from '../../dist/core/tactical/battlefield/navigation-effect.js';
 import { createRng } from '../../dist/core/common/rng.js';
 import { createBattleSpec } from '../../dist/core/tactical/battle/spec.js';
 import { BattleRuntime, simulateBattle } from '../../dist/core/tactical/battle/runtime.js';
 import { advanceSpawnSchedule, cloneScheduleState, createSpawnScheduleDefinition, createSpawnScheduleState, getSpawnedCount, getUnspawnedCount, isSpawnScheduleCompleted, recordScheduleSpawns, resolveScheduleUnits } from '../../dist/core/tactical/battle/schedule.js';
-import { createSteeringParameters } from '../../dist/core/tactical/unit/locomotion/steering.js';
+import { createSteeringParameters } from '../../dist/core/tactical/unit/capability/locomotion/steering.js';
 import { createEnemyDefinition } from '../../dist/core/tactical/unit/enemy.js';
 import { createRouteDefinition } from '../../dist/core/tactical/route/definition.js';
 import { TICKS_PER_SECOND } from '../../dist/core/tactical/tick.js';
@@ -28,6 +29,7 @@ import { parsePredefinedInstanceDefinition } from '../../dist/data/arknights/pre
 import { compileSpawnSchedule } from '../../dist/data/arknights/schedule.js';
 import { compileLevelMovementFragment } from '../../dist/data/arknights/movement-fragment.js';
 import { loadMovementScenario } from '../../dist/data/arknights/movement-scenario.js';
+import { createLegacyCombatBattle } from '../../dist/legacy/combat.js';
 
 const approx = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
 const guard = (o = {}) => chessRec({ id: 't_guard', profession: 'WARRIOR', stats: { atk: 300, blockCnt: 2 }, skill: null, ...o });
@@ -1757,4 +1759,133 @@ test('raw 01 dragon branch waits for an explicit trigger and uses its own actual
   assert.throws(() => loadMovementScenario(raw, selection, {
     ...catalog, prefab: key => key === 'enemy_1007_slime' ? delayed : catalog.prefab(key),
   }, 123), /synchronous enemy births/);
+});
+
+test('core blocked enemies at their route end stay in combat until their blocker dies', () => {
+  const route = createRouteDefinition({
+    pathMotionMode: 'WALK', startPosition: [0, 0], endPosition: [0, 0],
+    spawnOffset: [0, 0], spawnRandomRange: [0, 0], checkpoints: [],
+    allowDiagonalMove: false, visitEveryTileCenter: false,
+    visitEveryNodeCenter: false, visitEveryCheckPoint: true,
+  });
+  const runtime = createLegacyCombatBattle({
+    rows: 1, columns: 5, maxTicks: 20,
+    operators: [{ definition: guard({ stats: { maxHp: 2, atk: 0, def: 0, blockCnt: 1 } }), position: [0, 0] }],
+    enemies: [{ definition: walker({ hp: 100, atk: 1, bat: 0.1 }), route }],
+  });
+  const first = runtime.step();
+  assert.equal(first.result, null);
+  assert.ok(first.events.some(event => event.type === 'ATTACK' && event.sourceUnitId === 1 && event.targetUnitId === 0));
+  assert.equal(first.events.some(event => event.type === 'ROUTE_COMPLETED' || event.type === 'UNIT_REMOVED'), false);
+  const held = runtime.snapshot();
+  assert.deepEqual(held.units.map(unit => unit.id), [0, 1]);
+  assert.deepEqual(held.blockingRelations, [{ blockerUnitId: 0, blockedUnitId: 1 }]);
+  assert.deepEqual(held.spawning.managedFinalUnitIds, [1]);
+  assert.equal(held.units[1].locomotion.mainRoute.route.progress.phase, 'COMPLETED');
+  assert.equal(held.units[0].vitality.hp, 1);
+  for (let tick = 1; tick < 3; tick++) {
+    const waiting = runtime.step();
+    assert.equal(waiting.result, null);
+    assert.equal(waiting.events.some(event => event.type === 'ROUTE_COMPLETED' || event.type === 'UNIT_REMOVED'), false);
+    assert.deepEqual(runtime.snapshot().blockingRelations, held.blockingRelations);
+  }
+  const released = runtime.step();
+  assert.deepEqual(released.events.filter(event => event.type === 'UNIT_REMOVED').map(event => [event.unitId, event.reason]), [[0, 'DEATH'], [1, 'SCRIPT']]);
+  assert.deepEqual(released.events.filter(event => event.type === 'ROUTE_COMPLETED').map(event => event.unitId), [1]);
+  assert.equal(released.result.reason, 'SCHEDULE_COMPLETED');
+  assert.equal(released.result.elapsedTicks, 4);
+  assert.equal(released.result.completedRouteCount, 1);
+  assert.deepEqual(runtime.snapshot().blockingRelations, []);
+  assert.deepEqual(runtime.snapshot().units, []);
+});
+
+test('core blocked route waits can teleport away, release their blocker and resume movement', () => {
+  const route = createRouteDefinition({
+    pathMotionMode: 'WALK', startPosition: [0, 0], endPosition: [0, 4],
+    spawnOffset: [0, 0], spawnRandomRange: [0, 0],
+    checkpoints: [
+      { type: 'WAIT_FOR_TICKS', durationTicks: 2 },
+      { type: 'APPEAR_AT_POS', position: [0, 3], reachOffset: [0, 0] },
+    ],
+    allowDiagonalMove: false, visitEveryTileCenter: false,
+    visitEveryNodeCenter: false, visitEveryCheckPoint: true,
+  });
+  const runtime = createLegacyCombatBattle({
+    rows: 1, columns: 5, maxTicks: 20,
+    operators: [{ definition: guard({ stats: { maxHp: 100, atk: 0, def: 0, blockCnt: 1 } }), position: [0, 0] }],
+    enemies: [{ definition: walker({ hp: 100, atk: 1, bat: 0.1 }), route }],
+  });
+  runtime.step();
+  assert.deepEqual(runtime.snapshot().blockingRelations, [{ blockerUnitId: 0, blockedUnitId: 1 }]);
+  assert.equal(runtime.snapshot().units[1].locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 1);
+  const teleported = runtime.step();
+  assert.deepEqual(teleported.events.filter(event => event.type === 'ROUTE'), [
+    { type: 'ROUTE', unitId: 1, signal: { type: 'APPEAR_AT_POS', position: [3, 0] }, position: [3, 0], tick: 1 },
+  ]);
+  assert.deepEqual(runtime.snapshot().units[1].position, [3, 0]);
+  assert.deepEqual(runtime.snapshot().blockingRelations, []);
+  assert.equal(teleported.result, null);
+  for (let tick = 2; tick <= 4; tick++) {
+    const moving = runtime.step();
+    assert.equal(moving.events.some(event => event.type === 'ATTACK' && event.sourceUnitId === 1), false);
+    assert.deepEqual(runtime.snapshot().blockingRelations, []);
+    assert.ok(runtime.snapshot().units[1].position[0] > 3);
+    assert.equal(runtime.snapshot().units[1].locomotion.moving, true);
+    assert.equal(runtime.snapshot().units[0].vitality.hp, 99);
+  }
+});
+
+test('core same-position alternative disappearance and appearance replace an existing blocking relation', () => {
+  const route = createRouteDefinition({
+    pathMotionMode: 'WALK', startPosition: [0, 1], endPosition: [0, 4],
+    spawnOffset: [0.4, 0], spawnRandomRange: [0, 0],
+    checkpoints: [{ type: 'WAIT_FOR_TICKS', durationTicks: 30 }],
+    allowDiagonalMove: false, visitEveryTileCenter: false,
+    visitEveryNodeCenter: false, visitEveryCheckPoint: true,
+  });
+  const source = createLegacyCombatBattle({
+    rows: 1, columns: 5, maxTicks: 20,
+    operators: [{ definition: guard({ stats: { maxHp: 100, atk: 0, def: 0, blockCnt: 1 } }), position: [0, 1] }],
+    enemies: [{ definition: walker({ hp: 100, atk: 1, bat: 0.1 }), route }],
+  });
+  source.step();
+  const [operator, enemy] = source.snapshot().units;
+  const map = createBattlefieldMap(1, 5, Array.from({ length: 5 }, () => ({
+    heightType: 'LOWLAND', buildableType: 'ALL', passableMask: 'ALL',
+    playerSideMask: 'ALL', terrain: 'NORMAL', mechanism: null,
+  })));
+  const runtime = new BattleRuntime({
+    map, initialUnits: [{ definition: operator.definition, position: [1, 0] }],
+    predefines: [{ id: 99, alias: null, initiallyPresent: false, creation: {
+      type: 'UNIT', definition: operator.definition, position: [1.5, 0], navigationEffects: [],
+    } }],
+    schedule: { type: 'TIMELINE', spawns: [{
+      definition: enemy.definition, route, tick: 0,
+      timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 },
+      alwaysCheckCurrentPoint: true, notCountInTotal: false,
+    }] },
+    initialMechanisms: [], initialEffects: [], maxTicks: 20, moveMultiplier: 1,
+    rngState: 1, nextUnitId: 0, nextNavigationRequestId: 0,
+  });
+  runtime.step();
+  const before = runtime.snapshot();
+  assert.deepEqual(before.blockingRelations, [{ blockerUnitId: 0, blockedUnitId: 1 }]);
+  const hidden = createRouteDefinition({ ...route, checkpoints: [{ type: 'DISAPPEAR' }] });
+  const appeared = createRouteDefinition({ ...route, checkpoints: [
+    { type: 'APPEAR_AT_POS', position: [0, 1], reachOffset: [0.4, 0] },
+    { type: 'WAIT_FOR_TICKS', durationTicks: 30 },
+  ] });
+  const step = runtime.step([
+    { type: 'APPEAR_PREDEFINED', definitionId: 99 },
+    { type: 'SET_ALTERNATIVE_ROUTE', unitId: 1, route: hidden, alwaysCheckCurrentPoint: true },
+    { type: 'SET_ALTERNATIVE_ROUTE', unitId: 1, route: appeared, alwaysCheckCurrentPoint: true },
+  ]);
+  assert.deepEqual(step.events.filter(event => event.type === 'ROUTE').map(event => [event.signal.type, event.position]), [
+    ['DISAPPEAR', [1.4, 0]], ['APPEAR_AT_POS', [1.4, 0]],
+  ]);
+  const after = runtime.snapshot();
+  assert.deepEqual(after.units.find(unit => unit.id === 1).position, before.units[1].position);
+  assert.equal(after.units.find(unit => unit.id === 1).spatialPresence.present, true);
+  assert.deepEqual(after.blockingRelations, [{ blockerUnitId: 2, blockedUnitId: 1 }]);
+  assert.equal(step.result, null);
 });

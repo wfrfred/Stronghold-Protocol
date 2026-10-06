@@ -2,7 +2,7 @@ import { TICKS_PER_SECOND } from "../../core/tactical/tick.js";
 import {
     createSteeringParameters,
     type SteeringParameters,
-} from "../../core/tactical/unit/locomotion/steering.js";
+} from "../../core/tactical/unit/capability/locomotion/steering.js";
 import { secondsToTicks } from "./tick.js";
 
 export interface EnemyMovementPrefab {

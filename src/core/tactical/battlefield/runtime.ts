@@ -18,6 +18,12 @@ import {
 } from "./navigation-effect.js";
 import { copyUnitSnapshot, reconcileUnitNavigation } from "../unit/snapshot.js";
 import type { Unit, UnitId } from "../unit/unit.js";
+import {
+    blockingUsedCapacity,
+    reconcileBlockingRelations,
+    releaseBlockingRelations,
+    type BlockingRelation,
+} from "./blocking.js";
 import { projectNavigationMaps, projectStaticNavigationMap } from "./navigation-projection.js";
 import {
     battlefieldTileKey,
@@ -31,6 +37,11 @@ export type BattlefieldRemovalReason = "DEATH" | "RETREAT" | "EXPIRED" | "SCRIPT
 export type BattlefieldChange<U extends Unit = Unit> =
     | { readonly type: "REGISTER_UNIT"; readonly unit: U }
     | { readonly type: "UPDATE_UNIT"; readonly unit: U }
+    | {
+          readonly type: "SET_BLOCKING_RELATIONS";
+          readonly relations: readonly BlockingRelation[];
+      }
+    | { readonly type: "RELEASE_BLOCKING_RELATIONS"; readonly unitId: UnitId }
     | { readonly type: "MOVE_UNIT"; readonly unitId: UnitId; readonly position: WorldPosition }
     | {
           readonly type: "REMOVE_UNIT";
@@ -83,8 +94,12 @@ export interface BattlefieldView<U extends Unit = Unit> {
     readonly navigationMaps: NavigationMaps;
     readonly fieldCache: NavigationFieldCache;
     readonly unitIds: readonly UnitId[];
+    readonly blockingRelations: readonly BlockingRelation[];
     getUnit(id: UnitId): U | undefined;
     unitsAt(position: TilePosition): readonly U[];
+    blockerOf(unitId: UnitId): UnitId | undefined;
+    blockedBy(unitId: UnitId): readonly UnitId[];
+    blockingUsedCapacity(unitId: UnitId): number;
 }
 
 interface BattlefieldResources<U extends Unit> {
@@ -97,6 +112,7 @@ interface BattlefieldResources<U extends Unit> {
 interface BattlefieldState<U extends Unit> {
     readonly navigationMaps: NavigationMaps;
     readonly units: ReadonlyMap<UnitId, U>;
+    readonly blockingRelations: readonly BlockingRelation[];
     readonly mechanisms: ReadonlyMap<MechanismId, MechanismRuntime>;
     readonly effects: ReadonlyMap<SpatialEffectId, NavigationSpatialEffect>;
     readonly spatial: BattlefieldSpatialView;
@@ -141,8 +157,14 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
             get unitIds() {
                 return runtime.unitIds;
             },
+            get blockingRelations() {
+                return runtime.#state.blockingRelations;
+            },
             getUnit: (id) => runtime.#state.units.get(id),
             unitsAt: (position) => runtime.#unitsAt(position),
+            blockerOf: (id) => runtime.blockerOf(id),
+            blockedBy: (id) => runtime.blockedBy(id),
+            blockingUsedCapacity: (id) => runtime.blockingUsedCapacity(id),
         };
     }
 
@@ -163,6 +185,7 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
             {
                 navigationMaps: baseline,
                 units,
+                blockingRelations: [],
                 mechanisms,
                 effects,
                 spatial: projectBattlefieldSpatial(options.map, units, mechanisms, effects),
@@ -192,6 +215,25 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
 
     get unitIds(): readonly UnitId[] {
         return [...this.#state.units.keys()];
+    }
+
+    get blockingRelations(): readonly BlockingRelation[] {
+        return this.#state.blockingRelations.map((relation) => ({ ...relation }));
+    }
+
+    blockerOf(unitId: UnitId): UnitId | undefined {
+        return this.#state.blockingRelations.find((relation) => relation.blockedUnitId === unitId)
+            ?.blockerUnitId;
+    }
+
+    blockedBy(unitId: UnitId): readonly UnitId[] {
+        return this.#state.blockingRelations
+            .filter((relation) => relation.blockerUnitId === unitId)
+            .map((relation) => relation.blockedUnitId);
+    }
+
+    blockingUsedCapacity(unitId: UnitId): number {
+        return blockingUsedCapacity(this.#state.units, this.#state.blockingRelations, unitId);
     }
 
     get mechanismIds(): readonly MechanismId[] {
@@ -277,6 +319,12 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
                 case "UPDATE_UNIT":
                     return { ...change, unit: this.#resources.copyUnit(change.unit) };
 
+                case "SET_BLOCKING_RELATIONS":
+                    return {
+                        ...change,
+                        relations: change.relations.map((relation) => ({ ...relation })),
+                    };
+
                 case "REGISTER_MECHANISM":
                     return {
                         ...change,
@@ -297,6 +345,7 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
                     return { ...change, region: createSpatialEffectRegion(change.region) };
 
                 case "EXPIRE_EFFECTS":
+                case "RELEASE_BLOCKING_RELATIONS":
                 case "REMOVE_EFFECT":
                 case "REMOVE_MECHANISM":
                 case "REMOVE_UNIT":
@@ -312,6 +361,7 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
 
     commit(changes: readonly BattlefieldChange<U>[]): BattlefieldChangeResult {
         const units = new Map(this.#state.units);
+        let blockingRelations = this.#state.blockingRelations;
         const mechanisms = new Map(this.#state.mechanisms);
         const effects = new Map(this.#state.effects);
         const removedUnits: { unitId: UnitId; reason: BattlefieldRemovalReason }[] = [];
@@ -345,9 +395,18 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
                     break;
                 }
 
+                case "SET_BLOCKING_RELATIONS":
+                    blockingRelations = change.relations;
+                    break;
+
+                case "RELEASE_BLOCKING_RELATIONS":
+                    blockingRelations = releaseBlockingRelations(blockingRelations, change.unitId);
+                    break;
+
                 case "MOVE_UNIT": {
                     const unit = requireEntry(units, change.unitId, "unit");
                     units.set(change.unitId, { ...unit, position: change.position });
+                    blockingRelations = releaseBlockingRelations(blockingRelations, change.unitId);
                     break;
                 }
 
@@ -452,7 +511,14 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
         }
 
         const previousMaps = this.#state.navigationMaps;
-        this.#state = { units, mechanisms, effects, spatial, navigationMaps: projection.maps };
+        this.#state = {
+            units,
+            mechanisms,
+            effects,
+            spatial,
+            navigationMaps: projection.maps,
+            blockingRelations: reconcileBlockingRelations(units, blockingRelations),
+        };
 
         for (const mode of projection.changedModes) {
             if (this.#pendingInvalidations === null) {

@@ -1,4 +1,8 @@
-import type { BattlefieldChange, BattlefieldRemovalReason } from "../battlefield/runtime.js";
+import type {
+    BattlefieldChange,
+    BattlefieldRemovalReason,
+    BattlefieldView,
+} from "../battlefield/runtime.js";
 import type { MechanismDefinition } from "../battlefield/mechanism.js";
 import type {
     NavigationEffectDefinition,
@@ -8,8 +12,8 @@ import type {
 import { createWorldPosition, type WorldPosition } from "../geometry/coordinate.js";
 import type { Direction } from "../geometry/direction.js";
 import type { RangeGrid } from "../geometry/range.js";
-import type { Unit, UnitDefinition } from "../unit/unit.js";
-import { hasVitalityDefinition } from "../unit/vitality.js";
+import type { UnitDefinition } from "../unit/unit.js";
+import { initializeUnit } from "../unit/initialize.js";
 import type { BattleExecutionState } from "./state.js";
 import type { BattlePhase, BattleSystem } from "./system.js";
 
@@ -115,18 +119,6 @@ function nextIdentity(value: number): number {
     return next;
 }
 
-function initializeUnit(creation: PredefinedUnitCreation, id: number): Unit {
-    const unit: Unit = { id, definition: creation.definition, position: creation.position };
-
-    if (!hasVitalityDefinition(creation.definition)) {
-        return unit;
-    }
-
-    const initialized = { ...unit, vitality: { hp: creation.definition.vitality.maxHp } };
-
-    return initialized;
-}
-
 export function changePredefinedInstances(
     definitions: readonly PredefinedInstanceDefinition[],
     initialPresence: readonly PredefinedPresence[],
@@ -182,7 +174,11 @@ export function changePredefinedInstances(
             source = Object.freeze({ type: "UNIT", unitId: execution.nextUnitId });
             changes.push({
                 type: "REGISTER_UNIT",
-                unit: initializeUnit(creation, execution.nextUnitId),
+                unit: initializeUnit({
+                    id: execution.nextUnitId,
+                    definition: creation.definition,
+                    position: creation.position,
+                }),
             });
             contributions = creation.navigationEffects.map((effect) => ({
                 definition: effect.definition,
@@ -242,22 +238,35 @@ export function copyPredefinedPresence(
     return presence.map((binding) => ({ ...binding, source: { ...binding.source } }));
 }
 
+function reconcilePredefinedPresence(
+    presence: readonly PredefinedPresence[],
+    battlefield: BattlefieldView,
+): readonly PredefinedPresence[] {
+    const remaining = presence.filter(
+        ({ source }) => source.type !== "UNIT" || battlefield.getUnit(source.unitId) !== undefined,
+    );
+
+    return remaining.length === presence.length ? presence : remaining;
+}
+
 export function createPredefinedSystem(
     definitions: readonly PredefinedInstanceDefinition[],
 ): BattleSystem<readonly PredefinedPresence[]> & {
     readonly step: BattlePhase<readonly PredefinedPresence[]>;
+    readonly resolve: BattlePhase<readonly PredefinedPresence[]>;
 } {
     return {
         createState: () => [],
 
         step(input, state) {
+            const presence = reconcilePredefinedPresence(state, input.battlefield);
             const commands = input.commands.filter(
                 (command): command is PredefinedCommand =>
                     command.type === "APPEAR_PREDEFINED" || command.type === "REMOVE_PREDEFINED",
             );
             const changed = changePredefinedInstances(
                 definitions,
-                state,
+                presence,
                 commands,
                 input.execution,
             );
@@ -267,6 +276,15 @@ export function createPredefinedSystem(
                 changes: changed.changes,
                 events: [],
                 execution: changed.execution,
+            };
+        },
+
+        resolve(input, state) {
+            return {
+                state: reconcilePredefinedPresence(state, input.battlefield),
+                changes: [],
+                events: [],
+                execution: input.execution,
             };
         },
     };

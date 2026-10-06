@@ -31,6 +31,7 @@
     .rd-panel button:disabled { opacity: .4; cursor: default; }
     .rd-row[hidden] { display: none; }
     .rd-scope { color: #8a948f; font-size: 11px; }
+    .rd-result { color: #4ed8af; font-weight: 700; }
     .rd-panel button.is-on { border-color: #4ed8af; color: #4ed8af; }
     .rd-panel input[type=range] { flex: 1; accent-color: #4ed8af; }
     .rd-title { font-weight: 700; color: #f2f2f2; }
@@ -59,6 +60,7 @@
       <button id="trigger-dragon" type="button">触发飞行分支</button>
     </div>
     <div class="rd-row rd-scope" id="core-scope" hidden>生成与移动演示；地形伤害、部署和交战尚未接入</div>
+    <div class="rd-row rd-result" id="core-result" aria-live="polite" hidden></div>
     <div class="rd-row">
       <span class="rd-micro">BOARD</span>
       <button id="board3d" type="button" class="is-on" title="official 3D board (three.js) / 2D atlas board">3D</button>

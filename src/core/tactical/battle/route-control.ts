@@ -6,9 +6,9 @@ import { createRouteExecution } from "../route/execution.js";
 import {
     initializeRouteControl,
     type LocatedRouteSignal,
-} from "../unit/locomotion/route-control.js";
-import { hasRoutedLocomotion } from "../unit/locomotion/state.js";
-import { isSpatiallyPresent } from "../unit/presence.js";
+} from "../unit/capability/locomotion/route-control.js";
+import { hasRoutedLocomotion } from "../unit/capability/locomotion/state.js";
+import { isSpatiallyPresent } from "../unit/capability/presence.js";
 import type { Unit, UnitId } from "../unit/unit.js";
 import type { BattleExecutionState } from "./state.js";
 
@@ -82,8 +82,22 @@ export function changeAlternativeRoutes(
         signals.push(...initialized.signals.map((signal) => ({ ...signal, unitId: unit.id })));
     }
 
+    const changes: BattlefieldChange[] = [...units.values()].map((unit) => ({
+        type: "UPDATE_UNIT",
+        unit,
+    }));
+    const released = new Set(
+        signals
+            .filter(({ signal }) => signal.type === "APPEAR_AT_POS" || signal.type === "DISAPPEAR")
+            .map(({ unitId }) => unitId),
+    );
+
+    for (const unitId of released) {
+        changes.push({ type: "RELEASE_BLOCKING_RELATIONS", unitId });
+    }
+
     return {
-        changes: [...units.values()].map((unit) => ({ type: "UPDATE_UNIT", unit })),
+        changes,
         execution,
         signals,
     };

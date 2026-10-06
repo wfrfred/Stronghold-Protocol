@@ -1,8 +1,17 @@
 // Combat rules: statuses & immunities, cold→freeze, element bursts, blocking, melee vs FLY, stealth, priorities, healers.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { makeBattle, chessRec, enemyRec } from '../helpers/battleHarness.js';
 import { ELEMENT } from '../../server/sim/constants.js';
+import { createLegacyCombatBattle } from '../../dist/legacy/combat.js';
+import { createRouteDefinition } from '../../dist/core/tactical/route/definition.js';
+import { calculateDamage, damageUnit } from '../../dist/core/tactical/combat/damage.js';
+import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
+import { BattlefieldMap } from '../../dist/core/tactical/battlefield/map.js';
+import { World } from '../../dist/core/tactical/geometry/coordinate.js';
+import { loadMovementScenario } from '../../dist/data/arknights/movement-scenario.js';
+import { createTacticalCombatDemoSpec } from '../../dist/legacy/tactical-demo-combat.js';
 
 const approx = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
 
@@ -10,6 +19,223 @@ const guard = (o = {}) => chessRec({ id: 't_guard', profession: 'WARRIOR', stats
 const sniper = (o = {}) => chessRec({ id: 't_sniper', profession: 'SNIPER', subProfessionId: 'closerange', stats: { atk: 300 }, rangeGrid: [[0, 0], [0, 1], [0, 2], [0, 3], [1, 0], [1, 1], [1, 2], [1, 3], [-1, 0], [-1, 1], [-1, 2], [-1, 3]], skill: null, ...o });
 const dummy = (o = {}) => enemyRec({ key: 'enemy_dummy', hp: 1e6, speed: 0, ...o });
 const walker = (o = {}) => enemyRec({ key: 'enemy_walker', hp: 1e6, speed: 1, ...o });
+
+function coreCombatRoute(startPosition = [1, 8], overrides = {}) {
+  return createRouteDefinition({
+    pathMotionMode: 'WALK', startPosition, endPosition: [1, 0],
+    spawnOffset: [0, 0], spawnRandomRange: [0, 0], checkpoints: [],
+    allowDiagonalMove: false, visitEveryTileCenter: false,
+    visitEveryNodeCenter: false, visitEveryCheckPoint: true, ...overrides,
+  });
+}
+
+function coreCombatTrace(options) {
+  const battle = createLegacyCombatBattle({ rows: 3, columns: 10, ...options });
+  const trace = [];
+
+  while (battle.result === null) {
+    const stepped = battle.step();
+    trace.push({ events: stepped.events, snapshot: battle.snapshot() });
+  }
+
+  return { battle, trace, events: trace.flatMap(step => step.events) };
+}
+
+test('core combat: the real m01 demonstration preserves the map and data, blocks three dogs and replays identically', () => {
+  const fixture = name => JSON.parse(readFileSync(new URL(`../fixtures/arknights/${name}.json`, import.meta.url), 'utf8'));
+  const rawLevel = fixture('level_act1autochess_m01');
+  const generated = Object.fromEntries(['chess', 'enemies'].map(name => [name,
+    JSON.parse(readFileSync(new URL(`../../data/${name}.json`, import.meta.url), 'utf8')),
+  ]));
+  const data = { lookup: (file, key) => generated[file]?.[key] };
+  const operator = data.lookup('chess', 'chess_char_3_05_a');
+  const enemy = data.lookup('enemies', 'enemy_1000_gopro_2');
+  const originalRecords = structuredClone({ rawLevel, operator, enemy });
+  const catalog = {
+    character: () => assert.fail('no selected predefined characters'),
+    skill: () => assert.fail('no selected predefined skills'),
+    enemy: () => assert.fail('no selected movement spawns'),
+    prefab: () => assert.fail('no selected movement prefabs'),
+  };
+  const movement = loadMovementScenario(rawLevel, { actions: [], branches: [], predefines: [] }, catalog, 123);
+  const spec = createTacticalCombatDemoSpec(movement.spec.map, movement.level.routes[0], data, 123);
+  const placement = spec.initialUnits[0];
+  const tile = BattlefieldMap.get(spec.map, World.toTile(placement.position));
+
+  assert.equal(spec.map, movement.spec.map);
+  assert.equal(spec.schedule.spawns[0].route, movement.level.routes[0]);
+  assert.equal(tile.heightType, 'LOWLAND');
+  assert.ok(tile.buildableType === 'MELEE' || tile.buildableType === 'ALL');
+  assert.deepEqual(placement.position, [6, 5]);
+  assert.equal(placement.definition.vitality.maxHp, operator.stats.maxHp);
+  assert.equal(placement.definition.action.attack.power, operator.stats.atk);
+  assert.equal(spec.schedule.spawns[0].definition.vitality.maxHp, enemy.stats.maxHp);
+  assert.deepEqual(spec.schedule.spawns.map(spawn => spawn.tick), [90, 330, 570]);
+
+  const run = input => {
+    const battle = new BattleRuntime(input);
+    const events = [];
+    let blockingObserved = false;
+
+    while (battle.result === null) {
+      events.push(...battle.step().events);
+      blockingObserved ||= battle.snapshot().blockingRelations.length > 0;
+    }
+
+    return { result: battle.result, snapshot: battle.snapshot(), events, blockingObserved };
+  };
+  const first = run(spec);
+  const second = run(createTacticalCombatDemoSpec(movement.spec.map, movement.level.routes[0], data, 123));
+  const survivor = first.snapshot.units.find(unit => unit.id === 0);
+
+  assert.deepEqual(first, second);
+  assert.equal(first.result.reason, 'SCHEDULE_COMPLETED');
+  assert.equal(first.result.spawnedCount, 3);
+  assert.equal(first.result.completedRouteCount, 0);
+  assert.deepEqual(first.result.remainingUnitIds, [0]);
+  assert.equal(first.events.filter(event => event.type === 'UNIT_REMOVED' && event.reason === 'DEATH').length, 3);
+  assert.equal(first.events.filter(event => event.type === 'ROUTE_COMPLETED').length, 0);
+  assert.ok(first.blockingObserved);
+  assert.ok(survivor.vitality.hp > 0 && survivor.vitality.hp < operator.stats.maxHp);
+  assert.deepEqual({ rawLevel, operator, enemy }, originalRecords);
+});
+
+test('core combat: a blocked enemy exchanges attacks and death resolves the spawn schedule deterministically', () => {
+  const options = {
+    operators: [{
+      definition: guard({ stats: { maxHp: 1000, atk: 100, def: 0, blockCnt: 1, bat: 0.1 }, rangeGrid: [[0, 0]] }),
+      position: [1, 5],
+    }],
+    enemies: [{ definition: walker({ hp: 250, atk: 30, bat: 0.1 }), route: coreCombatRoute() }],
+    seed: 123,
+  };
+  const first = coreCombatTrace(options);
+  const second = coreCombatTrace(options);
+  const damage = first.events.filter(event => event.type === 'DAMAGE');
+
+  assert.deepEqual(first.trace, second.trace);
+  assert.ok(damage.some(event => event.sourceUnitId === 0 && event.targetUnitId === 1));
+  assert.ok(damage.some(event => event.sourceUnitId === 1 && event.targetUnitId === 0));
+  assert.ok(first.events.some(event => event.type === 'UNIT_REMOVED' && event.unitId === 1 && event.reason === 'DEATH'));
+  assert.equal(first.battle.result.reason, 'SCHEDULE_COMPLETED');
+  assert.equal(first.battle.result.spawnedCount, 1);
+  assert.equal(first.battle.result.completedRouteCount, 0);
+  assert.deepEqual(first.battle.result.remainingUnitIds, [0]);
+  assert.equal(first.battle.snapshot().blockingRelations.length, 0);
+});
+
+test('core combat: lethal damage caps HP loss and dead units cannot act or be selected later in the phase', () => {
+  const options = {
+    rows: 3, columns: 10,
+    operators: [0, 1].map(index => ({
+      definition: guard({ id: `core_guard_${index}`, stats: { maxHp: 1000, atk: 100, def: 0, blockCnt: 1 }, rangeGrid: [[0, 0], [0, 1]] }),
+      position: [1 + index, 5],
+    })),
+    enemies: [{ definition: walker({ hp: 7, atk: 100000, speed: 0 }), route: coreCombatRoute([1, 6], { spawnOffset: [-0.6, 0] }) }],
+  };
+  const battle = createLegacyCombatBattle(options);
+  const { events } = battle.step();
+  const damage = events.filter(event => event.type === 'DAMAGE');
+
+  assert.deepEqual(damage.map(event => [event.sourceUnitId, event.targetUnitId, event.amount, event.hp]), [[0, 2, 7, 0]]);
+  assert.equal(events.filter(event => event.type === 'ATTACK').length, 1);
+  assert.equal(battle.snapshot().units.find(unit => unit.id === 0).vitality.hp, 1000);
+  assert.equal(battle.snapshot().units.some(unit => unit.id === 2), false);
+  assert.equal(battle.snapshot().blockingRelations.length, 0);
+});
+
+test('core combat: air targeting follows unit data independently of the route motion mode', () => {
+  const battle = createLegacyCombatBattle({
+    rows: 3, columns: 10,
+    operators: [
+      { definition: guard({ canHitFly: false, rangeGrid: [[0, 0], [0, 1]] }), position: [1, 5] },
+      { definition: sniper({ canHitFly: true, projectile: 'none', rangeGrid: [[-1, 0], [-1, 1]] }), position: [2, 5] },
+    ],
+    enemies: [{ definition: enemyRec({ key: 'core_air', hp: 1e6, speed: 0, motion: 'FLY' }), route: coreCombatRoute([1, 6]) }],
+  });
+  const { events } = battle.step();
+
+  assert.deepEqual(events.filter(event => event.type === 'ATTACK').map(event => event.sourceUnitId), [1]);
+  assert.equal(battle.snapshot().blockingRelations.length, 0);
+  assert.equal(battle.snapshot().units.find(unit => unit.id === 2).targetable.layer, 'AIR');
+});
+
+test('core combat: damage formulas retain the 5% floor and immutable vitality transitions', () => {
+  assert.equal(calculateDamage(1000, 'PHYSICAL', { defense: 300, resistance: 0 }), 700);
+  assert.equal(calculateDamage(1000, 'PHYSICAL', { defense: 2000, resistance: 0 }), 50);
+  assert.equal(calculateDamage(1000, 'ARTS', { defense: 0, resistance: 30 }), 700);
+  assert.equal(calculateDamage(1000, 'ARTS', { defense: 0, resistance: 100 }), 50);
+  assert.equal(calculateDamage(1000, 'TRUE', { defense: 9999, resistance: 100 }), 1000);
+
+  const unit = Object.freeze({
+    id: 0, position: Object.freeze([0, 0]),
+    definition: Object.freeze({ id: 'core_target', defense: Object.freeze({ defense: 0, resistance: 0 }) }),
+    vitality: Object.freeze({ hp: 7 }),
+  });
+  const harmless = damageUnit(unit, 0, 'TRUE');
+  const lethal = damageUnit(unit, 1000, 'TRUE');
+
+  assert.equal(harmless.unit, unit);
+  assert.equal(lethal.amount, 7);
+  assert.equal(lethal.killed, true);
+  assert.equal(lethal.unit.vitality.hp, 0);
+  assert.equal(unit.vitality.hp, 7);
+});
+
+test('core combat: copied action, allegiance, targetability and blocking snapshots stay isolated', () => {
+  const battle = createLegacyCombatBattle({
+    rows: 3, columns: 10,
+    operators: [{ definition: guard({ stats: { atk: 0, maxHp: 1e6, blockCnt: 1 } }), position: [1, 5] }],
+    enemies: [{ definition: walker({ speed: 0 }), route: coreCombatRoute([1, 6], { spawnOffset: [-0.6, 0] }) }],
+  });
+  battle.step();
+  const expected = battle.snapshot();
+  const snapshot = battle.snapshot();
+  const operator = snapshot.units.find(unit => unit.id === 0);
+
+  operator.action.readyAtTick = 999999;
+  operator.allegiance.side = 'ENEMY';
+  operator.targetable.enabled = false;
+  operator.blocker.capacity = 0;
+  operator.vitality.hp = 0;
+  snapshot.blockingRelations[0].blockerUnitId = 999999;
+  snapshot.blockingRelations.length = 0;
+  assert.deepEqual(battle.snapshot(), expected);
+});
+
+test('core combat: a rejected tick preserves spawn identities, action state, HP and blocking', () => {
+  const options = {
+    rows: 3, columns: 10,
+    operators: [{ definition: guard({ stats: { atk: 100, maxHp: 1e6, blockCnt: 1 } }), position: [1, 5] }],
+    enemies: [{ definition: walker({ hp: 1000, speed: 0 }), route: coreCombatRoute([1, 6], { spawnOffset: [-0.6, 0] }) }],
+  };
+  const battle = createLegacyCombatBattle(options);
+  const reference = createLegacyCombatBattle(options);
+  const before = battle.snapshot();
+
+  assert.throws(() => battle.step([{ type: 'CLEAR_ALTERNATIVE_ROUTE', unitId: 999999 }]), /unknown alternative route unit/);
+  assert.deepEqual(battle.snapshot(), before);
+  assert.deepEqual(battle.step(), reference.step());
+  assert.deepEqual(battle.snapshot(), reference.snapshot());
+});
+
+test('core combat: the limited legacy adapter rejects unsupported content and preserves interval conversion', () => {
+  const options = {
+    rows: 3, columns: 10,
+    operators: [{ definition: guard({ stats: { bat: 0.5, aspd: 200 } }), position: [1, 5] }],
+    enemies: [{ definition: walker({ bat: 2, aspd: 100, speed: 1 }), route: coreCombatRoute() }],
+  };
+  const battle = createLegacyCombatBattle(options);
+  assert.equal(battle.snapshot().units[0].definition.action.attack.intervalTicks, 8);
+  battle.step();
+  const enemy = battle.snapshot().units.find(unit => unit.id === 1);
+
+  assert.equal(enemy.definition.action.attack.intervalTicks, 60);
+  assert.equal(enemy.definition.locomotion.moveSpeedPerTick, 1 / 60);
+  assert.throws(() => createLegacyCombatBattle({ ...options, operators: [{ definition: guard({ skill: { spCost: 1 } }), position: [1, 5] }] }), /does not execute operator skills/);
+  assert.throws(() => createLegacyCombatBattle({ ...options, operators: [{ definition: guard({ dmgType: 'heal' }), position: [1, 5] }] }), /only supports physical, arts and true damage/);
+  assert.throws(() => createLegacyCombatBattle({ ...options, operators: [{ definition: guard({ attackKind: 'none' }), position: [1, 5] }] }), /ordinary attacks/);
+});
 
 test('stun stops enemy movement and attacks; immunity honoured; statusApplied fires', () => {
   const h = makeBattle({

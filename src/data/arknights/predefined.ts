@@ -6,7 +6,7 @@ import { createMechanismDefinition } from "../../core/tactical/battlefield/mecha
 import { createNavigationEffectDefinition } from "../../core/tactical/battlefield/navigation-effect.js";
 import { Tile, createTileOffset } from "../../core/tactical/geometry/coordinate.js";
 import { RangeGrid } from "../../core/tactical/geometry/range.js";
-import type { VitalUnitDefinition } from "../../core/tactical/unit/vitality.js";
+import type { VitalUnitDefinition } from "../../core/tactical/unit/capability/vitality.js";
 import type { ArknightsPredefinedInstance } from "./level.js";
 import type { PredefinedPrefab } from "./prefab.js";
 

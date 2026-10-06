@@ -26,8 +26,8 @@ import { getNavigationRequest } from '../../dist/core/tactical/navigation/state.
 import { createRouteDefinition } from '../../dist/core/tactical/route/definition.js';
 import { createRouteTiming } from '../../dist/core/tactical/route/state.js';
 import { createEnemyDefinition, initializeRoutedEnemy, stepRoutedEnemy } from '../../dist/core/tactical/unit/enemy.js';
-import { createSteeringParameters, integrateSteeringDirection } from '../../dist/core/tactical/unit/locomotion/steering.js';
-import { applyMotionOverride, getNavigationBoundaryDirection, reflectNavigationMovement } from '../../dist/core/tactical/unit/locomotion/motion.js';
+import { createSteeringParameters, integrateSteeringDirection } from '../../dist/core/tactical/unit/capability/locomotion/steering.js';
+import { applyMotionOverride, getNavigationBoundaryDirection, reflectNavigationMovement } from '../../dist/core/tactical/unit/capability/locomotion/motion.js';
 
 const REAL = { skip: !hasGeneratedData() };
 const approx = (a, b, eps, msg) => assert.ok(Math.abs(a - b) <= eps, `${msg ?? ''} ${a} ≈ ${b}`);

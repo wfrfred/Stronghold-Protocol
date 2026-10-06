@@ -25,14 +25,14 @@ import {
 import { createRouteTiming, createRouteState } from '../../dist/core/tactical/route/state.js';
 import { initializeRouteSpawn } from '../../dist/core/tactical/route/spawn.js';
 import { predictRouteTarget } from '../../dist/core/tactical/route/plan.js';
-import { initializeRouteControl } from '../../dist/core/tactical/unit/locomotion/route-control.js';
+import { initializeRouteControl } from '../../dist/core/tactical/unit/capability/locomotion/route-control.js';
 import { parseBattlefieldMap } from '../../dist/data/arknights/map.js';
 import { parseRouteDefinition } from '../../dist/data/arknights/route.js';
 import { createRng } from '../../dist/core/common/rng.js';
 import { World } from '../../dist/core/tactical/geometry/coordinate.js';
 import { createEnemyDefinition, initializeRoutedEnemy, stepRoutedEnemy } from '../../dist/core/tactical/unit/enemy.js';
 import { copyUnitSnapshot } from '../../dist/core/tactical/unit/snapshot.js';
-import { createSteeringParameters, createSteeringState, integrateSteering } from '../../dist/core/tactical/unit/locomotion/steering.js';
+import { createSteeringParameters, createSteeringState, integrateSteering } from '../../dist/core/tactical/unit/capability/locomotion/steering.js';
 import { Grid, OBSTACLE_COST, bresenhamTiles } from '../../server/sim/grid.js';
 import { flowFieldForGrid, navigationMapFromGrid, waypointsForGrid } from '../../dist/legacy/navigation.js';
 import { buildRawNavigationField, buildNavigationField } from '../../dist/core/tactical/navigation/pathfinding.js';

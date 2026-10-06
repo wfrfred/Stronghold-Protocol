@@ -5,28 +5,51 @@ import type { RouteDefinition } from "../route/definition.js";
 import { createRouteExecution } from "../route/execution.js";
 import { initializeRouteSpawn } from "../route/spawn.js";
 import type { RouteTiming } from "../route/state.js";
-import { initializeRouteControl, type LocatedRouteSignal } from "./locomotion/route-control.js";
+import { createActionDefinition, type ActingUnitDefinition } from "./capability/action.js";
+import { createAllegianceState, type AllegiantUnitDefinition } from "./capability/allegiance.js";
+import { createBlockableDefinition, type BlockableUnitDefinition } from "./capability/blocking.js";
+import { createDefenseDefinition, type DefendedUnitDefinition } from "./capability/defense.js";
+import {
+    initializeRouteControl,
+    type LocatedRouteSignal,
+} from "./capability/locomotion/route-control.js";
 import {
     createRoutedLocomotionState,
     type Locomotion,
     type LocomotiveUnitDefinition,
     type RoutedLocomotion,
-} from "./locomotion/state.js";
-import { stepRoutedUnit, type RoutedLocomotionStepContext } from "./locomotion/step.js";
-import type { SpatialPresence } from "./presence.js";
+} from "./capability/locomotion/state.js";
+import { stepRoutedUnit, type RoutedLocomotionStepContext } from "./capability/locomotion/step.js";
+import type { SpatialPresence } from "./capability/presence.js";
+import { createTargetableState, type TargetableUnitDefinition } from "./capability/targetable.js";
 import type { Unit, UnitId } from "./unit.js";
-import type { Vitality, VitalUnitDefinition } from "./vitality.js";
+import type { Vitality, VitalUnitDefinition } from "./capability/vitality.js";
+import { initializeUnit, type InitializedUnit } from "./initialize.js";
 
 export interface EnemyDefinition extends VitalUnitDefinition, LocomotiveUnitDefinition {}
 
-export type Enemy = Unit<EnemyDefinition> & Vitality & Locomotion;
+export type Enemy<D extends EnemyDefinition = EnemyDefinition> = Unit<D> & Vitality & Locomotion;
 
-export type RoutedEnemy = Enemy & RoutedLocomotion & SpatialPresence;
+export type RoutedEnemy<D extends EnemyDefinition = EnemyDefinition> = Enemy<D> &
+    InitializedUnit<D> &
+    RoutedLocomotion &
+    SpatialPresence;
 
-export interface RoutedEnemySpawn {
+export interface CombatEnemyDefinition
+    extends
+        EnemyDefinition,
+        ActingUnitDefinition,
+        AllegiantUnitDefinition,
+        TargetableUnitDefinition,
+        DefendedUnitDefinition,
+        BlockableUnitDefinition {}
+
+export type CombatRoutedEnemy = RoutedEnemy<CombatEnemyDefinition>;
+
+export interface RoutedEnemySpawn<D extends EnemyDefinition = EnemyDefinition> {
     readonly id: UnitId;
     readonly tick: number;
-    readonly definition: EnemyDefinition;
+    readonly definition: D;
     readonly route: RouteDefinition;
     readonly timing: RouteTiming;
     readonly alwaysCheckCurrentPoint: boolean;
@@ -34,8 +57,8 @@ export interface RoutedEnemySpawn {
     readonly nextNavigationRequestId: NavigationRequestId;
 }
 
-export interface RoutedEnemyInitialization {
-    readonly enemy: RoutedEnemy;
+export interface RoutedEnemyInitialization<D extends EnemyDefinition = EnemyDefinition> {
+    readonly enemy: RoutedEnemy<D>;
     readonly signals: readonly LocatedRouteSignal[];
     readonly rngState: Seed;
     readonly nextNavigationRequestId: NavigationRequestId;
@@ -43,8 +66,8 @@ export interface RoutedEnemyInitialization {
 
 export type RoutedEnemyStepContext = RoutedLocomotionStepContext;
 
-export interface RoutedEnemyStep {
-    readonly enemy: RoutedEnemy;
+export interface RoutedEnemyStep<D extends EnemyDefinition = EnemyDefinition> {
+    readonly enemy: RoutedEnemy<D>;
     readonly signals: readonly LocatedRouteSignal[];
     readonly rngState: Seed;
     readonly nextNavigationRequestId: NavigationRequestId;
@@ -75,7 +98,22 @@ export function createEnemyDefinition(definition: EnemyDefinition): EnemyDefinit
     });
 }
 
-export function initializeRoutedEnemy(spawn: RoutedEnemySpawn): RoutedEnemyInitialization {
+export function createCombatEnemyDefinition(
+    definition: CombatEnemyDefinition,
+): CombatEnemyDefinition {
+    return Object.freeze({
+        ...createEnemyDefinition(definition),
+        action: createActionDefinition(definition.action),
+        allegiance: createAllegianceState(definition.allegiance),
+        targetable: createTargetableState(definition.targetable),
+        defense: createDefenseDefinition(definition.defense),
+        blockable: createBlockableDefinition(definition.blockable),
+    });
+}
+
+export function initializeRoutedEnemy<D extends EnemyDefinition>(
+    spawn: RoutedEnemySpawn<D>,
+): RoutedEnemyInitialization<D> {
     if (!Number.isSafeInteger(spawn.id) || spawn.id < 0) {
         throw new RangeError("enemy id must be a nonnegative safe integer");
     }
@@ -94,11 +132,13 @@ export function initializeRoutedEnemy(spawn: RoutedEnemySpawn): RoutedEnemyIniti
 
     return {
         enemy: {
-            id: spawn.id,
-            definition: spawn.definition,
-            position: initial.position,
+            ...initializeUnit({
+                id: spawn.id,
+                definition: spawn.definition,
+                position: initial.position,
+                tick: spawn.tick,
+            }),
             spatialPresence: { present: initial.present },
-            vitality: { hp: spawn.definition.vitality.maxHp },
             locomotion: createRoutedLocomotionState(
                 initial.control.route,
                 initial.control.navigation,
@@ -109,10 +149,10 @@ export function initializeRoutedEnemy(spawn: RoutedEnemySpawn): RoutedEnemyIniti
     };
 }
 
-export function stepRoutedEnemy(
-    enemy: RoutedEnemy,
+export function stepRoutedEnemy<D extends EnemyDefinition>(
+    enemy: RoutedEnemy<D>,
     context: RoutedEnemyStepContext,
-): RoutedEnemyStep {
+): RoutedEnemyStep<D> {
     const step = stepRoutedUnit(enemy, context);
 
     return {

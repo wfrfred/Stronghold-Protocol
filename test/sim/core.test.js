@@ -11,7 +11,7 @@ import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map.j
 import { createBattlefieldRuntime } from '../../dist/core/tactical/battlefield/runtime.js';
 import { createMechanismDefinition } from '../../dist/core/tactical/battlefield/mechanism.js';
 import { createNavigationEffectDefinition, createNavigationSpatialEffect } from '../../dist/core/tactical/battlefield/navigation-effect.js';
-import { hasSpatialPresence, isSpatiallyPresent } from '../../dist/core/tactical/unit/presence.js';
+import { hasSpatialPresence, isSpatiallyPresent } from '../../dist/core/tactical/unit/capability/presence.js';
 
 const approx = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
 

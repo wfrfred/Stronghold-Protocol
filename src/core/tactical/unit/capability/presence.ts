@@ -1,4 +1,4 @@
-import type { Unit } from "./unit.js";
+import type { Unit } from "../unit.js";
 
 export interface SpatialPresenceState {
     readonly present: boolean;

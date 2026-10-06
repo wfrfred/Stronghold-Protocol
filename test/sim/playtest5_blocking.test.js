@@ -13,6 +13,8 @@ import assert from 'node:assert/strict';
 import { makeBattle, chessRec, enemyRec, checkInvariants } from '../helpers/battleHarness.js';
 import { BLOCK_RADIUS } from '../../server/sim/constants.js';
 import { getDefaultSource } from '../../server/sim/simdata.js';
+import { createLegacyCombatBattle } from '../../dist/legacy/combat.js';
+import { createRouteDefinition } from '../../dist/core/tactical/route/definition.js';
 
 const FRONT = 'test_front_a', BACK = 'test_back_a';
 const op = (id, blockCnt = 1) => chessRec({ id, stats: { atk: 0, blockCnt, maxHp: 1e6, respawnTime: 999 }, skill: null });
@@ -28,6 +30,162 @@ function lane(units, enemies, defs = {}) {
   });
 }
 const kill = (h, u) => h.b.loseHp(u, 1e12);
+
+function coreBlockingRoute(startPosition = [1, 8], overrides = {}) {
+  return createRouteDefinition({
+    pathMotionMode: 'WALK', startPosition, endPosition: [1, 0],
+    spawnOffset: [0, 0], spawnRandomRange: [0, 0], checkpoints: [],
+    allowDiagonalMove: false, visitEveryTileCenter: false,
+    visitEveryNodeCenter: false, visitEveryCheckPoint: true, ...overrides,
+  });
+}
+
+function coreBlockingBattle(operators, enemies) {
+  return createLegacyCombatBattle({ rows: 3, columns: 10, operators, enemies, maxTicks: 600 });
+}
+
+function coreBlockingUnit(battle, id) {
+  return battle.snapshot().units.find(unit => unit.id === id);
+}
+
+function coreBlockedBy(battle, id) {
+  return battle.snapshot().blockingRelations.filter(relation => relation.blockerUnitId === id).map(relation => relation.blockedUnitId);
+}
+
+test('core blocking: enemy weight consumes capacity and oversized enemies cannot be held', () => {
+  const route = coreBlockingRoute([1, 6], { spawnOffset: [-0.6, 0] });
+  const battle = coreBlockingBattle(
+    [{ definition: op(FRONT, 3), position: [1, 5] }],
+    [2, 1, 1].map((weight, index) => ({ definition: foe(`core_weight_${index}`, { speed: 0, blockCnt: weight }), route })),
+  );
+  battle.step();
+
+  assert.deepEqual(coreBlockedBy(battle, 0), [1, 2]);
+  const used = coreBlockedBy(battle, 0).reduce((sum, id) => sum + coreBlockingUnit(battle, id).blockable.weight, 0);
+  assert.equal(used, 3);
+  assert.equal(coreBlockingUnit(battle, 3).blockable.weight, 1);
+
+  const tooHeavy = coreBlockingBattle(
+    [{ definition: op(FRONT, 1), position: [1, 5] }],
+    [{ definition: foe('core_heavy', { speed: 0, blockCnt: 2 }), route }],
+  );
+  tooHeavy.step();
+  assert.deepEqual(tooHeavy.snapshot().blockingRelations, []);
+});
+
+test('core blocking: ground eligibility comes from unit data while route motion is independent', () => {
+  const battle = coreBlockingBattle(
+    [{ definition: op(FRONT, 2), position: [1, 5] }],
+    [
+      { definition: foe('core_ground', { speed: 0, motion: 'WALK' }), route: coreBlockingRoute([1, 6], { pathMotionMode: 'FLY', spawnOffset: [-0.6, 0] }) },
+      { definition: foe('core_air', { speed: 0, motion: 'FLY' }), route: coreBlockingRoute([1, 6], { spawnOffset: [-0.6, 0] }) },
+    ],
+  );
+  battle.step();
+
+  assert.deepEqual(coreBlockedBy(battle, 0), [1]);
+  assert.equal(coreBlockingUnit(battle, 1).targetable.layer, 'GROUND');
+  assert.equal(coreBlockingUnit(battle, 2).targetable.layer, 'AIR');
+});
+
+test('core blocking: moving enemies stop at contact and an adjacent lane remains clear', () => {
+  const battle = coreBlockingBattle(
+    [{ definition: op(FRONT), position: [1, 5] }, { definition: op(BACK), position: [2, 7] }],
+    [{ definition: foe('core_walker'), route: coreBlockingRoute() }],
+  );
+
+  while (battle.result === null && coreBlockedBy(battle, 0).length === 0) {
+    battle.step();
+  }
+
+  assert.deepEqual(coreBlockedBy(battle, 0), [2]);
+  assert.deepEqual(coreBlockedBy(battle, 1), []);
+  const stopped = coreBlockingUnit(battle, 2).position;
+  const distance = Math.hypot(stopped[0] - 5, stopped[1] - 1);
+  assert.ok(distance < BLOCK_RADIUS.ground && distance > BLOCK_RADIUS.ground - 0.05);
+  battle.step();
+  assert.deepEqual(coreBlockingUnit(battle, 2).position, stopped);
+});
+
+test('core blocking: a full operator lets another enemy walk through', () => {
+  const battle = coreBlockingBattle(
+    [{ definition: op(FRONT), position: [1, 5] }],
+    [
+      { definition: foe('core_still', { speed: 0 }), route: coreBlockingRoute([1, 6], { spawnOffset: [-0.6, 0] }) },
+      { definition: foe('core_passing'), route: coreBlockingRoute() },
+    ],
+  );
+
+  do {
+    battle.step();
+  } while (battle.result === null && coreBlockingUnit(battle, 2).position[0] >= 4.2);
+
+  assert.deepEqual(coreBlockedBy(battle, 0), [1]);
+  assert.ok(coreBlockingUnit(battle, 2).position[0] < 4.2);
+});
+
+test('core blocking: nearest contact wins even when the enemy does not move', () => {
+  const battle = coreBlockingBattle(
+    [{ definition: op(FRONT), position: [1, 6] }, { definition: op(BACK), position: [1, 5] }],
+    [{ definition: foe('core_still', { speed: 0 }), route: coreBlockingRoute([1, 6], { spawnOffset: [-0.6, 0] }) }],
+  );
+  battle.step();
+
+  assert.deepEqual(coreBlockedBy(battle, 0), []);
+  assert.deepEqual(coreBlockedBy(battle, 1), [2]);
+});
+
+test('core blocking: blocker death releases its enemy and movement resumes on the next tick', () => {
+  const battle = coreBlockingBattle(
+    [{ definition: chessRec({ id: FRONT, stats: { maxHp: 10, atk: 0, def: 0, blockCnt: 1 }, skill: null }), position: [1, 5] }],
+    [{ definition: foe('core_killer', { atk: 1000 }), route: coreBlockingRoute([1, 6], { spawnOffset: [-0.6, 0] }) }],
+  );
+  const first = battle.step();
+  const stopped = coreBlockingUnit(battle, 1).position;
+
+  assert.ok(first.events.some(event => event.type === 'UNIT_REMOVED' && event.unitId === 0 && event.reason === 'DEATH'));
+  assert.deepEqual(battle.snapshot().blockingRelations, []);
+  battle.step();
+  assert.ok(coreBlockingUnit(battle, 1).position[0] < stopped[0]);
+});
+
+test('core blocking: a freed front operator takes over a surviving enemy without changing its position', () => {
+  const battle = coreBlockingBattle(
+    [
+      { definition: chessRec({ id: FRONT, stats: { maxHp: 1e6, atk: 100, def: 0, blockCnt: 1 }, skill: null }), position: [1, 6] },
+      { definition: chessRec({ id: BACK, stats: { maxHp: 10, atk: 0, def: 0, blockCnt: 1 }, skill: null }), position: [1, 5] },
+    ],
+    [
+      { definition: foe('core_front_target', { hp: 1, speed: 0 }), route: coreBlockingRoute([1, 7], { spawnOffset: [-0.4, 0] }) },
+      { definition: foe('core_survivor', { atk: 1000 }), route: coreBlockingRoute([1, 6], { spawnOffset: [-0.6, 0] }) },
+    ],
+  );
+  const first = battle.step();
+  const position = coreBlockingUnit(battle, 3).position;
+
+  assert.deepEqual(first.events.filter(event => event.type === 'UNIT_REMOVED').map(event => event.unitId), [1, 2]);
+  assert.deepEqual(coreBlockedBy(battle, 0), [3]);
+  battle.step();
+  assert.deepEqual(coreBlockedBy(battle, 0), [3]);
+  assert.deepEqual(coreBlockingUnit(battle, 3).position, position);
+});
+
+test('core blocking: the held enemy outranks a nearer in-range enemy and can be attacked outside the facing range', () => {
+  const battle = coreBlockingBattle(
+    [{ definition: chessRec({ id: FRONT, stats: { atk: 100, maxHp: 1e6, blockCnt: 1 }, skill: null }), position: [1, 5], direction: 'LEFT' }],
+    [
+      { definition: foe('core_held', { speed: 0 }), route: coreBlockingRoute([1, 6], { spawnOffset: [-0.35, 0] }) },
+      { definition: foe('core_in_range', { speed: 0 }), route: coreBlockingRoute([1, 4], { spawnOffset: [0.4, 0] }) },
+    ],
+  );
+  const { events } = battle.step();
+
+  assert.deepEqual(coreBlockedBy(battle, 0), [1]);
+  assert.equal(Math.round(coreBlockingUnit(battle, 1).position[0]), 6);
+  assert.deepEqual(events.filter(event => event.type === 'ATTACK' && event.sourceUnitId === 0).map(event => event.targetUnitId), [1]);
+  assert.ok(coreBlockingUnit(battle, 1).vitality.hp < 1e7);
+  assert.equal(coreBlockingUnit(battle, 2).vitality.hp, 1e7);
+});
 
 test('the official block radii are the PRTS numbers', () => {
   assert.ok(Math.abs(BLOCK_RADIUS.ground - 0.7071) < 1e-3);

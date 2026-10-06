@@ -1,4 +1,4 @@
-import type { Unit, UnitDefinition } from "./unit.js";
+import type { Unit, UnitDefinition } from "../unit.js";
 
 export interface VitalityDefinition {
     readonly maxHp: number;
