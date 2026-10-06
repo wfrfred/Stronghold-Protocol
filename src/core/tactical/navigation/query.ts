@@ -16,6 +16,57 @@ function sameTile(a: TilePosition, b: TilePosition): boolean {
     return a[0] === b[0] && a[1] === b[1];
 }
 
+export function canTraverseNavigationSegment(
+    map: NavigationMap,
+    from: WorldPosition,
+    to: WorldPosition,
+): boolean {
+    let [row, col] = World.toTile(from);
+    const [endRow, endCol] = World.toTile(to);
+    if (
+        NavigationMap.get(map, [row, col])?.passable !== true ||
+        NavigationMap.get(map, [endRow, endCol])?.passable !== true
+    ) {
+        return false;
+    }
+    const dx = to[0] - from[0];
+    const dy = to[1] - from[1];
+    const rowStep = Math.sign(dy);
+    const colStep = Math.sign(dx);
+    const rowDirection = rowStep > 0 ? "UP" : "DOWN";
+    const colDirection = colStep > 0 ? "RIGHT" : "LEFT";
+    while (row !== endRow || col !== endCol) {
+        const rowTime = row === endRow ? Infinity : (row + rowStep * 0.5 - from[1]) / dy;
+        const colTime = col === endCol ? Infinity : (col + colStep * 0.5 - from[0]) / dx;
+        const crossRow = rowTime <= colTime || Math.abs(rowTime - colTime) <= Number.EPSILON;
+        const crossCol = colTime <= rowTime || Math.abs(rowTime - colTime) <= Number.EPSILON;
+        if (crossRow && !NavigationMap.canDepart(map, [row, col], rowDirection)) {
+            return false;
+        }
+        if (crossCol && !NavigationMap.canDepart(map, [row, col], colDirection)) {
+            return false;
+        }
+        if (
+            crossRow &&
+            crossCol &&
+            (!NavigationMap.canDepart(map, [row + rowStep, col], colDirection) ||
+                !NavigationMap.canDepart(map, [row, col + colStep], rowDirection))
+        ) {
+            return false;
+        }
+        if (crossRow) {
+            row += rowStep;
+        }
+        if (crossCol) {
+            col += colStep;
+        }
+        if (NavigationMap.get(map, [row, col])?.passable !== true) {
+            return false;
+        }
+    }
+    return true;
+}
+
 function safeNext(path: NavigationPath<NavigationIntent>, tile: TilePosition): TilePosition {
     const node = path.field.nodes[tile[0] * path.field.map.columns + tile[1]]!;
     return node.type === "REACHABLE" ? node.next : tile;

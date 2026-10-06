@@ -5,10 +5,12 @@ import type { WorldOffset, WorldPosition } from "../../geometry/coordinate.js";
 import type { NavigationFieldCache } from "../../navigation/cache.js";
 import { NavigationMap } from "../../navigation/map.js";
 import type { NavigationMaps } from "../../navigation/map.js";
+import { canTraverseNavigationSegment } from "../../navigation/query.js";
 import { isNavigationGoalReached } from "../../navigation/request.js";
 import type { NavigationRequestId } from "../../navigation/request.js";
 import {
     clearNavigationRequest,
+    canCompleteNavigationSegment,
     getNavigationRequest,
     markNavigationArrived,
     steerNavigation,
@@ -91,12 +93,12 @@ export function stepRoutedUnit<U extends RoutedLocomotiveUnit>(
         unit:
             hasSpatialPresence(unit) || step.signals.some(({ signal }) => signal.type !== "ALERT")
                 ? {
-                      ...next,
-                      spatialPresence:
-                          hasSpatialPresence(unit) && unit.spatialPresence.present === step.present
-                              ? unit.spatialPresence
-                              : { present: step.present },
-                  }
+                    ...next,
+                    spatialPresence:
+                        hasSpatialPresence(unit) && unit.spatialPresence.present === step.present
+                            ? unit.spatialPresence
+                            : { present: step.present },
+                }
                 : next,
         signals: step.signals,
         rngState: step.rngState,
@@ -355,10 +357,10 @@ export function stepRoutedLocomotion(
             routeLocator(active, position),
         );
         let target: WorldPosition | null = null;
-        if (
+        const recoveringLocator =
             active.route.progress.phase !== "COMPLETED" &&
-            (locatorBoundary[0] !== 0 || locatorBoundary[1] !== 0)
-        ) {
+            (locatorBoundary[0] !== 0 || locatorBoundary[1] !== 0);
+        if (recoveringLocator) {
             target = World.translate(position, locatorBoundary);
         } else {
             const prediction = predictRouteControl(active, position, context);
@@ -367,18 +369,29 @@ export function stepRoutedLocomotion(
                 target = prediction.selection.decision.target;
             }
         }
-        if (target !== null && World.withinDistance(position, target, speed)) {
+        if (
+            target !== null &&
+            World.withinDistance(position, target, speed) &&
+            (recoveringLocator ||
+                (canCompleteNavigationSegment(active.navigation, position, target) &&
+                    canTraverseNavigationSegment(
+                        context.maps[active.navigation.pathMotionMode],
+                        position,
+                        target,
+                    )))
+        ) {
             moving = target[0] !== position[0] || target[1] !== position[1];
             position = target;
         } else {
             const next = heading(active);
             active = next.control;
             if (present) {
+                const distance = Math.hypot(next.direction[0], next.direction[1]);
                 const movement = integrateSteeringDirection(
                     steering,
                     position,
                     next.direction,
-                    speed,
+                    distance === 0 ? speed : Math.min(speed, distance),
                     definition.steeringParameters,
                 );
                 const reflected = reflectNavigationMovement(
@@ -386,8 +399,19 @@ export function stepRoutedLocomotion(
                     movement.position,
                     context.maps[active.navigation.pathMotionMode],
                 );
-                moving = reflected[0] !== position[0] || reflected[1] !== position[1];
-                position = reflected;
+                const map = context.maps[active.navigation.pathMotionMode];
+                const permitted =
+                    recoveringLocator ||
+                    (canTraverseNavigationSegment(map, position, reflected) &&
+                        canTraverseNavigationSegment(
+                            map,
+                            routeLocator(active, position),
+                            routeLocator(active, reflected),
+                        ));
+                if (permitted) {
+                    moving = reflected[0] !== position[0] || reflected[1] !== position[1];
+                    position = reflected;
+                }
                 steering = movement.state;
             }
         }

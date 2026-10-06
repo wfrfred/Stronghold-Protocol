@@ -15,6 +15,7 @@ import { deriveNavigationFieldQuery } from '../../dist/core/tactical/navigation/
 import { createNavigationPath } from '../../dist/core/tactical/navigation/path.js';
 import {
   bindNavigationPath, createNavigationState, predictNavigation,
+  canCompleteNavigationSegment,
   setNavigationMotionMode, startNavigationRequest, steerNavigation,
 } from '../../dist/core/tactical/navigation/state.js';
 import { createRouteDefinition } from '../../dist/core/tactical/route/definition.js';
@@ -39,6 +40,7 @@ import { createNavigationFieldCache } from '../../dist/core/tactical/navigation/
 import { smoothNavigationField } from '../../dist/core/tactical/navigation/smoothing.js';
 import {
   initializeNavigationCursor, selectNavigationPredictionTarget, selectNavigationSteeringTarget,
+  canTraverseNavigationSegment,
 } from '../../dist/core/tactical/navigation/query.js';
 import { getDefaultSource, hasGeneratedData } from '../../server/sim/simdata.js';
 import { makeBattle, flatStage, enemyRec } from '../helpers/battleHarness.js';
@@ -328,7 +330,78 @@ test('core diagonal smoothing reads the final tile departure and keeps raw succe
   assert.deepEqual(distances(diagonal), distances(axis));
 });
 
-test('core diagonal smoothing checks narrow rectangles and high costs while axis smoothing only checks collinearity', () => {
+test('core smoothing respects one-way departures and keeps reverse cardinal rays open', () => {
+  const cases = [
+    { rows: 2, columns: 3, from: [0, 2], to: [0, 0], denied: 'LEFT', turn: [1, 2] },
+    { rows: 2, columns: 3, from: [0, 0], to: [0, 2], denied: 'RIGHT', turn: [1, 0] },
+    { rows: 3, columns: 2, from: [2, 0], to: [0, 0], denied: 'DOWN', turn: [2, 1] },
+    { rows: 3, columns: 2, from: [0, 0], to: [2, 0], denied: 'UP', turn: [0, 1] },
+  ];
+  for (const { rows, columns, from, to, denied, turn } of cases) {
+    const cells = Array.from({ length: rows * columns }, () => fieldCell());
+    cells[from[0] * columns + from[1]].departures[denied] = false;
+    const map = fieldMap(rows, columns, cells);
+    for (const allowDiagonalMove of [true, false]) {
+      const message = `${denied}, diagonal=${allowDiagonalMove}`;
+      const forward = buildNavigationField(map, fieldQuery(to, allowDiagonalMove));
+      const node = forward.nodes[from[0] * columns + from[1]];
+      assert.equal(node.distance, 4, message);
+      assert.deepEqual(node.rawNext, turn, message);
+      assert.deepEqual(node.next, turn, message);
+      const reverse = buildNavigationField(map, fieldQuery(from, allowDiagonalMove));
+      const reverseNode = reverse.nodes[to[0] * columns + to[1]];
+      assert.equal(reverseNode.distance, 2, message);
+      assert.deepEqual(reverseNode.next, from, message);
+    }
+  }
+});
+
+test('core reversed diagonal smoothing checks both actual departure components and axes', () => {
+  const cases = [
+    { rows: 3, columns: 4, from: [2, 3], to: [0, 0], denied: 'LEFT', axis: 1 },
+    { rows: 3, columns: 4, from: [2, 3], to: [0, 0], denied: 'DOWN', axis: 0 },
+    { rows: 4, columns: 3, from: [3, 2], to: [0, 0], denied: 'DOWN', axis: 0 },
+    { rows: 4, columns: 3, from: [3, 2], to: [0, 0], denied: 'LEFT', axis: 1 },
+    { rows: 3, columns: 3, from: [0, 2], to: [2, 0], denied: 'LEFT', axis: 1 },
+    { rows: 3, columns: 3, from: [0, 2], to: [2, 0], denied: 'UP', axis: 0 },
+  ];
+  for (const { rows, columns, from, to, denied, axis } of cases) {
+    const cells = Array.from({ length: rows * columns }, () => fieldCell());
+    cells[from[0] * columns + from[1]].departures[denied] = false;
+    const map = fieldMap(rows, columns, cells);
+    const message = `${rows}x${columns}, ${denied}`;
+    const field = buildNavigationField(map, fieldQuery(to));
+    const node = field.nodes[from[0] * columns + from[1]];
+    assert.equal(node.distance, rows + columns - 2, message);
+    assert.equal(node.next[axis], from[axis], message);
+    assert.notDeepEqual(node.next, from, message);
+    const reverse = buildNavigationField(map, fieldQuery(from));
+    assert.deepEqual(reverse.nodes[to[0] * columns + to[1]].next, from, message);
+  }
+});
+
+test('core reversed diagonal smoothing checks departures from both side cells', () => {
+  const cases = [
+    { from: [2, 2], to: [0, 0], blocked: [1, 2], denied: 'LEFT' },
+    { from: [2, 2], to: [0, 0], blocked: [2, 1], denied: 'DOWN' },
+    { from: [0, 2], to: [2, 0], blocked: [1, 2], denied: 'LEFT' },
+    { from: [0, 2], to: [2, 0], blocked: [0, 1], denied: 'UP' },
+  ];
+  for (const { from, to, blocked, denied } of cases) {
+    const cells = Array.from({ length: 9 }, () => fieldCell());
+    cells[blocked[0] * 3 + blocked[1]].departures[denied] = false;
+    const map = fieldMap(3, 3, cells);
+    const message = `${from} -> ${to}, ${blocked}.${denied}`;
+    const field = buildNavigationField(map, fieldQuery(to));
+    const node = field.nodes[from[0] * 3 + from[1]];
+    assert.equal(node.distance, 4, message);
+    assert.notDeepEqual(node.next, to, message);
+    const reverse = buildNavigationField(map, fieldQuery(from));
+    assert.deepEqual(reverse.nodes[to[0] * 3 + to[1]].next, from, message);
+  }
+});
+
+test('core diagonal smoothing checks narrow rectangles while axis smoothing retains high-cost hops', () => {
   const cells = Array.from({ length: 8 }, () => fieldCell());
   cells[4] = fieldCell({ passable: false });
   const map = fieldMap(2, 4, cells);
@@ -785,6 +858,157 @@ function routedEnemyRequest(enemy) {
   const activity = enemy.locomotion.mainRoute.navigation.execution.activity;
   return activity.type === 'FOLLOWING' || activity.type === 'UNREACHABLE' ? activity.path.request : activity.request;
 }
+
+test('core ordinary movement cannot snap across an unreachable wall even with a large budget', () => {
+  const h = routedEnemyHarness({ speedPerTick: 2, checkpoints: [], routeOverrides: { endPosition: [0, 2] } });
+  const map = fieldMap(1, 3, [fieldCell(), fieldCell({ passable: false }), fieldCell()]);
+  h.setMaps({ WALK: map, FLY: map });
+  const seed = h.rngState, nextId = h.nextNavigationRequestId;
+  const first = h.step();
+  assert.deepEqual(h.enemy.position, [0, 0]);
+  assert.equal(h.enemy.locomotion.moving, false);
+  assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'END');
+  const navigation = h.enemy.locomotion.mainRoute.navigation;
+  assert.equal(navigation.execution.activity.type, 'UNREACHABLE');
+  assert.deepEqual(predictNavigation(navigation, [0, 0]).selection.decision, { type: 'TARGET', target: [2, 0] });
+  assert.equal(canCompleteNavigationSegment(navigation, [0, 0], [2, 0]), false);
+  assert.deepEqual(first.outcomes, [{ type: 'UNREACHABLE', requestId: 0, reason: 'POSITION_UNREACHABLE' }]);
+  assert.deepEqual(h.step().outcomes, []);
+  assert.deepEqual(h.enemy.position, [0, 0]);
+  assert.equal(h.rngState, seed);
+  assert.equal(h.nextNavigationRequestId, nextId);
+});
+
+test('core large-budget movement follows each current segment around walls and high-cost tiles', () => {
+  for (const obstacle of [{ passable: false }, { moveCost: 1000 }]) {
+    const cells = Array.from({ length: 6 }, () => fieldCell());
+    cells[1] = fieldCell(obstacle);
+    const map = fieldMap(2, 3, cells);
+    const h = routedEnemyHarness({ speedPerTick: 2, checkpoints: [], routeOverrides: { endPosition: [0, 2] } });
+    h.setMaps({ WALK: map, FLY: map });
+    h.step();
+    assert.deepEqual(h.enemy.position, [0, 1]);
+    assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'END');
+    const positions = [h.enemy.position];
+    for (let tick = 0; tick < 10 && h.enemy.locomotion.mainRoute.route.progress.phase !== 'COMPLETED'; tick++) {
+      h.step();
+      positions.push(h.enemy.position);
+    }
+    assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'COMPLETED');
+    assert.deepEqual(h.enemy.position, [2, 0]);
+    assert.ok(positions.every(position => position[1] >= 0.5 || position[0] === 0 || position[0] === 2));
+  }
+});
+
+test('core ordinary movement respects one-way departures in all four directions and permits the reverse', () => {
+  const cases = [
+    { start: [0, 2], end: [0, 0], direction: 'LEFT', first: [2, 1] },
+    { start: [0, 0], end: [0, 2], direction: 'RIGHT', first: [0, 1] },
+    { start: [2, 0], end: [0, 0], direction: 'DOWN', first: [1, 2] },
+    { start: [0, 0], end: [2, 0], direction: 'UP', first: [1, 0] },
+  ];
+  for (const { start, end, direction, first } of cases) {
+    const cells = Array.from({ length: 9 }, () => fieldCell());
+    cells[start[0] * 3 + start[1]] = fieldCell({ departures: { ...fieldCell().departures, [direction]: false } });
+    const map = fieldMap(3, 3, cells);
+    const h = routedEnemyHarness({ speedPerTick: 2, checkpoints: [], routeOverrides: { startPosition: start, endPosition: end } });
+    h.setMaps({ WALK: map, FLY: map });
+    h.step();
+    assert.deepEqual(h.enemy.position, first, direction);
+    assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'END');
+    const reverse = routedEnemyHarness({ speedPerTick: 2, checkpoints: [], routeOverrides: { startPosition: end, endPosition: start } });
+    reverse.setMaps({ WALK: map, FLY: map });
+    reverse.step();
+    assert.deepEqual(reverse.enemy.position, [start[1], start[0]], direction);
+    assert.equal(reverse.enemy.locomotion.mainRoute.route.progress.phase, 'COMPLETED');
+  }
+});
+
+test('core continuous segment permissions use actual directed crossings and rounded boundary ownership', () => {
+  const cells = Array.from({ length: 9 }, () => fieldCell());
+  cells[0] = fieldCell({ departures: { ...fieldCell().departures, RIGHT: false } });
+  const map = fieldMap(3, 3, cells);
+  assert.equal(canTraverseNavigationSegment(map, [0.5, 0], [1, 0]), false);
+  assert.equal(canTraverseNavigationSegment(map, [1, 0], [0.5, 0]), true);
+  assert.equal(canTraverseNavigationSegment(map, [0, 0], [0.5, 0]), true);
+  assert.equal(canTraverseNavigationSegment(map, [1.5, 0], [1, 0]), true);
+  assert.equal(canTraverseNavigationSegment(map, [0, 0], [0, 0]), true);
+  assert.equal(canTraverseNavigationSegment(map, [0.49, 0.1], [1, 1]), false);
+  assert.equal(canTraverseNavigationSegment(map, [1, 1], [0.49, 0.1]), true);
+  const cornerCells = Array.from({ length: 4 }, () => fieldCell());
+  cornerCells[1] = fieldCell({ departures: { ...fieldCell().departures, UP: false } });
+  const corner = fieldMap(2, 2, cornerCells);
+  assert.equal(canTraverseNavigationSegment(corner, [0, 0], [1, 1]), false);
+  assert.equal(canTraverseNavigationSegment(corner, [1, 1], [0, 0]), true);
+});
+
+test('core ordinary movement checks both world and locator segments and uses the selected motion map', () => {
+  const cells = Array.from({ length: 6 }, () => fieldCell());
+  cells[1] = fieldCell({ passable: false });
+  const walk = fieldMap(2, 3, cells);
+  const fly = fieldMap(2, 3, Array.from({ length: 6 }, () => fieldCell()), 'FLY');
+  const h = routedEnemyHarness({ speedPerTick: 10, checkpoints: [], routeOverrides: {
+    endPosition: [1, 2], spawnOffset: [0.49, 0],
+  } });
+  h.setMaps({ WALK: walk, FLY: fly });
+  h.step();
+  assert.deepEqual(h.enemy.position, [0.49, 1]);
+  for (let tick = 0; tick < 10 && h.enemy.locomotion.mainRoute.route.progress.phase !== 'COMPLETED'; tick++) h.step();
+  assert.deepEqual(h.enemy.position, [2.49, 1]);
+  assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'COMPLETED');
+  const flying = routedEnemyHarness({ speedPerTick: 2, checkpoints: [], routeOverrides: { endPosition: [0, 2], pathMotionMode: 'FLY' } });
+  flying.setMaps({ WALK: walk, FLY: fly });
+  flying.step();
+  assert.deepEqual(flying.enemy.position, [2, 0]);
+  assert.equal(flying.enemy.locomotion.mainRoute.route.progress.phase, 'COMPLETED');
+});
+
+test('core ordinary steering cannot carry old velocity through a wall to a passable landing tile', () => {
+  const cells = Array.from({ length: 15 }, () => fieldCell());
+  cells[1] = fieldCell({ passable: false });
+  const map = fieldMap(5, 3, cells);
+  const h = routedEnemyHarness({ speedPerTick: 2, checkpoints: [], routeOverrides: { endPosition: [4, 0] } });
+  h.setMaps({ WALK: map, FLY: map });
+  h.enemy.definition = createEnemyDefinition({ ...h.enemy.definition, locomotion: {
+    ...h.enemy.definition.locomotion,
+    steeringParameters: createSteeringParameters({ steeringFactor: 1, maxSteeringForce: 0 }),
+  } });
+  h.enemy.locomotion.steering.lastVelocity = [2, 0];
+  h.step();
+  assert.deepEqual(h.enemy.position, [0, 0]);
+  assert.equal(h.enemy.locomotion.moving, false);
+  assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'END');
+});
+
+test('core unreachable MOVE and wait preview targets cannot trigger a snap or checkpoint arrival', () => {
+  const map = fieldMap(1, 3, [fieldCell(), fieldCell({ passable: false }), fieldCell()]);
+  for (const checkpoints of [[coreMove(2)], [{ type: 'WAIT_FOR_TICKS', durationTicks: 10 }, coreMove(2)]]) {
+    const h = routedEnemyHarness({ speedPerTick: 2, checkpoints, routeOverrides: { endPosition: [0, 2] } });
+    h.setMaps({ WALK: map, FLY: map });
+    const nextId = h.nextNavigationRequestId, seed = h.rngState;
+    const result = h.step();
+    assert.deepEqual(h.enemy.position, [0, 0]);
+    assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'CHECKPOINTS');
+    assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpointIndex, 0);
+    assert.equal(result.outcomes.some(outcome => outcome.type === 'ARRIVED'), false);
+    assert.equal(h.nextNavigationRequestId, nextId);
+    assert.equal(h.rngState, seed);
+  }
+});
+
+test('core motion overrides and scripted appearances retain their explicit displacement semantics', () => {
+  const map = fieldMap(1, 3, [fieldCell(), fieldCell({ passable: false }), fieldCell()]);
+  const displaced = routedEnemyHarness({ speedPerTick: 2, checkpoints: [], routeOverrides: { endPosition: [0, 2] } });
+  displaced.setMaps({ WALK: map, FLY: map });
+  displaced.step({ motionOverride: { type: 'DISPLACEMENT', displacement: [2, 0] } });
+  assert.deepEqual(displaced.enemy.position, [2, 0]);
+  const appeared = routedEnemyHarness({ speedPerTick: 0, checkpoints: [
+    { type: 'APPEAR_AT_POS', position: [0, 2], reachOffset: [0, 0] },
+  ], routeOverrides: { endPosition: [0, 2] } });
+  appeared.setMaps({ WALK: map, FLY: map });
+  appeared.step();
+  assert.deepEqual(appeared.enemy.position, [2, 0]);
+});
 
 test('core serial MOVE-WAIT-END snaps once per step and waits independently of zero speed and blocking', () => {
   const h = routedEnemyHarness();

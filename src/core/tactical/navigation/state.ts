@@ -3,14 +3,16 @@ import {
     createWorldOffset,
     createWorldPosition,
     isWorldPosition,
+    World,
 } from "../geometry/coordinate.js";
 import type { WorldOffset, WorldPosition } from "../geometry/coordinate.js";
 import {
+    canTraverseNavigationSegment,
     initializeNavigationCursor,
     selectNavigationPredictionTarget,
     selectNavigationSteeringTarget,
 } from "./query.js";
-import { PathMotionMode, type NavigationMap } from "./map.js";
+import { NavigationMap, PathMotionMode } from "./map.js";
 import type {
     NavigationCursorInitialization,
     NavigationFailureReason,
@@ -286,6 +288,53 @@ export function predictNavigation(
         state: updateExecution(state, { ...activity, cursor: selection.cursor }, selection.visits),
         selection,
     };
+}
+
+export function canCompleteNavigationSegment(
+    state: NavigationState,
+    position: WorldPosition,
+    target: WorldPosition,
+): boolean {
+    const activity = state.execution.activity;
+    if (
+        activity.type !== "FOLLOWING" &&
+        activity.type !== "UNREACHABLE" &&
+        activity.type !== "PREVIEWING"
+    ) {
+        return false;
+    }
+    const { path, cursor } = activity;
+    const { map, nodes } = path.field;
+    const offset = state.execution.locatorOffset;
+    const locator = World.translate(position, offset);
+    const tile = World.toTile(locator);
+    if (
+        !NavigationMap.contains(map, tile) ||
+        nodes[tile[0] * map.columns + tile[1]]!.type === "UNREACHABLE" ||
+        nodes[path.request.targetTile[0] * map.columns + path.request.targetTile[1]]!.type ===
+            "UNREACHABLE"
+    ) {
+        return false;
+    }
+    const selection = selectNavigationSteeringTarget(
+        path,
+        cursor,
+        state.execution.visits,
+        position,
+        offset,
+    );
+    const segmentTarget =
+        selection.decision.type === "MOVE"
+            ? selection.decision.target
+            : selection.decision.type === "ARRIVED"
+              ? World.translate(path.request.goal.position, World.negate(offset))
+              : null;
+    return (
+        segmentTarget !== null &&
+        segmentTarget[0] === target[0] &&
+        segmentTarget[1] === target[1] &&
+        canTraverseNavigationSegment(map, locator, World.translate(target, offset))
+    );
 }
 
 export function steerNavigation(

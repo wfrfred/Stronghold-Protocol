@@ -1,5 +1,5 @@
 import type { TilePosition } from "../geometry/coordinate.js";
-import type { Direction } from "../geometry/direction.js";
+import { Direction } from "../geometry/direction.js";
 import type { NavigationField, NavigationFieldNode } from "./field.js";
 import { NavigationMap } from "./map.js";
 
@@ -23,7 +23,8 @@ function raycast(field: NavigationField, from: TilePosition, to: TilePosition): 
     let startMinor = swapAxes ? from[1] : from[0];
     let endMajor = swapAxes ? to[0] : to[1];
     let endMinor = swapAxes ? to[1] : to[0];
-    if (startMajor > endMajor) {
+    const reversed = startMajor > endMajor;
+    if (reversed) {
         [startMajor, endMajor] = [endMajor, startMajor];
         [startMinor, endMinor] = [endMinor, startMinor];
     }
@@ -44,8 +45,18 @@ function raycast(field: NavigationField, from: TilePosition, to: TilePosition): 
         const [row, col] = position(major, minor);
         return isClear(field, row, col);
     };
-    const canDepart = (major: number, minor: number, direction: Direction): boolean =>
-        NavigationMap.canDepart(field.map, position(major, minor), direction);
+    const canTraverse = (major: number, minor: number, direction: Direction): boolean => {
+        const from = position(major, minor);
+        if (!reversed) {
+            return NavigationMap.canDepart(field.map, from, direction);
+        }
+        const [dRow, dCol] = Direction.vector(direction);
+        return NavigationMap.canDepart(
+            field.map,
+            [from[0] + dRow, from[1] + dCol],
+            Direction.opposite(direction),
+        );
+    };
 
     if (minorDelta <= 1) {
         for (let row = Math.min(from[0], to[0]); row <= Math.max(from[0], to[0]); row++) {
@@ -60,7 +71,10 @@ function raycast(field: NavigationField, from: TilePosition, to: TilePosition): 
     let error = -majorDelta;
     let minor = startMinor;
     for (let major = startMajor; major <= endMajor; major++) {
-        if (!clear(major, minor) || !canDepart(major, minor, majorDirection)) {
+        if (
+            !clear(major, minor) ||
+            (major < endMajor && !canTraverse(major, minor, majorDirection))
+        ) {
             return false;
         }
         error += 2 * minorDelta;
@@ -69,9 +83,9 @@ function raycast(field: NavigationField, from: TilePosition, to: TilePosition): 
             if (
                 !clear(major, nextMinor) ||
                 !clear(major + 1, minor) ||
-                !canDepart(major, minor, minorDirection) ||
-                !canDepart(major + 1, minor, minorDirection) ||
-                !canDepart(major, nextMinor, majorDirection)
+                !canTraverse(major, minor, minorDirection) ||
+                !canTraverse(major + 1, minor, minorDirection) ||
+                !canTraverse(major, nextMinor, majorDirection)
             ) {
                 return false;
             }
@@ -79,7 +93,11 @@ function raycast(field: NavigationField, from: TilePosition, to: TilePosition): 
             error -= 2 * majorDelta;
         }
     }
-    return true;
+    return NavigationMap.canDepart(
+        field.map,
+        to,
+        reversed ? Direction.opposite(majorDirection) : majorDirection,
+    );
 }
 
 export function smoothNavigationField(field: NavigationField): NavigationField {
