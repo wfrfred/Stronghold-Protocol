@@ -1,5 +1,5 @@
 import type { Rng } from "../../common/rng.js";
-import { createWorldOffset, createWorldPosition, Tile } from "../geometry/coordinate.js";
+import { createWorldOffset, Tile, World } from "../geometry/coordinate.js";
 import type { WorldOffset, WorldPosition } from "../geometry/coordinate.js";
 import type { RouteDefinition } from "./definition.js";
 
@@ -26,9 +26,10 @@ export function initializeRouteSpawn(definition: RouteDefinition, rng: Rng): Rou
     const [rangeX, rangeY] = definition.spawnRandomRange;
     const dx = definition.spawnOffset[0] + (-rangeX + rng.next() * (2 * rangeX));
     const dy = definition.spawnOffset[1] + (-rangeY + rng.next() * (2 * rangeY));
+    const offset = createWorldOffset(dx, dy);
 
     return Object.freeze({
-        position: createWorldPosition(center[0] + dx, center[1] + dy),
-        locatorOffset: createWorldOffset(-dx, -dy),
+        position: World.translate(center, offset),
+        locatorOffset: World.negate(offset),
     });
 }

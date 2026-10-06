@@ -7,7 +7,10 @@ import { createNavigationMap, NavigationMap } from '../../dist/core/tactical/nav
 import { createNavigationRequest } from '../../dist/core/tactical/navigation/request.js';
 import { deriveNavigationFieldQuery } from '../../dist/core/tactical/navigation/field.js';
 import { createNavigationPath } from '../../dist/core/tactical/navigation/path.js';
-import { createNavigationState } from '../../dist/core/tactical/navigation/state.js';
+import {
+  bindNavigationPath, createNavigationState, predictNavigation,
+  setNavigationMotionMode, startNavigationRequest, steerNavigation,
+} from '../../dist/core/tactical/navigation/state.js';
 import { createRouteDefinition } from '../../dist/core/tactical/route/definition.js';
 import { createRouteClock, createRouteClockBinding, createRouteState } from '../../dist/core/tactical/route/progress.js';
 import { initializeRouteSpawn } from '../../dist/core/tactical/route/initialize.js';
@@ -18,6 +21,9 @@ import { flowFieldForGrid, navigationMapFromGrid, waypointsForGrid } from '../..
 import { buildRawNavigationField, buildNavigationField } from '../../dist/core/tactical/navigation/pathfinding.js';
 import { createNavigationFieldCache } from '../../dist/core/tactical/navigation/cache.js';
 import { smoothNavigationField } from '../../dist/core/tactical/navigation/smoothing.js';
+import {
+  initializeNavigationCursor, selectNavigationPredictionTarget, selectNavigationSteeringTarget,
+} from '../../dist/core/tactical/navigation/execute.js';
 import { getDefaultSource, hasGeneratedData } from '../../server/sim/simdata.js';
 import { makeBattle, flatStage, enemyRec } from '../helpers/battleHarness.js';
 import { remainingDistance } from '../../server/sim/ai.js';
@@ -376,6 +382,294 @@ test('core field cache shares geometry queries within a battle and isolates actu
   assert.notEqual(cache.get(map, request), rebuilt);
   assert.notEqual(cache.get(otherMap, request), otherBeforeClear);
   assert.equal(JSON.stringify(first), snapshot);
+});
+
+function navigationPathFor(map, overrides = {}) {
+  const input = coreRequest({ targetTile: [0, 3], goal: { position: [3.2, 0], reachDistance: 0.05 }, ...overrides });
+  input.options = { ...coreRequest().options, ...overrides.options };
+  const request = createNavigationRequest(input);
+  return createNavigationPath(request, buildNavigationField(map, deriveNavigationFieldQuery(request)));
+}
+
+const navigationVisits = (...positions) => Object.freeze({
+  visitedCenters: Object.freeze(positions.map(position => Object.freeze([...position]))),
+});
+const navigationCursor = (nextNode) => Object.freeze({ type: 'FIELD', nextNode: Object.freeze([...nextNode]) });
+
+test('core navigation predicts the continuous goal and steers through the field bend', () => {
+  const cells = Array.from({ length: 8 }, () => fieldCell());
+  cells[1] = fieldCell({ passable: false });
+  const path = navigationPathFor(fieldMap(2, 4, cells));
+  assert.deepEqual(path.field.nodes[0].next, [1, 0]);
+  const initial = initializeNavigationCursor(path, [0, 0], [0, 0]);
+  assert.deepEqual(initial, { type: 'READY', cursor: { type: 'FIELD', nextNode: [0, 0] } });
+  const prediction = selectNavigationPredictionTarget(path, initial.cursor, navigationVisits(), [0, 0], [0, 0]);
+  assert.deepEqual(prediction.decision, { type: 'TARGET', target: [3.2, 0] });
+  const steering = selectNavigationSteeringTarget(path, prediction.cursor, prediction.visits, [0, 0], [0, 0]);
+  assert.deepEqual(steering.decision, { type: 'MOVE', target: [0, 1] });
+  const finalLeg = selectNavigationSteeringTarget(path, navigationCursor([0, 2]), navigationVisits(), [2, 0], [0, 0]);
+  assert.deepEqual(finalLeg.decision, { type: 'MOVE', target: [3.2, 0] });
+  const displaced = selectNavigationPredictionTarget(path, Object.freeze({ type: 'GOAL' }), navigationVisits(), [0, 0], [0, 0]);
+  assert.deepEqual(displaced.cursor, { type: 'FIELD', nextNode: [1, 0] });
+  assert.deepEqual(displaced.decision, { type: 'TARGET', target: [3.2, 0] });
+});
+
+test('core navigation prioritizes tile centers, then node centers, then stable centers', () => {
+  const map = fieldMap(1, 4, Array.from({ length: 4 }, () => fieldCell()));
+  const tile = navigationPathFor(map, { options: { visitEveryTileCenter: true, visitEveryNodeCenter: true, visitEveryNodeStably: true } });
+  const tileSelection = selectNavigationPredictionTarget(tile, navigationCursor([0, 2]), navigationVisits(), [0.2, 0], [0, 0]);
+  assert.deepEqual(tileSelection.decision, { type: 'TARGET', target: [0, 0] });
+  const node = navigationPathFor(map, { options: { visitEveryNodeCenter: true, visitEveryNodeStably: true } });
+  assert.deepEqual(selectNavigationPredictionTarget(node, navigationCursor([0, 0]), navigationVisits(), [0.2, 0], [0, 0]).decision, {
+    type: 'TARGET', target: [0, 0],
+  });
+  const stable = navigationPathFor(map, { options: { visitEveryNodeStably: true } });
+  assert.deepEqual(selectNavigationPredictionTarget(stable, navigationCursor([0, 0]), navigationVisits(), [0.2, 0], [0, 0]).decision, {
+    type: 'TARGET', target: [3.2, 0],
+  });
+  const centerBeforeArrival = selectNavigationSteeringTarget(tile, navigationCursor([0, 3]), navigationVisits(), [3.2, 0], [0, 0]);
+  assert.deepEqual(centerBeforeArrival.decision, { type: 'MOVE', target: [3, 0] });
+});
+
+test('core center visits use 0.05 distance while stable tracking uses 0.25 without visit memory', () => {
+  const map = fieldMap(1, 4, Array.from({ length: 4 }, () => fieldCell()));
+  for (const option of ['visitEveryTileCenter', 'visitEveryNodeCenter']) {
+    const path = navigationPathFor(map, { options: { [option]: true } });
+    const waiting = selectNavigationPredictionTarget(path, navigationCursor([0, 0]), navigationVisits(), [0.051, 0], [0, 0]);
+    assert.deepEqual(waiting.decision, { type: 'TARGET', target: [0, 0] });
+    assert.deepEqual(waiting.visits.visitedCenters, []);
+    const reached = selectNavigationPredictionTarget(path, navigationCursor([0, 0]), navigationVisits(), [0.049, 0], [0, 0]);
+    assert.deepEqual(reached.decision, { type: 'TARGET', target: [3.2, 0] });
+    assert.deepEqual(reached.visits.visitedCenters, [[0, 0]]);
+    const steering = selectNavigationSteeringTarget(path, navigationCursor([0, 0]), navigationVisits(), [0.049, 0], [0, 0]);
+    assert.deepEqual(steering.decision, { type: 'MOVE', target: [3.2, 0] });
+    const remembered = selectNavigationPredictionTarget(path, navigationCursor([0, 0]), navigationVisits([0, 0]), [0.2, 0], [0, 0]);
+    assert.deepEqual(remembered.decision, { type: 'TARGET', target: [3.2, 0] });
+    assert.deepEqual(remembered.visits.visitedCenters, [[0, 0]]);
+  }
+  const path = navigationPathFor(map, { options: { visitEveryNodeStably: true } });
+  const waiting = selectNavigationPredictionTarget(path, navigationCursor([0, 0]), navigationVisits(), [0.251, 0], [0, 0]);
+  const reached = selectNavigationPredictionTarget(path, navigationCursor([0, 0]), navigationVisits(), [0.249, 0], [0, 0]);
+  assert.deepEqual(waiting.decision, { type: 'TARGET', target: [0, 0] });
+  assert.deepEqual(reached.decision, { type: 'TARGET', target: [3.2, 0] });
+  assert.deepEqual(reached.visits.visitedCenters, []);
+});
+
+test('core locator offsets affect quantization and every selected unit-space target', () => {
+  const map = fieldMap(3, 4, Array.from({ length: 12 }, () => fieldCell()));
+  const path = navigationPathFor(map, { options: { visitEveryTileCenter: true } });
+  const offset = [-0.5, 0.75];
+  const initial = initializeNavigationCursor(path, [1, 0.75], offset);
+  assert.deepEqual(initial, { type: 'READY', cursor: { type: 'FIELD', nextNode: [2, 0] } });
+  const center = selectNavigationPredictionTarget(path, initial.cursor, navigationVisits(), [1, 0.75], offset);
+  assert.deepEqual(center.decision, { type: 'TARGET', target: [0.5, 1.25] });
+  const ordinary = navigationPathFor(map);
+  const goal = selectNavigationPredictionTarget(ordinary, initial.cursor, navigationVisits(), [1, 0.75], offset);
+  assert.deepEqual(goal.decision, { type: 'TARGET', target: [3.7, -0.75] });
+  const inside = initializeNavigationCursor(ordinary, [-1, 0], [1, 0]);
+  assert.equal(inside.type, 'READY');
+});
+
+test('core prediction remains TARGET at the goal while steering distinguishes geometric arrival rules', () => {
+  const map = fieldMap(1, 4, Array.from({ length: 4 }, () => fieldCell()));
+  const path = navigationPathFor(map);
+  const cursor = navigationCursor([0, 3]);
+  const prediction = selectNavigationPredictionTarget(path, cursor, navigationVisits(), [3.2, 0], [0, 0]);
+  assert.deepEqual(initializeNavigationCursor(path, [3, 0], [0, 0]), { type: 'READY', cursor: { type: 'GOAL' } });
+  assert.deepEqual(prediction.decision, { type: 'TARGET', target: [3.2, 0] });
+  assert.deepEqual(selectNavigationSteeringTarget(path, prediction.cursor, prediction.visits, [3.2, 0], [0, 0]).decision, { type: 'ARRIVED' });
+  const geometric = navigationPathFor(map, { goal: { position: [2, 0], reachDistance: 2 }, targetTile: [0, 2] });
+  const end = navigationPathFor(map, { goal: { position: [2, 0], reachDistance: 2 }, targetTile: [0, 2], arrivalRule: 'TARGET_TILE_AND_DISTANCE' });
+  assert.equal(selectNavigationSteeringTarget(geometric, cursor, navigationVisits(), [0.49, 0], [0, 0]).decision.type, 'ARRIVED');
+  assert.equal(selectNavigationSteeringTarget(end, cursor, navigationVisits(), [0.49, 0], [0, 0]).decision.type, 'MOVE');
+  assert.equal(selectNavigationSteeringTarget(end, cursor, navigationVisits(), [1.5, 0], [0, 0]).decision.type, 'ARRIVED');
+  const exact = navigationPathFor(map, { goal: { position: [3, 0], reachDistance: 0 } });
+  assert.equal(selectNavigationSteeringTarget(exact, cursor, navigationVisits(), [3, 0], [0, 0]).decision.type, 'ARRIVED');
+  assert.equal(selectNavigationSteeringTarget(exact, cursor, navigationVisits(), [3.049, 0], [0, 0]).decision.type, 'MOVE');
+});
+
+test('core steering consumes the cursor and visits returned by the preceding prediction query', () => {
+  const path = navigationPathFor(fieldMap(1, 4, Array.from({ length: 4 }, () => fieldCell())), { options: { visitEveryNodeCenter: true } });
+  const cursor = navigationCursor([0, 0]), visits = navigationVisits();
+  const prediction = selectNavigationPredictionTarget(path, cursor, visits, [0.049, 0], [0, 0]);
+  assert.deepEqual(prediction.cursor, { type: 'GOAL' });
+  assert.deepEqual(prediction.visits.visitedCenters, [[0, 0]]);
+  assert.deepEqual(prediction.decision, { type: 'TARGET', target: [3.2, 0] });
+  const shared = selectNavigationSteeringTarget(path, prediction.cursor, prediction.visits, [0.049, 0], [0, 0]);
+  const stale = selectNavigationSteeringTarget(path, cursor, visits, [0.049, 0], [0, 0]);
+  assert.deepEqual(shared.decision, { type: 'MOVE', target: [3, 0] });
+  assert.deepEqual(stale.decision, { type: 'MOVE', target: [3.2, 0] });
+  assert.deepEqual(shared.visits.visitedCenters, [[0, 0]]);
+  assert.deepEqual(visits.visitedCenters, []);
+});
+
+test('core navigation distinguishes unreachable target, unreachable position and outside-map recovery input', () => {
+  const cursor = navigationCursor([0, 0]);
+  const blockedTarget = navigationPathFor(fieldMap(1, 4, [fieldCell(), fieldCell(), fieldCell(), fieldCell({ passable: false })]));
+  const disconnected = navigationPathFor(fieldMap(1, 4, [fieldCell(), fieldCell({ passable: false }), fieldCell(), fieldCell()]));
+  assert.deepEqual(selectNavigationSteeringTarget(blockedTarget, cursor, navigationVisits(), [0, 0], [0, 0]).decision, {
+    type: 'UNREACHABLE', reason: 'TARGET_UNREACHABLE',
+  });
+  assert.deepEqual(selectNavigationSteeringTarget(disconnected, cursor, navigationVisits(), [0, 0], [0, 0]).decision, {
+    type: 'UNREACHABLE', reason: 'POSITION_UNREACHABLE',
+  });
+  assert.equal(selectNavigationPredictionTarget(disconnected, cursor, navigationVisits(), [0, 0], [0, 0]).decision.type, 'TARGET');
+  assert.deepEqual(initializeNavigationCursor(disconnected, [-2, 0], [0, 0]), { type: 'OUTSIDE_MAP' });
+  assert.deepEqual(selectNavigationPredictionTarget(disconnected, cursor, navigationVisits(), [-2, 0], [0, 0]).decision, { type: 'OUTSIDE_MAP' });
+  assert.deepEqual(selectNavigationSteeringTarget(disconnected, cursor, navigationVisits(), [-2, 0], [0, 0]).decision, { type: 'OUTSIDE_MAP' });
+});
+
+test('core navigation selections preserve their inputs and never consume global randomness', () => {
+  const path = navigationPathFor(fieldMap(1, 4, Array.from({ length: 4 }, () => fieldCell())), { options: { visitEveryNodeCenter: true } });
+  const cursor = navigationCursor([0, 0]), visits = navigationVisits(), position = [0.049, 0], offset = [0, 0];
+  const before = JSON.stringify({ path, cursor, visits, position, offset });
+  const originalRandom = Math.random;
+  let randomCalls = 0;
+  Math.random = () => { randomCalls++; return 0.5; };
+  try {
+    const first = selectNavigationPredictionTarget(path, cursor, visits, position, offset);
+    assert.deepEqual(selectNavigationPredictionTarget(path, cursor, visits, position, offset), first);
+    selectNavigationSteeringTarget(path, first.cursor, first.visits, position, offset);
+    const ordinary = navigationPathFor(path.field.map);
+    const unchanged = selectNavigationPredictionTarget(ordinary, cursor, visits, position, offset);
+    assert.equal(unchanged.cursor, cursor);
+    assert.equal(unchanged.visits, visits);
+    const outside = selectNavigationPredictionTarget(ordinary, cursor, visits, [-2, 0], offset);
+    assert.equal(outside.cursor, cursor);
+    assert.equal(outside.visits, visits);
+    const bound = bindNavigationPath(startNavigationRequest(createNavigationState('WALK', offset), path.request), path, position);
+    const prediction = predictNavigation(bound.state, position);
+    const steering = steerNavigation(prediction.state, position);
+    setNavigationMotionMode(steering.state, 'FLY');
+    assert.ok(Object.isFrozen(first) && Object.isFrozen(first.cursor) && Object.isFrozen(first.visits));
+    assert.ok(Object.isFrozen(first.visits.visitedCenters) && first.visits.visitedCenters.every(Object.isFrozen));
+    assert.equal(randomCalls, 0);
+    assert.equal(JSON.stringify({ path, cursor, visits, position, offset }), before);
+  } finally {
+    Math.random = originalRandom;
+  }
+});
+
+test('core navigation state passes prediction updates to steering without modifying the prior state', () => {
+  const path = navigationPathFor(fieldMap(1, 4, Array.from({ length: 4 }, () => fieldCell())), { options: { visitEveryNodeCenter: true } });
+  const idle = createNavigationState('WALK', [-0.5, 0.25]);
+  const started = startNavigationRequest(idle, path.request);
+  assert.equal(idle.execution.activity.type, 'IDLE');
+  assert.equal(started.execution.activity.type, 'NEEDS_PATH');
+  assert.equal(started.execution.activity.request, path.request);
+  const position = [0.549, -0.25];
+  const bound = bindNavigationPath(started, path, position);
+  assert.equal(bound.initialization.type, 'READY');
+  const before = JSON.stringify({ idle, started, state: bound.state, path, position });
+  const prediction = predictNavigation(bound.state, position);
+  assert.deepEqual(prediction.selection.decision, { type: 'TARGET', target: [3.7, -0.25] });
+  assert.deepEqual(prediction.state.execution.visits.visitedCenters, [[0, 0]]);
+  assert.deepEqual(prediction.state.execution.activity.cursor, { type: 'GOAL' });
+  const steering = steerNavigation(prediction.state, position);
+  assert.deepEqual(steering.selection.decision, { type: 'MOVE', target: [3.5, -0.25] });
+  assert.deepEqual(steering.outcomes, []);
+  assert.equal(steering.state.execution.activity.type, 'FOLLOWING');
+  assert.equal(steering.state.execution.activity.path.request, path.request);
+  const displaced = predictNavigation(steering.state, [2.7, -0.25]);
+  assert.deepEqual(displaced.selection.decision, { type: 'TARGET', target: [3.5, -0.25] });
+  assert.equal(displaced.state.execution.visits, steering.state.execution.visits);
+  assert.equal(displaced.state.execution.activity.path.request, path.request);
+  assert.equal(JSON.stringify({ idle, started, state: bound.state, path, position }), before);
+  assert.notEqual(prediction.state, bound.state);
+  assert.ok(Object.isFrozen(prediction) && Object.isFrozen(prediction.state.execution));
+  assert.ok(Object.isFrozen(steering) && Object.isFrozen(steering.outcomes));
+});
+
+test('core navigation rebinds displacement, map replacement and motion mode without replacing the resolved request', () => {
+  const path = navigationPathFor(fieldMap(1, 4, Array.from({ length: 4 }, () => fieldCell())), {
+    id: 77, options: { visitEveryTileCenter: true },
+  });
+  const started = startNavigationRequest(createNavigationState('WALK', [0, 0]), path.request);
+  const original = bindNavigationPath(started, path, [0.049, 0]).state;
+  const visited = predictNavigation(original, [0.049, 0]).state;
+  const changedMap = createNavigationMap({
+    rows: 1, columns: 4, pathMotionMode: 'WALK', revision: 1,
+    cells: [fieldCell(), fieldCell({ moveCost: 1000 }), fieldCell(), fieldCell()],
+  });
+  const changedPath = createNavigationPath(path.request, buildNavigationField(changedMap, deriveNavigationFieldQuery(path.request)));
+  const rebound = bindNavigationPath(visited, changedPath, [2.2, 0]);
+  assert.equal(rebound.state.execution.activity.path, changedPath);
+  assert.deepEqual(rebound.initialization, { type: 'READY', cursor: { type: 'FIELD', nextNode: [0, 2] } });
+  assert.equal(rebound.state.execution.visits, visited.execution.visits);
+  assert.equal(rebound.state.execution.locatorOffset, visited.execution.locatorOffset);
+  assert.equal(rebound.state.execution.activity.path.request, path.request);
+  assert.equal(rebound.state.execution.activity.path.request.goal, path.request.goal);
+  assert.equal(rebound.state.execution.activity.path.request.id, 77);
+  assert.deepEqual(predictNavigation(rebound.state, [2.2, 0]).selection.decision, { type: 'TARGET', target: [2, 0] });
+  const fly = setNavigationMotionMode(rebound.state, 'FLY');
+  assert.equal(rebound.state.pathMotionMode, 'WALK');
+  assert.equal(fly.pathMotionMode, 'FLY');
+  assert.equal(fly.execution.activity.type, 'NEEDS_PATH');
+  assert.equal(fly.execution.activity.request, path.request);
+  assert.equal(fly.execution.visits, visited.execution.visits);
+  assert.throws(() => bindNavigationPath(fly, changedPath, [2.2, 0]));
+  const flyPath = createNavigationPath(path.request, buildNavigationField(
+    fieldMap(1, 4, Array.from({ length: 4 }, () => fieldCell()), 'FLY'), deriveNavigationFieldQuery(path.request),
+  ));
+  const flying = bindNavigationPath(fly, flyPath, [2.2, 0]).state;
+  assert.equal(flying.execution.activity.type, 'FOLLOWING');
+  assert.equal(flying.execution.activity.path.request, path.request);
+  assert.equal(flying.execution.visits, visited.execution.visits);
+  const continued = startNavigationRequest(flying, createNavigationRequest({ ...path.request, id: 78 }));
+  assert.equal(continued.execution.activity.type, 'NEEDS_PATH');
+  assert.equal(continued.execution.visits, flying.execution.visits);
+  assert.throws(() => bindNavigationPath(continued, flyPath, [2.2, 0]));
+});
+
+test('core unreachable navigation can predict and recover while reporting only failure transitions', () => {
+  const path = navigationPathFor(fieldMap(1, 4, [fieldCell(), fieldCell({ passable: false }), fieldCell(), fieldCell()]));
+  const started = startNavigationRequest(createNavigationState('WALK', [0, 0]), path.request);
+  const following = bindNavigationPath(started, path, [0, 0]).state;
+  const failed = steerNavigation(following, [0, 0]);
+  assert.deepEqual(failed.outcomes, [{ type: 'UNREACHABLE', requestId: path.request.id, reason: 'POSITION_UNREACHABLE' }]);
+  assert.equal(failed.state.execution.activity.type, 'UNREACHABLE');
+  assert.deepEqual(failed.state.execution.activity.position, [0, 0]);
+  const retry = steerNavigation(failed.state, [0.1, 0]);
+  assert.deepEqual(retry.outcomes, []);
+  assert.deepEqual(retry.state.execution.activity.position, [0.1, 0]);
+  assert.deepEqual(failed.state.execution.activity.position, [0, 0]);
+  const prediction = predictNavigation(retry.state, [0.1, 0]);
+  assert.deepEqual(prediction.selection.decision, { type: 'TARGET', target: [3.2, 0] });
+  assert.equal(prediction.state.execution.activity.type, 'UNREACHABLE');
+  const outside = steerNavigation(prediction.state, [-2, 0]);
+  assert.deepEqual(outside.selection.decision, { type: 'OUTSIDE_MAP' });
+  assert.deepEqual(outside.outcomes, []);
+  assert.equal(outside.state.execution.activity.type, 'UNREACHABLE');
+  const displaced = predictNavigation(outside.state, [2, 0]);
+  assert.equal(displaced.state.execution.activity.type, 'UNREACHABLE');
+  assert.deepEqual(displaced.state.execution.activity.position, [0.1, 0]);
+  const resumed = steerNavigation(displaced.state, [2, 0]);
+  assert.deepEqual(resumed.selection.decision, { type: 'MOVE', target: [3.2, 0] });
+  assert.equal(resumed.state.execution.activity.type, 'FOLLOWING');
+  assert.deepEqual(resumed.outcomes, []);
+  const arrived = steerNavigation(resumed.state, [3.2, 0]);
+  assert.deepEqual(arrived.selection.decision, { type: 'ARRIVED' });
+  assert.deepEqual(arrived.outcomes, [{ type: 'ARRIVED', requestId: path.request.id }]);
+  assert.equal(arrived.state.execution.activity.type, 'ARRIVED');
+  assert.equal(arrived.state.execution.activity.request, path.request);
+  assert.throws(() => predictNavigation(arrived.state, [3.2, 0]));
+});
+
+test('core initial outside-map binding retains the request and later explicit binding can start it', () => {
+  const path = navigationPathFor(fieldMap(1, 4, Array.from({ length: 4 }, () => fieldCell())));
+  const started = startNavigationRequest(createNavigationState('WALK', [0, 0]), path.request);
+  const outside = bindNavigationPath(started, path, [-2, 0]);
+  assert.deepEqual(outside.initialization, { type: 'OUTSIDE_MAP' });
+  assert.equal(outside.state.execution.activity.type, 'NEEDS_PATH');
+  assert.equal(outside.state.execution.activity.request, path.request);
+  assert.throws(() => predictNavigation(outside.state, [-2, 0]));
+  assert.throws(() => steerNavigation(outside.state, [-2, 0]));
+  const following = bindNavigationPath(outside.state, path, [0, 0]).state;
+  const outsidePrediction = predictNavigation(following, [-2, 0]);
+  assert.deepEqual(outsidePrediction.selection.decision, { type: 'OUTSIDE_MAP' });
+  assert.equal(outsidePrediction.state.execution.activity.type, 'FOLLOWING');
+  assert.equal(outsidePrediction.state.execution.activity.path, path);
+  assert.deepEqual(predictNavigation(outsidePrediction.state, [0, 0]).selection.decision, { type: 'TARGET', target: [3.2, 0] });
 });
 
 test('a pushed ground enemy re-plans from its tile centre: never cuts a fence corner or breaks the stage crate on it (act1 m03, tile 11,5)', REAL, () => {

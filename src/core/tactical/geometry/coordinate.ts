@@ -118,6 +118,30 @@ export const Tile = {
 };
 
 export const World = {
+    translate(position: WorldPosition, offset: WorldOffset): WorldPosition {
+        return createWorldPosition(position[0] + offset[0], position[1] + offset[1]);
+    },
+
+    difference(a: WorldPosition, b: WorldPosition): WorldOffset {
+        return createWorldOffset(a[0] - b[0], a[1] - b[1]);
+    },
+
+    negate(offset: WorldOffset): WorldOffset {
+        return createWorldOffset(-offset[0], -offset[1]);
+    },
+
+    distanceSquared(a: WorldPosition, b: WorldPosition): number {
+        const dx = a[0] - b[0];
+        const dy = a[1] - b[1];
+        return requireFinite(dx * dx + dy * dy, "squared world distance");
+    },
+
+    withinDistance(a: WorldPosition, b: WorldPosition, radius: number): boolean {
+        const distanceSquared = World.distanceSquared(a, b);
+        const radiusSquared = requireFinite(radius * radius, "squared radius");
+        return distanceSquared <= radiusSquared;
+    },
+
     toTile(position: WorldPosition): TilePosition {
         return createTilePosition(
             roundTiesToEven(position[1]),
