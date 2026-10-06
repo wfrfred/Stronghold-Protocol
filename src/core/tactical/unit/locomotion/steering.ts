@@ -2,7 +2,7 @@ import { createWorldOffset, World } from "../../geometry/coordinate.js";
 import type { WorldOffset, WorldPosition } from "../../geometry/coordinate.js";
 
 export interface SteeringState {
-    lastVelocity: WorldOffset;
+    readonly lastVelocity: WorldOffset;
 }
 
 export interface SteeringParameters {
@@ -37,25 +37,37 @@ export function integrateSteering(
     moveSpeedPerTick: number,
     parameters: SteeringParameters,
 ): SteeringResult {
+    return integrateSteeringDirection(
+        state,
+        position,
+        World.difference(target, position),
+        moveSpeedPerTick,
+        parameters,
+    );
+}
+
+export function integrateSteeringDirection(
+    state: Readonly<SteeringState>,
+    position: WorldPosition,
+    direction: WorldOffset,
+    moveSpeedPerTick: number,
+    parameters: SteeringParameters,
+): SteeringResult {
     if (moveSpeedPerTick <= 0) {
         return {
             position,
-            state: { lastVelocity: state.lastVelocity },
+            state,
         };
     }
-    const distanceSquared = World.distanceSquared(target, position);
-    const direction = distanceSquared === 0
-        ? createWorldOffset(0, 0)
-        : World.scale(World.difference(target, position), 1 / Math.sqrt(distanceSquared));
-    const desired = World.scale(direction, moveSpeedPerTick);
+    const magnitude = Math.hypot(direction[0], direction[1]);
+    const heading =
+        magnitude === 0 ? createWorldOffset(0, 0) : World.scale(direction, 1 / magnitude);
+    const desired = World.scale(heading, moveSpeedPerTick);
     const force = World.clampMagnitude(
         World.scale(World.difference(desired, state.lastVelocity), parameters.steeringFactor),
         parameters.maxSteeringForce,
     );
-    const velocity = World.clampMagnitude(
-        World.add(state.lastVelocity, force),
-        moveSpeedPerTick,
-    );
+    const velocity = World.clampMagnitude(World.add(state.lastVelocity, force), moveSpeedPerTick);
     const nextPosition = World.translate(position, velocity);
     return {
         position: nextPosition,

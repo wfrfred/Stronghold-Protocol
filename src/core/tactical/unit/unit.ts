@@ -10,5 +10,5 @@ export interface UnitDefinition {
 export interface Unit<D extends UnitDefinition = UnitDefinition> {
     readonly id: UnitId;
     readonly definition: D;
-    position: WorldPosition;
+    readonly position: WorldPosition;
 }

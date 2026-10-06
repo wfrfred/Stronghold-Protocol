@@ -2,6 +2,7 @@ import { Tile, World } from "../geometry/coordinate.js";
 import type { TilePosition, WorldOffset, WorldPosition } from "../geometry/coordinate.js";
 import { NavigationMap } from "./map.js";
 import { isNavigationGoalReached } from "./request.js";
+import type { NavigationIntent } from "./request.js";
 import type {
     NavigationCursorInitialization,
     NavigationPath,
@@ -15,29 +16,30 @@ function sameTile(a: TilePosition, b: TilePosition): boolean {
     return a[0] === b[0] && a[1] === b[1];
 }
 
-function safeNext(path: NavigationPath, tile: TilePosition): TilePosition {
+function safeNext(path: NavigationPath<NavigationIntent>, tile: TilePosition): TilePosition {
     const node = path.field.nodes[tile[0] * path.field.map.columns + tile[1]]!;
     return node.type === "REACHABLE" ? node.next : tile;
 }
 
 function cursorAt(
-    path: NavigationPath,
+    path: NavigationPath<NavigationIntent>,
     tile: TilePosition,
     previous?: NavigationPathCursor,
 ): NavigationPathCursor {
     const isTarget = sameTile(tile, path.request.targetTile);
-    if (previous !== undefined && (isTarget
-        ? previous.type === "GOAL"
-        : previous.type === "FIELD" && sameTile(tile, previous.nextNode))) {
+    if (
+        previous !== undefined &&
+        (isTarget
+            ? previous.type === "GOAL"
+            : previous.type === "FIELD" && sameTile(tile, previous.nextNode))
+    ) {
         return previous;
     }
-    return isTarget
-        ? { type: "GOAL" }
-        : { type: "FIELD", nextNode: tile };
+    return isTarget ? { type: "GOAL" } : { type: "FIELD", nextNode: tile };
 }
 
 function hasVisited(visits: NavigationVisitHistory, tile: TilePosition): boolean {
-    return visits.visitedCenters.some(visited => sameTile(visited, tile));
+    return visits.visitedCenters.some((visited) => sameTile(visited, tile));
 }
 
 function visit(visits: NavigationVisitHistory, tile: TilePosition): NavigationVisitHistory {
@@ -53,7 +55,7 @@ interface CenterSelection {
 }
 
 function selectCenter(
-    path: NavigationPath,
+    path: NavigationPath<NavigationIntent>,
     initialCursor: NavigationPathCursor,
     initialVisits: NavigationVisitHistory,
     locator: WorldPosition,
@@ -100,7 +102,7 @@ function selectCenter(
 }
 
 export function initializeNavigationCursor(
-    path: NavigationPath,
+    path: NavigationPath<NavigationIntent>,
     position: WorldPosition,
     locatorOffset: WorldOffset,
 ): NavigationCursorInitialization {
@@ -112,7 +114,7 @@ export function initializeNavigationCursor(
 }
 
 export function selectNavigationPredictionTarget(
-    path: NavigationPath,
+    path: NavigationPath<NavigationIntent>,
     cursor: NavigationPathCursor,
     visits: NavigationVisitHistory,
     position: WorldPosition,
@@ -133,13 +135,16 @@ export function selectNavigationPredictionTarget(
         visits: center.visits,
         decision: {
             type: "TARGET",
-            target: World.translate(center.target ?? path.request.goal.position, World.negate(locatorOffset)),
+            target: World.translate(
+                center.target ?? path.request.goal.position,
+                World.negate(locatorOffset),
+            ),
         },
     };
 }
 
 export function selectNavigationSteeringTarget(
-    path: NavigationPath,
+    path: NavigationPath<NavigationIntent>,
     cursor: NavigationPathCursor,
     visits: NavigationVisitHistory,
     position: WorldPosition,
@@ -159,7 +164,10 @@ export function selectNavigationSteeringTarget(
         return {
             cursor: center.cursor,
             visits: center.visits,
-            decision: { type: "MOVE", target: World.translate(center.target, World.negate(locatorOffset)) },
+            decision: {
+                type: "MOVE",
+                target: World.translate(center.target, World.negate(locatorOffset)),
+            },
         };
     }
     if (isNavigationGoalReached(path.request, locator)) {
@@ -179,7 +187,10 @@ export function selectNavigationSteeringTarget(
             visits: center.visits,
             decision: {
                 type: "UNREACHABLE",
-                reason: targetNode.type === "UNREACHABLE" ? "TARGET_UNREACHABLE" : "POSITION_UNREACHABLE",
+                reason:
+                    targetNode.type === "UNREACHABLE"
+                        ? "TARGET_UNREACHABLE"
+                        : "POSITION_UNREACHABLE",
             },
         };
     }

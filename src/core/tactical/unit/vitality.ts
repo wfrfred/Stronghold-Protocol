@@ -5,7 +5,7 @@ export interface VitalityDefinition {
 }
 
 export interface VitalityState {
-    hp: number;
+    readonly hp: number;
 }
 
 export interface Vitality {
@@ -16,14 +16,15 @@ export interface VitalUnitDefinition extends UnitDefinition {
     readonly vitality: VitalityDefinition;
 }
 
-export type VitalUnit<D extends VitalUnitDefinition = VitalUnitDefinition> =
-    Unit<D> & Vitality;
+export type VitalUnit<D extends VitalUnitDefinition = VitalUnitDefinition> = Unit<D> & Vitality;
 
 export function hasVitality(unit: Unit): unit is Unit & Vitality {
     return "vitality" in unit;
 }
 
-export function hasVitalityDefinition(definition: UnitDefinition): definition is VitalUnitDefinition {
+export function hasVitalityDefinition(
+    definition: UnitDefinition,
+): definition is VitalUnitDefinition {
     return "vitality" in definition;
 }
 

@@ -1,28 +1,12 @@
-export type HeightType =
-    | "LOWLAND"
-    | "HIGHLAND";
+export type HeightType = "LOWLAND" | "HIGHLAND";
 
-export type BuildableType =
-    | "NONE"
-    | "MELEE"
-    | "ALL"
-    | "RANGED";
+export type BuildableType = "NONE" | "MELEE" | "ALL" | "RANGED";
 
-export type PassableMask =
-    | "NONE"
-    | "WALK_ONLY"
-    | "ALL"
-    | "FLY_ONLY";
+export type PassableMask = "NONE" | "WALK_ONLY" | "ALL" | "FLY_ONLY";
 
-export type PlayerSideMask =
-    | "NONE"
-    | "SIDE_A"
-    | "SIDE_B"
-    | "ALL";
+export type PlayerSideMask = "NONE" | "SIDE_A" | "SIDE_B" | "ALL";
 
-export type TileTerrain =
-    | "NORMAL"
-    | "HOLE";
+export type TileTerrain = "NORMAL" | "HOLE";
 
 export interface InfectionParams {
     readonly damagePerTick: number;
@@ -46,20 +30,20 @@ export interface DeepseaParams {
 
 export type TileMechanism =
     | {
-        readonly type: "INFECTION";
-        readonly params: InfectionParams;
-    }
+          readonly type: "INFECTION";
+          readonly params: InfectionParams;
+      }
     | {
-        readonly type: "MIRE";
-        readonly params: MireParams;
-    }
+          readonly type: "MIRE";
+          readonly params: MireParams;
+      }
     | {
-        readonly type: "SMOG";
-    }
+          readonly type: "SMOG";
+      }
     | {
-        readonly type: "DEEPSEA";
-        readonly params: DeepseaParams;
-    };
+          readonly type: "DEEPSEA";
+          readonly params: DeepseaParams;
+      };
 
 export interface Tile {
     readonly heightType: HeightType;
@@ -107,15 +91,24 @@ function copyMechanism(mechanism: TileMechanism | null): TileMechanism | null {
                 type: "INFECTION",
                 params: Object.freeze({
                     damagePerTick: requireNonnegative(params.damagePerTick, "infection damage"),
-                    attackBonusRatio: requireFinite(params.attackBonusRatio, "infection attack bonus"),
-                    attackSpeedBonus: requireFinite(params.attackSpeedBonus, "infection attack speed bonus"),
+                    attackBonusRatio: requireFinite(
+                        params.attackBonusRatio,
+                        "infection attack bonus",
+                    ),
+                    attackSpeedBonus: requireFinite(
+                        params.attackSpeedBonus,
+                        "infection attack speed bonus",
+                    ),
                     activeUntilTick: requireTick(params.activeUntilTick, "infection expiry tick"),
                 }),
             });
         }
         case "MIRE": {
             const params = mechanism.params;
-            const stackIntervalTicks = requireTick(params.stackIntervalTicks, "mire stack interval");
+            const stackIntervalTicks = requireTick(
+                params.stackIntervalTicks,
+                "mire stack interval",
+            );
             if (stackIntervalTicks === 0) {
                 throw new RangeError("mire stack interval must be positive");
             }
@@ -126,8 +119,14 @@ function copyMechanism(mechanism: TileMechanism | null): TileMechanism | null {
                 type: "MIRE",
                 params: Object.freeze({
                     stackIntervalTicks,
-                    attackSpeedPerStack: requireFinite(params.attackSpeedPerStack, "mire attack speed per stack"),
-                    moveSpeedRatioPerStack: requireFinite(params.moveSpeedRatioPerStack, "mire move speed per stack"),
+                    attackSpeedPerStack: requireFinite(
+                        params.attackSpeedPerStack,
+                        "mire attack speed per stack",
+                    ),
+                    moveSpeedRatioPerStack: requireFinite(
+                        params.moveSpeedRatioPerStack,
+                        "mire move speed per stack",
+                    ),
                     maxStacks: params.maxStacks,
                 }),
             });
@@ -140,8 +139,14 @@ function copyMechanism(mechanism: TileMechanism | null): TileMechanism | null {
                 type: "DEEPSEA",
                 params: Object.freeze({
                     damagePerTick: requireNonnegative(params.damagePerTick, "deepsea damage"),
-                    attackSpeedModifier: requireFinite(params.attackSpeedModifier, "deepsea attack speed modifier"),
-                    moveSpeedMultiplier: requireNonnegative(params.moveSpeedMultiplier, "deepsea move speed multiplier"),
+                    attackSpeedModifier: requireFinite(
+                        params.attackSpeedModifier,
+                        "deepsea attack speed modifier",
+                    ),
+                    moveSpeedMultiplier: requireNonnegative(
+                        params.moveSpeedMultiplier,
+                        "deepsea move speed multiplier",
+                    ),
                 }),
             });
         }

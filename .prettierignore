@@ -1,0 +1,13 @@
+node_modules/
+/dist/
+/.cache/
+/data/
+/docs/
+/public/
+/server/
+/shared/
+/test/
+/scripts/
+/tools/
+**/*.md
+/package-lock.json

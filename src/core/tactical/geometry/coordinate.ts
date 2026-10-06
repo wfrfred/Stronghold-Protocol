@@ -1,41 +1,33 @@
 import { Direction } from "./direction.js";
 
-export type TilePosition = readonly [
-    row: number,
-    col: number,
-];
+export type TilePosition = readonly [row: number, col: number];
 
-export type TileOffset = readonly [
-    dRow: number,
-    dCol: number,
-];
+export type TileOffset = readonly [dRow: number, dCol: number];
 
-export type WorldPosition = readonly [
-    x: number,
-    y: number,
-];
+export type WorldPosition = readonly [x: number, y: number];
 
-export type WorldOffset = readonly [
-    dx: number,
-    dy: number,
-];
+export type WorldOffset = readonly [dx: number, dy: number];
 
 export function isTilePosition(value: unknown): value is TilePosition {
-    return Array.isArray(value)
-        && value.length === 2
-        && Object.hasOwn(value, 0)
-        && Object.hasOwn(value, 1)
-        && Number.isSafeInteger(value[0])
-        && Number.isSafeInteger(value[1]);
+    return (
+        Array.isArray(value) &&
+        value.length === 2 &&
+        Object.hasOwn(value, 0) &&
+        Object.hasOwn(value, 1) &&
+        Number.isSafeInteger(value[0]) &&
+        Number.isSafeInteger(value[1])
+    );
 }
 
 export function isWorldPosition(value: unknown): value is WorldPosition {
-    return Array.isArray(value)
-        && value.length === 2
-        && Object.hasOwn(value, 0)
-        && Object.hasOwn(value, 1)
-        && Number.isFinite(value[0])
-        && Number.isFinite(value[1]);
+    return (
+        Array.isArray(value) &&
+        value.length === 2 &&
+        Object.hasOwn(value, 0) &&
+        Object.hasOwn(value, 1) &&
+        Number.isFinite(value[0]) &&
+        Number.isFinite(value[1])
+    );
 }
 
 function requireFinite(value: number, name: string): number {
@@ -66,31 +58,19 @@ function roundTiesToEven(value: number): number {
 }
 
 export function createTilePosition(row: number, col: number): TilePosition {
-    return Object.freeze([
-        requireSafeInteger(row, "row"),
-        requireSafeInteger(col, "col"),
-    ]);
+    return Object.freeze([requireSafeInteger(row, "row"), requireSafeInteger(col, "col")]);
 }
 
 export function createTileOffset(dRow: number, dCol: number): TileOffset {
-    return Object.freeze([
-        requireSafeInteger(dRow, "dRow"),
-        requireSafeInteger(dCol, "dCol"),
-    ]);
+    return Object.freeze([requireSafeInteger(dRow, "dRow"), requireSafeInteger(dCol, "dCol")]);
 }
 
 export function createWorldPosition(x: number, y: number): WorldPosition {
-    return Object.freeze([
-        requireFinite(x, "x"),
-        requireFinite(y, "y"),
-    ]);
+    return Object.freeze([requireFinite(x, "x"), requireFinite(y, "y")]);
 }
 
 export function createWorldOffset(dx: number, dy: number): WorldOffset {
-    return Object.freeze([
-        requireFinite(dx, "dx"),
-        requireFinite(dy, "dy"),
-    ]);
+    return Object.freeze([requireFinite(dx, "dx"), requireFinite(dy, "dy")]);
 }
 
 export const Tile = {
@@ -98,7 +78,7 @@ export const Tile = {
         return createTilePosition(position[0] + offset[0], position[1] + offset[1]);
     },
 
-    difference(a: TilePosition, b: TilePosition,): TileOffset {
+    difference(a: TilePosition, b: TilePosition): TileOffset {
         return createTileOffset(a[0] - b[0], a[1] - b[1]);
     },
 
@@ -156,9 +136,6 @@ export const World = {
     },
 
     toTile(position: WorldPosition): TilePosition {
-        return createTilePosition(
-            roundTiesToEven(position[1]),
-            roundTiesToEven(position[0]),
-        );
+        return createTilePosition(roundTiesToEven(position[1]), roundTiesToEven(position[0]));
     },
 };

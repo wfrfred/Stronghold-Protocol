@@ -6,8 +6,13 @@ import { parseBattlefieldMap, type ArknightsMapOptions } from "./map.js";
 import { parseBlackboard, type ArknightsBlackboardEntry } from "./blackboard.js";
 import { parseRouteDefinition } from "./route.js";
 
-export type ArknightsJsonValue = null | boolean | number | string |
-    readonly ArknightsJsonValue[] | { readonly [key: string]: ArknightsJsonValue };
+export type ArknightsJsonValue =
+    | null
+    | boolean
+    | number
+    | string
+    | readonly ArknightsJsonValue[]
+    | { readonly [key: string]: ArknightsJsonValue };
 
 export interface ArknightsUnsupportedRule {
     readonly path: string;
@@ -154,7 +159,11 @@ function object(value: unknown, name: string, fields?: readonly string[]): Recor
     return source;
 }
 
-function array<T>(value: unknown, name: string, parse: (value: unknown, name: string) => T): readonly T[] {
+function array<T>(
+    value: unknown,
+    name: string,
+    parse: (value: unknown, name: string) => T,
+): readonly T[] {
     if (!Array.isArray(value)) {
         throw new TypeError(`${name} must be an array`);
     }
@@ -211,8 +220,10 @@ function boolean(value: unknown, name: string): boolean {
 
 function position(value: unknown, name: string): TilePosition {
     const source = object(value, name, ["row", "col"]);
-    return createTilePosition(integer(source.row, `${name}.row`, -Number.MAX_SAFE_INTEGER),
-        integer(source.col, `${name}.col`, -Number.MAX_SAFE_INTEGER));
+    return createTilePosition(
+        integer(source.row, `${name}.row`, -Number.MAX_SAFE_INTEGER),
+        integer(source.col, `${name}.col`, -Number.MAX_SAFE_INTEGER),
+    );
 }
 
 function emptyArray(value: unknown, name: string): readonly never[] {
@@ -244,8 +255,14 @@ function json(value: unknown, name: string, ancestors = new Set<object>()): Arkn
     if (Array.isArray(value)) {
         result = array(value, name, (item, path) => json(item, path, ancestors));
     } else {
-        result = Object.freeze(Object.fromEntries(Object.entries(value).map(([key, item]) =>
-            [key, json(item, `${name}.${key}`, ancestors)])));
+        result = Object.freeze(
+            Object.fromEntries(
+                Object.entries(value).map(([key, item]) => [
+                    key,
+                    json(item, `${name}.${key}`, ancestors),
+                ]),
+            ),
+        );
     }
     ancestors.delete(value);
     return result;
@@ -260,9 +277,20 @@ function blackboard(value: unknown, name: string): readonly ArknightsBlackboardE
 
 function options(value: unknown): ArknightsLevelOptions {
     const source = object(value, "level.options", [
-        "characterLimit", "maxLifePoint", "initialCost", "maxCost", "costIncreaseTime", "moveMultiplier",
-        "steeringEnabled", "isTrainingLevel", "isHardTrainingLevel", "isPredefinedCardsSelectable",
-        "displayRestTime", "maxPlayTime", "functionDisableMask", "configBlackBoard",
+        "characterLimit",
+        "maxLifePoint",
+        "initialCost",
+        "maxCost",
+        "costIncreaseTime",
+        "moveMultiplier",
+        "steeringEnabled",
+        "isTrainingLevel",
+        "isHardTrainingLevel",
+        "isPredefinedCardsSelectable",
+        "displayRestTime",
+        "maxPlayTime",
+        "functionDisableMask",
+        "configBlackBoard",
     ]);
     return Object.freeze({
         characterLimit: integer(source.characterLimit, "level.options.characterLimit"),
@@ -273,16 +301,29 @@ function options(value: unknown): ArknightsLevelOptions {
         moveMultiplier: number(source.moveMultiplier, "level.options.moveMultiplier", 0),
         steeringEnabled: boolean(source.steeringEnabled, "level.options.steeringEnabled"),
         isTrainingLevel: boolean(source.isTrainingLevel, "level.options.isTrainingLevel"),
-        isHardTrainingLevel: boolean(source.isHardTrainingLevel, "level.options.isHardTrainingLevel"),
-        isPredefinedCardsSelectable: boolean(source.isPredefinedCardsSelectable, "level.options.isPredefinedCardsSelectable"),
+        isHardTrainingLevel: boolean(
+            source.isHardTrainingLevel,
+            "level.options.isHardTrainingLevel",
+        ),
+        isPredefinedCardsSelectable: boolean(
+            source.isPredefinedCardsSelectable,
+            "level.options.isPredefinedCardsSelectable",
+        ),
         displayRestTime: boolean(source.displayRestTime, "level.options.displayRestTime"),
         maxPlayTime: number(source.maxPlayTime, "level.options.maxPlayTime", -1),
-        functionDisableMask: identifier(source.functionDisableMask, "level.options.functionDisableMask"),
+        functionDisableMask: identifier(
+            source.functionDisableMask,
+            "level.options.functionDisableMask",
+        ),
         configBlackBoard: blackboard(source.configBlackBoard, "level.options.configBlackBoard"),
     });
 }
 
-function enemyDbRef(value: unknown, name: string, unsupported: ArknightsUnsupportedRule[]): ArknightsEnemyDbRef {
+function enemyDbRef(
+    value: unknown,
+    name: string,
+    unsupported: ArknightsUnsupportedRule[],
+): ArknightsEnemyDbRef {
     const source = object(value, name, ["useDb", "id", "level", "overwrittenData"]);
     if (source.useDb !== true) {
         throw new TypeError(`${name}.useDb=false is not supported`);
@@ -290,15 +331,30 @@ function enemyDbRef(value: unknown, name: string, unsupported: ArknightsUnsuppor
     let overwrittenData: ArknightsJsonValue = null;
     if (source.overwrittenData !== null) {
         object(source.overwrittenData, `${name}.overwrittenData`, [
-            "name", "description", "prefabKey", "attributes", "applyWay", "motion", "enemyTags",
-            "lifePointReduce", "levelType", "rangeRadius", "numOfExtraDrops", "viewRadius",
-            "notCountInTotal", "talentBlackboard", "skills", "spData",
+            "name",
+            "description",
+            "prefabKey",
+            "attributes",
+            "applyWay",
+            "motion",
+            "enemyTags",
+            "lifePointReduce",
+            "levelType",
+            "rangeRadius",
+            "numOfExtraDrops",
+            "viewRadius",
+            "notCountInTotal",
+            "talentBlackboard",
+            "skills",
+            "spData",
         ]);
         overwrittenData = json(source.overwrittenData, `${name}.overwrittenData`);
-        unsupported.push(Object.freeze({
-            path: `${name}.overwrittenData`,
-            reason: "enemy attribute overrides require a content resolver",
-        }));
+        unsupported.push(
+            Object.freeze({
+                path: `${name}.overwrittenData`,
+                reason: "enemy attribute overrides require a content resolver",
+            }),
+        );
     }
     return Object.freeze({
         useDb: true,
@@ -308,12 +364,32 @@ function enemyDbRef(value: unknown, name: string, unsupported: ArknightsUnsuppor
     });
 }
 
-function action(value: unknown, name: string, routeCount: number, enemyIds: ReadonlySet<string>): ArknightsSpawnAction {
+function action(
+    value: unknown,
+    name: string,
+    routeCount: number,
+    enemyIds: ReadonlySet<string>,
+): ArknightsSpawnAction {
     const source = object(value, name, [
-        "actionType", "managedByScheduler", "key", "count", "preDelay", "interval", "routeIndex",
-        "blockFragment", "autoPreviewRoute", "autoDisplayEnemyInfo", "isUnharmfulAndAlwaysCountAsKilled",
-        "hiddenGroup", "randomSpawnGroupKey", "randomSpawnGroupPackKey", "randomType", "refreshType",
-        "weight", "dontBlockWave", "forceBlockWaveInBranch",
+        "actionType",
+        "managedByScheduler",
+        "key",
+        "count",
+        "preDelay",
+        "interval",
+        "routeIndex",
+        "blockFragment",
+        "autoPreviewRoute",
+        "autoDisplayEnemyInfo",
+        "isUnharmfulAndAlwaysCountAsKilled",
+        "hiddenGroup",
+        "randomSpawnGroupKey",
+        "randomSpawnGroupPackKey",
+        "randomType",
+        "refreshType",
+        "weight",
+        "dontBlockWave",
+        "forceBlockWaveInBranch",
     ]);
     if (source.actionType !== "SPAWN") {
         throw new RangeError(`${name} has unsupported actionType ${String(source.actionType)}`);
@@ -337,32 +413,73 @@ function action(value: unknown, name: string, routeCount: number, enemyIds: Read
         blockFragment: boolean(source.blockFragment, `${name}.blockFragment`),
         autoPreviewRoute: boolean(source.autoPreviewRoute, `${name}.autoPreviewRoute`),
         autoDisplayEnemyInfo: boolean(source.autoDisplayEnemyInfo, `${name}.autoDisplayEnemyInfo`),
-        isUnharmfulAndAlwaysCountAsKilled: boolean(source.isUnharmfulAndAlwaysCountAsKilled, `${name}.isUnharmfulAndAlwaysCountAsKilled`),
+        isUnharmfulAndAlwaysCountAsKilled: boolean(
+            source.isUnharmfulAndAlwaysCountAsKilled,
+            `${name}.isUnharmfulAndAlwaysCountAsKilled`,
+        ),
         hiddenGroup: nullableString(source.hiddenGroup, `${name}.hiddenGroup`),
-        randomSpawnGroupKey: nullableString(source.randomSpawnGroupKey, `${name}.randomSpawnGroupKey`),
-        randomSpawnGroupPackKey: nullableString(source.randomSpawnGroupPackKey, `${name}.randomSpawnGroupPackKey`),
+        randomSpawnGroupKey: nullableString(
+            source.randomSpawnGroupKey,
+            `${name}.randomSpawnGroupKey`,
+        ),
+        randomSpawnGroupPackKey: nullableString(
+            source.randomSpawnGroupPackKey,
+            `${name}.randomSpawnGroupPackKey`,
+        ),
         randomType: identifier(source.randomType, `${name}.randomType`),
         refreshType: identifier(source.refreshType, `${name}.refreshType`),
         weight: number(source.weight, `${name}.weight`, 0),
         dontBlockWave: boolean(source.dontBlockWave, `${name}.dontBlockWave`),
-        forceBlockWaveInBranch: boolean(source.forceBlockWaveInBranch, `${name}.forceBlockWaveInBranch`),
+        forceBlockWaveInBranch: boolean(
+            source.forceBlockWaveInBranch,
+            `${name}.forceBlockWaveInBranch`,
+        ),
     });
 }
 
-function fragment(value: unknown, name: string, routeCount: number, enemyIds: ReadonlySet<string>): ArknightsFragment {
+function fragment(
+    value: unknown,
+    name: string,
+    routeCount: number,
+    enemyIds: ReadonlySet<string>,
+): ArknightsFragment {
     const source = object(value, name, ["preDelay", "actions"]);
     return Object.freeze({
         preDelay: number(source.preDelay, `${name}.preDelay`, 0),
-        actions: array(source.actions, `${name}.actions`, (item, path) => action(item, path, routeCount, enemyIds)),
+        actions: array(source.actions, `${name}.actions`, (item, path) =>
+            action(item, path, routeCount, enemyIds),
+        ),
     });
 }
 
-function predefinedInstance(value: unknown, name: string, unsupported: ArknightsUnsupportedRule[]): ArknightsPredefinedInstance {
+function predefinedInstance(
+    value: unknown,
+    name: string,
+    unsupported: ArknightsUnsupportedRule[],
+): ArknightsPredefinedInstance {
     const source = object(value, name, [
-        "position", "direction", "hidden", "alias", "uniEquipIds", "showSpIllust", "masterInfos", "inst",
-        "skillIndex", "mainSkillLvl", "skinId", "tmplId", "overrideSkillBlackboard", "overrideTalents",
+        "position",
+        "direction",
+        "hidden",
+        "alias",
+        "uniEquipIds",
+        "showSpIllust",
+        "masterInfos",
+        "inst",
+        "skillIndex",
+        "mainSkillLvl",
+        "skinId",
+        "tmplId",
+        "overrideSkillBlackboard",
+        "overrideTalents",
     ]);
-    const inst = object(source.inst, `${name}.inst`, ["characterKey", "level", "phase", "favorPoint", "potentialRank"]);
+    const inst = object(source.inst, `${name}.inst`, [
+        "characterKey",
+        "level",
+        "phase",
+        "favorPoint",
+        "potentialRank",
+    ]);
     const phase = inst.phase;
     if (phase !== "PHASE_0" && phase !== "PHASE_1" && phase !== "PHASE_2") {
         throw new RangeError(`${name}.inst.phase is unsupported`);
@@ -374,7 +491,12 @@ function predefinedInstance(value: unknown, name: string, unsupported: Arknights
     for (const key of ["uniEquipIds", "masterInfos", "overrideTalents"] as const) {
         const value = source[key];
         if (value !== null && (!Array.isArray(value) || value.length !== 0)) {
-            unsupported.push(Object.freeze({ path: `${name}.${key}`, reason: "predefined content configuration requires a content resolver" }));
+            unsupported.push(
+                Object.freeze({
+                    path: `${name}.${key}`,
+                    reason: "predefined content configuration requires a content resolver",
+                }),
+            );
         }
     }
     return Object.freeze({
@@ -396,16 +518,32 @@ function predefinedInstance(value: unknown, name: string, unsupported: Arknights
         mainSkillLvl: integer(source.mainSkillLvl, `${name}.mainSkillLvl`, 1),
         skinId: nullableString(source.skinId, `${name}.skinId`),
         tmplId: nullableString(source.tmplId, `${name}.tmplId`),
-        overrideSkillBlackboard: blackboard(source.overrideSkillBlackboard, `${name}.overrideSkillBlackboard`),
+        overrideSkillBlackboard: blackboard(
+            source.overrideSkillBlackboard,
+            `${name}.overrideSkillBlackboard`,
+        ),
         overrideTalents: json(source.overrideTalents, `${name}.overrideTalents`),
     });
 }
 
-function predefines(value: unknown, name: string, unsupported: ArknightsUnsupportedRule[]): ArknightsPredefines {
-    const source = object(value, name, ["characterInsts", "tokenInsts", "characterCards", "tokenCards"]);
+function predefines(
+    value: unknown,
+    name: string,
+    unsupported: ArknightsUnsupportedRule[],
+): ArknightsPredefines {
+    const source = object(value, name, [
+        "characterInsts",
+        "tokenInsts",
+        "characterCards",
+        "tokenCards",
+    ]);
     return Object.freeze({
-        characterInsts: array(source.characterInsts, `${name}.characterInsts`, (item, path) => predefinedInstance(item, path, unsupported)),
-        tokenInsts: array(source.tokenInsts, `${name}.tokenInsts`, (item, path) => predefinedInstance(item, path, unsupported)),
+        characterInsts: array(source.characterInsts, `${name}.characterInsts`, (item, path) =>
+            predefinedInstance(item, path, unsupported),
+        ),
+        tokenInsts: array(source.tokenInsts, `${name}.tokenInsts`, (item, path) =>
+            predefinedInstance(item, path, unsupported),
+        ),
         characterCards: emptyArray(source.characterCards, `${name}.characterCards`),
         tokenCards: emptyArray(source.tokenCards, `${name}.tokenCards`),
     });
@@ -422,13 +560,34 @@ export function parseLevelDefinition(
     resolveMapOptions: (context: ArknightsLevelMapContext) => ArknightsMapOptions = () => ({}),
 ): ArknightsLevelDefinition {
     const source = object(value, "level", [
-        "options", "levelId", "mapId", "bgmEvent", "environmentSe", "mapData", "tilesDisallowToLocate",
-        "runes", "optionalRunes", "globalBuffs", "routes", "extraRoutes", "enemies", "enemyDbRefs", "waves",
-        "branches", "predefines", "hardPredefines", "excludeCharIdList", "randomSeed", "operaConfig", "cameraPlugin",
+        "options",
+        "levelId",
+        "mapId",
+        "bgmEvent",
+        "environmentSe",
+        "mapData",
+        "tilesDisallowToLocate",
+        "runes",
+        "optionalRunes",
+        "globalBuffs",
+        "routes",
+        "extraRoutes",
+        "enemies",
+        "enemyDbRefs",
+        "waves",
+        "branches",
+        "predefines",
+        "hardPredefines",
+        "excludeCharIdList",
+        "randomSeed",
+        "operaConfig",
+        "cameraPlugin",
     ]);
     const unsupported: ArknightsUnsupportedRule[] = [];
     const routes = array(source.routes, "level.routes", (item) => parseRouteDefinition(item));
-    const extraRoutes = array(source.extraRoutes, "level.extraRoutes", (item) => parseRouteDefinition(item));
+    const extraRoutes = array(source.extraRoutes, "level.extraRoutes", (item) =>
+        parseRouteDefinition(item),
+    );
     const enemyIds = new Set<string>();
     const enemyDbRefs = array(source.enemyDbRefs, "level.enemyDbRefs", (item, path) => {
         const reference = enemyDbRef(item, path, unsupported);
@@ -439,8 +598,18 @@ export function parseLevelDefinition(
         return reference;
     });
     const waves = array(source.waves, "level.waves", (item, path) => {
-        const wave = object(item, path, ["preDelay", "postDelay", "maxTimeWaitingForNextWave", "fragments", "advancedWaveTag"]);
-        const maxTimeWaitingForNextWave = number(wave.maxTimeWaitingForNextWave, `${path}.maxTimeWaitingForNextWave`, -1);
+        const wave = object(item, path, [
+            "preDelay",
+            "postDelay",
+            "maxTimeWaitingForNextWave",
+            "fragments",
+            "advancedWaveTag",
+        ]);
+        const maxTimeWaitingForNextWave = number(
+            wave.maxTimeWaitingForNextWave,
+            `${path}.maxTimeWaitingForNextWave`,
+            -1,
+        );
         if (maxTimeWaitingForNextWave < 0 && maxTimeWaitingForNextWave !== -1) {
             throw new RangeError(`${path}.maxTimeWaitingForNextWave must be -1 or non-negative`);
         }
@@ -448,24 +617,39 @@ export function parseLevelDefinition(
             preDelay: number(wave.preDelay, `${path}.preDelay`, 0),
             postDelay: number(wave.postDelay, `${path}.postDelay`, 0),
             maxTimeWaitingForNextWave,
-            fragments: array(wave.fragments, `${path}.fragments`, (part, name) => fragment(part, name, routes.length, enemyIds)),
+            fragments: array(wave.fragments, `${path}.fragments`, (part, name) =>
+                fragment(part, name, routes.length, enemyIds),
+            ),
             advancedWaveTag: nullableString(wave.advancedWaveTag, `${path}.advancedWaveTag`),
         });
     });
-    const branches = Object.freeze(Object.fromEntries(Object.entries(source.branches === null
-        ? {}
-        : object(source.branches, "level.branches")).map(([key, item]) => {
-        identifier(key, "level branch name");
-        const path = `level.branches.${key}`;
-        const branch = object(item, path, ["phases"]);
-        return [key, Object.freeze({
-            phases: array(branch.phases, `${path}.phases`, (part, name) => fragment(part, name, extraRoutes.length, enemyIds)),
-        })];
-    })));
+    const branches = Object.freeze(
+        Object.fromEntries(
+            Object.entries(
+                source.branches === null ? {} : object(source.branches, "level.branches"),
+            ).map(([key, item]) => {
+                identifier(key, "level branch name");
+                const path = `level.branches.${key}`;
+                const branch = object(item, path, ["phases"]);
+                return [
+                    key,
+                    Object.freeze({
+                        phases: array(branch.phases, `${path}.phases`, (part, name) =>
+                            fragment(part, name, extraRoutes.length, enemyIds),
+                        ),
+                    }),
+                ];
+            }),
+        ),
+    );
     const predefined = predefines(source.predefines, "level.predefines", unsupported);
     const hardPredefined = predefines(source.hardPredefines, "level.hardPredefines", unsupported);
     const levelOptions = options(source.options);
-    const mapOptions = resolveMapOptions({ predefines: predefined, hardPredefines: hardPredefined, options: levelOptions });
+    const mapOptions = resolveMapOptions({
+        predefines: predefined,
+        hardPredefines: hardPredefined,
+        options: levelOptions,
+    });
     const randomSeed = integer(source.randomSeed, "level.randomSeed", -(2 ** 31));
     if (randomSeed >= 2 ** 31) {
         throw new RangeError("level.randomSeed must be a signed 32-bit integer");
@@ -481,13 +665,18 @@ export function parseLevelDefinition(
         options: levelOptions,
         predefines: predefined,
         hardPredefines: hardPredefined,
-        tilesDisallowToLocate: array(source.tilesDisallowToLocate, "level.tilesDisallowToLocate", position),
+        tilesDisallowToLocate: array(
+            source.tilesDisallowToLocate,
+            "level.tilesDisallowToLocate",
+            position,
+        ),
         runes: nullableEmptyArray(source.runes, "level.runes"),
         optionalRunes: nullableEmptyArray(source.optionalRunes, "level.optionalRunes"),
         globalBuffs: nullableEmptyArray(source.globalBuffs, "level.globalBuffs"),
-        excludeCharIdList: source.excludeCharIdList === null
-            ? null
-            : array(source.excludeCharIdList, "level.excludeCharIdList", string),
+        excludeCharIdList:
+            source.excludeCharIdList === null
+                ? null
+                : array(source.excludeCharIdList, "level.excludeCharIdList", string),
         randomSeed,
         metadata: Object.freeze({
             levelId: nullableString(source.levelId, "level.levelId"),

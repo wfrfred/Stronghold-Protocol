@@ -5,7 +5,11 @@ import type { ArknightsBlackboardEntry } from "./blackboard.js";
 import type { ArknightsTileContext } from "./map.js";
 import { parseEnemyMovementContent, resolveEnemyMovementPrefabKey } from "./enemy.js";
 import { parseLevelDefinition } from "./level.js";
-import type { ArknightsLevelDefinition, ArknightsLevelMapContext, ArknightsPredefinedInstance } from "./level.js";
+import type {
+    ArknightsLevelDefinition,
+    ArknightsLevelMapContext,
+    ArknightsPredefinedInstance,
+} from "./level.js";
 import { parsePredefinedInstanceDefinition, resolvePredefinedPrefabKey } from "./predefined.js";
 import { parseEnemyMovementPrefab, parsePredefinedPrefab } from "./prefab.js";
 import { compileSpawnSchedule, type ArknightsScheduleSelection } from "./schedule.js";
@@ -58,7 +62,11 @@ function locatePredefines(context: ArknightsLevelMapContext): readonly LocatedPr
     for (const source of ["predefines", "hardPredefines"] as const) {
         for (const collection of ["characterInsts", "tokenInsts"] as const) {
             for (const [index, instance] of context[source][collection].entries()) {
-                instances.push({ id: instances.length, path: predefinedPath({ source, collection, index }), instance });
+                instances.push({
+                    id: instances.length,
+                    path: predefinedPath({ source, collection, index }),
+                    instance,
+                });
             }
         }
     }
@@ -73,15 +81,24 @@ export function loadMovementScenario(
 ): ArknightsMovementScenario {
     const predefines: PredefinedInstanceDefinition[] = [];
     const omittedPredefines: string[] = [];
-    const unappliedTileBlackboard: { context: ArknightsTileContext; entry: ArknightsBlackboardEntry }[] = [];
-    const level = parseLevelDefinition(rawLevel, context => {
+    const unappliedTileBlackboard: {
+        context: ArknightsTileContext;
+        entry: ArknightsBlackboardEntry;
+    }[] = [];
+    const level = parseLevelDefinition(rawLevel, (context) => {
         const located = locatePredefines(context);
         const selected = new Set<string>();
         for (const item of selection.predefines) {
             const path = predefinedPath(item);
-            if (!Number.isSafeInteger(item.index) || item.index < 0 || selected.has(path)
-                || !located.some(instance => instance.path === path)) {
-                throw new RangeError(`predefined selection requires unique existing instances: ${path}`);
+            if (
+                !Number.isSafeInteger(item.index) ||
+                item.index < 0 ||
+                selected.has(path) ||
+                !located.some((instance) => instance.path === path)
+            ) {
+                throw new RangeError(
+                    `predefined selection requires unique existing instances: ${path}`,
+                );
             }
             selected.add(path);
         }
@@ -93,12 +110,22 @@ export function loadMovementScenario(
             }
             const character = catalog.character(instance.inst.characterKey);
             const skillId = resolvePredefinedSkillId(instance, character);
-            const skill = resolvePredefinedSkillBlackboard(instance, character, catalog.skill(skillId));
+            const skill = resolvePredefinedSkillBlackboard(
+                instance,
+                character,
+                catalog.skill(skillId),
+            );
             const prefabKey = resolvePredefinedPrefabKey(instance, character);
-            const profile = parsePredefinedPrefab(catalog.prefab(prefabKey),
-                skill.prefabKey === null ? undefined : catalog.prefab(skill.prefabKey));
+            const profile = parsePredefinedPrefab(
+                catalog.prefab(prefabKey),
+                skill.prefabKey === null ? undefined : catalog.prefab(skill.prefabKey),
+            );
             if (profile.type === "MECHANISM") {
-                if (instance.hidden) throw new RangeError("hidden terrain controllers require dynamic terrain activation");
+                if (instance.hidden) {
+                    throw new RangeError(
+                        "hidden terrain controllers require dynamic terrain activation",
+                    );
+                }
                 controllers.push({ profile, skill });
             }
             predefines.push(parsePredefinedInstanceDefinition(id, instance, profile, character));
@@ -106,7 +133,9 @@ export function loadMovementScenario(
         return {
             ...resolveTerrainMapOptions(controllers),
             consumeTileBlackboard: (context, entry) => {
-                if (entry.key !== "isValidHand" && entry.key !== "previewNotAlloed") return false;
+                if (entry.key !== "isValidHand" && entry.key !== "previewNotAlloed") {
+                    return false;
+                }
                 if (entry.valueStr !== null || (entry.value !== 0 && entry.value !== 1)) {
                     throw new TypeError(`invalid movement-external tile flag ${entry.key}`);
                 }
@@ -118,11 +147,20 @@ export function loadMovementScenario(
     if (!level.options.steeringEnabled || level.options.functionDisableMask !== "NONE") {
         throw new RangeError("unsupported level movement controls");
     }
-    const compiled = compileSpawnSchedule(level, selection, reference => {
+    const compiled = compileSpawnSchedule(level, selection, (reference) => {
         const rawEnemy = catalog.enemy(reference.id);
-        const prefabKey = resolveEnemyMovementPrefabKey(rawEnemy, reference.level, reference.overwrittenData);
+        const prefabKey = resolveEnemyMovementPrefabKey(
+            rawEnemy,
+            reference.level,
+            reference.overwrittenData,
+        );
         const profile = parseEnemyMovementPrefab(catalog.prefab(prefabKey));
-        return parseEnemyMovementContent(rawEnemy, reference.level, profile, reference.overwrittenData);
+        return parseEnemyMovementContent(
+            rawEnemy,
+            reference.level,
+            profile,
+            reference.overwrittenData,
+        );
     });
     return Object.freeze({
         level,

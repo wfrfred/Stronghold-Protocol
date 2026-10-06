@@ -15,10 +15,7 @@ import {
     type BattlefieldMap,
     type BattlefieldMarker,
 } from "../../core/tactical/battlefield/map.js";
-import {
-    createTilePosition,
-    type TilePosition,
-} from "../../core/tactical/geometry/coordinate.js";
+import { createTilePosition, type TilePosition } from "../../core/tactical/geometry/coordinate.js";
 import { Direction } from "../../core/tactical/geometry/direction.js";
 import { perSecondToPerTick, secondsToTicks } from "./tick.js";
 import { parseBlackboard, type ArknightsBlackboardEntry } from "./blackboard.js";
@@ -112,7 +109,10 @@ function tileBlackboard(value: unknown): readonly ArknightsBlackboardEntry[] {
     if (value === null || value === undefined) {
         return Object.freeze([]);
     }
-    return parseBlackboard(value, "tile blackboard", { allowEmptyKeys: true, allowMissingValueStr: true });
+    return parseBlackboard(value, "tile blackboard", {
+        allowEmptyKeys: true,
+        allowMissingValueStr: true,
+    });
 }
 
 function parseTile(
@@ -121,13 +121,26 @@ function parseTile(
     options: ArknightsMapOptions,
 ): { readonly tile: Tile; readonly marker: BattlefieldMarker | null } {
     const source = record(value, "tile definition");
-    requireKnownFields(source, [
-        "tileKey", "heightType", "buildableType", "passableMask",
-        "playerSideMask", "advancedBuildableMask", "blackboard", "effects",
-    ], "tile definition");
+    requireKnownFields(
+        source,
+        [
+            "tileKey",
+            "heightType",
+            "buildableType",
+            "passableMask",
+            "playerSideMask",
+            "advancedBuildableMask",
+            "blackboard",
+            "effects",
+        ],
+        "tile definition",
+    );
     const tileKey = string(source.tileKey, "tile key");
-    if (source.advancedBuildableMask !== undefined && source.advancedBuildableMask !== null &&
-        source.advancedBuildableMask !== 0) {
+    if (
+        source.advancedBuildableMask !== undefined &&
+        source.advancedBuildableMask !== null &&
+        source.advancedBuildableMask !== 0
+    ) {
         throw new TypeError(`unsupported advanced buildable mask for ${tileKey}`);
     }
     requireEmpty(source.effects, `${tileKey} effects`);
@@ -207,7 +220,10 @@ function parseBlockEdge(value: unknown): BattlefieldBlockEdge {
         throw new TypeError("unsupported block edge direction");
     }
     return {
-        position: createTilePosition(finite(pos.row, "block edge row"), finite(pos.col, "block edge column")),
+        position: createTilePosition(
+            finite(pos.row, "block edge row"),
+            finite(pos.col, "block edge column"),
+        ),
         direction,
         blockMask: string(source.blockMask, "block edge mask") as PassableMask,
     };
@@ -218,7 +234,11 @@ export function parseBattlefieldMap(
     options: ArknightsMapOptions = {},
 ): BattlefieldMap {
     const source = record(value, "map data");
-    requireKnownFields(source, ["map", "tiles", "blockEdges", "tags", "effects", "layerRects"], "map data");
+    requireKnownFields(
+        source,
+        ["map", "tiles", "blockEdges", "tags", "effects", "layerRects"],
+        "map data",
+    );
     requireEmpty(source.tags, "map tags");
     requireEmpty(source.effects, "map effects");
     requireEmpty(source.layerRects, "map layers");
@@ -245,10 +265,18 @@ export function parseBattlefieldMap(
         }
         for (let col = 0; col < columns; col++) {
             const definitionIndex = finite(rawRow[col], "tile definition index");
-            if (!Number.isSafeInteger(definitionIndex) || definitionIndex < 0 || definitionIndex >= definitions.length) {
+            if (
+                !Number.isSafeInteger(definitionIndex) ||
+                definitionIndex < 0 ||
+                definitionIndex >= definitions.length
+            ) {
                 throw new RangeError(`invalid tile definition index ${definitionIndex}`);
             }
-            const parsed = parseTile(definitions[definitionIndex], createTilePosition(row, col), options);
+            const parsed = parseTile(
+                definitions[definitionIndex],
+                createTilePosition(row, col),
+                options,
+            );
             tiles.push(parsed.tile);
             if (parsed.marker !== null) {
                 markers.push(parsed.marker);
@@ -256,8 +284,9 @@ export function parseBattlefieldMap(
         }
     }
 
-    const blockEdges = source.blockEdges === null || source.blockEdges === undefined
-        ? []
-        : array(source.blockEdges, "block edges").map(parseBlockEdge);
+    const blockEdges =
+        source.blockEdges === null || source.blockEdges === undefined
+            ? []
+            : array(source.blockEdges, "block edges").map(parseBlockEdge);
     return createBattlefieldMap(matrix.length, columns, tiles, markers, blockEdges);
 }

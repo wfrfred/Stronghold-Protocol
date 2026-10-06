@@ -2,6 +2,7 @@ import { World } from "../geometry/coordinate.js";
 import type { TilePosition } from "../geometry/coordinate.js";
 import { RangeGrid } from "../geometry/range.js";
 import type { Unit, UnitId } from "../unit/unit.js";
+import { isSpatiallyPresent } from "../unit/presence.js";
 import { BattlefieldMap } from "./map.js";
 import type { MechanismId, MechanismRuntime } from "./mechanism.js";
 import type {
@@ -19,8 +20,13 @@ export interface BattlefieldSpatialView {
     readonly navigationEffects: readonly ProjectedNavigationEffect[];
 }
 
-export function battlefieldTileKey(map: BattlefieldMap, position: TilePosition): number | undefined {
-    return BattlefieldMap.contains(map, position) ? position[0] * map.columns + position[1] : undefined;
+export function battlefieldTileKey(
+    map: BattlefieldMap,
+    position: TilePosition,
+): number | undefined {
+    return BattlefieldMap.contains(map, position)
+        ? position[0] * map.columns + position[1]
+        : undefined;
 }
 
 export function spatialEffectSourceKey(source: SpatialEffectSource): string {
@@ -38,7 +44,9 @@ function indexId<K, V>(index: Map<K, Set<V>>, key: K, id: V): void {
 
 function requireEntry<K, V>(entries: ReadonlyMap<K, V>, id: K, name: string): V {
     const entry = entries.get(id);
-    if (entry === undefined) throw new RangeError(`unknown ${name}: ${id}`);
+    if (entry === undefined) {
+        throw new RangeError(`unknown ${name}: ${id}`);
+    }
     return entry;
 }
 
@@ -55,29 +63,51 @@ export function projectBattlefieldSpatial(
     const navigationEffects: ProjectedNavigationEffect[] = [];
 
     for (const unit of units.values()) {
+        if (!isSpatiallyPresent(unit)) {
+            continue;
+        }
         const key = battlefieldTileKey(map, World.toTile(unit.position));
-        if (key !== undefined) indexId(unitsByTile, key, unit.id);
+        if (key !== undefined) {
+            indexId(unitsByTile, key, unit.id);
+        }
     }
 
     for (const effect of effects.values()) {
         indexId(effectsBySource, spatialEffectSourceKey(effect.source), effect.id);
-        let sourceActive = true;
+        let sourceActive: boolean;
         if (effect.source.type === "UNIT") {
-            requireEntry(units, effect.source.unitId, "effect source unit");
+            sourceActive = isSpatiallyPresent(
+                requireEntry(units, effect.source.unitId, "effect source unit"),
+            );
         } else {
-            sourceActive = requireEntry(mechanisms, effect.source.mechanismId, "effect source mechanism").active;
+            sourceActive = requireEntry(
+                mechanisms,
+                effect.source.mechanismId,
+                "effect source mechanism",
+            ).active;
         }
 
         const region = effect.region;
-        const origin = region.type === "FIXED"
-            ? region.position
-            : World.toTile(requireEntry(units, region.unitId, "effect anchor unit").position);
-        if (region.type === "FOLLOW_UNIT") indexId(effectsByAnchor, region.unitId, effect.id);
-        if (!effect.active || !sourceActive) continue;
+        let origin: TilePosition;
+        let anchorActive = true;
+        if (region.type === "FIXED") {
+            origin = region.position;
+        } else {
+            const anchor = requireEntry(units, region.unitId, "effect anchor unit");
+            indexId(effectsByAnchor, region.unitId, effect.id);
+            anchorActive = isSpatiallyPresent(anchor);
+            origin = World.toTile(anchor.position);
+        }
+        if (!effect.active || !sourceActive || !anchorActive) {
+            continue;
+        }
 
-        const positions = RangeGrid.project(region.range, origin, region.direction)
-            .filter(position => BattlefieldMap.contains(map, position));
-        for (const position of positions) indexId(effectsByTile, battlefieldTileKey(map, position)!, effect.id);
+        const positions = RangeGrid.project(region.range, origin, region.direction).filter(
+            (position) => BattlefieldMap.contains(map, position),
+        );
+        for (const position of positions) {
+            indexId(effectsByTile, battlefieldTileKey(map, position)!, effect.id);
+        }
         navigationEffects.push({ definition: effect.definition, positions });
     }
 

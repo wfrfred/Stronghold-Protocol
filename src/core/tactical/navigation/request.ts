@@ -1,4 +1,10 @@
-import { createTilePosition, createWorldPosition, isTilePosition, isWorldPosition, World } from "../geometry/coordinate.js";
+import {
+    createTilePosition,
+    createWorldPosition,
+    isTilePosition,
+    isWorldPosition,
+    World,
+} from "../geometry/coordinate.js";
 import type { TilePosition, WorldPosition } from "../geometry/coordinate.js";
 
 export type NavigationRequestId = number;
@@ -15,22 +21,28 @@ export interface NavigationOptions {
     readonly visitEveryNodeStably: boolean;
 }
 
-export type NavigationArrivalRule =
-    | "DISTANCE"
-    | "TARGET_TILE_AND_DISTANCE";
+export type NavigationArrivalRule = "DISTANCE" | "TARGET_TILE_AND_DISTANCE";
 
-export interface NavigationRequest {
-    readonly id: NavigationRequestId;
+export interface NavigationIntent {
     readonly targetTile: TilePosition;
     readonly goal: NavigationGoal;
     readonly options: NavigationOptions;
     readonly arrivalRule: NavigationArrivalRule;
 }
 
-export function isNavigationGoalReached(request: NavigationRequest, locatorPosition: WorldPosition): boolean {
+export interface NavigationRequest extends NavigationIntent {
+    readonly id: NavigationRequestId;
+}
+
+export function isNavigationGoalReached(
+    request: NavigationIntent,
+    locatorPosition: WorldPosition,
+): boolean {
     if (request.arrivalRule === "TARGET_TILE_AND_DISTANCE") {
         const tile = World.toTile(locatorPosition);
-        if (tile[0] !== request.targetTile[0] || tile[1] !== request.targetTile[1]) return false;
+        if (tile[0] !== request.targetTile[0] || tile[1] !== request.targetTile[1]) {
+            return false;
+        }
     }
     return World.withinDistance(locatorPosition, request.goal.position, request.goal.reachDistance);
 }
@@ -51,10 +63,12 @@ export function createNavigationRequest(request: NavigationRequest): NavigationR
         throw new TypeError("invalid navigation arrival rule");
     }
     const options = request.options;
-    if (typeof options.allowDiagonalMove !== "boolean"
-        || typeof options.visitEveryTileCenter !== "boolean"
-        || typeof options.visitEveryNodeCenter !== "boolean"
-        || typeof options.visitEveryNodeStably !== "boolean") {
+    if (
+        typeof options.allowDiagonalMove !== "boolean" ||
+        typeof options.visitEveryTileCenter !== "boolean" ||
+        typeof options.visitEveryNodeCenter !== "boolean" ||
+        typeof options.visitEveryNodeStably !== "boolean"
+    ) {
         throw new TypeError("navigation options must be explicit booleans");
     }
     return Object.freeze({

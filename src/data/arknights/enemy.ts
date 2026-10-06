@@ -33,12 +33,16 @@ function enemyLevel(value: unknown): number {
 }
 
 function defined(value: unknown, name: string): unknown {
-    if (value === undefined) return undefined;
+    if (value === undefined) {
+        return undefined;
+    }
     const source = record(value, `enemy ${name}`);
     if (typeof source.m_defined !== "boolean") {
         throw new TypeError(`enemy ${name}.m_defined must be boolean`);
     }
-    if (!source.m_defined) return undefined;
+    if (!source.m_defined) {
+        return undefined;
+    }
     if (!Object.hasOwn(source, "m_value") || source.m_value === undefined) {
         throw new TypeError(`defined enemy ${name} requires m_value`);
     }
@@ -47,10 +51,17 @@ function defined(value: unknown, name: string): unknown {
 
 function attribute(value: unknown, name: "maxHp" | "moveSpeed"): number | undefined {
     const number = defined(value, name);
-    if (number === undefined) return undefined;
-    if (typeof number !== "number" || !Number.isFinite(number)
-        || (name === "maxHp" ? number <= 0 : number < 0)) {
-        throw new RangeError(`defined enemy ${name} must be finite and ${name === "maxHp" ? "positive" : "non-negative"}`);
+    if (number === undefined) {
+        return undefined;
+    }
+    if (
+        typeof number !== "number" ||
+        !Number.isFinite(number) ||
+        (name === "maxHp" ? number <= 0 : number < 0)
+    ) {
+        throw new RangeError(
+            `defined enemy ${name} must be finite and ${name === "maxHp" ? "positive" : "non-negative"}`,
+        );
     }
     return number;
 }
@@ -74,19 +85,36 @@ function movementValues(data: Record<string, unknown>): EnemyMovementValues {
 }
 
 function overwrite(value: unknown): EnemyMovementValues {
-    if (value === null || value === undefined) return { maxHp: undefined, moveSpeed: undefined, prefabKey: undefined, notCountInTotal: undefined };
+    if (value === null || value === undefined) {
+        return {
+            maxHp: undefined,
+            moveSpeed: undefined,
+            prefabKey: undefined,
+            notCountInTotal: undefined,
+        };
+    }
     const source = record(value, "enemy overwrittenData");
     const attributes = record(source.attributes, "enemy overwritten attributes");
     for (const [name, value] of Object.entries(attributes)) {
-        if (name !== "maxHp" && name !== "moveSpeed" && defined(value, `overwritten attributes.${name}`) !== undefined) {
+        if (
+            name !== "maxHp" &&
+            name !== "moveSpeed" &&
+            defined(value, `overwritten attributes.${name}`) !== undefined
+        ) {
             throw new TypeError(`unsupported overwritten enemy attribute ${name}`);
         }
     }
     for (const [name, value] of Object.entries(source)) {
-        if (name === "attributes" || name === "prefabKey" || name === "notCountInTotal") continue;
-        if (value === null || value === undefined) continue;
+        if (name === "attributes" || name === "prefabKey" || name === "notCountInTotal") {
+            continue;
+        }
+        if (value === null || value === undefined) {
+            continue;
+        }
         if (Array.isArray(value)) {
-            if (value.length !== 0) throw new TypeError(`unsupported overwritten enemy ${name}`);
+            if (value.length !== 0) {
+                throw new TypeError(`unsupported overwritten enemy ${name}`);
+            }
         } else if (defined(value, `overwritten ${name}`) !== undefined) {
             throw new TypeError(`unsupported overwritten enemy ${name}`);
         }
@@ -94,7 +122,11 @@ function overwrite(value: unknown): EnemyMovementValues {
     return movementValues(source);
 }
 
-function resolvedValues(value: unknown, level: number, overwrittenData?: unknown): {
+function resolvedValues(
+    value: unknown,
+    level: number,
+    overwrittenData?: unknown,
+): {
     readonly id: string;
     readonly maxHp: number;
     readonly moveSpeed: number;
@@ -123,21 +155,41 @@ function resolvedValues(value: unknown, level: number, overwrittenData?: unknown
         levels.set(entryLevel, movementValues(data));
     }
     const base = levels.get(0);
-    if (base === undefined) throw new RangeError("enemy database requires level 0");
+    if (base === undefined) {
+        throw new RangeError("enemy database requires level 0");
+    }
     const selected = levels.get(selectedLevel);
-    if (selected === undefined) throw new RangeError(`unknown enemy level ${selectedLevel}`);
+    if (selected === undefined) {
+        throw new RangeError(`unknown enemy level ${selectedLevel}`);
+    }
     const overridden = overwrite(overwrittenData);
     const maxHp = overridden.maxHp ?? selected.maxHp ?? base.maxHp;
     const moveSpeed = overridden.moveSpeed ?? selected.moveSpeed ?? base.moveSpeed;
     const prefabKey = overridden.prefabKey ?? selected.prefabKey ?? base.prefabKey;
-    if (maxHp === undefined) throw new TypeError("enemy maxHp requires a defined value");
-    if (moveSpeed === undefined) throw new TypeError("enemy moveSpeed requires a defined value");
-    if (prefabKey === undefined) throw new TypeError("enemy prefabKey requires a defined value");
-    return { id: source.Key, maxHp, moveSpeed, prefabKey,
-        notCountInTotal: overridden.notCountInTotal ?? selected.notCountInTotal ?? base.notCountInTotal ?? false };
+    if (maxHp === undefined) {
+        throw new TypeError("enemy maxHp requires a defined value");
+    }
+    if (moveSpeed === undefined) {
+        throw new TypeError("enemy moveSpeed requires a defined value");
+    }
+    if (prefabKey === undefined) {
+        throw new TypeError("enemy prefabKey requires a defined value");
+    }
+    return {
+        id: source.Key,
+        maxHp,
+        moveSpeed,
+        prefabKey,
+        notCountInTotal:
+            overridden.notCountInTotal ?? selected.notCountInTotal ?? base.notCountInTotal ?? false,
+    };
 }
 
-export function resolveEnemyMovementPrefabKey(value: unknown, level: number, overwrittenData?: unknown): string {
+export function resolveEnemyMovementPrefabKey(
+    value: unknown,
+    level: number,
+    overwrittenData?: unknown,
+): string {
     return resolvedValues(value, level, overwrittenData).prefabKey;
 }
 
@@ -147,8 +199,14 @@ export function parseEnemyMovementContent(
     profile: EnemyMovementPrefab,
     overwrittenData?: unknown,
 ): ArknightsEnemyMovementContent {
-    const { id, maxHp, moveSpeed, prefabKey, notCountInTotal } = resolvedValues(value, level, overwrittenData);
-    if (prefabKey !== profile.prefabKey) throw new TypeError(`enemy movement prefab does not match ${prefabKey}`);
+    const { id, maxHp, moveSpeed, prefabKey, notCountInTotal } = resolvedValues(
+        value,
+        level,
+        overwrittenData,
+    );
+    if (prefabKey !== profile.prefabKey) {
+        throw new TypeError(`enemy movement prefab does not match ${prefabKey}`);
+    }
     const definition = createEnemyDefinition({
         id,
         vitality: { maxHp },
@@ -157,9 +215,13 @@ export function parseEnemyMovementContent(
             steeringParameters: profile.steeringParameters,
         },
     });
-    return Object.freeze({ definition, alwaysCheckCurrentPoint: profile.alwaysCheckCurrentPoint,
-        notCountInTotal, delayToBornTicks: profile.delayToBornTicks,
-        onlyDelayToBornOnTileStart: profile.onlyDelayToBornOnTileStart });
+    return Object.freeze({
+        definition,
+        alwaysCheckCurrentPoint: profile.alwaysCheckCurrentPoint,
+        notCountInTotal,
+        delayToBornTicks: profile.delayToBornTicks,
+        onlyDelayToBornOnTileStart: profile.onlyDelayToBornOnTileStart,
+    });
 }
 
 export function parseEnemyMovementDefinition(

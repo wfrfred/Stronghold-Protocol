@@ -1,4 +1,9 @@
-import { createTilePosition, createWorldOffset, isTilePosition, isWorldPosition } from "../geometry/coordinate.js";
+import {
+    createTilePosition,
+    createWorldOffset,
+    isTilePosition,
+    isWorldPosition,
+} from "../geometry/coordinate.js";
 import type { TilePosition, WorldOffset } from "../geometry/coordinate.js";
 import type { PathMotionMode } from "../navigation/map.js";
 
@@ -11,44 +16,44 @@ export interface RouteMoveTarget {
 
 export type RouteCheckpoint =
     | {
-        readonly type: "MOVE";
-        readonly target: RouteMoveTarget;
-    }
+          readonly type: "MOVE";
+          readonly target: RouteMoveTarget;
+      }
     | {
-        readonly type: "PATROL_MOVE";
-        readonly target: RouteMoveTarget;
-    }
+          readonly type: "PATROL_MOVE";
+          readonly target: RouteMoveTarget;
+      }
     | {
-        readonly type: "MAP_OFFSET_MOVE";
-        readonly target: RouteMoveTarget;
-    }
+          readonly type: "MAP_OFFSET_MOVE";
+          readonly target: RouteMoveTarget;
+      }
     | {
-        readonly type: "WAIT_FOR_TICKS";
-        readonly durationTicks: number;
-    }
+          readonly type: "WAIT_FOR_TICKS";
+          readonly durationTicks: number;
+      }
     | {
-        readonly type: "WAIT_FOR_PLAY_TICK";
-        readonly targetPlayTick: number;
-    }
+          readonly type: "WAIT_FOR_PLAY_TICK";
+          readonly targetPlayTick: number;
+      }
     | {
-        readonly type: "WAIT_CURRENT_FRAGMENT_TICKS";
-        readonly targetElapsedTicks: number;
-    }
+          readonly type: "WAIT_CURRENT_FRAGMENT_TICKS";
+          readonly targetElapsedTicks: number;
+      }
     | {
-        readonly type: "WAIT_CURRENT_WAVE_TICKS";
-        readonly targetElapsedTicks: number;
-    }
+          readonly type: "WAIT_CURRENT_WAVE_TICKS";
+          readonly targetElapsedTicks: number;
+      }
     | {
-        readonly type: "DISAPPEAR";
-    }
+          readonly type: "DISAPPEAR";
+      }
     | {
-        readonly type: "APPEAR_AT_POS";
-        readonly position: TilePosition;
-        readonly reachOffset: WorldOffset;
-    }
+          readonly type: "APPEAR_AT_POS";
+          readonly position: TilePosition;
+          readonly reachOffset: WorldOffset;
+      }
     | {
-        readonly type: "ALERT";
-    };
+          readonly type: "ALERT";
+      };
 
 export interface RouteDefinition {
     readonly pathMotionMode: PathMotionMode;

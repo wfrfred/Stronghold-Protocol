@@ -7,7 +7,7 @@ export interface MechanismDefinition {
 export interface MechanismRuntime<D extends MechanismDefinition = MechanismDefinition> {
     readonly id: MechanismId;
     readonly definition: D;
-    active: boolean;
+    readonly active: boolean;
 }
 
 export function createMechanismDefinition(definition: MechanismDefinition): MechanismDefinition {

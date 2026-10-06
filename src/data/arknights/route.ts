@@ -1,6 +1,10 @@
 import type { TilePosition, WorldOffset } from "../../core/tactical/geometry/coordinate.js";
 import { createRouteDefinition } from "../../core/tactical/route/definition.js";
-import type { RouteCheckpoint, RouteDefinition, RouteMoveTarget } from "../../core/tactical/route/definition.js";
+import type {
+    RouteCheckpoint,
+    RouteDefinition,
+    RouteMoveTarget,
+} from "../../core/tactical/route/definition.js";
 import { secondsToTicks } from "./tick.js";
 
 function object(value: unknown, name: string, fields: readonly string[]): Record<string, unknown> {
@@ -54,7 +58,12 @@ function moveTarget(data: Record<string, unknown>): RouteMoveTarget {
 
 function checkpoint(value: unknown): RouteCheckpoint {
     const data = object(value, "checkpoint", [
-        "type", "time", "position", "reachOffset", "randomizeReachOffset", "reachDistance",
+        "type",
+        "time",
+        "position",
+        "reachOffset",
+        "randomizeReachOffset",
+        "reachDistance",
     ]);
     switch (data.type) {
         case "MOVE":
@@ -64,22 +73,34 @@ function checkpoint(value: unknown): RouteCheckpoint {
         case "WAIT_FOR_SECONDS":
             return {
                 type: "WAIT_FOR_TICKS",
-                durationTicks: Math.max(0, secondsToTicks(number(data.time, "checkpoint.time"), "checkpoint.time")),
+                durationTicks: Math.max(
+                    0,
+                    secondsToTicks(number(data.time, "checkpoint.time"), "checkpoint.time"),
+                ),
             };
         case "WAIT_FOR_PLAY_TIME":
             return {
                 type: "WAIT_FOR_PLAY_TICK",
-                targetPlayTick: Math.max(0, secondsToTicks(number(data.time, "checkpoint.time"), "checkpoint.time")),
+                targetPlayTick: Math.max(
+                    0,
+                    secondsToTicks(number(data.time, "checkpoint.time"), "checkpoint.time"),
+                ),
             };
         case "WAIT_CURRENT_FRAGMENT_TIME":
             return {
                 type: "WAIT_CURRENT_FRAGMENT_TICKS",
-                targetElapsedTicks: Math.max(0, secondsToTicks(number(data.time, "checkpoint.time"), "checkpoint.time")),
+                targetElapsedTicks: Math.max(
+                    0,
+                    secondsToTicks(number(data.time, "checkpoint.time"), "checkpoint.time"),
+                ),
             };
         case "WAIT_CURRENT_WAVE_TIME":
             return {
                 type: "WAIT_CURRENT_WAVE_TICKS",
-                targetElapsedTicks: Math.max(0, secondsToTicks(number(data.time, "checkpoint.time"), "checkpoint.time")),
+                targetElapsedTicks: Math.max(
+                    0,
+                    secondsToTicks(number(data.time, "checkpoint.time"), "checkpoint.time"),
+                ),
             };
         case "APPEAR_AT_POS":
             return {
@@ -97,8 +118,16 @@ function checkpoint(value: unknown): RouteCheckpoint {
 
 export function parseRouteDefinition(value: unknown): RouteDefinition {
     const data = object(value, "route", [
-        "motionMode", "startPosition", "endPosition", "spawnOffset", "spawnRandomRange", "checkpoints",
-        "allowDiagonalMove", "visitEveryTileCenter", "visitEveryNodeCenter", "visitEveryCheckPoint",
+        "motionMode",
+        "startPosition",
+        "endPosition",
+        "spawnOffset",
+        "spawnRandomRange",
+        "checkpoints",
+        "allowDiagonalMove",
+        "visitEveryTileCenter",
+        "visitEveryNodeCenter",
+        "visitEveryCheckPoint",
     ]);
     const pathMotionMode = data.motionMode;
     if (pathMotionMode !== "WALK" && pathMotionMode !== "FLY") {

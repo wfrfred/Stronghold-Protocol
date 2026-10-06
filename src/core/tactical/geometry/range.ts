@@ -12,8 +12,13 @@ export const RangeGrid = {
         const snapshot: TileOffset[] = [];
         for (let index = 0; index < offsets.length; index++) {
             const offset = offsets[index];
-            if (!Object.hasOwn(offsets, index) || !Array.isArray(offset) || offset.length !== 2
-                || !Object.hasOwn(offset, 0) || !Object.hasOwn(offset, 1)) {
+            if (
+                !Object.hasOwn(offsets, index) ||
+                !Array.isArray(offset) ||
+                offset.length !== 2 ||
+                !Object.hasOwn(offset, 0) ||
+                !Object.hasOwn(offset, 1)
+            ) {
                 throw new RangeError(`range offset ${index} must contain exactly two coordinates`);
             }
             const copy = createTileOffset(offset[0], offset[1]);
@@ -27,10 +32,12 @@ export const RangeGrid = {
         return Object.freeze(snapshot);
     },
 
-    project(range: RangeGrid, origin: TilePosition, direction: Direction,): readonly TilePosition[] {
-        return Object.freeze(range.map(offset => {
-            const rotated = Tile.rotate(offset, direction);
-            return Tile.translate(origin, rotated);
-        }));
+    project(range: RangeGrid, origin: TilePosition, direction: Direction): readonly TilePosition[] {
+        return Object.freeze(
+            range.map((offset) => {
+                const rotated = Tile.rotate(offset, direction);
+                return Tile.translate(origin, rotated);
+            }),
+        );
     },
 };

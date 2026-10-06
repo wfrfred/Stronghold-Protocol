@@ -1,9 +1,7 @@
 import type { TilePosition } from "../geometry/coordinate.js";
 import { DIRECTIONS, type Direction } from "../geometry/direction.js";
 
-export type PathMotionMode =
-    | "WALK"
-    | "FLY";
+export type PathMotionMode = "WALK" | "FLY";
 
 export type NavigationRevision = number;
 
@@ -49,9 +47,14 @@ export const NavigationMap = {
 };
 
 export function createNavigationMap(map: NavigationMap): NavigationMap {
-    if (!Number.isSafeInteger(map.rows) || map.rows <= 0
-        || !Number.isSafeInteger(map.columns) || map.columns <= 0
-        || !Number.isSafeInteger(map.rows * map.columns) || map.rows * map.columns > 0xffff_ffff) {
+    if (
+        !Number.isSafeInteger(map.rows) ||
+        map.rows <= 0 ||
+        !Number.isSafeInteger(map.columns) ||
+        map.columns <= 0 ||
+        !Number.isSafeInteger(map.rows * map.columns) ||
+        map.rows * map.columns > 0xffff_ffff
+    ) {
         throw new RangeError("invalid navigation map dimensions");
     }
     if (!PathMotionMode.is(map.pathMotionMode)) {
@@ -79,20 +82,25 @@ export function createNavigationMap(map: NavigationMap): NavigationMap {
         if (map.pathMotionMode === "FLY" && cell.moveCost !== 1) {
             throw new RangeError("FLY navigation costs must be 1");
         }
-        if (cell.departures === null || typeof cell.departures !== "object"
-            || DIRECTIONS.some(direction => typeof cell.departures[direction] !== "boolean")) {
+        if (
+            cell.departures === null ||
+            typeof cell.departures !== "object" ||
+            DIRECTIONS.some((direction) => typeof cell.departures[direction] !== "boolean")
+        ) {
             throw new TypeError(`invalid departure directions at index ${index}`);
         }
-        cells.push(Object.freeze({
-            passable: cell.passable,
-            moveCost: cell.moveCost,
-            departures: Object.freeze({
-                UP: cell.departures.UP,
-                RIGHT: cell.departures.RIGHT,
-                DOWN: cell.departures.DOWN,
-                LEFT: cell.departures.LEFT,
+        cells.push(
+            Object.freeze({
+                passable: cell.passable,
+                moveCost: cell.moveCost,
+                departures: Object.freeze({
+                    UP: cell.departures.UP,
+                    RIGHT: cell.departures.RIGHT,
+                    DOWN: cell.departures.DOWN,
+                    LEFT: cell.departures.LEFT,
+                }),
             }),
-        }));
+        );
     }
 
     return Object.freeze({

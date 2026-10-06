@@ -20,6 +20,14 @@ import assert from 'node:assert/strict';
 import { makeBattle, chessRec, enemyRec, checkInvariants } from '../helpers/battleHarness.js';
 import { hasGeneratedData, getDefaultSource, spawnsFromTemplate } from '../../server/sim/simdata.js';
 import { PUSH_TILES, PULL_STOP_RADIUS } from '../../server/sim/constants.js';
+import { createNavigationMap } from '../../dist/core/tactical/navigation/map.js';
+import { createNavigationFieldCache } from '../../dist/core/tactical/navigation/cache.js';
+import { getNavigationRequest } from '../../dist/core/tactical/navigation/state.js';
+import { createRouteDefinition } from '../../dist/core/tactical/route/definition.js';
+import { createRouteTiming } from '../../dist/core/tactical/route/state.js';
+import { createEnemyDefinition, initializeRoutedEnemy, stepRoutedEnemy } from '../../dist/core/tactical/unit/enemy.js';
+import { createSteeringParameters, integrateSteeringDirection } from '../../dist/core/tactical/unit/locomotion/steering.js';
+import { applyMotionOverride, getNavigationBoundaryDirection, reflectNavigationMovement } from '../../dist/core/tactical/unit/locomotion/motion.js';
 
 const REAL = { skip: !hasGeneratedData() };
 const approx = (a, b, eps, msg) => assert.ok(Math.abs(a - b) <= eps, `${msg ?? ''} ${a} ≈ ${b}`);
@@ -430,4 +438,176 @@ test('守墓石像 (PRTS 天赋): the statue (无法被阻挡，自缚，失衡�
     approx(Math.hypot(e.x - at.x, e.y - at.y), 0, 1e-9, `${key}: in place`);
     checkInvariants(h.b);
   }
+});
+
+function coreMotionMap(blocked = [], mode = 'WALK') {
+  return createNavigationMap({
+    rows: 3, columns: 8, pathMotionMode: mode, revision: 0,
+    cells: Array.from({ length: 24 }, (_, index) => ({
+      passable: !blocked.includes(index), moveCost: 1,
+      departures: { UP: true, RIGHT: true, DOWN: true, LEFT: true },
+    })),
+  });
+}
+
+const coreSteeringParameters = createSteeringParameters({ steeringFactor: 0.25, maxSteeringForce: 1 });
+
+test('core boundary recovery follows crossed map axes after tile quantization, independent of passability', () => {
+  const map = coreMotionMap(Array.from({ length: 24 }, (_, index) => index));
+  assert.deepEqual(getNavigationBoundaryDirection(map, [3, 1]), [0, 0]);
+  assert.deepEqual(getNavigationBoundaryDirection(map, [-1, 1]), [1, 0]);
+  assert.deepEqual(getNavigationBoundaryDirection(map, [8, 1]), [-1, 0]);
+  assert.deepEqual(getNavigationBoundaryDirection(map, [3, -1]), [0, 1]);
+  assert.deepEqual(getNavigationBoundaryDirection(map, [3, 3]), [0, -1]);
+  const corner = getNavigationBoundaryDirection(map, [-20, 3]);
+  approx(corner[0], Math.SQRT1_2, 1e-12);
+  approx(corner[1], -Math.SQRT1_2, 1e-12);
+  assert.deepEqual(getNavigationBoundaryDirection(map, [-0.5, 2.5]), [0, 0]);
+  const crossed = getNavigationBoundaryDirection(map, [-0.5001, 2.5001]);
+  approx(crossed[0], Math.SQRT1_2, 1e-12);
+  approx(crossed[1], -Math.SQRT1_2, 1e-12);
+});
+
+test('core steering: a zero heading decelerates, while zero speed preserves its history', () => {
+  const state = { lastVelocity: [0.2, 0.1] };
+  const position = [2, 1];
+  const before = structuredClone({ state, position });
+  const waiting = integrateSteeringDirection(state, position, [0, 0], 0.4, coreSteeringParameters);
+  approx(waiting.position[0], 2.15, 1e-12);
+  approx(waiting.position[1], 1.075, 1e-12);
+  approx(waiting.state.lastVelocity[0], 0.15, 1e-12);
+  approx(waiting.state.lastVelocity[1], 0.075, 1e-12);
+  const frozen = integrateSteeringDirection(state, position, [1, 0], 0, coreSteeringParameters);
+  assert.equal(frozen.position, position);
+  assert.equal(frozen.state.lastVelocity, state.lastVelocity);
+  assert.deepEqual({ state, position }, before);
+});
+
+test('core movement: an impassable landing tile reflects the displacement around its centre', () => {
+  const map = coreMotionMap([11]);
+  const start = [2.4, 1], next = [2.6, 1.2];
+  const reflected = reflectNavigationMovement(start, next, map);
+  approx(reflected[0], 2.2, 1e-12);
+  approx(reflected[1], 1.2, 1e-12);
+  approx(Math.hypot(reflected[0] - start[0], reflected[1] - start[1]), Math.hypot(0.2, 0.2), 1e-12);
+  assert.equal(reflectNavigationMovement([2.4, 1], [2.49, 1.2], map)[0], 2.49);
+  assert.equal(reflectNavigationMovement(start, next, coreMotionMap()), next);
+  assert.deepEqual(reflectNavigationMovement([0, 1], [-0.6, 1], map), [0.6, 1]);
+  assert.deepEqual(reflectNavigationMovement([-1, 1], [-2, 1], map), [-2, 1]);
+});
+
+test('core movement overrides: fixed direction uses steering without a route collision pass, displacement keeps steering intact', () => {
+  const state = { lastVelocity: [0.2, 0] };
+  const directed = applyMotionOverride(state, [2.4, 1], { type: 'DIRECTION', direction: [8, 0] }, 0.2, coreSteeringParameters);
+  approx(directed.position[0], 2.6, 1e-12);
+  assert.deepEqual(directed.state.lastVelocity, [0.2, 0]);
+  const displaced = applyMotionOverride(state, [2.4, 1], { type: 'DISPLACEMENT', displacement: [0.2, 0] }, 0, coreSteeringParameters);
+  assert.deepEqual(displaced.position, [2.6, 1]);
+  assert.notEqual(displaced.state, state);
+  assert.equal(displaced.state.lastVelocity, state.lastVelocity);
+  assert.deepEqual(state, { lastVelocity: [0.2, 0] });
+});
+
+function coreDisplacedEnemy(checkpoints = [{
+  type: 'MOVE', target: { position: [1, 6], reachOffset: [0.2, 0.1], randomizeReachOffset: true, reachDistance: 0.01 },
+}]) {
+  const initialized = initializeRoutedEnemy({
+    id: 1, tick: 0, rngState: 42, nextNavigationRequestId: 0,
+    alwaysCheckCurrentPoint: true,
+    definition: createEnemyDefinition({
+      id: 'enemy_displacement_boundary', vitality: { maxHp: 100 },
+      locomotion: { moveSpeedPerTick: 0.1, steeringParameters: coreSteeringParameters },
+    }),
+    route: createRouteDefinition({
+      pathMotionMode: 'WALK', startPosition: [1, 0], endPosition: [1, 7],
+      spawnOffset: [0.1, 0.05], spawnRandomRange: [0, 0], checkpoints,
+      allowDiagonalMove: true, visitEveryTileCenter: false, visitEveryNodeCenter: true,
+      visitEveryCheckPoint: true,
+    }),
+    timing: createRouteTiming({ waveStartedAtTick: 0, fragmentStartedAtTick: 0 }),
+  });
+  return {
+    initialized,
+    context: {
+      tick: 0, moveMultiplier: 1, movementAllowed: true, waitTickAllowed: true, routeAdvanceAllowed: true,
+      maps: { WALK: coreMotionMap(), FLY: coreMotionMap([], 'FLY') },
+      fieldCache: createNavigationFieldCache(),
+      rngState: initialized.rngState, nextNavigationRequestId: initialized.nextNavigationRequestId,
+    },
+  };
+}
+
+test('core forced displacement preserves the resolved route target, navigation context and deterministic inputs', () => {
+  const { initialized, context } = coreDisplacedEnemy();
+  const walking = stepRoutedEnemy(initialized.enemy, context);
+  const route = walking.enemy.locomotion.mainRoute;
+  const goal = getNavigationRequest(route.navigation);
+  const before = structuredClone(walking.enemy);
+  const forcedContext = {
+    ...context, tick: 1, movementAllowed: false,
+    rngState: walking.rngState, nextNavigationRequestId: walking.nextNavigationRequestId,
+    motionOverride: { type: 'DISPLACEMENT', displacement: [1, 0.1] },
+  };
+  const forced = stepRoutedEnemy(walking.enemy, forcedContext);
+  approx(forced.enemy.position[0], walking.enemy.position[0] + 1, 1e-12);
+  approx(forced.enemy.position[1], walking.enemy.position[1] + 0.1, 1e-12);
+  assert.equal(forced.enemy.locomotion.mainRoute.route.progress.checkpoint, route.route.progress.checkpoint);
+  assert.equal(getNavigationRequest(forced.enemy.locomotion.mainRoute.navigation), goal);
+  assert.deepEqual(forced.enemy.locomotion.mainRoute.navigation.execution, route.navigation.execution);
+  assert.deepEqual(forced.enemy.locomotion.steering, walking.enemy.locomotion.steering);
+  assert.equal(forced.rngState, walking.rngState);
+  assert.equal(forced.nextNavigationRequestId, walking.nextNavigationRequestId);
+  assert.deepEqual(walking.enemy, before);
+  assert.deepEqual(stepRoutedEnemy(walking.enemy, forcedContext), forced);
+  const resumed = stepRoutedEnemy(forced.enemy, {
+    ...context, tick: 2, rngState: forced.rngState, nextNavigationRequestId: forced.nextNavigationRequestId,
+  });
+  assert.ok(resumed.enemy.position[0] > forced.enemy.position[0]);
+  assert.equal(getNavigationRequest(resumed.enemy.locomotion.mainRoute.navigation), goal);
+  assert.deepEqual(resumed.enemy.locomotion.mainRoute.navigation.execution.locatorOffset, route.navigation.execution.locatorOffset);
+  assert.equal(resumed.rngState, forced.rngState);
+  assert.equal(resumed.nextNavigationRequestId, forced.nextNavigationRequestId);
+});
+
+test('core forced motion substitutes self movement without suspending the route wait timer', () => {
+  const { initialized, context } = coreDisplacedEnemy([{ type: 'WAIT_FOR_TICKS', durationTicks: 3 }]);
+  const state = { lastVelocity: [0.05, 0] };
+  initialized.enemy.locomotion.steering = state;
+  const forced = stepRoutedEnemy(initialized.enemy, {
+    ...context, movementAllowed: false,
+    motionOverride: { type: 'DISPLACEMENT', displacement: [1, 0] },
+  });
+  assert.deepEqual(forced.enemy.position, [1.1, 1.05]);
+  assert.deepEqual(forced.enemy.locomotion.mainRoute.route.progress.checkpoint, { type: 'WAIT', remainingTicks: 2 });
+  assert.deepEqual(forced.enemy.locomotion.steering, state);
+  const directed = stepRoutedEnemy(forced.enemy, {
+    ...context, tick: 1,
+    motionOverride: { type: 'DIRECTION', direction: [1, 0] },
+  });
+  assert.ok(directed.enemy.position[0] > forced.enemy.position[0]);
+  assert.equal(directed.enemy.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 1);
+  assert.equal(directed.rngState, forced.rngState);
+  assert.equal(directed.nextNavigationRequestId, forced.nextNavigationRequestId);
+});
+
+test('core forced displacement outside the map resumes with direct boundary movement and preserved steering history', () => {
+  const { initialized, context } = coreDisplacedEnemy();
+  initialized.enemy.locomotion.steering = { lastVelocity: [0.02, 0.04] };
+  const forced = stepRoutedEnemy(initialized.enemy, {
+    ...context, motionOverride: { type: 'DISPLACEMENT', displacement: [-1, 0] },
+  });
+  const control = forced.enemy.locomotion.mainRoute;
+  const goal = getNavigationRequest(control.navigation);
+  const before = structuredClone(forced.enemy);
+  const resumed = stepRoutedEnemy(forced.enemy, {
+    ...context, tick: 1, rngState: forced.rngState, nextNavigationRequestId: forced.nextNavigationRequestId,
+  });
+  approx(resumed.enemy.position[0], forced.enemy.position[0] + 0.1, 1e-12);
+  assert.equal(resumed.enemy.position[1], forced.enemy.position[1]);
+  assert.deepEqual(resumed.enemy.locomotion.steering, forced.enemy.locomotion.steering);
+  assert.equal(getNavigationRequest(resumed.enemy.locomotion.mainRoute.navigation), goal);
+  assert.deepEqual(resumed.enemy.locomotion.mainRoute.navigation.execution.locatorOffset, control.navigation.execution.locatorOffset);
+  assert.equal(resumed.rngState, forced.rngState);
+  assert.equal(resumed.nextNavigationRequestId, forced.nextNavigationRequestId);
+  assert.deepEqual(forced.enemy, before);
 });

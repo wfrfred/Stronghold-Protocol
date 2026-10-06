@@ -1,6 +1,6 @@
 import type { TilePosition } from "../geometry/coordinate.js";
 import type { NavigationMap } from "./map.js";
-import type { NavigationRequest } from "./request.js";
+import type { NavigationIntent } from "./request.js";
 
 export interface NavigationFieldQuery {
     readonly targetTile: TilePosition;
@@ -9,18 +9,18 @@ export interface NavigationFieldQuery {
 
 export type NavigationFieldNode =
     | {
-        readonly type: "UNREACHABLE";
-    }
+          readonly type: "UNREACHABLE";
+      }
     | {
-        readonly type: "TARGET";
-        readonly distance: 0;
-    }
+          readonly type: "TARGET";
+          readonly distance: 0;
+      }
     | {
-        readonly type: "REACHABLE";
-        readonly distance: number;
-        readonly rawNext: TilePosition;
-        readonly next: TilePosition;
-    };
+          readonly type: "REACHABLE";
+          readonly distance: number;
+          readonly rawNext: TilePosition;
+          readonly next: TilePosition;
+      };
 
 export interface NavigationField {
     readonly map: NavigationMap;
@@ -29,7 +29,7 @@ export interface NavigationField {
 }
 
 export function deriveNavigationFieldQuery(
-    request: NavigationRequest,
+    request: Pick<NavigationIntent, "targetTile" | "options">,
 ): NavigationFieldQuery {
     return Object.freeze({
         targetTile: request.targetTile,

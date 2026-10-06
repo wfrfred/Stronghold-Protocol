@@ -14,11 +14,13 @@ export function initializeRouteSpawn(definition: RouteDefinition, rng: Rng): Rou
         const range = definition.spawnRandomRange[axis]!;
         const offset = definition.spawnOffset[axis]!;
         const centerCoordinate = center[axis]!;
-        if (!Number.isFinite(range * 2)
-            || !Number.isFinite(offset - range)
-            || !Number.isFinite(offset + range)
-            || !Number.isFinite(centerCoordinate + offset - range)
-            || !Number.isFinite(centerCoordinate + offset + range)) {
+        if (
+            !Number.isFinite(range * 2) ||
+            !Number.isFinite(offset - range) ||
+            !Number.isFinite(offset + range) ||
+            !Number.isFinite(centerCoordinate + offset - range) ||
+            !Number.isFinite(centerCoordinate + offset + range)
+        ) {
             throw new RangeError("route spawn bounds must be finite");
         }
     }

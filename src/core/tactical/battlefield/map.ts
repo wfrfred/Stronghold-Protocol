@@ -26,8 +26,7 @@ export const BattlefieldMap = {
     contains(map: BattlefieldMap, position: TilePosition): boolean {
         const [row, col] = position;
 
-        return row >= 0 && row < map.rows &&
-            col >= 0 && col < map.columns;
+        return row >= 0 && row < map.rows && col >= 0 && col < map.columns;
     },
 
     get(map: BattlefieldMap, position: TilePosition): Tile | undefined {
@@ -37,7 +36,7 @@ export const BattlefieldMap = {
 
         const [row, col] = position;
         return map.tiles[row * map.columns + col];
-    }
+    },
 };
 
 export function createBattlefieldMap(
@@ -60,9 +59,7 @@ export function createBattlefieldMap(
         throw new RangeError("map dimensions exceed the supported array length");
     }
     if (!Array.isArray(tiles) || tiles.length !== tileCount) {
-        throw new RangeError(
-            `expected ${rows * columns} tiles, got ${tiles.length}`,
-        );
+        throw new RangeError(`expected ${rows * columns} tiles, got ${tiles.length}`);
     }
     if (!Array.isArray(markers) || !Array.isArray(blockEdges)) {
         throw new TypeError("map markers and block edges must be arrays");
@@ -101,10 +98,12 @@ export function createBattlefieldMap(
             throw new RangeError(`marker at index ${index} is outside the map`);
         }
         const [row, col] = marker.position;
-        copiedMarkers.push(Object.freeze({
-            type: marker.type,
-            position: createTilePosition(row, col),
-        }));
+        copiedMarkers.push(
+            Object.freeze({
+                type: marker.type,
+                position: createTilePosition(row, col),
+            }),
+        );
     }
 
     for (let index = 0; index < blockEdges.length; index++) {
@@ -127,11 +126,13 @@ export function createBattlefieldMap(
         if (!BattlefieldMap.contains(map, position) && !BattlefieldMap.contains(map, neighbor)) {
             throw new RangeError(`block edge at index ${index} has no endpoint inside the map`);
         }
-        copiedBlockEdges.push(Object.freeze({
-            position,
-            direction: edge.direction,
-            blockMask: edge.blockMask,
-        }));
+        copiedBlockEdges.push(
+            Object.freeze({
+                position,
+                direction: edge.direction,
+                blockMask: edge.blockMask,
+            }),
+        );
     }
 
     Object.freeze(copiedTiles);

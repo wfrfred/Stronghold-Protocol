@@ -1,4 +1,4 @@
-import { createTilePosition, isTilePosition } from "../geometry/coordinate.js";
+import { createTileOffset, createTilePosition, isTilePosition } from "../geometry/coordinate.js";
 import type { TilePosition } from "../geometry/coordinate.js";
 import { Direction } from "../geometry/direction.js";
 import { RangeGrid } from "../geometry/range.js";
@@ -8,22 +8,22 @@ import type { UnitId } from "../unit/unit.js";
 export type SpatialEffectId = number;
 
 export type SpatialEffectSource =
-    | { readonly type: "UNIT"; readonly unitId: UnitId; }
-    | { readonly type: "MECHANISM"; readonly mechanismId: MechanismId; };
+    | { readonly type: "UNIT"; readonly unitId: UnitId }
+    | { readonly type: "MECHANISM"; readonly mechanismId: MechanismId };
 
 export type SpatialEffectRegion =
     | {
-        readonly type: "FIXED";
-        readonly position: TilePosition;
-        readonly range: RangeGrid;
-        readonly direction: Direction;
-    }
+          readonly type: "FIXED";
+          readonly position: TilePosition;
+          readonly range: RangeGrid;
+          readonly direction: Direction;
+      }
     | {
-        readonly type: "FOLLOW_UNIT";
-        readonly unitId: UnitId;
-        readonly range: RangeGrid;
-        readonly direction: Direction;
-    };
+          readonly type: "FOLLOW_UNIT";
+          readonly unitId: UnitId;
+          readonly range: RangeGrid;
+          readonly direction: Direction;
+      };
 
 export interface WalkNavigationRestriction {
     readonly denyPassage: boolean;
@@ -46,9 +46,28 @@ export interface NavigationSpatialEffect {
     readonly id: SpatialEffectId;
     readonly definition: NavigationEffectDefinition;
     readonly source: SpatialEffectSource;
-    active: boolean;
-    region: SpatialEffectRegion;
-    expiresAtTick: number | null;
+    readonly active: boolean;
+    readonly region: SpatialEffectRegion;
+    readonly expiresAtTick: number | null;
+}
+
+export function copyNavigationSpatialEffect(
+    effect: NavigationSpatialEffect,
+): NavigationSpatialEffect {
+    const range = effect.region.range.map((offset) =>
+        Object.isFrozen(offset) ? offset : createTileOffset(...offset),
+    );
+    const region =
+        effect.region.type === "FIXED"
+            ? {
+                  ...effect.region,
+                  range,
+                  position: Object.isFrozen(effect.region.position)
+                      ? effect.region.position
+                      : createTilePosition(...effect.region.position),
+              }
+            : { ...effect.region, range };
+    return { ...effect, source: { ...effect.source }, region };
 }
 
 function identity(value: number, name: string): number {
@@ -95,13 +114,18 @@ function source(value: SpatialEffectSource): SpatialEffectSource {
         case "UNIT":
             return Object.freeze({ type: "UNIT", unitId: identity(value.unitId, "unit id") });
         case "MECHANISM":
-            return Object.freeze({ type: "MECHANISM", mechanismId: identity(value.mechanismId, "mechanism id") });
+            return Object.freeze({
+                type: "MECHANISM",
+                mechanismId: identity(value.mechanismId, "mechanism id"),
+            });
         default:
             throw new RangeError("unsupported spatial effect source");
     }
 }
 
-export function createNavigationEffectDefinition(definition: NavigationEffectDefinition): NavigationEffectDefinition {
+export function createNavigationEffectDefinition(
+    definition: NavigationEffectDefinition,
+): NavigationEffectDefinition {
     if (typeof definition.id !== "string" || definition.id.length === 0) {
         throw new TypeError("navigation effect definition id must be nonempty");
     }
@@ -152,13 +176,16 @@ export function createSpatialEffectRegion(region: SpatialEffectRegion): SpatialE
     }
 }
 
-export function createNavigationSpatialEffect(effect: NavigationSpatialEffect): NavigationSpatialEffect {
+export function createNavigationSpatialEffect(
+    effect: NavigationSpatialEffect,
+): NavigationSpatialEffect {
     if (typeof effect.active !== "boolean") {
         throw new TypeError("spatial effect active must be boolean");
     }
-    const expiresAtTick = effect.expiresAtTick === null
-        ? null
-        : identity(effect.expiresAtTick, "spatial effect expiry tick");
+    const expiresAtTick =
+        effect.expiresAtTick === null
+            ? null
+            : identity(effect.expiresAtTick, "spatial effect expiry tick");
     return {
         id: identity(effect.id, "spatial effect id"),
         definition: effect.definition,

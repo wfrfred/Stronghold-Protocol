@@ -44,9 +44,10 @@ export function parseBlackboard(
         if (typeof number !== "number" || !Number.isFinite(number)) {
             throw new RangeError(`${path}.value must be finite`);
         }
-        const valueStr = source.valueStr === undefined && options.allowMissingValueStr === true
-            ? null
-            : source.valueStr;
+        const valueStr =
+            source.valueStr === undefined && options.allowMissingValueStr === true
+                ? null
+                : source.valueStr;
         if (valueStr !== null && typeof valueStr !== "string") {
             throw new TypeError(`${path}.valueStr must be a string or null`);
         }

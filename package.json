@@ -1,58 +1,69 @@
 {
-  "name": "stronghold-protocol-covenant",
-  "version": "0.1.1",
-  "private": true,
-  "description": "明日方舟「卫戍协议：盟约」非官方同人联机网页复刻（1–4 人合作，Node.js 服务器 + 浏览器客户端）",
-  "license": "GPL-3.0-or-later",
-  "homepage": "https://github.com/sganggs/Stronghold-Protocol#readme",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/sganggs/Stronghold-Protocol.git"
-  },
-  "bugs": {
-    "url": "https://github.com/sganggs/Stronghold-Protocol/issues"
-  },
-  "keywords": [
-    "arknights",
-    "auto-chess",
-    "tower-defense",
-    "co-op",
-    "browser-game",
-    "fan-game"
-  ],
-  "type": "module",
-  "main": "server/index.js",
-  "scripts": {
-    "start": "node server/index.js",
-    "dev": "node --watch server/index.js",
-    "predemo:tactical": "npm run build:ts",
-    "demo:tactical": "node scripts/tactical-demo.mjs",
-    "pretest": "npm run build:ts",
-    "test": "node --test",
-    "vendor": "node tools/vendor.mjs",
-    "build-data": "node tools/build-data.mjs",
-    "assets": "node tools/vendor.mjs && node tools/fetch-assets.mjs",
-    "postinstall": "node tools/vendor.mjs",
-    "setup": "node tools/setup.mjs",
-    "doctor": "node tools/doctor.mjs",
-    "launch": "node scripts/launch.mjs",
-    "build:ts": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
-  },
-  "engines": {
-    "node": ">=22"
-  },
-  "dependencies": {
-    "htm": "^3.1.1",
-    "pixi-spine": "^4.0.6",
-    "pixi.js": "^7.4.2",
-    "preact": "^10.29.8",
-    "three": "^0.186.1",
-    "ws": "^8.22.0"
-  },
-  "devDependencies": {
-    "@types/node": "^26.6.4",
-    "puppeteer-core": "^25.12.0",
-    "typescript": "^7.0.2"
-  }
+    "name": "stronghold-protocol-covenant",
+    "version": "0.1.1",
+    "private": true,
+    "description": "明日方舟「卫戍协议：盟约」非官方同人联机网页复刻（1–4 人合作，Node.js 服务器 + 浏览器客户端）",
+    "license": "GPL-3.0-or-later",
+    "homepage": "https://github.com/sganggs/Stronghold-Protocol#readme",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/sganggs/Stronghold-Protocol.git"
+    },
+    "bugs": {
+        "url": "https://github.com/sganggs/Stronghold-Protocol/issues"
+    },
+    "keywords": [
+        "arknights",
+        "auto-chess",
+        "tower-defense",
+        "co-op",
+        "browser-game",
+        "fan-game"
+    ],
+    "type": "module",
+    "main": "server/index.js",
+    "scripts": {
+        "start": "node server/index.js",
+        "dev": "node --watch server/index.js",
+        "predemo:tactical": "npm run build:ts",
+        "demo:tactical": "node scripts/tactical-demo.mjs",
+        "pretest": "npm run build:ts",
+        "test": "node --test",
+        "vendor": "node tools/vendor.mjs",
+        "build-data": "node tools/build-data.mjs",
+        "assets": "node tools/vendor.mjs && node tools/fetch-assets.mjs",
+        "postinstall": "node tools/vendor.mjs",
+        "setup": "node tools/setup.mjs",
+        "doctor": "node tools/doctor.mjs",
+        "launch": "node scripts/launch.mjs",
+        "build:ts": "tsc -p tsconfig.json",
+        "typecheck": "tsc -p tsconfig.json --noEmit",
+        "lint": "eslint src --max-warnings=0",
+        "lint:fix": "eslint src --fix --max-warnings=0",
+        "format": "prettier --write \"src/**/*.ts\" eslint.config.mjs .prettierrc.json package.json tsconfig.json",
+        "format:check": "prettier --check \"src/**/*.ts\" eslint.config.mjs .prettierrc.json package.json tsconfig.json",
+        "check": "npm run lint && npm run format:check && npm run typecheck"
+    },
+    "engines": {
+        "node": "^22.13.0 || >=24.0.0"
+    },
+    "dependencies": {
+        "htm": "^3.1.1",
+        "pixi-spine": "^4.0.6",
+        "pixi.js": "^7.4.2",
+        "preact": "^10.29.8",
+        "three": "^0.186.1",
+        "ws": "^8.22.0"
+    },
+    "devDependencies": {
+        "@eslint/js": "10.0.1",
+        "@types/node": "^26.6.4",
+        "@typescript/native": "npm:typescript@^7.0.2",
+        "eslint": "10.12.0",
+        "eslint-config-prettier": "10.1.8",
+        "prettier": "3.9.9",
+        "puppeteer-core": "^25.12.0",
+        "typescript": "npm:@typescript/typescript6@^6.0.2",
+        "typescript-eslint": "8.71.1"
+    }
 }

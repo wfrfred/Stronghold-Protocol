@@ -41,8 +41,12 @@ export function buildRawNavigationField(
             const [dRow, dCol] = Direction.vector(direction);
             const neighborRow = row + dRow;
             const neighborCol = col + dCol;
-            if (neighborRow < 0 || neighborRow >= map.rows
-                || neighborCol < 0 || neighborCol >= map.columns) {
+            if (
+                neighborRow < 0 ||
+                neighborRow >= map.rows ||
+                neighborCol < 0 ||
+                neighborCol >= map.columns
+            ) {
                 continue;
             }
             const neighbor = neighborRow * map.columns + neighborCol;
@@ -72,7 +76,10 @@ export function buildRawNavigationField(
             return Object.freeze({ type: "TARGET", distance: 0 });
         }
         const successor = successors[index]!;
-        const next = Object.freeze([Math.floor(successor / map.columns), successor % map.columns] as const);
+        const next = Object.freeze([
+            Math.floor(successor / map.columns),
+            successor % map.columns,
+        ] as const);
         return Object.freeze({ type: "REACHABLE", distance, rawNext: next, next });
     });
     return Object.freeze({

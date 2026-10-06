@@ -1,3 +1,4 @@
+import { createWorldPosition } from "../geometry/coordinate.js";
 import type { TilePosition, WorldPosition } from "../geometry/coordinate.js";
 import type { BattlefieldMap } from "./map.js";
 import { createNavigationFieldCache } from "../navigation/cache.js";
@@ -5,35 +6,72 @@ import type { NavigationFieldCache } from "../navigation/cache.js";
 import type { NavigationMaps, PathMotionMode } from "../navigation/map.js";
 import type { MechanismId, MechanismRuntime } from "./mechanism.js";
 import type {
-    NavigationSpatialEffect, SpatialEffectId, SpatialEffectRegion, SpatialEffectSource,
+    NavigationSpatialEffect,
+    SpatialEffectId,
+    SpatialEffectRegion,
+    SpatialEffectSource,
 } from "./navigation-effect.js";
-import { createNavigationSpatialEffect } from "./navigation-effect.js";
+import {
+    copyNavigationSpatialEffect,
+    createNavigationSpatialEffect,
+    createSpatialEffectRegion,
+} from "./navigation-effect.js";
 import { copyUnitSnapshot, reconcileUnitNavigation } from "../unit/snapshot.js";
 import type { Unit, UnitId } from "../unit/unit.js";
 import { projectNavigationMaps, projectStaticNavigationMap } from "./navigation-projection.js";
-import { battlefieldTileKey, projectBattlefieldSpatial, spatialEffectSourceKey } from "./spatial.js";
+import {
+    battlefieldTileKey,
+    projectBattlefieldSpatial,
+    spatialEffectSourceKey,
+} from "./spatial.js";
 import type { BattlefieldSpatialView } from "./spatial.js";
 
 export type BattlefieldRemovalReason = "DEATH" | "RETREAT" | "EXPIRED" | "SCRIPT";
 
 export type BattlefieldChange<U extends Unit = Unit> =
-    | { readonly type: "REGISTER_UNIT"; readonly unit: U; }
-    | { readonly type: "UPDATE_UNIT"; readonly unit: U; }
-    | { readonly type: "MOVE_UNIT"; readonly unitId: UnitId; readonly position: WorldPosition; }
-    | { readonly type: "REMOVE_UNIT"; readonly unitId: UnitId; readonly reason: BattlefieldRemovalReason; }
-    | { readonly type: "REGISTER_MECHANISM"; readonly mechanism: MechanismRuntime; }
-    | { readonly type: "SET_MECHANISM_ACTIVE"; readonly mechanismId: MechanismId; readonly active: boolean; }
-    | { readonly type: "REMOVE_MECHANISM"; readonly mechanismId: MechanismId; readonly reason: BattlefieldRemovalReason; }
-    | { readonly type: "ADD_EFFECT"; readonly effect: NavigationSpatialEffect; }
-    | { readonly type: "SET_EFFECT_ACTIVE"; readonly effectId: SpatialEffectId; readonly active: boolean; }
-    | { readonly type: "SET_EFFECT_REGION"; readonly effectId: SpatialEffectId; readonly region: SpatialEffectRegion; }
-    | { readonly type: "REMOVE_EFFECT"; readonly effectId: SpatialEffectId; }
-    | { readonly type: "EXPIRE_EFFECTS"; readonly tick: number; };
+    | { readonly type: "REGISTER_UNIT"; readonly unit: U }
+    | { readonly type: "UPDATE_UNIT"; readonly unit: U }
+    | { readonly type: "MOVE_UNIT"; readonly unitId: UnitId; readonly position: WorldPosition }
+    | {
+          readonly type: "REMOVE_UNIT";
+          readonly unitId: UnitId;
+          readonly reason: BattlefieldRemovalReason;
+      }
+    | { readonly type: "REGISTER_MECHANISM"; readonly mechanism: MechanismRuntime }
+    | {
+          readonly type: "SET_MECHANISM_ACTIVE";
+          readonly mechanismId: MechanismId;
+          readonly active: boolean;
+      }
+    | {
+          readonly type: "REMOVE_MECHANISM";
+          readonly mechanismId: MechanismId;
+          readonly reason: BattlefieldRemovalReason;
+      }
+    | { readonly type: "ADD_EFFECT"; readonly effect: NavigationSpatialEffect }
+    | {
+          readonly type: "SET_EFFECT_ACTIVE";
+          readonly effectId: SpatialEffectId;
+          readonly active: boolean;
+      }
+    | {
+          readonly type: "SET_EFFECT_REGION";
+          readonly effectId: SpatialEffectId;
+          readonly region: SpatialEffectRegion;
+      }
+    | { readonly type: "REMOVE_EFFECT"; readonly effectId: SpatialEffectId }
+    | { readonly type: "EXPIRE_EFFECTS"; readonly tick: number };
 
 export interface BattlefieldChangeResult {
     readonly changedNavigationModes: readonly PathMotionMode[];
-    readonly removedUnits: readonly { readonly unitId: UnitId; readonly reason: BattlefieldRemovalReason; }[];
-    readonly removedMechanisms: readonly { readonly mechanismId: MechanismId; readonly reason: BattlefieldRemovalReason; }[];
+    readonly removedUnits: readonly {
+        readonly unitId: UnitId;
+        readonly reason: BattlefieldRemovalReason;
+    }[];
+    readonly removedMechanisms: readonly {
+        readonly mechanismId: MechanismId;
+        readonly reason: BattlefieldRemovalReason;
+    }[];
     readonly removedEffects: readonly SpatialEffectId[];
 }
 
@@ -41,100 +79,171 @@ export interface BattlefieldRuntimeOptions {
     readonly map: BattlefieldMap;
 }
 
+export interface BattlefieldView<U extends Unit = Unit> {
+    readonly navigationMaps: NavigationMaps;
+    readonly fieldCache: NavigationFieldCache;
+    readonly unitIds: readonly UnitId[];
+    getUnit(id: UnitId): U | undefined;
+    unitsAt(position: TilePosition): readonly U[];
+}
+
+interface BattlefieldResources<U extends Unit> {
+    readonly map: BattlefieldMap;
+    readonly baseline: NavigationMaps;
+    readonly fieldCache: NavigationFieldCache;
+    readonly copyUnit: (unit: Readonly<U>) => U;
+}
+
+interface BattlefieldState<U extends Unit> {
+    readonly navigationMaps: NavigationMaps;
+    readonly units: ReadonlyMap<UnitId, U>;
+    readonly mechanisms: ReadonlyMap<MechanismId, MechanismRuntime>;
+    readonly effects: ReadonlyMap<SpatialEffectId, NavigationSpatialEffect>;
+    readonly spatial: BattlefieldSpatialView;
+}
+
 function requireEntry<K, V>(entries: ReadonlyMap<K, V>, id: K, name: string): V {
     const entry = entries.get(id);
-    if (entry === undefined) throw new RangeError(`unknown ${name}: ${id}`);
+    if (entry === undefined) {
+        throw new RangeError(`unknown ${name}: ${id}`);
+    }
     return entry;
 }
 
 function register<K extends number, V>(entries: Map<K, V>, id: K, value: V, name: string): void {
-    if (entries.has(id)) throw new RangeError(`duplicate ${name}: ${id}`);
+    if (entries.has(id)) {
+        throw new RangeError(`duplicate ${name}: ${id}`);
+    }
     entries.set(id, value);
 }
 
 export class BattlefieldRuntime<U extends Unit = Unit> {
-    readonly #map: BattlefieldMap;
-    readonly #baseline: NavigationMaps;
-    readonly #fieldCache = createNavigationFieldCache();
-    readonly #copyUnit: (unit: Readonly<U>) => U;
-    #navigationMaps: NavigationMaps;
-    #units = new Map<UnitId, U>();
-    #mechanisms = new Map<MechanismId, MechanismRuntime>();
-    #effects = new Map<SpatialEffectId, NavigationSpatialEffect>();
-    #spatial: BattlefieldSpatialView;
+    readonly #resources: BattlefieldResources<U>;
+    readonly #view: BattlefieldView<U>;
+    #state: BattlefieldState<U>;
     #pendingInvalidations: Set<NavigationMaps[PathMotionMode]> | null = null;
 
-    constructor(options: BattlefieldRuntimeOptions, copyUnit: (unit: Readonly<U>) => U) {
-        this.#copyUnit = copyUnit;
-        this.#map = options.map;
-        this.#baseline = Object.freeze({
+    private constructor(resources: BattlefieldResources<U>, state: BattlefieldState<U>) {
+        this.#resources = resources;
+        this.#state = state;
+        const runtime = this;
+        this.#view = {
+            get navigationMaps() {
+                return runtime.navigationMaps;
+            },
+            get fieldCache() {
+                return runtime.fieldCache;
+            },
+            get unitIds() {
+                return runtime.unitIds;
+            },
+            getUnit: (id) => runtime.#state.units.get(id),
+            unitsAt: (position) => runtime.#unitsAt(position),
+        };
+    }
+
+    static create<U extends Unit>(
+        options: BattlefieldRuntimeOptions,
+        copyUnit: (unit: Readonly<U>) => U,
+    ): BattlefieldRuntime<U> {
+        const baseline = Object.freeze({
             WALK: projectStaticNavigationMap(options.map, "WALK", 0),
             FLY: projectStaticNavigationMap(options.map, "FLY", 0),
         });
-        this.#navigationMaps = this.#baseline;
-        this.#spatial = projectBattlefieldSpatial(this.#map, this.#units, this.#mechanisms, this.#effects);
+        const units = new Map<UnitId, U>();
+        const mechanisms = new Map<MechanismId, MechanismRuntime>();
+        const effects = new Map<SpatialEffectId, NavigationSpatialEffect>();
+        return new BattlefieldRuntime(
+            { map: options.map, baseline, copyUnit, fieldCache: createNavigationFieldCache() },
+            {
+                navigationMaps: baseline,
+                units,
+                mechanisms,
+                effects,
+                spatial: projectBattlefieldSpatial(options.map, units, mechanisms, effects),
+            },
+        );
     }
 
-    get map(): BattlefieldMap { return this.#map; }
-    get navigationMaps(): NavigationMaps { return this.#navigationMaps; }
-    get fieldCache(): NavigationFieldCache { return this.#fieldCache; }
-    get unitIds(): readonly UnitId[] { return [...this.#units.keys()]; }
-    get mechanismIds(): readonly MechanismId[] { return [...this.#mechanisms.keys()]; }
-    get effectIds(): readonly SpatialEffectId[] { return [...this.#effects.keys()]; }
+    fork(): BattlefieldRuntime<U> {
+        return new BattlefieldRuntime(this.#resources, this.#state);
+    }
+
+    get map(): BattlefieldMap {
+        return this.#resources.map;
+    }
+    get view(): BattlefieldView<U> {
+        return this.#view;
+    }
+    get navigationMaps(): NavigationMaps {
+        return this.#state.navigationMaps;
+    }
+    get fieldCache(): NavigationFieldCache {
+        return this.#resources.fieldCache;
+    }
+    get unitIds(): readonly UnitId[] {
+        return [...this.#state.units.keys()];
+    }
+    get mechanismIds(): readonly MechanismId[] {
+        return [...this.#state.mechanisms.keys()];
+    }
+    get effectIds(): readonly SpatialEffectId[] {
+        return [...this.#state.effects.keys()];
+    }
 
     getUnit(id: UnitId): U | undefined {
-        const unit = this.#units.get(id);
-        return unit === undefined ? undefined : this.#copyUnit(unit);
+        const unit = this.#state.units.get(id);
+        return unit === undefined ? undefined : this.#resources.copyUnit(unit);
     }
 
     getMechanism(id: MechanismId): MechanismRuntime | undefined {
-        const mechanism = this.#mechanisms.get(id);
+        const mechanism = this.#state.mechanisms.get(id);
         return mechanism === undefined ? undefined : { ...mechanism };
     }
 
     getEffect(id: SpatialEffectId): NavigationSpatialEffect | undefined {
-        const effect = this.#effects.get(id);
-        return effect === undefined ? undefined : { ...effect };
+        const effect = this.#state.effects.get(id);
+        return effect === undefined ? undefined : copyNavigationSpatialEffect(effect);
     }
 
     unitsAt(position: TilePosition): readonly U[] {
-        const key = battlefieldTileKey(this.#map, position);
-        const ids = key === undefined ? undefined : this.#spatial.unitsByTile.get(key);
-        return ids === undefined ? [] : [...ids].map(id => this.#copyUnit(this.#units.get(id)!));
+        return this.#unitsAt(position).map((unit) => this.#resources.copyUnit(unit));
+    }
+
+    #unitsAt(position: TilePosition): readonly U[] {
+        const key = battlefieldTileKey(this.map, position);
+        const ids = key === undefined ? undefined : this.#state.spatial.unitsByTile.get(key);
+        return ids === undefined ? [] : [...ids].map((id) => this.#state.units.get(id)!);
     }
 
     effectsAt(position: TilePosition): readonly SpatialEffectId[] {
-        const key = battlefieldTileKey(this.#map, position);
-        return key === undefined ? [] : [...(this.#spatial.effectsByTile.get(key) ?? [])];
+        const key = battlefieldTileKey(this.map, position);
+        return key === undefined ? [] : [...(this.#state.spatial.effectsByTile.get(key) ?? [])];
     }
 
     effectsFrom(source: SpatialEffectSource): readonly SpatialEffectId[] {
-        return [...(this.#spatial.effectsBySource.get(spatialEffectSourceKey(source)) ?? [])];
+        return [...(this.#state.spatial.effectsBySource.get(spatialEffectSourceKey(source)) ?? [])];
     }
 
     effectsFollowing(unitId: UnitId): readonly SpatialEffectId[] {
-        return [...(this.#spatial.effectsByAnchor.get(unitId) ?? [])];
+        return [...(this.#state.spatial.effectsByAnchor.get(unitId) ?? [])];
     }
 
     transact<T>(operation: (battlefield: BattlefieldRuntime<U>) => T): T {
-        if (this.#pendingInvalidations !== null) throw new Error("battlefield transaction is already active");
-        const units = this.#units;
-        const mechanisms = this.#mechanisms;
-        const effects = this.#effects;
-        const spatial = this.#spatial;
-        const maps = this.#navigationMaps;
+        if (this.#pendingInvalidations !== null) {
+            throw new Error("battlefield transaction is already active");
+        }
+        const previous = this.#state;
         const invalidations = new Set<NavigationMaps[PathMotionMode]>();
         this.#pendingInvalidations = invalidations;
         try {
             const result = operation(this);
-            for (const map of invalidations) this.#fieldCache.invalidate(map);
+            for (const map of invalidations) {
+                this.fieldCache.invalidate(map);
+            }
             return result;
         } catch (error) {
-            this.#units = units;
-            this.#mechanisms = mechanisms;
-            this.#effects = effects;
-            this.#spatial = spatial;
-            this.#navigationMaps = maps;
+            this.#state = previous;
             throw error;
         } finally {
             this.#pendingInvalidations = null;
@@ -142,11 +251,40 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
     }
 
     apply(changes: readonly BattlefieldChange<U>[]): BattlefieldChangeResult {
-        const units = new Map(this.#units);
-        const mechanisms = new Map(this.#mechanisms);
-        const effects = new Map(this.#effects);
-        const removedUnits: { unitId: UnitId; reason: BattlefieldRemovalReason; }[] = [];
-        const removedMechanisms: { mechanismId: MechanismId; reason: BattlefieldRemovalReason; }[] = [];
+        const owned = changes.map((change): BattlefieldChange<U> => {
+            switch (change.type) {
+                case "REGISTER_UNIT":
+                case "UPDATE_UNIT":
+                    return { ...change, unit: this.#resources.copyUnit(change.unit) };
+                case "REGISTER_MECHANISM":
+                    return {
+                        ...change,
+                        mechanism: {
+                            id: change.mechanism.id,
+                            definition: change.mechanism.definition,
+                            active: change.mechanism.active,
+                        },
+                    };
+                case "ADD_EFFECT":
+                    return { ...change, effect: createNavigationSpatialEffect(change.effect) };
+                case "MOVE_UNIT":
+                    return { ...change, position: createWorldPosition(...change.position) };
+                case "SET_EFFECT_REGION":
+                    return { ...change, region: createSpatialEffectRegion(change.region) };
+                default:
+                    return change;
+            }
+        });
+        return this.commit(owned);
+    }
+
+    commit(changes: readonly BattlefieldChange<U>[]): BattlefieldChangeResult {
+        const units = new Map(this.#state.units);
+        const mechanisms = new Map(this.#state.mechanisms);
+        const effects = new Map(this.#state.effects);
+        const removedUnits: { unitId: UnitId; reason: BattlefieldRemovalReason }[] = [];
+        const removedMechanisms: { mechanismId: MechanismId; reason: BattlefieldRemovalReason }[] =
+            [];
         const removedEffects = new Set<SpatialEffectId>();
         const removeEffect = (id: SpatialEffectId): void => {
             effects.delete(id);
@@ -155,13 +293,17 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
         for (const change of changes) {
             switch (change.type) {
                 case "REGISTER_UNIT":
-                    if (!Number.isSafeInteger(change.unit.id) || change.unit.id < 0) throw new RangeError("invalid unit id");
-                    register(units, change.unit.id, this.#copyUnit(change.unit), "unit");
+                    if (!Number.isSafeInteger(change.unit.id) || change.unit.id < 0) {
+                        throw new RangeError("invalid unit id");
+                    }
+                    register(units, change.unit.id, change.unit, "unit");
                     break;
                 case "UPDATE_UNIT": {
                     const previous = requireEntry(units, change.unit.id, "unit");
-                    if (previous.definition !== change.unit.definition) throw new RangeError("unit definition cannot change during update");
-                    units.set(change.unit.id, this.#copyUnit(change.unit));
+                    if (previous.definition !== change.unit.definition) {
+                        throw new RangeError("unit definition cannot change during update");
+                    }
+                    units.set(change.unit.id, change.unit);
                     break;
                 }
                 case "MOVE_UNIT": {
@@ -174,72 +316,104 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
                     units.delete(change.unitId);
                     removedUnits.push({ unitId: change.unitId, reason: change.reason });
                     for (const effect of effects.values()) {
-                        if ((effect.source.type === "UNIT" && effect.source.unitId === change.unitId)
-                            || (effect.region.type === "FOLLOW_UNIT" && effect.region.unitId === change.unitId)) {
+                        if (
+                            (effect.source.type === "UNIT" &&
+                                effect.source.unitId === change.unitId) ||
+                            (effect.region.type === "FOLLOW_UNIT" &&
+                                effect.region.unitId === change.unitId)
+                        ) {
                             removeEffect(effect.id);
                         }
                     }
                     break;
                 case "REGISTER_MECHANISM":
-                    register(mechanisms, change.mechanism.id, {
-                        id: change.mechanism.id,
-                        definition: change.mechanism.definition,
-                        active: change.mechanism.active,
-                    }, "mechanism");
+                    register(mechanisms, change.mechanism.id, change.mechanism, "mechanism");
                     break;
                 case "SET_MECHANISM_ACTIVE":
-                    mechanisms.set(change.mechanismId, { ...requireEntry(mechanisms, change.mechanismId, "mechanism"), active: change.active });
+                    mechanisms.set(change.mechanismId, {
+                        ...requireEntry(mechanisms, change.mechanismId, "mechanism"),
+                        active: change.active,
+                    });
                     break;
                 case "REMOVE_MECHANISM":
                     requireEntry(mechanisms, change.mechanismId, "mechanism");
                     mechanisms.delete(change.mechanismId);
-                    removedMechanisms.push({ mechanismId: change.mechanismId, reason: change.reason });
+                    removedMechanisms.push({
+                        mechanismId: change.mechanismId,
+                        reason: change.reason,
+                    });
                     for (const effect of effects.values()) {
-                        if (effect.source.type === "MECHANISM" && effect.source.mechanismId === change.mechanismId) removeEffect(effect.id);
+                        if (
+                            effect.source.type === "MECHANISM" &&
+                            effect.source.mechanismId === change.mechanismId
+                        ) {
+                            removeEffect(effect.id);
+                        }
                     }
                     break;
                 case "ADD_EFFECT":
-                    register(effects, change.effect.id, createNavigationSpatialEffect(change.effect), "effect");
+                    register(effects, change.effect.id, change.effect, "effect");
                     break;
                 case "SET_EFFECT_ACTIVE":
-                    effects.set(change.effectId, { ...requireEntry(effects, change.effectId, "effect"), active: change.active });
+                    effects.set(change.effectId, {
+                        ...requireEntry(effects, change.effectId, "effect"),
+                        active: change.active,
+                    });
                     break;
                 case "SET_EFFECT_REGION":
-                    effects.set(change.effectId, { ...requireEntry(effects, change.effectId, "effect"), region: change.region });
+                    effects.set(change.effectId, {
+                        ...requireEntry(effects, change.effectId, "effect"),
+                        region: change.region,
+                    });
                     break;
                 case "REMOVE_EFFECT":
                     requireEntry(effects, change.effectId, "effect");
                     removeEffect(change.effectId);
                     break;
                 case "EXPIRE_EFFECTS":
-                    if (!Number.isSafeInteger(change.tick) || change.tick < 0) throw new RangeError("effect expiry tick must be a nonnegative safe integer");
+                    if (!Number.isSafeInteger(change.tick) || change.tick < 0) {
+                        throw new RangeError(
+                            "effect expiry tick must be a nonnegative safe integer",
+                        );
+                    }
                     for (const effect of effects.values()) {
-                        if (effect.expiresAtTick !== null && effect.expiresAtTick <= change.tick) removeEffect(effect.id);
+                        if (effect.expiresAtTick !== null && effect.expiresAtTick <= change.tick) {
+                            removeEffect(effect.id);
+                        }
                     }
                     break;
             }
         }
-        const spatial = projectBattlefieldSpatial(this.#map, units, mechanisms, effects);
-        const projection = projectNavigationMaps(this.#baseline, spatial.navigationEffects, this.#navigationMaps);
-        for (const [id, unit] of units) units.set(id, reconcileUnitNavigation(unit, projection.maps));
-        const previousMaps = this.#navigationMaps;
-        this.#units = units;
-        this.#mechanisms = mechanisms;
-        this.#effects = effects;
-        this.#spatial = spatial;
-        this.#navigationMaps = projection.maps;
+        const spatial = projectBattlefieldSpatial(this.map, units, mechanisms, effects);
+        const projection = projectNavigationMaps(
+            this.#resources.baseline,
+            spatial.navigationEffects,
+            this.#state.navigationMaps,
+        );
+        for (const [id, unit] of units) {
+            units.set(id, reconcileUnitNavigation(unit, projection.maps));
+        }
+        const previousMaps = this.#state.navigationMaps;
+        this.#state = { units, mechanisms, effects, spatial, navigationMaps: projection.maps };
         for (const mode of projection.changedModes) {
-            if (this.#pendingInvalidations === null) this.#fieldCache.invalidate(previousMaps[mode]);
-            else this.#pendingInvalidations.add(previousMaps[mode]);
+            if (this.#pendingInvalidations === null) {
+                this.fieldCache.invalidate(previousMaps[mode]);
+            } else {
+                this.#pendingInvalidations.add(previousMaps[mode]);
+            }
         }
         return {
             changedNavigationModes: projection.changedModes,
-            removedUnits, removedMechanisms, removedEffects: [...removedEffects],
+            removedUnits,
+            removedMechanisms,
+            removedEffects: [...removedEffects],
         };
     }
 }
 
-export function createBattlefieldRuntime(options: BattlefieldRuntimeOptions): BattlefieldRuntime<Unit>;
+export function createBattlefieldRuntime(
+    options: BattlefieldRuntimeOptions,
+): BattlefieldRuntime<Unit>;
 export function createBattlefieldRuntime<U extends Unit>(
     options: BattlefieldRuntimeOptions,
     copyUnit: (unit: Readonly<U>) => U,
@@ -249,6 +423,6 @@ export function createBattlefieldRuntime<U extends Unit>(
     copyUnit?: (unit: Readonly<U>) => U,
 ): BattlefieldRuntime<Unit> | BattlefieldRuntime<U> {
     return copyUnit === undefined
-        ? new BattlefieldRuntime<Unit>(options, copyUnitSnapshot)
-        : new BattlefieldRuntime<U>(options, copyUnit);
+        ? BattlefieldRuntime.create<Unit>(options, copyUnitSnapshot)
+        : BattlefieldRuntime.create<U>(options, copyUnit);
 }

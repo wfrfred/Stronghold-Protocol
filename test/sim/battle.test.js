@@ -9,6 +9,7 @@ import { UF, ANIM, BOND_LAYER_CAP } from '../../shared/constants.js';
 import { EV } from '../../shared/protocol.js';
 import { getDefaultSource, spawnsFromTemplate, hasGeneratedData } from '../../server/sim/simdata.js';
 import { LocalBossPool } from '../../server/sim/spec.js';
+import { BattlefieldRuntime } from '../../dist/core/tactical/battlefield/runtime.js';
 import { createMechanismDefinition, createMechanismRuntime } from '../../dist/core/tactical/battlefield/mechanism.js';
 import { createNavigationEffectDefinition, createNavigationSpatialEffect, createSpatialEffectRegion } from '../../dist/core/tactical/battlefield/navigation-effect.js';
 import { createRng } from '../../dist/core/common/rng.js';
@@ -54,6 +55,17 @@ function slimeMovementFragment(rawLevel = arknightsFixture('level_act1autochess_
 
 function withTimelineSpawns(spec, spawns) {
   return { ...spec, schedule: { type: 'TIMELINE', spawns } };
+}
+
+function routeCommandBattle(checkpoints, options = {}) {
+  const { spec } = slimeMovementFragment();
+  const source = spec.schedule.spawns[0];
+  const route = createRouteDefinition({ ...source.route, visitEveryCheckPoint: true, checkpoints,
+    spawnOffset: [0, 0], spawnRandomRange: [0, 0], ...options.route });
+  const definition = createEnemyDefinition({ ...source.definition,
+    locomotion: { ...source.definition.locomotion, moveSpeedPerTick: options.speed ?? 0 } });
+  return { ...withTimelineSpawns(spec, [{ ...source, tick: 0, definition, route, alwaysCheckCurrentPoint: true }]),
+    maxTicks: options.maxTicks ?? 20, ...options.spec };
 }
 
 function nativeSpawn(overrides = {}) {
@@ -882,6 +894,316 @@ test('core absolute wait overflow rolls back same-tick spawns, expiry, identitie
     assert.deepEqual(runtime.snapshot(), before);
     assert.equal(runtime.navigationMaps, maps);
   }
+});
+
+test('core instant route signals retain identity and scheduler ownership through disappearance and appearance', () => {
+  const input = routeCommandBattle([
+    { type: 'DISAPPEAR' }, { type: 'WAIT_FOR_TICKS', durationTicks: 3 }, { type: 'ALERT' },
+    { type: 'APPEAR_AT_POS', position: [9, 5], reachOffset: [0.25, 0] },
+    { type: 'WAIT_FOR_TICKS', durationTicks: 30 },
+  ]);
+  const runtime = new BattleRuntime(input), replay = new BattleRuntime(input), events = [];
+  let appeared = false, observedHidden = false;
+  while (runtime.result === null) {
+    const step = runtime.step();
+    assert.deepEqual(step, replay.step());
+    assert.deepEqual(runtime.snapshot(), replay.snapshot());
+    events.push(...step.events);
+    const snapshot = runtime.snapshot(), unit = snapshot.units[0];
+    assert.equal(unit.id, 0);
+    assert.equal(unit.vitality.hp, 550);
+    assert.deepEqual(snapshot.spawning.managedFinalUnitIds, [0]);
+    if (step.events.some(event => event.type === 'ROUTE' && event.signal.type === 'APPEAR_AT_POS')) appeared = true;
+    if (appeared) {
+      assert.equal(unit.spatialPresence.present, true);
+      assert.deepEqual(unit.position, [5.25, 9]);
+    } else {
+      assert.equal(unit.spatialPresence.present, false);
+      observedHidden = true;
+    }
+  }
+  const signals = events.filter(event => event.type === 'ROUTE');
+  assert.equal(observedHidden, true);
+  assert.equal(appeared, true);
+  assert.deepEqual(signals.map(event => event.signal.type), ['DISAPPEAR', 'ALERT', 'APPEAR_AT_POS']);
+  assert.deepEqual(signals.map(event => event.position), [[10, 9], [10, 9], [5.25, 9]]);
+  assert.deepEqual(events.slice(0, 2).map(event => event.type), ['ENEMY_SPAWNED', 'ROUTE']);
+  assert.deepEqual(events.filter(event => event.type === 'ROUTE_COMPLETED' || event.type === 'UNIT_REMOVED'), []);
+  assert.equal(runtime.result.reason, 'TIME_LIMIT');
+  assert.equal(runtime.result.completedRouteCount, 0);
+  assert.deepEqual(runtime.result.remainingUnitIds, [0]);
+});
+
+test('core birth and same-tick route signals record each instruction position rather than the final pose', () => {
+  const runtime = new BattleRuntime(routeCommandBattle([
+    { type: 'ALERT' }, { type: 'APPEAR_AT_POS', position: [9, 6], reachOffset: [-0.25, 0] },
+    { type: 'DISAPPEAR' }, { type: 'WAIT_FOR_TICKS', durationTicks: 30 },
+  ]));
+  const first = runtime.step();
+  assert.deepEqual(first.events.filter(event => event.type === 'ROUTE').map(event => ({
+    signal: event.signal.type, position: event.position, tick: event.tick, unitId: event.unitId,
+  })), [
+    { signal: 'ALERT', position: [10, 9], tick: 0, unitId: 0 },
+    { signal: 'APPEAR_AT_POS', position: [5.75, 9], tick: 0, unitId: 0 },
+    { signal: 'DISAPPEAR', position: [5.75, 9], tick: 0, unitId: 0 },
+  ]);
+  assert.equal(runtime.snapshot().units[0].spatialPresence.present, false);
+  assert.deepEqual(runtime.snapshot().units[0].position, [5.75, 9]);
+  assert.deepEqual(runtime.step().events.filter(event => event.type === 'ROUTE'), []);
+});
+
+test('core alternative route commands preserve resolved main targets, continue main waits and isolate snapshots', () => {
+  const waiting = new BattleRuntime(routeCommandBattle([{ type: 'WAIT_FOR_TICKS', durationTicks: 12 }]));
+  waiting.step();
+  const waitRoute = createRouteDefinition({ ...waiting.snapshot().units[0].locomotion.mainRoute.route.definition,
+    checkpoints: [{ type: 'WAIT_FOR_TICKS', durationTicks: 30 }] });
+  waiting.step([{ type: 'SET_ALTERNATIVE_ROUTE', unitId: 0, route: waitRoute, alwaysCheckCurrentPoint: true }]);
+  const active = waiting.snapshot().units[0];
+  assert.equal(active.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 10);
+  assert.equal(active.locomotion.alternativeRoute.route.progress.checkpoint.remainingTicks, 29);
+  const snapshot = waiting.snapshot();
+  snapshot.units[0].locomotion.alternativeRoute.route.progress.checkpoint.remainingTicks = 999;
+  snapshot.units[0].spatialPresence.present = false;
+  assert.deepEqual(waiting.snapshot().units[0], active);
+  waiting.step();
+  assert.equal(waiting.snapshot().units[0].locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 9);
+  waiting.step([{ type: 'CLEAR_ALTERNATIVE_ROUTE', unitId: 0 }]);
+  assert.equal(waiting.snapshot().units[0].locomotion.alternativeRoute, null);
+  assert.equal(waiting.snapshot().units[0].locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 8);
+
+  const input = routeCommandBattle([{ type: 'MOVE', target: {
+    position: [9, 8], reachOffset: [0.25, 0], randomizeReachOffset: true, reachDistance: 0,
+  } }]);
+  const runtime = new BattleRuntime(input), replay = new BattleRuntime(input);
+  assert.deepEqual(runtime.step(), replay.step());
+  const main = runtime.snapshot().units[0].locomotion.mainRoute;
+  const originalRng = runtime.snapshot().execution.rngState;
+  const route = createRouteDefinition({ ...main.route.definition, startPosition: [100, 100], endPosition: [9, 10],
+    spawnOffset: [100, 100], spawnRandomRange: [100, 100],
+    checkpoints: [{ type: 'WAIT_FOR_TICKS', durationTicks: 3 }] });
+  for (let tick = 1; tick < 10; tick++) {
+    const commands = tick === 1 ? [{ type: 'SET_ALTERNATIVE_ROUTE', unitId: 0, route, alwaysCheckCurrentPoint: true }] : [];
+    assert.deepEqual(runtime.step(commands), replay.step(commands));
+    assert.deepEqual(runtime.snapshot(), replay.snapshot());
+    const unit = runtime.snapshot().units[0];
+    assert.deepEqual(unit.locomotion.mainRoute.route.progress, main.route.progress);
+    assert.deepEqual(unit.position, [10, 9]);
+    assert.equal(runtime.snapshot().execution.rngState, originalRng);
+  }
+  assert.equal(runtime.snapshot().units[0].locomotion.alternativeRoute.route.progress.phase, 'COMPLETED');
+  const clear = [{ type: 'CLEAR_ALTERNATIVE_ROUTE', unitId: 0 }];
+  assert.deepEqual(runtime.step(clear), replay.step(clear));
+  assert.deepEqual(runtime.snapshot(), replay.snapshot());
+  assert.equal(runtime.snapshot().units[0].locomotion.alternativeRoute, null);
+  assert.deepEqual(runtime.snapshot().units[0].locomotion.mainRoute.route.progress, main.route.progress);
+});
+
+test('core alternative route commands preserve hidden presence and emit ordered one-time teleport signals', () => {
+  const runtime = new BattleRuntime(routeCommandBattle([
+    { type: 'DISAPPEAR' }, { type: 'WAIT_FOR_TICKS', durationTicks: 30 },
+  ]));
+  runtime.step();
+  assert.equal(runtime.snapshot().units[0].spatialPresence.present, false);
+  const main = runtime.snapshot().units[0].locomotion.mainRoute;
+  const route = createRouteDefinition({ ...main.route.definition, checkpoints: [{ type: 'WAIT_FOR_TICKS', durationTicks: 30 }] });
+  runtime.step([{ type: 'SET_ALTERNATIVE_ROUTE', unitId: 0, route, alwaysCheckCurrentPoint: true }]);
+  assert.equal(runtime.snapshot().units[0].spatialPresence.present, false);
+  const teleport = createRouteDefinition({ ...route, checkpoints: [
+    { type: 'APPEAR_AT_POS', position: [9, 7], reachOffset: [0, 0] },
+    { type: 'WAIT_FOR_TICKS', durationTicks: 30 },
+  ] });
+  const step = runtime.step([
+    { type: 'SET_ALTERNATIVE_ROUTE', unitId: 0, route: teleport, alwaysCheckCurrentPoint: true },
+    { type: 'CLEAR_ALTERNATIVE_ROUTE', unitId: 0 },
+  ]);
+  assert.deepEqual(step.events.filter(event => event.type === 'ROUTE'), [
+    { type: 'ROUTE', unitId: 0, signal: { type: 'APPEAR_AT_POS', position: [7, 9] }, position: [7, 9], tick: 2 },
+  ]);
+  const unit = runtime.snapshot().units[0];
+  assert.equal(unit.spatialPresence.present, true);
+  assert.deepEqual(unit.position, [7, 9]);
+  assert.equal(unit.locomotion.alternativeRoute, null);
+  assert.equal(unit.locomotion.mainRoute.route.progress.checkpointIndex, main.route.progress.checkpointIndex);
+  assert.deepEqual(runtime.step().events.filter(event => event.type === 'ROUTE'), []);
+});
+
+test('core failed alternative route commands roll back same-tick expiry, births, RNG and navigation identities', () => {
+  const initial = routeCommandBattle([{ type: 'WAIT_FOR_TICKS', durationTicks: 30 }]);
+  const spawn = initial.schedule.spawns[0];
+  const mechanism = createMechanismRuntime({ id: 0, definition: createMechanismDefinition({ id: 'alternative-expiry' }), active: true });
+  const effect = createNavigationSpatialEffect({
+    id: 0, definition: createNavigationEffectDefinition({ id: 'alternative-expiry',
+      WALK: { denyPassage: false, deniedDepartures: [], costFloor: 2 }, FLY: null,
+    }), source: { type: 'MECHANISM', mechanismId: 0 }, active: true,
+    region: createSpatialEffectRegion({ type: 'FIXED', position: [9, 6], range: [[0, 0]], direction: 'RIGHT' }),
+    expiresAtTick: 1,
+  });
+  const input = { ...withTimelineSpawns(initial, [spawn, { ...spawn, tick: 1 }]), initialMechanisms: [mechanism], initialEffects: [effect] };
+  const runtime = new BattleRuntime(input), replay = new BattleRuntime(input);
+  runtime.step(); replay.step();
+  const before = runtime.snapshot(), maps = runtime.navigationMaps;
+  const route = createRouteDefinition({ ...spawn.route, checkpoints: [{ type: 'MOVE', target: {
+    position: [9, 8], reachOffset: [0.25, 0], randomizeReachOffset: true, reachDistance: 0,
+  } }] });
+  const command = { type: 'SET_ALTERNATIVE_ROUTE', unitId: 0, route, alwaysCheckCurrentPoint: true };
+  for (let retry = 0; retry < 2; retry++) {
+    assert.throws(() => runtime.step([command, { type: 'CLEAR_ALTERNATIVE_ROUTE', unitId: 999 }]), /unknown alternative route unit/);
+    assert.deepEqual(runtime.snapshot(), before);
+    assert.equal(runtime.navigationMaps, maps);
+  }
+  assert.deepEqual(runtime.step([command]), replay.step([command]));
+  assert.deepEqual(runtime.snapshot(), replay.snapshot());
+  const fixed = new BattleRuntime({ ...initial, predefines: [{ id: 0, alias: null, initiallyPresent: true,
+    creation: { type: 'UNIT', definition: Object.freeze({ id: 'fixed' }), position: [10, 9], navigationEffects: [] },
+  }] });
+  const fixedBefore = fixed.snapshot();
+  assert.throws(() => fixed.step([{ ...command, unitId: 0 }]), /no routed locomotion/);
+  assert.deepEqual(fixed.snapshot(), fixedBefore);
+});
+
+test('core battle publishes every tick once and retries a final-stage failure without losing state or events', () => {
+  for (const reason of ['TIME_LIMIT', 'SCHEDULE_COMPLETED']) {
+    const base = routeCommandBattle([{ type: 'WAIT_FOR_TICKS', durationTicks: 30 }], { speed: 1 / 30, maxTicks: 2 });
+    const source = base.schedule.spawns[0];
+    const completedRoute = createRouteDefinition({ ...source.route, endPosition: source.route.startPosition, checkpoints: [] });
+    const initialMechanism = createMechanismRuntime({
+      id: 0, definition: createMechanismDefinition({ id: 'late-failure-initial' }), active: true,
+    });
+    const restriction = createNavigationEffectDefinition({
+      id: 'late-failure-restriction', WALK: { denyPassage: false, deniedDepartures: [], costFloor: 3 }, FLY: null,
+    });
+    const initialEffect = createNavigationSpatialEffect({
+      id: 0, definition: restriction, source: { type: 'MECHANISM', mechanismId: 0 }, active: true,
+      region: createSpatialEffectRegion({ type: 'FIXED', position: [9, 6], range: [[0, 0]], direction: 'RIGHT' }),
+      expiresAtTick: 1,
+    });
+    const predefinedUnit = Object.freeze({ id: 'late-failure-predefined', vitality: Object.freeze({ maxHp: 25 }) });
+    const input = {
+      ...withTimelineSpawns(base, [
+        ...(reason === 'TIME_LIMIT' ? [source] : []),
+        { ...source, tick: 1, route: completedRoute },
+      ]),
+      initialMechanisms: [initialMechanism], initialEffects: [initialEffect],
+      predefines: [
+        { id: 0, alias: null, initiallyPresent: true,
+          creation: { type: 'UNIT', definition: predefinedUnit, position: Object.freeze([8, 9]), navigationEffects: [] } },
+        { id: 1, alias: null, initiallyPresent: false,
+          creation: { type: 'MECHANISM', definition: createMechanismDefinition({ id: 'late-failure-created' }), navigationEffects: [
+            { definition: restriction,
+              region: createSpatialEffectRegion({ type: 'FIXED', position: [9, 7], range: [[0, 0]], direction: 'RIGHT' }) },
+          ] } },
+        { id: 2, alias: null, initiallyPresent: false,
+          creation: { type: 'UNIT', definition: predefinedUnit, position: Object.freeze([8, 9]), navigationEffects: [] } },
+      ],
+    };
+    const runtime = new BattleRuntime(input), replay = new BattleRuntime(input);
+    assert.deepEqual(runtime.step(), replay.step());
+    const before = runtime.snapshot(), maps = runtime.navigationMaps;
+    const commands = [
+      { type: 'REMOVE_PREDEFINED', definitionId: 0, reason: 'SCRIPT' },
+      { type: 'APPEAR_PREDEFINED', definitionId: 1 },
+      { type: 'APPEAR_PREDEFINED', definitionId: 2 },
+    ];
+    const expected = replay.step(commands), expectedSnapshot = replay.snapshot();
+    assert.equal(expected.result.reason, reason);
+    assert.equal(expected.result.completedRouteCount, 1);
+    assert.equal(expectedSnapshot.units.length, reason === 'TIME_LIMIT' ? 2 : 1);
+    assert.equal(expected.events.filter(event => event.type === 'ENEMY_SPAWNED').length, 1);
+    assert.equal(expected.events.filter(event => event.type === 'UNIT_REMOVED').length, 2);
+    assert.notEqual(expectedSnapshot.execution.rngState, before.execution.rngState);
+    assert.ok(expectedSnapshot.execution.nextNavigationRequestId > before.execution.nextNavigationRequestId);
+    assert.ok(expectedSnapshot.execution.nextUnitId > before.execution.nextUnitId);
+    assert.ok(expectedSnapshot.execution.nextMechanismId > before.execution.nextMechanismId);
+    assert.ok(expectedSnapshot.execution.nextSpatialEffectId > before.execution.nextSpatialEffectId);
+    const transact = BattlefieldRuntime.prototype.transact;
+    let failures = 0;
+    try {
+      BattlefieldRuntime.prototype.transact = function(operation) {
+        return transact.call(this, field => {
+          operation(field);
+          assert.deepEqual(field.unitIds, expectedSnapshot.units.map(unit => unit.id));
+          assert.deepEqual(field.mechanismIds, expectedSnapshot.mechanisms.map(mechanism => mechanism.id));
+          assert.deepEqual(field.effectIds, [1]);
+          assert.deepEqual(runtime.snapshot(), before);
+          assert.equal(runtime.navigationMaps, maps);
+          failures++;
+          throw new Error('late-stage failure');
+        });
+      };
+      for (let retry = 0; retry < 2; retry++) {
+        assert.throws(() => runtime.step(commands), /late-stage failure/);
+        assert.deepEqual(runtime.snapshot(), before);
+        assert.equal(runtime.navigationMaps, maps);
+      }
+    } finally {
+      BattlefieldRuntime.prototype.transact = transact;
+    }
+    assert.equal(failures, 2);
+    assert.deepEqual(runtime.step(commands), expected);
+    assert.deepEqual(runtime.snapshot(), expectedSnapshot);
+  }
+});
+
+test('core schedule removal feedback advances the next wave only on the next tick', () => {
+  const base = routeCommandBattle([]);
+  const source = base.schedule.spawns[0];
+  const route = createRouteDefinition({ ...source.route, endPosition: source.route.startPosition });
+  const spawn = { ...source, route };
+  const fragment = { preDelayTicks: 0, actions: [{
+    spawn, offsetsTicks: [0], managedByScheduler: true, dontBlockWave: false, forceBlockWaveInBranch: false,
+  }] };
+  const wave = { preDelayTicks: 0, postDelayTicks: 0, maxWaitingTicks: null, fragments: [fragment] };
+  const runtime = new BattleRuntime({ ...base, schedule: { type: 'WAVES', waves: [wave, wave], branches: {} } });
+  const first = runtime.step();
+  assert.deepEqual(first.events.filter(event => event.type === 'ENEMY_SPAWNED'), [{ type: 'ENEMY_SPAWNED', unitId: 0, tick: 0 }]);
+  assert.deepEqual(first.events.filter(event => event.type === 'ROUTE_COMPLETED'), [{ type: 'ROUTE_COMPLETED', unitId: 0, tick: 0 }]);
+  assert.equal(first.result, null);
+  const afterFirst = runtime.snapshot();
+  assert.equal(afterFirst.spawning.waveIndex, 0);
+  assert.equal(afterFirst.spawning.main.phase, 'WAITING');
+  assert.deepEqual(afterFirst.spawning.managedWaveUnitIds, []);
+  assert.deepEqual(afterFirst.spawning.managedFinalUnitIds, []);
+  const second = runtime.step();
+  assert.deepEqual(second.events.filter(event => event.type === 'ENEMY_SPAWNED'), [{ type: 'ENEMY_SPAWNED', unitId: 1, tick: 1 }]);
+  assert.deepEqual(second.events.filter(event => event.type === 'ROUTE_COMPLETED'), [{ type: 'ROUTE_COMPLETED', unitId: 1, tick: 1 }]);
+  assert.equal(second.result, null);
+  assert.equal(runtime.snapshot().spawning.waveIndex, 1);
+  const final = runtime.step();
+  assert.deepEqual(final.events, []);
+  assert.deepEqual(final.result, {
+    reason: 'SCHEDULE_COMPLETED', elapsedTicks: 3, spawnedCount: 2, completedRouteCount: 2,
+    remainingUnitIds: [], unspawnedCount: 0,
+  });
+});
+
+test('core clearing derived navigation fields preserves every tick, event and RNG transition', () => {
+  const input = routeCommandBattle([
+    { type: 'MOVE', target: { position: [9, 8], reachOffset: [0.25, 0.25], randomizeReachOffset: true, reachDistance: 0.05 } },
+    { type: 'WAIT_FOR_TICKS', durationTicks: 2 },
+    { type: 'MOVE', target: { position: [9, 6], reachOffset: [0.25, 0.25], randomizeReachOffset: true, reachDistance: 0.05 } },
+  ], { speed: 1 / 5, maxTicks: 100 });
+  const runtime = new BattleRuntime(input), replay = new BattleRuntime(input);
+  const transact = BattlefieldRuntime.prototype.transact;
+  let clearCount = 0;
+  for (let tick = 0; runtime.result === null; tick++) {
+    const expected = replay.step();
+    let actual;
+    try {
+      BattlefieldRuntime.prototype.transact = function(operation) {
+        this.fieldCache.clear();
+        clearCount++;
+        return transact.call(this, operation);
+      };
+      actual = runtime.step();
+    } finally {
+      BattlefieldRuntime.prototype.transact = transact;
+    }
+    assert.deepEqual(actual, expected);
+    assert.deepEqual(runtime.snapshot(), replay.snapshot());
+  }
+  assert.ok(clearCount > 10);
+  assert.equal(runtime.result.reason, 'SCHEDULE_COMPLETED');
+  assert.equal(runtime.result.completedRouteCount, 1);
 });
 
 test('core battle deadline keeps live units separate from spawns due at the excluded final edge', () => {

@@ -1,4 +1,7 @@
-import { createPredefinedInstanceDefinition, type PredefinedInstanceDefinition } from "../../core/tactical/battle/predefined.js";
+import {
+    createPredefinedInstanceDefinition,
+    type PredefinedInstanceDefinition,
+} from "../../core/tactical/battle/predefined.js";
 import { createMechanismDefinition } from "../../core/tactical/battlefield/mechanism.js";
 import { createNavigationEffectDefinition } from "../../core/tactical/battlefield/navigation-effect.js";
 import { Tile, createTileOffset } from "../../core/tactical/geometry/coordinate.js";
@@ -14,20 +17,30 @@ function object(value: unknown, name: string): Record<string, unknown> {
     return value as Record<string, unknown>;
 }
 
-function characterPhase(instance: ArknightsPredefinedInstance, characterValue: unknown): Record<string, unknown> {
+function characterPhase(
+    instance: ArknightsPredefinedInstance,
+    characterValue: unknown,
+): Record<string, unknown> {
     const character = object(characterValue, "predefined character record");
-    if (!Array.isArray(character.phases)) throw new TypeError("predefined character phases must be an array");
+    if (!Array.isArray(character.phases)) {
+        throw new TypeError("predefined character phases must be an array");
+    }
     const phaseIndex = Number(instance.inst.phase.slice(-1));
     return object(character.phases[phaseIndex], "predefined character phase");
 }
 
 function phasePrefabKey(phase: Record<string, unknown>): string {
     const key = phase.characterPrefabKey;
-    if (typeof key !== "string" || key.length === 0) throw new TypeError("predefined character prefab key must be nonempty");
+    if (typeof key !== "string" || key.length === 0) {
+        throw new TypeError("predefined character prefab key must be nonempty");
+    }
     return key;
 }
 
-export function resolvePredefinedPrefabKey(instance: ArknightsPredefinedInstance, characterValue: unknown): string {
+export function resolvePredefinedPrefabKey(
+    instance: ArknightsPredefinedInstance,
+    characterValue: unknown,
+): string {
     return phasePrefabKey(characterPhase(instance, characterValue));
 }
 
@@ -36,9 +49,16 @@ function predefinedCharacter(
     profile: PredefinedPrefab,
     characterValue: unknown,
 ): Record<string, unknown> {
-    if (instance.uniEquipIds !== null || instance.masterInfos !== null || instance.overrideTalents !== null
-        || instance.tmplId !== null || (instance.skinId !== null && instance.skinId !== "")) {
-        throw new TypeError(`unsupported predefined character customization for ${instance.inst.characterKey}`);
+    if (
+        instance.uniEquipIds !== null ||
+        instance.masterInfos !== null ||
+        instance.overrideTalents !== null ||
+        instance.tmplId !== null ||
+        (instance.skinId !== null && instance.skinId !== "")
+    ) {
+        throw new TypeError(
+            `unsupported predefined character customization for ${instance.inst.characterKey}`,
+        );
     }
     const phase = characterPhase(instance, characterValue);
     if (phasePrefabKey(phase) !== profile.prefabKey) {
@@ -47,7 +67,10 @@ function predefinedCharacter(
     return phase;
 }
 
-function unitDefinition(instance: ArknightsPredefinedInstance, phase: Record<string, unknown>): VitalUnitDefinition {
+function unitDefinition(
+    instance: ArknightsPredefinedInstance,
+    phase: Record<string, unknown>,
+): VitalUnitDefinition {
     if (instance.inst.potentialRank !== 0 || instance.inst.favorPoint !== 0) {
         throw new TypeError("predefined unit potential and favor modifiers are not supported");
     }
@@ -60,14 +83,20 @@ function unitDefinition(instance: ArknightsPredefinedInstance, phase: Record<str
     for (const value of phase.attributesKeyFrames) {
         const frame = object(value, "predefined attribute keyframe");
         const attributes = object(frame.data, "predefined keyframe attributes");
-        if (typeof frame.level !== "number" || !Number.isSafeInteger(frame.level) || frame.level < 1) {
+        if (
+            typeof frame.level !== "number" ||
+            !Number.isSafeInteger(frame.level) ||
+            frame.level < 1
+        ) {
             throw new RangeError("predefined keyframe level must be a positive safe integer");
         }
         const hp = attributes.maxHp;
         if (typeof hp !== "number" || !Number.isFinite(hp) || hp <= 0) {
             throw new RangeError("predefined maxHp must be finite and positive");
         }
-        if (maxHp !== undefined && maxHp !== hp) throw new TypeError("varying predefined unit attributes are not supported");
+        if (maxHp !== undefined && maxHp !== hp) {
+            throw new TypeError("varying predefined unit attributes are not supported");
+        }
         maxHp = hp;
         minimumLevel = Math.min(minimumLevel, frame.level);
         maximumLevel = Math.max(maximumLevel, frame.level);
@@ -75,7 +104,10 @@ function unitDefinition(instance: ArknightsPredefinedInstance, phase: Record<str
     if (instance.inst.level < minimumLevel || instance.inst.level > maximumLevel) {
         throw new RangeError("predefined unit level is outside attribute keyframes");
     }
-    return Object.freeze({ id: instance.inst.characterKey, vitality: Object.freeze({ maxHp: maxHp! }) });
+    return Object.freeze({
+        id: instance.inst.characterKey,
+        vitality: Object.freeze({ maxHp: maxHp! }),
+    });
 }
 
 export function parsePredefinedInstanceDefinition(
@@ -110,7 +142,13 @@ export function parsePredefinedInstanceDefinition(
             type: "UNIT",
             definition: unitDefinition(instance, phase),
             position: Tile.center(instance.position),
-            navigationEffects: [{ definition: effect, range: RangeGrid.create([createTileOffset(0, 0)]), direction: instance.direction }],
+            navigationEffects: [
+                {
+                    definition: effect,
+                    range: RangeGrid.create([createTileOffset(0, 0)]),
+                    direction: instance.direction,
+                },
+            ],
         },
     });
 }

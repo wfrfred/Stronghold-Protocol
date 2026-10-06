@@ -2,10 +2,13 @@ import { deriveNavigationFieldQuery } from "./field.js";
 import type { NavigationField } from "./field.js";
 import type { NavigationMap } from "./map.js";
 import { buildNavigationField } from "./pathfinding.js";
-import type { NavigationRequest } from "./request.js";
+import type { NavigationIntent } from "./request.js";
 
 export interface NavigationFieldCache {
-    get(map: NavigationMap, request: NavigationRequest): NavigationField;
+    get(
+        map: NavigationMap,
+        request: Pick<NavigationIntent, "targetTile" | "options">,
+    ): NavigationField;
     invalidate(map: NavigationMap): void;
     clear(): void;
 }
@@ -13,7 +16,10 @@ export interface NavigationFieldCache {
 export function createNavigationFieldCache(): NavigationFieldCache {
     let maps = new WeakMap<NavigationMap, Map<string, NavigationField>>();
     return Object.freeze({
-        get(map: NavigationMap, request: NavigationRequest): NavigationField {
+        get(
+            map: NavigationMap,
+            request: Pick<NavigationIntent, "targetTile" | "options">,
+        ): NavigationField {
             const query = deriveNavigationFieldQuery(request);
             const key = `${query.targetTile[0]}:${query.targetTile[1]}:${query.allowDiagonalMove}`;
             let fields = maps.get(map);

@@ -9,8 +9,10 @@ function isClear(field: NavigationField, row: number, col: number): boolean {
         return false;
     }
     const index = row * field.map.columns + col;
-    return field.nodes[index]!.type !== "UNREACHABLE"
-        && (field.map.pathMotionMode === "FLY" || field.map.cells[index]!.moveCost < 1000);
+    return (
+        field.nodes[index]!.type !== "UNREACHABLE" &&
+        (field.map.pathMotionMode === "FLY" || field.map.cells[index]!.moveCost < 1000)
+    );
 }
 
 function raycast(field: NavigationField, from: TilePosition, to: TilePosition): boolean {
@@ -30,11 +32,14 @@ function raycast(field: NavigationField, from: TilePosition, to: TilePosition): 
     const minorStep = startMinor < endMinor ? 1 : -1;
     const majorDirection: Direction = swapAxes ? "UP" : "RIGHT";
     const minorDirection: Direction = swapAxes
-        ? minorStep === 1 ? "RIGHT" : "LEFT"
-        : minorStep === 1 ? "UP" : "DOWN";
-    const position = (major: number, minor: number): TilePosition => swapAxes
-        ? [major, minor]
-        : [minor, major];
+        ? minorStep === 1
+            ? "RIGHT"
+            : "LEFT"
+        : minorStep === 1
+          ? "UP"
+          : "DOWN";
+    const position = (major: number, minor: number): TilePosition =>
+        swapAxes ? [major, minor] : [minor, major];
     const clear = (major: number, minor: number): boolean => {
         const [row, col] = position(major, minor);
         return isClear(field, row, col);
@@ -61,10 +66,13 @@ function raycast(field: NavigationField, from: TilePosition, to: TilePosition): 
         error += 2 * minorDelta;
         if (major < endMajor && error >= 0) {
             const nextMinor = minor + minorStep;
-            if (!clear(major, nextMinor) || !clear(major + 1, minor)
-                || !canDepart(major, minor, minorDirection)
-                || !canDepart(major + 1, minor, minorDirection)
-                || !canDepart(major, nextMinor, majorDirection)) {
+            if (
+                !clear(major, nextMinor) ||
+                !clear(major + 1, minor) ||
+                !canDepart(major, minor, minorDirection) ||
+                !canDepart(major + 1, minor, minorDirection) ||
+                !canDepart(major, nextMinor, majorDirection)
+            ) {
                 return false;
             }
             minor = nextMinor;
@@ -81,7 +89,10 @@ export function smoothNavigationField(field: NavigationField): NavigationField {
         if (node.type !== "REACHABLE") {
             continue;
         }
-        const from: TilePosition = [Math.floor(index / field.map.columns), index % field.map.columns];
+        const from: TilePosition = [
+            Math.floor(index / field.map.columns),
+            index % field.map.columns,
+        ];
         let next = node.next;
         for (;;) {
             const cursor = nodes[next[0] * field.map.columns + next[1]]!;

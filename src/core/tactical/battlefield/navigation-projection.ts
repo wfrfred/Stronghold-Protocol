@@ -3,7 +3,12 @@ import { Direction, DIRECTIONS } from "../geometry/direction.js";
 import { BattlefieldMap } from "./map.js";
 import type { PassableMask } from "./tile.js";
 import { createNavigationMap, PathMotionMode } from "../navigation/map.js";
-import type { NavigationCell, NavigationMap, NavigationMaps, NavigationRevision } from "../navigation/map.js";
+import type {
+    NavigationCell,
+    NavigationMap,
+    NavigationMaps,
+    NavigationRevision,
+} from "../navigation/map.js";
 import type { NavigationEffectDefinition } from "./navigation-effect.js";
 
 export interface ProjectedNavigationEffect {
@@ -28,7 +33,7 @@ export function projectStaticNavigationMap(
     if (!PathMotionMode.is(pathMotionMode)) {
         throw new TypeError("invalid path motion mode");
     }
-    const cells: NavigationCell[] = map.tiles.map(tile => ({
+    const cells: NavigationCell[] = map.tiles.map((tile) => ({
         passable: includesMode(tile.passableMask, pathMotionMode),
         moveCost: pathMotionMode === "WALK" && tile.terrain === "HOLE" ? 1_000_000 : 1,
         departures: { UP: true, RIGHT: true, DOWN: true, LEFT: true },
@@ -69,7 +74,9 @@ function projectCells(
     const cells = baseline.cells.slice();
     for (const effect of effects) {
         const restriction = effect.definition[baseline.pathMotionMode];
-        if (restriction === null) continue;
+        if (restriction === null) {
+            continue;
+        }
         for (const position of effect.positions) {
             const index = position[0] * baseline.columns + position[1];
             const cell = cells[index]!;
@@ -80,10 +87,15 @@ function projectCells(
                 }
             }
             const passable = cell.passable && !restriction.denyPassage;
-            const moveCost = baseline.pathMotionMode === "WALK"
-                ? Math.max(cell.moveCost, effect.definition.WALK!.costFloor)
-                : 1;
-            if (passable !== cell.passable || moveCost !== cell.moveCost || departures !== cell.departures) {
+            const moveCost =
+                baseline.pathMotionMode === "WALK"
+                    ? Math.max(cell.moveCost, effect.definition.WALK!.costFloor)
+                    : 1;
+            if (
+                passable !== cell.passable ||
+                moveCost !== cell.moveCost ||
+                departures !== cell.departures
+            ) {
                 cells[index] = Object.freeze({ passable, moveCost, departures });
             }
         }
@@ -95,9 +107,16 @@ function sameCells(a: readonly NavigationCell[], b: readonly NavigationCell[]): 
     for (let index = 0; index < a.length; index++) {
         const left = a[index]!;
         const right = b[index]!;
-        if (left === right) continue;
-        if (left.passable !== right.passable || left.moveCost !== right.moveCost
-            || DIRECTIONS.some(direction => left.departures[direction] !== right.departures[direction])) {
+        if (left === right) {
+            continue;
+        }
+        if (
+            left.passable !== right.passable ||
+            left.moveCost !== right.moveCost ||
+            DIRECTIONS.some(
+                (direction) => left.departures[direction] !== right.departures[direction],
+            )
+        ) {
             return false;
         }
     }
@@ -115,7 +134,9 @@ export function projectNavigationMaps(
         const base = baseline[mode];
         const current = previous[mode];
         const cells = projectCells(base, effects);
-        if (sameCells(cells, current.cells)) continue;
+        if (sameCells(cells, current.cells)) {
+            continue;
+        }
         const revision = current.revision + 1;
         if (!Number.isSafeInteger(revision)) {
             throw new RangeError("navigation revision overflow");

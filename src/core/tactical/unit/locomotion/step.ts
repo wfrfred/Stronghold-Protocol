@@ -1,27 +1,48 @@
 import { createRng } from "../../../common/rng.js";
 import type { Seed } from "../../../common/rng.js";
-import { World } from "../../geometry/coordinate.js";
-import type { WorldPosition } from "../../geometry/coordinate.js";
+import { createWorldOffset, World } from "../../geometry/coordinate.js";
+import type { WorldOffset, WorldPosition } from "../../geometry/coordinate.js";
 import type { NavigationFieldCache } from "../../navigation/cache.js";
+import { NavigationMap } from "../../navigation/map.js";
 import type { NavigationMaps } from "../../navigation/map.js";
-import { createNavigationPath } from "../../navigation/path.js";
 import { isNavigationGoalReached } from "../../navigation/request.js";
 import type { NavigationRequestId } from "../../navigation/request.js";
 import {
-    bindNavigationPath,
     clearNavigationRequest,
     getNavigationRequest,
     markNavigationArrived,
-    predictNavigation,
-    startNavigationRequest,
     steerNavigation,
 } from "../../navigation/state.js";
-import type { NavigationOutcome, NavigationState } from "../../navigation/state.js";
-import { advanceRoute, createRouteExecution, enterRoute, tickRouteWait } from "../../route/execution.js";
-import type { RouteTransition } from "../../route/execution.js";
-import type { RouteState } from "../../route/state.js";
-import type { LocomotionDefinition, RoutedLocomotiveUnit, RoutedLocomotionState } from "./state.js";
-import { integrateSteering } from "./steering.js";
+import type { NavigationOutcome } from "../../navigation/state.js";
+import { createRouteExecution, tickRouteWait } from "../../route/execution.js";
+import {
+    isRouteCheckpointReady,
+    isRouteEndReached,
+    isRouteMoveCheckpointReached,
+} from "../../route/plan.js";
+import { hasSpatialPresence, isSpatiallyPresent } from "../presence.js";
+import {
+    applyMotionOverride,
+    getNavigationBoundaryDirection,
+    reflectNavigationMovement,
+} from "./motion.js";
+import type { MotionOverride } from "./motion.js";
+import {
+    advanceRouteControl,
+    bindRouteNavigation,
+    enterRouteControl,
+    isMovingRoute,
+    predictRouteControl,
+    routeLocator,
+} from "./route-control.js";
+import type { LocatedRouteSignal, RouteControlTransition } from "./route-control.js";
+import type {
+    LocomotionDefinition,
+    RouteControlState,
+    RoutedLocomotiveUnit,
+    RoutedLocomotionState,
+} from "./state.js";
+import { integrateSteeringDirection } from "./steering.js";
 
 export interface RoutedLocomotionStepContext {
     readonly tick: number;
@@ -31,6 +52,7 @@ export interface RoutedLocomotionStepContext {
     readonly movementAllowed: boolean;
     readonly waitTickAllowed: boolean;
     readonly routeAdvanceAllowed: boolean;
+    readonly motionOverride?: MotionOverride;
     readonly rngState: Seed;
     readonly nextNavigationRequestId: NavigationRequestId;
 }
@@ -38,6 +60,8 @@ export interface RoutedLocomotionStepContext {
 export interface RoutedLocomotionStep {
     readonly state: RoutedLocomotionState;
     readonly position: WorldPosition;
+    readonly present: boolean;
+    readonly signals: readonly LocatedRouteSignal[];
     readonly rngState: Seed;
     readonly nextNavigationRequestId: NavigationRequestId;
     readonly outcomes: readonly NavigationOutcome[];
@@ -45,6 +69,7 @@ export interface RoutedLocomotionStep {
 
 export interface RoutedUnitStep<U extends RoutedLocomotiveUnit = RoutedLocomotiveUnit> {
     readonly unit: U;
+    readonly signals: readonly LocatedRouteSignal[];
     readonly rngState: Seed;
     readonly nextNavigationRequestId: NavigationRequestId;
     readonly outcomes: readonly NavigationOutcome[];
@@ -54,44 +79,56 @@ export function stepRoutedUnit<U extends RoutedLocomotiveUnit>(
     unit: U,
     context: RoutedLocomotionStepContext,
 ): RoutedUnitStep<U> {
-    const step = stepRoutedLocomotion(unit.locomotion, unit.position, unit.definition.locomotion, context);
+    const step = stepRoutedLocomotion(
+        unit.locomotion,
+        unit.position,
+        unit.definition.locomotion,
+        context,
+        isSpatiallyPresent(unit),
+    );
+    const next = { ...unit, position: step.position, locomotion: step.state };
     return {
-        unit: { ...unit, position: step.position, locomotion: step.state },
+        unit:
+            hasSpatialPresence(unit) || step.signals.some(({ signal }) => signal.type !== "ALERT")
+                ? {
+                      ...next,
+                      spatialPresence:
+                          hasSpatialPresence(unit) && unit.spatialPresence.present === step.present
+                              ? unit.spatialPresence
+                              : { present: step.present },
+                  }
+                : next,
+        signals: step.signals,
         rngState: step.rngState,
         nextNavigationRequestId: step.nextNavigationRequestId,
         outcomes: step.outcomes,
     };
 }
 
-function isMovingRoute(route: RouteState): boolean {
-    return route.progress.phase === "END"
-        || (route.progress.phase === "CHECKPOINTS" && route.progress.checkpoint.type === "MOVE");
-}
-
-function installTransition(
-    navigation: NavigationState,
-    transition: RouteTransition,
-): NavigationState {
-    if (transition.request !== undefined) return startNavigationRequest(navigation, transition.request);
-    return isMovingRoute(transition.state) ? navigation : clearNavigationRequest(navigation);
-}
-
-function bindCurrentPath(
-    navigation: NavigationState,
+function isMoveCheckpointReached(
+    control: RouteControlState,
     position: WorldPosition,
     context: RoutedLocomotionStepContext,
-): NavigationState {
-    const activity = navigation.execution.activity;
-    if (activity.type === "IDLE") throw new Error("cannot bind navigation without a request");
-    const map = context.maps[navigation.pathMotionMode];
-    if ((activity.type === "FOLLOWING" || activity.type === "UNREACHABLE")
-        && activity.path.field.map === map) {
-        return navigation;
+): boolean {
+    const route = control.route;
+    if (route.progress.phase !== "CHECKPOINTS" || route.progress.checkpoint.type !== "MOVE") {
+        return false;
     }
-    const request = getNavigationRequest(navigation);
-    if (request === null) throw new Error("moving route requires a navigation request");
-    const path = createNavigationPath(request, context.fieldCache.get(map, request));
-    return bindNavigationPath(navigation, path, position).state;
+    const locator = routeLocator(control, position);
+    if (isRouteMoveCheckpointReached(route, locator, true)) {
+        return true;
+    }
+    if (route.alwaysCheckCurrentPoint) {
+        return false;
+    }
+    const request = getNavigationRequest(control.navigation)!;
+    const map = context.maps[control.navigation.pathMotionMode];
+    const tile = World.toTile(locator);
+    const field = context.fieldCache.get(map, request);
+    const reachable =
+        NavigationMap.get(map, tile)?.passable === true &&
+        field.nodes[tile[0] * map.columns + tile[1]]?.type !== "UNREACHABLE";
+    return isRouteMoveCheckpointReached(route, locator, reachable);
 }
 
 export function stepRoutedLocomotion(
@@ -99,120 +136,280 @@ export function stepRoutedLocomotion(
     position: WorldPosition,
     definition: LocomotionDefinition,
     context: RoutedLocomotionStepContext,
+    present = true,
 ): RoutedLocomotionStep {
-    if (state.alternativeRoute !== null) {
-        throw new RangeError("alternative route execution is not supported");
-    }
-    const execution = createRouteExecution(createRng(context.rngState), context.nextNavigationRequestId, context.tick);
-    const mainRoute = state.mainRoute;
-    const initial = enterRoute(mainRoute.route, execution);
-    let route = initial.state;
-    let navigation = installTransition(mainRoute.navigation, initial);
-    const initialPosition = position;
-    let steeringState = state.steering;
+    const execution = createRouteExecution(
+        createRng(context.rngState),
+        context.nextNavigationRequestId,
+        context.tick,
+    );
+    const signals: LocatedRouteSignal[] = [];
     const outcomes: NavigationOutcome[] = [];
-    const previouslyArrived = mainRoute.navigation.execution.activity.type === "ARRIVED"
-        ? mainRoute.navigation.execution.activity.request.id
-        : null;
-    const moveSpeedPerTick = definition.moveSpeedPerTick * context.moveMultiplier;
-    const stepDistance = moveSpeedPerTick;
-    if (!Number.isFinite(moveSpeedPerTick) || moveSpeedPerTick < 0) {
+    const arrived = new Set<NavigationRequestId>();
+    for (const control of [state.mainRoute, state.alternativeRoute]) {
+        if (control?.navigation.execution.activity.type === "ARRIVED") {
+            arrived.add(control.navigation.execution.activity.request.id);
+        }
+    }
+    let steering = state.steering;
+    let moving = false;
+    const speed = definition.moveSpeedPerTick * context.moveMultiplier;
+    if (!Number.isFinite(speed) || speed < 0) {
         throw new RangeError("movement budget must be finite and non-negative");
     }
 
-    function advance(): void {
-        const transition = advanceRoute(route, execution);
-        route = transition.state;
-        navigation = installTransition(navigation, transition);
+    function apply(transition: RouteControlTransition): RouteControlState {
+        position = transition.position;
+        present = transition.present;
+        signals.push(...transition.signals);
+        return transition.control;
     }
-
-    function reportArrival(requestId: NavigationRequestId): void {
-        if (requestId !== previouslyArrived
-            && !outcomes.some(outcome => outcome.type === "ARRIVED" && outcome.requestId === requestId)) {
-            outcomes.push({ type: "ARRIVED", requestId });
+    function advance(control: RouteControlState): RouteControlState {
+        return apply(advanceRouteControl(control, position, present, execution));
+    }
+    function reportArrival(control: RouteControlState): RouteControlState {
+        const request = getNavigationRequest(control.navigation)!;
+        if (!arrived.has(request.id)) {
+            outcomes.push({ type: "ARRIVED", requestId: request.id });
+            arrived.add(request.id);
         }
+        return { ...control, navigation: markNavigationArrived(control.navigation) };
     }
-
-    if (context.movementAllowed && isMovingRoute(route)) {
-        navigation = bindCurrentPath(navigation, position, context);
-        const activity = navigation.execution.activity;
-        if (activity.type === "FOLLOWING" || activity.type === "UNREACHABLE") {
-            const prediction = predictNavigation(navigation, position);
-            navigation = prediction.state;
-            const decision = prediction.selection.decision;
-            if (decision.type === "TARGET" && World.withinDistance(position, decision.target, stepDistance)) {
-                position = decision.target;
-            } else if (decision.type === "TARGET") {
-                while (isMovingRoute(route)
-                    || (route.progress.phase === "CHECKPOINTS"
-                        && route.progress.checkpoint.type === "WAIT"
-                        && route.progress.checkpoint.remainingTicks <= 0)) {
-                    if (!isMovingRoute(route)) {
-                        if (!context.routeAdvanceAllowed) break;
-                        advance();
-                        continue;
-                    }
-                    navigation = bindCurrentPath(navigation, position, context);
-                    const current = navigation.execution.activity;
-                    if (current.type !== "FOLLOWING" && current.type !== "UNREACHABLE") break;
-                    const steering = steerNavigation(navigation, position);
-                    navigation = steering.state;
-                    for (const outcome of steering.outcomes) {
-                        if (outcome.type === "ARRIVED") reportArrival(outcome.requestId);
-                        else outcomes.push(outcome);
-                    }
-                    switch (steering.selection.decision.type) {
-                        case "MOVE": {
-                            const movement = integrateSteering(
-                                steeringState,
-                                position,
-                                steering.selection.decision.target,
-                                moveSpeedPerTick,
-                                definition.steeringParameters,
-                            );
-                            position = movement.position;
-                            steeringState = movement.state;
-                            break;
-                        }
-                        case "ARRIVED":
-                            if (context.routeAdvanceAllowed) {
-                                advance();
-                                continue;
-                            }
-                            break;
-                        case "UNREACHABLE":
-                        case "OUTSIDE_MAP":
-                            break;
-                    }
+    function heading(control: RouteControlState): {
+        readonly control: RouteControlState;
+        readonly direction: WorldOffset;
+    } {
+        while (true) {
+            if (control.route.progress.phase === "COMPLETED") {
+                break;
+            }
+            const boundary = getNavigationBoundaryDirection(
+                context.maps[control.navigation.pathMotionMode],
+                routeLocator(control, position),
+            );
+            if (boundary[0] !== 0 || boundary[1] !== 0) {
+                return { control, direction: boundary };
+            }
+            if (isRouteCheckpointReady(control.route)) {
+                if (!context.routeAdvanceAllowed) {
                     break;
                 }
+                control = advance(control);
+                continue;
+            }
+            if (!isMovingRoute(control.route)) {
+                break;
+            }
+            control = bindRouteNavigation(control, position, context);
+            const activity = control.navigation.execution.activity;
+            if (activity.type !== "FOLLOWING" && activity.type !== "UNREACHABLE") {
+                if (
+                    context.routeAdvanceAllowed &&
+                    isMoveCheckpointReached(control, position, context)
+                ) {
+                    control = advance(control);
+                    continue;
+                }
+                break;
+            }
+            const next = steerNavigation(control.navigation, position);
+            if (
+                control.route.progress.phase === "END" &&
+                next.selection.decision.type === "ARRIVED"
+            ) {
+                const request = getNavigationRequest(control.navigation)!;
+                control = {
+                    ...control,
+                    navigation: {
+                        ...next.state,
+                        execution: {
+                            ...next.state.execution,
+                            activity: {
+                                type: "FOLLOWING",
+                                path: activity.path,
+                                cursor: next.selection.cursor,
+                            },
+                        },
+                    },
+                };
+                return {
+                    control,
+                    direction: World.difference(
+                        request.goal.position,
+                        routeLocator(control, position),
+                    ),
+                };
+            }
+            control = { ...control, navigation: next.state };
+            for (const outcome of next.outcomes) {
+                if (outcome.type === "ARRIVED") {
+                    if (arrived.has(outcome.requestId)) {
+                        continue;
+                    }
+                    arrived.add(outcome.requestId);
+                }
+                outcomes.push(outcome);
+            }
+            if (next.selection.decision.type === "ARRIVED") {
+                if (context.routeAdvanceAllowed) {
+                    control = advance(control);
+                    continue;
+                }
+                break;
+            }
+            if (
+                context.routeAdvanceAllowed &&
+                isMoveCheckpointReached(control, position, context)
+            ) {
+                control = advance(control);
+                continue;
+            }
+            if (next.selection.decision.type === "MOVE" && present) {
+                return {
+                    control,
+                    direction: World.difference(next.selection.decision.target, position),
+                };
+            }
+            break;
+        }
+        return { control, direction: createWorldOffset(0, 0) };
+    }
+    function tickWait(control: RouteControlState): RouteControlState {
+        const route = context.waitTickAllowed
+            ? tickRouteWait(control.route, context.tick)
+            : control.route;
+        return route === control.route ? control : { ...control, route };
+    }
+    function advanceReached(control: RouteControlState): RouteControlState {
+        if (!context.routeAdvanceAllowed) {
+            return control;
+        }
+        if (isRouteCheckpointReady(control.route)) {
+            return advance(control);
+        }
+        if (!isMovingRoute(control.route)) {
+            return control;
+        }
+        const request = getNavigationRequest(control.navigation)!;
+        const reached = isNavigationGoalReached(request, routeLocator(control, position));
+        if (reached) {
+            control = reportArrival(control);
+        }
+        if (reached || isMoveCheckpointReached(control, position, context)) {
+            return advance(control);
+        }
+        return control;
+    }
+    function completeAtEnd(control: RouteControlState): RouteControlState {
+        if (
+            !context.routeAdvanceAllowed ||
+            control.route.progress.phase === "COMPLETED" ||
+            !isRouteEndReached(control.route, routeLocator(control, position))
+        ) {
+            return control;
+        }
+        if (control.route.progress.phase === "END") {
+            control = reportArrival(control);
+        }
+        return {
+            route: { ...control.route, progress: { phase: "COMPLETED" } },
+            navigation: clearNavigationRequest(control.navigation),
+        };
+    }
+
+    let main = apply(enterRouteControl(state.mainRoute, position, present, execution));
+    let alternative =
+        state.alternativeRoute === null
+            ? null
+            : apply(enterRouteControl(state.alternativeRoute, position, present, execution));
+    let active = alternative ?? main;
+    const boundary = getNavigationBoundaryDirection(
+        context.maps[active.navigation.pathMotionMode],
+        position,
+    );
+    if (context.motionOverride !== undefined) {
+        if (
+            context.motionOverride.type === "DISPLACEMENT" ||
+            (context.movementAllowed && present)
+        ) {
+            const next = applyMotionOverride(
+                steering,
+                position,
+                context.motionOverride,
+                speed,
+                definition.steeringParameters,
+            );
+            moving =
+                context.motionOverride.type === "DIRECTION" &&
+                (next.position[0] !== position[0] || next.position[1] !== position[1]);
+            position = next.position;
+            steering = next.state;
+        }
+    } else if (context.movementAllowed && present && (boundary[0] !== 0 || boundary[1] !== 0)) {
+        const next = World.translate(position, World.scale(boundary, speed));
+        moving = next[0] !== position[0] || next[1] !== position[1];
+        position = next;
+    } else if (context.movementAllowed && present) {
+        const locatorBoundary = getNavigationBoundaryDirection(
+            context.maps[active.navigation.pathMotionMode],
+            routeLocator(active, position),
+        );
+        let target: WorldPosition | null = null;
+        if (
+            active.route.progress.phase !== "COMPLETED" &&
+            (locatorBoundary[0] !== 0 || locatorBoundary[1] !== 0)
+        ) {
+            target = World.translate(position, locatorBoundary);
+        } else {
+            const prediction = predictRouteControl(active, position, context);
+            active = prediction.control;
+            if (prediction.selection?.decision.type === "TARGET") {
+                target = prediction.selection.decision.target;
+            }
+        }
+        if (target !== null && World.withinDistance(position, target, speed)) {
+            moving = target[0] !== position[0] || target[1] !== position[1];
+            position = target;
+        } else {
+            const next = heading(active);
+            active = next.control;
+            if (present) {
+                const movement = integrateSteeringDirection(
+                    steering,
+                    position,
+                    next.direction,
+                    speed,
+                    definition.steeringParameters,
+                );
+                const reflected = reflectNavigationMovement(
+                    position,
+                    movement.position,
+                    context.maps[active.navigation.pathMotionMode],
+                );
+                moving = reflected[0] !== position[0] || reflected[1] !== position[1];
+                position = reflected;
+                steering = movement.state;
             }
         }
     }
-
-    if (context.waitTickAllowed) route = tickRouteWait(route, context.tick);
-    if (route.progress.phase === "CHECKPOINTS"
-        && route.progress.checkpoint.type === "WAIT"
-        && route.progress.checkpoint.remainingTicks <= 0) {
-        if (context.routeAdvanceAllowed) advance();
-    } else if (isMovingRoute(route)) {
-        const request = getNavigationRequest(navigation);
-        if (request === null) throw new Error("moving route requires a navigation request");
-        if (isNavigationGoalReached(request, World.translate(position, navigation.execution.locatorOffset))) {
-            navigation = markNavigationArrived(navigation);
-            reportArrival(request.id);
-            if (context.routeAdvanceAllowed) advance();
-        }
+    if (alternative === null) {
+        main = active;
+    } else {
+        alternative = active;
     }
+    main = tickWait(main);
+    if (alternative === null) {
+        main = advanceReached(main);
+    } else {
+        alternative = completeAtEnd(advanceReached(tickWait(alternative)));
+    }
+    main = completeAtEnd(main);
     return {
         position,
-        state: {
-            ...state,
-            moving: position[0] !== initialPosition[0] || position[1] !== initialPosition[1],
-            steering: steeringState,
-            mainRoute: { route, navigation },
-        },
-        ...execution.state(),
+        present,
+        signals,
         outcomes,
+        state: { ...state, moving, steering, mainRoute: main, alternativeRoute: alternative },
+        ...execution.state(),
     };
 }

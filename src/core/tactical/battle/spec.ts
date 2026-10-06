@@ -23,7 +23,9 @@ export interface BattleSpec {
 }
 
 function nonnegative(value: number, name: string): number {
-    if (!Number.isFinite(value) || value < 0) throw new RangeError(`${name} must be finite and non-negative`);
+    if (!Number.isFinite(value) || value < 0) {
+        throw new RangeError(`${name} must be finite and non-negative`);
+    }
     return value;
 }
 
@@ -32,21 +34,34 @@ export function createBattleSpec(spec: BattleSpec): BattleSpec {
         throw new RangeError("battle must have a finite positive tick budget");
     }
     nonnegative(spec.moveMultiplier, "moveMultiplier");
-    for (const [name, value] of [["nextUnitId", spec.nextUnitId], ["nextNavigationRequestId", spec.nextNavigationRequestId]] as const) {
-        if (!Number.isSafeInteger(value) || value < 0) throw new RangeError(`${name} must be a non-negative safe integer`);
+    for (const [name, value] of [
+        ["nextUnitId", spec.nextUnitId],
+        ["nextNavigationRequestId", spec.nextNavigationRequestId],
+    ] as const) {
+        if (!Number.isSafeInteger(value) || value < 0) {
+            throw new RangeError(`${name} must be a non-negative safe integer`);
+        }
     }
     createRng(spec.rngState);
     const ids = new Set<number>();
     for (const definition of spec.predefines) {
-        if (definition === undefined) throw new TypeError("predefined definitions must be dense");
-        if (ids.has(definition.id)) throw new RangeError(`duplicate predefined definition: ${definition.id}`);
+        if (definition === undefined) {
+            throw new TypeError("predefined definitions must be dense");
+        }
+        if (ids.has(definition.id)) {
+            throw new RangeError(`duplicate predefined definition: ${definition.id}`);
+        }
         ids.add(definition.id);
     }
     return Object.freeze({
         ...spec,
         schedule: createSpawnScheduleDefinition(spec.schedule),
         predefines: Object.freeze([...spec.predefines]),
-        initialMechanisms: Object.freeze(spec.initialMechanisms.map(mechanism => Object.freeze({ ...mechanism }))),
-        initialEffects: Object.freeze(spec.initialEffects.map(effect => Object.freeze({ ...effect }))),
+        initialMechanisms: Object.freeze(
+            spec.initialMechanisms.map((mechanism) => Object.freeze({ ...mechanism })),
+        ),
+        initialEffects: Object.freeze(
+            spec.initialEffects.map((effect) => Object.freeze({ ...effect })),
+        ),
     });
 }

@@ -14,27 +14,27 @@ export interface RouteWaitProgress {
 
 export type RouteCheckpointProgress =
     | {
-        readonly type: "NOT_ENTERED";
-    }
+          readonly type: "NOT_ENTERED";
+      }
     | {
-        readonly type: "ENTERED";
-    }
+          readonly type: "ENTERED";
+      }
     | RouteMoveProgress
     | RouteWaitProgress;
 
 export type RouteProgress =
     | {
-        readonly phase: "CHECKPOINTS";
-        checkpointIndex: number;
-        checkpoint: RouteCheckpointProgress;
-    }
+          readonly phase: "CHECKPOINTS";
+          readonly checkpointIndex: number;
+          readonly checkpoint: RouteCheckpointProgress;
+      }
     | {
-        readonly phase: "END";
-        readonly move: RouteMoveProgress;
-    }
+          readonly phase: "END";
+          readonly move: RouteMoveProgress;
+      }
     | {
-        readonly phase: "COMPLETED";
-    };
+          readonly phase: "COMPLETED";
+      };
 
 export interface RouteTiming {
     readonly waveStartedAtTick: number;
@@ -45,7 +45,7 @@ export interface RouteState {
     readonly definition: RouteDefinition;
     readonly timing: RouteTiming;
     readonly alwaysCheckCurrentPoint: boolean;
-    progress: RouteProgress;
+    readonly progress: RouteProgress;
 }
 
 export function copyRouteState(state: Readonly<RouteState>): RouteState {

@@ -7,6 +7,11 @@ import { mitigate } from '../../server/sim/damage.js';
 import { Unit } from '../../server/sim/units.js';
 import { getDefaultSource, hasGeneratedData } from '../../server/sim/simdata.js';
 import { makeBattle, flatStage, chessRec, enemyRec } from '../helpers/battleHarness.js';
+import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map.js';
+import { createBattlefieldRuntime } from '../../dist/core/tactical/battlefield/runtime.js';
+import { createMechanismDefinition } from '../../dist/core/tactical/battlefield/mechanism.js';
+import { createNavigationEffectDefinition, createNavigationSpatialEffect } from '../../dist/core/tactical/battlefield/navigation-effect.js';
+import { hasSpatialPresence, isSpatiallyPresent } from '../../dist/core/tactical/unit/presence.js';
 
 const approx = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
 
@@ -204,4 +209,126 @@ test('simdata normalises real chess, enemy, token, stage and routes', () => {
   const st = ds.getStage('act2autochess_m01');
   assert.equal(st.rows.length, 19);
   assert.equal(st.rows[9][2], 'E');
+});
+
+const presenceBattlefield = () => createBattlefieldRuntime({
+  map: createBattlefieldMap(1, 5, Array.from({ length: 5 }, () => ({
+    heightType: 'LOWLAND', buildableType: 'MELEE', passableMask: 'ALL',
+    playerSideMask: 'ALL', terrain: 'NORMAL', mechanism: null,
+  }))),
+});
+
+const presenceUnit = (id, position) => ({
+  id, definition: Object.freeze({ id: `presence_${id}` }), position: Object.freeze(position),
+  vitality: { hp: 100 }, spatialPresence: { present: true },
+});
+
+const presenceEffect = (id, source, region, costFloor = 1000) => createNavigationSpatialEffect({
+  id, source, region,
+  definition: createNavigationEffectDefinition({
+    id: `presence_effect_${id}`, WALK: { denyPassage: false, deniedDepartures: [], costFloor }, FLY: null,
+  }),
+  active: true, expiresAtTick: null,
+});
+
+test('core spatial presence keeps unit identity and isolates state while removing only spatial membership', () => {
+  const runtime = presenceBattlefield();
+  const unit = presenceUnit(1, [2, 0]);
+  const bare = { id: 2, definition: Object.freeze({ id: 'bare' }), position: Object.freeze([2, 0]) };
+  assert.equal(hasSpatialPresence(unit), true);
+  assert.equal(hasSpatialPresence(bare), false);
+  assert.equal(isSpatiallyPresent(bare), true);
+  runtime.apply([{ type: 'REGISTER_UNIT', unit }, { type: 'REGISTER_UNIT', unit: bare }]);
+  const baseline = runtime.navigationMaps;
+  unit.spatialPresence.present = false;
+  assert.equal(runtime.getUnit(1).spatialPresence.present, true);
+  const hidden = runtime.getUnit(1);
+  hidden.spatialPresence.present = false;
+  const result = runtime.apply([{ type: 'UPDATE_UNIT', unit: hidden }]);
+  assert.deepEqual(result.removedUnits, []);
+  assert.deepEqual(runtime.unitIds, [1, 2]);
+  assert.deepEqual(runtime.unitsAt([0, 2]).map(unit => unit.id), [2]);
+  assert.equal(runtime.getUnit(1).definition, hidden.definition);
+  assert.equal(runtime.getUnit(1).vitality.hp, 100);
+  assert.equal(runtime.navigationMaps, baseline);
+  hidden.spatialPresence.present = true;
+  assert.equal(runtime.getUnit(1).spatialPresence.present, false);
+  const restored = runtime.getUnit(1);
+  restored.spatialPresence.present = true;
+  runtime.apply([{ type: 'UPDATE_UNIT', unit: restored }]);
+  assert.deepEqual(runtime.unitsAt([0, 2]).map(unit => unit.id), [1, 2]);
+});
+
+test('core hidden effect sources and anchors suspend navigation contributions without removing effects', () => {
+  const runtime = presenceBattlefield();
+  const source = presenceUnit(1, [0, 0]), anchor = presenceUnit(2, [2, 0]);
+  const bare = { id: 3, definition: Object.freeze({ id: 'bare' }), position: Object.freeze([4, 0]) };
+  const fixed = position => ({ type: 'FIXED', position, range: [[0, 0]], direction: 'RIGHT' });
+  runtime.apply([
+    { type: 'REGISTER_UNIT', unit: source }, { type: 'REGISTER_UNIT', unit: anchor },
+    { type: 'REGISTER_UNIT', unit: bare },
+    { type: 'REGISTER_MECHANISM', mechanism: { id: 1, definition: createMechanismDefinition({ id: 'presence_mechanism' }), active: true } },
+    { type: 'ADD_EFFECT', effect: presenceEffect(1, { type: 'UNIT', unitId: 1 }, fixed([0, 1])) },
+    { type: 'ADD_EFFECT', effect: presenceEffect(2, { type: 'MECHANISM', mechanismId: 1 },
+      { type: 'FOLLOW_UNIT', unitId: 2, range: [[0, 0]], direction: 'RIGHT' }) },
+    { type: 'ADD_EFFECT', effect: presenceEffect(3, { type: 'UNIT', unitId: 3 }, fixed([0, 4]), 2000) },
+  ]);
+  const fly = runtime.navigationMaps.FLY;
+  assert.deepEqual(runtime.navigationMaps.WALK.cells.map(cell => cell.moveCost), [1, 1000, 1000, 1, 2000]);
+  source.spatialPresence.present = false;
+  anchor.spatialPresence.present = false;
+  const hidden = runtime.apply([{ type: 'UPDATE_UNIT', unit: source }, { type: 'UPDATE_UNIT', unit: anchor }]);
+  assert.deepEqual(hidden.removedEffects, []);
+  assert.deepEqual(hidden.changedNavigationModes, ['WALK']);
+  assert.deepEqual(runtime.effectIds, [1, 2, 3]);
+  assert.equal(runtime.getEffect(1).active, true);
+  assert.deepEqual(runtime.effectsFrom({ type: 'UNIT', unitId: 1 }), [1]);
+  assert.deepEqual(runtime.effectsFollowing(2), [2]);
+  assert.deepEqual(runtime.effectsAt([0, 1]), []);
+  assert.deepEqual(runtime.effectsAt([0, 2]), []);
+  assert.deepEqual(runtime.navigationMaps.WALK.cells.map(cell => cell.moveCost), [1, 1, 1, 1, 2000]);
+  const dormant = runtime.navigationMaps;
+  runtime.apply([{ type: 'MOVE_UNIT', unitId: 2, position: Object.freeze([3, 0]) }]);
+  assert.equal(runtime.navigationMaps, dormant);
+  assert.deepEqual(runtime.unitsAt([0, 3]), []);
+  source.spatialPresence.present = true;
+  const movedAnchor = runtime.getUnit(2);
+  movedAnchor.spatialPresence.present = true;
+  runtime.apply([{ type: 'UPDATE_UNIT', unit: source }, { type: 'UPDATE_UNIT', unit: movedAnchor }]);
+  assert.deepEqual(runtime.effectsAt([0, 3]), [2]);
+  assert.deepEqual(runtime.unitsAt([0, 3]).map(unit => unit.id), [2]);
+  assert.deepEqual(runtime.navigationMaps.WALK.cells.map(cell => cell.moveCost), [1, 1000, 1, 1000, 2000]);
+  assert.equal(runtime.navigationMaps.FLY, fly);
+  runtime.apply([{ type: 'SET_MECHANISM_ACTIVE', mechanismId: 1, active: false }]);
+  const inactive = runtime.navigationMaps;
+  movedAnchor.spatialPresence.present = false;
+  runtime.apply([{ type: 'UPDATE_UNIT', unit: movedAnchor }]);
+  movedAnchor.spatialPresence.present = true;
+  runtime.apply([{ type: 'UPDATE_UNIT', unit: movedAnchor }]);
+  assert.equal(runtime.navigationMaps, inactive);
+  assert.deepEqual(runtime.effectsAt([0, 3]), []);
+});
+
+test('core failed presence updates restore spatial membership and projected maps atomically', () => {
+  const runtime = presenceBattlefield();
+  const unit = presenceUnit(1, [2, 0]);
+  runtime.apply([
+    { type: 'REGISTER_UNIT', unit },
+    { type: 'ADD_EFFECT', effect: presenceEffect(1, { type: 'UNIT', unitId: 1 },
+      { type: 'FOLLOW_UNIT', unitId: 1, range: [[0, 0]], direction: 'RIGHT' }) },
+  ]);
+  const maps = runtime.navigationMaps;
+  assert.throws(() => runtime.transact(field => {
+    const hidden = field.getUnit(1);
+    hidden.spatialPresence.present = false;
+    field.apply([{ type: 'UPDATE_UNIT', unit: hidden }]);
+    assert.deepEqual(field.unitsAt([0, 2]), []);
+    assert.deepEqual(field.effectsAt([0, 2]), []);
+    assert.notEqual(field.navigationMaps, maps);
+    throw new Error('abort presence');
+  }), /abort presence/);
+  assert.equal(runtime.navigationMaps, maps);
+  assert.equal(runtime.getUnit(1).spatialPresence.present, true);
+  assert.deepEqual(runtime.unitsAt([0, 2]).map(unit => unit.id), [1]);
+  assert.deepEqual(runtime.effectsAt([0, 2]), [1]);
 });

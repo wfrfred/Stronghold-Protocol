@@ -1,4 +1,9 @@
-import { createWorldOffset, createWorldPosition, isWorldPosition } from "../geometry/coordinate.js";
+import {
+    createTilePosition,
+    createWorldOffset,
+    createWorldPosition,
+    isWorldPosition,
+} from "../geometry/coordinate.js";
 import type { WorldOffset, WorldPosition } from "../geometry/coordinate.js";
 import {
     initializeNavigationCursor,
@@ -15,32 +20,37 @@ import type {
     NavigationSelection,
     NavigationVisitHistory,
 } from "./path.js";
-import type { NavigationRequest, NavigationRequestId } from "./request.js";
+import type { NavigationIntent, NavigationRequest, NavigationRequestId } from "./request.js";
 
 export type NavigationActivity =
     | {
-        readonly type: "IDLE";
-    }
+          readonly type: "IDLE";
+      }
     | {
-        readonly type: "NEEDS_PATH";
-        readonly request: NavigationRequest;
-    }
+          readonly type: "PREVIEWING";
+          readonly path: NavigationPath<NavigationIntent>;
+          readonly cursor: NavigationPathCursor;
+      }
     | {
-        readonly type: "FOLLOWING";
-        readonly path: NavigationPath;
-        readonly cursor: NavigationPathCursor;
-    }
+          readonly type: "NEEDS_PATH";
+          readonly request: NavigationRequest;
+      }
     | {
-        readonly type: "ARRIVED";
-        readonly request: NavigationRequest;
-    }
+          readonly type: "FOLLOWING";
+          readonly path: NavigationPath;
+          readonly cursor: NavigationPathCursor;
+      }
     | {
-        readonly type: "UNREACHABLE";
-        readonly path: NavigationPath;
-        readonly cursor: NavigationPathCursor;
-        readonly position: WorldPosition;
-        readonly reason: NavigationFailureReason;
-    };
+          readonly type: "ARRIVED";
+          readonly request: NavigationRequest;
+      }
+    | {
+          readonly type: "UNREACHABLE";
+          readonly path: NavigationPath;
+          readonly cursor: NavigationPathCursor;
+          readonly position: WorldPosition;
+          readonly reason: NavigationFailureReason;
+      };
 
 export interface NavigationExecution {
     readonly locatorOffset: WorldOffset;
@@ -49,20 +59,20 @@ export interface NavigationExecution {
 }
 
 export interface NavigationState {
-    pathMotionMode: PathMotionMode;
-    execution: NavigationExecution;
+    readonly pathMotionMode: PathMotionMode;
+    readonly execution: NavigationExecution;
 }
 
 export type NavigationOutcome =
     | {
-        readonly type: "ARRIVED";
-        readonly requestId: NavigationRequestId;
-    }
+          readonly type: "ARRIVED";
+          readonly requestId: NavigationRequestId;
+      }
     | {
-        readonly type: "UNREACHABLE";
-        readonly requestId: NavigationRequestId;
-        readonly reason: NavigationFailureReason;
-    };
+          readonly type: "UNREACHABLE";
+          readonly requestId: NavigationRequestId;
+          readonly reason: NavigationFailureReason;
+      };
 
 export interface NavigationBinding {
     readonly state: NavigationState;
@@ -80,7 +90,7 @@ export interface NavigationSteering {
     readonly outcomes: readonly NavigationOutcome[];
 }
 
-type ActiveNavigation = Extract<NavigationActivity, { readonly path: NavigationPath }>;
+type ActiveNavigation = Extract<NavigationActivity, { readonly type: "FOLLOWING" | "UNREACHABLE" }>;
 
 function activeNavigation(state: NavigationState): ActiveNavigation {
     const activity = state.execution.activity;
@@ -92,25 +102,53 @@ function activeNavigation(state: NavigationState): ActiveNavigation {
 
 export function getNavigationRequest(state: Readonly<NavigationState>): NavigationRequest | null {
     const activity = state.execution.activity;
-    if (activity.type === "IDLE") return null;
+    if (activity.type === "IDLE" || activity.type === "PREVIEWING") {
+        return null;
+    }
     return activity.type === "FOLLOWING" || activity.type === "UNREACHABLE"
         ? activity.path.request
         : activity.request;
 }
 
+function copyCursor(cursor: NavigationPathCursor): NavigationPathCursor {
+    return cursor.type === "FIELD"
+        ? {
+              ...cursor,
+              nextNode: Object.isFrozen(cursor.nextNode)
+                  ? cursor.nextNode
+                  : createTilePosition(...cursor.nextNode),
+          }
+        : { ...cursor };
+}
+
 export function copyNavigationState(state: Readonly<NavigationState>): NavigationState {
     const activity = state.execution.activity;
+    const copiedActivity =
+        activity.type === "UNREACHABLE"
+            ? {
+                  ...activity,
+                  cursor: copyCursor(activity.cursor),
+                  position: Object.isFrozen(activity.position)
+                      ? activity.position
+                      : createWorldPosition(...activity.position),
+              }
+            : activity.type === "FOLLOWING" || activity.type === "PREVIEWING"
+              ? { ...activity, cursor: copyCursor(activity.cursor) }
+              : { ...activity };
     return {
         ...state,
         execution: {
             ...state.execution,
+            locatorOffset: Object.isFrozen(state.execution.locatorOffset)
+                ? state.execution.locatorOffset
+                : createWorldOffset(...state.execution.locatorOffset),
             visits: {
                 ...state.execution.visits,
-                visitedCenters: [...state.execution.visits.visitedCenters],
+                visitedCenters: state.execution.visits.visitedCenters.map((position) =>
+                    Object.isFrozen(position) ? position : createTilePosition(...position),
+                ),
             },
-            activity: activity.type === "FOLLOWING" || activity.type === "UNREACHABLE"
-                ? { ...activity, cursor: { ...activity.cursor } }
-                : { ...activity },
+            activity: copiedActivity,
         },
     };
 }
@@ -158,21 +196,33 @@ export function startNavigationRequest(
 }
 
 export function clearNavigationRequest(state: NavigationState): NavigationState {
-    return state.execution.activity.type === "IDLE" ? state : updateExecution(state, { type: "IDLE" });
+    return state.execution.activity.type === "IDLE"
+        ? state
+        : updateExecution(state, { type: "IDLE" });
 }
 
-export function invalidateNavigationPath(state: NavigationState, map: NavigationMap): NavigationState {
+export function invalidateNavigationPath(
+    state: NavigationState,
+    map: NavigationMap,
+): NavigationState {
     const activity = state.execution.activity;
-    return (activity.type === "FOLLOWING" || activity.type === "UNREACHABLE")
-        && activity.path.field.map !== map
+    if (activity.type === "PREVIEWING") {
+        return activity.path.field.map === map ? state : clearNavigationRequest(state);
+    }
+    return (activity.type === "FOLLOWING" || activity.type === "UNREACHABLE") &&
+        activity.path.field.map !== map
         ? startNavigationRequest(state, activity.path.request)
         : state;
 }
 
 export function markNavigationArrived(state: NavigationState): NavigationState {
-    if (state.execution.activity.type === "ARRIVED") return state;
+    if (state.execution.activity.type === "ARRIVED") {
+        return state;
+    }
     const request = getNavigationRequest(state);
-    if (request === null) throw new Error("navigation has no current request");
+    if (request === null) {
+        throw new Error("navigation has no current request");
+    }
     return updateExecution(state, { type: "ARRIVED", request });
 }
 
@@ -182,17 +232,24 @@ export function bindNavigationPath(
     position: WorldPosition,
 ): NavigationBinding {
     const request = getNavigationRequest(state);
-    if (request === null) throw new Error("navigation has no current request");
+    if (request === null) {
+        throw new Error("navigation has no current request");
+    }
     if (path.request.id !== request.id) {
         throw new RangeError("navigation path belongs to a different request");
     }
     if (path.field.map.pathMotionMode !== state.pathMotionMode) {
         throw new RangeError("navigation map does not match the current motion mode");
     }
-    const initialization = initializeNavigationCursor(path, position, state.execution.locatorOffset);
-    const next = initialization.type === "READY"
-        ? updateExecution(state, { type: "FOLLOWING", path, cursor: initialization.cursor })
-        : updateExecution(state, { type: "NEEDS_PATH", request });
+    const initialization = initializeNavigationCursor(
+        path,
+        position,
+        state.execution.locatorOffset,
+    );
+    const next =
+        initialization.type === "READY"
+            ? updateExecution(state, { type: "FOLLOWING", path, cursor: initialization.cursor })
+            : updateExecution(state, { type: "NEEDS_PATH", request });
     return { state: next, initialization };
 }
 
@@ -200,11 +257,16 @@ export function setNavigationMotionMode(
     state: NavigationState,
     pathMotionMode: PathMotionMode,
 ): NavigationState {
-    if (pathMotionMode === state.pathMotionMode) return state;
+    if (pathMotionMode === state.pathMotionMode) {
+        return state;
+    }
     const activity = state.execution.activity;
-    const next = activity.type === "FOLLOWING" || activity.type === "UNREACHABLE"
-        ? updateExecution(state, { type: "NEEDS_PATH", request: activity.path.request })
-        : state;
+    const next =
+        activity.type === "PREVIEWING"
+            ? clearNavigationRequest(state)
+            : activity.type === "FOLLOWING" || activity.type === "UNREACHABLE"
+              ? updateExecution(state, { type: "NEEDS_PATH", request: activity.path.request })
+              : state;
     return { pathMotionMode, execution: next.execution };
 }
 
