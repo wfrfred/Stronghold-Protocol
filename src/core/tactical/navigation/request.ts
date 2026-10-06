@@ -1,4 +1,4 @@
-import { createTilePosition, createWorldPosition, isTilePosition, isWorldPosition } from "../geometry/coordinate.js";
+import { createTilePosition, createWorldPosition, isTilePosition, isWorldPosition, World } from "../geometry/coordinate.js";
 import type { TilePosition, WorldPosition } from "../geometry/coordinate.js";
 
 export type NavigationRequestId = number;
@@ -25,6 +25,14 @@ export interface NavigationRequest {
     readonly goal: NavigationGoal;
     readonly options: NavigationOptions;
     readonly arrivalRule: NavigationArrivalRule;
+}
+
+export function isNavigationGoalReached(request: NavigationRequest, locatorPosition: WorldPosition): boolean {
+    if (request.arrivalRule === "TARGET_TILE_AND_DISTANCE") {
+        const tile = World.toTile(locatorPosition);
+        if (tile[0] !== request.targetTile[0] || tile[1] !== request.targetTile[1]) return false;
+    }
+    return World.withinDistance(locatorPosition, request.goal.position, request.goal.reachDistance);
 }
 
 export function createNavigationRequest(request: NavigationRequest): NavigationRequest {

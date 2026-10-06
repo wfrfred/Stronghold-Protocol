@@ -1,6 +1,7 @@
 import { Tile, World } from "../geometry/coordinate.js";
 import type { TilePosition, WorldOffset, WorldPosition } from "../geometry/coordinate.js";
 import { NavigationMap } from "./map.js";
+import { isNavigationGoalReached } from "./request.js";
 import type {
     NavigationCursorInitialization,
     NavigationPath,
@@ -31,8 +32,8 @@ function cursorAt(
         return previous;
     }
     return isTarget
-        ? Object.freeze({ type: "GOAL" })
-        : Object.freeze({ type: "FIELD", nextNode: tile });
+        ? { type: "GOAL" }
+        : { type: "FIELD", nextNode: tile };
 }
 
 function hasVisited(visits: NavigationVisitHistory, tile: TilePosition): boolean {
@@ -40,9 +41,9 @@ function hasVisited(visits: NavigationVisitHistory, tile: TilePosition): boolean
 }
 
 function visit(visits: NavigationVisitHistory, tile: TilePosition): NavigationVisitHistory {
-    return Object.freeze({
-        visitedCenters: Object.freeze([...visits.visitedCenters, tile]),
-    });
+    return {
+        visitedCenters: [...visits.visitedCenters, tile],
+    };
 }
 
 interface CenterSelection {
@@ -105,9 +106,9 @@ export function initializeNavigationCursor(
 ): NavigationCursorInitialization {
     const tile = World.toTile(World.translate(position, locatorOffset));
     if (!NavigationMap.contains(path.field.map, tile)) {
-        return Object.freeze({ type: "OUTSIDE_MAP" });
+        return { type: "OUTSIDE_MAP" };
     }
-    return Object.freeze({ type: "READY", cursor: cursorAt(path, tile) });
+    return { type: "READY", cursor: cursorAt(path, tile) };
 }
 
 export function selectNavigationPredictionTarget(
@@ -120,21 +121,21 @@ export function selectNavigationPredictionTarget(
     const locator = World.translate(position, locatorOffset);
     const tile = World.toTile(locator);
     if (!NavigationMap.contains(path.field.map, tile)) {
-        return Object.freeze({
+        return {
             cursor,
             visits,
-            decision: Object.freeze({ type: "OUTSIDE_MAP" }),
-        });
+            decision: { type: "OUTSIDE_MAP" },
+        };
     }
     const center = selectCenter(path, cursor, visits, locator, tile);
-    return Object.freeze({
+    return {
         cursor: center.cursor,
         visits: center.visits,
-        decision: Object.freeze({
+        decision: {
             type: "TARGET",
             target: World.translate(center.target ?? path.request.goal.position, World.negate(locatorOffset)),
-        }),
-    });
+        },
+    };
 }
 
 export function selectNavigationSteeringTarget(
@@ -147,47 +148,46 @@ export function selectNavigationSteeringTarget(
     const locator = World.translate(position, locatorOffset);
     const tile = World.toTile(locator);
     if (!NavigationMap.contains(path.field.map, tile)) {
-        return Object.freeze({
+        return {
             cursor,
             visits,
-            decision: Object.freeze({ type: "OUTSIDE_MAP" }),
-        });
+            decision: { type: "OUTSIDE_MAP" },
+        };
     }
     const center = selectCenter(path, cursor, visits, locator, tile);
     if (center.target !== null) {
-        return Object.freeze({
+        return {
             cursor: center.cursor,
             visits: center.visits,
-            decision: Object.freeze({ type: "MOVE", target: World.translate(center.target, World.negate(locatorOffset)) }),
-        });
+            decision: { type: "MOVE", target: World.translate(center.target, World.negate(locatorOffset)) },
+        };
     }
-    if ((path.request.arrivalRule === "DISTANCE" || sameTile(tile, path.request.targetTile))
-        && World.withinDistance(locator, path.request.goal.position, path.request.goal.reachDistance)) {
-        return Object.freeze({
+    if (isNavigationGoalReached(path.request, locator)) {
+        return {
             cursor: cursorAt(path, path.request.targetTile, center.cursor),
             visits: center.visits,
-            decision: Object.freeze({ type: "ARRIVED" }),
-        });
+            decision: { type: "ARRIVED" },
+        };
     }
     const map = path.field.map;
     const targetTile = path.request.targetTile;
     const targetNode = path.field.nodes[targetTile[0] * map.columns + targetTile[1]]!;
     const node = path.field.nodes[tile[0] * map.columns + tile[1]]!;
     if (targetNode.type === "UNREACHABLE" || node.type === "UNREACHABLE") {
-        return Object.freeze({
+        return {
             cursor: center.cursor,
             visits: center.visits,
-            decision: Object.freeze({
+            decision: {
                 type: "UNREACHABLE",
                 reason: targetNode.type === "UNREACHABLE" ? "TARGET_UNREACHABLE" : "POSITION_UNREACHABLE",
-            }),
-        });
+            },
+        };
     }
     const next = safeNext(path, tile);
     const target = sameTile(next, targetTile) ? path.request.goal.position : Tile.center(next);
-    return Object.freeze({
+    return {
         cursor: center.cursor,
         visits: center.visits,
-        decision: Object.freeze({ type: "MOVE", target: World.translate(target, World.negate(locatorOffset)) }),
-    });
+        decision: { type: "MOVE", target: World.translate(target, World.negate(locatorOffset)) },
+    };
 }

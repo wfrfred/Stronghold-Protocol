@@ -130,6 +130,19 @@ export const World = {
         return createWorldOffset(-offset[0], -offset[1]);
     },
 
+    add(a: WorldOffset, b: WorldOffset): WorldOffset {
+        return createWorldOffset(a[0] + b[0], a[1] + b[1]);
+    },
+
+    scale(offset: WorldOffset, factor: number): WorldOffset {
+        return createWorldOffset(offset[0] * factor, offset[1] * factor);
+    },
+
+    clampMagnitude(offset: WorldOffset, maximum: number): WorldOffset {
+        const magnitude = requireFinite(Math.hypot(offset[0], offset[1]), "world magnitude");
+        return magnitude > maximum ? World.scale(offset, maximum / magnitude) : offset;
+    },
+
     distanceSquared(a: WorldPosition, b: WorldPosition): number {
         const dx = a[0] - b[0];
         const dy = a[1] - b[1];

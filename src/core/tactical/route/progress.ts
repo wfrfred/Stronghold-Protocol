@@ -98,7 +98,7 @@ export function createRouteState(
         progress: {
             phase: "CHECKPOINTS",
             checkpointIndex: 0,
-            checkpoint: Object.freeze({ type: "NOT_ENTERED" }),
+            checkpoint: { type: "NOT_ENTERED" },
         },
     };
 }

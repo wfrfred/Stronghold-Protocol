@@ -106,11 +106,11 @@ function updateExecution(
 ): NavigationState {
     return {
         pathMotionMode: state.pathMotionMode,
-        execution: Object.freeze({
+        execution: {
             locatorOffset: state.execution.locatorOffset,
             visits,
-            activity: Object.freeze(activity),
-        }),
+            activity,
+        },
     };
 }
 
@@ -126,11 +126,11 @@ export function createNavigationState(
     }
     return {
         pathMotionMode,
-        execution: Object.freeze({
+        execution: {
             locatorOffset: createWorldOffset(locatorOffset[0], locatorOffset[1]),
-            visits: Object.freeze({ visitedCenters: Object.freeze([]) }),
-            activity: Object.freeze({ type: "IDLE" }),
-        }),
+            visits: { visitedCenters: [] },
+            activity: { type: "IDLE" },
+        },
     };
 }
 
@@ -139,6 +139,16 @@ export function startNavigationRequest(
     request: NavigationRequest,
 ): NavigationState {
     return updateExecution(state, { type: "NEEDS_PATH", request });
+}
+
+export function clearNavigationRequest(state: NavigationState): NavigationState {
+    return state.execution.activity.type === "IDLE" ? state : updateExecution(state, { type: "IDLE" });
+}
+
+export function markNavigationArrived(state: NavigationState): NavigationState {
+    return state.execution.activity.type === "ARRIVED"
+        ? state
+        : updateExecution(state, { type: "ARRIVED", request: requestOf(state.execution.activity) });
 }
 
 export function bindNavigationPath(
@@ -157,7 +167,7 @@ export function bindNavigationPath(
     const next = initialization.type === "READY"
         ? updateExecution(state, { type: "FOLLOWING", path, cursor: initialization.cursor })
         : updateExecution(state, { type: "NEEDS_PATH", request });
-    return Object.freeze({ state: next, initialization });
+    return { state: next, initialization };
 }
 
 export function setNavigationMotionMode(
@@ -184,10 +194,10 @@ export function predictNavigation(
         position,
         state.execution.locatorOffset,
     );
-    return Object.freeze({
+    return {
         state: updateExecution(state, { ...activity, cursor: selection.cursor }, selection.visits),
         selection,
-    });
+    };
 }
 
 export function steerNavigation(
@@ -211,7 +221,7 @@ export function steerNavigation(
             break;
         case "ARRIVED":
             nextActivity = { type: "ARRIVED", request: activity.path.request };
-            outcomes.push(Object.freeze({ type: "ARRIVED", requestId }));
+            outcomes.push({ type: "ARRIVED", requestId });
             break;
         case "UNREACHABLE": {
             const reason = selection.decision.reason;
@@ -223,7 +233,7 @@ export function steerNavigation(
                 reason,
             };
             if (activity.type !== "UNREACHABLE" || activity.reason !== reason) {
-                outcomes.push(Object.freeze({ type: "UNREACHABLE", requestId, reason }));
+                outcomes.push({ type: "UNREACHABLE", requestId, reason });
             }
             break;
         }
@@ -231,9 +241,9 @@ export function steerNavigation(
             nextActivity = { ...activity, cursor: selection.cursor };
             break;
     }
-    return Object.freeze({
+    return {
         state: updateExecution(state, nextActivity, selection.visits),
         selection,
-        outcomes: Object.freeze(outcomes),
-    });
+        outcomes,
+    };
 }

@@ -16,6 +16,12 @@ import { createRouteClock, createRouteClockBinding, createRouteState } from '../
 import { initializeRouteSpawn } from '../../dist/core/tactical/route/initialize.js';
 import { parseBattlefieldMap } from '../../dist/data/arknights/map.js';
 import { parseRouteDefinition } from '../../dist/data/arknights/route.js';
+import { createRng } from '../../dist/core/common/rng.js';
+import { World } from '../../dist/core/tactical/geometry/coordinate.js';
+import { createEnemyDefinition, initializeRoutedEnemy } from '../../dist/core/tactical/battle/unit/enemy.js';
+import { stepRoutedEnemy } from '../../dist/core/tactical/battle/unit/movement.js';
+import { createSteeringParameters, createSteeringState } from '../../dist/core/tactical/battle/unit/locomotion/steering.js';
+import { integrateSteering } from '../../dist/core/tactical/battle/unit/locomotion/integrate.js';
 import { Grid, OBSTACLE_COST, bresenhamTiles } from '../../server/sim/grid.js';
 import { flowFieldForGrid, navigationMapFromGrid, waypointsForGrid } from '../../dist/legacy/navigation.js';
 import { buildRawNavigationField, buildNavigationField } from '../../dist/core/tactical/navigation/pathfinding.js';
@@ -541,8 +547,8 @@ test('core navigation selections preserve their inputs and never consume global 
     const prediction = predictNavigation(bound.state, position);
     const steering = steerNavigation(prediction.state, position);
     setNavigationMotionMode(steering.state, 'FLY');
-    assert.ok(Object.isFrozen(first) && Object.isFrozen(first.cursor) && Object.isFrozen(first.visits));
-    assert.ok(Object.isFrozen(first.visits.visitedCenters) && first.visits.visitedCenters.every(Object.isFrozen));
+    assert.ok(first.visits.visitedCenters.every(Object.isFrozen));
+    assert.ok(Object.isFrozen(path) && Object.isFrozen(path.request));
     assert.equal(randomCalls, 0);
     assert.equal(JSON.stringify({ path, cursor, visits, position, offset }), before);
   } finally {
@@ -576,8 +582,8 @@ test('core navigation state passes prediction updates to steering without modify
   assert.equal(displaced.state.execution.activity.path.request, path.request);
   assert.equal(JSON.stringify({ idle, started, state: bound.state, path, position }), before);
   assert.notEqual(prediction.state, bound.state);
-  assert.ok(Object.isFrozen(prediction) && Object.isFrozen(prediction.state.execution));
-  assert.ok(Object.isFrozen(steering) && Object.isFrozen(steering.outcomes));
+  assert.equal(Object.isFrozen(prediction.state.execution), false);
+  assert.equal(Object.isFrozen(steering.state.execution), false);
 });
 
 test('core navigation rebinds displacement, map replacement and motion mode without replacing the resolved request', () => {
@@ -670,6 +676,319 @@ test('core initial outside-map binding retains the request and later explicit bi
   assert.equal(outsidePrediction.state.execution.activity.type, 'FOLLOWING');
   assert.equal(outsidePrediction.state.execution.activity.path, path);
   assert.deepEqual(predictNavigation(outsidePrediction.state, [0, 0]).selection.decision, { type: 'TARGET', target: [3.2, 0] });
+});
+
+const coreMove = (column, overrides = {}) => ({
+  type: 'MOVE', target: {
+    position: [0, column], reachOffset: [0, 0], randomizeReachOffset: false, reachDistance: 0, ...overrides,
+  },
+});
+
+function routedEnemyHarness({ seed = 42, speed = 10, checkpoints, routeOverrides = {} } = {}) {
+  const route = createRouteDefinition(coreRoute({
+    startPosition: [0, 0], endPosition: [0, 4], spawnOffset: [0, 0], spawnRandomRange: [0, 0],
+    checkpoints: checkpoints ?? [coreMove(1), { type: 'WAIT_FOR_SECONDS', durationSeconds: 1.5 }], ...routeOverrides,
+  }));
+  const initialized = initializeRoutedEnemy({
+    id: 1,
+    definition: createEnemyDefinition({ id: 'enemy_core_walker', vitality: { maxHp: 100 }, locomotion: { moveSpeed: speed } }),
+    route, clockBinding: createRouteClockBinding({ waveStartedAtSeconds: 0, fragmentStartedAtSeconds: 0 }),
+    alwaysCheckCurrentPoint: true, rngState: seed, nextNavigationRequestId: 0,
+  });
+  let enemy = initialized.enemy, rngState = initialized.rngState, nextNavigationRequestId = initialized.nextNavigationRequestId, elapsed = 0;
+  let maps = Object.freeze({
+    WALK: fieldMap(1, 5, Array.from({ length: 5 }, () => fieldCell())),
+    FLY: fieldMap(1, 5, Array.from({ length: 5 }, () => fieldCell()), 'FLY'),
+  });
+  const fieldCache = createNavigationFieldCache();
+  const steeringParameters = createSteeringParameters({ steeringFactor: 2.5, maxSteeringForce: 4 });
+  const trace = [];
+  return {
+    get enemy() { return enemy; },
+    get rngState() { return rngState; },
+    get nextNavigationRequestId() { return nextNavigationRequestId; },
+    get maps() { return maps; },
+    trace,
+    setMaps(next) { maps = next; },
+    displace(position) { enemy = { ...enemy, position: Object.freeze([...position]) }; },
+    setMotionMode(mode) {
+      const locomotion = enemy.locomotion, mainRoute = locomotion.mainRoute;
+      enemy = {
+        ...enemy,
+        locomotion: {
+          ...locomotion,
+          mainRoute: { ...mainRoute, navigation: setNavigationMotionMode(mainRoute.navigation, mode) },
+        },
+      };
+    },
+    step(controls = {}) {
+      elapsed += controls.deltaTimeSeconds ?? 0.5;
+      const context = {
+        clock: createRouteClock({ fixedPlayTimeSeconds: elapsed, userFixedPlayTimeSeconds: elapsed, deltaTimeSeconds: controls.deltaTimeSeconds ?? 0.5 }),
+        maps, fieldCache, steeringParameters, rngState, nextNavigationRequestId,
+        moveMultiplier: controls.moveMultiplier ?? 1,
+        movementAllowed: controls.movementAllowed ?? true,
+        routeAdvanceAllowed: controls.routeAdvanceAllowed ?? true,
+      };
+      const before = JSON.stringify({ enemy, context });
+      const oldLocomotion = enemy.locomotion, oldMainRoute = oldLocomotion.mainRoute;
+      const result = stepRoutedEnemy(enemy, context);
+      assert.equal(JSON.stringify({ enemy, context }), before);
+      assert.equal(enemy.locomotion, oldLocomotion);
+      assert.equal(enemy.locomotion.mainRoute, oldMainRoute);
+      assert.equal(Object.hasOwn(result.enemy, 'route'), false);
+      assert.equal(Object.hasOwn(result.enemy, 'navigation'), false);
+      assert.equal(result.enemy.definition, enemy.definition);
+      assert.equal(result.enemy.locomotion.alternativeRoute, oldLocomotion.alternativeRoute);
+      assert.equal(Object.isFrozen(result.enemy.locomotion), false);
+      assert.equal(Object.isFrozen(result.enemy.locomotion.steering), false);
+      enemy = result.enemy;
+      rngState = result.rngState;
+      nextNavigationRequestId = result.nextNavigationRequestId;
+      trace.push(JSON.parse(JSON.stringify({ elapsed, enemy, rngState, nextNavigationRequestId, outcomes: result.outcomes })));
+      return result;
+    },
+  };
+}
+
+function routedEnemyRequest(enemy) {
+  const activity = enemy.locomotion.mainRoute.navigation.execution.activity;
+  return activity.type === 'FOLLOWING' || activity.type === 'UNREACHABLE' ? activity.path.request : activity.request;
+}
+
+test('core serial MOVE-WAIT-END snaps once per step and waits independently of zero speed and blocking', () => {
+  const h = routedEnemyHarness();
+  assert.equal(Object.hasOwn(h.enemy, 'route'), false);
+  assert.equal(Object.hasOwn(h.enemy, 'navigation'), false);
+  const initialLocomotion = h.enemy.locomotion;
+  assert.equal(Object.hasOwn(initialLocomotion, 'controller'), false);
+  assert.equal(initialLocomotion.alternativeRoute, null);
+  assert.equal(initialLocomotion.mainRoute.route.progress.checkpoint.type, 'MOVE');
+  initialLocomotion.moving = true;
+  initialLocomotion.steering.lastVelocity = Object.freeze([0, 0]);
+  h.enemy.vitality.hp = 90;
+  h.step();
+  assert.equal(initialLocomotion.mainRoute.route.progress.checkpoint.type, 'MOVE');
+  assert.equal(h.enemy.vitality.hp, 90);
+  assert.deepEqual(h.enemy.position, [1, 0]);
+  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpointIndex, 1);
+  assert.deepEqual(h.enemy.locomotion.mainRoute.route.progress.checkpoint, { type: 'WAIT', remainingSeconds: 1.5 });
+  assert.equal(h.enemy.locomotion.moving, true);
+  h.step({ moveMultiplier: 0 });
+  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpoint.remainingSeconds, 1);
+  assert.deepEqual(h.enemy.position, [1, 0]);
+  assert.equal(h.enemy.locomotion.moving, false);
+  h.step({ movementAllowed: false });
+  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpoint.remainingSeconds, 0.5);
+  assert.deepEqual(h.enemy.position, [1, 0]);
+  h.step();
+  assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'END');
+  assert.deepEqual(h.enemy.position, [1, 0]);
+  h.step();
+  assert.deepEqual(h.enemy.position, [4, 0]);
+  assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'COMPLETED');
+  assert.equal(h.nextNavigationRequestId, 2);
+});
+
+test('core serial WAIT entered before movement consumes full step time and WAIT entered after snap starts next step', () => {
+  const before = routedEnemyHarness();
+  before.step({ moveMultiplier: 0 });
+  assert.equal(before.enemy.locomotion.mainRoute.route.progress.checkpoint.type, 'MOVE');
+  before.displace([0.96, 0]);
+  before.step({ moveMultiplier: 0.001 });
+  assert.deepEqual(before.enemy.position, [0.96, 0]);
+  assert.deepEqual(before.enemy.locomotion.mainRoute.route.progress.checkpoint, { type: 'WAIT', remainingSeconds: 1 });
+  const after = routedEnemyHarness();
+  after.step();
+  assert.deepEqual(after.enemy.position, [1, 0]);
+  assert.deepEqual(after.enemy.locomotion.mainRoute.route.progress.checkpoint, { type: 'WAIT', remainingSeconds: 1.5 });
+});
+
+test('core serial route advancement can pause while wait time continues to expire', () => {
+  const h = routedEnemyHarness();
+  h.step();
+  const waiting = h.enemy;
+  waiting.locomotion.mainRoute.route.progress.checkpoint.remainingSeconds = 1.25;
+  h.step({ deltaTimeSeconds: 2, movementAllowed: false, routeAdvanceAllowed: false, moveMultiplier: 0 });
+  assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'CHECKPOINTS');
+  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpointIndex, 1);
+  assert.deepEqual(h.enemy.locomotion.mainRoute.route.progress.checkpoint, { type: 'WAIT', remainingSeconds: 0 });
+  assert.deepEqual(waiting.locomotion.mainRoute.route.progress.checkpoint, { type: 'WAIT', remainingSeconds: 1.25 });
+  h.step({ routeAdvanceAllowed: false });
+  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpointIndex, 1);
+  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpoint.remainingSeconds, 0);
+  h.step({ movementAllowed: false });
+  assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'END');
+  assert.deepEqual(h.enemy.position, [1, 0]);
+  h.step();
+  assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'COMPLETED');
+});
+
+test('core serial reached MOVE resumes through heading before the wait tick and reports arrival once', () => {
+  const h = routedEnemyHarness({ speed: 0, checkpoints: [
+    coreMove(2, { reachDistance: 0.1 }), { type: 'WAIT_FOR_SECONDS', durationSeconds: 2 },
+  ] });
+  h.displace([1.95, 0]);
+  const paused = h.step({ deltaTimeSeconds: 1, routeAdvanceAllowed: false });
+  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpointIndex, 0);
+  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpoint.type, 'MOVE');
+  assert.equal(h.enemy.locomotion.mainRoute.navigation.execution.activity.type, 'ARRIVED');
+  assert.deepEqual(paused.outcomes, [{ type: 'ARRIVED', requestId: 0 }]);
+  const resumed = h.step({ deltaTimeSeconds: 1 });
+  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpointIndex, 1);
+  assert.deepEqual(h.enemy.locomotion.mainRoute.route.progress.checkpoint, { type: 'WAIT', remainingSeconds: 1 });
+  assert.deepEqual(resumed.outcomes, []);
+  assert.deepEqual(h.enemy.position, [1.95, 0]);
+});
+
+test('core routed enemy keeps one randomized goal across map changes, motion mode changes and displacement', () => {
+  const seed = 42;
+  const h = routedEnemyHarness({ seed, checkpoints: [
+    coreMove(2, { randomizeReachOffset: true, reachOffset: [0.25, 0] }),
+    coreMove(3, { randomizeReachOffset: true, reachOffset: [0.25, 0.125] }),
+  ] });
+  const expected = createRng(seed);
+  expected.next();
+  expected.next();
+  const x = -0.25 + expected.next() * 0.5;
+  expected.next();
+  const request = routedEnemyRequest(h.enemy), goal = h.enemy.locomotion.mainRoute.route.progress.checkpoint.goal;
+  assert.deepEqual(goal.position, [2 + x, 0]);
+  assert.equal(goal.reachDistance, 0.05);
+  assert.equal(request.goal, goal);
+  assert.equal(request.id, 0);
+  assert.equal(h.rngState, expected.state());
+  assert.equal(h.nextNavigationRequestId, 1);
+  const savedRngState = h.rngState;
+  const serialExpected = createRng(savedRngState);
+  serialExpected.next();
+  serialExpected.next();
+  const secondX = -0.25 + serialExpected.next() * 0.5;
+  serialExpected.next();
+  const second = initializeRoutedEnemy({
+    id: 2, definition: h.enemy.definition, route: h.enemy.locomotion.mainRoute.route.definition,
+    clockBinding: h.enemy.locomotion.mainRoute.route.clockBinding, alwaysCheckCurrentPoint: true,
+    rngState: savedRngState, nextNavigationRequestId: h.nextNavigationRequestId,
+  });
+  const secondRequest = routedEnemyRequest(second.enemy), secondGoal = second.enemy.locomotion.mainRoute.route.progress.checkpoint.goal;
+  assert.deepEqual(secondGoal.position, [2 + secondX, 0]);
+  assert.equal(secondRequest.goal, secondGoal);
+  assert.equal(secondRequest.id, 1);
+  assert.equal(second.rngState, serialExpected.state());
+  assert.equal(second.nextNavigationRequestId, 2);
+  assert.equal(h.rngState, savedRngState);
+  assert.equal(routedEnemyRequest(h.enemy), request);
+  h.step({ moveMultiplier: 0 });
+  assert.equal(routedEnemyRequest(h.enemy), request);
+  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpoint.goal, goal);
+  assert.equal(h.rngState, savedRngState);
+  assert.equal(h.nextNavigationRequestId, 1);
+  const changedMaps = Object.freeze({
+    WALK: createNavigationMap({ rows: 1, columns: 5, pathMotionMode: 'WALK', revision: 1, cells: Array.from({ length: 5 }, () => fieldCell()) }),
+    FLY: createNavigationMap({ rows: 1, columns: 5, pathMotionMode: 'FLY', revision: 1, cells: Array.from({ length: 5 }, () => fieldCell()) }),
+  });
+  h.setMaps(changedMaps);
+  h.step({ moveMultiplier: 0 });
+  assert.equal(h.enemy.locomotion.mainRoute.navigation.execution.activity.path.field.map, changedMaps.WALK);
+  const walkingLocomotion = h.enemy.locomotion, walkingMainRoute = walkingLocomotion.mainRoute;
+  h.setMotionMode('FLY');
+  assert.equal(h.enemy.locomotion.steering.lastVelocity, walkingLocomotion.steering.lastVelocity);
+  assert.equal(h.enemy.locomotion.mainRoute.route, walkingMainRoute.route);
+  assert.equal(walkingMainRoute.navigation.pathMotionMode, 'WALK');
+  h.step({ moveMultiplier: 0 });
+  assert.equal(h.enemy.locomotion.mainRoute.navigation.execution.activity.path.field.map, changedMaps.FLY);
+  const flyingLocomotion = h.enemy.locomotion;
+  h.displace([1.1, 0]);
+  assert.equal(h.enemy.locomotion, flyingLocomotion);
+  h.step({ moveMultiplier: 0 });
+  assert.equal(routedEnemyRequest(h.enemy), request);
+  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpoint.goal, goal);
+  assert.equal(h.rngState, savedRngState);
+  assert.equal(h.nextNavigationRequestId, 1);
+  const nextX = -0.25 + expected.next() * 0.5;
+  const nextY = -0.125 + expected.next() * 0.25;
+  h.step();
+  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpointIndex, 1);
+  assert.deepEqual(h.enemy.locomotion.mainRoute.route.progress.checkpoint.goal.position, [3 + nextX, nextY]);
+  assert.equal(h.rngState, expected.state());
+  assert.equal(h.nextNavigationRequestId, 2);
+  assert.notEqual(h.enemy.locomotion.mainRoute.route.progress.checkpoint.goal, goal);
+});
+
+test('core routed enemy reproduces a complete trace from the same seed and explicit controls', () => {
+  const settings = { seed: 7919, checkpoints: [
+    coreMove(1, { randomizeReachOffset: true, reachOffset: [0.2, 0.2] }),
+    { type: 'WAIT_FOR_SECONDS', durationSeconds: 1 }, coreMove(3),
+  ], routeOverrides: { spawnOffset: [0.1, -0.1], spawnRandomRange: [0.2, 0.2] } };
+  const first = routedEnemyHarness(settings), second = routedEnemyHarness(settings);
+  const originalRandom = Math.random;
+  Math.random = () => { throw new Error('core routed enemy consumed global randomness'); };
+  try {
+    for (const h of [first, second]) {
+      for (let step = 0; step < 16 && h.enemy.locomotion.mainRoute.route.progress.phase !== 'COMPLETED'; step++) {
+        h.step({ deltaTimeSeconds: 0.25, movementAllowed: step !== 2, moveMultiplier: step === 3 ? 0 : 1 });
+      }
+      assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'COMPLETED');
+    }
+    assert.deepEqual(first.trace, second.trace);
+    assert.deepEqual(first.enemy.position.map((coordinate, axis) => coordinate + first.enemy.locomotion.mainRoute.navigation.execution.locatorOffset[axis]), [4, 0]);
+  } finally {
+    Math.random = originalRandom;
+  }
+});
+
+test('core locomotion retains velocity history, clamps acceleration and reports actual displacement', () => {
+  const parameters = createSteeringParameters({ steeringFactor: 2.5, maxSteeringForce: 4 });
+  const state = createSteeringState(), position = [0, 0], target = [10, 0];
+  const before = JSON.stringify({ state, position, target, parameters });
+  const first = integrateSteering(state, position, target, 10, 0.5, parameters);
+  assert.deepEqual(first.state.lastVelocity, [2, 0]);
+  assert.deepEqual(first.position, [1, 0]);
+  assert.equal(Object.hasOwn(first.state, 'moving'), false);
+  const next = integrateSteering(first.state, first.position, target, 10, 0.5, parameters);
+  assert.deepEqual(next.state.lastVelocity, [4, 0]);
+  assert.deepEqual(next.position, [3, 0]);
+  const stopped = integrateSteering(next.state, next.position, target, 0, 0.5, parameters);
+  assert.equal(stopped.position, next.position);
+  assert.equal(stopped.state.lastVelocity, next.state.lastVelocity);
+  const retained = integrateSteering(next.state, next.position, target, 10, 0.5, createSteeringParameters({ steeringFactor: 2.5, maxSteeringForce: 0 }));
+  assert.deepEqual(retained.state.lastVelocity, [4, 0]);
+  assert.deepEqual(retained.position, [5, 0]);
+  assert.deepEqual(World.clampMagnitude([1e-200, 0], 0), [0, 0]);
+  const fast = integrateSteering(state, position, target, 1, 1, createSteeringParameters({ steeringFactor: 100, maxSteeringForce: 100 }));
+  assert.deepEqual(fast.state.lastVelocity, [1, 0]);
+  assert.deepEqual(fast.position, [1, 0]);
+  const disabled = integrateSteering(state, position, target, 10, 0.5, createSteeringParameters({ steeringFactor: 0, maxSteeringForce: 4 }));
+  assert.deepEqual(disabled.position, [0, 0]);
+  assert.ok(Object.isFrozen(parameters) && Object.isFrozen(first.position) && Object.isFrozen(first.state.lastVelocity));
+  assert.equal(Object.isFrozen(first.state), false);
+  assert.equal(JSON.stringify({ state, position, target, parameters }), before);
+  const h = routedEnemyHarness({ speed: 1 });
+  h.step();
+  assert.deepEqual(h.enemy.locomotion.steering.lastVelocity, [1, 0]);
+  h.step();
+  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpoint.type, 'WAIT');
+  assert.deepEqual(h.enemy.locomotion.steering.lastVelocity, [1, 0]);
+  h.step({ movementAllowed: false });
+  assert.equal(h.enemy.locomotion.moving, false);
+  assert.deepEqual(h.enemy.locomotion.steering.lastVelocity, [1, 0]);
+});
+
+test('core routed enemy initialization rejects rules outside the serial MOVE-WAIT execution profile', () => {
+  assert.throws(() => routedEnemyHarness({ routeOverrides: { visitEveryCheckPoint: false } }), RangeError);
+  assert.throws(() => routedEnemyHarness({ checkpoints: [{ type: 'ALERT' }] }), RangeError);
+  assert.throws(() => createEnemyDefinition({ id: 'enemy_bad', vitality: { maxHp: 0 }, locomotion: { moveSpeed: 1 } }), RangeError);
+  assert.throws(() => createSteeringParameters({ steeringFactor: Infinity, maxSteeringForce: 4 }), RangeError);
+  const h = routedEnemyHarness();
+  const alternativeRoute = h.enemy.locomotion.mainRoute;
+  h.enemy.locomotion.alternativeRoute = alternativeRoute;
+  const before = JSON.stringify(h.enemy);
+  const seed = h.rngState, nextId = h.nextNavigationRequestId;
+  assert.throws(() => h.step(), /alternative route.*(?:unsupported|not supported)|(?:unsupported|not supported).*alternative route/i);
+  assert.equal(h.enemy.locomotion.alternativeRoute, alternativeRoute);
+  assert.equal(JSON.stringify(h.enemy), before);
+  assert.equal(h.rngState, seed);
+  assert.equal(h.nextNavigationRequestId, nextId);
 });
 
 test('a pushed ground enemy re-plans from its tile centre: never cuts a fence corner or breaks the stage crate on it (act1 m03, tile 11,5)', REAL, () => {
