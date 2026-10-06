@@ -1714,10 +1714,10 @@ test('core external unit coordinates and internal effect snapshots retain owners
 });
 
 test('core battlefield isolates custom unit state using its explicit snapshot copy', () => {
-  const runtime = createBattlefieldRuntime({ map: flatBattlefieldRuntime().map }, unit => ({
-    ...copyUnitSnapshot(unit),
-    charges: { ...unit.charges, spent: [...unit.charges.spent] },
-  }));
+  const runtime = createBattlefieldRuntime({ map: flatBattlefieldRuntime().map }, unit => {
+    const { charges, ...base } = unit;
+    return { ...copyUnitSnapshot(base), charges: { ...charges, spent: [...charges.spent] } };
+  });
   const unit = { ...battlefieldUnit(10, [0, 0]), charges: { remaining: 3, spent: [] } };
   runtime.apply([{ type: 'REGISTER_UNIT', unit }]);
   unit.charges.remaining = 0;

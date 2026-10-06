@@ -1,7 +1,7 @@
 import type { BattlefieldChange } from "../battlefield/runtime.js";
 import { damageUnit } from "../combat/damage.js";
 import { selectAttackTarget, type CombatTargetingView } from "../combat/targeting.js";
-import { hasAction, hasActionDefinition, type Action } from "../unit/capability/action.js";
+import { hasAction, type Action } from "../unit/capability/action.js";
 import { isSpatiallyPresent } from "../unit/capability/presence.js";
 import { hasVitality } from "../unit/capability/vitality.js";
 import type { Unit, UnitId } from "../unit/unit.js";
@@ -34,12 +34,7 @@ export function createCombatSystem(): { readonly step: BattlePhase } {
         for (const id of ids) {
             const unit = units.get(id);
 
-            if (
-                unit === undefined ||
-                !hasAction(unit) ||
-                !hasActionDefinition(unit.definition) ||
-                !isSpatiallyPresent(unit)
-            ) {
+            if (unit === undefined || !hasAction(unit) || !isSpatiallyPresent(unit)) {
                 continue;
             }
 

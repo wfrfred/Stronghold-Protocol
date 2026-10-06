@@ -12,14 +12,10 @@ export interface AllegiantUnitDefinition extends UnitDefinition {
     readonly allegiance: AllegianceState;
 }
 
-export function hasAllegiance(unit: Unit): unit is Unit & Allegiance {
-    return "allegiance" in unit;
-}
-
-export function hasAllegianceDefinition(
-    definition: UnitDefinition,
-): definition is AllegiantUnitDefinition {
-    return "allegiance" in definition;
+export function hasAllegiance<U extends Unit>(
+    unit: U,
+): unit is U & Allegiance & Unit<U["definition"] & AllegiantUnitDefinition> {
+    return "allegiance" in unit && "allegiance" in unit.definition;
 }
 
 export function createAllegianceState(state: Readonly<AllegianceState>): AllegianceState {
@@ -34,6 +30,10 @@ export function createAllegianceState(state: Readonly<AllegianceState>): Allegia
 
 export function copyAllegianceState(state: Readonly<AllegianceState>): AllegianceState {
     return { ...state };
+}
+
+export function initializeAllegianceState(definition: AllegianceState): AllegianceState {
+    return copyAllegianceState(definition);
 }
 
 export function areHostile(left: Unit, right: Unit): boolean {

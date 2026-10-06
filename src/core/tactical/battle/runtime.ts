@@ -1,5 +1,6 @@
-import { createBattlefieldRuntime, type BattlefieldRuntime } from "../battlefield/runtime.js";
+import { BattlefieldRuntime } from "../battlefield/runtime.js";
 import type { NavigationMaps } from "../navigation/map.js";
+import { copyUnitSnapshot } from "../unit/snapshot.js";
 import { createBattleSpec, type BattleSpec } from "./spec.js";
 import type { BattleExecutionState } from "./state.js";
 import { predefinedIdsForAlias } from "./predefined.js";
@@ -46,7 +47,7 @@ export class BattleRuntime {
         this.#spec = createBattleSpec(spec);
         this.#systems = createBattleSystems(this.#spec);
 
-        const battlefield = createBattlefieldRuntime({ map: this.#spec.map });
+        const battlefield = BattlefieldRuntime.create({ map: this.#spec.map }, copyUnitSnapshot);
         const initialized = this.#systems.initialize(battlefield, {
             rngState: this.#spec.rngState,
             nextUnitId: this.#spec.nextUnitId,

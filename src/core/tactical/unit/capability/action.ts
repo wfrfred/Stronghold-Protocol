@@ -50,8 +50,10 @@ export interface ActingUnitDefinition extends UnitDefinition {
     readonly action: ActionDefinition;
 }
 
-export function hasAction(unit: Unit): unit is Unit & Action {
-    return "action" in unit;
+export function hasAction<U extends Unit>(
+    unit: U,
+): unit is U & Action & Unit<U["definition"] & ActingUnitDefinition> {
+    return "action" in unit && "action" in unit.definition;
 }
 
 export function hasActionDefinition(
@@ -137,6 +139,13 @@ export function createActionState(tick = 0): ActionState {
     ticks(tick, 0, "action tick");
 
     return { readyAtTick: tick, recoveryUntilTick: tick, targetUnitId: null };
+}
+
+export function initializeActionState(
+    _definition: ActionDefinition,
+    context: { readonly tick: number },
+): ActionState {
+    return createActionState(context.tick);
 }
 
 export function copyActionState(state: Readonly<ActionState>): ActionState {

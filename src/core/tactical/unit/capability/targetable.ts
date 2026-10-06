@@ -13,14 +13,10 @@ export interface TargetableUnitDefinition extends UnitDefinition {
     readonly targetable: TargetableState;
 }
 
-export function hasTargetable(unit: Unit): unit is Unit & Targetable {
-    return "targetable" in unit;
-}
-
-export function hasTargetableDefinition(
-    definition: UnitDefinition,
-): definition is TargetableUnitDefinition {
-    return "targetable" in definition;
+export function hasTargetable<U extends Unit>(
+    unit: U,
+): unit is U & Targetable & Unit<U["definition"] & TargetableUnitDefinition> {
+    return "targetable" in unit && "targetable" in unit.definition;
 }
 
 export function createTargetableState(state: TargetableState): TargetableState {
@@ -38,4 +34,8 @@ export function createTargetableState(state: TargetableState): TargetableState {
 
 export function copyTargetableState(state: TargetableState): TargetableState {
     return { ...state };
+}
+
+export function initializeTargetableState(definition: TargetableState): TargetableState {
+    return copyTargetableState(definition);
 }

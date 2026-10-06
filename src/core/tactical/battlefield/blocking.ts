@@ -1,12 +1,6 @@
 import { World } from "../geometry/coordinate.js";
 import { areHostile } from "../unit/capability/allegiance.js";
-import {
-    hasBlockable,
-    hasBlocker,
-    hasBlockerDefinition,
-    type Blocker,
-    type BlockingUnitDefinition,
-} from "../unit/capability/blocking.js";
+import { hasBlockable, hasBlocker } from "../unit/capability/blocking.js";
 import { isSpatiallyPresent } from "../unit/capability/presence.js";
 import { hasTargetable } from "../unit/capability/targetable.js";
 import { hasVitality } from "../unit/capability/vitality.js";
@@ -35,7 +29,6 @@ function isActive(unit: Unit): boolean {
 function canBlock(blocker: Unit, blocked: Unit): boolean {
     return (
         hasBlocker(blocker) &&
-        hasBlockerDefinition(blocker.definition) &&
         blocker.blocker.enabled &&
         hasBlockable(blocked) &&
         blocked.blockable.enabled &&
@@ -114,10 +107,7 @@ export function acquireBlockingRelations(
     const used = new Map<UnitId, number>();
     const additions: BlockingRelation[] = [];
     const ordered = [...units.values()].sort((left, right) => left.id - right.id);
-    const blockers = ordered.filter(
-        (unit): unit is Unit<BlockingUnitDefinition> & Blocker =>
-            hasBlocker(unit) && hasBlockerDefinition(unit.definition),
-    );
+    const blockers = ordered.filter(hasBlocker);
 
     for (const blocker of blockers) {
         used.set(blocker.id, blockingUsedCapacity(units, retained, blocker.id));

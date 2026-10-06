@@ -169,7 +169,7 @@ test('core combat: damage formulas retain the 5% floor and immutable vitality tr
 
   const unit = Object.freeze({
     id: 0, position: Object.freeze([0, 0]),
-    definition: Object.freeze({ id: 'core_target', defense: Object.freeze({ defense: 0, resistance: 0 }) }),
+    definition: Object.freeze({ id: 'core_target', vitality: Object.freeze({ maxHp: 7 }), defense: Object.freeze({ defense: 0, resistance: 0 }) }),
     vitality: Object.freeze({ hp: 7 }),
   });
   const harmless = damageUnit(unit, 0, 'TRUE');

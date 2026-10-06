@@ -1,6 +1,10 @@
 // Sim core: rng, grid/pathing, damage formulas, stat aggregation, buffs.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createRng } from '../../server/sim/rng.js';
 import { Grid } from '../../server/sim/grid.js';
 import { mitigate } from '../../server/sim/damage.js';
@@ -12,6 +16,17 @@ import { createBattlefieldRuntime } from '../../dist/core/tactical/battlefield/r
 import { createMechanismDefinition } from '../../dist/core/tactical/battlefield/mechanism.js';
 import { createNavigationEffectDefinition, createNavigationSpatialEffect } from '../../dist/core/tactical/battlefield/navigation-effect.js';
 import { hasSpatialPresence, isSpatiallyPresent } from '../../dist/core/tactical/unit/capability/presence.js';
+import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
+import { copyUnitSnapshot } from '../../dist/core/tactical/unit/snapshot.js';
+import { hasVitality } from '../../dist/core/tactical/unit/capability/vitality.js';
+import { createActionDefinition, hasAction } from '../../dist/core/tactical/unit/capability/action.js';
+import { hasAllegiance } from '../../dist/core/tactical/unit/capability/allegiance.js';
+import { hasBlockable, hasBlocker } from '../../dist/core/tactical/unit/capability/blocking.js';
+import { hasTargetable } from '../../dist/core/tactical/unit/capability/targetable.js';
+import { createLocomotionState, createRoutedLocomotionState, hasLocomotion, hasRoutedLocomotion } from '../../dist/core/tactical/unit/capability/locomotion/state.js';
+import { createRouteDefinition } from '../../dist/core/tactical/route/definition.js';
+import { createRouteState, createRouteTiming } from '../../dist/core/tactical/route/state.js';
+import { createNavigationState } from '../../dist/core/tactical/navigation/state.js';
 
 const approx = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
 
@@ -219,7 +234,7 @@ const presenceBattlefield = () => createBattlefieldRuntime({
 });
 
 const presenceUnit = (id, position) => ({
-  id, definition: Object.freeze({ id: `presence_${id}` }), position: Object.freeze(position),
+  id, definition: Object.freeze({ id: `presence_${id}`, vitality: Object.freeze({ maxHp: 100 }) }), position: Object.freeze(position),
   vitality: { hp: 100 }, spatialPresence: { present: true },
 });
 
@@ -331,4 +346,291 @@ test('core failed presence updates restore spatial membership and projected maps
   assert.equal(runtime.getUnit(1).spatialPresence.present, true);
   assert.deepEqual(runtime.unitsAt([0, 2]).map(unit => unit.id), [1]);
   assert.deepEqual(runtime.effectsAt([0, 2]), [1]);
+});
+
+const catalogDefinition = () => Object.freeze({
+  id: 'catalog_unit',
+  vitality: Object.freeze({ maxHp: 100 }),
+  locomotion: Object.freeze({
+    moveSpeedPerTick: 0.1,
+    steeringParameters: Object.freeze({ steeringFactor: 1, maxSteeringForce: 100 }),
+  }),
+  allegiance: Object.freeze({ side: 'ALLY' }),
+  action: createActionDefinition({ attack: {
+    power: 10, damageType: 'PHYSICAL', intervalTicks: 3, recoveryTicks: 0,
+    targeting: { range: { type: 'RADIUS', radius: 1 }, canTargetAir: false, priority: 'NEAREST' },
+  } }),
+  targetable: Object.freeze({ layer: 'GROUND', enabled: true }),
+  blocker: Object.freeze({ capacity: 2, contactRadius: 0.7 }),
+  blockable: Object.freeze({ weight: 1 }),
+  defense: Object.freeze({ defense: 20, resistance: 10 }),
+});
+
+function catalogRoutedState() {
+  const definition = createRouteDefinition({
+    pathMotionMode: 'WALK', startPosition: [0, 0], endPosition: [0, 4],
+    spawnOffset: [0, 0], spawnRandomRange: [0, 0],
+    checkpoints: [{ type: 'WAIT_FOR_TICKS', durationTicks: 10 }],
+    allowDiagonalMove: false, visitEveryTileCenter: false,
+    visitEveryNodeCenter: false, visitEveryCheckPoint: false,
+  });
+  const route = createRouteState(definition,
+    createRouteTiming({ waveStartedAtTick: 0, fragmentStartedAtTick: 0 }), true);
+  route.progress = { phase: 'CHECKPOINTS', checkpointIndex: 0,
+    checkpoint: { type: 'WAIT', remainingTicks: 9 } };
+  const locomotion = createRoutedLocomotionState(route, createNavigationState('WALK', [0, 0]));
+  locomotion.alternativeRoute = locomotion.mainRoute;
+  return locomotion;
+}
+
+test('core unit initialization uses prepared states and separates configuration from runtime-only capabilities', () => {
+  const definition = catalogDefinition();
+  const vitality = { hp: 25 };
+  const action = { readyAtTick: 9, recoveryUntilTick: 10, targetUnitId: 2 };
+  const locomotion = catalogRoutedState();
+  const unit = initializeUnit({ id: 1, definition, position: [2, 0], tick: 17,
+    states: { vitality, action, locomotion, spatialPresence: { present: false } } });
+
+  assert.equal(unit.definition, definition);
+  assert.deepEqual(unit.vitality, vitality);
+  assert.deepEqual(unit.action, action);
+  assert.equal(hasRoutedLocomotion(unit), true);
+  assert.equal(unit.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 9);
+  assert.equal(unit.spatialPresence.present, false);
+  assert.equal(Object.hasOwn(unit, 'defense'), false);
+  assert.deepEqual(unit.blocker, { capacity: 2, enabled: true });
+  assert.deepEqual(unit.blockable, { weight: 1, enabled: true });
+
+  vitality.hp = 0;
+  action.readyAtTick = 99;
+  locomotion.mainRoute.route.progress.checkpoint.remainingTicks = 0;
+  assert.equal(unit.vitality.hp, 25);
+  assert.equal(unit.action.readyAtTick, 9);
+  assert.equal(unit.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 9);
+  assert.equal(initializeUnit({ id: 2, definition, position: [0, 0], tick: 17 }).action.readyAtTick, 17);
+
+  const bare = initializeUnit({ id: 3, definition: Object.freeze({ id: 'presence_only' }),
+    position: [0, 0], states: { spatialPresence: { present: false } } });
+  assert.equal(hasSpatialPresence(bare), true);
+  assert.equal(hasVitality(bare), false);
+  assert.throws(() => initializeUnit({ id: 4, definition: { id: 'bare' }, position: [0, 0],
+    states: { locomotion: createLocomotionState() } }));
+});
+
+test('core capability guards and default snapshots reject unmatched or unregistered runtime state', () => {
+  const unit = initializeUnit({ id: 1, definition: catalogDefinition(), position: [0, 0],
+    states: { locomotion: catalogRoutedState() } });
+  for (const [key, guard] of [
+    ['vitality', hasVitality], ['locomotion', hasLocomotion], ['allegiance', hasAllegiance],
+    ['action', hasAction], ['targetable', hasTargetable], ['blocker', hasBlocker],
+    ['blockable', hasBlockable],
+  ]) {
+    const missingState = { ...unit };
+    delete missingState[key];
+    assert.equal(guard(missingState), false, `${key}: configuration alone is not a runtime capability`);
+    assert.throws(() => copyUnitSnapshot(missingState), `${key}: missing state`);
+
+    const definition = { ...unit.definition };
+    delete definition[key];
+    const missingConfiguration = { ...unit, definition };
+    assert.equal(guard(missingConfiguration), false, `${key}: state alone is not a configured capability`);
+    assert.throws(() => copyUnitSnapshot(missingConfiguration), `${key}: missing configuration`);
+    if (key === 'locomotion') assert.equal(hasRoutedLocomotion(missingConfiguration), false);
+  }
+
+  assert.equal(hasRoutedLocomotion({ ...unit, locomotion: createLocomotionState() }), false);
+  assert.equal(hasRoutedLocomotion(unit), true);
+  assert.throws(() => copyUnitSnapshot({ ...unit, memo: { value: 1 } }));
+  const presence = { id: 2, definition: Object.freeze({ id: 'presence' }), position: [0, 0],
+    spatialPresence: { present: false } };
+  assert.deepEqual(copyUnitSnapshot(presence).spatialPresence, { present: false });
+
+  const customCopy = source => ({ ...source, position: Object.freeze([...source.position]),
+    memo: { ...source.memo } });
+  const runtime = createBattlefieldRuntime({ map: presenceBattlefield().map }, customCopy);
+  const custom = { id: 3, definition: Object.freeze({ id: 'custom' }), position: [0, 0], memo: { value: 1 } };
+  runtime.apply([{ type: 'REGISTER_UNIT', unit: custom }]);
+  custom.memo.value = 2;
+  const snapshot = runtime.getUnit(3);
+  assert.equal(snapshot.memo.value, 1);
+  snapshot.memo.value = 3;
+  assert.equal(runtime.getUnit(3).memo.value, 1);
+  assert.throws(() => runtime.apply([{ type: 'REGISTER_UNIT', unit: {
+    ...custom, id: 4, definition: Object.freeze({ id: 'missing_vitality', vitality: { maxHp: 1 } }),
+  } }]));
+});
+
+test('core snapshots isolate capability state and both routed contexts while sharing immutable definitions', () => {
+  const unit = initializeUnit({ id: 1, definition: catalogDefinition(), position: Object.freeze([2, 0]),
+    states: { locomotion: catalogRoutedState(), spatialPresence: { present: true } } });
+  const snapshot = copyUnitSnapshot(unit);
+  assert.equal(snapshot.definition, unit.definition);
+  assert.equal(snapshot.position, unit.position);
+
+  snapshot.vitality.hp = 0;
+  snapshot.allegiance.side = 'ENEMY';
+  snapshot.action.targetUnitId = 7;
+  snapshot.targetable.enabled = false;
+  snapshot.blocker.capacity = 0;
+  snapshot.blockable.weight = 2;
+  snapshot.spatialPresence.present = false;
+  snapshot.locomotion.moving = true;
+  snapshot.locomotion.steering.lastVelocity = [1, 0];
+  snapshot.locomotion.mainRoute.route.progress.checkpoint.remainingTicks = 1;
+  snapshot.locomotion.mainRoute.navigation.execution.visits.visitedCenters.push([0, 1]);
+  assert.notEqual(snapshot.locomotion.mainRoute.navigation.execution.activity,
+    unit.locomotion.mainRoute.navigation.execution.activity);
+  snapshot.locomotion.mainRoute.navigation.execution.activity = { type: 'IDLE' };
+  assert.equal(snapshot.locomotion.alternativeRoute.route.progress.checkpoint.remainingTicks, 9);
+  assert.deepEqual(snapshot.locomotion.alternativeRoute.navigation.execution.visits.visitedCenters, []);
+  snapshot.locomotion.alternativeRoute.route.progress.checkpoint.remainingTicks = 2;
+  snapshot.locomotion.alternativeRoute.navigation.execution.locatorOffset = [0.5, 0];
+
+  assert.equal(unit.vitality.hp, 100);
+  assert.equal(unit.allegiance.side, 'ALLY');
+  assert.equal(unit.action.targetUnitId, null);
+  assert.equal(unit.targetable.enabled, true);
+  assert.equal(unit.blocker.capacity, 2);
+  assert.equal(unit.blockable.weight, 1);
+  assert.equal(unit.spatialPresence.present, true);
+  assert.equal(unit.locomotion.moving, false);
+  assert.deepEqual(unit.locomotion.steering.lastVelocity, [0, 0]);
+  for (const control of [unit.locomotion.mainRoute, unit.locomotion.alternativeRoute]) {
+    assert.equal(control.route.progress.checkpoint.remainingTicks, 9);
+    assert.deepEqual(control.navigation.execution.visits.visitedCenters, []);
+    assert.deepEqual(control.navigation.execution.locatorOffset, [0, 0]);
+    assert.equal(control.navigation.execution.activity.type, 'IDLE');
+  }
+});
+
+test('core external unit updates preserve capability configuration and fail atomically while presence stays dynamic', () => {
+  const runtime = presenceBattlefield();
+  const unit = initializeUnit({ id: 1, definition: catalogDefinition(), position: [2, 0] });
+  runtime.apply([{ type: 'REGISTER_UNIT', unit }]);
+  const maps = runtime.navigationMaps;
+  const missingState = runtime.getUnit(1);
+  delete missingState.action;
+  for (const invalid of [missingState, { ...unit, definition: Object.freeze({ ...unit.definition }) }]) {
+    assert.throws(() => runtime.apply([
+      { type: 'MOVE_UNIT', unitId: 1, position: [3, 0] },
+      { type: 'UPDATE_UNIT', unit: invalid },
+    ]));
+    assert.deepEqual(runtime.getUnit(1).position, [2, 0]);
+    assert.deepEqual(runtime.unitsAt([0, 2]).map(value => value.id), [1]);
+    assert.equal(runtime.navigationMaps, maps);
+  }
+
+  const bare = initializeUnit({ id: 2, definition: Object.freeze({ id: 'bare' }), position: [0, 0] });
+  runtime.apply([{ type: 'REGISTER_UNIT', unit: bare }]);
+  assert.throws(() => runtime.apply([{ type: 'UPDATE_UNIT', unit: { ...bare, vitality: { hp: 1 } } }]));
+  assert.throws(() => runtime.apply([{ type: 'UPDATE_UNIT', unit: {
+    ...bare, definition: Object.freeze({ ...bare.definition, vitality: { maxHp: 1 } }), vitality: { hp: 1 },
+  } }]));
+
+  const hidden = { ...runtime.getUnit(1), spatialPresence: { present: false } };
+  runtime.apply([{ type: 'UPDATE_UNIT', unit: hidden }]);
+  assert.deepEqual(runtime.unitsAt([0, 2]), []);
+  const restored = runtime.getUnit(1);
+  delete restored.spatialPresence;
+  runtime.apply([{ type: 'UPDATE_UNIT', unit: restored }]);
+  assert.deepEqual(runtime.unitsAt([0, 2]).map(value => value.id), [1]);
+});
+
+test('core initializer types preserve definition unions, prepared refinements and guard context', async () => {
+  const { default: ts } = await import('typescript');
+  const directory = mkdtempSync(join(tmpdir(), 'stronghold-unit-types-'));
+  const sourceModule = name => JSON.stringify(fileURLToPath(
+    new URL(`../../src/core/tactical/unit/${name}.js`, import.meta.url)));
+  const imports = `
+import { initializeUnit, type InitializedUnit } from ${sourceModule('initialize')};
+import type { Unit, UnitDefinition } from ${sourceModule('unit')};
+import type { EnemyDefinition } from ${sourceModule('enemy')};
+import { hasVitality, type VitalityDefinition } from ${sourceModule('capability/vitality')};
+import { hasRoutedLocomotion, type LocomotionState, type RoutedLocomotionState } from ${sourceModule('capability/locomotion/state')};
+import { createBattlefieldRuntime } from ${sourceModule('../battlefield/runtime')};
+import type { BattlefieldMap } from ${sourceModule('../battlefield/map')};
+type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
+type Assert<T extends true> = T;
+interface EnemyProbe extends EnemyDefinition { readonly kind: 'enemy'; readonly enemyCode: 17; }
+interface DeviceProbe extends UnitDefinition { readonly kind: 'device'; readonly deviceCode: 29; }
+interface OptionalProbe extends UnitDefinition { readonly vitality?: VitalityDefinition; }
+declare const enemyDefinition: EnemyProbe;
+declare const unionDefinition: EnemyProbe | DeviceProbe;
+declare const routed: RoutedLocomotionState;
+declare const battlefieldMap: BattlefieldMap;
+`;
+  const compile = (name, source) => {
+    const path = join(directory, `${name}.mts`);
+    writeFileSync(path, imports + source);
+    const program = ts.createProgram([path], {
+      noEmit: true, target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext,
+      strict: true, exactOptionalPropertyTypes: true, noUncheckedIndexedAccess: true,
+      skipLibCheck: true, types: [],
+    });
+    return ts.getPreEmitDiagnostics(program).map(diagnostic => ({
+      file: diagnostic.file?.fileName,
+      message: ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'),
+    }));
+  };
+
+  try {
+    const positive = compile('positive', `
+type Distributed = Assert<Equal<InitializedUnit<EnemyProbe | DeviceProbe>, InitializedUnit<EnemyProbe> | InitializedUnit<DeviceProbe>>>;
+type OptionalIsBase = Assert<Equal<keyof InitializedUnit<OptionalProbe>, keyof Unit>>;
+type WideIsBase = Assert<Equal<keyof InitializedUnit<UnitDefinition>, keyof Unit>>;
+function initializeGeneric<D extends EnemyDefinition>(definition: D): InitializedUnit<D> {
+  return initializeUnit({ id: 0, definition, position: [0, 0] });
+}
+const enemy = initializeUnit({ id: 1, definition: enemyDefinition, position: [0, 0] });
+type PlainDefinition = Assert<Equal<typeof enemy.definition, EnemyProbe>>;
+type PlainUnit = Assert<Equal<typeof enemy, InitializedUnit<EnemyProbe>>>;
+const union = initializeUnit({ id: 2, definition: unionDefinition, position: [0, 0] });
+type UnionUnit = Assert<Equal<typeof union, InitializedUnit<EnemyProbe | DeviceProbe>>>;
+if (union.definition.kind === 'enemy') { const code: 17 = union.definition.enemyCode; }
+else { const code: 29 = union.definition.deviceCode; }
+const prepared = initializeUnit({ id: 3, definition: enemyDefinition, position: [0, 0],
+  states: { locomotion: routed, spatialPresence: { present: false } } });
+type PreparedDefinition = Assert<Equal<typeof prepared.definition, EnemyProbe>>;
+type PreparedLocomotion = Assert<Equal<typeof prepared.locomotion, RoutedLocomotionState>>;
+prepared.locomotion.mainRoute.route.definition;
+prepared.spatialPresence.present;
+declare const optionalStates: Partial<{ locomotion: RoutedLocomotionState }>;
+const optionalPrepared = initializeUnit({ id: 4, definition: enemyDefinition, position: [0, 0], states: optionalStates });
+type OptionalPreparedLocomotion = Assert<Equal<typeof optionalPrepared.locomotion, LocomotionState>>;
+optionalPrepared.locomotion.moving;
+declare const guarded: Unit<EnemyProbe> & { readonly extra: 23 };
+if (hasVitality(guarded)) {
+  const extra: 23 = guarded.extra;
+  const kind: 'enemy' = guarded.definition.kind;
+  guarded.vitality.hp;
+}
+if (hasRoutedLocomotion(guarded)) {
+  const extra: 23 = guarded.extra;
+  const code: 17 = guarded.definition.enemyCode;
+  guarded.locomotion.mainRoute.route.definition;
+}
+const battlefield = createBattlefieldRuntime({ map: battlefieldMap });
+type PublicFactory = Assert<Equal<Extract<keyof typeof battlefield, 'commit' | 'view'>, never>>;
+const fork = battlefield.fork();
+type PublicFork = Assert<Equal<Extract<keyof typeof fork, 'commit' | 'view'>, never>>;
+battlefield.transact(field => {
+  type PublicTransaction = Assert<Equal<Extract<keyof typeof field, 'commit' | 'view'>, never>>;
+});
+`);
+    assert.deepEqual(positive, []);
+
+    for (const [name, source] of [
+      ['unconfigured', `initializeUnit({ id: 1, definition: { id: 'bare' }, position: [0, 0], states: { locomotion: routed } });`],
+      ['optional', `declare const optionalDefinition: OptionalProbe; initializeUnit({ id: 1, definition: optionalDefinition, position: [0, 0] }).vitality.hp;`],
+      ['wide', `declare const wideDefinition: UnitDefinition; initializeUnit({ id: 1, definition: wideDefinition, position: [0, 0] }).locomotion;`],
+      ['optional-refinement', `declare const optionalStates: Partial<{ locomotion: RoutedLocomotionState }>; initializeUnit({ id: 1, definition: enemyDefinition, position: [0, 0], states: optionalStates }).locomotion.mainRoute;`],
+    ]) {
+      const diagnostics = compile(name, source);
+      assert.ok(diagnostics.some(diagnostic => diagnostic.file === join(directory, `${name}.mts`)),
+        `${name} must reject unsupported capability inference: ${JSON.stringify(diagnostics)}`);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

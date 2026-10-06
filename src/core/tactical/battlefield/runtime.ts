@@ -17,6 +17,7 @@ import {
     type SpatialEffectSource,
 } from "./navigation-effect.js";
 import { copyUnitSnapshot, reconcileUnitNavigation } from "../unit/snapshot.js";
+import { assertUnitCapabilityConsistency } from "../unit/capability/catalog.js";
 import type { Unit, UnitId } from "../unit/unit.js";
 import {
     blockingUsedCapacity,
@@ -100,6 +101,20 @@ export interface BattlefieldView<U extends Unit = Unit> {
     blockerOf(unitId: UnitId): UnitId | undefined;
     blockedBy(unitId: UnitId): readonly UnitId[];
     blockingUsedCapacity(unitId: UnitId): number;
+}
+
+export interface Battlefield<U extends Unit = Unit> extends BattlefieldView<U> {
+    readonly map: BattlefieldMap;
+    readonly mechanismIds: readonly MechanismId[];
+    readonly effectIds: readonly SpatialEffectId[];
+    getMechanism(id: MechanismId): MechanismRuntime | undefined;
+    getEffect(id: SpatialEffectId): NavigationSpatialEffect | undefined;
+    effectsAt(position: TilePosition): readonly SpatialEffectId[];
+    effectsFrom(source: SpatialEffectSource): readonly SpatialEffectId[];
+    effectsFollowing(unitId: UnitId): readonly SpatialEffectId[];
+    fork(): Battlefield<U>;
+    transact<T>(operation: (battlefield: Battlefield<U>) => T): T;
+    apply(changes: readonly BattlefieldChange<U>[]): BattlefieldChangeResult;
 }
 
 interface BattlefieldResources<U extends Unit> {
@@ -537,16 +552,20 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
     }
 }
 
-export function createBattlefieldRuntime(options: BattlefieldRuntimeOptions): BattlefieldRuntime;
+export function createBattlefieldRuntime(options: BattlefieldRuntimeOptions): Battlefield;
 export function createBattlefieldRuntime<U extends Unit>(
     options: BattlefieldRuntimeOptions,
     copyUnit: (unit: Readonly<U>) => U,
-): BattlefieldRuntime<U>;
+): Battlefield<U>;
 export function createBattlefieldRuntime<U extends Unit>(
     options: BattlefieldRuntimeOptions,
     copyUnit?: (unit: Readonly<U>) => U,
-): BattlefieldRuntime | BattlefieldRuntime<U> {
+): Battlefield | Battlefield<U> {
     return copyUnit === undefined
         ? BattlefieldRuntime.create<Unit>(options, copyUnitSnapshot)
-        : BattlefieldRuntime.create<U>(options, copyUnit);
+        : BattlefieldRuntime.create<U>(options, (unit) => {
+              assertUnitCapabilityConsistency(unit);
+
+              return copyUnit(unit);
+          });
 }

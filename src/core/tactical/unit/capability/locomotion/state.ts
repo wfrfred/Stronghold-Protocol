@@ -47,13 +47,15 @@ export type LocomotiveUnit<D extends LocomotiveUnitDefinition = LocomotiveUnitDe
 export type RoutedLocomotiveUnit<D extends LocomotiveUnitDefinition = LocomotiveUnitDefinition> =
     Unit<D> & RoutedLocomotion;
 
-export function hasLocomotion(unit: Unit): unit is Unit & Locomotion {
-    return "locomotion" in unit;
+export function hasLocomotion<U extends Unit>(
+    unit: U,
+): unit is U & LocomotiveUnit<U["definition"] & LocomotiveUnitDefinition> {
+    return "locomotion" in unit && "locomotion" in unit.definition;
 }
 
-export function hasRoutedLocomotion<D extends UnitDefinition>(
-    unit: Unit<D>,
-): unit is RoutedLocomotiveUnit<D & LocomotiveUnitDefinition> {
+export function hasRoutedLocomotion<U extends Unit>(
+    unit: U,
+): unit is U & RoutedLocomotiveUnit<U["definition"] & LocomotiveUnitDefinition> {
     return hasLocomotion(unit) && "mainRoute" in unit.locomotion;
 }
 
@@ -141,6 +143,14 @@ export function reconcileLocomotionNavigation(
 
 export function createLocomotionState(): LocomotionState {
     return { moving: false, steering: createSteeringState() };
+}
+
+export function initializeLocomotionState(
+    definition: LocomotionDefinition,
+    context: { readonly tick: number },
+): LocomotionState;
+export function initializeLocomotionState(): LocomotionState {
+    return createLocomotionState();
 }
 
 export function createRoutedLocomotionState(

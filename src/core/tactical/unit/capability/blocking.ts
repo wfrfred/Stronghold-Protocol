@@ -35,24 +35,16 @@ export interface BlockableUnitDefinition extends UnitDefinition {
     readonly blockable: BlockableDefinition;
 }
 
-export function hasBlocker(unit: Unit): unit is Unit & Blocker {
-    return "blocker" in unit;
+export function hasBlocker<U extends Unit>(
+    unit: U,
+): unit is U & Blocker & Unit<U["definition"] & BlockingUnitDefinition> {
+    return "blocker" in unit && "blocker" in unit.definition;
 }
 
-export function hasBlockerDefinition(
-    definition: UnitDefinition,
-): definition is BlockingUnitDefinition {
-    return "blocker" in definition;
-}
-
-export function hasBlockable(unit: Unit): unit is Unit & Blockable {
-    return "blockable" in unit;
-}
-
-export function hasBlockableDefinition(
-    definition: UnitDefinition,
-): definition is BlockableUnitDefinition {
-    return "blockable" in definition;
+export function hasBlockable<U extends Unit>(
+    unit: U,
+): unit is U & Blockable & Unit<U["definition"] & BlockableUnitDefinition> {
+    return "blockable" in unit && "blockable" in unit.definition;
 }
 
 export function createBlockerDefinition(definition: BlockerDefinition): BlockerDefinition {
@@ -80,4 +72,12 @@ export function copyBlockerState(state: BlockerState): BlockerState {
 
 export function copyBlockableState(state: BlockableState): BlockableState {
     return { ...state };
+}
+
+export function initializeBlockerState(definition: BlockerDefinition): BlockerState {
+    return { capacity: definition.capacity, enabled: true };
+}
+
+export function initializeBlockableState(definition: BlockableDefinition): BlockableState {
+    return { weight: definition.weight, enabled: true };
 }
