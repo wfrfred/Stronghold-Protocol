@@ -54,6 +54,23 @@ export interface RouteState {
     progress: RouteProgress;
 }
 
+export function copyRouteState(state: Readonly<RouteState>): RouteState {
+    const progress = state.progress;
+    let copiedProgress: RouteProgress;
+    switch (progress.phase) {
+        case "CHECKPOINTS":
+            copiedProgress = { ...progress, checkpoint: { ...progress.checkpoint } };
+            break;
+        case "END":
+            copiedProgress = { ...progress, move: { ...progress.move } };
+            break;
+        case "COMPLETED":
+            copiedProgress = { ...progress };
+            break;
+    }
+    return { ...state, progress: copiedProgress };
+}
+
 function finite(value: number, name: string): number {
     if (!Number.isFinite(value)) {
         throw new RangeError(`${name} must be finite`);

@@ -1,31 +1,32 @@
-import { createRng } from "../../../../common/rng.js";
-import type { Seed } from "../../../../common/rng.js";
-import { World } from "../../../geometry/coordinate.js";
-import type { WorldPosition } from "../../../geometry/coordinate.js";
-import type { NavigationFieldCache } from "../../../navigation/cache.js";
-import type { NavigationMap, PathMotionMode } from "../../../navigation/map.js";
-import { createNavigationPath } from "../../../navigation/path.js";
-import { isNavigationGoalReached } from "../../../navigation/request.js";
-import type { NavigationRequest, NavigationRequestId } from "../../../navigation/request.js";
+import { createRng } from "../../../common/rng.js";
+import type { Seed } from "../../../common/rng.js";
+import { World } from "../../geometry/coordinate.js";
+import type { WorldPosition } from "../../geometry/coordinate.js";
+import type { NavigationFieldCache } from "../../navigation/cache.js";
+import type { NavigationMaps } from "../../navigation/map.js";
+import { createNavigationPath } from "../../navigation/path.js";
+import { isNavigationGoalReached } from "../../navigation/request.js";
+import type { NavigationRequestId } from "../../navigation/request.js";
 import {
     bindNavigationPath,
     clearNavigationRequest,
+    getNavigationRequest,
     markNavigationArrived,
     predictNavigation,
     startNavigationRequest,
     steerNavigation,
-} from "../../../navigation/state.js";
-import type { NavigationOutcome, NavigationState } from "../../../navigation/state.js";
-import { advanceRoute, enterRoute, tickRouteWait } from "../../../route/execute.js";
-import type { RouteExecutionContext, RouteTransition } from "../../../route/execute.js";
-import type { RouteClock, RouteState } from "../../../route/progress.js";
-import type { RoutedLocomotionState } from "../capabilities/locomotion.js";
-import { integrateSteering } from "./integrate.js";
+} from "../../navigation/state.js";
+import type { NavigationOutcome, NavigationState } from "../../navigation/state.js";
+import { advanceRoute, enterRoute, tickRouteWait } from "../../route/execution.js";
+import type { RouteExecutionContext, RouteTransition } from "../../route/execution.js";
+import type { RouteClock, RouteState } from "../../route/state.js";
+import type { RoutedLocomotionState } from "./state.js";
+import { integrateSteering } from "./steering.js";
 import type { SteeringParameters } from "./steering.js";
 
 export interface RoutedLocomotionStepContext {
     readonly clock: RouteClock;
-    readonly maps: Readonly<Record<PathMotionMode, NavigationMap>>;
+    readonly maps: NavigationMaps;
     readonly fieldCache: NavigationFieldCache;
     readonly moveMultiplier: number;
     readonly steeringParameters: SteeringParameters;
@@ -48,20 +49,6 @@ function isMovingRoute(route: RouteState): boolean {
         || (route.progress.phase === "CHECKPOINTS" && route.progress.checkpoint.type === "MOVE");
 }
 
-function currentRequest(navigation: NavigationState): NavigationRequest {
-    const activity = navigation.execution.activity;
-    switch (activity.type) {
-        case "FOLLOWING":
-        case "UNREACHABLE":
-            return activity.path.request;
-        case "NEEDS_PATH":
-        case "ARRIVED":
-            return activity.request;
-        case "IDLE":
-            throw new Error("moving route requires a navigation request");
-    }
-}
-
 function installTransition(
     navigation: NavigationState,
     transition: RouteTransition,
@@ -82,7 +69,8 @@ function bindCurrentPath(
         && activity.path.field.map === map) {
         return navigation;
     }
-    const request = currentRequest(navigation);
+    const request = getNavigationRequest(navigation);
+    if (request === null) throw new Error("moving route requires a navigation request");
     const path = createNavigationPath(request, context.fieldCache.get(map, request));
     return bindNavigationPath(navigation, path, position).state;
 }
@@ -203,7 +191,8 @@ export function stepRoutedLocomotion(
         && route.progress.checkpoint.remainingSeconds <= 0) {
         if (context.routeAdvanceAllowed) advance();
     } else if (isMovingRoute(route)) {
-        const request = currentRequest(navigation);
+        const request = getNavigationRequest(navigation);
+        if (request === null) throw new Error("moving route requires a navigation request");
         if (isNavigationGoalReached(request, World.translate(position, navigation.execution.locatorOffset))) {
             navigation = markNavigationArrived(navigation);
             reportArrival(request.id);

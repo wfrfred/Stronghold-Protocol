@@ -21,6 +21,8 @@ export interface NavigationMap {
     readonly cells: readonly NavigationCell[];
 }
 
+export type NavigationMaps = Readonly<Record<PathMotionMode, NavigationMap>>;
+
 export const PathMotionMode = {
     is(value: unknown): value is PathMotionMode {
         return value === "WALK" || value === "FLY";

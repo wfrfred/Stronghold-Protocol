@@ -8,13 +8,13 @@ import {
     type PlayerSideMask,
     type Tile,
     type TileMechanism,
-} from "../../core/tactical/map/tile.js";
+} from "../../core/tactical/battlefield/tile.js";
 import {
     createBattlefieldMap,
     type BattlefieldBlockEdge,
     type BattlefieldMap,
     type BattlefieldMarker,
-} from "../../core/tactical/map/map.js";
+} from "../../core/tactical/battlefield/map.js";
 import {
     createTilePosition,
     type TilePosition,

@@ -4,7 +4,7 @@ import type { WorldPosition } from "../geometry/coordinate.js";
 import { createNavigationRequest } from "../navigation/request.js";
 import type { NavigationRequest, NavigationRequestId } from "../navigation/request.js";
 import type { RouteDefinition, RouteMoveTarget } from "./definition.js";
-import type { RouteClock, RouteMoveProgress, RouteProgress, RouteState } from "./progress.js";
+import type { RouteClock, RouteMoveProgress, RouteProgress, RouteState } from "./state.js";
 
 export interface RouteExecutionContext {
     readonly rng: Rng;

@@ -1,4 +1,4 @@
-import type { Unit, UnitDefinition } from "../unit.js";
+import type { Unit, UnitDefinition } from "./unit.js";
 
 export interface VitalityDefinition {
     readonly maxHp: number;
@@ -18,3 +18,11 @@ export interface VitalUnitDefinition extends UnitDefinition {
 
 export type VitalUnit<D extends VitalUnitDefinition = VitalUnitDefinition> =
     Unit<D> & Vitality;
+
+export function hasVitality(unit: Unit): unit is Unit & Vitality {
+    return "vitality" in unit;
+}
+
+export function copyVitalityState(state: Readonly<VitalityState>): VitalityState {
+    return { ...state };
+}

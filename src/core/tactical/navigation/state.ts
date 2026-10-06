@@ -4,8 +4,8 @@ import {
     initializeNavigationCursor,
     selectNavigationPredictionTarget,
     selectNavigationSteeringTarget,
-} from "./execute.js";
-import { PathMotionMode } from "./map.js";
+} from "./query.js";
+import { PathMotionMode, type NavigationMap } from "./map.js";
 import type {
     NavigationCursorInitialization,
     NavigationFailureReason,
@@ -90,13 +90,29 @@ function activeNavigation(state: NavigationState): ActiveNavigation {
     return activity;
 }
 
-function requestOf(activity: NavigationActivity): NavigationRequest {
-    if (activity.type === "IDLE") {
-        throw new Error("navigation has no current request");
-    }
+export function getNavigationRequest(state: Readonly<NavigationState>): NavigationRequest | null {
+    const activity = state.execution.activity;
+    if (activity.type === "IDLE") return null;
     return activity.type === "FOLLOWING" || activity.type === "UNREACHABLE"
         ? activity.path.request
         : activity.request;
+}
+
+export function copyNavigationState(state: Readonly<NavigationState>): NavigationState {
+    const activity = state.execution.activity;
+    return {
+        ...state,
+        execution: {
+            ...state.execution,
+            visits: {
+                ...state.execution.visits,
+                visitedCenters: [...state.execution.visits.visitedCenters],
+            },
+            activity: activity.type === "FOLLOWING" || activity.type === "UNREACHABLE"
+                ? { ...activity, cursor: { ...activity.cursor } }
+                : { ...activity },
+        },
+    };
 }
 
 function updateExecution(
@@ -145,10 +161,19 @@ export function clearNavigationRequest(state: NavigationState): NavigationState 
     return state.execution.activity.type === "IDLE" ? state : updateExecution(state, { type: "IDLE" });
 }
 
+export function invalidateNavigationPath(state: NavigationState, map: NavigationMap): NavigationState {
+    const activity = state.execution.activity;
+    return (activity.type === "FOLLOWING" || activity.type === "UNREACHABLE")
+        && activity.path.field.map !== map
+        ? startNavigationRequest(state, activity.path.request)
+        : state;
+}
+
 export function markNavigationArrived(state: NavigationState): NavigationState {
-    return state.execution.activity.type === "ARRIVED"
-        ? state
-        : updateExecution(state, { type: "ARRIVED", request: requestOf(state.execution.activity) });
+    if (state.execution.activity.type === "ARRIVED") return state;
+    const request = getNavigationRequest(state);
+    if (request === null) throw new Error("navigation has no current request");
+    return updateExecution(state, { type: "ARRIVED", request });
 }
 
 export function bindNavigationPath(
@@ -156,7 +181,8 @@ export function bindNavigationPath(
     path: NavigationPath,
     position: WorldPosition,
 ): NavigationBinding {
-    const request = requestOf(state.execution.activity);
+    const request = getNavigationRequest(state);
+    if (request === null) throw new Error("navigation has no current request");
     if (path.request.id !== request.id) {
         throw new RangeError("navigation path belongs to a different request");
     }

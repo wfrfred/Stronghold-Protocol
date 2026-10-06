@@ -1,15 +1,18 @@
-import { createRng } from "../../../common/rng.js";
-import type { Seed } from "../../../common/rng.js";
-import type { NavigationRequestId } from "../../navigation/request.js";
-import { createNavigationState, startNavigationRequest } from "../../navigation/state.js";
-import type { RouteDefinition } from "../../route/definition.js";
-import { enterRoute, validateRouteExecution } from "../../route/execute.js";
-import { initializeRouteSpawn } from "../../route/initialize.js";
-import { createRouteState } from "../../route/progress.js";
-import type { RouteClockBinding } from "../../route/progress.js";
-import { createRoutedLocomotionState } from "./capabilities/locomotion.js";
-import type { Locomotion, LocomotiveUnitDefinition, RoutedLocomotion } from "./capabilities/locomotion.js";
-import type { Vitality, VitalUnitDefinition } from "./capabilities/vitality.js";
+import { createRng } from "../../common/rng.js";
+import type { Seed } from "../../common/rng.js";
+import type { NavigationRequestId } from "../navigation/request.js";
+import { createNavigationState, startNavigationRequest } from "../navigation/state.js";
+import type { NavigationOutcome } from "../navigation/state.js";
+import type { RouteDefinition } from "../route/definition.js";
+import { enterRoute, validateRouteExecution } from "../route/execution.js";
+import { initializeRouteSpawn } from "../route/spawn.js";
+import { createRouteState } from "../route/state.js";
+import type { RouteClockBinding } from "../route/state.js";
+import { createRoutedLocomotionState } from "./locomotion/state.js";
+import type { Locomotion, LocomotiveUnitDefinition, RoutedLocomotion } from "./locomotion/state.js";
+import { stepRoutedLocomotion } from "./locomotion/step.js";
+import type { RoutedLocomotionStepContext } from "./locomotion/step.js";
+import type { Vitality, VitalUnitDefinition } from "./vitality.js";
 import type { Unit, UnitId } from "./unit.js";
 
 export interface EnemyDefinition
@@ -38,6 +41,15 @@ export interface RoutedEnemyInitialization {
     readonly enemy: RoutedEnemy;
     readonly rngState: Seed;
     readonly nextNavigationRequestId: NavigationRequestId;
+}
+
+export type RoutedEnemyStepContext = RoutedLocomotionStepContext;
+
+export interface RoutedEnemyStep {
+    readonly enemy: RoutedEnemy;
+    readonly rngState: Seed;
+    readonly nextNavigationRequestId: NavigationRequestId;
+    readonly outcomes: readonly NavigationOutcome[];
 }
 
 export function createEnemyDefinition(definition: EnemyDefinition): EnemyDefinition {
@@ -91,5 +103,19 @@ export function initializeRoutedEnemy(spawn: RoutedEnemySpawn): RoutedEnemyIniti
         },
         rngState: rng.state(),
         nextNavigationRequestId,
+    };
+}
+
+export function stepRoutedEnemy(enemy: RoutedEnemy, context: RoutedEnemyStepContext): RoutedEnemyStep {
+    const step = stepRoutedLocomotion(enemy.locomotion, enemy.position, enemy.definition.locomotion.moveSpeed, context);
+    return {
+        enemy: {
+            ...enemy,
+            position: step.position,
+            locomotion: step.state,
+        },
+        rngState: step.rngState,
+        nextNavigationRequestId: step.nextNavigationRequestId,
+        outcomes: step.outcomes,
     };
 }

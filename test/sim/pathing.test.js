@@ -1,8 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createBattlefieldMap, BattlefieldMap } from '../../dist/core/tactical/map/map.js';
-import { createTile } from '../../dist/core/tactical/map/tile.js';
-import { projectStaticNavigationMap } from '../../dist/core/tactical/battle/battlefield/navigation.js';
+import { createBattlefieldMap, BattlefieldMap } from '../../dist/core/tactical/battlefield/map.js';
+import { createTile } from '../../dist/core/tactical/battlefield/tile.js';
+import { projectStaticNavigationMap } from '../../dist/core/tactical/battlefield/navigation-projection.js';
+import { createBattlefieldRuntime } from '../../dist/core/tactical/battlefield/runtime.js';
+import { createMechanismDefinition, createMechanismRuntime } from '../../dist/core/tactical/battlefield/mechanism.js';
+import {
+  createNavigationEffectDefinition, createNavigationSpatialEffect, createSpatialEffectRegion,
+} from '../../dist/core/tactical/battlefield/navigation-effect.js';
 import { createNavigationMap, NavigationMap } from '../../dist/core/tactical/navigation/map.js';
 import { createNavigationRequest } from '../../dist/core/tactical/navigation/request.js';
 import { deriveNavigationFieldQuery } from '../../dist/core/tactical/navigation/field.js';
@@ -12,16 +17,15 @@ import {
   setNavigationMotionMode, startNavigationRequest, steerNavigation,
 } from '../../dist/core/tactical/navigation/state.js';
 import { createRouteDefinition } from '../../dist/core/tactical/route/definition.js';
-import { createRouteClock, createRouteClockBinding, createRouteState } from '../../dist/core/tactical/route/progress.js';
-import { initializeRouteSpawn } from '../../dist/core/tactical/route/initialize.js';
+import { createRouteClock, createRouteClockBinding, createRouteState } from '../../dist/core/tactical/route/state.js';
+import { initializeRouteSpawn } from '../../dist/core/tactical/route/spawn.js';
 import { parseBattlefieldMap } from '../../dist/data/arknights/map.js';
 import { parseRouteDefinition } from '../../dist/data/arknights/route.js';
 import { createRng } from '../../dist/core/common/rng.js';
 import { World } from '../../dist/core/tactical/geometry/coordinate.js';
-import { createEnemyDefinition, initializeRoutedEnemy } from '../../dist/core/tactical/battle/unit/enemy.js';
-import { stepRoutedEnemy } from '../../dist/core/tactical/battle/unit/movement.js';
-import { createSteeringParameters, createSteeringState } from '../../dist/core/tactical/battle/unit/locomotion/steering.js';
-import { integrateSteering } from '../../dist/core/tactical/battle/unit/locomotion/integrate.js';
+import { createEnemyDefinition, initializeRoutedEnemy, stepRoutedEnemy } from '../../dist/core/tactical/unit/enemy.js';
+import { copyUnitSnapshot } from '../../dist/core/tactical/unit/snapshot.js';
+import { createSteeringParameters, createSteeringState, integrateSteering } from '../../dist/core/tactical/unit/locomotion/steering.js';
 import { Grid, OBSTACLE_COST, bresenhamTiles } from '../../server/sim/grid.js';
 import { flowFieldForGrid, navigationMapFromGrid, waypointsForGrid } from '../../dist/legacy/navigation.js';
 import { buildRawNavigationField, buildNavigationField } from '../../dist/core/tactical/navigation/pathfinding.js';
@@ -29,7 +33,7 @@ import { createNavigationFieldCache } from '../../dist/core/tactical/navigation/
 import { smoothNavigationField } from '../../dist/core/tactical/navigation/smoothing.js';
 import {
   initializeNavigationCursor, selectNavigationPredictionTarget, selectNavigationSteeringTarget,
-} from '../../dist/core/tactical/navigation/execute.js';
+} from '../../dist/core/tactical/navigation/query.js';
 import { getDefaultSource, hasGeneratedData } from '../../server/sim/simdata.js';
 import { makeBattle, flatStage, enemyRec } from '../helpers/battleHarness.js';
 import { remainingDistance } from '../../server/sim/ai.js';
@@ -989,6 +993,351 @@ test('core routed enemy initialization rejects rules outside the serial MOVE-WAI
   assert.equal(JSON.stringify(h.enemy), before);
   assert.equal(h.rngState, seed);
   assert.equal(h.nextNavigationRequestId, nextId);
+});
+
+const battlefieldUnit = (id, position) => ({
+  id, definition: Object.freeze({ id: `battlefield_unit_${id}` }), position: Object.freeze([...position]),
+});
+const battlefieldMechanism = (id, active = true) => createMechanismRuntime({
+  id, definition: createMechanismDefinition({ id: `battlefield_mechanism_${id}` }), active,
+});
+const walkRestriction = (overrides = {}) => ({ denyPassage: false, deniedDepartures: [], costFloor: 1, ...overrides });
+const effectDefinition = (id, WALK, FLY = null) => createNavigationEffectDefinition({ id, WALK, FLY });
+const fixedNavigationEffect = (id, source, position, definition, overrides = {}) => createNavigationSpatialEffect({
+  id, source, definition, active: true, expiresAtSeconds: null,
+  region: { type: 'FIXED', position, range: [[0, 0]], direction: 'RIGHT' }, ...overrides,
+});
+const flatBattlefieldRuntime = (rows = 1, columns = 5) => createBattlefieldRuntime({
+  map: createBattlefieldMap(rows, columns, Array.from({ length: rows * columns }, () => coreGround())),
+});
+
+test('core battlefield combines source restrictions and rebuilds navigation from the static baseline on removal', () => {
+  const runtime = flatBattlefieldRuntime();
+  runtime.apply([
+    { type: 'REGISTER_UNIT', unit: battlefieldUnit(10, [2, 0]) },
+    { type: 'REGISTER_UNIT', unit: battlefieldUnit(11, [3, 0]) },
+  ]);
+  const baseline = runtime.navigationMaps;
+  const oldField = buildNavigationField(baseline.WALK, fieldQuery([0, 4]));
+  const source = { type: 'UNIT', unitId: 10 };
+  const crate = fixedNavigationEffect(1, source, [0, 2], effectDefinition('crate', walkRestriction({ costFloor: 1000 })));
+  const otherSource = { type: 'UNIT', unitId: 11 };
+  const other = fixedNavigationEffect(2, otherSource, [0, 2], effectDefinition('other', walkRestriction({
+    costFloor: 2000, deniedDepartures: ['RIGHT'],
+  })));
+  const blocked = fixedNavigationEffect(3, source, [0, 2], effectDefinition('blocked', walkRestriction({ denyPassage: true, deniedDepartures: ['UP'] })));
+  const added = runtime.apply([{ type: 'ADD_EFFECT', effect: crate }, { type: 'ADD_EFFECT', effect: other }]);
+  assert.deepEqual(added.changedNavigationModes, ['WALK']);
+  assert.equal(runtime.navigationMaps.WALK.revision, 1);
+  assert.equal(runtime.navigationMaps.WALK.cells[2].moveCost, 2000);
+  assert.equal(runtime.navigationMaps.WALK.cells[2].departures.RIGHT, false);
+  assert.equal(runtime.navigationMaps.FLY, baseline.FLY);
+  assert.equal(runtime.navigationMaps.FLY.cells[2].moveCost, 1);
+  assert.deepEqual(distances(buildRawNavigationField(runtime.navigationMaps.WALK, fieldQuery([0, 4]))), [-1, -1, -1, 1, 0]);
+  const overlap = runtime.navigationMaps;
+  const maskedRemoval = runtime.apply([{ type: 'REMOVE_EFFECT', effectId: 1 }]);
+  assert.deepEqual(maskedRemoval.removedEffects, [1]);
+  assert.deepEqual(maskedRemoval.changedNavigationModes, []);
+  assert.equal(runtime.navigationMaps, overlap);
+  runtime.apply([{ type: 'ADD_EFFECT', effect: blocked }]);
+  assert.equal(runtime.navigationMaps.WALK.cells[2].passable, false);
+  assert.equal(runtime.navigationMaps.WALK.cells[2].departures.UP, false);
+  assert.equal(runtime.navigationMaps.WALK.cells[2].departures.RIGHT, false);
+  const removedSource = runtime.apply([{ type: 'REMOVE_UNIT', unitId: 10, reason: 'SCRIPT' }]);
+  assert.deepEqual(removedSource.removedUnits, [{ unitId: 10, reason: 'SCRIPT' }]);
+  assert.deepEqual(removedSource.removedEffects, [3]);
+  assert.equal(runtime.navigationMaps.WALK.cells[2].passable, true);
+  assert.equal(runtime.navigationMaps.WALK.cells[2].departures.UP, true);
+  assert.equal(runtime.navigationMaps.WALK.cells[2].departures.RIGHT, false);
+  assert.equal(runtime.navigationMaps.WALK.cells[2].moveCost, 2000);
+  runtime.apply([{ type: 'REMOVE_EFFECT', effectId: 2 }]);
+  assert.equal(runtime.navigationMaps.WALK.cells[2].moveCost, 1);
+  assert.equal(runtime.navigationMaps.WALK.cells[2].departures.RIGHT, true);
+  assert.equal(runtime.navigationMaps.FLY, baseline.FLY);
+  assert.equal(baseline.WALK.cells[2].moveCost, 1);
+  assert.equal(oldField.map, baseline.WALK);
+  assert.deepEqual(distances(oldField), [4, 3, 2, 1, 0]);
+  const restoredWalk = runtime.navigationMaps.WALK;
+  const flyOnly = runtime.apply([{ type: 'ADD_EFFECT', effect: fixedNavigationEffect(4, otherSource, [0, 2],
+    effectDefinition('fly-edge', null, { denyPassage: false, deniedDepartures: ['RIGHT'] }), {
+      region: { type: 'FIXED', position: [0, 2], range: [[0, 0]], direction: 'UP' },
+    }) }]);
+  assert.deepEqual(flyOnly.changedNavigationModes, ['FLY']);
+  assert.equal(runtime.navigationMaps.WALK, restoredWalk);
+  assert.equal(runtime.navigationMaps.FLY.cells[2].moveCost, 1);
+  assert.equal(runtime.navigationMaps.FLY.cells[2].departures.RIGHT, false);
+  assert.equal(runtime.navigationMaps.FLY.cells[2].departures.UP, true);
+});
+
+test('core battlefield follows quantized unit positions, clips rotated regions and updates spatial indexes', () => {
+  const runtime = flatBattlefieldRuntime(2, 4);
+  const source = { type: 'MECHANISM', mechanismId: 1 };
+  const region = createSpatialEffectRegion({ type: 'FOLLOW_UNIT', unitId: 10, range: [[0, 0], [0, 1], [-1, 0]], direction: 'RIGHT' });
+  const effect = createNavigationSpatialEffect({
+    id: 1, source, region, definition: effectDefinition('following-crate', walkRestriction({ costFloor: 1000 })),
+    active: true, expiresAtSeconds: null,
+  });
+  runtime.apply([
+    { type: 'ADD_EFFECT', effect }, { type: 'REGISTER_MECHANISM', mechanism: battlefieldMechanism(1) },
+    { type: 'REGISTER_UNIT', unit: battlefieldUnit(10, [0, 0]) },
+  ]);
+  assert.deepEqual(runtime.unitsAt([0, 0]).map(unit => unit.id), [10]);
+  assert.deepEqual(runtime.effectsAt([0, 0]), [1]);
+  assert.deepEqual(runtime.effectsAt([0, 1]), [1]);
+  assert.deepEqual(runtime.effectsFollowing(10), [1]);
+  assert.deepEqual(runtime.effectsFrom(source), [1]);
+  const firstMaps = runtime.navigationMaps;
+  runtime.apply([{ type: 'MOVE_UNIT', unitId: 10, position: Object.freeze([0.5, 0]) }]);
+  assert.equal(runtime.navigationMaps, firstMaps);
+  assert.deepEqual(runtime.unitsAt([0, 0]).map(unit => unit.id), [10]);
+  runtime.apply([{ type: 'MOVE_UNIT', unitId: 10, position: Object.freeze([0.51, 0]) }]);
+  assert.deepEqual(runtime.unitsAt([0, 0]), []);
+  assert.deepEqual(runtime.unitsAt([0, 1]).map(unit => unit.id), [10]);
+  assert.deepEqual(runtime.effectsAt([0, 0]), []);
+  assert.deepEqual(runtime.effectsAt([0, 2]), [1]);
+  assert.equal(runtime.navigationMaps.WALK.revision, firstMaps.WALK.revision + 1);
+  assert.equal(runtime.navigationMaps.FLY, firstMaps.FLY);
+  runtime.apply([{ type: 'MOVE_UNIT', unitId: 10, position: Object.freeze([-2, 0]) }]);
+  assert.deepEqual(runtime.unitsAt([0, 1]), []);
+  assert.deepEqual(runtime.effectsAt([0, 1]), []);
+  assert.equal(runtime.navigationMaps.WALK.cells.every(cell => cell.moveCost === 1), true);
+  const fixed = createSpatialEffectRegion({ type: 'FIXED', position: [0, 3], range: [[0, 0], [0, 1]], direction: 'UP' });
+  runtime.apply([{ type: 'SET_EFFECT_REGION', effectId: 1, region: fixed }]);
+  assert.deepEqual(runtime.effectsFollowing(10), []);
+  assert.deepEqual(runtime.effectsFrom(source), [1]);
+  assert.deepEqual(runtime.effectsAt([0, 3]), [1]);
+  assert.deepEqual(runtime.effectsAt([1, 3]), [1]);
+  assert.equal(runtime.navigationMaps.WALK.cells[3].moveCost, 1000);
+  assert.equal(runtime.navigationMaps.WALK.cells[7].moveCost, 1000);
+});
+
+test('core battlefield keeps inactive effects, expires deadlines and cleans distinct sources and follow anchors', () => {
+  const runtime = flatBattlefieldRuntime();
+  runtime.apply([
+    { type: 'REGISTER_UNIT', unit: battlefieldUnit(10, [0, 0]) },
+    { type: 'REGISTER_UNIT', unit: battlefieldUnit(11, [1, 0]) },
+    { type: 'REGISTER_MECHANISM', mechanism: battlefieldMechanism(1) },
+  ]);
+  const definition = effectDefinition('lifecycle-crate', walkRestriction({ costFloor: 1000 }));
+  const fromMechanism = fixedNavigationEffect(1, { type: 'MECHANISM', mechanismId: 1 }, [0, 2], definition, { expiresAtSeconds: 5 });
+  const followOther = fixedNavigationEffect(2, { type: 'UNIT', unitId: 10 }, [0, 0], definition, {
+    region: { type: 'FOLLOW_UNIT', unitId: 11, range: [[0, 0]], direction: 'RIGHT' },
+  });
+  const fromOther = fixedNavigationEffect(3, { type: 'UNIT', unitId: 11 }, [0, 3], definition);
+  runtime.apply([{ type: 'ADD_EFFECT', effect: fromMechanism }, { type: 'ADD_EFFECT', effect: followOther }, { type: 'ADD_EFFECT', effect: fromOther }]);
+  runtime.apply([{ type: 'SET_MECHANISM_ACTIVE', mechanismId: 1, active: false }]);
+  assert.equal(runtime.getEffect(1).active, true);
+  assert.equal(runtime.navigationMaps.WALK.cells[2].moveCost, 1);
+  const inactiveMaps = runtime.navigationMaps;
+  runtime.apply([{ type: 'SET_EFFECT_ACTIVE', effectId: 1, active: false }]);
+  assert.equal(runtime.navigationMaps, inactiveMaps);
+  runtime.apply([{ type: 'SET_MECHANISM_ACTIVE', mechanismId: 1, active: true }]);
+  assert.equal(runtime.navigationMaps, inactiveMaps);
+  runtime.apply([{ type: 'SET_EFFECT_ACTIVE', effectId: 1, active: true }]);
+  assert.equal(runtime.navigationMaps.WALK.cells[2].moveCost, 1000);
+  assert.deepEqual(runtime.apply([{ type: 'EXPIRE_EFFECTS', elapsedSeconds: 4.99 }]).removedEffects, []);
+  assert.deepEqual(runtime.apply([{ type: 'EXPIRE_EFFECTS', elapsedSeconds: 5 }]).removedEffects, [1]);
+  assert.equal(runtime.getEffect(1), undefined);
+  const removedAnchor = runtime.apply([{ type: 'REMOVE_UNIT', unitId: 11, reason: 'DEATH' }]);
+  assert.deepEqual(removedAnchor.removedUnits, [{ unitId: 11, reason: 'DEATH' }]);
+  assert.deepEqual([...removedAnchor.removedEffects].sort(), [2, 3]);
+  assert.equal(runtime.getUnit(10).id, 10);
+  assert.deepEqual(runtime.effectsFrom({ type: 'UNIT', unitId: 10 }), []);
+  assert.deepEqual(runtime.effectsFollowing(11), []);
+  const fromSource = fixedNavigationEffect(4, { type: 'UNIT', unitId: 10 }, [0, 0], definition);
+  const finalMechanism = fixedNavigationEffect(5, { type: 'MECHANISM', mechanismId: 1 }, [0, 4], definition);
+  runtime.apply([{ type: 'ADD_EFFECT', effect: fromSource }, { type: 'ADD_EFFECT', effect: finalMechanism }]);
+  const removed = runtime.apply([
+    { type: 'REMOVE_UNIT', unitId: 10, reason: 'EXPIRED' },
+    { type: 'REMOVE_MECHANISM', mechanismId: 1, reason: 'SCRIPT' },
+  ]);
+  assert.deepEqual(removed.removedUnits, [{ unitId: 10, reason: 'EXPIRED' }]);
+  assert.deepEqual(removed.removedMechanisms, [{ mechanismId: 1, reason: 'SCRIPT' }]);
+  assert.deepEqual([...removed.removedEffects].sort(), [4, 5]);
+  assert.deepEqual(runtime.unitIds, []);
+  assert.deepEqual(runtime.mechanismIds, []);
+  assert.deepEqual(runtime.effectIds, []);
+  assert.equal(runtime.navigationMaps.WALK.cells.every(cell => cell.moveCost === 1), true);
+});
+
+test('core battlefield isolates dynamic snapshots and rejects a failed batch without changing maps or caches', () => {
+  const runtime = flatBattlefieldRuntime();
+  const h = routedEnemyHarness();
+  const unit = h.enemy, mechanism = battlefieldMechanism(1);
+  const effect = fixedNavigationEffect(1, { type: 'MECHANISM', mechanismId: 1 }, [0, 2], effectDefinition('snapshot-crate', walkRestriction({ costFloor: 1000 })));
+  runtime.apply([{ type: 'REGISTER_UNIT', unit }, { type: 'REGISTER_MECHANISM', mechanism }, { type: 'ADD_EFFECT', effect }]);
+  unit.vitality.hp = 1;
+  unit.locomotion.mainRoute.navigation.execution.visits.visitedCenters.push(Object.freeze([0, 4]));
+  mechanism.active = false;
+  effect.active = false;
+  const snapshot = runtime.getUnit(1);
+  snapshot.vitality.hp = 2;
+  snapshot.position = Object.freeze([3, 0]);
+  snapshot.locomotion.steering.lastVelocity = Object.freeze([10, 0]);
+  snapshot.locomotion.mainRoute.route.progress.checkpointIndex = 100;
+  snapshot.locomotion.mainRoute.navigation.execution.visits.visitedCenters.push(Object.freeze([0, 3]));
+  runtime.unitsAt([0, 0])[0].vitality.hp = 3;
+  runtime.getMechanism(1).active = false;
+  runtime.getEffect(1).active = false;
+  assert.equal(runtime.getUnit(1).vitality.hp, 100);
+  assert.deepEqual(runtime.getUnit(1).position, [0, 0]);
+  assert.deepEqual(runtime.getUnit(1).locomotion.steering.lastVelocity, [0, 0]);
+  assert.equal(runtime.getUnit(1).locomotion.mainRoute.route.progress.checkpointIndex, 0);
+  assert.deepEqual(runtime.getUnit(1).locomotion.mainRoute.navigation.execution.visits.visitedCenters, []);
+  assert.equal(runtime.getMechanism(1).active, true);
+  assert.equal(runtime.getEffect(1).active, true);
+  const before = JSON.stringify({ unit: runtime.getUnit(1), mechanisms: runtime.mechanismIds, effects: runtime.effectIds });
+  const maps = runtime.navigationMaps;
+  const request = createNavigationRequest(coreRequest({ targetTile: [0, 4], goal: { position: [4, 0], reachDistance: 0.05 } }));
+  const field = runtime.fieldCache.get(maps.WALK, request);
+  assert.throws(() => runtime.apply([
+    { type: 'REGISTER_UNIT', unit: battlefieldUnit(10, [4, 0]) },
+    { type: 'ADD_EFFECT', effect: fixedNavigationEffect(2, { type: 'UNIT', unitId: 10 }, [0, 3], effectDefinition('failed-denial', walkRestriction({ denyPassage: true }))) },
+    { type: 'REGISTER_UNIT', unit: battlefieldUnit(1, [2, 0]) },
+  ]));
+  assert.equal(runtime.getUnit(10), undefined);
+  assert.equal(runtime.getEffect(2), undefined);
+  assert.equal(runtime.navigationMaps, maps);
+  assert.equal(runtime.fieldCache.get(maps.WALK, request), field);
+  assert.equal(JSON.stringify({ unit: runtime.getUnit(1), mechanisms: runtime.mechanismIds, effects: runtime.effectIds }), before);
+  assert.throws(() => runtime.apply([{ type: 'ADD_EFFECT', effect: fixedNavigationEffect(2, { type: 'UNIT', unitId: 99 }, [0, 3], effect.definition) }]));
+  assert.equal(runtime.navigationMaps, maps);
+  assert.deepEqual(runtime.effectIds, [1]);
+  const updated = runtime.getUnit(1);
+  updated.definition = Object.freeze({ ...updated.definition });
+  assert.throws(() => runtime.apply([{ type: 'UPDATE_UNIT', unit: updated }]));
+});
+
+test('core battlefield isolates custom unit state using its explicit snapshot copy', () => {
+  const runtime = createBattlefieldRuntime({ map: flatBattlefieldRuntime().map }, unit => ({
+    ...copyUnitSnapshot(unit),
+    charges: { ...unit.charges, spent: [...unit.charges.spent] },
+  }));
+  const unit = { ...battlefieldUnit(10, [0, 0]), charges: { remaining: 3, spent: [] } };
+  runtime.apply([{ type: 'REGISTER_UNIT', unit }]);
+  unit.charges.remaining = 0;
+  unit.charges.spent.push(0);
+  const snapshot = runtime.getUnit(10);
+  assert.deepEqual(snapshot.charges, { remaining: 3, spent: [] });
+  snapshot.charges.remaining = 2;
+  snapshot.charges.spent.push(1);
+  assert.deepEqual(runtime.getUnit(10).charges, { remaining: 3, spent: [] });
+  const maps = runtime.navigationMaps;
+  runtime.apply([{ type: 'UPDATE_UNIT', unit: snapshot }]);
+  snapshot.charges.remaining = 0;
+  snapshot.charges.spent.push(2);
+  runtime.unitsAt([0, 0])[0].charges.spent.push(3);
+  assert.deepEqual(runtime.getUnit(10).charges, { remaining: 2, spent: [1] });
+  assert.equal(runtime.navigationMaps, maps);
+  assert.throws(() => runtime.apply([
+    { type: 'MOVE_UNIT', unitId: 10, position: Object.freeze([1, 0]) },
+    { type: 'REGISTER_UNIT', unit },
+  ]));
+  assert.deepEqual(runtime.getUnit(10).position, [0, 0]);
+  assert.deepEqual(runtime.getUnit(10).charges, { remaining: 2, spent: [1] });
+});
+
+test('core battlefield invalidates only changed navigation modes and preserves routed intent through rebinding', () => {
+  const runtime = flatBattlefieldRuntime();
+  const h = routedEnemyHarness({ speed: 1, checkpoints: [coreMove(4, { randomizeReachOffset: true, reachOffset: [0.1, 0] })], routeOverrides: {
+    spawnOffset: [0.1, -0.2], visitEveryTileCenter: true,
+  } });
+  h.setMaps(runtime.navigationMaps);
+  h.step({ moveMultiplier: 0 });
+  const walker = h.enemy, oldNavigation = walker.locomotion.mainRoute.navigation;
+  const request = routedEnemyRequest(walker), goal = walker.locomotion.mainRoute.route.progress.checkpoint.goal;
+  const alternativeRoute = { route: walker.locomotion.mainRoute.route, navigation: oldNavigation };
+  walker.locomotion.alternativeRoute = alternativeRoute;
+  const flyRoute = createRouteDefinition(coreRoute({ pathMotionMode: 'FLY', startPosition: [0, 0], endPosition: [0, 4], spawnOffset: [0, 0], spawnRandomRange: [0, 0] }));
+  const flyer = initializeRoutedEnemy({ id: 2, definition: walker.definition, route: flyRoute,
+    clockBinding: walker.locomotion.mainRoute.route.clockBinding, alwaysCheckCurrentPoint: true, rngState: h.rngState, nextNavigationRequestId: h.nextNavigationRequestId }).enemy;
+  const flyRequest = routedEnemyRequest(flyer);
+  const flyField = runtime.fieldCache.get(runtime.navigationMaps.FLY, flyRequest);
+  flyer.locomotion.mainRoute.navigation = bindNavigationPath(flyer.locomotion.mainRoute.navigation, createNavigationPath(flyRequest, flyField), flyer.position).state;
+  const idle = { ...flyer, id: 3, locomotion: { ...flyer.locomotion, mainRoute: { ...flyer.locomotion.mainRoute, navigation: createNavigationState('WALK', [0, 0]) } } };
+  const arrived = { ...walker, id: 4, locomotion: { ...walker.locomotion, alternativeRoute: null, mainRoute: {
+    ...walker.locomotion.mainRoute, navigation: { ...oldNavigation, execution: { ...oldNavigation.execution, activity: { type: 'ARRIVED', request } } },
+  } } };
+  const externalMap = fieldMap(1, 5, Array.from({ length: 5 }, () => fieldCell()));
+  const externalPath = createNavigationPath(request, buildNavigationField(externalMap, deriveNavigationFieldQuery(request)));
+  const externalUnit = { ...walker, id: 5, locomotion: { ...walker.locomotion, alternativeRoute: null, mainRoute: {
+    ...walker.locomotion.mainRoute, navigation: bindNavigationPath(oldNavigation, externalPath, walker.position).state,
+  } } };
+  runtime.apply([
+    { type: 'REGISTER_UNIT', unit: walker }, { type: 'REGISTER_UNIT', unit: flyer },
+    { type: 'REGISTER_UNIT', unit: idle }, { type: 'REGISTER_UNIT', unit: arrived },
+    { type: 'REGISTER_UNIT', unit: externalUnit },
+    { type: 'REGISTER_MECHANISM', mechanism: battlefieldMechanism(1) },
+  ]);
+  assert.equal(runtime.getUnit(5).locomotion.mainRoute.navigation.execution.activity.type, 'NEEDS_PATH');
+  assert.equal(routedEnemyRequest(runtime.getUnit(5)), request);
+  assert.equal(externalUnit.locomotion.mainRoute.navigation.execution.activity.path, externalPath);
+  const oldMaps = runtime.navigationMaps;
+  const oldPath = runtime.getUnit(1).locomotion.mainRoute.navigation.execution.activity.path;
+  const memo = runtime.fieldCache.get(oldMaps.WALK, request);
+  const hpUpdate = runtime.getUnit(1);
+  hpUpdate.vitality.hp = 90;
+  assert.deepEqual(runtime.apply([{ type: 'UPDATE_UNIT', unit: hpUpdate }]).changedNavigationModes, []);
+  assert.equal(runtime.navigationMaps, oldMaps);
+  assert.equal(runtime.getUnit(1).locomotion.mainRoute.navigation.execution.activity.path, oldPath);
+  assert.equal(runtime.fieldCache.get(oldMaps.WALK, request), memo);
+  runtime.fieldCache.clear();
+  assert.equal(runtime.navigationMaps, oldMaps);
+  assert.equal(runtime.getUnit(1).locomotion.mainRoute.navigation.execution.activity.path, oldPath);
+  assert.notEqual(runtime.fieldCache.get(oldMaps.WALK, request), memo);
+  const flyMemo = runtime.fieldCache.get(oldMaps.FLY, flyRequest);
+  const change = runtime.apply([{ type: 'ADD_EFFECT', effect: fixedNavigationEffect(1, { type: 'MECHANISM', mechanismId: 1 }, [0, 2],
+    effectDefinition('dynamic-crate', walkRestriction({ costFloor: 1000 }))) }]);
+  assert.deepEqual(change.changedNavigationModes, ['WALK']);
+  assert.equal(runtime.navigationMaps.FLY, oldMaps.FLY);
+  assert.equal(runtime.fieldCache.get(runtime.navigationMaps.FLY, flyRequest), flyMemo);
+  assert.equal(runtime.getUnit(2).locomotion.mainRoute.navigation.execution.activity.path.field, flyField);
+  assert.equal(runtime.getUnit(3).locomotion.mainRoute.navigation.execution.activity.type, 'IDLE');
+  assert.equal(runtime.getUnit(4).locomotion.mainRoute.navigation.execution.activity.type, 'ARRIVED');
+  const changedMaps = runtime.navigationMaps;
+  const changedField = runtime.fieldCache.get(changedMaps.WALK, request);
+  hpUpdate.vitality.hp = 80;
+  assert.deepEqual(runtime.apply([{ type: 'UPDATE_UNIT', unit: hpUpdate }]).changedNavigationModes, []);
+  assert.equal(runtime.navigationMaps, changedMaps);
+  assert.equal(runtime.fieldCache.get(changedMaps.WALK, request), changedField);
+  assert.equal(hpUpdate.locomotion.mainRoute.navigation.execution.activity.path, oldPath);
+  const pending = runtime.getUnit(1);
+  assert.equal(pending.vitality.hp, 80);
+  for (const control of [pending.locomotion.mainRoute, pending.locomotion.alternativeRoute]) {
+    assert.equal(control.navigation.execution.activity.type, 'NEEDS_PATH');
+    assert.equal(control.navigation.execution.activity.request, request);
+    assert.equal(control.navigation.execution.activity.request.goal, goal);
+    assert.deepEqual(control.navigation.execution.visits, oldNavigation.execution.visits);
+    assert.equal(control.navigation.execution.locatorOffset, oldNavigation.execution.locatorOffset);
+  }
+  assert.equal(oldPath.field.map, oldMaps.WALK);
+  assert.equal(oldMaps.WALK.cells[2].moveCost, 1);
+  pending.locomotion.alternativeRoute = null;
+  const context = {
+    clock: createRouteClock({ fixedPlayTimeSeconds: 1, userFixedPlayTimeSeconds: 1, deltaTimeSeconds: 0.5 }),
+    maps: runtime.navigationMaps, fieldCache: runtime.fieldCache, steeringParameters: createSteeringParameters({ steeringFactor: 2.5, maxSteeringForce: 4 }),
+    moveMultiplier: 0, movementAllowed: true, routeAdvanceAllowed: true, rngState: h.rngState, nextNavigationRequestId: h.nextNavigationRequestId,
+  };
+  const stepped = stepRoutedEnemy(pending, context);
+  runtime.apply([{ type: 'UPDATE_UNIT', unit: stepped.enemy }]);
+  const rebound = runtime.getUnit(1);
+  assert.equal(rebound.locomotion.mainRoute.navigation.execution.activity.path.field.map, runtime.navigationMaps.WALK);
+  assert.equal(routedEnemyRequest(rebound), request);
+  assert.equal(rebound.locomotion.mainRoute.route.progress.checkpoint.goal, goal);
+  assert.equal(rebound.vitality.hp, 80);
+  assert.equal(stepped.rngState, h.rngState);
+  assert.equal(stepped.nextNavigationRequestId, h.nextNavigationRequestId);
+  runtime.apply([{ type: 'ADD_EFFECT', effect: fixedNavigationEffect(2, { type: 'MECHANISM', mechanismId: 1 }, [0, 2],
+    effectDefinition('dynamic-wall', walkRestriction({ denyPassage: true }))) }]);
+  const failed = stepRoutedEnemy(runtime.getUnit(1), { ...context, maps: runtime.navigationMaps });
+  assert.equal(failed.enemy.locomotion.mainRoute.navigation.execution.activity.type, 'UNREACHABLE');
+  runtime.apply([{ type: 'UPDATE_UNIT', unit: failed.enemy }]);
+  runtime.apply([{ type: 'REMOVE_EFFECT', effectId: 2 }]);
+  const retry = runtime.getUnit(1).locomotion.mainRoute.navigation;
+  assert.equal(retry.execution.activity.type, 'NEEDS_PATH');
+  assert.equal(retry.execution.activity.request, request);
+  assert.equal(retry.execution.activity.request.goal, goal);
+  assert.deepEqual(retry.execution.visits, oldNavigation.execution.visits);
 });
 
 test('a pushed ground enemy re-plans from its tile centre: never cuts a fence corner or breaks the stage crate on it (act1 m03, tile 11,5)', REAL, () => {

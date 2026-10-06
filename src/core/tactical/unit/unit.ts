@@ -1,4 +1,4 @@
-import type { WorldPosition } from "../../geometry/coordinate.js";
+import type { WorldPosition } from "../geometry/coordinate.js";
 
 export type UnitId = number;
 export type UnitDefinitionId = string;
