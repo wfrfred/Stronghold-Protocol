@@ -154,8 +154,13 @@ class ProjectileSettlement {
                 continue;
             }
 
+            const contacted = updateProjectileInstance(current, {
+                hitUnitIds: Object.freeze([...current.hitUnitIds, targetUnitId]),
+            });
+            this.#update(contacted);
+
             withProjectileContext(
-                current,
+                contacted,
                 program,
                 this.#services,
                 this.#contextAccess(),
@@ -179,21 +184,10 @@ class ProjectileSettlement {
                 },
             );
 
-            const latest = (this.#get(instance.id) ??
-                this.#lastKnown.get(instance.id) ??
-                current) as ProjectileInstance<S>;
-            const updated = updateProjectileInstance(latest, {
-                hitUnitIds: Object.freeze([...latest.hitUnitIds, targetUnitId]),
-            });
+            const latest = this.#get(instance.id) ?? this.#lastKnown.get(instance.id) ?? contacted;
 
-            if (this.#get(instance.id) !== undefined) {
-                this.#update(updated);
-            } else {
-                this.#lastKnown.set(instance.id, updated);
-            }
-
-            this.#signal(updated, {
-                ...this.#signalFacts(updated),
+            this.#signal(latest, {
+                ...this.#signalFacts(latest),
                 type: "PROJECTILE_HIT",
                 targetUnitId,
             });
