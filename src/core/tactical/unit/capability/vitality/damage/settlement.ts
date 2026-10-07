@@ -1,7 +1,7 @@
 import { hasDefenseDefinition, type DefenseDefinition } from "../../defense/capability.js";
 import { hasVitality, type Vitality } from "../capability.js";
 import type { Unit } from "../../../unit.js";
-import { hasStatusFlag } from "../../status.js";
+import { hasStatusFlag } from "../../status/capability.js";
 import { resolveDefense } from "../../defense/query.js";
 import type {
     DamageType,
@@ -93,7 +93,7 @@ function confirmDamage(
         work = reaction.apply(work, report);
     }
     if (report.deathOccurred) {
-        work = retireCombatUnit(work, report.request.targetUnitId, resources);
+        work = retireCombatUnit(work, report.request.targetUnitId, resources, report.request.tick);
     }
 
     return { work, report };

@@ -3,6 +3,7 @@ import {
     registerNumericContribution,
     removeNumericContributionsOwnedBy,
     updateNumericContribution,
+    setNumericContributionParticipation,
     type NumericContributionGroup,
     type NumericValueContribution,
 } from "../../../modifier/contribution.js";
@@ -24,6 +25,11 @@ export interface EffectContributionProjection<S extends object> {
 export interface CompiledEffectContribution {
     readonly install: <U extends Unit>(unit: U, instance: EffectInstanceValue) => U;
     readonly update: <U extends Unit>(unit: U, instance: EffectInstanceValue) => U;
+    readonly setParticipation: <U extends Unit>(
+        unit: U,
+        instance: EffectInstanceValue,
+        participating: boolean,
+    ) => U;
     readonly remove: <U extends Unit>(unit: U, instance: EffectInstanceValue) => U;
 }
 
@@ -41,10 +47,23 @@ function contributionBinding(
     return {
         id: `@effect/${instance.id}/${binding.id}`,
         sequence: instance.acquiredSequence,
-        participating: true,
+        participating: instance.participating,
         owner: { unitId: unit.id, instanceId: instance.id },
         ...(binding.group === undefined ? {} : { group: binding.group }),
     };
+}
+
+function participationBinding(
+    binding: ContributionBinding,
+): CompiledEffectContribution["setParticipation"] {
+    return (unit, instance, participating) =>
+        binding.target(unit, (state) =>
+            setNumericContributionParticipation(
+                state,
+                `@effect/${instance.id}/${binding.id}`,
+                participating,
+            ),
+        );
 }
 
 function removeBinding(binding: ContributionBinding): CompiledEffectContribution["remove"] {
@@ -75,6 +94,7 @@ export function compileNumericProviderBinding(
                 }),
             ),
         update: (unit) => unit,
+        setParticipation: participationBinding(binding),
         remove: removeBinding(binding),
     };
 }
@@ -104,6 +124,7 @@ export function compileNumericProjectionBinding(
                 })),
             );
         },
+        setParticipation: participationBinding(binding),
         remove: removeBinding(binding),
     };
 }

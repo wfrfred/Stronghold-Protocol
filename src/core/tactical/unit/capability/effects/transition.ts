@@ -1,49 +1,9 @@
 import { transitionCombatUnit, type CombatWork } from "../../../battle/execution/work.js";
-import type { Unit, UnitId } from "../../unit.js";
-import type { StatusFlag } from "../status.js";
-import { createEffectsState, hasEffects, type Effects } from "./capability.js";
-import type { EffectInstanceValue } from "./instance.js";
-import { installEffect } from "./lifecycle.js";
+import type { UnitId } from "../../unit.js";
+import { hasEffects } from "./capability.js";
+import { replaceEffectInstances } from "./internal/state.js";
 import type { EffectProgramRef } from "./program.js";
-import type { EffectResources } from "./registry.js";
-import type { EffectContributionBindings } from "./resources.js";
-
-export interface EffectTransitionResources {
-    readonly effects: Pick<EffectResources, "typedInstance" | "update">;
-    readonly effectBindings: EffectContributionBindings;
-}
-
-export function installEffectWithBindings<U extends Unit>(
-    unit: U,
-    instance: EffectInstanceValue,
-    bindings: EffectContributionBindings,
-    flags: readonly StatusFlag[] = [],
-): U & Effects {
-    const contributions = bindings.get(instance);
-    let installed = installEffect(unit, instance, flags);
-
-    for (const binding of contributions) {
-        installed = binding.install(installed, instance);
-    }
-
-    return installed;
-}
-
-export function cleanupEffectContributions<U extends Unit>(
-    unit: U,
-    removedInstances: readonly EffectInstanceValue[],
-    bindings: EffectContributionBindings,
-): U {
-    let current = unit;
-
-    for (const instance of removedInstances) {
-        for (const binding of bindings.get(instance)) {
-            current = binding.remove(current, instance);
-        }
-    }
-
-    return current;
-}
+import type { EffectTransitionResources } from "./contract.js";
 
 export function updateEffectState<S extends object>(
     work: CombatWork,
@@ -80,15 +40,15 @@ export function updateEffectState<S extends object>(
             return owner;
         }
 
-        let unit: Unit & Effects = {
-            ...owner,
-            effects: createEffectsState(
-                owner.effects.instances.map((value) => (value === instance ? updated : value)),
-            ),
-        };
+        let unit = replaceEffectInstances(
+            owner,
+            owner.effects.instances.map((value) => (value === instance ? updated : value)),
+        );
 
-        for (const binding of resources.effectBindings.get(updated)) {
-            unit = binding.update(unit, updated);
+        if (updated.started) {
+            for (const binding of resources.effectBindings.get(updated)) {
+                unit = binding.update(unit, updated);
+            }
         }
 
         return unit;

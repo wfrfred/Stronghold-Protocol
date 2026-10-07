@@ -9,7 +9,7 @@ import type {
 import { areHostile, hasAllegiance } from "../capability/allegiance.js";
 import { isSpatiallyPresent } from "../capability/presence.js";
 import { hasHit, hasSpatial } from "../capability/spatial.js";
-import { hasStatusFlag } from "../capability/status.js";
+import { hasStatusFlag } from "../capability/status/capability.js";
 import { hasVitality, type VitalUnit } from "../capability/vitality/capability.js";
 import type { Unit, UnitId } from "../unit.js";
 import type {

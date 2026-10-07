@@ -1,12 +1,19 @@
 import type { BattlefieldChange } from "../../battlefield/contract.js";
+import type { EffectTransitionResources } from "../../unit/capability/effects/contract.js";
 import { hasRoutedLocomotion } from "../../unit/capability/locomotion/capability.js";
 import { hasAction } from "../../unit/capability/action/capability.js";
 import { stepRoutedUnit } from "../../unit/capability/locomotion/step.js";
+import type { Unit, UnitId } from "../../unit/unit.js";
 import { changeAlternativeRoutes, type AlternativeRouteCommand } from "./route-control.js";
 import type { BattleEvent } from "../contract.js";
 import type { BattlePhase } from "../system.js";
+import { removeUnitWithEffects } from "../execution/unit-lifecycle.js";
+import { combatWorkChanges, createCombatWork, updateCombatUnit } from "../execution/work.js";
 
-export function createMovementSystem({ moveMultiplier }: { readonly moveMultiplier: number }): {
+export function createMovementSystem(
+    { moveMultiplier }: { readonly moveMultiplier: number },
+    resources: EffectTransitionResources,
+): {
     readonly reroute: BattlePhase;
     readonly step: BattlePhase;
 } {
@@ -40,6 +47,8 @@ export function createMovementSystem({ moveMultiplier }: { readonly moveMultipli
         let execution = input.execution;
         const changes: BattlefieldChange[] = [];
         const events: BattleEvent[] = [];
+        const movedUnits: Unit[] = [];
+        const completed: UnitId[] = [];
 
         for (const unitId of [...battlefield.unitIds].sort((left, right) => left - right)) {
             const unit = battlefield.getUnit(unitId)!;
@@ -86,14 +95,28 @@ export function createMovementSystem({ moveMultiplier }: { readonly moveMultipli
                 moved.unit.locomotion.mainRoute.route.progress.phase === "COMPLETED" &&
                 (battlefield.blockerOf(unitId) === undefined || releasesBlocking)
             ) {
-                changes.push({ type: "REMOVE_UNIT", unitId, reason: "SCRIPT" });
+                completed.push(unitId);
                 events.push({ type: "ROUTE_COMPLETED", unitId, tick });
-            } else {
-                changes.push({ type: "UPDATE_UNIT", unit: moved.unit });
             }
+
+            movedUnits.push(moved.unit);
         }
 
-        return { state: undefined, changes, events, execution };
+        let work = createCombatWork(battlefield, execution);
+
+        for (const unit of movedUnits) {
+            work = updateCombatUnit(work, unit);
+        }
+        for (const unitId of completed) {
+            work = removeUnitWithEffects(work, unitId, "SCRIPT", resources, tick);
+        }
+
+        return {
+            state: undefined,
+            changes: [...changes, ...combatWorkChanges(work)],
+            events: [...events, ...work.events],
+            execution: work.execution,
+        };
     };
 
     return { reroute, step };

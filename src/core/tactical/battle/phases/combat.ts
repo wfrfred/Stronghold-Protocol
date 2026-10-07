@@ -46,7 +46,7 @@ export function createCombatSystem(
             const unit = getCombatUnit(work, id);
 
             if (unit !== undefined && hasVitality(unit) && unit.vitality.hp <= 0) {
-                work = retireCombatUnit(work, id, resources);
+                work = retireCombatUnit(work, id, resources, tick);
             }
         }
 

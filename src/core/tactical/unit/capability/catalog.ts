@@ -29,7 +29,7 @@ import {
     initializeHitState,
     initializeSpatialState,
 } from "./spatial.js";
-import { copyStatusState, initializeStatusState } from "./status.js";
+import { copyStatusState, initializeStatusState } from "./status/capability.js";
 import { copyVitalityState, initializeVitalityState } from "./vitality/capability.js";
 
 export interface CapabilityInitializationContext {

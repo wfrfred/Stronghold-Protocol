@@ -17,6 +17,10 @@ import {
 } from "./creation/placement.js";
 import type { BattleExecutionState } from "./execution/state.js";
 import type { BattlePhase, BattleSystem } from "./system.js";
+import type { BattleEvent } from "./contract.js";
+import type { EffectTransitionResources } from "../unit/capability/effects/contract.js";
+import { removeUnitWithEffects } from "./execution/unit-lifecycle.js";
+import { combatWorkChanges, createCombatWork } from "./execution/work.js";
 
 export interface PredefinedUnitCreation extends UnitPlacementDefinition {
     readonly type: "UNIT";
@@ -235,6 +239,7 @@ function reconcilePredefinedPresence(
 
 export function createPredefinedSystem(
     definitions: readonly PredefinedInstanceDefinition[],
+    resources: EffectTransitionResources,
 ): BattleSystem<readonly PredefinedPresence[]> & {
     readonly step: BattlePhase<readonly PredefinedPresence[]>;
     readonly resolve: BattlePhase<readonly PredefinedPresence[]>;
@@ -256,11 +261,66 @@ export function createPredefinedSystem(
                 input.tick,
             );
 
+            if (changed.changes.length === 0) {
+                return {
+                    state: changed.presence,
+                    changes: [],
+                    events: [],
+                    execution: changed.execution,
+                };
+            }
+
+            const units = new Map(
+                input.battlefield.unitIds.map((id) => [id, input.battlefield.getUnit(id)!]),
+            );
+            const changes: BattlefieldChange[] = [];
+            const events: BattleEvent[] = [];
+            let execution = changed.execution;
+
+            for (const change of changed.changes) {
+                if (change.type === "REGISTER_UNIT" || change.type === "UPDATE_UNIT") {
+                    units.set(change.unit.id, change.unit);
+                }
+                if (change.type !== "REMOVE_UNIT") {
+                    changes.push(change);
+                    continue;
+                }
+
+                const work = removeUnitWithEffects(
+                    createCombatWork(
+                        {
+                            unitIds: [...units.keys()],
+                            getUnit: (id) => units.get(id),
+                            blockerOf: (id) => input.battlefield.blockerOf(id),
+                            blockedBy: (id) => input.battlefield.blockedBy(id),
+                        },
+                        execution,
+                    ),
+                    change.unitId,
+                    change.reason,
+                    resources,
+                    input.tick,
+                );
+                const settled = combatWorkChanges(work);
+
+                for (const update of settled) {
+                    if (update.type === "REGISTER_UNIT" || update.type === "UPDATE_UNIT") {
+                        units.set(update.unit.id, update.unit);
+                    } else if (update.type === "REMOVE_UNIT") {
+                        units.delete(update.unitId);
+                    }
+                }
+
+                changes.push(...settled);
+                events.push(...work.events);
+                execution = work.execution;
+            }
+
             return {
                 state: changed.presence,
-                changes: changed.changes,
-                events: [],
-                execution: changed.execution,
+                changes,
+                events,
+                execution,
             };
         },
 

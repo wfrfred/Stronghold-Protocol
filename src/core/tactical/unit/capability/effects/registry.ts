@@ -6,10 +6,8 @@ import {
     ownRestoredEffectInstance,
     ownUpdatedEffectInstance,
     readEffectSnapshot,
-    type EffectInstance,
-    type EffectInstanceMetadata,
-    type EffectInstanceValue,
-} from "./instance.js";
+} from "./internal/instance.js";
+import type { EffectInstance, EffectInstanceMetadata, EffectInstanceValue } from "./instance.js";
 
 export class EffectResources {
     readonly #programs = new Map<string, EffectProgram<object>>();
@@ -42,7 +40,7 @@ export class EffectResources {
     ): EffectInstance<S> {
         const program = this.get(ref);
 
-        return ownEffectInstance(program, metadata, program.initialize(), null);
+        return ownEffectInstance(program, metadata, program.initialize());
     }
 
     restore(value: unknown): EffectInstanceValue {
@@ -96,10 +94,7 @@ export class EffectResources {
         return ownUpdatedEffectInstance(instance, ref, ownedState);
     }
 
-    withProgram<R>(
-        instance: EffectInstanceValue,
-        visitor: <S extends object>(instance: EffectInstance<S>, program: EffectProgram<S>) => R,
-    ): R {
+    #instanceProgram(instance: EffectInstanceValue): EffectProgram<object> {
         copyEffectInstance(instance);
         const program = this.#programs.get(instance.programRef.id);
 
@@ -107,6 +102,17 @@ export class EffectResources {
             throw new TypeError(`unregistered effect program ${instance.programRef.id}`);
         }
 
-        return visitor(instance as EffectInstance<object>, program);
+        return program;
+    }
+
+    assertInstance(instance: EffectInstanceValue): void {
+        this.#instanceProgram(instance);
+    }
+
+    withProgram<R>(
+        instance: EffectInstanceValue,
+        visitor: <S extends object>(instance: EffectInstance<S>, program: EffectProgram<S>) => R,
+    ): R {
+        return visitor(instance as EffectInstance<object>, this.#instanceProgram(instance));
     }
 }

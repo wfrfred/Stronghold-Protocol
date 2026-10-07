@@ -18,7 +18,7 @@ import type { BattleSpec } from "./spec.js";
 import type { BattleExecutionState } from "./execution/state.js";
 import type { BattlePhase } from "./system.js";
 import { battlefieldCommitEvents, finishBattleEvents } from "./events.js";
-import type { CombatResources } from "./resources.js";
+import { CombatResources } from "./resources.js";
 import type { compileAction } from "../unit/capability/action/compile.js";
 
 export interface BattleResources {
@@ -53,12 +53,13 @@ function bindStatelessPhase(phase: BattlePhase): BattlePhase<BattleSystemStates>
 }
 
 export function createBattleSystems(spec: BattleSpec, resources: BattleResources = {}) {
-    const predefined = createPredefinedSystem(spec.predefines);
+    const combatResources = resources.combat ?? new CombatResources();
+    const predefined = createPredefinedSystem(spec.predefines, combatResources);
     const schedule = createSpawnScheduleSystem(spec.schedule);
-    const movement = createMovementSystem({ moveMultiplier: spec.moveMultiplier });
+    const movement = createMovementSystem({ moveMultiplier: spec.moveMultiplier }, combatResources);
     const blocking = createBlockingSystem();
-    const combat = createCombatSystem(resources.combat, resources.compileAction);
-    const deployment = createDeploymentSystem();
+    const combat = createCombatSystem(combatResources, resources.compileAction);
+    const deployment = createDeploymentSystem(combatResources);
 
     const prepare: BattlePhase<readonly PredefinedPresence[]> = (input, state) => {
         const prepared = predefined.step(input, state);

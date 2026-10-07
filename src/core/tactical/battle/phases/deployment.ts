@@ -24,6 +24,9 @@ import type { Unit, UnitId } from "../../unit/unit.js";
 import type { BattleEvent } from "../contract.js";
 import type { BattleExecutionState } from "../execution/state.js";
 import type { BattlePhase } from "../system.js";
+import type { EffectTransitionResources } from "../../unit/capability/effects/contract.js";
+import { removeUnitWithEffects } from "../execution/unit-lifecycle.js";
+import { combatWorkChanges, createCombatWork } from "../execution/work.js";
 
 export type DeploymentCommand =
     | {
@@ -43,7 +46,7 @@ export type DeploymentCommand =
 
 export type DeploymentCommandView = Pick<
     BattlefieldView,
-    "map" | "unitIds" | "getUnit" | "supportRelations"
+    "map" | "unitIds" | "getUnit" | "supportRelations" | "blockerOf" | "blockedBy"
 >;
 
 export interface DeploymentCommandResolution {
@@ -82,6 +85,7 @@ export function resolveDeploymentCommands(
     commands: readonly DeploymentCommand[],
     execution: BattleExecutionState,
     tick: number,
+    resources: EffectTransitionResources,
 ): DeploymentCommandResolution {
     if (commands.length === 0) {
         return { changes: [], events: [], execution };
@@ -103,8 +107,32 @@ export function resolveDeploymentCommands(
                 throw new RangeError(`unknown retreat unit ${command.unitId}`);
             }
 
-            units.delete(command.unitId);
-            changes.push({ type: "REMOVE_UNIT", unitId: command.unitId, reason: "RETREAT" });
+            const exited = removeUnitWithEffects(
+                createCombatWork(
+                    {
+                        unitIds: [...units.keys()],
+                        getUnit: (id) => units.get(id),
+                        blockerOf: (id) => battlefield.blockerOf(id),
+                        blockedBy: (id) => battlefield.blockedBy(id),
+                    },
+                    execution,
+                ),
+                command.unitId,
+                "RETREAT",
+                resources,
+                tick,
+            );
+
+            for (const unit of exited.units.values()) {
+                units.set(unit.id, unit);
+            }
+            for (const id of exited.removals.keys()) {
+                units.delete(id);
+            }
+
+            changes.push(...combatWorkChanges(exited));
+            events.push(...exited.events);
+            execution = exited.execution;
             continue;
         }
 
@@ -201,7 +229,9 @@ export function resolveDeploymentCommands(
     return { changes, events, execution };
 }
 
-export function createDeploymentSystem(): { readonly step: BattlePhase } {
+export function createDeploymentSystem(resources: EffectTransitionResources): {
+    readonly step: BattlePhase;
+} {
     const step: BattlePhase = (input) => {
         const commands = input.commands.filter(
             (command): command is DeploymentCommand =>
@@ -214,6 +244,7 @@ export function createDeploymentSystem(): { readonly step: BattlePhase } {
             commands,
             input.execution,
             input.tick,
+            resources,
         );
 
         return { state: undefined, ...resolved };

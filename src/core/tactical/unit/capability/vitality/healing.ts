@@ -1,4 +1,4 @@
-import { hasStatusFlag } from "../status.js";
+import { hasStatusFlag } from "../status/capability.js";
 import { hasVitality, type VitalUnit } from "./capability.js";
 import type { UnitId } from "../../unit.js";
 import { resolveMaxHp } from "./query.js";

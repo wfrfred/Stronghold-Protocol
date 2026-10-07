@@ -24,7 +24,10 @@ import {
     type HitUnitDefinition,
     type SpatialUnitDefinition,
 } from "../capability/spatial.js";
-import { createStatusDefinition, type StatusUnitDefinition } from "../capability/status.js";
+import {
+    createStatusDefinition,
+    type StatusUnitDefinition,
+} from "../capability/status/capability.js";
 import type { Unit } from "../unit.js";
 import type { Vitality, VitalUnitDefinition } from "../capability/vitality/capability.js";
 import type { InitializedUnit } from "../initialize.js";

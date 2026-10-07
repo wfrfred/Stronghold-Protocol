@@ -9,6 +9,8 @@ import {
     type DamageResources,
     type DamageEffectRules,
 } from "../unit/capability/vitality/damage/resources.js";
+import type { CompiledEffectContribution } from "../unit/capability/effects/contribution-bindings.js";
+import type { EffectLifecycleResources } from "../unit/capability/effects/lifecycle-resources.js";
 import type { NumericContributionResources } from "../modifier/providers.js";
 import type { NumericProviderFacts } from "../unit/capability/contribution.js";
 import { createActionResources } from "../unit/capability/action/resources.js";
@@ -23,6 +25,7 @@ export class CombatResources {
     readonly vitality: NumericContributionResources<NumericProviderFacts>;
     readonly effectBindings: EffectBindingResources;
     readonly damage: DamageResources;
+    readonly effectLifecycle: EffectLifecycleResources;
 
     constructor() {
         const resources = createActionResources();
@@ -32,14 +35,19 @@ export class CombatResources {
         this.vitality = resources.vitality;
         this.effectBindings = resources.effectBindings;
         this.damage = resources.damage;
+        this.effectLifecycle = resources.effectLifecycle;
     }
 
     registerEffect<S extends object>(
         program: EffectProgram<S>,
-        rules: NoInfer<CombatEffectRules<S>>,
+        rules: NoInfer<CombatEffectRules<S>> = {},
+        bindings: readonly CompiledEffectContribution[] = [],
     ): EffectProgram<S> {
         this.effects.register(program);
-        this.effectBindings.register(program.ref, compileEffectContributions(program, rules, this));
+        this.effectBindings.register(program.ref, [
+            ...compileEffectContributions(program, rules, this),
+            ...bindings,
+        ]);
         this.damage.register(program.ref, rules, this);
 
         return program;

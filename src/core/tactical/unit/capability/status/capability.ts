@@ -1,4 +1,4 @@
-import type { Unit, UnitDefinition } from "../unit.js";
+import type { Unit, UnitDefinition } from "../../unit.js";
 
 export const STATUS_FLAGS = Object.freeze([
     "TARGET_FREE",
@@ -23,6 +23,13 @@ export interface StatusDefinition {
 export interface StatusContribution {
     readonly id: StatusContributionId;
     readonly flags: readonly StatusFlag[];
+    readonly participating: boolean;
+}
+
+export interface StatusContributionInput {
+    readonly id: StatusContributionId;
+    readonly flags: readonly StatusFlag[];
+    readonly participating?: boolean;
 }
 
 export interface StatusState {
@@ -73,8 +80,15 @@ function createContribution(contribution: StatusContribution): StatusContributio
     if (typeof contribution.id !== "string" || contribution.id.length === 0) {
         throw new TypeError("status contribution id must be nonempty");
     }
+    if (typeof contribution.participating !== "boolean") {
+        throw new TypeError("status contribution participation must be boolean");
+    }
 
-    const owned = Object.freeze({ id: contribution.id, flags: createFlags(contribution.flags) });
+    const owned = Object.freeze({
+        id: contribution.id,
+        flags: createFlags(contribution.flags),
+        participating: contribution.participating,
+    });
 
     ownedContributionValues.add(owned);
 
@@ -118,7 +132,9 @@ export function hasStatus<U extends Unit>(
 export function hasStatusFlag(unit: Unit, flag: StatusFlag): boolean {
     return (
         hasStatus(unit) &&
-        unit.status.contributions.some((contribution) => contribution.flags.includes(flag))
+        unit.status.contributions.some(
+            (contribution) => contribution.participating && contribution.flags.includes(flag),
+        )
     );
 }
 
@@ -133,20 +149,57 @@ export function copyStatusState(state: StatusState): StatusState {
 export function initializeStatusState(definition: StatusDefinition): StatusState {
     return {
         contributions: ownContributions([
-            { id: BASELINE_STATUS_CONTRIBUTION_ID, flags: definition.initialFlags },
+            {
+                id: BASELINE_STATUS_CONTRIBUTION_ID,
+                flags: definition.initialFlags,
+                participating: true,
+            },
         ]),
     };
 }
 
 export function addStatusContribution(
     state: StatusState,
-    contribution: StatusContribution,
+    contribution: StatusContributionInput,
 ): StatusState {
     if (contribution.id === BASELINE_STATUS_CONTRIBUTION_ID) {
         throw new TypeError("baseline status contribution is reserved");
     }
 
-    return { contributions: ownContributions([...state.contributions, contribution]) };
+    return {
+        contributions: ownContributions([
+            ...state.contributions,
+            {
+                id: contribution.id,
+                flags: contribution.flags,
+                participating: contribution.participating ?? true,
+            },
+        ]),
+    };
+}
+
+export function setStatusContributionParticipation(
+    state: StatusState,
+    contributionId: StatusContributionId,
+    participating: boolean,
+): StatusState {
+    if (contributionId === BASELINE_STATUS_CONTRIBUTION_ID) {
+        throw new TypeError("baseline status contribution participation cannot be changed");
+    }
+
+    const current = state.contributions.find(({ id }) => id === contributionId);
+
+    if (current === undefined || current.participating === participating) {
+        return state;
+    }
+
+    return {
+        contributions: ownContributions(
+            state.contributions.map((contribution) =>
+                contribution === current ? { ...contribution, participating } : contribution,
+            ),
+        ),
+    };
 }
 
 export function removeStatusContribution(
@@ -167,5 +220,7 @@ export function removeStatusContribution(
 }
 
 export function deriveEffectiveStatusFlags(state: StatusState): EffectiveStatusFlags {
-    return new Set(state.contributions.flatMap(({ flags }) => flags));
+    return new Set(
+        state.contributions.flatMap(({ flags, participating }) => (participating ? flags : [])),
+    );
 }

@@ -1,7 +1,7 @@
 import { type EffectInstance, type EffectInstanceValue } from "../../effects/instance.js";
 import { type EffectProgramRef } from "../../effects/program.js";
 import { EffectResources } from "../../effects/registry.js";
-import type { EffectTransitionResources } from "../../effects/transition.js";
+import type { EffectTransitionResources } from "../../effects/contract.js";
 import { hasEffects } from "../../effects/capability.js";
 import type { NumericProviderFacts } from "../../contribution.js";
 import type { NumericContributionProvider } from "../../../../modifier/providers.js";
@@ -229,7 +229,10 @@ export class DamageResources {
 
                 return { instance, rules };
             })
-            .filter(({ rules }) => participates(rules))
+            .filter(
+                ({ instance, rules }) =>
+                    instance.participating && !instance.finished && participates(rules),
+            )
             .sort(orderInstances);
         const winners = new Map<string, ActiveProgram>();
 
