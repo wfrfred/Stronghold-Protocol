@@ -5,20 +5,22 @@ import { readFileSync } from 'node:fs';
 import { makeBattle, chessRec, enemyRec } from '../helpers/battleHarness.js';
 import { ELEMENT } from '../../server/sim/constants.js';
 import { createLegacyCombatBattle, createLegacyCombatSpec } from '../../dist/legacy/combat.js';
-import { createRouteDefinition } from '../../dist/core/tactical/route/definition.js';
-import { calculateDamage, damageUnit } from '../../dist/core/tactical/combat/damage.js';
+import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
+import { calculateDamage, damageUnit } from '../../dist/core/tactical/unit/capability/vitality/damage/settlement.js';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
-import { createBattlefieldMap, BattlefieldMap } from '../../dist/core/tactical/battlefield/map.js';
-import { createTile } from '../../dist/core/tactical/battlefield/tile.js';
+import { createBattlefieldMap, BattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
+import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
 import { World } from '../../dist/core/tactical/geometry/coordinate.js';
 import { loadMovementScenario } from '../../dist/data/arknights/movement-scenario.js';
 import { createTacticalCombatDemoSpec } from '../../dist/legacy/tactical-demo-combat.js';
-import { createOperatorDefinition } from '../../dist/core/tactical/unit/operator.js';
+import { createTacticalDemo } from '../../dist/legacy/tactical-demo.js';
+import { createOperatorDefinition } from '../../dist/core/tactical/unit/archetype/operator.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
-import { compileAction, stepAction } from '../../dist/core/tactical/combat/action.js';
-import { compileTargeting } from '../../dist/core/tactical/combat/targeting.js';
+import { compileAction } from "../../dist/core/tactical/unit/capability/action/compile.js";
+import { stepAction } from "../../dist/core/tactical/unit/capability/action/execution.js";
+import { compileTargeting } from "../../dist/core/tactical/unit/targeting/compile.js";
 import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
-import { selectTargets } from '../../dist/core/tactical/targeting/select.js';
+import { selectTargets } from '../../dist/core/tactical/unit/targeting/select.js';
 
 const approx = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
 
@@ -48,7 +50,7 @@ function coreCombatTrace(options) {
   return { battle, trace, events: trace.flatMap(step => step.events) };
 }
 
-test('core combat: the real m01 demonstration preserves the map and data, blocks three dogs and replays identically', () => {
+test('core combat: the real m01 demonstration targets at range, blocks three dogs and replays identically', () => {
   const fixture = name => JSON.parse(readFileSync(new URL(`../fixtures/arknights/${name}.json`, import.meta.url), 'utf8'));
   const rawLevel = fixture('level_act1autochess_m01');
   const generated = Object.fromEntries(['chess', 'enemies'].map(name => [name,
@@ -56,8 +58,9 @@ test('core combat: the real m01 demonstration preserves the map and data, blocks
   ]));
   const data = { lookup: (file, key) => generated[file]?.[key] };
   const operator = data.lookup('chess', 'chess_char_3_05_a');
+  const rangedOperator = data.lookup('chess', 'chess_char_3_01_a');
   const enemy = data.lookup('enemies', 'enemy_1000_gopro_2');
-  const originalRecords = structuredClone({ rawLevel, operator, enemy });
+  const originalRecords = structuredClone({ rawLevel, operator, rangedOperator, enemy });
   const catalog = {
     character: () => assert.fail('no selected predefined characters'),
     skill: () => assert.fail('no selected predefined skills'),
@@ -76,20 +79,38 @@ test('core combat: the real m01 demonstration preserves the map and data, blocks
   assert.deepEqual(placement.position, [6, 5]);
   assert.equal(placement.definition.vitality.maxHp, operator.stats.maxHp);
   assert.equal(placement.definition.action.normalAction.targetGroups[0].effects[0].power, operator.stats.atk);
+  const rangedPlacement = spec.initialUnits[1];
+  const rangedTile = BattlefieldMap.get(spec.map, World.toTile(rangedPlacement.position));
+  assert.ok(rangedTile.buildableType === 'RANGED' || rangedTile.buildableType === 'ALL');
+  assert.deepEqual(rangedPlacement.position, [4, 4]);
+  assert.equal(rangedPlacement.definition.id, rangedOperator.chessId);
+  assert.equal(rangedPlacement.definition.offense.attack, rangedOperator.stats.atk);
   assert.equal(spec.schedule.spawns[0].definition.vitality.maxHp, enemy.stats.maxHp);
   assert.deepEqual(spec.schedule.spawns.map(spawn => spawn.tick), [90, 330, 570]);
 
   const run = input => {
     const battle = new BattleRuntime(input);
     const events = [];
+    const rangedAttacks = [];
     let blockingObserved = false;
 
     while (battle.result === null) {
-      events.push(...battle.step().events);
+      const before = battle.snapshot();
+      const stepped = battle.step();
+      for (const event of stepped.events) {
+        if (event.type !== 'ACTION' || event.sourceUnitId !== 1) continue;
+        const source = before.units.find(unit => unit.id === 1);
+        const target = before.units.find(unit => unit.id === event.targetUnitId);
+        rangedAttacks.push({
+          distance: Math.sqrt(World.distanceSquared(source.position, target.position)),
+          blocked: before.blockingRelations.some(relation => relation.blockedUnitId === target.id),
+        });
+      }
+      events.push(...stepped.events);
       blockingObserved ||= battle.snapshot().blockingRelations.length > 0;
     }
 
-    return { result: battle.result, snapshot: battle.snapshot(), events, blockingObserved };
+    return { result: battle.result, snapshot: battle.snapshot(), events, rangedAttacks, blockingObserved };
   };
   const first = run(spec);
   const second = run(createTacticalCombatDemoSpec(movement.spec.map, movement.level.routes[0], data, 123));
@@ -99,12 +120,80 @@ test('core combat: the real m01 demonstration preserves the map and data, blocks
   assert.equal(first.result.reason, 'SCHEDULE_COMPLETED');
   assert.equal(first.result.spawnedCount, 3);
   assert.equal(first.result.completedRouteCount, 0);
-  assert.deepEqual(first.result.remainingUnitIds, [0]);
+  assert.deepEqual(first.result.remainingUnitIds, [0, 1]);
   assert.equal(first.events.filter(event => event.type === 'UNIT_REMOVED' && event.reason === 'DEATH').length, 3);
   assert.equal(first.events.filter(event => event.type === 'ROUTE_COMPLETED').length, 0);
   assert.ok(first.blockingObserved);
+  assert.ok(first.rangedAttacks.some(attack => !attack.blocked && attack.distance > 1));
+  assert.ok(first.events.some(event => event.type === 'DAMAGE' && event.sourceUnitId === 1 && event.amount > 0));
   assert.ok(survivor.vitality.hp > 0 && survivor.vitality.hp < operator.stats.maxHp);
-  assert.deepEqual({ rawLevel, operator, enemy }, originalRecords);
+  assert.equal(first.snapshot.units.find(unit => unit.id === 1).vitality.hp, rangedOperator.stats.maxHp);
+  assert.deepEqual({ rawLevel, operator, rangedOperator, enemy }, originalRecords);
+});
+
+test('core combat: demo scenarios preserve ranged targeting, blocking capacity and concise logs', async t => {
+  t.mock.method(globalThis, 'fetch', async url => ({
+    ok: true,
+    json: async () => JSON.parse(readFileSync(new URL(`../fixtures/arknights/${url.slice('/fixtures/'.length)}`, import.meta.url), 'utf8')),
+  }));
+  const generated = Object.fromEntries(['chess', 'enemies', 'stages'].map(name => [name,
+    JSON.parse(readFileSync(new URL(`../../data/${name}.json`, import.meta.url), 'utf8')),
+  ]));
+  const logs = [];
+  const view = {
+    setStage() {}, enterBattle() {}, setCamera() {}, setLocalFeed() {},
+    pushSnapshot() {}, pushEvents() {},
+    debug: { interp: { snapToNewest() {}, maxExtrapolate: 0 } },
+  };
+  const demo = await createTacticalDemo(view, {
+    stageId: 'act1autochess_m01', mode: 'COMBAT', seed: 123,
+    data: { lookup: (file, key) => generated[file]?.[key] },
+    onEvent: event => logs.push(event),
+  });
+
+  demo.tick(45);
+
+  const removals = logs.filter(event => event.type === 'UNIT_REMOVED');
+  assert.equal(removals.length, 3);
+  for (const event of removals) {
+    assert.deepEqual(Object.keys(event).sort(), ['reason', 'tick', 'type', 'unitId']);
+    assert.equal(event.reason, 'DEATH');
+  }
+  assert.ok(logs.some(event => event.type === 'DAMAGE'));
+  assert.equal(JSON.stringify(logs).includes('UNREACHABLE'), false);
+  assert.equal(demo.stats().killedCount, 3);
+  demo.stop();
+
+  for (const combatScenario of ['RANGED', 'BLOCKING']) {
+    await t.test(combatScenario, async () => {
+      const events = [];
+      const scenario = await createTacticalDemo(view, {
+        stageId: 'act1autochess_m01', mode: 'COMBAT', combatScenario, seed: 123,
+        data: { lookup: (file, key) => generated[file]?.[key] },
+        onEvent: event => events.push(event),
+      });
+      assert.deepEqual(scenario.snapshot().units.map(unit => unit.definition.id),
+        [combatScenario === 'RANGED' ? 'chess_char_3_01_a' : 'chess_char_3_05_a']);
+      let maximumBlocked = 0;
+      let simultaneousEnemies = 0;
+      for (let tick = 0; tick < 1350 && scenario.stats().result === null; tick++) {
+        scenario.step();
+        maximumBlocked = Math.max(maximumBlocked, scenario.stats().blockingCount);
+        simultaneousEnemies = Math.max(simultaneousEnemies,
+          scenario.snapshot().units.filter(unit => unit.definition.id === 'enemy_1000_gopro_2').length);
+      }
+      assert.equal(scenario.stats().result.reason, 'SCHEDULE_COMPLETED');
+      assert.equal(maximumBlocked, combatScenario === 'RANGED' ? 0 : 1);
+      assert.equal(simultaneousEnemies, combatScenario === 'RANGED' ? 1 : 3);
+      assert.deepEqual(events.filter(event => event.type === 'ENEMY_SPAWNED').map(event => event.tick),
+        combatScenario === 'RANGED' ? [90, 330, 570] : [90, 90, 90]);
+      assert.equal(scenario.stats().killedCount, combatScenario === 'RANGED' ? 3 : 1);
+      assert.equal(events.filter(event => event.type === 'ROUTE_COMPLETED').length,
+        combatScenario === 'RANGED' ? 0 : 2);
+      assert.equal(JSON.stringify(events).includes('UNREACHABLE'), false);
+      scenario.stop();
+    });
+  }
 });
 
 test('core combat: a blocked enemy exchanges attacks and death resolves the spawn schedule deterministically', () => {
@@ -961,7 +1050,7 @@ function actionUnit(id, side, position, { hp = 100, flags = [], action } = {}) {
   });
   const unit = initializeUnit({ id, definition, position });
 
-  return { ...unit, vitality: { hp } };
+  return { ...unit, vitality: { ...unit.vitality, hp } };
 }
 
 function actionView(units, relations = []) {

@@ -59,17 +59,18 @@ export function createEffectOperations(
             setWork(finishEffect(getWork(), address, resources, tick, dispatch));
         },
         attachParent: (child, parent, finishIfParentFinished) => {
-            setWork(
-                attachEffectParent(
-                    getWork(),
-                    child,
-                    parent,
-                    resources,
-                    tick,
-                    finishIfParentFinished,
-                    dispatch,
-                ),
+            const binding = attachEffectParent(
+                getWork(),
+                child,
+                parent,
+                resources,
+                tick,
+                finishIfParentFinished,
+                dispatch,
             );
+            setWork(binding.work);
+
+            return binding.result;
         },
     };
 }

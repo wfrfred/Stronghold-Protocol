@@ -10,16 +10,19 @@ import { EV } from '../../shared/protocol.js';
 import { getDefaultSource, spawnsFromTemplate, hasGeneratedData } from '../../server/sim/simdata.js';
 import { LocalBossPool } from '../../server/sim/spec.js';
 import { BattlefieldRuntime, createBattlefieldRuntime } from '../../dist/core/tactical/battlefield/runtime.js';
-import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map.js';
+import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createMechanismDefinition, createMechanismRuntime } from '../../dist/core/tactical/battlefield/mechanism.js';
-import { createNavigationEffectDefinition, createNavigationSpatialEffect, createSpatialEffectRegion } from '../../dist/core/tactical/battlefield/navigation-effect.js';
+import { createNavigationEffectDefinition, createNavigationSpatialEffect, createSpatialEffectRegion } from '../../dist/core/tactical/battlefield/navigation/effect.js';
 import { createRng } from '../../dist/core/common/rng.js';
 import { createBattleSpec } from '../../dist/core/tactical/battle/spec.js';
 import { BattleRuntime, simulateBattle } from '../../dist/core/tactical/battle/runtime.js';
-import { advanceSpawnSchedule, cloneScheduleState, createSpawnScheduleDefinition, createSpawnScheduleState, getSpawnedCount, getUnspawnedCount, isSpawnScheduleCompleted, recordScheduleSpawns, resolveScheduleUnits } from '../../dist/core/tactical/battle/schedule.js';
+import { advanceSpawnSchedule, getSpawnedCount, getUnspawnedCount, isSpawnScheduleCompleted, recordScheduleSpawns, resolveScheduleUnits } from "../../dist/core/tactical/battle/schedule/runtime.js";
+import { cloneScheduleState, createSpawnScheduleState } from "../../dist/core/tactical/battle/schedule/state.js";
+import { createSpawnScheduleDefinition } from "../../dist/core/tactical/battle/schedule/definition.js";
 import { createSteeringParameters } from '../../dist/core/tactical/unit/capability/locomotion/steering.js';
-import { createEnemyDefinition, initializeRoutedEnemy } from '../../dist/core/tactical/unit/enemy.js';
-import { createRouteDefinition } from '../../dist/core/tactical/route/definition.js';
+import { createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
+import { initializeRoutedEnemy } from "../../dist/core/tactical/battle/creation/enemy.js";
+import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
 import { TICKS_PER_SECOND } from '../../dist/core/tactical/tick.js';
 import { secondsToTicks } from '../../dist/data/arknights/tick.js';
 import { parseLevelDefinition } from '../../dist/data/arknights/level.js';
@@ -33,7 +36,8 @@ import { createLegacyCombatBattle } from '../../dist/legacy/combat.js';
 import { createDeploymentProfile, createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/deployment.js';
 import { createOccupancyState } from '../../dist/core/tactical/unit/capability/occupancy.js';
 import { createPredefinedInstanceDefinition } from '../../dist/core/tactical/battle/predefined.js';
-import { createMovementSystem } from '../../dist/core/tactical/battle/movement.js';
+import { createMovementSystem } from '../../dist/core/tactical/battle/phases/movement.js';
+import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 
 const approx = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
 const guard = (o = {}) => chessRec({ id: 't_guard', profession: 'WARRIOR', stats: { atk: 300, blockCnt: 2 }, skill: null, ...o });
@@ -2094,7 +2098,7 @@ test('core visibility: movement reads one navigation projection before following
   }) }]);
   assert.deepEqual(battlefield.navigationMaps.WALK.cells.map(cell => cell.passable), [true, false, true, true, true]);
 
-  const moved = createMovementSystem({ moveMultiplier: 1 }).step({
+  const moved = createMovementSystem({ moveMultiplier: 1 }, new CombatResources()).step({
     battlefield, tick: 0, commands: [], execution, removedUnits: [],
   }, undefined);
   battlefield.apply(moved.changes);

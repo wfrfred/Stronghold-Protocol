@@ -10,12 +10,12 @@ import { spawnYanyou, spawnMapChar, TOKEN_IDS, wolfShadows, tileFree, findSummon
 import { startColdWind, kjeragColdWind, activateTurrets, terrainAt, deviceOverridesOf } from '../../server/sim/content/devices.js';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
 import { createBattlefieldRuntime } from '../../dist/core/tactical/battlefield/runtime.js';
-import { NavigationMap } from '../../dist/core/tactical/navigation/map.js';
+import { NavigationMap } from '../../dist/core/tactical/battlefield/navigation/map.js';
 import { loadMovementScenario } from '../../dist/data/arknights/movement-scenario.js';
 import { resolvePredefinedSkillBlackboard } from '../../dist/data/arknights/skill.js';
 import { parsePredefinedPrefab, parseTileDeploymentPrefab } from '../../dist/data/arknights/prefab.js';
 import { createDeploymentProfile } from '../../dist/core/tactical/unit/capability/deployment.js';
-import { evaluateDeployment } from '../../dist/core/tactical/battlefield/deployment.js';
+import { evaluateDeployment } from '../../dist/core/tactical/battlefield/deployment/query.js';
 
 const REAL = { skip: !hasGeneratedData() };
 const ds = getDefaultSource();

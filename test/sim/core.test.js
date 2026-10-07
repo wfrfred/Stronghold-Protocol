@@ -11,29 +11,29 @@ import { mitigate } from '../../server/sim/damage.js';
 import { Unit } from '../../server/sim/units.js';
 import { getDefaultSource, hasGeneratedData } from '../../server/sim/simdata.js';
 import { makeBattle, flatStage, chessRec, enemyRec } from '../helpers/battleHarness.js';
-import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map.js';
+import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createBattlefieldRuntime } from '../../dist/core/tactical/battlefield/runtime.js';
 import { createMechanismDefinition } from '../../dist/core/tactical/battlefield/mechanism.js';
-import { createNavigationEffectDefinition, createNavigationSpatialEffect } from '../../dist/core/tactical/battlefield/navigation-effect.js';
+import { createNavigationEffectDefinition, createNavigationSpatialEffect } from '../../dist/core/tactical/battlefield/navigation/effect.js';
 import { hasSpatialPresence, isSpatiallyPresent } from '../../dist/core/tactical/unit/capability/presence.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { copyUnitSnapshot } from '../../dist/core/tactical/unit/snapshot.js';
-import { hasVitality } from '../../dist/core/tactical/unit/capability/vitality.js';
-import { createActionCapabilityDefinition, hasAction } from '../../dist/core/tactical/unit/capability/action.js';
+import { hasVitality, initializeVitalityState } from '../../dist/core/tactical/unit/capability/vitality/capability.js';
+import { createActionCapabilityDefinition, hasAction } from '../../dist/core/tactical/unit/capability/action/capability.js';
 import { hasAllegiance } from '../../dist/core/tactical/unit/capability/allegiance.js';
 import { createBlockerDefinition, hasBlockable, hasBlocker } from '../../dist/core/tactical/unit/capability/blocking.js';
 import { createHitDefinition, createSpatialDefinition, hasHit, hasSpatial } from '../../dist/core/tactical/unit/capability/spatial.js';
-import { addStatusContribution, copyStatusState, createStatusDefinition, deriveEffectiveStatusFlags, hasStatus, initializeStatusState, removeStatusContribution } from '../../dist/core/tactical/unit/capability/status.js';
+import { addStatusContribution, copyStatusState, createStatusDefinition, deriveEffectiveStatusFlags, hasStatus, initializeStatusState, removeStatusContribution } from '../../dist/core/tactical/unit/capability/status/capability.js';
 import { createBlockGeometry, createRangeGeometry, createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { geometryContainsPosition, rangeContainsPosition, rangeOverlapsHit } from '../../dist/core/tactical/geometry/intersection.js';
-import { acquireBlockingRelations } from '../../dist/core/tactical/battlefield/blocking.js';
-import { createLocomotionState, createRoutedLocomotionState, hasLocomotion, hasRoutedLocomotion } from '../../dist/core/tactical/unit/capability/locomotion/state.js';
-import { createRouteDefinition } from '../../dist/core/tactical/route/definition.js';
-import { createRouteState, createRouteTiming } from '../../dist/core/tactical/route/state.js';
-import { createNavigationState } from '../../dist/core/tactical/navigation/state.js';
+import { acquireBlockingRelations } from '../../dist/core/tactical/battlefield/blocking/relations.js';
+import { createLocomotionState, createRoutedLocomotionState, hasLocomotion, hasRoutedLocomotion } from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
+import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
+import { createRouteState, createRouteTiming } from '../../dist/core/tactical/unit/capability/locomotion/route/state.js';
+import { createNavigationState } from '../../dist/core/tactical/battlefield/navigation/state.js';
 import { createDeploymentProfile, createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/deployment.js';
 import { createOccupancyState } from '../../dist/core/tactical/unit/capability/occupancy.js';
-import { evaluateDeployment } from '../../dist/core/tactical/battlefield/deployment.js';
+import { evaluateDeployment } from '../../dist/core/tactical/battlefield/deployment/query.js';
 
 const approx = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
 
@@ -242,7 +242,7 @@ const presenceBattlefield = () => createBattlefieldRuntime({
 
 const presenceUnit = (id, position) => ({
   id, definition: Object.freeze({ id: `presence_${id}`, vitality: Object.freeze({ maxHp: 100 }) }), position: Object.freeze(position),
-  vitality: { hp: 100 }, spatialPresence: { present: true },
+  vitality: initializeVitalityState({maxHp:100}), spatialPresence: { present: true },
 });
 
 const presenceEffect = (id, source, region, costFloor = 1000) => createNavigationSpatialEffect({
@@ -286,7 +286,7 @@ test('core removal facts retain the latest unit and isolate it from retained bat
   const unit = presenceUnit(1, [2, 0]);
   runtime.apply([{ type: 'REGISTER_UNIT', unit }]);
   const fork = runtime.fork();
-  const updated = { ...runtime.getUnit(1), position: [3, 0], vitality: { hp: 20 } };
+  const updated = { ...runtime.getUnit(1), position: [3, 0], vitality: {...runtime.getUnit(1).vitality, hp: 20} };
   const removed = runtime.apply([
     { type: 'UPDATE_UNIT', unit: updated },
     { type: 'REMOVE_UNIT', unitId: 1, reason: 'DEATH' },
@@ -448,7 +448,7 @@ function catalogRoutedState() {
 
 test('core unit initialization uses prepared states and separates configuration from runtime-only capabilities', () => {
   const definition = catalogDefinition();
-  const vitality = { hp: 25 };
+  const vitality = {...initializeVitalityState(definition.vitality), hp: 25};
   const action = { readyAtTick: 9, recoveryUntilTick: 10, targetUnitId: 2 };
   const locomotion = catalogRoutedState();
   const unit = initializeUnit({ id: 1, definition, position: [2, 0], tick: 17,
@@ -460,7 +460,7 @@ test('core unit initialization uses prepared states and separates configuration 
   assert.equal(hasRoutedLocomotion(unit), true);
   assert.equal(unit.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 9);
   assert.equal(unit.spatialPresence.present, false);
-  assert.equal(Object.hasOwn(unit, 'defense'), false);
+  assert.equal(Object.hasOwn(unit, 'defense'), true);
   assert.deepEqual(unit.blocker, { capacity: 2, geometry: { radius: 0.7 }, enabled: true });
   assert.deepEqual(unit.blockable, { weight: 1, enabled: true });
 
@@ -732,14 +732,14 @@ test('core initializer types preserve definition unions, prepared refinements an
   const imports = `
 import { initializeUnit, type InitializedUnit } from ${sourceModule('initialize')};
 import type { Unit, UnitDefinition } from ${sourceModule('unit')};
-import type { EnemyDefinition } from ${sourceModule('enemy')};
-import { hasVitality, type VitalityDefinition } from ${sourceModule('capability/vitality')};
-import { hasRoutedLocomotion, type LocomotionState, type RoutedLocomotionState } from ${sourceModule('capability/locomotion/state')};
+import type { EnemyDefinition } from ${sourceModule('archetype/enemy')};
+import { hasVitality, type VitalityDefinition } from ${sourceModule('capability/vitality/capability')};
+import { hasRoutedLocomotion, type LocomotionState, type RoutedLocomotionState } from ${sourceModule('capability/locomotion/capability')};
 import { createBattlefieldRuntime } from ${sourceModule('../battlefield/runtime')};
 import type { BattlefieldView } from ${sourceModule('../battlefield/contract')};
-import type { BattlefieldMap } from ${sourceModule('../battlefield/map')};
-import { createUnitPlacementDefinition, instantiateUnitPlacement, type UnitPlacementDefinition } from ${sourceModule('../battle/unit-creation')};
-import type { BattleExecutionState } from ${sourceModule('../battle/state')};
+import type { BattlefieldMap } from ${sourceModule('../battlefield/map/map')};
+import { createUnitPlacementDefinition, instantiateUnitPlacement, type UnitPlacementDefinition } from ${sourceModule('../battle/creation/placement')};
+import type { BattleExecutionState } from ${sourceModule('../battle/execution/state')};
 import type { Occupancy, OccupancyState } from ${sourceModule('capability/occupancy')};
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
 type Assert<T extends true> = T;

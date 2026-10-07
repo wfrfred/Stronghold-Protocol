@@ -14,7 +14,7 @@ import { makeBattle, chessRec, enemyRec, checkInvariants } from '../helpers/batt
 import { BLOCK_RADIUS } from '../../server/sim/constants.js';
 import { getDefaultSource } from '../../server/sim/simdata.js';
 import { createLegacyCombatBattle } from '../../dist/legacy/combat.js';
-import { createRouteDefinition } from '../../dist/core/tactical/route/definition.js';
+import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
 
 const FRONT = 'test_front_a', BACK = 'test_back_a';
 const op = (id, blockCnt = 1) => chessRec({ id, stats: { atk: 0, blockCnt, maxHp: 1e6, respawnTime: 999 }, skill: null });

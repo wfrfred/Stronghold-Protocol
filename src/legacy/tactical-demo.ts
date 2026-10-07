@@ -11,7 +11,10 @@ import {
     type ArknightsMovementCatalog,
     type ArknightsMovementSelection,
 } from "../data/arknights/movement-scenario.js";
-import { createTacticalCombatDemoSpec } from "./tactical-demo-combat.js";
+import {
+    createTacticalCombatDemoSpec,
+    type TacticalCombatScenario,
+} from "./tactical-demo-combat.js";
 import {
     TacticalDemoPresentation,
     type LegacyData,
@@ -51,6 +54,7 @@ export interface TacticalDemoOptions {
     readonly data: LegacyData;
     readonly seed?: number;
     readonly mode?: "MOVEMENT" | "COMBAT";
+    readonly combatScenario?: TacticalCombatScenario;
     readonly onEvent?: (event: unknown) => void;
 }
 
@@ -195,7 +199,13 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
     const route = scenario.level.routes[0]!;
     const spec =
         mode === "COMBAT"
-            ? createTacticalCombatDemoSpec(scenario.spec.map, route, data, seed)
+            ? createTacticalCombatDemoSpec(
+                  scenario.spec.map,
+                  route,
+                  data,
+                  seed,
+                  options.combatScenario,
+              )
             : scenario.spec;
     const presentation = new TacticalDemoPresentation(data);
 
@@ -252,9 +262,20 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
         });
 
         for (const event of events) {
+            if (event.type === "UNIT_REMOVED") {
+                // Removed units retain navigation paths and fields; keep those out of the UI log.
+                options.onEvent?.({
+                    type: event.type,
+                    unitId: event.unitId,
+                    reason: event.reason,
+                    tick: event.tick,
+                });
+                continue;
+            }
+
             if (
                 event.type === "ENEMY_SPAWNED" ||
-                event.type === "UNIT_REMOVED" ||
+                event.type === "ROUTE_COMPLETED" ||
                 event.type === "ACTION" ||
                 event.type === "DAMAGE" ||
                 event.type === "HEAL"

@@ -7,8 +7,8 @@ import { Grid } from '../../server/sim/grid.js';
 import { getDefaultSource, hasGeneratedData } from '../../server/sim/simdata.js';
 import { GEO } from '../../shared/constants.js';
 import { flowFieldForGrid } from '../../dist/legacy/navigation.js';
-import { createNavigationMap } from '../../dist/core/tactical/navigation/map.js';
-import { buildRawNavigationField, buildNavigationField } from '../../dist/core/tactical/navigation/pathfinding.js';
+import { createNavigationMap } from '../../dist/core/tactical/battlefield/navigation/map.js';
+import { buildRawNavigationField, buildNavigationField } from '../../dist/core/tactical/battlefield/navigation/pathfinding.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const LEVELS = join(ROOT, '.cache', 'gamedata', 'levels', 'activities');

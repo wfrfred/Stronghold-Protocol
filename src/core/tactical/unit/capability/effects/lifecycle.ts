@@ -10,6 +10,7 @@ import type {
     EffectInstallation,
     EffectInstallationInput,
     EffectLifecycleContext,
+    EffectParentBinding,
     EffectTransitionResources,
 } from "./contract.js";
 import type { EffectAddress, EffectInstanceValue } from "./instance.js";
@@ -139,7 +140,7 @@ function runLifecycleAction(
                     currentWork = finishInScope(currentWork, target, resources, tick, scope);
                 },
                 attachParent: (child, parent, finishIfParentFinished) => {
-                    currentWork = attachParentInScope(
+                    const binding = attachParentInScope(
                         currentWork,
                         child,
                         parent,
@@ -148,6 +149,9 @@ function runLifecycleAction(
                         finishIfParentFinished ?? true,
                         scope,
                     );
+                    currentWork = binding.work;
+
+                    return binding.result;
                 },
             },
         };
@@ -524,7 +528,7 @@ export function attachEffectParent(
     tick: number,
     finishIfParentFinished = true,
     dispatch?: EffectDispatchScope,
-): CombatWork {
+): EffectParentBinding {
     return attachParentInScope(
         work,
         childAddress,
@@ -544,20 +548,33 @@ function attachParentInScope(
     tick: number,
     finishIfParentFinished: boolean,
     scope: EffectLifecycleScope,
-): CombatWork {
-    const parent = getEffect(work, parentAddress);
+): EffectParentBinding {
     const child = getEffect(work, childAddress);
 
-    if (parent === undefined || child === undefined || child.finished) {
-        return work;
+    if (child === undefined) {
+        return { work, result: { type: "CHILD_ABSENT" } };
     }
-    if (parent.finished) {
-        return finishIfParentFinished
-            ? finishInScope(work, childAddress, resources, tick, scope)
-            : work;
+    if (child.finished) {
+        return { work, result: { type: "CHILD_FINISHED" } };
+    }
+
+    const parent = getEffect(work, parentAddress);
+
+    if (parent === undefined || parent.finished) {
+        if (finishIfParentFinished) {
+            work = finishInScope(work, childAddress, resources, tick, scope);
+        }
+
+        return {
+            work,
+            result: {
+                type: "PARENT_UNAVAILABLE",
+                reason: parent === undefined ? "ABSENT" : "FINISHED",
+            },
+        };
     }
     if (sameAddress(child.parent, parentAddress)) {
-        return work;
+        return { work, result: { type: "BOUND" } };
     }
     if (child.parent !== null) {
         throw new TypeError("effect parent identity cannot be replaced");
@@ -573,9 +590,11 @@ function attachParentInScope(
         ancestor = getEffect(work, ancestor)?.parent ?? null;
     }
 
-    return changeInstance(work, childAddress, (instance) =>
+    work = changeInstance(work, childAddress, (instance) =>
         withEffectLifecycle(instance, { parent: Object.freeze({ ...parentAddress }) }),
     );
+
+    return { work, result: { type: "BOUND" } };
 }
 
 export function expireEffects(

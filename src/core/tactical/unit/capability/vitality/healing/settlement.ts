@@ -255,11 +255,7 @@ export function resolveHealing(
     } else {
         const receiver = getCombatUnit(work, request.targetUnitId)!;
 
-        if (
-            request.skipModifierEvents !== true &&
-            !request.ignoreHealFree &&
-            hasStatusFlag(receiver, "HEAL_FREE")
-        ) {
+        if (!request.ignoreHealFree && hasStatusFlag(receiver, "HEAL_FREE")) {
             pending = {
                 ...pending,
                 cancellation: pending.cancellation ?? { reason: "HEAL_FREE" },

@@ -10,7 +10,7 @@ import {
     removeCombatUnit,
     updateCombatUnit,
     withCombatExecution,
-} from '../../dist/core/tactical/combat/work.js';
+} from '../../dist/core/tactical/battle/execution/work.js';
 
 const unit = (id, position = [0, 0]) => ({
     id,
@@ -101,6 +101,7 @@ test('combat work: terminal changes are ordered and preserve registration and re
             { unitId: 1, reason: 'DEATH' },
             { unitId: 2, reason: 'SCRIPT' },
         ],
+        lifecycleResults: [{type: "CREATED", unit:spawned}, {type:"REMOVED",unit:second,reason:"SCRIPT"}, {type:"REMOVED",unit:first,reason:"DEATH"}],
         events: [],
         execution: initial.execution,
     });

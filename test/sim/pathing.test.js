@@ -1,55 +1,57 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createBattlefieldMap, BattlefieldMap } from '../../dist/core/tactical/battlefield/map.js';
-import { createTile } from '../../dist/core/tactical/battlefield/tile.js';
-import { projectStaticNavigationMap } from '../../dist/core/tactical/battlefield/navigation-projection.js';
+import { createBattlefieldMap, BattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
+import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
+import { projectStaticNavigationMap } from '../../dist/core/tactical/battlefield/navigation/projection.js';
 import { createBattlefieldRuntime } from '../../dist/core/tactical/battlefield/runtime.js';
-import { applyBattlefieldChanges, ownBattlefieldChanges } from '../../dist/core/tactical/battlefield/changes.js';
+import { applyBattlefieldChanges, ownBattlefieldChanges } from '../../dist/core/tactical/battlefield/storage/changes.js';
 import {
   createBattlefieldState, settleBattlefieldState, settleBattlefieldStateFully,
-} from '../../dist/core/tactical/battlefield/state.js';
+} from '../../dist/core/tactical/battlefield/storage/state.js';
 import { battlefieldCommitEvents, finishBattleEvents } from '../../dist/core/tactical/battle/events.js';
 import { createMechanismDefinition, createMechanismRuntime } from '../../dist/core/tactical/battlefield/mechanism.js';
 import {
   createNavigationEffectDefinition, createNavigationSpatialEffect, createSpatialEffectRegion,
-} from '../../dist/core/tactical/battlefield/navigation-effect.js';
-import { createNavigationMap, NavigationMap } from '../../dist/core/tactical/navigation/map.js';
-import { createNavigationRequest } from '../../dist/core/tactical/navigation/request.js';
-import { deriveNavigationFieldQuery } from '../../dist/core/tactical/navigation/field.js';
-import { createNavigationPath } from '../../dist/core/tactical/navigation/path.js';
+} from '../../dist/core/tactical/battlefield/navigation/effect.js';
+import { createNavigationMap, NavigationMap } from '../../dist/core/tactical/battlefield/navigation/map.js';
+import { createNavigationRequest } from '../../dist/core/tactical/battlefield/navigation/request.js';
+import { deriveNavigationFieldQuery } from '../../dist/core/tactical/battlefield/navigation/field.js';
+import { createNavigationPath } from '../../dist/core/tactical/battlefield/navigation/path.js';
 import {
   bindNavigationPath, createNavigationState, predictNavigation,
   canCompleteNavigationSegment,
   setNavigationMotionMode, startNavigationRequest, steerNavigation,
-} from '../../dist/core/tactical/navigation/state.js';
-import { createRouteDefinition } from '../../dist/core/tactical/route/definition.js';
+} from '../../dist/core/tactical/battlefield/navigation/state.js';
+import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
 import {
   advanceRoute, createRouteExecution, enterRoute, nextCheckpointIndex, tickRouteWait,
-} from '../../dist/core/tactical/route/execution.js';
-import { createRouteTiming, createRouteState } from '../../dist/core/tactical/route/state.js';
-import { initializeRouteSpawn } from '../../dist/core/tactical/route/spawn.js';
-import { predictRouteTarget } from '../../dist/core/tactical/route/plan.js';
+} from '../../dist/core/tactical/unit/capability/locomotion/route/execution.js';
+import { createRouteTiming, createRouteState } from '../../dist/core/tactical/unit/capability/locomotion/route/state.js';
+import { initializeRouteSpawn } from '../../dist/core/tactical/unit/capability/locomotion/route/spawn.js';
+import { predictRouteTarget } from '../../dist/core/tactical/unit/capability/locomotion/route/plan.js';
 import { initializeRouteControl } from '../../dist/core/tactical/unit/capability/locomotion/route-control.js';
 import { parseBattlefieldMap } from '../../dist/data/arknights/map.js';
 import { parseRouteDefinition } from '../../dist/data/arknights/route.js';
 import { createRng } from '../../dist/core/common/rng.js';
 import { World } from '../../dist/core/tactical/geometry/coordinate.js';
-import { createEnemyDefinition, initializeRoutedEnemy, stepRoutedEnemy } from '../../dist/core/tactical/unit/enemy.js';
+import { createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
+import { initializeRoutedEnemy } from "../../dist/core/tactical/battle/creation/enemy.js";
+import { stepRoutedEnemy } from "../../dist/legacy/enemy.js";
 import { copyUnitSnapshot } from '../../dist/core/tactical/unit/snapshot.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
-import { createActionCapabilityDefinition, createActionState } from '../../dist/core/tactical/unit/capability/action.js';
+import { createActionCapabilityDefinition, createActionState } from '../../dist/core/tactical/unit/capability/action/capability.js';
 import { createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/deployment.js';
 import { createSteeringParameters, createSteeringState, integrateSteering } from '../../dist/core/tactical/unit/capability/locomotion/steering.js';
 import { Grid, OBSTACLE_COST, bresenhamTiles } from '../../server/sim/grid.js';
 import { flowFieldForGrid, navigationMapFromGrid, waypointsForGrid } from '../../dist/legacy/navigation.js';
-import { buildRawNavigationField, buildNavigationField } from '../../dist/core/tactical/navigation/pathfinding.js';
-import { createNavigationFieldCache } from '../../dist/core/tactical/navigation/cache.js';
-import { smoothNavigationField } from '../../dist/core/tactical/navigation/smoothing.js';
+import { buildRawNavigationField, buildNavigationField } from '../../dist/core/tactical/battlefield/navigation/pathfinding.js';
+import { createNavigationFieldCache } from '../../dist/core/tactical/battlefield/navigation/cache.js';
+import { smoothNavigationField } from '../../dist/core/tactical/battlefield/navigation/smoothing.js';
 import {
   initializeNavigationCursor, selectNavigationPredictionTarget, selectNavigationSteeringTarget,
   canTraverseNavigationSegment,
-} from '../../dist/core/tactical/navigation/query.js';
+} from '../../dist/core/tactical/battlefield/navigation/query.js';
 import { getDefaultSource, hasGeneratedData } from '../../server/sim/simdata.js';
 import { makeBattle, flatStage, enemyRec } from '../helpers/battleHarness.js';
 import { remainingDistance } from '../../server/sim/ai.js';
@@ -1395,7 +1397,7 @@ test('core selective projection retains untouched collections, indexes and live 
   const path = unit.locomotion.mainRoute.navigation.execution.activity.path;
   const field = h.branches[0].fieldCache.get(previous.navigationMaps.WALK, path.request);
   h.commit(state => [{ type: 'UPDATE_UNIT', unit: {
-    ...state.units.get(1), vitality: { hp: 90 }, action: { readyAtTick: 7, recoveryUntilTick: 4, targetUnitId: null },
+    ...state.units.get(1), vitality: { ...state.units.get(1).vitality, hp: 90 }, action: { readyAtTick: 7, recoveryUntilTick: 4, targetUnitId: null },
   } }]);
   assert.notEqual(h.state.units, previous.units);
   assert.equal(h.state.mechanisms, previous.mechanisms);
@@ -1535,7 +1537,7 @@ test('core selective and full projection preserve relation history and explicit 
   ]);
   assert.deepEqual(h.state.blockingRelations, []);
   h.commit([{ type: 'SET_BLOCKING_RELATIONS', relations: blocking }]);
-  h.commit(state => [{ type: 'UPDATE_UNIT', unit: { ...state.units.get(11), vitality: { hp: 0 } } }]);
+  h.commit(state => [{ type: 'UPDATE_UNIT', unit: { ...state.units.get(11), vitality: { ...state.units.get(11).vitality, hp: 0 } } }]);
   assert.deepEqual(h.state.blockingRelations, []);
   assert.ok(h.state.spatial.unitsByTile.get(9).has(11));
   const mutations = [

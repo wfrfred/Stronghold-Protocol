@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { SnapshotBuffer, normalizeSnapshot, isCosmeticEvent, frameTime } from '../../public/js/render/interp.js';
 import { chessRec, enemyRec } from '../helpers/battleHarness.js';
-import { createRouteDefinition } from '../../dist/core/tactical/route/definition.js';
+import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
 import { createLegacyCombatBattle } from '../../dist/legacy/combat.js';
 import { TacticalDemoPresentation } from '../../dist/legacy/tactical-demo-presentation.js';
 

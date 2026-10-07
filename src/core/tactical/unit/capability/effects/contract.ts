@@ -29,7 +29,7 @@ export interface EffectLifecycleOperations {
         child: EffectAddress,
         parent: EffectAddress,
         finishIfParentFinished?: boolean,
-    ): void;
+    ): EffectParentBindingResult;
 }
 
 export interface EffectLifecycleContext<S extends object = object> {
@@ -82,4 +82,15 @@ export type EffectInstallationResult =
 export interface EffectInstallation {
     readonly work: CombatWork;
     readonly result: EffectInstallationResult;
+}
+
+export type EffectParentBindingResult =
+    | { readonly type: "BOUND" }
+    | { readonly type: "CHILD_ABSENT" }
+    | { readonly type: "CHILD_FINISHED" }
+    | { readonly type: "PARENT_UNAVAILABLE"; readonly reason: "ABSENT" | "FINISHED" };
+
+export interface EffectParentBinding {
+    readonly work: CombatWork;
+    readonly result: EffectParentBindingResult;
 }
