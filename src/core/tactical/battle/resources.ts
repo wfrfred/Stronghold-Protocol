@@ -11,6 +11,8 @@ import {
 } from "../unit/capability/vitality/damage/resources.js";
 import type { CompiledEffectContribution } from "../unit/capability/effects/contribution-bindings.js";
 import type { EffectLifecycleResources } from "../unit/capability/effects/lifecycle-resources.js";
+import type { HealingResources } from "../unit/capability/vitality/healing/resources.js";
+import type { DamageOperation, HealingOperation } from "../unit/capability/vitality/hook.js";
 import type { NumericContributionResources } from "../modifier/providers.js";
 import type { NumericProviderFacts } from "../unit/capability/contribution.js";
 import { createActionResources } from "../unit/capability/action/resources.js";
@@ -26,6 +28,9 @@ export class CombatResources {
     readonly effectBindings: EffectBindingResources;
     readonly damage: DamageResources;
     readonly effectLifecycle: EffectLifecycleResources;
+    readonly healing: HealingResources;
+    readonly settleDamage: DamageOperation;
+    readonly settleHealing: HealingOperation;
 
     constructor() {
         const resources = createActionResources();
@@ -36,6 +41,9 @@ export class CombatResources {
         this.effectBindings = resources.effectBindings;
         this.damage = resources.damage;
         this.effectLifecycle = resources.effectLifecycle;
+        this.healing = resources.healing;
+        this.settleDamage = resources.settleDamage;
+        this.settleHealing = resources.settleHealing;
     }
 
     registerEffect<S extends object>(
@@ -48,7 +56,7 @@ export class CombatResources {
             ...compileEffectContributions(program, rules, this),
             ...bindings,
         ]);
-        this.damage.register(program.ref, rules, this);
+        this.damage.register(program.ref, rules);
 
         return program;
     }

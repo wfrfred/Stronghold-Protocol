@@ -2,7 +2,7 @@ import { resolveAttackPower } from "../offense/query.js";
 import { createDamageOperands } from "../vitality/damage/contract.js";
 import { resolveDamage } from "../vitality/damage/settlement.js";
 import type { EffectDefinition } from "./effect.js";
-import { resolveHealing } from "../vitality/healing.js";
+import { resolveHealing } from "../vitality/healing/settlement.js";
 import type { ActionResources } from "./resources.js";
 import { combatWorkView, getCombatUnit, type CombatWork } from "../../../battle/execution/work.js";
 import type { UnitId } from "../../unit.js";

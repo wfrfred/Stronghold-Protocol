@@ -1,6 +1,6 @@
 import type { Unit, UnitId } from "../../unit.js";
 import type { CombatWork } from "../../../battle/execution/work.js";
-import type { EffectAddress, EffectInstanceValue } from "./instance.js";
+import type { EffectAddress, EffectInstanceValue, EffectLifetimeOwner } from "./instance.js";
 import type { EffectProgramRef } from "./program.js";
 import type { EffectResources } from "./registry.js";
 import type { EffectContributionBindings } from "./resources.js";
@@ -13,6 +13,11 @@ export interface EffectFacts {
 }
 
 export interface EffectLifecycleOperations {
+    install<S extends object>(
+        unitId: UnitId,
+        ref: EffectProgramRef<S>,
+        input: EffectInstallationInput,
+    ): EffectInstallationResult;
     update<S extends object>(
         address: EffectAddress,
         ref: EffectProgramRef<S>,
@@ -52,9 +57,18 @@ export interface EffectLifecycleProgram<S extends object> {
 }
 
 export interface EffectTransitionResources {
-    readonly effects: Pick<EffectResources, "assertInstance" | "typedInstance" | "update">;
+    readonly effects: Pick<
+        EffectResources,
+        "assertInstance" | "create" | "typedInstance" | "update"
+    >;
     readonly effectBindings: EffectContributionBindings;
     readonly effectLifecycle: Pick<EffectLifecycleResources, "get">;
+}
+
+export interface EffectInstallationInput {
+    readonly sourceUnitId: UnitId | null;
+    readonly lifetimeOwner: EffectLifetimeOwner | null;
+    readonly expiresAtTick: number | null;
 }
 
 export type EffectInstallationResult =

@@ -6,6 +6,7 @@ import {
     finishEffectsOwnedByUnit,
 } from "../../unit/capability/effects/lifecycle.js";
 import { hasEffects } from "../../unit/capability/effects/capability.js";
+import type { EffectDispatchScope } from "../../unit/capability/effects/dispatch.js";
 import type { UnitId } from "../../unit/unit.js";
 import type { BattlefieldRemovalReason } from "../../battlefield/contract.js";
 import type { EffectTransitionResources } from "../../unit/capability/effects/contract.js";
@@ -17,8 +18,9 @@ export function retireCombatUnit(
     unitId: UnitId,
     resources: EffectTransitionResources,
     tick: number,
+    dispatch?: EffectDispatchScope,
 ): CombatWork {
-    return removeUnitWithEffects(work, unitId, "DEATH", resources, tick);
+    return removeUnitWithEffects(work, unitId, "DEATH", resources, tick, dispatch);
 }
 
 export function removeUnitWithEffects(
@@ -27,10 +29,11 @@ export function removeUnitWithEffects(
     reason: BattlefieldRemovalReason,
     resources: EffectTransitionResources,
     tick: number,
+    dispatch?: EffectDispatchScope,
 ): CombatWork {
-    work = finishEffectsOnUnit(work, unitId, resources, tick);
-    work = finishEffectsOwnedByUnit(work, unitId, resources, tick);
-    work = finalizeFinishedEffects(work, unitId, resources, tick);
+    work = finishEffectsOnUnit(work, unitId, resources, tick, dispatch);
+    work = finishEffectsOwnedByUnit(work, unitId, resources, tick, dispatch);
+    work = finalizeFinishedEffects(work, unitId, resources, tick, dispatch);
 
     return removeCombatUnit(work, unitId, reason);
 }

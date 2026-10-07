@@ -18,7 +18,23 @@ export interface DamageRequest {
     readonly damageType: DamageType;
     readonly operands: DamageOperands;
     readonly tick: number;
+    readonly receptionPolicy?: DamageReceptionPolicy;
 }
+
+export interface DamageReceptionPolicy {
+    readonly skipModifierEvents: boolean;
+    readonly considerInvincibility: boolean;
+}
+
+export const NORMAL_DAMAGE_RECEPTION: DamageReceptionPolicy = Object.freeze({
+    skipModifierEvents: false,
+    considerInvincibility: true,
+});
+
+export const SKIPPED_DAMAGE_RECEPTION: DamageReceptionPolicy = Object.freeze({
+    skipModifierEvents: true,
+    considerInvincibility: false,
+});
 
 export interface DamageCancellation {
     readonly stage: "INPUT" | "FORMULA" | "OUTPUT" | "RECEPTION";

@@ -3,14 +3,21 @@ import { hasVitality, type Vitality } from "../capability.js";
 import type { Unit } from "../../../unit.js";
 import { hasStatusFlag } from "../../status/capability.js";
 import { resolveDefense } from "../../defense/query.js";
-import type {
-    DamageType,
-    DamageOperands,
-    DamageReport,
-    DamageRequest,
-    DamageResolution,
-    PendingDamage,
+import {
+    type DamageType,
+    type DamageOperands,
+    type DamageReport,
+    type DamageRequest,
+    type DamageResolution,
+    type PendingDamage,
+    NORMAL_DAMAGE_RECEPTION,
 } from "./contract.js";
+import { EffectDispatchScope } from "../../effects/dispatch.js";
+import {
+    dispatchDamageFormula,
+    dispatchDamageAmount,
+    dispatchDamageReactions,
+} from "./dispatch.js";
 import { retireCombatUnit } from "../../../../battle/execution/unit-lifecycle.js";
 import type { DamageResourceServices } from "./resources.js";
 import {
@@ -81,19 +88,21 @@ function confirmDamage(
     work: CombatWork,
     report: DamageReport,
     resources: DamageResourceServices,
+    dispatch: EffectDispatchScope,
 ): DamageResolution {
     report = Object.freeze(report);
 
-    const reactions = resources.damage.reactionRules(work, [
-        report.request.sourceUnitId,
-        report.request.targetUnitId,
-    ]);
-
-    for (const reaction of reactions) {
-        work = reaction.apply(work, report);
+    if (!(report.request.receptionPolicy ?? NORMAL_DAMAGE_RECEPTION).skipModifierEvents) {
+        work = dispatchDamageReactions(work, report, resources, dispatch);
     }
     if (report.deathOccurred) {
-        work = retireCombatUnit(work, report.request.targetUnitId, resources, report.request.tick);
+        work = retireCombatUnit(
+            work,
+            report.request.targetUnitId,
+            resources,
+            report.request.tick,
+            dispatch,
+        );
     }
 
     return { work, report };
@@ -103,7 +112,9 @@ export function resolveDamage(
     work: CombatWork,
     request: DamageRequest,
     resources: DamageResourceServices,
+    dispatch = new EffectDispatchScope(),
 ): DamageResolution {
+    const policy = request.receptionPolicy ?? NORMAL_DAMAGE_RECEPTION;
     const target = getCombatUnit(work, request.targetUnitId);
     const report: DamageReport = {
         request,
@@ -134,6 +145,7 @@ export function resolveDamage(
                 },
             },
             resources,
+            dispatch,
         );
     }
 
@@ -143,13 +155,17 @@ export function resolveDamage(
         [request.sourceUnitId, "sourceFormula"],
         [request.targetUnitId, "targetFormula"],
     ] as const) {
-        const rules = resources.damage.formulaRules(work, owner, stage);
-
-        for (const rule of rules) {
-            const result = rule.apply(work, request, operands);
-            work = result.work;
-            operands = result.value;
-        }
+        const result = dispatchDamageFormula(
+            work,
+            request,
+            owner,
+            stage,
+            operands,
+            resources,
+            dispatch,
+        );
+        work = result.work;
+        operands = result.value;
     }
 
     const current = getCombatUnit(work, request.targetUnitId);
@@ -159,6 +175,7 @@ export function resolveDamage(
             work,
             { ...report, cancellation: { stage: "FORMULA", reason: "TARGET_UNAVAILABLE" } },
             resources,
+            dispatch,
         );
     }
 
@@ -178,54 +195,53 @@ export function resolveDamage(
     );
     let pending: PendingDamage = { amount: formulaDamage, cancellation: null, consumptions: [] };
 
-    for (const rule of resources.damage.amountRules(work, request.sourceUnitId, "output")) {
-        const result = rule.apply(work, request, pending);
+    if (!policy.skipModifierEvents) {
+        const result = dispatchDamageAmount(
+            work,
+            request,
+            request.sourceUnitId,
+            "output",
+            pending,
+            resources,
+            dispatch,
+        );
         work = result.work;
         pending = result.value;
-
-        if (pending.cancellation !== null) {
-            return confirmDamage(
-                work,
-                {
-                    ...report,
-                    formulaDamage,
-                    resourceConsumptions: pending.consumptions,
-                    cancellation: pending.cancellation,
-                },
-                resources,
-            );
-        }
     }
 
     const outputDamage = pending.amount;
     const receiver = getCombatUnit(work, request.targetUnitId);
 
-    if (
-        receiver === undefined ||
-        !hasVitality(receiver) ||
-        receiver.vitality.hp <= 0 ||
-        hasStatusFlag(receiver, "INVINCIBLE")
-    ) {
+    if (receiver === undefined || !hasVitality(receiver) || receiver.vitality.hp <= 0) {
         pending = {
             ...pending,
-            cancellation: {
+            cancellation: pending.cancellation ?? {
                 stage: "RECEPTION",
-                reason:
-                    receiver !== undefined && hasStatusFlag(receiver, "INVINCIBLE")
-                        ? "INVINCIBLE"
-                        : "TARGET_UNAVAILABLE",
+                reason: "TARGET_UNAVAILABLE",
             },
         };
     } else {
-        for (const rule of resources.damage.amountRules(work, request.targetUnitId, "reception")) {
-            const result = rule.apply(work, request, pending);
-            work = result.work;
-            pending = result.value;
-
-            if (pending.cancellation !== null) {
-                break;
-            }
+        if (policy.considerInvincibility && hasStatusFlag(receiver, "INVINCIBLE")) {
+            pending = {
+                ...pending,
+                cancellation: pending.cancellation ?? {
+                    stage: "RECEPTION",
+                    reason: "INVINCIBLE",
+                },
+            };
         }
+
+        const result = dispatchDamageAmount(
+            work,
+            request,
+            request.targetUnitId,
+            policy.skipModifierEvents ? "skippedReception" : "reception",
+            pending,
+            resources,
+            dispatch,
+        );
+        work = result.work;
+        pending = result.value;
     }
 
     const finalTarget = getCombatUnit(work, request.targetUnitId);
@@ -265,6 +281,7 @@ export function resolveDamage(
                 cancellation,
             },
             resources,
+            dispatch,
         );
     }
 
@@ -307,5 +324,6 @@ export function resolveDamage(
             fatalProtection,
         },
         resources,
+        dispatch,
     );
 }
