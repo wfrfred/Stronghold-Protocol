@@ -1,37 +1,20 @@
-import type { CombatWork } from "../../../battle/execution/work.js";
 import type { UnitId } from "../../unit.js";
 import type { ActionDefinition, TargetBindingId } from "./capability.js";
 import type { CompiledActionSegment } from "./process.js";
-import type { ProjectileOperations } from "../../../battlefield/projectile/operations.js";
-
-export interface ActionProgramContext {
-    readonly work: CombatWork;
-    readonly sourceUnitId: UnitId;
-    readonly tick: number;
-    readonly bindings: ReadonlyMap<TargetBindingId, readonly UnitId[]>;
-    readonly projectiles?: ProjectileOperations;
-}
-
-export type ActionProgramStep = (context: ActionProgramContext) => ActionProgramContext;
+import type { CombatTargetQueryContext } from "../../targeting/query.js";
 
 export interface CompiledAction {
     readonly definition: ActionDefinition;
-    readonly bind: ActionProgramStep;
-    readonly program: readonly ActionProgramStep[];
-    readonly process?: readonly CompiledActionSegment[];
+    readonly bind: (
+        context: CombatTargetQueryContext,
+    ) => ReadonlyMap<TargetBindingId, readonly UnitId[]>;
+    readonly program: readonly CompiledActionSegment[];
 }
 
 export function ownCompiledAction(compiled: CompiledAction): CompiledAction {
     return Object.freeze({
         definition: compiled.definition,
         bind: compiled.bind,
-        program: Object.freeze([...compiled.program]),
-        ...(compiled.process === undefined
-            ? {}
-            : {
-                  process: Object.freeze(
-                      compiled.process.map((segment) => Object.freeze({ ...segment })),
-                  ),
-              }),
+        program: Object.freeze(compiled.program.map((segment) => Object.freeze({ ...segment }))),
     });
 }

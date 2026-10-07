@@ -351,24 +351,15 @@ export function resumeActionExecution(
         return { work, state, result: { type: "ABSENT" }, signals: [] };
     }
 
+    const source = getCombatUnit(work, execution.sourceUnitId);
+
+    if (source === undefined || !isSpatiallyPresent(source)) {
+        return cancelActionExecution(work, state, executionId, resources, tick, "SOURCE_ABSENT");
+    }
+
     const signals: ActionExecutionSignal[] = [];
 
     while (true) {
-        const source = getCombatUnit(work, execution.sourceUnitId);
-
-        if (source === undefined || !isSpatiallyPresent(source)) {
-            const cancelled = cancelActionExecution(
-                work,
-                replaceExecution(state, execution),
-                executionId,
-                resources,
-                tick,
-                "SOURCE_ABSENT",
-            );
-
-            return { ...cancelled, signals: [...signals, ...cancelled.signals] };
-        }
-
         const segment: CompiledActionSegment | undefined = segments[execution.cursor];
 
         if (segment === undefined) {

@@ -6,8 +6,8 @@ import type { ActionDefinition, TargetBindingId } from "./capability.js";
 import { compileEffect, type CompiledEffect } from "./compile-effect.js";
 import { effectPurposes, type EffectDefinition } from "./effect.js";
 import { createActionResources, type ActionResources } from "./resources.js";
-import { combatWorkView, getCombatUnit } from "../../../battle/execution/work.js";
-import type { ActionProgramContext, ActionProgramStep, CompiledAction } from "./program.js";
+import type { CompiledAction } from "./program.js";
+import type { ActionExecutionContext, CompiledActionSegment } from "./process.js";
 
 export function compileAction(
     definition: ActionDefinition,
@@ -25,12 +25,12 @@ export function compileAction(
         effects: group.effects.map(compile),
     }));
 
-    const applyTo =
-        (
-            effect: CompiledEffect,
-            ids: (context: ActionProgramContext) => readonly UnitId[],
-        ): ActionProgramStep =>
-        (context) => {
+    const applyTo = (
+        effect: CompiledEffect,
+        ids: (context: ActionExecutionContext) => readonly UnitId[],
+    ): CompiledActionSegment => ({
+        type: "EXECUTE",
+        run: (context) => {
             let { work } = context;
 
             for (const targetUnitId of ids(context)) {
@@ -42,8 +42,9 @@ export function compileAction(
                 });
             }
 
-            return { ...context, work };
-        };
+            return { work };
+        },
+    });
 
     const program = groups.flatMap((group) =>
         group.effects.map((effect) =>
@@ -54,17 +55,15 @@ export function compileAction(
     for (const { receiver, effect } of definition.followUps) {
         const ids =
             receiver.type === "SOURCE"
-                ? (context: ActionProgramContext) => [context.sourceUnitId]
-                : (context: ActionProgramContext) => context.bindings.get(receiver.bindingId)!;
+                ? (context: ActionExecutionContext) => [context.sourceUnitId]
+                : (context: ActionExecutionContext) => context.bindings.get(receiver.bindingId)!;
 
         program.push(applyTo(compile(effect), ids));
     }
 
     return {
         definition,
-        bind: (context) => {
-            const source = getCombatUnit(context.work, context.sourceUnitId)!;
-            const query = { source, battlefield: combatWorkView(context.work) };
+        bind: (query) => {
             const bindings = new Map<TargetBindingId, readonly UnitId[]>();
 
             for (const group of groups) {
@@ -74,7 +73,7 @@ export function compileAction(
                 );
             }
 
-            return { ...context, bindings };
+            return bindings;
         },
         program,
     };

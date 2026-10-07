@@ -51,15 +51,9 @@ export function createCombatSystem(
 
         return compiled;
     };
-    const segmentsOf = (execution: ActionExecution): readonly CompiledActionSegment[] => {
-        const segments = compiledAction(execution.definition).process;
 
-        if (segments === undefined) {
-            throw new TypeError("action execution requires its compiled process");
-        }
-
-        return segments;
-    };
+    const segmentsOf = (execution: ActionExecution): readonly CompiledActionSegment[] =>
+        compiledAction(execution.definition).program;
 
     const mayStart = (state: ActionExecutionState, unitId: UnitId): boolean =>
         state.executions.every(

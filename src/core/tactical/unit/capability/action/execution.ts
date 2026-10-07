@@ -2,6 +2,7 @@ import type { BattleEvent } from "../../../battle/contract.js";
 import {
     appendCombatEvents,
     combatWorkResult,
+    combatWorkView,
     createCombatWork,
     getCombatUnit,
     updateCombatUnit,
@@ -10,16 +11,19 @@ import {
 import type { CombatTargetingView } from "../../targeting/query.js";
 import type { Unit, UnitId } from "../../unit.js";
 import { hasAction, type Action, type ActingUnitDefinition } from "./capability.js";
-import type { ActionProgramContext, CompiledAction } from "./program.js";
+import type { CompiledAction } from "./program.js";
 import type { EffectTransitionResources } from "../effects/contract.js";
 import {
     acceptActionExecution,
+    createActionExecutionState,
     resumeActionExecution,
     type ActionExecutionState,
 } from "./process.js";
 import type { ProjectileOperations } from "../../../battlefield/projectile/operations.js";
+import { isSpatiallyPresent } from "../presence.js";
 
 export interface ActionStep {
+    readonly state: ActionExecutionState;
     readonly units: readonly Unit[];
     readonly removedUnitIds: readonly UnitId[];
     readonly events: readonly BattleEvent[];
@@ -28,96 +32,8 @@ export interface ActionStep {
 export interface ActionStepContext {
     readonly battlefield: CombatTargetingView;
     readonly tick: number;
+    readonly state?: ActionExecutionState;
     readonly projectiles?: ProjectileOperations;
-}
-
-interface ActionAcceptance {
-    readonly work: CombatWork;
-    readonly context: ActionProgramContext | null;
-}
-
-function acceptAction(
-    work: CombatWork,
-    sourceUnitId: UnitId,
-    compiled: CompiledAction,
-    tick: number,
-    mayStart: boolean,
-    projectiles?: ProjectileOperations,
-): ActionAcceptance {
-    const source = getCombatUnit(work, sourceUnitId);
-
-    if (source === undefined || !hasAction(source)) {
-        return { work, context: null };
-    }
-
-    const context = compiled.bind({ work, sourceUnitId, tick, bindings: new Map() });
-    const targetUnitId = context.bindings.get(compiled.definition.triggerBindingId)![0] ?? null;
-    const current = getCombatUnit(context.work, sourceUnitId);
-
-    if (current === undefined || !hasAction(current)) {
-        return { work: context.work, context: null };
-    }
-
-    let acting = current;
-
-    if (targetUnitId !== current.action.targetUnitId) {
-        acting = { ...current, action: { ...current.action, targetUnitId } };
-    }
-
-    work = updateCombatUnit(context.work, acting);
-
-    if (
-        !mayStart ||
-        targetUnitId === null ||
-        tick < acting.action.readyAtTick ||
-        tick < acting.action.recoveryUntilTick
-    ) {
-        return { work, context: null };
-    }
-
-    const { definition } = compiled;
-    const executing = {
-        ...acting,
-        action: {
-            ...acting.action,
-            readyAtTick: tick + definition.intervalTicks,
-            recoveryUntilTick: tick + definition.recoveryTicks,
-        },
-    };
-
-    work = updateCombatUnit(work, executing);
-    work = appendCombatEvents(work, [{ type: "ACTION", sourceUnitId, targetUnitId, tick }]);
-
-    return {
-        work,
-        context: { ...context, work, ...(projectiles === undefined ? {} : { projectiles }) },
-    };
-}
-
-function runImmediateAction(context: ActionProgramContext, compiled: CompiledAction): CombatWork {
-    for (const step of compiled.program) {
-        context = step(context);
-    }
-
-    return context.work;
-}
-
-export function executeAction(
-    work: CombatWork,
-    sourceUnitId: UnitId,
-    compiled: CompiledAction,
-    tick: number,
-    projectiles?: ProjectileOperations,
-): CombatWork {
-    if (compiled.process !== undefined) {
-        throw new TypeError("resumable actions require an execution state");
-    }
-
-    const accepted = acceptAction(work, sourceUnitId, compiled, tick, true, projectiles);
-
-    return accepted.context === null
-        ? accepted.work
-        : runImmediateAction(accepted.context, compiled);
 }
 
 export function startAction(
@@ -130,27 +46,51 @@ export function startAction(
     mayStart: boolean,
     projectiles?: ProjectileOperations,
 ): { readonly work: CombatWork; readonly state: ActionExecutionState } {
-    const accepted = acceptAction(work, sourceUnitId, compiled, tick, mayStart, projectiles);
+    const source = getCombatUnit(work, sourceUnitId);
 
-    if (accepted.context === null) {
-        return { work: accepted.work, state };
+    if (
+        !mayStart ||
+        source === undefined ||
+        !hasAction(source) ||
+        !isSpatiallyPresent(source) ||
+        tick < source.action.readyAtTick ||
+        tick < source.action.recoveryUntilTick
+    ) {
+        return { work, state };
     }
-    if (compiled.process === undefined) {
-        return { work: runImmediateAction(accepted.context, compiled), state };
+
+    const bindings = compiled.bind({ source, battlefield: combatWorkView(work) });
+    const targetUnitId = bindings.get(compiled.definition.triggerBindingId)![0] ?? null;
+
+    if (targetUnitId === null) {
+        return { work, state };
     }
+
+    const { definition } = compiled;
+    const executing = {
+        ...source,
+        action: {
+            ...source.action,
+            targetUnitId,
+            readyAtTick: tick + definition.intervalTicks,
+            recoveryUntilTick: tick + definition.recoveryTicks,
+        },
+    };
+    work = updateCombatUnit(work, executing);
+    work = appendCombatEvents(work, [{ type: "ACTION", sourceUnitId, targetUnitId, tick }]);
 
     const initialized = acceptActionExecution(state, {
         sourceUnitId,
-        definition: compiled.definition,
-        inputTargetUnitId: accepted.context.bindings.get(compiled.definition.triggerBindingId)![0]!,
-        bindings: accepted.context.bindings,
+        definition,
+        inputTargetUnitId: targetUnitId,
+        bindings,
         tick,
     });
     const advanced = resumeActionExecution(
-        accepted.work,
+        work,
         initialized.state,
         initialized.execution.id,
-        compiled.process,
+        compiled.program,
         tick,
         resources,
         projectiles,
@@ -163,15 +103,19 @@ export function stepAction(
     source: Unit<ActingUnitDefinition> & Action,
     compiled: CompiledAction,
     context: ActionStepContext,
+    resources: EffectTransitionResources,
 ): ActionStep {
-    const work = executeAction(
+    const result = startAction(
         updateCombatUnit(createCombatWork(context.battlefield), source),
+        context.state ?? createActionExecutionState(),
         source.id,
         compiled,
         context.tick,
+        resources,
+        true,
         context.projectiles,
     );
-    const { units, removedUnitIds, events } = combatWorkResult(work);
+    const { units, removedUnitIds, events } = combatWorkResult(result.work);
 
-    return { units, removedUnitIds, events };
+    return { state: result.state, units, removedUnitIds, events };
 }
