@@ -1,4 +1,4 @@
-import type { BattlefieldView } from "../battlefield/runtime.js";
+import type { BattlefieldView } from "../battlefield/contract.js";
 import { World } from "../geometry/coordinate.js";
 import { RangeGrid } from "../geometry/range.js";
 import type { TargetProfile } from "../unit/capability/action.js";

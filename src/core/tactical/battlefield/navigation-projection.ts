@@ -141,15 +141,67 @@ function sameCells(
     return true;
 }
 
+function sameContributions(
+    leftEffects: readonly ProjectedNavigationEffect[],
+    rightEffects: readonly ProjectedNavigationEffect[],
+    mode: PathMotionMode,
+): boolean {
+    if (leftEffects === rightEffects) {
+        return true;
+    }
+
+    const contributes = (effect: ProjectedNavigationEffect) =>
+        effect.definition[mode] !== null && effect.positions.length > 0;
+    const left = leftEffects.filter(contributes);
+    const right = rightEffects.filter(contributes);
+
+    if (left.length !== right.length) {
+        return false;
+    }
+
+    for (let index = 0; index < left.length; index++) {
+        const leftEffect = left[index]!;
+        const rightEffect = right[index]!;
+        const leftRestriction = leftEffect.definition[mode]!;
+        const rightRestriction = rightEffect.definition[mode]!;
+
+        if (
+            leftRestriction.denyPassage !== rightRestriction.denyPassage ||
+            (mode === "WALK" &&
+                leftEffect.definition.WALK!.costFloor !== rightEffect.definition.WALK!.costFloor) ||
+            DIRECTIONS.some(
+                (direction) =>
+                    leftRestriction.deniedDepartures.includes(direction) !==
+                    rightRestriction.deniedDepartures.includes(direction),
+            ) ||
+            leftEffect.positions.length !== rightEffect.positions.length ||
+            leftEffect.positions.some((position, positionIndex) => {
+                const other = rightEffect.positions[positionIndex]!;
+
+                return position[0] !== other[0] || position[1] !== other[1];
+            })
+        ) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 export function projectNavigationMaps(
     baseline: NavigationMaps,
     effects: readonly ProjectedNavigationEffect[],
     previous: NavigationMaps,
+    previousEffects?: readonly ProjectedNavigationEffect[],
 ): NavigationProjection {
     const maps: Record<PathMotionMode, NavigationMap> = { WALK: previous.WALK, FLY: previous.FLY };
     const changedModes: PathMotionMode[] = [];
 
     for (const mode of ["WALK", "FLY"] as const) {
+        if (previousEffects !== undefined && sameContributions(effects, previousEffects, mode)) {
+            continue;
+        }
+
         const baselineMap = baseline[mode];
         const previousMap = previous[mode];
         const cells = projectCells(baselineMap, effects);

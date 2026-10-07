@@ -135,7 +135,7 @@ test('core blocking: nearest contact wins even when the enemy does not move', ()
   assert.deepEqual(coreBlockedBy(battle, 1), [2]);
 });
 
-test('core blocking: blocker death releases its enemy and movement resumes on the next tick', () => {
+test('core visibility: blocker death releases its enemy before movement in the same tick', () => {
   const battle = coreBlockingBattle(
     [{ definition: chessRec({ id: FRONT, stats: { maxHp: 10, atk: 0, def: 0, blockCnt: 1 }, skill: null }), position: [1, 5] }],
     [{ definition: foe('core_killer', { atk: 1000 }), route: coreBlockingRoute([1, 6], { spawnOffset: [-0.6, 0] }) }],
@@ -145,11 +145,13 @@ test('core blocking: blocker death releases its enemy and movement resumes on th
 
   assert.ok(first.events.some(event => event.type === 'UNIT_REMOVED' && event.unitId === 0 && event.reason === 'DEATH'));
   assert.deepEqual(battle.snapshot().blockingRelations, []);
+  assert.ok(stopped[0] < 5.4);
+  assert.ok(stopped[0] > 5.4 - 1 / 30);
   battle.step();
   assert.ok(coreBlockingUnit(battle, 1).position[0] < stopped[0]);
 });
 
-test('core blocking: a freed front operator takes over a surviving enemy without changing its position', () => {
+test('core visibility: a freed front operator takes over after movement and holds the next tick', () => {
   const battle = coreBlockingBattle(
     [
       { definition: chessRec({ id: FRONT, stats: { maxHp: 1e6, atk: 100, def: 0, blockCnt: 1 }, skill: null }), position: [1, 6] },
@@ -164,6 +166,8 @@ test('core blocking: a freed front operator takes over a surviving enemy without
   const position = coreBlockingUnit(battle, 3).position;
 
   assert.deepEqual(first.events.filter(event => event.type === 'UNIT_REMOVED').map(event => event.unitId), [1, 2]);
+  assert.ok(position[0] < 5.4);
+  assert.ok(position[0] > 5.4 - 1 / 30);
   assert.deepEqual(coreBlockedBy(battle, 0), [3]);
   battle.step();
   assert.deepEqual(coreBlockedBy(battle, 0), [3]);

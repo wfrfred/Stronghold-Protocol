@@ -1,8 +1,5 @@
-import type {
-    BattlefieldChange,
-    BattlefieldChangeResult,
-    BattlefieldRuntime,
-} from "../battlefield/runtime.js";
+import type { BattlefieldChange, BattlefieldChangeResult } from "../battlefield/contract.js";
+import type { BattlefieldRuntime } from "../battlefield/runtime.js";
 import { createMovementSystem } from "./movement.js";
 import { createBlockingSystem } from "./blocking.js";
 import { createCombatSystem } from "./combat.js";
@@ -20,6 +17,7 @@ import { createSpawnScheduleSystem } from "./spawning.js";
 import type { BattleSpec } from "./spec.js";
 import type { BattleExecutionState } from "./state.js";
 import type { BattlePhase } from "./system.js";
+import { battlefieldCommitEvents, finishBattleEvents } from "./events.js";
 
 export interface BattleSystemStates {
     readonly predefined: readonly PredefinedPresence[];
@@ -144,13 +142,7 @@ export function createBattleSystems(spec: BattleSpec) {
                 if (phaseResult.changes.length > 0) {
                     const committed = battlefield.commit(phaseResult.changes);
                     removedUnits.push(...committed.removedUnits);
-                    events.push(
-                        ...committed.lostSupports.map((relation): BattleEvent => ({
-                            type: "SUPPORT_LOST",
-                            ...relation,
-                            tick,
-                        })),
-                    );
+                    events.push(...battlefieldCommitEvents(committed, tick));
                 }
 
                 states = phaseResult.state;
@@ -158,16 +150,10 @@ export function createBattleSystems(spec: BattleSpec) {
                 events.push(...phaseResult.events);
             }
 
-            for (const removed of removedUnits) {
-                events.push({ type: "UNIT_REMOVED", ...removed, tick });
-            }
-
             return {
                 states,
                 execution,
-                events,
-                completedRouteCount: events.filter((event) => event.type === "ROUTE_COMPLETED")
-                    .length,
+                ...finishBattleEvents(events, removedUnits, tick),
             };
         },
 

@@ -1,6 +1,6 @@
 import type { Seed } from "../../core/common/rng.js";
 import { createBattleSpec, type BattleSpec } from "../../core/tactical/battle/spec.js";
-import type { ScheduledEnemySpawn } from "../../core/tactical/battle/spawning.js";
+import type { ScheduledEnemySpawn } from "../../core/tactical/battle/schedule.js";
 import { createRouteTiming } from "../../core/tactical/route/state.js";
 import type { ArknightsLevelDefinition } from "./level.js";
 import { resolveActionSpawn, type ArknightsEnemyResolver } from "./schedule.js";

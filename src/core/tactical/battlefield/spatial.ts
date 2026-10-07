@@ -69,42 +69,13 @@ function requireEntry<K extends number, V>(entries: ReadonlyMap<K, V>, id: K, na
     return entry;
 }
 
-export function projectBattlefieldSpatial(
+export function projectUnitsByTile(
     map: BattlefieldMap,
     units: ReadonlyMap<UnitId, Unit>,
-    mechanisms: ReadonlyMap<MechanismId, MechanismRuntime>,
-    effects: ReadonlyMap<SpatialEffectId, NavigationSpatialEffect>,
-): BattlefieldSpatialView {
+): Pick<BattlefieldSpatialView, "unitsByTile"> {
     const unitsByTile = new Map<number, Set<UnitId>>();
-    const occupancyBySlot = new Map<string, Set<UnitId>>();
-    const effectsByTile = new Map<number, Set<SpatialEffectId>>();
-    const effectsBySource = new Map<string, Set<SpatialEffectId>>();
-    const effectsByAnchor = new Map<UnitId, Set<SpatialEffectId>>();
-    const navigationEffects: ProjectedNavigationEffect[] = [];
 
     for (const unit of units.values()) {
-        if (hasOccupancy(unit)) {
-            for (const claim of unit.occupancy.claims) {
-                if (!isOccupancyClaimActive(unit, claim)) {
-                    continue;
-                }
-
-                const key = battlefieldOccupancyKey(map, claim.position, claim.slot);
-
-                if (key === undefined) {
-                    throw new RangeError("occupancy claim is outside the battlefield");
-                }
-
-                const occupants = occupancyBySlot.get(key);
-
-                if (occupants !== undefined && !occupants.has(unit.id)) {
-                    throw new RangeError("occupancy slot is already claimed");
-                }
-
-                indexId(occupancyBySlot, key, unit.id);
-            }
-        }
-
         if (!isSpatiallyPresent(unit)) {
             continue;
         }
@@ -116,22 +87,84 @@ export function projectBattlefieldSpatial(
         }
     }
 
+    return { unitsByTile };
+}
+
+export function projectOccupancyBySlot(
+    map: BattlefieldMap,
+    units: ReadonlyMap<UnitId, Unit>,
+): Pick<BattlefieldSpatialView, "occupancyBySlot"> {
+    const occupancyBySlot = new Map<string, Set<UnitId>>();
+
+    for (const unit of units.values()) {
+        if (!hasOccupancy(unit)) {
+            continue;
+        }
+
+        for (const claim of unit.occupancy.claims) {
+            if (!isOccupancyClaimActive(unit, claim)) {
+                continue;
+            }
+
+            const key = battlefieldOccupancyKey(map, claim.position, claim.slot);
+
+            if (key === undefined) {
+                throw new RangeError("occupancy claim is outside the battlefield");
+            }
+
+            const occupants = occupancyBySlot.get(key);
+
+            if (occupants !== undefined && !occupants.has(unit.id)) {
+                throw new RangeError("occupancy slot is already claimed");
+            }
+
+            indexId(occupancyBySlot, key, unit.id);
+        }
+    }
+
+    return { occupancyBySlot };
+}
+
+export function projectEffectRelations(
+    units: ReadonlyMap<UnitId, Unit>,
+    mechanisms: ReadonlyMap<MechanismId, MechanismRuntime>,
+    effects: ReadonlyMap<SpatialEffectId, NavigationSpatialEffect>,
+): Pick<BattlefieldSpatialView, "effectsBySource" | "effectsByAnchor"> {
+    const effectsBySource = new Map<string, Set<SpatialEffectId>>();
+    const effectsByAnchor = new Map<UnitId, Set<SpatialEffectId>>();
+
     for (const effect of effects.values()) {
+        if (effect.source.type === "UNIT") {
+            requireEntry(units, effect.source.unitId, "effect source unit");
+        } else {
+            requireEntry(mechanisms, effect.source.mechanismId, "effect source mechanism");
+        }
+
         indexId(effectsBySource, spatialEffectSourceKey(effect.source), effect.id);
 
-        let sourceActive: boolean;
-
-        if (effect.source.type === "UNIT") {
-            sourceActive = isSpatiallyPresent(
-                requireEntry(units, effect.source.unitId, "effect source unit"),
-            );
-        } else {
-            sourceActive = requireEntry(
-                mechanisms,
-                effect.source.mechanismId,
-                "effect source mechanism",
-            ).active;
+        if (effect.region.type === "FOLLOW_UNIT") {
+            requireEntry(units, effect.region.unitId, "effect anchor unit");
+            indexId(effectsByAnchor, effect.region.unitId, effect.id);
         }
+    }
+
+    return { effectsBySource, effectsByAnchor };
+}
+
+export function projectEffectCoverage(
+    map: BattlefieldMap,
+    units: ReadonlyMap<UnitId, Unit>,
+    mechanisms: ReadonlyMap<MechanismId, MechanismRuntime>,
+    effects: ReadonlyMap<SpatialEffectId, NavigationSpatialEffect>,
+): Pick<BattlefieldSpatialView, "effectsByTile" | "navigationEffects"> {
+    const effectsByTile = new Map<number, Set<SpatialEffectId>>();
+    const navigationEffects: ProjectedNavigationEffect[] = [];
+
+    for (const effect of effects.values()) {
+        const sourceActive =
+            effect.source.type === "UNIT"
+                ? isSpatiallyPresent(units.get(effect.source.unitId)!)
+                : mechanisms.get(effect.source.mechanismId)!.active;
 
         const region = effect.region;
         let origin: TilePosition;
@@ -140,8 +173,7 @@ export function projectBattlefieldSpatial(
         if (region.type === "FIXED") {
             origin = region.position;
         } else {
-            const anchor = requireEntry(units, region.unitId, "effect anchor unit");
-            indexId(effectsByAnchor, region.unitId, effect.id);
+            const anchor = units.get(region.unitId)!;
             anchorActive = isSpatiallyPresent(anchor);
             origin = World.toTile(anchor.position);
         }
@@ -161,12 +193,19 @@ export function projectBattlefieldSpatial(
         navigationEffects.push({ definition: effect.definition, positions });
     }
 
+    return { effectsByTile, navigationEffects };
+}
+
+export function projectBattlefieldSpatial(
+    map: BattlefieldMap,
+    units: ReadonlyMap<UnitId, Unit>,
+    mechanisms: ReadonlyMap<MechanismId, MechanismRuntime>,
+    effects: ReadonlyMap<SpatialEffectId, NavigationSpatialEffect>,
+): BattlefieldSpatialView {
     return {
-        unitsByTile,
-        occupancyBySlot,
-        effectsByTile,
-        effectsBySource,
-        effectsByAnchor,
-        navigationEffects,
+        ...projectUnitsByTile(map, units),
+        ...projectOccupancyBySlot(map, units),
+        ...projectEffectRelations(units, mechanisms, effects),
+        ...projectEffectCoverage(map, units, mechanisms, effects),
     };
 }

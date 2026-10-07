@@ -2,7 +2,7 @@ import type {
     BattlefieldChange,
     BattlefieldRemovalReason,
     BattlefieldView,
-} from "../battlefield/runtime.js";
+} from "../battlefield/contract.js";
 import type { MechanismDefinition } from "../battlefield/mechanism.js";
 import {
     createSpatialEffectRegion,

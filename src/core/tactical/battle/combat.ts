@@ -1,4 +1,4 @@
-import type { BattlefieldChange } from "../battlefield/runtime.js";
+import type { BattlefieldChange } from "../battlefield/contract.js";
 import { damageUnit } from "../combat/damage.js";
 import { selectAttackTarget, type CombatTargetingView } from "../combat/targeting.js";
 import { hasAction, type Action } from "../unit/capability/action.js";

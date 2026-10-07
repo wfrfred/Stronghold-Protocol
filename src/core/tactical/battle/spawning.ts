@@ -1,7 +1,5 @@
-import { initializeRoutedEnemy, type RoutedEnemy, type EnemyDefinition } from "../unit/enemy.js";
+import { initializeRoutedEnemy, type RoutedEnemy } from "../unit/enemy.js";
 import type { BattleExecutionState } from "./state.js";
-import type { RouteDefinition } from "../route/definition.js";
-import type { RouteTiming } from "../route/state.js";
 import type { UnitRouteSignal } from "./route-control.js";
 import type { UnitId } from "../unit/unit.js";
 import type { BattleEvent } from "./contract.js";
@@ -14,22 +12,11 @@ import {
     isSpawnScheduleCompleted,
     recordScheduleSpawns,
     resolveScheduleUnits,
+    type ScheduledEnemySpawn,
     type SpawnScheduleDefinition,
     type SpawnScheduleState,
     type SpawnScheduleTrigger,
 } from "./schedule.js";
-
-export interface EnemySpawnDefinition {
-    readonly definition: EnemyDefinition;
-    readonly route: RouteDefinition;
-    readonly alwaysCheckCurrentPoint: boolean;
-    readonly notCountInTotal: boolean;
-}
-
-export interface ScheduledEnemySpawn extends EnemySpawnDefinition {
-    readonly tick: number;
-    readonly timing: RouteTiming;
-}
 
 export interface SpawnedEnemies {
     readonly execution: BattleExecutionState;

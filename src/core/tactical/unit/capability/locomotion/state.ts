@@ -1,5 +1,5 @@
 import { createWorldOffset } from "../../../geometry/coordinate.js";
-import type { NavigationMaps } from "../../../navigation/map.js";
+import type { NavigationMaps, PathMotionMode } from "../../../navigation/map.js";
 import {
     copyNavigationState,
     invalidateNavigationPath,
@@ -100,7 +100,12 @@ export function copyLocomotionState(state: Readonly<LocomotionState>): Locomotio
 function reconcileRouteNavigation(
     state: RouteControlState,
     maps: NavigationMaps,
+    modes?: readonly PathMotionMode[],
 ): RouteControlState {
+    if (modes !== undefined && !modes.includes(state.navigation.pathMotionMode)) {
+        return state;
+    }
+
     const navigation = invalidateNavigationPath(
         state.navigation,
         maps[state.navigation.pathMotionMode],
@@ -112,25 +117,28 @@ function reconcileRouteNavigation(
 export function reconcileLocomotionNavigation(
     state: RoutedLocomotionState,
     maps: NavigationMaps,
+    modes?: readonly PathMotionMode[],
 ): RoutedLocomotionState;
 export function reconcileLocomotionNavigation(
     state: LocomotionState,
     maps: NavigationMaps,
+    modes?: readonly PathMotionMode[],
 ): LocomotionState;
 export function reconcileLocomotionNavigation(
     state: LocomotionState,
     maps: NavigationMaps,
+    modes?: readonly PathMotionMode[],
 ): LocomotionState {
     if (!("mainRoute" in state)) {
         return state;
     }
 
     const routed = state as RoutedLocomotionState;
-    const mainRoute = reconcileRouteNavigation(routed.mainRoute, maps);
+    const mainRoute = reconcileRouteNavigation(routed.mainRoute, maps, modes);
     const alternativeRoute =
         routed.alternativeRoute === null
             ? null
-            : reconcileRouteNavigation(routed.alternativeRoute, maps);
+            : reconcileRouteNavigation(routed.alternativeRoute, maps, modes);
 
     if (mainRoute === routed.mainRoute && alternativeRoute === routed.alternativeRoute) {
         return state;
@@ -139,6 +147,20 @@ export function reconcileLocomotionNavigation(
     const next: RoutedLocomotionState = { ...routed, mainRoute, alternativeRoute };
 
     return next;
+}
+
+export function reconcileUnitNavigation<U extends Unit>(
+    unit: U,
+    maps: NavigationMaps,
+    modes?: readonly PathMotionMode[],
+): U {
+    if (!hasLocomotion(unit)) {
+        return unit;
+    }
+
+    const locomotion = reconcileLocomotionNavigation(unit.locomotion, maps, modes);
+
+    return locomotion === unit.locomotion ? unit : { ...unit, locomotion };
 }
 
 export function createLocomotionState(): LocomotionState {

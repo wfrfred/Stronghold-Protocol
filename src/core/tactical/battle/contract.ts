@@ -1,4 +1,4 @@
-import type { BattlefieldRemovalReason } from "../battlefield/runtime.js";
+import type { BattlefieldRemovalReason } from "../battlefield/contract.js";
 import type { BlockingRelation } from "../battlefield/blocking.js";
 import type { DamageType } from "../unit/capability/action.js";
 import type { MechanismRuntime } from "../battlefield/mechanism.js";

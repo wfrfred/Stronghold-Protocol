@@ -1,4 +1,4 @@
-import type { BattlefieldChange } from "../battlefield/runtime.js";
+import type { BattlefieldChange } from "../battlefield/contract.js";
 import type {
     NavigationEffectDefinition,
     SpatialEffectSource,
@@ -39,9 +39,22 @@ type PlacedUnit<P extends UnitPlacementDefinition> = P extends unknown
           (P extends { readonly occupancy: OccupancyState } ? Occupancy : object)
     : never;
 
-export function createUnitPlacementDefinition<D extends UnitDefinition>(
-    placement: UnitPlacementDefinition<D>,
-): UnitPlacementDefinition<D> {
+type NormalizedUnitPlacement<P extends UnitPlacementDefinition> = P extends unknown
+    ? {
+          readonly definition: P["definition"];
+          readonly position: WorldPosition;
+          readonly navigationEffects: readonly UnitNavigationEffectPlacement[];
+      } & (P extends { readonly occupancy: OccupancyState }
+          ? Occupancy
+          : Pick<UnitPlacementDefinition, "occupancy">)
+    : never;
+
+export function createUnitPlacementDefinition<P extends UnitPlacementDefinition>(
+    placement: P,
+): NormalizedUnitPlacement<P>;
+export function createUnitPlacementDefinition(
+    placement: UnitPlacementDefinition,
+): NormalizedUnitPlacement<UnitPlacementDefinition> {
     const navigationEffects: UnitNavigationEffectPlacement[] = [];
     const effects = placement.navigationEffects ?? [];
     const effectsAreArray: boolean = Array.isArray(effects);

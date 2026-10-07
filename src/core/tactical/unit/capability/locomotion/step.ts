@@ -5,7 +5,7 @@ import {
     type WorldOffset,
     type WorldPosition,
 } from "../../../geometry/coordinate.js";
-import type { NavigationFieldCache } from "../../../navigation/cache.js";
+import type { NavigationFieldProvider } from "../../../navigation/cache.js";
 import { NavigationMap, type NavigationMaps } from "../../../navigation/map.js";
 import { canTraverseNavigationSegment } from "../../../navigation/query.js";
 import { isNavigationGoalReached, type NavigationRequestId } from "../../../navigation/request.js";
@@ -51,7 +51,7 @@ import { integrateSteeringDirection } from "./steering.js";
 export interface RoutedLocomotionStepContext {
     readonly tick: number;
     readonly maps: NavigationMaps;
-    readonly fieldCache: NavigationFieldCache;
+    readonly fieldCache: NavigationFieldProvider;
     readonly moveMultiplier: number;
     readonly movementAllowed: boolean;
     readonly waitTickAllowed: boolean;

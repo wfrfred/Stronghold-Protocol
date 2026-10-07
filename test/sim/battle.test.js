@@ -9,7 +9,7 @@ import { UF, ANIM, BOND_LAYER_CAP } from '../../shared/constants.js';
 import { EV } from '../../shared/protocol.js';
 import { getDefaultSource, spawnsFromTemplate, hasGeneratedData } from '../../server/sim/simdata.js';
 import { LocalBossPool } from '../../server/sim/spec.js';
-import { BattlefieldRuntime } from '../../dist/core/tactical/battlefield/runtime.js';
+import { BattlefieldRuntime, createBattlefieldRuntime } from '../../dist/core/tactical/battlefield/runtime.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map.js';
 import { createMechanismDefinition, createMechanismRuntime } from '../../dist/core/tactical/battlefield/mechanism.js';
 import { createNavigationEffectDefinition, createNavigationSpatialEffect, createSpatialEffectRegion } from '../../dist/core/tactical/battlefield/navigation-effect.js';
@@ -18,7 +18,7 @@ import { createBattleSpec } from '../../dist/core/tactical/battle/spec.js';
 import { BattleRuntime, simulateBattle } from '../../dist/core/tactical/battle/runtime.js';
 import { advanceSpawnSchedule, cloneScheduleState, createSpawnScheduleDefinition, createSpawnScheduleState, getSpawnedCount, getUnspawnedCount, isSpawnScheduleCompleted, recordScheduleSpawns, resolveScheduleUnits } from '../../dist/core/tactical/battle/schedule.js';
 import { createSteeringParameters } from '../../dist/core/tactical/unit/capability/locomotion/steering.js';
-import { createEnemyDefinition } from '../../dist/core/tactical/unit/enemy.js';
+import { createEnemyDefinition, initializeRoutedEnemy } from '../../dist/core/tactical/unit/enemy.js';
 import { createRouteDefinition } from '../../dist/core/tactical/route/definition.js';
 import { TICKS_PER_SECOND } from '../../dist/core/tactical/tick.js';
 import { secondsToTicks } from '../../dist/data/arknights/tick.js';
@@ -33,6 +33,7 @@ import { createLegacyCombatBattle } from '../../dist/legacy/combat.js';
 import { createDeploymentProfile, createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/deployment.js';
 import { createOccupancyState } from '../../dist/core/tactical/unit/capability/occupancy.js';
 import { createPredefinedInstanceDefinition } from '../../dist/core/tactical/battle/predefined.js';
+import { createMovementSystem } from '../../dist/core/tactical/battle/movement.js';
 
 const approx = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
 const guard = (o = {}) => chessRec({ id: 't_guard', profession: 'WARRIOR', stats: { atk: 300, blockCnt: 2 }, skill: null, ...o });
@@ -2027,6 +2028,81 @@ test('core battle conflicting deployment commands roll back identities, relation
     replay.step([{ type: 'RETREAT_UNIT', unitId: 0 }, deploy([0, 1])]));
   assert.deepEqual(runtime.snapshot(), replay.snapshot());
   assert.deepEqual(runtime.snapshot().units.map(unit => unit.id), [1, 2]);
+});
+
+test('core visibility: commands from different domains execute in phase order before array order', () => {
+  const definition = deployableDefinition();
+  const spec = deploymentBattleInput({ predefines: [{
+    id: 17, alias: null, initiallyPresent: true, creation: {
+      type: 'UNIT', definition, position: [1, 0], navigationEffects: [],
+      occupancy: createOccupancyState({ claims: [{ position: [0, 1], slot: 'DEPLOYMENT', type: 'PRESENT' }] }),
+    },
+  }] });
+  const runtime = new BattleRuntime(spec);
+  assert.deepEqual(runtime.snapshot().units.map(unit => unit.id), [0]);
+  const step = runtime.step([
+    { type: 'DEPLOY_UNIT', definition, tilePosition: [0, 1], playerSide: 'SIDE_A' },
+    { type: 'REMOVE_PREDEFINED', definitionId: 17, reason: 'SCRIPT' },
+  ]);
+
+  assert.deepEqual(step.events.filter(event => event.type === 'UNIT_DEPLOYED' || event.type === 'UNIT_REMOVED'), [
+    { type: 'UNIT_DEPLOYED', unitId: 1, position: [1, 0], tick: 0 },
+    { type: 'UNIT_REMOVED', unitId: 0, reason: 'SCRIPT', tick: 0 },
+  ]);
+  const snapshot = runtime.snapshot();
+  assert.deepEqual(snapshot.units.map(unit => [unit.id, unit.position]), [[1, [1, 0]]]);
+  assert.deepEqual(snapshot.predefinedPresence, []);
+  assert.equal(snapshot.execution.nextUnitId, 2);
+});
+
+test('core visibility: movement reads one navigation projection before following effects move', () => {
+  const map = createBattlefieldMap(1, 5, Array.from({ length: 5 }, () => ({
+    heightType: 'LOWLAND', buildableType: 'ALL', passableMask: 'ALL',
+    playerSideMask: 'ALL', terrain: 'NORMAL', mechanism: null,
+  })));
+  const battlefield = createBattlefieldRuntime({ map });
+  const definition = createEnemyDefinition({ id: 'moving_effect_anchor', vitality: { maxHp: 100 }, locomotion: {
+    moveSpeedPerTick: 1, steeringParameters: createSteeringParameters({ steeringFactor: 1, maxSteeringForce: 1 }),
+  } });
+  let execution = { rngState: 123, nextUnitId: 2, nextNavigationRequestId: 0, nextMechanismId: 0, nextSpatialEffectId: 1 };
+
+  for (const [id, pathMotionMode, column] of [[0, 'FLY', 1], [1, 'WALK', 3]]) {
+    const route = createRouteDefinition({
+      pathMotionMode, startPosition: [0, column], endPosition: [0, 4],
+      spawnOffset: [0, 0], spawnRandomRange: [0, 0], checkpoints: [
+        { type: 'MOVE', target: { position: [0, 2], reachOffset: [0, 0], randomizeReachOffset: false, reachDistance: 0 } },
+        { type: 'WAIT_FOR_TICKS', durationTicks: 30 },
+      ],
+      allowDiagonalMove: false, visitEveryTileCenter: false,
+      visitEveryNodeCenter: false, visitEveryCheckPoint: true,
+    });
+    const spawned = initializeRoutedEnemy({
+      id, tick: 0, definition, route, timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 },
+      alwaysCheckCurrentPoint: true, rngState: execution.rngState, nextNavigationRequestId: execution.nextNavigationRequestId,
+    });
+    execution = { ...execution, rngState: spawned.rngState, nextNavigationRequestId: spawned.nextNavigationRequestId };
+    battlefield.apply([{ type: 'REGISTER_UNIT', unit: spawned.enemy }]);
+  }
+
+  battlefield.apply([{ type: 'ADD_EFFECT', effect: createNavigationSpatialEffect({
+    id: 0, definition: createNavigationEffectDefinition({ id: 'moving_denied_tile',
+      WALK: { denyPassage: true, deniedDepartures: [], costFloor: 1 }, FLY: null }),
+    source: { type: 'UNIT', unitId: 0 }, active: true,
+    region: { type: 'FOLLOW_UNIT', unitId: 0, range: [[0, 0]], direction: 'RIGHT' }, expiresAtTick: null,
+  }) }]);
+  assert.deepEqual(battlefield.navigationMaps.WALK.cells.map(cell => cell.passable), [true, false, true, true, true]);
+
+  const moved = createMovementSystem({ moveMultiplier: 1 }).step({
+    battlefield, tick: 0, commands: [], execution, removedUnits: [],
+  }, undefined);
+  battlefield.apply(moved.changes);
+
+  assert.deepEqual(battlefield.unitIds.map(id => battlefield.getUnit(id).position), [[2, 0], [2, 0]]);
+  assert.deepEqual(moved.events.filter(event => event.type === 'NAVIGATION').map(event => [event.unitId, event.outcome.type]),
+    [[0, 'ARRIVED'], [1, 'ARRIVED']]);
+  assert.deepEqual(battlefield.navigationMaps.WALK.cells.map(cell => cell.passable), [true, true, false, true, true]);
+  assert.deepEqual(battlefield.effectsAt([0, 2]), [0]);
+  assert.deepEqual(moved.execution, execution);
 });
 
 test('core elevated support disables blocking without changing target layer and reports loss while retaining its occupant', () => {

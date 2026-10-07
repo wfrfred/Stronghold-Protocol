@@ -1,5 +1,5 @@
 import { World, type WorldOffset, type WorldPosition } from "../../../geometry/coordinate.js";
-import type { NavigationFieldCache } from "../../../navigation/cache.js";
+import type { NavigationFieldProvider } from "../../../navigation/cache.js";
 import type { NavigationMaps } from "../../../navigation/map.js";
 import {
     createNavigationPath,
@@ -46,7 +46,7 @@ export interface RouteControlTransition {
 
 export interface RouteNavigationContext {
     readonly maps: NavigationMaps;
-    readonly fieldCache: NavigationFieldCache;
+    readonly fieldCache: NavigationFieldProvider;
 }
 
 export function isMovingRoute(route: Readonly<RouteState>): boolean {

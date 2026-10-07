@@ -144,6 +144,53 @@ test('core combat: lethal damage caps HP loss and dead units cannot act or be se
   assert.equal(battle.snapshot().blockingRelations.length, 0);
 });
 
+test('core visibility: consecutive attacks consume the current target HP within one combat phase', () => {
+  const battle = createLegacyCombatBattle({
+    rows: 3, columns: 10,
+    operators: [0, 1].map(index => ({
+      definition: guard({ id: `current_hp_guard_${index}`, stats: { maxHp: 1000, atk: 10, def: 0, blockCnt: 1 },
+        rangeGrid: [[0, 0], [0, 1], [-1, 0], [-1, 1]] }),
+      position: [1 + index, 5],
+    })),
+    enemies: [{ definition: walker({ hp: 25, atk: 0, def: 0, speed: 0 }),
+      route: coreCombatRoute([1, 6], { spawnOffset: [-0.6, 0] }) }],
+  });
+  const { events } = battle.step();
+  const damage = events.filter(event => event.type === 'DAMAGE' && event.sourceUnitId < 2);
+
+  assert.deepEqual(damage.map(event => [event.sourceUnitId, event.targetUnitId, event.amount, event.hp]),
+    [[0, 2, 10, 15], [1, 2, 10, 5]]);
+  assert.equal(battle.snapshot().units.find(unit => unit.id === 2).vitality.hp, 5);
+});
+
+test('core visibility: later enemies cannot attack a new blocker before the post-movement blocking phase', () => {
+  const battle = createLegacyCombatBattle({
+    rows: 3, columns: 10,
+    operators: [
+      { definition: guard({ id: 'available_front', stats: { maxHp: 1000, atk: 100, def: 0, blockCnt: 3 } }), position: [1, 6] },
+      { definition: guard({ id: 'doomed_back', stats: { maxHp: 10, atk: 0, def: 0, blockCnt: 2 } }), position: [1, 5] },
+    ],
+    enemies: [
+      { definition: walker({ key: 'front_target', hp: 1, atk: 0, def: 0, speed: 0 }),
+        route: coreCombatRoute([1, 7], { spawnOffset: [-0.4, 0] }) },
+      { definition: walker({ key: 'back_killer', hp: 1000, atk: 1000, def: 0, speed: 0 }),
+        route: coreCombatRoute([1, 6], { spawnOffset: [-0.6, 0] }) },
+      { definition: walker({ key: 'later_enemy', hp: 1000, atk: 10, def: 0, speed: 0 }),
+        route: coreCombatRoute([1, 6], { spawnOffset: [-0.6, 0] }) },
+    ],
+  });
+  const { events } = battle.step();
+
+  assert.deepEqual(events.filter(event => event.type === 'UNIT_REMOVED').map(event => event.unitId), [1, 2]);
+  assert.deepEqual(events.filter(event => event.type === 'ATTACK').map(event => [event.sourceUnitId, event.targetUnitId]),
+    [[0, 2], [1, 3], [3, 1]]);
+  assert.equal(battle.snapshot().units.find(unit => unit.id === 0).vitality.hp, 1000);
+  assert.deepEqual(battle.snapshot().blockingRelations,
+    [{ blockerUnitId: 0, blockedUnitId: 3 }, { blockerUnitId: 0, blockedUnitId: 4 }]);
+  const next = battle.step();
+  assert.ok(next.events.some(event => event.type === 'ATTACK' && event.sourceUnitId === 4 && event.targetUnitId === 0));
+});
+
 test('core combat: air targeting follows unit data independently of the route motion mode', () => {
   const battle = createLegacyCombatBattle({
     rows: 3, columns: 10,

@@ -306,7 +306,7 @@ test('core hidden effect sources and anchors suspend navigation contributions wi
   assert.deepEqual(runtime.effectsAt([0, 2]), []);
   assert.deepEqual(runtime.navigationMaps.WALK.cells.map(cell => cell.moveCost), [1, 1, 1, 1, 2000]);
   const dormant = runtime.navigationMaps;
-  runtime.apply([{ type: 'MOVE_UNIT', unitId: 2, position: Object.freeze([3, 0]) }]);
+  runtime.apply([{ type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 2, position: Object.freeze([3, 0]) }]);
   assert.equal(runtime.navigationMaps, dormant);
   assert.deepEqual(runtime.unitsAt([0, 3]), []);
   source.spatialPresence.present = true;
@@ -515,7 +515,7 @@ test('core external unit updates preserve capability configuration and fail atom
   delete missingState.action;
   for (const invalid of [missingState, { ...unit, definition: Object.freeze({ ...unit.definition }) }]) {
     assert.throws(() => runtime.apply([
-      { type: 'MOVE_UNIT', unitId: 1, position: [3, 0] },
+      { type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 1, position: [3, 0] },
       { type: 'UPDATE_UNIT', unit: invalid },
     ]));
     assert.deepEqual(runtime.getUnit(1).position, [2, 0]);
@@ -551,8 +551,9 @@ import type { EnemyDefinition } from ${sourceModule('enemy')};
 import { hasVitality, type VitalityDefinition } from ${sourceModule('capability/vitality')};
 import { hasRoutedLocomotion, type LocomotionState, type RoutedLocomotionState } from ${sourceModule('capability/locomotion/state')};
 import { createBattlefieldRuntime } from ${sourceModule('../battlefield/runtime')};
+import type { BattlefieldView } from ${sourceModule('../battlefield/contract')};
 import type { BattlefieldMap } from ${sourceModule('../battlefield/map')};
-import { instantiateUnitPlacement } from ${sourceModule('../battle/unit-creation')};
+import { createUnitPlacementDefinition, instantiateUnitPlacement, type UnitPlacementDefinition } from ${sourceModule('../battle/unit-creation')};
 import type { BattleExecutionState } from ${sourceModule('../battle/state')};
 import type { Occupancy, OccupancyState } from ${sourceModule('capability/occupancy')};
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
@@ -601,6 +602,18 @@ type PlacementDefinition = Assert<Equal<typeof placed.unit.definition, EnemyProb
 type ExpectedPlacement = (InitializedUnit<EnemyProbe> & Occupancy) | InitializedUnit<DeviceProbe>;
 type PlacementCapabilities = Assert<typeof placed.unit extends ExpectedPlacement ? true : false>;
 type PlacementInput = Assert<ExpectedPlacement extends typeof placed.unit ? true : false>;
+const normalizedPlacement = createUnitPlacementDefinition(placement);
+const normalizedPlaced = instantiateUnitPlacement(normalizedPlacement, execution, 0);
+type NormalizedPlacementCapabilities = Assert<typeof normalizedPlaced.unit extends ExpectedPlacement ? true : false>;
+type NormalizedPlacementInput = Assert<ExpectedPlacement extends typeof normalizedPlaced.unit ? true : false>;
+const requiredPlacement = createUnitPlacementDefinition({
+  definition: unionDefinition, position: [0, 0], occupancy: { claims: [] }, extra: 31,
+});
+const requiredPlaced = instantiateUnitPlacement(requiredPlacement, execution, 0);
+requiredPlaced.unit.occupancy.claims;
+type RequiredPlacementCapabilities = Assert<typeof requiredPlaced.unit extends InitializedUnit<EnemyProbe | DeviceProbe> & Occupancy ? true : false>;
+type RequiredPlacementInput = Assert<InitializedUnit<EnemyProbe | DeviceProbe> & Occupancy extends typeof requiredPlaced.unit ? true : false>;
+type NormalizedPlacementFields = Assert<Equal<keyof typeof requiredPlacement, 'definition' | 'position' | 'occupancy' | 'navigationEffects'>>;
 if (union.definition.kind === 'enemy') { const code: 17 = union.definition.enemyCode; }
 else { const code: 29 = union.definition.deviceCode; }
 const prepared = initializeUnit({ id: 3, definition: enemyDefinition, position: [0, 0],
@@ -626,6 +639,7 @@ if (hasRoutedLocomotion(guarded)) {
 }
 const battlefield = createBattlefieldRuntime({ map: battlefieldMap });
 type PublicFactory = Assert<Equal<Extract<keyof typeof battlefield, 'commit' | 'view'>, never>>;
+type RuleCache = Assert<Equal<Extract<keyof BattlefieldView['fieldCache'], 'invalidate' | 'clear'>, never>>;
 const fork = battlefield.fork();
 type PublicFork = Assert<Equal<Extract<keyof typeof fork, 'commit' | 'view'>, never>>;
 battlefield.transact(field => {
@@ -639,6 +653,9 @@ battlefield.transact(field => {
       ['optional', `declare const optionalDefinition: OptionalProbe; initializeUnit({ id: 1, definition: optionalDefinition, position: [0, 0] }).vitality.hp;`],
       ['wide', `declare const wideDefinition: UnitDefinition; initializeUnit({ id: 1, definition: wideDefinition, position: [0, 0] }).locomotion;`],
       ['optional-refinement', `declare const optionalStates: Partial<{ locomotion: RoutedLocomotionState }>; initializeUnit({ id: 1, definition: enemyDefinition, position: [0, 0], states: optionalStates }).locomotion.mainRoute;`],
+      ['optional-normalized-occupancy', `declare const optionalPlacement: UnitPlacementDefinition<EnemyProbe>; instantiateUnitPlacement(createUnitPlacementDefinition(optionalPlacement), execution, 0).unit.occupancy.claims;`],
+      ['normalized-union-occupancy', `instantiateUnitPlacement(createUnitPlacementDefinition(placement), execution, 0).unit.occupancy.claims;`],
+      ['normalized-unknown-field', `createUnitPlacementDefinition({ definition: enemyDefinition, position: [0, 0], extra: 31 }).extra;`],
     ]) {
       const diagnostics = compile(name, source);
       assert.ok(diagnostics.some(diagnostic => diagnostic.file === join(directory, `${name}.mts`)),

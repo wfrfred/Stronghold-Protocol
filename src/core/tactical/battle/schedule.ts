@@ -1,6 +1,19 @@
 import { createRouteTiming, type RouteTiming } from "../route/state.js";
+import type { RouteDefinition } from "../route/definition.js";
+import type { EnemyDefinition } from "../unit/enemy.js";
 import type { UnitId } from "../unit/unit.js";
-import type { EnemySpawnDefinition, ScheduledEnemySpawn } from "./spawning.js";
+
+export interface EnemySpawnDefinition {
+    readonly definition: EnemyDefinition;
+    readonly route: RouteDefinition;
+    readonly alwaysCheckCurrentPoint: boolean;
+    readonly notCountInTotal: boolean;
+}
+
+export interface ScheduledEnemySpawn extends EnemySpawnDefinition {
+    readonly tick: number;
+    readonly timing: RouteTiming;
+}
 
 export interface SpawnActionDefinition {
     readonly spawn: EnemySpawnDefinition;

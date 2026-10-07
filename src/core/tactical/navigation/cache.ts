@@ -3,11 +3,14 @@ import type { NavigationMap } from "./map.js";
 import { buildNavigationField } from "./pathfinding.js";
 import type { NavigationIntent } from "./request.js";
 
-export interface NavigationFieldCache {
+export interface NavigationFieldProvider {
     get(
         map: NavigationMap,
         request: Pick<NavigationIntent, "targetTile" | "options">,
     ): NavigationField;
+}
+
+export interface NavigationFieldCache extends NavigationFieldProvider {
     invalidate(map: NavigationMap): void;
     clear(): void;
 }

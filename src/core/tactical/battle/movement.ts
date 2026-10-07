@@ -1,4 +1,4 @@
-import type { BattlefieldChange } from "../battlefield/runtime.js";
+import type { BattlefieldChange } from "../battlefield/contract.js";
 import { hasRoutedLocomotion } from "../unit/capability/locomotion/state.js";
 import { hasAction } from "../unit/capability/action.js";
 import { stepRoutedUnit } from "../unit/capability/locomotion/step.js";

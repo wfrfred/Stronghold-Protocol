@@ -1,10 +1,10 @@
 import type {
     BranchDefinition,
+    EnemySpawnDefinition,
     FragmentDefinition,
     SpawnActionDefinition,
     SpawnScheduleDefinition,
 } from "../../core/tactical/battle/schedule.js";
-import type { EnemySpawnDefinition } from "../../core/tactical/battle/spawning.js";
 import type { RouteDefinition } from "../../core/tactical/route/definition.js";
 import type { ArknightsEnemyMovementContent } from "./enemy.js";
 import type {

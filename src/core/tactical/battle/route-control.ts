@@ -1,5 +1,5 @@
 import { createRng } from "../../common/rng.js";
-import type { BattlefieldChange } from "../battlefield/runtime.js";
+import type { BattlefieldChange } from "../battlefield/contract.js";
 import { createWorldOffset } from "../geometry/coordinate.js";
 import type { RouteDefinition } from "../route/definition.js";
 import { createRouteExecution } from "../route/execution.js";

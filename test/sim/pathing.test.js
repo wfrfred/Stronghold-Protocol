@@ -5,6 +5,11 @@ import { createBattlefieldMap, BattlefieldMap } from '../../dist/core/tactical/b
 import { createTile } from '../../dist/core/tactical/battlefield/tile.js';
 import { projectStaticNavigationMap } from '../../dist/core/tactical/battlefield/navigation-projection.js';
 import { createBattlefieldRuntime } from '../../dist/core/tactical/battlefield/runtime.js';
+import { applyBattlefieldChanges, ownBattlefieldChanges } from '../../dist/core/tactical/battlefield/changes.js';
+import {
+  createBattlefieldState, settleBattlefieldState, settleBattlefieldStateFully,
+} from '../../dist/core/tactical/battlefield/state.js';
+import { battlefieldCommitEvents, finishBattleEvents } from '../../dist/core/tactical/battle/events.js';
 import { createMechanismDefinition, createMechanismRuntime } from '../../dist/core/tactical/battlefield/mechanism.js';
 import {
   createNavigationEffectDefinition, createNavigationSpatialEffect, createSpatialEffectRegion,
@@ -32,6 +37,9 @@ import { createRng } from '../../dist/core/common/rng.js';
 import { World } from '../../dist/core/tactical/geometry/coordinate.js';
 import { createEnemyDefinition, initializeRoutedEnemy, stepRoutedEnemy } from '../../dist/core/tactical/unit/enemy.js';
 import { copyUnitSnapshot } from '../../dist/core/tactical/unit/snapshot.js';
+import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
+import { createActionDefinition, createActionState } from '../../dist/core/tactical/unit/capability/action.js';
+import { createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/deployment.js';
 import { createSteeringParameters, createSteeringState, integrateSteering } from '../../dist/core/tactical/unit/capability/locomotion/steering.js';
 import { Grid, OBSTACLE_COST, bresenhamTiles } from '../../server/sim/grid.js';
 import { flowFieldForGrid, navigationMapFromGrid, waypointsForGrid } from '../../dist/legacy/navigation.js';
@@ -1283,6 +1291,346 @@ const flatBattlefieldRuntime = (rows = 1, columns = 5) => createBattlefieldRunti
   map: createBattlefieldMap(rows, columns, Array.from({ length: rows * columns }, () => coreGround())),
 });
 
+function battlefieldProjectionHarness(rows = 2, columns = 5) {
+  const map = createBattlefieldMap(rows, columns, Array.from({ length: rows * columns }, () => coreGround()));
+  const branches = [settleBattlefieldState, settleBattlefieldStateFully].map(settle => {
+    const baseline = Object.freeze({
+      WALK: projectStaticNavigationMap(map, 'WALK', 0),
+      FLY: projectStaticNavigationMap(map, 'FLY', 0),
+    });
+    return { baseline, settle, state: createBattlefieldState(map, baseline), fieldCache: createNavigationFieldCache() };
+  });
+  const equivalent = () => {
+    const [selective, full] = branches.map(branch => branch.state);
+    assert.deepEqual(selective, full);
+    for (const key of ['units', 'mechanisms', 'effects']) {
+      assert.deepEqual([...selective[key]], [...full[key]]);
+    }
+    for (const key of ['unitsByTile', 'occupancyBySlot', 'effectsByTile', 'effectsBySource', 'effectsByAnchor']) {
+      const entries = state => [...state.spatial[key]].map(([key, ids]) => [key, [...ids]]);
+      assert.deepEqual(entries(selective), entries(full));
+    }
+  };
+  const commit = (changes, tick = 0) => {
+    const results = branches.map((branch, index) => {
+      const previous = branch.state;
+      const snapshot = structuredClone(previous);
+      const batch = typeof changes === 'function' ? changes(previous, index) : changes;
+      const applied = applyBattlefieldChanges(previous, ownBattlefieldChanges(batch, copyUnitSnapshot));
+      const settled = branch.settle(map, branch.baseline, previous, applied.content, applied.dependencies);
+      assert.deepEqual(previous, snapshot);
+      branch.state = settled.state;
+      return { ...applied.facts, ...settled.facts };
+    });
+    assert.deepEqual(results[0], results[1]);
+    const events = results.map(result => finishBattleEvents(
+      battlefieldCommitEvents(result, tick), result.removedUnits, tick,
+    ));
+    assert.deepEqual(events[0], events[1]);
+    equivalent();
+    return results[0];
+  };
+  const reject = (changes, expected) => {
+    for (const branch of branches) {
+      const previous = branch.state;
+      const snapshot = structuredClone(previous);
+      assert.throws(() => {
+        const batch = typeof changes === 'function' ? changes(previous) : changes;
+        const applied = applyBattlefieldChanges(previous, ownBattlefieldChanges(batch, copyUnitSnapshot));
+        branch.settle(map, branch.baseline, previous, applied.content, applied.dependencies);
+      }, expected);
+      assert.equal(branch.state, previous);
+      assert.deepEqual(previous, snapshot);
+    }
+    equivalent();
+  };
+  return { branches, commit, reject, equivalent, get state() { return branches[0].state; } };
+}
+
+const projectionClaim = (column, type = 'PRESENT', slot = 'DEPLOYMENT') => ({ position: [0, column], type, slot });
+const projectionUnit = (id, position, definition = {}, states = {}) => initializeUnit({
+  id, position, definition: Object.freeze({ id: `projection_unit_${id}`, ...definition }), states,
+});
+
+test('core selective projection retains untouched collections, indexes and live navigation on nonspatial updates', () => {
+  const h = battlefieldProjectionHarness();
+  const routed = routedEnemyHarness({ speedPerTick: 0.1, checkpoints: [coreMove(4)] });
+  const definition = Object.freeze({ ...routed.enemy.definition, action: createActionDefinition({ attack: {
+    power: 10, damageType: 'PHYSICAL', intervalTicks: 30, recoveryTicks: 0,
+    targeting: { range: { type: 'RADIUS', radius: 1 }, canTargetAir: false, priority: 'NEAREST' },
+  } }) });
+  h.commit([{ type: 'REGISTER_UNIT', unit: { ...routed.enemy, definition, action: createActionState() } }]);
+  h.commit((state, index) => {
+    const moved = stepRoutedEnemy(state.units.get(1), {
+      tick: 0, maps: state.navigationMaps, fieldCache: h.branches[index].fieldCache,
+      moveMultiplier: 0, movementAllowed: true, waitTickAllowed: true, routeAdvanceAllowed: true,
+      rngState: routed.rngState, nextNavigationRequestId: routed.nextNavigationRequestId,
+    });
+    return [{ type: 'UPDATE_UNIT', unit: moved.enemy }];
+  });
+  const previous = h.state;
+  const unit = previous.units.get(1);
+  const path = unit.locomotion.mainRoute.navigation.execution.activity.path;
+  const field = h.branches[0].fieldCache.get(previous.navigationMaps.WALK, path.request);
+  h.commit(state => [{ type: 'UPDATE_UNIT', unit: {
+    ...state.units.get(1), vitality: { hp: 90 }, action: { readyAtTick: 7, recoveryUntilTick: 4, targetUnitId: null },
+  } }]);
+  assert.notEqual(h.state.units, previous.units);
+  assert.equal(h.state.mechanisms, previous.mechanisms);
+  assert.equal(h.state.effects, previous.effects);
+  assert.equal(h.state.spatial, previous.spatial);
+  assert.equal(h.state.supportRelations, previous.supportRelations);
+  assert.equal(h.state.blockingRelations, previous.blockingRelations);
+  assert.equal(h.state.navigationMaps, previous.navigationMaps);
+  assert.equal(h.state.units.get(1).locomotion.mainRoute.navigation.execution.activity.path, path);
+  assert.equal(h.branches[0].fieldCache.get(h.state.navigationMaps.WALK, path.request), field);
+  assert.equal(h.state.units.get([...h.state.spatial.unitsByTile.get(0)][0]).vitality.hp, 90);
+  const unchanged = h.state;
+  assert.deepEqual(h.commit([{ type: 'EXPIRE_EFFECTS', tick: 1 }]).removedEffects, []);
+  assert.equal(h.state.units, unchanged.units);
+  assert.equal(h.state.mechanisms, unchanged.mechanisms);
+  assert.equal(h.state.effects, unchanged.effects);
+  assert.equal(h.state.spatial, unchanged.spatial);
+});
+
+test('core selective and full projection agree on contributions, claims, source and anchor lifecycles', () => {
+  const h = battlefieldProjectionHarness();
+  const source = { type: 'UNIT', unitId: 10 };
+  const dominant = effectDefinition('projection-dominant', walkRestriction({ costFloor: 2000 }));
+  const masked = effectDefinition('projection-masked', walkRestriction({ costFloor: 1000 }));
+  h.commit([
+    { type: 'REGISTER_UNIT', unit: projectionUnit(10, [0, 0], {}, { spatialPresence: { present: true },
+      occupancy: { claims: [projectionClaim(0), projectionClaim(4, 'RESERVATION')] } }) },
+    { type: 'REGISTER_UNIT', unit: projectionUnit(11, [1, 0], {}, { spatialPresence: { present: true } }) },
+    { type: 'REGISTER_MECHANISM', mechanism: battlefieldMechanism(1) },
+    { type: 'ADD_EFFECT', effect: fixedNavigationEffect(1, source, [0, 2], dominant) },
+    { type: 'ADD_EFFECT', effect: fixedNavigationEffect(2, source, [0, 2], masked) },
+    { type: 'ADD_EFFECT', effect: fixedNavigationEffect(3, source, [0, 0], masked, {
+      region: { type: 'FOLLOW_UNIT', unitId: 11, range: [[0, 0]], direction: 'RIGHT' },
+    }) },
+    { type: 'ADD_EFFECT', effect: fixedNavigationEffect(4, { type: 'MECHANISM', mechanismId: 1 }, [1, 3],
+      effectDefinition('projection-flight', null, { denyPassage: true, deniedDepartures: [] })) },
+  ]);
+  const beforeRemoval = h.state;
+  const removed = h.commit([{ type: 'REMOVE_EFFECT', effectId: 2 }]);
+  assert.deepEqual(removed.removedEffects, [2]);
+  assert.deepEqual(removed.changedNavigationModes, []);
+  assert.equal(h.state.navigationMaps, beforeRemoval.navigationMaps);
+  const beforeMovement = h.state;
+  h.commit(state => [{ type: 'UPDATE_UNIT', unit: { ...state.units.get(11), position: Object.freeze([1.2, 0]) } }]);
+  assert.equal(h.state.spatial, beforeMovement.spatial);
+  assert.equal(h.state.navigationMaps, beforeMovement.navigationMaps);
+  h.commit(state => [{ type: 'UPDATE_UNIT', unit: { ...state.units.get(11), position: Object.freeze([1.6, 0]) } }]);
+  assert.deepEqual([...h.state.spatial.unitsByTile.get(2)], [11]);
+  assert.deepEqual([...h.state.spatial.effectsByTile.get(2)], [1, 3]);
+  assert.equal(h.state.spatial.effectsBySource, beforeMovement.spatial.effectsBySource);
+  assert.equal(h.state.spatial.effectsByAnchor, beforeMovement.spatial.effectsByAnchor);
+  h.commit(state => [{ type: 'UPDATE_UNIT', unit: { ...state.units.get(10), spatialPresence: { present: false } } }]);
+  assert.equal(h.state.spatial.occupancyBySlot.has('0:DEPLOYMENT'), false);
+  assert.deepEqual([...h.state.spatial.occupancyBySlot.get('4:DEPLOYMENT')], [10]);
+  assert.deepEqual([...h.state.spatial.effectsBySource.get('UNIT:10')], [1, 3]);
+  assert.deepEqual([...h.state.spatial.effectsByAnchor.get(11)], [3]);
+  assert.equal(h.state.navigationMaps.WALK.cells[2].moveCost, 1);
+  h.commit(state => [{ type: 'UPDATE_UNIT', unit: { ...state.units.get(10), spatialPresence: { present: true } } }]);
+  h.commit(state => [{ type: 'UPDATE_UNIT', unit: { ...state.units.get(11), spatialPresence: { present: false } } }]);
+  assert.deepEqual([...h.state.spatial.effectsByTile.get(2)], [1]);
+  const maps = h.state.navigationMaps;
+  assert.deepEqual(h.commit([{ type: 'SET_MECHANISM_ACTIVE', mechanismId: 1, active: false }]).changedNavigationModes, ['FLY']);
+  assert.equal(h.state.navigationMaps.WALK, maps.WALK);
+  const cleanup = h.commit([{ type: 'REMOVE_UNIT', unitId: 11, reason: 'SCRIPT' }], 12);
+  assert.deepEqual(cleanup.removedEffects, [3]);
+  assert.deepEqual([...h.state.spatial.effectsBySource.get('UNIT:10')], [1]);
+  assert.equal(h.state.spatial.effectsByAnchor.has(11), false);
+  h.commit([{ type: 'REMOVE_UNIT', unitId: 10, reason: 'DEATH' }], 13);
+  assert.equal(h.state.effects.has(1), false);
+  assert.equal(h.state.spatial.occupancyBySlot.size, 0);
+});
+
+test('core selective and full projection preserve relation history and explicit same-position release', () => {
+  const h = battlefieldProjectionHarness();
+  const blocker = projectionUnit(10, [1, 0], {
+    vitality: { maxHp: 100 }, allegiance: { side: 'ALLY' }, blocker: { capacity: 2, contactRadius: 1 },
+  }, { spatialPresence: { present: true }, occupancy: { claims: [projectionClaim(1)] } });
+  const enemy = projectionUnit(11, [1.1, 0], {
+    vitality: { maxHp: 100 }, allegiance: { side: 'ENEMY' }, blockable: { weight: 1 }, targetable: { layer: 'GROUND' },
+  }, { spatialPresence: { present: true } });
+  const platform = projectionUnit(12, [1, 0], {
+    tileBinding: createTileBindingDefinition({ buildableType: 'ALL', heightType: 'HIGHLAND' }),
+  }, { spatialPresence: { present: true }, occupancy: { claims: [projectionClaim(1, 'PRESENT', 'SUPPORT')] } });
+  const blocking = [{ blockerUnitId: 10, blockedUnitId: 11 }];
+  h.commit([blocker, enemy, platform].map(unit => ({ type: 'REGISTER_UNIT', unit })));
+  h.commit([{ type: 'SET_BLOCKING_RELATIONS', relations: blocking }]);
+  h.commit(state => [{ type: 'UPDATE_UNIT', unit: { ...state.units.get(11), position: Object.freeze([4, 1]) } }]);
+  assert.deepEqual(h.state.blockingRelations, blocking);
+  h.commit([{ type: 'SET_SUPPORT_RELATIONS', relations: [{ supportedUnitId: 10, supportUnitId: 12 }] }]);
+  assert.deepEqual(h.state.blockingRelations, []);
+  const reservation = h.commit(state => [{ type: 'UPDATE_UNIT', unit: {
+    ...state.units.get(12), occupancy: { claims: [projectionClaim(1, 'RESERVATION', 'SUPPORT')] },
+  } }]);
+  assert.deepEqual(reservation.lostSupports, [{ supportedUnitId: 10, supportUnitId: 12 }]);
+  h.commit([{ type: 'UPDATE_UNIT', unit: platform },
+    { type: 'SET_SUPPORT_RELATIONS', relations: [{ supportedUnitId: 10, supportUnitId: 12 }] }]);
+  const lost = h.commit([{ type: 'REMOVE_UNIT', unitId: 12, reason: 'SCRIPT' }], 4);
+  assert.deepEqual(lost.lostSupports, [{ supportedUnitId: 10, supportUnitId: 12 }]);
+  h.commit([{ type: 'SET_BLOCKING_RELATIONS', relations: blocking }]);
+  h.commit(state => [
+    { type: 'UPDATE_UNIT', unit: { ...state.units.get(11), spatialPresence: { present: false } } },
+    { type: 'RELEASE_BLOCKING_RELATIONS', unitId: 11 },
+    { type: 'UPDATE_UNIT', unit: { ...state.units.get(11), spatialPresence: { present: true } } },
+  ]);
+  assert.deepEqual(h.state.blockingRelations, []);
+  h.commit([{ type: 'SET_BLOCKING_RELATIONS', relations: blocking }]);
+  h.commit(state => [{ type: 'UPDATE_UNIT', unit: { ...state.units.get(11), vitality: { hp: 0 } } }]);
+  assert.deepEqual(h.state.blockingRelations, []);
+  assert.ok(h.state.spatial.unitsByTile.get(9).has(11));
+  const mutations = [
+    unit => ({ ...unit, allegiance: { side: 'ALLY' } }),
+    unit => ({ ...unit, targetable: { layer: 'AIR' } }),
+    unit => ({ ...unit, blockable: { weight: 3, enabled: true } }),
+    unit => ({ ...unit, blockable: { weight: 1, enabled: false } }),
+  ];
+  for (const mutate of mutations) {
+    h.commit([{ type: 'UPDATE_UNIT', unit: enemy }, { type: 'SET_BLOCKING_RELATIONS', relations: blocking }]);
+    h.commit(state => [{ type: 'UPDATE_UNIT', unit: mutate(state.units.get(11)) }]);
+    assert.deepEqual(h.state.blockingRelations, []);
+  }
+  for (const blockerState of [{ capacity: 0, enabled: true }, { capacity: 2, enabled: false }]) {
+    h.commit([{ type: 'UPDATE_UNIT', unit: enemy }, { type: 'UPDATE_UNIT', unit: blocker },
+      { type: 'SET_BLOCKING_RELATIONS', relations: blocking }]);
+    h.commit(state => [{ type: 'UPDATE_UNIT', unit: { ...state.units.get(10), blocker: blockerState } }]);
+    assert.deepEqual(h.state.blockingRelations, []);
+  }
+  h.commit([{ type: 'UPDATE_UNIT', unit: enemy }, { type: 'UPDATE_UNIT', unit: blocker },
+    { type: 'SET_BLOCKING_RELATIONS', relations: blocking }]);
+  const spatial = h.state.spatial;
+  h.commit([{ type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 11, position: enemy.position }]);
+  assert.deepEqual(h.state.blockingRelations, []);
+  assert.equal(h.state.spatial, spatial);
+});
+
+test('core selective projection reconciles externally brought paths without changing maps or request identity', () => {
+  const h = battlefieldProjectionHarness();
+  const external = routedEnemyHarness({ speedPerTick: 0.1, checkpoints: [coreMove(4)] });
+  external.step({ moveMultiplier: 0 });
+  const incoming = external.enemy;
+  const path = incoming.locomotion.mainRoute.navigation.execution.activity.path;
+  const request = path.request;
+  const maps = h.state.navigationMaps;
+  h.commit([{ type: 'REGISTER_UNIT', unit: incoming }]);
+  assert.equal(h.state.navigationMaps, maps);
+  assert.equal(h.state.units.get(1).locomotion.mainRoute.navigation.execution.activity.type, 'NEEDS_PATH');
+  assert.equal(routedEnemyRequest(h.state.units.get(1)), request);
+  assert.equal(incoming.locomotion.mainRoute.navigation.execution.activity.path, path);
+  h.commit(state => [{ type: 'UPDATE_UNIT', unit: { ...state.units.get(1), locomotion: incoming.locomotion } }]);
+  assert.equal(h.state.navigationMaps, maps);
+  assert.equal(h.state.units.get(1).locomotion.mainRoute.navigation.execution.activity.type, 'NEEDS_PATH');
+  assert.equal(routedEnemyRequest(h.state.units.get(1)), request);
+});
+
+test('core selective and full projection reject invalid final references and claims atomically', () => {
+  const h = battlefieldProjectionHarness();
+  h.commit([{ type: 'REGISTER_UNIT', unit: battlefieldUnit(10, [0, 0]) },
+    { type: 'REGISTER_MECHANISM', mechanism: battlefieldMechanism(1, false) }]);
+  const definition = effectDefinition('projection-invalid', walkRestriction({ denyPassage: true }));
+  h.reject([{ type: 'ADD_EFFECT', effect: fixedNavigationEffect(1, { type: 'UNIT', unitId: 99 }, [0, 0],
+    definition, { active: false }) }], /unknown effect source unit/);
+  h.reject([{ type: 'ADD_EFFECT', effect: fixedNavigationEffect(1, { type: 'MECHANISM', mechanismId: 1 }, [0, 0],
+    definition, { active: false, region: { type: 'FOLLOW_UNIT', unitId: 99, range: [[0, 0]], direction: 'RIGHT' } }) }],
+  /unknown effect anchor unit/);
+  const reserved = projectionUnit(11, [1, 0], {}, { spatialPresence: { present: false },
+    occupancy: { claims: [projectionClaim(1, 'RESERVATION')] } });
+  h.commit([{ type: 'REGISTER_UNIT', unit: reserved }]);
+  const hiddenSpatial = h.state.spatial;
+  h.commit(state => [{ type: 'UPDATE_UNIT', unit: {
+    ...state.units.get(11), position: Object.freeze([1e30, 0]),
+  } }]);
+  assert.deepEqual(h.state.units.get(11).position, [1e30, 0]);
+  assert.equal(h.state.spatial, hiddenSpatial);
+  assert.deepEqual([...h.state.spatial.occupancyBySlot.get('1:DEPLOYMENT')], [11]);
+  h.commit([{ type: 'UPDATE_UNIT', unit: reserved }, {
+    type: 'ADD_EFFECT', effect: fixedNavigationEffect(5, { type: 'MECHANISM', mechanismId: 1 }, [0, 0], definition,
+      { active: false, region: { type: 'FOLLOW_UNIT', unitId: 11, range: [[0, 0]], direction: 'RIGHT' } }),
+  }]);
+  h.reject(state => [{ type: 'UPDATE_UNIT', unit: {
+    ...state.units.get(11), position: Object.freeze([1e30, 0]),
+  } }], /safe integer/);
+  const anchoredSpatial = h.state.spatial;
+  const unanchored = h.commit(state => [{ type: 'UPDATE_UNIT', unit: {
+    ...state.units.get(11), position: Object.freeze([1e30, 0]),
+  } }, { type: 'REMOVE_EFFECT', effectId: 5 }]);
+  assert.deepEqual(unanchored.removedEffects, [5]);
+  assert.deepEqual(unanchored.changedNavigationModes, []);
+  assert.deepEqual(h.state.units.get(11).position, [1e30, 0]);
+  assert.equal(h.state.spatial.unitsByTile, anchoredSpatial.unitsByTile);
+  assert.equal(h.state.spatial.occupancyBySlot, anchoredSpatial.occupancyBySlot);
+  assert.equal(h.state.spatial.effectsByAnchor.has(11), false);
+  h.commit(state => [{ type: 'UPDATE_UNIT', unit: {
+    ...state.units.get(11), position: Object.freeze([1, 0]), spatialPresence: { present: true },
+  } }]);
+  assert.deepEqual([...h.state.spatial.unitsByTile.get(1)], [11]);
+  h.commit(state => [{ type: 'UPDATE_UNIT', unit: {
+    ...state.units.get(11), position: Object.freeze([1e30, 0]), spatialPresence: { present: false },
+  } }]);
+  assert.equal(h.state.spatial.unitsByTile.has(1), false);
+  h.reject([{ type: 'REGISTER_UNIT', unit: projectionUnit(12, [2, 0], {}, {
+    occupancy: { claims: [projectionClaim(1)] },
+  }) }], /occupancy slot is already claimed/);
+  h.reject([{ type: 'REGISTER_UNIT', unit: projectionUnit(12, [2, 0], {}, {
+    spatialPresence: { present: false }, occupancy: { claims: [projectionClaim(99, 'RESERVATION')] },
+  }) }], /occupancy claim is outside/);
+  h.reject([{ type: 'REMOVE_UNIT', unitId: 10, reason: 'SCRIPT' },
+    { type: 'SET_SUPPORT_RELATIONS', relations: [{ supportedUnitId: 11, supportUnitId: 10 }] }], /invalid support relation/);
+  const previous = h.state;
+  const final = h.commit([{ type: 'ADD_EFFECT', effect: fixedNavigationEffect(1, { type: 'UNIT', unitId: 99 }, [0, 0], definition) },
+    { type: 'REMOVE_EFFECT', effectId: 1 }]);
+  assert.deepEqual(final.removedEffects, [1]);
+  assert.deepEqual(final.changedNavigationModes, []);
+  assert.equal(h.state.navigationMaps, previous.navigationMaps);
+  h.commit([{ type: 'REGISTER_UNIT', unit: battlefieldUnit(12, [0, 0]) }]);
+  h.commit(state => [{ type: 'REMOVE_UNIT', unitId: 10, reason: 'SCRIPT' },
+    { type: 'REGISTER_UNIT', unit: state.units.get(10) }]);
+  assert.deepEqual([...h.state.units.keys()], [11, 12, 10]);
+  assert.deepEqual([...h.state.spatial.unitsByTile.get(0)], [12, 10]);
+});
+
+test('core selective and full projection preserve subsequent route events, RNG and identity consumption', () => {
+  const h = battlefieldProjectionHarness();
+  const routed = routedEnemyHarness({ speedPerTick: 0.2, seed: 314159,
+    checkpoints: [coreMove(2, { randomizeReachOffset: true, reachOffset: [0.2, 0.1] }),
+      { type: 'WAIT_FOR_TICKS', durationTicks: 2 }, coreMove(4)] });
+  const execution = h.branches.map(() => ({ rngState: routed.rngState, nextNavigationRequestId: routed.nextNavigationRequestId }));
+  h.commit([{ type: 'REGISTER_UNIT', unit: routed.enemy },
+    { type: 'REGISTER_MECHANISM', mechanism: battlefieldMechanism(1) }]);
+  let completed = false;
+  for (let tick = 0; tick < 60; tick++) {
+    if (tick === 2) h.commit([{ type: 'ADD_EFFECT', effect: fixedNavigationEffect(1,
+      { type: 'MECHANISM', mechanismId: 1 }, [0, 1], effectDefinition('projection-trace', walkRestriction({ costFloor: 1000 }))) }], tick);
+    if (tick === 5) h.commit([{ type: 'REMOVE_EFFECT', effectId: 1 }], tick);
+    const moved = h.branches.map((branch, index) => stepRoutedEnemy(branch.state.units.get(1), {
+      tick, maps: branch.state.navigationMaps, fieldCache: branch.fieldCache, ...execution[index],
+      moveMultiplier: 1, movementAllowed: true, waitTickAllowed: true, routeAdvanceAllowed: true,
+    }));
+    assert.deepEqual(moved[0], moved[1]);
+    h.commit((state, index) => [{ type: 'UPDATE_UNIT', unit: moved[index].enemy }], tick);
+    moved.forEach((result, index) => {
+      execution[index] = { rngState: result.rngState, nextNavigationRequestId: result.nextNavigationRequestId };
+      const activity = result.enemy.locomotion.mainRoute.navigation.execution.activity;
+      if (activity.type === 'FOLLOWING' || activity.type === 'UNREACHABLE') {
+        const branch = h.branches[index];
+        assert.equal(activity.path.field.map, branch.state.navigationMaps.WALK);
+        assert.equal(branch.fieldCache.get(branch.state.navigationMaps.WALK, activity.path.request), activity.path.field);
+      }
+    });
+    if (h.state.units.get(1).locomotion.mainRoute.route.progress.phase === 'COMPLETED') {
+      completed = true;
+      break;
+    }
+  }
+  assert.equal(completed, true);
+  assert.deepEqual(execution[0], execution[1]);
+  assert.equal(execution[0].nextNavigationRequestId, 3);
+});
+
 test('core battlefield combines source restrictions and rebuilds navigation from the static baseline on removal', () => {
   const runtime = flatBattlefieldRuntime();
   runtime.apply([
@@ -1359,17 +1707,17 @@ test('core battlefield follows quantized unit positions, clips rotated regions a
   assert.deepEqual(runtime.effectsFollowing(10), [1]);
   assert.deepEqual(runtime.effectsFrom(source), [1]);
   const firstMaps = runtime.navigationMaps;
-  runtime.apply([{ type: 'MOVE_UNIT', unitId: 10, position: Object.freeze([0.5, 0]) }]);
+  runtime.apply([{ type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 10, position: Object.freeze([0.5, 0]) }]);
   assert.equal(runtime.navigationMaps, firstMaps);
   assert.deepEqual(runtime.unitsAt([0, 0]).map(unit => unit.id), [10]);
-  runtime.apply([{ type: 'MOVE_UNIT', unitId: 10, position: Object.freeze([0.51, 0]) }]);
+  runtime.apply([{ type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 10, position: Object.freeze([0.51, 0]) }]);
   assert.deepEqual(runtime.unitsAt([0, 0]), []);
   assert.deepEqual(runtime.unitsAt([0, 1]).map(unit => unit.id), [10]);
   assert.deepEqual(runtime.effectsAt([0, 0]), []);
   assert.deepEqual(runtime.effectsAt([0, 2]), [1]);
   assert.equal(runtime.navigationMaps.WALK.revision, firstMaps.WALK.revision + 1);
   assert.equal(runtime.navigationMaps.FLY, firstMaps.FLY);
-  runtime.apply([{ type: 'MOVE_UNIT', unitId: 10, position: Object.freeze([-2, 0]) }]);
+  runtime.apply([{ type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 10, position: Object.freeze([-2, 0]) }]);
   assert.deepEqual(runtime.unitsAt([0, 1]), []);
   assert.deepEqual(runtime.effectsAt([0, 1]), []);
   assert.equal(runtime.navigationMaps.WALK.cells.every(cell => cell.moveCost === 1), true);
@@ -1490,7 +1838,8 @@ test('core battlefield commits phased changes together and preserves maps and ca
   assert.throws(() => runtime.transact(field => {
     field.apply([{ type: 'ADD_EFFECT', effect }]);
     assert.notEqual(field.navigationMaps.WALK, maps.WALK);
-    field.apply([{ type: 'MOVE_UNIT', unitId: 10, position: Object.freeze([1, 0]) }]);
+    field.apply([{ type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 10, position: Object.freeze([1, 0]) }]);
+    assert.throws(() => field.transact(() => 0), /battlefield transaction is already active/);
     throw new Error('movement failed');
   }), /movement failed/);
   assert.equal(runtime.navigationMaps, maps);
@@ -1500,7 +1849,7 @@ test('core battlefield commits phased changes together and preserves maps and ca
   assert.equal(runtime.fieldCache.get(maps.WALK, request), cached);
   const value = runtime.transact(field => {
     field.apply([{ type: 'ADD_EFFECT', effect }]);
-    field.apply([{ type: 'MOVE_UNIT', unitId: 10, position: Object.freeze([1, 0]) }]);
+    field.apply([{ type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 10, position: Object.freeze([1, 0]) }]);
     return 7;
   });
   assert.equal(value, 7);
@@ -1508,7 +1857,11 @@ test('core battlefield commits phased changes together and preserves maps and ca
   assert.deepEqual(runtime.effectsAt([0, 2]), [1]);
   assert.equal(runtime.navigationMaps.WALK.revision, 1);
   assert.equal(runtime.navigationMaps.FLY, maps.FLY);
-  assert.notEqual(runtime.fieldCache.get(maps.WALK, request), cached);
+  assert.equal(runtime.fieldCache.get(maps.WALK, request), cached);
+  assert.equal(cached.map, maps.WALK);
+  const updatedField = runtime.fieldCache.get(runtime.navigationMaps.WALK, request);
+  assert.notEqual(updatedField, cached);
+  assert.equal(updatedField.map, runtime.navigationMaps.WALK);
 });
 
 test('core battlefield forks isolate mutable state while preserving map, field and path identity', () => {
@@ -1562,7 +1915,10 @@ test('core battlefield forks isolate mutable state while preserving map, field a
   assert.equal(runtime.getUnit(1).locomotion.mainRoute.navigation.execution.activity.path, path);
   assert.equal(runtime.navigationMaps, maps);
   assert.equal(path.field.map, maps.WALK);
-  runtime.apply([{ type: 'MOVE_UNIT', unitId: 1, position: Object.freeze([1, 0]) }]);
+  assert.equal(runtime.fieldCache.get(maps.WALK, path.request), cached);
+  assert.equal(fork.fieldCache.get(maps.WALK, path.request), cached);
+  assert.notEqual(fork.fieldCache.get(fork.navigationMaps.WALK, path.request), cached);
+  runtime.apply([{ type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 1, position: Object.freeze([1, 0]) }]);
   assert.deepEqual(fork.getUnit(1).position, [0, 0]);
   assert.deepEqual(runtime.getUnit(1).position, [1, 0]);
   assert.deepEqual(before.position, [0, 0]);
@@ -1608,7 +1964,7 @@ test('core battlefield shares immutable unit values internally and copies only a
   assert.equal(path.field.map, maps.WALK);
   assert.equal(view.fieldCache.get(maps.WALK, path.request), field);
   assert.throws(() => fork.transact(working => {
-    working.commit([{ type: 'MOVE_UNIT', unitId: 1, position: Object.freeze([3, 0]) }]);
+    working.commit([{ type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 1, position: Object.freeze([3, 0]) }]);
     throw new Error('immutable commit failed');
   }), /immutable commit failed/);
   assert.equal(view.getUnit(1), moved);
@@ -1681,7 +2037,7 @@ test('core external unit coordinates and internal effect snapshots retain owners
   assert.deepEqual(stored.locomotion.mainRoute.navigation.execution.locatorOffset, [0, 0]);
   assert.deepEqual(stored.locomotion.mainRoute.navigation.execution.visits.visitedCenters, [[0, 0]]);
   const moved = [1, 0];
-  runtime.apply([{ type: 'MOVE_UNIT', unitId: 1, position: moved }]);
+  runtime.apply([{ type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 1, position: moved }]);
   moved[0] = 4;
   assert.deepEqual(runtime.view.getUnit(1).position, [1, 0]);
   assert.deepEqual(runtime.view.unitsAt([0, 1]).map(entry => entry.id), [1]);
@@ -1735,7 +2091,7 @@ test('core battlefield isolates custom unit state using its explicit snapshot co
   assert.deepEqual(runtime.getUnit(10).charges, { remaining: 2, spent: [1] });
   assert.equal(runtime.navigationMaps, maps);
   assert.throws(() => runtime.apply([
-    { type: 'MOVE_UNIT', unitId: 10, position: Object.freeze([1, 0]) },
+    { type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 10, position: Object.freeze([1, 0]) },
     { type: 'REGISTER_UNIT', unit },
   ]));
   assert.deepEqual(runtime.getUnit(10).position, [0, 0]);

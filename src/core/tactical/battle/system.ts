@@ -2,7 +2,7 @@ import type {
     BattlefieldChange,
     BattlefieldChangeResult,
     BattlefieldView,
-} from "../battlefield/runtime.js";
+} from "../battlefield/contract.js";
 import type { BattleCommand, BattleEvent } from "./contract.js";
 import type { BattleExecutionState } from "./state.js";
 
