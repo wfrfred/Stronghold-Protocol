@@ -65,7 +65,7 @@ export function absorbBarrier<S extends { readonly remainingAmount: number }>():
             ownerUnitId,
             instance.id,
             instance.programRef,
-            { ...instance.state, remainingAmount: instance.state.remainingAmount - absorbed },
+            (current) => ({ ...current, remainingAmount: current.remainingAmount - absorbed }),
         );
 
         return {

@@ -1,3 +1,12 @@
+import {
+    copyNumericContributionState,
+    createNumericContributionState,
+    resolveNumericContributions,
+    type NumericContributionEvaluator,
+    type NumericContributionState,
+    type NumericContributionTransition,
+} from "../../modifier/contribution.js";
+import { resolveNumericValue } from "../../modifier/numeric.js";
 import type { Unit, UnitDefinition } from "../unit.js";
 
 export interface VitalityDefinition {
@@ -6,6 +15,7 @@ export interface VitalityDefinition {
 
 export interface VitalityState {
     readonly hp: number;
+    readonly maxHp: NumericContributionState;
 }
 
 export interface Vitality {
@@ -31,9 +41,29 @@ export function hasVitalityDefinition(
 }
 
 export function copyVitalityState(state: Readonly<VitalityState>): VitalityState {
-    return { ...state };
+    return { ...state, maxHp: copyNumericContributionState(state.maxHp) };
 }
 
 export function initializeVitalityState(definition: VitalityDefinition): VitalityState {
-    return { hp: definition.maxHp };
+    return { hp: definition.maxHp, maxHp: createNumericContributionState() };
+}
+
+export function updateVitalityMaxHpContributions(
+    state: VitalityState,
+    transition: NumericContributionTransition,
+): VitalityState {
+    const maxHp = transition(state.maxHp);
+
+    return maxHp === state.maxHp ? state : { ...state, maxHp };
+}
+
+export function resolveVitalityMaxHp(
+    definition: VitalityDefinition,
+    state: VitalityState,
+    evaluate?: NumericContributionEvaluator,
+): number {
+    return Math.max(
+        1,
+        resolveNumericValue(definition.maxHp, resolveNumericContributions(state.maxHp, evaluate)),
+    );
 }

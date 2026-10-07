@@ -8,9 +8,21 @@ import {
     initializeBlockerState,
 } from "./blocking.js";
 import { copyEffectsState } from "./effects.js";
+import {
+    copyDefenseState,
+    initializeDefenseState,
+    type DefenseDefinition,
+    type DefenseState,
+} from "./defense.js";
 import { copyLocomotionState, initializeLocomotionState } from "./locomotion/state.js";
 import { copySpatialPresenceState } from "./presence.js";
 import { copyOccupancyState } from "./occupancy.js";
+import {
+    copyOffenseState,
+    initializeOffenseState,
+    type OffenseDefinition,
+    type OffenseState,
+} from "./offense.js";
 import {
     copyHitState,
     copySpatialState,
@@ -33,6 +45,14 @@ function configuredCapability<C, S>(
 
 export const configuredCapabilities = Object.freeze({
     vitality: configuredCapability(initializeVitalityState, copyVitalityState),
+    offense: configuredCapability<OffenseDefinition, OffenseState>(
+        initializeOffenseState,
+        copyOffenseState,
+    ),
+    defense: configuredCapability<DefenseDefinition, DefenseState>(
+        initializeDefenseState,
+        copyDefenseState,
+    ),
     action: configuredCapability(initializeActionState, copyActionState),
     allegiance: configuredCapability(initializeAllegianceState, copyAllegianceState),
     spatial: configuredCapability(initializeSpatialState, copySpatialState),

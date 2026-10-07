@@ -8,7 +8,7 @@ import {
     type TargetBindingId,
 } from "../unit/capability/action.js";
 import type { Unit, UnitId } from "../unit/unit.js";
-import { resolveMaxHp } from "./attributes.js";
+import { resolveMaxHp } from "./vitality.js";
 import { compileEffect, type CompiledEffect } from "./compile-effect.js";
 import { effectPurposes, type EffectDefinition } from "./effect.js";
 import { CombatResources } from "./resources.js";
@@ -60,7 +60,8 @@ export function compileAction(
         targeting: compileTargeting(
             group.targeting,
             group.effects.flatMap(effectPurposes),
-            (unit, context) => resolveMaxHp(unit, createCombatWork(context.battlefield), resources),
+            (unit, context) =>
+                resolveMaxHp(unit.id, createCombatWork(context.battlefield), resources)!,
         ),
         effects: group.effects.map(compile),
     }));

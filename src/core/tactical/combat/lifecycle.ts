@@ -1,6 +1,7 @@
 import { expireEffects, removeEffectsOwnedByUnit } from "../effect/lifecycle.js";
 import { hasEffects } from "../unit/capability/effects.js";
-import type { UnitId } from "../unit/unit.js";
+import type { Unit, UnitId } from "../unit/unit.js";
+import type { CombatResources } from "./resources.js";
 import {
     combatWorkView,
     getCombatUnit,
@@ -9,21 +10,44 @@ import {
     type CombatWork,
 } from "./work.js";
 
-export function retireCombatUnit(work: CombatWork, unitId: UnitId): CombatWork {
+function cleanRemovedContributions(before: Unit, after: Unit, resources: CombatResources): Unit {
+    if (before === after || !hasEffects(before)) {
+        return after;
+    }
+
+    const remaining = new Set(hasEffects(after) ? after.effects.instances.map(({ id }) => id) : []);
+    const removed = before.effects.instances.filter(({ id }) => !remaining.has(id));
+
+    return resources.cleanupContributions(after, removed);
+}
+
+export function retireCombatUnit(
+    work: CombatWork,
+    unitId: UnitId,
+    resources: CombatResources,
+): CombatWork {
     work = removeCombatUnit(work, unitId, "DEATH");
 
     for (const id of combatWorkView(work).unitIds) {
         const unit = getCombatUnit(work, id)!;
 
-        work = updateCombatUnit(work, removeEffectsOwnedByUnit(unit, unitId));
+        work = updateCombatUnit(
+            work,
+            cleanRemovedContributions(unit, removeEffectsOwnedByUnit(unit, unitId), resources),
+        );
     }
 
     return work;
 }
 
-export function prepareCombatEffects(work: CombatWork, tick: number): CombatWork {
+export function prepareCombatEffects(
+    work: CombatWork,
+    tick: number,
+    resources: CombatResources,
+): CombatWork {
     for (const id of combatWorkView(work).unitIds) {
-        let unit = expireEffects(getCombatUnit(work, id)!, tick);
+        const previous = getCombatUnit(work, id)!;
+        let unit = expireEffects(previous, tick);
 
         if (hasEffects(unit)) {
             const missingOwners = new Set(
@@ -40,7 +64,7 @@ export function prepareCombatEffects(work: CombatWork, tick: number): CombatWork
             }
         }
 
-        work = updateCombatUnit(work, unit);
+        work = updateCombatUnit(work, cleanRemovedContributions(previous, unit, resources));
     }
 
     return work;

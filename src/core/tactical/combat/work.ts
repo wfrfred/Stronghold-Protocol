@@ -12,10 +12,19 @@ const defaultExecution: BattleExecutionState = Object.freeze({
     nextSpatialEffectId: 0,
 });
 
+export type CombatUnitLifecycleResult =
+    | { readonly type: "CREATED"; readonly unit: Unit }
+    | {
+          readonly type: "REMOVED";
+          readonly unit: Unit;
+          readonly reason: BattlefieldRemovalReason;
+      };
+
 export interface CombatWork {
     readonly battlefield: CombatTargetingView;
     readonly units: ReadonlyMap<UnitId, Unit>;
     readonly removals: ReadonlyMap<UnitId, BattlefieldRemovalReason>;
+    readonly lifecycleResults: readonly CombatUnitLifecycleResult[];
     readonly events: readonly BattleEvent[];
     readonly execution: BattleExecutionState;
 }
@@ -27,6 +36,7 @@ export interface CombatWorkResult {
         readonly unitId: UnitId;
         readonly reason: BattlefieldRemovalReason;
     }[];
+    readonly lifecycleResults: readonly CombatUnitLifecycleResult[];
     readonly events: readonly BattleEvent[];
     readonly execution: BattleExecutionState;
 }
@@ -39,6 +49,7 @@ export function createCombatWork(
         battlefield,
         units: new Map(),
         removals: new Map(),
+        lifecycleResults: [],
         events: [],
         execution,
     };
@@ -71,7 +82,9 @@ export function combatWorkView(work: CombatWork): CombatTargetingView {
 }
 
 export function updateCombatUnit(work: CombatWork, unit: Unit): CombatWork {
-    if (getCombatUnit(work, unit.id) === unit) {
+    const current = getCombatUnit(work, unit.id);
+
+    if (current === unit) {
         return work;
     }
 
@@ -89,7 +102,43 @@ export function updateCombatUnit(work: CombatWork, unit: Unit): CombatWork {
         removals = nextRemovals;
     }
 
-    return { ...work, units, removals };
+    return {
+        ...work,
+        units,
+        removals,
+        lifecycleResults:
+            current === undefined
+                ? [...work.lifecycleResults, { type: "CREATED", unit }]
+                : work.lifecycleResults,
+    };
+}
+
+export function registerCombatUnit(work: CombatWork, unit: Unit): CombatWork {
+    if (getCombatUnit(work, unit.id) !== undefined) {
+        throw new TypeError("combat unit identity is already registered");
+    }
+
+    return updateCombatUnit(work, unit);
+}
+
+export function transitionCombatUnit(
+    work: CombatWork,
+    id: UnitId,
+    transition: (current: Unit) => Unit,
+): CombatWork {
+    const current = getCombatUnit(work, id);
+
+    if (current === undefined) {
+        return work;
+    }
+
+    const next = transition(current);
+
+    if (next.id !== id) {
+        throw new TypeError("combat unit transition cannot change identity");
+    }
+
+    return updateCombatUnit(work, next);
 }
 
 export function removeCombatUnit(
@@ -97,7 +146,9 @@ export function removeCombatUnit(
     id: UnitId,
     reason: BattlefieldRemovalReason = "DEATH",
 ): CombatWork {
-    if (getCombatUnit(work, id) === undefined) {
+    const unit = getCombatUnit(work, id);
+
+    if (unit === undefined) {
         return work;
     }
 
@@ -115,7 +166,12 @@ export function removeCombatUnit(
         removals = nextRemovals;
     }
 
-    return { ...work, units, removals };
+    return {
+        ...work,
+        units,
+        removals,
+        lifecycleResults: [...work.lifecycleResults, { type: "REMOVED", unit, reason }],
+    };
 }
 
 export function appendCombatEvents(work: CombatWork, events: readonly BattleEvent[]): CombatWork {
@@ -164,6 +220,7 @@ export function combatWorkResult(work: CombatWork): CombatWorkResult {
         units,
         removedUnitIds: removals.map(({ unitId }) => unitId),
         removals,
+        lifecycleResults: work.lifecycleResults,
         events: work.events,
         execution: work.execution,
     };

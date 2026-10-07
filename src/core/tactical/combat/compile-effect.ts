@@ -1,4 +1,4 @@
-import { resolveAttackPower } from "./attributes.js";
+import { resolveAttackPower } from "./offense.js";
 import { createDamageOperands } from "./contract.js";
 import { resolveDamage } from "./damage.js";
 import type { EffectDefinition } from "./effect.js";
@@ -29,7 +29,7 @@ export function compileEffect(
 
                           return source === undefined
                               ? definition.power
-                              : resolveAttackPower(source, work, resources);
+                              : resolveAttackPower(source.id, work, resources)!;
                       }
                     : (): number => definition.power;
 

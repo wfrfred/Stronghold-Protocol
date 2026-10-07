@@ -20,6 +20,7 @@ export function createCombatSystem(
         const work = prepareCombatEffects(
             createCombatWork(input.battlefield, input.execution),
             input.tick,
+            resources,
         );
 
         return {
@@ -33,13 +34,17 @@ export function createCombatSystem(
     const step: BattlePhase = (input) => {
         const { battlefield, tick } = input;
         const ids = [...battlefield.unitIds].sort((left, right) => left - right);
-        let work = prepareCombatEffects(createCombatWork(battlefield, input.execution), tick);
+        let work = prepareCombatEffects(
+            createCombatWork(battlefield, input.execution),
+            tick,
+            resources,
+        );
 
         for (const id of ids) {
             const unit = getCombatUnit(work, id);
 
             if (unit !== undefined && hasVitality(unit) && unit.vitality.hp <= 0) {
-                work = retireCombatUnit(work, id);
+                work = retireCombatUnit(work, id, resources);
             }
         }
 

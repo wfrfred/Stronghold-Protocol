@@ -1,7 +1,7 @@
 import { hasStatusFlag } from "../unit/capability/status.js";
 import { hasVitality, type VitalUnit } from "../unit/capability/vitality.js";
 import type { UnitId } from "../unit/unit.js";
-import { resolveMaxHp } from "./attributes.js";
+import { resolveMaxHp } from "./vitality.js";
 import type { CombatResources } from "./resources.js";
 import { appendCombatEvents, getCombatUnit, updateCombatUnit, type CombatWork } from "./work.js";
 
@@ -59,7 +59,7 @@ export function resolveHealing(
         target,
         request.power,
         request.ignoreHealFree,
-        resolveMaxHp(target, work, resources),
+        resolveMaxHp(target.id, work, resources),
     );
     const nextWork = appendCombatEvents(updateCombatUnit(work, healed.unit), [
         {

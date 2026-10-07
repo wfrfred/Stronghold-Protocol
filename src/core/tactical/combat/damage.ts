@@ -3,7 +3,7 @@ import { hasDefenseDefinition, type DefenseDefinition } from "../unit/capability
 import { hasVitality, type Vitality } from "../unit/capability/vitality.js";
 import type { Unit } from "../unit/unit.js";
 import { hasStatusFlag } from "../unit/capability/status.js";
-import { resolveDefense } from "./attributes.js";
+import { resolveDefense } from "./defense.js";
 import type {
     DamageOperands,
     DamageReport,
@@ -87,7 +87,7 @@ function confirmDamage(
         work = reaction.apply(work, report);
     }
     if (report.deathOccurred) {
-        work = retireCombatUnit(work, report.request.targetUnitId);
+        work = retireCombatUnit(work, report.request.targetUnitId, resources);
     }
 
     return { work, report };
@@ -156,7 +156,7 @@ export function resolveDamage(
         );
     }
 
-    const defense = resolveDefense(current, work, resources);
+    const defense = resolveDefense(current.id, work, resources)!;
     const effectiveDefense = {
         defense:
             Math.max(0, defense.defense - operands.fixedPenetration) *
