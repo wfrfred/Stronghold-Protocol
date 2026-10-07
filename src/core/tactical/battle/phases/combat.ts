@@ -1,41 +1,105 @@
 import { compileAction } from "../../unit/capability/action/compile.js";
-import { executeAction } from "../../unit/capability/action/execution.js";
-import { type CompiledAction } from "../../unit/capability/action/program.js";
+import { startAction } from "../../unit/capability/action/execution.js";
+import { ownCompiledAction, type CompiledAction } from "../../unit/capability/action/program.js";
+import {
+    actionExecutionPermissions,
+    cancelActionExecution,
+    createActionExecutionState,
+    resumeActionExecution,
+    type ActionExecution,
+    type ActionExecutionState,
+    type CompiledActionSegment,
+} from "../../unit/capability/action/process.js";
 import { prepareCombatEffects, retireCombatUnit } from "../execution/unit-lifecycle.js";
 import { CombatResources } from "../resources.js";
 import { combatWorkChanges, createCombatWork, getCombatUnit } from "../execution/work.js";
 import { hasAction, type ActionDefinition } from "../../unit/capability/action/capability.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
 import { hasVitality } from "../../unit/capability/vitality/capability.js";
+import type { UnitId } from "../../unit/unit.js";
 import type { BattlePhase } from "../system.js";
 
 export function createCombatSystem(
     resources = new CombatResources(),
     compile: typeof compileAction = compileAction,
 ): {
-    readonly prepare: BattlePhase;
-    readonly step: BattlePhase;
+    createState(): ActionExecutionState;
+    readonly prepare: BattlePhase<ActionExecutionState>;
+    readonly step: BattlePhase<ActionExecutionState>;
+    allowsMovement(state: ActionExecutionState, unitId: UnitId): boolean;
 } {
     const compiledActions = new WeakMap<ActionDefinition, CompiledAction>();
 
-    const prepare: BattlePhase = (input) => {
-        const work = prepareCombatEffects(
+    const compiledAction = (definition: ActionDefinition): CompiledAction => {
+        let compiled = compiledActions.get(definition);
+
+        if (compiled === undefined) {
+            const candidate = compile(definition, resources);
+
+            if (candidate.definition !== definition) {
+                throw new TypeError("compiled action must retain its definition association");
+            }
+
+            compiled = ownCompiledAction(candidate);
+            compiledActions.set(definition, compiled);
+        }
+
+        return compiled;
+    };
+    const segmentsOf = (execution: ActionExecution): readonly CompiledActionSegment[] => {
+        const segments = compiledAction(execution.definition).process;
+
+        if (segments === undefined) {
+            throw new TypeError("action execution requires its compiled process");
+        }
+
+        return segments;
+    };
+
+    const mayStart = (state: ActionExecutionState, unitId: UnitId): boolean =>
+        state.executions.every(
+            (execution) =>
+                execution.sourceUnitId !== unitId ||
+                actionExecutionPermissions(execution, segmentsOf(execution)).allowNewAction,
+        );
+
+    const prepare: BattlePhase<ActionExecutionState> = (input, state) => {
+        let work = prepareCombatEffects(
             createCombatWork(input.battlefield, input.execution, input.battlefield),
             input.tick,
             resources,
         );
 
+        for (const command of input.commands) {
+            if (command.type === "CANCEL_ACTION_EXECUTION") {
+                const cancelled = cancelActionExecution(
+                    work,
+                    state,
+                    command.executionId,
+                    resources,
+                    input.tick,
+                );
+                work = cancelled.work;
+                state = cancelled.state;
+            }
+        }
+
         return {
-            state: undefined,
+            state,
             changes: combatWorkChanges(work),
             events: work.events,
             execution: work.execution,
         };
     };
 
-    const step: BattlePhase = (input) => {
+    const step: BattlePhase<ActionExecutionState> = (input, state) => {
         const { battlefield, tick } = input;
-        const ids = [...battlefield.unitIds].sort((left, right) => left - right);
+        const ids = [
+            ...new Set([
+                ...battlefield.unitIds,
+                ...state.executions.map(({ sourceUnitId }) => sourceUnitId),
+            ]),
+        ].sort((left, right) => left - right);
         let work = prepareCombatEffects(
             createCombatWork(battlefield, input.execution, battlefield),
             tick,
@@ -51,30 +115,57 @@ export function createCombatSystem(
         }
 
         for (const id of ids) {
+            const executions = state.executions.filter(({ sourceUnitId }) => sourceUnitId === id);
+
+            for (const execution of executions) {
+                const resumed = resumeActionExecution(
+                    work,
+                    state,
+                    execution.id,
+                    segmentsOf(execution),
+                    tick,
+                    resources,
+                );
+                work = resumed.work;
+                state = resumed.state;
+            }
+
             const unit = getCombatUnit(work, id);
 
             if (unit === undefined || !hasAction(unit) || !isSpatiallyPresent(unit)) {
                 continue;
             }
 
-            const definition = unit.definition.action.normalAction;
-            let compiled = compiledActions.get(definition);
-
-            if (compiled === undefined) {
-                compiled = compile(definition, resources);
-                compiledActions.set(definition, compiled);
-            }
-
-            work = executeAction(work, id, compiled, tick);
+            const started = startAction(
+                work,
+                state,
+                id,
+                compiledAction(unit.definition.action.normalAction),
+                tick,
+                resources,
+                mayStart(state, id),
+            );
+            work = started.work;
+            state = started.state;
         }
 
         return {
-            state: undefined,
+            state,
             changes: combatWorkChanges(work),
             events: work.events,
             execution: work.execution,
         };
     };
 
-    return { prepare, step };
+    return {
+        createState: createActionExecutionState,
+        prepare,
+        step,
+        allowsMovement: (state, unitId) =>
+            state.executions.every(
+                (execution) =>
+                    execution.sourceUnitId !== unitId ||
+                    !actionExecutionPermissions(execution, segmentsOf(execution)).blockingMovement,
+            ),
+    };
 }

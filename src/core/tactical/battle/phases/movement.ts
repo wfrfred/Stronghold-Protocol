@@ -6,16 +6,20 @@ import { stepRoutedUnit } from "../../unit/capability/locomotion/step.js";
 import type { Unit, UnitId } from "../../unit/unit.js";
 import { changeAlternativeRoutes, type AlternativeRouteCommand } from "./route-control.js";
 import type { BattleEvent } from "../contract.js";
-import type { BattlePhase } from "../system.js";
+import type { BattlePhase, BattlePhaseInput } from "../system.js";
 import { removeUnitWithEffects } from "../execution/unit-lifecycle.js";
 import { combatWorkChanges, createCombatWork, updateCombatUnit } from "../execution/work.js";
+
+export interface MovementPhaseInput extends BattlePhaseInput {
+    readonly movementAllowed?: (unitId: UnitId) => boolean;
+}
 
 export function createMovementSystem(
     { moveMultiplier }: { readonly moveMultiplier: number },
     resources: EffectTransitionResources,
 ): {
     readonly reroute: BattlePhase;
-    readonly step: BattlePhase;
+    readonly step: BattlePhase<void, MovementPhaseInput>;
 } {
     const reroute: BattlePhase = (input) => {
         const commands = input.commands.filter(
@@ -42,7 +46,7 @@ export function createMovementSystem(
         };
     };
 
-    const step: BattlePhase = (input) => {
+    const step: BattlePhase<void, MovementPhaseInput> = (input) => {
         const { battlefield, tick } = input;
         let execution = input.execution;
         const changes: BattlefieldChange[] = [];
@@ -63,6 +67,7 @@ export function createMovementSystem(
                 fieldCache: battlefield.fieldCache,
                 moveMultiplier,
                 movementAllowed:
+                    (input.movementAllowed?.(unitId) ?? true) &&
                     battlefield.blockerOf(unitId) === undefined &&
                     (!hasAction(unit) || tick >= unit.action.recoveryUntilTick),
                 waitTickAllowed: true,

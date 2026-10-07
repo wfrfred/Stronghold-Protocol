@@ -13,15 +13,22 @@ import type { AlternativeRouteCommand } from "./phases/route-control.js";
 import type { BattleExecutionState } from "./execution/state.js";
 import type { DeploymentCommand } from "./phases/deployment.js";
 import type { SupportRelation } from "../battlefield/support/relations.js";
+import type {
+    ActionExecutionId,
+    ActionExecutionSignal,
+    ActionExecutionState,
+} from "../unit/capability/action/process.js";
 
 export type BattleCommand =
     | PredefinedCommand
     | AlternativeRouteCommand
     | DeploymentCommand
+    | { readonly type: "CANCEL_ACTION_EXECUTION"; readonly executionId: ActionExecutionId }
     | { readonly type: "TRIGGER_BRANCH"; readonly branchId: string; readonly isLoop: boolean };
 
 export type BattleEvent =
     | CombatEvent
+    | ActionExecutionSignal
     | {
           readonly type: "UNIT_DEPLOYED" | "UNIT_RELOCATED";
           readonly unitId: UnitId;
@@ -63,6 +70,7 @@ export interface BattleSnapshot {
     readonly spawning: SpawnScheduleState;
     readonly execution: BattleExecutionState;
     readonly predefinedPresence: readonly PredefinedPresence[];
+    readonly actionExecution: ActionExecutionState;
     readonly units: readonly Unit[];
     readonly blockingRelations: readonly BlockingRelation[];
     readonly supportRelations: readonly SupportRelation[];

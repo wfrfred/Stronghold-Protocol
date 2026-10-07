@@ -138,9 +138,29 @@ Source active 是唯一源参与事实。默认跟随源参与的接收实例通
 
 这一批覆盖普通持续 GlobalBuff 分发、一次选择、显式光环范围政策及共享计数压力案例。计数例只验证项目协议，不代表已实现复活或尚未闭合的 autochess Lua 时序。低层 Battlefield 的存储 changes 不承担 Buff 结算；内容必须通过 Source 领域入口协调启停和结束，不能先删除 host 再要求系统找回安装联系。
 
-## 9. 验收范围
+## 9. 可恢复 Action 执行
 
-[派发回归](../../test/sim/effect-dispatch.test.js)、[生命周期回归](../../test/sim/effects.test.js) 和 [贡献回归](../../test/sim/contributions.test.js) 验证上述协议。共享 [Effect fixture](../../test/helpers/effects.js) 使用统一安装入口；手工 Unit fixture 先通过 [initializeUnit](../../src/core/tactical/unit/initialize.ts) 建立能力事实，再通过合法 transition 调整测试输入，不手造过时 capability state。
+[ActionExecution](../../src/core/tactical/unit/capability/action/process.ts) 保存在独立 Action 领域集合，并由 BattleSystemStates 与 BattleSnapshot 保存。每次执行有单调身份、来源、不可变 ActionDefinition 关联、接受时点与输入目标、绑定、数值样本、游标及等待事实；同一来源可以有多个执行。集合中没有函数、Map、候选作用域或同步调用帧。生成的执行事实不可变，复制集合时复用它们。编译段落只保存在定义关联的私有程序缓存中，缓存取得描述对象与数组的所有权。
+
+未声明 process 的现有行动继续即时完成，不分配延迟进程。两条路径共用接受流程：每 tick 更新展示目标；有触发目标、冷却与恢复允许时才接受，接受时记录 ACTION，并按原有 intervalTicks／recoveryTicks 更新 Unit.ActionState。执行输入目标与绑定独立于后续每 tick 的展示目标。程序可以在某段安装后再查询／重绑；无需在接受时把所有后续目标固定下来。
+
+编译段落只有同步执行、等待及释放标记这些有限控制操作。同步执行返回 Working facts，完成后才推进游标；可以明确请求正常 FINISH 或 CONTENT_CANCELLED，保留本段已返回的事实，再结束精确执行身份的生命周期绑定，不执行后继。异常则由整 tick 不发布政策处理，不能用异常代替正常取消。
+
+相对等待在进入时保存 remainingTicks，此 tick 不消费；之后每次获准推进的新 tick 消耗一个，同 tick 重入不重复消费。绝对等待按 targetTick 判断；跳过推进后恢复时，两者仍有不同语义。不会用 Promise、generator 或跨 tick 调用栈保存等待。
+
+当前推进合同如下：
+
+1. 阶段准备先处理显式 CANCEL_ACTION_EXECUTION；同 tick 取消早于恢复等待／释放。
+2. 交战按来源 UnitId 递增处理。各来源先按执行接受次序恢复旧进程，再考虑普通行动的新接受，不把全场延迟释放统一挪到即时行动之前。
+3. 当前段落的 allowNewAction 许可在同来源多个执行之间取交集；blockingMovement 只要有一项阻止就拒绝移动。Movement 取得 Action 的纯许可查询，不读取进程游标或程序内部。
+4. 来源缺席或不再有空间存在时，在 Action 阶段取消尚未完成的执行；缺席来源仍加入待处理身份集合。取消／完成清理的是精确 ownerUnitId＋executionId，不结束同来源的其他进程。
+5. RELEASE、FINISHED、CANCELLED 在实际发生处写入 Work 事件序列。段落控制结果另返回相同 signal，协调层不再次追加。阶段事件先于该阶段提交产生的 SUPPORT_LOST 以及后续登记回调事件；UNIT_REMOVED 保持原有整 tick 汇总报告。
+
+这一批实现显式 tick 等待与释放的有限路径，未猜测原生动画事件对应帧数，也未实现全部 spell 重复策略或输入位置格式。在途 Projectile 与它的 cachedAtk 属于后续独立过程。来源在 Action phase 之后退出的未完成进程，下次 Action phase 再处理；战斗终止后的剩余过程政策仍在 Step 6 确定，本批不延长战斗或静默全局 finalize。
+
+## 10. 验收范围
+
+[派发回归](../../test/sim/effect-dispatch.test.js)、[生命周期回归](../../test/sim/effects.test.js) 和 [贡献回归](../../test/sim/contributions.test.js) 验证上述协议。[源过程](../../test/sim/effect-sources.test.js)、[源接入](../../test/sim/effect-source-runtime.test.js)、[行动进程](../../test/sim/action-process.test.js) 和 [行动接入](../../test/sim/action-process-runtime.test.js) 验证联系、恢复、正常取消与整 tick 异常重试。共享 [Effect fixture](../../test/helpers/effects.js) 使用统一安装入口；手工 Unit fixture 先通过 [initializeUnit](../../src/core/tactical/unit/initialize.ts) 建立能力事实，再通过合法 transition 调整测试输入，不手造过时 capability state。
 
 从空构建产物验收，避免已删除模块的残留 JS 使测试假通过：
 
@@ -153,6 +173,9 @@ node --test --test-isolation=none \
     test/render/interp.test.js \
     test/sim/battle.test.js \
     test/sim/combat-program.test.js \
+    test/sim/action-process.test.js \
+    test/sim/action-process-runtime.test.js \
+    test/sim/action-event-order.test.js \
     test/sim/combat-work.test.js \
     test/sim/combat.test.js \
     test/sim/contributions.test.js \
