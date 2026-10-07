@@ -255,8 +255,9 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
             if (
                 event.type === "ENEMY_SPAWNED" ||
                 event.type === "UNIT_REMOVED" ||
-                event.type === "ATTACK" ||
-                event.type === "DAMAGE"
+                event.type === "ACTION" ||
+                event.type === "DAMAGE" ||
+                event.type === "HEAL"
             ) {
                 options.onEvent?.(event);
             }
@@ -282,10 +283,9 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
     }
 
     function advance(requested: readonly BattleCommand[] = commands.get(snapshot.tickIndex) ?? []) {
-        const before = snapshot;
         const result = runtime.step(requested);
         snapshot = runtime.snapshot();
-        const visuals = presentation.advance(before, snapshot, result.events);
+        const visuals = presentation.advance(snapshot, result.events);
 
         return { events: result.events, visuals };
     }

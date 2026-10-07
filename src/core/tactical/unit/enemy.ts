@@ -5,7 +5,10 @@ import type { RouteDefinition } from "../route/definition.js";
 import { createRouteExecution } from "../route/execution.js";
 import { initializeRouteSpawn } from "../route/spawn.js";
 import type { RouteTiming } from "../route/state.js";
-import { createActionDefinition, type ActingUnitDefinition } from "./capability/action.js";
+import {
+    createActionCapabilityDefinition,
+    type ActingUnitDefinition,
+} from "./capability/action.js";
 import { createAllegianceState, type AllegiantUnitDefinition } from "./capability/allegiance.js";
 import { createBlockableDefinition, type BlockableUnitDefinition } from "./capability/blocking.js";
 import { createDefenseDefinition, type DefendedUnitDefinition } from "./capability/defense.js";
@@ -21,7 +24,13 @@ import {
 } from "./capability/locomotion/state.js";
 import { stepRoutedUnit, type RoutedLocomotionStepContext } from "./capability/locomotion/step.js";
 import type { SpatialPresence } from "./capability/presence.js";
-import { createTargetableState, type TargetableUnitDefinition } from "./capability/targetable.js";
+import {
+    createHitDefinition,
+    createSpatialDefinition,
+    type HitUnitDefinition,
+    type SpatialUnitDefinition,
+} from "./capability/spatial.js";
+import { createStatusDefinition, type StatusUnitDefinition } from "./capability/status.js";
 import type { Unit, UnitId } from "./unit.js";
 import type { Vitality, VitalUnitDefinition } from "./capability/vitality.js";
 import { initializeUnit, type InitializedUnit } from "./initialize.js";
@@ -40,7 +49,9 @@ export interface CombatEnemyDefinition
         EnemyDefinition,
         ActingUnitDefinition,
         AllegiantUnitDefinition,
-        TargetableUnitDefinition,
+        SpatialUnitDefinition,
+        HitUnitDefinition,
+        StatusUnitDefinition,
         DefendedUnitDefinition,
         BlockableUnitDefinition {}
 
@@ -103,9 +114,11 @@ export function createCombatEnemyDefinition(
 ): CombatEnemyDefinition {
     return Object.freeze({
         ...createEnemyDefinition(definition),
-        action: createActionDefinition(definition.action),
+        action: createActionCapabilityDefinition(definition.action),
         allegiance: createAllegianceState(definition.allegiance),
-        targetable: createTargetableState(definition.targetable),
+        spatial: createSpatialDefinition(definition.spatial),
+        hit: createHitDefinition(definition.hit),
+        status: createStatusDefinition(definition.status),
         defense: createDefenseDefinition(definition.defense),
         blockable: createBlockableDefinition(definition.blockable),
     });

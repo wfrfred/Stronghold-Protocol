@@ -1,6 +1,6 @@
-import type { BattlefieldRemovalReason } from "../battlefield/contract.js";
+import type { BattlefieldChangeResult } from "../battlefield/contract.js";
 import type { BlockingRelation } from "../battlefield/blocking.js";
-import type { DamageType } from "../unit/capability/action.js";
+import type { CombatEvent } from "../combat/event.js";
 import type { MechanismRuntime } from "../battlefield/mechanism.js";
 import type { NavigationSpatialEffect } from "../battlefield/navigation-effect.js";
 import type { NavigationOutcome } from "../navigation/state.js";
@@ -21,6 +21,7 @@ export type BattleCommand =
     | { readonly type: "TRIGGER_BRANCH"; readonly branchId: string; readonly isLoop: boolean };
 
 export type BattleEvent =
+    | CombatEvent
     | {
           readonly type: "UNIT_DEPLOYED" | "UNIT_RELOCATED";
           readonly unitId: UnitId;
@@ -29,22 +30,6 @@ export type BattleEvent =
       }
     | ({ readonly type: "SUPPORT_LOST"; readonly tick: number } & SupportRelation)
     | { readonly type: "ENEMY_SPAWNED"; readonly unitId: UnitId; readonly tick: number }
-    | {
-          readonly type: "ATTACK";
-          readonly sourceUnitId: UnitId;
-          readonly targetUnitId: UnitId;
-          readonly damageType: DamageType;
-          readonly tick: number;
-      }
-    | {
-          readonly type: "DAMAGE";
-          readonly sourceUnitId: UnitId;
-          readonly targetUnitId: UnitId;
-          readonly damageType: DamageType;
-          readonly amount: number;
-          readonly hp: number;
-          readonly tick: number;
-      }
     | {
           readonly type: "ROUTE";
           readonly unitId: UnitId;
@@ -59,12 +44,10 @@ export type BattleEvent =
           readonly tick: number;
       }
     | { readonly type: "ROUTE_COMPLETED"; readonly unitId: UnitId; readonly tick: number }
-    | {
+    | ({
           readonly type: "UNIT_REMOVED";
-          readonly unitId: UnitId;
-          readonly reason: BattlefieldRemovalReason;
           readonly tick: number;
-      };
+      } & BattlefieldChangeResult["removedUnits"][number]);
 
 export interface BattleResult {
     readonly reason: "SCHEDULE_COMPLETED" | "TIME_LIMIT";

@@ -84,8 +84,8 @@ test('core blocking: ground eligibility comes from unit data while route motion 
   battle.step();
 
   assert.deepEqual(coreBlockedBy(battle, 0), [1]);
-  assert.equal(coreBlockingUnit(battle, 1).targetable.layer, 'GROUND');
-  assert.equal(coreBlockingUnit(battle, 2).targetable.layer, 'AIR');
+  assert.equal(coreBlockingUnit(battle, 1).spatial.layer, 'GROUND');
+  assert.equal(coreBlockingUnit(battle, 2).spatial.layer, 'AIR');
 });
 
 test('core blocking: moving enemies stop at contact and an adjacent lane remains clear', () => {
@@ -186,7 +186,7 @@ test('core blocking: the held enemy outranks a nearer in-range enemy and can be 
 
   assert.deepEqual(coreBlockedBy(battle, 0), [1]);
   assert.equal(Math.round(coreBlockingUnit(battle, 1).position[0]), 6);
-  assert.deepEqual(events.filter(event => event.type === 'ATTACK' && event.sourceUnitId === 0).map(event => event.targetUnitId), [1]);
+  assert.deepEqual(events.filter(event => event.type === 'ACTION' && event.sourceUnitId === 0).map(event => event.targetUnitId), [1]);
   assert.ok(coreBlockingUnit(battle, 1).vitality.hp < 1e7);
   assert.equal(coreBlockingUnit(battle, 2).vitality.hp, 1e7);
 });

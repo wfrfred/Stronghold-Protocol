@@ -1,14 +1,16 @@
 import type { BattlefieldChange } from "../battlefield/contract.js";
-import { damageUnit } from "../combat/damage.js";
-import { selectAttackTarget, type CombatTargetingView } from "../combat/targeting.js";
-import { hasAction, type Action } from "../unit/capability/action.js";
+import { compileAction, stepAction, type CompiledAction } from "../combat/action.js";
+import type { CombatTargetingView } from "../combat/targeting.js";
+import { hasAction, type ActionDefinition } from "../unit/capability/action.js";
 import { isSpatiallyPresent } from "../unit/capability/presence.js";
 import { hasVitality } from "../unit/capability/vitality.js";
-import type { Unit, UnitId } from "../unit/unit.js";
+import type { UnitId } from "../unit/unit.js";
 import type { BattleEvent } from "./contract.js";
 import type { BattlePhase } from "./system.js";
 
 export function createCombatSystem(): { readonly step: BattlePhase } {
+    const compiledActions = new WeakMap<ActionDefinition, CompiledAction>();
+
     const step: BattlePhase = (input) => {
         const { battlefield, tick } = input;
         const ids = [...battlefield.unitIds].sort((left, right) => left - right);
@@ -38,61 +40,26 @@ export function createCombatSystem(): { readonly step: BattlePhase } {
                 continue;
             }
 
-            const attack = unit.definition.action.attack;
-            const target = selectAttackTarget(unit, attack.targeting, view);
-            const targetUnitId = target?.id ?? null;
-            let acting: Unit & Action = unit;
+            const definition = unit.definition.action.normalAction;
+            let compiled = compiledActions.get(definition);
 
-            if (targetUnitId !== unit.action.targetUnitId) {
-                acting = { ...unit, action: { ...unit.action, targetUnitId } };
-                units.set(id, acting);
-                changed.add(id);
-            }
-            if (
-                target === null ||
-                tick < acting.action.readyAtTick ||
-                tick < acting.action.recoveryUntilTick
-            ) {
-                continue;
+            if (compiled === undefined) {
+                compiled = compileAction(definition);
+                compiledActions.set(definition, compiled);
             }
 
-            const attacking: Unit & Action = {
-                ...acting,
-                action: {
-                    ...acting.action,
-                    readyAtTick: tick + attack.intervalTicks,
-                    recoveryUntilTick: tick + attack.recoveryTicks,
-                },
-            };
-            units.set(id, attacking);
-            changed.add(id);
-            events.push({
-                type: "ATTACK",
-                sourceUnitId: id,
-                targetUnitId: target.id,
-                damageType: attack.damageType,
-                tick,
-            });
+            const result = stepAction(unit, compiled, { battlefield: view, tick });
 
-            const damaged = damageUnit(target, attack.power, attack.damageType);
-
-            if (damaged.killed) {
-                units.delete(target.id);
-                changed.add(target.id);
-            } else if (damaged.unit !== target) {
-                units.set(target.id, damaged.unit);
-                changed.add(target.id);
+            for (const updated of result.units) {
+                units.set(updated.id, updated);
+                changed.add(updated.id);
+            }
+            for (const removedId of result.removedUnitIds) {
+                units.delete(removedId);
+                changed.add(removedId);
             }
 
-            events.push({
-                type: "DAMAGE",
-                sourceUnitId: id,
-                targetUnitId: target.id,
-                damageType: attack.damageType,
-                amount: damaged.amount,
-                hp: damaged.unit.vitality.hp,
-                tick,
-            });
+            events.push(...result.events);
         }
 
         const changes: BattlefieldChange[] = [...changed]

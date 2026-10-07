@@ -1779,7 +1779,7 @@ test('core blocked enemies at their route end stay in combat until their blocker
   });
   const first = runtime.step();
   assert.equal(first.result, null);
-  assert.ok(first.events.some(event => event.type === 'ATTACK' && event.sourceUnitId === 1 && event.targetUnitId === 0));
+  assert.ok(first.events.some(event => event.type === 'ACTION' && event.sourceUnitId === 1 && event.targetUnitId === 0));
   assert.equal(first.events.some(event => event.type === 'ROUTE_COMPLETED' || event.type === 'UNIT_REMOVED'), false);
   const held = runtime.snapshot();
   assert.deepEqual(held.units.map(unit => unit.id), [0, 1]);
@@ -1831,7 +1831,7 @@ test('core blocked route waits can teleport away, release their blocker and resu
   assert.equal(teleported.result, null);
   for (let tick = 2; tick <= 4; tick++) {
     const moving = runtime.step();
-    assert.equal(moving.events.some(event => event.type === 'ATTACK' && event.sourceUnitId === 1), false);
+    assert.equal(moving.events.some(event => event.type === 'ACTION' && event.sourceUnitId === 1), false);
     assert.deepEqual(runtime.snapshot().blockingRelations, []);
     assert.ok(runtime.snapshot().units[1].position[0] > 3);
     assert.equal(runtime.snapshot().units[1].locomotion.moving, true);
@@ -1911,8 +1911,8 @@ function deploymentBattleInput(overrides = {}) {
 const deployableDefinition = (id = 'test_deployable') => Object.freeze({
   id, deployment: createDeploymentProfile({ buildableType: 'ALL' }),
   vitality: Object.freeze({ maxHp: 100 }), allegiance: Object.freeze({ side: 'ALLY' }),
-  targetable: Object.freeze({ layer: 'GROUND', enabled: true }),
-  blocker: Object.freeze({ capacity: 1, contactRadius: 0.7 }),
+  spatial: Object.freeze({ layer: 'GROUND' }),
+  blocker: Object.freeze({ capacity: 1, geometry: Object.freeze({ radius: 0.7 }) }),
 });
 
 test('core battle deploys, relocates and retreats units with owned occupancy and attached navigation effects', () => {
@@ -2040,6 +2040,7 @@ test('core visibility: commands from different domains execute in phase order be
   }] });
   const runtime = new BattleRuntime(spec);
   assert.deepEqual(runtime.snapshot().units.map(unit => unit.id), [0]);
+  const unitAtRemoval = runtime.snapshot().units[0];
   const step = runtime.step([
     { type: 'DEPLOY_UNIT', definition, tilePosition: [0, 1], playerSide: 'SIDE_A' },
     { type: 'REMOVE_PREDEFINED', definitionId: 17, reason: 'SCRIPT' },
@@ -2047,7 +2048,8 @@ test('core visibility: commands from different domains execute in phase order be
 
   assert.deepEqual(step.events.filter(event => event.type === 'UNIT_DEPLOYED' || event.type === 'UNIT_REMOVED'), [
     { type: 'UNIT_DEPLOYED', unitId: 1, position: [1, 0], tick: 0 },
-    { type: 'UNIT_REMOVED', unitId: 0, reason: 'SCRIPT', tick: 0 },
+    { type: 'UNIT_REMOVED', unitId: 0, reason: 'SCRIPT', tick: 0,
+      unit: unitAtRemoval },
   ]);
   const snapshot = runtime.snapshot();
   assert.deepEqual(snapshot.units.map(unit => [unit.id, unit.position]), [[1, [1, 0]]]);
@@ -2112,7 +2114,7 @@ test('core elevated support disables blocking without changing target layer and 
   const definition = deployableDefinition();
   const enemyDefinition = Object.freeze({ id: 'standing_enemy',
     vitality: Object.freeze({ maxHp: 100 }), allegiance: Object.freeze({ side: 'ENEMY' }),
-    targetable: Object.freeze({ layer: 'GROUND', enabled: true }), blockable: Object.freeze({ weight: 1 }),
+    spatial: Object.freeze({ layer: 'GROUND' }), blockable: Object.freeze({ weight: 1 }),
   });
   const occupancy = createOccupancyState({ claims: [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }] });
   const recipe = createPredefinedInstanceDefinition({ id: 50, alias: 'test_platform', initiallyPresent: true, creation: {
@@ -2152,7 +2154,7 @@ test('core elevated support disables blocking without changing target layer and 
   const supported = runtime.snapshot();
   assert.deepEqual(supported.supportRelations, [{ supportedUnitId: occupantId, supportUnitId: platformId }]);
   assert.deepEqual(supported.blockingRelations, []);
-  assert.equal(supported.units.find(unit => unit.id === occupantId).targetable.layer, 'GROUND');
+  assert.equal(supported.units.find(unit => unit.id === occupantId).spatial.layer, 'GROUND');
   const removed = runtime.step([{ type: 'REMOVE_PREDEFINED', definitionId: 50, reason: 'SCRIPT' }]);
   assert.deepEqual(removed.events.filter(event => event.type === 'SUPPORT_LOST').map(event => [event.supportedUnitId, event.supportUnitId]),
     [[occupantId, platformId]]);
@@ -2161,7 +2163,7 @@ test('core elevated support disables blocking without changing target layer and 
   assert.equal(after.units.find(unit => unit.id === occupantId).definition, definition);
   assert.deepEqual(after.units.find(unit => unit.id === occupantId).position, [1, 0]);
   assert.equal(after.units.find(unit => unit.id === occupantId).vitality.hp, 100);
-  assert.equal(after.units.find(unit => unit.id === occupantId).targetable.layer, 'GROUND');
+  assert.equal(after.units.find(unit => unit.id === occupantId).spatial.layer, 'GROUND');
   assert.deepEqual(after.blockingRelations, [{ blockerUnitId: occupantId,
     blockedUnitId: after.units.find(unit => unit.definition === enemyDefinition).id }]);
 });

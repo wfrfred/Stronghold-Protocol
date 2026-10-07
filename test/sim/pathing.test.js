@@ -38,7 +38,7 @@ import { World } from '../../dist/core/tactical/geometry/coordinate.js';
 import { createEnemyDefinition, initializeRoutedEnemy, stepRoutedEnemy } from '../../dist/core/tactical/unit/enemy.js';
 import { copyUnitSnapshot } from '../../dist/core/tactical/unit/snapshot.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
-import { createActionDefinition, createActionState } from '../../dist/core/tactical/unit/capability/action.js';
+import { createActionCapabilityDefinition, createActionState } from '../../dist/core/tactical/unit/capability/action.js';
 import { createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/deployment.js';
 import { createSteeringParameters, createSteeringState, integrateSteering } from '../../dist/core/tactical/unit/capability/locomotion/steering.js';
 import { Grid, OBSTACLE_COST, bresenhamTiles } from '../../server/sim/grid.js';
@@ -319,7 +319,24 @@ test('core raw search consumes projected WALK_ONLY, hole costs and FLY masks', (
   assert.deepEqual(distances(buildRawNavigationField(fly, fieldQuery([0, 0]))), [-1, -1, -1, -1, -1]);
 });
 
-test('core field rejects signed int32 candidate overflow as a computation error', () => {
+test('core fields accept high costs when overflowing backedges cannot improve distances', () => {
+  const map = fieldMap(1, 2, [fieldCell({ moveCost: 0x7fffffff }), fieldCell()]);
+  for (const build of [buildRawNavigationField, buildNavigationField]) {
+    assert.deepEqual(distances(build(map, fieldQuery([0, 1]))), [0x7fffffff, 0]);
+  }
+});
+
+test('core fields allow a provisional overflow to be replaced by an in-range shortest path', () => {
+  const map = fieldMap(2, 2, [
+    fieldCell(), fieldCell(),
+    fieldCell({ moveCost: 1_000_000_000 }), fieldCell({ moveCost: 1_500_000_000 }),
+  ]);
+  for (const build of [buildRawNavigationField, buildNavigationField]) {
+    assert.deepEqual(distances(build(map, fieldQuery([0, 0]))), [0, 1, 1_000_000_000, 1_500_000_001]);
+  }
+});
+
+test('core field rejects signed int32 shortest-distance overflow as a computation error', () => {
   const map = fieldMap(1, 3, [fieldCell(), fieldCell({ moveCost: 0x7fffffff }), fieldCell()]);
   assert.throws(() => buildRawNavigationField(map, fieldQuery([0, 0])), RangeError);
   assert.throws(() => buildNavigationField(map, fieldQuery([0, 0])), RangeError);
@@ -1291,8 +1308,8 @@ const flatBattlefieldRuntime = (rows = 1, columns = 5) => createBattlefieldRunti
   map: createBattlefieldMap(rows, columns, Array.from({ length: rows * columns }, () => coreGround())),
 });
 
-function battlefieldProjectionHarness(rows = 2, columns = 5) {
-  const map = createBattlefieldMap(rows, columns, Array.from({ length: rows * columns }, () => coreGround()));
+function battlefieldProjectionHarness(rows = 2, columns = 5,
+  map = createBattlefieldMap(rows, columns, Array.from({ length: rows * columns }, () => coreGround()))) {
   const branches = [settleBattlefieldState, settleBattlefieldStateFully].map(settle => {
     const baseline = Object.freeze({
       WALK: projectStaticNavigationMap(map, 'WALK', 0),
@@ -1355,9 +1372,14 @@ const projectionUnit = (id, position, definition = {}, states = {}) => initializ
 test('core selective projection retains untouched collections, indexes and live navigation on nonspatial updates', () => {
   const h = battlefieldProjectionHarness();
   const routed = routedEnemyHarness({ speedPerTick: 0.1, checkpoints: [coreMove(4)] });
-  const definition = Object.freeze({ ...routed.enemy.definition, action: createActionDefinition({ attack: {
-    power: 10, damageType: 'PHYSICAL', intervalTicks: 30, recoveryTicks: 0,
-    targeting: { range: { type: 'RADIUS', radius: 1 }, canTargetAir: false, priority: 'NEAREST' },
+  const definition = Object.freeze({ ...routed.enemy.definition, action: createActionCapabilityDefinition({ normalAction: {
+    triggerBindingId: 'normal', intervalTicks: 30, recoveryTicks: 0, followUps: [],
+    targetGroups: [{ id: 'normal', effects: [{ type: 'DAMAGE', power: 10, damageType: 'PHYSICAL' }],
+      targeting: { type: 'DAMAGE', scope: { type: 'RANGE', geometry: {
+        type: 'SHAPES', geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 1 }] },
+      } }, canTargetAir: false, includeBlockingRelations: false, preferBlockingRelations: false,
+        ignoreTargetFree: false, ignoreInvisible: false, maxTargets: 1 },
+    }],
   } }) });
   h.commit([{ type: 'REGISTER_UNIT', unit: { ...routed.enemy, definition, action: createActionState() } }]);
   h.commit((state, index) => {
@@ -1446,13 +1468,46 @@ test('core selective and full projection agree on contributions, claims, source 
   assert.equal(h.state.spatial.occupancyBySlot.size, 0);
 });
 
+test('core selective and full projection release ground blocking when a blocker enters an impassable tile', () => {
+  const map = createBattlefieldMap(1, 4, ['ALL', 'FLY_ONLY', 'WALK_ONLY', 'NONE']
+    .map(passableMask => coreGround({ passableMask })));
+  const h = battlefieldProjectionHarness(1, 4, map);
+  const blocker = projectionUnit(10, [0, 0], {
+    vitality: { maxHp: 100 }, allegiance: { side: 'ALLY' }, blocker: { capacity: 1, geometry: { radius: 1 } },
+  });
+  const enemy = projectionUnit(11, [0.1, 0], {
+    vitality: { maxHp: 100 }, allegiance: { side: 'ENEMY' }, blockable: { weight: 1 },
+    spatial: { layer: 'GROUND' },
+  });
+  const relations = [{ blockerUnitId: 10, blockedUnitId: 11 }];
+  h.commit([blocker, enemy].map(unit => ({ type: 'REGISTER_UNIT', unit })));
+  h.commit([{ type: 'SET_BLOCKING_RELATIONS', relations }]);
+  const retained = h.state.blockingRelations;
+  h.commit([{ type: 'UPDATE_UNIT', unit: { ...blocker, position: [2, 0] } }]);
+  assert.equal(h.state.blockingRelations, retained);
+
+  for (const position of [[1, 0], [3, 0], [-1, 0]]) {
+    h.commit([{ type: 'UPDATE_UNIT', unit: blocker }, { type: 'SET_BLOCKING_RELATIONS', relations }]);
+    assert.deepEqual(h.state.blockingRelations, relations);
+    h.commit([{ type: 'UPDATE_UNIT', unit: { ...blocker, position } }]);
+    assert.deepEqual(h.state.blockingRelations, []);
+    h.commit([{ type: 'SET_BLOCKING_RELATIONS', relations }]);
+    assert.deepEqual(h.state.blockingRelations, []);
+  }
+  h.commit([{ type: 'UPDATE_UNIT', unit: {
+    ...blocker, position: [1e30, 0], spatialPresence: { present: false },
+  } }]);
+  h.commit([{ type: 'SET_BLOCKING_RELATIONS', relations }]);
+  assert.deepEqual(h.state.blockingRelations, []);
+});
+
 test('core selective and full projection preserve relation history and explicit same-position release', () => {
   const h = battlefieldProjectionHarness();
   const blocker = projectionUnit(10, [1, 0], {
-    vitality: { maxHp: 100 }, allegiance: { side: 'ALLY' }, blocker: { capacity: 2, contactRadius: 1 },
+    vitality: { maxHp: 100 }, allegiance: { side: 'ALLY' }, blocker: { capacity: 2, geometry: { radius: 1 } },
   }, { spatialPresence: { present: true }, occupancy: { claims: [projectionClaim(1)] } });
   const enemy = projectionUnit(11, [1.1, 0], {
-    vitality: { maxHp: 100 }, allegiance: { side: 'ENEMY' }, blockable: { weight: 1 }, targetable: { layer: 'GROUND' },
+    vitality: { maxHp: 100 }, allegiance: { side: 'ENEMY' }, blockable: { weight: 1 }, spatial: { layer: 'GROUND' },
   }, { spatialPresence: { present: true } });
   const platform = projectionUnit(12, [1, 0], {
     tileBinding: createTileBindingDefinition({ buildableType: 'ALL', heightType: 'HIGHLAND' }),
@@ -1485,7 +1540,7 @@ test('core selective and full projection preserve relation history and explicit 
   assert.ok(h.state.spatial.unitsByTile.get(9).has(11));
   const mutations = [
     unit => ({ ...unit, allegiance: { side: 'ALLY' } }),
-    unit => ({ ...unit, targetable: { layer: 'AIR' } }),
+    unit => ({ ...unit, spatial: { layer: 'AIR' } }),
     unit => ({ ...unit, blockable: { weight: 3, enabled: true } }),
     unit => ({ ...unit, blockable: { weight: 1, enabled: false } }),
   ];
@@ -1494,7 +1549,10 @@ test('core selective and full projection preserve relation history and explicit 
     h.commit(state => [{ type: 'UPDATE_UNIT', unit: mutate(state.units.get(11)) }]);
     assert.deepEqual(h.state.blockingRelations, []);
   }
-  for (const blockerState of [{ capacity: 0, enabled: true }, { capacity: 2, enabled: false }]) {
+  for (const blockerState of [
+    { capacity: 0, geometry: blocker.blocker.geometry, enabled: true },
+    { capacity: 2, geometry: blocker.blocker.geometry, enabled: false },
+  ]) {
     h.commit([{ type: 'UPDATE_UNIT', unit: enemy }, { type: 'UPDATE_UNIT', unit: blocker },
       { type: 'SET_BLOCKING_RELATIONS', relations: blocking }]);
     h.commit(state => [{ type: 'UPDATE_UNIT', unit: { ...state.units.get(10), blocker: blockerState } }]);
@@ -1663,8 +1721,9 @@ test('core battlefield combines source restrictions and rebuilds navigation from
   assert.equal(runtime.navigationMaps.WALK.cells[2].passable, false);
   assert.equal(runtime.navigationMaps.WALK.cells[2].departures.UP, false);
   assert.equal(runtime.navigationMaps.WALK.cells[2].departures.RIGHT, false);
+  const sourceAtRemoval = runtime.getUnit(10);
   const removedSource = runtime.apply([{ type: 'REMOVE_UNIT', unitId: 10, reason: 'SCRIPT' }]);
-  assert.deepEqual(removedSource.removedUnits, [{ unitId: 10, reason: 'SCRIPT' }]);
+  assert.deepEqual(removedSource.removedUnits, [{ unitId: 10, reason: 'SCRIPT', unit: sourceAtRemoval }]);
   assert.deepEqual(removedSource.removedEffects, [3]);
   assert.equal(runtime.navigationMaps.WALK.cells[2].passable, true);
   assert.equal(runtime.navigationMaps.WALK.cells[2].departures.UP, true);
@@ -1758,8 +1817,9 @@ test('core battlefield keeps inactive effects, expires deadlines and cleans dist
   assert.deepEqual(runtime.apply([{ type: 'EXPIRE_EFFECTS', tick: 4 }]).removedEffects, []);
   assert.deepEqual(runtime.apply([{ type: 'EXPIRE_EFFECTS', tick: 5 }]).removedEffects, [1]);
   assert.equal(runtime.getEffect(1), undefined);
+  const anchorAtRemoval = runtime.getUnit(11);
   const removedAnchor = runtime.apply([{ type: 'REMOVE_UNIT', unitId: 11, reason: 'DEATH' }]);
-  assert.deepEqual(removedAnchor.removedUnits, [{ unitId: 11, reason: 'DEATH' }]);
+  assert.deepEqual(removedAnchor.removedUnits, [{ unitId: 11, reason: 'DEATH', unit: anchorAtRemoval }]);
   assert.deepEqual([...removedAnchor.removedEffects].sort(), [2, 3]);
   assert.equal(runtime.getUnit(10).id, 10);
   assert.deepEqual(runtime.effectsFrom({ type: 'UNIT', unitId: 10 }), []);
@@ -1767,11 +1827,12 @@ test('core battlefield keeps inactive effects, expires deadlines and cleans dist
   const fromSource = fixedNavigationEffect(4, { type: 'UNIT', unitId: 10 }, [0, 0], definition);
   const finalMechanism = fixedNavigationEffect(5, { type: 'MECHANISM', mechanismId: 1 }, [0, 4], definition);
   runtime.apply([{ type: 'ADD_EFFECT', effect: fromSource }, { type: 'ADD_EFFECT', effect: finalMechanism }]);
+  const unitAtRemoval = runtime.getUnit(10);
   const removed = runtime.apply([
     { type: 'REMOVE_UNIT', unitId: 10, reason: 'EXPIRED' },
     { type: 'REMOVE_MECHANISM', mechanismId: 1, reason: 'SCRIPT' },
   ]);
-  assert.deepEqual(removed.removedUnits, [{ unitId: 10, reason: 'EXPIRED' }]);
+  assert.deepEqual(removed.removedUnits, [{ unitId: 10, reason: 'EXPIRED', unit: unitAtRemoval }]);
   assert.deepEqual(removed.removedMechanisms, [{ mechanismId: 1, reason: 'SCRIPT' }]);
   assert.deepEqual([...removed.removedEffects].sort(), [4, 5]);
   assert.deepEqual(runtime.unitIds, []);

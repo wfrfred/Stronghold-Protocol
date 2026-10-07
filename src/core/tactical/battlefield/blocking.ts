@@ -2,11 +2,12 @@ import { World } from "../geometry/coordinate.js";
 import { areHostile } from "../unit/capability/allegiance.js";
 import { hasBlockable, hasBlocker } from "../unit/capability/blocking.js";
 import { isSpatiallyPresent } from "../unit/capability/presence.js";
-import { hasTargetable } from "../unit/capability/targetable.js";
+import { hasSpatial } from "../unit/capability/spatial.js";
 import { hasVitality } from "../unit/capability/vitality.js";
 import type { Unit, UnitId } from "../unit/unit.js";
 import { hasTileBindingDefinition } from "../unit/capability/deployment.js";
 import type { SupportRelation } from "./support.js";
+import { BattlefieldMap } from "./map.js";
 
 export interface BlockingRelation {
     readonly blockerUnitId: UnitId;
@@ -28,7 +29,18 @@ function isActive(unit: Unit): boolean {
     return isSpatiallyPresent(unit) && (!hasVitality(unit) || unit.vitality.hp > 0);
 }
 
+export function canBlockGround(unit: Unit, map: BattlefieldMap): boolean {
+    if (!hasBlocker(unit) || !unit.blocker.enabled || !isActive(unit)) {
+        return false;
+    }
+
+    const tile = BattlefieldMap.get(map, World.toTile(unit.position));
+
+    return tile?.passableMask === "ALL" || tile?.passableMask === "WALK_ONLY";
+}
+
 function canBlock(
+    map: BattlefieldMap,
     blocker: Unit,
     blocked: Unit,
     units: ReadonlyMap<UnitId, Unit>,
@@ -48,18 +60,17 @@ function canBlock(
     }
 
     return (
-        hasBlocker(blocker) &&
-        blocker.blocker.enabled &&
+        canBlockGround(blocker, map) &&
         hasBlockable(blocked) &&
         blocked.blockable.enabled &&
-        (!hasTargetable(blocked) || blocked.targetable.layer === "GROUND") &&
-        isActive(blocker) &&
+        (!hasSpatial(blocked) || blocked.spatial.layer === "GROUND") &&
         isActive(blocked) &&
         areHostile(blocker, blocked)
     );
 }
 
 export function reconcileBlockingRelations(
+    map: BattlefieldMap,
     units: ReadonlyMap<UnitId, Unit>,
     relations: readonly BlockingRelation[],
     supports: readonly SupportRelation[] = [],
@@ -77,7 +88,7 @@ export function reconcileBlockingRelations(
             blocked === undefined ||
             !hasBlocker(blocker) ||
             !hasBlockable(blocked) ||
-            !canBlock(blocker, blocked, units, supports) ||
+            !canBlock(map, blocker, blocked, units, supports) ||
             blockedIds.has(blocked.id)
         ) {
             continue;
@@ -120,11 +131,12 @@ export function blockingUsedCapacity(
 }
 
 export function acquireBlockingRelations(
+    map: BattlefieldMap,
     units: ReadonlyMap<UnitId, Unit>,
     previous: readonly BlockingRelation[],
     supports: readonly SupportRelation[] = [],
 ): readonly BlockingRelation[] {
-    const retained = reconcileBlockingRelations(units, previous, supports);
+    const retained = reconcileBlockingRelations(map, units, previous, supports);
     const blockedIds = new Set(retained.map((relation) => relation.blockedUnitId));
     const used = new Map<UnitId, number>();
     const additions: BlockingRelation[] = [];
@@ -145,16 +157,16 @@ export function acquireBlockingRelations(
 
         for (const blocker of blockers) {
             if (
-                !canBlock(blocker, blocked, units, supports) ||
+                !canBlock(map, blocker, blocked, units, supports) ||
                 (used.get(blocker.id) ?? 0) + blocked.blockable.weight > blocker.blocker.capacity
             ) {
                 continue;
             }
 
             const distance = World.distanceSquared(blocker.position, blocked.position);
-            const radius = blocker.definition.blocker.contactRadius;
+            const radius = blocker.blocker.geometry.radius;
 
-            if (distance < radius * radius && distance < nearestDistance) {
+            if (distance <= radius * radius && distance < nearestDistance) {
                 nearest = blocker;
                 nearestDistance = distance;
             }

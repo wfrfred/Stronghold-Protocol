@@ -2,12 +2,12 @@ import { BattleRuntime } from "../core/tactical/battle/runtime.js";
 import type { BattleSpec } from "../core/tactical/battle/spec.js";
 import { createBattlefieldMap, type BattlefieldMap } from "../core/tactical/battlefield/map.js";
 import { createTile } from "../core/tactical/battlefield/tile.js";
+import type { DamageType } from "../core/tactical/combat/effect.js";
 import { isTilePosition, Tile, type TilePosition } from "../core/tactical/geometry/coordinate.js";
 import type { Direction } from "../core/tactical/geometry/direction.js";
 import { RangeGrid } from "../core/tactical/geometry/range.js";
 import type { RouteDefinition } from "../core/tactical/route/definition.js";
 import { TICKS_PER_SECOND } from "../core/tactical/tick.js";
-import type { DamageType } from "../core/tactical/unit/capability/action.js";
 import { createCombatEnemyDefinition } from "../core/tactical/unit/enemy.js";
 import { createOperatorDefinition } from "../core/tactical/unit/operator.js";
 
@@ -28,6 +28,9 @@ interface LegacyCombatContent {
 
 export type LegacyCombatOptions = LegacyCombatContent &
     ({ readonly map: BattlefieldMap } | { readonly rows: number; readonly columns: number });
+
+const LEGACY_OPERATOR_HIT_RADIUS = 0.25;
+const LEGACY_ENEMY_HIT_RADIUS = 0.1;
 
 function record(value: unknown, name: string): Record<string, unknown> {
     if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -140,26 +143,56 @@ function operatorDefinition(value: unknown, direction: Direction) {
         id: stringField(definition.chessId, "chessId"),
         vitality: { maxHp: numberField(stats.maxHp, "maxHp") },
         allegiance: { side: "ALLY" },
-        targetable: { layer: "GROUND", enabled: true },
+        spatial: { layer: "GROUND" },
+        hit: {
+            geometry: {
+                shapes: [{ type: "CIRCLE", offset: [0, 0], radius: LEGACY_OPERATOR_HIT_RADIUS }],
+            },
+        },
+        status: { initialFlags: [] },
         defense: {
             defense: numberField(stats.def, "defense"),
             resistance: numberField(stats.res, "resistance"),
         },
         blocker: {
             capacity: numberField(stats.blockCnt, "block capacity"),
-            contactRadius: 0.70709997,
+            geometry: { radius: 0.70709997 },
         },
         action: {
-            attack: {
-                power: numberField(stats.atk, "attack"),
-                damageType: damageType(definition.dmgType),
+            normalAction: {
+                triggerBindingId: "primary",
                 intervalTicks: attackInterval(stats),
                 recoveryTicks: 0,
-                targeting: {
-                    range: { type: "GRID", offsets: attackRange(definition.rangeGrid), direction },
-                    canTargetAir,
-                    priority: "NEAREST",
-                },
+                targetGroups: [
+                    {
+                        id: "primary",
+                        targeting: {
+                            type: "DAMAGE",
+                            scope: {
+                                type: "RANGE",
+                                geometry: {
+                                    type: "GRID",
+                                    offsets: attackRange(definition.rangeGrid),
+                                    direction,
+                                },
+                            },
+                            canTargetAir,
+                            includeBlockingRelations: true,
+                            preferBlockingRelations: true,
+                            ignoreTargetFree: false,
+                            ignoreInvisible: false,
+                            maxTargets: 1,
+                        },
+                        effects: [
+                            {
+                                type: "DAMAGE",
+                                power: numberField(stats.atk, "attack"),
+                                damageType: damageType(definition.dmgType),
+                            },
+                        ],
+                    },
+                ],
+                followUps: [],
             },
         },
     });
@@ -190,23 +223,59 @@ function enemyDefinition(value: unknown) {
             steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 },
         },
         allegiance: { side: "ENEMY" },
-        targetable: { layer: motion === "FLY" ? "AIR" : "GROUND", enabled: true },
+        spatial: { layer: motion === "FLY" ? "AIR" : "GROUND" },
+        hit: {
+            geometry: {
+                shapes: [{ type: "CIRCLE", offset: [0, 0], radius: LEGACY_ENEMY_HIT_RADIUS }],
+            },
+        },
+        status: { initialFlags: [] },
         defense: {
             defense: numberField(stats.def, "defense"),
             resistance: numberField(stats.res, "resistance"),
         },
         blockable: { weight: numberField(stats.blockCnt, "block weight") },
         action: {
-            attack: {
-                power: numberField(stats.atk, "attack"),
-                damageType: damageType(stats.dmgType),
+            normalAction: {
+                triggerBindingId: "primary",
                 intervalTicks: attackInterval(stats),
                 recoveryTicks: applyWay === "RANGED" ? Math.ceil(0.35 * TICKS_PER_SECOND) : 0,
-                targeting: {
-                    range: applyWay === "MELEE" ? { type: "BLOCKER" } : { type: "RADIUS", radius },
-                    canTargetAir: true,
-                    priority: "NEAREST",
-                },
+                targetGroups: [
+                    {
+                        id: "primary",
+                        targeting: {
+                            type: "DAMAGE",
+                            scope:
+                                applyWay === "MELEE"
+                                    ? { type: "BLOCKER" }
+                                    : {
+                                          type: "RANGE",
+                                          geometry: {
+                                              type: "SHAPES",
+                                              geometry: {
+                                                  shapes: [
+                                                      { type: "CIRCLE", offset: [0, 0], radius },
+                                                  ],
+                                              },
+                                          },
+                                      },
+                            canTargetAir: true,
+                            includeBlockingRelations: true,
+                            preferBlockingRelations: true,
+                            ignoreTargetFree: false,
+                            ignoreInvisible: false,
+                            maxTargets: 1,
+                        },
+                        effects: [
+                            {
+                                type: "DAMAGE",
+                                power: numberField(stats.atk, "attack"),
+                                damageType: damageType(stats.dmgType),
+                            },
+                        ],
+                    },
+                ],
+                followUps: [],
             },
         },
     });

@@ -1,12 +1,14 @@
+import { createBlockGeometry, type BlockGeometry } from "../../geometry/shape.js";
 import type { Unit, UnitDefinition } from "../unit.js";
 
 export interface BlockerDefinition {
     readonly capacity: number;
-    readonly contactRadius: number;
+    readonly geometry: BlockGeometry;
 }
 
 export interface BlockerState {
     readonly capacity: number;
+    readonly geometry: BlockGeometry;
     readonly enabled: boolean;
 }
 
@@ -51,11 +53,11 @@ export function createBlockerDefinition(definition: BlockerDefinition): BlockerD
     if (!Number.isSafeInteger(definition.capacity) || definition.capacity < 0) {
         throw new RangeError("blocking capacity must be a nonnegative safe integer");
     }
-    if (!Number.isFinite(definition.contactRadius) || definition.contactRadius < 0) {
-        throw new RangeError("blocking contact radius must be finite and nonnegative");
-    }
 
-    return Object.freeze({ ...definition });
+    return Object.freeze({
+        capacity: definition.capacity,
+        geometry: createBlockGeometry(definition.geometry),
+    });
 }
 
 export function createBlockableDefinition(definition: BlockableDefinition): BlockableDefinition {
@@ -67,7 +69,7 @@ export function createBlockableDefinition(definition: BlockableDefinition): Bloc
 }
 
 export function copyBlockerState(state: BlockerState): BlockerState {
-    return { ...state };
+    return { ...state, geometry: createBlockGeometry(state.geometry) };
 }
 
 export function copyBlockableState(state: BlockableState): BlockableState {
@@ -75,7 +77,11 @@ export function copyBlockableState(state: BlockableState): BlockableState {
 }
 
 export function initializeBlockerState(definition: BlockerDefinition): BlockerState {
-    return { capacity: definition.capacity, enabled: true };
+    return {
+        capacity: definition.capacity,
+        geometry: createBlockGeometry(definition.geometry),
+        enabled: true,
+    };
 }
 
 export function initializeBlockableState(definition: BlockableDefinition): BlockableState {

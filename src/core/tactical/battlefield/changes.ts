@@ -108,7 +108,7 @@ export function applyBattlefieldChanges<U extends Unit>(
     let supportRelations = previous.supportRelations;
     const mechanisms = copyOnWriteMap(previous.mechanisms);
     const effects = copyOnWriteMap(previous.effects);
-    const removedUnits: { unitId: UnitId; reason: BattlefieldRemovalReason }[] = [];
+    const removedUnits: { unitId: UnitId; reason: BattlefieldRemovalReason; unit: U }[] = [];
     const removedMechanisms: { mechanismId: MechanismId; reason: BattlefieldRemovalReason }[] = [];
     const removedEffects = new Set<SpatialEffectId>();
     const updatedUnitIds = new Set<UnitId>();
@@ -169,12 +169,12 @@ export function applyBattlefieldChanges<U extends Unit>(
                 break;
             }
 
-            case "REMOVE_UNIT":
-                requireEntry(units.value, change.unitId, "unit");
+            case "REMOVE_UNIT": {
+                const unit = requireEntry(units.value, change.unitId, "unit");
                 units.edit().delete(change.unitId);
                 updatedUnitIds.add(change.unitId);
                 unitMembershipChanged = true;
-                removedUnits.push({ unitId: change.unitId, reason: change.reason });
+                removedUnits.push({ unitId: change.unitId, reason: change.reason, unit });
 
                 for (const effect of effects.value.values()) {
                     const ownedOrAnchoredByUnit =
@@ -188,6 +188,7 @@ export function applyBattlefieldChanges<U extends Unit>(
                 }
 
                 break;
+            }
 
             case "REGISTER_MECHANISM":
                 register(mechanisms.edit(), change.mechanism.id, change.mechanism, "mechanism");

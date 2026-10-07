@@ -1,103 +1,189 @@
 import type { BattlefieldView } from "../battlefield/contract.js";
 import { World } from "../geometry/coordinate.js";
-import { RangeGrid } from "../geometry/range.js";
-import type { TargetProfile } from "../unit/capability/action.js";
-import { areHostile, type Allegiance } from "../unit/capability/allegiance.js";
+import { rangeOverlapsHit } from "../geometry/intersection.js";
+import type { CompiledTargeting, TargetQueryContext } from "../targeting/query.js";
+import { areHostile, hasAllegiance } from "../unit/capability/allegiance.js";
 import { isSpatiallyPresent } from "../unit/capability/presence.js";
-import { hasTargetable, type Targetable } from "../unit/capability/targetable.js";
-import { hasVitality, type Vitality } from "../unit/capability/vitality.js";
-import type { Unit } from "../unit/unit.js";
-
-export type AttackTarget = Unit & Vitality & Targetable & Allegiance;
+import { hasHit, hasSpatial } from "../unit/capability/spatial.js";
+import { hasStatusFlag } from "../unit/capability/status.js";
+import { hasVitality, type VitalUnit } from "../unit/capability/vitality.js";
+import type { Unit, UnitId } from "../unit/unit.js";
+import type { QueryPurpose } from "./effect.js";
+import type {
+    DamageTargetingDefinition,
+    HealingTargetingDefinition,
+    TargetingDefinition,
+} from "./targeting-definition.js";
 
 export type CombatTargetingView = Pick<
     BattlefieldView,
     "unitIds" | "getUnit" | "blockerOf" | "blockedBy"
 >;
 
-export function canTargetUnit(
-    source: Unit,
-    target: Unit,
-    profile: TargetProfile,
-): target is AttackTarget {
+export interface CombatTargetQueryContext extends TargetQueryContext {
+    readonly source: Unit;
+    readonly battlefield: CombatTargetingView;
+}
+
+function isActiveVitalUnit(target: Unit): target is VitalUnit {
+    return hasVitality(target) && target.vitality.hp > 0 && isSpatiallyPresent(target);
+}
+
+function sameSide(source: Unit, target: Unit): boolean {
     return (
-        hasVitality(target) &&
-        target.vitality.hp > 0 &&
-        hasTargetable(target) &&
-        target.targetable.enabled &&
-        (target.targetable.layer === "GROUND" || profile.canTargetAir) &&
-        isSpatiallyPresent(target) &&
-        areHostile(source, target)
+        hasAllegiance(source) &&
+        hasAllegiance(target) &&
+        source.allegiance.side === target.allegiance.side
     );
 }
 
-export function selectAttackTarget(
-    source: Unit,
-    profile: TargetProfile,
-    battlefield: CombatTargetingView,
-): AttackTarget | null {
-    const blockerId = battlefield.blockerOf(source.id);
-    const blocking = new Set(battlefield.blockedBy(source.id));
+function blockingRelated(context: CombatTargetQueryContext, targetId: UnitId): boolean {
+    const { source, battlefield } = context;
 
-    if (blockerId !== undefined) {
-        blocking.add(blockerId);
+    return (
+        battlefield.blockerOf(source.id) === targetId ||
+        battlefield.blockedBy(source.id).includes(targetId)
+    );
+}
+
+function acceptsHostileStatus(target: Unit, definition: DamageTargetingDefinition): boolean {
+    if (hasStatusFlag(target, "CAMOUFLAGE")) {
+        return false;
+    }
+    if (definition.ignoreTargetFree) {
+        return true;
+    }
+    if (hasStatusFlag(target, "TARGET_FREE") || hasStatusFlag(target, "INVINCIBLE")) {
+        return false;
     }
 
-    const range = profile.range;
-    const rangeTiles =
-        range.type === "GRID"
-            ? RangeGrid.project(range.offsets, World.toTile(source.position), range.direction)
-            : [];
-    let selected: AttackTarget | null = null;
-    let selectedBlocked = false;
-    let selectedDistance = Infinity;
+    return definition.ignoreInvisible || !hasStatusFlag(target, "INVISIBLE");
+}
 
-    for (const id of battlefield.unitIds) {
-        const target = battlefield.getUnit(id)!;
+function compareDistance(context: CombatTargetQueryContext, left: Unit, right: Unit): number {
+    return (
+        World.distanceSquared(context.source.position, left.position) -
+        World.distanceSquared(context.source.position, right.position)
+    );
+}
 
-        if (!canTargetUnit(source, target, profile)) {
-            continue;
-        }
+export function compileDamageTargeting(
+    definition: DamageTargetingDefinition,
+    purposes: readonly QueryPurpose[],
+): CompiledTargeting<CombatTargetQueryContext> {
+    const requiresHealingEligibility = purposes.includes("HEAL");
 
-        const blocked = blocking.has(id);
-        let inRange: boolean;
+    return {
+        candidates: function* ({ source, battlefield }) {
+            if (definition.scope.type === "BLOCKER") {
+                const blockerId = battlefield.blockerOf(source.id);
 
-        switch (range.type) {
-            case "BLOCKER":
-                inRange = id === blockerId;
-                break;
-
-            case "RADIUS":
-                inRange =
-                    blocked || World.withinDistance(source.position, target.position, range.radius);
-                break;
-
-            case "GRID": {
-                const tile = World.toTile(target.position);
-                inRange =
-                    blocked || rangeTiles.some(([row, col]) => row === tile[0] && col === tile[1]);
-                break;
+                if (blockerId !== undefined) {
+                    yield blockerId;
+                }
+            } else {
+                yield* battlefield.unitIds;
             }
-        }
+        },
 
-        if (!inRange) {
-            continue;
-        }
+        accepts: (context, target) => {
+            if (
+                !isActiveVitalUnit(target) ||
+                !hasSpatial(target) ||
+                (target.spatial.layer === "AIR" && !definition.canTargetAir) ||
+                !areHostile(context.source, target) ||
+                (requiresHealingEligibility && hasStatusFlag(target, "HEAL_FREE"))
+            ) {
+                return false;
+            }
+            if (definition.scope.type === "BLOCKER") {
+                return context.battlefield.blockerOf(context.source.id) === target.id;
+            }
+            if (definition.includeBlockingRelations && blockingRelated(context, target.id)) {
+                return true;
+            }
 
-        const distance = World.distanceSquared(source.position, target.position);
-        const preferred =
-            selected === null ||
-            (blocked && !selectedBlocked) ||
-            (blocked === selectedBlocked &&
-                (distance < selectedDistance ||
-                    (distance === selectedDistance && id < selected.id)));
+            return (
+                acceptsHostileStatus(target, definition) &&
+                hasHit(target) &&
+                rangeOverlapsHit(
+                    definition.scope.geometry,
+                    context.source.position,
+                    target.position,
+                    target.hit.geometry,
+                )
+            );
+        },
 
-        if (preferred) {
-            selected = target;
-            selectedBlocked = blocked;
-            selectedDistance = distance;
-        }
+        compare: (context, left, right) => {
+            if (definition.preferBlockingRelations) {
+                const order =
+                    Number(blockingRelated(context, right.id)) -
+                    Number(blockingRelated(context, left.id));
+
+                if (order !== 0) {
+                    return order;
+                }
+            }
+
+            return compareDistance(context, left, right);
+        },
+
+        limit: () => definition.maxTargets,
+    };
+}
+
+export function compileHealingTargeting(
+    definition: HealingTargetingDefinition,
+    purposes: readonly QueryPurpose[],
+): CompiledTargeting<CombatTargetQueryContext> {
+    const requiresHealingEligibility = purposes.includes("HEAL");
+
+    return {
+        candidates: ({ battlefield }) => battlefield.unitIds,
+
+        accepts: (context, target) =>
+            isActiveVitalUnit(target) &&
+            hasSpatial(target) &&
+            hasHit(target) &&
+            (definition.includeSelf || target.id !== context.source.id) &&
+            sameSide(context.source, target) &&
+            target.vitality.hp < target.definition.vitality.maxHp &&
+            (definition.ignoreAllyTargetFree || !hasStatusFlag(target, "ALLY_TARGET_FREE")) &&
+            (!requiresHealingEligibility ||
+                definition.ignoreHealFree ||
+                !hasStatusFlag(target, "HEAL_FREE")) &&
+            rangeOverlapsHit(
+                definition.geometry,
+                context.source.position,
+                target.position,
+                target.hit.geometry,
+            ),
+
+        compare: (_context, left, right) => {
+            if (!hasVitality(left) || !hasVitality(right)) {
+                return 0;
+            }
+
+            return (
+                left.vitality.hp / left.definition.vitality.maxHp -
+                right.vitality.hp / right.definition.vitality.maxHp
+            );
+        },
+
+        limit: () => definition.maxTargets,
+    };
+}
+
+export function compileTargeting(
+    definition: TargetingDefinition,
+    purposes: readonly QueryPurpose[],
+): CompiledTargeting<CombatTargetQueryContext> {
+    switch (definition.type) {
+        case "DAMAGE":
+            return compileDamageTargeting(definition, purposes);
+
+        case "HEAL":
+            return compileHealingTargeting(definition, purposes);
     }
-
-    return selected;
 }

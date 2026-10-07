@@ -223,17 +223,31 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
         }
     }
 
-    apply(changes: readonly BattlefieldChange<U>[]): BattlefieldChangeResult {
+    apply(changes: readonly BattlefieldChange<U>[]): BattlefieldChangeResult<U> {
         const owned = ownBattlefieldChanges(changes, this.#resources.copyUnit);
-        const committed = this.commit(owned);
-
-        return {
-            ...committed,
-            lostSupports: committed.lostSupports.map((relation) => ({ ...relation })),
+        const prepared = this.#prepare(owned);
+        const result: BattlefieldChangeResult<U> = {
+            ...prepared.facts,
+            removedUnits: prepared.facts.removedUnits.map((removed) => ({
+                ...removed,
+                unit: this.#resources.copyUnit(removed.unit),
+            })),
+            lostSupports: prepared.facts.lostSupports.map((relation) => ({ ...relation })),
         };
+
+        this.#state = prepared.state;
+
+        return result;
     }
 
-    commit(changes: readonly BattlefieldChange<U>[]): BattlefieldChangeResult {
+    commit(changes: readonly BattlefieldChange<U>[]): BattlefieldChangeResult<U> {
+        const prepared = this.#prepare(changes);
+        this.#state = prepared.state;
+
+        return prepared.facts;
+    }
+
+    #prepare(changes: readonly BattlefieldChange<U>[]) {
         const applied = applyBattlefieldChanges(this.#state, changes);
         const settled = settleBattlefieldState(
             this.map,
@@ -243,9 +257,7 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
             applied.dependencies,
         );
 
-        this.#state = settled.state;
-
-        return { ...applied.facts, ...settled.facts };
+        return { state: settled.state, facts: { ...applied.facts, ...settled.facts } };
     }
 }
 

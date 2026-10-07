@@ -74,10 +74,9 @@ describe('TacticalDemoPresentation', () => {
     })),
   });
   const step = (runtime, presentation) => {
-    const before = runtime.snapshot();
     const result = runtime.step();
     const after = runtime.snapshot();
-    return { snapshot: after, visual: presentation.advance(before, after, result.events) };
+    return { snapshot: after, visual: presentation.advance(after, result.events) };
   };
 
   test('projects real core combat metadata, flags and death poses for a bounded window', () => {
@@ -117,6 +116,45 @@ describe('TacticalDemoPresentation', () => {
     assert.ok(presentation.units(runtime.snapshot()).some(unit => unit.info.id === 1));
     step(runtime, presentation);
     assert.equal(presentation.units(runtime.snapshot()).some(unit => unit.info.id === 1), false);
+  });
+
+  test('an enemy killed on its spawn tick is counted and presented at its resolved spawn position', () => {
+    const createBattle = () => createLegacyCombatBattle({
+      rows: 1, columns: 5, maxTicks: 100,
+      operators: [{ definition: chessRec({
+        id: 'chess_char_1_12_a', profession: 'WARRIOR', skill: null, rangeGrid: [[0, 0]],
+        stats: { maxHp: 100, atk: 10, def: 0, blockCnt: 1, bat: 0.1 },
+      }), position: [0, 1] }],
+      enemies: [0, 60].map(tick => ({
+        definition: enemyRec({ key: 'enemy_1000_gopro', hp: 7, atk: 10000, speed: 0 }), tick,
+        route: createRouteDefinition({ ...route, startPosition: [0, 2],
+          spawnOffset: [-0.8, 0], spawnRandomRange: [0.1, 0.1] }),
+      })),
+    });
+    const presentation = new TacticalDemoPresentation(data);
+    const run = () => {
+      const runtime = createBattle();
+      assert.deepEqual(runtime.snapshot().units.map(unit => unit.id), [0]);
+      const killed = step(runtime, presentation);
+      assert.deepEqual(killed.snapshot.units.map(unit => unit.id), [0]);
+      assert.deepEqual(presentation.stats(), { killedCount: 1, attackCount: 1, damageCount: 1 });
+      assert.deepEqual(killed.visual, [['atk', 0, 1, 'none'], ['dmg', 1, 7, 'phys'], ['die', 1, 'killed']]);
+      const corpse = presentation.units(killed.snapshot).find(unit => unit.info.id === 1);
+      assert.equal(corpse.info.name, enemies.enemy_1000_gopro_2.name);
+      assert.equal(corpse.info.kind, 'enemy');
+      assert.equal(corpse.info.spine, 'enemy_1000_gopro_2');
+      assert.ok(corpse.info.x >= 1.1 && corpse.info.x <= 1.3);
+      assert.ok(Math.abs(corpse.info.y) <= 0.1);
+      assert.deepEqual(corpse.tuple, [1, corpse.info.x, corpse.info.y, 0, 7, 0, 0, 0, 4]);
+      while (runtime.snapshot().tickIndex < 24) step(runtime, presentation);
+      assert.ok(presentation.units(runtime.snapshot()).some(unit => unit.info.id === 1));
+      step(runtime, presentation);
+      assert.equal(presentation.units(runtime.snapshot()).some(unit => unit.info.id === 1), false);
+      return { killed, corpse, stats: presentation.stats() };
+    };
+    const first = run();
+    presentation.reset();
+    assert.deepEqual(run(), first);
   });
 
   test('resetting and replaying core frames reproduces visuals and counts without replaying damage', () => {
@@ -161,10 +199,25 @@ describe('TacticalDemoPresentation', () => {
     assert.deepEqual(leaks, [['leak', 0]]);
     assert.deepEqual(presentation.stats(), { killedCount: 0, attackCount: 0, damageCount: 0 });
     assert.deepEqual(presentation.units(runtime.snapshot()), []);
-    const removed = presentation.advance(runtime.snapshot(), runtime.snapshot(), [
-      { type: 'UNIT_REMOVED', unitId: 99, reason: 'SCRIPT', tick: 10 },
+    const removed = presentation.advance(runtime.snapshot(), [
+      { type: 'UNIT_REMOVED', unitId: 99, reason: 'SCRIPT', tick: 10,
+        unit: { id: 99, definition: { id: 'scripted' }, position: [0, 0] } },
     ]);
     assert.deepEqual(removed, []);
+  });
+
+  test('healing actions retain their animation and emit a separate healing visual', () => {
+    const runtime = battle();
+    const presentation = new TacticalDemoPresentation(data);
+    const snapshot = runtime.snapshot();
+    const visual = presentation.advance(snapshot, [
+      { type: 'ACTION', sourceUnitId: 0, targetUnitId: 0, tick: 0 },
+      { type: 'HEAL', sourceUnitId: 0, targetUnitId: 0, amount: 12.6, hp: 90, tick: 0 },
+    ]);
+
+    assert.deepEqual(visual, [['atk', 0, 0, 'none'], ['heal', 0, 13]]);
+    assert.deepEqual(presentation.stats(), { killedCount: 0, attackCount: 1, damageCount: 0 });
+    assert.deepEqual(presentation.replayEvents(snapshot), [['atk', 0, 0, 'none']]);
   });
 });
 

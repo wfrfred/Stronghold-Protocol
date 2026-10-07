@@ -10,7 +10,13 @@ import {
 import { copyLocomotionState, initializeLocomotionState } from "./locomotion/state.js";
 import { copySpatialPresenceState } from "./presence.js";
 import { copyOccupancyState } from "./occupancy.js";
-import { copyTargetableState, initializeTargetableState } from "./targetable.js";
+import {
+    copyHitState,
+    copySpatialState,
+    initializeHitState,
+    initializeSpatialState,
+} from "./spatial.js";
+import { copyStatusState, initializeStatusState } from "./status.js";
 import { copyVitalityState, initializeVitalityState } from "./vitality.js";
 
 export interface CapabilityInitializationContext {
@@ -28,7 +34,9 @@ export const configuredCapabilities = Object.freeze({
     vitality: configuredCapability(initializeVitalityState, copyVitalityState),
     action: configuredCapability(initializeActionState, copyActionState),
     allegiance: configuredCapability(initializeAllegianceState, copyAllegianceState),
-    targetable: configuredCapability(initializeTargetableState, copyTargetableState),
+    spatial: configuredCapability(initializeSpatialState, copySpatialState),
+    hit: configuredCapability(initializeHitState, copyHitState),
+    status: configuredCapability(initializeStatusState, copyStatusState),
     blocker: configuredCapability(initializeBlockerState, copyBlockerState),
     blockable: configuredCapability(initializeBlockableState, copyBlockableState),
     locomotion: configuredCapability(initializeLocomotionState, copyLocomotionState),

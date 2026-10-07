@@ -60,11 +60,12 @@ export type BattlefieldChange<U extends Unit = Unit> =
     | { readonly type: "REMOVE_EFFECT"; readonly effectId: SpatialEffectId }
     | { readonly type: "EXPIRE_EFFECTS"; readonly tick: number };
 
-export interface BattlefieldChangeResult {
+export interface BattlefieldChangeResult<U extends Unit = Unit> {
     readonly changedNavigationModes: readonly PathMotionMode[];
     readonly removedUnits: readonly {
         readonly unitId: UnitId;
         readonly reason: BattlefieldRemovalReason;
+        readonly unit: U;
     }[];
     readonly removedMechanisms: readonly {
         readonly mechanismId: MechanismId;
@@ -106,5 +107,5 @@ export interface Battlefield<U extends Unit = Unit> extends BattlefieldView<U> {
     effectsFollowing(unitId: UnitId): readonly SpatialEffectId[];
     fork(): Battlefield<U>;
     transact<T>(operation: (battlefield: Battlefield<U>) => T): T;
-    apply(changes: readonly BattlefieldChange<U>[]): BattlefieldChangeResult;
+    apply(changes: readonly BattlefieldChange<U>[]): BattlefieldChangeResult<U>;
 }

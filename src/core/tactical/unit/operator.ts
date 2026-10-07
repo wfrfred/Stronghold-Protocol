@@ -1,8 +1,17 @@
-import { createActionDefinition, type ActingUnitDefinition } from "./capability/action.js";
+import {
+    createActionCapabilityDefinition,
+    type ActingUnitDefinition,
+} from "./capability/action.js";
 import { createAllegianceState, type AllegiantUnitDefinition } from "./capability/allegiance.js";
 import { createBlockerDefinition, type BlockingUnitDefinition } from "./capability/blocking.js";
 import { createDefenseDefinition, type DefendedUnitDefinition } from "./capability/defense.js";
-import { createTargetableState, type TargetableUnitDefinition } from "./capability/targetable.js";
+import {
+    createHitDefinition,
+    createSpatialDefinition,
+    type HitUnitDefinition,
+    type SpatialUnitDefinition,
+} from "./capability/spatial.js";
+import { createStatusDefinition, type StatusUnitDefinition } from "./capability/status.js";
 import type { VitalUnitDefinition } from "./capability/vitality.js";
 import { initializeUnit, type InitializedUnit, type UnitInitialization } from "./initialize.js";
 
@@ -11,7 +20,9 @@ export interface OperatorDefinition
         VitalUnitDefinition,
         ActingUnitDefinition,
         AllegiantUnitDefinition,
-        TargetableUnitDefinition,
+        SpatialUnitDefinition,
+        HitUnitDefinition,
+        StatusUnitDefinition,
         DefendedUnitDefinition,
         BlockingUnitDefinition {}
 
@@ -33,9 +44,11 @@ export function createOperatorDefinition(definition: OperatorDefinition): Operat
     return Object.freeze({
         id,
         vitality: Object.freeze({ maxHp: definition.vitality.maxHp }),
-        action: createActionDefinition(definition.action),
+        action: createActionCapabilityDefinition(definition.action),
         allegiance: createAllegianceState(definition.allegiance),
-        targetable: createTargetableState(definition.targetable),
+        spatial: createSpatialDefinition(definition.spatial),
+        hit: createHitDefinition(definition.hit),
+        status: createStatusDefinition(definition.status),
         defense: createDefenseDefinition(definition.defense),
         blocker: createBlockerDefinition(definition.blocker),
     });

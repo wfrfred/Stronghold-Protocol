@@ -19,10 +19,14 @@ import { hasSpatialPresence, isSpatiallyPresent } from '../../dist/core/tactical
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { copyUnitSnapshot } from '../../dist/core/tactical/unit/snapshot.js';
 import { hasVitality } from '../../dist/core/tactical/unit/capability/vitality.js';
-import { createActionDefinition, hasAction } from '../../dist/core/tactical/unit/capability/action.js';
+import { createActionCapabilityDefinition, hasAction } from '../../dist/core/tactical/unit/capability/action.js';
 import { hasAllegiance } from '../../dist/core/tactical/unit/capability/allegiance.js';
-import { hasBlockable, hasBlocker } from '../../dist/core/tactical/unit/capability/blocking.js';
-import { hasTargetable } from '../../dist/core/tactical/unit/capability/targetable.js';
+import { createBlockerDefinition, hasBlockable, hasBlocker } from '../../dist/core/tactical/unit/capability/blocking.js';
+import { createHitDefinition, createSpatialDefinition, hasHit, hasSpatial } from '../../dist/core/tactical/unit/capability/spatial.js';
+import { addStatusContribution, copyStatusState, createStatusDefinition, deriveEffectiveStatusFlags, hasStatus, initializeStatusState, removeStatusContribution } from '../../dist/core/tactical/unit/capability/status.js';
+import { createBlockGeometry, createRangeGeometry, createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
+import { geometryContainsPosition, rangeContainsPosition, rangeOverlapsHit } from '../../dist/core/tactical/geometry/intersection.js';
+import { acquireBlockingRelations } from '../../dist/core/tactical/battlefield/blocking.js';
 import { createLocomotionState, createRoutedLocomotionState, hasLocomotion, hasRoutedLocomotion } from '../../dist/core/tactical/unit/capability/locomotion/state.js';
 import { createRouteDefinition } from '../../dist/core/tactical/route/definition.js';
 import { createRouteState, createRouteTiming } from '../../dist/core/tactical/route/state.js';
@@ -277,6 +281,53 @@ test('core spatial presence keeps unit identity and isolates state while removin
   assert.deepEqual(runtime.unitsAt([0, 2]).map(unit => unit.id), [1, 2]);
 });
 
+test('core removal facts retain the latest unit and isolate it from retained battlefield forks', () => {
+  const runtime = presenceBattlefield();
+  const unit = presenceUnit(1, [2, 0]);
+  runtime.apply([{ type: 'REGISTER_UNIT', unit }]);
+  const fork = runtime.fork();
+  const updated = { ...runtime.getUnit(1), position: [3, 0], vitality: { hp: 20 } };
+  const removed = runtime.apply([
+    { type: 'UPDATE_UNIT', unit: updated },
+    { type: 'REMOVE_UNIT', unitId: 1, reason: 'DEATH' },
+  ]);
+  assert.deepEqual(removed.removedUnits, [{ unitId: 1, reason: 'DEATH', unit: {
+    ...updated, position: Object.freeze([3, 0]),
+  } }]);
+  assert.equal(removed.removedUnits[0].unit.definition, unit.definition);
+  assert.deepEqual(runtime.unitIds, []);
+  const retained = fork.fork();
+  const old = fork.apply([{ type: 'REMOVE_UNIT', unitId: 1, reason: 'SCRIPT' }]);
+  assert.deepEqual(old.removedUnits[0].unit, unit);
+  old.removedUnits[0].unit.vitality.hp = 0;
+  old.removedUnits[0].unit.spatialPresence.present = false;
+  assert.deepEqual(retained.getUnit(1), unit);
+  assert.equal(unit.vitality.hp, 100);
+  assert.equal(unit.spatialPresence.present, true);
+  assert.equal(removed.removedUnits[0].unit.vitality.hp, 20);
+});
+
+test('core failure to copy a public removal fact leaves battlefield state unpublished', () => {
+  let rejectCopy = false;
+  const runtime = createBattlefieldRuntime({ map: presenceBattlefield().map }, unit => {
+    if (rejectCopy) {
+      throw new Error('removal snapshot rejected');
+    }
+    return copyUnitSnapshot(unit);
+  });
+  runtime.apply([{ type: 'REGISTER_UNIT', unit: presenceUnit(1, [2, 0]) }]);
+  const unit = runtime.getUnit(1);
+  const maps = runtime.navigationMaps;
+  rejectCopy = true;
+  assert.throws(() => runtime.apply([{ type: 'REMOVE_UNIT', unitId: 1, reason: 'SCRIPT' }]),
+    /removal snapshot rejected/);
+  rejectCopy = false;
+  assert.deepEqual(runtime.unitIds, [1]);
+  assert.deepEqual(runtime.getUnit(1), unit);
+  assert.deepEqual(runtime.unitsAt([0, 2]), [unit]);
+  assert.equal(runtime.navigationMaps, maps);
+});
+
 test('core hidden effect sources and anchors suspend navigation contributions without removing effects', () => {
   const runtime = presenceBattlefield();
   const source = presenceUnit(1, [0, 0]), anchor = presenceUnit(2, [2, 0]);
@@ -359,12 +410,21 @@ const catalogDefinition = () => Object.freeze({
     steeringParameters: Object.freeze({ steeringFactor: 1, maxSteeringForce: 100 }),
   }),
   allegiance: Object.freeze({ side: 'ALLY' }),
-  action: createActionDefinition({ attack: {
-    power: 10, damageType: 'PHYSICAL', intervalTicks: 3, recoveryTicks: 0,
-    targeting: { range: { type: 'RADIUS', radius: 1 }, canTargetAir: false, priority: 'NEAREST' },
+  action: createActionCapabilityDefinition({ normalAction: {
+    triggerBindingId: 'primary',
+    intervalTicks: 3, recoveryTicks: 0, followUps: [],
+    targetGroups: [{ id: 'primary',
+      effects: [{ type: 'DAMAGE', power: 10, damageType: 'PHYSICAL' }],
+      targeting: { type: 'DAMAGE', scope: { type: 'RANGE', geometry: {
+        type: 'SHAPES', geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 1 }] },
+      } }, canTargetAir: false, includeBlockingRelations: false, preferBlockingRelations: false,
+        ignoreTargetFree: false, ignoreInvisible: false, maxTargets: 1 },
+    }],
   } }),
-  targetable: Object.freeze({ layer: 'GROUND', enabled: true }),
-  blocker: Object.freeze({ capacity: 2, contactRadius: 0.7 }),
+  spatial: createSpatialDefinition({ layer: 'GROUND' }),
+  hit: createHitDefinition({ geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.25 }] } }),
+  status: createStatusDefinition({ initialFlags: ['HEAL_FREE'] }),
+  blocker: createBlockerDefinition({ capacity: 2, geometry: { radius: 0.7 } }),
   blockable: Object.freeze({ weight: 1 }),
   defense: Object.freeze({ defense: 20, resistance: 10 }),
 });
@@ -401,7 +461,7 @@ test('core unit initialization uses prepared states and separates configuration 
   assert.equal(unit.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 9);
   assert.equal(unit.spatialPresence.present, false);
   assert.equal(Object.hasOwn(unit, 'defense'), false);
-  assert.deepEqual(unit.blocker, { capacity: 2, enabled: true });
+  assert.deepEqual(unit.blocker, { capacity: 2, geometry: { radius: 0.7 }, enabled: true });
   assert.deepEqual(unit.blockable, { weight: 1, enabled: true });
 
   vitality.hp = 0;
@@ -425,7 +485,7 @@ test('core capability guards and default snapshots reject unmatched or unregiste
     states: { locomotion: catalogRoutedState() } });
   for (const [key, guard] of [
     ['vitality', hasVitality], ['locomotion', hasLocomotion], ['allegiance', hasAllegiance],
-    ['action', hasAction], ['targetable', hasTargetable], ['blocker', hasBlocker],
+    ['action', hasAction], ['spatial', hasSpatial], ['hit', hasHit], ['status', hasStatus], ['blocker', hasBlocker],
     ['blockable', hasBlockable],
   ]) {
     const missingState = { ...unit };
@@ -473,8 +533,14 @@ test('core snapshots isolate capability state and both routed contexts while sha
   snapshot.vitality.hp = 0;
   snapshot.allegiance.side = 'ENEMY';
   snapshot.action.targetUnitId = 7;
-  snapshot.targetable.enabled = false;
+  assert.equal(snapshot.hit.geometry, unit.hit.geometry);
+  assert.equal(snapshot.blocker.geometry, unit.blocker.geometry);
+  assert.equal(snapshot.status.contributions, unit.status.contributions);
+  snapshot.spatial.layer = 'AIR';
+  snapshot.hit.geometry = createShapeGeometry({ shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 2 }] });
+  snapshot.status.contributions = [];
   snapshot.blocker.capacity = 0;
+  snapshot.blocker.geometry = createBlockGeometry({ radius: 2 });
   snapshot.blockable.weight = 2;
   snapshot.spatialPresence.present = false;
   snapshot.locomotion.moving = true;
@@ -492,8 +558,11 @@ test('core snapshots isolate capability state and both routed contexts while sha
   assert.equal(unit.vitality.hp, 100);
   assert.equal(unit.allegiance.side, 'ALLY');
   assert.equal(unit.action.targetUnitId, null);
-  assert.equal(unit.targetable.enabled, true);
+  assert.equal(unit.spatial.layer, 'GROUND');
+  assert.equal(unit.hit.geometry.shapes[0].radius, 0.25);
+  assert.deepEqual([...deriveEffectiveStatusFlags(unit.status)], ['HEAL_FREE']);
   assert.equal(unit.blocker.capacity, 2);
+  assert.equal(unit.blocker.geometry.radius, 0.7);
   assert.equal(unit.blockable.weight, 1);
   assert.equal(unit.spatialPresence.present, true);
   assert.equal(unit.locomotion.moving, false);
@@ -504,6 +573,122 @@ test('core snapshots isolate capability state and both routed contexts while sha
     assert.deepEqual(control.navigation.execution.locatorOffset, [0, 0]);
     assert.equal(control.navigation.execution.activity.type, 'IDLE');
   }
+});
+
+test('core geometry boundaries own shape values and share them across snapshots', () => {
+  const circle = { type: 'CIRCLE', offset: [0.25, 0], radius: 0.125 };
+  const box = { type: 'BOX', offset: [0, 1], halfExtents: [0.5, 0.25] };
+  const geometry = createShapeGeometry({ shapes: [circle, box] });
+  circle.radius = 10;
+  circle.offset[0] = 10;
+  box.halfExtents[0] = 10;
+  assert.deepEqual(geometry.shapes, [
+    { type: 'CIRCLE', offset: [0.25, 0], radius: 0.125 },
+    { type: 'BOX', offset: [0, 1], halfExtents: [0.5, 0.25] },
+  ]);
+  assert.equal(createShapeGeometry(geometry), geometry);
+  assert.equal(Object.isFrozen(geometry.shapes), true);
+  assert.equal(Object.isFrozen(geometry.shapes[0].offset), true);
+  assert.equal(Object.isFrozen(geometry.shapes[1].halfExtents), true);
+  assert.throws(() => createShapeGeometry({ shapes: Array(1) }), /dense/);
+  assert.throws(() => createShapeGeometry({ shapes: [] }), /at least one/);
+  assert.throws(() => createBlockGeometry({ radius: -1 }), /nonnegative/);
+
+  const definition = Object.freeze({ id: 'shared_geometry', hit: createHitDefinition({ geometry }) });
+  const first = initializeUnit({ id: 1, definition, position: [0, 0] });
+  const second = initializeUnit({ id: 2, definition, position: [1, 0] });
+  const snapshot = copyUnitSnapshot(first);
+  assert.equal(snapshot.hit.geometry, geometry);
+  assert.equal(second.hit.geometry, geometry);
+  assert.notEqual(first.hit, second.hit);
+  assert.notEqual(snapshot.hit, first.hit);
+});
+
+test('core range geometry includes tangent contacts and excludes circle-box corner gaps', () => {
+  const shapes = shape => createShapeGeometry({ shapes: [shape] });
+  const circle = radius => shapes({ type: 'CIRCLE', offset: [0, 0], radius });
+  const box = (halfWidth, halfHeight) => shapes({ type: 'BOX', offset: [0, 0], halfExtents: [halfWidth, halfHeight] });
+  const range = geometry => createRangeGeometry({ type: 'SHAPES', geometry });
+  assert.equal(rangeOverlapsHit(range(circle(1)), [0, 0], [1.25, 0], circle(0.25)), true);
+  assert.equal(rangeOverlapsHit(range(circle(1)), [0, 0], [1.251, 0], circle(0.25)), false);
+  assert.equal(rangeOverlapsHit(range(box(0.5, 0.5)), [0, 0], [0.875, 1], circle(0.625)), true);
+  assert.equal(rangeOverlapsHit(range(box(0.5, 0.5)), [0, 0], [1, 1], circle(0.625)), false);
+  assert.equal(rangeOverlapsHit(range(circle(0.625)), [1, 1], [0, 0], box(0.5, 0.5)), false);
+  assert.equal(rangeOverlapsHit(range(box(0.5, 0.5)), [0, 0], [0.75, 0.75], box(0.25, 0.25)), true);
+  assert.equal(rangeOverlapsHit(range(box(0.5, 0.5)), [0, 0], [0.751, 0.75], box(0.25, 0.25)), false);
+  assert.equal(rangeOverlapsHit(range(circle(1)), [0, 0], [4, 0], shapes({
+    type: 'CIRCLE', offset: [-3, 0], radius: 0.125,
+  })), true);
+  assert.equal(geometryContainsPosition(shapes({ type: 'CIRCLE', offset: [0.5, -0.5], radius: 1 }),
+    [2, 3], [3.5, 2.5]), true);
+  assert.equal(geometryContainsPosition(box(0.5, 0.5), [2, 3], [2.5, 3.5]), true);
+});
+
+test('core grid ranges rotate all four directions around continuous source positions', () => {
+  const source = [0.25, 0.25];
+  const hit = createShapeGeometry({ shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.125 }] });
+  for (const [direction, axis] of [['RIGHT', [1, 0]], ['UP', [0, 1]], ['LEFT', [-1, 0]], ['DOWN', [0, -1]]]) {
+    const range = createRangeGeometry({ type: 'GRID', offsets: [[0, 1], [0, 3]], direction });
+    const at = distance => source.map((value, index) => value + axis[index] * distance);
+    assert.equal(rangeOverlapsHit(range, source, at(1.625), hit), true, `${direction}: tangent`);
+    assert.equal(rangeOverlapsHit(range, source, at(1.626), hit), false, `${direction}: beyond edge`);
+    assert.equal(rangeOverlapsHit(range, source, at(2), hit), false, `${direction}: gap in union`);
+    assert.equal(rangeContainsPosition(range, source, at(3)), true, `${direction}: second box`);
+  }
+  const originCell = createRangeGeometry({ type: 'GRID', offsets: [[0, 0]], direction: 'RIGHT' });
+  assert.equal(rangeOverlapsHit(originCell, source, [0.875, 0.25], hit), true);
+  assert.equal(rangeOverlapsHit(originCell, [0, 0], [0.875, 0.25], hit), false);
+  assert.equal(rangeContainsPosition(originCell, source, [0.75, 0.25]), true);
+  assert.equal(rangeContainsPosition(originCell, [0, 0], [0.75, 0.25]), false);
+});
+
+test('core status contributions retain overlapping flags and isolate sources and unit snapshots', () => {
+  const initialFlags = ['INVINCIBLE'];
+  const definition = createStatusDefinition({ initialFlags });
+  initialFlags.push('HEAL_FREE');
+  let state = initializeStatusState(definition);
+  const baseline = state.contributions[0];
+  const flags = ['HEAL_FREE'];
+  state = addStatusContribution(state, { id: 'source-a', flags });
+  flags.push('INVISIBLE');
+  state = addStatusContribution(state, { id: 'source-b', flags: ['HEAL_FREE'] });
+  assert.equal(state.contributions[0], baseline);
+  assert.equal(deriveEffectiveStatusFlags(state).has('INVISIBLE'), false);
+  assert.throws(() => addStatusContribution(state, { id: 'source-a', flags: [] }), /duplicate/);
+  const copy = copyStatusState(state);
+  assert.notEqual(copy, state);
+  assert.equal(copy.contributions, state.contributions);
+  copy.contributions = [];
+  assert.equal(deriveEffectiveStatusFlags(state).has('HEAL_FREE'), true);
+  state = removeStatusContribution(state, 'source-a');
+  assert.equal(deriveEffectiveStatusFlags(state).has('HEAL_FREE'), true);
+  state = removeStatusContribution(state, 'source-b');
+  assert.deepEqual([...deriveEffectiveStatusFlags(state)], ['INVINCIBLE']);
+  assert.throws(() => removeStatusContribution(state, baseline.id), /cannot be removed/);
+
+  const unitDefinition = Object.freeze({ id: 'shared_status_definition', status: definition });
+  const first = initializeUnit({ id: 1, definition: unitDefinition, position: [0, 0] });
+  const second = initializeUnit({ id: 2, definition: unitDefinition, position: [0, 0] });
+  first.status = addStatusContribution(first.status, { id: 'source-a', flags: ['HEAL_FREE'] });
+  assert.equal(deriveEffectiveStatusFlags(second.status).has('HEAL_FREE'), false);
+  assert.equal(deriveEffectiveStatusFlags(first.status).has('HEAL_FREE'), true);
+});
+
+test('core blocking uses current state radius and includes center-distance equality', () => {
+  const map = createBattlefieldMap(1, 3, Array.from({ length: 3 }, () => deploymentTile()));
+  const blocker = initializeUnit({ id: 1, definition: Object.freeze({ id: 'radius_blocker',
+    allegiance: { side: 'ALLY' }, blocker: createBlockerDefinition({ capacity: 1, geometry: { radius: 0.5 } }),
+  }), position: [0, 0] });
+  const blocked = initializeUnit({ id: 2, definition: Object.freeze({ id: 'radius_enemy',
+    allegiance: { side: 'ENEMY' }, blockable: { weight: 1 }, spatial: { layer: 'GROUND' },
+    hit: createHitDefinition({ geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 10 }] } }),
+  }), position: [1, 0] });
+  const acquire = current => acquireBlockingRelations(map, new Map([[1, current], [2, blocked]]), []);
+  assert.deepEqual(acquire(blocker), []);
+  const enlarged = { ...blocker, blocker: { ...blocker.blocker, geometry: createBlockGeometry({ radius: 1 }) } };
+  assert.deepEqual(acquire(enlarged), [{ blockerUnitId: 1, blockedUnitId: 2 }]);
+  assert.deepEqual(acquire({ ...enlarged, blocker: { ...enlarged.blocker, geometry: createBlockGeometry({ radius: 0.999 }) } }), []);
+  assert.equal(enlarged.definition.blocker.geometry.radius, 0.5);
 });
 
 test('core external unit updates preserve capability configuration and fail atomically while presence stays dynamic', () => {

@@ -8,7 +8,7 @@ import {
     type OccupancyClaim,
 } from "../unit/capability/occupancy.js";
 import { isSpatiallyPresent } from "../unit/capability/presence.js";
-import { hasTargetable } from "../unit/capability/targetable.js";
+import { hasSpatial } from "../unit/capability/spatial.js";
 import { hasVitality } from "../unit/capability/vitality.js";
 import type { Unit, UnitId } from "../unit/unit.js";
 import type { BattlefieldMap } from "./map.js";
@@ -16,6 +16,7 @@ import type { MechanismId } from "./mechanism.js";
 import type { SpatialEffectId, SpatialEffectRegion } from "./navigation-effect.js";
 import { battlefieldTileKey, spatialEffectSourceKey } from "./spatial.js";
 import type { BattlefieldContent, BattlefieldState } from "./state.js";
+import { canBlockGround } from "./blocking.js";
 
 export interface BattlefieldDependencyChanges {
     readonly updatedUnitIds: ReadonlySet<UnitId>;
@@ -79,10 +80,10 @@ function sameSupportInputs(left: Unit, right: Unit): boolean {
     );
 }
 
-function sameBlockingInputs(left: Unit, right: Unit): boolean {
+function sameBlockingInputs(map: BattlefieldMap, left: Unit, right: Unit): boolean {
     const active = (unit: Unit) =>
         isSpatiallyPresent(unit) && (!hasVitality(unit) || unit.vitality.hp > 0);
-    const ground = (unit: Unit) => !hasTargetable(unit) || unit.targetable.layer === "GROUND";
+    const ground = (unit: Unit) => !hasSpatial(unit) || unit.spatial.layer === "GROUND";
     const highland = (unit: Unit) =>
         hasTileBindingDefinition(unit.definition) &&
         unit.definition.tileBinding.heightType === "HIGHLAND";
@@ -95,6 +96,7 @@ function sameBlockingInputs(left: Unit, right: Unit): boolean {
         active(left) === active(right) &&
         ground(left) === ground(right) &&
         highland(left) === highland(right) &&
+        canBlockGround(left, map) === canBlockGround(right, map) &&
         leftBlocker?.enabled === rightBlocker?.enabled &&
         leftBlocker?.capacity === rightBlocker?.capacity &&
         leftBlockable?.enabled === rightBlockable?.enabled &&
@@ -185,7 +187,7 @@ export function deriveBattlefieldDependencies<U extends Unit>(
 
         occupancy ||= !sameOccupancyInputs(left, right);
         support ||= !sameSupportInputs(left, right);
-        blocking ||= !sameBlockingInputs(left, right);
+        blocking ||= !sameBlockingInputs(map, left, right);
         effectCoverage ||=
             (presenceChanged && previous.spatial.effectsBySource.has(`UNIT:${id}`)) ||
             ((presenceChanged || tileChanged) && retainedAnchor);

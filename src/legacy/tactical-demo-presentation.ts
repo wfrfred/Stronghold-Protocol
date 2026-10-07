@@ -1,12 +1,13 @@
 import type { BattleEvent, BattleSnapshot } from "../core/tactical/battle/contract.js";
-import { hasActionDefinition, type DamageType } from "../core/tactical/unit/capability/action.js";
+import type { DamageType } from "../core/tactical/combat/effect.js";
+import { hasActionDefinition } from "../core/tactical/unit/capability/action.js";
 import { hasAllegiance } from "../core/tactical/unit/capability/allegiance.js";
 import {
     hasLocomotion,
     hasRoutedLocomotion,
 } from "../core/tactical/unit/capability/locomotion/state.js";
 import { isSpatiallyPresent } from "../core/tactical/unit/capability/presence.js";
-import { hasTargetable } from "../core/tactical/unit/capability/targetable.js";
+import { hasSpatial } from "../core/tactical/unit/capability/spatial.js";
 import { hasVitality, hasVitalityDefinition } from "../core/tactical/unit/capability/vitality.js";
 import type { Direction } from "../core/tactical/geometry/direction.js";
 import type { Unit, UnitId } from "../core/tactical/unit/unit.js";
@@ -34,6 +35,7 @@ export interface LegacyUnitInfo {
 export type LegacyVisualEvent =
     | readonly ["atk", sourceId: UnitId, targetId: UnitId, "none"]
     | readonly ["dmg", targetId: UnitId, amount: number, "phys" | "arts" | "true"]
+    | readonly ["heal", targetId: UnitId, amount: number]
     | readonly ["die", unitId: UnitId, "killed"]
     | readonly ["leak", unitId: UnitId];
 
@@ -73,8 +75,8 @@ function isEnemy(unit: Unit): boolean {
 }
 
 function isFlying(unit: Unit): boolean {
-    if (hasTargetable(unit)) {
-        return unit.targetable.layer === "AIR";
+    if (hasSpatial(unit)) {
+        return unit.spatial.layer === "AIR";
     }
 
     return (
@@ -94,10 +96,16 @@ function unitInfo(unit: Unit, data: LegacyData): LegacyUnitInfo {
     let dir: Direction = "RIGHT";
 
     if (hasActionDefinition(unit.definition)) {
-        const range = unit.definition.action.attack.targeting.range;
+        const targeting = unit.definition.action.normalAction.targetGroups[0].targeting;
 
-        if (range.type === "GRID") {
-            dir = range.direction;
+        if (
+            targeting.type === "DAMAGE" &&
+            targeting.scope.type === "RANGE" &&
+            targeting.scope.geometry.type === "GRID"
+        ) {
+            dir = targeting.scope.geometry.direction;
+        } else if (targeting.type === "HEAL" && targeting.geometry.type === "GRID") {
+            dir = targeting.geometry.direction;
         }
     }
 
@@ -175,11 +183,7 @@ export class TacticalDemoPresentation {
         this.#damageCount = 0;
     }
 
-    advance(
-        before: BattleSnapshot,
-        after: BattleSnapshot,
-        events: readonly BattleEvent[],
-    ): readonly LegacyVisualEvent[] {
+    advance(after: BattleSnapshot, events: readonly BattleEvent[]): readonly LegacyVisualEvent[] {
         const visible: LegacyVisualEvent[] = [];
 
         for (const [id, tombstone] of this.#tombstones) {
@@ -195,7 +199,7 @@ export class TacticalDemoPresentation {
 
         for (const event of events) {
             switch (event.type) {
-                case "ATTACK": {
+                case "ACTION": {
                     const attack = ["atk", event.sourceUnitId, event.targetUnitId, "none"] as const;
                     this.#attackCount++;
                     this.#attacks.set(event.sourceUnitId, {
@@ -216,6 +220,10 @@ export class TacticalDemoPresentation {
                     ]);
                     break;
 
+                case "HEAL":
+                    visible.push(["heal", event.targetUnitId, Math.round(event.amount)]);
+                    break;
+
                 case "UNIT_REMOVED": {
                     if (event.reason !== "DEATH") {
                         break;
@@ -223,19 +231,17 @@ export class TacticalDemoPresentation {
 
                     visible.push(["die", event.unitId, "killed"]);
 
-                    const unit = before.units.find((candidate) => candidate.id === event.unitId);
+                    const unit = event.unit;
 
-                    if (unit !== undefined) {
-                        if (isEnemy(unit)) {
-                            this.#killedCount++;
-                        }
-
-                        this.#tombstones.set(event.unitId, {
-                            info: unitInfo(unit, this.#data),
-                            tuple: unitTuple(unit, after, true),
-                            expiresAtTick: after.tickIndex + DEATH_WINDOW_TICKS,
-                        });
+                    if (isEnemy(unit)) {
+                        this.#killedCount++;
                     }
+
+                    this.#tombstones.set(event.unitId, {
+                        info: unitInfo(unit, this.#data),
+                        tuple: unitTuple(unit, after, true),
+                        expiresAtTick: after.tickIndex + DEATH_WINDOW_TICKS,
+                    });
 
                     break;
                 }

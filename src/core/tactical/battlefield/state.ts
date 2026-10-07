@@ -170,7 +170,7 @@ export function settleBattlefieldState<U extends Unit>(
         dependencies.blocking ||
         supportRelations !== previous.supportRelations ||
         content.blockingRelations !== previous.blockingRelations
-            ? reconcileBlockingRelations(units, content.blockingRelations, supportRelations)
+            ? reconcileBlockingRelations(map, units, content.blockingRelations, supportRelations)
             : previous.blockingRelations;
 
     return finishSettlement(
@@ -201,6 +201,7 @@ export function settleBattlefieldStateFully<U extends Unit>(
     );
     const units = reconcileNavigation(content.units, projection.maps);
     const blockingRelations = reconcileBlockingRelations(
+        map,
         units,
         content.blockingRelations,
         supportRelations,
