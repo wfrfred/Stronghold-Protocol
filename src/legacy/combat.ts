@@ -1,15 +1,15 @@
 import { BattleRuntime } from "../core/tactical/battle/runtime.js";
 import type { BattleSpec } from "../core/tactical/battle/spec.js";
-import { createBattlefieldMap, type BattlefieldMap } from "../core/tactical/battlefield/map.js";
-import { createTile } from "../core/tactical/battlefield/tile.js";
-import type { DamageType } from "../core/tactical/combat/effect.js";
+import { createBattlefieldMap, type BattlefieldMap } from "../core/tactical/battlefield/map/map.js";
+import { createTile } from "../core/tactical/battlefield/map/tile.js";
+import type { DamageType } from "../core/tactical/unit/capability/vitality/damage/contract.js";
 import { isTilePosition, Tile, type TilePosition } from "../core/tactical/geometry/coordinate.js";
 import type { Direction } from "../core/tactical/geometry/direction.js";
 import { RangeGrid } from "../core/tactical/geometry/range.js";
-import type { RouteDefinition } from "../core/tactical/route/definition.js";
+import type { RouteDefinition } from "../core/tactical/unit/capability/locomotion/route/definition.js";
 import { TICKS_PER_SECOND } from "../core/tactical/tick.js";
-import { createCombatEnemyDefinition } from "../core/tactical/unit/enemy.js";
-import { createOperatorDefinition } from "../core/tactical/unit/operator.js";
+import { createCombatEnemyDefinition } from "../core/tactical/unit/archetype/enemy.js";
+import { createOperatorDefinition } from "../core/tactical/unit/archetype/operator.js";
 
 interface LegacyCombatContent {
     readonly operators: readonly {

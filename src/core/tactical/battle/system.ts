@@ -4,7 +4,7 @@ import type {
     BattlefieldView,
 } from "../battlefield/contract.js";
 import type { BattleCommand, BattleEvent } from "./contract.js";
-import type { BattleExecutionState } from "./state.js";
+import type { BattleExecutionState } from "./execution/state.js";
 
 export interface BattlePhaseInput {
     readonly battlefield: BattlefieldView;

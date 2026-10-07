@@ -5,10 +5,13 @@ import {
     type WorldOffset,
     type WorldPosition,
 } from "../../../geometry/coordinate.js";
-import type { NavigationFieldProvider } from "../../../navigation/cache.js";
-import { NavigationMap, type NavigationMaps } from "../../../navigation/map.js";
-import { canTraverseNavigationSegment } from "../../../navigation/query.js";
-import { isNavigationGoalReached, type NavigationRequestId } from "../../../navigation/request.js";
+import type { NavigationFieldProvider } from "../../../battlefield/navigation/cache.js";
+import { NavigationMap, type NavigationMaps } from "../../../battlefield/navigation/map.js";
+import { canTraverseNavigationSegment } from "../../../battlefield/navigation/query.js";
+import {
+    isNavigationGoalReached,
+    type NavigationRequestId,
+} from "../../../battlefield/navigation/request.js";
 import {
     clearNavigationRequest,
     canCompleteNavigationSegment,
@@ -16,13 +19,13 @@ import {
     markNavigationArrived,
     steerNavigation,
     type NavigationOutcome,
-} from "../../../navigation/state.js";
-import { createRouteExecution, tickRouteWait } from "../../../route/execution.js";
+} from "../../../battlefield/navigation/state.js";
+import { createRouteExecution, tickRouteWait } from "./route/execution.js";
 import {
     isRouteCheckpointReady,
     isRouteEndReached,
     isRouteMoveCheckpointReached,
-} from "../../../route/plan.js";
+} from "./route/plan.js";
 import { hasSpatialPresence, isSpatiallyPresent } from "../presence.js";
 import {
     applyMotionOverride,
@@ -45,7 +48,7 @@ import type {
     RouteControlState,
     RoutedLocomotiveUnit,
     RoutedLocomotionState,
-} from "./state.js";
+} from "./capability.js";
 import { integrateSteeringDirection } from "./steering.js";
 
 export interface RoutedLocomotionStepContext {

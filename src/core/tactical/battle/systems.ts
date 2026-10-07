@@ -1,10 +1,10 @@
 import type { BattlefieldChange, BattlefieldChangeResult } from "../battlefield/contract.js";
 import type { BattlefieldRuntime } from "../battlefield/runtime.js";
-import { createMovementSystem } from "./movement.js";
-import { createBlockingSystem } from "./blocking.js";
-import { createCombatSystem } from "./combat.js";
-import { createDeploymentSystem } from "./deployment.js";
-import { instantiateUnitPlacement } from "./unit-creation.js";
+import { createMovementSystem } from "./phases/movement.js";
+import { createBlockingSystem } from "./phases/blocking.js";
+import { createCombatSystem } from "./phases/combat.js";
+import { createDeploymentSystem } from "./phases/deployment.js";
+import { instantiateUnitPlacement } from "./creation/placement.js";
 import {
     changePredefinedInstances,
     copyPredefinedPresence,
@@ -12,14 +12,14 @@ import {
     type PredefinedPresence,
 } from "./predefined.js";
 import type { BattleCommand, BattleEvent, BattleResult } from "./contract.js";
-import { cloneScheduleState, type SpawnScheduleState } from "./schedule.js";
-import { createSpawnScheduleSystem } from "./spawning.js";
+import { cloneScheduleState, type SpawnScheduleState } from "./schedule/state.js";
+import { createSpawnScheduleSystem } from "./phases/spawning.js";
 import type { BattleSpec } from "./spec.js";
-import type { BattleExecutionState } from "./state.js";
+import type { BattleExecutionState } from "./execution/state.js";
 import type { BattlePhase } from "./system.js";
 import { battlefieldCommitEvents, finishBattleEvents } from "./events.js";
-import type { CombatResources } from "../combat/resources.js";
-import type { compileAction } from "../combat/action.js";
+import type { CombatResources } from "./resources.js";
+import type { compileAction } from "../unit/capability/action/compile.js";
 
 export interface BattleResources {
     readonly combat?: CombatResources;

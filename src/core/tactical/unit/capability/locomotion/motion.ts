@@ -5,7 +5,7 @@ import {
     type WorldOffset,
     type WorldPosition,
 } from "../../../geometry/coordinate.js";
-import { NavigationMap } from "../../../navigation/map.js";
+import { NavigationMap } from "../../../battlefield/navigation/map.js";
 import {
     integrateSteeringDirection,
     type SteeringParameters,

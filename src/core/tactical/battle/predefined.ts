@@ -9,13 +9,13 @@ import {
     type NavigationEffectDefinition,
     type SpatialEffectSource,
     type SpatialEffectRegion,
-} from "../battlefield/navigation-effect.js";
+} from "../battlefield/navigation/effect.js";
 import {
     createUnitPlacementDefinition,
     instantiateUnitPlacement,
     type UnitPlacementDefinition,
-} from "./unit-creation.js";
-import type { BattleExecutionState } from "./state.js";
+} from "./creation/placement.js";
+import type { BattleExecutionState } from "./execution/state.js";
 import type { BattlePhase, BattleSystem } from "./system.js";
 
 export interface PredefinedUnitCreation extends UnitPlacementDefinition {

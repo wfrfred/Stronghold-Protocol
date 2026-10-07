@@ -1,4 +1,7 @@
-import { createEnemyDefinition, type EnemyDefinition } from "../../core/tactical/unit/enemy.js";
+import {
+    createEnemyDefinition,
+    type EnemyDefinition,
+} from "../../core/tactical/unit/archetype/enemy.js";
 import type { EnemyMovementPrefab } from "./prefab.js";
 import { perSecondToPerTick } from "./tick.js";
 

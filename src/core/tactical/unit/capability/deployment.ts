@@ -1,4 +1,4 @@
-import type { BuildableType, HeightType } from "../../battlefield/tile.js";
+import type { BuildableType, HeightType } from "../../battlefield/map/tile.js";
 import type { UnitDefinition } from "../unit.js";
 
 export interface DeploymentProfile {

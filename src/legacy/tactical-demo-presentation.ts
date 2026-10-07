@@ -1,14 +1,17 @@
 import type { BattleEvent, BattleSnapshot } from "../core/tactical/battle/contract.js";
-import type { DamageType } from "../core/tactical/combat/effect.js";
-import { hasActionDefinition } from "../core/tactical/unit/capability/action.js";
+import type { DamageType } from "../core/tactical/unit/capability/vitality/damage/contract.js";
+import { hasActionDefinition } from "../core/tactical/unit/capability/action/capability.js";
 import { hasAllegiance } from "../core/tactical/unit/capability/allegiance.js";
 import {
     hasLocomotion,
     hasRoutedLocomotion,
-} from "../core/tactical/unit/capability/locomotion/state.js";
+} from "../core/tactical/unit/capability/locomotion/capability.js";
 import { isSpatiallyPresent } from "../core/tactical/unit/capability/presence.js";
 import { hasSpatial } from "../core/tactical/unit/capability/spatial.js";
-import { hasVitality, hasVitalityDefinition } from "../core/tactical/unit/capability/vitality.js";
+import {
+    hasVitality,
+    hasVitalityDefinition,
+} from "../core/tactical/unit/capability/vitality/capability.js";
 import type { Direction } from "../core/tactical/geometry/direction.js";
 import type { Unit, UnitId } from "../core/tactical/unit/unit.js";
 

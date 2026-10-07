@@ -4,8 +4,8 @@ import type {
     FragmentDefinition,
     SpawnActionDefinition,
     SpawnScheduleDefinition,
-} from "../../core/tactical/battle/schedule.js";
-import type { RouteDefinition } from "../../core/tactical/route/definition.js";
+} from "../../core/tactical/battle/schedule/definition.js";
+import type { RouteDefinition } from "../../core/tactical/unit/capability/locomotion/route/definition.js";
 import type { ArknightsEnemyMovementContent } from "./enemy.js";
 import type {
     ArknightsEnemyDbRef,

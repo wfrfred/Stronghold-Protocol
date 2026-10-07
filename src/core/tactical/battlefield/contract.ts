@@ -1,18 +1,18 @@
 import type { TilePosition, WorldPosition } from "../geometry/coordinate.js";
-import type { NavigationFieldCache, NavigationFieldProvider } from "../navigation/cache.js";
-import type { NavigationMaps, PathMotionMode } from "../navigation/map.js";
+import type { NavigationFieldCache, NavigationFieldProvider } from "./navigation/cache.js";
+import type { NavigationMaps, PathMotionMode } from "./navigation/map.js";
 import type { Unit, UnitId } from "../unit/unit.js";
 import type { OccupancySlot } from "../unit/capability/occupancy.js";
-import type { BattlefieldMap } from "./map.js";
+import type { BattlefieldMap } from "./map/map.js";
 import type { MechanismId, MechanismRuntime } from "./mechanism.js";
 import type {
     NavigationSpatialEffect,
     SpatialEffectId,
     SpatialEffectRegion,
     SpatialEffectSource,
-} from "./navigation-effect.js";
-import type { BlockingRelation } from "./blocking.js";
-import type { SupportRelation } from "./support.js";
+} from "./navigation/effect.js";
+import type { BlockingRelation } from "./blocking/relations.js";
+import type { SupportRelation } from "./support/relations.js";
 
 export type BattlefieldRemovalReason = "DEATH" | "RETREAT" | "EXPIRED" | "SCRIPT";
 

@@ -4,7 +4,7 @@ import {
     type RouteCheckpoint,
     type RouteDefinition,
     type RouteMoveTarget,
-} from "../../core/tactical/route/definition.js";
+} from "../../core/tactical/unit/capability/locomotion/route/definition.js";
 import { secondsToTicks } from "./tick.js";
 
 function object(value: unknown, name: string, fields: readonly string[]): Record<string, unknown> {

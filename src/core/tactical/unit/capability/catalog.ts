@@ -1,5 +1,5 @@
 import type { Unit, UnitDefinition } from "../unit.js";
-import { copyActionState, initializeActionState } from "./action.js";
+import { copyActionState, initializeActionState } from "./action/capability.js";
 import { copyAllegianceState, initializeAllegianceState } from "./allegiance.js";
 import {
     copyBlockableState,
@@ -7,14 +7,14 @@ import {
     initializeBlockableState,
     initializeBlockerState,
 } from "./blocking.js";
-import { copyEffectsState } from "./effects.js";
+import { copyEffectsState } from "./effects/capability.js";
 import {
     copyDefenseState,
     initializeDefenseState,
     type DefenseDefinition,
     type DefenseState,
-} from "./defense.js";
-import { copyLocomotionState, initializeLocomotionState } from "./locomotion/state.js";
+} from "./defense/capability.js";
+import { copyLocomotionState, initializeLocomotionState } from "./locomotion/capability.js";
 import { copySpatialPresenceState } from "./presence.js";
 import { copyOccupancyState } from "./occupancy.js";
 import {
@@ -22,7 +22,7 @@ import {
     initializeOffenseState,
     type OffenseDefinition,
     type OffenseState,
-} from "./offense.js";
+} from "./offense/capability.js";
 import {
     copyHitState,
     copySpatialState,
@@ -30,7 +30,7 @@ import {
     initializeSpatialState,
 } from "./spatial.js";
 import { copyStatusState, initializeStatusState } from "./status.js";
-import { copyVitalityState, initializeVitalityState } from "./vitality.js";
+import { copyVitalityState, initializeVitalityState } from "./vitality/capability.js";
 
 export interface CapabilityInitializationContext {
     readonly tick: number;

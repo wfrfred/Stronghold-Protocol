@@ -1,8 +1,8 @@
 import { BattlefieldRuntime } from "../battlefield/runtime.js";
-import type { NavigationMaps } from "../navigation/map.js";
+import type { NavigationMaps } from "../battlefield/navigation/map.js";
 import { copyUnitSnapshot } from "../unit/snapshot.js";
 import { createBattleSpec, type BattleSpec } from "./spec.js";
-import type { BattleExecutionState } from "./state.js";
+import type { BattleExecutionState } from "./execution/state.js";
 import { predefinedIdsForAlias } from "./predefined.js";
 import { createBattleSystems, type BattleSystemStates, type BattleResources } from "./systems.js";
 import type { BattleCommand, BattleResult, BattleSnapshot, BattleStep } from "./contract.js";

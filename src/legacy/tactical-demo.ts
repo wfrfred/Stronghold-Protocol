@@ -3,9 +3,9 @@ import {
     type BattleCommand,
     type BattleEvent,
 } from "../core/tactical/battle/runtime.js";
-import type { BattlefieldMap } from "../core/tactical/battlefield/map.js";
+import type { BattlefieldMap } from "../core/tactical/battlefield/map/map.js";
 import { TICKS_PER_SECOND } from "../core/tactical/tick.js";
-import { getUnspawnedCount } from "../core/tactical/battle/schedule.js";
+import { getUnspawnedCount } from "../core/tactical/battle/schedule/runtime.js";
 import {
     loadMovementScenario,
     type ArknightsMovementCatalog,

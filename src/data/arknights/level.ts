@@ -1,7 +1,7 @@
-import type { BattlefieldMap } from "../../core/tactical/battlefield/map.js";
+import type { BattlefieldMap } from "../../core/tactical/battlefield/map/map.js";
 import { createTilePosition, type TilePosition } from "../../core/tactical/geometry/coordinate.js";
 import { Direction } from "../../core/tactical/geometry/direction.js";
-import type { RouteDefinition } from "../../core/tactical/route/definition.js";
+import type { RouteDefinition } from "../../core/tactical/unit/capability/locomotion/route/definition.js";
 import { parseBlackboard, type ArknightsBlackboardEntry } from "./blackboard.js";
 import { parseBattlefieldMap, type ArknightsMapOptions } from "./map.js";
 import { parseRouteDefinition } from "./route.js";

@@ -1,15 +1,21 @@
 import { createRng, type Seed } from "../../common/rng.js";
-import type { BattlefieldMap } from "../battlefield/map.js";
+import type { BattlefieldMap } from "../battlefield/map/map.js";
 import type { MechanismRuntime } from "../battlefield/mechanism.js";
-import type { NavigationSpatialEffect } from "../battlefield/navigation-effect.js";
-import type { NavigationRequestId } from "../navigation/request.js";
+import type { NavigationSpatialEffect } from "../battlefield/navigation/effect.js";
+import type { NavigationRequestId } from "../battlefield/navigation/request.js";
 import type { UnitId } from "../unit/unit.js";
 import {
     createPredefinedInstanceDefinition,
     type PredefinedInstanceDefinition,
 } from "./predefined.js";
-import { createUnitPlacementDefinition, type UnitPlacementDefinition } from "./unit-creation.js";
-import { createSpawnScheduleDefinition, type SpawnScheduleDefinition } from "./schedule.js";
+import {
+    createUnitPlacementDefinition,
+    type UnitPlacementDefinition,
+} from "./creation/placement.js";
+import {
+    createSpawnScheduleDefinition,
+    type SpawnScheduleDefinition,
+} from "./schedule/definition.js";
 
 export type InitialUnitPlacement = UnitPlacementDefinition;
 

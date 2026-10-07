@@ -1,6 +1,6 @@
 import type { BattleSpec } from "../core/tactical/battle/spec.js";
-import type { BattlefieldMap } from "../core/tactical/battlefield/map.js";
-import type { RouteDefinition } from "../core/tactical/route/definition.js";
+import type { BattlefieldMap } from "../core/tactical/battlefield/map/map.js";
+import type { RouteDefinition } from "../core/tactical/unit/capability/locomotion/route/definition.js";
 import { TICKS_PER_SECOND } from "../core/tactical/tick.js";
 import { createLegacyCombatSpec } from "./combat.js";
 import type { LegacyData } from "./tactical-demo-presentation.js";

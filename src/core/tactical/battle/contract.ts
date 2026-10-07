@@ -1,18 +1,18 @@
 import type { BattlefieldChangeResult } from "../battlefield/contract.js";
-import type { BlockingRelation } from "../battlefield/blocking.js";
-import type { CombatEvent } from "../combat/event.js";
+import type { BlockingRelation } from "../battlefield/blocking/relations.js";
+import type { CombatEvent } from "./execution/event.js";
 import type { MechanismRuntime } from "../battlefield/mechanism.js";
-import type { NavigationSpatialEffect } from "../battlefield/navigation-effect.js";
-import type { NavigationOutcome } from "../navigation/state.js";
+import type { NavigationSpatialEffect } from "../battlefield/navigation/effect.js";
+import type { NavigationOutcome } from "../battlefield/navigation/state.js";
 import type { WorldPosition } from "../geometry/coordinate.js";
-import type { RouteSignal } from "../route/execution.js";
+import type { RouteSignal } from "../unit/capability/locomotion/route/execution.js";
 import type { Unit, UnitId } from "../unit/unit.js";
 import type { PredefinedCommand, PredefinedPresence } from "./predefined.js";
-import type { SpawnScheduleState } from "./schedule.js";
-import type { AlternativeRouteCommand } from "./route-control.js";
-import type { BattleExecutionState } from "./state.js";
-import type { DeploymentCommand } from "./deployment.js";
-import type { SupportRelation } from "../battlefield/support.js";
+import type { SpawnScheduleState } from "./schedule/state.js";
+import type { AlternativeRouteCommand } from "./phases/route-control.js";
+import type { BattleExecutionState } from "./execution/state.js";
+import type { DeploymentCommand } from "./phases/deployment.js";
+import type { SupportRelation } from "../battlefield/support/relations.js";
 
 export type BattleCommand =
     | PredefinedCommand

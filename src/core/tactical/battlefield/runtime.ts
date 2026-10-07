@@ -1,12 +1,12 @@
 import type { TilePosition } from "../geometry/coordinate.js";
-import { createNavigationFieldCache, type NavigationFieldCache } from "../navigation/cache.js";
-import type { NavigationMaps } from "../navigation/map.js";
+import { createNavigationFieldCache, type NavigationFieldCache } from "./navigation/cache.js";
+import type { NavigationMaps } from "./navigation/map.js";
 import { assertUnitCapabilityConsistency } from "../unit/capability/catalog.js";
 import type { OccupancySlot } from "../unit/capability/occupancy.js";
 import { copyUnitSnapshot } from "../unit/snapshot.js";
 import type { Unit, UnitId } from "../unit/unit.js";
-import { blockingUsedCapacity, type BlockingRelation } from "./blocking.js";
-import { applyBattlefieldChanges, ownBattlefieldChanges } from "./changes.js";
+import { blockingUsedCapacity, type BlockingRelation } from "./blocking/relations.js";
+import { applyBattlefieldChanges, ownBattlefieldChanges } from "./storage/changes.js";
 import type {
     Battlefield,
     BattlefieldChange,
@@ -14,18 +14,26 @@ import type {
     BattlefieldRuntimeOptions,
     BattlefieldView,
 } from "./contract.js";
-import type { BattlefieldMap } from "./map.js";
+import type { BattlefieldMap } from "./map/map.js";
 import type { MechanismId, MechanismRuntime } from "./mechanism.js";
 import {
     copyNavigationSpatialEffect,
     type NavigationSpatialEffect,
     type SpatialEffectId,
     type SpatialEffectSource,
-} from "./navigation-effect.js";
-import { projectStaticNavigationMap } from "./navigation-projection.js";
-import { battlefieldTileKey, battlefieldOccupancyKey, spatialEffectSourceKey } from "./spatial.js";
-import { createBattlefieldState, settleBattlefieldState, type BattlefieldState } from "./state.js";
-import type { SupportRelation } from "./support.js";
+} from "./navigation/effect.js";
+import { projectStaticNavigationMap } from "./navigation/projection.js";
+import {
+    battlefieldTileKey,
+    battlefieldOccupancyKey,
+    spatialEffectSourceKey,
+} from "./storage/indexes.js";
+import {
+    createBattlefieldState,
+    settleBattlefieldState,
+    type BattlefieldState,
+} from "./storage/state.js";
+import type { SupportRelation } from "./support/relations.js";
 
 interface BattlefieldResources<U extends Unit> {
     readonly map: BattlefieldMap;

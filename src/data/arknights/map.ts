@@ -3,7 +3,7 @@ import {
     type BattlefieldBlockEdge,
     type BattlefieldMap,
     type BattlefieldMarker,
-} from "../../core/tactical/battlefield/map.js";
+} from "../../core/tactical/battlefield/map/map.js";
 import type {
     BuildableType,
     DeepseaParams,
@@ -14,7 +14,7 @@ import type {
     PlayerSideMask,
     Tile,
     TileMechanism,
-} from "../../core/tactical/battlefield/tile.js";
+} from "../../core/tactical/battlefield/map/tile.js";
 import { createTilePosition, type TilePosition } from "../../core/tactical/geometry/coordinate.js";
 import { Direction } from "../../core/tactical/geometry/direction.js";
 import { parseBlackboard, type ArknightsBlackboardEntry } from "./blackboard.js";

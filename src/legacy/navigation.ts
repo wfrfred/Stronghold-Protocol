@@ -1,11 +1,11 @@
 import type { TilePosition } from "../core/tactical/geometry/coordinate.js";
-import type { NavigationField } from "../core/tactical/navigation/field.js";
+import type { NavigationField } from "../core/tactical/battlefield/navigation/field.js";
 import {
     createNavigationMap,
     NavigationMap,
     type PathMotionMode,
-} from "../core/tactical/navigation/map.js";
-import { buildNavigationField } from "../core/tactical/navigation/pathfinding.js";
+} from "../core/tactical/battlefield/navigation/map.js";
+import { buildNavigationField } from "../core/tactical/battlefield/navigation/pathfinding.js";
 
 export interface LegacyGrid {
     readonly rows: number;

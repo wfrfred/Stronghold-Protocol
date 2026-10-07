@@ -3,7 +3,7 @@ import {
     type PredefinedInstanceDefinition,
 } from "../../core/tactical/battle/predefined.js";
 import { createMechanismDefinition } from "../../core/tactical/battlefield/mechanism.js";
-import { createNavigationEffectDefinition } from "../../core/tactical/battlefield/navigation-effect.js";
+import { createNavigationEffectDefinition } from "../../core/tactical/battlefield/navigation/effect.js";
 import { Tile, createTileOffset } from "../../core/tactical/geometry/coordinate.js";
 import { RangeGrid } from "../../core/tactical/geometry/range.js";
 import {
@@ -13,7 +13,7 @@ import {
     type TileBoundUnitDefinition,
 } from "../../core/tactical/unit/capability/deployment.js";
 import { createOccupancyState } from "../../core/tactical/unit/capability/occupancy.js";
-import type { VitalUnitDefinition } from "../../core/tactical/unit/capability/vitality.js";
+import type { VitalUnitDefinition } from "../../core/tactical/unit/capability/vitality/capability.js";
 import type { ArknightsPredefinedInstance } from "./level.js";
 import type { PredefinedPrefab } from "./prefab.js";
 
