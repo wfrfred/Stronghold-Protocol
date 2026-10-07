@@ -1,34 +1,22 @@
 import { World, type WorldOffset, type WorldPosition } from "../../../geometry/coordinate.js";
 import type { NavigationFieldProvider } from "../../../battlefield/navigation/cache.js";
 import type { NavigationMaps } from "../../../battlefield/navigation/map.js";
-import {
-    createNavigationPath,
-    type NavigationPredictionSelection,
-} from "../../../battlefield/navigation/path.js";
-import {
-    initializeNavigationCursor,
-    selectNavigationPredictionTarget,
-} from "../../../battlefield/navigation/query.js";
-import type { NavigationIntent } from "../../../battlefield/navigation/request.js";
+import { createNavigationPath } from "../../../battlefield/navigation/path.js";
 import {
     bindNavigationPath,
     clearNavigationRequest,
     createNavigationState,
     getNavigationRequest,
-    predictNavigation,
     startNavigationRequest,
-    type NavigationState,
 } from "../../../battlefield/navigation/state.js";
 import type { RouteDefinition } from "./route/definition.js";
 import {
     advanceRoute,
     enterRoute,
-    routeNavigationOptions,
     type RouteExecutionContext,
     type RouteSignal,
     type RouteTransition,
 } from "./route/execution.js";
-import { predictRouteTarget } from "./route/plan.js";
 import { createRouteState, type RouteState, type RouteTiming } from "./route/state.js";
 import type { RouteControlState } from "./capability.js";
 
@@ -157,80 +145,6 @@ export function bindRouteNavigation(
     const path = createNavigationPath(request, context.fieldCache.get(map, request));
 
     return { ...control, navigation: bindNavigationPath(navigation, path, position).state };
-}
-
-export function predictRouteControl(
-    control: RouteControlState,
-    position: WorldPosition,
-    context: RouteNavigationContext,
-): {
-    readonly control: RouteControlState;
-    readonly selection: NavigationPredictionSelection | null;
-} {
-    if (isMovingRoute(control.route)) {
-        control = bindRouteNavigation(control, position, context);
-        const activity = control.navigation.execution.activity;
-
-        if (activity.type !== "FOLLOWING" && activity.type !== "UNREACHABLE") {
-            return { control, selection: null };
-        }
-
-        const prediction = predictNavigation(control.navigation, position);
-
-        return {
-            control: { ...control, navigation: prediction.state },
-            selection: prediction.selection,
-        };
-    }
-
-    const target = predictRouteTarget(control.route);
-
-    if (target.type === "COMPLETED") {
-        return { control, selection: null };
-    }
-
-    const navigation = control.navigation;
-    const map = context.maps[navigation.pathMotionMode];
-    const previous = navigation.execution.activity;
-    const intent: NavigationIntent = Object.freeze({
-        targetTile: target.targetTile,
-        goal: Object.freeze(target.goal),
-        options: Object.freeze(routeNavigationOptions(control.route.definition)),
-        arrivalRule: target.type === "END_TARGET" ? "TARGET_TILE_AND_DISTANCE" : "DISTANCE",
-    });
-    const samePreview =
-        previous.type === "PREVIEWING" &&
-        previous.path.field.map === map &&
-        previous.path.request.targetTile[0] === target.targetTile[0] &&
-        previous.path.request.targetTile[1] === target.targetTile[1];
-    const path = samePreview
-        ? previous.path
-        : createNavigationPath(intent, context.fieldCache.get(map, intent));
-    const initialization = samePreview
-        ? { type: "READY" as const, cursor: previous.cursor }
-        : initializeNavigationCursor(path, position, navigation.execution.locatorOffset);
-
-    if (initialization.type !== "READY") {
-        return { control, selection: null };
-    }
-
-    const selection = selectNavigationPredictionTarget(
-        path,
-        initialization.cursor,
-        navigation.execution.visits,
-        position,
-        navigation.execution.locatorOffset,
-    );
-    const next: NavigationState = {
-        ...navigation,
-        execution: {
-            ...navigation.execution,
-            visits: selection.visits,
-            activity: { type: "PREVIEWING", path, cursor: selection.cursor },
-        },
-    };
-
-    return { control: { ...control, navigation: next }, selection };
 }
 
 export function routeLocator(control: RouteControlState, position: WorldPosition): WorldPosition {

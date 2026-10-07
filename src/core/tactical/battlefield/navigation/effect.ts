@@ -1,4 +1,4 @@
-import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
+import { assertNonnegativeSafeInteger, assertPositiveSafeInteger } from "../../../common/assert.js";
 import {
     createTileOffset,
     createTilePosition,
@@ -159,9 +159,7 @@ export function createNavigationEffectDefinition(
         const walk = restriction(definition.WALK);
         const costFloor = definition.WALK.costFloor;
 
-        if (!Number.isInteger(costFloor) || costFloor <= 0 || costFloor > 0x7fffffff) {
-            throw new RangeError("WALK cost floor must be a positive int32");
-        }
+        assertPositiveSafeInteger(costFloor, "WALK cost floor");
 
         WALK = Object.freeze({ ...walk, costFloor });
     }

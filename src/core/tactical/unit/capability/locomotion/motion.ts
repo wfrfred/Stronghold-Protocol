@@ -1,10 +1,4 @@
-import {
-    createWorldOffset,
-    Tile,
-    World,
-    type WorldOffset,
-    type WorldPosition,
-} from "../../../geometry/coordinate.js";
+import { Tile, World, type WorldOffset, type WorldPosition } from "../../../geometry/coordinate.js";
 import { NavigationMap } from "../../../battlefield/navigation/map.js";
 import {
     integrateSteeringDirection,
@@ -23,26 +17,25 @@ export type MotionOverride =
           readonly direction: WorldOffset;
       };
 
-export function getNavigationBoundaryDirection(
+export function getNavigationRecoveryTarget(
     map: NavigationMap,
     position: WorldPosition,
-): WorldOffset {
-    const [row, col] = World.toTile(position);
-    let dx = 0;
-    let dy = 0;
+    locatorOffset: WorldOffset,
+): WorldPosition | null {
+    const [minimum, maximum] = NavigationMap.bounds(map);
+    const minX = Math.max(minimum[0], minimum[0] - locatorOffset[0]);
+    const maxX = Math.min(maximum[0], maximum[0] - locatorOffset[0]);
+    const minY = Math.max(minimum[1], minimum[1] - locatorOffset[1]);
+    const maxY = Math.min(maximum[1], maximum[1] - locatorOffset[1]);
 
-    if (col < 0) {
-        dx = 1;
-    } else if (col >= map.columns) {
-        dx = -1;
-    }
-    if (row < 0) {
-        dy = 1;
-    } else if (row >= map.rows) {
-        dy = -1;
+    if (minX > maxX || minY > maxY) {
+        return null;
     }
 
-    return World.clampMagnitude(createWorldOffset(dx, dy), 1);
+    return [
+        Math.max(minX, Math.min(maxX, position[0])),
+        Math.max(minY, Math.min(maxY, position[1])),
+    ];
 }
 
 export function reflectNavigationMovement(

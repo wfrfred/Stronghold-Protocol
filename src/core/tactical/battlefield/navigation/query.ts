@@ -6,75 +6,18 @@ import {
     type WorldPosition,
 } from "../../geometry/coordinate.js";
 import { NavigationMap } from "./map.js";
+import { canTraverseNavigationSegment } from "./segment.js";
 import { isNavigationGoalReached, type NavigationIntent } from "./request.js";
 import type {
     NavigationCursorInitialization,
     NavigationPath,
     NavigationPathCursor,
-    NavigationPredictionSelection,
     NavigationSelection,
     NavigationVisitHistory,
 } from "./path.js";
 
 function sameTile(a: TilePosition, b: TilePosition): boolean {
     return a[0] === b[0] && a[1] === b[1];
-}
-
-export function canTraverseNavigationSegment(
-    map: NavigationMap,
-    from: WorldPosition,
-    to: WorldPosition,
-): boolean {
-    let [row, col] = World.toTile(from);
-    const [endRow, endCol] = World.toTile(to);
-
-    if (
-        NavigationMap.get(map, [row, col])?.passable !== true ||
-        NavigationMap.get(map, [endRow, endCol])?.passable !== true
-    ) {
-        return false;
-    }
-
-    const dx = to[0] - from[0];
-    const dy = to[1] - from[1];
-    const rowStep = Math.sign(dy);
-    const colStep = Math.sign(dx);
-    const rowDirection = rowStep > 0 ? "UP" : "DOWN";
-    const colDirection = colStep > 0 ? "RIGHT" : "LEFT";
-
-    while (row !== endRow || col !== endCol) {
-        const rowTime = row === endRow ? Infinity : (row + rowStep * 0.5 - from[1]) / dy;
-        const colTime = col === endCol ? Infinity : (col + colStep * 0.5 - from[0]) / dx;
-        const crossRow = rowTime <= colTime || Math.abs(rowTime - colTime) <= Number.EPSILON;
-        const crossCol = colTime <= rowTime || Math.abs(rowTime - colTime) <= Number.EPSILON;
-
-        if (crossRow && !NavigationMap.canDepart(map, [row, col], rowDirection)) {
-            return false;
-        }
-        if (crossCol && !NavigationMap.canDepart(map, [row, col], colDirection)) {
-            return false;
-        }
-        if (
-            crossRow &&
-            crossCol &&
-            (!NavigationMap.canDepart(map, [row + rowStep, col], colDirection) ||
-                !NavigationMap.canDepart(map, [row, col + colStep], rowDirection))
-        ) {
-            return false;
-        }
-
-        if (crossRow) {
-            row += rowStep;
-        }
-        if (crossCol) {
-            col += colStep;
-        }
-        if (NavigationMap.get(map, [row, col])?.passable !== true) {
-            return false;
-        }
-    }
-
-    return true;
 }
 
 function safeNext(path: NavigationPath<NavigationIntent>, tile: TilePosition): TilePosition {
@@ -193,40 +136,7 @@ export function initializeNavigationCursor(
     return { type: "READY", cursor: cursorAt(path, tile) };
 }
 
-export function selectNavigationPredictionTarget(
-    path: NavigationPath<NavigationIntent>,
-    cursor: NavigationPathCursor,
-    visits: NavigationVisitHistory,
-    position: WorldPosition,
-    locatorOffset: WorldOffset,
-): NavigationPredictionSelection {
-    const locator = World.translate(position, locatorOffset);
-    const tile = World.toTile(locator);
-
-    if (!NavigationMap.contains(path.field.map, tile)) {
-        return {
-            cursor,
-            visits,
-            decision: { type: "OUTSIDE_MAP" },
-        };
-    }
-
-    const center = selectCenter(path, cursor, visits, locator, tile);
-
-    return {
-        cursor: center.cursor,
-        visits: center.visits,
-        decision: {
-            type: "TARGET",
-            target: World.translate(
-                center.target ?? path.request.goal.position,
-                World.negate(locatorOffset),
-            ),
-        },
-    };
-}
-
-export function selectNavigationSteeringTarget(
+export function selectNavigationTarget(
     path: NavigationPath<NavigationIntent>,
     cursor: NavigationPathCursor,
     visits: NavigationVisitHistory,
@@ -244,27 +154,6 @@ export function selectNavigationSteeringTarget(
         };
     }
 
-    const center = selectCenter(path, cursor, visits, locator, tile);
-
-    if (center.target !== null) {
-        return {
-            cursor: center.cursor,
-            visits: center.visits,
-            decision: {
-                type: "MOVE",
-                target: World.translate(center.target, World.negate(locatorOffset)),
-            },
-        };
-    }
-
-    if (isNavigationGoalReached(path.request, locator)) {
-        return {
-            cursor: cursorAt(path, path.request.targetTile, center.cursor),
-            visits: center.visits,
-            decision: { type: "ARRIVED" },
-        };
-    }
-
     const map = path.field.map;
     const targetTile = path.request.targetTile;
     const targetNode = path.field.nodes[targetTile[0] * map.columns + targetTile[1]]!;
@@ -272,8 +161,8 @@ export function selectNavigationSteeringTarget(
 
     if (targetNode.type === "UNREACHABLE" || node.type === "UNREACHABLE") {
         return {
-            cursor: center.cursor,
-            visits: center.visits,
+            cursor,
+            visits,
             decision: {
                 type: "UNREACHABLE",
                 reason:
@@ -284,12 +173,35 @@ export function selectNavigationSteeringTarget(
         };
     }
 
+    const center = selectCenter(path, cursor, visits, locator, tile);
+
+    if (center.target === null && isNavigationGoalReached(path.request, locator)) {
+        return {
+            cursor: cursorAt(path, path.request.targetTile, center.cursor),
+            visits: center.visits,
+            decision: {
+                type: "ARRIVAL_CANDIDATE",
+                target: World.translate(path.request.goal.position, World.negate(locatorOffset)),
+            },
+        };
+    }
+
     const next = safeNext(path, tile);
-    const target = sameTile(next, targetTile) ? path.request.goal.position : Tile.center(next);
+    const target =
+        center.target ??
+        (sameTile(next, targetTile) ? path.request.goal.position : Tile.center(next));
+    const rawTarget =
+        node.type === "REACHABLE" ? Tile.center(node.rawNext) : path.request.goal.position;
+    const permitted = [target, rawTarget, Tile.center(tile)].find((candidate) =>
+        canTraverseNavigationSegment(map, locator, candidate),
+    );
 
     return {
         cursor: center.cursor,
         visits: center.visits,
-        decision: { type: "MOVE", target: World.translate(target, World.negate(locatorOffset)) },
+        decision:
+            permitted === undefined
+                ? { type: "UNREACHABLE", reason: "POSITION_UNREACHABLE" }
+                : { type: "MOVE", target: World.translate(permitted, World.negate(locatorOffset)) },
     };
 }

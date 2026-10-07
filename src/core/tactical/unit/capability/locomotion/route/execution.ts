@@ -1,4 +1,5 @@
 import type { Rng, Seed } from "../../../../../common/rng.js";
+import { assertNonnegativeSafeInteger } from "../../../../../common/assert.js";
 import {
     createWorldOffset,
     Tile,
@@ -14,13 +15,13 @@ import {
 import type { RouteCheckpoint, RouteDefinition, RouteMoveTarget } from "./definition.js";
 import type { RouteMoveProgress, RouteProgress, RouteState } from "./state.js";
 
-const MAX_PATROL_RESTARTS_PER_TICK = 51;
+const ROUTE_TRANSITIONS_PER_TICK = 128;
 
 export interface RouteExecutionContext {
     readonly tick: number;
     readonly rng: Rng;
     readonly nextNavigationRequestId: () => NavigationRequestId;
-    readonly tryRestartPatrol: (checkpointIndex: number) => boolean;
+    readonly tryEnterCheckpoint: () => boolean;
 }
 
 export interface RouteExecution extends RouteExecutionContext {
@@ -34,9 +35,11 @@ export function createRouteExecution(
     rng: Rng,
     initialNextNavigationRequestId: NavigationRequestId,
     tick: number,
+    transitionBudget = ROUTE_TRANSITIONS_PER_TICK,
 ): RouteExecution {
+    assertNonnegativeSafeInteger(transitionBudget, "route transition budget");
     let nextNavigationRequestId = initialNextNavigationRequestId;
-    const patrolRestarts = new Map<number, number>();
+    let remainingTransitions = transitionBudget;
 
     return {
         tick,
@@ -53,14 +56,12 @@ export function createRouteExecution(
 
             return id;
         },
-        tryRestartPatrol(checkpointIndex) {
-            const count = patrolRestarts.get(checkpointIndex) ?? 0;
-
-            if (count >= MAX_PATROL_RESTARTS_PER_TICK) {
+        tryEnterCheckpoint() {
+            if (remainingTransitions === 0) {
                 return false;
             }
 
-            patrolRestarts.set(checkpointIndex, count + 1);
+            remainingTransitions--;
 
             return true;
         },
@@ -210,6 +211,9 @@ export function enterRoute(state: RouteState, context: RouteExecutionContext): R
     if (progress.phase !== "CHECKPOINTS" || progress.checkpoint.type !== "NOT_ENTERED") {
         return { state, signals: [] };
     }
+    if (!context.tryEnterCheckpoint()) {
+        return { state, signals: [] };
+    }
     if (progress.checkpointIndex >= state.definition.checkpoints.length) {
         const request = navigationRequest(
             state,
@@ -322,14 +326,7 @@ export function advanceRoute(state: RouteState, context: RouteExecutionContext):
         throw new Error("cannot advance a route checkpoint before entering it");
     }
 
-    let nextIndex = nextCheckpointIndex(state.definition, progress.checkpointIndex);
-
-    if (
-        nextIndex < progress.checkpointIndex &&
-        !context.tryRestartPatrol(progress.checkpointIndex)
-    ) {
-        nextIndex = progress.checkpointIndex + 1;
-    }
+    const nextIndex = nextCheckpointIndex(state.definition, progress.checkpointIndex);
 
     return enterRoute(
         withProgress(state, {

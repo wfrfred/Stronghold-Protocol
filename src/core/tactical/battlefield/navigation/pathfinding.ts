@@ -3,8 +3,8 @@ import type { NavigationField, NavigationFieldNode, NavigationFieldQuery } from 
 import { NavigationMap } from "./map.js";
 import { smoothNavigationField } from "./smoothing.js";
 
-const MAX_FIELD_DISTANCE = 0x7fffffff;
-const OVERFLOW_DISTANCE = MAX_FIELD_DISTANCE + 1;
+const MAX_FIELD_DISTANCE = Number.MAX_SAFE_INTEGER;
+const OVERFLOW_DISTANCE = Infinity;
 
 export function buildRawNavigationField(
     map: NavigationMap,
@@ -69,7 +69,8 @@ export function buildRawNavigationField(
                 continue;
             }
 
-            const candidate = Math.min(distances[current]! + cell.moveCost, OVERFLOW_DISTANCE);
+            const sum = distances[current]! + cell.moveCost;
+            const candidate = sum <= MAX_FIELD_DISTANCE ? sum : OVERFLOW_DISTANCE;
 
             if (distances[neighbor]! >= 0 && candidate >= distances[neighbor]!) {
                 continue;
@@ -86,7 +87,7 @@ export function buildRawNavigationField(
 
     const nodes: NavigationFieldNode[] = distances.map((distance, index) => {
         if (distance > MAX_FIELD_DISTANCE) {
-            throw new RangeError("navigation field distance exceeds int32 range");
+            throw new RangeError("navigation field distance exceeds safe integer range");
         }
         if (distance < 0) {
             return Object.freeze({ type: "UNREACHABLE" });

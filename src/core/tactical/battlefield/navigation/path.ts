@@ -28,7 +28,8 @@ export type NavigationPathDecision =
           readonly target: WorldPosition;
       }
     | {
-          readonly type: "ARRIVED";
+          readonly type: "ARRIVAL_CANDIDATE";
+          readonly target: WorldPosition;
       }
     | {
           readonly type: "UNREACHABLE";
@@ -52,19 +53,6 @@ export type NavigationCursorInitialization =
     | {
           readonly type: "OUTSIDE_MAP";
       };
-
-export interface NavigationPredictionSelection {
-    readonly cursor: NavigationPathCursor;
-    readonly visits: NavigationVisitHistory;
-    readonly decision:
-        | {
-              readonly type: "TARGET";
-              readonly target: WorldPosition;
-          }
-        | {
-              readonly type: "OUTSIDE_MAP";
-          };
-}
 
 export function createNavigationPath<I extends NavigationIntent>(
     request: I,

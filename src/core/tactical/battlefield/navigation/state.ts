@@ -3,36 +3,24 @@ import {
     createWorldOffset,
     createWorldPosition,
     isWorldPosition,
-    World,
     type WorldOffset,
     type WorldPosition,
 } from "../../geometry/coordinate.js";
-import {
-    canTraverseNavigationSegment,
-    initializeNavigationCursor,
-    selectNavigationPredictionTarget,
-    selectNavigationSteeringTarget,
-} from "./query.js";
+import { initializeNavigationCursor, selectNavigationTarget } from "./query.js";
 import { NavigationMap, PathMotionMode } from "./map.js";
 import type {
     NavigationCursorInitialization,
     NavigationFailureReason,
     NavigationPath,
     NavigationPathCursor,
-    NavigationPredictionSelection,
     NavigationSelection,
     NavigationVisitHistory,
 } from "./path.js";
-import type { NavigationIntent, NavigationRequest, NavigationRequestId } from "./request.js";
+import type { NavigationRequest, NavigationRequestId } from "./request.js";
 
 export type NavigationActivity =
     | {
           readonly type: "IDLE";
-      }
-    | {
-          readonly type: "PREVIEWING";
-          readonly path: NavigationPath<NavigationIntent>;
-          readonly cursor: NavigationPathCursor;
       }
     | {
           readonly type: "NEEDS_PATH";
@@ -82,12 +70,7 @@ export interface NavigationBinding {
     readonly initialization: NavigationCursorInitialization;
 }
 
-export interface NavigationPrediction {
-    readonly state: NavigationState;
-    readonly selection: NavigationPredictionSelection;
-}
-
-export interface NavigationSteering {
+export interface NavigationQuery {
     readonly state: NavigationState;
     readonly selection: NavigationSelection;
     readonly outcomes: readonly NavigationOutcome[];
@@ -108,7 +91,7 @@ function activeNavigation(state: NavigationState): ActiveNavigation {
 export function getNavigationRequest(state: Readonly<NavigationState>): NavigationRequest | null {
     const activity = state.execution.activity;
 
-    if (activity.type === "IDLE" || activity.type === "PREVIEWING") {
+    if (activity.type === "IDLE") {
         return null;
     }
 
@@ -140,7 +123,7 @@ function copyActivity(activity: NavigationActivity): NavigationActivity {
                 : createWorldPosition(...activity.position),
         };
     }
-    if (activity.type === "FOLLOWING" || activity.type === "PREVIEWING") {
+    if (activity.type === "FOLLOWING") {
         return { ...activity, cursor: copyCursor(activity.cursor) };
     }
 
@@ -223,10 +206,6 @@ export function invalidateNavigationPath(
 ): NavigationState {
     const activity = state.execution.activity;
 
-    if (activity.type === "PREVIEWING") {
-        return activity.path.field.map === map ? state : clearNavigationRequest(state);
-    }
-
     return (activity.type === "FOLLOWING" || activity.type === "UNREACHABLE") &&
         activity.path.field.map !== map
         ? startNavigationRequest(state, activity.path.request)
@@ -288,101 +267,16 @@ export function setNavigationMotionMode(
     const activity = state.execution.activity;
     let next = state;
 
-    if (activity.type === "PREVIEWING") {
-        next = clearNavigationRequest(state);
-    } else if (activity.type === "FOLLOWING" || activity.type === "UNREACHABLE") {
+    if (activity.type === "FOLLOWING" || activity.type === "UNREACHABLE") {
         next = updateExecution(state, { type: "NEEDS_PATH", request: activity.path.request });
     }
 
     return { pathMotionMode, execution: next.execution };
 }
 
-export function predictNavigation(
-    state: NavigationState,
-    position: WorldPosition,
-): NavigationPrediction {
+export function queryNavigation(state: NavigationState, position: WorldPosition): NavigationQuery {
     const activity = activeNavigation(state);
-    const selection = selectNavigationPredictionTarget(
-        activity.path,
-        activity.cursor,
-        state.execution.visits,
-        position,
-        state.execution.locatorOffset,
-    );
-
-    return {
-        state: updateExecution(state, { ...activity, cursor: selection.cursor }, selection.visits),
-        selection,
-    };
-}
-
-export function canCompleteNavigationSegment(
-    state: NavigationState,
-    position: WorldPosition,
-    target: WorldPosition,
-): boolean {
-    const activity = state.execution.activity;
-
-    if (
-        activity.type !== "FOLLOWING" &&
-        activity.type !== "UNREACHABLE" &&
-        activity.type !== "PREVIEWING"
-    ) {
-        return false;
-    }
-
-    const { path, cursor } = activity;
-    const { map, nodes } = path.field;
-    const offset = state.execution.locatorOffset;
-    const locator = World.translate(position, offset);
-    const tile = World.toTile(locator);
-
-    if (!NavigationMap.contains(map, tile)) {
-        return false;
-    }
-
-    const positionIndex = tile[0] * map.columns + tile[1];
-
-    if (nodes[positionIndex]!.type === "UNREACHABLE") {
-        return false;
-    }
-
-    const targetTile = path.request.targetTile;
-    const targetIndex = targetTile[0] * map.columns + targetTile[1];
-
-    if (nodes[targetIndex]!.type === "UNREACHABLE") {
-        return false;
-    }
-
-    const selection = selectNavigationSteeringTarget(
-        path,
-        cursor,
-        state.execution.visits,
-        position,
-        offset,
-    );
-    let segmentTarget: WorldPosition | null = null;
-
-    if (selection.decision.type === "MOVE") {
-        segmentTarget = selection.decision.target;
-    } else if (selection.decision.type === "ARRIVED") {
-        segmentTarget = World.translate(path.request.goal.position, World.negate(offset));
-    }
-
-    return (
-        segmentTarget !== null &&
-        segmentTarget[0] === target[0] &&
-        segmentTarget[1] === target[1] &&
-        canTraverseNavigationSegment(map, locator, World.translate(target, offset))
-    );
-}
-
-export function steerNavigation(
-    state: NavigationState,
-    position: WorldPosition,
-): NavigationSteering {
-    const activity = activeNavigation(state);
-    const selection = selectNavigationSteeringTarget(
+    const selection = selectNavigationTarget(
         activity.path,
         activity.cursor,
         state.execution.visits,
@@ -398,9 +292,8 @@ export function steerNavigation(
             nextActivity = { type: "FOLLOWING", path: activity.path, cursor: selection.cursor };
             break;
 
-        case "ARRIVED":
-            nextActivity = { type: "ARRIVED", request: activity.path.request };
-            outcomes.push({ type: "ARRIVED", requestId });
+        case "ARRIVAL_CANDIDATE":
+            nextActivity = { type: "FOLLOWING", path: activity.path, cursor: selection.cursor };
             break;
 
         case "UNREACHABLE": {

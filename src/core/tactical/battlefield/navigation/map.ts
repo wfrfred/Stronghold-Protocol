@@ -1,5 +1,5 @@
 import { assertNonnegativeSafeInteger, assertPositiveSafeInteger } from "../../../common/assert.js";
-import type { TilePosition } from "../../geometry/coordinate.js";
+import type { TilePosition, WorldPosition } from "../../geometry/coordinate.js";
 import { DIRECTIONS, type Direction } from "../../geometry/direction.js";
 
 export type PathMotionMode = "WALK" | "FLY";
@@ -29,6 +29,15 @@ export const PathMotionMode = {
 };
 
 export const NavigationMap = {
+    bounds(map: NavigationMap): readonly [min: WorldPosition, max: WorldPosition] {
+        const margin = Number.EPSILON * Math.max(map.rows, map.columns);
+
+        return [
+            [-0.5 + margin, -0.5 + margin],
+            [map.columns - 0.5 - margin, map.rows - 0.5 - margin],
+        ];
+    },
+
     contains(map: NavigationMap, position: TilePosition): boolean {
         const [row, col] = position;
 
@@ -81,9 +90,9 @@ export function createNavigationMap(map: NavigationMap): NavigationMap {
         if (typeof cell.passable !== "boolean") {
             throw new TypeError(`invalid passability at index ${index}`);
         }
-        if (!Number.isInteger(cell.moveCost) || cell.moveCost <= 0 || cell.moveCost > 0x7fffffff) {
-            throw new RangeError(`invalid navigation cost at index ${index}`);
-        }
+
+        assertPositiveSafeInteger(cell.moveCost, `navigation cost at index ${index}`);
+
         if (map.pathMotionMode === "FLY" && cell.moveCost !== 1) {
             throw new RangeError("FLY navigation costs must be 1");
         }

@@ -1,24 +1,21 @@
 import { assertNonnegativeNumber } from "../../../../common/assert.js";
 import { createRng, type Seed } from "../../../../common/rng.js";
-import {
-    createWorldOffset,
-    World,
-    type WorldOffset,
-    type WorldPosition,
-} from "../../../geometry/coordinate.js";
+import { createWorldOffset, World, type WorldPosition } from "../../../geometry/coordinate.js";
 import type { NavigationFieldProvider } from "../../../battlefield/navigation/cache.js";
 import { NavigationMap, type NavigationMaps } from "../../../battlefield/navigation/map.js";
-import { canTraverseNavigationSegment } from "../../../battlefield/navigation/query.js";
+import {
+    canTraverseNavigationSegment,
+    canTraverseNavigationRecoverySegment,
+} from "../../../battlefield/navigation/segment.js";
 import {
     isNavigationGoalReached,
     type NavigationRequestId,
 } from "../../../battlefield/navigation/request.js";
 import {
     clearNavigationRequest,
-    canCompleteNavigationSegment,
     getNavigationRequest,
     markNavigationArrived,
-    steerNavigation,
+    queryNavigation,
     type NavigationOutcome,
 } from "../../../battlefield/navigation/state.js";
 import { createRouteExecution, tickRouteWait } from "./route/execution.js";
@@ -30,7 +27,7 @@ import {
 import { hasSpatialPresence, isSpatiallyPresent } from "../presence.js";
 import {
     applyMotionOverride,
-    getNavigationBoundaryDirection,
+    getNavigationRecoveryTarget,
     reflectNavigationMovement,
     type MotionOverride,
 } from "./motion.js";
@@ -39,7 +36,6 @@ import {
     bindRouteNavigation,
     enterRouteControl,
     isMovingRoute,
-    predictRouteControl,
     routeLocator,
     type LocatedRouteSignal,
     type RouteControlTransition,
@@ -197,23 +193,10 @@ export function stepRoutedLocomotion(
 
     function heading(control: RouteControlState): {
         readonly control: RouteControlState;
-        readonly direction: WorldOffset;
+        readonly target: WorldPosition | null;
         readonly present: boolean;
     } {
-        while (true) {
-            if (control.route.progress.phase === "COMPLETED") {
-                break;
-            }
-
-            const boundary = getNavigationBoundaryDirection(
-                context.maps[control.navigation.pathMotionMode],
-                routeLocator(control, position),
-            );
-
-            if (boundary[0] !== 0 || boundary[1] !== 0) {
-                return { control, direction: boundary, present };
-            }
-
+        while (control.route.progress.phase !== "COMPLETED") {
             if (isRouteCheckpointReady(control.route)) {
                 if (!context.routeAdvanceAllowed) {
                     break;
@@ -241,79 +224,39 @@ export function stepRoutedLocomotion(
                 break;
             }
 
-            const next = steerNavigation(control.navigation, position);
-
-            if (
-                control.route.progress.phase === "END" &&
-                next.selection.decision.type === "ARRIVED"
-            ) {
-                const request = getNavigationRequest(control.navigation)!;
-                control = {
-                    ...control,
-                    navigation: {
-                        ...next.state,
-                        execution: {
-                            ...next.state.execution,
-                            activity: {
-                                type: "FOLLOWING",
-                                path: activity.path,
-                                cursor: next.selection.cursor,
-                            },
-                        },
-                    },
-                };
-
-                return {
-                    control,
-                    present,
-                    direction: World.difference(
-                        request.goal.position,
-                        routeLocator(control, position),
-                    ),
-                };
-            }
-
+            const next = queryNavigation(control.navigation, position);
             control = { ...control, navigation: next.state };
+            outcomes.push(...next.outcomes);
+            const decision = next.selection.decision;
 
-            for (const outcome of next.outcomes) {
-                if (outcome.type === "ARRIVED") {
-                    if (arrived.has(outcome.requestId)) {
+            if (control.route.progress.phase === "CHECKPOINTS") {
+                if (decision.type === "ARRIVAL_CANDIDATE") {
+                    control = reportArrival(control);
+                }
+                if (
+                    decision.type === "ARRIVAL_CANDIDATE" ||
+                    isMoveCheckpointReached(control, position, context)
+                ) {
+                    if (context.routeAdvanceAllowed) {
+                        control = advance(control);
                         continue;
                     }
 
-                    arrived.add(outcome.requestId);
+                    break;
                 }
-
-                outcomes.push(outcome);
             }
 
-            if (next.selection.decision.type === "ARRIVED") {
-                if (context.routeAdvanceAllowed) {
-                    control = advance(control);
-                    continue;
-                }
-
-                break;
-            }
-            if (
-                context.routeAdvanceAllowed &&
-                isMoveCheckpointReached(control, position, context)
-            ) {
-                control = advance(control);
-                continue;
-            }
-            if (next.selection.decision.type === "MOVE" && present) {
-                return {
-                    control,
-                    present,
-                    direction: World.difference(next.selection.decision.target, position),
-                };
-            }
-
-            break;
+            return {
+                control,
+                present,
+                target:
+                    decision.type === "MOVE" || decision.type === "ARRIVAL_CANDIDATE"
+                        ? decision.target
+                        : null,
+            };
         }
 
-        return { control, direction: createWorldOffset(0, 0), present };
+        return { control, target: null, present };
     }
 
     function tickWait(control: RouteControlState): RouteControlState {
@@ -352,6 +295,8 @@ export function stepRoutedLocomotion(
         if (
             !context.routeAdvanceAllowed ||
             control.route.progress.phase === "COMPLETED" ||
+            (control.route.progress.phase === "CHECKPOINTS" &&
+                control.route.progress.checkpoint.type === "NOT_ENTERED") ||
             !isRouteEndReached(control.route, routeLocator(control, position))
         ) {
             return control;
@@ -367,38 +312,23 @@ export function stepRoutedLocomotion(
         };
     }
 
-    function canSnapToTarget(
-        control: RouteControlState,
-        target: WorldPosition,
-        recoveringLocator: boolean,
-    ): boolean {
-        if (!World.withinDistance(position, target, speed)) {
-            return false;
-        }
-        if (recoveringLocator) {
-            return true;
-        }
+    let main = state.mainRoute;
+    let alternative = state.alternativeRoute;
 
-        return (
-            canCompleteNavigationSegment(control.navigation, position, target) &&
-            canTraverseNavigationSegment(
-                context.maps[control.navigation.pathMotionMode],
-                position,
-                target,
-            )
-        );
+    if (context.routeAdvanceAllowed) {
+        if (alternative === null) {
+            main = apply(enterRouteControl(main, position, present, execution));
+        } else {
+            alternative = apply(enterRouteControl(alternative, position, present, execution));
+        }
     }
 
-    let main = apply(enterRouteControl(state.mainRoute, position, present, execution));
-    let alternative =
-        state.alternativeRoute === null
-            ? null
-            : apply(enterRouteControl(state.alternativeRoute, position, present, execution));
     let active = alternative ?? main;
-    const boundary = getNavigationBoundaryDirection(
-        context.maps[active.navigation.pathMotionMode],
-        position,
-    );
+    const map = context.maps[active.navigation.pathMotionMode];
+    const locator = routeLocator(active, position);
+    const recovering =
+        !NavigationMap.contains(map, World.toTile(position)) ||
+        !NavigationMap.contains(map, World.toTile(locator));
 
     if (context.motionOverride !== undefined) {
         if (
@@ -418,65 +348,61 @@ export function stepRoutedLocomotion(
             position = next.position;
             steering = next.state;
         }
-    } else if (context.movementAllowed && present && (boundary[0] !== 0 || boundary[1] !== 0)) {
-        const next = World.translate(position, World.scale(boundary, speed));
-        moving = next[0] !== position[0] || next[1] !== position[1];
-        position = next;
     } else if (context.movementAllowed && present) {
-        const locatorBoundary = getNavigationBoundaryDirection(
-            context.maps[active.navigation.pathMotionMode],
-            routeLocator(active, position),
-        );
-        let target: WorldPosition | null = null;
-        const recoveringLocator =
-            active.route.progress.phase !== "COMPLETED" &&
-            (locatorBoundary[0] !== 0 || locatorBoundary[1] !== 0);
+        let target: WorldPosition | null;
 
-        if (recoveringLocator) {
-            target = World.translate(position, locatorBoundary);
-        } else {
-            const prediction = predictRouteControl(active, position, context);
-            active = prediction.control;
-
-            if (prediction.selection?.decision.type === "TARGET") {
-                target = prediction.selection.decision.target;
-            }
-        }
-
-        if (target !== null && canSnapToTarget(active, target, recoveringLocator)) {
-            moving = target[0] !== position[0] || target[1] !== position[1];
-            position = target;
+        if (recovering) {
+            target = getNavigationRecoveryTarget(
+                map,
+                position,
+                active.navigation.execution.locatorOffset,
+            );
         } else {
             const next = heading(active);
             active = next.control;
+            target = next.target;
+            present = next.present;
+        }
 
-            if (next.present) {
-                const distance = Math.hypot(next.direction[0], next.direction[1]);
+        const pending =
+            active.route.progress.phase === "CHECKPOINTS" &&
+            active.route.progress.checkpoint.type === "NOT_ENTERED";
+        const traverse = recovering
+            ? canTraverseNavigationRecoverySegment
+            : canTraverseNavigationSegment;
+        const permitted = (destination: WorldPosition): boolean =>
+            traverse(map, position, destination) &&
+            traverse(map, routeLocator(active, position), routeLocator(active, destination));
+
+        if (recovering && target === null) {
+            steering = { lastVelocity: createWorldOffset(0, 0) };
+        } else if (!pending && present) {
+            if (
+                target !== null &&
+                active.route.progress.phase === "CHECKPOINTS" &&
+                World.withinDistance(position, target, speed) &&
+                permitted(target)
+            ) {
+                moving = target[0] !== position[0] || target[1] !== position[1];
+                position = target;
+            } else {
+                const direction =
+                    target === null ? createWorldOffset(0, 0) : World.difference(target, position);
+                const distance = Math.hypot(direction[0], direction[1]);
                 const movement = integrateSteeringDirection(
                     steering,
                     position,
-                    next.direction,
+                    direction,
                     distance === 0 ? speed : Math.min(speed, distance),
                     definition.steeringParameters,
                 );
-                const reflected = reflectNavigationMovement(
-                    position,
-                    movement.position,
-                    context.maps[active.navigation.pathMotionMode],
-                );
-                const map = context.maps[active.navigation.pathMotionMode];
-                const permitted =
-                    recoveringLocator ||
-                    (canTraverseNavigationSegment(map, position, reflected) &&
-                        canTraverseNavigationSegment(
-                            map,
-                            routeLocator(active, position),
-                            routeLocator(active, reflected),
-                        ));
+                const destination = recovering
+                    ? movement.position
+                    : reflectNavigationMovement(position, movement.position, map);
 
-                if (permitted) {
-                    moving = reflected[0] !== position[0] || reflected[1] !== position[1];
-                    position = reflected;
+                if (permitted(destination)) {
+                    moving = destination[0] !== position[0] || destination[1] !== position[1];
+                    position = destination;
                 }
 
                 steering = movement.state;
