@@ -3,6 +3,7 @@ import { hasVitality, type Vitality } from "../capability.js";
 import type { Unit } from "../../../unit.js";
 import { hasStatusFlag } from "../../status/capability.js";
 import { resolveDefense } from "../../defense/query.js";
+import { applicableVitalityAmount, finiteVitalityAmount } from "../amount.js";
 import {
     type DamageType,
     type DamageOperands,
@@ -59,9 +60,11 @@ export function damageUnit<U extends Unit & Vitality>(
     damageType: DamageType,
 ): DamageResult<U> {
     const defense = hasDefenseDefinition(unit.definition) ? unit.definition.defense : NO_DEFENSE;
-    const damage = hasStatusFlag(unit, "INVINCIBLE")
-        ? 0
-        : calculateDamage(power, damageType, defense);
+    const formulaDamage = applicableVitalityAmount(
+        calculateDamage(power, damageType, defense),
+        "damage amount",
+    );
+    const damage = hasStatusFlag(unit, "INVINCIBLE") ? 0 : formulaDamage;
     const candidateHp = Math.max(0, unit.vitality.hp - damage);
     const hp =
         candidateHp === 0 && unit.vitality.hp > 0 && hasStatusFlag(unit, "UNDEADABLE")
@@ -188,10 +191,9 @@ export function resolveDamage(
             Math.max(0, defense.resistance - operands.fixedPenetration) *
             Math.max(0, 1 - operands.proportionalPenetration),
     };
-    const formulaDamage = calculateDamage(
-        formulaPower(operands),
-        request.damageType,
-        effectiveDefense,
+    const formulaDamage = finiteVitalityAmount(
+        calculateDamage(formulaPower(operands), request.damageType, effectiveDefense),
+        "formula damage",
     );
     let pending: PendingDamage = { amount: formulaDamage, cancellation: null, consumptions: [] };
 
@@ -209,7 +211,7 @@ export function resolveDamage(
         pending = result.value;
     }
 
-    const outputDamage = pending.amount;
+    const outputDamage = finiteVitalityAmount(pending.amount, "output damage");
     const receiver = getCombatUnit(work, request.targetUnitId);
 
     if (receiver === undefined || !hasVitality(receiver) || receiver.vitality.hp <= 0) {
@@ -244,6 +246,7 @@ export function resolveDamage(
         pending = result.value;
     }
 
+    const hpDamage = applicableVitalityAmount(pending.amount, "received damage");
     const finalTarget = getCombatUnit(work, request.targetUnitId);
 
     if (
@@ -285,7 +288,7 @@ export function resolveDamage(
         );
     }
 
-    const candidateHp = Math.max(0, finalTarget.vitality.hp - pending.amount);
+    const candidateHp = Math.max(0, finalTarget.vitality.hp - hpDamage);
     const fatalProtection = candidateHp === 0 && hasStatusFlag(finalTarget, "UNDEADABLE");
     const hp = fatalProtection ? Math.min(1, finalTarget.vitality.hp) : candidateHp;
     const hpLoss = finalTarget.vitality.hp - hp;
@@ -317,7 +320,7 @@ export function resolveDamage(
             ...report,
             formulaDamage,
             outputDamage,
-            hpDamage: pending.amount,
+            hpDamage,
             hpLoss,
             resourceConsumptions: pending.consumptions,
             deathOccurred: hp === 0,

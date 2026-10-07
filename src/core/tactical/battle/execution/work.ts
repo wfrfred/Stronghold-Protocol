@@ -64,17 +64,25 @@ export function getCombatUnit(work: CombatWork, id: UnitId): Unit | undefined {
 }
 
 export function combatWorkView(work: CombatWork): CombatTargetingView {
-    const ids = new Set(work.battlefield.unitIds);
-
-    for (const id of work.units.keys()) {
-        ids.add(id);
-    }
-    for (const id of work.removals.keys()) {
-        ids.delete(id);
-    }
+    let unitIds: readonly UnitId[] | undefined;
 
     return {
-        unitIds: [...ids].sort((left, right) => left - right),
+        get unitIds() {
+            if (unitIds === undefined) {
+                const ids = new Set(work.battlefield.unitIds);
+
+                for (const id of work.units.keys()) {
+                    ids.add(id);
+                }
+                for (const id of work.removals.keys()) {
+                    ids.delete(id);
+                }
+
+                unitIds = Object.freeze([...ids].sort((left, right) => left - right));
+            }
+
+            return unitIds;
+        },
         getUnit: (id) => getCombatUnit(work, id),
         blockerOf: (id) => work.battlefield.blockerOf(id),
         blockedBy: (id) => work.battlefield.blockedBy(id),

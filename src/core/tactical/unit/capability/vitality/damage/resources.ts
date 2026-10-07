@@ -1,3 +1,4 @@
+import { ResourceRegistration } from "../../../../../common/resource-registration.js";
 import type { EffectInstanceValue } from "../../effects/instance.js";
 import type { EffectProgramRef } from "../../effects/program.js";
 import type { EffectResources } from "../../effects/registry.js";
@@ -99,15 +100,18 @@ const emptyRules: CompiledDamageRules = Object.freeze({});
 export class DamageResources {
     readonly #effects: EffectResources;
     readonly #rules = new Map<string, CompiledDamageRules>();
+    readonly #registration: ResourceRegistration;
 
-    constructor(effects: EffectResources) {
+    constructor(effects: EffectResources, registration = new ResourceRegistration()) {
         this.#effects = effects;
+        this.#registration = registration;
     }
 
     register<S extends object>(
         ref: EffectProgramRef<S>,
         rules: NoInfer<DamageEffectRules<S>>,
     ): void {
+        this.#registration.assertWritable();
         this.#effects.get(ref);
 
         if (this.#rules.has(ref.id)) {
@@ -196,6 +200,8 @@ export class DamageResources {
     }
 
     get(instance: EffectInstanceValue): CompiledDamageRules {
+        this.#registration.assertUsable();
+
         return this.#rules.get(instance.programRef.id) ?? emptyRules;
     }
 }

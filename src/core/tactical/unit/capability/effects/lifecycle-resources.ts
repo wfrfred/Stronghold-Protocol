@@ -1,3 +1,4 @@
+import { ResourceRegistration } from "../../../../common/resource-registration.js";
 import type {
     EffectAdmissionContext,
     EffectLifecycleContext,
@@ -9,10 +10,10 @@ import type { EffectResources } from "./registry.js";
 import { hasEffects } from "./capability.js";
 
 export interface CompiledEffectLifecycle {
-    readonly start?: (context: EffectLifecycleContext) => void;
-    readonly enable?: (context: EffectLifecycleContext) => void;
-    readonly disable?: (context: EffectLifecycleContext) => void;
-    readonly finalize?: (context: EffectLifecycleContext) => void;
+    readonly start?: (context: EffectLifecycleContext) => undefined;
+    readonly enable?: (context: EffectLifecycleContext) => undefined;
+    readonly disable?: (context: EffectLifecycleContext) => undefined;
+    readonly finalize?: (context: EffectLifecycleContext) => undefined;
     readonly accepts?: (context: EffectAdmissionContext) => boolean;
 }
 
@@ -21,15 +22,18 @@ const emptyLifecycle: CompiledEffectLifecycle = Object.freeze({});
 export class EffectLifecycleResources {
     readonly #effects: EffectResources;
     readonly #programs = new Map<string, CompiledEffectLifecycle>();
+    readonly #registration: ResourceRegistration;
 
-    constructor(effects: EffectResources) {
+    constructor(effects: EffectResources, registration = new ResourceRegistration()) {
         this.#effects = effects;
+        this.#registration = registration;
     }
 
     register<S extends object>(
         ref: EffectProgramRef<S>,
         program: NoInfer<EffectLifecycleProgram<S>>,
     ): void {
+        this.#registration.assertWritable();
         this.#effects.get(ref);
 
         if (this.#programs.has(ref.id)) {
@@ -50,13 +54,20 @@ export class EffectLifecycleResources {
             action === undefined
                 ? {}
                 : {
-                      run: (context: EffectLifecycleContext) => {
-                          action({
+                      run: (context: EffectLifecycleContext): undefined => {
+                          const invoke: (context: EffectLifecycleContext<S>) => unknown = action;
+                          const result = invoke({
                               ...context,
                               get instance() {
                                   return typed(context.instance);
                               },
                           });
+
+                          if (result !== undefined) {
+                              throw new TypeError(
+                                  "effect lifecycle callbacks must complete synchronously without returning a value",
+                              );
+                          }
                       },
                   };
         const start = compile(program.start).run;
@@ -83,6 +94,8 @@ export class EffectLifecycleResources {
     }
 
     get(instance: EffectInstanceValue): CompiledEffectLifecycle {
+        this.#registration.assertUsable();
+
         return this.#programs.get(instance.programRef.id) ?? emptyLifecycle;
     }
 }

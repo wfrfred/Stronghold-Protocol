@@ -7,6 +7,7 @@ import { hasVitality, type VitalUnit } from "../capability.js";
 import type { UnitId } from "../../../unit.js";
 import { resolveMaxHp } from "../query.js";
 import { withVitalityHookContext } from "../hook.js";
+import { applicableVitalityAmount } from "../amount.js";
 import type { CompiledHealingContext, HealingResourceServices, HealingStage } from "./resources.js";
 import type {
     HealingCancellation,
@@ -189,16 +190,11 @@ function targetCancellation(work: CombatWork, targetUnitId: UnitId): HealingCanc
     return null;
 }
 
-export function healUnit<U extends VitalUnit>(
+function applyHealingValue<U extends VitalUnit>(
     unit: U,
     power: number,
-    ignoreHealFree = false,
-    maxHp = unit.definition.vitality.maxHp,
+    maxHp: number,
 ): HealingResult<U> {
-    if (unit.vitality.hp <= 0 || (!ignoreHealFree && hasStatusFlag(unit, "HEAL_FREE"))) {
-        return { unit, amount: 0 };
-    }
-
     const amount = Math.max(0, Math.min(power, maxHp - unit.vitality.hp));
 
     return {
@@ -208,6 +204,22 @@ export function healUnit<U extends VitalUnit>(
                 : { ...unit, vitality: { ...unit.vitality, hp: unit.vitality.hp + amount } },
         amount,
     };
+}
+
+export function healUnit<U extends VitalUnit>(
+    unit: U,
+    power: number,
+    ignoreHealFree = false,
+    maxHp = unit.definition.vitality.maxHp,
+): HealingResult<U> {
+    applicableVitalityAmount(power, "healing amount");
+    applicableVitalityAmount(maxHp, "healing maximum HP");
+
+    if (unit.vitality.hp <= 0 || (!ignoreHealFree && hasStatusFlag(unit, "HEAL_FREE"))) {
+        return { unit, amount: 0 };
+    }
+
+    return applyHealingValue(unit, power, maxHp);
 }
 
 export function resolveHealing(
@@ -276,6 +288,7 @@ export function resolveHealing(
         pending = reception.value;
     }
 
+    const healingAmount = applicableVitalityAmount(pending.amount, "received healing");
     const current = getCombatUnit(work, request.targetUnitId);
     const finalCancellation =
         pending.cancellation ?? targetCancellation(work, request.targetUnitId);
@@ -285,12 +298,8 @@ export function resolveHealing(
         let hp = current.vitality.hp;
 
         if (finalCancellation === null) {
-            const healed = healUnit(
-                current,
-                pending.amount,
-                true,
-                resolveMaxHp(current.id, combatWorkView(work), resources.vitality),
-            );
+            const maxHp = resolveMaxHp(current.id, combatWorkView(work), resources.vitality)!;
+            const healed = applyHealingValue(current, healingAmount, maxHp);
             work = updateCombatUnit(work, healed.unit);
             amount = healed.amount;
             hp = healed.unit.vitality.hp;

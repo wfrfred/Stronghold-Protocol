@@ -46,7 +46,9 @@ export interface EffectAdmissionContext<S extends object = object> {
     readonly facts: EffectFacts;
 }
 
-export type EffectLifecycleAction<S extends object> = (context: EffectLifecycleContext<S>) => void;
+export type EffectLifecycleAction<S extends object> = (
+    context: EffectLifecycleContext<S>,
+) => undefined;
 
 export interface EffectLifecycleProgram<S extends object> {
     readonly start?: EffectLifecycleAction<S>;

@@ -14,6 +14,7 @@ import { offenseAttackContributions } from "../offense/capability.js";
 import { defenseContributions, resistanceContributions } from "../defense/capability.js";
 import { vitalityMaxHpContributions } from "../vitality/capability.js";
 import type { NumericContributionTarget, NumericProviderFacts } from "../contribution.js";
+import { ResourceRegistration } from "../../../../common/resource-registration.js";
 import type { Unit } from "../../unit.js";
 import type { CombatTargetingView } from "../../targeting/query.js";
 
@@ -127,19 +128,32 @@ export interface EffectContributionBindings {
 
 export class EffectBindingResources implements EffectContributionBindings {
     readonly #contributions = new Map<string, readonly CompiledEffectContribution[]>();
+    readonly #registration: ResourceRegistration;
+
+    constructor(registration = new ResourceRegistration()) {
+        this.#registration = registration;
+    }
 
     register<S extends object>(
         ref: EffectProgramRef<S>,
         bindings: readonly CompiledEffectContribution[],
     ): void {
+        this.#registration.assertWritable();
+
         if (this.#contributions.has(ref.id)) {
             throw new TypeError(`duplicate effect bindings ${ref.id}`);
         }
 
-        this.#contributions.set(ref.id, bindings);
+        const owned = Object.freeze(
+            bindings.map(({ install, update, setParticipation, remove }) =>
+                Object.freeze({ install, update, setParticipation, remove }),
+            ),
+        );
+        this.#contributions.set(ref.id, owned);
     }
 
     get(instance: EffectInstanceValue): readonly CompiledEffectContribution[] {
+        this.#registration.assertUsable();
         const bindings = this.#contributions.get(instance.programRef.id);
 
         if (bindings === undefined) {

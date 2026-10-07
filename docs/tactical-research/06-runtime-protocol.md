@@ -28,6 +28,12 @@ resources.registerEffect(program, {
 
 所有字段都可省略。`resources.registerEffect(program)` 合法：实例可以没有贡献、接收 hook 或生命周期动作；领域登记缺席表示没有该领域行为。
 
+登记发生在资源构建期间。Binding registry 在登记时取得数组和操作描述对象的所有权，复制并冻结这两层结构；函数引用共享，函数捕获的配置仍须不可变。底层 program registry 允许同一个 program 对象重复登记；相同 ref 不允许替换已有 program 描述。组合入口仍按各领域的重复登记政策拒绝再次登记。
+
+Program registry 也取得行为描述的所有权，复制并冻结 initialize／ownState 的函数引用，返回自己的描述对象；来源对象和返回对象均可作为同一次底层重复登记的身份。程序 ref 保留原身份，必须不可变，通常来自 createEffectProgram。调用方随后修改来源描述，不改变已经登记的规则。Binding 编译器同样捕获配置值，不保留调用方可变的配置对象。
+
+组合登记失败后，整份资源构建结果失效，必须重新构建；已完成的部分登记不原地回滚，也不允许继续读取、登记或交付。`BattleRuntime` 创建系统时关闭整份资源图的登记入口，包括各领域 registry。关闭后仍可读取规则、创建实例与延迟编译 Action；延迟编译不得登记新规则。战斗中的实例安装不属于程序登记。
+
 这是组合层向各领域登记的入口。[EffectProgram](../../src/core/tactical/unit/capability/effects/program.ts) 仅定义程序身份、状态初始化及状态取得所有权，不追加一套包办所有 subsystem 的行为槽位。Damage、Healing、Status 等继续拥有自身契约；同一实例可以同时具有多个 facet。
 
 ## 3. Effect 生命周期与父关系
@@ -43,6 +49,12 @@ resources.registerEffect(program, {
 | finalize | 先移除登记身份，再执行结束动作并清理 bindings；子实例由自身接收者独立清理 |
 
 自动安装在清理连锁完成后读取最新身份计数器，避免 ON_FINISH 嵌套安装后复用 ID。安装拒绝是正常结果，保留已完成的 start 前缀和身份进度。
+
+start 已结束实例时，安装直接 finalize 并返回 `START_FINISHED`，不初始化或移除尚未安装的 bindings；`started` 保持 false，表示安装尚未进入绑定初始化阶段。普通 admission 拒绝仍清理已经安装的 bindings。
+
+生命周期动作必须同步完成并返回 undefined；调用原 callback 的编译边界拒绝其他返回值。context 的实例查询、facts 和 operations 只在当前 callback 调用期有效，正常或异常退出都关闭。不得保存 operations 后通过微任务、定时器或其他延后 continuation 调用；跨 tick 行为须保存为明确的过程事实。
+
+Damage／Healing hook 的借出 facts、实例查询和 operations 同样在 callback 退出时关闭；同步嵌套结算期间，外层 callback 的接口仍有效。
 
 父身份是 `{ unitId, instanceId }`，独立于来源和 lifetime owner。`attachEffectParent()` 返回 `{ work, result }`；内容操作 `effects.attachParent()` 提交同一工作变化并返回 `result`：
 
@@ -62,6 +74,8 @@ resources.registerEffect(program, {
 候选轮到前重新读取当前实例、参与事实和领域资格。新实例按 UID 立即可见，但不进入旧范围；旧停用候选恢复后可以参与。候选身份冻结，HP、载荷及有效参数仍按对应查询契约读取。
 
 领域事件结束后清理接收者的 finished 实例。嵌套 cleanup 可以先于外层事件结束，运行结束动作并安装新实例；它不会重建尚活跃的外层候选。
+
+单接收者清理只捕获该接收者当时的全部实例身份，逐个重读是否 finished。结束动作结束的原有候选仍可在本轮清理；结束动作新装的实例不加入本轮。局部事实查询不枚举单位，View 的成员列表仅在实际读取时构建，且与该 View 的 getUnit 使用同一份 Work。
 
 已经进入的 callback 不因实例 finish／finalize 自动中断。finalize 删除 UID 前向活跃 invocation 保存该实例最后事实，callback 后继可以读取最后载荷；UID 和参与查询已经看不到该登记。这个暂存退出 callback 即清除，不延迟 cleanup，也不进入 Resources 或 snapshot。
 
@@ -106,6 +120,8 @@ skipModifierEvents = raw._skipModifierEvent;
 
 正常拒绝、领域取消和零 HP 变化都是可提交结果。只有未处理异常或明确 tick abort 才放弃本 tick 工作事实；权威 Battlefield 在整 tick 成功后发布。
 
+进入 HP 转换的最终伤害和治疗量必须有限且非负，非法扩展结果抛 RangeError；公式和输出中写入 DamageReport 的数值必须有限，中间有符号修正不被统一归零。取消不使非法最终量变成合法量。公开生命 transition 使用同一数值边界；Healing 源请求既有的负 power 归零归一化继续保留。
+
 候选范围和活跃实例暂存在 `finally` 中释放。异常后的新事件必须重新建立身份范围；不得把失败调用的候选、HP、实例载荷、身份进度或公开事件留入下一次权威结果。
 
 ## 8. 验收范围
@@ -129,12 +145,15 @@ node --test --test-isolation=none \
     test/sim/core.test.js \
     test/sim/damage-pipeline.test.js \
     test/sim/effect-dispatch.test.js \
+    test/sim/effect-cleanup.test.js \
     test/sim/effects.test.js \
     test/sim/facing.test.js \
     test/sim/feedback1b-displacement.test.js \
     test/sim/pathing-crosscheck.test.js \
     test/sim/pathing.test.js \
-    test/sim/playtest5_blocking.test.js
+    test/sim/playtest5_blocking.test.js \
+    test/sim/resource-registration.test.js \
+    test/sim/settlement-invariants.test.js
 ```
 
 该命令只包含已接入 TypeScript 的 legacy 相关测试；统计不混入全仓库其他测试。

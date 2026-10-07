@@ -94,17 +94,27 @@ function runLifecycleAction(
 
     return scope.dispatch.withInstance(address, instance, (lastKnown) => {
         let currentWork = work;
+        let active = true;
+
+        const readWork = (): CombatWork => {
+            if (!active) {
+                throw new TypeError("effect lifecycle context is no longer active");
+            }
+
+            return currentWork;
+        };
+
         const context: EffectLifecycleContext = {
             address,
             get instance() {
-                return getEffect(currentWork, address) ?? lastKnown();
+                return getEffect(readWork(), address) ?? lastKnown();
             },
             tick,
-            facts: effectDispatchFacts(() => effectFacts(() => currentWork), scope.dispatch),
+            facts: effectDispatchFacts(() => effectFacts(readWork), scope.dispatch),
             effects: {
                 install: (unitId, ref, input) => {
                     const installation = installNewInScope(
-                        currentWork,
+                        readWork(),
                         unitId,
                         ref,
                         input,
@@ -118,7 +128,7 @@ function runLifecycleAction(
                 },
                 update: (target, ref, transition) => {
                     currentWork = updateEffectState(
-                        currentWork,
+                        readWork(),
                         target.unitId,
                         target.instanceId,
                         ref,
@@ -128,7 +138,7 @@ function runLifecycleAction(
                 },
                 setParticipation: (target, participating) => {
                     currentWork = setParticipationInScope(
-                        currentWork,
+                        readWork(),
                         target,
                         participating,
                         resources,
@@ -137,11 +147,11 @@ function runLifecycleAction(
                     );
                 },
                 finish: (target) => {
-                    currentWork = finishInScope(currentWork, target, resources, tick, scope);
+                    currentWork = finishInScope(readWork(), target, resources, tick, scope);
                 },
                 attachParent: (child, parent, finishIfParentFinished) => {
                     const binding = attachParentInScope(
-                        currentWork,
+                        readWork(),
                         child,
                         parent,
                         resources,
@@ -156,9 +166,13 @@ function runLifecycleAction(
             },
         };
 
-        action(context);
+        try {
+            action(context);
 
-        return currentWork;
+            return currentWork;
+        } finally {
+            active = false;
+        }
     });
 }
 
@@ -379,10 +393,16 @@ function finalizeFinishedInScope(
     tick: number,
     scope: EffectLifecycleScope,
 ): CombatWork {
-    const addresses = addressesMatching(
-        work,
-        (_instance, address) => address.unitId === ownerUnitId,
-    );
+    const owner = getCombatUnit(work, ownerUnitId);
+
+    if (owner === undefined || !hasEffects(owner)) {
+        return work;
+    }
+
+    const addresses = owner.effects.instances.map((instance) => ({
+        unitId: ownerUnitId,
+        instanceId: instance.id,
+    }));
 
     for (const address of addresses) {
         work = finalizeInScope(work, address, resources, tick, scope);
@@ -476,6 +496,11 @@ function installInScope(
     let current = getEffect(work, address);
 
     if (current === undefined) {
+        return { work, result: { type: "REJECTED", reason: "START_FINISHED", address } };
+    }
+    if (current.finished) {
+        work = finalizeInScope(work, address, resources, tick, scope);
+
         return { work, result: { type: "REJECTED", reason: "START_FINISHED", address } };
     }
 

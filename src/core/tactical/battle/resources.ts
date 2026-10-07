@@ -1,3 +1,4 @@
+import { ResourceRegistration } from "../../common/resource-registration.js";
 import { type EffectResources } from "../unit/capability/effects/registry.js";
 import { type EffectProgram } from "../unit/capability/effects/program.js";
 import {
@@ -30,6 +31,7 @@ export interface CombatEffectFacets<S extends object> {
 }
 
 export class CombatResources {
+    readonly #registration = new ResourceRegistration();
     readonly effects: EffectResources;
     readonly offense: NumericContributionResources<NumericProviderFacts>;
     readonly defense: NumericContributionResources<NumericProviderFacts>;
@@ -42,7 +44,7 @@ export class CombatResources {
     readonly settleHealing: HealingOperation;
 
     constructor() {
-        const resources = createActionResources();
+        const resources = createActionResources(this.#registration);
         this.effects = resources.effects;
         this.offense = resources.offense;
         this.defense = resources.defense;
@@ -55,28 +57,41 @@ export class CombatResources {
         this.settleHealing = resources.settleHealing;
     }
 
+    seal(): this {
+        this.#registration.seal();
+
+        return this;
+    }
+
     registerEffect<S extends object>(
         program: EffectProgram<S>,
         facets: NoInfer<CombatEffectFacets<S>> = {},
     ): EffectProgram<S> {
-        this.effects.register(program);
-        this.effectBindings.register(program.ref, [
-            ...(facets.contributions === undefined
-                ? []
-                : compileEffectContributions(program, facets.contributions, this)),
-            ...(facets.bindings ?? []),
-        ]);
+        this.#registration.assertWritable();
 
-        if (facets.damage !== undefined) {
-            this.damage.register(program.ref, facets.damage);
-        }
-        if (facets.healing !== undefined) {
-            this.healing.register(program.ref, facets.healing);
-        }
-        if (facets.lifecycle !== undefined) {
-            this.effectLifecycle.register(program.ref, facets.lifecycle);
-        }
+        try {
+            const registered = this.effects.register(program);
+            this.effectBindings.register(registered.ref, [
+                ...(facets.contributions === undefined
+                    ? []
+                    : compileEffectContributions(registered, facets.contributions, this)),
+                ...(facets.bindings ?? []),
+            ]);
 
-        return program;
+            if (facets.damage !== undefined) {
+                this.damage.register(registered.ref, facets.damage);
+            }
+            if (facets.healing !== undefined) {
+                this.healing.register(registered.ref, facets.healing);
+            }
+            if (facets.lifecycle !== undefined) {
+                this.effectLifecycle.register(registered.ref, facets.lifecycle);
+            }
+
+            return registered;
+        } catch (error) {
+            this.#registration.fail();
+            throw error;
+        }
     }
 }

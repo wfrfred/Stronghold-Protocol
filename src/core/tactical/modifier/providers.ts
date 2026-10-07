@@ -1,3 +1,4 @@
+import { ResourceRegistration } from "../../common/resource-registration.js";
 import type { NumericContributionEvaluator, NumericProviderContribution } from "./contribution.js";
 import type { NumericContribution } from "./numeric.js";
 
@@ -12,8 +13,15 @@ export interface NumericContributionProvider<C> {
 
 export class NumericContributionResources<C> implements NumericContributionProvider<C> {
     readonly #providers = new Map<string, CompiledNumericProvider<C>>();
+    readonly #registration: ResourceRegistration;
+
+    constructor(registration = new ResourceRegistration()) {
+        this.#registration = registration;
+    }
 
     register(ref: string, provider: CompiledNumericProvider<C>): void {
+        this.#registration.assertWritable();
+
         if (this.#providers.has(ref)) {
             throw new TypeError(`duplicate numeric provider ${ref}`);
         }
@@ -22,7 +30,10 @@ export class NumericContributionResources<C> implements NumericContributionProvi
     }
 
     evaluator(context: C): NumericContributionEvaluator {
+        this.#registration.assertUsable();
+
         return (entry) => {
+            this.#registration.assertUsable();
             const provider = this.#providers.get(entry.providerRef);
 
             if (provider === undefined) {

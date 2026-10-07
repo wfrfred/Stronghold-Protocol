@@ -39,6 +39,14 @@ interface ContributionBinding {
     readonly group: NumericContributionGroup | undefined;
 }
 
+function ownBinding(binding: ContributionBinding): ContributionBinding {
+    return Object.freeze({
+        id: binding.id,
+        target: binding.target,
+        group: binding.group === undefined ? undefined : Object.freeze({ ...binding.group }),
+    });
+}
+
 function contributionBinding(
     unit: Unit,
     instance: EffectInstanceValue,
@@ -83,19 +91,21 @@ export function compileNumericProviderBinding(
         readonly evaluate: CompiledNumericProvider<NumericProviderFacts>;
     },
 ): CompiledEffectContribution {
-    binding.providers.register(binding.providerRef, binding.evaluate);
+    const owned = ownBinding(binding);
+    const { providerRef, providers, evaluate } = binding;
+    providers.register(providerRef, evaluate);
 
     return {
         install: (unit, instance) =>
-            binding.target(unit, (state) =>
+            owned.target(unit, (state) =>
                 registerNumericContribution(state, {
-                    ...contributionBinding(unit, instance, binding),
-                    providerRef: binding.providerRef,
+                    ...contributionBinding(unit, instance, owned),
+                    providerRef,
                 }),
             ),
         update: (unit) => unit,
-        setParticipation: participationBinding(binding),
-        remove: removeBinding(binding),
+        setParticipation: participationBinding(owned),
+        remove: removeBinding(owned),
     };
 }
 
@@ -104,27 +114,29 @@ export function compileNumericProjectionBinding(
         readonly project: (instance: EffectInstanceValue) => readonly NumericContribution[];
     },
 ): CompiledEffectContribution {
+    const owned = ownBinding(binding);
+    const { project } = binding;
     const projected = (unit: Unit, instance: EffectInstanceValue): NumericValueContribution => ({
-        ...contributionBinding(unit, instance, binding),
-        values: binding.project(instance),
+        ...contributionBinding(unit, instance, owned),
+        values: project(instance),
     });
 
     return {
         install: (unit, instance) =>
-            binding.target(unit, (state) =>
+            owned.target(unit, (state) =>
                 registerNumericContribution(state, projected(unit, instance)),
             ),
         update: (unit, instance) => {
             const contribution = projected(unit, instance);
 
-            return binding.target(unit, (state) =>
+            return owned.target(unit, (state) =>
                 updateNumericContribution(state, contribution.id, (entry) => ({
                     ...contribution,
                     participating: entry.participating,
                 })),
             );
         },
-        setParticipation: participationBinding(binding),
-        remove: removeBinding(binding),
+        setParticipation: participationBinding(owned),
+        remove: removeBinding(owned),
     };
 }

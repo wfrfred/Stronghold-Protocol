@@ -53,7 +53,7 @@ function bindStatelessPhase(phase: BattlePhase): BattlePhase<BattleSystemStates>
 }
 
 export function createBattleSystems(spec: BattleSpec, resources: BattleResources = {}) {
-    const combatResources = resources.combat ?? new CombatResources();
+    const combatResources = (resources.combat ?? new CombatResources()).seal();
     const predefined = createPredefinedSystem(spec.predefines, combatResources);
     const schedule = createSpawnScheduleSystem(spec.schedule);
     const movement = createMovementSystem({ moveMultiplier: spec.moveMultiplier }, combatResources);

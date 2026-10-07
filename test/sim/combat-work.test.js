@@ -29,6 +29,72 @@ function baseline(units) {
     };
 }
 
+test('combat work: point reads do not enumerate battlefield membership', () => {
+    const first = unit(1);
+    const second = unit(2);
+    const battlefield = {
+        ...baseline([second, first]),
+        get unitIds() {
+            assert.fail('point reads must not enumerate units');
+        },
+    };
+    const moved = { ...second, position: [3, 4] };
+    const work = removeCombatUnit(updateCombatUnit(createCombatWork(battlefield), moved), 1);
+    const view = combatWorkView(work);
+
+    assert.equal(view.getUnit(2), moved);
+    assert.equal(view.getUnit(1), undefined);
+    assert.equal(view.getUnit(99), undefined);
+    assert.equal(view.blockerOf(2), 1);
+    assert.deepEqual(view.blockedBy(1), [2]);
+});
+
+test('combat work: lazy membership is reused and agrees with its captured work', () => {
+    const first = unit(1);
+    const second = unit(2);
+    const third = unit(3);
+    const battlefield = baseline([third, first, second]);
+    const baselineIds = battlefield.unitIds;
+    let enumerations = 0;
+    Object.defineProperty(battlefield, 'unitIds', {
+        get: () => {
+            enumerations++;
+
+            return baselineIds;
+        },
+    });
+
+    const spawned = unit(8);
+    const moved = { ...third, position: [5, 5] };
+    let work = createCombatWork(battlefield);
+    work = updateCombatUnit(work, spawned);
+    work = updateCombatUnit(work, moved);
+    work = removeCombatUnit(work, 2);
+    const view = combatWorkView(work);
+    const nextSpawned = unit(9);
+    const next = updateCombatUnit(removeCombatUnit(work, 8), nextSpawned);
+
+    assert.equal(enumerations, 0);
+    assert.equal(view.getUnit(8), spawned);
+    const ids = view.unitIds;
+
+    assert.equal(enumerations, 1);
+    assert.equal(view.unitIds, ids);
+    assert.equal(enumerations, 1);
+    assert.deepEqual(ids, [1, 3, 8]);
+    assert.deepEqual(ids.map(id => view.getUnit(id)), [first, moved, spawned]);
+    assert.equal(view.getUnit(2), undefined);
+    assert.equal(view.getUnit(9), undefined);
+
+    const nextView = combatWorkView(next);
+
+    assert.deepEqual(nextView.unitIds, [1, 3, 9]);
+    assert.equal(nextView.getUnit(8), undefined);
+    assert.equal(nextView.getUnit(9), nextSpawned);
+    assert.equal(enumerations, 2);
+    assert.equal(view.unitIds, ids);
+});
+
 test('combat work: sparse updates expose current units while relation queries retain the baseline', () => {
     const first = unit(1);
     const second = unit(2);

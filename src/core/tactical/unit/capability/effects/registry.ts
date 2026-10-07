@@ -1,3 +1,4 @@
+import { ResourceRegistration } from "../../../../common/resource-registration.js";
 import type { EffectProgram, EffectProgramRef } from "./program.js";
 import {
     copyEffectInstance,
@@ -9,23 +10,47 @@ import {
 } from "./internal/instance.js";
 import type { EffectInstance, EffectInstanceMetadata, EffectInstanceValue } from "./instance.js";
 
+interface RegisteredEffectProgram {
+    readonly source: object;
+    readonly program: EffectProgram<object>;
+}
+
 export class EffectResources {
-    readonly #programs = new Map<string, EffectProgram<object>>();
+    readonly #programs = new Map<string, RegisteredEffectProgram>();
+    readonly #registration: ResourceRegistration;
+
+    constructor(registration = new ResourceRegistration()) {
+        this.#registration = registration;
+    }
 
     register<S extends object>(program: EffectProgram<S>): EffectProgram<S> {
-        const existing = this.#programs.get(program.ref.id);
+        this.#registration.assertWritable();
+        const { ref, initialize, ownState } = program;
+        const existing = this.#programs.get(ref.id);
 
-        if (existing !== undefined && !Object.is(existing.ref, program.ref)) {
-            throw new TypeError(`duplicate effect program ${program.ref.id}`);
+        if (existing !== undefined) {
+            if (!Object.is(existing.source, program) && !Object.is(existing.program, program)) {
+                throw new TypeError(`duplicate effect program ${ref.id}`);
+            }
+
+            return existing.program as unknown as EffectProgram<S>;
+        }
+        if (!Object.isFrozen(ref)) {
+            throw new TypeError("effect program references must be immutable");
         }
 
-        this.#programs.set(program.ref.id, program as unknown as EffectProgram<object>);
+        const owned = Object.freeze({ ref, initialize, ownState });
+        this.#programs.set(ref.id, {
+            source: program,
+            program: owned as unknown as EffectProgram<object>,
+        });
 
-        return program;
+        return owned;
     }
 
     get<S extends object>(ref: EffectProgramRef<S>): EffectProgram<S> {
-        const program = this.#programs.get(ref.id);
+        this.#registration.assertUsable();
+        const program = this.#programs.get(ref.id)?.program;
 
         if (!Object.is(program?.ref, ref)) {
             throw new TypeError(`unregistered effect program ${ref.id}`);
@@ -44,8 +69,9 @@ export class EffectResources {
     }
 
     restore(value: unknown): EffectInstanceValue {
+        this.#registration.assertUsable();
         const { instance, programId } = readEffectSnapshot(value);
-        const program = this.#programs.get(programId);
+        const program = this.#programs.get(programId)?.program;
 
         if (program === undefined) {
             throw new TypeError(`unregistered effect program ${programId}`);
@@ -95,8 +121,9 @@ export class EffectResources {
     }
 
     #instanceProgram(instance: EffectInstanceValue): EffectProgram<object> {
+        this.#registration.assertUsable();
         copyEffectInstance(instance);
-        const program = this.#programs.get(instance.programRef.id);
+        const program = this.#programs.get(instance.programRef.id)?.program;
 
         if (program?.ref !== instance.programRef) {
             throw new TypeError(`unregistered effect program ${instance.programRef.id}`);

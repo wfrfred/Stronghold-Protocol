@@ -298,6 +298,70 @@ test("effect dispatch: exceptional exits release candidates before retry on the 
   assert.equal(exitedReader(), initialInstance);
 });
 
+test("effect dispatch: Damage and Healing borrowed facts and operations close after every callback exit", () => {
+  for (const domain of ["damage", "healing"]) {
+    for (const fails of [false, true]) {
+      const resources = new CombatResources();
+      let escaped;
+      const descriptor = resources.registerEffect(program("borrowed", { calls: 0 }), {
+        [domain]: {
+          reception: {
+            priority: 0,
+            apply: (context, pending) => {
+              escaped = context;
+              context.operations.effects.update(
+                context.address,
+                context.instance.programRef,
+                (state) => ({ calls: state.calls + 1 }),
+              );
+              if (fails) {
+                throw new Error("hook failed");
+              }
+              return { value: pending };
+            },
+          },
+        },
+      });
+      const original = effectFixtureWork(attach(resources, unit(2, 500), descriptor));
+      const healRequest = { sourceUnitId: null, targetUnitId: 2, power: 100 };
+      const settle = () =>
+        domain === "damage"
+          ? resolveDamage(original, request(), resources)
+          : resolveHealing(original, healRequest, resources, 1);
+      let result;
+      if (fails) {
+        assert.throws(settle, /hook failed/);
+      } else {
+        result = settle();
+      }
+
+      for (const call of [
+        () => escaped.instance,
+        () => escaped.facts.getUnit(2),
+        () => escaped.facts.getEffect(escaped.address),
+        () => escaped.facts.participating(2),
+        () => escaped.facts.maxHp(2),
+        () => escaped.operations.effects.install(2, descriptor.ref, installation(2)),
+        () => escaped.operations.effects.update(escaped.address, descriptor.ref, (state) => state),
+        () => escaped.operations.effects.setParticipation(escaped.address, false),
+        () => escaped.operations.effects.finish(escaped.address),
+        () =>
+          escaped.operations.effects.attachParent(escaped.address, { unitId: 2, instanceId: 99 }),
+        () => escaped.operations.damage(request()),
+        () => escaped.operations.heal(healRequest),
+      ]) {
+        assert.throws(call, /no longer active/);
+      }
+      assert.equal(getCombatUnit(original, 2).vitality.hp, 500);
+      assert.equal(getCombatUnit(original, 2).effects.instances[0].state.calls, 0);
+      if (result !== undefined) {
+        assert.equal(getCombatUnit(result.work, 2).vitality.hp, domain === "damage" ? 400 : 600);
+        assert.equal(getCombatUnit(result.work, 2).effects.instances[0].state.calls, 1);
+      }
+    }
+  }
+});
+
 test("effect dispatch: domain cancellation retains prefix transitions and stops candidates only when explicitly requested", () => {
   for (const stopDispatch of [false, true]) {
     const resources = new CombatResources();

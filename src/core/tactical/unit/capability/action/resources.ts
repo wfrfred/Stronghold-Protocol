@@ -1,3 +1,4 @@
+import { ResourceRegistration } from "../../../../common/resource-registration.js";
 import {
     NumericContributionResources,
     type NumericContributionProvider,
@@ -27,22 +28,30 @@ export interface ActionResourceSet extends ActionResources {
     readonly settleHealing: HealingOperation;
 }
 
-export function createActionResources(): ActionResourceSet {
-    const effects = new EffectResources();
+export function createActionResources(
+    registration = new ResourceRegistration(),
+): ActionResourceSet {
+    const effects = new EffectResources(registration);
 
     const resources: ActionResourceSet = {
         effects,
-        offense: new NumericContributionResources<NumericProviderFacts>(),
-        defense: new NumericContributionResources<NumericProviderFacts>(),
-        vitality: new NumericContributionResources<NumericProviderFacts>(),
-        effectBindings: new EffectBindingResources(),
-        effectLifecycle: new EffectLifecycleResources(effects),
-        damage: new DamageResources(effects),
-        healing: new HealingResources(effects),
-        settleDamage: (work, request, dispatch) =>
-            resolveDamage(work, request, resources, dispatch),
-        settleHealing: (work, request, tick, dispatch) =>
-            resolveHealing(work, request, resources, tick, dispatch),
+        offense: new NumericContributionResources<NumericProviderFacts>(registration),
+        defense: new NumericContributionResources<NumericProviderFacts>(registration),
+        vitality: new NumericContributionResources<NumericProviderFacts>(registration),
+        effectBindings: new EffectBindingResources(registration),
+        effectLifecycle: new EffectLifecycleResources(effects, registration),
+        damage: new DamageResources(effects, registration),
+        healing: new HealingResources(effects, registration),
+        settleDamage: (work, request, dispatch) => {
+            registration.assertUsable();
+
+            return resolveDamage(work, request, resources, dispatch);
+        },
+        settleHealing: (work, request, tick, dispatch) => {
+            registration.assertUsable();
+
+            return resolveHealing(work, request, resources, tick, dispatch);
+        },
     };
 
     return resources;

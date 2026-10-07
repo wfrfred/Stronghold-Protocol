@@ -347,6 +347,163 @@ test("effects: start can read its registered identity before status bindings par
   assert.equal(getCombatUnit(result.work, 2).effects.instances[0].participating, true);
 });
 
+test("effects: start termination preserves its prefix without initializing or removing bindings", () => {
+  const resources = new CombatResources();
+  const keeper = resources.registerEffect(
+    createEffectProgram({
+      id: "keeper",
+      initialize: () => ({ attempts: 0 }),
+      ownState: (value) => ({ ...value }),
+    }),
+  );
+  const binding = compileStatusBinding(["INVINCIBLE"]);
+  let installed = 0;
+  let removed = 0;
+  const finalizations = [];
+  const program = resources.registerEffect(barrierProgram("start-terminated"), {
+    bindings: [
+      {
+        ...binding,
+        install: (unit, instance) => {
+          installed++;
+          return binding.install(unit, instance);
+        },
+        remove: (unit, instance) => {
+          removed++;
+          return binding.remove(unit, instance);
+        },
+      },
+    ],
+    lifecycle: {
+      start: (context) => {
+        context.effects.update({ unitId: 2, instanceId: 0 }, keeper.ref, (state) => ({
+          attempts: state.attempts + 1,
+        }));
+        context.effects.update(context.address, program.ref, () => ({ remainingAmount: 200 }));
+        context.effects.finish(context.address);
+      },
+      finalize: (context) => {
+        finalizations.push([
+          context.instance.started,
+          context.instance.finished,
+          context.instance.state.remainingAmount,
+        ]);
+      },
+    },
+  });
+  const bare = { id: 2, definition: { id: "bare" }, position: [0, 0] };
+  const seeded = installFixtureEffect(
+    bare,
+    resources.effects.create(keeper.ref, metadata(0)),
+    resources,
+  );
+  const original = effectFixtureWork(seeded);
+  const result = installEffect(
+    original,
+    2,
+    resources.effects.create(program.ref, metadata(1)),
+    resources,
+    0,
+  );
+
+  assert.deepEqual(result.result, {
+    type: "REJECTED",
+    reason: "START_FINISHED",
+    address: { unitId: 2, instanceId: 1 },
+  });
+  assert.deepEqual(finalizations, [[false, true, 200]]);
+  assert.equal(installed, 0);
+  assert.equal(removed, 0);
+  assert.deepEqual(
+    getCombatUnit(result.work, 2).effects.instances.map((instance) => instance.id),
+    [0],
+  );
+  assert.equal(getCombatUnit(result.work, 2).effects.instances[0].state.attempts, 1);
+  assert.equal(getCombatUnit(result.work, 2).effects.nextInstanceId, 2);
+  assert.equal(getCombatUnit(original, 2).effects.instances[0].state.attempts, 0);
+});
+
+test("effects: lifecycle callbacks reject async and Promise results at the original call boundary", () => {
+  for (const makeAction of [
+    (capture) => async (context) => {
+      capture(context);
+    },
+    (capture) => (context) => {
+      capture(context);
+      return Promise.resolve();
+    },
+    (capture) => (context) => {
+      capture(context);
+      return { then: () => undefined };
+    },
+  ]) {
+    const resources = new CombatResources();
+    let escaped;
+    const program = resources.registerEffect(barrierProgram(), {
+      lifecycle: {
+        start: makeAction((context) => {
+          escaped = context;
+        }),
+      },
+    });
+    const original = effectFixtureWork(unit());
+
+    assert.throws(
+      () =>
+        installEffect(original, 2, resources.effects.create(program.ref, metadata()), resources, 0),
+      /complete synchronously/,
+    );
+    assert.equal(getCombatUnit(original, 2).effects, undefined);
+    assert.throws(() => escaped.effects.finish(escaped.address), /no longer active/);
+    assert.throws(() => escaped.facts.getUnit(2), /no longer active/);
+  }
+});
+
+test("effects: lifecycle facts and operation leases close on normal and exceptional callback exits", () => {
+  for (const throws of [false, true]) {
+    const resources = new CombatResources();
+    let escaped;
+    const program = resources.registerEffect(barrierProgram(), {
+      lifecycle: {
+        start: (context) => {
+          escaped = context;
+          if (throws) {
+            throw new Error("start failed");
+          }
+        },
+      },
+    });
+    const original = effectFixtureWork(unit());
+    const install = () =>
+      installEffect(original, 2, resources.effects.create(program.ref, metadata()), resources, 0);
+    let result;
+    if (throws) {
+      assert.throws(install, /start failed/);
+    } else {
+      result = install();
+    }
+    const input = { sourceUnitId: null, lifetimeOwner: null, expiresAtTick: null };
+    const calls = [
+      () => escaped.instance,
+      () => escaped.facts.getUnit(2),
+      () => escaped.facts.getEffect(escaped.address),
+      () => escaped.facts.participating(2),
+      () => escaped.effects.install(2, program.ref, input),
+      () => escaped.effects.update(escaped.address, program.ref, (state) => state),
+      () => escaped.effects.setParticipation(escaped.address, false),
+      () => escaped.effects.finish(escaped.address),
+      () => escaped.effects.attachParent(escaped.address, { unitId: 2, instanceId: 99 }),
+    ];
+    for (const call of calls) {
+      assert.throws(call, /no longer active/);
+    }
+    if (result !== undefined) {
+      assert.equal(getCombatUnit(result.work, 2).effects.instances[0].participating, true);
+      assert.equal(getCombatUnit(result.work, 2).effects.instances[0].finished, false);
+    }
+  }
+});
+
 test("effects: rejected unique installation preserves completed start transitions", () => {
   const resources = new CombatResources();
   const keeper = resources.registerEffect(
@@ -364,7 +521,9 @@ test("effects: rejected unique installation preserves completed start transition
         }));
       },
       accepts: uniqueEffectAdmission("unique"),
-      finalize: (context) => finalized.push(context.address.instanceId),
+      finalize: (context) => {
+        finalized.push(context.address.instanceId);
+      },
     },
   });
   const finalized = [];
@@ -593,7 +752,9 @@ test("effects: finish remains terminal when disable tries to reenable and finish
   });
   const follower = resources.registerEffect(barrierProgram("follower"), {
     lifecycle: {
-      finalize: () => finalizations.push("follower"),
+      finalize: () => {
+        finalizations.push("follower");
+      },
     },
   });
   let disables = 0;
@@ -729,7 +890,7 @@ combat.registerEffect(barrier, {
   } },
  },
  lifecycle: {
-  start: context => context.effects.update(context.address, barrier.ref, state => ({ remainingAmount: state.remainingAmount })),
+  start: context => { context.effects.update(context.address, barrier.ref, state => ({ remainingAmount: state.remainingAmount })); },
  },
 });
 `,
@@ -764,6 +925,23 @@ reception.resources;
 reception.operations.spawn;
 `,
         6,
+      ],
+      [
+        "async-lifecycle",
+        `
+const combat = new CombatResources();
+combat.registerEffect(barrier, { lifecycle: { start: async context => { await Promise.resolve(); context.effects.finish(context.address); } } });
+`,
+        1,
+      ],
+      [
+        "void-lifecycle",
+        `
+declare const start: (context: import(${sourceModule("unit/capability/effects/contract")}).EffectLifecycleContext<BarrierState>) => void;
+const combat = new CombatResources();
+combat.registerEffect(barrier, { lifecycle: { start } });
+`,
+        1,
       ],
       [
         "flat-rules",

@@ -93,31 +93,47 @@ export function withVitalityHookContext<R, T>(
     dispatch: EffectDispatchScope,
     run: (context: VitalityHookInvocation<R>) => T,
 ): T {
-    return dispatch.withInstance(address, instance, (lastKnown) =>
-        run({
+    return dispatch.withInstance(address, instance, (lastKnown) => {
+        let active = true;
+
+        const readWork = (): CombatWork => {
+            if (!active) {
+                throw new TypeError("vitality hook context is no longer active");
+            }
+
+            return getWork();
+        };
+
+        const context: VitalityHookInvocation<R> = {
             address,
             ownerUnitId: address.unitId,
             get instance() {
-                return getEffect(getWork(), address) ?? lastKnown();
+                return getEffect(readWork(), address) ?? lastKnown();
             },
             request,
             tick,
-            facts: vitalityHookFacts(getWork, resources.vitality, dispatch),
+            facts: vitalityHookFacts(readWork, resources.vitality, dispatch),
             operations: {
-                effects: createEffectOperations(getWork, setWork, resources, tick, dispatch),
+                effects: createEffectOperations(readWork, setWork, resources, tick, dispatch),
                 damage: (input) => {
-                    const result = resources.settleDamage(getWork(), input, dispatch);
+                    const result = resources.settleDamage(readWork(), input, dispatch);
                     setWork(result.work);
 
                     return result.report;
                 },
                 heal: (input) => {
-                    const result = resources.settleHealing(getWork(), input, tick, dispatch);
+                    const result = resources.settleHealing(readWork(), input, tick, dispatch);
                     setWork(result.work);
 
                     return result.report;
                 },
             },
-        }),
-    );
+        };
+
+        try {
+            return run(context);
+        } finally {
+            active = false;
+        }
+    });
 }
