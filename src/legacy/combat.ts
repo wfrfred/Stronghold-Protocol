@@ -142,6 +142,7 @@ function operatorDefinition(value: unknown, direction: Direction) {
     return createOperatorDefinition({
         id: stringField(definition.chessId, "chessId"),
         vitality: { maxHp: numberField(stats.maxHp, "maxHp") },
+        offense: { attack: numberField(stats.atk, "attack") },
         allegiance: { side: "ALLY" },
         spatial: { layer: "GROUND" },
         hit: {
@@ -187,6 +188,7 @@ function operatorDefinition(value: unknown, direction: Direction) {
                             {
                                 type: "DAMAGE",
                                 power: numberField(stats.atk, "attack"),
+                                powerSource: "SOURCE_ATTACK",
                                 damageType: damageType(definition.dmgType),
                             },
                         ],
@@ -218,6 +220,7 @@ function enemyDefinition(value: unknown) {
     return createCombatEnemyDefinition({
         id: stringField(definition.key, "enemy key"),
         vitality: { maxHp: numberField(stats.maxHp, "maxHp") },
+        offense: { attack: numberField(stats.atk, "attack") },
         locomotion: {
             moveSpeedPerTick: (numberField(stats.moveSpeed, "move speed") * 0.5) / TICKS_PER_SECOND,
             steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 },
@@ -270,6 +273,7 @@ function enemyDefinition(value: unknown) {
                             {
                                 type: "DAMAGE",
                                 power: numberField(stats.atk, "attack"),
+                                powerSource: "SOURCE_ATTACK",
                                 damageType: damageType(stats.dmgType),
                             },
                         ],

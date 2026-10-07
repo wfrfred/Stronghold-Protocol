@@ -13,6 +13,7 @@ import {
 } from "../unit/capability/occupancy.js";
 import { initializeUnit, type InitializedUnit } from "../unit/initialize.js";
 import type { Unit, UnitDefinition } from "../unit/unit.js";
+import { copyPreparedCapabilityStates, type CapabilityStates } from "../unit/capability/catalog.js";
 import type { BattleExecutionState } from "./state.js";
 
 export interface UnitNavigationEffectPlacement {
@@ -26,6 +27,7 @@ export interface UnitPlacementDefinition<D extends UnitDefinition = UnitDefiniti
     readonly position: WorldPosition;
     readonly occupancy?: OccupancyState;
     readonly navigationEffects?: readonly UnitNavigationEffectPlacement[];
+    readonly states?: Partial<CapabilityStates>;
 }
 
 export interface UnitPlacementInstantiation<U extends Unit = Unit> {
@@ -35,7 +37,10 @@ export interface UnitPlacementInstantiation<U extends Unit = Unit> {
 }
 
 type PlacedUnit<P extends UnitPlacementDefinition> = P extends unknown
-    ? InitializedUnit<P["definition"]> &
+    ? InitializedUnit<
+          P["definition"],
+          P extends { readonly states: infer S extends object } ? S : object
+      > &
           (P extends { readonly occupancy: OccupancyState } ? Occupancy : object)
     : never;
 
@@ -46,7 +51,12 @@ type NormalizedUnitPlacement<P extends UnitPlacementDefinition> = P extends unkn
           readonly navigationEffects: readonly UnitNavigationEffectPlacement[];
       } & (P extends { readonly occupancy: OccupancyState }
           ? Occupancy
-          : Pick<UnitPlacementDefinition, "occupancy">)
+          : Pick<UnitPlacementDefinition, "occupancy">) &
+          (P extends { readonly states: infer S extends object }
+              ? { readonly states: S }
+              : "states" extends keyof P
+                ? Pick<UnitPlacementDefinition, "states">
+                : object)
     : never;
 
 export function createUnitPlacementDefinition<P extends UnitPlacementDefinition>(
@@ -55,6 +65,10 @@ export function createUnitPlacementDefinition<P extends UnitPlacementDefinition>
 export function createUnitPlacementDefinition(
     placement: UnitPlacementDefinition,
 ): NormalizedUnitPlacement<UnitPlacementDefinition> {
+    if (placement.occupancy !== undefined && placement.states?.occupancy !== undefined) {
+        throw new TypeError("unit occupancy must have a single initial state");
+    }
+
     const navigationEffects: UnitNavigationEffectPlacement[] = [];
     const effects = placement.navigationEffects ?? [];
     const effectsAreArray: boolean = Array.isArray(effects);
@@ -84,6 +98,13 @@ export function createUnitPlacementDefinition(
 
     return Object.freeze({
         definition: placement.definition,
+        ...(placement.states === undefined
+            ? {}
+            : {
+                  states: Object.freeze(
+                      copyPreparedCapabilityStates(placement.definition, placement.states),
+                  ),
+              }),
         position: createWorldPosition(...placement.position),
         ...(placement.occupancy === undefined
             ? {}
@@ -117,12 +138,18 @@ export function instantiateUnitPlacement(
     tick: number,
 ): UnitPlacementInstantiation {
     const nextUnitId = nextIdentity(execution.nextUnitId, "unit");
+    const states = copyPreparedCapabilityStates(
+        placement.definition,
+        placement.occupancy === undefined
+            ? (placement.states ?? {})
+            : { ...placement.states, occupancy: placement.occupancy },
+    );
     const unit = initializeUnit({
         id: execution.nextUnitId,
         definition: placement.definition,
         position: placement.position,
         tick,
-        states: placement.occupancy === undefined ? {} : { occupancy: placement.occupancy },
+        states,
     });
     const changes: BattlefieldChange[] = [{ type: "REGISTER_UNIT", unit }];
     const source: SpatialEffectSource = Object.freeze({ type: "UNIT", unitId: unit.id });

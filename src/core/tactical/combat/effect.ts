@@ -7,6 +7,7 @@ export type EffectDefinition =
           readonly type: "DAMAGE";
           readonly power: number;
           readonly damageType: DamageType;
+          readonly powerSource?: "SOURCE_ATTACK";
       }
     | {
           readonly type: "HEAL";
@@ -27,7 +28,18 @@ export function createEffectDefinition(effect: EffectDefinition): EffectDefiniti
                 throw new RangeError("unsupported attack damage type");
             }
 
-            return Object.freeze({ type: effect.type, power: effect.power, damageType });
+            const powerSource: unknown = effect.powerSource;
+
+            if (powerSource !== undefined && powerSource !== "SOURCE_ATTACK") {
+                throw new RangeError("unsupported damage power source");
+            }
+
+            return Object.freeze({
+                type: effect.type,
+                power: effect.power,
+                damageType,
+                ...(effect.powerSource === undefined ? {} : { powerSource: effect.powerSource }),
+            });
         }
 
         case "HEAL":

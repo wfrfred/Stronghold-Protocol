@@ -4,7 +4,7 @@ import { copyUnitSnapshot } from "../unit/snapshot.js";
 import { createBattleSpec, type BattleSpec } from "./spec.js";
 import type { BattleExecutionState } from "./state.js";
 import { predefinedIdsForAlias } from "./predefined.js";
-import { createBattleSystems, type BattleSystemStates } from "./systems.js";
+import { createBattleSystems, type BattleSystemStates, type BattleResources } from "./systems.js";
 import type { BattleCommand, BattleResult, BattleSnapshot, BattleStep } from "./contract.js";
 
 export type {
@@ -43,9 +43,9 @@ export class BattleRuntime {
     readonly #systems: ReturnType<typeof createBattleSystems>;
     #state: BattleRuntimeState;
 
-    constructor(spec: BattleSpec) {
+    constructor(spec: BattleSpec, resources: BattleResources = {}) {
         this.#spec = createBattleSpec(spec);
-        this.#systems = createBattleSystems(this.#spec);
+        this.#systems = createBattleSystems(this.#spec, resources);
 
         const battlefield = BattlefieldRuntime.create({ map: this.#spec.map }, copyUnitSnapshot);
         const initialized = this.#systems.initialize(battlefield, {

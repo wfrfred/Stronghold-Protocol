@@ -25,6 +25,10 @@ export interface CombatTargetQueryContext extends TargetQueryContext {
     readonly battlefield: CombatTargetingView;
 }
 
+export type HealingMaxHpProvider = (unit: VitalUnit, context: CombatTargetQueryContext) => number;
+
+const staticMaxHp: HealingMaxHpProvider = (unit) => unit.definition.vitality.maxHp;
+
 function isActiveVitalUnit(target: Unit): target is VitalUnit {
     return hasVitality(target) && target.vitality.hp > 0 && isSpatiallyPresent(target);
 }
@@ -136,6 +140,7 @@ export function compileDamageTargeting(
 export function compileHealingTargeting(
     definition: HealingTargetingDefinition,
     purposes: readonly QueryPurpose[],
+    maxHp: HealingMaxHpProvider = staticMaxHp,
 ): CompiledTargeting<CombatTargetQueryContext> {
     const requiresHealingEligibility = purposes.includes("HEAL");
 
@@ -148,7 +153,7 @@ export function compileHealingTargeting(
             hasHit(target) &&
             (definition.includeSelf || target.id !== context.source.id) &&
             sameSide(context.source, target) &&
-            target.vitality.hp < target.definition.vitality.maxHp &&
+            target.vitality.hp < maxHp(target, context) &&
             (definition.ignoreAllyTargetFree || !hasStatusFlag(target, "ALLY_TARGET_FREE")) &&
             (!requiresHealingEligibility ||
                 definition.ignoreHealFree ||
@@ -160,14 +165,13 @@ export function compileHealingTargeting(
                 target.hit.geometry,
             ),
 
-        compare: (_context, left, right) => {
+        compare: (context, left, right) => {
             if (!hasVitality(left) || !hasVitality(right)) {
                 return 0;
             }
 
             return (
-                left.vitality.hp / left.definition.vitality.maxHp -
-                right.vitality.hp / right.definition.vitality.maxHp
+                left.vitality.hp / maxHp(left, context) - right.vitality.hp / maxHp(right, context)
             );
         },
 
@@ -178,12 +182,13 @@ export function compileHealingTargeting(
 export function compileTargeting(
     definition: TargetingDefinition,
     purposes: readonly QueryPurpose[],
+    maxHp?: HealingMaxHpProvider,
 ): CompiledTargeting<CombatTargetQueryContext> {
     switch (definition.type) {
         case "DAMAGE":
             return compileDamageTargeting(definition, purposes);
 
         case "HEAL":
-            return compileHealingTargeting(definition, purposes);
+            return compileHealingTargeting(definition, purposes, maxHp);
     }
 }

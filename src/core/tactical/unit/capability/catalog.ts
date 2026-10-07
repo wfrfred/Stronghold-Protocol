@@ -7,6 +7,7 @@ import {
     initializeBlockableState,
     initializeBlockerState,
 } from "./blocking.js";
+import { copyEffectsState } from "./effects.js";
 import { copyLocomotionState, initializeLocomotionState } from "./locomotion/state.js";
 import { copySpatialPresenceState } from "./presence.js";
 import { copyOccupancyState } from "./occupancy.js";
@@ -45,6 +46,7 @@ export const configuredCapabilities = Object.freeze({
 export const runtimeCapabilities = Object.freeze({
     spatialPresence: Object.freeze({ copy: copySpatialPresenceState }),
     occupancy: Object.freeze({ copy: copyOccupancyState }),
+    effects: Object.freeze({ copy: copyEffectsState }),
 });
 
 const capabilities = { ...configuredCapabilities, ...runtimeCapabilities };
@@ -58,6 +60,8 @@ type CapabilityConfig<K extends ConfiguredCapabilityKey> = Parameters<
 >[0];
 
 type CapabilityState<K extends CapabilityKey> = Parameters<(typeof capabilities)[K]["copy"]>[0];
+
+export type CapabilityStates = { readonly [K in CapabilityKey]: CapabilityState<K> };
 
 export type RuntimeCapabilitiesFor<D extends UnitDefinition> = {
     readonly [
@@ -118,11 +122,7 @@ function copyCapability<K extends CapabilityKey>(key: K, state: unknown): Capabi
     return copy(stateRecord(state, key) as CapabilityState<K>);
 }
 
-export function initializeUnitCapabilities(
-    definition: UnitDefinition,
-    context: CapabilityInitializationContext,
-    prepared: object,
-): object {
+function copyPreparedStates(definition: UnitDefinition, prepared: object): Record<string, unknown> {
     const states: Record<string, unknown> = {};
 
     for (const key of Reflect.ownKeys(prepared)) {
@@ -135,6 +135,23 @@ export function initializeUnitCapabilities(
 
         states[key] = copyCapability(key as CapabilityKey, Reflect.get(prepared, key) as unknown);
     }
+
+    return states;
+}
+
+export function copyPreparedCapabilityStates<D extends UnitDefinition>(
+    definition: D,
+    prepared: Partial<CapabilityStates>,
+): PreparedCapabilityStates<D> {
+    return copyPreparedStates(definition, prepared) as PreparedCapabilityStates<D>;
+}
+
+export function initializeUnitCapabilities(
+    definition: UnitDefinition,
+    context: CapabilityInitializationContext,
+    prepared: object,
+): object {
+    const states = copyPreparedStates(definition, prepared);
 
     for (const key of configuredKeys) {
         if (!(key in definition) || key in states) {

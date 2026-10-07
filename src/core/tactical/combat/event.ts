@@ -10,7 +10,7 @@ export type CombatEvent =
       }
     | {
           readonly type: "DAMAGE";
-          readonly sourceUnitId: UnitId;
+          readonly sourceUnitId: UnitId | null;
           readonly targetUnitId: UnitId;
           readonly damageType: DamageType;
           readonly amount: number;
@@ -19,7 +19,7 @@ export type CombatEvent =
       }
     | {
           readonly type: "HEAL";
-          readonly sourceUnitId: UnitId;
+          readonly sourceUnitId: UnitId | null;
           readonly targetUnitId: UnitId;
           readonly amount: number;
           readonly hp: number;

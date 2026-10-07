@@ -1,40 +1,50 @@
-import type { BattlefieldChange } from "../battlefield/contract.js";
-import { compileAction, stepAction, type CompiledAction } from "../combat/action.js";
-import type { CombatTargetingView } from "../combat/targeting.js";
+import { compileAction, executeAction, type CompiledAction } from "../combat/action.js";
+import { prepareCombatEffects, retireCombatUnit } from "../combat/lifecycle.js";
+import { CombatResources } from "../combat/resources.js";
+import { combatWorkChanges, createCombatWork, getCombatUnit } from "../combat/work.js";
 import { hasAction, type ActionDefinition } from "../unit/capability/action.js";
 import { isSpatiallyPresent } from "../unit/capability/presence.js";
 import { hasVitality } from "../unit/capability/vitality.js";
-import type { UnitId } from "../unit/unit.js";
-import type { BattleEvent } from "./contract.js";
 import type { BattlePhase } from "./system.js";
 
-export function createCombatSystem(): { readonly step: BattlePhase } {
+export function createCombatSystem(
+    resources = new CombatResources(),
+    compile: typeof compileAction = compileAction,
+): {
+    readonly prepare: BattlePhase;
+    readonly step: BattlePhase;
+} {
     const compiledActions = new WeakMap<ActionDefinition, CompiledAction>();
+
+    const prepare: BattlePhase = (input) => {
+        const work = prepareCombatEffects(
+            createCombatWork(input.battlefield, input.execution),
+            input.tick,
+        );
+
+        return {
+            state: undefined,
+            changes: combatWorkChanges(work),
+            events: work.events,
+            execution: work.execution,
+        };
+    };
 
     const step: BattlePhase = (input) => {
         const { battlefield, tick } = input;
         const ids = [...battlefield.unitIds].sort((left, right) => left - right);
-        const units = new Map(ids.map((id) => [id, battlefield.getUnit(id)!]));
-        const changed = new Set<UnitId>();
-        const events: BattleEvent[] = [];
-        const view: CombatTargetingView = {
-            get unitIds() {
-                return [...units.keys()];
-            },
-            getUnit: (id) => units.get(id),
-            blockerOf: (id) => battlefield.blockerOf(id),
-            blockedBy: (id) => battlefield.blockedBy(id),
-        };
+        let work = prepareCombatEffects(createCombatWork(battlefield, input.execution), tick);
 
-        for (const [id, unit] of units) {
-            if (hasVitality(unit) && unit.vitality.hp <= 0) {
-                units.delete(id);
-                changed.add(id);
+        for (const id of ids) {
+            const unit = getCombatUnit(work, id);
+
+            if (unit !== undefined && hasVitality(unit) && unit.vitality.hp <= 0) {
+                work = retireCombatUnit(work, id);
             }
         }
 
         for (const id of ids) {
-            const unit = units.get(id);
+            const unit = getCombatUnit(work, id);
 
             if (unit === undefined || !hasAction(unit) || !isSpatiallyPresent(unit)) {
                 continue;
@@ -44,36 +54,20 @@ export function createCombatSystem(): { readonly step: BattlePhase } {
             let compiled = compiledActions.get(definition);
 
             if (compiled === undefined) {
-                compiled = compileAction(definition);
+                compiled = compile(definition, resources);
                 compiledActions.set(definition, compiled);
             }
 
-            const result = stepAction(unit, compiled, { battlefield: view, tick });
-
-            for (const updated of result.units) {
-                units.set(updated.id, updated);
-                changed.add(updated.id);
-            }
-            for (const removedId of result.removedUnitIds) {
-                units.delete(removedId);
-                changed.add(removedId);
-            }
-
-            events.push(...result.events);
+            work = executeAction(work, id, compiled, tick);
         }
 
-        const changes: BattlefieldChange[] = [...changed]
-            .sort((left, right) => left - right)
-            .map((unitId): BattlefieldChange => {
-                const unit = units.get(unitId);
-
-                return unit === undefined
-                    ? { type: "REMOVE_UNIT", unitId, reason: "DEATH" }
-                    : { type: "UPDATE_UNIT", unit };
-            });
-
-        return { state: undefined, changes, events, execution: input.execution };
+        return {
+            state: undefined,
+            changes: combatWorkChanges(work),
+            events: work.events,
+            execution: work.execution,
+        };
     };
 
-    return { step };
+    return { prepare, step };
 }

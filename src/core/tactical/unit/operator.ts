@@ -5,6 +5,7 @@ import {
 import { createAllegianceState, type AllegiantUnitDefinition } from "./capability/allegiance.js";
 import { createBlockerDefinition, type BlockingUnitDefinition } from "./capability/blocking.js";
 import { createDefenseDefinition, type DefendedUnitDefinition } from "./capability/defense.js";
+import { createOffenseDefinition, type OffenseDefinition } from "./capability/offense.js";
 import {
     createHitDefinition,
     createSpatialDefinition,
@@ -24,7 +25,9 @@ export interface OperatorDefinition
         HitUnitDefinition,
         StatusUnitDefinition,
         DefendedUnitDefinition,
-        BlockingUnitDefinition {}
+        BlockingUnitDefinition {
+    readonly offense?: OffenseDefinition;
+}
 
 export type Operator<D extends OperatorDefinition = OperatorDefinition> = InitializedUnit<D>;
 
@@ -50,6 +53,9 @@ export function createOperatorDefinition(definition: OperatorDefinition): Operat
         hit: createHitDefinition(definition.hit),
         status: createStatusDefinition(definition.status),
         defense: createDefenseDefinition(definition.defense),
+        ...(definition.offense === undefined
+            ? {}
+            : { offense: createOffenseDefinition(definition.offense) }),
         blocker: createBlockerDefinition(definition.blocker),
     });
 }

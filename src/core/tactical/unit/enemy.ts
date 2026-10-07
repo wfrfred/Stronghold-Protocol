@@ -12,6 +12,7 @@ import {
 import { createAllegianceState, type AllegiantUnitDefinition } from "./capability/allegiance.js";
 import { createBlockableDefinition, type BlockableUnitDefinition } from "./capability/blocking.js";
 import { createDefenseDefinition, type DefendedUnitDefinition } from "./capability/defense.js";
+import { createOffenseDefinition, type OffenseDefinition } from "./capability/offense.js";
 import {
     initializeRouteControl,
     type LocatedRouteSignal,
@@ -53,7 +54,9 @@ export interface CombatEnemyDefinition
         HitUnitDefinition,
         StatusUnitDefinition,
         DefendedUnitDefinition,
-        BlockableUnitDefinition {}
+        BlockableUnitDefinition {
+    readonly offense?: OffenseDefinition;
+}
 
 export type CombatRoutedEnemy = RoutedEnemy<CombatEnemyDefinition>;
 
@@ -120,6 +123,9 @@ export function createCombatEnemyDefinition(
         hit: createHitDefinition(definition.hit),
         status: createStatusDefinition(definition.status),
         defense: createDefenseDefinition(definition.defense),
+        ...(definition.offense === undefined
+            ? {}
+            : { offense: createOffenseDefinition(definition.offense) }),
         blockable: createBlockableDefinition(definition.blockable),
     });
 }

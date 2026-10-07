@@ -1,38 +1,47 @@
+import type { BattleEvent } from "../battle/contract.js";
 import { selectTargets } from "../targeting/select.js";
-import type { CompiledTargeting } from "../targeting/query.js";
-import type {
-    Action,
-    ActionDefinition,
-    ActingUnitDefinition,
-    TargetBindingId,
-} from "../unit/capability/action.js";
-import { hasVitality } from "../unit/capability/vitality.js";
-import type { Unit, UnitId } from "../unit/unit.js";
-import { damageUnit } from "./damage.js";
-import { effectPurposes, type EffectDefinition } from "./effect.js";
-import type { CombatEvent } from "./event.js";
-import { healUnit } from "./healing.js";
 import {
-    compileTargeting,
-    type CombatTargetingView,
-    type CombatTargetQueryContext,
-} from "./targeting.js";
+    hasAction,
+    type Action,
+    type ActionDefinition,
+    type ActingUnitDefinition,
+    type TargetBindingId,
+} from "../unit/capability/action.js";
+import type { Unit, UnitId } from "../unit/unit.js";
+import { resolveMaxHp } from "./attributes.js";
+import { compileEffect, type CompiledEffect } from "./compile-effect.js";
+import { effectPurposes, type EffectDefinition } from "./effect.js";
+import { CombatResources } from "./resources.js";
+import { compileTargeting, type CombatTargetingView } from "./targeting.js";
+import {
+    appendCombatEvents,
+    combatWorkResult,
+    combatWorkView,
+    createCombatWork,
+    getCombatUnit,
+    updateCombatUnit,
+    type CombatWork,
+} from "./work.js";
 
-interface CompiledTargetGroup {
-    readonly id: TargetBindingId;
-    readonly targeting: CompiledTargeting<CombatTargetQueryContext>;
-    readonly effects: readonly EffectDefinition[];
+export interface ActionProgramContext {
+    readonly work: CombatWork;
+    readonly sourceUnitId: UnitId;
+    readonly tick: number;
+    readonly bindings: ReadonlyMap<TargetBindingId, readonly UnitId[]>;
 }
+
+export type ActionProgramStep = (context: ActionProgramContext) => ActionProgramContext;
 
 export interface CompiledAction {
     readonly definition: ActionDefinition;
-    readonly targetGroups: readonly CompiledTargetGroup[];
+    readonly bind: ActionProgramStep;
+    readonly program: readonly ActionProgramStep[];
 }
 
 export interface ActionStep {
     readonly units: readonly Unit[];
     readonly removedUnitIds: readonly UnitId[];
-    readonly events: readonly CombatEvent[];
+    readonly events: readonly BattleEvent[];
 }
 
 export interface ActionStepContext {
@@ -40,61 +49,132 @@ export interface ActionStepContext {
     readonly tick: number;
 }
 
-export function compileAction(definition: ActionDefinition): CompiledAction {
+export function compileAction(
+    definition: ActionDefinition,
+    resources = new CombatResources(),
+    compile: (effect: EffectDefinition) => CompiledEffect = (effect) =>
+        compileEffect(effect, resources),
+): CompiledAction {
+    const groups = definition.targetGroups.map((group) => ({
+        id: group.id,
+        targeting: compileTargeting(
+            group.targeting,
+            group.effects.flatMap(effectPurposes),
+            (unit, context) => resolveMaxHp(unit, createCombatWork(context.battlefield), resources),
+        ),
+        effects: group.effects.map(compile),
+    }));
+
+    const applyTo =
+        (
+            effect: CompiledEffect,
+            ids: (context: ActionProgramContext) => readonly UnitId[],
+        ): ActionProgramStep =>
+        (context) => {
+            let { work } = context;
+
+            for (const targetUnitId of ids(context)) {
+                work = effect({
+                    work,
+                    sourceUnitId: context.sourceUnitId,
+                    targetUnitId,
+                    tick: context.tick,
+                });
+            }
+
+            return { ...context, work };
+        };
+
+    const program = groups.flatMap((group) =>
+        group.effects.map((effect) =>
+            applyTo(effect, (context) => context.bindings.get(group.id)!),
+        ),
+    );
+
+    for (const { receiver, effect } of definition.followUps) {
+        const ids =
+            receiver.type === "SOURCE"
+                ? (context: ActionProgramContext) => [context.sourceUnitId]
+                : (context: ActionProgramContext) => context.bindings.get(receiver.bindingId)!;
+
+        program.push(applyTo(compile(effect), ids));
+    }
+
     return {
         definition,
-        targetGroups: definition.targetGroups.map((group) => ({
-            id: group.id,
-            targeting: compileTargeting(group.targeting, group.effects.flatMap(effectPurposes)),
-            effects: group.effects,
-        })),
+        bind: (context) => {
+            const source = getCombatUnit(context.work, context.sourceUnitId)!;
+            const query = { source, battlefield: combatWorkView(context.work) };
+            const bindings = new Map<TargetBindingId, readonly UnitId[]>();
+
+            for (const group of groups) {
+                bindings.set(
+                    group.id,
+                    selectTargets(query, group.targeting).map((unit) => unit.id),
+                );
+            }
+
+            return { ...context, bindings };
+        },
+        program,
     };
 }
 
-function resolveEffect(
-    effect: EffectDefinition,
+export function executeAction(
+    work: CombatWork,
     sourceUnitId: UnitId,
-    target: Unit,
+    compiled: CompiledAction,
     tick: number,
-): { readonly unit: Unit; readonly event: CombatEvent } | undefined {
-    if (!hasVitality(target) || target.vitality.hp <= 0) {
-        return undefined;
+): CombatWork {
+    const source = getCombatUnit(work, sourceUnitId);
+
+    if (source === undefined || !hasAction(source)) {
+        return work;
     }
 
-    switch (effect.type) {
-        case "DAMAGE": {
-            const result = damageUnit(target, effect.power, effect.damageType);
+    let context = compiled.bind({ work, sourceUnitId, tick, bindings: new Map() });
+    const targetUnitId = context.bindings.get(compiled.definition.triggerBindingId)![0] ?? null;
+    const current = getCombatUnit(context.work, sourceUnitId);
 
-            return {
-                unit: result.unit,
-                event: {
-                    type: "DAMAGE",
-                    sourceUnitId,
-                    targetUnitId: target.id,
-                    damageType: effect.damageType,
-                    amount: result.amount,
-                    hp: result.unit.vitality.hp,
-                    tick,
-                },
-            };
-        }
-
-        case "HEAL": {
-            const result = healUnit(target, effect.power, effect.ignoreHealFree);
-
-            return {
-                unit: result.unit,
-                event: {
-                    type: "HEAL",
-                    sourceUnitId,
-                    targetUnitId: target.id,
-                    amount: result.amount,
-                    hp: result.unit.vitality.hp,
-                    tick,
-                },
-            };
-        }
+    if (current === undefined || !hasAction(current)) {
+        return context.work;
     }
+
+    let acting = current;
+
+    if (targetUnitId !== current.action.targetUnitId) {
+        acting = { ...current, action: { ...current.action, targetUnitId } };
+    }
+
+    work = updateCombatUnit(context.work, acting);
+
+    if (
+        targetUnitId === null ||
+        tick < acting.action.readyAtTick ||
+        tick < acting.action.recoveryUntilTick
+    ) {
+        return work;
+    }
+
+    const { definition } = compiled;
+    const executing = {
+        ...acting,
+        action: {
+            ...acting.action,
+            readyAtTick: tick + definition.intervalTicks,
+            recoveryUntilTick: tick + definition.recoveryTicks,
+        },
+    };
+
+    work = updateCombatUnit(work, executing);
+    work = appendCombatEvents(work, [{ type: "ACTION", sourceUnitId, targetUnitId, tick }]);
+    context = { ...context, work };
+
+    for (const step of compiled.program) {
+        context = step(context);
+    }
+
+    return context.work;
 }
 
 export function stepAction(
@@ -102,100 +182,13 @@ export function stepAction(
     compiled: CompiledAction,
     context: ActionStepContext,
 ): ActionStep {
-    const bindings = new Map<TargetBindingId, readonly UnitId[]>();
-    const queryContext = { source, battlefield: context.battlefield };
+    const work = executeAction(
+        updateCombatUnit(createCombatWork(context.battlefield), source),
+        source.id,
+        compiled,
+        context.tick,
+    );
+    const { units, removedUnitIds, events } = combatWorkResult(work);
 
-    for (const group of compiled.targetGroups) {
-        bindings.set(
-            group.id,
-            selectTargets(queryContext, group.targeting).map((unit) => unit.id),
-        );
-    }
-
-    const targetUnitId = bindings.get(compiled.definition.triggerBindingId)![0] ?? null;
-    let acting = source;
-
-    if (targetUnitId !== source.action.targetUnitId) {
-        acting = { ...source, action: { ...source.action, targetUnitId } };
-    }
-
-    if (
-        targetUnitId === null ||
-        context.tick < acting.action.readyAtTick ||
-        context.tick < acting.action.recoveryUntilTick
-    ) {
-        return {
-            units: acting === source ? [] : [acting],
-            removedUnitIds: [],
-            events: [],
-        };
-    }
-
-    const updates = new Map<UnitId, Unit>();
-    const removed = new Set<UnitId>();
-    const events: CombatEvent[] = [
-        {
-            type: "ACTION",
-            sourceUnitId: source.id,
-            targetUnitId,
-            tick: context.tick,
-        },
-    ];
-    const { definition } = compiled;
-    const executing = {
-        ...acting,
-        action: {
-            ...acting.action,
-            readyAtTick: context.tick + definition.intervalTicks,
-            recoveryUntilTick: context.tick + definition.recoveryTicks,
-        },
-    };
-    updates.set(source.id, executing);
-
-    const apply = (effect: EffectDefinition, targetId: UnitId): void => {
-        if (removed.has(targetId)) {
-            return;
-        }
-
-        const target = updates.get(targetId) ?? context.battlefield.getUnit(targetId);
-
-        if (target === undefined) {
-            return;
-        }
-
-        const resolved = resolveEffect(effect, source.id, target, context.tick);
-
-        if (resolved === undefined) {
-            return;
-        }
-        if (resolved.unit !== target) {
-            updates.set(targetId, resolved.unit);
-        }
-        if (hasVitality(resolved.unit) && resolved.unit.vitality.hp <= 0) {
-            removed.add(targetId);
-        }
-
-        events.push(resolved.event);
-    };
-
-    for (const group of compiled.targetGroups) {
-        for (const effect of group.effects) {
-            for (const targetId of bindings.get(group.id)!) {
-                apply(effect, targetId);
-            }
-        }
-    }
-    for (const { receiver, effect } of definition.followUps) {
-        const ids = receiver.type === "SOURCE" ? [source.id] : bindings.get(receiver.bindingId)!;
-
-        for (const id of ids) {
-            apply(effect, id);
-        }
-    }
-
-    return {
-        units: [...updates.values()],
-        removedUnitIds: [...removed],
-        events,
-    };
+    return { units, removedUnitIds, events };
 }
