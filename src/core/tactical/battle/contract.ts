@@ -18,17 +18,21 @@ import type {
     ActionExecutionSignal,
     ActionExecutionState,
 } from "../unit/capability/action/process.js";
+import type { ProjectileId, ProjectileState } from "../battlefield/projectile/state.js";
+import type { ProjectileSignal } from "../battlefield/projectile/settlement.js";
 
 export type BattleCommand =
     | PredefinedCommand
     | AlternativeRouteCommand
     | DeploymentCommand
     | { readonly type: "CANCEL_ACTION_EXECUTION"; readonly executionId: ActionExecutionId }
+    | { readonly type: "STOP_PROJECTILE"; readonly projectileId: ProjectileId }
     | { readonly type: "TRIGGER_BRANCH"; readonly branchId: string; readonly isLoop: boolean };
 
 export type BattleEvent =
     | CombatEvent
     | ActionExecutionSignal
+    | ProjectileSignal
     | {
           readonly type: "UNIT_DEPLOYED" | "UNIT_RELOCATED";
           readonly unitId: UnitId;
@@ -71,6 +75,7 @@ export interface BattleSnapshot {
     readonly execution: BattleExecutionState;
     readonly predefinedPresence: readonly PredefinedPresence[];
     readonly actionExecution: ActionExecutionState;
+    readonly projectiles: ProjectileState;
     readonly units: readonly Unit[];
     readonly blockingRelations: readonly BlockingRelation[];
     readonly supportRelations: readonly SupportRelation[];

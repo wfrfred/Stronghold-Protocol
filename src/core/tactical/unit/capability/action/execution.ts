@@ -17,6 +17,7 @@ import {
     resumeActionExecution,
     type ActionExecutionState,
 } from "./process.js";
+import type { ProjectileOperations } from "../../../battlefield/projectile/operations.js";
 
 export interface ActionStep {
     readonly units: readonly Unit[];
@@ -27,6 +28,7 @@ export interface ActionStep {
 export interface ActionStepContext {
     readonly battlefield: CombatTargetingView;
     readonly tick: number;
+    readonly projectiles?: ProjectileOperations;
 }
 
 interface ActionAcceptance {
@@ -40,6 +42,7 @@ function acceptAction(
     compiled: CompiledAction,
     tick: number,
     mayStart: boolean,
+    projectiles?: ProjectileOperations,
 ): ActionAcceptance {
     const source = getCombatUnit(work, sourceUnitId);
 
@@ -85,7 +88,10 @@ function acceptAction(
     work = updateCombatUnit(work, executing);
     work = appendCombatEvents(work, [{ type: "ACTION", sourceUnitId, targetUnitId, tick }]);
 
-    return { work, context: { ...context, work } };
+    return {
+        work,
+        context: { ...context, work, ...(projectiles === undefined ? {} : { projectiles }) },
+    };
 }
 
 function runImmediateAction(context: ActionProgramContext, compiled: CompiledAction): CombatWork {
@@ -101,12 +107,13 @@ export function executeAction(
     sourceUnitId: UnitId,
     compiled: CompiledAction,
     tick: number,
+    projectiles?: ProjectileOperations,
 ): CombatWork {
     if (compiled.process !== undefined) {
         throw new TypeError("resumable actions require an execution state");
     }
 
-    const accepted = acceptAction(work, sourceUnitId, compiled, tick, true);
+    const accepted = acceptAction(work, sourceUnitId, compiled, tick, true, projectiles);
 
     return accepted.context === null
         ? accepted.work
@@ -121,8 +128,9 @@ export function startAction(
     tick: number,
     resources: EffectTransitionResources,
     mayStart: boolean,
+    projectiles?: ProjectileOperations,
 ): { readonly work: CombatWork; readonly state: ActionExecutionState } {
-    const accepted = acceptAction(work, sourceUnitId, compiled, tick, mayStart);
+    const accepted = acceptAction(work, sourceUnitId, compiled, tick, mayStart, projectiles);
 
     if (accepted.context === null) {
         return { work: accepted.work, state };
@@ -145,6 +153,7 @@ export function startAction(
         compiled.process,
         tick,
         resources,
+        projectiles,
     );
 
     return { work: advanced.work, state: advanced.state };
@@ -160,6 +169,7 @@ export function stepAction(
         source.id,
         compiled,
         context.tick,
+        context.projectiles,
     );
     const { units, removedUnitIds, events } = combatWorkResult(work);
 

@@ -257,6 +257,9 @@ export class TacticalDemoPresentation {
                 case "ACTION_RELEASED":
                 case "ACTION_FINISHED":
                 case "ACTION_CANCELLED":
+                case "PROJECTILE_REACHED":
+                case "PROJECTILE_HIT":
+                case "PROJECTILE_STOPPED":
                 case "UNIT_DEPLOYED":
                 case "UNIT_RELOCATED":
                 case "SUPPORT_LOST":

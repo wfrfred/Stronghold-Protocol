@@ -25,6 +25,9 @@ import {
     copyActionExecutionState,
     type ActionExecutionState,
 } from "../unit/capability/action/process.js";
+import { createProjectileSystem } from "./phases/projectiles.js";
+import { copyProjectileState, type ProjectileState } from "../battlefield/projectile/state.js";
+import { withProjectileOperations } from "../battlefield/projectile/operations.js";
 
 export interface BattleResources {
     readonly combat?: CombatResources;
@@ -35,6 +38,7 @@ export interface BattleSystemStates {
     readonly predefined: readonly PredefinedPresence[];
     readonly schedule: SpawnScheduleState;
     readonly actionExecution: ActionExecutionState;
+    readonly projectiles: ProjectileState;
 }
 
 function bindPhase<K extends keyof BattleSystemStates>(
@@ -67,6 +71,7 @@ export function createBattleSystems(spec: BattleSpec, resources: BattleResources
     const combat = createCombatSystem(combatResources, resources.compileAction);
     const deployment = createDeploymentSystem(combatResources);
     const effectSources = createEffectSourceSystem(combatResources);
+    const projectiles = createProjectileSystem(combatResources);
 
     const prepare: BattlePhase<readonly PredefinedPresence[]> = (input, state) => {
         const prepared = predefined.step(input, state);
@@ -88,6 +93,25 @@ export function createBattleSystems(spec: BattleSpec, resources: BattleResources
         state,
     });
 
+    const act: BattlePhase<BattleSystemStates> = (input, state) => {
+        const advanced = withProjectileOperations(
+            state.projectiles,
+            combatResources.projectiles,
+            input.tick,
+            (operations) =>
+                combat.step({ ...input, projectiles: operations }, state.actionExecution),
+        );
+
+        return {
+            ...advanced.result,
+            state: {
+                ...state,
+                actionExecution: advanced.result.state,
+                projectiles: advanced.state,
+            },
+        };
+    };
+
     const phases = Object.freeze([
         bindPhase("predefined", prepare),
         bindPhase("actionExecution", combat.prepare),
@@ -96,7 +120,8 @@ export function createBattleSystems(spec: BattleSpec, resources: BattleResources
         bindStatelessPhase(effectSources.step),
         bindStatelessPhase(movement.reroute),
         bindStatelessPhase(blocking.step),
-        bindPhase("actionExecution", combat.step),
+        act,
+        bindPhase("projectiles", projectiles.step),
         move,
         bindStatelessPhase(effectSources.step),
         bindStatelessPhase(blocking.step),
@@ -153,6 +178,7 @@ export function createBattleSystems(spec: BattleSpec, resources: BattleResources
                 predefined: initialized.presence,
                 schedule: schedule.createState(),
                 actionExecution: combat.createState(),
+                projectiles: projectiles.createState(),
             };
 
             return { states, execution: preparedSources.execution };
@@ -163,6 +189,7 @@ export function createBattleSystems(spec: BattleSpec, resources: BattleResources
                 spawning: cloneScheduleState(states.schedule),
                 predefinedPresence: copyPredefinedPresence(states.predefined),
                 actionExecution: copyActionExecutionState(states.actionExecution),
+                projectiles: copyProjectileState(states.projectiles),
             };
         },
 

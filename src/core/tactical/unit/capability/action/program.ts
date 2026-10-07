@@ -2,12 +2,14 @@ import type { CombatWork } from "../../../battle/execution/work.js";
 import type { UnitId } from "../../unit.js";
 import type { ActionDefinition, TargetBindingId } from "./capability.js";
 import type { CompiledActionSegment } from "./process.js";
+import type { ProjectileOperations } from "../../../battlefield/projectile/operations.js";
 
 export interface ActionProgramContext {
     readonly work: CombatWork;
     readonly sourceUnitId: UnitId;
     readonly tick: number;
     readonly bindings: ReadonlyMap<TargetBindingId, readonly UnitId[]>;
+    readonly projectiles?: ProjectileOperations;
 }
 
 export type ActionProgramStep = (context: ActionProgramContext) => ActionProgramContext;

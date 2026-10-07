@@ -22,6 +22,7 @@ import type { NumericContributionResources } from "../modifier/providers.js";
 import type { NumericProviderFacts } from "../unit/capability/contribution.js";
 import { createActionResources } from "../unit/capability/action/resources.js";
 import type { EffectSourceResources } from "../battlefield/effect-source/resources.js";
+import { ProjectileResources } from "../battlefield/projectile/resources.js";
 
 export interface CombatEffectFacets<S extends object> {
     readonly contributions?: EffectContributionRules<S>;
@@ -42,6 +43,7 @@ export class CombatResources {
     readonly effectLifecycle: EffectLifecycleResources;
     readonly healing: HealingResources;
     readonly effectSources: EffectSourceResources;
+    readonly projectiles = new ProjectileResources(this.#registration);
     readonly settleDamage: DamageOperation;
     readonly settleHealing: HealingOperation;
 

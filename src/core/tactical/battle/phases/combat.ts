@@ -17,7 +17,12 @@ import { hasAction, type ActionDefinition } from "../../unit/capability/action/c
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
 import { hasVitality } from "../../unit/capability/vitality/capability.js";
 import type { UnitId } from "../../unit/unit.js";
-import type { BattlePhase } from "../system.js";
+import type { BattlePhase, BattlePhaseInput } from "../system.js";
+import type { ProjectileOperations } from "../../battlefield/projectile/operations.js";
+
+export interface CombatPhaseInput extends BattlePhaseInput {
+    readonly projectiles?: ProjectileOperations;
+}
 
 export function createCombatSystem(
     resources = new CombatResources(),
@@ -25,7 +30,7 @@ export function createCombatSystem(
 ): {
     createState(): ActionExecutionState;
     readonly prepare: BattlePhase<ActionExecutionState>;
-    readonly step: BattlePhase<ActionExecutionState>;
+    readonly step: BattlePhase<ActionExecutionState, CombatPhaseInput>;
     allowsMovement(state: ActionExecutionState, unitId: UnitId): boolean;
 } {
     const compiledActions = new WeakMap<ActionDefinition, CompiledAction>();
@@ -92,7 +97,7 @@ export function createCombatSystem(
         };
     };
 
-    const step: BattlePhase<ActionExecutionState> = (input, state) => {
+    const step: BattlePhase<ActionExecutionState, CombatPhaseInput> = (input, state) => {
         const { battlefield, tick } = input;
         const ids = [
             ...new Set([
@@ -125,6 +130,7 @@ export function createCombatSystem(
                     segmentsOf(execution),
                     tick,
                     resources,
+                    input.projectiles,
                 );
                 work = resumed.work;
                 state = resumed.state;
@@ -144,6 +150,7 @@ export function createCombatSystem(
                 tick,
                 resources,
                 mayStart(state, id),
+                input.projectiles,
             );
             work = started.work;
             state = started.state;

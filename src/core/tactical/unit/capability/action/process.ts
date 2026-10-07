@@ -10,6 +10,7 @@ import { isSpatiallyPresent } from "../presence.js";
 import type { EffectTransitionResources } from "../effects/contract.js";
 import { finishEffectsOwnedByExecution } from "../effects/lifecycle.js";
 import type { ActionDefinition, TargetBindingId } from "./capability.js";
+import type { ProjectileOperations } from "../../../battlefield/projectile/operations.js";
 
 export type ActionExecutionId = number;
 
@@ -60,6 +61,7 @@ export interface ActionExecutionContext {
     readonly tick: number;
     readonly bindings: ReadonlyMap<TargetBindingId, readonly UnitId[]>;
     readonly samples: ActionExecutionSamples;
+    readonly projectiles?: ProjectileOperations;
 }
 
 export interface ActionExecutionStepResult {
@@ -192,6 +194,7 @@ function contextFor(
     work: CombatWork,
     execution: ActionExecution,
     tick: number,
+    projectiles?: ProjectileOperations,
 ): ActionExecutionContext {
     return {
         work,
@@ -202,6 +205,7 @@ function contextFor(
         tick,
         bindings: new Map(Object.entries(execution.bindings)),
         samples: execution.samples,
+        ...(projectiles === undefined ? {} : { projectiles }),
     };
 }
 
@@ -337,6 +341,7 @@ export function resumeActionExecution(
     segments: readonly CompiledActionSegment[],
     tick: number,
     resources: EffectTransitionResources,
+    projectiles?: ProjectileOperations,
 ): ActionExecutionTransition {
     let execution: ActionExecution | undefined = state.executions.find(
         (current) => current.id === executionId,
@@ -373,7 +378,7 @@ export function resumeActionExecution(
         switch (segment.type) {
             case "EXECUTE": {
                 const result: ActionExecutionStepResult = segment.run(
-                    contextFor(work, execution, tick),
+                    contextFor(work, execution, tick, projectiles),
                 );
                 work = result.work;
                 execution = Object.freeze({
@@ -411,7 +416,10 @@ export function resumeActionExecution(
             case "WAIT": {
                 const wait =
                     execution.wait === null
-                        ? enterWait(segment.resolve(contextFor(work, execution, tick)), tick)
+                        ? enterWait(
+                              segment.resolve(contextFor(work, execution, tick, projectiles)),
+                              tick,
+                          )
                         : advanceWait(execution.wait, tick);
 
                 if (!waitComplete(wait, tick)) {
