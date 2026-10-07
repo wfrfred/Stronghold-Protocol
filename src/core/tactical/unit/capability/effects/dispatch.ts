@@ -2,6 +2,7 @@ import type { UnitId } from "../../unit.js";
 import { hasEffects } from "./capability.js";
 import type { EffectFacts } from "./contract.js";
 import type { EffectAddress, EffectInstanceValue } from "./instance.js";
+import { isParticipatingEffect } from "./query.js";
 
 interface ActiveInstance {
     instance: EffectInstanceValue;
@@ -95,31 +96,5 @@ export function participatingEffect(
 ): EffectInstanceValue | undefined {
     const instance = facts.getEffect(address);
 
-    return instance?.started === true && instance.participating && !instance.finished
-        ? instance
-        : undefined;
-}
-
-export function effectDispatchFacts(
-    facts: () => EffectFacts,
-    scope: EffectDispatchScope,
-): EffectFacts {
-    return {
-        getUnit: (unitId) => facts().getUnit(unitId),
-        getEffect: (address) => facts().getEffect(address),
-        participating: (unitId) =>
-            scope.withCandidates(facts(), unitId, (candidates) => {
-                const instances: EffectInstanceValue[] = [];
-
-                for (const address of candidates) {
-                    const instance = participatingEffect(facts(), address);
-
-                    if (instance !== undefined) {
-                        instances.push(instance);
-                    }
-                }
-
-                return instances;
-            }),
-    };
+    return instance !== undefined && isParticipatingEffect(instance) ? instance : undefined;
 }

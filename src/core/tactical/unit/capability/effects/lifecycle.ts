@@ -18,18 +18,9 @@ import { withEffectLifecycle } from "./internal/instance.js";
 import { registerEffectInstance, replaceEffectInstances } from "./internal/state.js";
 import type { CompiledEffectLifecycle } from "./lifecycle-resources.js";
 import { effectFacts, getEffect } from "./query.js";
-import { effectDispatchFacts, EffectDispatchScope } from "./dispatch.js";
+import { EffectDispatchScope } from "./dispatch.js";
 import type { EffectProgramRef } from "./program.js";
 import { updateEffectState } from "./transition.js";
-
-interface EffectLifecycleScope {
-    readonly finishing: readonly EffectAddress[];
-    readonly dispatch: EffectDispatchScope;
-}
-
-function lifecycleScope(dispatch?: EffectDispatchScope): EffectLifecycleScope {
-    return { finishing: [], dispatch: dispatch ?? new EffectDispatchScope() };
-}
 
 function sameAddress(left: EffectAddress | null, right: EffectAddress): boolean {
     return left !== null && left.unitId === right.unitId && left.instanceId === right.instanceId;
@@ -79,6 +70,33 @@ function changeInstance(
     });
 }
 
+function changeParticipation(
+    work: CombatWork,
+    address: EffectAddress,
+    instance: EffectInstanceValue,
+    updated: EffectInstanceValue,
+    resources: EffectTransitionResources,
+): CombatWork {
+    return transitionCombatUnit(work, address.unitId, (unit) => {
+        if (!hasEffects(unit)) {
+            return unit;
+        }
+
+        let current = replaceEffectInstances(
+            unit,
+            unit.effects.instances.map((value) => (value === instance ? updated : value)),
+        );
+
+        if (instance.started && instance.participating !== updated.participating) {
+            for (const binding of resources.effectBindings.get(updated)) {
+                current = binding.setParticipation(current, updated, updated.participating);
+            }
+        }
+
+        return current;
+    });
+}
+
 function runLifecycleAction(
     work: CombatWork,
     address: EffectAddress,
@@ -86,13 +104,13 @@ function runLifecycleAction(
     action: CompiledEffectLifecycle["start"],
     resources: EffectTransitionResources,
     tick: number,
-    scope: EffectLifecycleScope,
+    scope: EffectDispatchScope,
 ): CombatWork {
     if (action === undefined) {
         return work;
     }
 
-    return scope.dispatch.withInstance(address, instance, (lastKnown) => {
+    return scope.withInstance(address, instance, (lastKnown) => {
         let currentWork = work;
         let active = true;
 
@@ -110,7 +128,7 @@ function runLifecycleAction(
                 return getEffect(readWork(), address) ?? lastKnown();
             },
             tick,
-            facts: effectDispatchFacts(() => effectFacts(readWork), scope.dispatch),
+            facts: effectFacts(readWork),
             effects: {
                 install: (unitId, ref, input) => {
                     const installation = installNewInScope(
@@ -190,7 +208,7 @@ export function setEffectParticipation(
         participating,
         resources,
         tick,
-        lifecycleScope(dispatch),
+        dispatch ?? new EffectDispatchScope(),
     );
 }
 
@@ -200,12 +218,8 @@ function setParticipationInScope(
     participating: boolean,
     resources: EffectTransitionResources,
     tick: number,
-    scope: EffectLifecycleScope,
+    scope: EffectDispatchScope,
 ): CombatWork {
-    if (participating && scope.finishing.some((value) => sameAddress(value, address))) {
-        return work;
-    }
-
     const instance = getEffect(work, address);
 
     if (
@@ -218,22 +232,7 @@ function setParticipationInScope(
     }
 
     const updated = withEffectLifecycle(instance, { participating });
-    work = transitionCombatUnit(work, address.unitId, (unit) => {
-        if (!hasEffects(unit)) {
-            return unit;
-        }
-
-        let current = replaceEffectInstances(
-            unit,
-            unit.effects.instances.map((value) => (value === instance ? updated : value)),
-        );
-
-        for (const binding of resources.effectBindings.get(updated)) {
-            current = binding.setParticipation(current, updated, participating);
-        }
-
-        return current;
-    });
+    work = changeParticipation(work, address, instance, updated, resources);
     const program = resources.effectLifecycle.get(updated);
 
     return runLifecycleAction(
@@ -254,7 +253,7 @@ export function finishEffect(
     tick: number,
     dispatch?: EffectDispatchScope,
 ): CombatWork {
-    return finishInScope(work, address, resources, tick, lifecycleScope(dispatch));
+    return finishInScope(work, address, resources, tick, dispatch ?? new EffectDispatchScope());
 }
 
 function finishInScope(
@@ -262,31 +261,33 @@ function finishInScope(
     address: EffectAddress,
     resources: EffectTransitionResources,
     tick: number,
-    scope: EffectLifecycleScope,
+    scope: EffectDispatchScope,
 ): CombatWork {
-    if (scope.finishing.some((value) => sameAddress(value, address))) {
-        return work;
-    }
-
     const instance = getEffect(work, address);
 
     if (instance === undefined || instance.finished) {
         return work;
     }
 
-    const finishing = { ...scope, finishing: [...scope.finishing, address] };
-    work = setParticipationInScope(work, address, false, resources, tick, finishing);
-    const current = getEffect(work, address);
+    const finished = withEffectLifecycle(instance, { participating: false, finished: true });
+    work = changeParticipation(work, address, instance, finished, resources);
 
-    if (current === undefined || current.finished) {
-        return work;
+    if (instance.started && instance.participating) {
+        work = runLifecycleAction(
+            work,
+            address,
+            finished,
+            resources.effectLifecycle.get(finished).disable,
+            resources,
+            tick,
+            scope,
+        );
     }
 
-    work = changeInstance(work, address, (value) => withEffectLifecycle(value, { finished: true }));
     const children = addressesMatching(work, (value) => sameAddress(value.parent, address));
 
     for (const child of children) {
-        work = finishInScope(work, child, resources, tick, finishing);
+        work = finishInScope(work, child, resources, tick, scope);
     }
 
     return work;
@@ -299,7 +300,7 @@ export function finalizeEffect(
     tick: number,
     dispatch?: EffectDispatchScope,
 ): CombatWork {
-    return finalizeInScope(work, address, resources, tick, lifecycleScope(dispatch));
+    return finalizeInScope(work, address, resources, tick, dispatch ?? new EffectDispatchScope());
 }
 
 function finalizeInScope(
@@ -307,7 +308,7 @@ function finalizeInScope(
     address: EffectAddress,
     resources: EffectTransitionResources,
     tick: number,
-    scope: EffectLifecycleScope,
+    scope: EffectDispatchScope,
 ): CombatWork {
     const instance = getEffect(work, address);
 
@@ -315,7 +316,7 @@ function finalizeInScope(
         return work;
     }
 
-    scope.dispatch.retainFinalizedInstance(address, instance);
+    scope.retainFinalizedInstance(address, instance);
     work = transitionCombatUnit(work, address.unitId, (unit) => {
         if (!hasEffects(unit)) {
             return unit;
@@ -357,7 +358,7 @@ export function removeEffect(
     tick: number,
     dispatch?: EffectDispatchScope,
 ): CombatWork {
-    return removeInScope(work, address, resources, tick, lifecycleScope(dispatch));
+    return removeInScope(work, address, resources, tick, dispatch ?? new EffectDispatchScope());
 }
 
 function removeInScope(
@@ -365,7 +366,7 @@ function removeInScope(
     address: EffectAddress,
     resources: EffectTransitionResources,
     tick: number,
-    scope: EffectLifecycleScope,
+    scope: EffectDispatchScope,
 ): CombatWork {
     return finalizeInScope(
         finishInScope(work, address, resources, tick, scope),
@@ -383,7 +384,13 @@ export function finalizeFinishedEffects(
     tick: number,
     dispatch?: EffectDispatchScope,
 ): CombatWork {
-    return finalizeFinishedInScope(work, ownerUnitId, resources, tick, lifecycleScope(dispatch));
+    return finalizeFinishedInScope(
+        work,
+        ownerUnitId,
+        resources,
+        tick,
+        dispatch ?? new EffectDispatchScope(),
+    );
 }
 
 function finalizeFinishedInScope(
@@ -391,7 +398,7 @@ function finalizeFinishedInScope(
     ownerUnitId: UnitId,
     resources: EffectTransitionResources,
     tick: number,
-    scope: EffectLifecycleScope,
+    scope: EffectDispatchScope,
 ): CombatWork {
     const owner = getCombatUnit(work, ownerUnitId);
 
@@ -419,7 +426,7 @@ export function installEffect(
     tick: number,
     dispatch?: EffectDispatchScope,
 ): EffectInstallation {
-    const scope = lifecycleScope(dispatch);
+    const scope = dispatch ?? new EffectDispatchScope();
 
     if (getCombatUnit(work, ownerUnitId) !== undefined) {
         work = finalizeFinishedInScope(work, ownerUnitId, resources, tick, scope);
@@ -444,7 +451,7 @@ export function installNewEffect<S extends object>(
         input,
         resources,
         tick,
-        lifecycleScope(dispatch),
+        dispatch ?? new EffectDispatchScope(),
     );
 }
 
@@ -455,7 +462,7 @@ function installNewInScope<S extends object>(
     input: EffectInstallationInput<NoInfer<S>>,
     resources: EffectTransitionResources,
     tick: number,
-    scope: EffectLifecycleScope,
+    scope: EffectDispatchScope,
 ): EffectInstallation {
     if (getCombatUnit(work, ownerUnitId) !== undefined) {
         work = finalizeFinishedInScope(work, ownerUnitId, resources, tick, scope);
@@ -484,7 +491,7 @@ function installInScope(
     instance: EffectInstanceValue,
     resources: EffectTransitionResources,
     tick: number,
-    scope: EffectLifecycleScope,
+    scope: EffectDispatchScope,
 ): EffectInstallation {
     const address = Object.freeze({ unitId: ownerUnitId, instanceId: instance.id });
 
@@ -528,7 +535,7 @@ function installInScope(
         (lifecycle.accepts?.({
             address,
             instance: current,
-            facts: effectDispatchFacts(() => effectFacts(() => work), scope.dispatch),
+            facts: effectFacts(() => work),
         }) ??
             true);
 
@@ -567,7 +574,7 @@ export function attachEffectParent(
         resources,
         tick,
         finishIfParentFinished,
-        lifecycleScope(dispatch),
+        dispatch ?? new EffectDispatchScope(),
     );
 }
 
@@ -578,7 +585,7 @@ function attachParentInScope(
     resources: EffectTransitionResources,
     tick: number,
     finishIfParentFinished: boolean,
-    scope: EffectLifecycleScope,
+    scope: EffectDispatchScope,
 ): EffectParentBinding {
     const child = getEffect(work, childAddress);
 
@@ -634,7 +641,7 @@ export function expireEffects(
     resources: EffectTransitionResources,
     dispatch?: EffectDispatchScope,
 ): CombatWork {
-    const scope = lifecycleScope(dispatch);
+    const scope = dispatch ?? new EffectDispatchScope();
     const expired = addressesMatching(
         work,
         (instance) => instance.expiresAtTick !== null && instance.expiresAtTick <= tick,
@@ -654,7 +661,7 @@ export function finishEffectsOwnedByUnit(
     tick: number,
     dispatch?: EffectDispatchScope,
 ): CombatWork {
-    const scope = lifecycleScope(dispatch);
+    const scope = dispatch ?? new EffectDispatchScope();
     const addresses = addressesMatching(work, (instance) => instance.scope?.unitId === ownerUnitId);
 
     for (const address of addresses) {
@@ -672,7 +679,7 @@ export function finishEffectsOwnedByExecution(
     tick: number,
     dispatch?: EffectDispatchScope,
 ): CombatWork {
-    const scope = lifecycleScope(dispatch);
+    const scope = dispatch ?? new EffectDispatchScope();
     const addresses = addressesMatching(
         work,
         (instance) =>
@@ -695,7 +702,7 @@ export function finishEffectsOnUnit(
     tick: number,
     dispatch?: EffectDispatchScope,
 ): CombatWork {
-    const scope = lifecycleScope(dispatch);
+    const scope = dispatch ?? new EffectDispatchScope();
     const addresses = addressesMatching(work, (_, address) => address.unitId === unitId);
 
     for (const address of addresses) {
@@ -712,7 +719,7 @@ export function removeEffectsOwnedByUnit(
     tick: number,
     dispatch?: EffectDispatchScope,
 ): CombatWork {
-    const scope = lifecycleScope(dispatch);
+    const scope = dispatch ?? new EffectDispatchScope();
     const addresses = addressesMatching(work, (instance) => instance.scope?.unitId === ownerUnitId);
 
     for (const address of addresses) {

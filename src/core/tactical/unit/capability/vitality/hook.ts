@@ -6,7 +6,7 @@ import type {
 } from "../effects/contract.js";
 import type { EffectAddress, EffectInstance, EffectInstanceValue } from "../effects/instance.js";
 import { createEffectOperations } from "../effects/operations.js";
-import { EffectDispatchScope, effectDispatchFacts } from "../effects/dispatch.js";
+import { EffectDispatchScope } from "../effects/dispatch.js";
 import { effectFacts, getEffect } from "../effects/query.js";
 import { resolveMaxHp } from "./query.js";
 import { hasVitality } from "./capability.js";
@@ -56,10 +56,9 @@ export type HealingOperation = (
 export function vitalityHookFacts(
     work: () => CombatWork,
     vitality: NumericContributionProvider<NumericProviderFacts>,
-    dispatch: EffectDispatchScope,
 ): VitalityHookFacts {
     return {
-        ...effectDispatchFacts(() => effectFacts(work), dispatch),
+        ...effectFacts(work),
         maxHp: (unitId) => {
             const current = work();
             const unit = getCombatUnit(current, unitId);
@@ -119,7 +118,7 @@ export function withVitalityHookContext<R, T>(
             },
             request,
             tick,
-            facts: vitalityHookFacts(readWork, resources.vitality, dispatch),
+            facts: vitalityHookFacts(readWork, resources.vitality),
             operations: {
                 effects: createEffectOperations(readWork, setWork, resources, tick, dispatch),
                 sources: createEffectSourceOperations(readWork, setWork, resources),

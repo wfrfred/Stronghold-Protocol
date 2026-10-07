@@ -3,6 +3,10 @@ import { hasEffects } from "./capability.js";
 import type { EffectAddress, EffectInstanceValue } from "./instance.js";
 import type { EffectFacts } from "./contract.js";
 
+export function isParticipatingEffect(instance: EffectInstanceValue): boolean {
+    return instance.started && instance.participating && !instance.finished;
+}
+
 export function getEffect(
     work: CombatWork,
     address: EffectAddress,
@@ -22,9 +26,7 @@ export function effectFacts(work: () => CombatWork): EffectFacts {
             const unit = getCombatUnit(work(), id);
 
             return unit !== undefined && hasEffects(unit)
-                ? unit.effects.instances.filter(
-                      (instance) => instance.participating && !instance.finished,
-                  )
+                ? unit.effects.instances.filter(isParticipatingEffect)
                 : [];
         },
     };

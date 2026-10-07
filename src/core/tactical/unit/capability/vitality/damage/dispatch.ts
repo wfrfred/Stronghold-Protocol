@@ -33,7 +33,7 @@ function dispatchStage<V>(
         return { work, value };
     }
 
-    const facts = vitalityHookFacts(() => work, resources.vitality, dispatch);
+    const facts = vitalityHookFacts(() => work, resources.vitality);
     dispatch.withCandidates(facts, ownerUnitId, (identities) => {
         const candidates = identities
             .flatMap((address) => {
