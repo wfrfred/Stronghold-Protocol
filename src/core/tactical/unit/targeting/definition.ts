@@ -1,3 +1,4 @@
+import { assertPositiveSafeInteger } from "../../../common/assert.js";
 import { createRangeGeometry, type RangeGeometry } from "../../geometry/shape.js";
 
 export type DamageTargetScope =
@@ -25,14 +26,6 @@ export interface HealingTargetingDefinition {
 
 export type TargetingDefinition = DamageTargetingDefinition | HealingTargetingDefinition;
 
-function maxTargets(value: number): number {
-    if (!Number.isSafeInteger(value) || value < 1) {
-        throw new RangeError("maxTargets must be a positive safe integer");
-    }
-
-    return value;
-}
-
 function flags(definition: object, keys: readonly string[]): void {
     for (const key of keys) {
         if (typeof Reflect.get(definition, key) !== "boolean") {
@@ -42,6 +35,8 @@ function flags(definition: object, keys: readonly string[]): void {
 }
 
 export function createTargetingDefinition(definition: TargetingDefinition): TargetingDefinition {
+    assertPositiveSafeInteger(definition.maxTargets, "maxTargets");
+
     switch (definition.type) {
         case "DAMAGE": {
             flags(definition, [
@@ -68,7 +63,6 @@ export function createTargetingDefinition(definition: TargetingDefinition): Targ
                               geometry: createRangeGeometry(scope.geometry),
                           })
                         : Object.freeze({ type: scope.type }),
-                maxTargets: maxTargets(definition.maxTargets),
             });
         }
 
@@ -78,7 +72,6 @@ export function createTargetingDefinition(definition: TargetingDefinition): Targ
             return Object.freeze({
                 ...definition,
                 geometry: createRangeGeometry(definition.geometry),
-                maxTargets: maxTargets(definition.maxTargets),
             });
     }
 }

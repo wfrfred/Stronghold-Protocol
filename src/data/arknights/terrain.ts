@@ -1,3 +1,4 @@
+import { assertPositiveNumber, assertPositiveSafeInteger } from "../../core/common/assert.js";
 import type { ArknightsMapOptions } from "./map.js";
 import type { PredefinedPrefab } from "./prefab.js";
 import type { ArknightsResolvedSkill } from "./skill.js";
@@ -39,9 +40,8 @@ export function resolveTerrainMapOptions(
             const interval = parameter("value");
             const maxStacks = parameter("max_stack_cnt");
 
-            if (interval <= 0 || !Number.isSafeInteger(maxStacks) || maxStacks <= 0) {
-                throw new RangeError("invalid mire stack timing or count");
-            }
+            assertPositiveNumber(interval, "mire stack interval");
+            assertPositiveSafeInteger(maxStacks, "mire maximum stacks");
 
             options.mire = Object.freeze({
                 stackIntervalTicks: secondsToTicks(interval, "mire stack interval"),

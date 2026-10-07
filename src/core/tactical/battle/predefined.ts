@@ -1,3 +1,4 @@
+import { assertNonnegativeSafeInteger } from "../../common/assert.js";
 import type {
     BattlefieldChange,
     BattlefieldRemovalReason,
@@ -64,9 +65,8 @@ export interface PredefinedTransition {
 export function createPredefinedInstanceDefinition(
     definition: PredefinedInstanceDefinition,
 ): PredefinedInstanceDefinition {
-    if (!Number.isSafeInteger(definition.id) || definition.id < 0) {
-        throw new RangeError("predefined definition id must be a nonnegative safe integer");
-    }
+    assertNonnegativeSafeInteger(definition.id, "predefined definition id");
+
     if (definition.alias !== null && typeof definition.alias !== "string") {
         throw new TypeError("predefined alias must be a string or null");
     }

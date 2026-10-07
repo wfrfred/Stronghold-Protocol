@@ -1,3 +1,4 @@
+import { assertNonnegativeSafeInteger, assertPositiveNumber } from "../../../common/assert.js";
 import {
     createActionCapabilityDefinition,
     type ActingUnitDefinition,
@@ -49,9 +50,8 @@ export function createOperatorDefinition(definition: OperatorDefinition): Operat
     if (typeof id !== "string" || id.length === 0) {
         throw new TypeError("operator definition id must be nonempty");
     }
-    if (!Number.isFinite(definition.vitality.maxHp) || definition.vitality.maxHp <= 0) {
-        throw new RangeError("operator maxHp must be finite and positive");
-    }
+
+    assertPositiveNumber(definition.vitality.maxHp, "operator maxHp");
 
     return Object.freeze({
         id,
@@ -72,9 +72,7 @@ export function createOperatorDefinition(definition: OperatorDefinition): Operat
 export function initializeOperator<D extends OperatorDefinition>(
     input: OperatorInitialization<D>,
 ): Operator<D> {
-    if (!Number.isSafeInteger(input.id) || input.id < 0) {
-        throw new RangeError("operator id must be a nonnegative safe integer");
-    }
+    assertNonnegativeSafeInteger(input.id, "operator id");
 
     return initializeUnit(input);
 }

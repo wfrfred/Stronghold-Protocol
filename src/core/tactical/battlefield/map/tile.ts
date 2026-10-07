@@ -1,3 +1,10 @@
+import {
+    assertFiniteNumber,
+    assertNonnegativeNumber,
+    assertNonnegativeSafeInteger,
+    assertPositiveSafeInteger,
+} from "../../../common/assert.js";
+
 export type HeightType = "LOWLAND" | "HIGHLAND";
 
 export type BuildableType = "NONE" | "MELEE" | "ALL" | "RANGED";
@@ -56,27 +63,19 @@ export interface Tile {
 }
 
 function requireFinite(value: number, name: string): number {
-    if (!Number.isFinite(value)) {
-        throw new RangeError(`${name} must be finite`);
-    }
+    assertFiniteNumber(value, name);
 
     return value === 0 ? 0 : value;
 }
 
 function requireNonnegative(value: number, name: string): number {
-    requireFinite(value, name);
-
-    if (value < 0) {
-        throw new RangeError(`${name} must be nonnegative`);
-    }
+    assertNonnegativeNumber(value, name);
 
     return value === 0 ? 0 : value;
 }
 
 function requireTick(value: number, name: string): number {
-    if (!Number.isSafeInteger(value) || value < 0) {
-        throw new RangeError(`${name} must be a nonnegative safe integer`);
-    }
+    assertNonnegativeSafeInteger(value, name);
 
     return value === 0 ? 0 : value;
 }
@@ -112,17 +111,10 @@ function copyMechanism(mechanism: TileMechanism | null): TileMechanism | null {
 
         case "MIRE": {
             const params = mechanism.params;
-            const stackIntervalTicks = requireTick(
-                params.stackIntervalTicks,
-                "mire stack interval",
-            );
+            const stackIntervalTicks = params.stackIntervalTicks;
 
-            if (stackIntervalTicks === 0) {
-                throw new RangeError("mire stack interval must be positive");
-            }
-            if (!Number.isSafeInteger(params.maxStacks) || params.maxStacks <= 0) {
-                throw new RangeError("mire maximum stacks must be a positive safe integer");
-            }
+            assertPositiveSafeInteger(stackIntervalTicks, "mire stack interval");
+            assertPositiveSafeInteger(params.maxStacks, "mire maximum stacks");
 
             return Object.freeze({
                 type: "MIRE",

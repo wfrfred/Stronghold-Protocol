@@ -1,3 +1,4 @@
+import { assertNonnegativeSafeInteger } from "../../../../../common/assert.js";
 import type {
     NavigationGoal,
     NavigationRequestId,
@@ -72,18 +73,13 @@ export function copyRouteState(state: Readonly<RouteState>): RouteState {
     return { ...state, progress: copiedProgress };
 }
 
-function ticks(value: number, name: string): number {
-    if (!Number.isSafeInteger(value) || value < 0) {
-        throw new RangeError(`${name} must be a non-negative safe integer`);
-    }
-
-    return value;
-}
-
 export function createRouteTiming(timing: RouteTiming): RouteTiming {
+    assertNonnegativeSafeInteger(timing.waveStartedAtTick, "waveStartedAtTick");
+    assertNonnegativeSafeInteger(timing.fragmentStartedAtTick, "fragmentStartedAtTick");
+
     return Object.freeze({
-        waveStartedAtTick: ticks(timing.waveStartedAtTick, "waveStartedAtTick"),
-        fragmentStartedAtTick: ticks(timing.fragmentStartedAtTick, "fragmentStartedAtTick"),
+        waveStartedAtTick: timing.waveStartedAtTick,
+        fragmentStartedAtTick: timing.fragmentStartedAtTick,
     });
 }
 

@@ -1,3 +1,4 @@
+import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import { createWorldPosition } from "../../geometry/coordinate.js";
 import type { Unit, UnitId } from "../../unit/unit.js";
 import { releaseBlockingRelations } from "../blocking/relations.js";
@@ -125,9 +126,7 @@ export function applyBattlefieldChanges<U extends Unit>(
     for (const change of changes) {
         switch (change.type) {
             case "REGISTER_UNIT":
-                if (!Number.isSafeInteger(change.unit.id) || change.unit.id < 0) {
-                    throw new RangeError("invalid unit id");
-                }
+                assertNonnegativeSafeInteger(change.unit.id, "unit id");
 
                 register(units.edit(), change.unit.id, change.unit, "unit");
                 registeredUnitIds.push(change.unit.id);
@@ -262,9 +261,7 @@ export function applyBattlefieldChanges<U extends Unit>(
                 break;
 
             case "EXPIRE_EFFECTS":
-                if (!Number.isSafeInteger(change.tick) || change.tick < 0) {
-                    throw new RangeError("effect expiry tick must be a nonnegative safe integer");
-                }
+                assertNonnegativeSafeInteger(change.tick, "effect expiry tick");
 
                 for (const effect of effects.value.values()) {
                     if (effect.expiresAtTick !== null && effect.expiresAtTick <= change.tick) {

@@ -1,3 +1,4 @@
+import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import { ownDataRecord } from "../../../common/immutable-data.js";
 import type { MechanismRuntime } from "../mechanism.js";
 import type { UnitId } from "../../unit/unit.js";
@@ -70,14 +71,12 @@ function copyReceivers(
             if (ids.has(receiver.unitId)) {
                 throw new TypeError("effect source receiver identities must be unique");
             }
-            if (
-                !Number.isSafeInteger(receiver.installationAttempts) ||
-                receiver.installationAttempts < 0
-            ) {
-                throw new RangeError(
-                    "effect source installation attempts must be a nonnegative safe integer",
-                );
-            }
+
+            assertNonnegativeSafeInteger(
+                receiver.installationAttempts,
+                "effect source installation attempts",
+            );
+
             if (receiver.address !== null && receiver.address.unitId !== receiver.unitId) {
                 throw new TypeError("effect source receiver address must match its unit");
             }

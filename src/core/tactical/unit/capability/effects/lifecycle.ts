@@ -466,8 +466,8 @@ function installNewInScope<S extends object>(
     const instance = resources.effects.create(
         ref,
         {
-            sourceUnitId: input.sourceUnitId,
-            lifetimeOwner: input.lifetimeOwner,
+            source: input.source,
+            scope: input.scope,
             expiresAtTick: input.expiresAtTick,
             id: progress?.nextInstanceId ?? 0,
             acquiredSequence: progress?.nextAcquiredSequence ?? 0,
@@ -655,10 +655,7 @@ export function finishEffectsOwnedByUnit(
     dispatch?: EffectDispatchScope,
 ): CombatWork {
     const scope = lifecycleScope(dispatch);
-    const addresses = addressesMatching(
-        work,
-        (instance) => instance.lifetimeOwner?.unitId === ownerUnitId,
-    );
+    const addresses = addressesMatching(work, (instance) => instance.scope?.unitId === ownerUnitId);
 
     for (const address of addresses) {
         work = finishInScope(work, address, resources, tick, scope);
@@ -679,9 +676,9 @@ export function finishEffectsOwnedByExecution(
     const addresses = addressesMatching(
         work,
         (instance) =>
-            instance.lifetimeOwner?.type === "EXECUTION" &&
-            instance.lifetimeOwner.unitId === ownerUnitId &&
-            instance.lifetimeOwner.executionId === executionId,
+            instance.scope?.type === "EXECUTION" &&
+            instance.scope.unitId === ownerUnitId &&
+            instance.scope.executionId === executionId,
     );
 
     for (const address of addresses) {
@@ -716,10 +713,7 @@ export function removeEffectsOwnedByUnit(
     dispatch?: EffectDispatchScope,
 ): CombatWork {
     const scope = lifecycleScope(dispatch);
-    const addresses = addressesMatching(
-        work,
-        (instance) => instance.lifetimeOwner?.unitId === ownerUnitId,
-    );
+    const addresses = addressesMatching(work, (instance) => instance.scope?.unitId === ownerUnitId);
 
     for (const address of addresses) {
         work = finishInScope(work, address, resources, tick, scope);

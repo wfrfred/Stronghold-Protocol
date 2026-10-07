@@ -1,3 +1,4 @@
+import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import {
     createRouteTiming,
     type RouteTiming,
@@ -49,16 +50,12 @@ export type SpawnScheduleDefinition =
           readonly branches: Readonly<Record<string, BranchDefinition>>;
       };
 
-function ticks(value: number, name: string): number {
-    if (!Number.isSafeInteger(value) || value < 0) {
-        throw new RangeError(`${name} must be a non-negative safe integer`);
-    }
-
-    return value;
-}
-
 export function addScheduleTicks(left: number, right: number): number {
-    return ticks(left + right, "schedule deadline");
+    const deadline = left + right;
+
+    assertNonnegativeSafeInteger(deadline, "schedule deadline");
+
+    return deadline;
 }
 
 function flag(value: boolean, name: string): boolean {
@@ -94,7 +91,10 @@ function copyFragment(fragment: FragmentDefinition): FragmentDefinition {
         throw new TypeError("fragments must be dense");
     }
 
-    const preDelayTicks = ticks(fragment.preDelayTicks, "fragment.preDelayTicks");
+    const preDelayTicks = fragment.preDelayTicks;
+
+    assertNonnegativeSafeInteger(preDelayTicks, "fragment.preDelayTicks");
+
     const actions: SpawnActionDefinition[] = [];
 
     for (const action of fragment.actions) {
@@ -107,7 +107,9 @@ function copyFragment(fragment: FragmentDefinition): FragmentDefinition {
         const offsetsTicks: number[] = [];
 
         for (const offset of action.offsetsTicks) {
-            offsetsTicks.push(ticks(offset, "spawn offset"));
+            assertNonnegativeSafeInteger(offset, "spawn offset");
+
+            offsetsTicks.push(offset);
             addScheduleTicks(preDelayTicks, offset);
         }
 
@@ -151,10 +153,12 @@ export function createSpawnScheduleDefinition(
                 throw new TypeError("timeline spawns must be dense");
             }
 
+            assertNonnegativeSafeInteger(spawn.tick, "spawn.tick");
+
             spawns.push(
                 Object.freeze({
                     ...copySpawnDefinition(spawn),
-                    tick: ticks(spawn.tick, "spawn.tick"),
+                    tick: spawn.tick,
                     timing: createRouteTiming(spawn.timing),
                 }),
             );
@@ -189,14 +193,18 @@ export function createSpawnScheduleDefinition(
             fragments.push(copied);
         }
 
+        assertNonnegativeSafeInteger(wave.preDelayTicks, "wave.preDelayTicks");
+        assertNonnegativeSafeInteger(wave.postDelayTicks, "wave.postDelayTicks");
+
+        if (wave.maxWaitingTicks !== null) {
+            assertNonnegativeSafeInteger(wave.maxWaitingTicks, "wave.maxWaitingTicks");
+        }
+
         waves.push(
             Object.freeze({
-                preDelayTicks: ticks(wave.preDelayTicks, "wave.preDelayTicks"),
-                postDelayTicks: ticks(wave.postDelayTicks, "wave.postDelayTicks"),
-                maxWaitingTicks:
-                    wave.maxWaitingTicks === null
-                        ? null
-                        : ticks(wave.maxWaitingTicks, "wave.maxWaitingTicks"),
+                preDelayTicks: wave.preDelayTicks,
+                postDelayTicks: wave.postDelayTicks,
+                maxWaitingTicks: wave.maxWaitingTicks,
                 fragments: Object.freeze(fragments),
             }),
         );

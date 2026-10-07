@@ -1,3 +1,4 @@
+import { assertNonnegativeNumber } from "../../common/assert.js";
 import { createWorldOffset, type WorldOffset } from "./coordinate.js";
 import { Direction } from "./direction.js";
 import { RangeGrid } from "./range.js";
@@ -39,29 +40,26 @@ const ownedShapes = new WeakSet<ShapeGeometry>();
 const ownedBlocks = new WeakSet<BlockGeometry>();
 const ownedRanges = new WeakSet<RangeGeometry>();
 
-function requireNonnegative(value: number, name: string): number {
-    if (!Number.isFinite(value) || value < 0) {
-        throw new RangeError(`${name} must be finite and nonnegative`);
-    }
-
-    return value;
-}
-
 function createLocalShape(shape: LocalShape): LocalShape {
     const offset = createWorldOffset(shape.offset[0], shape.offset[1]);
 
     switch (shape.type) {
         case "CIRCLE":
+            assertNonnegativeNumber(shape.radius, "circle radius");
+
             return Object.freeze({
                 type: shape.type,
                 offset,
-                radius: requireNonnegative(shape.radius, "circle radius"),
+                radius: shape.radius,
             });
 
         case "BOX": {
+            assertNonnegativeNumber(shape.halfExtents[0], "box half width");
+            assertNonnegativeNumber(shape.halfExtents[1], "box half height");
+
             const halfExtents: readonly [halfWidth: number, halfHeight: number] = Object.freeze([
-                requireNonnegative(shape.halfExtents[0], "box half width"),
-                requireNonnegative(shape.halfExtents[1], "box half height"),
+                shape.halfExtents[0],
+                shape.halfExtents[1],
             ]);
 
             return Object.freeze({ type: shape.type, offset, halfExtents });
@@ -101,7 +99,9 @@ export function createBlockGeometry(geometry: BlockGeometry): BlockGeometry {
         return geometry;
     }
 
-    const owned = Object.freeze({ radius: requireNonnegative(geometry.radius, "block radius") });
+    assertNonnegativeNumber(geometry.radius, "block radius");
+
+    const owned = Object.freeze({ radius: geometry.radius });
 
     ownedBlocks.add(owned);
 

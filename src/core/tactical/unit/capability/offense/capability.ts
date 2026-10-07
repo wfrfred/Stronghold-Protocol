@@ -1,3 +1,4 @@
+import { assertNonnegativeNumber } from "../../../../common/assert.js";
 import {
     copyNumericContributionState,
     createNumericContributionState,
@@ -38,9 +39,7 @@ export function hasOffenseDefinition(
 }
 
 export function createOffenseDefinition(definition: OffenseDefinition): OffenseDefinition {
-    if (!Number.isFinite(definition.attack) || definition.attack < 0) {
-        throw new RangeError("attack must be finite and nonnegative");
-    }
+    assertNonnegativeNumber(definition.attack, "attack");
 
     return Object.freeze({ attack: definition.attack });
 }

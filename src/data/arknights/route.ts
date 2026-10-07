@@ -1,3 +1,4 @@
+import { assertFiniteNumber } from "../../core/common/assert.js";
 import type { TilePosition, WorldOffset } from "../../core/tactical/geometry/coordinate.js";
 import {
     createRouteDefinition,
@@ -24,9 +25,7 @@ function object(value: unknown, name: string, fields: readonly string[]): Record
 }
 
 function number(value: unknown, name: string): number {
-    if (typeof value !== "number" || !Number.isFinite(value)) {
-        throw new RangeError(`${name} must be finite`);
-    }
+    assertFiniteNumber(value, name);
 
     return value;
 }

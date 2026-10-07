@@ -1,9 +1,8 @@
+import { assertFiniteNumber } from "../../core/common/assert.js";
 import { TICKS_PER_SECOND } from "../../core/tactical/tick.js";
 
 export function secondsToTicks(value: number, name = "time"): number {
-    if (!Number.isFinite(value)) {
-        throw new RangeError(`${name} must be finite`);
-    }
+    assertFiniteNumber(value, name);
 
     const ticks = value * TICKS_PER_SECOND;
     const nearest = Math.round(ticks);
@@ -20,9 +19,7 @@ export function secondsToTicks(value: number, name = "time"): number {
 }
 
 export function perSecondToPerTick(value: number): number {
-    if (!Number.isFinite(value)) {
-        throw new RangeError("rate must be finite");
-    }
+    assertFiniteNumber(value, "rate");
 
     return value / TICKS_PER_SECOND;
 }

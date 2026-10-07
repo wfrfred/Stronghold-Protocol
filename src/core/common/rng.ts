@@ -1,3 +1,5 @@
+import { assertNonnegativeNumber, assertPositiveNumber } from "./assert.js";
+
 export type Seed = number;
 
 const UINT32_RANGE = 2 ** 32;
@@ -101,9 +103,7 @@ export function createRng(seed: Seed): Rng {
         let lastPositive: T | undefined;
 
         for (const [item, weight] of items) {
-            if (!Number.isFinite(weight) || weight < 0) {
-                throw new RangeError("weight must be a finite non-negative number");
-            }
+            assertNonnegativeNumber(weight, "weight");
 
             if (weight > 0) {
                 lastPositive = item;
@@ -112,9 +112,7 @@ export function createRng(seed: Seed): Rng {
             total += weight;
         }
 
-        if (!Number.isFinite(total) || total <= 0) {
-            throw new RangeError("total weight must be finite and positive");
-        }
+        assertPositiveNumber(total, "total weight");
 
         let target = next() * total;
 

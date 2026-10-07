@@ -1,3 +1,4 @@
+import { assertNonnegativeSafeInteger } from "../../../../../common/assert.js";
 import { copyEffectInstance } from "./instance.js";
 import type { EffectInstanceValue } from "../instance.js";
 import type { Effects, EffectsState } from "../capability.js";
@@ -13,14 +14,12 @@ const ownedArrays = new WeakMap<readonly EffectInstanceValue[], AllocationProgre
 export function ownEffectsState(state: EffectsState): EffectsState {
     const { instances, nextInstanceId, nextAcquiredSequence } = state;
 
-    if (
-        !Number.isSafeInteger(nextInstanceId) ||
-        nextInstanceId < 0 ||
-        !Number.isSafeInteger(nextAcquiredSequence) ||
-        nextAcquiredSequence < 0
-    ) {
-        throw new TypeError("invalid effect allocation progress");
-    }
+    assertNonnegativeSafeInteger(nextInstanceId, "effect instance allocation progress", TypeError);
+    assertNonnegativeSafeInteger(
+        nextAcquiredSequence,
+        "effect acquired sequence allocation progress",
+        TypeError,
+    );
 
     const minimumProgress = ownedArrays.get(instances);
 

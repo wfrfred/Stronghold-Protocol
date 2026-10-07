@@ -1,3 +1,4 @@
+import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import {
     createTileOffset,
     createTilePosition,
@@ -79,9 +80,7 @@ export function copyNavigationSpatialEffect(
 }
 
 function identity(value: number, name: string): number {
-    if (!Number.isSafeInteger(value) || value < 0) {
-        throw new RangeError(`${name} must be a nonnegative safe integer`);
-    }
+    assertNonnegativeSafeInteger(value, name);
 
     return value === 0 ? 0 : value;
 }

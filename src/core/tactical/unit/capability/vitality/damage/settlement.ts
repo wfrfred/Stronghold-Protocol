@@ -3,7 +3,7 @@ import { hasVitality, type Vitality } from "../capability.js";
 import type { Unit } from "../../../unit.js";
 import { hasStatusFlag } from "../../status/capability.js";
 import { resolveDefense } from "../../defense/query.js";
-import { applicableVitalityAmount, finiteVitalityAmount } from "../amount.js";
+import { assertFiniteNumber, assertNonnegativeNumber } from "../../../../../common/assert.js";
 import {
     type DamageType,
     type DamageOperands,
@@ -60,10 +60,10 @@ export function damageUnit<U extends Unit & Vitality>(
     damageType: DamageType,
 ): DamageResult<U> {
     const defense = hasDefenseDefinition(unit.definition) ? unit.definition.defense : NO_DEFENSE;
-    const formulaDamage = applicableVitalityAmount(
-        calculateDamage(power, damageType, defense),
-        "damage amount",
-    );
+    const formulaDamage = calculateDamage(power, damageType, defense);
+
+    assertNonnegativeNumber(formulaDamage, "damage amount");
+
     const damage = hasStatusFlag(unit, "INVINCIBLE") ? 0 : formulaDamage;
     const candidateHp = Math.max(0, unit.vitality.hp - damage);
     const hp =
@@ -191,10 +191,14 @@ export function resolveDamage(
             Math.max(0, defense.resistance - operands.fixedPenetration) *
             Math.max(0, 1 - operands.proportionalPenetration),
     };
-    const formulaDamage = finiteVitalityAmount(
-        calculateDamage(formulaPower(operands), request.damageType, effectiveDefense),
-        "formula damage",
+    const formulaDamage = calculateDamage(
+        formulaPower(operands),
+        request.damageType,
+        effectiveDefense,
     );
+
+    assertFiniteNumber(formulaDamage, "formula damage");
+
     let pending: PendingDamage = { amount: formulaDamage, cancellation: null, consumptions: [] };
 
     if (!policy.skipModifierEvents) {
@@ -211,7 +215,10 @@ export function resolveDamage(
         pending = result.value;
     }
 
-    const outputDamage = finiteVitalityAmount(pending.amount, "output damage");
+    const outputDamage = pending.amount;
+
+    assertFiniteNumber(outputDamage, "output damage");
+
     const receiver = getCombatUnit(work, request.targetUnitId);
 
     if (receiver === undefined || !hasVitality(receiver) || receiver.vitality.hp <= 0) {
@@ -246,7 +253,10 @@ export function resolveDamage(
         pending = result.value;
     }
 
-    const hpDamage = applicableVitalityAmount(pending.amount, "received damage");
+    const hpDamage = pending.amount;
+
+    assertNonnegativeNumber(hpDamage, "received damage");
+
     const finalTarget = getCombatUnit(work, request.targetUnitId);
 
     if (

@@ -1,3 +1,4 @@
+import { assertNonnegativeNumber } from "../../core/common/assert.js";
 import { TICKS_PER_SECOND } from "../../core/tactical/tick.js";
 import type {
     DeploymentProfile,
@@ -106,9 +107,7 @@ function boolean(value: unknown, name: string): boolean {
 }
 
 function nonnegative(value: unknown, name: string): number {
-    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-        throw new RangeError(`${name} must be finite and nonnegative`);
-    }
+    assertNonnegativeNumber(value, name);
 
     return value;
 }

@@ -1,4 +1,5 @@
 import { createTile, type PassableMask, type Tile } from "./tile.js";
+import { assertPositiveSafeInteger } from "../../../common/assert.js";
 import {
     createTilePosition,
     isTilePosition,
@@ -50,12 +51,8 @@ export function createBattlefieldMap(
     markers: readonly BattlefieldMarker[] = [],
     blockEdges: readonly BattlefieldBlockEdge[] = [],
 ): BattlefieldMap {
-    if (!Number.isSafeInteger(rows) || rows <= 0) {
-        throw new RangeError(`invalid row count: ${rows}`);
-    }
-    if (!Number.isSafeInteger(columns) || columns <= 0) {
-        throw new RangeError(`invalid column count: ${columns}`);
-    }
+    assertPositiveSafeInteger(rows, "battlefield row count");
+    assertPositiveSafeInteger(columns, "battlefield column count");
 
     const tileCount = rows * columns;
 

@@ -1,3 +1,4 @@
+import { assertNonnegativeNumber } from "../../../../common/assert.js";
 import {
     copyNumericContributionState,
     createNumericContributionState,
@@ -44,9 +45,7 @@ export function createDefenseDefinition(definition: DefenseDefinition): DefenseD
         ["defense", definition.defense],
         ["resistance", definition.resistance],
     ] as const) {
-        if (!Number.isFinite(value) || value < 0) {
-            throw new RangeError(`${name} must be finite and nonnegative`);
-        }
+        assertNonnegativeNumber(value, name);
     }
 
     return Object.freeze({ defense: definition.defense, resistance: definition.resistance });

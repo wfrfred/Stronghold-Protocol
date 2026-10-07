@@ -1,3 +1,4 @@
+import { assertNonnegativeSafeInteger } from "../../../../../common/assert.js";
 import { ownDataRecord } from "../../../../../common/immutable-data.js";
 import type { EffectProgram, EffectProgramRef } from "../program.js";
 import type {
@@ -6,7 +7,7 @@ import type {
     EffectInstanceMetadata,
     EffectInstanceValue,
     EffectLifecycleFacts,
-    EffectLifetimeOwner,
+    EffectLifetimeScope,
 } from "../instance.js";
 import type { UnitId } from "../../../unit.js";
 
@@ -17,9 +18,7 @@ export function ownEffectState<S extends object>(program: EffectProgram<S>, valu
 }
 
 function nonnegativeInteger(value: unknown, name: string): number {
-    if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
-        throw new TypeError(`effect ${name} must be a nonnegative safe integer`);
-    }
+    assertNonnegativeSafeInteger(value, `effect ${name}`, TypeError);
 
     return value;
 }
@@ -36,33 +35,33 @@ function unitId(value: unknown): UnitId | null {
     return value === null ? null : nonnegativeInteger(value, "unit identity");
 }
 
-function ownLifetimeOwner(value: unknown): EffectLifetimeOwner | null {
+function ownLifetimeScope(value: unknown): EffectLifetimeScope | null {
     if (value === null) {
         return null;
     }
 
-    const owner = record(value);
-    const ownerUnitId = nonnegativeInteger(owner.unitId, "lifetime owner");
+    const scope = record(value);
+    const scopeUnitId = nonnegativeInteger(scope.unitId, "lifetime scope unit identity");
 
-    if (owner.type === "UNIT") {
-        return Object.freeze({ type: "UNIT", unitId: ownerUnitId });
+    if (scope.type === "UNIT") {
+        return Object.freeze({ type: "UNIT", unitId: scopeUnitId });
     }
-    if (owner.type === "EXECUTION") {
+    if (scope.type === "EXECUTION") {
         return Object.freeze({
             type: "EXECUTION",
-            unitId: ownerUnitId,
-            executionId: nonnegativeInteger(owner.executionId, "execution identity"),
+            unitId: scopeUnitId,
+            executionId: nonnegativeInteger(scope.executionId, "execution identity"),
         });
     }
 
-    throw new TypeError("unknown effect lifetime owner");
+    throw new TypeError("unknown effect lifetime scope");
 }
 
 function ownMetadata(value: EffectInstanceMetadata): EffectInstanceMetadata {
     return {
         id: nonnegativeInteger(value.id, "identity"),
-        sourceUnitId: unitId(value.sourceUnitId),
-        lifetimeOwner: ownLifetimeOwner(value.lifetimeOwner),
+        source: unitId(value.source),
+        scope: ownLifetimeScope(value.scope),
         acquiredSequence: nonnegativeInteger(value.acquiredSequence, "acquired sequence"),
         expiresAtTick:
             value.expiresAtTick === null
@@ -152,8 +151,8 @@ export function ownRestoredEffectInstance<S extends object>(
             program,
             {
                 id: nonnegativeInteger(instance.id, "identity"),
-                sourceUnitId: unitId(instance.sourceUnitId),
-                lifetimeOwner: ownLifetimeOwner(instance.lifetimeOwner),
+                source: unitId(instance.source),
+                scope: ownLifetimeScope(instance.scope),
                 acquiredSequence: nonnegativeInteger(
                     instance.acquiredSequence,
                     "acquired sequence",

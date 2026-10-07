@@ -1,3 +1,4 @@
+import { assertNonnegativeSafeInteger, assertPositiveSafeInteger } from "../../../common/assert.js";
 import type { TilePosition } from "../../geometry/coordinate.js";
 import { DIRECTIONS, type Direction } from "../../geometry/direction.js";
 
@@ -50,22 +51,17 @@ export const NavigationMap = {
 };
 
 export function createNavigationMap(map: NavigationMap): NavigationMap {
-    if (
-        !Number.isSafeInteger(map.rows) ||
-        map.rows <= 0 ||
-        !Number.isSafeInteger(map.columns) ||
-        map.columns <= 0 ||
-        !Number.isSafeInteger(map.rows * map.columns) ||
-        map.rows * map.columns > 0xffff_ffff
-    ) {
+    assertPositiveSafeInteger(map.rows, "navigation row count");
+    assertPositiveSafeInteger(map.columns, "navigation column count");
+
+    if (!Number.isSafeInteger(map.rows * map.columns) || map.rows * map.columns > 0xffff_ffff) {
         throw new RangeError("invalid navigation map dimensions");
     }
     if (!PathMotionMode.is(map.pathMotionMode)) {
         throw new TypeError("invalid path motion mode");
     }
-    if (!Number.isSafeInteger(map.revision) || map.revision < 0) {
-        throw new RangeError("navigation revision must be a nonnegative safe integer");
-    }
+
+    assertNonnegativeSafeInteger(map.revision, "navigation revision");
 
     const cellsAreArray: boolean = Array.isArray(map.cells);
 

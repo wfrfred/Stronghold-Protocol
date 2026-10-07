@@ -1,3 +1,7 @@
+import {
+    assertNonnegativeSafeInteger,
+    assertPositiveSafeInteger,
+} from "../../../../common/assert.js";
 import { createEffectDefinition, type EffectDefinition } from "./effect.js";
 import { createTargetingDefinition, type TargetingDefinition } from "../../targeting/definition.js";
 import type { Unit, UnitDefinition, UnitId } from "../../unit.js";
@@ -56,14 +60,6 @@ export function hasActionDefinition(
     return "action" in definition;
 }
 
-function ticks(value: number, minimum: number, name: string): number {
-    if (!Number.isSafeInteger(value) || value < minimum) {
-        throw new RangeError(`${name} must be a safe integer of at least ${minimum}`);
-    }
-
-    return value;
-}
-
 export function createActionDefinition(definition: ActionDefinition): ActionDefinition {
     const groupsAreArray: boolean = Array.isArray(definition.targetGroups);
 
@@ -114,12 +110,15 @@ export function createActionDefinition(definition: ActionDefinition): ActionDefi
         throw new RangeError("action trigger references an unknown target binding");
     }
 
+    assertPositiveSafeInteger(definition.intervalTicks, "action intervalTicks");
+    assertNonnegativeSafeInteger(definition.recoveryTicks, "action recoveryTicks");
+
     return Object.freeze({
         triggerBindingId: definition.triggerBindingId,
         targetGroups: Object.freeze(targetGroups) as ActionDefinition["targetGroups"],
         followUps: Object.freeze(followUps),
-        intervalTicks: ticks(definition.intervalTicks, 1, "action intervalTicks"),
-        recoveryTicks: ticks(definition.recoveryTicks, 0, "action recoveryTicks"),
+        intervalTicks: definition.intervalTicks,
+        recoveryTicks: definition.recoveryTicks,
     });
 }
 
@@ -130,7 +129,7 @@ export function createActionCapabilityDefinition(
 }
 
 export function createActionState(tick = 0): ActionState {
-    ticks(tick, 0, "action tick");
+    assertNonnegativeSafeInteger(tick, "action tick");
 
     return { readyAtTick: tick, recoveryUntilTick: tick, targetUnitId: null };
 }

@@ -7,7 +7,7 @@ import { hasVitality, type VitalUnit } from "../capability.js";
 import type { UnitId } from "../../../unit.js";
 import { resolveMaxHp } from "../query.js";
 import { withVitalityHookContext } from "../hook.js";
-import { applicableVitalityAmount } from "../amount.js";
+import { assertNonnegativeNumber } from "../../../../../common/assert.js";
 import type { CompiledHealingContext, HealingResourceServices, HealingStage } from "./resources.js";
 import type {
     HealingCancellation,
@@ -212,8 +212,8 @@ export function healUnit<U extends VitalUnit>(
     ignoreHealFree = false,
     maxHp = unit.definition.vitality.maxHp,
 ): HealingResult<U> {
-    applicableVitalityAmount(power, "healing amount");
-    applicableVitalityAmount(maxHp, "healing maximum HP");
+    assertNonnegativeNumber(power, "healing amount");
+    assertNonnegativeNumber(maxHp, "healing maximum HP");
 
     if (unit.vitality.hp <= 0 || (!ignoreHealFree && hasStatusFlag(unit, "HEAL_FREE"))) {
         return { unit, amount: 0 };
@@ -288,7 +288,10 @@ export function resolveHealing(
         pending = reception.value;
     }
 
-    const healingAmount = applicableVitalityAmount(pending.amount, "received healing");
+    const healingAmount = pending.amount;
+
+    assertNonnegativeNumber(healingAmount, "received healing");
+
     const current = getCombatUnit(work, request.targetUnitId);
     const finalCancellation =
         pending.cancellation ?? targetCancellation(work, request.targetUnitId);

@@ -1,3 +1,4 @@
+import { assertNonnegativeNumber } from "../../../../common/assert.js";
 import type { DamageType } from "../vitality/damage/contract.js";
 
 import type { QueryPurpose } from "../../targeting/query.js";
@@ -16,9 +17,7 @@ export type EffectDefinition =
       };
 
 export function createEffectDefinition(effect: EffectDefinition): EffectDefinition {
-    if (!Number.isFinite(effect.power) || effect.power < 0) {
-        throw new RangeError("effect power must be finite and nonnegative");
-    }
+    assertNonnegativeNumber(effect.power, "effect power");
 
     switch (effect.type) {
         case "DAMAGE": {

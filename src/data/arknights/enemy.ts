@@ -1,4 +1,9 @@
 import {
+    assertNonnegativeNumber,
+    assertNonnegativeSafeInteger,
+    assertPositiveNumber,
+} from "../../core/common/assert.js";
+import {
     createEnemyDefinition,
     type EnemyDefinition,
 } from "../../core/tactical/unit/archetype/enemy.js";
@@ -29,9 +34,7 @@ function record(value: unknown, name: string): Record<string, unknown> {
 }
 
 function enemyLevel(value: unknown): number {
-    if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
-        throw new RangeError("enemy level must be a nonnegative safe integer");
-    }
+    assertNonnegativeSafeInteger(value, "enemy level");
 
     return value;
 }
@@ -62,14 +65,10 @@ function attribute(value: unknown, name: "maxHp" | "moveSpeed"): number | undefi
     if (number === undefined) {
         return undefined;
     }
-    if (
-        typeof number !== "number" ||
-        !Number.isFinite(number) ||
-        (name === "maxHp" ? number <= 0 : number < 0)
-    ) {
-        throw new RangeError(
-            `defined enemy ${name} must be finite and ${name === "maxHp" ? "positive" : "non-negative"}`,
-        );
+    if (name === "maxHp") {
+        assertPositiveNumber(number, "defined enemy maxHp");
+    } else {
+        assertNonnegativeNumber(number, "defined enemy moveSpeed");
     }
 
     return number;

@@ -1,3 +1,4 @@
+import { assert, assertFiniteNumber, assertSafeInteger } from "../../core/common/assert.js";
 import type { BattlefieldMap } from "../../core/tactical/battlefield/map/map.js";
 import { createTilePosition, type TilePosition } from "../../core/tactical/geometry/coordinate.js";
 import { Direction } from "../../core/tactical/geometry/direction.js";
@@ -207,9 +208,8 @@ function nullableString(value: unknown, name: string): string | null {
 }
 
 function number(value: unknown, name: string, minimum = -Infinity): number {
-    if (typeof value !== "number" || !Number.isFinite(value) || value < minimum) {
-        throw new RangeError(`${name} must be finite and at least ${minimum}`);
-    }
+    assertFiniteNumber(value, name);
+    assert(value >= minimum, `${name} must be at least ${minimum}`, RangeError);
 
     return value;
 }
@@ -217,9 +217,7 @@ function number(value: unknown, name: string, minimum = -Infinity): number {
 function integer(value: unknown, name: string, minimum = 0): number {
     const result = number(value, name, minimum);
 
-    if (!Number.isSafeInteger(result)) {
-        throw new RangeError(`${name} must be a safe integer`);
-    }
+    assertSafeInteger(result, name);
 
     return result;
 }

@@ -1,3 +1,4 @@
+import { assertNonnegativeNumber, assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import {
     createTilePosition,
     createWorldPosition,
@@ -51,9 +52,8 @@ export function isNavigationGoalReached(
 }
 
 export function createNavigationRequest(request: NavigationRequest): NavigationRequest {
-    if (!Number.isSafeInteger(request.id) || request.id < 0) {
-        throw new RangeError("navigation request id must be a nonnegative safe integer");
-    }
+    assertNonnegativeSafeInteger(request.id, "navigation request id");
+
     if (!isTilePosition(request.targetTile) || !isWorldPosition(request.goal.position)) {
         throw new RangeError("navigation coordinates must be valid pairs");
     }
@@ -61,9 +61,7 @@ export function createNavigationRequest(request: NavigationRequest): NavigationR
     const [row, col] = request.targetTile;
     const [x, y] = request.goal.position;
 
-    if (!Number.isFinite(request.goal.reachDistance) || request.goal.reachDistance < 0) {
-        throw new RangeError("navigation reach distance must be finite and nonnegative");
-    }
+    assertNonnegativeNumber(request.goal.reachDistance, "navigation reach distance");
 
     const fields: { readonly arrivalRule: unknown } = request;
 

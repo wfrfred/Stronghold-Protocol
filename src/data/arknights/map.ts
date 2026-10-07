@@ -1,3 +1,4 @@
+import { assertFiniteNumber } from "../../core/common/assert.js";
 import {
     createBattlefieldMap,
     type BattlefieldBlockEdge,
@@ -86,9 +87,7 @@ function string(value: unknown, name: string): string {
 }
 
 function finite(value: unknown, name: string): number {
-    if (typeof value !== "number" || !Number.isFinite(value)) {
-        throw new RangeError(`${name} must be a finite number`);
-    }
+    assertFiniteNumber(value, name);
 
     return value;
 }

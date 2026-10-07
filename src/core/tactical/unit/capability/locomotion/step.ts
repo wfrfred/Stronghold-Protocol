@@ -1,3 +1,4 @@
+import { assertNonnegativeNumber } from "../../../../common/assert.js";
 import { createRng, type Seed } from "../../../../common/rng.js";
 import {
     createWorldOffset,
@@ -169,9 +170,7 @@ export function stepRoutedLocomotion(
     let moving = false;
     const speed = definition.moveSpeedPerTick * context.moveMultiplier;
 
-    if (!Number.isFinite(speed) || speed < 0) {
-        throw new RangeError("movement budget must be finite and non-negative");
-    }
+    assertNonnegativeNumber(speed, "movement budget");
 
     function apply(transition: RouteControlTransition): RouteControlState {
         position = transition.position;

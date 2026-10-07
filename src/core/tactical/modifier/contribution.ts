@@ -1,3 +1,4 @@
+import { assertFiniteNumber, assertNonnegativeSafeInteger } from "../../common/assert.js";
 import { createNumericContribution, type NumericContribution } from "./numeric.js";
 
 export interface NumericContributionOwner {
@@ -54,25 +55,22 @@ function ownEntry(entry: NumericContributionEntry): NumericContributionEntry {
     if (typeof entry.participating !== "boolean") {
         throw new TypeError("numeric contribution participation must be boolean");
     }
-    if (!Number.isSafeInteger(entry.sequence) || entry.sequence < 0) {
-        throw new RangeError("numeric contribution sequence must be nonnegative");
+
+    assertNonnegativeSafeInteger(entry.sequence, "numeric contribution sequence");
+
+    if (entry.owner !== undefined) {
+        assertNonnegativeSafeInteger(entry.owner.unitId, "numeric contribution owner unit id");
+        assertNonnegativeSafeInteger(
+            entry.owner.instanceId,
+            "numeric contribution owner instance id",
+        );
     }
-    if (
-        entry.owner !== undefined &&
-        (!Number.isSafeInteger(entry.owner.unitId) ||
-            entry.owner.unitId < 0 ||
-            !Number.isSafeInteger(entry.owner.instanceId) ||
-            entry.owner.instanceId < 0)
-    ) {
-        throw new RangeError("numeric contribution owner identity must be nonnegative");
-    }
-    if (
-        entry.group !== undefined &&
-        (typeof entry.group.id !== "string" ||
-            entry.group.id.length === 0 ||
-            !Number.isFinite(entry.group.strength))
-    ) {
-        throw new TypeError("numeric contribution group must have an identity and finite strength");
+    if (entry.group !== undefined) {
+        if (typeof entry.group.id !== "string" || entry.group.id.length === 0) {
+            throw new TypeError("numeric contribution group must have an identity");
+        }
+
+        assertFiniteNumber(entry.group.strength, "numeric contribution group strength", TypeError);
     }
 
     const binding = {

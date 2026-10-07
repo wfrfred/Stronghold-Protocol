@@ -1,3 +1,4 @@
+import { assertFiniteNumber, assertSafeInteger } from "../../common/assert.js";
 import { Direction } from "./direction.js";
 
 export type TilePosition = readonly [row: number, col: number];
@@ -31,17 +32,13 @@ export function isWorldPosition(value: unknown): value is WorldPosition {
 }
 
 function requireFinite(value: number, name: string): number {
-    if (!Number.isFinite(value)) {
-        throw new RangeError(`${name} must be finite`);
-    }
+    assertFiniteNumber(value, name);
 
     return value === 0 ? 0 : value;
 }
 
 function requireSafeInteger(value: number, name: string): number {
-    if (!Number.isSafeInteger(value)) {
-        throw new RangeError(`${name} must be a safe integer`);
-    }
+    assertSafeInteger(value, name);
 
     return value === 0 ? 0 : value;
 }

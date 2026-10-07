@@ -1,3 +1,4 @@
+import { assertNonnegativeSafeInteger } from "../../common/assert.js";
 import {
     copyEffectSourceState,
     hasEffectSource,
@@ -38,9 +39,8 @@ export function createMechanismRuntime<D extends MechanismDefinition>(
 export function createMechanismRuntime<D extends MechanismDefinition>(
     runtime: MechanismRuntime<D>,
 ): MechanismRuntime<D> {
-    if (!Number.isSafeInteger(runtime.id) || runtime.id < 0) {
-        throw new RangeError("mechanism id must be a nonnegative safe integer");
-    }
+    assertNonnegativeSafeInteger(runtime.id, "mechanism id");
+
     if (typeof runtime.active !== "boolean") {
         throw new TypeError("mechanism active must be boolean");
     }

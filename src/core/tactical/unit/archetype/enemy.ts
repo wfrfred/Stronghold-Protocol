@@ -1,3 +1,4 @@
+import { assertNonnegativeNumber, assertPositiveNumber } from "../../../common/assert.js";
 import {
     createActionCapabilityDefinition,
     type ActingUnitDefinition,
@@ -60,15 +61,9 @@ export function createEnemyDefinition(definition: EnemyDefinition): EnemyDefinit
     if (typeof definition.id !== "string" || definition.id.length === 0) {
         throw new TypeError("enemy definition id must be nonempty");
     }
-    if (!Number.isFinite(definition.vitality.maxHp) || definition.vitality.maxHp <= 0) {
-        throw new RangeError("enemy maxHp must be finite and positive");
-    }
-    if (
-        !Number.isFinite(definition.locomotion.moveSpeedPerTick) ||
-        definition.locomotion.moveSpeedPerTick < 0
-    ) {
-        throw new RangeError("enemy moveSpeedPerTick must be finite and non-negative");
-    }
+
+    assertPositiveNumber(definition.vitality.maxHp, "enemy maxHp");
+    assertNonnegativeNumber(definition.locomotion.moveSpeedPerTick, "enemy moveSpeedPerTick");
 
     return Object.freeze({
         id: definition.id,

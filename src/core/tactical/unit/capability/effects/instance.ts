@@ -15,7 +15,7 @@ export interface EffectLifecycleFacts {
     readonly parent: EffectAddress | null;
 }
 
-export type EffectLifetimeOwner =
+export type EffectLifetimeScope =
     | { readonly type: "UNIT"; readonly unitId: UnitId }
     | {
           readonly type: "EXECUTION";
@@ -25,8 +25,8 @@ export type EffectLifetimeOwner =
 
 export interface EffectInstanceMetadata {
     readonly id: EffectInstanceId;
-    readonly sourceUnitId: UnitId | null;
-    readonly lifetimeOwner: EffectLifetimeOwner | null;
+    readonly source: UnitId | null;
+    readonly scope: EffectLifetimeScope | null;
     readonly acquiredSequence: number;
     readonly expiresAtTick: number | null;
 }

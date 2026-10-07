@@ -1,3 +1,8 @@
+import {
+    assertNonnegativeNumber,
+    assertNonnegativeSafeInteger,
+    assertPositiveSafeInteger,
+} from "../../common/assert.js";
 import { createRng, type Seed } from "../../common/rng.js";
 import type { BattlefieldMap } from "../battlefield/map/map.js";
 import { createMechanismRuntime, type MechanismRuntime } from "../battlefield/mechanism.js";
@@ -33,28 +38,15 @@ export interface BattleSpec {
     readonly nextNavigationRequestId: NavigationRequestId;
 }
 
-function nonnegative(value: number, name: string): number {
-    if (!Number.isFinite(value) || value < 0) {
-        throw new RangeError(`${name} must be finite and non-negative`);
-    }
-
-    return value;
-}
-
 export function createBattleSpec(spec: BattleSpec): BattleSpec {
-    if (!Number.isSafeInteger(spec.maxTicks) || spec.maxTicks <= 0) {
-        throw new RangeError("battle must have a finite positive tick budget");
-    }
-
-    nonnegative(spec.moveMultiplier, "moveMultiplier");
+    assertPositiveSafeInteger(spec.maxTicks, "battle tick budget");
+    assertNonnegativeNumber(spec.moveMultiplier, "moveMultiplier");
 
     for (const [name, value] of [
         ["nextUnitId", spec.nextUnitId],
         ["nextNavigationRequestId", spec.nextNavigationRequestId],
     ] as const) {
-        if (!Number.isSafeInteger(value) || value < 0) {
-            throw new RangeError(`${name} must be a non-negative safe integer`);
-        }
+        assertNonnegativeSafeInteger(value, name);
     }
 
     createRng(spec.rngState);

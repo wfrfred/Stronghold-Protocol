@@ -1,3 +1,5 @@
+import { assertFiniteNumber } from "../../common/assert.js";
+
 export interface NumericContribution {
     readonly addition: number;
     readonly multiplier: number;
@@ -19,9 +21,7 @@ export function createNumericContribution(
     const normalized = { addition, multiplier, finalAddition, finalScaler };
 
     for (const [name, value] of Object.entries(normalized)) {
-        if (!Number.isFinite(value)) {
-            throw new RangeError(`numeric contribution ${name} must be finite`);
-        }
+        assertFiniteNumber(value, `numeric contribution ${name}`);
     }
 
     return Object.freeze(normalized);
@@ -45,9 +45,7 @@ export function resolveNumericValue(
 
     const value = ((base + addition) * Math.max(0, 1 + multiplier) + finalAddition) * finalScaler;
 
-    if (!Number.isFinite(value)) {
-        throw new RangeError("resolved numeric value must be finite");
-    }
+    assertFiniteNumber(value, "resolved numeric value");
 
     return value;
 }

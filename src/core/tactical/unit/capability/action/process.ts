@@ -1,3 +1,4 @@
+import { assertFiniteNumber, assertNonnegativeSafeInteger } from "../../../../common/assert.js";
 import { ownDataRecord } from "../../../../common/immutable-data.js";
 import {
     appendCombatEvents,
@@ -115,14 +116,6 @@ export interface ActionExecutionTransition {
     readonly signals: readonly ActionExecutionSignal[];
 }
 
-function tickValue(value: number): number {
-    if (!Number.isSafeInteger(value) || value < 0) {
-        throw new RangeError("action execution ticks must be nonnegative safe integers");
-    }
-
-    return value;
-}
-
 function ownBindings(
     bindings: ReadonlyMap<TargetBindingId, readonly UnitId[]>,
 ): ActionExecutionBindings {
@@ -130,17 +123,15 @@ function ownBindings(
 }
 
 function ownSamples(samples: ActionExecutionSamples): ActionExecutionSamples {
-    if (Object.values(samples).some((value) => !Number.isFinite(value))) {
-        throw new RangeError("action samples must be finite numbers");
+    for (const [name, value] of Object.entries(samples)) {
+        assertFiniteNumber(value, `action sample ${name}`);
     }
 
     return ownDataRecord(samples, "action samples");
 }
 
 export function createActionExecutionState(nextExecutionId = 0): ActionExecutionState {
-    if (!Number.isSafeInteger(nextExecutionId) || nextExecutionId < 0) {
-        throw new RangeError("action execution identity must be a nonnegative safe integer");
-    }
+    assertNonnegativeSafeInteger(nextExecutionId, "action execution identity");
 
     return Object.freeze({ nextExecutionId, executions: Object.freeze([]) });
 }
@@ -162,11 +153,13 @@ export function acceptActionExecution(
         throw new RangeError("action execution identity overflow");
     }
 
+    assertNonnegativeSafeInteger(input.tick, "action acceptance tick");
+
     const execution: ActionExecution = Object.freeze({
         id: state.nextExecutionId,
         sourceUnitId: input.sourceUnitId,
         definition: input.definition,
-        acceptedAtTick: tickValue(input.tick),
+        acceptedAtTick: input.tick,
         inputTargetUnitId: input.inputTargetUnitId,
         cursor: 0,
         bindings: ownBindings(input.bindings),
@@ -306,14 +299,18 @@ export function cancelActionExecution(
 function enterWait(request: ActionExecutionWaitRequest, tick: number): ActionExecutionWait {
     switch (request.type) {
         case "FOR_TICKS":
+            assertNonnegativeSafeInteger(request.ticks, "action wait duration");
+
             return Object.freeze({
                 type: "COUNT",
-                remainingTicks: tickValue(request.ticks),
+                remainingTicks: request.ticks,
                 lastConsumedTick: tick,
             });
 
         case "UNTIL_TICK":
-            return Object.freeze({ type: "UNTIL", targetTick: tickValue(request.targetTick) });
+            assertNonnegativeSafeInteger(request.targetTick, "action wait target tick");
+
+            return Object.freeze({ type: "UNTIL", targetTick: request.targetTick });
     }
 }
 

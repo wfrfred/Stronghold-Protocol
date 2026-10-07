@@ -53,9 +53,9 @@ export function prepareCombatEffects(
         }
 
         const missingOwners = new Set(
-            unit.effects.instances.flatMap(({ lifetimeOwner }) =>
-                lifetimeOwner !== null && getCombatUnit(work, lifetimeOwner.unitId) === undefined
-                    ? [lifetimeOwner.unitId]
+            unit.effects.instances.flatMap(({ scope }) =>
+                scope !== null && getCombatUnit(work, scope.unitId) === undefined
+                    ? [scope.unitId]
                     : [],
             ),
         );

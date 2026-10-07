@@ -1,3 +1,4 @@
+import { assertNonnegativeSafeInteger, assertPositiveSafeInteger } from "../../../common/assert.js";
 import { createBlockGeometry, type BlockGeometry } from "../../geometry/shape.js";
 import type { Unit, UnitDefinition } from "../unit.js";
 
@@ -50,9 +51,7 @@ export function hasBlockable<U extends Unit>(
 }
 
 export function createBlockerDefinition(definition: BlockerDefinition): BlockerDefinition {
-    if (!Number.isSafeInteger(definition.capacity) || definition.capacity < 0) {
-        throw new RangeError("blocking capacity must be a nonnegative safe integer");
-    }
+    assertNonnegativeSafeInteger(definition.capacity, "blocking capacity");
 
     return Object.freeze({
         capacity: definition.capacity,
@@ -61,9 +60,7 @@ export function createBlockerDefinition(definition: BlockerDefinition): BlockerD
 }
 
 export function createBlockableDefinition(definition: BlockableDefinition): BlockableDefinition {
-    if (!Number.isSafeInteger(definition.weight) || definition.weight <= 0) {
-        throw new RangeError("blocking weight must be a positive safe integer");
-    }
+    assertPositiveSafeInteger(definition.weight, "blocking weight");
 
     return Object.freeze({ ...definition });
 }

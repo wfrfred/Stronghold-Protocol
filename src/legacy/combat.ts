@@ -1,3 +1,4 @@
+import { assertFiniteNumber, assertPositiveSafeInteger } from "../core/common/assert.js";
 import { BattleRuntime } from "../core/tactical/battle/runtime.js";
 import type { BattleSpec } from "../core/tactical/battle/spec.js";
 import { createBattlefieldMap, type BattlefieldMap } from "../core/tactical/battlefield/map/map.js";
@@ -41,9 +42,7 @@ function record(value: unknown, name: string): Record<string, unknown> {
 }
 
 function numberField(value: unknown, name: string): number {
-    if (typeof value !== "number" || !Number.isFinite(value)) {
-        throw new TypeError(`${name} must be a finite number`);
-    }
+    assertFiniteNumber(value, name, TypeError);
 
     return value;
 }
@@ -290,14 +289,8 @@ function combatMap(options: LegacyCombatOptions): BattlefieldMap {
         return options.map;
     }
 
-    if (
-        !Number.isSafeInteger(options.rows) ||
-        options.rows <= 0 ||
-        !Number.isSafeInteger(options.columns) ||
-        options.columns <= 0
-    ) {
-        throw new RangeError("legacy combat map dimensions must be positive safe integers");
-    }
+    assertPositiveSafeInteger(options.rows, "legacy combat row count");
+    assertPositiveSafeInteger(options.columns, "legacy combat column count");
 
     const tile = createTile({
         heightType: "LOWLAND",

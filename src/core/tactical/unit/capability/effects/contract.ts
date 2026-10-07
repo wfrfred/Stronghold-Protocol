@@ -1,6 +1,6 @@
 import type { Unit, UnitId } from "../../unit.js";
 import type { CombatWork } from "../../../battle/execution/work.js";
-import type { EffectAddress, EffectInstanceValue, EffectLifetimeOwner } from "./instance.js";
+import type { EffectAddress, EffectInstanceValue, EffectLifetimeScope } from "./instance.js";
 import type { EffectProgramRef } from "./program.js";
 import type { EffectResources } from "./registry.js";
 import type { EffectContributionBindings } from "./resources.js";
@@ -68,8 +68,8 @@ export interface EffectTransitionResources {
 }
 
 export interface EffectInstallationInput<S extends object = object> {
-    readonly sourceUnitId: UnitId | null;
-    readonly lifetimeOwner: EffectLifetimeOwner | null;
+    readonly source: UnitId | null;
+    readonly scope: EffectLifetimeScope | null;
     readonly expiresAtTick: number | null;
     readonly initialState?: S;
 }

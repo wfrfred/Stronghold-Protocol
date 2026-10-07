@@ -1,3 +1,5 @@
+import { assertFiniteNumber } from "../../core/common/assert.js";
+
 export interface ArknightsBlackboardEntry {
     readonly key: string;
     readonly value: number;
@@ -53,9 +55,7 @@ export function parseBlackboard(
 
         const number = source.value;
 
-        if (typeof number !== "number" || !Number.isFinite(number)) {
-            throw new RangeError(`${path}.value must be finite`);
-        }
+        assertFiniteNumber(number, `${path}.value`);
 
         const valueStr =
             source.valueStr === undefined && options.allowMissingValueStr === true

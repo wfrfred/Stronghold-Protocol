@@ -129,8 +129,8 @@ function settleSource<S extends object>(
             unitId,
             installation.programRef as EffectProgramRef<object>,
             {
-                sourceUnitId: source.effectSource.sourceUnitId,
-                lifetimeOwner: null,
+                source: source.effectSource.sourceUnitId,
+                scope: null,
                 expiresAtTick: installation.expiresAtTick,
                 ...(installation.initialState === undefined
                     ? {}

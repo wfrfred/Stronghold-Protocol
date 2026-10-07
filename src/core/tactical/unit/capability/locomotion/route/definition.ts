@@ -1,3 +1,4 @@
+import { assertFiniteNumber, assertNonnegativeSafeInteger } from "../../../../../common/assert.js";
 import {
     createTilePosition,
     createWorldOffset,
@@ -85,22 +86,6 @@ function copyOffset(offset: WorldOffset): WorldOffset {
     return createWorldOffset(offset[0], offset[1]);
 }
 
-function finite(value: number, name: string): number {
-    if (!Number.isFinite(value)) {
-        throw new RangeError(`${name} must be finite`);
-    }
-
-    return value;
-}
-
-function ticks(value: number, name: string): number {
-    if (!Number.isSafeInteger(value) || value < 0) {
-        throw new RangeError(`${name} must be a non-negative safe integer`);
-    }
-
-    return value;
-}
-
 function boolean(value: boolean, name: string): boolean {
     if (typeof value !== "boolean") {
         throw new TypeError(`${name} must be boolean`);
@@ -116,11 +101,13 @@ function copyTarget(target: RouteMoveTarget): RouteMoveTarget {
         throw new TypeError("route move target must be an object");
     }
 
+    assertFiniteNumber(target.reachDistance, "reachDistance");
+
     return Object.freeze({
         position: copyPosition(target.position),
         reachOffset: copyOffset(target.reachOffset),
         randomizeReachOffset: boolean(target.randomizeReachOffset, "randomizeReachOffset"),
-        reachDistance: finite(target.reachDistance, "reachDistance"),
+        reachDistance: target.reachDistance,
     });
 }
 
@@ -138,22 +125,28 @@ function copyCheckpoint(checkpoint: RouteCheckpoint): RouteCheckpoint {
             return Object.freeze({ type: checkpoint.type, target: copyTarget(checkpoint.target) });
 
         case "WAIT_FOR_TICKS":
+            assertNonnegativeSafeInteger(checkpoint.durationTicks, "durationTicks");
+
             return Object.freeze({
                 type: checkpoint.type,
-                durationTicks: ticks(checkpoint.durationTicks, "durationTicks"),
+                durationTicks: checkpoint.durationTicks,
             });
 
         case "WAIT_FOR_PLAY_TICK":
+            assertNonnegativeSafeInteger(checkpoint.targetPlayTick, "targetPlayTick");
+
             return Object.freeze({
                 type: checkpoint.type,
-                targetPlayTick: ticks(checkpoint.targetPlayTick, "targetPlayTick"),
+                targetPlayTick: checkpoint.targetPlayTick,
             });
 
         case "WAIT_CURRENT_FRAGMENT_TICKS":
         case "WAIT_CURRENT_WAVE_TICKS":
+            assertNonnegativeSafeInteger(checkpoint.targetElapsedTicks, "targetElapsedTicks");
+
             return Object.freeze({
                 type: checkpoint.type,
-                targetElapsedTicks: ticks(checkpoint.targetElapsedTicks, "targetElapsedTicks"),
+                targetElapsedTicks: checkpoint.targetElapsedTicks,
             });
 
         case "APPEAR_AT_POS":

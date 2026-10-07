@@ -1,3 +1,4 @@
+import { assertNonnegativeSafeInteger } from "../../core/common/assert.js";
 import type {
     BranchDefinition,
     EnemySpawnDefinition,
@@ -107,9 +108,7 @@ export function compileSpawnSchedule(
 
     for (const item of selection.actions) {
         for (const index of [item.waveIndex, item.fragmentIndex, item.actionIndex]) {
-            if (!Number.isSafeInteger(index) || index < 0) {
-                throw new RangeError("action selection indices must be nonnegative safe integers");
-            }
+            assertNonnegativeSafeInteger(index, "action selection indices");
         }
 
         const path = actionPath(item);

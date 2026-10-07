@@ -1,3 +1,4 @@
+import { assertPositiveNumber, assertPositiveSafeInteger } from "../../core/common/assert.js";
 import {
     createPredefinedInstanceDefinition,
     type PredefinedInstanceDefinition,
@@ -103,19 +104,12 @@ function unitDefinition(
         const frame = object(value, "predefined attribute keyframe");
         const attributes = object(frame.data, "predefined keyframe attributes");
 
-        if (
-            typeof frame.level !== "number" ||
-            !Number.isSafeInteger(frame.level) ||
-            frame.level < 1
-        ) {
-            throw new RangeError("predefined keyframe level must be a positive safe integer");
-        }
+        assertPositiveSafeInteger(frame.level, "predefined keyframe level");
 
         const hp = attributes.maxHp;
 
-        if (typeof hp !== "number" || !Number.isFinite(hp) || hp <= 0) {
-            throw new RangeError("predefined maxHp must be finite and positive");
-        }
+        assertPositiveNumber(hp, "predefined maxHp");
+
         if (maxHp !== undefined && maxHp !== hp) {
             throw new TypeError("varying predefined unit attributes are not supported");
         }

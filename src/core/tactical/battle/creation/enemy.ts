@@ -1,3 +1,4 @@
+import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import { createRng, type Seed } from "../../../common/rng.js";
 import type { NavigationRequestId } from "../../battlefield/navigation/request.js";
 import type { RouteDefinition } from "../../unit/capability/locomotion/route/definition.js";
@@ -34,9 +35,7 @@ export interface RoutedEnemyInitialization<D extends EnemyDefinition = EnemyDefi
 export function initializeRoutedEnemy<D extends EnemyDefinition>(
     spawn: RoutedEnemySpawn<D>,
 ): RoutedEnemyInitialization<D> {
-    if (!Number.isSafeInteger(spawn.id) || spawn.id < 0) {
-        throw new RangeError("enemy id must be a nonnegative safe integer");
-    }
+    assertNonnegativeSafeInteger(spawn.id, "enemy id");
 
     const rng = createRng(spawn.rngState);
     const location = initializeRouteSpawn(spawn.route, rng);
