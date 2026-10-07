@@ -1,6 +1,6 @@
 import { createRng, type Seed } from "../../common/rng.js";
 import type { BattlefieldMap } from "../battlefield/map/map.js";
-import type { MechanismRuntime } from "../battlefield/mechanism.js";
+import { createMechanismRuntime, type MechanismRuntime } from "../battlefield/mechanism.js";
 import type { NavigationSpatialEffect } from "../battlefield/navigation/effect.js";
 import type { NavigationRequestId } from "../battlefield/navigation/request.js";
 import type { UnitId } from "../unit/unit.js";
@@ -80,7 +80,9 @@ export function createBattleSpec(spec: BattleSpec): BattleSpec {
         predefines: Object.freeze(spec.predefines.map(createPredefinedInstanceDefinition)),
         initialUnits: Object.freeze((spec.initialUnits ?? []).map(createUnitPlacementDefinition)),
         initialMechanisms: Object.freeze(
-            spec.initialMechanisms.map((mechanism) => Object.freeze({ ...mechanism })),
+            spec.initialMechanisms.map((mechanism) =>
+                Object.freeze(createMechanismRuntime(mechanism)),
+            ),
         ),
         initialEffects: Object.freeze(
             spec.initialEffects.map((effect) => Object.freeze({ ...effect })),

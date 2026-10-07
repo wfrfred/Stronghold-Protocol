@@ -2,7 +2,7 @@ import { createWorldPosition } from "../../geometry/coordinate.js";
 import type { Unit, UnitId } from "../../unit/unit.js";
 import { releaseBlockingRelations } from "../blocking/relations.js";
 import type { BattlefieldChange, BattlefieldRemovalReason } from "../contract.js";
-import type { MechanismId } from "../mechanism.js";
+import { createMechanismRuntime, type MechanismId } from "../mechanism.js";
 import {
     createNavigationSpatialEffect,
     createSpatialEffectRegion,
@@ -35,13 +35,10 @@ export function ownBattlefieldChanges<U extends Unit>(
                 };
 
             case "REGISTER_MECHANISM":
+            case "UPDATE_MECHANISM":
                 return {
                     ...change,
-                    mechanism: {
-                        id: change.mechanism.id,
-                        definition: change.mechanism.definition,
-                        active: change.mechanism.active,
-                    },
+                    mechanism: createMechanismRuntime(change.mechanism),
                 };
 
             case "ADD_EFFECT":
@@ -109,6 +106,7 @@ export function applyBattlefieldChanges<U extends Unit>(
     const mechanisms = copyOnWriteMap(previous.mechanisms);
     const effects = copyOnWriteMap(previous.effects);
     const removedUnits: { unitId: UnitId; reason: BattlefieldRemovalReason; unit: U }[] = [];
+    const registeredUnitIds: UnitId[] = [];
     const removedMechanisms: { mechanismId: MechanismId; reason: BattlefieldRemovalReason }[] = [];
     const removedEffects = new Set<SpatialEffectId>();
     const updatedUnitIds = new Set<UnitId>();
@@ -132,6 +130,7 @@ export function applyBattlefieldChanges<U extends Unit>(
                 }
 
                 register(units.edit(), change.unit.id, change.unit, "unit");
+                registeredUnitIds.push(change.unit.id);
                 updatedUnitIds.add(change.unit.id);
                 unitMembershipChanged = true;
                 break;
@@ -194,6 +193,18 @@ export function applyBattlefieldChanges<U extends Unit>(
                 register(mechanisms.edit(), change.mechanism.id, change.mechanism, "mechanism");
                 updatedMechanismIds.add(change.mechanism.id);
                 break;
+
+            case "UPDATE_MECHANISM": {
+                const previous = requireEntry(mechanisms.value, change.mechanism.id, "mechanism");
+
+                if (previous.definition !== change.mechanism.definition) {
+                    throw new RangeError("mechanism definition cannot change during update");
+                }
+
+                mechanisms.edit().set(change.mechanism.id, change.mechanism);
+                updatedMechanismIds.add(change.mechanism.id);
+                break;
+            }
 
             case "SET_MECHANISM_ACTIVE":
                 mechanisms.edit().set(change.mechanismId, {
@@ -282,6 +293,11 @@ export function applyBattlefieldChanges<U extends Unit>(
             supportRelations,
         },
         dependencies,
-        facts: { removedUnits, removedMechanisms, removedEffects: [...removedEffects] },
+        facts: {
+            registeredUnitIds,
+            removedUnits,
+            removedMechanisms,
+            removedEffects: [...removedEffects],
+        },
     };
 }

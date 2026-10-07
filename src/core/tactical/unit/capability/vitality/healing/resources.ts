@@ -14,8 +14,10 @@ import type {
     VitalityHookInvocation,
 } from "../hook.js";
 import type { HealingReport, HealingRequest, PendingHealing } from "./contract.js";
+import type { EffectSourceResources } from "../../../../battlefield/effect-source/resources.js";
 
 export interface HealingResourceServices extends EffectTransitionResources {
+    readonly effectSources: EffectSourceResources;
     readonly vitality: NumericContributionProvider<NumericProviderFacts>;
     readonly healing: HealingResources;
     readonly settleDamage: DamageOperation;

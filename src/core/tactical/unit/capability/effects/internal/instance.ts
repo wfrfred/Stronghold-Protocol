@@ -1,3 +1,4 @@
+import { ownDataRecord } from "../../../../../common/immutable-data.js";
 import type { EffectProgram, EffectProgramRef } from "../program.js";
 import type {
     EffectAddress,
@@ -9,107 +10,10 @@ import type {
 } from "../instance.js";
 import type { UnitId } from "../../../unit.js";
 
-const ownedValues = new WeakSet();
 const ownedInstances = new WeakSet<EffectInstanceValue>();
 
-function ownData(value: unknown, ancestors: Set<object>, copies: Map<object, object>): unknown {
-    if (
-        value === null ||
-        typeof value === "string" ||
-        typeof value === "boolean" ||
-        (typeof value === "number" && Number.isFinite(value))
-    ) {
-        return value;
-    }
-    if (typeof value !== "object") {
-        throw new TypeError("effect state must contain only finite, data-only values");
-    }
-    if (ownedValues.has(value)) {
-        return value;
-    }
-    if (copies.has(value)) {
-        return copies.get(value)!;
-    }
-    if (ancestors.has(value)) {
-        throw new TypeError("effect state cannot contain cycles");
-    }
-    if (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype) {
-        throw new TypeError("effect state must contain plain records and arrays");
-    }
-
-    ancestors.add(value);
-    let owned: object;
-
-    if (Array.isArray(value)) {
-        const items: unknown[] = [];
-
-        for (const key of Reflect.ownKeys(value)) {
-            if (key === "length") {
-                continue;
-            }
-            if (
-                typeof key !== "string" ||
-                !Number.isInteger(Number(key)) ||
-                Number(key) < 0 ||
-                Number(key) >= value.length ||
-                String(Number(key)) !== key
-            ) {
-                throw new TypeError("effect state arrays cannot contain extra properties");
-            }
-        }
-
-        for (let index = 0; index < value.length; index++) {
-            const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
-
-            if (descriptor === undefined) {
-                throw new TypeError("effect state arrays must be dense");
-            }
-            if (!("value" in descriptor)) {
-                throw new TypeError("effect state cannot contain accessors");
-            }
-
-            items.push(ownData(descriptor.value, ancestors, copies));
-        }
-
-        owned = Object.freeze(items);
-    } else {
-        const record: Record<string, unknown> = {};
-
-        for (const key of Reflect.ownKeys(value)) {
-            if (typeof key !== "string") {
-                throw new TypeError("effect state cannot contain symbol properties");
-            }
-
-            const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
-
-            if (!("value" in descriptor)) {
-                throw new TypeError("effect state cannot contain accessors");
-            }
-
-            Object.defineProperty(record, key, {
-                value: ownData(descriptor.value, ancestors, copies),
-                enumerable: true,
-            });
-        }
-
-        owned = Object.freeze(record);
-    }
-
-    ancestors.delete(value);
-    ownedValues.add(owned);
-    copies.set(value, owned);
-
-    return owned;
-}
-
 export function ownEffectState<S extends object>(program: EffectProgram<S>, value: unknown): S {
-    const state = program.ownState(value);
-
-    if (Array.isArray(state) || Object.getPrototypeOf(state) !== Object.prototype) {
-        throw new TypeError("effect state root must be a plain record");
-    }
-
-    return ownData(state, new Set(), new Map()) as S;
+    return ownDataRecord(program.ownState(value), "effect state");
 }
 
 function nonnegativeInteger(value: unknown, name: string): number {

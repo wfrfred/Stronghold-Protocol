@@ -3,6 +3,12 @@ import type { BattleEvent } from "../contract.js";
 import type { BattleExecutionState } from "./state.js";
 import type { Unit, UnitId } from "../../unit/unit.js";
 import type { CombatTargetingView } from "../../unit/targeting/query.js";
+import type { MechanismId, MechanismRuntime, MechanismView } from "../../battlefield/mechanism.js";
+
+const emptyMechanismView: MechanismView = Object.freeze({
+    mechanismIds: [],
+    getMechanism: () => undefined,
+});
 
 const defaultExecution: BattleExecutionState = Object.freeze({
     rngState: 0,
@@ -22,6 +28,8 @@ export type CombatUnitLifecycleResult =
 
 export interface CombatWork {
     readonly battlefield: CombatTargetingView;
+    readonly mechanismView: MechanismView;
+    readonly mechanisms: ReadonlyMap<MechanismId, MechanismRuntime>;
     readonly units: ReadonlyMap<UnitId, Unit>;
     readonly removals: ReadonlyMap<UnitId, BattlefieldRemovalReason>;
     readonly lifecycleResults: readonly CombatUnitLifecycleResult[];
@@ -44,15 +52,46 @@ export interface CombatWorkResult {
 export function createCombatWork(
     battlefield: CombatTargetingView,
     execution: BattleExecutionState = defaultExecution,
+    mechanismView: MechanismView = emptyMechanismView,
 ): CombatWork {
     return {
         battlefield,
+        mechanismView,
+        mechanisms: new Map(),
         units: new Map(),
         removals: new Map(),
         lifecycleResults: [],
         events: [],
         execution,
     };
+}
+
+export function getCombatMechanism(
+    work: CombatWork,
+    id: MechanismId,
+): MechanismRuntime | undefined {
+    return work.mechanisms.get(id) ?? work.mechanismView.getMechanism(id);
+}
+
+export function updateCombatMechanism(work: CombatWork, mechanism: MechanismRuntime): CombatWork {
+    const current = getCombatMechanism(work, mechanism.id);
+
+    if (current === mechanism) {
+        return work;
+    }
+    if (current !== undefined && current.definition !== mechanism.definition) {
+        throw new TypeError("combat mechanism transition cannot change definition");
+    }
+
+    const mechanisms = new Map(work.mechanisms);
+
+    if (work.mechanismView.getMechanism(mechanism.id) === mechanism) {
+        mechanisms.delete(mechanism.id);
+    } else {
+        mechanisms.set(mechanism.id, mechanism);
+    }
+
+    return { ...work, mechanisms };
 }
 
 export function getCombatUnit(work: CombatWork, id: UnitId): Unit | undefined {
@@ -197,7 +236,7 @@ export function withCombatExecution(work: CombatWork, execution: BattleExecution
 export function combatWorkChanges(work: CombatWork): readonly BattlefieldChange[] {
     const ids = [...work.units.keys(), ...work.removals.keys()].sort((left, right) => left - right);
 
-    return ids.map((unitId): BattlefieldChange => {
+    const changes = ids.map((unitId): BattlefieldChange => {
         const unit = work.units.get(unitId);
 
         if (unit !== undefined) {
@@ -216,6 +255,20 @@ export function combatWorkChanges(work: CombatWork): readonly BattlefieldChange[
             reason: work.removals.get(unitId)!,
         };
     });
+
+    for (const mechanism of [...work.mechanisms.values()].sort(
+        (left, right) => left.id - right.id,
+    )) {
+        changes.push({
+            type:
+                work.mechanismView.getMechanism(mechanism.id) === undefined
+                    ? "REGISTER_MECHANISM"
+                    : "UPDATE_MECHANISM",
+            mechanism,
+        });
+    }
+
+    return changes;
 }
 
 export function combatWorkResult(work: CombatWork): CombatWorkResult {

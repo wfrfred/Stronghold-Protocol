@@ -17,8 +17,10 @@ import type {
     DispatchResult,
 } from "../hook.js";
 import type { DamageOperands, DamageReport, DamageRequest, PendingDamage } from "./contract.js";
+import type { EffectSourceResources } from "../../../../battlefield/effect-source/resources.js";
 
 export interface DamageResourceServices extends EffectTransitionResources {
+    readonly effectSources: EffectSourceResources;
     readonly damage: DamageResources;
     readonly defense: NumericContributionProvider<NumericProviderFacts>;
     readonly vitality: NumericContributionProvider<NumericProviderFacts>;

@@ -20,6 +20,7 @@ import type { BattlePhase } from "./system.js";
 import { battlefieldCommitEvents, finishBattleEvents } from "./events.js";
 import { CombatResources } from "./resources.js";
 import type { compileAction } from "../unit/capability/action/compile.js";
+import { createEffectSourceSystem } from "./phases/effect-sources.js";
 
 export interface BattleResources {
     readonly combat?: CombatResources;
@@ -60,6 +61,7 @@ export function createBattleSystems(spec: BattleSpec, resources: BattleResources
     const blocking = createBlockingSystem();
     const combat = createCombatSystem(combatResources, resources.compileAction);
     const deployment = createDeploymentSystem(combatResources);
+    const effectSources = createEffectSourceSystem(combatResources);
 
     const prepare: BattlePhase<readonly PredefinedPresence[]> = (input, state) => {
         const prepared = predefined.step(input, state);
@@ -75,10 +77,12 @@ export function createBattleSystems(spec: BattleSpec, resources: BattleResources
         bindStatelessPhase(combat.prepare),
         bindStatelessPhase(deployment.step),
         bindPhase("schedule", schedule.spawn),
+        bindStatelessPhase(effectSources.step),
         bindStatelessPhase(movement.reroute),
         bindStatelessPhase(blocking.step),
         bindStatelessPhase(combat.step),
         bindStatelessPhase(movement.step),
+        bindStatelessPhase(effectSources.step),
         bindStatelessPhase(blocking.step),
         bindPhase("predefined", predefined.resolve),
         bindPhase("schedule", schedule.resolve),
@@ -117,12 +121,24 @@ export function createBattleSystems(spec: BattleSpec, resources: BattleResources
                 ...initialized.changes,
             ]);
 
+            const preparedSources = effectSources.step(
+                {
+                    battlefield: battlefield.view,
+                    tick: 0,
+                    commands: [],
+                    execution: initialized.execution,
+                    removedUnits: [],
+                },
+                undefined,
+            );
+            battlefield.commit(preparedSources.changes);
+
             const states: BattleSystemStates = {
                 predefined: initialized.presence,
                 schedule: schedule.createState(),
             };
 
-            return { states, execution: initialized.execution };
+            return { states, execution: preparedSources.execution };
         },
 
         snapshot(states: BattleSystemStates) {
@@ -147,15 +163,33 @@ export function createBattleSystems(spec: BattleSpec, resources: BattleResources
                     { battlefield: battlefield.view, execution, tick, commands, removedUnits },
                     states,
                 );
+                let nextExecution = phaseResult.execution;
 
                 if (phaseResult.changes.length > 0) {
                     const committed = battlefield.commit(phaseResult.changes);
                     removedUnits.push(...committed.removedUnits);
                     events.push(...battlefieldCommitEvents(committed, tick));
+
+                    if (committed.registeredUnitIds.length > 0) {
+                        const joined = effectSources.register(
+                            {
+                                battlefield: battlefield.view,
+                                execution: nextExecution,
+                                tick,
+                                commands,
+                                removedUnits,
+                            },
+                            committed.registeredUnitIds,
+                        );
+                        const installed = battlefield.commit(joined.changes);
+                        removedUnits.push(...installed.removedUnits);
+                        events.push(...battlefieldCommitEvents(installed, tick), ...joined.events);
+                        nextExecution = joined.execution;
+                    }
                 }
 
                 states = phaseResult.state;
-                execution = phaseResult.execution;
+                execution = nextExecution;
                 events.push(...phaseResult.events);
             }
 

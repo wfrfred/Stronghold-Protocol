@@ -12,6 +12,7 @@ import { HealingResources, type HealingResourceServices } from "../vitality/heal
 import { resolveHealing } from "../vitality/healing/settlement.js";
 import { resolveDamage } from "../vitality/damage/settlement.js";
 import type { DamageOperation, HealingOperation } from "../vitality/hook.js";
+import { EffectSourceResources } from "../../../battlefield/effect-source/resources.js";
 
 export interface ActionResources extends DamageResourceServices, HealingResourceServices {
     readonly offense: NumericContributionProvider<NumericProviderFacts>;
@@ -24,6 +25,7 @@ export interface ActionResourceSet extends ActionResources {
     readonly vitality: NumericContributionResources<NumericProviderFacts>;
     readonly effectBindings: EffectBindingResources;
     readonly effectLifecycle: EffectLifecycleResources;
+    readonly effectSources: EffectSourceResources;
     readonly settleDamage: DamageOperation;
     readonly settleHealing: HealingOperation;
 }
@@ -40,6 +42,7 @@ export function createActionResources(
         vitality: new NumericContributionResources<NumericProviderFacts>(registration),
         effectBindings: new EffectBindingResources(registration),
         effectLifecycle: new EffectLifecycleResources(effects, registration),
+        effectSources: new EffectSourceResources(registration),
         damage: new DamageResources(effects, registration),
         healing: new HealingResources(effects, registration),
         settleDamage: (work, request, dispatch) => {

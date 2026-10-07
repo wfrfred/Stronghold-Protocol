@@ -20,7 +20,7 @@ export function createCombatSystem(
 
     const prepare: BattlePhase = (input) => {
         const work = prepareCombatEffects(
-            createCombatWork(input.battlefield, input.execution),
+            createCombatWork(input.battlefield, input.execution, input.battlefield),
             input.tick,
             resources,
         );
@@ -37,7 +37,7 @@ export function createCombatSystem(
         const { battlefield, tick } = input;
         const ids = [...battlefield.unitIds].sort((left, right) => left - right);
         let work = prepareCombatEffects(
-            createCombatWork(battlefield, input.execution),
+            createCombatWork(battlefield, input.execution, battlefield),
             tick,
             resources,
         );

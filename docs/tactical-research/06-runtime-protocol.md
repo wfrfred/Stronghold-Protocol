@@ -92,7 +92,7 @@ Damage／Healing 拥有自己的排序与结算流程。一个事件内部按 pr
 
 领域 cancellation 与 `stopDispatch` 独立。取消 HP 应用不自动停止已进入派发的剩余候选，不回滚实例消耗、嵌套回复或允许的内容后继；只有明确 `stopDispatch` 停止该事件的后续候选。
 
-[Hook context](../../src/core/tactical/unit/capability/vitality/hook.ts) 只暴露阶段事实及明确注入的 Effect／Damage／Healing operation，不暴露 Work、全量 Resources 或任意 Battlefield mutation。公式阶段只提供 Effect 操作。嵌套领域操作完整结算后返回本次报告，后继读取最新工作事实；本次报告不汇总嵌套操作的净 HP 变化。
+[Hook context](../../src/core/tactical/unit/capability/vitality/hook.ts) 只暴露阶段事实及明确注入的 Effect／Damage／Healing operation，不暴露 Work、全量 Resources 或任意 Battlefield mutation；共享源事实通过独立的 Source 载荷操作访问。公式阶段只提供 Effect 操作。嵌套领域操作完整结算后返回本次报告，后继读取最新工作事实；本次报告不汇总嵌套操作的净 HP 变化。
 
 ## 6. Core 接收政策与原始数据适配
 
@@ -124,7 +124,21 @@ skipModifierEvents = raw._skipModifierEvent;
 
 候选范围和活跃实例暂存在 `finally` 中释放。异常后的新事件必须重新建立身份范围；不得把失败调用的候选、HP、实例载荷、身份进度或公开事件留入下一次权威结果。
 
-## 8. 验收范围
+## 8. 非空间效果源与接收联系
+
+[EffectSource](../../src/core/tactical/battlefield/effect-source/state.ts) 是非空间 Mechanism 的一组运行事实。源与接收 Buff 有不同身份：源保存程序关联、共享载荷、初始化／结束事实和 receiver→精确 Buff 地址及安装尝试历史；接收者保存自己的实例及领域贡献。几何候选由程序查询，不代替已安装联系。程序、筛选与安装策略保存在独立 Source registry，快照只有数据和不可变程序 ref。
+
+运行期新增源第一次协调时补选当前单位。持续分发程序另外声明 acceptsRegistration；部署、预置实例出现、波次出生都先登记单位，再由该次 REGISTER_UNIT 的实际结果接入源，接收者已可查询，安装完成后才进入下一 phase。开局一次选择不声明该入口，因此后续出生不自动加入。当前光环成员协调发生在出生／部署之后的交战前、移动之后；不声称重现所有原生 callback 时点。
+
+Source active 是唯一源参与事实。默认跟随源参与的接收实例通过公开 Effect 操作启停；非参与期间的新登记保留未安装联系，恢复参与后补装。followsParticipation 可以明确脱钩；范围离开、源结束、重新安装分别由该程序选择。源停止按保存的地址处理接收实例；不能在结束时重新查询当前几何范围来代替清理。保留接收实例的策略表示其后续生命周期独立于结束的源。来源 Unit 只是 provenance，是否随来源退出结束由 shouldFinish 明示。
+
+安装前记录 installationAttempts，包含正常拒绝，默认不会在每次协调时重试。成功安装另存 address；源历史与当前实例存在分别表达。重新安装必须由 shouldReinstall 明示。初始化载荷在 receiver ON_START 前取得所有权，不通过安装后补写来建立源关联。
+
+共享额度只有源 state 一份权威事实。Damage／Healing hook 可以取得 [窄 Source operations](../../src/core/tactical/battlefield/effect-source/operations.ts)，同步读取和更新该载荷；不能修改接收联系或任意 Mechanism。tryConsume 对不存在、结束、非参与的源返回 false；正常额度不足保留之前的转换。接口随 hook 退出关闭。共享载荷更新复用已取得所有权的 receiver 数组，避免每次消费复制所有接收者。
+
+这一批覆盖普通持续 GlobalBuff 分发、一次选择、显式光环范围政策及共享计数压力案例。计数例只验证项目协议，不代表已实现复活或尚未闭合的 autochess Lua 时序。低层 Battlefield 的存储 changes 不承担 Buff 结算；内容必须通过 Source 领域入口协调启停和结束，不能先删除 host 再要求系统找回安装联系。
+
+## 9. 验收范围
 
 [派发回归](../../test/sim/effect-dispatch.test.js)、[生命周期回归](../../test/sim/effects.test.js) 和 [贡献回归](../../test/sim/contributions.test.js) 验证上述协议。共享 [Effect fixture](../../test/helpers/effects.js) 使用统一安装入口；手工 Unit fixture 先通过 [initializeUnit](../../src/core/tactical/unit/initialize.ts) 建立能力事实，再通过合法 transition 调整测试输入，不手造过时 capability state。
 
@@ -147,6 +161,8 @@ node --test --test-isolation=none \
     test/sim/effect-dispatch.test.js \
     test/sim/effect-cleanup.test.js \
     test/sim/effects.test.js \
+    test/sim/effect-sources.test.js \
+    test/sim/effect-source-runtime.test.js \
     test/sim/facing.test.js \
     test/sim/feedback1b-displacement.test.js \
     test/sim/pathing-crosscheck.test.js \

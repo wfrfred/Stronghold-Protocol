@@ -62,10 +62,11 @@ export class EffectResources {
     create<S extends object>(
         ref: EffectProgramRef<S>,
         metadata: EffectInstanceMetadata,
+        initialState?: NoInfer<S>,
     ): EffectInstance<S> {
         const program = this.get(ref);
 
-        return ownEffectInstance(program, metadata, program.initialize());
+        return ownEffectInstance(program, metadata, initialState ?? program.initialize());
     }
 
     restore(value: unknown): EffectInstanceValue {

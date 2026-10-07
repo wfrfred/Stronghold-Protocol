@@ -16,7 +16,7 @@ export interface EffectLifecycleOperations {
     install<S extends object>(
         unitId: UnitId,
         ref: EffectProgramRef<S>,
-        input: EffectInstallationInput,
+        input: EffectInstallationInput<NoInfer<S>>,
     ): EffectInstallationResult;
     update<S extends object>(
         address: EffectAddress,
@@ -67,10 +67,11 @@ export interface EffectTransitionResources {
     readonly effectLifecycle: Pick<EffectLifecycleResources, "get">;
 }
 
-export interface EffectInstallationInput {
+export interface EffectInstallationInput<S extends object = object> {
     readonly sourceUnitId: UnitId | null;
     readonly lifetimeOwner: EffectLifetimeOwner | null;
     readonly expiresAtTick: number | null;
+    readonly initialState?: S;
 }
 
 export type EffectInstallationResult =

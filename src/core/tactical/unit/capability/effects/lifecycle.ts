@@ -432,7 +432,7 @@ export function installNewEffect<S extends object>(
     work: CombatWork,
     ownerUnitId: UnitId,
     ref: EffectProgramRef<S>,
-    input: EffectInstallationInput,
+    input: EffectInstallationInput<NoInfer<S>>,
     resources: EffectTransitionResources,
     tick: number,
     dispatch?: EffectDispatchScope,
@@ -452,7 +452,7 @@ function installNewInScope<S extends object>(
     work: CombatWork,
     ownerUnitId: UnitId,
     ref: EffectProgramRef<S>,
-    input: EffectInstallationInput,
+    input: EffectInstallationInput<NoInfer<S>>,
     resources: EffectTransitionResources,
     tick: number,
     scope: EffectLifecycleScope,
@@ -463,11 +463,17 @@ function installNewInScope<S extends object>(
 
     const unit = getCombatUnit(work, ownerUnitId);
     const progress = unit !== undefined && hasEffects(unit) ? unit.effects : undefined;
-    const instance = resources.effects.create(ref, {
-        ...input,
-        id: progress?.nextInstanceId ?? 0,
-        acquiredSequence: progress?.nextAcquiredSequence ?? 0,
-    });
+    const instance = resources.effects.create(
+        ref,
+        {
+            sourceUnitId: input.sourceUnitId,
+            lifetimeOwner: input.lifetimeOwner,
+            expiresAtTick: input.expiresAtTick,
+            id: progress?.nextInstanceId ?? 0,
+            acquiredSequence: progress?.nextAcquiredSequence ?? 0,
+        },
+        input.initialState,
+    );
 
     return installInScope(work, ownerUnitId, instance, resources, tick, scope);
 }

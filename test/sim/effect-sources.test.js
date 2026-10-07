@@ -1,0 +1,253 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
+import {
+    combatWorkView,
+    createCombatWork,
+    getCombatMechanism,
+    getCombatUnit,
+    registerCombatUnit,
+    updateCombatUnit,
+} from "../../dist/core/tactical/battle/execution/work.js";
+import { createMechanismDefinition, createMechanismRuntime } from "../../dist/core/tactical/battlefield/mechanism.js";
+import { createEffectSourceProgramRef, effectSourceInstallation } from "../../dist/core/tactical/battlefield/effect-source/program.js";
+import { copyEffectSourceState } from "../../dist/core/tactical/battlefield/effect-source/state.js";
+import { createEffectSourceOperations } from "../../dist/core/tactical/battlefield/effect-source/operations.js";
+import {
+    finishEffectSource,
+    reconcileEffectSources,
+    registerEffectSourceUnits,
+    setEffectSourceActive,
+} from "../../dist/core/tactical/battlefield/effect-source/settlement.js";
+import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
+import { createNumericContribution } from "../../dist/core/tactical/modifier/numeric.js";
+import { offenseAttackContributions } from "../../dist/core/tactical/unit/capability/offense/capability.js";
+import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
+import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
+import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
+
+function unit(id, position = [0, 0]) {
+    return initializeUnit({
+        id,
+        position,
+        definition: { id: `source-unit-${id}`, vitality: { maxHp: 100 }, offense: { attack: 100 } },
+    });
+}
+
+function receiverEffect(resources, id, facets = {}) {
+    const program = createEffectProgram({
+        id,
+        initialize: () => ({ addition: 10 }),
+        ownState: value => value,
+    });
+
+    return resources.registerEffect(program, {
+        contributions: {
+            contributions: [{
+                id: "attack",
+                target: offenseAttackContributions,
+                project: context => [createNumericContribution({ finalAddition: context.state.addition })],
+            }],
+        },
+        ...facets,
+    });
+}
+
+function sourceProgram(resources, receiver, overrides = {}) {
+    const ref = createEffectSourceProgramRef("domain-source");
+    const program = resources.effectSources.register({
+        ref,
+        initialize: () => ({ remaining: 3 }),
+        ownState: value => value,
+        selectInitial: ({ battlefield }) => battlefield.unitIds,
+        acceptsRegistration: () => true,
+        install: ({ source, receiver: target }) => effectSourceInstallation(receiver.ref, {
+            expiresAtTick: null,
+            initialState: { addition: target.id * 10, sourceId: source.id },
+        }),
+        ...overrides,
+    });
+
+    return {
+        program,
+        source: createMechanismRuntime({
+            id: 20,
+            definition: createMechanismDefinition({ id: ref.id }),
+            active: true,
+            effectSource: resources.effectSources.create(ref, { sourceUnitId: null }),
+        }),
+    };
+}
+
+function fixtureWork(source, units = [unit(1), unit(2)]) {
+    const byId = new Map(units.map(current => [current.id, current]));
+
+    return createCombatWork({
+        unitIds: [...byId.keys()],
+        getUnit: id => byId.get(id),
+        blockerOf: () => undefined,
+        blockedBy: () => [],
+    }, undefined, {
+        mechanismIds: [source.id],
+        getMechanism: id => id === source.id ? source : undefined,
+    });
+}
+
+function attack(work, resources, id) {
+    return resolveAttackPower(id, combatWorkView(work), resources.offense);
+}
+
+test("effect sources: inactive registration is retained and participation keeps sampled receiver instances", () => {
+    const resources = new CombatResources();
+    const receiver = receiverEffect(resources, "paused-receivers");
+    const { source } = sourceProgram(resources, receiver);
+    let work = fixtureWork({ ...source, active: false });
+    work = reconcileEffectSources(work, resources, 0);
+    work = registerCombatUnit(work, unit(3));
+    work = registerEffectSourceUnits(work, [3, 3], resources, 0);
+
+    assert.deepEqual(getCombatMechanism(work, 20).effectSource.receivers.map(binding => binding.unitId), [1, 2, 3]);
+    assert.equal(getCombatUnit(work, 3).effects, undefined);
+
+    work = setEffectSourceActive(work, 20, true, resources, 1);
+    const beforePause = getCombatMechanism(work, 20);
+    const receiverInstances = [1, 2, 3].map(id => getCombatUnit(work, id).effects.instances[0]);
+    assert.deepEqual([1, 2, 3].map(id => attack(work, resources, id)), [110, 120, 130]);
+
+    work = setEffectSourceActive(work, 20, false, resources, 2);
+    assert.deepEqual([1, 2, 3].map(id => attack(work, resources, id)), [100, 100, 100]);
+    work = setEffectSourceActive(work, 20, true, resources, 3);
+
+    assert.deepEqual(getCombatMechanism(work, 20).effectSource.receivers, beforePause.effectSource.receivers);
+    assert.deepEqual([1, 2, 3].map(id => getCombatUnit(work, id).effects.instances[0].state), receiverInstances.map(instance => instance.state));
+    assert.deepEqual([1, 2, 3].map(id => getCombatUnit(work, id).effects.nextInstanceId), [1, 1, 1]);
+});
+
+test("effect sources: rejected installation is a committed attempt and repeated notifications do not retry it", () => {
+    const resources = new CombatResources();
+    let admissions = 0;
+    let selections = 0;
+    const receiver = receiverEffect(resources, "rejected-receivers", {
+        lifecycle: { accepts: () => { admissions++; return false; } },
+    });
+    const { source } = sourceProgram(resources, receiver, {
+        selectInitial: ({ battlefield }) => { selections++; return battlefield.unitIds; },
+    });
+    let work = reconcileEffectSources(fixtureWork(source), resources, 0);
+    work = registerEffectSourceUnits(work, [1, 2, 1], resources, 1);
+    work = registerEffectSourceUnits(work, [], resources, 1);
+    work = reconcileEffectSources(work, resources, 2);
+
+    assert.equal(selections, 1);
+    assert.equal(admissions, 2);
+    assert.deepEqual(getCombatMechanism(work, 20).effectSource.receivers, [
+        { unitId: 1, address: null, installationAttempts: 1 },
+        { unitId: 2, address: null, installationAttempts: 1 },
+    ]);
+});
+
+test("effect sources: explicit aura reconciliation tracks receiver identity independently from geometric membership", () => {
+    const resources = new CombatResources();
+    const receiver = receiverEffect(resources, "aura-receivers");
+    const select = ({ battlefield }) => battlefield.unitIds.filter(id => battlefield.getUnit(id).position[0] < 1);
+    const { source } = sourceProgram(resources, receiver, {
+        selectInitial: select,
+        selectCurrent: select,
+        shouldReinstall: () => true,
+    });
+    let work = reconcileEffectSources(fixtureWork(source, [unit(1), unit(2, [2, 0])]), resources, 0);
+    const firstAddress = getCombatMechanism(work, 20).effectSource.receivers[0].address;
+
+    assert.equal(attack(work, resources, 1), 110);
+    assert.equal(attack(work, resources, 2), 100);
+    work = updateCombatUnit(work, { ...getCombatUnit(work, 1), position: [2, 0] });
+    work = updateCombatUnit(work, { ...getCombatUnit(work, 2), position: [0, 0] });
+    work = reconcileEffectSources(work, resources, 1);
+
+    assert.equal(attack(work, resources, 1), 100);
+    assert.equal(attack(work, resources, 2), 120);
+    assert.equal(getCombatMechanism(work, 20).effectSource.receivers[0].address, null);
+    work = updateCombatUnit(work, { ...getCombatUnit(work, 1), position: [0, 0] });
+    work = reconcileEffectSources(work, resources, 2);
+    const returned = getCombatMechanism(work, 20).effectSource.receivers[0];
+
+    assert.equal(returned.installationAttempts, 2);
+    assert.notDeepEqual(returned.address, firstAddress);
+    assert.equal(attack(work, resources, 1), 110);
+    work = finishEffectSource(work, 20, resources, 3);
+
+    assert.equal(getCombatMechanism(work, 20).effectSource.finished, true);
+    assert.equal(getCombatMechanism(work, 20).active, false);
+    assert.deepEqual([1, 2].map(id => attack(work, resources, id)), [100, 100]);
+});
+
+test("effect sources: shared state operations own data and share the receiver graph without reinstallation", () => {
+    const resources = new CombatResources();
+    const receiver = receiverEffect(resources, "quota-receivers");
+    const { source, program } = sourceProgram(resources, receiver);
+    let work = reconcileEffectSources(fixtureWork(source), resources, 0);
+    const baseline = work;
+    const graph = getCombatMechanism(work, 20).effectSource.receivers;
+    const operations = createEffectSourceOperations(() => work, next => { work = next; }, resources);
+
+    for (let index = 0; index < 4; index++) {
+        const consumed = operations.tryConsume(20, program.ref, state => state.remaining === 0 ? undefined : { ...state, remaining: state.remaining - 1 });
+        assert.equal(consumed, index < 3);
+    }
+
+    assert.equal(operations.get(20, program.ref).effectSource.state.remaining, 0);
+    assert.equal(getCombatMechanism(baseline, 20).effectSource.state.remaining, 3);
+    assert.equal(getCombatMechanism(work, 20).effectSource.receivers, graph);
+    const external = { remaining: 2, nested: { amount: 10 } };
+    operations.update(20, program.ref, () => external);
+    external.nested.amount = 999;
+
+    assert.equal(operations.get(20, program.ref).effectSource.state.nested.amount, 10);
+    const copied = copyEffectSourceState(getCombatMechanism(work, 20).effectSource);
+    assert.equal(copied.programRef, program.ref);
+    assert.equal(copied.receivers, graph);
+    work = reconcileEffectSources(work, resources, 1);
+    assert.deepEqual([1, 2].map(id => getCombatUnit(work, id).effects.nextInstanceId), [1, 1]);
+    work = setEffectSourceActive(work, 20, false, resources, 2);
+    assert.equal(operations.tryConsume(20, program.ref, state => ({ ...state, remaining: state.remaining - 1 })), false);
+});
+
+test("effect sources: nested damage hooks share current source quota and source ports expire with the callback", () => {
+    const resources = new CombatResources();
+    let retained;
+    let sourceRef;
+    const receiver = receiverEffect(resources, "hook-receivers", {
+        damage: {
+            reception: {
+                priority: 0,
+                apply: (context, pending) => {
+                    retained = context.operations.sources;
+                    const consumed = retained.tryConsume(context.instance.state.sourceId, sourceRef, state => state.remaining === 0 ? undefined : { ...state, remaining: state.remaining - 1 });
+                    return { value: consumed ? { ...pending, amount: 0 } : pending };
+                },
+            },
+        },
+    });
+    const { source, program } = sourceProgram(resources, receiver);
+    sourceRef = program.ref;
+    let work = reconcileEffectSources(fixtureWork(source), resources, 0);
+
+    for (const targetUnitId of [1, 2, 1, 2]) {
+        const result = resolveDamage(work, {
+            sourceUnitId: null,
+            targetUnitId,
+            damageType: "TRUE",
+            operands: createDamageOperands(10),
+            tick: 1,
+        }, resources);
+        work = result.work;
+        assert.equal(result.report.hpLoss, targetUnitId === 2 && getCombatMechanism(work, 20).effectSource.state.remaining === 0 ? 10 : 0);
+    }
+
+    assert.equal(getCombatUnit(work, 1).vitality.hp, 100);
+    assert.equal(getCombatUnit(work, 2).vitality.hp, 90);
+    assert.throws(() => retained.get(20, sourceRef), /no longer active/);
+    assert.throws(() => retained.update(20, sourceRef, state => state), /no longer active/);
+    assert.throws(() => retained.tryConsume(20, sourceRef, state => state), /no longer active/);
+});

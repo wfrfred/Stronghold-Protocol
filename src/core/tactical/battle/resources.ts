@@ -21,6 +21,7 @@ import type { DamageOperation, HealingOperation } from "../unit/capability/vital
 import type { NumericContributionResources } from "../modifier/providers.js";
 import type { NumericProviderFacts } from "../unit/capability/contribution.js";
 import { createActionResources } from "../unit/capability/action/resources.js";
+import type { EffectSourceResources } from "../battlefield/effect-source/resources.js";
 
 export interface CombatEffectFacets<S extends object> {
     readonly contributions?: EffectContributionRules<S>;
@@ -40,6 +41,7 @@ export class CombatResources {
     readonly damage: DamageResources;
     readonly effectLifecycle: EffectLifecycleResources;
     readonly healing: HealingResources;
+    readonly effectSources: EffectSourceResources;
     readonly settleDamage: DamageOperation;
     readonly settleHealing: HealingOperation;
 
@@ -53,6 +55,7 @@ export class CombatResources {
         this.damage = resources.damage;
         this.effectLifecycle = resources.effectLifecycle;
         this.healing = resources.healing;
+        this.effectSources = resources.effectSources;
         this.settleDamage = resources.settleDamage;
         this.settleHealing = resources.settleHealing;
     }

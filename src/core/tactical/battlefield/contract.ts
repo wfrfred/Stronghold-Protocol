@@ -4,7 +4,7 @@ import type { NavigationMaps, PathMotionMode } from "./navigation/map.js";
 import type { Unit, UnitId } from "../unit/unit.js";
 import type { OccupancySlot } from "../unit/capability/occupancy.js";
 import type { BattlefieldMap } from "./map/map.js";
-import type { MechanismId, MechanismRuntime } from "./mechanism.js";
+import type { MechanismId, MechanismRuntime, MechanismView } from "./mechanism.js";
 import type {
     NavigationSpatialEffect,
     SpatialEffectId,
@@ -36,6 +36,7 @@ export type BattlefieldChange<U extends Unit = Unit> =
           readonly reason: BattlefieldRemovalReason;
       }
     | { readonly type: "REGISTER_MECHANISM"; readonly mechanism: MechanismRuntime }
+    | { readonly type: "UPDATE_MECHANISM"; readonly mechanism: MechanismRuntime }
     | {
           readonly type: "SET_MECHANISM_ACTIVE";
           readonly mechanismId: MechanismId;
@@ -62,6 +63,7 @@ export type BattlefieldChange<U extends Unit = Unit> =
 
 export interface BattlefieldChangeResult<U extends Unit = Unit> {
     readonly changedNavigationModes: readonly PathMotionMode[];
+    readonly registeredUnitIds: readonly UnitId[];
     readonly removedUnits: readonly {
         readonly unitId: UnitId;
         readonly reason: BattlefieldRemovalReason;
@@ -79,7 +81,7 @@ export interface BattlefieldRuntimeOptions {
     readonly map: BattlefieldMap;
 }
 
-export interface BattlefieldView<U extends Unit = Unit> {
+export interface BattlefieldView<U extends Unit = Unit> extends MechanismView {
     readonly map: BattlefieldMap;
     readonly navigationMaps: NavigationMaps;
     readonly fieldCache: NavigationFieldProvider;

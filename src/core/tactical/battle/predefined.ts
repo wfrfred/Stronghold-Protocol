@@ -295,6 +295,7 @@ export function createPredefinedSystem(
                             blockedBy: (id) => input.battlefield.blockedBy(id),
                         },
                         execution,
+                        input.battlefield,
                     ),
                     change.unitId,
                     change.reason,

@@ -66,6 +66,10 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
             get unitIds() {
                 return runtime.unitIds;
             },
+            get mechanismIds() {
+                return runtime.mechanismIds;
+            },
+            getMechanism: (id) => runtime.#state.mechanisms.get(id),
             get blockingRelations() {
                 return runtime.#state.blockingRelations;
             },

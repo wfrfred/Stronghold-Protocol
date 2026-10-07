@@ -1,4 +1,15 @@
+import {
+    copyEffectSourceState,
+    hasEffectSource,
+    type EffectSourceMechanism,
+} from "./effect-source/state.js";
+
 export type MechanismId = number;
+
+export interface MechanismView {
+    readonly mechanismIds: readonly MechanismId[];
+    getMechanism(id: MechanismId): MechanismRuntime | undefined;
+}
 
 export interface MechanismDefinition {
     readonly id: string;
@@ -19,6 +30,12 @@ export function createMechanismDefinition(definition: MechanismDefinition): Mech
 }
 
 export function createMechanismRuntime<D extends MechanismDefinition>(
+    runtime: MechanismRuntime<D> & EffectSourceMechanism,
+): MechanismRuntime<D> & EffectSourceMechanism;
+export function createMechanismRuntime<D extends MechanismDefinition>(
+    runtime: MechanismRuntime<D>,
+): MechanismRuntime<D>;
+export function createMechanismRuntime<D extends MechanismDefinition>(
     runtime: MechanismRuntime<D>,
 ): MechanismRuntime<D> {
     if (!Number.isSafeInteger(runtime.id) || runtime.id < 0) {
@@ -28,5 +45,12 @@ export function createMechanismRuntime<D extends MechanismDefinition>(
         throw new TypeError("mechanism active must be boolean");
     }
 
-    return { id: runtime.id, definition: runtime.definition, active: runtime.active };
+    return {
+        id: runtime.id,
+        definition: runtime.definition,
+        active: runtime.active,
+        ...(hasEffectSource(runtime)
+            ? { effectSource: copyEffectSourceState(runtime.effectSource) }
+            : {}),
+    };
 }

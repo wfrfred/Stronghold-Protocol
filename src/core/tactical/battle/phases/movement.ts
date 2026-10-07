@@ -102,7 +102,7 @@ export function createMovementSystem(
             movedUnits.push(moved.unit);
         }
 
-        let work = createCombatWork(battlefield, execution);
+        let work = createCombatWork(battlefield, execution, battlefield);
 
         for (const unit of movedUnits) {
             work = updateCombatUnit(work, unit);
