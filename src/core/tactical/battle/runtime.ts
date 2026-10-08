@@ -113,9 +113,7 @@ export class BattleRuntime {
             ...this.#state,
             battlefield: this.#state.battlefield.fork(),
         };
-        const advanced = workingState.battlefield.transact(() =>
-            this.#advance(workingState, commands),
-        );
+        const advanced = this.#advance(workingState, commands);
 
         this.#state = advanced.state;
 

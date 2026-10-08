@@ -1125,20 +1125,25 @@ test('core battle publishes every tick once and retries a final-stage failure wi
     assert.ok(expectedSnapshot.execution.nextUnitId > before.execution.nextUnitId);
     assert.ok(expectedSnapshot.execution.nextMechanismId > before.execution.nextMechanismId);
     assert.ok(expectedSnapshot.execution.nextSpatialEffectId > before.execution.nextSpatialEffectId);
-    const transact = BattlefieldRuntime.prototype.transact;
+    const fork = BattlefieldRuntime.prototype.fork;
+    const unitIds = Object.getOwnPropertyDescriptor(BattlefieldRuntime.prototype, 'unitIds').get;
     let failures = 0;
     try {
-      BattlefieldRuntime.prototype.transact = function(operation) {
-        return transact.call(this, field => {
-          operation(field);
-          assert.deepEqual(field.unitIds, expectedSnapshot.units.map(unit => unit.id));
-          assert.deepEqual(field.mechanismIds, expectedSnapshot.mechanisms.map(mechanism => mechanism.id));
-          assert.deepEqual(field.effectIds, [1]);
-          assert.deepEqual(runtime.snapshot(), before);
-          assert.equal(runtime.navigationMaps, maps);
-          failures++;
-          throw new Error('late-stage failure');
-        });
+      BattlefieldRuntime.prototype.fork = function() {
+        const field = fork.call(this);
+        Object.defineProperty(field, 'unitIds', { get() {
+          const ids = unitIds.call(field);
+          if (JSON.stringify(ids) === JSON.stringify(expectedSnapshot.units.map(unit => unit.id))) {
+            assert.deepEqual(field.mechanismIds, expectedSnapshot.mechanisms.map(mechanism => mechanism.id));
+            assert.deepEqual(field.effectIds, [1]);
+            assert.deepEqual(runtime.snapshot(), before);
+            assert.equal(runtime.navigationMaps, maps);
+            failures++;
+            throw new Error('late-stage failure');
+          }
+          return ids;
+        } });
+        return field;
       };
       for (let retry = 0; retry < 2; retry++) {
         assert.throws(() => runtime.step(commands), /late-stage failure/);
@@ -1146,7 +1151,7 @@ test('core battle publishes every tick once and retries a final-stage failure wi
         assert.equal(runtime.navigationMaps, maps);
       }
     } finally {
-      BattlefieldRuntime.prototype.transact = transact;
+      BattlefieldRuntime.prototype.fork = fork;
     }
     assert.equal(failures, 2);
     assert.deepEqual(runtime.step(commands), expected);
@@ -1193,20 +1198,20 @@ test('core clearing derived navigation fields preserves every tick, event and RN
     { type: 'MOVE', target: { position: [9, 6], reachOffset: [0.25, 0.25], randomizeReachOffset: true, reachDistance: 0.05 } },
   ], { speed: 1 / 5, maxTicks: 100 });
   const runtime = new BattleRuntime(input), replay = new BattleRuntime(input);
-  const transact = BattlefieldRuntime.prototype.transact;
+  const fork = BattlefieldRuntime.prototype.fork;
   let clearCount = 0;
   for (let tick = 0; runtime.result === null; tick++) {
     const expected = replay.step();
     let actual;
     try {
-      BattlefieldRuntime.prototype.transact = function(operation) {
+      BattlefieldRuntime.prototype.fork = function() {
         this.fieldCache.clear();
         clearCount++;
-        return transact.call(this, operation);
+        return fork.call(this);
       };
       actual = runtime.step();
     } finally {
-      BattlefieldRuntime.prototype.transact = transact;
+      BattlefieldRuntime.prototype.fork = fork;
     }
     assert.deepEqual(actual, expected);
     assert.deepEqual(runtime.snapshot(), replay.snapshot());
