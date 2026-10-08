@@ -11,6 +11,8 @@ import { createSkillDefinition } from "../../dist/core/tactical/unit/capability/
 import { gainSkillSp } from "../../dist/core/tactical/unit/capability/skill/sp.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import { effectFixtureWork } from "../helpers/effects.js";
+import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
+import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
 
 const attackBuff = {
   skillId: "skcom_atk_up[1]",
@@ -48,6 +50,49 @@ test("native Attack Enhancement Alpha level 1 charges, buffs attack for 20 secon
   assert.equal(getCombatUnit(work, 1).skill.active, null);
   work = advanceSkill(work, 1, 2130, resources).work;
   assert.equal(getCombatUnit(work, 1).skill.sp, 1);
+});
+
+test("native attack buff data compiles, registers and changes ordinary attacks through BattleRuntime", () => {
+  const resources = new CombatResources();
+  const compiled = resources.skills.register(compileArknightsAttackBuffSkill(attackBuff, 1, resources));
+  const geometry = { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 2 }] };
+  const actor = {
+    id: "native-skill-actor", vitality: { maxHp: 1000 }, offense: { attack: 100 },
+    allegiance: { side: "ALLY" }, spatial: { layer: "GROUND" }, skill: compiled.definition,
+    action: { normalAction: {
+      triggerBindingId: "target", baseAttackTimeTicks: 30, recoveryTicks: 0, followUps: [],
+      targetGroups: [{ id: "target", targeting: {
+        type: "DAMAGE", scope: { type: "RANGE", geometry: { type: "SHAPES", geometry } },
+        canTargetAir: true, includeBlockingRelations: false, preferBlockingRelations: false,
+        ignoreTargetFree: false, ignoreInvisible: false, maxTargets: 1,
+      }, operations: [{ type: "DAMAGE", powerSource: "SOURCE_ATTACK", power: 1, damageType: "TRUE" }] }],
+    } },
+  };
+  const target = {
+    id: "stationary-content-target", vitality: { maxHp: 1000000 }, allegiance: { side: "ENEMY" },
+    spatial: { layer: "GROUND" }, hit: { geometry },
+    locomotion: { moveSpeedPerTick: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 } },
+  };
+  const base = createLegacyCombatSpec({ rows: 1, columns: 3, operators: [], enemies: [], maxTicks: 2200 });
+  const runtime = new BattleRuntime({ ...base, initialUnits: [{ definition: actor, position: [0, 0] }],
+    schedule: { type: "TIMELINE", spawns: [{ definition: target, tick: 0,
+      route: { pathMotionMode: "WALK", startPosition: [0, 1], endPosition: [0, 2], spawnOffset: [0, 0],
+        spawnRandomRange: [0, 0], checkpoints: [], allowDiagonalMove: false, visitEveryTileCenter: false,
+        visitEveryNodeCenter: false, visitEveryCheckPoint: true },
+      timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 }, alwaysCheckCurrentPoint: true, notCountInTotal: false,
+    }] },
+  }, { combat: resources });
+  const current = () => runtime.snapshot().units.find(unit => unit.id === 0);
+
+  for (let tick = 0; tick < 1500; tick++) { runtime.step(); }
+  assert.equal(current().skill.sp, 49);
+  const activated = runtime.step([{ type: "ACTIVATE_SKILL", unitId: 0 }]);
+  assert.equal(current().skill.active.endsAtTick, 2100);
+  assert.equal(Math.round(activated.events.find(event => event.type === "DAMAGE").amount), 110);
+  for (let tick = 1501; tick < 2100; tick++) { runtime.step(); }
+  const ended = runtime.step();
+  assert.equal(ended.events.find(event => event.type === "DAMAGE").amount, 100);
+  assert.equal(current().skill.active, null);
 });
 
 test("native SP enums and timing values decode without interpreting unrelated terrain skill blackboards", () => {
