@@ -40,20 +40,23 @@ import {
     type LocatedRouteSignal,
     type RouteControlTransition,
 } from "./route-control.js";
-import type {
-    LocomotionDefinition,
-    RouteControlState,
-    RoutedLocomotiveUnit,
-    RoutedLocomotionState,
+import {
+    resolveMoveSpeedPerTick,
+    type LocomotionDefinition,
+    type RouteControlState,
+    type RoutedLocomotiveUnit,
+    type RoutedLocomotionState,
 } from "./capability.js";
 import { integrateSteeringDirection } from "./steering.js";
 import { stabilizeUnit, type StableUnit } from "../../unit.js";
+import type * as contribution from "../../../modifier/contribution.js";
 
 export interface RoutedLocomotionStepContext {
     readonly tick: number;
     readonly maps: NavigationMaps;
     readonly fieldCache: NavigationFieldProvider;
     readonly moveMultiplier: number;
+    readonly evaluateContributions?: contribution.Evaluate;
     readonly movementAllowed: boolean;
     readonly waitTickAllowed: boolean;
     readonly routeAdvanceAllowed: boolean;
@@ -177,7 +180,9 @@ export function stepRoutedLocomotion(
 
     let steering = state.steering;
     let moving = false;
-    const speed = definition.moveSpeedPerTick * context.moveMultiplier;
+    const speed =
+        resolveMoveSpeedPerTick(definition, state, context.evaluateContributions) *
+        context.moveMultiplier;
 
     assertNonnegativeNumber(speed, "movement budget");
 

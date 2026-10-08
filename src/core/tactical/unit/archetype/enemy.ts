@@ -64,12 +64,15 @@ export function createEnemyDefinition(definition: EnemyDefinition): EnemyDefinit
 
     assertPositiveNumber(definition.vitality.maxHp, "enemy maxHp");
     assertNonnegativeNumber(definition.locomotion.moveSpeedPerTick, "enemy moveSpeedPerTick");
+    const minimumMoveSpeedPerTick = definition.locomotion.minimumMoveSpeedPerTick ?? 0;
+    assertNonnegativeNumber(minimumMoveSpeedPerTick, "enemy minimumMoveSpeedPerTick");
 
     return Object.freeze({
         id: definition.id,
         vitality: Object.freeze({ maxHp: definition.vitality.maxHp }),
         locomotion: Object.freeze({
             moveSpeedPerTick: definition.locomotion.moveSpeedPerTick,
+            minimumMoveSpeedPerTick,
             steeringParameters: Object.freeze({ ...definition.locomotion.steeringParameters }),
         }),
     });

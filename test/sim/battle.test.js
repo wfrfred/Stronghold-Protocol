@@ -73,7 +73,7 @@ function routeCommandBattle(checkpoints, options = {}) {
   const route = createRouteDefinition({ ...source.route, visitEveryCheckPoint: true, checkpoints,
     spawnOffset: [0, 0], spawnRandomRange: [0, 0], ...options.route });
   const definition = createEnemyDefinition({ ...source.definition,
-    locomotion: { ...source.definition.locomotion, moveSpeedPerTick: options.speed ?? 0 } });
+    locomotion: { ...source.definition.locomotion, moveSpeedPerTick: options.speed ?? 0, minimumMoveSpeedPerTick: 0 } });
   return { ...withTimelineSpawns(spec, [{ ...source, tick: 0, definition, route, alwaysCheckCurrentPoint: true }]),
     maxTicks: options.maxTicks ?? 20, ...options.spec };
 }
@@ -1283,10 +1283,10 @@ test('raw enemy movement levels inherit only defined values and reject sparse, u
   const profile = slimeMovementProfile();
   const parseMovement = (value, level) => parseEnemyMovementDefinition(value, level, profile);
   assert.deepEqual(parseMovement(fixture, 0), {
-    id: 'enemy_1007_slime', vitality: { maxHp: 550 }, locomotion: { moveSpeedPerTick: 1 / 30, steeringParameters: profile.steeringParameters },
+    id: 'enemy_1007_slime', vitality: { maxHp: 550 }, locomotion: { moveSpeedPerTick: 1 / 30, minimumMoveSpeedPerTick: 0.1 / 30, steeringParameters: profile.steeringParameters },
   });
   assert.deepEqual(parseMovement(fixture, 1), {
-    id: 'enemy_1007_slime', vitality: { maxHp: 2050 }, locomotion: { moveSpeedPerTick: 1 / 30, steeringParameters: profile.steeringParameters },
+    id: 'enemy_1007_slime', vitality: { maxHp: 2050 }, locomotion: { moveSpeedPerTick: 1 / 30, minimumMoveSpeedPerTick: 0.1 / 30, steeringParameters: profile.steeringParameters },
   });
   assert.deepEqual(parseMovement({ ...fixture, Value: [...fixture.Value].reverse() }, 1), parseMovement(fixture, 1));
   const ignored = structuredClone(fixture);

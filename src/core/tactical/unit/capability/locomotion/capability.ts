@@ -4,16 +4,20 @@ import {
     type NavigationState,
 } from "../../../battlefield/navigation/state.js";
 import { copyRouteState, type RouteState } from "./route/state.js";
-import type { Unit, UnitDefinition } from "../../unit.js";
+import { stabilizeUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
 import { createSteeringState, type SteeringParameters, type SteeringState } from "./steering.js";
+import * as contribution from "../../../modifier/contribution.js";
+import * as modifier from "../../../modifier/value.js";
 
 export interface LocomotionDefinition {
     readonly moveSpeedPerTick: number;
+    readonly minimumMoveSpeedPerTick?: number;
     readonly steeringParameters: SteeringParameters;
 }
 
 export interface LocomotionState {
     readonly moving: boolean;
+    readonly moveSpeed: contribution.State;
     readonly steering: SteeringState;
 }
 
@@ -70,6 +74,7 @@ export function copyLocomotionState(state: Readonly<LocomotionState>): Locomotio
 export function copyLocomotionState(state: Readonly<LocomotionState>): LocomotionState {
     const snapshot = {
         ...state,
+        moveSpeed: contribution.copy(state.moveSpeed),
         steering: {
             ...state.steering,
             lastVelocity: Object.isFrozen(state.steering.lastVelocity)
@@ -96,7 +101,7 @@ export function copyLocomotionState(state: Readonly<LocomotionState>): Locomotio
 }
 
 export function createLocomotionState(): LocomotionState {
-    return { moving: false, steering: createSteeringState() };
+    return { moving: false, moveSpeed: contribution.create(), steering: createSteeringState() };
 }
 
 export function initializeLocomotionState(
@@ -116,4 +121,35 @@ export function createRoutedLocomotionState(
         mainRoute: { route, navigation },
         alternativeRoute: null,
     };
+}
+
+export function updateMoveSpeedContributions<U extends Unit>(
+    input: U | StableUnit<U>,
+    transition: contribution.Transition,
+): StableUnit<U> {
+    const unit = stabilizeUnit<U>(input);
+
+    if (!hasLocomotion(unit)) {
+        throw new TypeError("move speed contributions require Locomotion capability");
+    }
+
+    const moveSpeed = transition(unit.locomotion.moveSpeed);
+
+    return moveSpeed === unit.locomotion.moveSpeed
+        ? unit
+        : { ...unit, locomotion: { ...unit.locomotion, moveSpeed } };
+}
+
+export function resolveMoveSpeedPerTick(
+    definition: LocomotionDefinition,
+    state: LocomotionState,
+    evaluate?: contribution.Evaluate,
+): number {
+    return Math.max(
+        definition.minimumMoveSpeedPerTick ?? 0,
+        modifier.apply(
+            definition.moveSpeedPerTick,
+            contribution.resolve(state.moveSpeed, evaluate),
+        ),
+    );
 }

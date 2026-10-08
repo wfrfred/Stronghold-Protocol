@@ -243,6 +243,7 @@ export function parseEnemyMovementContent(
         vitality: { maxHp },
         locomotion: {
             moveSpeedPerTick: perSecondToPerTick(moveSpeed),
+            minimumMoveSpeedPerTick: perSecondToPerTick(0.1),
             steeringParameters: profile.steeringParameters,
         },
     });

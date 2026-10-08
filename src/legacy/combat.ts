@@ -225,6 +225,7 @@ function enemyDefinition(value: unknown) {
         offense: { attack: numberField(stats.atk, "attack") },
         locomotion: {
             moveSpeedPerTick: (numberField(stats.moveSpeed, "move speed") * 0.5) / TICKS_PER_SECOND,
+            minimumMoveSpeedPerTick: (0.1 * 0.5) / TICKS_PER_SECOND,
             steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 },
         },
         allegiance: { side: "ENEMY" },

@@ -1,0 +1,87 @@
+{
+  "source": {
+    "bundle": "config/buff_template_holder.ab",
+    "holderObjectId": "6070581171229484677",
+    "templateKey": "buff_mire[mark]",
+    "eventId": 2,
+    "nodePath": [
+      1,
+      "_succeedNodes",
+      0,
+      "_failNodes",
+      0
+    ]
+  },
+  "node": {
+    "_buff": {
+      "attributes": {
+        "abnormalFlags": [],
+        "abnormalImmunes": [],
+        "abnormalAntis": [],
+        "abnormalCombos": [],
+        "abnormalComboImmunes": [],
+        "attributeModifiers": [
+          {
+            "attributeType": "ATTACK_SPEED",
+            "formulaItem": "MULTIPLIER",
+            "value": 0.0,
+            "loadFromBlackboard": true,
+            "fetchBaseValueFromSourceEntity": false
+          },
+          {
+            "attributeType": "MOVE_SPEED",
+            "formulaItem": "MULTIPLIER",
+            "value": 0.0,
+            "loadFromBlackboard": true,
+            "fetchBaseValueFromSourceEntity": false
+          }
+        ]
+      },
+      "buffKey": "buff_mire[attr]",
+      "loadFromDB": false,
+      "isDurableBuff": false,
+      "isDamageMissable": false,
+      "isSilenceable": false,
+      "isStunnable": false,
+      "isFreezable": false,
+      "isLevitatable": false,
+      "isGroundBoundable": false,
+      "statusResistable": "AUTOMATIC",
+      "templateKey": "empty",
+      "disableOverride": false,
+      "overrideKey": null,
+      "overrideType": "STACK",
+      "maxStackCnt": 1,
+      "refreshRemainingTimeWhenStackMax": false,
+      "clearAllStackCntWhenTimeUp": false,
+      "maxValidStackCnt": -1,
+      "independentCharacterSource": false,
+      "overrideEffectKey": null,
+      "overrideOnEventPriority": false,
+      "onEventPriority": "DEFAULT",
+      "audioSignal": null,
+      "lifeTimeType": "INFINITY",
+      "takeSnapshotWhenExtend": false,
+      "durationKey": null,
+      "remainingTimeKey": null,
+      "lifeTime": 0.0,
+      "triggerLifeType": "IMMEDIATELY",
+      "triggerCnt": 0,
+      "triggerInterval": -1.0,
+      "waitFirstTriggerInterval": true,
+      "firstTriggerInterval": -1.0,
+      "priority": -1,
+      "priorityBBKeys": [],
+      "stripBlackboardParamsWithBuffKey": false,
+      "blackboard": [],
+      "enableInitDirectionFromSource": false
+    },
+    "_buffOwner": "BUFF_OWNER",
+    "_isDerivedBuff": true,
+    "_finishDerivedBuffIfParentFinish": true,
+    "_stackCntKey": "cnt",
+    "_stackCnt": 1,
+    "_isDisableOverrideBuff": false,
+    "$type": "Torappu.Battle.Action.Nodes+CreateBuffStacked"
+  }
+}

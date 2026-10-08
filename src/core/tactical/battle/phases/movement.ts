@@ -1,5 +1,7 @@
 import type { BattlefieldChange } from "../../battlefield/contract.js";
 import type { EffectTransitionResources } from "../../unit/capability/effects/contract.js";
+import type * as computation from "../../modifier/computation.js";
+import type { ContributionFacts } from "../../unit/capability/contribution.js";
 import { hasRoutedLocomotion } from "../../unit/capability/locomotion/capability.js";
 import { hasAction } from "../../unit/capability/action/capability.js";
 import { stepRoutedUnit } from "../../unit/capability/locomotion/step.js";
@@ -21,7 +23,9 @@ export interface MovementPhaseInput extends BattlePhaseInput {
 
 export function createMovementSystem(
     { moveMultiplier }: { readonly moveMultiplier: number },
-    resources: EffectTransitionResources,
+    resources: EffectTransitionResources & {
+        readonly computations: computation.Computations<ContributionFacts>;
+    },
 ): {
     readonly reroute: BattlePhase;
     readonly step: BattlePhase<void, MovementPhaseInput>;
@@ -71,6 +75,7 @@ export function createMovementSystem(
                 maps: battlefield.navigationMaps,
                 fieldCache: battlefield.fieldCache,
                 moveMultiplier,
+                evaluateContributions: resources.computations.bind({ unit, battlefield }),
                 movementAllowed:
                     (input.movementAllowed?.(unitId) ?? true) &&
                     battlefield.blockerOf(unitId) === undefined &&
