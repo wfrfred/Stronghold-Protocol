@@ -12,12 +12,16 @@ import type {
     CompiledNumericProvider,
     NumericContributionResources,
 } from "../../../modifier/providers.js";
-import type { NumericContributionTarget, NumericProviderFacts } from "../contribution.js";
+import type {
+    NumericContributionTarget,
+    NumericProjectionTarget,
+    NumericProviderFacts,
+} from "../contribution.js";
 import type { Unit } from "../../unit.js";
 
 export interface EffectContributionProjection<S extends object> {
     readonly id: string;
-    readonly target: NumericContributionTarget;
+    readonly target: NumericProjectionTarget;
     readonly project: (instance: EffectInstance<S>) => readonly NumericContribution[];
     readonly group?: NumericContributionGroup;
 }
@@ -33,13 +37,15 @@ export interface CompiledEffectContribution {
     readonly remove: <U extends Unit>(unit: U, instance: EffectInstanceValue) => U;
 }
 
-interface ContributionBinding {
+interface ContributionBinding<T extends NumericProjectionTarget = NumericProjectionTarget> {
     readonly id: string;
-    readonly target: NumericContributionTarget;
+    readonly target: T;
     readonly group: NumericContributionGroup | undefined;
 }
 
-function ownBinding(binding: ContributionBinding): ContributionBinding {
+function ownBinding<T extends NumericProjectionTarget>(
+    binding: ContributionBinding<T>,
+): ContributionBinding<T> {
     return Object.freeze({
         id: binding.id,
         target: binding.target,
@@ -85,7 +91,7 @@ function removeBinding(binding: ContributionBinding): CompiledEffectContribution
 }
 
 export function compileNumericProviderBinding(
-    binding: ContributionBinding & {
+    binding: ContributionBinding<NumericContributionTarget> & {
         readonly providers: NumericContributionResources<NumericProviderFacts>;
         readonly providerRef: string;
         readonly evaluate: CompiledNumericProvider<NumericProviderFacts>;

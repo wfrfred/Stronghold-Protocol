@@ -17,6 +17,7 @@ import type { NumericContributionTarget, NumericProviderFacts } from "../contrib
 import { ResourceRegistration } from "../../../../common/resource-registration.js";
 import type { Unit } from "../../unit.js";
 import type { CombatTargetingView } from "../../targeting/query.js";
+import { coordinateVitalityMaxHp } from "../vitality/max-hp.js";
 
 export interface ParameterContext<S extends object> {
     readonly unit: Unit;
@@ -33,7 +34,7 @@ export interface EffectContributionRules<S extends object> {
     readonly attack?: ParameterProvider<S>;
     readonly defense?: ParameterProvider<S>;
     readonly resistance?: ParameterProvider<S>;
-    readonly maxHp?: ParameterProvider<S>;
+    readonly maxHp?: (instance: EffectInstance<S>) => readonly NumericContribution[];
     readonly contributions?: readonly EffectContributionProjection<S>[];
 }
 
@@ -41,7 +42,6 @@ export interface EffectContributionResources {
     readonly effects: EffectResources;
     readonly offense: NumericContributionResources<NumericProviderFacts>;
     readonly defense: NumericContributionResources<NumericProviderFacts>;
-    readonly vitality: NumericContributionResources<NumericProviderFacts>;
 }
 
 export function compileEffectContributions<S extends object>(
@@ -96,8 +96,12 @@ export function compileEffectContributions<S extends object>(
             resources.defense,
             rules.resistance,
         ),
-        ...compileProvider("maxHp", vitalityMaxHpContributions, resources.vitality, rules.maxHp),
-        ...(rules.contributions ?? []).map((projection) => {
+        ...[
+            ...(rules.maxHp === undefined
+                ? []
+                : [{ id: "maxHp", target: vitalityMaxHpContributions, project: rules.maxHp }]),
+            ...(rules.contributions ?? []),
+        ].map((projection) => {
             const { id, target, project } = projection;
             const projectionGroup =
                 projection.group === undefined ? group : Object.freeze({ ...projection.group });
@@ -124,6 +128,11 @@ export function compileEffectContributions<S extends object>(
 
 export interface EffectContributionBindings {
     get(instance: EffectInstanceValue): readonly CompiledEffectContribution[];
+    transition<U extends Unit>(
+        unit: U,
+        instance: EffectInstanceValue,
+        apply: (binding: CompiledEffectContribution, current: U) => U,
+    ): U;
 }
 
 export class EffectBindingResources implements EffectContributionBindings {
@@ -161,5 +170,19 @@ export class EffectBindingResources implements EffectContributionBindings {
         }
 
         return bindings;
+    }
+
+    transition<U extends Unit>(
+        unit: U,
+        instance: EffectInstanceValue,
+        apply: (binding: CompiledEffectContribution, current: U) => U,
+    ): U {
+        let current = unit;
+
+        for (const binding of this.get(instance)) {
+            current = apply(binding, current);
+        }
+
+        return coordinateVitalityMaxHp(unit, current);
     }
 }

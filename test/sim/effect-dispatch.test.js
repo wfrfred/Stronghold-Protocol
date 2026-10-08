@@ -774,7 +774,8 @@ test("effect registration: domain facets coexist and expose the complete healing
   );
   const initial = effectFixtureWork(attach(resources, unit(2, 500), descriptor));
   assert.equal(hasStatusFlag(getCombatUnit(initial, 2), "INVISIBLE"), true);
-  assert.equal(resolveMaxHp(2, combatWorkView(initial), resources.vitality), 1050);
+  assert.equal(resolveMaxHp(2, combatWorkView(initial)), 1050);
+  assert.equal(getCombatUnit(initial, 2).vitality.hp, 525);
   const damaged = resolveDamage(initial, request(100, { sourceUnitId: 2 }), resources);
   const healed = resolveHealing(
     damaged.work,
@@ -798,7 +799,7 @@ test("effect registration: domain facets coexist and expose the complete healing
   assert.equal(damaged.report.hpLoss, 200);
   assert.equal(healed.amount, 30);
   assert.equal(skipped.amount, 11);
-  assert.equal(getCombatUnit(skipped.work, 2).vitality.hp, 341);
+  assert.equal(getCombatUnit(skipped.work, 2).vitality.hp, 366);
   assert.deepEqual(getCombatUnit(skipped.work, 2).effects.instances[0].state, {
     damage: 1,
     output: 1,

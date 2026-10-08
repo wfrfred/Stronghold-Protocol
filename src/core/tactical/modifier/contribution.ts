@@ -29,26 +29,37 @@ export interface NumericProviderContribution extends NumericContributionBinding 
 
 export type NumericContributionEntry = NumericValueContribution | NumericProviderContribution;
 
-export interface NumericContributionState {
-    readonly entries: readonly NumericContributionEntry[];
+interface NumericContributionEntries {
+    readonly values: NumericValueContribution;
+    readonly all: NumericContributionEntry;
+}
+
+export type NumericContributionKind = keyof NumericContributionEntries;
+
+export interface NumericContributionState<K extends NumericContributionKind = "all"> {
+    readonly entries: readonly NumericContributionEntries[K][];
 }
 
 export type NumericContributionEvaluator = (
     entry: NumericProviderContribution,
 ) => readonly NumericContribution[];
 
-export type NumericContributionTransition = (
-    state: NumericContributionState,
-) => NumericContributionState;
+export type NumericContributionTransition<K extends NumericContributionKind = "all"> = (
+    state: NumericContributionState<K>,
+) => NumericContributionState<K>;
 
-const emptyState: NumericContributionState = Object.freeze({ entries: Object.freeze([]) });
+export type NumericProjectionTransition = <K extends NumericContributionKind>(
+    state: NumericContributionState<K>,
+) => NumericContributionState<K>;
+
+const emptyState = Object.freeze({ entries: Object.freeze([]) });
 const ownedEntries = new WeakSet<NumericContributionEntry>();
 const ownedArrays = new WeakSet<readonly NumericContributionEntry[]>([emptyState.entries]);
 
-function ownEntry(
-    entry: NumericContributionEntry,
-    previous?: NumericContributionEntry,
-): NumericContributionEntry {
+function ownEntry<K extends NumericContributionKind>(
+    entry: NumericContributionEntries[K],
+    previous?: NumericContributionEntries[K],
+): NumericContributionEntries[K] {
     if (ownedEntries.has(entry)) {
         return entry;
     }
@@ -120,10 +131,12 @@ function ownEntry(
 
     ownedEntries.add(owned);
 
-    return owned;
+    return owned as NumericContributionEntries[K];
 }
 
-function publishEntries(entries: NumericContributionEntry[]): NumericContributionState {
+function publishEntries<K extends NumericContributionKind>(
+    entries: NumericContributionEntries[K][],
+): NumericContributionState<K> {
     if (entries.length === 0) {
         return emptyState;
     }
@@ -134,15 +147,17 @@ function publishEntries(entries: NumericContributionEntry[]): NumericContributio
     return Object.freeze({ entries });
 }
 
-function getOwnedEntries(state: NumericContributionState): readonly NumericContributionEntry[] {
+function getOwnedEntries<K extends NumericContributionKind>(
+    state: NumericContributionState<K>,
+): readonly NumericContributionEntries[K][] {
     return ownedArrays.has(state.entries)
         ? state.entries
-        : createNumericContributionState(state.entries).entries;
+        : createNumericContributionState<K>(state.entries).entries;
 }
 
-export function createNumericContributionState(
-    entries: readonly NumericContributionEntry[] = [],
-): NumericContributionState {
+export function createNumericContributionState<K extends NumericContributionKind = "all">(
+    entries: readonly NumericContributionEntries[K][] = [],
+): NumericContributionState<K> {
     if (entries.length === 0) {
         return emptyState;
     }
@@ -151,14 +166,14 @@ export function createNumericContributionState(
     }
 
     const ids = new Set<string>();
-    const owned: NumericContributionEntry[] = [];
+    const owned: NumericContributionEntries[K][] = [];
 
     for (let index = 0; index < entries.length; index++) {
         if (!Object.hasOwn(entries, index)) {
             throw new TypeError("numeric contribution entries must be dense");
         }
 
-        const entry = ownEntry(entries[index]!);
+        const entry = ownEntry<K>(entries[index]!);
 
         if (ids.has(entry.id)) {
             throw new TypeError(`duplicate numeric contribution ${entry.id}`);
@@ -168,34 +183,34 @@ export function createNumericContributionState(
         owned.push(entry);
     }
 
-    return publishEntries(owned);
+    return publishEntries<K>(owned);
 }
 
-export function copyNumericContributionState(
-    state: NumericContributionState,
-): NumericContributionState {
-    return createNumericContributionState(state.entries);
+export function copyNumericContributionState<K extends NumericContributionKind>(
+    state: NumericContributionState<K>,
+): NumericContributionState<K> {
+    return createNumericContributionState<K>(state.entries);
 }
 
-export function registerNumericContribution(
-    state: NumericContributionState,
-    entry: NumericContributionEntry,
-): NumericContributionState {
+export function registerNumericContribution<K extends NumericContributionKind>(
+    state: NumericContributionState<K>,
+    entry: NumericContributionEntries[K],
+): NumericContributionState<K> {
     const entries = getOwnedEntries(state);
-    const owned = ownEntry(entry);
+    const owned = ownEntry<K>(entry);
 
     if (entries.some((current) => current.id === owned.id)) {
         throw new TypeError(`duplicate numeric contribution ${owned.id}`);
     }
 
-    return publishEntries([...entries, owned]);
+    return publishEntries<K>([...entries, owned]);
 }
 
-export function updateNumericContribution(
-    state: NumericContributionState,
+export function updateNumericContribution<K extends NumericContributionKind>(
+    state: NumericContributionState<K>,
     id: string,
-    update: (entry: NumericContributionEntry) => NumericContributionEntry,
-): NumericContributionState {
+    update: (entry: NumericContributionEntries[K]) => NumericContributionEntries[K],
+): NumericContributionState<K> {
     const entries = getOwnedEntries(state);
     const index = entries.findIndex((entry) => entry.id === id);
 
@@ -215,40 +230,40 @@ export function updateNumericContribution(
 
     const next = [...entries];
 
-    next[index] = ownEntry(updated, current);
+    next[index] = ownEntry<K>(updated, current);
 
-    return publishEntries(next);
+    return publishEntries<K>(next);
 }
 
-export function setNumericContributionParticipation(
-    state: NumericContributionState,
+export function setNumericContributionParticipation<K extends NumericContributionKind>(
+    state: NumericContributionState<K>,
     id: string,
     participating: boolean,
-): NumericContributionState {
-    return updateNumericContribution(state, id, (entry) =>
+): NumericContributionState<K> {
+    return updateNumericContribution<K>(state, id, (entry) =>
         entry.participating === participating ? entry : { ...entry, participating },
     );
 }
 
-export function removeNumericContribution(
-    state: NumericContributionState,
+export function removeNumericContribution<K extends NumericContributionKind>(
+    state: NumericContributionState<K>,
     id: string,
-): NumericContributionState {
+): NumericContributionState<K> {
     const entries = getOwnedEntries(state).filter((entry) => entry.id !== id);
 
-    return entries.length === state.entries.length ? state : publishEntries(entries);
+    return entries.length === state.entries.length ? state : publishEntries<K>(entries);
 }
 
-export function removeNumericContributionsOwnedBy(
-    state: NumericContributionState,
+export function removeNumericContributionsOwnedBy<K extends NumericContributionKind>(
+    state: NumericContributionState<K>,
     owner: NumericContributionOwner,
-): NumericContributionState {
+): NumericContributionState<K> {
     const entries = getOwnedEntries(state).filter(
         (entry) =>
             entry.owner?.unitId !== owner.unitId || entry.owner.instanceId !== owner.instanceId,
     );
 
-    return entries.length === state.entries.length ? state : publishEntries(entries);
+    return entries.length === state.entries.length ? state : publishEntries<K>(entries);
 }
 
 function compareEntries(left: NumericContributionEntry, right: NumericContributionEntry): number {
@@ -268,8 +283,8 @@ function compareEntries(left: NumericContributionEntry, right: NumericContributi
     return left.id < right.id ? -1 : 1;
 }
 
-export function resolveNumericContributions(
-    state: NumericContributionState,
+export function resolveNumericContributions<K extends NumericContributionKind>(
+    state: NumericContributionState<K>,
     evaluate?: NumericContributionEvaluator,
 ): readonly NumericContribution[] {
     const candidates = state.entries.filter((entry) => entry.participating).sort(compareEntries);

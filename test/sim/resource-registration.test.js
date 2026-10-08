@@ -218,7 +218,6 @@ test("resources: publishing to BattleRuntime closes every registry while preserv
     () => resources.effectBindings.register(descriptor.ref, []),
     () => resources.offense.register("late-attack", () => []),
     () => resources.defense.register("late-defense", () => []),
-    () => resources.vitality.register("late-hp", () => []),
     () => resources.damage.register(descriptor.ref, {}),
     () => resources.healing.register(descriptor.ref, {}),
     () => resources.effectLifecycle.register(descriptor.ref, {}),

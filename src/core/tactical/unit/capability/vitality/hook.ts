@@ -9,10 +9,7 @@ import { createEffectOperations } from "../effects/operations.js";
 import { EffectDispatchScope } from "../effects/dispatch.js";
 import { effectFacts, getEffect } from "../effects/query.js";
 import { resolveMaxHp } from "./query.js";
-import { hasVitality } from "./capability.js";
-import type { NumericContributionProvider } from "../../../modifier/providers.js";
-import type { NumericProviderFacts } from "../contribution.js";
-import { combatWorkView, getCombatUnit, type CombatWork } from "../../../battle/execution/work.js";
+import { combatWorkView, type CombatWork } from "../../../battle/execution/work.js";
 import type { DamageReport, DamageRequest, DamageResolution } from "./damage/contract.js";
 import type { HealingReport, HealingRequest, HealingResolution } from "./healing/contract.js";
 import {
@@ -53,20 +50,10 @@ export type HealingOperation = (
     dispatch: EffectDispatchScope,
 ) => HealingResolution;
 
-export function vitalityHookFacts(
-    work: () => CombatWork,
-    vitality: NumericContributionProvider<NumericProviderFacts>,
-): VitalityHookFacts {
+export function vitalityHookFacts(work: () => CombatWork): VitalityHookFacts {
     return {
         ...effectFacts(work),
-        maxHp: (unitId) => {
-            const current = work();
-            const unit = getCombatUnit(current, unitId);
-
-            return unit !== undefined && hasVitality(unit)
-                ? resolveMaxHp(unitId, combatWorkView(current), vitality)
-                : undefined;
-        },
+        maxHp: (unitId) => resolveMaxHp(unitId, combatWorkView(work())),
     };
 }
 
@@ -77,7 +64,6 @@ export interface DispatchResult<V> {
 
 export interface VitalityHookServices extends EffectTransitionResources {
     readonly effectSources: EffectSourceResources;
-    readonly vitality: NumericContributionProvider<NumericProviderFacts>;
     readonly settleDamage: DamageOperation;
     readonly settleHealing: HealingOperation;
 }
@@ -118,7 +104,7 @@ export function withVitalityHookContext<R, T>(
             },
             request,
             tick,
-            facts: vitalityHookFacts(readWork, resources.vitality),
+            facts: vitalityHookFacts(readWork),
             operations: {
                 effects: createEffectOperations(readWork, setWork, resources, tick, dispatch),
                 sources: createEffectSourceOperations(readWork, setWork, resources),

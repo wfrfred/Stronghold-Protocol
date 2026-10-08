@@ -86,15 +86,13 @@ function changeParticipation(
             return unit;
         }
 
-        let current = replaceEffectInstance(unit, instance, updated);
+        const current = replaceEffectInstance(unit, instance, updated);
 
-        if (instance.started && instance.participating !== updated.participating) {
-            for (const binding of resources.effectBindings.get(updated)) {
-                current = binding.setParticipation(current, updated, updated.participating);
-            }
-        }
-
-        return current;
+        return instance.started && instance.participating !== updated.participating
+            ? resources.effectBindings.transition(current, updated, (binding, value) =>
+                  binding.setParticipation(value, updated, updated.participating),
+              )
+            : current;
     });
 }
 
@@ -336,17 +334,13 @@ function finalizeInScope(
         scope,
     );
 
-    return transitionCombatUnit(work, address.unitId, (unit) => {
-        let current = unit;
-
-        if (instance.started) {
-            for (const binding of resources.effectBindings.get(instance)) {
-                current = binding.remove(current, instance);
-            }
-        }
-
-        return current;
-    });
+    return instance.started
+        ? transitionCombatUnit(work, address.unitId, (unit) =>
+              resources.effectBindings.transition(unit, instance, (binding, current) =>
+                  binding.remove(current, instance),
+              ),
+          )
+        : work;
 }
 
 export function removeEffect(
@@ -526,15 +520,11 @@ function installInScope<S extends object>(
     work = changeInstance(work, address, (value) => withEffectLifecycle(value, { started: true }));
     current = getEffect(work, address)!;
     const started = current;
-    work = transitionCombatUnit(work, ownerUnitId, (unit) => {
-        let updated = unit;
-
-        for (const binding of resources.effectBindings.get(started)) {
-            updated = binding.install(updated, started);
-        }
-
-        return updated;
-    });
+    work = transitionCombatUnit(work, ownerUnitId, (unit) =>
+        resources.effectBindings.transition(unit, started, (binding, current) =>
+            binding.install(current, started),
+        ),
+    );
 
     const accepted =
         !current.finished &&

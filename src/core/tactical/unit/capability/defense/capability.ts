@@ -115,11 +115,14 @@ export function resolveDefenseParameters(
                 resolveNumericContributions(state.defense, evaluate),
             ),
         ),
-        resistance: Math.max(
-            0,
-            resolveNumericValue(
-                definition.resistance,
-                resolveNumericContributions(state.resistance, evaluate),
+        resistance: Math.min(
+            100,
+            Math.max(
+                0,
+                resolveNumericValue(
+                    definition.resistance,
+                    resolveNumericContributions(state.resistance, evaluate),
+                ),
             ),
         ),
     };

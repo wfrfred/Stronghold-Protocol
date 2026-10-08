@@ -3,8 +3,6 @@ import type { EffectTransitionResources } from "../../effects/contract.js";
 import type { EffectInstanceValue } from "../../effects/instance.js";
 import type { EffectProgramRef } from "../../effects/program.js";
 import type { EffectResources } from "../../effects/registry.js";
-import type { NumericProviderFacts } from "../../contribution.js";
-import type { NumericContributionProvider } from "../../../../modifier/providers.js";
 import type {
     DamageOperation,
     DispatchResult,
@@ -18,7 +16,6 @@ import type { EffectSourceResources } from "../../../../battlefield/effect-sourc
 
 export interface HealingResourceServices extends EffectTransitionResources {
     readonly effectSources: EffectSourceResources;
-    readonly vitality: NumericContributionProvider<NumericProviderFacts>;
     readonly healing: HealingResources;
     readonly settleDamage: DamageOperation;
     readonly settleHealing: HealingOperation;

@@ -2,7 +2,6 @@ import {
     copyNumericContributionState,
     createNumericContributionState,
     resolveNumericContributions,
-    type NumericContributionEvaluator,
     type NumericContributionState,
     type NumericContributionTransition,
 } from "../../../modifier/contribution.js";
@@ -15,7 +14,7 @@ export interface VitalityDefinition {
 
 export interface VitalityState {
     readonly hp: number;
-    readonly maxHp: NumericContributionState;
+    readonly maxHp: NumericContributionState<"values">;
 }
 
 export interface Vitality {
@@ -45,12 +44,12 @@ export function copyVitalityState(state: Readonly<VitalityState>): VitalityState
 }
 
 export function initializeVitalityState(definition: VitalityDefinition): VitalityState {
-    return { hp: definition.maxHp, maxHp: createNumericContributionState() };
+    return { hp: definition.maxHp, maxHp: createNumericContributionState<"values">() };
 }
 
 export function updateVitalityMaxHpContributions(
     state: VitalityState,
-    transition: NumericContributionTransition,
+    transition: NumericContributionTransition<"values">,
 ): VitalityState {
     const maxHp = transition(state.maxHp);
 
@@ -59,7 +58,7 @@ export function updateVitalityMaxHpContributions(
 
 export function vitalityMaxHpContributions<U extends Unit>(
     unit: U,
-    transition: NumericContributionTransition,
+    transition: NumericContributionTransition<"values">,
 ): U {
     if (!hasVitality(unit)) {
         throw new TypeError("maximum HP contributions require Vitality capability");
@@ -70,13 +69,9 @@ export function vitalityMaxHpContributions<U extends Unit>(
     return vitality === unit.vitality ? unit : { ...unit, vitality };
 }
 
-export function resolveVitalityMaxHp(
-    definition: VitalityDefinition,
-    state: VitalityState,
-    evaluate?: NumericContributionEvaluator,
-): number {
+export function resolveVitalityMaxHp(definition: VitalityDefinition, state: VitalityState): number {
     return Math.max(
         1,
-        resolveNumericValue(definition.maxHp, resolveNumericContributions(state.maxHp, evaluate)),
+        resolveNumericValue(definition.maxHp, resolveNumericContributions(state.maxHp)),
     );
 }

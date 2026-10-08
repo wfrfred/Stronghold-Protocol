@@ -20,7 +20,7 @@ export function compileAction(
         targeting: compileTargeting(
             group.targeting,
             group.effects.flatMap(effectPurposes),
-            (unit, context) => resolveMaxHp(unit.id, context.battlefield, resources.vitality)!,
+            (unit, context) => resolveMaxHp(unit.id, context.battlefield)!,
         ),
         effects: group.effects.map(compile),
     }));

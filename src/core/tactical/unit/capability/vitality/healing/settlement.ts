@@ -3,7 +3,7 @@ import { EffectDispatchScope, participatingEffect } from "../../effects/dispatch
 import { effectFacts, getEffect } from "../../effects/query.js";
 import { finalizeFinishedEffects } from "../../effects/lifecycle.js";
 import type { EffectAddress } from "../../effects/instance.js";
-import { hasVitality, type VitalUnit } from "../capability.js";
+import { hasVitality, resolveVitalityMaxHp, type VitalUnit } from "../capability.js";
 import type { UnitId } from "../../../unit.js";
 import { resolveMaxHp } from "../query.js";
 import { withVitalityHookContext } from "../hook.js";
@@ -210,7 +210,7 @@ export function healUnit<U extends VitalUnit>(
     unit: U,
     power: number,
     ignoreHealFree = false,
-    maxHp = unit.definition.vitality.maxHp,
+    maxHp = resolveVitalityMaxHp(unit.definition.vitality, unit.vitality),
 ): HealingResult<U> {
     assertNonnegativeNumber(power, "healing amount");
     assertNonnegativeNumber(maxHp, "healing maximum HP");
@@ -301,7 +301,7 @@ export function resolveHealing(
         let hp = current.vitality.hp;
 
         if (finalCancellation === null) {
-            const maxHp = resolveMaxHp(current.id, combatWorkView(work), resources.vitality)!;
+            const maxHp = resolveMaxHp(current.id, combatWorkView(work))!;
             const healed = applyHealingValue(current, healingAmount, maxHp);
             work = updateCombatUnit(work, healed.unit);
             amount = healed.amount;

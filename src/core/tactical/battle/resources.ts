@@ -38,7 +38,6 @@ export class CombatResources {
     readonly effects = new EffectResources(this.#registration);
     readonly offense = new NumericContributionResources<NumericProviderFacts>(this.#registration);
     readonly defense = new NumericContributionResources<NumericProviderFacts>(this.#registration);
-    readonly vitality = new NumericContributionResources<NumericProviderFacts>(this.#registration);
     readonly effectBindings = new EffectBindingResources(this.#registration);
     readonly damage = new DamageResources(this.effects, this.#registration);
     readonly effectLifecycle = new EffectLifecycleResources(this.effects, this.#registration);

@@ -39,14 +39,12 @@ export function updateEffectState<S extends object>(
             return owner;
         }
 
-        let unit = replaceEffectInstance(owner, instance, updated);
+        const unit = replaceEffectInstance(owner, instance, updated);
 
-        if (updated.started) {
-            for (const binding of resources.effectBindings.get(updated)) {
-                unit = binding.update(unit, updated);
-            }
-        }
-
-        return unit;
+        return updated.started
+            ? resources.effectBindings.transition(unit, updated, (binding, current) =>
+                  binding.update(current, updated),
+              )
+            : unit;
     });
 }

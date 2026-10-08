@@ -3,7 +3,10 @@ import { updateEffectState } from "../../dist/core/tactical/unit/capability/effe
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
-import { createNumericContribution } from "../../dist/core/tactical/modifier/numeric.js";
+import {
+  createNumericContribution,
+  resolveNumericValue,
+} from "../../dist/core/tactical/modifier/numeric.js";
 import {
   createNumericContributionState,
   copyNumericContributionState,
@@ -12,6 +15,7 @@ import {
   setNumericContributionParticipation,
   removeNumericContribution,
   removeNumericContributionsOwnedBy,
+  resolveNumericContributions,
 } from "../../dist/core/tactical/modifier/contribution.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { copyUnitSnapshot } from "../../dist/core/tactical/unit/snapshot.js";
@@ -21,6 +25,11 @@ import {
   resolveOffenseAttack,
 } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
+import {
+  createDefenseDefinition,
+  resistanceContributions,
+} from "../../dist/core/tactical/unit/capability/defense/capability.js";
+import { resolveDefense } from "../../dist/core/tactical/unit/capability/defense/query.js";
 import {
   combatWorkView,
   createCombatWork,
@@ -329,6 +338,65 @@ test("contributions: live provider reads latest working facts without changing s
   assert.equal(resolveAttackPower(1, combatWorkView(changed), resources.offense), 200);
   assert.equal(resolveAttackPower(1, combatWorkView(initial), resources.offense), 100);
   assert.equal(getCombatUnit(changed, 1).offense.attack.entries, installed.offense.attack.entries);
+});
+
+test("contributions: defense queries clamp resistance after sampled and live contributions without clipping numeric state", () => {
+  for (const mode of ["sampled", "live"]) {
+    for (const [amount, expected] of [[0, 30], [10, 40], [-10, 20], [-50, 0], [90, 100]]) {
+      const resources = new CombatResources();
+      const initial = initializeUnit({
+        id: 1,
+        definition: {
+          id: "defended-unit",
+          defense: createDefenseDefinition({ defense: 200, resistance: 30 }),
+        },
+        position: [0, 0],
+      });
+      let defended;
+
+      if (mode === "sampled") {
+        defended = resistanceContributions(initial, (state) =>
+          registerNumericContribution(state, {
+            id: "resistance",
+            sequence: 0,
+            participating: true,
+            values: [value(amount)],
+          }),
+        );
+      } else {
+        const program = resources.registerEffect(
+          createEffectProgram({
+            id: "resistance-provider",
+            initialize: () => ({}),
+            ownState: () => ({}),
+          }),
+          { contributions: { resistance: () => [value(amount)] } },
+        );
+        defended = installFixtureEffect(
+          initial,
+          resources.effects.create(program.ref, metadata()),
+          resources,
+        );
+      }
+
+      const facts = combatWorkView(workFor(defended));
+      const state = defended.defense.resistance;
+      const entries = state.entries;
+      const numeric = resolveNumericContributions(
+        state,
+        resources.defense.evaluator({ unit: defended, battlefield: facts }),
+      );
+
+      assert.equal(resolveNumericValue(30, numeric), 30 + amount);
+      assert.deepEqual(resolveDefense(1, facts, resources.defense), {
+        defense: 200,
+        resistance: expected,
+      });
+      assert.equal(defended.definition.defense.resistance, 30);
+      assert.equal(defended.defense.resistance, state);
+      assert.equal(state.entries, entries);
+    }
+  }
 });
 
 test("contributions: a sampled child retains its input until an explicit parent refresh", () => {

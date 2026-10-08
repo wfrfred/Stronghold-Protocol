@@ -188,6 +188,7 @@ test("damage pipeline: fixed penetration precedes proportional penetration for d
   const examples = [
     { damageType: "PHYSICAL", defense: 200, resistance: 0, fixed: 100, expected: 950 },
     { damageType: "ARTS", defense: 0, resistance: 80, fixed: 10, expected: 650 },
+    { damageType: "ARTS", defense: 0, resistance: 150, fixed: 10, expected: 550 },
   ];
 
   for (const example of examples) {
@@ -207,6 +208,34 @@ test("damage pipeline: fixed penetration precedes proportional penetration for d
 
     assert.equal(result.report.formulaDamage, example.expected);
   }
+});
+
+test("damage pipeline: resistance contributions are clamped before fixed and proportional penetration", () => {
+  const resources = new CombatResources();
+  const resistance = resources.registerEffect(program("resistance"), {
+    contributions: {
+      resistance: () => [createNumericContribution({ finalAddition: 70 })],
+    },
+  });
+  const target = attach(resources, unit(2, { resistance: 80 }), resistance, 21);
+  const result = resolveDamage(
+    workFor(unit(1), target),
+    request(1000, {
+      damageType: "ARTS",
+      operands: {
+        ...createDamageOperands(1000),
+        fixedPenetration: 10,
+        proportionalPenetration: 0.5,
+      },
+    }),
+    resources,
+  );
+
+  assert.equal(result.report.formulaDamage, 550);
+  assert.equal(result.report.hpLoss, 550);
+  assert.equal(getCombatUnit(result.work, 2).vitality.hp, 4450);
+  assert.equal(getCombatUnit(result.work, 2).definition.defense.resistance, 80);
+  assert.equal(getCombatUnit(result.work, 2).defense.resistance, target.defense.resistance);
 });
 
 test("damage pipeline: a 500 barrier before doubling takes 400 HP, while doubling before the barrier takes 900", () => {

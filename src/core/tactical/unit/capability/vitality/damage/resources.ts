@@ -23,7 +23,6 @@ export interface DamageResourceServices extends EffectTransitionResources {
     readonly effectSources: EffectSourceResources;
     readonly damage: DamageResources;
     readonly defense: NumericContributionProvider<NumericProviderFacts>;
-    readonly vitality: NumericContributionProvider<NumericProviderFacts>;
     readonly settleDamage: DamageOperation;
     readonly settleHealing: HealingOperation;
 }
