@@ -4,6 +4,7 @@ import type { BattleExecutionState } from "./state.js";
 import type { Unit, UnitId } from "../../unit/unit.js";
 import type { CombatTargetingView } from "../../unit/targeting/query.js";
 import type { MechanismId, MechanismRuntime, MechanismView } from "../../battlefield/mechanism.js";
+import { deriveEffectLifetimeProjection } from "../../unit/capability/effects/lifetime-index.js";
 
 const emptyMechanismView: MechanismView = Object.freeze({
     mechanismIds: [],
@@ -149,7 +150,7 @@ export function updateCombatUnit(work: CombatWork, unit: Unit): CombatWork {
         removals = nextRemovals;
     }
 
-    return {
+    const next: CombatWork = {
         ...work,
         units,
         removals,
@@ -158,6 +159,9 @@ export function updateCombatUnit(work: CombatWork, unit: Unit): CombatWork {
                 ? [...work.lifecycleResults, { type: "CREATED", unit }]
                 : work.lifecycleResults,
     };
+    deriveEffectLifetimeProjection(work, next, current, unit);
+
+    return next;
 }
 
 export function registerCombatUnit(work: CombatWork, unit: Unit): CombatWork {
@@ -213,12 +217,15 @@ export function removeCombatUnit(
         removals = nextRemovals;
     }
 
-    return {
+    const next: CombatWork = {
         ...work,
         units,
         removals,
         lifecycleResults: [...work.lifecycleResults, { type: "REMOVED", unit, reason }],
     };
+    deriveEffectLifetimeProjection(work, next, unit, undefined);
+
+    return next;
 }
 
 export function appendCombatEvents(work: CombatWork, events: readonly BattleEvent[]): CombatWork {

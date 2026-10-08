@@ -21,6 +21,11 @@ import { effectFacts, getEffect } from "./query.js";
 import { EffectDispatchScope } from "./dispatch.js";
 import type { EffectProgramRef } from "./program.js";
 import { updateEffectState } from "./transition.js";
+import {
+    effectAddressesOwnedByExecution,
+    effectAddressesOwnedByUnit,
+    effectChildAddresses,
+} from "./lifetime-index.js";
 
 function sameAddress(left: EffectAddress | null, right: EffectAddress): boolean {
     return left !== null && left.unitId === right.unitId && left.instanceId === right.instanceId;
@@ -284,7 +289,7 @@ function finishInScope(
         );
     }
 
-    const children = addressesMatching(work, (value) => sameAddress(value.parent, address));
+    const children = effectChildAddresses(work, address);
 
     for (const child of children) {
         work = finishInScope(work, child, resources, tick, scope);
@@ -662,7 +667,7 @@ export function finishEffectsOwnedByUnit(
     dispatch?: EffectDispatchScope,
 ): CombatWork {
     const scope = dispatch ?? new EffectDispatchScope();
-    const addresses = addressesMatching(work, (instance) => instance.scope?.unitId === ownerUnitId);
+    const addresses = effectAddressesOwnedByUnit(work, ownerUnitId);
 
     for (const address of addresses) {
         work = finishInScope(work, address, resources, tick, scope);
@@ -680,13 +685,7 @@ export function finishEffectsOwnedByExecution(
     dispatch?: EffectDispatchScope,
 ): CombatWork {
     const scope = dispatch ?? new EffectDispatchScope();
-    const addresses = addressesMatching(
-        work,
-        (instance) =>
-            instance.scope?.type === "EXECUTION" &&
-            instance.scope.unitId === ownerUnitId &&
-            instance.scope.executionId === executionId,
-    );
+    const addresses = effectAddressesOwnedByExecution(work, ownerUnitId, executionId);
 
     for (const address of addresses) {
         work = finishInScope(work, address, resources, tick, scope);
@@ -720,7 +719,7 @@ export function removeEffectsOwnedByUnit(
     dispatch?: EffectDispatchScope,
 ): CombatWork {
     const scope = dispatch ?? new EffectDispatchScope();
-    const addresses = addressesMatching(work, (instance) => instance.scope?.unitId === ownerUnitId);
+    const addresses = effectAddressesOwnedByUnit(work, ownerUnitId);
 
     for (const address of addresses) {
         work = finishInScope(work, address, resources, tick, scope);
