@@ -4,7 +4,7 @@ import { effectFacts, getEffect } from "../../effects/query.js";
 import { finalizeFinishedEffects } from "../../effects/lifecycle.js";
 import type { EffectAddress } from "../../effects/instance.js";
 import { hasVitality, resolveVitalityMaxHp, type VitalUnit } from "../capability.js";
-import type { UnitId } from "../../../unit.js";
+import { stabilizeUnit, type StableUnit, type UnitId } from "../../../unit.js";
 import { resolveMaxHp } from "../query.js";
 import { withVitalityHookContext } from "../hook.js";
 import { assertNonnegativeNumber } from "../../../../../common/assert.js";
@@ -191,23 +191,24 @@ function targetCancellation(work: CombatWork, targetUnitId: UnitId): HealingCanc
 }
 
 function applyHealingValue<U extends VitalUnit>(
-    unit: U,
+    unit: U | StableUnit<U>,
     power: number,
     maxHp: number,
 ): HealingResult<U> {
     const amount = Math.max(0, Math.min(power, maxHp - unit.vitality.hp));
 
     return {
-        unit:
+        unit: stabilizeUnit<U>(
             amount === 0
                 ? unit
                 : { ...unit, vitality: { ...unit.vitality, hp: unit.vitality.hp + amount } },
+        ),
         amount,
     };
 }
 
 export function healUnit<U extends VitalUnit>(
-    unit: U,
+    unit: U | StableUnit<U>,
     power: number,
     ignoreHealFree = false,
     maxHp = resolveVitalityMaxHp(unit.definition.vitality, unit.vitality),
@@ -216,10 +217,10 @@ export function healUnit<U extends VitalUnit>(
     assertNonnegativeNumber(maxHp, "healing maximum HP");
 
     if (unit.vitality.hp <= 0 || (!ignoreHealFree && hasStatusFlag(unit, "HEAL_FREE"))) {
-        return { unit, amount: 0 };
+        return { unit: stabilizeUnit<U>(unit), amount: 0 };
     }
 
-    return applyHealingValue(unit, power, maxHp);
+    return applyHealingValue<U>(unit, power, maxHp);
 }
 
 export function resolveHealing(

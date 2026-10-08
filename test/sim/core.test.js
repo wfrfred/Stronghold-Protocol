@@ -796,6 +796,7 @@ import type { ProjectileResources } from ${sourceModule('../battlefield/projecti
 import type { Occupancy, OccupancyState } from ${sourceModule('capability/occupancy')};
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
 type Assert<T extends true> = T;
+type RequiredKeys<T> = { [K in keyof T]-?: {} extends Pick<T, K> ? never : K }[keyof T];
 interface EnemyProbe extends EnemyDefinition { readonly kind: 'enemy'; readonly enemyCode: 17; }
 interface DeviceProbe extends UnitDefinition { readonly kind: 'device'; readonly deviceCode: 29; }
 interface OptionalProbe extends UnitDefinition { readonly vitality?: VitalityDefinition; }
@@ -827,8 +828,8 @@ declare const placement: { readonly definition: EnemyProbe; readonly position: r
   try {
     const positive = compile('positive', `
 type Distributed = Assert<Equal<InitializedUnit<EnemyProbe | DeviceProbe>, InitializedUnit<EnemyProbe> | InitializedUnit<DeviceProbe>>>;
-type OptionalIsBase = Assert<Equal<keyof InitializedUnit<OptionalProbe>, keyof Unit>>;
-type WideIsBase = Assert<Equal<keyof InitializedUnit<UnitDefinition>, keyof Unit>>;
+type OptionalHasNoRequiredCapabilities = Assert<Equal<RequiredKeys<InitializedUnit<OptionalProbe>>, 'id' | 'definition' | 'position'>>;
+type WideHasNoRequiredCapabilities = Assert<Equal<RequiredKeys<InitializedUnit<UnitDefinition>>, 'id' | 'definition' | 'position'>>;
 function initializeGeneric<D extends EnemyDefinition>(definition: D): InitializedUnit<D> {
   return initializeUnit({ id: 0, definition, position: [0, 0] });
 }
@@ -859,12 +860,14 @@ else { const code: 29 = union.definition.deviceCode; }
 const prepared = initializeUnit({ id: 3, definition: enemyDefinition, position: [0, 0],
   states: { locomotion: routed, spatialPresence: { present: false } } });
 type PreparedDefinition = Assert<Equal<typeof prepared.definition, ImmutableData<EnemyProbe>>>;
-type PreparedLocomotion = Assert<Equal<typeof prepared.locomotion, RoutedLocomotionState>>;
+type PreparedLocomotion = Assert<typeof prepared.locomotion extends RoutedLocomotionState ? true : false>;
+type PreparedLocomotionShape = Assert<RoutedLocomotionState extends typeof prepared.locomotion ? true : false>;
 prepared.locomotion.mainRoute.route.definition;
 prepared.spatialPresence.present;
 declare const optionalStates: Partial<{ locomotion: RoutedLocomotionState }>;
 const optionalPrepared = initializeUnit({ id: 4, definition: enemyDefinition, position: [0, 0], states: optionalStates });
-type OptionalPreparedLocomotion = Assert<Equal<typeof optionalPrepared.locomotion, LocomotionState>>;
+type OptionalPreparedLocomotion = Assert<typeof optionalPrepared.locomotion extends LocomotionState ? true : false>;
+type OptionalPreparedLocomotionShape = Assert<LocomotionState extends typeof optionalPrepared.locomotion ? true : false>;
 optionalPrepared.locomotion.moving;
 declare const guarded: Unit<EnemyProbe> & { readonly extra: 23 };
 if (hasVitality(guarded)) {
@@ -909,7 +912,7 @@ type ProjectileVoid = Assert<Equal<typeof projectileVoid.result, undefined>>;
       ['mutable-definition', `initializeUnit({ id: 1, definition: { id: 'mutable', vitality: { maxHp: 10 } }, position: [0, 0] }).definition.vitality.maxHp = 99;`],
       ['unconfigured', `initializeUnit({ id: 1, definition: { id: 'bare' }, position: [0, 0], states: { locomotion: routed } });`],
       ['optional', `declare const optionalDefinition: OptionalProbe; initializeUnit({ id: 1, definition: optionalDefinition, position: [0, 0] }).vitality.hp;`],
-      ['wide', `declare const wideDefinition: UnitDefinition; initializeUnit({ id: 1, definition: wideDefinition, position: [0, 0] }).locomotion;`],
+      ['wide', `declare const wideDefinition: UnitDefinition; initializeUnit({ id: 1, definition: wideDefinition, position: [0, 0] }).locomotion.moving;`],
       ['optional-refinement', `declare const optionalStates: Partial<{ locomotion: RoutedLocomotionState }>; initializeUnit({ id: 1, definition: enemyDefinition, position: [0, 0], states: optionalStates }).locomotion.mainRoute;`],
       ['optional-normalized-occupancy', `declare const optionalPlacement: UnitPlacementDefinition<EnemyProbe>; instantiateUnitPlacement(createUnitPlacementDefinition(optionalPlacement), execution, 0).unit.occupancy.claims;`],
       ['normalized-union-occupancy', `instantiateUnitPlacement(createUnitPlacementDefinition(placement), execution, 0).unit.occupancy.claims;`],

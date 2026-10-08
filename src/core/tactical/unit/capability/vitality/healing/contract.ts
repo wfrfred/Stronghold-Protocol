@@ -1,4 +1,4 @@
-import type { UnitId } from "../../../unit.js";
+import type { StableUnit, UnitId } from "../../../unit.js";
 import type { CombatWork } from "../../../../battle/execution/work.js";
 import type { VitalUnit } from "../capability.js";
 
@@ -32,6 +32,6 @@ export interface HealingResolution {
 }
 
 export interface HealingResult<U extends VitalUnit> {
-    readonly unit: U;
+    readonly unit: StableUnit<U>;
     readonly amount: number;
 }

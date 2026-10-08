@@ -1,4 +1,4 @@
-import type { EffectInstance, EffectInstanceValue } from "./instance.js";
+import type { EffectInstanceValue } from "./instance.js";
 import {
     registerNumericContribution,
     removeNumericContributionsOwnedBy,
@@ -17,24 +17,26 @@ import type {
     NumericProjectionTarget,
     NumericProviderFacts,
 } from "../contribution.js";
-import type { Unit } from "../../unit.js";
-
-export interface EffectContributionProjection<S extends object> {
-    readonly id: string;
-    readonly target: NumericProjectionTarget;
-    readonly project: (instance: EffectInstance<S>) => readonly NumericContribution[];
-    readonly group?: NumericContributionGroup;
-}
+import { stabilizeUnit, type StableUnit, type Unit } from "../../unit.js";
 
 export interface CompiledEffectContribution {
-    readonly install: <U extends Unit>(unit: U, instance: EffectInstanceValue) => U;
-    readonly update: <U extends Unit>(unit: U, instance: EffectInstanceValue) => U;
+    readonly install: <U extends Unit>(
+        unit: U | StableUnit<U>,
+        instance: EffectInstanceValue,
+    ) => StableUnit<U>;
+    readonly update: <U extends Unit>(
+        unit: U | StableUnit<U>,
+        instance: EffectInstanceValue,
+    ) => StableUnit<U>;
     readonly setParticipation: <U extends Unit>(
-        unit: U,
+        unit: U | StableUnit<U>,
         instance: EffectInstanceValue,
         participating: boolean,
-    ) => U;
-    readonly remove: <U extends Unit>(unit: U, instance: EffectInstanceValue) => U;
+    ) => StableUnit<U>;
+    readonly remove: <U extends Unit>(
+        unit: U | StableUnit<U>,
+        instance: EffectInstanceValue,
+    ) => StableUnit<U>;
 }
 
 interface ContributionBinding<T extends NumericProjectionTarget = NumericProjectionTarget> {
@@ -109,7 +111,7 @@ export function compileNumericProviderBinding(
                     providerRef,
                 }),
             ),
-        update: (unit) => unit,
+        update: stabilizeUnit,
         setParticipation: participationBinding(owned),
         remove: removeBinding(owned),
     };

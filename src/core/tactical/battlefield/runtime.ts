@@ -3,7 +3,7 @@ import { createNavigationFieldCache, type NavigationFieldCache } from "./navigat
 import type { NavigationMaps } from "./navigation/map.js";
 import type { OccupancySlot } from "../unit/capability/occupancy.js";
 import { copyUnitSnapshot } from "../unit/snapshot.js";
-import type { Unit, UnitId } from "../unit/unit.js";
+import type { StableUnit, Unit, UnitId } from "../unit/unit.js";
 import { blockingUsedCapacity, type BlockingRelation } from "./blocking/relations.js";
 import { applyBattlefieldChanges, ownBattlefieldChanges } from "./storage/changes.js";
 import type {
@@ -39,16 +39,19 @@ interface BattlefieldResources<U extends Unit> {
     readonly map: BattlefieldMap;
     readonly baseline: NavigationMaps;
     readonly fieldCache: NavigationFieldCache;
-    readonly copyUnit: (unit: Readonly<U>) => U;
+    readonly copyUnit: (unit: Readonly<StableUnit<U>>) => StableUnit<U>;
 }
 
 export class BattlefieldRuntime<U extends Unit = Unit> {
     readonly #resources: BattlefieldResources<U>;
-    readonly #view: BattlefieldView<U>;
-    #state: BattlefieldState<U>;
+    readonly #view: BattlefieldView<StableUnit<U>>;
+    #state: BattlefieldState<StableUnit<U>>;
     #transactionActive = false;
 
-    private constructor(resources: BattlefieldResources<U>, state: BattlefieldState<U>) {
+    private constructor(
+        resources: BattlefieldResources<U>,
+        state: BattlefieldState<StableUnit<U>>,
+    ) {
         this.#resources = resources;
         this.#state = state;
 
@@ -89,16 +92,16 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
 
     static create<U extends Unit>(
         options: BattlefieldRuntimeOptions,
-        copyUnit: (unit: Readonly<U>) => U,
+        copyUnit: (unit: Readonly<StableUnit<U>>) => StableUnit<U>,
     ): BattlefieldRuntime<U> {
         const baseline = Object.freeze({
             WALK: projectStaticNavigationMap(options.map, "WALK", 0),
             FLY: projectStaticNavigationMap(options.map, "FLY", 0),
         });
 
-        return new BattlefieldRuntime(
+        return new BattlefieldRuntime<U>(
             { map: options.map, baseline, copyUnit, fieldCache: createNavigationFieldCache() },
-            createBattlefieldState<U>(options.map, baseline),
+            createBattlefieldState<StableUnit<U>>(options.map, baseline),
         );
     }
 
@@ -110,7 +113,7 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
         return this.#resources.map;
     }
 
-    get view(): BattlefieldView<U> {
+    get view(): BattlefieldView<StableUnit<U>> {
         return this.#view;
     }
 
@@ -174,7 +177,7 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
         return [...this.#state.effects.keys()];
     }
 
-    getUnit(id: UnitId): U | undefined {
+    getUnit(id: UnitId): StableUnit<U> | undefined {
         const unit = this.#state.units.get(id);
 
         return unit === undefined ? undefined : this.#resources.copyUnit(unit);
@@ -192,11 +195,11 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
         return effect === undefined ? undefined : copyNavigationSpatialEffect(effect);
     }
 
-    unitsAt(position: TilePosition): readonly U[] {
+    unitsAt(position: TilePosition): readonly StableUnit<U>[] {
         return this.#unitsAt(position).map((unit) => this.#resources.copyUnit(unit));
     }
 
-    #unitsAt(position: TilePosition): readonly U[] {
+    #unitsAt(position: TilePosition): readonly StableUnit<U>[] {
         const key = battlefieldTileKey(this.map, position);
         const ids = key === undefined ? undefined : this.#state.spatial.unitsByTile.get(key);
 
@@ -237,10 +240,12 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
         }
     }
 
-    apply(changes: readonly BattlefieldChange<U>[]): BattlefieldChangeResult<U> {
+    apply(
+        changes: readonly BattlefieldChange<StableUnit<U>>[],
+    ): BattlefieldChangeResult<StableUnit<U>> {
         const owned = ownBattlefieldChanges(changes, this.#resources.copyUnit);
         const prepared = this.#prepare(owned);
-        const result: BattlefieldChangeResult<U> = {
+        const result: BattlefieldChangeResult<StableUnit<U>> = {
             ...prepared.facts,
             removedUnits: prepared.facts.removedUnits.map((removed) => ({
                 ...removed,
@@ -254,16 +259,18 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
         return result;
     }
 
-    commit(changes: readonly BattlefieldChange<U>[]): BattlefieldChangeResult<U> {
+    commit(
+        changes: readonly BattlefieldChange<StableUnit<U>>[],
+    ): BattlefieldChangeResult<StableUnit<U>> {
         const prepared = this.#prepare(changes);
         this.#state = prepared.state;
 
         return prepared.facts;
     }
 
-    #prepare(changes: readonly BattlefieldChange<U>[]) {
-        const applied = applyBattlefieldChanges(this.#state, changes);
-        const settled = settleBattlefieldState(
+    #prepare(changes: readonly BattlefieldChange<StableUnit<U>>[]) {
+        const applied = applyBattlefieldChanges<U>(this.#state, changes);
+        const settled = settleBattlefieldState<U>(
             this.map,
             this.#resources.baseline,
             this.#state,
@@ -278,12 +285,12 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
 export function createBattlefieldRuntime(options: BattlefieldRuntimeOptions): Battlefield;
 export function createBattlefieldRuntime<U extends Unit>(
     options: BattlefieldRuntimeOptions,
-    copyUnit: (unit: Readonly<U>) => U,
-): Battlefield<U>;
+    copyUnit: (unit: Readonly<StableUnit<U>>) => StableUnit<U>,
+): Battlefield<StableUnit<U>>;
 export function createBattlefieldRuntime<U extends Unit>(
     options: BattlefieldRuntimeOptions,
-    copyUnit?: (unit: Readonly<U>) => U,
-): Battlefield | Battlefield<U> {
+    copyUnit?: (unit: Readonly<StableUnit<U>>) => StableUnit<U>,
+): Battlefield | Battlefield<StableUnit<U>> {
     return copyUnit === undefined
         ? BattlefieldRuntime.create<Unit>(options, copyUnitSnapshot)
         : BattlefieldRuntime.create<U>(options, copyUnit);

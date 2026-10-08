@@ -1,6 +1,6 @@
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import { createWorldPosition } from "../../geometry/coordinate.js";
-import type { Unit, UnitId } from "../../unit/unit.js";
+import type { StableUnit, Unit, UnitId } from "../../unit/unit.js";
 import {
     assertUnitCapabilityComposition,
     assertUnitCapabilityPairing,
@@ -102,15 +102,19 @@ function copyOnWriteMap<K, V>(source: ReadonlyMap<K, V>) {
 }
 
 export function applyBattlefieldChanges<U extends Unit>(
-    previous: BattlefieldContent<U>,
-    changes: readonly BattlefieldChange<U>[],
+    previous: BattlefieldContent<StableUnit<U>>,
+    changes: readonly BattlefieldChange<StableUnit<U>>[],
 ) {
     const units = copyOnWriteMap(previous.units);
     let blockingRelations = previous.blockingRelations;
     let supportRelations = previous.supportRelations;
     const mechanisms = copyOnWriteMap(previous.mechanisms);
     const effects = copyOnWriteMap(previous.effects);
-    const removedUnits: { unitId: UnitId; reason: BattlefieldRemovalReason; unit: U }[] = [];
+    const removedUnits: {
+        unitId: UnitId;
+        reason: BattlefieldRemovalReason;
+        unit: StableUnit<U>;
+    }[] = [];
     const registeredUnitIds: UnitId[] = [];
     const removedMechanisms: { mechanismId: MechanismId; reason: BattlefieldRemovalReason }[] = [];
     const removedEffects = new Set<SpatialEffectId>();

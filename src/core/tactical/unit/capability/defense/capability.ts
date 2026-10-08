@@ -8,7 +8,7 @@ import {
     type NumericContributionTransition,
 } from "../../../modifier/contribution.js";
 import { resolveNumericValue } from "../../../modifier/numeric.js";
-import type { Unit, UnitDefinition } from "../../unit.js";
+import { stabilizeUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
 
 export interface DefenseDefinition {
     readonly defense: number;
@@ -77,9 +77,11 @@ export function updateDefenseContributions(
 }
 
 export function defenseContributions<U extends Unit>(
-    unit: U,
+    input: U | StableUnit<U>,
     transition: NumericContributionTransition,
-): U {
+): StableUnit<U> {
+    const unit = stabilizeUnit<U>(input);
+
     if (!hasDefense(unit)) {
         throw new TypeError("defense contributions require Defense capability");
     }
@@ -90,9 +92,11 @@ export function defenseContributions<U extends Unit>(
 }
 
 export function resistanceContributions<U extends Unit>(
-    unit: U,
+    input: U | StableUnit<U>,
     transition: NumericContributionTransition,
-): U {
+): StableUnit<U> {
+    const unit = stabilizeUnit<U>(input);
+
     if (!hasDefense(unit)) {
         throw new TypeError("resistance contributions require Defense capability");
     }

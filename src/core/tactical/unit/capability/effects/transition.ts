@@ -1,5 +1,5 @@
 import { transitionCombatUnit, type CombatWork } from "../../../battle/execution/work.js";
-import type { Unit, UnitId } from "../../unit.js";
+import { stabilizeUnit, type StableUnit, type Unit, type UnitId } from "../../unit.js";
 import { hasEffects } from "./capability.js";
 import { replaceEffectInstance } from "./internal/state.js";
 import type { EffectProgramRef } from "./program.js";
@@ -10,18 +10,18 @@ import type { EffectContributionBindings } from "./resources.js";
 import { coordinateVitalityMaxHp } from "../vitality/max-hp.js";
 
 export function transitionEffectBindings<U extends Unit>(
-    unit: U,
+    unit: U | StableUnit<U>,
     instance: EffectInstanceValue,
     resources: EffectContributionBindings,
-    apply: (binding: CompiledEffectContribution, current: U) => U,
-): U {
-    let current = unit;
+    apply: (binding: CompiledEffectContribution, current: StableUnit<U>) => StableUnit<U>,
+): StableUnit<U> {
+    let current = stabilizeUnit<U>(unit);
 
     for (const binding of resources.get(instance)) {
         current = apply(binding, current);
     }
 
-    return coordinateVitalityMaxHp(unit, current);
+    return coordinateVitalityMaxHp<U>(unit, current);
 }
 
 export function updateEffectState<S extends object>(

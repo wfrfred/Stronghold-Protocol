@@ -2,6 +2,7 @@ import type { Seed } from "../core/common/rng.js";
 import type { NavigationRequestId } from "../core/tactical/battlefield/navigation/request.js";
 import type { NavigationOutcome } from "../core/tactical/battlefield/navigation/state.js";
 import type { EnemyDefinition, RoutedEnemy } from "../core/tactical/unit/archetype/enemy.js";
+import type { StableUnit } from "../core/tactical/unit/unit.js";
 import type { LocatedRouteSignal } from "../core/tactical/unit/capability/locomotion/route-control.js";
 import {
     stepRoutedUnit,
@@ -11,7 +12,7 @@ import {
 export type RoutedEnemyStepContext = RoutedLocomotionStepContext;
 
 export interface RoutedEnemyStep<D extends EnemyDefinition = EnemyDefinition> {
-    readonly enemy: RoutedEnemy<D>;
+    readonly enemy: StableUnit<RoutedEnemy<D>>;
     readonly signals: readonly LocatedRouteSignal[];
     readonly rngState: Seed;
     readonly nextNavigationRequestId: NavigationRequestId;
@@ -19,10 +20,10 @@ export interface RoutedEnemyStep<D extends EnemyDefinition = EnemyDefinition> {
 }
 
 export function stepRoutedEnemy<D extends EnemyDefinition>(
-    enemy: RoutedEnemy<D>,
+    enemy: RoutedEnemy<D> | StableUnit<RoutedEnemy<D>>,
     context: RoutedEnemyStepContext,
 ): RoutedEnemyStep<D> {
-    const step = stepRoutedUnit(enemy, context);
+    const step = stepRoutedUnit<RoutedEnemy<D>>(enemy, context);
 
     return {
         enemy: step.unit,

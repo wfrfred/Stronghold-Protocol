@@ -1,7 +1,12 @@
-import type { Unit } from "../../unit.js";
+import { stabilizeUnit, type StableUnit, type Unit } from "../../unit.js";
 import { hasVitality, resolveVitalityMaxHp } from "./capability.js";
 
-export function coordinateVitalityMaxHp<U extends Unit>(previous: U, updated: U): U {
+export function coordinateVitalityMaxHp<U extends Unit>(
+    previous: U | StableUnit<U>,
+    input: U | StableUnit<U>,
+): StableUnit<U> {
+    const updated = stabilizeUnit<U>(input);
+
     if (
         previous === updated ||
         !hasVitality(previous) ||

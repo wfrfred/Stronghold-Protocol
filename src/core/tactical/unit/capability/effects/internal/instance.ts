@@ -122,7 +122,11 @@ export function copyEffectInstance(instance: EffectInstanceValue): EffectInstanc
 export function withEffectLifecycle<I extends EffectInstanceValue>(
     instance: I,
     facts: Partial<EffectLifecycleFacts>,
-): I {
+): I extends unknown ? Omit<I, keyof EffectLifecycleFacts> & EffectLifecycleFacts : never;
+export function withEffectLifecycle(
+    instance: EffectInstanceValue,
+    facts: Partial<EffectLifecycleFacts>,
+): EffectInstanceValue {
     const updated = Object.freeze({ ...instance, ...facts });
     ownedInstances.add(updated);
 

@@ -1,6 +1,6 @@
 import { hasDefenseDefinition, type DefenseDefinition } from "../../defense/capability.js";
 import { hasVitality, type Vitality } from "../capability.js";
-import type { Unit } from "../../../unit.js";
+import { stabilizeUnit, type StableUnit, type Unit } from "../../../unit.js";
 import { hasStatusFlag } from "../../status/capability.js";
 import { resolveDefense } from "../../defense/query.js";
 import { assertFiniteNumber, assertNonnegativeNumber } from "../../../../../common/assert.js";
@@ -32,7 +32,7 @@ import {
 const NO_DEFENSE: DefenseDefinition = Object.freeze({ defense: 0, resistance: 0 });
 
 export interface DamageResult<U extends Unit & Vitality> {
-    readonly unit: U;
+    readonly unit: StableUnit<U>;
     readonly amount: number;
     readonly killed: boolean;
 }
@@ -55,7 +55,7 @@ export function calculateDamage(
 }
 
 export function damageUnit<U extends Unit & Vitality>(
-    unit: U,
+    unit: U | StableUnit<U>,
     power: number,
     damageType: DamageType,
 ): DamageResult<U> {
@@ -73,7 +73,9 @@ export function damageUnit<U extends Unit & Vitality>(
     const amount = unit.vitality.hp - hp;
 
     return {
-        unit: amount === 0 ? unit : { ...unit, vitality: { ...unit.vitality, hp } },
+        unit: stabilizeUnit<U>(
+            amount === 0 ? unit : { ...unit, vitality: { ...unit.vitality, hp } },
+        ),
         amount,
         killed: unit.vitality.hp > 0 && hp === 0,
     };

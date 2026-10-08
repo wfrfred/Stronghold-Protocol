@@ -47,6 +47,7 @@ import type {
     RoutedLocomotionState,
 } from "./capability.js";
 import { integrateSteeringDirection } from "./steering.js";
+import { stabilizeUnit, type StableUnit } from "../../unit.js";
 
 export interface RoutedLocomotionStepContext {
     readonly tick: number;
@@ -72,7 +73,7 @@ export interface RoutedLocomotionStep {
 }
 
 export interface RoutedUnitStep<U extends RoutedLocomotiveUnit = RoutedLocomotiveUnit> {
-    readonly unit: U;
+    readonly unit: StableUnit<U>;
     readonly signals: readonly LocatedRouteSignal[];
     readonly rngState: Seed;
     readonly nextNavigationRequestId: NavigationRequestId;
@@ -80,9 +81,14 @@ export interface RoutedUnitStep<U extends RoutedLocomotiveUnit = RoutedLocomotiv
 }
 
 export function stepRoutedUnit<U extends RoutedLocomotiveUnit>(
-    unit: U,
+    input: U | StableUnit<U>,
     context: RoutedLocomotionStepContext,
-): RoutedUnitStep<U> {
+): RoutedUnitStep<U>;
+export function stepRoutedUnit(
+    input: RoutedLocomotiveUnit,
+    context: RoutedLocomotionStepContext,
+): RoutedUnitStep {
+    const unit = stabilizeUnit(input);
     const step = stepRoutedLocomotion(
         unit.locomotion,
         unit.position,

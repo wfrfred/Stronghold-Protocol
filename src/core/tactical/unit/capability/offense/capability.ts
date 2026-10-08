@@ -8,7 +8,7 @@ import {
     type NumericContributionTransition,
 } from "../../../modifier/contribution.js";
 import { resolveNumericValue } from "../../../modifier/numeric.js";
-import type { Unit, UnitDefinition } from "../../unit.js";
+import { stabilizeUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
 
 export interface OffenseDefinition {
     readonly attack: number;
@@ -62,9 +62,11 @@ export function updateOffenseContributions(
 }
 
 export function offenseAttackContributions<U extends Unit>(
-    unit: U,
+    input: U | StableUnit<U>,
     transition: NumericContributionTransition,
-): U {
+): StableUnit<U> {
+    const unit = stabilizeUnit<U>(input);
+
     if (!hasOffense(unit)) {
         throw new TypeError("attack contributions require Offense capability");
     }
