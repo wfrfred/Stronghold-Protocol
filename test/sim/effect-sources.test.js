@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import {
     combatWorkView,
+    combatWorkChanges,
     createCombatWork,
     getCombatMechanism,
     getCombatUnit,
@@ -96,6 +97,31 @@ function fixtureWork(source, units = [unit(1), unit(2)]) {
 
 function attack(work, resources, id) {
     return resolveAttackPower(id, combatWorkView(work), resources.offense);
+}
+
+function observeMechanismCopies(work, run) {
+    const NativeMap = globalThis.Map;
+    const mechanismMaps = new WeakSet([work.mechanisms]);
+    let currentMechanisms = work.mechanisms;
+    let copies = 0;
+    class ObservedMap extends NativeMap {
+        constructor(entries) {
+            super(entries);
+            if (entries !== undefined && mechanismMaps.has(entries)) {
+                mechanismMaps.add(this);
+                currentMechanisms = this;
+                copies++;
+            }
+        }
+    }
+    try {
+        globalThis.Map = ObservedMap;
+        const result = run(() => currentMechanisms);
+
+        return { result, copies };
+    } finally {
+        globalThis.Map = NativeMap;
+    }
 }
 
 test("effect sources: inactive registration is retained and participation keeps sampled receiver instances", () => {
@@ -339,9 +365,11 @@ test("effect sources: clearing many absent receivers preserves the input branch 
         }),
     };
     const initial = fixtureWork(registered, []);
-    const work = reconcileEffectSources(initial, resources, 0);
+    const observed = observeMechanismCopies(initial, () => reconcileEffectSources(initial, resources, 0));
+    const work = observed.result;
     const completed = getCombatMechanism(work, 20);
 
+    assert.equal(observed.copies, 1);
     assert.equal(completed.effectSource.receivers.length, 512);
     assert.equal(completed.effectSource.receivers.every(binding => binding.address === null && binding.installationAttempts === 2), true);
     assert.deepEqual(getCombatMechanism(initial, 20).effectSource.receivers, registered.effectSource.receivers);
@@ -376,4 +404,107 @@ test("effect sources: preserved binding order is unchanged until a new receiver 
 
     assert.deepEqual(getCombatMechanism(work, 20).effectSource.receivers.map(binding => binding.unitId), [0, 1, 2, 3]);
     assert.deepEqual(installedOrder, [3, 1, 2, 0]);
+});
+
+test("effect sources: flushes publish attempts before lifecycle work and preserve nested facts on retry", () => {
+    const resources = new CombatResources();
+    const fault = { enabled: true };
+    const borrowed = [];
+    const prefixes = [];
+    const published = [];
+    let readMechanisms;
+    const marker = receiverEffect(resources, "nested-buffer-marker", {
+        lifecycle: {
+            start: context => {
+                context.effects.update(context.address, marker.ref, state => ({ ...state, addition: 77 }));
+            },
+        },
+    });
+    const receiver = receiverEffect(resources, "buffered-installation", {
+        lifecycle: {
+            start: context => {
+                borrowed.push(context);
+                const nested = context.effects.install(3, marker.ref, {
+                    source: null,
+                    scope: null,
+                    expiresAtTick: null,
+                });
+                assert.equal(nested.type, "INSTALLED");
+                assert.equal(context.facts.getEffect(nested.address).state.addition, 77);
+                context.effects.update(context.address, receiver.ref, state => ({ ...state, nested: nested.address }));
+                if (fault.enabled && context.address.unitId === 2) {
+                    throw new Error("buffered source install failed");
+                }
+            },
+        },
+    });
+    const { source } = sourceProgram(resources, receiver, {
+        selectInitial: () => [1, 2],
+        install: ({ source: current }) => {
+            prefixes.push(current);
+            return effectSourceInstallation(receiver.ref, { expiresAtTick: null });
+        },
+    });
+    const initial = fixtureWork(source, [unit(1), unit(2), unit(3)]);
+    const services = {
+        ...resources,
+        effectLifecycle: {
+            get: instance => {
+                const lifecycle = resources.effectLifecycle.get(instance);
+                if (instance.programRef === receiver.ref) {
+                    return {
+                        ...lifecycle,
+                        start: context => {
+                            const current = getCombatMechanism({ ...initial, mechanisms: readMechanisms() }, 20);
+                            published.push(current);
+                            assert.equal(current.effectSource.initialized, true);
+                            assert.equal(current.effectSource.receivers.find(binding => binding.unitId === context.address.unitId).installationAttempts, 1);
+                            if (context.address.unitId === 2) {
+                                assert.deepEqual(current.effectSource.receivers[0].address, { unitId: 1, instanceId: 0 });
+                            }
+                            lifecycle.start(context);
+                        },
+                    };
+                }
+
+                return lifecycle;
+            },
+        },
+    };
+    const failed = observeMechanismCopies(initial, read => {
+        readMechanisms = read;
+        assert.throws(() => reconcileEffectSources(initial, services, 0), /buffered source install failed/);
+    });
+    assert.equal(failed.copies, 2);
+    assert.equal(getCombatMechanism(initial, 20), source);
+    assert.equal(source.effectSource.initialized, false);
+    assert.deepEqual(source.effectSource.receivers, []);
+    assert.equal(initial.units.size, 0);
+    assert.equal(getCombatUnit(initial, 3).effects, undefined);
+    for (const context of borrowed) {
+        assert.throws(() => context.effects.update(context.address, receiver.ref, state => state), /no longer active/);
+    }
+
+    fault.enabled = false;
+    const retry = observeMechanismCopies(initial, read => {
+        readMechanisms = read;
+        return reconcileEffectSources(initial, services, 0);
+    });
+    const ordinary = observeMechanismCopies(initial, read => {
+        readMechanisms = read;
+        return reconcileEffectSources(initial, services, 0);
+    });
+    assert.equal(retry.copies, 3);
+    assert.equal(ordinary.copies, 3);
+    assert.deepEqual(combatWorkChanges(retry.result), combatWorkChanges(ordinary.result));
+    assert.deepEqual(getCombatUnit(retry.result, 3).effects.instances.map(instance => [instance.id, instance.state.addition]), [[0, 77], [1, 77]]);
+    assert.deepEqual([1, 2].map(id => getCombatUnit(retry.result, id).effects.instances[0].state.nested), [
+        { unitId: 3, instanceId: 0 }, { unitId: 3, instanceId: 1 },
+    ]);
+    assert.deepEqual(prefixes.map(current => current.effectSource.receivers.map(binding => binding.installationAttempts)), [
+        [0, 0], [1, 0], [0, 0], [1, 0], [0, 0], [1, 0],
+    ]);
+    assert.deepEqual(published.map(current => current.effectSource.receivers.map(binding => binding.installationAttempts)), [
+        [1, 0], [1, 1], [1, 0], [1, 1], [1, 0], [1, 1],
+    ]);
 });

@@ -58,18 +58,26 @@ function settleSource<S extends object>(
     }
 
     let work = initialWork;
+    let pendingSource: EffectSourceMechanism | undefined;
     const sourceId = initialSource.id;
     const receivers = new EffectSourceReceiverWork(initialSource.effectSource.receivers);
     let receiversChanged = false;
 
     const current = () => {
-        const source = getCombatMechanism(work, sourceId);
+        const source = pendingSource ?? getCombatMechanism(work, sourceId);
 
         if (source === undefined || !hasEffectSource(source)) {
             throw new TypeError("effect source settlement lost its mechanism");
         }
 
         return resources.effectSources.typedSource(source, program.ref)!;
+    };
+
+    const flush = () => {
+        if (pendingSource !== undefined) {
+            work = updateCombatMechanism(work, pendingSource);
+            pendingSource = undefined;
+        }
     };
 
     const context = (): EffectSourceContext<S> => ({
@@ -86,7 +94,7 @@ function settleSource<S extends object>(
                 updateEffectSourceReceiverView(source.effectSource, changes) ??
                 copyEffectSourceState({ ...source.effectSource, ...changes }),
         };
-        work = updateCombatMechanism(work, next);
+        pendingSource = next;
     };
 
     const bindingOf = (unitId: UnitId) => receivers.get(unitId);
@@ -100,7 +108,7 @@ function settleSource<S extends object>(
             ...source,
             effectSource: createEffectSourceReceiverView(source.effectSource, readReceivers),
         };
-        work = updateCombatMechanism(work, next);
+        pendingSource = next;
     };
     const finishWork = () => {
         if (receiversChanged) {
@@ -109,8 +117,10 @@ function settleSource<S extends object>(
                 ...source,
                 effectSource: copyEffectSourceState(source.effectSource),
             };
-            work = updateCombatMechanism(work, next);
+            pendingSource = next;
         }
+
+        flush();
 
         return work;
     };
@@ -150,6 +160,7 @@ function settleSource<S extends object>(
         }
 
         bind({ ...binding, installationAttempts: binding.installationAttempts + 1 });
+        flush();
 
         const installed = installNewEffect(
             work,
@@ -180,7 +191,7 @@ function settleSource<S extends object>(
         }
 
         patch({ finished: true });
-        work = updateCombatMechanism(work, { ...current(), active: false });
+        pendingSource = { ...current(), active: false };
 
         for (const unitId of receivers.ids()) {
             const binding = bindingOf(unitId)!;
@@ -190,6 +201,7 @@ function settleSource<S extends object>(
                 binding.address !== null &&
                 !(input !== undefined && (program.keepOnFinish?.(input) ?? false))
             ) {
+                flush();
                 work = finishEffect(work, binding.address, resources, tick, dispatch);
                 bind({ ...bindingOf(binding.unitId)!, address: null });
             }
@@ -247,10 +259,12 @@ function settleSource<S extends object>(
                 bind({ ...binding, address: null });
                 binding = bindingOf(binding.unitId)!;
             } else if (!selected.has(binding.unitId) && !(program.keepOnLeave?.(input) ?? false)) {
+                flush();
                 work = finishEffect(work, binding.address, resources, tick, dispatch);
                 bind({ ...bindingOf(binding.unitId)!, address: null });
                 binding = bindingOf(binding.unitId)!;
             } else if (program.followsParticipation?.(input) ?? true) {
+                flush();
                 work = setEffectParticipation(
                     work,
                     binding.address,
