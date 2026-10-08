@@ -53,8 +53,8 @@ const workFor = (...units) => {
 const value = (amount) => createNumericContribution({ finalAddition: amount });
 const metadata = (id = 0) => ({
   id,
-  sourceUnitId: null,
-  lifetimeOwner: null,
+  source: null,
+  scope: null,
   acquiredSequence: id,
   expiresAtTick: null,
 });

@@ -3,12 +3,14 @@ import { test } from 'node:test';
 import {
     appendCombatEvents,
     combatWorkChanges,
+    combatWorkEvents,
     combatWorkResult,
     combatWorkView,
     createCombatWork,
     getCombatUnit,
     removeCombatUnit,
     updateCombatUnit,
+    updateCombatUnits,
     withCombatExecution,
 } from '../../dist/core/tactical/battle/execution/work.js';
 
@@ -218,12 +220,87 @@ test('combat work: events and execution changes stay local to their pure branch'
     const executionWork = withCombatExecution(eventWork, execution);
     const finalWork = appendCombatEvents(executionWork, [secondEvent]);
 
-    assert.deepEqual(initial.events, []);
-    assert.deepEqual(eventWork.events, [firstEvent]);
-    assert.deepEqual(finalWork.events, [firstEvent, secondEvent]);
+    assert.deepEqual(combatWorkEvents(initial), []);
+    assert.deepEqual(combatWorkEvents(eventWork), [firstEvent]);
+    assert.deepEqual(combatWorkEvents(finalWork), [firstEvent, secondEvent]);
     assert.equal(eventWork.execution, initial.execution);
     assert.equal(executionWork.execution, execution);
     assert.equal(executionWork.units, initial.units);
     assert.equal(executionWork.removals, initial.removals);
     assert.equal(finalWork.execution, execution);
+});
+
+
+test('combat work: batch updates match sequential transitions and isolate existing branches', () => {
+    const first = unit(1);
+    const second = unit(2);
+    const third = unit(3);
+    const initial = createCombatWork(baseline([first, second, third]));
+    const before = removeCombatUnit(updateCombatUnit(initial, { ...first, position: [3, 4] }), 2);
+    const beforeView = combatWorkView(before);
+    const spawned = unit(8);
+    const changedSpawned = { ...spawned, position: [6, 7] };
+    const updates = [first, second, spawned, changedSpawned, third];
+    const sequential = updates.reduce(updateCombatUnit, before);
+    const batched = updateCombatUnits(before, updates);
+
+    assert.deepEqual(combatWorkResult(batched), combatWorkResult(sequential));
+    assert.deepEqual(combatWorkChanges(batched), combatWorkChanges(sequential));
+    assert.deepEqual(batched.lifecycleResults.slice(before.lifecycleResults.length), [
+        { type: 'CREATED', unit: second },
+        { type: 'CREATED', unit: spawned },
+    ]);
+    assert.equal(getCombatUnit(batched, 1), first);
+    assert.equal(getCombatUnit(batched, 2), second);
+    assert.equal(getCombatUnit(batched, 8), changedSpawned);
+    assert.equal(beforeView.getUnit(1).position[0], 3);
+    assert.equal(beforeView.getUnit(2), undefined);
+    assert.equal(beforeView.getUnit(8), undefined);
+    assert.equal(initial.units.size, 0);
+    assert.equal(initial.removals.size, 0);
+
+    const sibling = updateCombatUnits(before, [{ ...third, position: [9, 9] }]);
+    assert.equal(getCombatUnit(sibling, 8), undefined);
+    assert.equal(getCombatUnit(sibling, 3).position[0], 9);
+    assert.equal(getCombatUnit(batched, 3), third);
+});
+
+test('combat work: empty and unchanged batches retain the original work without enumerating the world', () => {
+    const first = unit(1);
+    const battlefield = {
+        ...baseline([first]),
+        get unitIds() { assert.fail('batch updates must not enumerate the world'); },
+    };
+    const initial = createCombatWork(battlefield);
+
+    assert.equal(updateCombatUnits(initial, []), initial);
+    assert.equal(updateCombatUnits(initial, [first, first]), initial);
+});
+
+test('combat work: event branches share immutable history and materialize without recursive traversal', () => {
+    const initial = createCombatWork(baseline([]));
+    const first = { type: 'ACTION', sourceUnitId: 1, targetUnitId: 2, tick: 0 };
+    const leftEvent = { ...first, tick: 1 };
+    const rightEvent = { ...first, tick: 2 };
+    const prefix = appendCombatEvents(initial, [first]);
+    const left = appendCombatEvents(prefix, [leftEvent]);
+    const right = appendCombatEvents(prefix, [rightEvent]);
+    const prefixEvents = combatWorkEvents(prefix);
+
+    assert.deepEqual(combatWorkEvents(left), [first, leftEvent]);
+    assert.deepEqual(combatWorkEvents(right), [first, rightEvent]);
+    assert.equal(combatWorkEvents(prefix), prefixEvents);
+    assert.throws(() => prefixEvents.push(rightEvent), TypeError);
+    assert.deepEqual(combatWorkResult(prefix).events, [first]);
+    assert.deepEqual(combatWorkEvents(initial), []);
+
+    let long = initial;
+    for (let tick = 0; tick < 20000; tick++) {
+        long = appendCombatEvents(long, [{ ...first, tick }]);
+    }
+    const all = combatWorkResult(long).events;
+    assert.equal(all.length, 20000);
+    assert.equal(all[0].tick, 0);
+    assert.equal(all.at(-1).tick, 19999);
+    assert.equal(combatWorkEvents(long), all);
 });

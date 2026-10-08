@@ -141,7 +141,7 @@ function spec(initialUnits, spawns) {
 function delayed(compiled, ticks, { allowNewAction = false, blockingMovement = false } = {}) {
   return {
     ...compiled,
-    process: [
+    program: [
       {
         type: "WAIT",
         allowNewAction,
@@ -149,7 +149,7 @@ function delayed(compiled, ticks, { allowNewAction = false, blockingMovement = f
         resolve: () => ({ type: "FOR_TICKS", ticks }),
       },
       { type: "RELEASE", markerId: "normal" },
-      ...compiled.program.map((run) => ({ type: "EXECUTE", run })),
+      ...compiled.program,
     ],
   };
 }
@@ -196,7 +196,7 @@ test("action runtime: delayed progress keeps ordinary same-tick order and copied
           return compiled;
         }
         const result = delayed(compiled, 2);
-        process = result.process;
+        process = result.program;
         return result;
       },
     },
@@ -371,7 +371,7 @@ test("action runtime: failed continuation publishes no progress, sample, settlem
           const compiled = delayed(compileAction(action, services), 1);
           return {
             ...compiled,
-            process: [
+            program: [
               {
                 type: "EXECUTE",
                 run: (context) => ({
@@ -380,8 +380,8 @@ test("action runtime: failed continuation publishes no progress, sample, settlem
                     0,
                     marker.ref,
                     {
-                      sourceUnitId: 0,
-                      lifetimeOwner: {
+                      source: 0,
+                      scope: {
                         type: "EXECUTION",
                         unitId: 0,
                         executionId: context.executionId,
@@ -393,7 +393,7 @@ test("action runtime: failed continuation publishes no progress, sample, settlem
                   ).work,
                 }),
               },
-              ...compiled.process,
+              ...compiled.program,
               {
                 type: "EXECUTE",
                 run: (context) => {

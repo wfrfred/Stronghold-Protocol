@@ -1,3 +1,4 @@
+import { combatWorkEvents } from "../../dist/core/tactical/battle/execution/work.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { effectFixtureWork, installFixtureEffect } from "../helpers/effects.js";
@@ -42,8 +43,8 @@ function attach(resources, owner, descriptor) {
   const instance = resources.effects.create(descriptor.ref, {
     id: owner.effects?.nextInstanceId ?? 0,
     acquiredSequence: owner.effects?.nextAcquiredSequence ?? 0,
-    sourceUnitId: null,
-    lifetimeOwner: null,
+    source: null,
+    scope: null,
     expiresAtTick: null,
   });
 
@@ -97,7 +98,7 @@ test("settlement invariants: invalid final damage rejects hook results without p
     assert.throws(() => resolveDamage(original, damageRequest(), resources), RangeError);
     assert.equal(getCombatUnit(original, 2).vitality.hp, 200);
     assert.equal(getCombatUnit(original, 2).effects.instances[0].state.uses, 0);
-    assert.deepEqual(original.events, []);
+    assert.deepEqual(combatWorkEvents(original), []);
     assert.equal(reactions, 0);
 
     malformed = false;
@@ -142,7 +143,7 @@ test("settlement invariants: invalid final healing rejects after synchronous dam
     assert.throws(() => resolveHealing(original, healingRequest(), resources, 1), RangeError);
     assert.equal(getCombatUnit(original, 2).vitality.hp, 200);
     assert.equal(getCombatUnit(original, 2).effects.instances[0].state.uses, 0);
-    assert.deepEqual(original.events, []);
+    assert.deepEqual(combatWorkEvents(original), []);
     assert.equal(reactions, 0);
 
     malformed = false;
@@ -208,7 +209,7 @@ test("settlement invariants: cancelled damage cannot publish nonfinite formula o
       const original = effectFixtureWork(source, target);
       assert.throws(() => resolveDamage(original, damageRequest(), resources), RangeError);
       assert.equal(getCombatUnit(original, 2).vitality.hp, 200);
-      assert.deepEqual(original.events, []);
+      assert.deepEqual(combatWorkEvents(original), []);
       assert.equal(reactions, 0);
       assert.equal(repaired, false);
     }
@@ -307,7 +308,7 @@ test("settlement invariants: cancelled healing still rejects a nonfinite final h
 
   assert.throws(() => resolveHealing(original, healingRequest(), resources, 1), RangeError);
   assert.equal(getCombatUnit(original, 2).vitality.hp, 200);
-  assert.deepEqual(original.events, []);
+  assert.deepEqual(combatWorkEvents(original), []);
 });
 
 test("settlement invariants: public vitality transitions cannot bypass amount validation", () => {

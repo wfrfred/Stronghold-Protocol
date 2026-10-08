@@ -29,8 +29,8 @@ const program = (id) => createEffectProgram({
 const metadata = {
   id: 0,
   acquiredSequence: 0,
-  sourceUnitId: null,
-  lifetimeOwner: null,
+  source: null,
+  scope: null,
   expiresAtTick: null,
 };
 const unit = () => initializeUnit({

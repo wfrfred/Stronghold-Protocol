@@ -55,8 +55,8 @@ function barrierProgram(id = "barrier") {
 function metadata(id = 1, overrides = {}) {
   return {
     id,
-    sourceUnitId: 7,
-    lifetimeOwner: { type: "UNIT", unitId: 9 },
+    source: 7,
+    scope: { type: "UNIT", unitId: 9 },
     acquiredSequence: id,
     expiresAtTick: null,
     ...overrides,
@@ -257,23 +257,23 @@ test("effects: installing flags requires existing Status and baseline facts surv
   assert.equal(hasStatusFlag(getCombatUnit(removed, 2), "INVINCIBLE"), true);
 });
 
-test("effects: expiration is independent of source and lifetime owner cleanup does not filter by source", () => {
+test("effects: expiration is independent of source and lifetime scope cleanup does not filter by source", () => {
   const resources = new CombatResources();
   const program = resources.registerEffect(barrierProgram(), {
     bindings: [compileStatusBinding(["HEAL_FREE"])],
   });
   let current = unit();
   const values = [
-    metadata(1, { sourceUnitId: 9, lifetimeOwner: { type: "UNIT", unitId: 7 }, expiresAtTick: 5 }),
+    metadata(1, { source: 9, scope: { type: "UNIT", unitId: 7 }, expiresAtTick: 5 }),
     metadata(2, {
-      sourceUnitId: 7,
-      lifetimeOwner: { type: "EXECUTION", unitId: 9, executionId: 10 },
+      source: 7,
+      scope: { type: "EXECUTION", unitId: 9, executionId: 10 },
     }),
     metadata(3, {
-      sourceUnitId: 7,
-      lifetimeOwner: { type: "EXECUTION", unitId: 9, executionId: 11 },
+      source: 7,
+      scope: { type: "EXECUTION", unitId: 9, executionId: 11 },
     }),
-    metadata(4, { sourceUnitId: 9, lifetimeOwner: null }),
+    metadata(4, { source: 9, scope: null }),
   ];
 
   for (const value of values) {
@@ -379,8 +379,13 @@ test("effects: start termination preserves its prefix without initializing or re
         context.effects.update({ unitId: 2, instanceId: 0 }, keeper.ref, (state) => ({
           attempts: state.attempts + 1,
         }));
-        context.effects.update(context.address, program.ref, () => ({ remainingAmount: 200 }));
+        context.effects.update(context.address, program.ref, () => ({
+          remainingAmount: 200,
+        }));
         context.effects.finish(context.address);
+        assert.equal(context.instance.finished, true);
+        assert.equal(context.instance.participating, false);
+        assert.equal(context.facts.participating(2).length, 1);
       },
       finalize: (context) => {
         finalizations.push([
@@ -482,7 +487,7 @@ test("effects: lifecycle facts and operation leases close on normal and exceptio
     } else {
       result = install();
     }
-    const input = { sourceUnitId: null, lifetimeOwner: null, expiresAtTick: null };
+    const input = { source: null, scope: null, expiresAtTick: null };
     const calls = [
       () => escaped.instance,
       () => escaped.facts.getUnit(2),
@@ -679,7 +684,11 @@ test("effects: unavailable parents end a child by default and explicit preservat
       const receiver = initializeUnit({
         id: 2,
         position: [0, 0],
-        definition: { id: "receiver", offense: { attack: 100 }, status: { initialFlags: [] } },
+        definition: {
+          id: "receiver",
+          offense: { attack: 100 },
+          status: { initialFlags: [] },
+        },
       });
       const owner = { id: 9, definition: { id: "parent-owner" }, position: [0, 0] };
       const parent = { unitId: 9, instanceId: 1 };
@@ -737,6 +746,15 @@ test("effects: finish remains terminal when disable tries to reenable and finish
     lifecycle: {
       disable: (context) => {
         disables++;
+        assert.equal(context.instance.finished, true);
+        assert.equal(context.instance.participating, false);
+        assert.equal(context.facts.getEffect(context.address), context.instance);
+        assert.equal(context.facts.getUnit(2).offense.attack.entries[0].participating, false);
+        assert.equal(hasStatusFlag(context.facts.getUnit(2), "INVINCIBLE"), false);
+        assert.deepEqual(
+          context.facts.participating(2).map((instance) => instance.id),
+          [2],
+        );
         context.effects.setParticipation(context.address, true);
         context.effects.finish(context.address);
       },
@@ -801,6 +819,155 @@ test("effects: finish remains terminal when disable tries to reenable and finish
   assert.deepEqual(getCombatUnit(finalized, 2).offense.attack.entries, []);
 });
 
+test("effects: disabling preserves restartable samples and finishing a disabled instance does not dispatch disable twice", () => {
+  const resources = new CombatResources();
+  const disabled = [];
+  let finalized = 0;
+  const descriptor = resources.registerEffect(barrierProgram("disabled-then-finished"), {
+    bindings: [compileStatusBinding(["INVINCIBLE"])],
+    contributions: {
+      contributions: [
+        {
+          id: "attack",
+          target: offenseAttackContributions,
+          project: () => [createNumericContribution({ finalAddition: 50 })],
+        },
+      ],
+    },
+    lifecycle: {
+      disable: (context) => {
+        disabled.push(context.instance.finished);
+        assert.equal(context.instance.participating, false);
+        assert.equal(context.facts.getUnit(2).offense.attack.entries[0].participating, false);
+        assert.equal(hasStatusFlag(context.facts.getUnit(2), "INVINCIBLE"), false);
+      },
+      finalize: () => {
+        finalized++;
+      },
+    },
+  });
+  const owner = initializeUnit({
+    id: 2,
+    position: [0, 0],
+    definition: { id: "receiver", offense: { attack: 100 }, status: { initialFlags: [] } },
+  });
+  const installed = installEffect(
+    effectFixtureWork(owner),
+    2,
+    resources.effects.create(descriptor.ref, metadata()),
+    resources,
+    0,
+  ).work;
+  const address = { unitId: 2, instanceId: 1 };
+  const inactive = setEffectParticipation(installed, address, false, resources, 1);
+  assert.equal(getCombatUnit(inactive, 2).effects.instances[0].finished, false);
+  assert.equal(getCombatUnit(inactive, 2).offense.attack.entries[0].values[0].finalAddition, 50);
+  const resumed = setEffectParticipation(inactive, address, true, resources, 2);
+  assert.equal(resolveAttackPower(2, combatWorkView(resumed)), 150);
+  const inactiveAgain = setEffectParticipation(resumed, address, false, resources, 3);
+  const finished = finishEffect(inactiveAgain, address, resources, 4);
+  assert.deepEqual(disabled, [false, false]);
+  assert.equal(getCombatUnit(finished, 2).effects.instances[0].finished, true);
+  assert.equal(setEffectParticipation(finished, address, true, resources, 4), finished);
+  assert.equal(finalized, 0);
+  const cleaned = finalizeFinishedEffects(finished, 2, resources, 4);
+  assert.equal(finalized, 1);
+  assert.deepEqual(getCombatUnit(cleaned, 2).offense.attack.entries, []);
+});
+
+test("effects: nested finalization during disable preserves the terminal continuation and finishes existing children", () => {
+  const resources = new CombatResources();
+  const events = [];
+  const replacement = resources.registerEffect(barrierProgram("replacement"));
+  const parent = resources.registerEffect(barrierProgram("nested-parent"), {
+    bindings: [compileStatusBinding(["INVINCIBLE"])],
+    lifecycle: {
+      disable: (context) => {
+        events.push("parent-disable");
+        assert.equal(context.instance.finished, true);
+        assert.equal(context.instance.participating, false);
+        assert.equal(hasStatusFlag(context.facts.getUnit(2), "INVINCIBLE"), false);
+        const installed = context.effects.install(2, replacement.ref, {
+          source: null,
+          scope: null,
+          expiresAtTick: null,
+        });
+        assert.equal(installed.type, "INSTALLED");
+        assert.equal(context.facts.getEffect(context.address), undefined);
+        assert.equal(context.instance.finished, true);
+        assert.equal(context.instance.state.remainingAmount, 500);
+        context.effects.setParticipation(context.address, true);
+        context.effects.finish(context.address);
+        events.push("parent-continued");
+      },
+      finalize: (context) => {
+        events.push("parent-finalize");
+        assert.equal(context.instance.finished, true);
+        assert.equal(context.facts.getEffect(context.address), undefined);
+      },
+    },
+  });
+  const child = resources.registerEffect(barrierProgram("nested-child"), {
+    lifecycle: {
+      disable: (context) => {
+        events.push("child-disable");
+        assert.equal(context.instance.finished, true);
+        context.effects.finish({ unitId: 2, instanceId: 1 });
+        context.effects.setParticipation(context.address, true);
+      },
+      finalize: () => {
+        events.push("child-finalize");
+      },
+    },
+  });
+  let work = installEffect(
+    effectFixtureWork(unit()),
+    2,
+    resources.effects.create(parent.ref, metadata(1)),
+    resources,
+    0,
+  ).work;
+  work = installEffect(
+    work,
+    2,
+    resources.effects.create(child.ref, metadata(2)),
+    resources,
+    0,
+  ).work;
+  const parentAddress = { unitId: 2, instanceId: 1 };
+  const childAddress = { unitId: 2, instanceId: 2 };
+  work = attachEffectParent(work, childAddress, parentAddress, resources, 0).work;
+  const finished = finishEffect(work, parentAddress, resources, 1);
+
+  assert.deepEqual(events, [
+    "parent-disable",
+    "parent-finalize",
+    "parent-continued",
+    "child-disable",
+  ]);
+  const instances = getCombatUnit(finished, 2).effects.instances;
+  assert.equal(instances[0].id, 2);
+  assert.equal(instances[0].finished, true);
+  assert.equal(instances[0].participating, false);
+  assert.equal(instances[1].programRef, replacement.ref);
+  assert.equal(instances[1].participating, true);
+  assert.equal(finishEffect(finished, parentAddress, resources, 1), finished);
+  const finalized = finalizeFinishedEffects(finished, 2, resources, 1);
+  assert.deepEqual(events, [
+    "parent-disable",
+    "parent-finalize",
+    "parent-continued",
+    "child-disable",
+    "child-finalize",
+  ]);
+  assert.deepEqual(
+    getCombatUnit(finalized, 2).effects.instances.map((instance) => instance.programRef),
+    [replacement.ref],
+  );
+  assert.equal(getCombatUnit(work, 2).effects.instances[0].finished, false);
+  assert.equal(hasStatusFlag(getCombatUnit(work, 2), "INVINCIBLE"), true);
+});
+
 test("effects: TypeScript preserves invariant program state references and typed combat hook inference", async () => {
   const { default: ts } = await import("typescript");
   const directory = mkdtempSync(join(tmpdir(), "stronghold-effect-types-"));
@@ -830,7 +997,7 @@ const barrier = createEffectProgram({
 const resources = new EffectResources();
 resources.register(barrier);
 const instance = resources.create(barrier.ref, {
-  id: 1, sourceUnitId: null, lifetimeOwner: null, acquiredSequence: 0, expiresAtTick: null,
+  id: 1, source: null, scope: null, acquiredSequence: 0, expiresAtTick: null,
 });
 `;
   const compile = (name, source) => {

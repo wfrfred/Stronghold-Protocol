@@ -14,7 +14,7 @@ import { createEffectProgram } from '../../dist/core/tactical/unit/capability/ef
 import { effectFixtureWork } from '../helpers/effects.js';
 
 const owner = () => ({ id: 2, definition: { id: 'receiver' }, position: [0, 0] });
-const input = { sourceUnitId: null, lifetimeOwner: null, expiresAtTick: null };
+const input = { source: null, scope: null, expiresAtTick: null };
 const program = id => createEffectProgram({
     id,
     initialize: () => ({}),

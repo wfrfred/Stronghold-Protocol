@@ -20,7 +20,7 @@ import assert from 'node:assert/strict';
 import { makeBattle, chessRec, enemyRec, checkInvariants } from '../helpers/battleHarness.js';
 import { hasGeneratedData, getDefaultSource, spawnsFromTemplate } from '../../server/sim/simdata.js';
 import { PUSH_TILES, PULL_STOP_RADIUS } from '../../server/sim/constants.js';
-import { createNavigationMap } from '../../dist/core/tactical/battlefield/navigation/map.js';
+import { NavigationMap, createNavigationMap } from '../../dist/core/tactical/battlefield/navigation/map.js';
 import { createNavigationFieldCache } from '../../dist/core/tactical/battlefield/navigation/cache.js';
 import { getNavigationRequest } from '../../dist/core/tactical/battlefield/navigation/state.js';
 import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
@@ -29,7 +29,7 @@ import { createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/e
 import { initializeRoutedEnemy } from "../../dist/core/tactical/battle/creation/enemy.js";
 import { stepRoutedEnemy } from "../../dist/legacy/enemy.js";
 import { createSteeringParameters, integrateSteeringDirection } from '../../dist/core/tactical/unit/capability/locomotion/steering.js';
-import { applyMotionOverride, getNavigationBoundaryDirection, reflectNavigationMovement } from '../../dist/core/tactical/unit/capability/locomotion/motion.js';
+import { applyMotionOverride, getNavigationRecoveryTarget, reflectNavigationMovement } from '../../dist/core/tactical/unit/capability/locomotion/motion.js';
 
 const REAL = { skip: !hasGeneratedData() };
 const approx = (a, b, eps, msg) => assert.ok(Math.abs(a - b) <= eps, `${msg ?? ''} ${a} ≈ ${b}`);
@@ -454,20 +454,22 @@ function coreMotionMap(blocked = [], mode = 'WALK') {
 
 const coreSteeringParameters = createSteeringParameters({ steeringFactor: 0.25, maxSteeringForce: 1 });
 
-test('core boundary recovery follows crossed map axes after tile quantization, independent of passability', () => {
+test('core boundary recovery chooses a common interior target for actual position and locator', () => {
   const map = coreMotionMap(Array.from({ length: 24 }, (_, index) => index));
-  assert.deepEqual(getNavigationBoundaryDirection(map, [3, 1]), [0, 0]);
-  assert.deepEqual(getNavigationBoundaryDirection(map, [-1, 1]), [1, 0]);
-  assert.deepEqual(getNavigationBoundaryDirection(map, [8, 1]), [-1, 0]);
-  assert.deepEqual(getNavigationBoundaryDirection(map, [3, -1]), [0, 1]);
-  assert.deepEqual(getNavigationBoundaryDirection(map, [3, 3]), [0, -1]);
-  const corner = getNavigationBoundaryDirection(map, [-20, 3]);
-  approx(corner[0], Math.SQRT1_2, 1e-12);
-  approx(corner[1], -Math.SQRT1_2, 1e-12);
-  assert.deepEqual(getNavigationBoundaryDirection(map, [-0.5, 2.5]), [0, 0]);
-  const crossed = getNavigationBoundaryDirection(map, [-0.5001, 2.5001]);
-  approx(crossed[0], Math.SQRT1_2, 1e-12);
-  approx(crossed[1], -Math.SQRT1_2, 1e-12);
+  const [minimum, maximum] = NavigationMap.bounds(map);
+  const target = position => getNavigationRecoveryTarget(map, position, [0, 0]);
+  assert.deepEqual(target([3, 1]), [3, 1]);
+  assert.deepEqual(target([-1, 1]), [minimum[0], 1]);
+  assert.deepEqual(target([8, 1]), [maximum[0], 1]);
+  assert.deepEqual(target([3, -1]), [3, minimum[1]]);
+  assert.deepEqual(target([3, 3]), [3, maximum[1]]);
+  assert.deepEqual(target([-20, 3]), [minimum[0], maximum[1]]);
+  const shifted = getNavigationRecoveryTarget(map, [-1, 3], [0.2, -0.1]);
+  assert.ok(shifted[0] >= minimum[0] && shifted[0] <= maximum[0]);
+  assert.ok(shifted[1] >= minimum[1] && shifted[1] <= maximum[1]);
+  assert.ok(shifted[0] + 0.2 >= minimum[0] && shifted[0] + 0.2 <= maximum[0]);
+  assert.ok(shifted[1] - 0.1 >= minimum[1] && shifted[1] - 0.1 <= maximum[1]);
+  assert.equal(getNavigationRecoveryTarget(map, [0, 0], [9, 0]), null);
 });
 
 test('core steering: a zero heading decelerates, while zero speed preserves its history', () => {
@@ -592,7 +594,7 @@ test('core forced motion substitutes self movement without suspending the route 
   assert.equal(directed.nextNavigationRequestId, forced.nextNavigationRequestId);
 });
 
-test('core forced displacement outside the map resumes with direct boundary movement and preserved steering history', () => {
+test('core forced displacement outside the map resumes with budgeted recovery and preserved route facts', () => {
   const { initialized, context } = coreDisplacedEnemy();
   initialized.enemy.locomotion.steering = { lastVelocity: [0.02, 0.04] };
   const forced = stepRoutedEnemy(initialized.enemy, {
@@ -604,9 +606,8 @@ test('core forced displacement outside the map resumes with direct boundary move
   const resumed = stepRoutedEnemy(forced.enemy, {
     ...context, tick: 1, rngState: forced.rngState, nextNavigationRequestId: forced.nextNavigationRequestId,
   });
-  approx(resumed.enemy.position[0], forced.enemy.position[0] + 0.1, 1e-12);
-  assert.equal(resumed.enemy.position[1], forced.enemy.position[1]);
-  assert.deepEqual(resumed.enemy.locomotion.steering, forced.enemy.locomotion.steering);
+  assert.ok(resumed.enemy.position[0] > forced.enemy.position[0]);
+  assert.ok(Math.hypot(resumed.enemy.position[0] - forced.enemy.position[0], resumed.enemy.position[1] - forced.enemy.position[1]) <= 0.1 + 1e-12);
   assert.equal(getNavigationRequest(resumed.enemy.locomotion.mainRoute.navigation), goal);
   assert.deepEqual(resumed.enemy.locomotion.mainRoute.navigation.execution.locatorOffset, control.navigation.execution.locatorOffset);
   assert.equal(resumed.rngState, forced.rngState);

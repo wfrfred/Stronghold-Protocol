@@ -91,9 +91,9 @@ test("action event order: release and damage precede support loss produced by th
 
             return {
                 ...compiled,
-                process: [
+                program: [
                     { type: "RELEASE", markerId: "damage" },
-                    ...compiled.program.map(run => ({ type: "EXECUTE", run })),
+                    ...compiled.program,
                 ],
             };
         },

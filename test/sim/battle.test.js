@@ -1393,7 +1393,7 @@ test('core battle rolls back spawning, expiry, RNG and tick progress when moveme
     range: Array.from({ length: spec.map.rows }, (_, row) => Array.from({ length: spec.map.columns }, (_, col) => [row, col])).flat(),
   });
   const effect = createNavigationSpatialEffect({ id: 0,
-    definition: createNavigationEffectDefinition({ id: 'overflow', WALK: { denyPassage: false, deniedDepartures: [], costFloor: 0x7fffffff }, FLY: null }),
+    definition: createNavigationEffectDefinition({ id: 'overflow', WALK: { denyPassage: false, deniedDepartures: [], costFloor: Number.MAX_SAFE_INTEGER }, FLY: null }),
     source: { type: 'MECHANISM', mechanismId: 0 }, active: true, region, expiresAtTick: null,
   });
   const expired = createNavigationSpatialEffect({ ...effect, id: 1, expiresAtTick: 0 });
@@ -1407,10 +1407,10 @@ test('core battle rolls back spawning, expiry, RNG and tick progress when moveme
   });
   const before = runtime.snapshot();
   const maps = runtime.navigationMaps;
-  assert.throws(() => runtime.step([{ type: 'APPEAR_PREDEFINED', definitionId: 0 }]), /distance exceeds int32/);
+  assert.throws(() => runtime.step([{ type: 'APPEAR_PREDEFINED', definitionId: 0 }]), /distance exceeds safe integer range/);
   assert.deepEqual(runtime.snapshot(), before);
   assert.equal(runtime.navigationMaps, maps);
-  assert.throws(() => runtime.step([{ type: 'APPEAR_PREDEFINED', definitionId: 0 }]), /distance exceeds int32/);
+  assert.throws(() => runtime.step([{ type: 'APPEAR_PREDEFINED', definitionId: 0 }]), /distance exceeds safe integer range/);
   assert.deepEqual(runtime.snapshot(), before);
   assert.equal(runtime.navigationMaps, maps);
 });

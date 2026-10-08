@@ -1,3 +1,4 @@
+import { combatWorkEvents } from "../../dist/core/tactical/battle/execution/work.js";
 import { installFixtureEffect } from "../helpers/effects.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -81,8 +82,8 @@ function attach(resources, owner, descriptor, id, acquiredSequence = id) {
   const instance = resources.effects.create(descriptor.ref, {
     id,
     acquiredSequence,
-    sourceUnitId: null,
-    lifetimeOwner: { type: "UNIT", unitId: owner.id },
+    source: null,
+    scope: { type: "UNIT", unitId: owner.id },
     expiresAtTick: null,
   });
 
@@ -485,7 +486,7 @@ test("damage pipeline: absent target reports unexecuted numerical stages rather 
   assert.equal(result.report.hpDamage, null);
   assert.equal(result.report.hpLoss, 0);
   assert.deepEqual(result.report.cancellation, { stage: "INPUT", reason: "TARGET_ABSENT" });
-  assert.equal(result.work.events.length, 0);
+  assert.equal(combatWorkEvents(result.work).length, 0);
   assert.equal(result.work.removals.size, 0);
 });
 
@@ -643,7 +644,7 @@ test("damage pipeline: nested reaction damage and healing preserve latest HP and
     observedTargetHp: 910,
   });
   assert.deepEqual(
-    result.work.events.map((event) => [
+    combatWorkEvents(result.work).map((event) => [
       event.type,
       event.sourceUnitId,
       event.targetUnitId,

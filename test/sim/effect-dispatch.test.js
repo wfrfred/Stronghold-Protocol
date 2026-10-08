@@ -1,3 +1,4 @@
+import { combatWorkEvents } from "../../dist/core/tactical/battle/execution/work.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { effectFixtureWork, installFixtureEffect } from "../helpers/effects.js";
@@ -32,7 +33,11 @@ function unit(id, hp = 1000, flags = []) {
 }
 
 function program(id, state = {}) {
-  return createEffectProgram({ id, initialize: () => state, ownState: (value) => ({ ...value }) });
+  return createEffectProgram({
+    id,
+    initialize: () => state,
+    ownState: (value) => ({ ...value }),
+  });
 }
 
 function attach(resources, owner, descriptor) {
@@ -41,8 +46,8 @@ function attach(resources, owner, descriptor) {
   const instance = resources.effects.create(descriptor.ref, {
     id,
     acquiredSequence,
-    sourceUnitId: null,
-    lifetimeOwner: { type: "UNIT", unitId: owner.id },
+    source: null,
+    scope: { type: "UNIT", unitId: owner.id },
     expiresAtTick: null,
   });
 
@@ -61,7 +66,7 @@ function request(power = 100, overrides = {}) {
 }
 
 function installation(unitId) {
-  return { sourceUnitId: null, lifetimeOwner: { type: "UNIT", unitId }, expiresAtTick: null };
+  return { source: null, scope: { type: "UNIT", unitId }, expiresAtTick: null };
 }
 
 test("effect dispatch: registered candidate identities freeze while current participation is rechecked", () => {
@@ -164,7 +169,7 @@ test("effect dispatch: nested finalization preserves the entered callback contin
   assert.deepEqual(getCombatUnit(result.work, 2).effects.instances, []);
 });
 
-test("effect dispatch: new UIDs are visible but excluded from the same receiver scope, including nested settlement", () => {
+test("effect dispatch: ordinary facts see new participating UIDs while current and nested dispatch candidates stay frozen", () => {
   const resources = new CombatResources();
   const calls = [];
   const c = resources.registerEffect(program("new-C"), {
@@ -214,7 +219,7 @@ test("effect dispatch: new UIDs are visible but excluded from the same receiver 
           assert.equal(context.facts.getUnit(2).effects.instances.length, 2);
           assert.equal(
             context.facts.participating(2).some((instance) => instance.programRef.id === "new-C"),
-            false,
+            true,
           );
           context.operations.damage(request(1, { sourceUnitId: 2, targetUnitId: 3 }));
           context.operations.damage(request(1));
@@ -264,7 +269,9 @@ test("effect dispatch: exceptional exits release candidates before retry on the 
     damage: {
       reception: {
         priority: 0,
-        apply: (context, pending) => ({ value: { ...pending, amount: pending.amount * 2 } }),
+        apply: (context, pending) => ({
+          value: { ...pending, amount: pending.amount * 2 },
+        }),
       },
     },
   });
@@ -346,7 +353,10 @@ test("effect dispatch: Damage and Healing borrowed facts and operations close af
         () => escaped.operations.effects.setParticipation(escaped.address, false),
         () => escaped.operations.effects.finish(escaped.address),
         () =>
-          escaped.operations.effects.attachParent(escaped.address, { unitId: 2, instanceId: 99 }),
+          escaped.operations.effects.attachParent(escaped.address, {
+            unitId: 2,
+            instanceId: 99,
+          }),
         () => escaped.operations.damage(request()),
         () => escaped.operations.heal(healRequest),
       ]) {
@@ -465,7 +475,7 @@ test("effect dispatch: shield cancellation completes nested healing before retur
     ["recharge"],
   );
   assert.deepEqual(
-    result.work.events.map((event) => [event.type, event.amount]),
+    combatWorkEvents(result.work).map((event) => [event.type, event.amount]),
     [
       ["HEAL", 20],
       ["DAMAGE", 0],
