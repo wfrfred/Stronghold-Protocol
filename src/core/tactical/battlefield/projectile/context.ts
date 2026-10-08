@@ -37,21 +37,23 @@ export interface ProjectileOperationsFor<S extends object> {
     stopSelf(reason?: ProjectileStopReason): void;
 }
 
-export interface ProjectileStopContext<
+export interface ProjectileCallbackContext<
     S extends object = object,
 > extends ProjectileQueryContext<S> {
     readonly operations: ProjectileOperationsFor<S>;
     attackPower(): number;
 }
 
+export type ProjectileStopContext<S extends object = object> = ProjectileCallbackContext<S>;
+
 export interface ProjectileContactContext<
     S extends object = object,
-> extends ProjectileStopContext<S> {
+> extends ProjectileCallbackContext<S> {
     readonly targetUnitId: UnitId;
 }
 
 export interface ProjectileServices extends EffectTransitionResources {
-    readonly projectiles: ProjectileResources;
+    readonly projectiles: Pick<ProjectileResources, "ownState" | "withProgram">;
     readonly offense: NumericContributionProvider<NumericProviderFacts>;
     readonly settleDamage: DamageOperation;
     readonly settleHealing: HealingOperation;

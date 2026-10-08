@@ -17,7 +17,7 @@ import {
     type UnitPlacementDefinition,
 } from "./creation/placement.js";
 import type { BattleExecutionState } from "./execution/state.js";
-import type { BattlePhase, BattleSystem } from "./system.js";
+import type { BattlePhase } from "./system.js";
 import type { BattleEvent } from "./contract.js";
 import type { EffectTransitionResources } from "../unit/capability/effects/contract.js";
 import { removeUnitWithEffects } from "./execution/unit-lifecycle.js";
@@ -231,7 +231,8 @@ function reconcilePredefinedPresence(
 export function createPredefinedSystem(
     definitions: readonly PredefinedInstanceDefinition[],
     resources: EffectTransitionResources,
-): BattleSystem<readonly PredefinedPresence[]> & {
+): {
+    createState(): readonly PredefinedPresence[];
     readonly step: BattlePhase<readonly PredefinedPresence[]>;
     readonly resolve: BattlePhase<readonly PredefinedPresence[]>;
 } {

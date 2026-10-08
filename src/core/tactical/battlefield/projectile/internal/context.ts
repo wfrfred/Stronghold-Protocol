@@ -3,10 +3,10 @@ import { resolveAttackPower } from "../../../unit/capability/offense/query.js";
 import { EffectDispatchScope } from "../../../unit/capability/effects/dispatch.js";
 import { createEffectOperations } from "../../../unit/capability/effects/operations.js";
 import type {
+    ProjectileCallbackContext,
     ProjectileFacts,
     ProjectileQueryContext,
     ProjectileServices,
-    ProjectileStopContext,
 } from "../context.js";
 import type { ProjectileProgram } from "../program.js";
 import type { ProjectileId, ProjectileInstance, ProjectileStopReason } from "../state.js";
@@ -77,7 +77,7 @@ export function withProjectileContext<S extends object>(
     services: ProjectileServices,
     access: ProjectileContextAccess,
     tick: number,
-    run: (context: ProjectileStopContext<S>) => undefined,
+    run: (context: ProjectileCallbackContext<S>) => undefined,
 ): void {
     let active = true;
     const dispatch = new EffectDispatchScope();
@@ -97,7 +97,7 @@ export function withProjectileContext<S extends object>(
             instance) as ProjectileInstance<S>;
     };
 
-    const context: ProjectileStopContext<S> = {
+    const context: ProjectileCallbackContext<S> = {
         get projectile() {
             return readProjectile();
         },

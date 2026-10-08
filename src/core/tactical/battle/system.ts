@@ -25,7 +25,3 @@ export type BattlePhase<S = void, I extends BattlePhaseInput = BattlePhaseInput>
     input: I,
     state: S,
 ) => BattlePhaseResult<S>;
-
-export interface BattleSystem<S> {
-    createState(): S;
-}

@@ -4,7 +4,7 @@ import type { BattleExecutionState } from "../execution/state.js";
 import type { UnitRouteSignal } from "./route-control.js";
 import type { UnitId } from "../../unit/unit.js";
 import type { BattleEvent } from "../contract.js";
-import type { BattlePhase, BattleSystem } from "../system.js";
+import type { BattlePhase } from "../system.js";
 import {
     advanceSpawnSchedule,
     getSpawnedCount,
@@ -92,9 +92,8 @@ function enemySpawnEvents(spawned: SpawnedEnemies, tick: number): BattleEvent[] 
     return events;
 }
 
-export function createSpawnScheduleSystem(
-    definition: SpawnScheduleDefinition,
-): BattleSystem<SpawnScheduleExecution> & {
+export function createSpawnScheduleSystem(definition: SpawnScheduleDefinition): {
+    createState(): SpawnScheduleExecution;
     readonly spawn: BattlePhase<SpawnScheduleExecution>;
     readonly resolve: BattlePhase<SpawnScheduleExecution>;
     isCompleted(state: SpawnScheduleExecution): boolean;

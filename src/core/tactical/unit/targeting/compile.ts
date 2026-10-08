@@ -62,7 +62,7 @@ function compareDistance(context: CombatTargetQueryContext, left: Unit, right: U
     );
 }
 
-export function compileDamageTargeting(
+function compileDamageTargeting(
     definition: DamageTargetingDefinition,
     purposes: readonly QueryPurpose[],
 ): CompiledTargeting<CombatTargetQueryContext> {
@@ -128,7 +128,7 @@ export function compileDamageTargeting(
     };
 }
 
-export function compileHealingTargeting(
+function compileHealingTargeting(
     definition: HealingTargetingDefinition,
     purposes: readonly QueryPurpose[],
     maxHp: HealingMaxHpProvider = staticMaxHp,

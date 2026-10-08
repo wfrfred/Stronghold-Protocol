@@ -4,13 +4,12 @@ import {
     type ProjectileState,
 } from "../../battlefield/projectile/state.js";
 import { stepProjectiles } from "../../battlefield/projectile/settlement.js";
+import type { ProjectileServices } from "../../battlefield/projectile/context.js";
 import { combatWorkEvents, combatWorkChanges, createCombatWork } from "../execution/work.js";
-import type { CombatResources } from "../resources.js";
-import type { BattlePhase, BattleSystem } from "../system.js";
+import type { BattlePhase } from "../system.js";
 
-export function createProjectileSystem(
-    resources: CombatResources,
-): BattleSystem<ProjectileState> & {
+export function createProjectileSystem(resources: ProjectileServices): {
+    createState(): ProjectileState;
     readonly step: BattlePhase<ProjectileState>;
 } {
     const step: BattlePhase<ProjectileState> = (input, state) => {

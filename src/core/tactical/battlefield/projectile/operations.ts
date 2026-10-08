@@ -31,19 +31,19 @@ export interface ProjectileOperations {
 
 export function withProjectileOperations(
     state: ProjectileState,
-    resources: ProjectileResources,
+    resources: Pick<ProjectileResources, "get" | "ownState">,
     tick: number,
     run: (operations: ProjectileOperations) => undefined,
 ): { readonly state: ProjectileState; readonly result: undefined };
 export function withProjectileOperations<T>(
     state: ProjectileState,
-    resources: ProjectileResources,
+    resources: Pick<ProjectileResources, "get" | "ownState">,
     tick: number,
     run: (operations: ProjectileOperations) => SynchronousResult<T>,
 ): { readonly state: ProjectileState; readonly result: T };
 export function withProjectileOperations<T>(
     state: ProjectileState,
-    resources: ProjectileResources,
+    resources: Pick<ProjectileResources, "get" | "ownState">,
     tick: number,
     run: (operations: ProjectileOperations) => SynchronousResult<T>,
 ): { readonly state: ProjectileState; readonly result: T } {
