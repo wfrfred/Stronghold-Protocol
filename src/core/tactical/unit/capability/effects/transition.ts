@@ -1,9 +1,28 @@
 import { transitionCombatUnit, type CombatWork } from "../../../battle/execution/work.js";
-import type { UnitId } from "../../unit.js";
+import type { Unit, UnitId } from "../../unit.js";
 import { hasEffects } from "./capability.js";
 import { replaceEffectInstance } from "./internal/state.js";
 import type { EffectProgramRef } from "./program.js";
 import type { EffectTransitionResources } from "./contract.js";
+import type { EffectInstanceValue } from "./instance.js";
+import type { CompiledEffectContribution } from "./contribution-bindings.js";
+import type { EffectContributionBindings } from "./resources.js";
+import { coordinateVitalityMaxHp } from "../vitality/max-hp.js";
+
+export function transitionEffectBindings<U extends Unit>(
+    unit: U,
+    instance: EffectInstanceValue,
+    resources: EffectContributionBindings,
+    apply: (binding: CompiledEffectContribution, current: U) => U,
+): U {
+    let current = unit;
+
+    for (const binding of resources.get(instance)) {
+        current = apply(binding, current);
+    }
+
+    return coordinateVitalityMaxHp(unit, current);
+}
 
 export function updateEffectState<S extends object>(
     work: CombatWork,
@@ -42,8 +61,11 @@ export function updateEffectState<S extends object>(
         const unit = replaceEffectInstance(owner, instance, updated);
 
         return updated.started
-            ? resources.effectBindings.transition(unit, updated, (binding, current) =>
-                  binding.update(current, updated),
+            ? transitionEffectBindings(
+                  unit,
+                  updated,
+                  resources.effectBindings,
+                  (binding, current) => binding.update(current, updated),
               )
             : unit;
     });

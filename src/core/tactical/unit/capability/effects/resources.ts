@@ -17,7 +17,6 @@ import type { NumericContributionTarget, NumericProviderFacts } from "../contrib
 import { ResourceRegistration } from "../../../../common/resource-registration.js";
 import type { Unit } from "../../unit.js";
 import type { CombatTargetingView } from "../../targeting/query.js";
-import { coordinateVitalityMaxHp } from "../vitality/max-hp.js";
 
 export interface ParameterContext<S extends object> {
     readonly unit: Unit;
@@ -128,11 +127,6 @@ export function compileEffectContributions<S extends object>(
 
 export interface EffectContributionBindings {
     get(instance: EffectInstanceValue): readonly CompiledEffectContribution[];
-    transition<U extends Unit>(
-        unit: U,
-        instance: EffectInstanceValue,
-        apply: (binding: CompiledEffectContribution, current: U) => U,
-    ): U;
 }
 
 export class EffectBindingResources implements EffectContributionBindings {
@@ -170,19 +164,5 @@ export class EffectBindingResources implements EffectContributionBindings {
         }
 
         return bindings;
-    }
-
-    transition<U extends Unit>(
-        unit: U,
-        instance: EffectInstanceValue,
-        apply: (binding: CompiledEffectContribution, current: U) => U,
-    ): U {
-        let current = unit;
-
-        for (const binding of this.get(instance)) {
-            current = apply(binding, current);
-        }
-
-        return coordinateVitalityMaxHp(unit, current);
     }
 }

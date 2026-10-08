@@ -24,7 +24,7 @@ import type { CompiledEffectLifecycle } from "./lifecycle-resources.js";
 import { effectFacts, getEffect } from "./query.js";
 import { EffectDispatchScope } from "./dispatch.js";
 import type { EffectProgramRef } from "./program.js";
-import { updateEffectState } from "./transition.js";
+import { transitionEffectBindings, updateEffectState } from "./transition.js";
 import {
     effectAddressesOwnedByExecution,
     effectAddressesOwnedByUnit,
@@ -89,8 +89,12 @@ function changeParticipation(
         const current = replaceEffectInstance(unit, instance, updated);
 
         return instance.started && instance.participating !== updated.participating
-            ? resources.effectBindings.transition(current, updated, (binding, value) =>
-                  binding.setParticipation(value, updated, updated.participating),
+            ? transitionEffectBindings(
+                  current,
+                  updated,
+                  resources.effectBindings,
+                  (binding, value) =>
+                      binding.setParticipation(value, updated, updated.participating),
               )
             : current;
     });
@@ -336,8 +340,11 @@ function finalizeInScope(
 
     return instance.started
         ? transitionCombatUnit(work, address.unitId, (unit) =>
-              resources.effectBindings.transition(unit, instance, (binding, current) =>
-                  binding.remove(current, instance),
+              transitionEffectBindings(
+                  unit,
+                  instance,
+                  resources.effectBindings,
+                  (binding, current) => binding.remove(current, instance),
               ),
           )
         : work;
@@ -521,7 +528,7 @@ function installInScope<S extends object>(
     current = getEffect(work, address)!;
     const started = current;
     work = transitionCombatUnit(work, ownerUnitId, (unit) =>
-        resources.effectBindings.transition(unit, started, (binding, current) =>
+        transitionEffectBindings(unit, started, resources.effectBindings, (binding, current) =>
             binding.install(current, started),
         ),
     );
