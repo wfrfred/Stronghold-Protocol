@@ -26,7 +26,7 @@ import type { BattleExecutionState } from "../execution/state.js";
 import type { BattlePhase } from "../system.js";
 import type { EffectTransitionResources } from "../../unit/capability/effects/contract.js";
 import { removeUnitWithEffects } from "../execution/unit-lifecycle.js";
-import { combatWorkChanges, createCombatWork } from "../execution/work.js";
+import { combatWorkEvents, combatWorkChanges, createCombatWork } from "../execution/work.js";
 
 export type DeploymentCommand =
     | {
@@ -131,7 +131,7 @@ export function resolveDeploymentCommands(
             }
 
             changes.push(...combatWorkChanges(exited));
-            events.push(...exited.events);
+            events.push(...combatWorkEvents(exited));
             execution = exited.execution;
             continue;
         }

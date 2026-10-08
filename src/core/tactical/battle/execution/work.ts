@@ -27,6 +27,15 @@ export type CombatUnitLifecycleResult =
           readonly reason: BattlefieldRemovalReason;
       };
 
+export interface CombatEventLog {
+    readonly previous: CombatEventLog | null;
+    readonly chunk: readonly BattleEvent[];
+    readonly length: number;
+}
+
+const emptyEvents: readonly BattleEvent[] = Object.freeze([]);
+const materializedEvents = new WeakMap<CombatEventLog, readonly BattleEvent[]>();
+
 export interface CombatWork {
     readonly battlefield: CombatTargetingView;
     readonly mechanismView: MechanismView;
@@ -34,7 +43,7 @@ export interface CombatWork {
     readonly units: ReadonlyMap<UnitId, Unit>;
     readonly removals: ReadonlyMap<UnitId, BattlefieldRemovalReason>;
     readonly lifecycleResults: readonly CombatUnitLifecycleResult[];
-    readonly events: readonly BattleEvent[];
+    readonly eventLog: CombatEventLog | null;
     readonly execution: BattleExecutionState;
 }
 
@@ -62,7 +71,7 @@ export function createCombatWork(
         units: new Map(),
         removals: new Map(),
         lifecycleResults: [],
-        events: [],
+        eventLog: null,
         execution,
     };
 }
@@ -130,36 +139,59 @@ export function combatWorkView(work: CombatWork): CombatTargetingView {
 }
 
 export function updateCombatUnit(work: CombatWork, unit: Unit): CombatWork {
-    const current = getCombatUnit(work, unit.id);
+    return updateCombatUnits(work, [unit]);
+}
 
-    if (current === unit) {
+export function updateCombatUnits(work: CombatWork, updates: readonly Unit[]): CombatWork {
+    let units: Map<UnitId, Unit> | undefined;
+    let removals: Map<UnitId, BattlefieldRemovalReason> | undefined;
+    const transitions: {
+        readonly previousUnit: Unit | undefined;
+        readonly nextUnit: Unit;
+    }[] = [];
+    const created: CombatUnitLifecycleResult[] = [];
+
+    for (const unit of updates) {
+        const currentRemovals = removals ?? work.removals;
+        const baseline = work.battlefield.getUnit(unit.id);
+        const current = currentRemovals.has(unit.id)
+            ? undefined
+            : ((units ?? work.units).get(unit.id) ?? baseline);
+
+        if (current === unit) {
+            continue;
+        }
+
+        units ??= new Map(work.units);
+
+        if (baseline === unit) {
+            units.delete(unit.id);
+        } else {
+            units.set(unit.id, unit);
+        }
+        if (currentRemovals.has(unit.id)) {
+            removals ??= new Map(work.removals);
+            removals.delete(unit.id);
+        }
+        if (current === undefined) {
+            created.push({ type: "CREATED", unit });
+        }
+
+        transitions.push({ previousUnit: current, nextUnit: unit });
+    }
+
+    if (units === undefined) {
         return work;
-    }
-
-    const units = new Map(work.units);
-    let removals = work.removals;
-
-    if (work.battlefield.getUnit(unit.id) === unit) {
-        units.delete(unit.id);
-    } else {
-        units.set(unit.id, unit);
-    }
-    if (removals.has(unit.id)) {
-        const nextRemovals = new Map(removals);
-        nextRemovals.delete(unit.id);
-        removals = nextRemovals;
     }
 
     const next: CombatWork = {
         ...work,
         units,
-        removals,
+        removals: removals ?? work.removals,
         lifecycleResults:
-            current === undefined
-                ? [...work.lifecycleResults, { type: "CREATED", unit }]
-                : work.lifecycleResults,
+            created.length === 0 ? work.lifecycleResults : [...work.lifecycleResults, ...created],
     };
-    deriveEffectLifetimeProjection(work, next, current, unit);
+    deriveEffectLifetimeProjection(work, next, transitions);
 
     return next;
 }
@@ -223,7 +255,7 @@ export function removeCombatUnit(
         removals,
         lifecycleResults: [...work.lifecycleResults, { type: "REMOVED", unit, reason }],
     };
-    deriveEffectLifetimeProjection(work, next, unit, undefined);
+    deriveEffectLifetimeProjection(work, next, [{ previousUnit: unit, nextUnit: undefined }]);
 
     return next;
 }
@@ -233,7 +265,45 @@ export function appendCombatEvents(work: CombatWork, events: readonly BattleEven
         return work;
     }
 
-    return { ...work, events: [...work.events, ...events] };
+    const chunk = Object.freeze([...events]);
+    const eventLog = Object.freeze({
+        previous: work.eventLog,
+        chunk,
+        length: (work.eventLog?.length ?? 0) + chunk.length,
+    });
+
+    return { ...work, eventLog };
+}
+
+export function combatWorkEvents(work: CombatWork): readonly BattleEvent[] {
+    if (work.eventLog === null) {
+        return emptyEvents;
+    }
+
+    const cached = materializedEvents.get(work.eventLog);
+
+    if (cached !== undefined) {
+        return cached;
+    }
+
+    const events = new Array<BattleEvent>(work.eventLog.length);
+    let cursor: CombatEventLog | null = work.eventLog;
+    let offset = events.length;
+
+    while (cursor !== null) {
+        offset -= cursor.chunk.length;
+
+        for (let index = 0; index < cursor.chunk.length; index++) {
+            events[offset + index] = cursor.chunk[index]!;
+        }
+
+        cursor = cursor.previous;
+    }
+
+    const result = Object.freeze(events);
+    materializedEvents.set(work.eventLog, result);
+
+    return result;
 }
 
 export function withCombatExecution(work: CombatWork, execution: BattleExecutionState): CombatWork {
@@ -289,7 +359,7 @@ export function combatWorkResult(work: CombatWork): CombatWorkResult {
         removedUnitIds: removals.map(({ unitId }) => unitId),
         removals,
         lifecycleResults: work.lifecycleResults,
-        events: work.events,
+        events: combatWorkEvents(work),
         execution: work.execution,
     };
 }

@@ -1,6 +1,6 @@
 import { createProjectileState, type ProjectileState } from "../../battlefield/projectile/state.js";
 import { stepProjectiles, stopProjectile } from "../../battlefield/projectile/settlement.js";
-import { combatWorkChanges, createCombatWork } from "../execution/work.js";
+import { combatWorkEvents, combatWorkChanges, createCombatWork } from "../execution/work.js";
 import type { CombatResources } from "../resources.js";
 import type { BattlePhase, BattleSystem } from "../system.js";
 
@@ -31,7 +31,7 @@ export function createProjectileSystem(
         return {
             state: advanced.state,
             changes: combatWorkChanges(advanced.work),
-            events: advanced.work.events,
+            events: combatWorkEvents(advanced.work),
             execution: advanced.work.execution,
         };
     };

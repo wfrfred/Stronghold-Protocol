@@ -4,7 +4,7 @@ import {
     type EffectSourceServices,
 } from "../../battlefield/effect-source/settlement.js";
 import type { UnitId } from "../../unit/unit.js";
-import { combatWorkChanges, createCombatWork } from "../execution/work.js";
+import { combatWorkEvents, combatWorkChanges, createCombatWork } from "../execution/work.js";
 import type { BattlePhase, BattlePhaseInput, BattlePhaseResult } from "../system.js";
 
 export function createEffectSourceSystem(resources: EffectSourceServices): {
@@ -21,7 +21,7 @@ export function createEffectSourceSystem(resources: EffectSourceServices): {
         return {
             state: undefined,
             changes: combatWorkChanges(work),
-            events: work.events,
+            events: combatWorkEvents(work),
             execution: work.execution,
         };
     };
@@ -39,7 +39,7 @@ export function createEffectSourceSystem(resources: EffectSourceServices): {
             return {
                 state: undefined,
                 changes: combatWorkChanges(work),
-                events: work.events,
+                events: combatWorkEvents(work),
                 execution: work.execution,
             };
         },

@@ -100,8 +100,10 @@ function addressesFor(work: CombatWork, key: string): readonly EffectAddress[] {
 export function deriveEffectLifetimeProjection(
     previous: CombatWork,
     next: CombatWork,
-    previousUnit: Unit | undefined,
-    nextUnit: Unit | undefined,
+    transitions: readonly {
+        readonly previousUnit: Unit | undefined;
+        readonly nextUnit: Unit | undefined;
+    }[],
 ): void {
     const projection = storedProjection(previous);
 
@@ -109,17 +111,6 @@ export function deriveEffectLifetimeProjection(
         return;
     }
 
-    const previousInstances = instancesOf(previousUnit);
-    const nextInstances = instancesOf(nextUnit);
-
-    if (previousInstances === nextInstances) {
-        storeProjection(next, projection);
-
-        return;
-    }
-
-    const unitId = (nextUnit ?? previousUnit)!.id;
-    const previousById = new Map(previousInstances?.map((instance) => [instance.id, instance]));
     let updated: Map<string, AddressBucket> | undefined;
     const editedBuckets = new Map<string, Map<string, EffectAddress>>();
 
@@ -136,6 +127,7 @@ export function deriveEffectLifetimeProjection(
     };
 
     const changeRelations = (
+        unitId: UnitId,
         before: EffectInstanceValue | undefined,
         after: EffectInstanceValue | undefined,
     ): void => {
@@ -159,12 +151,24 @@ export function deriveEffectLifetimeProjection(
         }
     };
 
-    for (const instance of nextInstances ?? []) {
-        changeRelations(previousById.get(instance.id), instance);
-        previousById.delete(instance.id);
-    }
-    for (const instance of previousById.values()) {
-        changeRelations(instance, undefined);
+    for (const { previousUnit, nextUnit } of transitions) {
+        const previousInstances = instancesOf(previousUnit);
+        const nextInstances = instancesOf(nextUnit);
+
+        if (previousInstances === nextInstances) {
+            continue;
+        }
+
+        const unitId = (nextUnit ?? previousUnit)!.id;
+        const previousById = new Map(previousInstances?.map((instance) => [instance.id, instance]));
+
+        for (const instance of nextInstances ?? []) {
+            changeRelations(unitId, previousById.get(instance.id), instance);
+            previousById.delete(instance.id);
+        }
+        for (const instance of previousById.values()) {
+            changeRelations(unitId, instance, undefined);
+        }
     }
 
     if (updated !== undefined) {

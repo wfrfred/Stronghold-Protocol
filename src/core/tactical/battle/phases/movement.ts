@@ -8,7 +8,12 @@ import { changeAlternativeRoutes, type AlternativeRouteCommand } from "./route-c
 import type { BattleEvent } from "../contract.js";
 import type { BattlePhase, BattlePhaseInput } from "../system.js";
 import { removeUnitWithEffects } from "../execution/unit-lifecycle.js";
-import { combatWorkChanges, createCombatWork, updateCombatUnit } from "../execution/work.js";
+import {
+    combatWorkChanges,
+    combatWorkEvents,
+    createCombatWork,
+    updateCombatUnits,
+} from "../execution/work.js";
 
 export interface MovementPhaseInput extends BattlePhaseInput {
     readonly movementAllowed?: (unitId: UnitId) => boolean;
@@ -107,11 +112,11 @@ export function createMovementSystem(
             movedUnits.push(moved.unit);
         }
 
-        let work = createCombatWork(battlefield, execution, battlefield);
+        let work = updateCombatUnits(
+            createCombatWork(battlefield, execution, battlefield),
+            movedUnits,
+        );
 
-        for (const unit of movedUnits) {
-            work = updateCombatUnit(work, unit);
-        }
         for (const unitId of completed) {
             work = removeUnitWithEffects(work, unitId, "SCRIPT", resources, tick);
         }
@@ -119,7 +124,7 @@ export function createMovementSystem(
         return {
             state: undefined,
             changes: [...changes, ...combatWorkChanges(work)],
-            events: [...events, ...work.events],
+            events: [...events, ...combatWorkEvents(work)],
             execution: work.execution,
         };
     };

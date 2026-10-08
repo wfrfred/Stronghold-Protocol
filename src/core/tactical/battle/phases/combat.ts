@@ -12,7 +12,12 @@ import {
 } from "../../unit/capability/action/process.js";
 import { prepareCombatEffects, retireCombatUnit } from "../execution/unit-lifecycle.js";
 import { CombatResources } from "../resources.js";
-import { combatWorkChanges, createCombatWork, getCombatUnit } from "../execution/work.js";
+import {
+    combatWorkEvents,
+    combatWorkChanges,
+    createCombatWork,
+    getCombatUnit,
+} from "../execution/work.js";
 import { hasAction, type ActionDefinition } from "../../unit/capability/action/capability.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
 import { hasVitality } from "../../unit/capability/vitality/capability.js";
@@ -86,7 +91,7 @@ export function createCombatSystem(
         return {
             state,
             changes: combatWorkChanges(work),
-            events: work.events,
+            events: combatWorkEvents(work),
             execution: work.execution,
         };
     };
@@ -153,7 +158,7 @@ export function createCombatSystem(
         return {
             state,
             changes: combatWorkChanges(work),
-            events: work.events,
+            events: combatWorkEvents(work),
             execution: work.execution,
         };
     };

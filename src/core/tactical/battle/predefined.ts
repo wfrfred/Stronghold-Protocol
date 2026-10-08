@@ -21,7 +21,7 @@ import type { BattlePhase, BattleSystem } from "./system.js";
 import type { BattleEvent } from "./contract.js";
 import type { EffectTransitionResources } from "../unit/capability/effects/contract.js";
 import { removeUnitWithEffects } from "./execution/unit-lifecycle.js";
-import { combatWorkChanges, createCombatWork } from "./execution/work.js";
+import { combatWorkEvents, combatWorkChanges, createCombatWork } from "./execution/work.js";
 
 export interface PredefinedUnitCreation extends UnitPlacementDefinition {
     readonly type: "UNIT";
@@ -313,7 +313,7 @@ export function createPredefinedSystem(
                 }
 
                 changes.push(...settled);
-                events.push(...work.events);
+                events.push(...combatWorkEvents(work));
                 execution = work.execution;
             }
 
