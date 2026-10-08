@@ -487,7 +487,7 @@ test("effect sources: flushes publish attempts before lifecycle work and preserv
                     return {
                         ...lifecycle,
                         start: context => {
-                            const current = getCombatMechanism({ ...initial, mechanisms: readMechanisms() }, 20);
+                            const current = getCombatMechanism({ ...initial, mechanismUpdates: readMechanisms() }, 20);
                             published.push(current);
                             assert.equal(current.effectSource.initialized, true);
                             assert.equal(current.effectSource.receivers.find(binding => binding.unitId === context.address.unitId).installationAttempts, 1);
