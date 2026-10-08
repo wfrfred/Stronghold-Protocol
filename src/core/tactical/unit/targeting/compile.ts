@@ -10,6 +10,11 @@ import { areHostile, hasAllegiance } from "../capability/allegiance.js";
 import { isSpatiallyPresent } from "../capability/presence.js";
 import { hasHit, hasSpatial } from "../capability/spatial.js";
 import { hasStatusFlag } from "../capability/status/capability.js";
+import {
+    canReceiveElementDamage,
+    canReceiveElementHeal,
+    elementDamageRatio,
+} from "../capability/elemental/query.js";
 import { hasVitality, type VitalUnit } from "../capability/vitality/capability.js";
 import type { Unit, UnitId } from "../unit.js";
 import type {
@@ -67,6 +72,12 @@ function compileDamageTargeting(
     purposes: readonly QueryPurpose[],
 ): CompiledTargeting<CombatTargetQueryContext> {
     const requiresHealingEligibility = purposes.includes("HEAL");
+    const requiresElementDamage = purposes.includes("ELEMENT_DAMAGE");
+    const requiresElementHealing = purposes.includes("ELEMENT_HEAL");
+    const elementOnly =
+        !purposes.includes("DAMAGE") &&
+        !requiresHealingEligibility &&
+        (requiresElementDamage || requiresElementHealing);
 
     return {
         candidates: function* ({ source, battlefield }) {
@@ -83,11 +94,13 @@ function compileDamageTargeting(
 
         accepts: (context, target) => {
             if (
-                !isActiveVitalUnit(target) ||
+                !(elementOnly ? isSpatiallyPresent(target) : isActiveVitalUnit(target)) ||
                 !hasSpatial(target) ||
                 (target.spatial.layer === "AIR" && !definition.canTargetAir) ||
                 !areHostile(context.source, target) ||
-                (requiresHealingEligibility && hasStatusFlag(target, "HEAL_FREE"))
+                (requiresHealingEligibility && hasStatusFlag(target, "HEAL_FREE")) ||
+                (requiresElementDamage && !canReceiveElementDamage(target)) ||
+                (requiresElementHealing && !canReceiveElementHeal(target))
             ) {
                 return false;
             }
@@ -134,17 +147,22 @@ function compileHealingTargeting(
     maxHp: HealingMaxHpProvider = staticMaxHp,
 ): CompiledTargeting<CombatTargetQueryContext> {
     const requiresHealingEligibility = purposes.includes("HEAL");
+    const elementHealing = purposes.includes("ELEMENT_HEAL");
+    const elementOnly = elementHealing && !requiresHealingEligibility;
 
     return {
         candidates: ({ battlefield }) => battlefield.unitIds,
 
         accepts: (context, target) =>
-            isActiveVitalUnit(target) &&
+            isSpatiallyPresent(target) &&
             hasSpatial(target) &&
             hasHit(target) &&
             (definition.includeSelf || target.id !== context.source.id) &&
             sameSide(context.source, target) &&
-            target.vitality.hp < maxHp(target, context) &&
+            (elementOnly
+                ? elementDamageRatio(target) > 0
+                : isActiveVitalUnit(target) && target.vitality.hp < maxHp(target, context)) &&
+            (!elementHealing || canReceiveElementHeal(target)) &&
             (definition.ignoreAllyTargetFree || !hasStatusFlag(target, "ALLY_TARGET_FREE")) &&
             (!requiresHealingEligibility ||
                 definition.ignoreHealFree ||
@@ -157,6 +175,9 @@ function compileHealingTargeting(
             ),
 
         compare: (context, left, right) => {
+            if (elementOnly) {
+                return elementDamageRatio(right) - elementDamageRatio(left);
+            }
             if (!hasVitality(left) || !hasVitality(right)) {
                 return 0;
             }

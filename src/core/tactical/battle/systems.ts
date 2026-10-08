@@ -30,6 +30,7 @@ import {
 import { createProjectileSystem } from "./phases/projectiles.js";
 import { copyProjectileState, type ProjectileState } from "../battlefield/projectile/state.js";
 import { withProjectileOperations } from "../battlefield/projectile/operations.js";
+import { advanceElements } from "./phases/elemental.js";
 import { advanceSkills } from "./phases/skills.js";
 
 export interface BattleResources {
@@ -126,6 +127,7 @@ export function createBattleSystems(input: Input, resources: BattleResources = {
         bindPhase("actionExecution", combat.prepare),
         bindStatelessPhase(deployment.step),
         bindPhase("schedule", schedule.spawn),
+        bindStatelessPhase((input) => advanceElements(input, combatResources)),
         bindStatelessPhase((input) => advanceSkills(input, combatResources)),
         bindStatelessPhase(effectSources.step),
         bindStatelessPhase(movement.reroute),

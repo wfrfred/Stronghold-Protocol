@@ -28,6 +28,15 @@ import {
     ActionReleaseResources,
     type ActionReleaseRules,
 } from "../unit/capability/action/release.js";
+import { ElementalResources } from "../unit/capability/elemental/resources.js";
+import {
+    resolveElementDamage,
+    resolveElementHeal,
+} from "../unit/capability/elemental/execution.js";
+import type {
+    ElementDamageRequest,
+    ElementHealRequest,
+} from "../unit/capability/elemental/settlement.js";
 import { SkillResources } from "../unit/capability/skill/resources.js";
 
 export interface CombatEffectFacets<S extends object> {
@@ -50,6 +59,28 @@ export class CombatResources {
     readonly effectSources = new EffectSourceResources(this.#registration);
     readonly projectiles = new ProjectileResources(this.#registration);
     readonly skills = new SkillResources(this.#registration);
+    readonly elemental = new ElementalResources(this.#registration);
+    readonly settleElementDamage = (
+        work: CombatWork,
+        request: ElementDamageRequest & { readonly targetUnitId: UnitId },
+    ) => {
+        this.#registration.assertUsable();
+
+        return resolveElementDamage(work, request, this);
+    };
+
+    readonly settleElementHeal = (
+        work: CombatWork,
+        request: ElementHealRequest & {
+            readonly sourceUnitId: UnitId | null;
+            readonly targetUnitId: UnitId;
+        },
+    ) => {
+        this.#registration.assertUsable();
+
+        return resolveElementHeal(work, request);
+    };
+
     readonly actionRelease = new ActionReleaseResources(this.effects, this.#registration);
     readonly completeAttack = (work: CombatWork, unitId: UnitId, tick: number): CombatWork => {
         const consumed = consumeSkillAmmo(work, unitId, tick, this);

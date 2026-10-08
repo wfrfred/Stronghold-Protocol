@@ -32,10 +32,15 @@ import {
 import type { Unit } from "../unit.js";
 import type { Vitality, VitalUnitDefinition } from "../capability/vitality/capability.js";
 import type { InitializedUnit } from "../initialize.js";
+import {
+    createElementalDefinition,
+    type ElementalDefinition,
+} from "../capability/elemental/capability.js";
 import { createSkillDefinition, type SkillDefinition } from "../capability/skill/capability.js";
 
 export interface EnemyDefinition extends VitalUnitDefinition, LocomotiveUnitDefinition {
     readonly skill?: SkillDefinition;
+    readonly elemental?: ElementalDefinition;
 }
 
 export type Enemy<D extends EnemyDefinition = EnemyDefinition> = Unit<D> & Vitality & Locomotion;
@@ -78,6 +83,9 @@ export function createEnemyDefinition(definition: EnemyDefinition): EnemyDefinit
             minimumMoveSpeedPerTick,
             steeringParameters: Object.freeze({ ...definition.locomotion.steeringParameters }),
         }),
+        ...(definition.elemental === undefined
+            ? {}
+            : { elemental: createElementalDefinition(definition.elemental) }),
         ...(definition.skill === undefined
             ? {}
             : { skill: createSkillDefinition(definition.skill) }),

@@ -58,10 +58,12 @@ interface RecentAttack {
 
 const DEATH_WINDOW_TICKS = 24;
 const ATTACK_REPLAY_TICKS = 8;
-const DAMAGE_TYPE = { PHYSICAL: "phys", ARTS: "arts", TRUE: "true" } as const satisfies Record<
-    DamageType,
-    string
->;
+const DAMAGE_TYPE = {
+    PHYSICAL: "phys",
+    ARTS: "arts",
+    TRUE: "true",
+    ELEMENTAL: "true",
+} as const satisfies Record<DamageType, string>;
 
 function record(value: unknown): Record<string, unknown> {
     return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -260,6 +262,10 @@ export class TacticalDemoPresentation {
                 case "PROJECTILE_REACHED":
                 case "PROJECTILE_HIT":
                 case "PROJECTILE_STOPPED":
+                case "ELEMENT_DAMAGE":
+                case "ELEMENT_HEAL":
+                case "ELEMENT_BURST":
+                case "ELEMENT_RECOVERED":
                 case "SKILL_ACTIVATED":
                 case "SKILL_FINISHED":
                 case "UNIT_DEPLOYED":

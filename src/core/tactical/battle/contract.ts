@@ -30,6 +30,7 @@ import type {
 } from "../unit/capability/action/process.js";
 import type { ProjectileId, ProjectileState } from "../battlefield/projectile/state.js";
 import type { ProjectileSignal } from "../battlefield/projectile/settlement.js";
+import type { ElementalSignal } from "../unit/capability/elemental/execution.js";
 import type { SkillSignal } from "../unit/capability/skill/execution.js";
 
 /** Shared creation data. Keep this input unchanged for the runtime lifetime. */
@@ -60,6 +61,7 @@ export type Event =
     | ActionExecutionSignal
     | ProjectileSignal
     | SkillSignal
+    | ElementalSignal
     | {
           readonly type: "UNIT_DEPLOYED" | "UNIT_RELOCATED";
           readonly unitId: UnitId;

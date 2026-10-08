@@ -2,7 +2,7 @@ import type { EffectInstanceId } from "../../effects/instance.js";
 import type { UnitId } from "../../../unit.js";
 import type { CombatWork } from "../../../../battle/execution/work.js";
 
-export type DamageType = "PHYSICAL" | "ARTS" | "TRUE";
+export type DamageType = "PHYSICAL" | "ARTS" | "TRUE" | "ELEMENTAL";
 
 export interface DamageOperands {
     readonly power: number;

@@ -1,0 +1,584 @@
+{
+  "sources": {
+    "epBreakBuffTable": {
+      "bundlePath": "/mnt/c/Program Files/Hypergryph Launcher/games/Arknights Game/Arknights_Data/StreamingAssets/AB/Windows/anon/04eb386f05b54d201d3620f4fc75ac10.bin",
+      "cab": "CAB-7a9646da11272da492e962c13d6edca3",
+      "object": {
+        "id": -2481015010035215825,
+        "start": 4096,
+        "size": 572,
+        "typeid": 0,
+        "classid": 49
+      },
+      "textAssetName": "ep_breakbuff_table1cdc7b",
+      "payloadLength": 540,
+      "flatbufferPayloadOffset": 128
+    },
+    "buffTable": {
+      "bundlePath": "/mnt/c/Program Files/Hypergryph Launcher/games/Arknights Game/Arknights_Data/StreamingAssets/AB/Windows/anon/a7696ca0e44fd1fb1ce127832b61caa0.bin",
+      "cab": "CAB-a7aef17f7325363153742bc6b3c9e372",
+      "object": {
+        "id": -6712922429902062778,
+        "start": 4096,
+        "size": 26136,
+        "typeid": 0,
+        "classid": 49
+      },
+      "textAssetName": "buff_tablea22aef",
+      "payloadLength": 26112,
+      "flatbufferPayloadOffset": 128
+    },
+    "buffTemplateHolder": {
+      "bundlePath": "/mnt/c/Program Files/Hypergryph Launcher/games/Arknights Game/Arknights_Data/StreamingAssets/AB/Windows/config/buff_template_holder.ab",
+      "cab": "CAB-7983df61b3ae63c96fb4e076fc3d80af",
+      "object": {
+        "id": 6070581171229484677,
+        "start": 4352,
+        "size": 15862184,
+        "typeid": 1,
+        "classid": 114
+      },
+      "extractedFrom": "/tmp/stronghold-numeric-movement/buff-template-holder.json"
+    }
+  },
+  "decoding": "TextAsset payload bytes after the 128-byte header are FlatBuffers. Only fields present in the original table are emitted; absent schema fields are omitted. Enum numbers are translated using this client metadata, with mappings retained below. Template records and SerializedState strings are copied unchanged.",
+  "epBreakData": {
+    "SANITY": {
+      "elementBreakDuration": 10.0,
+      "enemyElementBreakDuration": 10.0,
+      "elementBuffs": [
+        "ep_break_sanity"
+      ]
+    },
+    "WATER": {
+      "elementBreakDuration": 10.0,
+      "enemyElementBreakDuration": 8.0,
+      "elementBuffs": [
+        "ep_break_water"
+      ]
+    },
+    "FIRE": {
+      "elementBreakDuration": 10.0,
+      "enemyElementBreakDuration": 10.0,
+      "elementBuffs": [
+        "ep_break_fire"
+      ]
+    },
+    "DARK": {
+      "elementBreakDuration": 15.0,
+      "enemyElementBreakDuration": 15.0,
+      "elementBuffs": [
+        "ep_break_dark"
+      ]
+    },
+    "ANGER": {
+      "elementBreakDuration": 15.0,
+      "enemyElementBreakDuration": 15.0,
+      "elementBuffs": [
+        "ep_break_anger"
+      ]
+    }
+  },
+  "buffData": {
+    "palsy[stack]": {
+      "attributes": {
+        "abnormalFlags": [
+          "PALSY"
+        ]
+      },
+      "buffKey": "palsy[stack]",
+      "isDamageMissable": true,
+      "statusResistable": 2,
+      "templateKey": "palsy[stack]",
+      "overrideKey": "palsy[stack]",
+      "overrideType": "STACK",
+      "maxStackCnt": 3,
+      "maxValidStackCnt": -1,
+      "overrideEffectKey": "common_061_numb_01",
+      "lifeTimeType": 2,
+      "triggerInterval": -1.0,
+      "waitFirstTriggerInterval": true,
+      "firstTriggerInterval": -1.0,
+      "priority": -1,
+      "blackboard": [
+        {
+          "key": "palsy_resistance_timer.interval",
+          "value": 10.0
+        }
+      ]
+    },
+    "palsying": {
+      "attributes": {
+        "abnormalFlags": [
+          "PALSYING"
+        ]
+      },
+      "buffKey": "palsying",
+      "isDamageMissable": true,
+      "statusResistable": 2,
+      "templateKey": "empty",
+      "maxStackCnt": 1,
+      "maxValidStackCnt": -1,
+      "overrideEffectKey": "common_061_numb_hit_01",
+      "audioSignal": "palsy_break_audio",
+      "lifeTimeType": "INFINITY",
+      "durationKey": "duration",
+      "triggerInterval": -1.0,
+      "waitFirstTriggerInterval": true,
+      "firstTriggerInterval": -1.0,
+      "priority": -1,
+      "blackboard": [
+        {
+          "key": "duration",
+          "value": 0.5
+        }
+      ]
+    },
+    "palsy_trigger": {
+      "attributes": {},
+      "buffKey": "palsy_trigger",
+      "statusResistable": 2,
+      "templateKey": "palsy_delay_trigger",
+      "maxStackCnt": 1,
+      "maxValidStackCnt": -1,
+      "lifeTimeType": 2,
+      "durationKey": "duration",
+      "triggerLifeType": "INFINITY",
+      "triggerCnt": 1,
+      "triggerInterval": 2.0,
+      "waitFirstTriggerInterval": true,
+      "firstTriggerInterval": -1.0,
+      "priority": -1
+    },
+    "ep_break_sanity_char": {
+      "attributes": {},
+      "buffKey": "ep_break_sanity_char",
+      "statusResistable": 2,
+      "templateKey": "ep_break_sanity_char",
+      "maxStackCnt": 1,
+      "maxValidStackCnt": -1,
+      "triggerInterval": -1.0,
+      "waitFirstTriggerInterval": true,
+      "firstTriggerInterval": -1.0,
+      "priority": -1,
+      "blackboard": [
+        {
+          "key": "stun",
+          "value": 10.0
+        },
+        {
+          "key": "ep_sanity_damage",
+          "value": 1000.0
+        }
+      ]
+    },
+    "ep_break_water_char": {
+      "attributes": {},
+      "buffKey": "ep_break_water_char",
+      "statusResistable": 2,
+      "templateKey": "ep_break_water_char",
+      "maxStackCnt": 1,
+      "maxValidStackCnt": -1,
+      "lifeTimeType": "INFINITY",
+      "durationKey": "ep_break_duration",
+      "triggerInterval": -1.0,
+      "waitFirstTriggerInterval": true,
+      "firstTriggerInterval": -1.0,
+      "priority": -1,
+      "blackboard": [
+        {
+          "key": "ep_water_damage",
+          "value": 800.0
+        },
+        {
+          "key": "def",
+          "value": -100.0
+        }
+      ]
+    },
+    "ep_break_fire_char": {
+      "attributes": {},
+      "buffKey": "ep_break_fire_char",
+      "statusResistable": 2,
+      "templateKey": "ep_break_fire_char",
+      "maxStackCnt": 1,
+      "maxValidStackCnt": -1,
+      "lifeTimeType": 2,
+      "triggerInterval": -1.0,
+      "waitFirstTriggerInterval": true,
+      "firstTriggerInterval": -1.0,
+      "priority": -1,
+      "blackboard": [
+        {
+          "key": "magic_resistance",
+          "value": -20.0
+        },
+        {
+          "key": "ep_fire_damage",
+          "value": 1200.0
+        }
+      ]
+    },
+    "ep_break_fire_enemy": {
+      "attributes": {
+        "attributeModifiers": [
+          {
+            "attributeType": "MAGIC_RESISTANCE",
+            "value": -20.0
+          }
+        ]
+      },
+      "buffKey": "ep_break_fire_enemy",
+      "statusResistable": 2,
+      "templateKey": "ep_break_fire_enemy",
+      "maxStackCnt": 1,
+      "maxValidStackCnt": -1,
+      "overrideEffectKey": "common_firedamage_debuff",
+      "audioSignal": "ep_break_fire_audio",
+      "lifeTimeType": 2,
+      "triggerInterval": -1.0,
+      "waitFirstTriggerInterval": true,
+      "firstTriggerInterval": -1.0,
+      "priority": -1,
+      "blackboard": [
+        {
+          "key": "ep_fire_damage",
+          "value": 7000.0
+        }
+      ]
+    },
+    "ep_break_water_enemy": {
+      "attributes": {
+        "attributeModifiers": [
+          {
+            "attributeType": "DEF",
+            "value": -120.0
+          }
+        ]
+      },
+      "buffKey": "ep_break_water_enemy",
+      "isDurableBuff": true,
+      "statusResistable": 2,
+      "templateKey": "ep_break_water_enemy",
+      "overrideType": "STACK",
+      "maxStackCnt": 1,
+      "maxValidStackCnt": -1,
+      "overrideEffectKey": "common_waterdamage_debuff",
+      "audioSignal": "ep_break_water_audio",
+      "lifeTimeType": 2,
+      "triggerInterval": -1.0,
+      "waitFirstTriggerInterval": true,
+      "firstTriggerInterval": -1.0,
+      "priority": -1,
+      "blackboard": [
+        {
+          "key": "ep_water_damage",
+          "value": 5000.0
+        },
+        {
+          "key": "max_stack_cnt",
+          "value": -1.0
+        }
+      ]
+    },
+    "ep_break_dark_char": {
+      "attributes": {},
+      "buffKey": "ep_break_dark_char",
+      "statusResistable": 2,
+      "templateKey": "ep_break_dark_char",
+      "maxStackCnt": 1,
+      "maxValidStackCnt": -1,
+      "lifeTimeType": 2,
+      "triggerInterval": -1.0,
+      "waitFirstTriggerInterval": true,
+      "firstTriggerInterval": -1.0,
+      "priority": -1,
+      "blackboard": [
+        {
+          "key": "damage",
+          "value": 100.0
+        },
+        {
+          "key": "interval",
+          "value": 1.0
+        },
+        {
+          "key": "sp",
+          "value": -1.0
+        }
+      ]
+    },
+    "ep_break_dark_enemy": {
+      "attributes": {},
+      "buffKey": "ep_break_dark_enemy",
+      "statusResistable": 2,
+      "templateKey": "ep_break_dark_enemy",
+      "maxStackCnt": 1,
+      "maxValidStackCnt": -1,
+      "lifeTimeType": 2,
+      "triggerInterval": -1.0,
+      "waitFirstTriggerInterval": true,
+      "firstTriggerInterval": -1.0,
+      "priority": -1,
+      "blackboard": [
+        {
+          "key": "atk_down",
+          "value": -0.5
+        },
+        {
+          "key": "duration",
+          "value": 15.0
+        },
+        {
+          "key": "damage",
+          "value": 800.0
+        },
+        {
+          "key": "interval",
+          "value": 1.0
+        }
+      ]
+    },
+    "ep_break_sanity_enemy": {
+      "attributes": {},
+      "buffKey": "ep_break_sanity_enemy",
+      "statusResistable": 2,
+      "templateKey": "ep_break_sanity_enemy",
+      "maxStackCnt": 1,
+      "maxValidStackCnt": -1,
+      "overrideEffectKey": "common_nerve_injury_01_hit",
+      "audioSignal": "ep_break_sanity_audio",
+      "triggerInterval": -1.0,
+      "waitFirstTriggerInterval": true,
+      "firstTriggerInterval": -1.0,
+      "priority": -1,
+      "blackboard": [
+        {
+          "key": "palsy_stack_cnt",
+          "value": 3.0
+        },
+        {
+          "key": "ep_sanity_damage",
+          "value": 6000.0
+        }
+      ]
+    },
+    "ep_break_sanity": {
+      "attributes": {},
+      "buffKey": "ep_break_sanity",
+      "statusResistable": 2,
+      "templateKey": "ep_break_sanity",
+      "maxStackCnt": 1,
+      "maxValidStackCnt": -1,
+      "lifeTimeType": "INFINITY",
+      "durationKey": "ep_break_duration",
+      "triggerInterval": -1.0,
+      "waitFirstTriggerInterval": true,
+      "firstTriggerInterval": -1.0,
+      "priority": -1
+    },
+    "ep_break_water": {
+      "attributes": {},
+      "buffKey": "ep_break_water",
+      "statusResistable": 2,
+      "templateKey": "ep_break_water",
+      "maxStackCnt": 1,
+      "maxValidStackCnt": -1,
+      "lifeTimeType": "INFINITY",
+      "durationKey": "ep_break_duration",
+      "triggerInterval": -1.0,
+      "waitFirstTriggerInterval": true,
+      "firstTriggerInterval": -1.0,
+      "priority": -1
+    },
+    "ep_break_fire": {
+      "attributes": {},
+      "buffKey": "ep_break_fire",
+      "statusResistable": 2,
+      "templateKey": "ep_break_fire",
+      "maxStackCnt": 1,
+      "maxValidStackCnt": -1,
+      "lifeTimeType": "INFINITY",
+      "durationKey": "ep_break_duration",
+      "triggerInterval": -1.0,
+      "waitFirstTriggerInterval": true,
+      "firstTriggerInterval": -1.0,
+      "priority": -1
+    },
+    "ep_break_dark": {
+      "attributes": {},
+      "buffKey": "ep_break_dark",
+      "statusResistable": 2,
+      "templateKey": "ep_break_dark",
+      "maxStackCnt": 1,
+      "maxValidStackCnt": -1,
+      "lifeTimeType": "INFINITY",
+      "durationKey": "ep_break_duration",
+      "triggerInterval": -1.0,
+      "waitFirstTriggerInterval": true,
+      "firstTriggerInterval": -1.0,
+      "priority": -1
+    }
+  },
+  "buffTemplates": [
+    {
+      "templateIndex": 284,
+      "record": {
+        "templateKey": "periodic_magic_damage",
+        "effectKey": "",
+        "onEventPriority": 0,
+        "eventToActions": {
+          "_items": [
+            {
+              "key": 2,
+              "value": {
+                "SerializedState": "[{\"_damageType\":\"MAGICAL\",\"_damageKey\":\"damage\",\"_ignoreForSp\":true,\"_damageWithoutModify\":false,\"_attackType\":\"BUFF\",\"_isEnvDamage\":false,\"_isUndeadable\":false,\"_ignoreCancelReasonMask\":\"NONE\",\"_instantKillLikeDamage\":false,\"_isNotChangeableValue\":false,\"_multiplierByKey\":false,\"_multiplierKey\":\"cnt\",\"_modifierKey\":\"\",\"$type\":\"Torappu.Battle.Action.Nodes+NoSourceDamage\"}]",
+                "SerializedObjectReferences": []
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "templateIndex": 490,
+      "record": {
+        "templateKey": "ep_break_sanity_char",
+        "effectKey": "",
+        "onEventPriority": 0,
+        "eventToActions": {
+          "_items": [
+            {
+              "key": 0,
+              "value": {
+                "SerializedState": "[{\"_buff\":{\"attributes\":{\"abnormalFlags\":[],\"abnormalImmunes\":[],\"abnormalAntis\":[],\"abnormalCombos\":[],\"abnormalComboImmunes\":[],\"attributeModifiers\":[]},\"buffKey\":\"stun\",\"loadFromDB\":true,\"isDurableBuff\":false,\"isDamageMissable\":false,\"isSilenceable\":false,\"isStunnable\":false,\"isFreezable\":false,\"isLevitatable\":false,\"isGroundBoundable\":false,\"statusResistable\":\"AUTOMATIC\",\"templateKey\":\"empty\",\"disableOverride\":false,\"overrideKey\":null,\"overrideType\":\"DEFAULT\",\"maxStackCnt\":1,\"refreshRemainingTimeWhenStackMax\":false,\"clearAllStackCntWhenTimeUp\":false,\"maxValidStackCnt\":-1,\"independentCharacterSource\":false,\"overrideEffectKey\":null,\"overrideOnEventPriority\":false,\"onEventPriority\":\"DEFAULT\",\"audioSignal\":null,\"lifeTimeType\":\"LIMITED\",\"takeSnapshotWhenExtend\":false,\"durationKey\":null,\"remainingTimeKey\":null,\"lifeTime\":0.0,\"triggerLifeType\":\"IMMEDIATELY\",\"triggerCnt\":0,\"triggerInterval\":-1.0,\"waitFirstTriggerInterval\":true,\"firstTriggerInterval\":-1.0,\"priority\":-1,\"priorityBBKeys\":[],\"stripBlackboardParamsWithBuffKey\":false,\"blackboard\":[],\"enableInitDirectionFromSource\":false},\"_buffOwner\":\"BUFF_OWNER\",\"_useSpecialBuffSource\":false,\"_specialBuffSource\":\"BUFF_SOURCE\",\"_isDerivedBuff\":false,\"_finishDerivedBuffIfParentFinish\":false,\"_inherateSourceProjectileFromParentBuff\":false,\"_hookEffectKeyFromSourceProjectile\":false,\"$type\":\"Torappu.Battle.Action.Nodes+CreateBuff\"},{\"_buff\":{\"attributes\":{\"abnormalFlags\":[],\"abnormalImmunes\":[],\"abnormalAntis\":[],\"abnormalCombos\":[],\"abnormalComboImmunes\":[],\"attributeModifiers\":[]},\"buffKey\":\"ep_break_sanity[epfree]\",\"loadFromDB\":false,\"isDurableBuff\":false,\"isDamageMissable\":false,\"isSilenceable\":false,\"isStunnable\":false,\"isFreezable\":false,\"isLevitatable\":false,\"isGroundBoundable\":false,\"statusResistable\":\"AUTOMATIC\",\"templateKey\":\"empty\",\"disableOverride\":false,\"overrideKey\":null,\"overrideType\":\"DEFAULT\",\"maxStackCnt\":1,\"refreshRemainingTimeWhenStackMax\":false,\"clearAllStackCntWhenTimeUp\":false,\"maxValidStackCnt\":-1,\"independentCharacterSource\":false,\"overrideEffectKey\":\"common_nerve_injury_01_hit\",\"overrideOnEventPriority\":false,\"onEventPriority\":\"DEFAULT\",\"audioSignal\":\"ep_break_sanity_audio\",\"lifeTimeType\":\"LIMITED\",\"takeSnapshotWhenExtend\":false,\"durationKey\":\"ep_break_duration\",\"remainingTimeKey\":null,\"lifeTime\":0.0,\"triggerLifeType\":\"IMMEDIATELY\",\"triggerCnt\":0,\"triggerInterval\":-1.0,\"waitFirstTriggerInterval\":true,\"firstTriggerInterval\":-1.0,\"priority\":-1,\"priorityBBKeys\":[],\"stripBlackboardParamsWithBuffKey\":false,\"blackboard\":[],\"enableInitDirectionFromSource\":false},\"_buffOwner\":\"BUFF_OWNER\",\"_useSpecialBuffSource\":false,\"_specialBuffSource\":\"BUFF_SOURCE\",\"_isDerivedBuff\":false,\"_finishDerivedBuffIfParentFinish\":false,\"_inherateSourceProjectileFromParentBuff\":false,\"_hookEffectKeyFromSourceProjectile\":false,\"$type\":\"Torappu.Battle.Action.Nodes+CreateBuff\"},{\"_damageType\":\"PURE\",\"_damageKey\":\"ep_sanity_damage\",\"_ignoreForSp\":false,\"_damageWithoutModify\":false,\"_attackType\":\"NONE\",\"_isEnvDamage\":false,\"_isUndeadable\":false,\"_ignoreCancelReasonMask\":\"NONE\",\"_instantKillLikeDamage\":false,\"_isNotChangeableValue\":false,\"_multiplierByKey\":false,\"_multiplierKey\":\"cnt\",\"_modifierKey\":\"\",\"$type\":\"Torappu.Battle.Action.Nodes+NoSourceDamage\"}]",
+                "SerializedObjectReferences": []
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "templateIndex": 576,
+      "record": {
+        "templateKey": "ep_break_water_char",
+        "effectKey": "",
+        "onEventPriority": 0,
+        "eventToActions": {
+          "_items": [
+            {
+              "key": 0,
+              "value": {
+                "SerializedState": "[{\"_targetType\":\"BUFF_OWNER\",\"_sourceType\":\"SOURCE\",\"_effectKey\":\"common_waterElementExplosion\",\"_useSourceFaceVactor\":false,\"_useSourceToTargetDirection\":false,\"_useConstDirection\":false,\"_constDirection\":\"UP\",\"_createEffectHoldBySource\":false,\"_createEffectConstDirectionHoldBySource\":false,\"_useAttackPlaybackSpeed\":false,\"_manualSetPlaybackSpeed\":false,\"_blackboardKey\":\"\",\"_playbackSpeed\":1.0,\"$type\":\"Torappu.Battle.Action.Nodes+CreateEffect\"},{\"_buff\":{\"attributes\":{\"abnormalFlags\":[],\"abnormalImmunes\":[],\"abnormalAntis\":[],\"abnormalCombos\":[],\"abnormalComboImmunes\":[],\"attributeModifiers\":[{\"attributeType\":\"DEF\",\"formulaItem\":\"ADDITION\",\"value\":0.0,\"loadFromBlackboard\":true,\"fetchBaseValueFromSourceEntity\":false}]},\"buffKey\":\"ep_water_def_down\",\"loadFromDB\":false,\"isDurableBuff\":false,\"isDamageMissable\":false,\"isSilenceable\":false,\"isStunnable\":false,\"isFreezable\":false,\"isLevitatable\":false,\"isGroundBoundable\":false,\"statusResistable\":\"AUTOMATIC\",\"templateKey\":\"empty\",\"disableOverride\":false,\"overrideKey\":null,\"overrideType\":\"STACK\",\"maxStackCnt\":-1,\"refreshRemainingTimeWhenStackMax\":false,\"clearAllStackCntWhenTimeUp\":false,\"maxValidStackCnt\":-1,\"independentCharacterSource\":false,\"overrideEffectKey\":\"buff_defdown\",\"overrideOnEventPriority\":false,\"onEventPriority\":\"DEFAULT\",\"audioSignal\":\"ep_break_water_audio\",\"lifeTimeType\":\"INFINITY\",\"takeSnapshotWhenExtend\":false,\"durationKey\":null,\"remainingTimeKey\":null,\"lifeTime\":0.0,\"triggerLifeType\":\"IMMEDIATELY\",\"triggerCnt\":0,\"triggerInterval\":-1.0,\"waitFirstTriggerInterval\":true,\"firstTriggerInterval\":-1.0,\"priority\":-1,\"priorityBBKeys\":[],\"stripBlackboardParamsWithBuffKey\":false,\"blackboard\":[],\"enableInitDirectionFromSource\":false},\"_buffOwner\":\"BUFF_OWNER\",\"_useSpecialBuffSource\":false,\"_specialBuffSource\":\"BUFF_SOURCE\",\"_isDerivedBuff\":false,\"_finishDerivedBuffIfParentFinish\":false,\"_inherateSourceProjectileFromParentBuff\":false,\"_hookEffectKeyFromSourceProjectile\":false,\"$type\":\"Torappu.Battle.Action.Nodes+CreateBuff\"},{\"_damageType\":\"PHYSICAL\",\"_damageKey\":\"ep_water_damage\",\"_ignoreForSp\":false,\"_damageWithoutModify\":false,\"_attackType\":\"NORMAL\",\"_isEnvDamage\":false,\"_isUndeadable\":false,\"_ignoreCancelReasonMask\":\"NONE\",\"_instantKillLikeDamage\":false,\"_isNotChangeableValue\":false,\"_multiplierByKey\":false,\"_multiplierKey\":\"cnt\",\"_modifierKey\":\"\",\"$type\":\"Torappu.Battle.Action.Nodes+NoSourceDamage\"}]",
+                "SerializedObjectReferences": []
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "templateIndex": 606,
+      "record": {
+        "templateKey": "ep_break_water_enemy",
+        "effectKey": "",
+        "onEventPriority": 0,
+        "eventToActions": {
+          "_items": [
+            {
+              "key": 0,
+              "value": {
+                "SerializedState": "[{\"_damageType\":\"ELEMENT\",\"_damageKey\":\"ep_water_damage\",\"_ignoreForSp\":false,\"_damageWithoutModify\":false,\"_attackType\":\"NORMAL\",\"_isEnvDamage\":false,\"_isUndeadable\":false,\"_ignoreCancelReasonMask\":\"NONE\",\"_instantKillLikeDamage\":false,\"_isNotChangeableValue\":false,\"_multiplierByKey\":false,\"_multiplierKey\":\"cnt\",\"_modifierKey\":\"\",\"$type\":\"Torappu.Battle.Action.Nodes+NoSourceDamage\"},{\"_targetType\":\"BUFF_OWNER\",\"_sourceType\":\"SOURCE\",\"_effectKey\":\"common_waterdamage_hit\",\"_useSourceFaceVactor\":false,\"_useSourceToTargetDirection\":false,\"_useConstDirection\":false,\"_constDirection\":\"UP\",\"_createEffectHoldBySource\":false,\"_createEffectConstDirectionHoldBySource\":false,\"_useAttackPlaybackSpeed\":false,\"_manualSetPlaybackSpeed\":false,\"_blackboardKey\":\"\",\"_playbackSpeed\":1.0,\"$type\":\"Torappu.Battle.Action.Nodes+CreateEffect\"}]",
+                "SerializedObjectReferences": []
+              }
+            },
+            {
+              "key": 100,
+              "value": {
+                "SerializedState": "[{\"_buff\":{\"attributes\":{\"abnormalFlags\":[],\"abnormalImmunes\":[],\"abnormalAntis\":[],\"abnormalCombos\":[],\"abnormalComboImmunes\":[],\"attributeModifiers\":[]},\"buffKey\":\"ep_break_water_enemy[effect]\",\"loadFromDB\":false,\"isDurableBuff\":false,\"isDamageMissable\":false,\"isSilenceable\":false,\"isStunnable\":false,\"isFreezable\":false,\"isLevitatable\":false,\"isGroundBoundable\":false,\"statusResistable\":\"AUTOMATIC\",\"templateKey\":\"empty\",\"disableOverride\":false,\"overrideKey\":null,\"overrideType\":\"DEFAULT\",\"maxStackCnt\":1,\"refreshRemainingTimeWhenStackMax\":false,\"clearAllStackCntWhenTimeUp\":false,\"maxValidStackCnt\":-1,\"independentCharacterSource\":false,\"overrideEffectKey\":\"common_waterdamage_debuff\",\"overrideOnEventPriority\":false,\"onEventPriority\":\"DEFAULT\",\"audioSignal\":null,\"lifeTimeType\":\"INFINITY\",\"takeSnapshotWhenExtend\":false,\"durationKey\":null,\"remainingTimeKey\":null,\"lifeTime\":0.0,\"triggerLifeType\":\"IMMEDIATELY\",\"triggerCnt\":0,\"triggerInterval\":-1.0,\"waitFirstTriggerInterval\":true,\"firstTriggerInterval\":-1.0,\"priority\":-1,\"priorityBBKeys\":[],\"stripBlackboardParamsWithBuffKey\":false,\"blackboard\":[],\"enableInitDirectionFromSource\":false},\"_buffOwner\":\"BUFF_OWNER\",\"_useSpecialBuffSource\":false,\"_specialBuffSource\":\"BUFF_SOURCE\",\"_isDerivedBuff\":true,\"_finishDerivedBuffIfParentFinish\":true,\"_inherateSourceProjectileFromParentBuff\":false,\"_hookEffectKeyFromSourceProjectile\":false,\"$type\":\"Torappu.Battle.Action.Nodes+CreateBuff\"}]",
+                "SerializedObjectReferences": []
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "templateIndex": 611,
+      "record": {
+        "templateKey": "ep_break_fire_enemy",
+        "effectKey": "",
+        "onEventPriority": 0,
+        "eventToActions": {
+          "_items": [
+            {
+              "key": 0,
+              "value": {
+                "SerializedState": "[{\"_damageType\":\"ELEMENT\",\"_damageKey\":\"ep_fire_damage\",\"_ignoreForSp\":false,\"_damageWithoutModify\":false,\"_attackType\":\"NORMAL\",\"_isEnvDamage\":false,\"_isUndeadable\":false,\"_ignoreCancelReasonMask\":\"NONE\",\"_instantKillLikeDamage\":false,\"_isNotChangeableValue\":false,\"_multiplierByKey\":false,\"_multiplierKey\":\"cnt\",\"_modifierKey\":\"ep_break_damage_enemy_fire\",\"$type\":\"Torappu.Battle.Action.Nodes+NoSourceDamage\"},{\"_targetType\":\"BUFF_OWNER\",\"_sourceType\":\"SOURCE\",\"_effectKey\":\"common_firedamage_hit\",\"_useSourceFaceVactor\":false,\"_useSourceToTargetDirection\":false,\"_useConstDirection\":false,\"_constDirection\":\"UP\",\"_createEffectHoldBySource\":false,\"_createEffectConstDirectionHoldBySource\":false,\"_useAttackPlaybackSpeed\":false,\"_manualSetPlaybackSpeed\":false,\"_blackboardKey\":\"\",\"_playbackSpeed\":1.0,\"$type\":\"Torappu.Battle.Action.Nodes+CreateEffect\"}]",
+                "SerializedObjectReferences": []
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "templateIndex": 1165,
+      "record": {
+        "templateKey": "ep_break_fire_char",
+        "effectKey": "",
+        "onEventPriority": 0,
+        "eventToActions": {
+          "_items": [
+            {
+              "key": 0,
+              "value": {
+                "SerializedState": "[{\"_buff\":{\"attributes\":{\"abnormalFlags\":[],\"abnormalImmunes\":[],\"abnormalAntis\":[],\"abnormalCombos\":[],\"abnormalComboImmunes\":[],\"attributeModifiers\":[{\"attributeType\":\"MAGIC_RESISTANCE\",\"formulaItem\":\"ADDITION\",\"value\":0.0,\"loadFromBlackboard\":true,\"fetchBaseValueFromSourceEntity\":false}]},\"buffKey\":\"ep_fire_magic_res_down\",\"loadFromDB\":false,\"isDurableBuff\":false,\"isDamageMissable\":false,\"isSilenceable\":false,\"isStunnable\":false,\"isFreezable\":false,\"isLevitatable\":false,\"isGroundBoundable\":false,\"statusResistable\":\"AUTOMATIC\",\"templateKey\":\"empty\",\"disableOverride\":false,\"overrideKey\":null,\"overrideType\":\"STACK\",\"maxStackCnt\":-1,\"refreshRemainingTimeWhenStackMax\":false,\"clearAllStackCntWhenTimeUp\":false,\"maxValidStackCnt\":-1,\"independentCharacterSource\":false,\"overrideEffectKey\":\"buff_burn\",\"overrideOnEventPriority\":false,\"onEventPriority\":\"DEFAULT\",\"audioSignal\":\"ep_break_fire_audio\",\"lifeTimeType\":\"INFINITY\",\"takeSnapshotWhenExtend\":false,\"durationKey\":null,\"remainingTimeKey\":null,\"lifeTime\":0.0,\"triggerLifeType\":\"IMMEDIATELY\",\"triggerCnt\":0,\"triggerInterval\":-1.0,\"waitFirstTriggerInterval\":true,\"firstTriggerInterval\":-1.0,\"priority\":-1,\"priorityBBKeys\":[],\"stripBlackboardParamsWithBuffKey\":false,\"blackboard\":[],\"enableInitDirectionFromSource\":false},\"_buffOwner\":\"BUFF_OWNER\",\"_useSpecialBuffSource\":false,\"_specialBuffSource\":\"BUFF_SOURCE\",\"_isDerivedBuff\":true,\"_finishDerivedBuffIfParentFinish\":true,\"_inherateSourceProjectileFromParentBuff\":false,\"_hookEffectKeyFromSourceProjectile\":false,\"$type\":\"Torappu.Battle.Action.Nodes+CreateBuff\"},{\"_damageType\":\"MAGICAL\",\"_damageKey\":\"ep_fire_damage\",\"_ignoreForSp\":false,\"_damageWithoutModify\":false,\"_attackType\":\"NORMAL\",\"_isEnvDamage\":false,\"_isUndeadable\":false,\"_ignoreCancelReasonMask\":\"NONE\",\"_instantKillLikeDamage\":false,\"_isNotChangeableValue\":false,\"_multiplierByKey\":false,\"_multiplierKey\":\"cnt\",\"_modifierKey\":\"\",\"$type\":\"Torappu.Battle.Action.Nodes+NoSourceDamage\"}]",
+                "SerializedObjectReferences": []
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "templateIndex": 1169,
+      "record": {
+        "templateKey": "periodic_element_damage",
+        "effectKey": "",
+        "onEventPriority": 0,
+        "eventToActions": {
+          "_items": [
+            {
+              "key": 2,
+              "value": {
+                "SerializedState": "[{\"_damageType\":\"ELEMENT\",\"_damageKey\":\"damage\",\"_ignoreForSp\":true,\"_damageWithoutModify\":false,\"_attackType\":\"BUFF\",\"_isEnvDamage\":false,\"_isUndeadable\":false,\"_ignoreCancelReasonMask\":\"NONE\",\"_instantKillLikeDamage\":false,\"_isNotChangeableValue\":false,\"_multiplierByKey\":false,\"_multiplierKey\":\"cnt\",\"_modifierKey\":\"ep_break_damage_enemy_dark\",\"$type\":\"Torappu.Battle.Action.Nodes+NoSourceDamage\"}]",
+                "SerializedObjectReferences": []
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "templateIndex": 6111,
+      "record": {
+        "templateKey": "ep_break_sanity_enemy",
+        "effectKey": "",
+        "onEventPriority": 0,
+        "eventToActions": {
+          "_items": [
+            {
+              "key": 0,
+              "value": {
+                "SerializedState": "[{\"_conditionNode\":{\"$type\":\"Torappu.Battle.Action.Nodes+AlwaysNext\"},\"_succeedNodes\":[{\"_ownerType\":\"BUFF_OWNER\",\"$type\":\"Torappu.Battle.Action.Nodes+CheckUnitAlive\"},{\"_conditionsNode\":[{\"_abnormalFlag\":\"PALSY\",\"_targetType\":\"BUFF_OWNER\",\"_isUnset\":true,\"$type\":\"Torappu.Battle.Action.Nodes+CheckAbnormalImmune\"}],\"_succeedNodes\":[{\"_buff\":{\"attributes\":{\"abnormalFlags\":null,\"abnormalImmunes\":null,\"abnormalAntis\":null,\"abnormalCombos\":null,\"abnormalComboImmunes\":null,\"attributeModifiers\":null},\"buffKey\":\"palsy[stack]\",\"loadFromDB\":true,\"isDurableBuff\":false,\"isDamageMissable\":false,\"isSilenceable\":false,\"isStunnable\":false,\"isFreezable\":false,\"isLevitatable\":false,\"isGroundBoundable\":false,\"statusResistable\":\"AUTOMATIC\",\"templateKey\":\"empty\",\"disableOverride\":false,\"overrideKey\":null,\"overrideType\":\"STACK\",\"maxStackCnt\":1,\"refreshRemainingTimeWhenStackMax\":false,\"clearAllStackCntWhenTimeUp\":false,\"maxValidStackCnt\":-1,\"independentCharacterSource\":false,\"overrideEffectKey\":null,\"overrideOnEventPriority\":false,\"onEventPriority\":\"DEFAULT\",\"audioSignal\":null,\"lifeTimeType\":\"LIMITED\",\"takeSnapshotWhenExtend\":false,\"durationKey\":null,\"remainingTimeKey\":null,\"lifeTime\":0.0,\"triggerLifeType\":\"IMMEDIATELY\",\"triggerCnt\":0,\"triggerInterval\":-1.0,\"waitFirstTriggerInterval\":true,\"firstTriggerInterval\":-1.0,\"priority\":-1,\"priorityBBKeys\":[],\"stripBlackboardParamsWithBuffKey\":false,\"blackboard\":[],\"enableInitDirectionFromSource\":false},\"_buffOwner\":\"BUFF_OWNER\",\"_isDerivedBuff\":false,\"_finishDerivedBuffIfParentFinish\":false,\"_stackCntKey\":\"palsy_stack_cnt\",\"_stackCnt\":1,\"_isDisableOverrideBuff\":false,\"$type\":\"Torappu.Battle.Action.Nodes+CreateBuffStacked\"}],\"_failNodes\":null,\"_isAnd\":false,\"$type\":\"Torappu.Battle.Action.Nodes+IfConditions\"},{\"$type\":\"Torappu.Battle.Action.Nodes+AlwaysNext\"}],\"_failNodes\":null,\"$type\":\"Torappu.Battle.Action.Nodes+IfElse\"},{\"_damageType\":\"ELEMENT\",\"_damageKey\":\"ep_sanity_damage\",\"_ignoreForSp\":false,\"_damageWithoutModify\":false,\"_attackType\":\"NORMAL\",\"_isEnvDamage\":false,\"_isUndeadable\":false,\"_ignoreCancelReasonMask\":\"NONE\",\"_instantKillLikeDamage\":false,\"_isNotChangeableValue\":false,\"_multiplierByKey\":false,\"_multiplierKey\":\"cnt\",\"_modifierKey\":\"ep_break_damage_enemy_sanity\",\"$type\":\"Torappu.Battle.Action.Nodes+NoSourceDamage\"}]",
+                "SerializedObjectReferences": []
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

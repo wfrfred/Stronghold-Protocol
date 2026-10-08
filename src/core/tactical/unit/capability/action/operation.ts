@@ -1,4 +1,5 @@
 import { assertNonnegativeNumber } from "../../../../common/assert.js";
+import type { ElementType } from "../elemental/capability.js";
 import type { QueryPurpose } from "../../targeting/query.js";
 import { resolveAttackPower } from "../offense/query.js";
 import { createDamageOperands, type DamageType } from "../vitality/damage/contract.js";
@@ -18,7 +19,9 @@ export type Definition =
           readonly type: "HEAL";
           readonly power: number;
           readonly ignoreHealFree: boolean;
-      };
+      }
+    | { readonly type: "ELEMENT_DAMAGE"; readonly elementType: ElementType; readonly power: number }
+    | { readonly type: "ELEMENT_HEAL"; readonly power: number };
 
 export function create(definition: Definition): Definition {
     assertNonnegativeNumber(definition.power, "operation power");
@@ -33,6 +36,12 @@ export function purposes(definition: Definition): readonly QueryPurpose[] {
 
         case "HEAL":
             return ["HEAL"];
+
+        case "ELEMENT_DAMAGE":
+            return ["ELEMENT_DAMAGE"];
+
+        case "ELEMENT_HEAL":
+            return ["ELEMENT_HEAL"];
     }
 }
 
@@ -79,6 +88,25 @@ export function compile(definition: Definition, resources: ActionResources): Pro
                 ).work;
             };
         }
+
+        case "ELEMENT_DAMAGE":
+            return ({ work, sourceUnitId, targetUnitId, tick }) =>
+                resources.settleElementDamage(work, {
+                    sourceUnitId,
+                    targetUnitId,
+                    tick,
+                    type: definition.elementType,
+                    power: definition.power,
+                }).work;
+
+        case "ELEMENT_HEAL":
+            return ({ work, sourceUnitId, targetUnitId, tick }) =>
+                resources.settleElementHeal(work, {
+                    sourceUnitId,
+                    targetUnitId,
+                    tick,
+                    power: definition.power,
+                }).work;
 
         case "HEAL":
             return ({ work, sourceUnitId, targetUnitId, tick }) =>

@@ -1,4 +1,5 @@
 import { hasDefenseDefinition, type DefenseDefinition } from "../../defense/capability.js";
+import { hasElemental } from "../../elemental/capability.js";
 import { hasVitality, type Vitality } from "../capability.js";
 import { stabilizeUnit, type StableUnit, type Unit } from "../../../unit.js";
 import { hasStatusFlag } from "../../status/capability.js";
@@ -42,6 +43,7 @@ export function calculateDamage(
     power: number,
     damageType: DamageType,
     defense: DefenseDefinition,
+    elementDamageResistance = 0,
 ): number {
     switch (damageType) {
         case "PHYSICAL":
@@ -52,6 +54,12 @@ export function calculateDamage(
 
         case "TRUE":
             return power;
+
+        case "ELEMENTAL":
+            return Math.max(
+                power * 0.05,
+                power * Math.max(0, 1 - Math.max(0, elementDamageResistance) / 100),
+            );
     }
 }
 
@@ -61,7 +69,12 @@ export function damageUnit<U extends Unit & Vitality>(
     damageType: DamageType,
 ): DamageResult<U> {
     const defense = hasDefenseDefinition(unit.definition) ? unit.definition.defense : NO_DEFENSE;
-    const formulaDamage = calculateDamage(power, damageType, defense);
+    const formulaDamage = calculateDamage(
+        power,
+        damageType,
+        defense,
+        hasElemental(unit) ? unit.definition.elemental.damageResistance : 0,
+    );
 
     assertNonnegativeNumber(formulaDamage, "damage amount");
 
@@ -198,6 +211,7 @@ export function resolveDamage(
         formulaPower(operands),
         request.damageType,
         effectiveDefense,
+        hasElemental(current) ? current.definition.elemental.damageResistance : 0,
     );
 
     assertFiniteNumber(formulaDamage, "formula damage");
