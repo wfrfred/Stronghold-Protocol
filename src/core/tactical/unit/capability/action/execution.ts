@@ -71,7 +71,6 @@ export function startAction(
         ...source,
         action: {
             ...source.action,
-            targetUnitId,
             readyAtTick: tick + definition.intervalTicks,
             recoveryUntilTick: tick + definition.recoveryTicks,
         },

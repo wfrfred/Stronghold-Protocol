@@ -4,7 +4,7 @@ import {
 } from "../../../../common/assert.js";
 import { createEffectDefinition, type EffectDefinition } from "./effect.js";
 import { createTargetingDefinition, type TargetingDefinition } from "../../targeting/definition.js";
-import type { Unit, UnitDefinition, UnitId } from "../../unit.js";
+import type { Unit, UnitDefinition } from "../../unit.js";
 
 export type TargetBindingId = string;
 
@@ -37,7 +37,6 @@ export interface ActionCapabilityDefinition {
 export interface ActionState {
     readonly readyAtTick: number;
     readonly recoveryUntilTick: number;
-    readonly targetUnitId: UnitId | null;
 }
 
 export interface Action {
@@ -131,7 +130,7 @@ export function createActionCapabilityDefinition(
 export function createActionState(tick = 0): ActionState {
     assertNonnegativeSafeInteger(tick, "action tick");
 
-    return { readyAtTick: tick, recoveryUntilTick: tick, targetUnitId: null };
+    return { readyAtTick: tick, recoveryUntilTick: tick };
 }
 
 export function initializeActionState(

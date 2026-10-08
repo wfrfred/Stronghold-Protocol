@@ -351,12 +351,6 @@ export function resumeActionExecution(
         return { work, state, result: { type: "ABSENT" }, signals: [] };
     }
 
-    const source = getCombatUnit(work, execution.sourceUnitId);
-
-    if (source === undefined || !isSpatiallyPresent(source)) {
-        return cancelActionExecution(work, state, executionId, resources, tick, "SOURCE_ABSENT");
-    }
-
     const signals: ActionExecutionSignal[] = [];
 
     while (true) {
@@ -364,6 +358,21 @@ export function resumeActionExecution(
 
         if (segment === undefined) {
             return finishExecution(work, state, execution, resources, tick, signals);
+        }
+
+        const source = getCombatUnit(work, execution.sourceUnitId);
+
+        if (source === undefined || !isSpatiallyPresent(source)) {
+            const cancelled = cancelActionExecution(
+                work,
+                state,
+                executionId,
+                resources,
+                tick,
+                "SOURCE_ABSENT",
+            );
+
+            return { ...cancelled, signals: [...signals, ...cancelled.signals] };
         }
 
         switch (segment.type) {
