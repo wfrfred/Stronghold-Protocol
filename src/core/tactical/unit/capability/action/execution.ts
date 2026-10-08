@@ -1,40 +1,21 @@
-import type { BattleEvent } from "../../../battle/contract.js";
 import {
     appendCombatEvents,
-    combatWorkResult,
     combatWorkView,
-    createCombatWork,
     getCombatUnit,
     updateCombatUnit,
     type CombatWork,
 } from "../../../battle/execution/work.js";
-import type { CombatTargetingView } from "../../targeting/query.js";
-import type { Unit, UnitId } from "../../unit.js";
-import { hasAction, type Action, type ActingUnitDefinition } from "./capability.js";
+import type { UnitId } from "../../unit.js";
+import { hasAction } from "./capability.js";
 import type { CompiledAction } from "./program.js";
 import type { EffectTransitionResources } from "../effects/contract.js";
 import {
     acceptActionExecution,
-    createActionExecutionState,
     resumeActionExecution,
     type ActionExecutionState,
 } from "./process.js";
 import type { ProjectileOperations } from "../../../battlefield/projectile/operations.js";
 import { isSpatiallyPresent } from "../presence.js";
-
-export interface ActionStep {
-    readonly state: ActionExecutionState;
-    readonly units: readonly Unit[];
-    readonly removedUnitIds: readonly UnitId[];
-    readonly events: readonly BattleEvent[];
-}
-
-export interface ActionStepContext {
-    readonly battlefield: CombatTargetingView;
-    readonly tick: number;
-    readonly state?: ActionExecutionState;
-    readonly projectiles?: ProjectileOperations;
-}
 
 export function startAction(
     work: CombatWork,
@@ -96,25 +77,4 @@ export function startAction(
     );
 
     return { work: advanced.work, state: advanced.state };
-}
-
-export function stepAction(
-    source: Unit<ActingUnitDefinition> & Action,
-    compiled: CompiledAction,
-    context: ActionStepContext,
-    resources: EffectTransitionResources,
-): ActionStep {
-    const result = startAction(
-        updateCombatUnit(createCombatWork(context.battlefield), source),
-        context.state ?? createActionExecutionState(),
-        source.id,
-        compiled,
-        context.tick,
-        resources,
-        true,
-        context.projectiles,
-    );
-    const { units, removedUnitIds, events } = combatWorkResult(result.work);
-
-    return { state: result.state, units, removedUnitIds, events };
 }

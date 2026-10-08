@@ -16,6 +16,9 @@ import type { SupportRelation } from "./support/relations.js";
 
 export type BattlefieldRemovalReason = "DEATH" | "RETREAT" | "EXPIRED" | "SCRIPT";
 
+export type SynchronousResult<T> = T &
+    (Extract<T, PromiseLike<unknown>> extends never ? unknown : never);
+
 export type BattlefieldChange<U extends Unit = Unit> =
     | { readonly type: "REGISTER_UNIT"; readonly unit: U }
     | { readonly type: "UPDATE_UNIT"; readonly unit: U }
@@ -108,6 +111,6 @@ export interface Battlefield<U extends Unit = Unit> extends BattlefieldView<U> {
     effectsFrom(source: SpatialEffectSource): readonly SpatialEffectId[];
     effectsFollowing(unitId: UnitId): readonly SpatialEffectId[];
     fork(): Battlefield<U>;
-    transact<T>(operation: (battlefield: Battlefield<U>) => T): T;
+    transact<T>(operation: (battlefield: Battlefield<U>) => SynchronousResult<T>): T;
     apply(changes: readonly BattlefieldChange<U>[]): BattlefieldChangeResult<U>;
 }

@@ -70,9 +70,7 @@ export function createUnitPlacementDefinition<P extends UnitPlacementDefinition>
 export function createUnitPlacementDefinition(
     placement: UnitPlacementDefinition,
 ): NormalizedUnitPlacement<UnitPlacementDefinition> {
-    if (placement.occupancy !== undefined && placement.states?.occupancy !== undefined) {
-        throw new TypeError("unit occupancy must have a single initial state");
-    }
+    assertSingleOccupancy(placement);
 
     const navigationEffects: UnitNavigationEffectPlacement[] = [];
     const effects = placement.navigationEffects ?? [];
@@ -122,6 +120,12 @@ export function createUnitPlacementDefinition(
     });
 }
 
+function assertSingleOccupancy(placement: UnitPlacementDefinition): void {
+    if (placement.occupancy !== undefined && placement.states?.occupancy !== undefined) {
+        throw new TypeError("unit occupancy must have a single initial state");
+    }
+}
+
 function nextIdentity(value: number, name: string): number {
     const next = value + 1;
 
@@ -142,13 +146,14 @@ export function instantiateUnitPlacement(
     execution: BattleExecutionState,
     tick: number,
 ): UnitPlacementInstantiation {
+    assertSingleOccupancy(placement);
+
     const nextUnitId = nextIdentity(execution.nextUnitId, "unit");
-    const states = copyPreparedCapabilityStates(
-        placement.definition,
+    const prepared = copyPreparedCapabilityStates(placement.definition, placement.states ?? {});
+    const states =
         placement.occupancy === undefined
-            ? (placement.states ?? {})
-            : { ...placement.states, occupancy: placement.occupancy },
-    );
+            ? prepared
+            : { ...prepared, occupancy: placement.occupancy };
     const unit = initializeUnit({
         id: execution.nextUnitId,
         definition: placement.definition,

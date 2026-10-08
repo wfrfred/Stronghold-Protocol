@@ -13,6 +13,7 @@ import type {
     BattlefieldChangeResult,
     BattlefieldRuntimeOptions,
     BattlefieldView,
+    SynchronousResult,
 } from "./contract.js";
 import type { BattlefieldMap } from "./map/map.js";
 import type { MechanismId, MechanismRuntime } from "./mechanism.js";
@@ -217,7 +218,7 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
         return [...(this.#state.spatial.effectsByAnchor.get(unitId) ?? [])];
     }
 
-    transact<T>(operation: (battlefield: BattlefieldRuntime<U>) => T): T {
+    transact<T>(operation: (battlefield: BattlefieldRuntime<U>) => SynchronousResult<T>): T {
         if (this.#transactionActive) {
             throw new Error("battlefield transaction is already active");
         }
@@ -226,7 +227,17 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
         this.#transactionActive = true;
 
         try {
-            return operation(this);
+            const result = operation(this);
+
+            if (
+                result !== null &&
+                (typeof result === "object" || typeof result === "function") &&
+                typeof (Reflect.get(result, "then") as unknown) === "function"
+            ) {
+                throw new TypeError("battlefield transactions must complete synchronously");
+            }
+
+            return result;
         } catch (error) {
             this.#state = previous;
             throw error;
