@@ -1,7 +1,7 @@
 import { attack, computedAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import { computedResistance } from "../../dist/core/tactical/unit/capability/defense/contributions.js";
 import { installFixtureEffect } from "../helpers/effects.js";
-import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/transition.js";
+import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
@@ -32,7 +32,7 @@ import {
 import { prepareCombatEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
 import {
   installEffect,
-  setEffectParticipation,
+  setEffectEnabled,
   finishEffect,
   finalizeEffect,
   attachEffectParent,
@@ -266,7 +266,7 @@ test("contributions: private stack transitions publish maintained projections im
     0,
     program.ref,
     (current) => ({ ...current, remaining: 10 }),
-    resources,
+    resources, 0,
   );
   const updated = updateEffectState(
     consumed,
@@ -274,7 +274,7 @@ test("contributions: private stack transitions publish maintained projections im
     0,
     program.ref,
     (current) => ({ ...current, layers: current.layers + 1 }),
-    resources,
+    resources, 0,
   );
   assert.equal(resolveAttackPower(1, combatWorkView(updated)), 130);
   assert.deepEqual(getCombatUnit(updated, 1).effects.instances[0].state, {
@@ -432,10 +432,10 @@ test("contributions: a sampled child retains its input until an explicit parent 
     ),
   );
   assert.equal(resolveAttackPower(2, combatWorkView(work)), 650);
-  const paused = setEffectParticipation(work, first, false, resources, 1);
+  const paused = setEffectEnabled(work, first, false, resources, 1);
   assert.equal(resolveAttackPower(2, combatWorkView(paused)), 500);
   assert.deepEqual(getCombatUnit(paused, 2).effects.instances[1].state, { sample: 150 });
-  work = setEffectParticipation(paused, first, true, resources, 1);
+  work = setEffectEnabled(paused, first, true, resources, 1);
   assert.equal(resolveAttackPower(2, combatWorkView(work)), 650);
   work = finishEffect(work, first, resources, 2);
   assert.equal(resolveAttackPower(2, combatWorkView(work)), 500);

@@ -14,7 +14,7 @@ import {
   removeEffect,
   finishEffectsOwnedByExecution,
   finishEffectsOwnedByUnit,
-  setEffectParticipation,
+  setEffectEnabled,
   finishEffect,
   finalizeEffect,
   finalizeFinishedEffects,
@@ -35,7 +35,7 @@ import {
   removeEffectInstance,
   replaceEffectInstance,
 } from "../../dist/core/tactical/unit/capability/effects/internal/state.js";
-import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/transition.js";
+import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import {
   createStatusDefinition,
   hasStatusFlag,
@@ -251,11 +251,11 @@ test("effects: derived arrays stay frozen and preserve unchanged instances acros
       calls++;
       return state;
     },
-    resources,
+    resources, 0,
   );
-  const updated = updateEffectState(work, 2, 2, program.ref, { remainingAmount: 100 }, resources);
-  const branch = updateEffectState(work, 2, 2, program.ref, { remainingAmount: 200 }, resources);
-  const disabled = setEffectParticipation(updated, address, false, resources, 1);
+  const updated = updateEffectState(work, 2, 2, program.ref, { remainingAmount: 100 }, resources, 0);
+  const branch = updateEffectState(work, 2, 2, program.ref, { remainingAmount: 200 }, resources, 0);
+  const disabled = setEffectEnabled(updated, address, false, resources, 1);
   const finished = finishEffect(disabled, address, resources, 1);
   const cleaned = finalizeEffect(finished, address, resources, 1);
   const retained = getCombatUnit(cleaned, 2).effects;
@@ -660,7 +660,7 @@ test("effects: lifecycle facts and operation leases close on normal and exceptio
       () => escaped.facts.participating(2),
       () => escaped.effects.install(2, program.ref, input),
       () => escaped.effects.update(escaped.address, program.ref, (state) => state),
-      () => escaped.effects.setParticipation(escaped.address, false),
+      () => escaped.effects.setEnabled(escaped.address, false),
       () => escaped.effects.finish(escaped.address),
       () => escaped.effects.attachParent(escaped.address, { unitId: 2, instanceId: 99 }),
     ];
@@ -730,7 +730,7 @@ test("effects: rejected unique installation preserves completed start transition
   );
   assert.deepEqual(finalized, [2]);
   assert.equal(getCombatUnit(rejected.work, 2).effects.nextInstanceId, 3);
-  const paused = setEffectParticipation(
+  const paused = setEffectEnabled(
     rejected.work,
     { unitId: 2, instanceId: 1 },
     false,
@@ -746,7 +746,7 @@ test("effects: rejected unique installation preserves completed start transition
   );
   assert.equal(duplicate.result.reason, "ADMISSION_REJECTED");
   assert.equal(getCombatUnit(duplicate.work, 2).effects.instances[0].state.attempts, 3);
-  const resumed = setEffectParticipation(
+  const resumed = setEffectEnabled(
     duplicate.work,
     { unitId: 2, instanceId: 1 },
     true,
@@ -904,7 +904,7 @@ test("effects: finish remains terminal when disable tries to reenable and finish
           context.facts.participating(2).map((instance) => instance.id),
           [2],
         );
-        context.effects.setParticipation(context.address, true);
+        context.effects.setEnabled(context.address, true);
         context.effects.finish(context.address);
       },
       finalize: (context) => {
@@ -1000,16 +1000,16 @@ test("effects: disabling preserves restartable samples and finishing a disabled 
     0,
   ).work;
   const address = { unitId: 2, instanceId: 1 };
-  const inactive = setEffectParticipation(installed, address, false, resources, 1);
+  const inactive = setEffectEnabled(installed, address, false, resources, 1);
   assert.equal(getCombatUnit(inactive, 2).effects.instances[0].finished, false);
   assert.equal(getCombatUnit(inactive, 2).offense.attack.entries[0].values[0].finalAddition, 50);
-  const resumed = setEffectParticipation(inactive, address, true, resources, 2);
+  const resumed = setEffectEnabled(inactive, address, true, resources, 2);
   assert.equal(resolveAttackPower(2, combatWorkView(resumed)), 150);
-  const inactiveAgain = setEffectParticipation(resumed, address, false, resources, 3);
+  const inactiveAgain = setEffectEnabled(resumed, address, false, resources, 3);
   const finished = finishEffect(inactiveAgain, address, resources, 4);
   assert.deepEqual(disabled, [false, false]);
   assert.equal(getCombatUnit(finished, 2).effects.instances[0].finished, true);
-  assert.equal(setEffectParticipation(finished, address, true, resources, 4), finished);
+  assert.equal(setEffectEnabled(finished, address, true, resources, 4), finished);
   assert.equal(finalized, 0);
   const cleaned = finalizeFinishedEffects(finished, 2, resources, 4);
   assert.equal(finalized, 1);
@@ -1037,7 +1037,7 @@ test("effects: nested finalization during disable preserves the terminal continu
         assert.equal(context.facts.getEffect(context.address), undefined);
         assert.equal(context.instance.finished, true);
         assert.equal(context.instance.state.remainingAmount, 500);
-        context.effects.setParticipation(context.address, true);
+        context.effects.setEnabled(context.address, true);
         context.effects.finish(context.address);
         events.push("parent-continued");
       },
@@ -1054,7 +1054,7 @@ test("effects: nested finalization during disable preserves the terminal continu
         events.push("child-disable");
         assert.equal(context.instance.finished, true);
         context.effects.finish({ unitId: 2, instanceId: 1 });
-        context.effects.setParticipation(context.address, true);
+        context.effects.setEnabled(context.address, true);
       },
       finalize: () => {
         events.push("child-finalize");
@@ -1083,23 +1083,22 @@ test("effects: nested finalization during disable preserves the terminal continu
   assert.deepEqual(events, [
     "parent-disable",
     "parent-finalize",
-    "parent-continued",
     "child-disable",
+    "child-finalize",
+    "parent-continued",
   ]);
   const instances = getCombatUnit(finished, 2).effects.instances;
-  assert.equal(instances[0].id, 2);
-  assert.equal(instances[0].finished, true);
-  assert.equal(instances[0].participating, false);
-  assert.equal(instances[1].programRef, replacement.ref);
-  assert.equal(instances[1].participating, true);
+  assert.equal(instances.length, 1);
+  assert.equal(instances[0].programRef, replacement.ref);
+  assert.equal(instances[0].participating, true);
   assert.equal(finishEffect(finished, parentAddress, resources, 1), finished);
   const finalized = finalizeFinishedEffects(finished, 2, resources, 1);
   assert.deepEqual(events, [
     "parent-disable",
     "parent-finalize",
-    "parent-continued",
     "child-disable",
     "child-finalize",
+    "parent-continued",
   ]);
   assert.deepEqual(
     getCombatUnit(finalized, 2).effects.instances.map((instance) => instance.programRef),

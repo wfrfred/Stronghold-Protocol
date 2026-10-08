@@ -3,7 +3,7 @@ import { updateAttackContributions } from "./capability.js";
 
 export function attack<S extends object>(
     sample: contributions.Stored<S>["sample"],
-    options: contributions.Options = {},
+    options: contributions.Options<S> = {},
 ): contributions.Stored<S> {
     return {
         id: options.id ?? "attack",
@@ -15,7 +15,7 @@ export function attack<S extends object>(
 
 export function computedAttack<S extends object>(
     compute: contributions.Computed<S>["compute"],
-    options: contributions.Options = {},
+    options: contributions.Options<S> = {},
 ): contributions.Computed<S> {
     return {
         id: options.id ?? "attack",

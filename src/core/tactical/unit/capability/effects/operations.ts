@@ -5,9 +5,10 @@ import {
     attachEffectParent,
     finishEffect,
     installNewEffect,
-    setEffectParticipation,
+    setEffectEnabled,
+    setEffectExpiration,
+    updateEffectState,
 } from "./lifecycle.js";
-import { updateEffectState } from "./transition.js";
 
 export function createEffectOperations(
     getWork: () => CombatWork,
@@ -40,20 +41,16 @@ export function createEffectOperations(
                     ref,
                     transition,
                     resources,
-                ),
-            );
-        },
-        setParticipation: (address, participating) => {
-            setWork(
-                setEffectParticipation(
-                    getWork(),
-                    address,
-                    participating,
-                    resources,
                     tick,
                     dispatch,
                 ),
             );
+        },
+        setEnabled: (address, enabled) => {
+            setWork(setEffectEnabled(getWork(), address, enabled, resources, tick, dispatch));
+        },
+        setExpiration: (address, expiresAtTick) => {
+            setWork(setEffectExpiration(getWork(), address, expiresAtTick));
         },
         finish: (address) => {
             setWork(finishEffect(getWork(), address, resources, tick, dispatch));

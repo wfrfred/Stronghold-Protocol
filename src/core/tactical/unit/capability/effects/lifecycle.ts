@@ -2,10 +2,13 @@ import {
     combatWorkView,
     getCombatUnit,
     transitionCombatUnit,
+    updateCombatUnit,
+    updateCombatUnits,
     type CombatWork,
 } from "../../../battle/execution/work.js";
-import type { UnitId } from "../../unit.js";
+import type { Unit, UnitId } from "../../unit.js";
 import { hasEffects } from "./capability.js";
+import { assertNonnegativeSafeInteger } from "../../../../common/assert.js";
 import type {
     EffectInstallation,
     EffectInstallationInput,
@@ -19,12 +22,13 @@ import {
     registerEffectInstance,
     removeEffectInstance,
     replaceEffectInstance,
+    replaceEffectInstances,
 } from "./internal/state.js";
 import type { CompiledEffectLifecycle } from "./lifecycle-resources.js";
 import { effectView, getEffect } from "./query.js";
 import { EffectDispatchScope } from "./dispatch.js";
 import type { EffectProgramRef } from "./program.js";
-import { transitionEffectBindings, updateEffectState } from "./transition.js";
+import { reconcileEffectBindings, transitionEffectBindings } from "./transition.js";
 import {
     effectAddressesOwnedByExecution,
     effectAddressesOwnedByUnit,
@@ -74,29 +78,75 @@ function changeInstance(
     });
 }
 
-function changeParticipation(
+function reconcileInScope(
     work: CombatWork,
-    address: EffectAddress,
-    instance: EffectInstanceValue,
-    updated: EffectInstanceValue,
+    ownerUnitId: UnitId,
+    before: Unit,
     resources: EffectTransitionResources,
+    tick: number,
+    scope: EffectDispatchScope,
+    updatedId?: number,
 ): CombatWork {
-    return transitionCombatUnit(work, address.unitId, (unit) => {
-        if (!hasEffects(unit)) {
-            return unit;
+    const owner = getCombatUnit(work, ownerUnitId);
+
+    if (owner === undefined || !hasEffects(owner)) {
+        return work;
+    }
+
+    const { unit, changes } = reconcileEffectBindings(before, owner, resources, updatedId);
+    work = updateCombatUnit(work, unit);
+
+    return runParticipationActions(
+        work,
+        changes.map(({ instanceId, participating }) => ({
+            address: { unitId: ownerUnitId, instanceId },
+            participating,
+        })),
+        resources,
+        tick,
+        scope,
+    );
+}
+
+function runParticipationActions(
+    work: CombatWork,
+    changes: readonly { address: EffectAddress; participating: boolean }[],
+    resources: EffectTransitionResources,
+    tick: number,
+    scope: EffectDispatchScope,
+): CombatWork {
+    return scope.withParticipationChanges(changes, (isPending) => {
+        for (const participating of [false, true]) {
+            for (const [index, change] of changes.entries()) {
+                if (!isPending(index) || change.participating !== participating) {
+                    continue;
+                }
+
+                const { address } = change;
+                const current = getEffect(work, address);
+
+                if (
+                    current?.participating !== participating ||
+                    (participating && current.finished)
+                ) {
+                    continue;
+                }
+
+                const lifecycle = resources.effectLifecycle.get(current);
+                scope.consumeParticipationChange(address, participating);
+                work = runLifecycleAction(
+                    work,
+                    address,
+                    current,
+                    participating ? lifecycle.enable : lifecycle.disable,
+                    resources,
+                    tick,
+                    scope,
+                );
+            }
         }
 
-        const current = replaceEffectInstance(unit, instance, updated);
-
-        return instance.started && instance.participating !== updated.participating
-            ? transitionEffectBindings(
-                  current,
-                  updated,
-                  resources.effectBindings,
-                  (binding, value) =>
-                      binding.setParticipation(value, updated, updated.participating),
-              )
-            : current;
+        return work;
     });
 }
 
@@ -155,17 +205,22 @@ function runLifecycleAction(
                         ref,
                         transition,
                         resources,
+                        tick,
+                        scope,
                     );
                 },
-                setParticipation: (target, participating) => {
-                    currentWork = setParticipationInScope(
+                setEnabled: (target, enabled) => {
+                    currentWork = setEnabledInScope(
                         readWork(),
                         target,
-                        participating,
+                        enabled,
                         resources,
                         tick,
                         scope,
                     );
+                },
+                setExpiration: (target, expiresAtTick) => {
+                    currentWork = setEffectExpiration(readWork(), target, expiresAtTick);
                 },
                 finish: (target) => {
                     currentWork = finishInScope(readWork(), target, resources, tick, scope);
@@ -197,56 +252,104 @@ function runLifecycleAction(
     });
 }
 
-export function setEffectParticipation(
+export function updateEffectState<S extends object>(
     work: CombatWork,
-    address: EffectAddress,
-    participating: boolean,
+    ownerUnitId: UnitId,
+    instanceId: number,
+    ref: EffectProgramRef<S>,
+    state: NoInfer<S> | ((current: NoInfer<S>) => NoInfer<S>),
     resources: EffectTransitionResources,
     tick: number,
     dispatch?: EffectDispatchScope,
 ): CombatWork {
-    return setParticipationInScope(
+    const address = { unitId: ownerUnitId, instanceId };
+    const instance = getEffect(work, address);
+
+    if (instance === undefined || instance.finished) {
+        return work;
+    }
+
+    const typed = resources.effects.typedInstance(instance, ref);
+
+    if (typed === undefined) {
+        throw new TypeError("effect state update must use its matching program");
+    }
+
+    const updated = resources.effects.update(
+        typed,
+        typeof state === "function" ? state(typed.state) : state,
+    );
+
+    if (updated === instance) {
+        return work;
+    }
+
+    const before = getCombatUnit(work, ownerUnitId)!;
+    work = changeInstance(work, address, () => updated);
+
+    return reconcileInScope(
+        work,
+        ownerUnitId,
+        before,
+        resources,
+        tick,
+        dispatch ?? new EffectDispatchScope(),
+        instanceId,
+    );
+}
+
+export function setEffectExpiration(
+    work: CombatWork,
+    address: EffectAddress,
+    expiresAtTick: number | null,
+): CombatWork {
+    if (expiresAtTick !== null) {
+        assertNonnegativeSafeInteger(expiresAtTick, "effect expiration tick");
+    }
+
+    return changeInstance(work, address, (instance) =>
+        instance.finished || instance.expiresAtTick === expiresAtTick
+            ? instance
+            : Object.freeze({ ...instance, expiresAtTick }),
+    );
+}
+
+export function setEffectEnabled(
+    work: CombatWork,
+    address: EffectAddress,
+    enabled: boolean,
+    resources: EffectTransitionResources,
+    tick: number,
+    dispatch?: EffectDispatchScope,
+): CombatWork {
+    return setEnabledInScope(
         work,
         address,
-        participating,
+        enabled,
         resources,
         tick,
         dispatch ?? new EffectDispatchScope(),
     );
 }
 
-function setParticipationInScope(
+function setEnabledInScope(
     work: CombatWork,
     address: EffectAddress,
-    participating: boolean,
+    enabled: boolean,
     resources: EffectTransitionResources,
     tick: number,
     scope: EffectDispatchScope,
 ): CombatWork {
     const instance = getEffect(work, address);
 
-    if (
-        instance === undefined ||
-        !instance.started ||
-        instance.finished ||
-        instance.participating === participating
-    ) {
+    if (instance === undefined || instance.finished || instance.enabled === enabled) {
         return work;
     }
 
-    const updated = withEffectLifecycle(instance, { participating });
-    work = changeParticipation(work, address, instance, updated, resources);
-    const program = resources.effectLifecycle.get(updated);
+    const before = getCombatUnit(work, address.unitId)!;
+    work = changeInstance(work, address, (value) => withEffectLifecycle(value, { enabled }));
 
-    return runLifecycleAction(
-        work,
-        address,
-        updated,
-        participating ? program.enable : program.disable,
-        resources,
-        tick,
-        scope,
-    );
+    return reconcileInScope(work, address.unitId, before, resources, tick, scope);
 }
 
 export function finishEffect(
@@ -272,28 +375,74 @@ function finishInScope(
         return work;
     }
 
-    const finished = withEffectLifecycle(instance, { participating: false, finished: true });
-    work = changeParticipation(work, address, instance, finished, resources);
+    const ending = new Map<UnitId, Set<number>>();
+    const order = new Map<string, number>();
+    const pending = [address];
 
-    if (instance.started && instance.participating) {
-        work = runLifecycleAction(
-            work,
-            address,
-            finished,
-            resources.effectLifecycle.get(finished).disable,
-            resources,
-            tick,
-            scope,
+    while (pending.length > 0) {
+        const target = pending.pop()!;
+        const current = getEffect(work, target);
+
+        if (current === undefined || current.finished) {
+            continue;
+        }
+
+        let ids = ending.get(target.unitId);
+
+        if (ids === undefined) {
+            ids = new Set();
+            ending.set(target.unitId, ids);
+        }
+        if (ids.has(target.instanceId)) {
+            continue;
+        }
+
+        ids.add(target.instanceId);
+        order.set(`${target.unitId}/${target.instanceId}`, order.size);
+        pending.push(...[...effectChildAddresses(work, target)].reverse());
+    }
+
+    const owners = [...ending.keys()].map((unitId) => getCombatUnit(work, unitId)!);
+    work = updateCombatUnits(
+        work,
+        owners.map((owner) => {
+            if (!hasEffects(owner)) {
+                return owner;
+            }
+
+            const ids = ending.get(owner.id)!;
+
+            return replaceEffectInstances(
+                owner,
+                owner.effects.instances.map((value) =>
+                    ids.has(value.id)
+                        ? withEffectLifecycle(value, { participating: false, finished: true })
+                        : value,
+                ),
+            );
+        }),
+    );
+
+    const changes: { address: EffectAddress; participating: boolean }[] = [];
+    const updates = owners.map((before) => {
+        const result = reconcileEffectBindings(before, getCombatUnit(work, before.id)!, resources);
+        changes.push(
+            ...result.changes.map(({ instanceId, participating }) => ({
+                address: { unitId: before.id, instanceId },
+                participating,
+            })),
         );
-    }
 
-    const children = effectChildAddresses(work, address);
+        return result.unit;
+    });
+    work = updateCombatUnits(work, updates);
+    changes.sort(
+        (left, right) =>
+            (order.get(`${left.address.unitId}/${left.address.instanceId}`) ?? order.size) -
+            (order.get(`${right.address.unitId}/${right.address.instanceId}`) ?? order.size),
+    );
 
-    for (const child of children) {
-        work = finishInScope(work, child, resources, tick, scope);
-    }
-
-    return work;
+    return runParticipationActions(work, changes, resources, tick, scope);
 }
 
 export function finalizeEffect(
@@ -313,10 +462,27 @@ function finalizeInScope(
     tick: number,
     scope: EffectDispatchScope,
 ): CombatWork {
-    const instance = getEffect(work, address);
+    let instance = getEffect(work, address);
 
     if (!instance?.finished) {
         return work;
+    }
+
+    if (scope.consumeParticipationChange(address, false)) {
+        work = runLifecycleAction(
+            work,
+            address,
+            instance,
+            resources.effectLifecycle.get(instance).disable,
+            resources,
+            tick,
+            scope,
+        );
+        instance = getEffect(work, address);
+
+        if (!instance?.finished) {
+            return work;
+        }
     }
 
     scope.retainFinalizedInstance(address, instance);
@@ -549,7 +715,14 @@ function installInScope<S extends object>(
         return { work, result: { type: "REJECTED", reason, address } };
     }
 
-    work = setParticipationInScope(work, address, true, resources, tick, scope);
+    work = reconcileInScope(
+        work,
+        ownerUnitId,
+        getCombatUnit(work, ownerUnitId)!,
+        resources,
+        tick,
+        scope,
+    );
     current = getEffect(work, address);
 
     if (current === undefined || current.finished) {

@@ -1,6 +1,11 @@
 import type { Unit, UnitId } from "../../unit.js";
 import type { CombatWork } from "../../../battle/execution/work.js";
-import type { EffectAddress, EffectInstanceValue, EffectLifetimeScope } from "./instance.js";
+import type {
+    EffectAddress,
+    EffectInstanceValue,
+    EffectLifetimeScope,
+    EffectInstanceMetadata,
+} from "./instance.js";
 import type { EffectProgramRef } from "./program.js";
 import type { EffectResources } from "./registry.js";
 import type { EffectBindings } from "./resources.js";
@@ -23,7 +28,8 @@ export interface EffectLifecycleOperations {
         ref: EffectProgramRef<S>,
         transition: (current: NoInfer<S>) => NoInfer<S>,
     ): void;
-    setParticipation(address: EffectAddress, participating: boolean): void;
+    setEnabled(address: EffectAddress, enabled: boolean): void;
+    setExpiration(address: EffectAddress, expiresAtTick: number | null): void;
     finish(address: EffectAddress): void;
     attachParent(
         child: EffectAddress,
@@ -56,6 +62,20 @@ export interface EffectLifecycleProgram<S extends object> {
     readonly disable?: EffectLifecycleAction<S>;
     readonly finalize?: EffectLifecycleAction<S>;
     readonly accepts?: (context: EffectAdmissionContext<S>) => boolean;
+    readonly competition?: (instance: EffectCompetitionInput<S>) => EffectCompetition | undefined;
+}
+
+export interface EffectCompetitionInput<S extends object> extends Pick<
+    EffectInstanceMetadata,
+    "id" | "source" | "acquiredSequence"
+> {
+    readonly programRef: { readonly id: string };
+    readonly state: S;
+}
+
+export interface EffectCompetition {
+    readonly group: string;
+    readonly priority: number;
 }
 
 export interface EffectTransitionResources {

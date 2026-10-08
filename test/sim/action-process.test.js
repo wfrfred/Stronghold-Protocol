@@ -23,7 +23,7 @@ import {
 } from "../../dist/core/tactical/battle/execution/work.js";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
 import { installNewEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
-import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/transition.js";
+import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { compileStatusBinding } from "../../dist/core/tactical/unit/capability/status/binding.js";
 import { hasStatusFlag } from "../../dist/core/tactical/unit/capability/status/capability.js";
 import * as modifier from "../../dist/core/tactical/modifier/value.js";
@@ -427,7 +427,7 @@ test("action process: content cancellation and normal finish retain completed pr
               0,
               sampled.ref,
               () => ({ power: context.samples.power }),
-              resources,
+              resources, 0,
             );
             assert.equal(resolveAttackPower(1, combatWorkView(work), resources.computations), 33);
             return { work, continuation };

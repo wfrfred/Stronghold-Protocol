@@ -7,7 +7,7 @@ import type {
     StoredContributionTarget,
     ContributionFacts,
 } from "../contribution.js";
-import { stabilizeUnit, type StableUnit, type Unit } from "../../unit.js";
+import type { StableUnit, Unit } from "../../unit.js";
 
 export interface EffectBinding {
     readonly install: <U extends Unit>(
@@ -32,34 +32,55 @@ export interface EffectBinding {
 interface ContributionBinding<T extends StoredContributionTarget = StoredContributionTarget> {
     readonly id: string;
     readonly target: T;
-    readonly group: contribution.Group | undefined;
+    readonly group:
+        | contribution.Group
+        | ((instance: EffectInstanceValue) => contribution.Group | undefined)
+        | undefined;
+}
+
+interface CompiledContributionBinding<
+    T extends StoredContributionTarget = StoredContributionTarget,
+> {
+    readonly id: string;
+    readonly target: T;
+    readonly group: (instance: EffectInstanceValue) => contribution.Group | undefined;
 }
 
 function ownBinding<T extends StoredContributionTarget>(
     binding: ContributionBinding<T>,
-): ContributionBinding<T> {
+): CompiledContributionBinding<T> {
+    const declaredGroup = binding.group;
+    const fixedGroup =
+        declaredGroup === undefined || typeof declaredGroup === "function"
+            ? undefined
+            : Object.freeze({ id: declaredGroup.id, strength: declaredGroup.strength });
+
     return Object.freeze({
         id: binding.id,
         target: binding.target,
-        group: binding.group === undefined ? undefined : Object.freeze({ ...binding.group }),
+        group: typeof declaredGroup === "function" ? declaredGroup : () => fixedGroup,
     });
 }
 
 function contributionBinding(
     unit: Unit,
     instance: EffectInstanceValue,
-    binding: ContributionBinding,
+    binding: CompiledContributionBinding,
 ) {
+    const group = binding.group(instance);
+
     return {
         id: `@effect/${instance.id}/${binding.id}`,
         sequence: instance.acquiredSequence,
         participating: instance.participating,
         owner: { unitId: unit.id, instanceId: instance.id },
-        ...(binding.group === undefined ? {} : { group: binding.group }),
+        ...(group === undefined ? {} : { group }),
     };
 }
 
-function participationBinding(binding: ContributionBinding): EffectBinding["setParticipation"] {
+function participationBinding(
+    binding: CompiledContributionBinding,
+): EffectBinding["setParticipation"] {
     return (unit, instance, participating) =>
         binding.target(unit, (state) =>
             contribution.setParticipation(
@@ -70,7 +91,7 @@ function participationBinding(binding: ContributionBinding): EffectBinding["setP
         );
 }
 
-function removeBinding(binding: ContributionBinding): EffectBinding["remove"] {
+function removeBinding(binding: CompiledContributionBinding): EffectBinding["remove"] {
     return (unit, instance) =>
         binding.target(unit, (state) =>
             contribution.removeOwnedBy(state, {
@@ -99,7 +120,19 @@ export function compileComputedBinding(
                     computeRef,
                 }),
             ),
-        update: stabilizeUnit,
+        update: (unit, instance) => {
+            const group = owned.group(instance);
+
+            return owned.target(unit, (state) =>
+                contribution.update(state, `@effect/${instance.id}/${owned.id}`, (entry) => {
+                    const { group: previousGroup, ...unchanged } = entry;
+
+                    return previousGroup === group
+                        ? entry
+                        : { ...unchanged, ...(group === undefined ? {} : { group }) };
+                }),
+            );
+        },
         setParticipation: participationBinding(owned),
         remove: removeBinding(owned),
     };

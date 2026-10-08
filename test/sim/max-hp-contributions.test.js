@@ -17,13 +17,13 @@ import { copyUnitSnapshot } from "../../dist/core/tactical/unit/snapshot.js";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
 import {
     installNewEffect,
-    setEffectParticipation,
+    setEffectEnabled,
     finishEffect,
     finalizeEffect,
     removeEffect,
     expireEffects,
 } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
-import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/transition.js";
+import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import * as modifier from "../../dist/core/tactical/modifier/value.js";
 import { compileStoredBinding } from "../../dist/core/tactical/unit/capability/effects/binding.js";
 import {
@@ -83,10 +83,10 @@ test("MaxHP: install, payload, participation, finish and cleanup retain HP perce
             0,
             effect.ref,
             (state) => ({ ...state, amount: 200 }),
-            resources,
+            resources, 0,
         );
         assert.deepEqual(pair(updated), [hp * 3, 300]);
-        const disabled = setEffectParticipation(updated, address(), false, resources, 1);
+        const disabled = setEffectEnabled(updated, address(), false, resources, 1);
         assert.deepEqual(pair(disabled), [hp, 100]);
         const refreshed = updateEffectState(
             disabled,
@@ -94,10 +94,10 @@ test("MaxHP: install, payload, participation, finish and cleanup retain HP perce
             0,
             effect.ref,
             (state) => ({ ...state, amount: 300 }),
-            resources,
+            resources, 0,
         );
         assert.deepEqual(pair(refreshed), [hp, 100]);
-        const enabled = setEffectParticipation(refreshed, address(), true, resources, 2);
+        const enabled = setEffectEnabled(refreshed, address(), true, resources, 2);
         assert.deepEqual(pair(enabled), [hp * 4, 400]);
         const finished = finishEffect(enabled, address(), resources, 3);
         assert.deepEqual(pair(finished), [hp, 100]);
@@ -159,7 +159,7 @@ test("MaxHP: callbacks and synchronous nested successors see coordinated facts",
         ["enable", 100, 200],
         ["update", 150, 300],
         ["child", 175, 350],
-        ["disable", 75, 150],
+        ["disable", 50, 100],
         ["finalize", 50, 100],
     ]);
     assert.deepEqual(pair(removed), [50, 100]);
@@ -193,7 +193,7 @@ test("MaxHP: one binding batch coordinates once after every slot has changed", (
         ],
     });
     const installed = install(effectFixtureWork(receiver()), effect.ref, resources);
-    const disabled = setEffectParticipation(installed, address(), false, resources, 1);
+    const disabled = setEffectEnabled(installed, address(), false, resources, 1);
     assert.deepEqual(observed, [50, 150]);
     assert.deepEqual(pair(installed), [150, 300]);
     assert.deepEqual(pair(disabled), [50, 100]);
@@ -247,12 +247,12 @@ test("MaxHP: group winner replacement and fallback preserve the current HP ratio
         0,
         weak.ref,
         (state) => ({ ...state, amount: 100 }),
-        resources,
+        resources, 0,
     );
     assert.deepEqual(pair(weakerUpdated), [150, 300]);
-    const disabled = setEffectParticipation(weakerUpdated, address(1), false, resources, 1);
+    const disabled = setEffectEnabled(weakerUpdated, address(1), false, resources, 1);
     assert.deepEqual(pair(disabled), [100, 200]);
-    const enabled = setEffectParticipation(disabled, address(1), true, resources, 2);
+    const enabled = setEffectEnabled(disabled, address(1), true, resources, 2);
     assert.deepEqual(pair(enabled), [150, 300]);
     const ended = removeEffect(enabled, address(1), resources, 3);
     assert.deepEqual(pair(ended), [100, 200]);
@@ -269,14 +269,14 @@ test("MaxHP: unchanged effective values, inactive cleanup and snapshots do not r
     const copied = copyUnitSnapshot(getCombatUnit(installed, 1));
     assert.equal(copied.vitality.maxHp.entries, getCombatUnit(installed, 1).vitality.maxHp.entries);
     assert.deepEqual(pair(effectFixtureWork(copied)), pair(installed));
-    assert.equal(setEffectParticipation(installed, address(), true, resources, 1), installed);
+    assert.equal(setEffectEnabled(installed, address(), true, resources, 1), installed);
     const updated = updateEffectState(
         installed,
         1,
         0,
         effect.ref,
         (state) => ({ ...state, amount: -600 }),
-        resources,
+        resources, 0,
     );
     assert.equal(getCombatUnit(updated, 1).vitality.hp, getCombatUnit(installed, 1).vitality.hp);
     assert.equal(resolveMaxHp(1, combatWorkView(updated)), 1);
@@ -286,7 +286,7 @@ test("MaxHP: unchanged effective values, inactive cleanup and snapshots do not r
         0,
         effect.ref,
         (state) => ({ ...state, revision: 1 }),
-        resources,
+        resources, 0,
     );
     assert.equal(getCombatUnit(noChange, 1).vitality.hp, getCombatUnit(updated, 1).vitality.hp);
     const expired = expireEffects(noChange, 5, resources);

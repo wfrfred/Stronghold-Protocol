@@ -16,8 +16,8 @@ import {
 import * as modifier from "../../dist/core/tactical/modifier/value.js";
 import { updateAttackContributions } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
-import { removeEffect, setEffectParticipation } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
-import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/transition.js";
+import { removeEffect, setEffectEnabled } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
+import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { compileStatusBinding } from "../../dist/core/tactical/unit/capability/status/binding.js";
 import { hasStatusFlag } from "../../dist/core/tactical/unit/capability/status/capability.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
@@ -157,12 +157,12 @@ test("resources: registered authored contributions retain their behavior after c
     const initial = effectFixtureWork(installed);
     assert.equal(currentAttack(initial), 120);
     assert.deepEqual(installed.offense.attack.entries[0].group, { id: "original-group", strength: 1 });
-    const updated = updateEffectState(initial, 2, 0, descriptor.ref, () => ({ value: 2 }), resources);
+    const updated = updateEffectState(initial, 2, 0, descriptor.ref, () => ({ value: 2 }), resources, 0);
     assert.equal(currentAttack(updated), 140);
     const address = { unitId: 2, instanceId: 0 };
-    const disabled = setEffectParticipation(updated, address, false, resources, 0);
+    const disabled = setEffectEnabled(updated, address, false, resources, 0);
     assert.equal(currentAttack(disabled), 100);
-    assert.equal(currentAttack(setEffectParticipation(disabled, address, true, resources, 0)), 140);
+    assert.equal(currentAttack(setEffectEnabled(disabled, address, true, resources, 0)), 140);
     const removed = removeEffect(updated, address, resources, 0);
     assert.deepEqual(getCombatUnit(removed, 2).offense.attack.entries, []);
   }

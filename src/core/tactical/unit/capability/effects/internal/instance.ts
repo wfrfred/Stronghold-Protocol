@@ -69,7 +69,7 @@ function ownParent(parent: EffectAddress | null): EffectAddress | null {
 }
 
 function assertLifecycleFacts(instance: EffectLifecycleFacts): void {
-    if (instance.participating && (!instance.started || instance.finished)) {
+    if (instance.participating && (!instance.started || !instance.enabled || instance.finished)) {
         throw new TypeError("invalid effect lifecycle facts");
     }
 }
@@ -84,6 +84,7 @@ export function ownEffectInstance<S extends object>(
         programRef: program.ref,
         state: ownEffectState(program, state),
         started: false,
+        enabled: true,
         participating: false,
         finished: false,
         parent: null,
@@ -109,6 +110,7 @@ export function copyEffectInstance(instance: EffectInstanceValue): EffectInstanc
         ...ownMetadata(instance),
         programRef: instance.programRef,
         started: instance.started,
+        enabled: instance.enabled,
         participating: instance.participating,
         finished: instance.finished,
         parent: ownParent(instance.parent),
@@ -141,6 +143,7 @@ export function ownRestoredEffectInstance<S extends object>(
 
     return withEffectLifecycle(ownEffectInstance(program, instance, instance.state), {
         started: instance.started,
+        enabled: instance.enabled,
         participating: instance.participating,
         finished: instance.finished,
         parent: ownParent(instance.parent),

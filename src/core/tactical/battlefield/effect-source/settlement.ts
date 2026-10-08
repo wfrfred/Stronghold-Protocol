@@ -11,7 +11,7 @@ import type { EffectDispatchScope } from "../../unit/capability/effects/dispatch
 import {
     finishEffect,
     installNewEffect,
-    setEffectParticipation,
+    setEffectEnabled,
 } from "../../unit/capability/effects/lifecycle.js";
 import { getEffect } from "../../unit/capability/effects/query.js";
 import type {
@@ -266,7 +266,7 @@ function settleSource<S extends object>(
                 binding = bindingOf(binding.unitId)!;
             } else if (program.followsParticipation?.(input) ?? true) {
                 flush();
-                work = setEffectParticipation(
+                work = setEffectEnabled(
                     work,
                     binding.address,
                     current().active,

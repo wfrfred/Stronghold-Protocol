@@ -1,9 +1,9 @@
-import { transitionCombatUnit, type CombatWork } from "../../../battle/execution/work.js";
-import { stabilizeUnit, type StableUnit, type Unit, type UnitId } from "../../unit.js";
 import { hasEffects } from "./capability.js";
-import { replaceEffectInstance } from "./internal/state.js";
-import type { EffectProgramRef } from "./program.js";
 import type { EffectTransitionResources } from "./contract.js";
+import { selectParticipatingEffects } from "./competition.js";
+import { replaceEffectInstances } from "./internal/state.js";
+import { withEffectLifecycle } from "./internal/instance.js";
+import { stabilizeUnit, type StableUnit, type Unit } from "../../unit.js";
 import type { EffectInstanceValue } from "./instance.js";
 import type { EffectBinding } from "./binding.js";
 import type { EffectBindings } from "./resources.js";
@@ -24,49 +24,72 @@ export function transitionEffectBindings<U extends Unit>(
     return preserveHpRatio<U>(unit, current);
 }
 
-export function updateEffectState<S extends object>(
-    work: CombatWork,
-    ownerUnitId: UnitId,
-    instanceId: number,
-    ref: EffectProgramRef<S>,
-    state: NoInfer<S> | ((current: NoInfer<S>) => NoInfer<S>),
+export interface EffectParticipationChange {
+    readonly instanceId: number;
+    readonly participating: boolean;
+}
+
+export function reconcileEffectBindings<U extends Unit>(
+    before: U | StableUnit<U>,
+    input: U | StableUnit<U>,
     resources: EffectTransitionResources,
-): CombatWork {
-    return transitionCombatUnit(work, ownerUnitId, (owner) => {
-        if (!hasEffects(owner)) {
-            return owner;
+    updatedId?: number,
+): { readonly unit: StableUnit<U>; readonly changes: readonly EffectParticipationChange[] } {
+    const owner = stabilizeUnit<U>(input);
+
+    if (!hasEffects(owner)) {
+        return { unit: owner, changes: [] };
+    }
+
+    const selected = selectParticipatingEffects(owner.effects.instances, resources.effectLifecycle);
+    const previous = new Map(
+        hasEffects(before)
+            ? before.effects.instances.map((instance) => [instance.id, instance])
+            : [],
+    );
+    const changes: EffectParticipationChange[] = [];
+    const instances = owner.effects.instances.map((instance) => {
+        const participating = selected.has(instance.id);
+        const updated =
+            instance.participating === participating
+                ? instance
+                : withEffectLifecycle(instance, { participating });
+        const old = previous.get(instance.id);
+
+        if (old?.participating !== participating && (old?.started ?? updated.started)) {
+            changes.push({ instanceId: updated.id, participating });
         }
 
-        const instance = owner.effects.instances.find((value) => value.id === instanceId);
-
-        if (instance === undefined) {
-            return owner;
-        }
-
-        const typed = resources.effects.typedInstance(instance, ref);
-
-        if (typed === undefined) {
-            throw new TypeError("effect state update must use its matching program");
-        }
-
-        const updated = resources.effects.update(
-            typed,
-            typeof state === "function" ? state(typed.state) : state,
-        );
-
-        if (updated === instance) {
-            return owner;
-        }
-
-        const unit = replaceEffectInstance(owner, instance, updated);
-
-        return updated.started
-            ? transitionEffectBindings(
-                  unit,
-                  updated,
-                  resources.effectBindings,
-                  (binding, current) => binding.update(current, updated),
-              )
-            : unit;
+        return updated;
     });
+    let next: StableUnit<U> = instances.some(
+        (instance, index) => instance !== owner.effects.instances[index],
+    )
+        ? replaceEffectInstances<U>(owner, instances)
+        : owner;
+
+    for (const instance of instances) {
+        if (!instance.started) {
+            continue;
+        }
+
+        const old = previous.get(instance.id);
+        const changedParticipation =
+            old !== undefined && old.participating !== instance.participating;
+
+        if (instance.id !== updatedId && !changedParticipation) {
+            continue;
+        }
+
+        for (const binding of resources.effectBindings.get(instance)) {
+            if (instance.id === updatedId) {
+                next = binding.update(next, instance);
+            }
+            if (changedParticipation) {
+                next = binding.setParticipation(next, instance, instance.participating);
+            }
+        }
+    }
+
+    return { unit: preserveHpRatio<U>(before, next), changes };
 }

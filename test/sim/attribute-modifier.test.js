@@ -5,8 +5,8 @@ import { parseAttributeModifiers, compileAttributeModifiers } from "../../dist/d
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { combatWorkView, getCombatUnit, removeCombatUnit } from "../../dist/core/tactical/battle/execution/work.js";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
-import { installNewEffect, setEffectParticipation, finishEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
-import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/transition.js";
+import { installNewEffect, setEffectEnabled, finishEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
+import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { attack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { attackSpeed } from "../../dist/core/tactical/unit/capability/action/contributions.js";
@@ -160,11 +160,11 @@ test("attribute modifiers: inspiration samples belong to the Effect input and re
     work = installNewEffect(work, 0, amplify.ref, { source: null, scope: null, expiresAtTick: null }, resources, 1).work;
     assert.equal(resolve(work, 0), 200);
     assert.equal(resolve(work, 1), 80);
-    work = setEffectParticipation(work, { unitId: 1, instanceId: 0 }, false, resources, 1);
+    work = setEffectEnabled(work, { unitId: 1, instanceId: 0 }, false, resources, 1);
     assert.equal(resolve(work, 1), 20);
-    work = setEffectParticipation(work, { unitId: 1, instanceId: 0 }, true, resources, 2);
+    work = setEffectEnabled(work, { unitId: 1, instanceId: 0 }, true, resources, 2);
     assert.equal(resolve(work, 1), 80);
-    work = updateEffectState(work, 1, 0, program.ref, () => sampleInput(work), resources);
+    work = updateEffectState(work, 1, 0, program.ref, () => sampleInput(work), resources, 0);
     assert.equal(resolve(work, 1), 140);
     work = removeCombatUnit(work, 0, "RETREAT");
     assert.equal(resolve(work, 1), 140);

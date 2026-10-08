@@ -3,7 +3,7 @@ import { updateAttackSpeedContributions, updateBaseAttackTimeContributions } fro
 
 export function attackSpeed<S extends object>(
     sample: contributions.Stored<S>["sample"],
-    options: contributions.Options = {},
+    options: contributions.Options<S> = {},
 ): contributions.Stored<S> {
     return {
         id: options.id ?? "attackSpeed",
@@ -15,7 +15,7 @@ export function attackSpeed<S extends object>(
 
 export function computedAttackSpeed<S extends object>(
     compute: contributions.Computed<S>["compute"],
-    options: contributions.Options = {},
+    options: contributions.Options<S> = {},
 ): contributions.Computed<S> {
     return {
         id: options.id ?? "attackSpeed",
@@ -27,7 +27,7 @@ export function computedAttackSpeed<S extends object>(
 
 export function baseAttackTime<S extends object>(
     sample: contributions.Stored<S>["sample"],
-    options: contributions.Options = {},
+    options: contributions.Options<S> = {},
 ): contributions.Stored<S> {
     return {
         id: options.id ?? "baseAttackTime",
@@ -39,7 +39,7 @@ export function baseAttackTime<S extends object>(
 
 export function computedBaseAttackTime<S extends object>(
     compute: contributions.Computed<S>["compute"],
-    options: contributions.Options = {},
+    options: contributions.Options<S> = {},
 ): contributions.Computed<S> {
     return {
         id: options.id ?? "baseAttackTime",

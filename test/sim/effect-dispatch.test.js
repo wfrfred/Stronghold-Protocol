@@ -12,7 +12,7 @@ import { compileStatusBinding } from "../../dist/core/tactical/unit/capability/s
 import { hasStatusFlag } from "../../dist/core/tactical/unit/capability/status/capability.js";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
 import { EffectDispatchScope } from "../../dist/core/tactical/unit/capability/effects/dispatch.js";
-import { setEffectParticipation } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
+import { setEffectEnabled } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import { readArknightsHealingRequest } from "../../dist/data/arknights/healing.js";
@@ -93,7 +93,7 @@ test("effect dispatch: registered candidate identities freeze while current part
             seen.push("A");
             const address = { unitId: 2, instanceId: 1 };
             if (operation === "enable") {
-              context.operations.effects.setParticipation(address, true);
+              context.operations.effects.setEnabled(address, true);
             } else {
               context.operations.effects.finish(address);
             }
@@ -106,7 +106,7 @@ test("effect dispatch: registered candidate identities freeze while current part
     target = attach(resources, target, b);
     let work = effectFixtureWork(target);
     if (operation === "enable") {
-      work = setEffectParticipation(work, { unitId: 2, instanceId: 1 }, false, resources, 0);
+      work = setEffectEnabled(work, { unitId: 2, instanceId: 1 }, false, resources, 0);
     }
     const result = resolveDamage(work, request(), resources);
 
@@ -351,7 +351,7 @@ test("effect dispatch: Damage and Healing borrowed facts and operations close af
         () => escaped.facts.maxHp(2),
         () => escaped.operations.effects.install(2, descriptor.ref, installation(2)),
         () => escaped.operations.effects.update(escaped.address, descriptor.ref, (state) => state),
-        () => escaped.operations.effects.setParticipation(escaped.address, false),
+        () => escaped.operations.effects.setEnabled(escaped.address, false),
         () => escaped.operations.effects.finish(escaped.address),
         () =>
           escaped.operations.effects.attachParent(escaped.address, {

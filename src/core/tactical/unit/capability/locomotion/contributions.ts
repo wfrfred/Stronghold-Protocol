@@ -3,7 +3,7 @@ import { updateMoveSpeedContributions } from "./capability.js";
 
 export function moveSpeed<S extends object>(
     sample: contributions.Stored<S>["sample"],
-    options: contributions.Options = {},
+    options: contributions.Options<S> = {},
 ): contributions.Stored<S> {
     return {
         id: options.id ?? "moveSpeed",
@@ -15,7 +15,7 @@ export function moveSpeed<S extends object>(
 
 export function computedMoveSpeed<S extends object>(
     compute: contributions.Computed<S>["compute"],
-    options: contributions.Options = {},
+    options: contributions.Options<S> = {},
 ): contributions.Computed<S> {
     return {
         id: options.id ?? "moveSpeed",

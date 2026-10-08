@@ -3,7 +3,7 @@ import { updateDefenseContributions, updateResistanceContributions } from "./cap
 
 export function defense<S extends object>(
     sample: contributions.Stored<S>["sample"],
-    options: contributions.Options = {},
+    options: contributions.Options<S> = {},
 ): contributions.Stored<S> {
     return {
         id: options.id ?? "defense",
@@ -15,7 +15,7 @@ export function defense<S extends object>(
 
 export function computedDefense<S extends object>(
     compute: contributions.Computed<S>["compute"],
-    options: contributions.Options = {},
+    options: contributions.Options<S> = {},
 ): contributions.Computed<S> {
     return {
         id: options.id ?? "defense",
@@ -27,7 +27,7 @@ export function computedDefense<S extends object>(
 
 export function resistance<S extends object>(
     sample: contributions.Stored<S>["sample"],
-    options: contributions.Options = {},
+    options: contributions.Options<S> = {},
 ): contributions.Stored<S> {
     return {
         id: options.id ?? "resistance",
@@ -39,7 +39,7 @@ export function resistance<S extends object>(
 
 export function computedResistance<S extends object>(
     compute: contributions.Computed<S>["compute"],
-    options: contributions.Options = {},
+    options: contributions.Options<S> = {},
 ): contributions.Computed<S> {
     return {
         id: options.id ?? "resistance",

@@ -17,7 +17,7 @@ import {
 } from "../../dist/core/tactical/unit/capability/action/process.js";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
 import { installNewEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
-import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/transition.js";
+import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { createCombatWork, getCombatUnit } from "../../dist/core/tactical/battle/execution/work.js";
 
 const hit = createShapeGeometry({
@@ -404,7 +404,7 @@ test("action runtime: failed continuation publishes no progress, sample, settlem
                     0,
                     marker.ref,
                     (state) => ({ count: state.count + 1 }),
-                    services,
+                    services, 0,
                   );
                   if (fault.enabled) {
                     throw new Error("continuation failed");

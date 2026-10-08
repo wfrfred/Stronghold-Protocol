@@ -10,7 +10,7 @@ import type {
 } from "../contribution.js";
 import { hasEffects } from "./capability.js";
 import { compileComputedBinding, compileStoredBinding, type EffectBinding } from "./binding.js";
-import type { EffectInstance } from "./instance.js";
+import type { EffectInstance, EffectInstanceValue } from "./instance.js";
 import type { EffectProgram } from "./program.js";
 import type { EffectResources } from "./registry.js";
 
@@ -20,22 +20,23 @@ export interface Context<S extends object> {
     readonly instance: EffectInstance<S>;
 }
 
-export interface Options {
+export interface Options<S extends object = object> {
     readonly id?: string;
-    readonly group?: contribution.Group;
+    readonly group?:
+        contribution.Group | ((instance: EffectInstance<S>) => contribution.Group | undefined);
 }
 
-interface ContributionDeclaration {
+interface ContributionDeclaration<S extends object> {
     readonly id: string;
-    readonly group?: contribution.Group;
+    readonly group?: Options<S>["group"];
 }
 
-export interface Stored<S extends object> extends ContributionDeclaration {
+export interface Stored<S extends object> extends ContributionDeclaration<S> {
     readonly target: StoredContributionTarget;
     readonly sample: (instance: EffectInstance<S>) => readonly modifier.Value[];
 }
 
-export interface Computed<S extends object> extends ContributionDeclaration {
+export interface Computed<S extends object> extends ContributionDeclaration<S> {
     readonly target: ContributionTarget;
     readonly compute: (context: Context<S>) => readonly modifier.Value[];
 }
@@ -67,8 +68,22 @@ export function compile<S extends object>(
 
     return declarations.map((declaration) => {
         const { id, target } = declaration;
+        const declaredGroup = declaration.group;
+
         const group =
-            declaration.group === undefined ? undefined : Object.freeze({ ...declaration.group });
+            typeof declaredGroup !== "function"
+                ? declaredGroup
+                : (instance: EffectInstanceValue) => {
+                      const typed = resources.effects.typedInstance(instance, program.ref);
+
+                      if (typed === undefined) {
+                          throw new TypeError(
+                              "contribution group requires its matching effect program",
+                          );
+                      }
+
+                      return declaredGroup(typed);
+                  };
 
         if ("sample" in declaration) {
             const { sample } = declaration;

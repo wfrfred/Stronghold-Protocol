@@ -20,8 +20,8 @@ import { moveSpeed, computedMoveSpeed } from "../../dist/core/tactical/unit/capa
 import { stepRoutedUnit } from "../../dist/core/tactical/unit/capability/locomotion/step.js";
 import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
-import { installNewEffect, setEffectParticipation, finishEffect, finalizeEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
-import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/transition.js";
+import { installNewEffect, setEffectEnabled, finishEffect, finalizeEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
+import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { copyUnitSnapshot } from "../../dist/core/tactical/unit/snapshot.js";
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
 import * as modifier from "../../dist/core/tactical/modifier/value.js";
@@ -107,7 +107,7 @@ test("move speed: normalized minimum, arithmetic and movement permission are sep
     assert.deepEqual(denied.unit.position, [0, 0]);
     const moved = h.step(resources, 2, { moveMultiplier: 0.5 });
     close(moved.unit.position[0], 0.1 / 60);
-    h.work = updateEffectState(h.work, 0, 0, program.ref, (state) => ({ ...state, value: modifier.create({ addition: 1 / 30, multiplier: 0.5, finalAddition: 1 / 30, finalScaler: 2 }) }), resources);
+    h.work = updateEffectState(h.work, 0, 0, program.ref, (state) => ({ ...state, value: modifier.create({ addition: 1 / 30, multiplier: 0.5, finalAddition: 1 / 30, finalScaler: 2 }) }), resources, 0);
     close(speed(h.work, resources), 8 / 30);
 });
 
@@ -127,9 +127,9 @@ test("move speed: lifecycle and copies retain route samples, identities and visi
     assert.equal(h.unit.locomotion.mainRoute, before.locomotion.mainRoute);
     assert.equal(h.unit.locomotion.mainRoute.route.progress.checkpoint.goal, sample);
     close(speed(h.work, resources), 0.125);
-    h.work = setEffectParticipation(h.work, address, false, resources, 1);
+    h.work = setEffectEnabled(h.work, address, false, resources, 1);
     close(speed(h.work, resources), 0.25);
-    h.work = setEffectParticipation(h.work, address, true, resources, 2);
+    h.work = setEffectEnabled(h.work, address, true, resources, 2);
     const participating = copyUnitSnapshot(h.unit);
     h.work = finishEffect(h.work, address, resources, 3);
     h.work = finalizeEffect(h.work, address, resources, 3);
@@ -152,13 +152,13 @@ test("move speed: in-flight acceleration, zero budget and restoration do not res
     h.work = install(h.work, program, resources);
     h.step(resources, 1);
     close(h.unit.position[0], 0.375);
-    h.work = updateEffectState(h.work, 0, 0, program.ref, (state) => ({ ...state, value: modifier.create({ multiplier: 1 }) }), resources);
+    h.work = updateEffectState(h.work, 0, 0, program.ref, (state) => ({ ...state, value: modifier.create({ multiplier: 1 }) }), resources, 0);
     h.step(resources, 2);
     close(h.unit.position[0], 0.875);
-    h.work = updateEffectState(h.work, 0, 0, program.ref, (state) => ({ ...state, value: modifier.create({ multiplier: -1 }) }), resources);
+    h.work = updateEffectState(h.work, 0, 0, program.ref, (state) => ({ ...state, value: modifier.create({ multiplier: -1 }) }), resources, 0);
     h.step(resources, 3);
     close(h.unit.position[0], 0.875);
-    h.work = setEffectParticipation(h.work, address, false, resources, 4);
+    h.work = setEffectEnabled(h.work, address, false, resources, 4);
     h.step(resources, 4);
     close(h.unit.position[0], 1.125);
     assert.equal(getNavigationRequest(h.unit.locomotion.mainRoute.navigation).id, request.id);
@@ -178,7 +178,7 @@ test("move speed: main and alternative route share current contributions and one
     close(h.unit.position[0], 0.5);
     assert.equal(h.unit.locomotion.mainRoute, main);
     h.reroute({ type: "CLEAR_ALTERNATIVE_ROUTE", unitId: 0 }, 2);
-    h.work = setEffectParticipation(h.work, address, false, resources, 2);
+    h.work = setEffectEnabled(h.work, address, false, resources, 2);
     h.step(resources, 2);
     close(h.unit.position[0], 1);
     assert.equal(getNavigationRequest(h.unit.locomotion.mainRoute.navigation).id, getNavigationRequest(main.navigation).id);
@@ -192,10 +192,10 @@ test("move speed: route WAIT consumes ticks independently of a speed contributio
     h.work = install(h.work, program, resources);
     h.step(resources, 0);
     assert.equal(h.unit.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 2);
-    h.work = setEffectParticipation(h.work, address, false, resources, 1);
+    h.work = setEffectEnabled(h.work, address, false, resources, 1);
     h.step(resources, 1);
     assert.equal(h.unit.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 1);
-    h.work = setEffectParticipation(h.work, address, true, resources, 2);
+    h.work = setEffectEnabled(h.work, address, true, resources, 2);
     h.step(resources, 2);
     assert.equal(h.unit.locomotion.mainRoute.route.progress.phase, "END");
     assert.deepEqual(h.unit.position, [0, 0]);
@@ -243,7 +243,7 @@ test("move speed: acceleration still follows the low-cost corridor and cannot cr
     h.work = install(h.work, program, resources);
     const visited = [];
     for (let tick = 0; tick < 60 && h.unit.locomotion.mainRoute.route.progress.phase !== "COMPLETED"; tick++) {
-        if (tick === 4) { h.work = setEffectParticipation(h.work, address, false, resources, tick); }
+        if (tick === 4) { h.work = setEffectEnabled(h.work, address, false, resources, tick); }
         const previous = h.unit.position;
         h.step(resources, tick);
         assert.ok(canTraverseNavigationSegment(navigation.WALK, previous, h.unit.position));

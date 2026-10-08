@@ -11,6 +11,64 @@ interface ActiveInstance {
 export class EffectDispatchScope {
     readonly #candidates = new Map<UnitId, readonly EffectAddress[]>();
     readonly #activeInstances = new Map<UnitId, Map<number, Set<ActiveInstance>>>();
+    readonly #participationChanges = new Map<
+        UnitId,
+        Map<number, { pending: boolean; participating: boolean }>
+    >();
+
+    withParticipationChanges<T>(
+        changes: readonly { address: EffectAddress; participating: boolean }[],
+        run: (isPending: (index: number) => boolean) => T,
+    ): T {
+        const cells = changes.map(({ address, participating }) => {
+            let instances = this.#participationChanges.get(address.unitId);
+
+            if (instances === undefined) {
+                instances = new Map();
+                this.#participationChanges.set(address.unitId, instances);
+            }
+
+            const previous = instances.get(address.instanceId);
+
+            if (previous !== undefined) {
+                previous.pending = false;
+            }
+
+            const cell = { pending: true, participating };
+            instances.set(address.instanceId, cell);
+
+            return cell;
+        });
+
+        try {
+            return run((index) => cells[index]!.pending);
+        } finally {
+            for (const [index, { address }] of changes.entries()) {
+                const instances = this.#participationChanges.get(address.unitId);
+                const cell = cells[index]!;
+                cell.pending = false;
+
+                if (instances?.get(address.instanceId) === cell) {
+                    instances.delete(address.instanceId);
+                }
+                if (instances?.size === 0) {
+                    this.#participationChanges.delete(address.unitId);
+                }
+            }
+        }
+    }
+
+    consumeParticipationChange(address: EffectAddress, participating: boolean): boolean {
+        const cell = this.#participationChanges.get(address.unitId)?.get(address.instanceId);
+
+        if (cell?.pending !== true || cell.participating !== participating) {
+            return false;
+        }
+
+        cell.pending = false;
+
+        return true;
+    }
 
     withInstance<T>(
         address: EffectAddress,

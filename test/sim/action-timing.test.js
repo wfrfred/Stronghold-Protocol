@@ -10,8 +10,8 @@ import { startAction } from "../../dist/core/tactical/unit/capability/action/exe
 import { createActionExecutionState } from "../../dist/core/tactical/unit/capability/action/process.js";
 import { resolveAttackSpeed, resolveBaseAttackTime, resolveActionIntervalTicks } from "../../dist/core/tactical/unit/capability/action/timing.js";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
-import { installNewEffect, setEffectParticipation, finishEffect, finalizeEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
-import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/transition.js";
+import { installNewEffect, setEffectEnabled, finishEffect, finalizeEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
+import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { copyUnitSnapshot } from "../../dist/core/tactical/unit/snapshot.js";
 import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
@@ -109,9 +109,9 @@ test("action timing: ASPD attribute floor, interval cap and BAT algebra remain d
     const initial = effectFixtureWork(actor(), target());
     let work = install(initial, program, resources);
     assert.deepEqual(values(work, resources), [20, 19.5, 97.5]);
-    work = updateEffectState(work, 0, 0, program.ref, (state) => ({ ...state, speed: 900 }), resources);
+    work = updateEffectState(work, 0, 0, program.ref, (state) => ({ ...state, speed: 900 }), resources, 0);
     assert.deepEqual(values(work, resources), [1000, 19.5, 3.25]);
-    work = updateEffectState(work, 0, 0, program.ref, (state) => ({ ...state, time: modifier.create({ addition: -100 }) }), resources);
+    work = updateEffectState(work, 0, 0, program.ref, (state) => ({ ...state, time: modifier.create({ addition: -100 }) }), resources, 0);
     assert.deepEqual(values(work, resources), [1000, 0, 1]);
     assert.deepEqual(values(initial, resources), [100, 30, 30]);
 });
@@ -125,9 +125,9 @@ test("action timing: lifecycle updates both slots and snapshots share only owned
     const copied = copyUnitSnapshot(getCombatUnit(installed, 0));
     assert.equal(copied.action.attackSpeed.entries, getCombatUnit(installed, 0).action.attackSpeed.entries);
     assert.ok(Object.isFrozen(copied.action.attackSpeed.entries));
-    const disabled = setEffectParticipation(installed, address, false, resources, 1);
+    const disabled = setEffectEnabled(installed, address, false, resources, 1);
     assert.deepEqual(values(disabled, resources), [100, 30, 30]);
-    const enabled = setEffectParticipation(disabled, address, true, resources, 2);
+    const enabled = setEffectEnabled(disabled, address, true, resources, 2);
     assert.deepEqual(values(enabled, resources), [200, 15, 7.5]);
     const finished = finishEffect(enabled, address, resources, 3);
     assert.deepEqual(values(finished, resources), [100, 30, 30]);
@@ -147,7 +147,7 @@ test("action timing: speed-up and slow-down preserve completed cooldown percenta
     const spedUp = advance(installed, resources, 15, initial.state);
     close(getCombatUnit(spedUp.work, 0).action.readyAtTick, 22.5);
     assert.equal(combatWorkEvents(spedUp.work).filter((event) => event.type === "ACTION").length, 1);
-    const disabled = setEffectParticipation(spedUp.work, address, false, resources, 18);
+    const disabled = setEffectEnabled(spedUp.work, address, false, resources, 18);
     const slowed = advance(disabled, resources, 18, spedUp.state);
     close(getCombatUnit(slowed.work, 0).action.readyAtTick, 27);
     const beforeReady = advance(slowed.work, resources, 26, slowed.state);

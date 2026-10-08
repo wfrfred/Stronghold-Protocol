@@ -3,6 +3,7 @@ import type {
     EffectAdmissionContext,
     EffectLifecycleContext,
     EffectLifecycleProgram,
+    EffectCompetition,
 } from "./contract.js";
 import type { EffectInstanceValue } from "./instance.js";
 import type { EffectProgramRef } from "./program.js";
@@ -15,6 +16,7 @@ export interface CompiledEffectLifecycle {
     readonly disable?: (context: EffectLifecycleContext) => undefined;
     readonly finalize?: (context: EffectLifecycleContext) => undefined;
     readonly accepts?: (context: EffectAdmissionContext) => boolean;
+    readonly competition?: (instance: EffectInstanceValue) => EffectCompetition | undefined;
 }
 
 const emptyLifecycle: CompiledEffectLifecycle = Object.freeze({});
@@ -68,6 +70,7 @@ export class EffectLifecycleResources {
         const disable = compile(program.disable).run;
         const finalize = compile(program.finalize).run;
         const accepts = program.accepts;
+        const competition = program.competition;
 
         this.#programs.set(
             ref.id,
@@ -81,6 +84,12 @@ export class EffectLifecycleResources {
                     : {
                           accepts: (context: EffectAdmissionContext) =>
                               accepts({ ...context, instance: typed(context.instance) }),
+                      }),
+                ...(competition === undefined
+                    ? {}
+                    : {
+                          competition: (instance: EffectInstanceValue) =>
+                              competition(typed(instance)),
                       }),
             }),
         );

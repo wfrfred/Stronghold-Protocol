@@ -10,6 +10,7 @@ export interface EffectAddress {
 
 export interface EffectLifecycleFacts {
     readonly started: boolean;
+    readonly enabled: boolean;
     readonly participating: boolean;
     readonly finished: boolean;
     readonly parent: EffectAddress | null;

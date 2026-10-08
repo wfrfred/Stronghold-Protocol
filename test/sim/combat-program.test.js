@@ -2,7 +2,7 @@ import { computedAttack } from "../../dist/core/tactical/unit/capability/offense
 import { combatWorkEvents } from "../../dist/core/tactical/battle/execution/work.js";
 import { installFixtureEffect } from "../helpers/effects.js";
 import { installNewEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
-import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/transition.js";
+import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
@@ -288,7 +288,7 @@ test("combat program: a compiled source-attack effect reads current contribution
     targetUnitId: 1,
     tick: 0,
   });
-  const changed = updateEffectState(first, 0, 0, program.ref, { bonus: 30 }, resources);
+  const changed = updateEffectState(first, 0, 0, program.ref, { bonus: 30 }, resources, 0);
   const second = effect({ work: changed, sourceUnitId: 0, targetUnitId: 1, tick: 0 });
 
   assert.equal(getCombatUnit(first, 1).vitality.hp, 75);
