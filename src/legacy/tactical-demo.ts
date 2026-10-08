@@ -5,7 +5,6 @@ import {
 } from "../core/tactical/battle/runtime.js";
 import type { BattlefieldMap } from "../core/tactical/battlefield/map/map.js";
 import { TICKS_PER_SECOND } from "../core/tactical/tick.js";
-import { getUnspawnedCount } from "../core/tactical/battle/schedule/runtime.js";
 import {
     loadMovementScenario,
     type ArknightsMovementCatalog,
@@ -256,9 +255,7 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
             units: visible.map((unit) => unit.tuple),
             dp: 0,
             killed: presentation.stats().killedCount,
-            total:
-                snapshot.spawning.spawnedCount +
-                getUnspawnedCount(spec.schedule, snapshot.spawning),
+            total: runtime.spawnCounts.spawnedCount + runtime.spawnCounts.unspawnedCount,
         });
 
         for (const event of events) {

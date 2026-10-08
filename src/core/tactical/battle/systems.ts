@@ -12,7 +12,7 @@ import {
     type PredefinedPresence,
 } from "./predefined.js";
 import type { BattleCommand, BattleEvent, BattleResult } from "./contract.js";
-import { cloneScheduleState, type SpawnScheduleState } from "./schedule/state.js";
+import { cloneScheduleState, type SpawnScheduleExecution } from "./schedule/state.js";
 import { createSpawnScheduleSystem } from "./phases/spawning.js";
 import type { BattleSpec } from "./spec.js";
 import type { BattleExecutionState } from "./execution/state.js";
@@ -36,7 +36,7 @@ export interface BattleResources {
 
 export interface BattleSystemStates {
     readonly predefined: readonly PredefinedPresence[];
-    readonly schedule: SpawnScheduleState;
+    readonly schedule: SpawnScheduleExecution;
     readonly actionExecution: ActionExecutionState;
     readonly projectiles: ProjectileState;
 }
@@ -182,6 +182,10 @@ export function createBattleSystems(spec: BattleSpec, resources: BattleResources
             };
 
             return { states, execution: preparedSources.execution };
+        },
+
+        spawnCounts(states: BattleSystemStates) {
+            return schedule.counts(states.schedule);
         },
 
         snapshot(states: BattleSystemStates) {

@@ -82,6 +82,10 @@ export class BattleRuntime {
         return copyBattleResult(this.#state.result);
     }
 
+    get spawnCounts(): { readonly spawnedCount: number; readonly unspawnedCount: number } {
+        return this.#systems.spawnCounts(this.#state.systems);
+    }
+
     snapshot(): BattleSnapshot {
         const { battlefield, tickIndex, systems, execution, completedRouteCount, result } =
             this.#state;

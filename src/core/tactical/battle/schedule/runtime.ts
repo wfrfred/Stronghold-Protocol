@@ -1,12 +1,11 @@
 import { createRouteTiming } from "../../unit/capability/locomotion/route/state.js";
 import type { UnitId } from "../../unit/unit.js";
-import {
-    addScheduleTicks,
-    countFragmentSpawns,
-    type SpawnScheduleDefinition,
-    type WaveDefinition,
-} from "./definition.js";
-import type { SpawnScheduleState, WavesScheduleState } from "./state.js";
+import { addScheduleTicks, countFragmentSpawns, type WaveDefinition } from "./definition.js";
+import type {
+    SpawnScheduleExecution,
+    SpawnScheduleState,
+    WavesScheduleExecution,
+} from "./state.js";
 import {
     createQueue,
     dispatchQueue,
@@ -20,15 +19,15 @@ export interface SpawnScheduleTrigger {
 }
 
 export interface SpawnScheduleAdvance {
-    readonly state: SpawnScheduleState;
+    readonly state: SpawnScheduleExecution;
     readonly spawns: readonly ScheduledScheduleSpawn[];
 }
 
 function beginWave(
-    state: WavesScheduleState,
+    state: WavesScheduleExecution,
     wave: WaveDefinition,
     tick: number,
-): WavesScheduleState {
+): WavesScheduleExecution {
     return {
         ...state,
         waveStartedAtTick: tick,
@@ -37,13 +36,13 @@ function beginWave(
 }
 
 function advanceBranches(
-    definition: Extract<SpawnScheduleDefinition, { readonly type: "WAVES" }>,
-    initial: WavesScheduleState,
+    initial: WavesScheduleExecution,
     tick: number,
     triggers: readonly SpawnScheduleTrigger[],
     spawns: ScheduledScheduleSpawn[],
-): WavesScheduleState {
+): WavesScheduleExecution {
     let state = initial;
+    const { definition } = initial;
     const branchCursors = { ...state.branchCursors };
     const activeBranches = [...state.activeBranches];
 
@@ -85,12 +84,12 @@ function advanceBranches(
 }
 
 function advanceMainWaves(
-    definition: Extract<SpawnScheduleDefinition, { readonly type: "WAVES" }>,
-    initial: WavesScheduleState,
+    initial: WavesScheduleExecution,
     tick: number,
     spawns: ScheduledScheduleSpawn[],
-): WavesScheduleState {
+): WavesScheduleExecution {
     let state = initial;
+    const { definition } = initial;
 
     while (true) {
         if (state.main.phase === "COMPLETED") {
@@ -194,24 +193,23 @@ function advanceMainWaves(
 }
 
 function advanceWaves(
-    definition: Extract<SpawnScheduleDefinition, { readonly type: "WAVES" }>,
-    initial: WavesScheduleState,
+    initial: WavesScheduleExecution,
     tick: number,
     triggers: readonly SpawnScheduleTrigger[],
     spawns: ScheduledScheduleSpawn[],
-): WavesScheduleState {
+): WavesScheduleExecution {
+    const { definition } = initial;
     const state =
         initial.main.phase === "NOT_STARTED" && initial.waveIndex < definition.waves.length
             ? beginWave(initial, definition.waves[initial.waveIndex]!, tick)
             : initial;
-    const branched = advanceBranches(definition, state, tick, triggers, spawns);
+    const branched = advanceBranches(state, tick, triggers, spawns);
 
-    return advanceMainWaves(definition, branched, tick, spawns);
+    return advanceMainWaves(branched, tick, spawns);
 }
 
 export function advanceSpawnSchedule(
-    definition: SpawnScheduleDefinition,
-    previous: SpawnScheduleState,
+    previous: SpawnScheduleExecution,
     context: { readonly tick: number; readonly triggers?: readonly SpawnScheduleTrigger[] },
 ): SpawnScheduleAdvance {
     const tick = context.tick;
@@ -225,13 +223,14 @@ export function advanceSpawnSchedule(
 
     const triggers = context.triggers ?? [];
     const spawns: ScheduledScheduleSpawn[] = [];
-    let state: SpawnScheduleState;
+    let state: SpawnScheduleExecution;
 
-    if (definition.type === "TIMELINE" && previous.type === "TIMELINE") {
+    if (previous.type === "TIMELINE") {
         if (triggers.length > 0) {
             throw new RangeError("timeline schedules do not define branches");
         }
 
+        const { definition } = previous;
         let cursor = previous.cursor;
 
         while (cursor < definition.spawns.length && definition.spawns[cursor]!.tick <= tick) {
@@ -250,20 +249,18 @@ export function advanceSpawnSchedule(
         }
 
         state = { ...previous, cursor };
-    } else if (definition.type === "WAVES" && previous.type === "WAVES") {
-        state = advanceWaves(definition, previous, tick, triggers, spawns);
     } else {
-        throw new TypeError("schedule state type does not match its definition");
+        state = advanceWaves(previous, tick, triggers, spawns);
     }
 
     return { state: { ...state, pendingSpawnCount: spawns.length, lastTick: tick }, spawns };
 }
 
 export function recordScheduleSpawns(
-    previous: SpawnScheduleState,
+    previous: SpawnScheduleExecution,
     spawns: readonly ScheduledScheduleSpawn[],
     unitIds: readonly UnitId[],
-): SpawnScheduleState {
+): SpawnScheduleExecution {
     if (spawns.length !== unitIds.length || spawns.length !== previous.pendingSpawnCount) {
         throw new RangeError("recorded schedule spawns must match the pending spawn batch");
     }
@@ -308,9 +305,9 @@ export function recordScheduleSpawns(
 }
 
 export function resolveScheduleUnits(
-    previous: SpawnScheduleState,
+    previous: SpawnScheduleExecution,
     resolvedIds: readonly UnitId[],
-): SpawnScheduleState {
+): SpawnScheduleExecution {
     if (resolvedIds.length === 0) {
         return previous;
     }
@@ -332,19 +329,12 @@ export function resolveScheduleUnits(
     };
 }
 
-export function isSpawnScheduleCompleted(
-    definition: SpawnScheduleDefinition,
-    state: SpawnScheduleState,
-): boolean {
+export function isSpawnScheduleCompleted(state: SpawnScheduleExecution): boolean {
     if (state.pendingSpawnCount !== 0 || state.managedFinalUnitIds.length !== 0) {
         return false;
     }
     if (state.type === "TIMELINE") {
-        return (
-            state.cursor ===
-            (definition as Extract<SpawnScheduleDefinition, { readonly type: "TIMELINE" }>).spawns
-                .length
-        );
+        return state.cursor === state.definition.spawns.length;
     }
 
     return state.main.phase === "COMPLETED" && state.activeBranches.length === 0;
@@ -354,21 +344,15 @@ export function getSpawnedCount(state: SpawnScheduleState): number {
     return state.spawnedCount;
 }
 
-export function getUnspawnedCount(
-    definition: SpawnScheduleDefinition,
-    state: SpawnScheduleState,
-): number {
+export function getUnspawnedCount(state: SpawnScheduleExecution): number {
     if (state.type === "TIMELINE") {
-        const timeline = definition as Extract<
-            SpawnScheduleDefinition,
-            { readonly type: "TIMELINE" }
-        >;
-
-        return addScheduleTicks(timeline.spawns.length - state.cursor, state.pendingSpawnCount);
+        return addScheduleTicks(
+            state.definition.spawns.length - state.cursor,
+            state.pendingSpawnCount,
+        );
     }
 
-    const waves = (definition as Extract<SpawnScheduleDefinition, { readonly type: "WAVES" }>)
-        .waves;
+    const { waves } = state.definition;
     let count = state.pendingSpawnCount;
 
     for (const queue of state.activeBranches) {

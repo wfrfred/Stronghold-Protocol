@@ -14,7 +14,7 @@ import {
     resolveScheduleUnits,
     type SpawnScheduleTrigger,
 } from "../schedule/runtime.js";
-import { createSpawnScheduleState, type SpawnScheduleState } from "../schedule/state.js";
+import { createSpawnScheduleExecution, type SpawnScheduleExecution } from "../schedule/state.js";
 import { type ScheduledEnemySpawn, type SpawnScheduleDefinition } from "../schedule/definition.js";
 
 export interface SpawnedEnemies {
@@ -94,23 +94,23 @@ function enemySpawnEvents(spawned: SpawnedEnemies, tick: number): BattleEvent[] 
 
 export function createSpawnScheduleSystem(
     definition: SpawnScheduleDefinition,
-): BattleSystem<SpawnScheduleState> & {
-    readonly spawn: BattlePhase<SpawnScheduleState>;
-    readonly resolve: BattlePhase<SpawnScheduleState>;
-    isCompleted(state: SpawnScheduleState): boolean;
-    counts(state: SpawnScheduleState): {
+): BattleSystem<SpawnScheduleExecution> & {
+    readonly spawn: BattlePhase<SpawnScheduleExecution>;
+    readonly resolve: BattlePhase<SpawnScheduleExecution>;
+    isCompleted(state: SpawnScheduleExecution): boolean;
+    counts(state: SpawnScheduleExecution): {
         readonly spawnedCount: number;
         readonly unspawnedCount: number;
     };
 } {
     return {
-        createState: () => createSpawnScheduleState(definition),
+        createState: () => createSpawnScheduleExecution(definition),
 
         spawn(input, state) {
             const triggers: SpawnScheduleTrigger[] = input.commands.filter(
                 (command) => command.type === "TRIGGER_BRANCH",
             );
-            const scheduled = advanceSpawnSchedule(definition, state, {
+            const scheduled = advanceSpawnSchedule(state, {
                 tick: input.tick,
                 triggers,
             });
@@ -140,10 +140,10 @@ export function createSpawnScheduleSystem(
             };
         },
 
-        isCompleted: (state) => isSpawnScheduleCompleted(definition, state),
+        isCompleted: (state) => isSpawnScheduleCompleted(state),
         counts: (state) => ({
             spawnedCount: getSpawnedCount(state),
-            unspawnedCount: getUnspawnedCount(definition, state),
+            unspawnedCount: getUnspawnedCount(state),
         }),
     };
 }

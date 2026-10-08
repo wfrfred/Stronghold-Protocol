@@ -17,7 +17,7 @@ import { createRng } from '../../dist/core/common/rng.js';
 import { createBattleSpec } from '../../dist/core/tactical/battle/spec.js';
 import { BattleRuntime, simulateBattle } from '../../dist/core/tactical/battle/runtime.js';
 import { advanceSpawnSchedule, getSpawnedCount, getUnspawnedCount, isSpawnScheduleCompleted, recordScheduleSpawns, resolveScheduleUnits } from "../../dist/core/tactical/battle/schedule/runtime.js";
-import { cloneScheduleState, createSpawnScheduleState } from "../../dist/core/tactical/battle/schedule/state.js";
+import { cloneScheduleState, createSpawnScheduleExecution } from "../../dist/core/tactical/battle/schedule/state.js";
 import { createSpawnScheduleDefinition } from "../../dist/core/tactical/battle/schedule/definition.js";
 import { createSteeringParameters } from '../../dist/core/tactical/unit/capability/locomotion/steering.js';
 import { createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
@@ -112,8 +112,8 @@ function syntheticSpawnSchedule(waves, branches = {}, ignoredKeys = []) {
   return { level, schedule: createSpawnScheduleDefinition(compilation.schedule) };
 }
 
-function dispatchSchedule(schedule, state, tick, unitIds = [], triggers = []) {
-  const advanced = advanceSpawnSchedule(schedule, state, { tick, triggers });
+function dispatchSchedule(state, tick, unitIds = [], triggers = []) {
+  const advanced = advanceSpawnSchedule(state, { tick, triggers });
   return { spawns: advanced.spawns, state: recordScheduleSpawns(advanced.state, advanced.spawns, unitIds) };
 }
 
@@ -1465,6 +1465,43 @@ test('raw levels preserve predefined configuration and keep unsupported inputs o
   }
 });
 
+test('schedule execution keeps the definition internally and exposes isolated progress snapshots', () => {
+  const timelineDefinition = createSpawnScheduleDefinition({ type: 'TIMELINE', spawns: [] });
+  const timeline = createSpawnScheduleExecution(timelineDefinition);
+  const timelineSnapshot = cloneScheduleState(timeline);
+  assert.equal(timeline.definition, timelineDefinition);
+  assert.equal(Object.hasOwn(timelineSnapshot, 'definition'), false);
+  assert.equal(timelineSnapshot.type, 'TIMELINE');
+  assert.equal(isSpawnScheduleCompleted(timeline), true);
+  assert.equal(getUnspawnedCount(timeline), 0);
+  const advanced = advanceSpawnSchedule(timeline, { tick: 0 });
+  const recorded = recordScheduleSpawns(advanced.state, advanced.spawns, []);
+  assert.equal(recorded.definition, timelineDefinition);
+  assert.equal(resolveScheduleUnits(recorded, []).definition, timelineDefinition);
+  timelineSnapshot.managedFinalUnitIds.push(99);
+  assert.deepEqual(timeline.managedFinalUnitIds, []);
+
+  const { schedule } = syntheticSpawnSchedule([nativeWave([nativeFragment([nativeSpawn()])])]);
+  const waves = createSpawnScheduleExecution(schedule);
+  const wavesSnapshot = cloneScheduleState(waves);
+  assert.equal(waves.definition, schedule);
+  assert.equal(Object.hasOwn(wavesSnapshot, 'definition'), false);
+  assert.equal(wavesSnapshot.type, 'WAVES');
+  const { spec } = slimeMovementFragment();
+  for (const definition of [timelineDefinition, schedule]) {
+    const runtime = new BattleRuntime({ ...spec, schedule: definition });
+    assert.deepEqual(runtime.spawnCounts, {
+      spawnedCount: 0, unspawnedCount: definition.type === 'TIMELINE' ? 0 : 1,
+    });
+    assert.equal(Object.hasOwn(runtime.snapshot().spawning, 'definition'), false);
+    runtime.step();
+    assert.deepEqual(runtime.spawnCounts, {
+      spawnedCount: definition.type === 'TIMELINE' ? 0 : 1, unspawnedCount: 0,
+    });
+    assert.equal(Object.hasOwn(runtime.snapshot().spawning, 'definition'), false);
+  }
+});
+
 test('native-format waves exhaust each queue before advancing, and SPAWN callbacks unblock fragments before units disappear', () => {
   const { schedule } = syntheticSpawnSchedule([
     nativeWave([
@@ -1474,22 +1511,22 @@ test('native-format waves exhaust each queue before advancing, and SPAWN callbac
     ], { preDelay: 2 / 30, postDelay: 2 / 30 }),
     nativeWave([nativeFragment([nativeSpawn()])], { preDelay: 1 / 30, postDelay: 1 / 30, maxTimeWaitingForNextWave: 0 }),
   ]);
-  const initial = createSpawnScheduleState(schedule);
-  let step = dispatchSchedule(schedule, initial, 0);
+  const initial = createSpawnScheduleExecution(schedule);
+  let step = dispatchSchedule(initial, 0);
   assert.equal(step.state.main.phase, 'PRE_DELAY');
-  assert.equal(getUnspawnedCount(schedule, step.state), 4);
-  step = dispatchSchedule(schedule, step.state, 2);
+  assert.equal(getUnspawnedCount(step.state), 4);
+  step = dispatchSchedule(step.state, 2);
   assert.equal(step.spawns.length, 0);
   assert.equal(step.state.main.fragmentIndex, 1);
   assert.equal(step.state.fragmentStartedAtTick, 3);
-  step = dispatchSchedule(schedule, step.state, 4, [0]);
+  step = dispatchSchedule(step.state, 4, [0]);
   assert.deepEqual(step.spawns.map(spawn => spawn.tick), [4]);
   assert.deepEqual(step.state.managedWaveUnitIds, [0]);
   assert.equal(step.state.main.phase, 'FRAGMENTS');
-  step = dispatchSchedule(schedule, step.state, 5);
+  step = dispatchSchedule(step.state, 5);
   assert.equal(step.spawns.length, 0);
   assert.equal(step.state.main.fragmentIndex, 1);
-  step = dispatchSchedule(schedule, step.state, 6, [1, 2]);
+  step = dispatchSchedule(step.state, 6, [1, 2]);
   assert.deepEqual(step.spawns.map(spawn => spawn.tick), [6, 6]);
   assert.deepEqual(step.spawns.map(spawn => spawn.timing), [
     { waveStartedAtTick: 0, fragmentStartedAtTick: 3 },
@@ -1497,27 +1534,27 @@ test('native-format waves exhaust each queue before advancing, and SPAWN callbac
   ]);
   assert.equal(step.state.main.phase, 'WAITING');
   assert.deepEqual(step.state.managedWaveUnitIds, [0, 1, 2]);
-  assert.equal(getUnspawnedCount(schedule, step.state), 1);
-  assert.deepEqual(initial, createSpawnScheduleState(schedule));
+  assert.equal(getUnspawnedCount(step.state), 1);
+  assert.deepEqual(initial, createSpawnScheduleExecution(schedule));
   const resolved = resolveScheduleUnits(step.state, [0, 1, 2]);
-  step = dispatchSchedule(schedule, resolved, 7);
+  step = dispatchSchedule(resolved, 7);
   assert.equal(step.state.main.phase, 'POST_DELAY');
-  step = dispatchSchedule(schedule, step.state, 8);
+  step = dispatchSchedule(step.state, 8);
   assert.equal(step.state.waveIndex, 0);
-  step = dispatchSchedule(schedule, step.state, 9);
+  step = dispatchSchedule(step.state, 9);
   assert.equal(step.state.waveIndex, 1);
   assert.equal(step.state.main.phase, 'PRE_DELAY');
-  step = dispatchSchedule(schedule, step.state, 10, [3]);
+  step = dispatchSchedule(step.state, 10, [3]);
   assert.deepEqual(step.spawns[0].timing, { waveStartedAtTick: 9, fragmentStartedAtTick: 10 });
-  step = dispatchSchedule(schedule, step.state, 100);
+  step = dispatchSchedule(step.state, 100);
   assert.equal(step.state.main.phase, 'WAITING');
-  assert.equal(isSpawnScheduleCompleted(schedule, step.state), false);
-  step = dispatchSchedule(schedule, resolveScheduleUnits(step.state, [3]), 101);
+  assert.equal(isSpawnScheduleCompleted(step.state), false);
+  step = dispatchSchedule(resolveScheduleUnits(step.state, [3]), 101);
   assert.equal(step.state.main.phase, 'POST_DELAY');
-  step = dispatchSchedule(schedule, step.state, 102);
-  assert.equal(isSpawnScheduleCompleted(schedule, step.state), true);
+  step = dispatchSchedule(step.state, 102);
+  assert.equal(isSpawnScheduleCompleted(step.state), true);
   assert.equal(getSpawnedCount(step.state), 4);
-  assert.equal(getUnspawnedCount(schedule, step.state), 0);
+  assert.equal(getUnspawnedCount(step.state), 0);
 });
 
 test('scheduler wave and final ownership follow managed, dontBlockWave, forceBlockWaveInBranch and enemy notCountInTotal', () => {
@@ -1536,20 +1573,20 @@ test('scheduler wave and final ownership follow managed, dontBlockWave, forceBlo
     nativeSpawn({ key: 'ignored', forceBlockWaveInBranch: true }),
     nativeSpawn({ managedByScheduler: false, forceBlockWaveInBranch: true }),
   ])] } }, ['ignored']);
-  let step = dispatchSchedule(schedule, createSpawnScheduleState(schedule), 0, [0, 1, 2, 3, 4]);
+  let step = dispatchSchedule(createSpawnScheduleExecution(schedule), 0, [0, 1, 2, 3, 4]);
   assert.deepEqual(step.state.managedWaveUnitIds, [0, 4]);
   assert.deepEqual(step.state.managedFinalUnitIds, [0, 2, 4]);
   assert.equal(step.spawns[3].notCountInTotal, true);
-  step = dispatchSchedule(schedule, step.state, 1, [5, 6, 7, 8, 9], [{ branchId: 'extra', isLoop: false }]);
+  step = dispatchSchedule(step.state, 1, [5, 6, 7, 8, 9], [{ branchId: 'extra', isLoop: false }]);
   assert.deepEqual(step.state.managedWaveUnitIds, [0, 4, 6]);
   assert.deepEqual(step.state.managedFinalUnitIds, [0, 2, 4, 5, 6, 7]);
   assert.equal(getSpawnedCount(step.state), 10);
-  assert.equal(getUnspawnedCount(schedule, step.state), 0);
-  step = dispatchSchedule(schedule, resolveScheduleUnits(step.state, [0, 4, 6]), 2);
+  assert.equal(getUnspawnedCount(step.state), 0);
+  step = dispatchSchedule(resolveScheduleUnits(step.state, [0, 4, 6]), 2);
   assert.equal(step.state.main.phase, 'COMPLETED');
   assert.deepEqual(step.state.managedFinalUnitIds, [2, 5, 7]);
-  assert.equal(isSpawnScheduleCompleted(schedule, step.state), false);
-  assert.equal(isSpawnScheduleCompleted(schedule, resolveScheduleUnits(step.state, [2, 5, 7])), true);
+  assert.equal(isSpawnScheduleCompleted(step.state), false);
+  assert.equal(isSpawnScheduleCompleted(resolveScheduleUnits(step.state, [2, 5, 7])), true);
 });
 
 test('wave timeout starts after its last queued action, clears only wave ownership, and final waves ignore that timeout', () => {
@@ -1558,31 +1595,31 @@ test('wave timeout starts after its last queued action, clears only wave ownersh
       { maxTimeWaitingForNextWave: 3 / 30, postDelay: 2 / 30 }),
     nativeWave([nativeFragment([nativeSpawn()])], { maxTimeWaitingForNextWave: 0 }),
   ]);
-  let step = dispatchSchedule(schedule, createSpawnScheduleState(schedule), 0, [0]);
-  step = dispatchSchedule(schedule, step.state, 4);
+  let step = dispatchSchedule(createSpawnScheduleExecution(schedule), 0, [0]);
+  step = dispatchSchedule(step.state, 4);
   assert.equal(step.state.main.phase, 'FRAGMENTS');
   assert.equal(step.state.waveIndex, 0);
-  step = dispatchSchedule(schedule, step.state, 5, [1]);
+  step = dispatchSchedule(step.state, 5, [1]);
   assert.equal(step.state.main.phase, 'WAITING');
   assert.equal(step.state.main.startedAtTick, 5);
-  step = dispatchSchedule(schedule, step.state, 7);
+  step = dispatchSchedule(step.state, 7);
   assert.equal(step.state.main.phase, 'WAITING');
-  step = dispatchSchedule(schedule, step.state, 8);
+  step = dispatchSchedule(step.state, 8);
   assert.equal(step.state.main.phase, 'POST_DELAY');
   assert.deepEqual(step.state.managedWaveUnitIds, []);
   assert.deepEqual(step.state.managedFinalUnitIds, [0, 1]);
-  step = dispatchSchedule(schedule, step.state, 9);
+  step = dispatchSchedule(step.state, 9);
   assert.equal(step.state.waveIndex, 0);
-  step = dispatchSchedule(schedule, step.state, 10, [2]);
+  step = dispatchSchedule(step.state, 10, [2]);
   assert.equal(step.state.waveIndex, 1);
   assert.deepEqual(step.state.managedWaveUnitIds, [2]);
   assert.deepEqual(step.state.managedFinalUnitIds, [0, 1, 2]);
-  step = dispatchSchedule(schedule, step.state, 100);
+  step = dispatchSchedule(step.state, 100);
   assert.equal(step.state.main.phase, 'WAITING');
-  step = dispatchSchedule(schedule, resolveScheduleUnits(step.state, [2]), 101);
+  step = dispatchSchedule(resolveScheduleUnits(step.state, [2]), 101);
   assert.equal(step.state.main.phase, 'COMPLETED');
-  assert.equal(isSpawnScheduleCompleted(schedule, step.state), false);
-  assert.equal(isSpawnScheduleCompleted(schedule, resolveScheduleUnits(step.state, [0, 1])), true);
+  assert.equal(isSpawnScheduleCompleted(step.state), false);
+  assert.equal(isSpawnScheduleCompleted(resolveScheduleUnits(step.state, [0, 1])), true);
 });
 
 test('same-tick zero timeout never registers an old wave spawn as a new wave blocker', () => {
@@ -1590,10 +1627,10 @@ test('same-tick zero timeout never registers an old wave spawn as a new wave blo
     nativeWave([nativeFragment([nativeSpawn()])], { maxTimeWaitingForNextWave: 0 }),
     nativeWave([nativeFragment([nativeSpawn()])]),
   ]);
-  const advanced = advanceSpawnSchedule(schedule, createSpawnScheduleState(schedule), { tick: 0 });
+  const advanced = advanceSpawnSchedule(createSpawnScheduleExecution(schedule), { tick: 0 });
   assert.deepEqual(advanced.spawns.map(spawn => spawn.schedule.waveIndex), [0, 1]);
-  assert.equal(isSpawnScheduleCompleted(schedule, advanced.state), false);
-  assert.throws(() => advanceSpawnSchedule(schedule, advanced.state, { tick: 1 }), /must be recorded/);
+  assert.equal(isSpawnScheduleCompleted(advanced.state), false);
+  assert.throws(() => advanceSpawnSchedule(advanced.state, { tick: 1 }), /must be recorded/);
   assert.throws(() => recordScheduleSpawns(advanced.state, advanced.spawns, [0]), /pending spawn batch/);
   const state = recordScheduleSpawns(advanced.state, advanced.spawns, [0, 1]);
   assert.equal(state.waveIndex, 1);
@@ -1608,24 +1645,24 @@ test('branches require explicit triggers, consume one phase each, support loops 
     nativeFragment([nativeSpawn({ preDelay: 3 / 30 })]),
     nativeFragment([nativeSpawn()]),
   ] } });
-  let step = dispatchSchedule(schedule, createSpawnScheduleState(schedule), 0);
+  let step = dispatchSchedule(createSpawnScheduleExecution(schedule), 0);
   assert.equal(step.state.branchCursors.extra, 0);
   assert.equal(step.state.activeBranches.length, 0);
-  assert.equal(getUnspawnedCount(schedule, step.state), 1);
-  step = dispatchSchedule(schedule, step.state, 1, [], [{ branchId: 'extra', isLoop: false }]);
+  assert.equal(getUnspawnedCount(step.state), 1);
+  step = dispatchSchedule(step.state, 1, [], [{ branchId: 'extra', isLoop: false }]);
   assert.equal(step.state.branchCursors.extra, 1);
-  assert.equal(getUnspawnedCount(schedule, step.state), 2);
-  step = dispatchSchedule(schedule, step.state, 2, [0], [{ branchId: 'extra', isLoop: false }]);
+  assert.equal(getUnspawnedCount(step.state), 2);
+  step = dispatchSchedule(step.state, 2, [0], [{ branchId: 'extra', isLoop: false }]);
   assert.equal(step.state.branchCursors.extra, 2);
   assert.equal(step.state.activeBranches.length, 1);
   assert.equal(step.spawns[0].route, level.extraRoutes[0]);
   assert.deepEqual(step.spawns[0].timing, { waveStartedAtTick: 0, fragmentStartedAtTick: 0 });
   assert.deepEqual(step.state.managedWaveUnitIds, []);
-  step = dispatchSchedule(schedule, step.state, 3, [], [{ branchId: 'extra', isLoop: false }]);
+  step = dispatchSchedule(step.state, 3, [], [{ branchId: 'extra', isLoop: false }]);
   assert.equal(step.spawns.length, 0);
-  step = dispatchSchedule(schedule, step.state, 4, [1]);
+  step = dispatchSchedule(step.state, 4, [1]);
   assert.equal(step.state.activeBranches.length, 0);
-  step = dispatchSchedule(schedule, step.state, 5, [2], [
+  step = dispatchSchedule(step.state, 5, [2], [
     { branchId: 'extra', isLoop: true }, { branchId: 'extra', isLoop: true },
   ]);
   assert.equal(step.spawns.length, 1);
@@ -1640,27 +1677,27 @@ test('branches require explicit triggers, consume one phase each, support loops 
   assert.equal(step.state.activeBranches[0].spawns.length, 1);
   assert.equal(step.state.main.queue.spawns.length, 1);
   assert.deepEqual(step.state.managedFinalUnitIds, [0, 1, 2]);
-  step = dispatchSchedule(schedule, step.state, 8, [3]);
+  step = dispatchSchedule(step.state, 8, [3]);
   assert.equal(getSpawnedCount(step.state), 4);
-  assert.equal(getUnspawnedCount(schedule, step.state), 1);
+  assert.equal(getUnspawnedCount(step.state), 1);
   const before = cloneScheduleState(step.state);
-  assert.throws(() => advanceSpawnSchedule(schedule, step.state, { tick: 9, triggers: [{ branchId: 'missing', isLoop: false }] }), /unknown scheduler branch/);
-  assert.deepEqual(step.state, before);
+  assert.throws(() => advanceSpawnSchedule(step.state, { tick: 9, triggers: [{ branchId: 'missing', isLoop: false }] }), /unknown scheduler branch/);
+  assert.deepEqual(cloneScheduleState(step.state), before);
 });
 
 test('WAVES projection rounds absolute action times, including fractional fragment delays, without periodic drift', () => {
   const { schedule } = syntheticSpawnSchedule([
     nativeWave([nativeFragment([nativeSpawn({ preDelay: 0.05, interval: 0.15, count: 8 })], 0.05)]),
   ]);
-  let state = createSpawnScheduleState(schedule);
+  let state = createSpawnScheduleExecution(schedule);
   const ticks = [];
   for (let tick = 0; tick <= 35; tick++) {
-    const advanced = advanceSpawnSchedule(schedule, state, { tick });
+    const advanced = advanceSpawnSchedule(state, { tick });
     ticks.push(...advanced.spawns.map(spawn => spawn.tick));
     state = recordScheduleSpawns(advanced.state, advanced.spawns, advanced.spawns.map((_, index) => ticks.length - advanced.spawns.length + index));
   }
   assert.deepEqual(ticks, [3, 8, 12, 17, 21, 26, 30, 35]);
-  assert.equal(getUnspawnedCount(schedule, state), 0);
+  assert.equal(getUnspawnedCount(state), 0);
 });
 
 test('delayed branch births snapshot the current main fragment and wave at dispatch rather than at their trigger', () => {
@@ -1673,12 +1710,12 @@ test('delayed branch births snapshot the current main fragment and wave at dispa
   ], { extra: { phases: [nativeFragment([
     nativeSpawn({ preDelay: 3 / 30 }), nativeSpawn({ preDelay: 8 / 30 }),
   ])] } });
-  let state = createSpawnScheduleState(schedule);
+  let state = createSpawnScheduleExecution(schedule);
   let nextUnitId = 0;
   const births = [];
   for (let tick = 0; tick <= 10; tick++) {
     const triggers = tick === 0 ? [{ branchId: 'extra', isLoop: false }] : [];
-    const advanced = advanceSpawnSchedule(schedule, state, { tick, triggers });
+    const advanced = advanceSpawnSchedule(state, { tick, triggers });
     for (const spawn of advanced.spawns) births.push({
       tick: spawn.tick, branch: spawn.route === level.extraRoutes[0], timing: spawn.timing,
     });
@@ -1697,7 +1734,7 @@ test('same-tick branch dispatch reads the main snapshot before that tick enters 
   const { schedule } = syntheticSpawnSchedule([
     nativeWave([nativeFragment([nativeSpawn()], 1)]),
   ], { extra: { phases: [nativeFragment([nativeSpawn()])] } });
-  const step = dispatchSchedule(schedule, createSpawnScheduleState(schedule), 0, [0], [{ branchId: 'extra', isLoop: false }]);
+  const step = dispatchSchedule(createSpawnScheduleExecution(schedule), 0, [0], [{ branchId: 'extra', isLoop: false }]);
   assert.deepEqual(step.spawns[0].timing, { waveStartedAtTick: 0, fragmentStartedAtTick: 0 });
   assert.equal(step.state.fragmentStartedAtTick, 30);
   assert.equal(step.state.main.queue.spawns[0].tick, 30);
@@ -1716,13 +1753,16 @@ test('battle schedule completion can leave unmanaged live units, and branch comm
     { extra: { phases: [nativeFragment([nativeSpawn()])] } });
   const branchRuntime = new BattleRuntime({ ...spec, schedule: branches.schedule });
   branchRuntime.step();
+  assert.deepEqual(branchRuntime.spawnCounts, { spawnedCount: 0, unspawnedCount: 1 });
   const before = branchRuntime.snapshot();
   assert.throws(() => branchRuntime.step([
     { type: 'TRIGGER_BRANCH', branchId: 'extra', isLoop: false },
     { type: 'TRIGGER_BRANCH', branchId: 'missing', isLoop: false },
   ]), /unknown scheduler branch/);
   assert.deepEqual(branchRuntime.snapshot(), before);
+  assert.deepEqual(branchRuntime.spawnCounts, { spawnedCount: 0, unspawnedCount: 1 });
   const spawned = branchRuntime.step([{ type: 'TRIGGER_BRANCH', branchId: 'extra', isLoop: false }]);
+  assert.deepEqual(branchRuntime.spawnCounts, { spawnedCount: 1, unspawnedCount: 1 });
   assert.deepEqual(spawned.events.filter(event => event.type === 'ENEMY_SPAWNED'), [{ type: 'ENEMY_SPAWNED', unitId: 0, tick: 1 }]);
   assert.equal(branchRuntime.snapshot().units[0].locomotion.mainRoute.route.definition, branches.level.extraRoutes[0]);
 });

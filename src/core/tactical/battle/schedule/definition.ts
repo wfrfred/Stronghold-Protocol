@@ -42,13 +42,18 @@ export interface BranchDefinition {
     readonly phases: readonly FragmentDefinition[];
 }
 
-export type SpawnScheduleDefinition =
-    | { readonly type: "TIMELINE"; readonly spawns: readonly ScheduledEnemySpawn[] }
-    | {
-          readonly type: "WAVES";
-          readonly waves: readonly WaveDefinition[];
-          readonly branches: Readonly<Record<string, BranchDefinition>>;
-      };
+export interface TimelineScheduleDefinition {
+    readonly type: "TIMELINE";
+    readonly spawns: readonly ScheduledEnemySpawn[];
+}
+
+export interface WavesScheduleDefinition {
+    readonly type: "WAVES";
+    readonly waves: readonly WaveDefinition[];
+    readonly branches: Readonly<Record<string, BranchDefinition>>;
+}
+
+export type SpawnScheduleDefinition = TimelineScheduleDefinition | WavesScheduleDefinition;
 
 export function addScheduleTicks(left: number, right: number): number {
     const deadline = left + right;

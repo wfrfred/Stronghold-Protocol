@@ -1,6 +1,11 @@
 import type { RouteTiming } from "../../unit/capability/locomotion/route/state.js";
 import type { UnitId } from "../../unit/unit.js";
-import type { EnemySpawnDefinition, SpawnScheduleDefinition } from "./definition.js";
+import type {
+    EnemySpawnDefinition,
+    SpawnScheduleDefinition,
+    TimelineScheduleDefinition,
+    WavesScheduleDefinition,
+} from "./definition.js";
 
 export type SpawnTimingSource =
     { readonly type: "FIXED"; readonly timing: RouteTiming } | { readonly type: "CURRENT_MAIN" };
@@ -55,7 +60,19 @@ export interface WavesScheduleState extends ScheduleLedger {
 
 export type SpawnScheduleState = TimelineScheduleState | WavesScheduleState;
 
-export function createSpawnScheduleState(definition: SpawnScheduleDefinition): SpawnScheduleState {
+export interface TimelineScheduleExecution extends TimelineScheduleState {
+    readonly definition: TimelineScheduleDefinition;
+}
+
+export interface WavesScheduleExecution extends WavesScheduleState {
+    readonly definition: WavesScheduleDefinition;
+}
+
+export type SpawnScheduleExecution = TimelineScheduleExecution | WavesScheduleExecution;
+
+export function createSpawnScheduleExecution(
+    definition: SpawnScheduleDefinition,
+): SpawnScheduleExecution {
     const ledger: ScheduleLedger = {
         spawnedCount: 0,
         pendingSpawnCount: 0,
@@ -65,12 +82,13 @@ export function createSpawnScheduleState(definition: SpawnScheduleDefinition): S
     };
 
     if (definition.type === "TIMELINE") {
-        return { ...ledger, type: "TIMELINE", cursor: 0 };
+        return { ...ledger, type: "TIMELINE", definition, cursor: 0 };
     }
 
     return {
         ...ledger,
         type: "WAVES",
+        definition,
         waveIndex: 0,
         waveStartedAtTick: 0,
         fragmentStartedAtTick: 0,
@@ -93,18 +111,24 @@ function copyMainWaveProgress(main: MainWaveProgress): MainWaveProgress {
 }
 
 export function cloneScheduleState(state: SpawnScheduleState): SpawnScheduleState {
-    const ledger = {
+    const ledger: ScheduleLedger = {
+        spawnedCount: state.spawnedCount,
+        pendingSpawnCount: state.pendingSpawnCount,
         managedWaveUnitIds: [...state.managedWaveUnitIds],
         managedFinalUnitIds: [...state.managedFinalUnitIds],
+        lastTick: state.lastTick,
     };
 
     if (state.type === "TIMELINE") {
-        return { ...state, ...ledger };
+        return { ...ledger, type: "TIMELINE", cursor: state.cursor };
     }
 
     return {
-        ...state,
         ...ledger,
+        type: "WAVES",
+        waveIndex: state.waveIndex,
+        waveStartedAtTick: state.waveStartedAtTick,
+        fragmentStartedAtTick: state.fragmentStartedAtTick,
         main: copyMainWaveProgress(state.main),
         branchCursors: { ...state.branchCursors },
         activeBranches: state.activeBranches.map(copyQueue),
