@@ -36,7 +36,7 @@ import { createLegacyCombatBattle } from '../../dist/legacy/combat.js';
 import { createDeploymentProfile, createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/deployment.js';
 import { createOccupancyState } from '../../dist/core/tactical/unit/capability/occupancy.js';
 import { createPredefinedInstanceDefinition } from '../../dist/core/tactical/battle/predefined.js';
-import { createMovementSystem } from '../../dist/core/tactical/battle/phases/movement.js';
+import { advanceMovement } from '../../dist/core/tactical/battle/phases/movement.js';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 
 const approx = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
@@ -2144,9 +2144,9 @@ test('core visibility: movement reads one navigation projection before following
   }) }]);
   assert.deepEqual(battlefield.navigationMaps.WALK.cells.map(cell => cell.passable), [true, false, true, true, true]);
 
-  const moved = createMovementSystem({ routeMoveMultiplier: 1 }, new CombatResources()).step({
+  const moved = advanceMovement({
     battlefield, tick: 0, commands: [], execution, removedUnits: [],
-  }, undefined);
+  }, { routeMoveMultiplier: 1 }, new CombatResources());
   battlefield.apply(moved.changes);
 
   assert.deepEqual(battlefield.unitIds.map(id => battlefield.getUnit(id).position), [[2, 0], [2, 0]]);

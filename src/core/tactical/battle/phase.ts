@@ -14,14 +14,21 @@ export interface BattlePhaseInput {
     readonly removedUnits: BattlefieldChangeResult["removedUnits"];
 }
 
-export interface BattlePhaseResult<S = void> {
-    readonly state: S;
+export interface BattlePhaseOutput {
     readonly changes: readonly BattlefieldChange[];
     readonly events: readonly Event[];
     readonly execution: BattleExecutionState;
 }
 
-export type BattlePhase<S = void, I extends BattlePhaseInput = BattlePhaseInput> = (
+export interface BattlePhaseResult<S> extends BattlePhaseOutput {
+    readonly state: S;
+}
+
+export type BattlePhase<S, I extends BattlePhaseInput = BattlePhaseInput> = (
     input: I,
     state: S,
 ) => BattlePhaseResult<S>;
+
+export type StatelessBattlePhase<I extends BattlePhaseInput = BattlePhaseInput> = (
+    input: I,
+) => BattlePhaseOutput;

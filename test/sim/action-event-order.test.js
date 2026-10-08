@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
-import { createBattleSystems } from "../../dist/core/tactical/battle/systems.js";
+import { createBattleFlow } from "../../dist/core/tactical/battle/flow.js";
 import { BattlefieldRuntime } from "../../dist/core/tactical/battlefield/runtime.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { copyUnitSnapshot } from "../../dist/core/tactical/unit/snapshot.js";
@@ -85,7 +85,7 @@ test("action event order: release and damage precede support loss produced by th
         ...[attacker, support, recipient].map(unit => ({ type: "REGISTER_UNIT", unit })),
         { type: "SET_SUPPORT_RELATIONS", relations: [{ supportedUnitId: 2, supportUnitId: 1 }] },
     ]);
-    const systems = createBattleSystems(spec, {
+    const flow = createBattleFlow(spec, {
         compileAction: (definition, resources) => {
             const compiled = compileAction(definition, resources);
 
@@ -98,14 +98,14 @@ test("action event order: release and damage precede support loss produced by th
             };
         },
     });
-    const initialized = systems.initialize(battlefield, {
+    const initialized = flow.initialize(battlefield, {
         rngState: 17,
         nextUnitId: 3,
         nextNavigationRequestId: 0,
         nextMechanismId: 0,
         nextNavigationModifierId: 0,
     });
-    const output = systems.step(battlefield, initialized.states, initialized.execution, 0, []);
+    const output = flow.step(battlefield, initialized.phaseState, initialized.execution, 0, []);
 
     assert.deepEqual(output.events.map(event => event.type), [
         "ACTION", "ACTION_RELEASED", "DAMAGE", "ACTION_FINISHED", "SUPPORT_LOST", "UNIT_REMOVED",

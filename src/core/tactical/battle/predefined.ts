@@ -17,7 +17,7 @@ import {
     type UnitPlacementDefinition,
 } from "./creation/placement.js";
 import type { BattleExecutionState } from "./execution/state.js";
-import type { BattlePhase } from "./system.js";
+import type { BattlePhase } from "./phase.js";
 import type { Event } from "./contract.js";
 import type { EffectTransitionResources } from "../unit/capability/effects/contract.js";
 import { removeUnitWithEffects } from "./execution/unit-lifecycle.js";

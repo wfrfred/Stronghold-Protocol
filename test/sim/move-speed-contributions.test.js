@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
-import { createMovementSystem } from "../../dist/core/tactical/battle/phases/movement.js";
+import { advanceMovement } from "../../dist/core/tactical/battle/phases/movement.js";
 import { changeAlternativeRoutes } from "../../dist/core/tactical/battle/phases/route-control.js";
 import { combatWorkView, getCombatUnit, updateCombatUnit } from "../../dist/core/tactical/battle/execution/work.js";
 import { initializeRoutedEnemy } from "../../dist/core/tactical/battle/creation/enemy.js";
@@ -216,9 +216,9 @@ test("move speed: computed providers read phase facts without becoming stored fi
     const fullHp = h.unit;
     h.work = updateCombatUnit(h.work, { ...fullHp, vitality: { ...fullHp.vitality, hp: 50 } });
     h.battlefield.apply([{ type: "REGISTER_UNIT", unit: h.unit }]);
-    const moved = createMovementSystem({ routeMoveMultiplier: 0.5 }, resources).step({
+    const moved = advanceMovement({
         battlefield: h.battlefield.view, tick: 0, execution: h.execution, commands: [], removedUnits: [],
-    }, undefined);
+    }, { routeMoveMultiplier: 0.5 }, resources);
     h.battlefield.commit(moved.changes);
     close(h.battlefield.getUnit(0).position[0], 0.125);
     assert.equal(h.battlefield.getUnit(0).definition.locomotion.moveSpeedPerTick, 0.5);

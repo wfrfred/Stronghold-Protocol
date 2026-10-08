@@ -4,18 +4,15 @@ import type { BattleExecutionState } from "../execution/state.js";
 import type { UnitRouteSignal } from "./route-control.js";
 import type { UnitId } from "../../unit/unit.js";
 import type { Event } from "../contract.js";
-import type { BattlePhase } from "../system.js";
+import type { BattlePhaseInput, BattlePhaseResult } from "../phase.js";
 import {
     advanceSpawnSchedule,
-    getSpawnedCount,
-    getUnspawnedCount,
-    isSpawnScheduleCompleted,
     recordScheduleSpawns,
     resolveScheduleUnits,
     type SpawnScheduleTrigger,
 } from "../schedule/runtime.js";
-import { createSpawnScheduleExecution, type SpawnScheduleExecution } from "../schedule/state.js";
-import { type ScheduledEnemySpawn, type SpawnScheduleDefinition } from "../schedule/definition.js";
+import type { SpawnScheduleExecution } from "../schedule/state.js";
+import type { ScheduledEnemySpawn } from "../schedule/definition.js";
 
 export interface SpawnedEnemies {
     readonly execution: BattleExecutionState;
@@ -92,57 +89,42 @@ function enemySpawnEvents(spawned: SpawnedEnemies, tick: number): Event[] {
     return events;
 }
 
-export function createSpawnScheduleSystem(definition: SpawnScheduleDefinition): {
-    createState(): SpawnScheduleExecution;
-    readonly spawn: BattlePhase<SpawnScheduleExecution>;
-    readonly resolve: BattlePhase<SpawnScheduleExecution>;
-    isCompleted(state: SpawnScheduleExecution): boolean;
-    counts(state: SpawnScheduleExecution): {
-        readonly spawnedCount: number;
-        readonly unspawnedCount: number;
-    };
-} {
+export function advanceSpawning(
+    input: BattlePhaseInput,
+    state: SpawnScheduleExecution,
+): BattlePhaseResult<SpawnScheduleExecution> {
+    const triggers: SpawnScheduleTrigger[] = input.commands.filter(
+        (command) => command.type === "TRIGGER_BRANCH",
+    );
+    const scheduled = advanceSpawnSchedule(state, {
+        tick: input.tick,
+        triggers,
+    });
+    const spawned = spawnEnemies(scheduled.spawns, input.execution, input.tick);
+
     return {
-        createState: () => createSpawnScheduleExecution(definition),
+        state: recordScheduleSpawns(
+            scheduled.state,
+            scheduled.spawns,
+            spawned.enemies.map((enemy) => enemy.id),
+        ),
+        changes: spawned.enemies.map((unit) => ({ type: "REGISTER_UNIT", unit })),
+        events: enemySpawnEvents(spawned, input.tick),
+        execution: spawned.execution,
+    };
+}
 
-        spawn(input, state) {
-            const triggers: SpawnScheduleTrigger[] = input.commands.filter(
-                (command) => command.type === "TRIGGER_BRANCH",
-            );
-            const scheduled = advanceSpawnSchedule(state, {
-                tick: input.tick,
-                triggers,
-            });
-            const spawned = spawnEnemies(scheduled.spawns, input.execution, input.tick);
-
-            return {
-                state: recordScheduleSpawns(
-                    scheduled.state,
-                    scheduled.spawns,
-                    spawned.enemies.map((enemy) => enemy.id),
-                ),
-                changes: spawned.enemies.map((unit) => ({ type: "REGISTER_UNIT", unit })),
-                events: enemySpawnEvents(spawned, input.tick),
-                execution: spawned.execution,
-            };
-        },
-
-        resolve(input, state) {
-            return {
-                state: resolveScheduleUnits(
-                    state,
-                    input.removedUnits.map((removed) => removed.unitId),
-                ),
-                changes: [],
-                events: [],
-                execution: input.execution,
-            };
-        },
-
-        isCompleted: (state) => isSpawnScheduleCompleted(state),
-        counts: (state) => ({
-            spawnedCount: getSpawnedCount(state),
-            unspawnedCount: getUnspawnedCount(state),
-        }),
+export function resolveSpawning(
+    input: BattlePhaseInput,
+    state: SpawnScheduleExecution,
+): BattlePhaseResult<SpawnScheduleExecution> {
+    return {
+        state: resolveScheduleUnits(
+            state,
+            input.removedUnits.map((removed) => removed.unitId),
+        ),
+        changes: [],
+        events: [],
+        execution: input.execution,
     };
 }

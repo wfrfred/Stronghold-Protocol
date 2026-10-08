@@ -1,9 +1,9 @@
 import type { BattlefieldChange, BattlefieldChangeResult } from "../battlefield/contract.js";
 import type { BattlefieldRuntime } from "../battlefield/runtime.js";
-import { createMovementSystem } from "./phases/movement.js";
-import { createBlockingSystem } from "./phases/blocking.js";
+import { advanceMovement, applyRouteCommands } from "./phases/movement.js";
+import { advanceBlocking } from "./phases/blocking.js";
 import { createCombatSystem } from "./phases/combat.js";
-import { createDeploymentSystem } from "./phases/deployment.js";
+import { advanceDeployment } from "./phases/deployment.js";
 import { instantiateUnitPlacement } from "./creation/placement.js";
 import { instantiateMechanismPlacement } from "./creation/mechanism.js";
 import { instantiateNavigationModifierPlacement } from "./creation/navigation-modifier.js";
@@ -15,14 +15,19 @@ import {
     type PredefinedPresence,
 } from "./predefined.js";
 import type { Input, Command, Event, Result } from "./contract.js";
-import { cloneScheduleState, type SpawnScheduleExecution } from "./schedule/state.js";
-import { createSpawnScheduleSystem } from "./phases/spawning.js";
+import {
+    cloneScheduleState,
+    createSpawnScheduleExecution,
+    type SpawnScheduleExecution,
+} from "./schedule/state.js";
+import { getSpawnScheduleCounts, isSpawnScheduleCompleted } from "./schedule/runtime.js";
+import { advanceSpawning, resolveSpawning } from "./phases/spawning.js";
 import type { BattleExecutionState } from "./execution/state.js";
-import type { BattlePhase } from "./system.js";
+import type { BattlePhase, BattlePhaseInput, BattlePhaseOutput } from "./phase.js";
 import { battlefieldCommitEvents, finishBattleEvents } from "./events.js";
 import { CombatResources } from "./resources.js";
 import type { compileAction } from "../unit/capability/action/compile.js";
-import { createEffectSourceSystem } from "./phases/effect-sources.js";
+import { advanceEffectSources, registerEffectSources } from "./phases/effect-sources.js";
 import {
     copyActionExecutionState,
     type ActionExecutionState,
@@ -38,46 +43,42 @@ export interface BattleResources {
     readonly compileAction?: typeof compileAction;
 }
 
-export interface BattleSystemStates {
+export interface BattlePhaseState {
     readonly predefined: readonly PredefinedPresence[];
     readonly schedule: SpawnScheduleExecution;
     readonly actionExecution: ActionExecutionState;
     readonly projectiles: ProjectileState;
 }
 
-function bindPhase<K extends keyof BattleSystemStates>(
+function statefulPhase<K extends keyof BattlePhaseState>(
     slot: K,
-    phase: BattlePhase<BattleSystemStates[K]>,
-): BattlePhase<BattleSystemStates> {
-    return (input, states) => {
-        const phaseResult = phase(input, states[slot]);
+    phase: BattlePhase<BattlePhaseState[K]>,
+): BattlePhase<BattlePhaseState> {
+    return (input, phaseState) => {
+        const phaseResult = phase(input, phaseState[slot]);
 
         return {
             ...phaseResult,
             state:
-                phaseResult.state === states[slot]
-                    ? states
-                    : { ...states, [slot]: phaseResult.state },
+                phaseResult.state === phaseState[slot]
+                    ? phaseState
+                    : { ...phaseState, [slot]: phaseResult.state },
         };
     };
 }
 
-function bindStatelessPhase(phase: BattlePhase): BattlePhase<BattleSystemStates> {
-    return (input, state) => ({ ...phase(input, undefined), state });
+function statelessPhase(
+    advance: (input: BattlePhaseInput, state: BattlePhaseState) => BattlePhaseOutput,
+): BattlePhase<BattlePhaseState> {
+    return (input, state) => ({ ...advance(input, state), state });
 }
 
-export function createBattleSystems(input: Input, resources: BattleResources = {}) {
+export function createBattleFlow(input: Input, resources: BattleResources = {}) {
     const combatResources = (resources.combat ?? new CombatResources()).seal();
     const predefined = createPredefinedSystem(input.predefines, combatResources);
-    const schedule = createSpawnScheduleSystem(createSpawnScheduleDefinition(input.schedule));
-    const movement = createMovementSystem(
-        { routeMoveMultiplier: input.routeMoveMultiplier },
-        combatResources,
-    );
-    const blocking = createBlockingSystem();
+    const scheduleDefinition = createSpawnScheduleDefinition(input.schedule);
+    const movementOptions = { routeMoveMultiplier: input.routeMoveMultiplier };
     const combat = createCombatSystem(combatResources, resources.compileAction);
-    const deployment = createDeploymentSystem(combatResources);
-    const effectSources = createEffectSourceSystem(combatResources);
     const projectiles = createProjectileSystem(combatResources);
 
     const prepare: BattlePhase<readonly PredefinedPresence[]> = (input, state) => {
@@ -92,18 +93,7 @@ export function createBattleSystems(input: Input, resources: BattleResources = {
         };
     };
 
-    const move: BattlePhase<BattleSystemStates> = (input, state) => ({
-        ...movement.step(
-            {
-                ...input,
-                movementAllowed: (unitId) => combat.allowsMovement(state.actionExecution, unitId),
-            },
-            undefined,
-        ),
-        state,
-    });
-
-    const act: BattlePhase<BattleSystemStates> = (input, state) => {
+    const act: BattlePhase<BattlePhaseState> = (input, state) => {
         const advanced = withProjectileOperations(
             state.projectiles,
             combatResources.projectiles,
@@ -123,22 +113,32 @@ export function createBattleSystems(input: Input, resources: BattleResources = {
     };
 
     const phases = Object.freeze([
-        bindPhase("predefined", prepare),
-        bindPhase("actionExecution", combat.prepare),
-        bindStatelessPhase(deployment.step),
-        bindPhase("schedule", schedule.spawn),
-        bindStatelessPhase((input) => advanceElements(input, combatResources)),
-        bindStatelessPhase((input) => advanceSkills(input, combatResources)),
-        bindStatelessPhase(effectSources.step),
-        bindStatelessPhase(movement.reroute),
-        bindStatelessPhase(blocking.step),
+        statefulPhase("predefined", prepare),
+        statefulPhase("actionExecution", combat.prepare),
+        statelessPhase((input) => advanceDeployment(input, combatResources)),
+        statefulPhase("schedule", advanceSpawning),
+        statelessPhase((input) => advanceElements(input, combatResources)),
+        statelessPhase((input) => advanceSkills(input, combatResources)),
+        statelessPhase((input) => advanceEffectSources(input, combatResources)),
+        statelessPhase(applyRouteCommands),
+        statelessPhase(advanceBlocking),
         act,
-        bindPhase("projectiles", projectiles.step),
-        move,
-        bindStatelessPhase(effectSources.step),
-        bindStatelessPhase(blocking.step),
-        bindPhase("predefined", predefined.resolve),
-        bindPhase("schedule", schedule.resolve),
+        statefulPhase("projectiles", projectiles.step),
+        statelessPhase((input, state) =>
+            advanceMovement(
+                {
+                    ...input,
+                    movementAllowed: (unitId) =>
+                        combat.allowsMovement(state.actionExecution, unitId),
+                },
+                movementOptions,
+                combatResources,
+            ),
+        ),
+        statelessPhase((input) => advanceEffectSources(input, combatResources)),
+        statelessPhase(advanceBlocking),
+        statefulPhase("predefined", predefined.resolve),
+        statefulPhase("schedule", resolveSpawning),
     ]);
 
     return {
@@ -190,7 +190,7 @@ export function createBattleSystems(input: Input, resources: BattleResources = {
 
             battlefield.apply([...initialChanges, ...initialized.changes]);
 
-            const preparedSources = effectSources.step(
+            const preparedSources = advanceEffectSources(
                 {
                     battlefield: battlefield.view,
                     tick: 0,
@@ -198,36 +198,36 @@ export function createBattleSystems(input: Input, resources: BattleResources = {
                     execution: initialized.execution,
                     removedUnits: [],
                 },
-                undefined,
+                combatResources,
             );
             battlefield.commit(preparedSources.changes);
 
-            const states: BattleSystemStates = {
+            const phaseState: BattlePhaseState = {
                 predefined: initialized.presence,
-                schedule: schedule.createState(),
+                schedule: createSpawnScheduleExecution(scheduleDefinition),
                 actionExecution: combat.createState(),
                 projectiles: projectiles.createState(),
             };
 
-            return { states, execution: preparedSources.execution };
+            return { phaseState, execution: preparedSources.execution };
         },
 
-        spawnCounts(states: BattleSystemStates) {
-            return schedule.counts(states.schedule);
+        spawnCounts(phaseState: BattlePhaseState) {
+            return getSpawnScheduleCounts(phaseState.schedule);
         },
 
-        snapshot(states: BattleSystemStates) {
+        snapshot(phaseState: BattlePhaseState) {
             return {
-                spawning: cloneScheduleState(states.schedule),
-                predefinedPresence: copyPredefinedPresence(states.predefined),
-                actionExecution: copyActionExecutionState(states.actionExecution),
-                projectiles: copyProjectileState(states.projectiles),
+                spawning: cloneScheduleState(phaseState.schedule),
+                predefinedPresence: copyPredefinedPresence(phaseState.predefined),
+                actionExecution: copyActionExecutionState(phaseState.actionExecution),
+                projectiles: copyProjectileState(phaseState.projectiles),
             };
         },
 
         step(
             battlefield: BattlefieldRuntime,
-            states: BattleSystemStates,
+            phaseState: BattlePhaseState,
             execution: BattleExecutionState,
             tick: number,
             commands: readonly Command[],
@@ -238,7 +238,7 @@ export function createBattleSystems(input: Input, resources: BattleResources = {
             for (const phase of phases) {
                 const phaseResult = phase(
                     { battlefield: battlefield.view, execution, tick, commands, removedUnits },
-                    states,
+                    phaseState,
                 );
                 let nextExecution = phaseResult.execution;
                 events.push(...phaseResult.events);
@@ -249,7 +249,7 @@ export function createBattleSystems(input: Input, resources: BattleResources = {
                     events.push(...battlefieldCommitEvents(committed, tick));
 
                     if (committed.registeredUnitIds.length > 0) {
-                        const joined = effectSources.register(
+                        const joined = registerEffectSources(
                             {
                                 battlefield: battlefield.view,
                                 execution: nextExecution,
@@ -258,6 +258,7 @@ export function createBattleSystems(input: Input, resources: BattleResources = {
                                 removedUnits,
                             },
                             committed.registeredUnitIds,
+                            combatResources,
                         );
                         const installed = battlefield.commit(joined.changes);
                         removedUnits.push(...installed.removedUnits);
@@ -266,24 +267,24 @@ export function createBattleSystems(input: Input, resources: BattleResources = {
                     }
                 }
 
-                states = phaseResult.state;
+                phaseState = phaseResult.state;
                 execution = nextExecution;
             }
 
             return {
-                states,
+                phaseState,
                 execution,
                 ...finishBattleEvents(events, removedUnits, tick),
             };
         },
 
         finish(
-            states: BattleSystemStates,
+            phaseState: BattlePhaseState,
             elapsedTicks: number,
             completedRouteCount: number,
             remainingUnitIds: Result["remainingUnitIds"],
         ): Result | null {
-            const completed = schedule.isCompleted(states.schedule);
+            const completed = isSpawnScheduleCompleted(phaseState.schedule);
 
             if (!completed && elapsedTicks < input.maxTicks) {
                 return null;
@@ -294,7 +295,7 @@ export function createBattleSystems(input: Input, resources: BattleResources = {
                 elapsedTicks,
                 completedRouteCount,
                 remainingUnitIds,
-                ...schedule.counts(states.schedule),
+                ...getSpawnScheduleCounts(phaseState.schedule),
             };
         },
     };

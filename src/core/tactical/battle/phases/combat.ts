@@ -26,7 +26,7 @@ import { hasAction, type ActionDefinition } from "../../unit/capability/action/c
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
 import { hasVitality } from "../../unit/capability/vitality/capability.js";
 import type { UnitId } from "../../unit/unit.js";
-import type { BattlePhase, BattlePhaseInput } from "../system.js";
+import type { BattlePhase, BattlePhaseInput } from "../phase.js";
 import type { ProjectileOperations } from "../../battlefield/projectile/operations.js";
 import { hasSkill } from "../../unit/capability/skill/capability.js";
 import { hasStatusFlag } from "../../unit/capability/status/capability.js";

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
-import { createBlockingSystem } from '../../dist/core/tactical/battle/phases/blocking.js';
+import { advanceBlocking } from '../../dist/core/tactical/battle/phases/blocking.js';
 import { combatWorkChanges, combatWorkView, getCombatUnit } from '../../dist/core/tactical/battle/execution/work.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
@@ -151,11 +151,11 @@ function battlefield(units) {
     blocked() { return h.state.blockingRelations.map(relation => relation.blockedUnitId); },
     blockingPhase(tick) {
       const state = h.state;
-      const stepped = createBlockingSystem().step({ tick, commands: [], removedUnits: [],
+      const stepped = advanceBlocking({ tick, commands: [], removedUnits: [],
         execution: { rngState: 17, nextUnitId: units.length, nextNavigationRequestId: 0, nextMechanismId: 0, nextNavigationModifierId: 0 },
         battlefield: { map, unitIds: [...state.units.keys()], getUnit: id => state.units.get(id),
           blockingRelations: state.blockingRelations, supportRelations: state.supportRelations },
-      }, undefined);
+      });
       commit(stepped.changes);
     },
   };

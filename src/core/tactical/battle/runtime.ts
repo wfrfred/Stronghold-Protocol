@@ -5,7 +5,7 @@ import type { NavigationMaps } from "../battlefield/navigation/map.js";
 import { copyUnitSnapshot } from "../unit/snapshot.js";
 import type { BattleExecutionState } from "./execution/state.js";
 import { predefinedIdsForAlias } from "./predefined.js";
-import { createBattleSystems, type BattleSystemStates, type BattleResources } from "./systems.js";
+import { createBattleFlow, type BattlePhaseState, type BattleResources } from "./flow.js";
 import type { Input, Command, Result, Snapshot, Step } from "./contract.js";
 
 export type { Input, Command, Event, Result, Snapshot, Step } from "./contract.js";
@@ -13,7 +13,7 @@ export type { Input, Command, Event, Result, Snapshot, Step } from "./contract.j
 interface BattleRuntimeState {
     readonly battlefield: BattlefieldRuntime;
     readonly tickIndex: number;
-    readonly systems: BattleSystemStates;
+    readonly phaseState: BattlePhaseState;
     readonly execution: BattleExecutionState;
     readonly completedRouteCount: number;
     readonly result: Result | null;
@@ -25,7 +25,7 @@ function copyResult(result: Result | null): Result | null {
 
 export class BattleRuntime {
     readonly #input: Input;
-    readonly #systems: ReturnType<typeof createBattleSystems>;
+    readonly #flow: ReturnType<typeof createBattleFlow>;
     #state: BattleRuntimeState;
 
     constructor(input: Input, resources: BattleResources = {}) {
@@ -48,10 +48,10 @@ export class BattleRuntime {
         }
 
         this.#input = input;
-        this.#systems = createBattleSystems(this.#input, resources);
+        this.#flow = createBattleFlow(this.#input, resources);
 
         const battlefield = BattlefieldRuntime.create({ map: this.#input.map }, copyUnitSnapshot);
-        const initialized = this.#systems.initialize(battlefield, {
+        const initialized = this.#flow.initialize(battlefield, {
             rngState: this.#input.rngState,
             nextUnitId: 0,
             nextNavigationRequestId: 0,
@@ -61,7 +61,7 @@ export class BattleRuntime {
 
         this.#state = {
             battlefield,
-            systems: initialized.states,
+            phaseState: initialized.phaseState,
             execution: initialized.execution,
             tickIndex: 0,
             completedRouteCount: 0,
@@ -82,16 +82,16 @@ export class BattleRuntime {
     }
 
     get spawnCounts(): { readonly spawnedCount: number; readonly unspawnedCount: number } {
-        return this.#systems.spawnCounts(this.#state.systems);
+        return this.#flow.spawnCounts(this.#state.phaseState);
     }
 
     snapshot(): Snapshot {
-        const { battlefield, tickIndex, systems, execution, completedRouteCount, result } =
+        const { battlefield, tickIndex, phaseState, execution, completedRouteCount, result } =
             this.#state;
 
         return {
             tickIndex,
-            ...this.#systems.snapshot(systems),
+            ...this.#flow.snapshot(phaseState),
             execution: { ...execution },
             units: battlefield.unitIds.map((id) => battlefield.getUnit(id)!),
             blockingRelations: battlefield.blockingRelations,
@@ -128,9 +128,9 @@ export class BattleRuntime {
         readonly state: BattleRuntimeState;
         readonly output: Step;
     } {
-        const stepped = this.#systems.step(
+        const stepped = this.#flow.step(
             workingState.battlefield,
-            workingState.systems,
+            workingState.phaseState,
             workingState.execution,
             workingState.tickIndex,
             commands,
@@ -138,8 +138,8 @@ export class BattleRuntime {
 
         const tickIndex = workingState.tickIndex + 1;
         const completedRouteCount = workingState.completedRouteCount + stepped.completedRouteCount;
-        const result = this.#systems.finish(
-            stepped.states,
+        const result = this.#flow.finish(
+            stepped.phaseState,
             tickIndex,
             completedRouteCount,
             workingState.battlefield.unitIds,
@@ -151,7 +151,7 @@ export class BattleRuntime {
                 tickIndex,
                 completedRouteCount,
                 result,
-                systems: stepped.states,
+                phaseState: stepped.phaseState,
                 execution: stepped.execution,
             },
             output: { events: stepped.events, result: copyResult(result) },

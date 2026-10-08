@@ -23,7 +23,7 @@ import { instantiateUnitPlacement, type UnitPlacementDefinition } from "../creat
 import type { Unit, UnitId } from "../../unit/unit.js";
 import type { Event } from "../contract.js";
 import type { BattleExecutionState } from "../execution/state.js";
-import type { BattlePhase } from "../system.js";
+import type { BattlePhaseInput, BattlePhaseOutput } from "../phase.js";
 import type { EffectTransitionResources } from "../../unit/capability/effects/contract.js";
 import { removeUnitWithEffects } from "../execution/unit-lifecycle.js";
 import { combatWorkEvents, combatWorkChanges, createCombatWork } from "../execution/work.js";
@@ -229,26 +229,22 @@ export function resolveDeploymentCommands(
     return { changes, events, execution };
 }
 
-export function createDeploymentSystem(resources: EffectTransitionResources): {
-    readonly step: BattlePhase;
-} {
-    const step: BattlePhase = (input) => {
-        const commands = input.commands.filter(
-            (command): command is DeploymentCommand =>
-                command.type === "DEPLOY_UNIT" ||
-                command.type === "RELOCATE_UNIT" ||
-                command.type === "RETREAT_UNIT",
-        );
-        const resolved = resolveDeploymentCommands(
-            input.battlefield,
-            commands,
-            input.execution,
-            input.tick,
-            resources,
-        );
+export function advanceDeployment(
+    input: BattlePhaseInput,
+    resources: EffectTransitionResources,
+): BattlePhaseOutput {
+    const commands = input.commands.filter(
+        (command): command is DeploymentCommand =>
+            command.type === "DEPLOY_UNIT" ||
+            command.type === "RELOCATE_UNIT" ||
+            command.type === "RETREAT_UNIT",
+    );
 
-        return { state: undefined, ...resolved };
-    };
-
-    return { step };
+    return resolveDeploymentCommands(
+        input.battlefield,
+        commands,
+        input.execution,
+        input.tick,
+        resources,
+    );
 }

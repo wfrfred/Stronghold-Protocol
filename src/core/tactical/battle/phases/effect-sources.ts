@@ -5,43 +5,40 @@ import {
 } from "../../battlefield/effect-source/settlement.js";
 import type { UnitId } from "../../unit/unit.js";
 import { combatWorkEvents, combatWorkChanges, createCombatWork } from "../execution/work.js";
-import type { BattlePhase, BattlePhaseInput, BattlePhaseResult } from "../system.js";
+import type { BattlePhaseInput, BattlePhaseOutput } from "../phase.js";
 
-export function createEffectSourceSystem(resources: EffectSourceServices): {
-    readonly step: BattlePhase;
-    register(input: BattlePhaseInput, unitIds: readonly UnitId[]): BattlePhaseResult;
-} {
-    const step: BattlePhase = (input) => {
-        const work = reconcileEffectSources(
-            createCombatWork(input.battlefield, input.execution, input.battlefield),
-            resources,
-            input.tick,
-        );
-
-        return {
-            state: undefined,
-            changes: combatWorkChanges(work),
-            events: combatWorkEvents(work),
-            execution: work.execution,
-        };
-    };
+export function advanceEffectSources(
+    input: BattlePhaseInput,
+    resources: EffectSourceServices,
+): BattlePhaseOutput {
+    const work = reconcileEffectSources(
+        createCombatWork(input.battlefield, input.execution, input.battlefield),
+        resources,
+        input.tick,
+    );
 
     return {
-        step,
-        register: (input, unitIds) => {
-            const work = registerEffectSourceUnits(
-                createCombatWork(input.battlefield, input.execution, input.battlefield),
-                unitIds,
-                resources,
-                input.tick,
-            );
+        changes: combatWorkChanges(work),
+        events: combatWorkEvents(work),
+        execution: work.execution,
+    };
+}
 
-            return {
-                state: undefined,
-                changes: combatWorkChanges(work),
-                events: combatWorkEvents(work),
-                execution: work.execution,
-            };
-        },
+export function registerEffectSources(
+    input: BattlePhaseInput,
+    unitIds: readonly UnitId[],
+    resources: EffectSourceServices,
+): BattlePhaseOutput {
+    const work = registerEffectSourceUnits(
+        createCombatWork(input.battlefield, input.execution, input.battlefield),
+        unitIds,
+        resources,
+        input.tick,
+    );
+
+    return {
+        changes: combatWorkChanges(work),
+        events: combatWorkEvents(work),
+        execution: work.execution,
     };
 }

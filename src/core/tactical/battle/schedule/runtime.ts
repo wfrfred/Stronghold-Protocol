@@ -6,12 +6,7 @@ import type {
     SpawnScheduleState,
     WavesScheduleExecution,
 } from "./state.js";
-import {
-    createQueue,
-    dispatchQueue,
-    scheduledSpawn,
-    type ScheduledScheduleSpawn,
-} from "./queue.js";
+import { createQueue, dispatchQueue, createScheduleSpawn, type ScheduleSpawn } from "./queue.js";
 
 export interface SpawnScheduleTrigger {
     readonly branchId: string;
@@ -20,7 +15,7 @@ export interface SpawnScheduleTrigger {
 
 export interface SpawnScheduleAdvance {
     readonly state: SpawnScheduleExecution;
-    readonly spawns: readonly ScheduledScheduleSpawn[];
+    readonly spawns: readonly ScheduleSpawn[];
 }
 
 function beginWave(
@@ -39,7 +34,7 @@ function advanceBranches(
     initial: WavesScheduleExecution,
     tick: number,
     triggers: readonly SpawnScheduleTrigger[],
-    spawns: ScheduledScheduleSpawn[],
+    spawns: ScheduleSpawn[],
 ): WavesScheduleExecution {
     let state = initial;
     const { definition } = initial;
@@ -86,7 +81,7 @@ function advanceBranches(
 function advanceMainWaves(
     initial: WavesScheduleExecution,
     tick: number,
-    spawns: ScheduledScheduleSpawn[],
+    spawns: ScheduleSpawn[],
 ): WavesScheduleExecution {
     let state = initial;
     const { definition } = initial;
@@ -196,7 +191,7 @@ function advanceWaves(
     initial: WavesScheduleExecution,
     tick: number,
     triggers: readonly SpawnScheduleTrigger[],
-    spawns: ScheduledScheduleSpawn[],
+    spawns: ScheduleSpawn[],
 ): WavesScheduleExecution {
     const { definition } = initial;
     const state =
@@ -222,7 +217,7 @@ export function advanceSpawnSchedule(
     }
 
     const triggers = context.triggers ?? [];
-    const spawns: ScheduledScheduleSpawn[] = [];
+    const spawns: ScheduleSpawn[] = [];
     let state: SpawnScheduleExecution;
 
     if (previous.type === "TIMELINE") {
@@ -236,14 +231,16 @@ export function advanceSpawnSchedule(
         while (cursor < definition.spawns.length && definition.spawns[cursor]!.tick <= tick) {
             const spawn = definition.spawns[cursor]!;
             spawns.push(
-                scheduledSpawn(
+                createScheduleSpawn({
                     spawn,
-                    spawn.tick,
-                    spawn.timing,
-                    !spawn.notCountInTotal,
-                    false,
-                    null,
-                ),
+                    tick: spawn.tick,
+                    timing: spawn.timing,
+                    management: {
+                        managedFinal: !spawn.notCountInTotal,
+                        managedWave: false,
+                        waveIndex: null,
+                    },
+                }),
             );
             cursor++;
         }
@@ -258,7 +255,7 @@ export function advanceSpawnSchedule(
 
 export function recordScheduleSpawns(
     previous: SpawnScheduleExecution,
-    spawns: readonly ScheduledScheduleSpawn[],
+    spawns: readonly ScheduleSpawn[],
     unitIds: readonly UnitId[],
 ): SpawnScheduleExecution {
     if (spawns.length !== unitIds.length || spawns.length !== previous.pendingSpawnCount) {
@@ -342,6 +339,16 @@ export function isSpawnScheduleCompleted(state: SpawnScheduleExecution): boolean
 
 export function getSpawnedCount(state: SpawnScheduleState): number {
     return state.spawnedCount;
+}
+
+export function getSpawnScheduleCounts(state: SpawnScheduleExecution): {
+    readonly spawnedCount: number;
+    readonly unspawnedCount: number;
+} {
+    return {
+        spawnedCount: getSpawnedCount(state),
+        unspawnedCount: getUnspawnedCount(state),
+    };
 }
 
 export function getUnspawnedCount(state: SpawnScheduleExecution): number {

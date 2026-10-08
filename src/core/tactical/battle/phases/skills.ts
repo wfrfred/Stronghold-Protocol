@@ -4,7 +4,7 @@ import {
     finishSkill,
     type SkillExecutionResources,
 } from "../../unit/capability/skill/execution.js";
-import type { BattlePhaseInput, BattlePhaseResult } from "../system.js";
+import type { BattlePhaseInput, BattlePhaseOutput } from "../phase.js";
 import {
     appendCombatEvents,
     combatWorkChanges,
@@ -15,7 +15,7 @@ import {
 export function advanceSkills(
     input: BattlePhaseInput,
     resources: SkillExecutionResources,
-): BattlePhaseResult {
+): BattlePhaseOutput {
     let work = createCombatWork(input.battlefield, input.execution, input.battlefield);
 
     for (const id of input.battlefield.unitIds) {
@@ -34,7 +34,6 @@ export function advanceSkills(
     }
 
     return {
-        state: undefined,
         changes: combatWorkChanges(work),
         events: combatWorkEvents(work),
         execution: work.execution,

@@ -15,7 +15,7 @@ import type {
     WavesScheduleState,
 } from "./state.js";
 
-export interface ScheduledScheduleSpawn extends ScheduledEnemySpawn {
+export interface ScheduleSpawn extends ScheduledEnemySpawn {
     readonly schedule: {
         readonly managedFinal: boolean;
         readonly managedWave: boolean;
@@ -23,19 +23,22 @@ export interface ScheduledScheduleSpawn extends ScheduledEnemySpawn {
     };
 }
 
-export function scheduledSpawn(
-    spawn: EnemySpawnDefinition,
-    tick: number,
-    timing: RouteTiming,
-    managedFinal: boolean,
-    managedWave: boolean,
-    waveIndex: number | null,
-): ScheduledScheduleSpawn {
+export function createScheduleSpawn({
+    spawn,
+    tick,
+    timing,
+    management,
+}: {
+    readonly spawn: EnemySpawnDefinition;
+    readonly tick: number;
+    readonly timing: RouteTiming;
+    readonly management: ScheduleSpawn["schedule"];
+}): ScheduleSpawn {
     return Object.freeze({
         ...spawn,
         tick,
         timing,
-        schedule: Object.freeze({ managedFinal, managedWave, waveIndex }),
+        schedule: Object.freeze({ ...management }),
     });
 }
 
@@ -75,7 +78,7 @@ export function createQueue(
 export function dispatchQueue(
     queue: SpawnQueueState,
     tick: number,
-    spawns: ScheduledScheduleSpawn[],
+    spawns: ScheduleSpawn[],
     main: WavesScheduleState,
 ): SpawnQueueState {
     let cursor = queue.cursor;
@@ -91,14 +94,16 @@ export function dispatchQueue(
                   });
 
         spawns.push(
-            scheduledSpawn(
-                queued.spawn,
-                queued.tick,
+            createScheduleSpawn({
+                spawn: queued.spawn,
+                tick: queued.tick,
                 timing,
-                queued.managedFinal,
-                queued.managedWave,
-                main.waveIndex,
-            ),
+                management: {
+                    managedFinal: queued.managedFinal,
+                    managedWave: queued.managedWave,
+                    waveIndex: main.waveIndex,
+                },
+            }),
         );
         cursor++;
     }

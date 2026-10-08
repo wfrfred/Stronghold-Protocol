@@ -6,7 +6,7 @@ import {
 import { stepProjectiles } from "../../battlefield/projectile/settlement.js";
 import type { ProjectileServices } from "../../battlefield/projectile/context.js";
 import { combatWorkEvents, combatWorkChanges, createCombatWork } from "../execution/work.js";
-import type { BattlePhase } from "../system.js";
+import type { BattlePhase } from "../phase.js";
 
 export function createProjectileSystem(resources: ProjectileServices): {
     createState(): ProjectileState;
