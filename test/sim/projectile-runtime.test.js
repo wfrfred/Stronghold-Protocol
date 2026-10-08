@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
+import { createProjectileSystem } from "../../dist/core/tactical/battle/phases/projectiles.js";
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
 import { createOperatorDefinition } from "../../dist/core/tactical/unit/archetype/operator.js";
 import { createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
@@ -855,4 +856,176 @@ test("projectile runtime: stop callbacks see latest peer progress while removals
   assert.deepEqual(stopped.state.instances, []);
   assert.equal(advanced.state.instances[0].progress.type, "FLYING");
   assert.equal(advanced.state.instances[0].state.contacts, 0);
+});
+
+test("projectile runtime: command stops share one container before advancing survivors", () => {
+  const resources = new CombatResources();
+  const observed = [];
+  const program = registerProjectile(resources, {
+    stop: (context) => {
+      observed.push(context.projectile.id);
+    },
+  });
+  const state = withProjectileOperations(createProjectileState(), resources.projectiles, 0, (operations) => {
+    for (let index = 0; index < 32; index++) {
+      operations.launch(program.ref, {
+        source: null,
+        traceTarget: null,
+        position: [0, 0],
+        destination: [100, 0],
+        cachedAtk: 0,
+        speedPerTick: 1,
+        contactRange,
+        stopDelayTicks: 1,
+      });
+    }
+  }).state;
+  const work = createCombatWork({
+    unitIds: [],
+    getUnit: () => undefined,
+    blockerOf: () => undefined,
+    blockedBy: () => [],
+  });
+  const ids = Array.from({ length: 16 }, (_, index) => 30 - index * 2);
+  const commands = ids.flatMap((projectileId) => [
+    { type: "STOP_PROJECTILE", projectileId },
+    { type: "STOP_PROJECTILE", projectileId },
+  ]);
+  commands.push({ type: "STOP_PROJECTILE", projectileId: 999 });
+  let containers = 0;
+  const NativeMap = globalThis.Map;
+  class ObservedMap extends NativeMap {
+    constructor(entries) {
+      super(entries);
+      if (Array.isArray(entries) && entries.length > 0 && entries.every(([, value]) =>
+        value !== null && typeof value === "object" && Object.hasOwn(value, "lastAdvancedTick")
+      )) {
+        containers++;
+      }
+    }
+  }
+  let advanced;
+  try {
+    globalThis.Map = ObservedMap;
+    advanced = createProjectileSystem(resources).step({
+      battlefield: combatWorkView(work),
+      execution: work.execution,
+      tick: 1,
+      commands,
+      removedUnits: [],
+    }, state);
+  } finally {
+    globalThis.Map = NativeMap;
+  }
+
+  assert.equal(containers, 1);
+  assert.deepEqual(observed, ids);
+  assert.deepEqual(advanced.events.map((event) => event.projectileId), ids);
+  assert.deepEqual(advanced.state.instances.map((instance) => instance.id),
+    Array.from({ length: 16 }, (_, index) => index * 2 + 1));
+  assert.equal(advanced.state.instances.every((instance) => instance.position[0] === 1), true);
+  assert.equal(state.instances.every((instance) => instance.position[0] === 0), true);
+  assert.equal(state.instances.every((instance) => instance.progress.type === "FLYING"), true);
+});
+
+test("projectile runtime: ordered command stops see same-tick launches and roll back together on failure", () => {
+  const scenario = (failing) => {
+    const resources = new CombatResources();
+    const fault = { enabled: failing };
+    const observed = [];
+    const attempted = [];
+    const borrowed = [];
+    const program = registerProjectile(resources, {
+      stop: (context) => {
+        if (borrowed.length > 0) {
+          assert.throws(() => borrowed.at(-1).operations.stopSelf(), /no longer active/);
+        }
+        borrowed.push(context);
+        observed.push({
+          id: context.projectile.id,
+          hp: context.facts.getUnit(1).vitality.hp,
+          survivorPosition: context.facts.getProjectile(2).position,
+          newPeer: context.facts.getProjectile(3)?.progress.type,
+        });
+        assert.equal(context.facts.getProjectile(context.projectile.id).progress.type, "STOPPED");
+        context.operations.stopSelf();
+        context.operations.stopSelf();
+        context.operations.updateState((state) => ({ ...state, contacts: state.contacts + 1 }));
+        assert.equal(context.projectile.state.contacts, 1);
+        context.operations.damage({
+          sourceUnitId: context.projectile.source,
+          targetUnitId: 1,
+          tick: context.tick,
+          damageType: "TRUE",
+          operands: createDamageOperands(1),
+        });
+        if (fault.enabled && context.projectile.id === 1) {
+          throw new Error("second command stop failed");
+        }
+      },
+    });
+    const runtime = new BattleRuntime(
+      spec([
+        { definition: actorDefinition(), position: [0, 0] },
+        { definition: passiveDefinition(), position: [4, 0] },
+      ]),
+      {
+        combat: resources,
+        compileAction: (definition, services) => ({
+          ...compileAction(definition, services),
+          program: [
+            { type: "EXECUTE", run: (context) => {
+              for (let index = 0; index < 3; index++) {
+                attempted.push(launch(context, services, program));
+              }
+              return context;
+            } },
+            { type: "WAIT", resolve: () => ({ type: "FOR_TICKS", ticks: 1 }) },
+            { type: "EXECUTE", run: (context) => {
+              attempted.push(launch(context, services, program));
+              return context;
+            } },
+          ],
+        }),
+      },
+    );
+    runtime.step();
+
+    return { runtime, fault, observed, attempted, borrowed };
+  };
+  const commands = [3, 3, 999, 1, 0].map((projectileId) => ({ type: "STOP_PROJECTILE", projectileId }));
+  const control = scenario(false);
+  const failed = scenario(true);
+  const before = failed.runtime.snapshot();
+  assert.throws(() => failed.runtime.step(commands), /second command stop failed/);
+  assert.deepEqual(failed.runtime.snapshot(), before);
+  assert.deepEqual(failed.attempted, [0, 1, 2, 3]);
+  assert.deepEqual(failed.observed.map((entry) => entry.id), [3, 1]);
+  for (const context of failed.borrowed) {
+    assert.throws(() => context.facts.getProjectile(2), /no longer active/);
+    assert.throws(() => context.operations.updateState((state) => state), /no longer active/);
+  }
+
+  failed.fault.enabled = false;
+  const retried = failed.runtime.step(commands);
+  const ordinary = control.runtime.step(commands);
+  assert.deepEqual(retried, ordinary);
+  assert.deepEqual(failed.runtime.snapshot(), control.runtime.snapshot());
+  assert.deepEqual(failed.attempted, [0, 1, 2, 3, 3]);
+  assert.deepEqual(control.observed, [
+    { id: 3, hp: 100, survivorPosition: [0, 0], newPeer: "STOPPED" },
+    { id: 1, hp: 99, survivorPosition: [0, 0], newPeer: undefined },
+    { id: 0, hp: 98, survivorPosition: [0, 0], newPeer: undefined },
+  ]);
+  assert.deepEqual(ordinary.events
+    .filter((event) => event.type === "PROJECTILE_STOPPED" || event.type === "DAMAGE")
+    .map((event) => event.type), [
+      "PROJECTILE_STOPPED", "DAMAGE", "PROJECTILE_STOPPED", "DAMAGE", "PROJECTILE_STOPPED", "DAMAGE",
+    ]);
+  const snapshot = control.runtime.snapshot();
+  assert.equal(snapshot.projectiles.nextProjectileId, 4);
+  assert.deepEqual(snapshot.projectiles.instances.map((instance) => [instance.id, instance.position]), [[2, [1, 0]]]);
+  assert.equal(snapshot.units.find((unit) => unit.id === 1).vitality.hp, 97);
+  assert.equal(before.projectiles.instances.every((instance) => instance.progress.type === "FLYING"), true);
+  assert.equal(before.projectiles.instances.every((instance) => instance.state.contacts === 0), true);
 });

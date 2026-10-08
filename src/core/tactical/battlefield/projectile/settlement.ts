@@ -328,8 +328,14 @@ export function stepProjectiles(
     state: ProjectileState,
     services: ProjectileServices,
     tick: number,
+    stopIds: readonly ProjectileId[] = [],
 ): ProjectileTransition {
     const settlement = new ProjectileSettlement(work, state, services, tick);
+
+    for (const id of stopIds) {
+        settlement.stop(id, "EXPLICIT");
+    }
+
     settlement.advanceAll();
 
     return settlement.result();
