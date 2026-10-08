@@ -8,7 +8,7 @@ import { Direction } from "../../geometry/direction.js";
 import { RangeGrid } from "../../geometry/range.js";
 import { initializeUnit, type InitializedUnit } from "../../unit/initialize.js";
 import { ownUnitDefinition, type Unit, type UnitDefinition } from "../../unit/unit.js";
-import type { ImmutableData } from "../../../common/immutable-data.js";
+import { ownDataRecord, type ImmutableData } from "../../../common/immutable-data.js";
 import {
     copyPreparedCapabilityStates,
     type CapabilityStates,
@@ -73,7 +73,10 @@ export function createUnitPlacementDefinition(
 
         navigationModifiers.push(
             Object.freeze({
-                definition: navigationModifier.definition,
+                definition: ownDataRecord(
+                    navigationModifier.definition,
+                    "navigation modifier definition",
+                ),
                 range: RangeGrid.create(navigationModifier.range),
                 direction: navigationModifier.direction,
             }),

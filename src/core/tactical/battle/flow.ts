@@ -200,7 +200,7 @@ export function createBattleFlow(input: Input, resources: BattleResources = {}) 
                 },
                 combatResources,
             );
-            battlefield.commit(preparedSources.changes);
+            battlefield.commitOwned(preparedSources.changes);
 
             const phaseState: BattlePhaseState = {
                 predefined: initialized.presence,
@@ -244,7 +244,7 @@ export function createBattleFlow(input: Input, resources: BattleResources = {}) 
                 events.push(...phaseResult.events);
 
                 if (phaseResult.changes.length > 0) {
-                    const committed = battlefield.commit(phaseResult.changes);
+                    const committed = battlefield.commitOwned(phaseResult.changes);
                     removedUnits.push(...committed.removedUnits);
                     events.push(...battlefieldCommitEvents(committed, tick));
 
@@ -260,7 +260,7 @@ export function createBattleFlow(input: Input, resources: BattleResources = {}) 
                             committed.registeredUnitIds,
                             combatResources,
                         );
-                        const installed = battlefield.commit(joined.changes);
+                        const installed = battlefield.commitOwned(joined.changes);
                         removedUnits.push(...installed.removedUnits);
                         events.push(...battlefieldCommitEvents(installed, tick), ...joined.events);
                         nextExecution = joined.execution;

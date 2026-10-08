@@ -1965,7 +1965,7 @@ test('core battlefield shares immutable unit values internally and copies only a
     rngState: h.rngState, nextNavigationRequestId: h.nextNavigationRequestId,
   }).enemy;
   const added = { ...moved, id: 2, position: Object.freeze([2, 0]) };
-  fork.commit([{ type: 'UPDATE_UNIT', unit: moved }, { type: 'REGISTER_UNIT', unit: added }]);
+  fork.commitOwned([{ type: 'UPDATE_UNIT', unit: moved }, { type: 'REGISTER_UNIT', unit: added }]);
   assert.equal(copies, 1);
   assert.equal(view.getUnit(1), moved);
   assert.equal(view.getUnit(2), added);
@@ -1979,7 +1979,7 @@ test('core battlefield shares immutable unit values internally and copies only a
   assert.equal(path.field.map, maps.WALK);
   assert.equal(view.fieldCache.get(maps.WALK, path.request), field);
   assert.throws(() => fork.transact(working => {
-    working.commit([{ type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 1, position: Object.freeze([3, 0]) }]);
+    working.commitOwned([{ type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 1, position: Object.freeze([3, 0]) }]);
     throw new Error('immutable commit failed');
   }), /immutable commit failed/);
   assert.equal(view.getUnit(1), moved);
@@ -2162,7 +2162,7 @@ test('core external unit coordinates and internal navigation modifier snapshots 
     active: true, expiresAtTick: null,
     region: { type: 'FOLLOW_UNIT', unitId: 1, range: [[0, 0]], direction: 'RIGHT' },
   };
-  runtime.commit([{ type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: effect }]);
+  runtime.commitOwned([{ type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: effect }]);
   const snapshot = runtime.getNavigationModifier(1), maps = runtime.navigationMaps;
   snapshot.source.unitId = 999;
   snapshot.region.unitId = 999;

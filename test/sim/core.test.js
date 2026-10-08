@@ -1061,3 +1061,25 @@ test('core support allows a platform and occupant to coexist without treating th
   assert.equal(runtime.getUnit(2).id, 2);
   assert.deepEqual(runtime.occupancyAt([0, 1], 'DEPLOYMENT'), [2]);
 });
+
+test('core navigation definitions are owned once and shared across copied observations', () => {
+  const definition = { id: 'owned-navigation', WALK: { denyPassage: false, deniedDepartures: ['LEFT'], costFloor: 1000 }, FLY: null };
+  const placement = createUnitPlacementDefinition({ definition: { id: 'source' }, position: [0, 0],
+    navigationModifiers: [{ definition, range: [[0, 1]], direction: 'RIGHT' }] });
+  const runtime = presenceBattlefield();
+  const modifier = { ...presenceNavigationModifier(1, { type: 'UNIT', unitId: 1 },
+    { type: 'FIXED', position: [0, 1], range: [[0, 0]], direction: 'RIGHT' }), definition };
+  runtime.apply([{ type: 'REGISTER_UNIT', unit: presenceUnit(1, [0, 0]) },
+    { type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: modifier }]);
+  const maps = runtime.navigationMaps;
+  const owned = runtime.getNavigationModifier(1).definition;
+  definition.WALK.costFloor = 1;
+  definition.WALK.denyPassage = true;
+  definition.WALK.deniedDepartures.push('RIGHT');
+  assert.equal(owned.WALK.costFloor, 1000);
+  assert.deepEqual(owned.WALK.deniedDepartures, ['LEFT']);
+  assert.equal(placement.navigationModifiers[0].definition.WALK.costFloor, 1000);
+  assert.equal(runtime.getNavigationModifier(1).definition, owned);
+  assert.equal(runtime.navigationMaps, maps);
+  assert.equal(maps.WALK.cells[1].passable, true);
+});

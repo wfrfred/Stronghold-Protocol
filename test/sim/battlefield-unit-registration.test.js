@@ -47,7 +47,7 @@ const definition = () => ({
 const modes = [
   ['public apply', () => createBattlefieldRuntime({ map: map() }), 'apply'],
   ['custom copier apply', () => createBattlefieldRuntime({ map: map() }, unit => ({ ...unit })), 'apply'],
-  ['internal commit', () => BattlefieldRuntime.create({ map: map() }, copyUnitSnapshot), 'commit'],
+  ['internal owned commit', () => BattlefieldRuntime.create({ map: map() }, copyUnitSnapshot), 'commitOwned'],
 ];
 
 for (const [name, create, operation] of modes) {

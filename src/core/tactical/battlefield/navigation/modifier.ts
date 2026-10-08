@@ -1,3 +1,4 @@
+import { ownDataRecord } from "../../../common/immutable-data.js";
 import { assertNonnegativeSafeInteger, assertPositiveSafeInteger } from "../../../common/assert.js";
 import {
     createTileOffset,
@@ -73,7 +74,12 @@ export function copyNavigationModifier(navigationModifier: NavigationModifier): 
         region = { ...navigationModifier.region, range };
     }
 
-    return { ...navigationModifier, source: { ...navigationModifier.source }, region };
+    return {
+        ...navigationModifier,
+        definition: ownDataRecord(navigationModifier.definition, "navigation modifier definition"),
+        source: { ...navigationModifier.source },
+        region,
+    };
 }
 
 function identity(value: number, name: string): number {
@@ -138,11 +144,14 @@ export function createNavigationModifierDefinition(
         WALK = Object.freeze({ ...walk, costFloor });
     }
 
-    return Object.freeze({
-        id: definition.id,
-        WALK,
-        FLY: definition.FLY === null ? null : restriction(definition.FLY),
-    });
+    return ownDataRecord(
+        {
+            id: definition.id,
+            WALK,
+            FLY: definition.FLY === null ? null : restriction(definition.FLY),
+        },
+        "navigation modifier definition",
+    );
 }
 
 export function createNavigationModifierRegion(
@@ -179,7 +188,7 @@ export function createNavigationModifier(
 
     return {
         id: identity(navigationModifier.id, "navigation modifier id"),
-        definition: navigationModifier.definition,
+        definition: ownDataRecord(navigationModifier.definition, "navigation modifier definition"),
         source: source(navigationModifier.source),
         active: navigationModifier.active,
         region: createNavigationModifierRegion(navigationModifier.region),

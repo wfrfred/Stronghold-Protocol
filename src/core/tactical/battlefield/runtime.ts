@@ -267,7 +267,7 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
         return result;
     }
 
-    commit(
+    commitOwned(
         changes: readonly BattlefieldChange<StableUnit<U>>[],
     ): BattlefieldChangeResult<StableUnit<U>> {
         const prepared = this.#prepare(changes);
