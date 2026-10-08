@@ -15,7 +15,7 @@ export type ArknightsJsonValue =
     | readonly ArknightsJsonValue[]
     | { readonly [key: string]: ArknightsJsonValue };
 
-export interface ArknightsUnsupportedRule {
+export interface ArknightsContentIssue {
     readonly path: string;
     readonly reason: string;
 }
@@ -124,8 +124,8 @@ export interface ArknightsLevelMetadata {
     readonly cameraPlugin: string | null;
 }
 
-export interface ArknightsLevelDefinition {
-    readonly map: BattlefieldMap;
+export interface ArknightsLevelContent {
+    readonly mapData: ArknightsJsonValue;
     readonly routes: readonly RouteDefinition[];
     readonly extraRoutes: readonly RouteDefinition[];
     readonly enemies: readonly never[];
@@ -142,7 +142,11 @@ export interface ArknightsLevelDefinition {
     readonly excludeCharIdList: readonly string[] | null;
     readonly randomSeed: number;
     readonly metadata: ArknightsLevelMetadata;
-    readonly unsupportedRules: readonly ArknightsUnsupportedRule[];
+    readonly unresolvedRules: readonly ArknightsContentIssue[];
+}
+
+export interface ArknightsLevelDefinition extends Omit<ArknightsLevelContent, "mapData"> {
+    readonly map: BattlefieldMap;
 }
 
 function object(value: unknown, name: string, fields?: readonly string[]): Record<string, unknown> {
@@ -342,7 +346,7 @@ function options(value: unknown): ArknightsLevelOptions {
 function enemyDbRef(
     value: unknown,
     name: string,
-    unsupported: ArknightsUnsupportedRule[],
+    unresolved: ArknightsContentIssue[],
 ): ArknightsEnemyDbRef {
     const source = object(value, name, ["useDb", "id", "level", "overwrittenData"]);
 
@@ -372,7 +376,7 @@ function enemyDbRef(
             "spData",
         ]);
         overwrittenData = json(source.overwrittenData, `${name}.overwrittenData`);
-        unsupported.push(
+        unresolved.push(
             Object.freeze({
                 path: `${name}.overwrittenData`,
                 reason: "enemy attribute overrides require a content resolver",
@@ -486,7 +490,7 @@ function fragment(
 function predefinedInstance(
     value: unknown,
     name: string,
-    unsupported: ArknightsUnsupportedRule[],
+    unresolved: ArknightsContentIssue[],
 ): ArknightsPredefinedInstance {
     const source = object(value, name, [
         "position",
@@ -527,7 +531,7 @@ function predefinedInstance(
         const value = source[key];
 
         if (value !== null && (!Array.isArray(value) || value.length !== 0)) {
-            unsupported.push(
+            unresolved.push(
                 Object.freeze({
                     path: `${name}.${key}`,
                     reason: "predefined content configuration requires a content resolver",
@@ -566,7 +570,7 @@ function predefinedInstance(
 function predefines(
     value: unknown,
     name: string,
-    unsupported: ArknightsUnsupportedRule[],
+    unresolved: ArknightsContentIssue[],
 ): ArknightsPredefines {
     const source = object(value, name, [
         "characterInsts",
@@ -577,26 +581,17 @@ function predefines(
 
     return Object.freeze({
         characterInsts: array(source.characterInsts, `${name}.characterInsts`, (item, path) =>
-            predefinedInstance(item, path, unsupported),
+            predefinedInstance(item, path, unresolved),
         ),
         tokenInsts: array(source.tokenInsts, `${name}.tokenInsts`, (item, path) =>
-            predefinedInstance(item, path, unsupported),
+            predefinedInstance(item, path, unresolved),
         ),
         characterCards: emptyArray(source.characterCards, `${name}.characterCards`),
         tokenCards: emptyArray(source.tokenCards, `${name}.tokenCards`),
     });
 }
 
-export interface ArknightsLevelMapContext {
-    readonly predefines: ArknightsPredefines;
-    readonly hardPredefines: ArknightsPredefines;
-    readonly options: ArknightsLevelOptions;
-}
-
-export function parseLevelDefinition(
-    value: unknown,
-    resolveMapOptions: (context: ArknightsLevelMapContext) => ArknightsMapOptions = () => ({}),
-): ArknightsLevelDefinition {
+export function parseLevelContent(value: unknown): ArknightsLevelContent {
     const source = object(value, "level", [
         "options",
         "levelId",
@@ -622,7 +617,7 @@ export function parseLevelDefinition(
         "cameraPlugin",
     ]);
 
-    const unsupported: ArknightsUnsupportedRule[] = [];
+    const unresolved: ArknightsContentIssue[] = [];
     const routes = array(source.routes, "level.routes", (item) => parseRouteDefinition(item));
     const extraRoutes = array(source.extraRoutes, "level.extraRoutes", (item) =>
         parseRouteDefinition(item),
@@ -630,7 +625,7 @@ export function parseLevelDefinition(
 
     const enemyIds = new Set<string>();
     const enemyDbRefs = array(source.enemyDbRefs, "level.enemyDbRefs", (item, path) => {
-        const reference = enemyDbRef(item, path, unsupported);
+        const reference = enemyDbRef(item, path, unresolved);
 
         if (enemyIds.has(reference.id)) {
             throw new TypeError(`level.enemyDbRefs has duplicate enemy ${reference.id}`);
@@ -688,14 +683,9 @@ export function parseLevelDefinition(
     });
     const branches = Object.freeze(Object.fromEntries(branchEntries));
 
-    const predefined = predefines(source.predefines, "level.predefines", unsupported);
-    const hardPredefined = predefines(source.hardPredefines, "level.hardPredefines", unsupported);
+    const predefined = predefines(source.predefines, "level.predefines", unresolved);
+    const hardPredefined = predefines(source.hardPredefines, "level.hardPredefines", unresolved);
     const levelOptions = options(source.options);
-    const mapOptions = resolveMapOptions({
-        predefines: predefined,
-        hardPredefines: hardPredefined,
-        options: levelOptions,
-    });
 
     const randomSeed = integer(source.randomSeed, "level.randomSeed", -(2 ** 31));
 
@@ -704,7 +694,7 @@ export function parseLevelDefinition(
     }
 
     return Object.freeze({
-        map: parseBattlefieldMap(source.mapData, mapOptions),
+        mapData: json(source.mapData, "level.mapData"),
         routes,
         extraRoutes,
         enemies: emptyArray(source.enemies, "level.enemies"),
@@ -735,6 +725,22 @@ export function parseLevelDefinition(
             operaConfig: json(source.operaConfig, "level.operaConfig"),
             cameraPlugin: nullableString(source.cameraPlugin, "level.cameraPlugin"),
         }),
-        unsupportedRules: Object.freeze(unsupported),
+        unresolvedRules: Object.freeze(unresolved),
     });
+}
+
+export function createLevelDefinition(
+    content: ArknightsLevelContent,
+    mapOptions: ArknightsMapOptions = {},
+): ArknightsLevelDefinition {
+    const { mapData, ...level } = content;
+
+    return Object.freeze({ ...level, map: parseBattlefieldMap(mapData, mapOptions) });
+}
+
+export function parseLevelDefinition(
+    value: unknown,
+    mapOptions: ArknightsMapOptions = {},
+): ArknightsLevelDefinition {
+    return createLevelDefinition(parseLevelContent(value), mapOptions);
 }

@@ -25,7 +25,7 @@ import { initializeRoutedEnemy } from "../../dist/core/tactical/battle/creation/
 import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
 import { TICKS_PER_SECOND } from '../../dist/core/tactical/tick.js';
 import { secondsToTicks } from '../../dist/data/arknights/tick.js';
-import { parseLevelDefinition } from '../../dist/data/arknights/level.js';
+import { parseLevelContent, parseLevelDefinition } from '../../dist/data/arknights/level.js';
 import { parseEnemyMovementContent, parseEnemyMovementDefinition } from '../../dist/data/arknights/enemy.js';
 import { parseEnemyMovementPrefab, parsePredefinedPrefab } from '../../dist/data/arknights/prefab.js';
 import { parsePredefinedInstanceDefinition } from '../../dist/data/arknights/predefined.js';
@@ -1403,9 +1403,9 @@ test('core battle rolls back spawning, expiry, RNG and tick progress when moveme
     source: { type: 'MECHANISM', mechanismId: 0 }, active: true, region, expiresAtTick: null,
   });
   const expired = createNavigationModifier({ ...effect, id: 1, expiresAtTick: 0 });
-  const predefinedLevel = parseLevelDefinition(arknightsFixture('level_act1autochess_m02'), () => ({
+  const predefinedLevel = parseLevelDefinition(arknightsFixture('level_act1autochess_m02'), {
     consumeTileBlackboard: (_, entry) => ['isValidHand', 'previewNotAlloed'].includes(entry.key),
-  }));
+  });
   const hiddenCrate = parsePredefinedInstanceDefinition(0, predefinedLevel.predefines.tokenInsts[13],
     parsePredefinedPrefab(arknightsFixture('prefab_trap_1105_accrate')), arknightsFixture('character_trap_1105_accrate'));
   const runtime = new BattleRuntime({ ...withTimelineSpawns(spec, [{ ...spec.schedule.spawns[0], tick: 0 }]),
@@ -1419,6 +1419,60 @@ test('core battle rolls back spawning, expiry, RNG and tick progress when moveme
   assert.throws(() => runtime.step([{ type: 'APPEAR_PREDEFINED', definitionId: 0 }]), /distance exceeds safe integer range/);
   assert.deepEqual(runtime.snapshot(), before);
   assert.equal(runtime.navigationMaps, maps);
+});
+
+test('movement scenarios resolve one enemy reference once and distinguish raw unresolved overrides from unsupported content', () => {
+  const raw = arknightsFixture('level_act1autochess_01');
+  raw.waves = [nativeWave([nativeFragment([nativeSpawn({ count: 1 }), nativeSpawn({ count: 1 })])])];
+  raw.branches = {};
+  const selectedReference = raw.enemyDbRefs.find(reference => reference.id === 'enemy_1007_slime');
+  selectedReference.level = 1;
+  selectedReference.overwrittenData = {
+    attributes: {
+      maxHp: { m_defined: true, m_value: 1234 },
+      moveSpeed: { m_defined: true, m_value: 0 },
+    },
+    prefabKey: { m_defined: true, m_value: 'enemy_1000_gopro' },
+    notCountInTotal: { m_defined: true, m_value: true },
+  };
+  raw.enemyDbRefs[0].overwrittenData = {
+    attributes: { atk: { m_defined: true, m_value: 999 } },
+  };
+  const parsed = parseLevelContent(raw);
+  assert.deepEqual(parsed.unresolvedRules.map(rule => rule.path), [
+    'level.enemyDbRefs[0].overwrittenData', 'level.enemyDbRefs[2].overwrittenData',
+  ]);
+  const source = arknightsFixture('enemy_1007_slime');
+  const levels = source.Value;
+  let valueReads = 0;
+  Object.defineProperty(source, 'Value', { get: () => { valueReads++; return levels; } });
+  const requested = [];
+  const catalog = {
+    character: () => assert.fail('no selected predefined characters'),
+    skill: () => assert.fail('no selected predefined skills'),
+    enemy: key => { requested.push(key); return source; },
+    prefab: key => { requested.push(key); return arknightsFixture(`prefab_${key}`); },
+  };
+  const selection = {
+    actions: [0, 1].map(actionIndex => ({ waveIndex: 0, fragmentIndex: 0, actionIndex })),
+    branches: [], predefines: [],
+  };
+  const scenario = loadMovementScenario(raw, selection, catalog, 123);
+  const actions = scenario.spec.schedule.waves[0].fragments[0].actions;
+
+  assert.equal(valueReads, 1);
+  assert.deepEqual(requested, ['enemy_1007_slime', 'enemy_1000_gopro']);
+  assert.equal(actions[0].spawn.definition, actions[1].spawn.definition);
+  assert.equal(actions[0].spawn.definition.vitality.maxHp, 1234);
+  assert.equal(actions[0].spawn.definition.locomotion.moveSpeedPerTick, 0);
+  assert.equal(actions[0].spawn.notCountInTotal, true);
+  assert.deepEqual(scenario.unsupportedRules, []);
+  assert.deepEqual(scenario.level.unresolvedRules, parsed.unresolvedRules);
+  const runtime = new BattleRuntime(scenario.spec);
+  assert.equal(runtime.step().events.filter(event => event.type === 'ENEMY_SPAWNED').length, 2);
+  assert.deepEqual(runtime.snapshot().units.map(unit => unit.vitality.hp), [1234, 1234]);
+  selectedReference.overwrittenData.attributes.atk = { m_defined: true, m_value: 10 };
+  assert.throws(() => loadMovementScenario(raw, selection, catalog, 123), /unsupported overwritten enemy attribute atk/);
 });
 
 test('raw levels preserve predefined configuration and keep unsupported inputs outside the movement fragment', () => {
@@ -2019,9 +2073,9 @@ test('core battle deploys, relocates and retreats units with owned occupancy and
   assert.throws(() => reserved.step([{ type: 'DEPLOY_UNIT', definition, tilePosition: [0, 5], playerSide: 'SIDE_A' }]));
   assert.deepEqual(reserved.snapshot(), before);
 
-  const level = parseLevelDefinition(arknightsFixture('level_act1autochess_m02'), () => ({
+  const level = parseLevelDefinition(arknightsFixture('level_act1autochess_m02'), {
     consumeTileBlackboard: (_, entry) => ['isValidHand', 'previewNotAlloed'].includes(entry.key),
-  }));
+  });
   const recipe = parsePredefinedInstanceDefinition(50,
     level.predefines.tokenInsts.find(instance => instance.inst.characterKey === 'trap_1105_accrate'),
     parsePredefinedPrefab(arknightsFixture('prefab_trap_1105_accrate')), arknightsFixture('character_trap_1105_accrate'));

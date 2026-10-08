@@ -17,6 +17,14 @@ interface EnemyMovementValues {
     readonly notCountInTotal: boolean | undefined;
 }
 
+export interface ArknightsResolvedEnemyMovement {
+    readonly id: string;
+    readonly maxHp: number;
+    readonly moveSpeed: number;
+    readonly prefabKey: string;
+    readonly notCountInTotal: boolean;
+}
+
 export interface ArknightsEnemyMovementContent {
     readonly definition: EnemyDefinition;
     readonly alwaysCheckCurrentPoint: boolean;
@@ -138,35 +146,32 @@ function overwrite(value: unknown): EnemyMovementValues {
     return movementValues(source);
 }
 
-function resolvedValues(
+export function resolveEnemyMovementValues(
     value: unknown,
     level: number,
     overwrittenData?: unknown,
-): {
-    readonly id: string;
-    readonly maxHp: number;
-    readonly moveSpeed: number;
-    readonly prefabKey: string;
-    readonly notCountInTotal: boolean;
-} {
+): ArknightsResolvedEnemyMovement {
     const selectedLevel = enemyLevel(level);
     const source = record(value, "enemy database entry");
 
     if (typeof source.Key !== "string" || source.Key.length === 0) {
         throw new TypeError("enemy database Key must be nonempty");
     }
-    if (!Array.isArray(source.Value)) {
+
+    const entries = source.Value;
+
+    if (!Array.isArray(entries)) {
         throw new TypeError("enemy database Value must be an array");
     }
 
     const levels = new Map<number, EnemyMovementValues>();
 
-    for (let index = 0; index < source.Value.length; index++) {
-        if (!Object.hasOwn(source.Value, index) || source.Value[index] === undefined) {
+    for (let index = 0; index < entries.length; index++) {
+        if (!Object.hasOwn(entries, index) || entries[index] === undefined) {
             throw new TypeError("enemy database Value must be dense");
         }
 
-        const entry = record(source.Value[index], "enemy level entry");
+        const entry = record(entries[index], "enemy level entry");
         const entryLevel = enemyLevel(entry.level);
 
         if (levels.has(entryLevel)) {
@@ -204,35 +209,21 @@ function resolvedValues(
         throw new TypeError("enemy prefabKey requires a defined value");
     }
 
-    return {
+    return Object.freeze({
         id: source.Key,
         maxHp,
         moveSpeed,
         prefabKey,
         notCountInTotal:
             overridden.notCountInTotal ?? selected.notCountInTotal ?? base.notCountInTotal ?? false,
-    };
+    });
 }
 
-export function resolveEnemyMovementPrefabKey(
-    value: unknown,
-    level: number,
-    overwrittenData?: unknown,
-): string {
-    return resolvedValues(value, level, overwrittenData).prefabKey;
-}
-
-export function parseEnemyMovementContent(
-    value: unknown,
-    level: number,
+export function createEnemyMovementContent(
+    values: ArknightsResolvedEnemyMovement,
     profile: EnemyMovementPrefab,
-    overwrittenData?: unknown,
 ): ArknightsEnemyMovementContent {
-    const { id, maxHp, moveSpeed, prefabKey, notCountInTotal } = resolvedValues(
-        value,
-        level,
-        overwrittenData,
-    );
+    const { id, maxHp, moveSpeed, prefabKey, notCountInTotal } = values;
 
     if (prefabKey !== profile.prefabKey) {
         throw new TypeError(`enemy movement prefab does not match ${prefabKey}`);
@@ -255,6 +246,18 @@ export function parseEnemyMovementContent(
         delayToBornTicks: profile.delayToBornTicks,
         onlyDelayToBornOnTileStart: profile.onlyDelayToBornOnTileStart,
     });
+}
+
+export function parseEnemyMovementContent(
+    value: unknown,
+    level: number,
+    profile: EnemyMovementPrefab,
+    overwrittenData?: unknown,
+): ArknightsEnemyMovementContent {
+    return createEnemyMovementContent(
+        resolveEnemyMovementValues(value, level, overwrittenData),
+        profile,
+    );
 }
 
 export function parseEnemyMovementDefinition(

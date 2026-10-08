@@ -12,6 +12,7 @@ import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
 import { createBattlefieldRuntime } from '../../dist/core/tactical/battlefield/runtime.js';
 import { NavigationMap } from '../../dist/core/tactical/battlefield/navigation/map.js';
 import { loadMovementScenario } from '../../dist/data/arknights/movement-scenario.js';
+import { createLevelDefinition, parseLevelContent } from '../../dist/data/arknights/level.js';
 import { resolvePredefinedSkillBlackboard } from '../../dist/data/arknights/skill.js';
 import { parsePredefinedPrefab, parseTileDeploymentPrefab } from '../../dist/data/arknights/prefab.js';
 import { createDeploymentProfile } from '../../dist/core/tactical/unit/capability/deployment.js';
@@ -1340,11 +1341,35 @@ test('core act2 mire and tide controller prefabs initialize nonspatial mechanism
     assert.equal(affected.length, 12);
     for (const tile of affected) assert.deepEqual(tile.mechanism.params, params);
     if (terrainType === 'DEEPSEA') assert.ok(affected.every(tile => tile.advancedBuildableMask === 2));
+    const controllerRules = scenario.unsupportedRules.filter(rule => rule.path.includes('.skill.blackboard.'));
+    assert.deepEqual(controllerRules.map(rule => rule.path.split('.skill.blackboard.')[1]),
+      terrainType === 'DEEPSEA' ? ['skill_max_trigger_time'] : []);
     while (runtime.result === null) runtime.step();
     assert.equal(runtime.result.reason, 'SCHEDULE_COMPLETED');
     assert.equal(runtime.result.remainingUnitIds.length, 4);
     assert.deepEqual(runtime.snapshot().mechanisms, snapshot.mechanisms);
   }
+});
+
+test('core raw level parsing owns map data before explicit controller parameters create the battlefield', () => {
+  const raw = arknightsFixture('level_act2autochess_m04');
+  const content = parseLevelContent(raw);
+  assert.equal('map' in content, false);
+  assert.deepEqual(content.mapData, raw.mapData);
+  assert.ok(Object.isFrozen(content.mapData.tiles));
+  const consumeTileBlackboard = (_, entry) => ['isValidHand', 'previewNotAlloed'].includes(entry.key);
+  assert.throws(() => createLevelDefinition(content, { consumeTileBlackboard }),
+    /deepsea controller parameters must be supplied explicitly/);
+  const deepsea = { damagePerTick: 2, attackSpeedModifier: -0.2, moveSpeedMultiplier: 0.8 };
+  const level = createLevelDefinition(content, {
+    deepsea,
+    consumeTileBlackboard,
+  });
+  raw.mapData.tiles.find(tile => tile.tileKey === 'tile_deepsea').tileKey = 'future_terrain';
+  const affected = level.map.tiles.filter(tile => tile.mechanism?.type === 'DEEPSEA');
+  assert.ok(affected.length > 0);
+  for (const tile of affected) assert.deepEqual(tile.mechanism.params, deepsea);
+  assert.ok(content.mapData.tiles.some(tile => tile.tileKey === 'tile_deepsea'));
 });
 
 test('core controller skill selection clamps the raw level and replaces blackboard keys regardless of case', () => {
@@ -1365,6 +1390,8 @@ test('core controller skill selection clamps the raw level and replaces blackboa
   assert.equal(resolved.prefabKey, 'sktok_tidectrl_3');
   assert.equal(resolved.level, 2);
   assert.equal(resolved.blackboard.length, 4);
+  assert.deepEqual(scenario.unsupportedRules.filter(rule => rule.path.includes('.skill.blackboard.'))
+    .map(rule => rule.path.split('.skill.blackboard.')[1]), ['skill_max_trigger_time']);
   assert.equal(new Set(resolved.blackboard.map(entry => entry.key.toLowerCase())).size, 4);
   assert.deepEqual(resolved.blackboard.find(entry => entry.key.toLowerCase() === 'sea_drown[enemy].damage'),
     { key: 'SEA_DROWN[ENEMY].DAMAGE', value: 90, valueStr: null });
@@ -1400,6 +1427,9 @@ test('core movement scenario reports omitted definitions and movement-external b
   const omitted = loadMovementScenario(rawLevel, { actions: [], branches: [], predefines: [] }, movementCatalog, 123);
   assert.deepEqual(omitted.omittedActions, ['waves[0].fragments[0].actions[0]']);
   assert.deepEqual(scenario.inactiveBranches, Object.keys(rawLevel.branches ?? {}));
+  assert.equal(scenario.unsupportedRules.filter(rule => rule.path.startsWith('level.options.configBlackBoard[')).length, 32);
+  assert.equal(scenario.unsupportedRules.filter(rule => rule.reason === 'tile blackboard flag is not applied by movement scenarios').length, 37);
+  assert.ok(Object.isFrozen(scenario.unsupportedRules));
   const invalid = structuredClone(rawLevel);
   const tile = invalid.mapData.tiles.find(tile => tile.blackboard?.some(entry => entry.key === 'isValidHand'));
   const entry = tile.blackboard.find(entry => entry.key === 'isValidHand');
@@ -1408,6 +1438,30 @@ test('core movement scenario reports omitted definitions and movement-external b
   entry.key = 'isValidHand';
   entry.value = 2;
   assert.throws(() => predefinedMovementScenario(invalid), /invalid movement-external tile flag isValidHand/);
+});
+
+test('core omitted predefined customization stays unresolved in raw data while selected customization is rejected', () => {
+  const raw = arknightsFixture('level_act1autochess_m01');
+  const index = raw.predefines.tokenInsts.findIndex(instance => instance.inst.characterKey === 'trap_1105_accrate');
+  assert.ok(index >= 0);
+  raw.predefines.tokenInsts[index].uniEquipIds = ['future_equipment'];
+  const path = `level.predefines.tokenInsts[${index}].uniEquipIds`;
+  assert.ok(parseLevelContent(raw).unresolvedRules.some(rule => rule.path === path));
+  const omitted = loadMovementScenario(raw, { actions: [], branches: [], predefines: [] }, movementCatalog, 123);
+
+  assert.ok(omitted.omittedPredefines.includes(`predefines.tokenInsts[${index}]`));
+  assert.equal(omitted.unsupportedRules.some(rule => rule.path === path), false);
+  assert.throws(() => loadMovementScenario(raw, {
+    actions: [], branches: [], predefines: [{ source: 'predefines', collection: 'tokenInsts', index }],
+  }, movementCatalog, 123), /unsupported predefined character customization/);
+  raw.predefines.tokenInsts[index].uniEquipIds = null;
+  raw.predefines.tokenInsts[index].overrideSkillBlackboard = [{ key: 'unused_rule', value: 2, valueStr: null }];
+  const selected = loadMovementScenario(raw, {
+    actions: [], branches: [], predefines: [{ source: 'predefines', collection: 'tokenInsts', index }],
+  }, movementCatalog, 123);
+  assert.deepEqual(selected.unsupportedRules.filter(rule => rule.path.includes('.skill.blackboard.')),
+    [{ path: `level.predefines.tokenInsts[${index}].skill.blackboard.unused_rule`,
+      reason: 'predefined unit skill blackboard is not applied by movement scenarios' }]);
 });
 
 test('core failed command batches preserve hidden recipes, battlefield projections and execution counters for retry', () => {

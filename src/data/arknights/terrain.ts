@@ -1,5 +1,6 @@
 import { assertPositiveNumber, assertPositiveSafeInteger } from "../../core/common/assert.js";
 import type { ArknightsMapOptions } from "./map.js";
+import type { ArknightsBlackboardEntry } from "./blackboard.js";
 import type { PredefinedPrefab } from "./prefab.js";
 import type { ArknightsResolvedSkill } from "./skill.js";
 import { perSecondToPerTick, secondsToTicks } from "./tick.js";
@@ -9,18 +10,32 @@ export interface ArknightsTerrainController {
     readonly skill: ArknightsResolvedSkill;
 }
 
-export function resolveTerrainMapOptions(
+export interface ArknightsTerrainResolution {
+    readonly mapOptions: ArknightsMapOptions;
+    readonly unappliedBlackboard: readonly {
+        readonly controllerIndex: number;
+        readonly entry: ArknightsBlackboardEntry;
+    }[];
+}
+
+export function resolveTerrainControllers(
     controllers: readonly ArknightsTerrainController[],
-): ArknightsMapOptions {
+): ArknightsTerrainResolution {
     const options: {
         mire?: NonNullable<ArknightsMapOptions["mire"]>;
         deepsea?: NonNullable<ArknightsMapOptions["deepsea"]>;
     } = {};
+    const unappliedBlackboard: {
+        controllerIndex: number;
+        entry: ArknightsBlackboardEntry;
+    }[] = [];
 
-    for (const { profile, skill } of controllers) {
+    for (const [controllerIndex, { profile, skill }] of controllers.entries()) {
         if (skill.prefabKey !== profile.skillPrefabKey) {
             throw new TypeError("controller skill prefab does not match profile");
         }
+
+        const consumed = new Set<string>();
 
         function parameter(key: string): number {
             const entry = skill.blackboard.find((entry) => entry.key.toLowerCase() === key);
@@ -28,6 +43,8 @@ export function resolveTerrainMapOptions(
             if (entry?.valueStr !== null) {
                 throw new TypeError(`${profile.terrain} requires numeric blackboard ${key}`);
             }
+
+            consumed.add(key);
 
             return entry.value;
         }
@@ -67,7 +84,16 @@ export function resolveTerrainMapOptions(
                 moveSpeedMultiplier: speed,
             });
         }
+
+        for (const entry of skill.blackboard) {
+            if (!consumed.has(entry.key.toLowerCase())) {
+                unappliedBlackboard.push(Object.freeze({ controllerIndex, entry }));
+            }
+        }
     }
 
-    return Object.freeze(options);
+    return Object.freeze({
+        mapOptions: Object.freeze(options),
+        unappliedBlackboard: Object.freeze(unappliedBlackboard),
+    });
 }
