@@ -3,6 +3,8 @@ import type { NavigationField, NavigationFieldNode } from "./field.js";
 import { NavigationMap } from "./map.js";
 import { navigationSegmentCost } from "./segment.js";
 
+const WALK_SHORTCUT_COST_LIMIT = 1000;
+
 export function smoothNavigationField(field: NavigationField): NavigationField {
     const nodes: NavigationFieldNode[] = field.nodes.slice();
 
@@ -40,7 +42,8 @@ export function smoothNavigationField(field: NavigationField): NavigationField {
                 field.map,
                 Tile.center(from),
                 Tile.center(candidate),
-                (cell) => field.map.pathMotionMode === "FLY" || cell.moveCost < 1000,
+                (cell) =>
+                    field.map.pathMotionMode === "FLY" || cell.moveCost < WALK_SHORTCUT_COST_LIMIT,
             );
             const destination = field.nodes[candidate[0] * field.map.columns + candidate[1]]!;
 

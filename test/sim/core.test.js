@@ -407,17 +407,15 @@ test('core failed presence updates restore spatial membership and projected maps
   assert.deepEqual(runtime.navigationModifiersAt([0, 2]), [1]);
 });
 
-test('core placement entrances consistently reject duplicate occupancy', () => {
-  const placement = { definition: { id: 'placement' }, position: [0, 0], occupancy: { claims: [] },
-    states: { occupancy: { claims: [{ position: [0, 1], slot: 'DEPLOYMENT', type: 'RESERVATION' }] } } };
+test('core placement owns and initializes occupancy through capability states', () => {
+  const states = { occupancy: { claims: [{ position: [0, 1], slot: 'DEPLOYMENT', type: 'RESERVATION' }] } };
+  const placement = { definition: { id: 'placement' }, position: [0, 0], states };
   const execution = { rngState: 1, nextUnitId: 0, nextNavigationRequestId: 0, nextMechanismId: 0, nextNavigationModifierId: 0 };
-  assert.throws(() => createUnitPlacementDefinition(placement), /single initial state/);
-  assert.throws(() => instantiateUnitPlacement(placement, execution, 0), /single initial state/);
-  const viaStates = { ...placement };
-  delete viaStates.occupancy;
-  assert.deepEqual(instantiateUnitPlacement(viaStates, execution, 0).unit.occupancy, placement.states.occupancy);
-  const normalized = createUnitPlacementDefinition(viaStates);
-  assert.deepEqual(instantiateUnitPlacement(normalized, execution, 0).unit.occupancy, placement.states.occupancy);
+  const direct = instantiateUnitPlacement(placement, execution, 0).unit;
+  const normalized = createUnitPlacementDefinition(placement);
+  states.occupancy.claims[0].position[1] = 2;
+  assert.equal(direct.occupancy.claims[0].position[1], 1);
+  assert.equal(instantiateUnitPlacement(normalized, execution, 0).unit.occupancy.claims[0].position[1], 1);
 });
 
 const catalogDefinition = () => Object.freeze({
@@ -459,7 +457,7 @@ function catalogRoutedState() {
     createRouteTiming({ waveStartedAtTick: 0, fragmentStartedAtTick: 0 }), true);
   route.progress = { phase: 'CHECKPOINTS', checkpointIndex: 0,
     checkpoint: { type: 'WAIT', remainingTicks: 9 } };
-  const locomotion = createRoutedLocomotionState(route, createNavigationState('WALK', [0, 0]));
+  const locomotion = createRoutedLocomotionState({ route, navigation: createNavigationState('WALK', [0, 0]) });
   locomotion.alternativeRoute = locomotion.mainRoute;
   return locomotion;
 }
@@ -814,7 +812,7 @@ declare const battlefieldMap: BattlefieldMap;
 declare const execution: BattleExecutionState;
 declare const projectiles: ProjectileState;
 declare const projectileResources: ProjectileResources;
-declare const placement: { readonly definition: EnemyProbe; readonly position: readonly [number, number]; readonly occupancy: OccupancyState }
+declare const placement: { readonly definition: EnemyProbe; readonly position: readonly [number, number]; readonly states: { readonly occupancy: OccupancyState } }
   | { readonly definition: DeviceProbe; readonly position: readonly [number, number] };
 `;
   const compile = (name, source) => {
@@ -855,13 +853,13 @@ const normalizedPlaced = instantiateUnitPlacement(normalizedPlacement, execution
 type NormalizedPlacementCapabilities = Assert<typeof normalizedPlaced.unit extends ExpectedPlacement ? true : false>;
 type NormalizedPlacementInput = Assert<ExpectedPlacement extends typeof normalizedPlaced.unit ? true : false>;
 const requiredPlacement = createUnitPlacementDefinition({
-  definition: unionDefinition, position: [0, 0], occupancy: { claims: [] }, extra: 31,
+  definition: unionDefinition, position: [0, 0], states: { occupancy: { claims: [] } }, extra: 31,
 });
 const requiredPlaced = instantiateUnitPlacement(requiredPlacement, execution, 0);
 requiredPlaced.unit.occupancy.claims;
 type RequiredPlacementCapabilities = Assert<typeof requiredPlaced.unit extends InitializedUnit<EnemyProbe | DeviceProbe> & Occupancy ? true : false>;
 type RequiredPlacementInput = Assert<InitializedUnit<EnemyProbe | DeviceProbe> & Occupancy extends typeof requiredPlaced.unit ? true : false>;
-type NormalizedPlacementFields = Assert<Equal<keyof typeof requiredPlacement, 'definition' | 'position' | 'occupancy' | 'navigationModifiers'>>;
+type NormalizedPlacementFields = Assert<Equal<keyof typeof requiredPlacement, 'definition' | 'position' | 'states' | 'navigationModifiers'>>;
 if (union.definition.kind === 'enemy') { const code: 17 = union.definition.enemyCode; }
 else { const code: 29 = union.definition.deviceCode; }
 const prepared = initializeUnit({ id: 3, definition: enemyDefinition, position: [0, 0],

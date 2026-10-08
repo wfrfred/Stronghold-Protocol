@@ -166,9 +166,11 @@ export function parsePredefinedInstanceDefinition(
             type: "UNIT",
             definition: unitDefinition(instance, phase, profile),
             position: Tile.center(instance.position),
-            occupancy: createOccupancyState({
-                claims: [{ position: instance.position, slot: "SUPPORT", type: "PRESENT" }],
-            }),
+            states: {
+                occupancy: createOccupancyState({
+                    claims: [{ position: instance.position, slot: "SUPPORT", type: "PRESENT" }],
+                }),
+            },
             navigationModifiers: [
                 {
                     definition: navigationModifierDefinition,

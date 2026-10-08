@@ -2701,9 +2701,10 @@ test('core patrol yields with its exact successor and resumes without replaying 
   assert.equal(enterRoute(state, execution).state, state);
   assert.deepEqual(execution.state(), sampled);
   const nextFrame = createRouteExecution(createRng(sampled.rngState), sampled.nextNavigationRequestId, 1, 2);
-  state = enterRoute(state, nextFrame).state;
+  const resumed = enterRoute(state, nextFrame);
+  state = resumed.state;
   assert.equal(state.progress.checkpointIndex, 1);
-  assert.equal(state.progress.checkpoint.navigationRequestId, sampled.nextNavigationRequestId);
+  assert.equal(resumed.request.id, sampled.nextNavigationRequestId);
   assert.equal(nextFrame.state().rngState, sampled.rngState);
   state = advanceRoute(state, nextFrame).state;
   assert.equal(state.progress.checkpointIndex, 0);

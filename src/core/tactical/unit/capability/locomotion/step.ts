@@ -12,7 +12,6 @@ import {
     type NavigationRequestId,
 } from "../../../battlefield/navigation/request.js";
 import {
-    clearNavigationRequest,
     getNavigationRequest,
     markNavigationArrived,
     queryNavigation,
@@ -35,6 +34,7 @@ import {
     advanceRouteControl,
     bindRouteNavigation,
     enterRouteControl,
+    completeRouteControl,
     isMovingRoute,
     routeLocator,
     type LocatedRouteSignal,
@@ -330,10 +330,7 @@ export function stepRoutedLocomotion(
             control = reportArrival(control);
         }
 
-        return {
-            route: { ...control.route, progress: { phase: "COMPLETED" } },
-            navigation: clearNavigationRequest(control.navigation),
-        };
+        return completeRouteControl(control);
     }
 
     let main = state.mainRoute;

@@ -112,13 +112,10 @@ export function initializeLocomotionState(): LocomotionState {
     return createLocomotionState();
 }
 
-export function createRoutedLocomotionState(
-    route: RouteState,
-    navigation: NavigationState,
-): RoutedLocomotionState {
+export function createRoutedLocomotionState(mainRoute: RouteControlState): RoutedLocomotionState {
     return {
         ...createLocomotionState(),
-        mainRoute: { route, navigation },
+        mainRoute,
         alternativeRoute: null,
     };
 }

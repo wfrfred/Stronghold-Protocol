@@ -12,6 +12,7 @@ import {
 import type { RouteDefinition } from "./route/definition.js";
 import {
     advanceRoute,
+    completeRoute,
     enterRoute,
     type RouteExecutionContext,
     type RouteSignal,
@@ -98,6 +99,15 @@ export function advanceRouteControl(
     execution: RouteExecutionContext,
 ): RouteControlTransition {
     return applyTransition(control, advanceRoute(control.route, execution), position, present);
+}
+
+export function completeRouteControl(control: RouteControlState): RouteControlState {
+    const route = completeRoute(control.route);
+    const navigation = clearNavigationRequest(control.navigation);
+
+    return route === control.route && navigation === control.navigation
+        ? control
+        : { route, navigation };
 }
 
 export function initializeRouteControl(

@@ -185,7 +185,7 @@ export function resolveDeploymentCommands(
                 {
                     definition,
                     position,
-                    occupancy,
+                    states: { occupancy },
                     ...(command.type === "DEPLOY_UNIT" && command.navigationModifiers !== undefined
                         ? { navigationModifiers: command.navigationModifiers }
                         : {}),

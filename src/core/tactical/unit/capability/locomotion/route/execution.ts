@@ -95,7 +95,6 @@ function moveProgress(request: NavigationRequest): RouteMoveProgress {
     return {
         type: "MOVE",
         goal: request.goal,
-        navigationRequestId: request.id,
     };
 }
 
@@ -313,6 +312,12 @@ export function nextCheckpointIndex(definition: RouteDefinition, checkpointIndex
     return segmentStart < checkpointIndex ? segmentStart : nextIndex;
 }
 
+export function completeRoute(state: RouteState): RouteState {
+    return state.progress.phase === "COMPLETED"
+        ? state
+        : withProgress(state, { phase: "COMPLETED" });
+}
+
 export function advanceRoute(state: RouteState, context: RouteExecutionContext): RouteTransition {
     const progress = state.progress;
 
@@ -320,7 +325,7 @@ export function advanceRoute(state: RouteState, context: RouteExecutionContext):
         return { state, signals: [] };
     }
     if (progress.phase === "END") {
-        return { state: withProgress(state, { phase: "COMPLETED" }), signals: [] };
+        return { state: completeRoute(state), signals: [] };
     }
     if (progress.checkpoint.type === "NOT_ENTERED") {
         throw new Error("cannot advance a route checkpoint before entering it");

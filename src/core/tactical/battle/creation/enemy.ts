@@ -51,7 +51,7 @@ export function initializeRoutedEnemy<D extends EnemyDefinition>(
 
     const states = {
         spatialPresence: { present: initial.present },
-        locomotion: createRoutedLocomotionState(initial.control.route, initial.control.navigation),
+        locomotion: createRoutedLocomotionState(initial.control),
     };
     const enemy = initializeUnit<EnemyDefinition, typeof states>({
         id: spawn.id,

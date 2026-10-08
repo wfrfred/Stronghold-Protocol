@@ -17,6 +17,8 @@ export interface ProjectedNavigationModifier {
     readonly positions: readonly TilePosition[];
 }
 
+const HOLE_MOVE_COST = 1_000_000;
+
 export interface NavigationProjection {
     readonly maps: NavigationMaps;
     readonly changedModes: readonly PathMotionMode[];
@@ -35,7 +37,7 @@ export function projectStaticNavigationMap(
 
     const cells: NavigationCell[] = map.tiles.map((tile) => ({
         passable: includesMode(tile.passableMask, pathMotionMode),
-        moveCost: pathMotionMode === "WALK" && tile.terrain === "HOLE" ? 1_000_000 : 1,
+        moveCost: pathMotionMode === "WALK" && tile.terrain === "HOLE" ? HOLE_MOVE_COST : 1,
         departures: { UP: true, RIGHT: true, DOWN: true, LEFT: true },
     }));
 
