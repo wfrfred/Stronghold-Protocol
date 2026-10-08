@@ -147,9 +147,8 @@ test("damage pipeline: low HP attack contributions read current work after damag
   );
   const healed = resolveHealing(
     damaged.work,
-    { sourceUnitId: 2, targetUnitId: 1, power: 400, ignoreHealFree: false },
+    { sourceUnitId: 2, targetUnitId: 1, power: 400, ignoreHealFree: false, tick: 12 },
     resources,
-    12,
   );
 
   assert.equal(resolveAttackPower(source.id, combatWorkView(original), resources.computations), 100);

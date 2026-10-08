@@ -1,3 +1,4 @@
+import type { EffectDispatchScope } from "../../effects/dispatch.js";
 import type { EffectInstanceId } from "../../effects/instance.js";
 import type { UnitId } from "../../../unit.js";
 import type { CombatWork } from "../../../../battle/execution/work.js";
@@ -81,3 +82,9 @@ export function createDamageOperands(power: number): DamageOperands {
         proportionalPenetration: 0,
     };
 }
+
+export type DamageOperation = (
+    work: CombatWork,
+    request: DamageRequest,
+    dispatch: EffectDispatchScope,
+) => DamageResolution;

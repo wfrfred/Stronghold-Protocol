@@ -14,7 +14,8 @@ import {
     HealingResources,
     type HealingEffectRules,
 } from "../unit/capability/vitality/healing/resources.js";
-import type { DamageOperation, HealingOperation } from "../unit/capability/vitality/hook.js";
+import type { DamageOperation } from "../unit/capability/vitality/damage/contract.js";
+import type { HealingOperation } from "../unit/capability/vitality/healing/contract.js";
 import * as computation from "../modifier/computation.js";
 import type { ContributionFacts } from "../unit/capability/contribution.js";
 import { EffectSourceResources } from "../battlefield/effect-source/resources.js";
@@ -32,11 +33,9 @@ import { ElementalResources } from "../unit/capability/elemental/resources.js";
 import {
     resolveElementDamage,
     resolveElementHeal,
+    type ElementDamageOperation,
+    type ElementHealOperation,
 } from "../unit/capability/elemental/execution.js";
-import type {
-    ElementDamageRequest,
-    ElementHealRequest,
-} from "../unit/capability/elemental/settlement.js";
 import { SkillResources } from "../unit/capability/skill/resources.js";
 
 export interface CombatEffectFacets<S extends object> {
@@ -60,22 +59,13 @@ export class CombatResources {
     readonly projectiles = new ProjectileResources(this.#registration);
     readonly skills = new SkillResources(this.#registration);
     readonly elemental = new ElementalResources(this.#registration);
-    readonly settleElementDamage = (
-        work: CombatWork,
-        request: ElementDamageRequest & { readonly targetUnitId: UnitId },
-    ) => {
+    readonly settleElementDamage: ElementDamageOperation = (work, request) => {
         this.#registration.assertUsable();
 
         return resolveElementDamage(work, request, this);
     };
 
-    readonly settleElementHeal = (
-        work: CombatWork,
-        request: ElementHealRequest & {
-            readonly sourceUnitId: UnitId | null;
-            readonly targetUnitId: UnitId;
-        },
-    ) => {
+    readonly settleElementHeal: ElementHealOperation = (work, request) => {
         this.#registration.assertUsable();
 
         return resolveElementHeal(work, request);
@@ -94,10 +84,10 @@ export class CombatResources {
         return resolveDamage(work, request, this, dispatch);
     };
 
-    readonly settleHealing: HealingOperation = (work, request, tick, dispatch) => {
+    readonly settleHealing: HealingOperation = (work, request, dispatch) => {
         this.#registration.assertUsable();
 
-        return resolveHealing(work, request, this, tick, dispatch);
+        return resolveHealing(work, request, this, dispatch);
     };
 
     seal(): this {

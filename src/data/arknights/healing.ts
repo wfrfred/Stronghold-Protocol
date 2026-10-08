@@ -1,9 +1,9 @@
 import type { HealingRequest } from "../../core/tactical/unit/capability/vitality/healing/contract.js";
 
-export function readArknightsHealingRequest(
+export function readArknightsHealingInput(
     value: unknown,
     input: Pick<HealingRequest, "sourceUnitId" | "targetUnitId" | "power">,
-): HealingRequest {
+): Omit<HealingRequest, "tick"> {
     if (value === null || typeof value !== "object" || Array.isArray(value)) {
         throw new TypeError("healing action must be an object");
     }

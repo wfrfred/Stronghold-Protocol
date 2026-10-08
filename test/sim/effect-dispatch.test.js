@@ -15,7 +15,7 @@ import { EffectDispatchScope } from "../../dist/core/tactical/unit/capability/ef
 import { setEffectEnabled } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
-import { readArknightsHealingRequest } from "../../dist/data/arknights/healing.js";
+import { readArknightsHealingInput } from "../../dist/data/arknights/healing.js";
 import { resolveHealing } from "../../dist/core/tactical/unit/capability/vitality/healing/settlement.js";
 
 function unit(id, hp = 1000, flags = []) {
@@ -69,6 +69,49 @@ function request(power = 100, overrides = {}) {
 function installation(unitId) {
   return { source: null, scope: { type: "UNIT", unitId }, expiresAtTick: null };
 }
+
+test("effect dispatch: synchronous damage and healing inherit the active settlement tick", () => {
+  const resources = new CombatResources();
+  const seen = [];
+  const descriptor = resources.registerEffect(program("nested-time"), {
+    damage: {
+      reception: {
+        priority: 0,
+        apply: (context, pending) => {
+          seen.push(["damage", context.tick, context.request.tick]);
+          if (context.request.operands.power === 10) {
+            context.operations.damage({
+              sourceUnitId: null,
+              targetUnitId: 2,
+              damageType: "TRUE",
+              operands: createDamageOperands(1),
+            });
+            context.operations.heal({ sourceUnitId: null, targetUnitId: 2, power: 3 });
+          }
+          return { value: pending };
+        },
+      },
+    },
+    healing: {
+      reception: {
+        priority: 0,
+        apply: (context, pending) => {
+          seen.push(["healing", context.tick, context.request.tick]);
+          return { value: pending };
+        },
+      },
+    },
+  });
+  const result = resolveDamage(
+    effectFixtureWork(attach(resources, unit(2, 500), descriptor)),
+    request(10, { tick: 37 }),
+    resources,
+  );
+
+  assert.deepEqual(seen, [["damage", 37, 37], ["damage", 37, 37], ["healing", 37, 37]]);
+  assert.equal(getCombatUnit(result.work, 2).vitality.hp, 492);
+  assert.ok(combatWorkEvents(result.work).every(event => event.tick === 37));
+});
 
 test("effect dispatch: registered candidate identities freeze while current participation is rechecked", () => {
   for (const operation of ["enable", "finish"]) {
@@ -236,9 +279,11 @@ test("effect dispatch: healing retains selected rules while nested candidates an
         },
       },
     };
-    const healed = resolveHealing(work, {
-      sourceUnitId: null, targetUnitId: 2, power: 10,
-    }, services, 1);
+    const healed = resolveHealing(
+      work,
+      { sourceUnitId: null, targetUnitId: 2, power: 10, tick: 1 },
+      services,
+    );
 
     assert.deepEqual(calls, operation === "enable"
       ? [["first", 10], ["first", 1], ["follower", 1, 0], ["follower", 10, 1]]
@@ -247,9 +292,11 @@ test("effect dispatch: healing retains selected rules while nested candidates an
     assert.equal(healed.amount, operation === "enable" ? 20 : 10);
     assert.equal(getCombatUnit(healed.work, 2).vitality.hp, operation === "enable" ? 522 : 511);
     calls.length = 0;
-    const subsequent = resolveHealing(healed.work, {
-      sourceUnitId: null, targetUnitId: 2, power: 1,
-    }, resources, 2);
+    const subsequent = resolveHealing(
+      healed.work,
+      { sourceUnitId: null, targetUnitId: 2, power: 1, tick: 2 },
+      resources,
+    );
 
     assert.deepEqual(calls, operation === "enable"
       ? [["first", 1], ["follower", 1, 2], ["added", 1]]
@@ -424,7 +471,7 @@ test("effect dispatch: Damage and Healing borrowed facts and operations close af
       const settle = () =>
         domain === "damage"
           ? resolveDamage(original, request(), resources)
-          : resolveHealing(original, healRequest, resources, 1);
+          : resolveHealing(original, { ...healRequest, tick: 1 }, resources);
       let result;
       if (fails) {
         assert.throws(settle, /hook failed/);
@@ -680,15 +727,13 @@ test("effect dispatch: healing observes reception rejection without retrospectiv
   const original = effectFixtureWork(attach(resources, unit(2, 500, ["HEAL_FREE"]), descriptor));
   const rejected = resolveHealing(
     original,
-    { sourceUnitId: null, targetUnitId: 2, power: 20, ignoreHealFree: false },
+    { sourceUnitId: null, targetUnitId: 2, power: 20, ignoreHealFree: false, tick: 1 },
     resources,
-    1,
   );
   const received = resolveHealing(
     original,
-    { sourceUnitId: null, targetUnitId: 2, power: 20, ignoreHealFree: true },
+    { sourceUnitId: null, targetUnitId: 2, power: 20, ignoreHealFree: true, tick: 1 },
     resources,
-    1,
   );
   const skipped = resolveHealing(
     original,
@@ -698,9 +743,9 @@ test("effect dispatch: healing observes reception rejection without retrospectiv
       power: 20,
       ignoreHealFree: false,
       skipModifierEvents: true,
+      tick: 1,
     },
     resources,
-    1,
   );
 
   assert.equal(rejected.amount, 0);
@@ -715,9 +760,9 @@ test("effect dispatch: healing observes reception rejection without retrospectiv
       power: 20,
       ignoreHealFree: true,
       skipModifierEvents: true,
+      tick: 1,
     },
     resources,
-    1,
   );
   assert.equal(permittedSkip.amount, 20);
   assert.equal(permittedSkip.report.cancellation, null);
@@ -738,16 +783,14 @@ test("effect dispatch: healing observes reception rejection without retrospectiv
   );
   const admitted = resolveHealing(
     initiallyAllowed,
-    { sourceUnitId: 1, targetUnitId: 2, power: 30, ignoreHealFree: false },
+    { sourceUnitId: 1, targetUnitId: 2, power: 30, ignoreHealFree: false, tick: 1 },
     resources,
-    1,
   );
   assert.deepEqual(reactions, ["target", "source"]);
   const next = resolveHealing(
     admitted.work,
-    { sourceUnitId: 1, targetUnitId: 2, power: 30, ignoreHealFree: false },
+    { sourceUnitId: 1, targetUnitId: 2, power: 30, ignoreHealFree: false, tick: 2 },
     resources,
-    2,
   );
 
   assert.equal(hasStatusFlag(getCombatUnit(admitted.work, 2), "HEAL_FREE"), true);
@@ -758,14 +801,13 @@ test("effect dispatch: healing observes reception rejection without retrospectiv
   reactions.length = 0;
   resolveHealing(
     admitted.work,
-    { sourceUnitId: 2, targetUnitId: 2, power: 1, ignoreHealFree: true },
+    { sourceUnitId: 2, targetUnitId: 2, power: 1, ignoreHealFree: true, tick: 3 },
     resources,
-    3,
   );
   assert.deepEqual(reactions, ["target"]);
   for (const _ignoreHealFree of [false, true]) {
     for (const _skipModifierEvent of [false, true]) {
-      const mapped = readArknightsHealingRequest(
+      const mapped = readArknightsHealingInput(
         {
           $type: "Torappu.Battle.Action.Nodes+HealViaMaxHpRatio",
           _ignoreHealFree,
@@ -773,7 +815,7 @@ test("effect dispatch: healing observes reception rejection without retrospectiv
         },
         { sourceUnitId: null, targetUnitId: 2, power: 20 },
       );
-      const resolution = resolveHealing(original, mapped, resources, 1);
+      const resolution = resolveHealing(original, { ...mapped, tick: 1 }, resources);
       assert.equal(mapped.ignoreHealFree, _ignoreHealFree || _skipModifierEvent);
       assert.equal(mapped.skipModifierEvents, _skipModifierEvent);
       assert.equal(resolution.amount, _skipModifierEvent ? 20 : _ignoreHealFree ? 40 : 0);
@@ -869,9 +911,8 @@ test("effect registration: domain facets coexist and expose the complete healing
   const damaged = resolveDamage(initial, request(100, { sourceUnitId: 2 }), resources);
   const healed = resolveHealing(
     damaged.work,
-    { sourceUnitId: 2, targetUnitId: 2, power: 10, ignoreHealFree: false },
+    { sourceUnitId: 2, targetUnitId: 2, power: 10, ignoreHealFree: false, tick: 1 },
     resources,
-    1,
   );
   const skipped = resolveHealing(
     healed.work,
@@ -881,9 +922,9 @@ test("effect registration: domain facets coexist and expose the complete healing
       power: 10,
       ignoreHealFree: false,
       skipModifierEvents: true,
+      tick: 2,
     },
     resources,
-    2,
   );
 
   assert.equal(damaged.report.hpLoss, 200);

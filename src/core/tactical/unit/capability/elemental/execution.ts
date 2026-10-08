@@ -10,7 +10,7 @@ import type { EffectTransitionResources } from "../effects/contract.js";
 import { EffectDispatchScope } from "../effects/dispatch.js";
 import { createEffectOperations } from "../effects/operations.js";
 import { effectView } from "../effects/query.js";
-import type { DamageOperation } from "../vitality/hook.js";
+import type { DamageOperation } from "../vitality/damage/contract.js";
 import { hasElemental, type ElementType, type ElementValues } from "./capability.js";
 import type { ElementalRejection } from "./query.js";
 import type { CompiledElementalBurst, ElementalBurstContext } from "./program.js";
@@ -60,6 +60,23 @@ export interface ElementDamageReport {
     readonly amount: number;
     readonly burst: ElementalBurst | null;
 }
+
+export type ElementDamageOperation = (
+    work: CombatWork,
+    request: ElementDamageRequest & { readonly targetUnitId: UnitId },
+) => { readonly work: CombatWork; readonly report: ElementDamageReport };
+
+export type ElementHealOperation = (
+    work: CombatWork,
+    request: ElementHealRequest & {
+        readonly targetUnitId: UnitId;
+        readonly sourceUnitId: UnitId | null;
+    },
+) => {
+    readonly work: CombatWork;
+    readonly amount: number;
+    readonly outcome: "REJECTED" | "APPLIED";
+};
 
 function runBurst(
     work: CombatWork,

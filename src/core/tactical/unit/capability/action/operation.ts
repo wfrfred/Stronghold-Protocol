@@ -117,8 +117,8 @@ export function compile(definition: Definition, resources: ActionResources): Pro
                         targetUnitId,
                         power: definition.power,
                         ignoreHealFree: definition.ignoreHealFree,
+                        tick,
                     },
-                    tick,
                     new EffectDispatchScope(),
                 ).work;
     }

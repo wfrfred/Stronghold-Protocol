@@ -87,9 +87,7 @@ export function damageUnit<U extends Unit & Vitality>(
     const amount = unit.vitality.hp - hp;
 
     return {
-        unit: widenUnit<U>(
-            amount === 0 ? unit : { ...unit, vitality: { ...unit.vitality, hp } },
-        ),
+        unit: widenUnit<U>(amount === 0 ? unit : { ...unit, vitality: { ...unit.vitality, hp } }),
         amount,
         killed: unit.vitality.hp > 0 && hp === 0,
     };

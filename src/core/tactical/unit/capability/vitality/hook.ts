@@ -10,8 +10,8 @@ import { EffectDispatchScope } from "../effects/dispatch.js";
 import { effectView, getEffect } from "../effects/query.js";
 import { resolveMaxHp } from "./query.js";
 import { combatWorkView, type CombatWork } from "../../../battle/execution/work.js";
-import type { DamageReport, DamageRequest, DamageResolution } from "./damage/contract.js";
-import type { HealingReport, HealingRequest, HealingResolution } from "./healing/contract.js";
+import type { DamageReport, DamageRequest, DamageOperation } from "./damage/contract.js";
+import type { HealingReport, HealingRequest, HealingOperation } from "./healing/contract.js";
 import {
     createEffectSourceOperations,
     type EffectSourceOperations,
@@ -33,22 +33,9 @@ export interface VitalityHookContext<S extends object> {
 export interface VitalityHookOperations {
     readonly effects: EffectLifecycleOperations;
     readonly sources: EffectSourceOperations;
-    damage(request: DamageRequest): DamageReport;
-    heal(request: HealingRequest): HealingReport;
+    damage(request: Omit<DamageRequest, "tick">): DamageReport;
+    heal(request: Omit<HealingRequest, "tick">): HealingReport;
 }
-
-export type DamageOperation = (
-    work: CombatWork,
-    request: DamageRequest,
-    dispatch: EffectDispatchScope,
-) => DamageResolution;
-
-export type HealingOperation = (
-    work: CombatWork,
-    request: HealingRequest,
-    tick: number,
-    dispatch: EffectDispatchScope,
-) => HealingResolution;
 
 export function vitalityHookFacts(work: () => CombatWork): VitalityHookFacts {
     return {
@@ -109,13 +96,17 @@ export function withVitalityHookContext<R, T>(
                 effects: createEffectOperations(readWork, setWork, resources, tick, dispatch),
                 sources: createEffectSourceOperations(readWork, setWork, resources),
                 damage: (input) => {
-                    const result = resources.settleDamage(readWork(), input, dispatch);
+                    const result = resources.settleDamage(readWork(), { ...input, tick }, dispatch);
                     setWork(result.work);
 
                     return result.report;
                 },
                 heal: (input) => {
-                    const result = resources.settleHealing(readWork(), input, tick, dispatch);
+                    const result = resources.settleHealing(
+                        readWork(),
+                        { ...input, tick },
+                        dispatch,
+                    );
                     setWork(result.work);
 
                     return result.report;

@@ -14,7 +14,8 @@ import { createEffectOperations } from "../effects/operations.js";
 import { isSpatiallyPresent } from "../presence.js";
 import { hasStatusFlag } from "../status/capability.js";
 import { hasVitality } from "../vitality/capability.js";
-import type { DamageOperation, HealingOperation } from "../vitality/hook.js";
+import type { DamageOperation } from "../vitality/damage/contract.js";
+import type { HealingOperation } from "../vitality/healing/contract.js";
 import {
     copySkillState,
     hasSkill,
@@ -133,7 +134,7 @@ function withSkillContext<R>(
                 return result.report;
             },
             heal: (request) => {
-                const result = resources.settleHealing(readWork(), request, tick, dispatch);
+                const result = resources.settleHealing(readWork(), { ...request, tick }, dispatch);
                 current = result.work;
 
                 return result.report;

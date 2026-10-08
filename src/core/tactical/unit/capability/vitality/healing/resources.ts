@@ -4,14 +4,18 @@ import type { EffectInstanceValue } from "../../effects/instance.js";
 import type { EffectProgramRef } from "../../effects/program.js";
 import type { EffectResources } from "../../effects/registry.js";
 import type {
-    DamageOperation,
     DispatchResult,
-    HealingOperation,
     VitalityHookContext,
     VitalityHookOperations,
     VitalityHookInvocation,
 } from "../hook.js";
-import type { HealingReport, HealingRequest, PendingHealing } from "./contract.js";
+import type { DamageOperation } from "../damage/contract.js";
+import type {
+    HealingOperation,
+    HealingReport,
+    HealingRequest,
+    PendingHealing,
+} from "./contract.js";
 import type { EffectSourceResources } from "../../../../battlefield/effect-source/resources.js";
 
 export interface HealingResourceServices extends EffectTransitionResources {

@@ -241,9 +241,11 @@ test("resources: failed composite registration invalidates the entire unpublishe
         sourceUnitId: null, targetUnitId: 2, damageType: "TRUE",
         operands: createDamageOperands(10), tick: 0,
       }, new EffectDispatchScope()),
-      () => resources.settleHealing(effectFixtureWork(), {
-        sourceUnitId: null, targetUnitId: 2, power: 10,
-      }, 0, new EffectDispatchScope()),
+      () => resources.settleHealing(
+        effectFixtureWork(),
+        { sourceUnitId: null, targetUnitId: 2, power: 10, tick: 0 },
+        new EffectDispatchScope(),
+      ),
       () => resources.seal(),
       () => new BattleRuntime(spec(), { combat: resources }),
     ]) {

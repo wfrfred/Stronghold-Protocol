@@ -19,7 +19,7 @@ export interface SkillActivationContext extends SkillQueryContext {
     readonly endsAtTick: number | null;
     readonly effects: EffectLifecycleOperations;
     damage(request: Omit<DamageRequest, "tick">): DamageReport;
-    heal(request: HealingRequest): HealingReport;
+    heal(request: Omit<HealingRequest, "tick">): HealingReport;
 }
 
 export type SkillContentResult =

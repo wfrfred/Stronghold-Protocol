@@ -1,5 +1,4 @@
 import { assert, assertNonnegativeNumber, assertPositiveSafeInteger } from "../../common/assert.js";
-
 import { BattlefieldRuntime } from "../battlefield/runtime.js";
 import type { NavigationMaps } from "../battlefield/navigation/map.js";
 import { copyUnitSnapshot } from "../unit/snapshot.js";

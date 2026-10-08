@@ -12,11 +12,16 @@ import type {
     VitalityHookContext,
     VitalityHookOperations,
     VitalityHookInvocation,
-    HealingOperation,
-    DamageOperation,
     DispatchResult,
 } from "../hook.js";
-import type { DamageOperands, DamageReport, DamageRequest, PendingDamage } from "./contract.js";
+import type { HealingOperation } from "../healing/contract.js";
+import type {
+    DamageOperation,
+    DamageOperands,
+    DamageReport,
+    DamageRequest,
+    PendingDamage,
+} from "./contract.js";
 import type { EffectSourceResources } from "../../../../battlefield/effect-source/resources.js";
 
 export interface DamageResourceServices extends EffectTransitionResources {

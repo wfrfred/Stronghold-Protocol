@@ -127,13 +127,13 @@ export function withProjectileContext<S extends object>(
                 dispatch,
             ),
             damage: (request) => {
-                const result = services.settleDamage(readWork(), request, dispatch);
+                const result = services.settleDamage(readWork(), { ...request, tick }, dispatch);
                 access.setWork(result.work);
 
                 return result.report;
             },
             heal: (request) => {
-                const result = services.settleHealing(readWork(), request, tick, dispatch);
+                const result = services.settleHealing(readWork(), { ...request, tick }, dispatch);
                 access.setWork(result.work);
 
                 return result.report;

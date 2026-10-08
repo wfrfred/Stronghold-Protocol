@@ -238,9 +238,9 @@ export function resolveHealing(
     work: CombatWork,
     request: HealingRequest,
     resources: HealingResourceServices,
-    tick: number,
     dispatch = new EffectDispatchScope(),
 ): HealingResolution {
+    const { tick } = request;
     let pending: PendingHealing = {
         amount: Math.max(0, request.power),
         cancellation: null,
