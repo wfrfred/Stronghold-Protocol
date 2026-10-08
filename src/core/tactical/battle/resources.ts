@@ -1,11 +1,11 @@
 import { ResourceRegistration } from "../../common/resource-registration.js";
 import { EffectResources } from "../unit/capability/effects/registry.js";
 import { type EffectProgram } from "../unit/capability/effects/program.js";
+import { EffectBindingResources } from "../unit/capability/effects/resources.js";
 import {
     compileEffectContributions,
-    EffectBindingResources,
-    type EffectContributionRules,
-} from "../unit/capability/effects/resources.js";
+    type EffectContribution,
+} from "../unit/capability/effects/contributions.js";
 import {
     DamageResources,
     type DamageEffectRules,
@@ -26,7 +26,7 @@ import { resolveDamage } from "../unit/capability/vitality/damage/settlement.js"
 import { resolveHealing } from "../unit/capability/vitality/healing/settlement.js";
 
 export interface CombatEffectFacets<S extends object> {
-    readonly contributions?: EffectContributionRules<S>;
+    readonly contributions?: readonly EffectContribution<S>[];
     readonly bindings?: readonly CompiledEffectContribution[];
     readonly damage?: DamageEffectRules<S>;
     readonly healing?: HealingEffectRules<S>;

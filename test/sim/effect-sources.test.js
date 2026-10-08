@@ -1,3 +1,4 @@
+import { attack as attackContribution } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
@@ -44,13 +45,7 @@ function receiverEffect(resources, id, facets = {}) {
     });
 
     return resources.registerEffect(program, {
-        contributions: {
-            contributions: [{
-                id: "attack",
-                target: offenseAttackContributions,
-                project: context => [createNumericContribution({ finalAddition: context.state.addition })],
-            }],
-        },
+        contributions: [attackContribution(context => [createNumericContribution({ finalAddition: context.state.addition })])],
         ...facets,
     });
 }

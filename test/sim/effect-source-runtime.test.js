@@ -1,3 +1,4 @@
+import { attack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
@@ -97,13 +98,7 @@ function receiverProgram(resources, id, addition = 20, lifecycle) {
     });
 
     return resources.registerEffect(program, {
-        contributions: {
-            contributions: [{
-                id: "attack",
-                target: offenseAttackContributions,
-                project: () => [createNumericContribution({ finalAddition: addition })],
-            }],
-        },
+        contributions: [attack(() => [createNumericContribution({ finalAddition: addition })])],
         ...(lifecycle === undefined ? {} : { lifecycle }),
     });
 }

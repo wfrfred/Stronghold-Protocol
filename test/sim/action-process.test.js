@@ -1,3 +1,4 @@
+import { computedAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import { combatWorkEvents } from "../../dist/core/tactical/battle/execution/work.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -344,7 +345,7 @@ test("action process: install then query binds current targets and the next segm
 test("action process: concurrent executions from one source own independent contributions and cleanup", () => {
   const resources = new CombatResources();
   const bonus = resources.registerEffect(effectProgram("owned-bonus"), {
-    contributions: { attack: () => [createNumericContribution({ finalAddition: 20 })] },
+    contributions: [computedAttack(() => [createNumericContribution({ finalAddition: 20 })])],
   });
   const first = accept();
   const second = accept(first.state, { definition: first.execution.definition });
@@ -403,11 +404,9 @@ test("action process: content cancellation and normal finish retain completed pr
         ownState: (value) => ({ ...value }),
       }),
       {
-        contributions: {
-          attack: ({ instance }) => [
+        contributions: [computedAttack(({ instance }) => [
             createNumericContribution({ finalAddition: instance.state.power }),
-          ],
-        },
+          ])],
       },
     );
     const accepted = accept();

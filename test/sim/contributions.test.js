@@ -1,3 +1,5 @@
+import { attack, computedAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
+import { computedResistance } from "../../dist/core/tactical/unit/capability/defense/contributions.js";
 import { installFixtureEffect } from "../helpers/effects.js";
 import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/transition.js";
 import assert from "node:assert/strict";
@@ -262,15 +264,7 @@ test("contributions: private stack transitions publish maintained projections im
     ownState: (value) => ({ ...value }),
   });
   resources.registerEffect(program, {
-    contributions: {
-      contributions: [
-        {
-          id: "attack",
-          target: offenseAttackContributions,
-          project: (instance) => [value(instance.state.layers * 10)],
-        },
-      ],
-    },
+    contributions: [attack((instance) => [value(instance.state.layers * 10)])],
   });
   const installed = installFixtureEffect(
     unit(1),
@@ -321,9 +315,7 @@ test("contributions: live provider reads latest working facts without changing s
   const resources = new CombatResources();
   const program = createEffectProgram({ id: "live", initialize: () => ({}), ownState: () => ({}) });
   resources.registerEffect(program, {
-    contributions: {
-      attack: ({ unit }) => [value(unit.vitality.hp < 50 ? 100 : 0)],
-    },
+    contributions: [computedAttack(({ unit }) => [value(unit.vitality.hp < 50 ? 100 : 0)])],
   });
   const installed = installFixtureEffect(
     unit(1),
@@ -370,7 +362,7 @@ test("contributions: defense queries clamp resistance after sampled and live con
             initialize: () => ({}),
             ownState: () => ({}),
           }),
-          { contributions: { resistance: () => [value(amount)] } },
+          { contributions: [computedResistance(() => [value(amount)])] },
         );
         defended = installFixtureEffect(
           initial,
@@ -411,15 +403,7 @@ test("contributions: a sampled child retains its input until an explicit parent 
       ownState: (input) => ({ ...input }),
     }),
     {
-      contributions: {
-        contributions: [
-          {
-            id: "attack",
-            target: offenseAttackContributions,
-            project: (instance) => [value(instance.state.sample)],
-          },
-        ],
-      },
+      contributions: [attack((instance) => [value(instance.state.sample)])],
       lifecycle: {
         start: (context) => {
           const source = context.facts.getUnit(1);

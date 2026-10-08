@@ -1,3 +1,4 @@
+import { computedAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import { combatWorkEvents } from "../../dist/core/tactical/battle/execution/work.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -377,7 +378,7 @@ test("projectile runtime: current ATK and cached-only ATK stay distinct, while a
         initialize: () => ({}),
         ownState: (state) => ({ ...state }),
       }),
-      { contributions: { attack: () => [createNumericContribution({ addition: 10 })] } },
+      { contributions: [computedAttack(() => [createNumericContribution({ addition: 10 })])] },
     );
     const runtime = new BattleRuntime(
       spec([

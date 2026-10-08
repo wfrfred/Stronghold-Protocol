@@ -1,3 +1,4 @@
+import { computedAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
@@ -118,9 +119,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
       initialize: () => ({ starts: 0, enables: 0 }),
       ownState: (state) => ({ ...state }),
     }), {
-      contributions: {
-        attack: () => [createNumericContribution({ finalAddition: addition })],
-      },
+      contributions: [computedAttack(() => [createNumericContribution({ finalAddition: addition })])],
       bindings: flags.length === 0 ? [] : [compileStatusBinding(flags)],
       lifecycle: {
         start: (context) => {
@@ -161,9 +160,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
     initialize: () => ({ starts: 0, enables: 0, uses: 0 }),
     ownState: (state) => ({ ...state }),
   }), {
-    contributions: {
-      attack: () => [createNumericContribution({ finalAddition: 5 })],
-    },
+    contributions: [computedAttack(() => [createNumericContribution({ finalAddition: 5 })])],
     lifecycle: {
       start: (context) => {
         context.effects.update(context.address, receiver.ref, (state) => ({

@@ -1,3 +1,4 @@
+import { maxHp } from "../../dist/core/tactical/unit/capability/vitality/contributions.js";
 import { combatWorkEvents } from "../../dist/core/tactical/battle/execution/work.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -703,7 +704,7 @@ test("effect registration: domain facets coexist and expose the complete healing
       initialized: false,
     }),
     {
-      contributions: { maxHp: () => [createNumericContribution({ finalAddition: 50 })] },
+      contributions: [maxHp(() => [createNumericContribution({ finalAddition: 50 })])],
       bindings: [compileStatusBinding(["INVISIBLE"])],
       lifecycle: {
         start: (context) =>

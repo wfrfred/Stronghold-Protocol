@@ -1,3 +1,4 @@
+import { attack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -835,15 +836,7 @@ test("effects: unavailable parents end a child by default and explicit preservat
       const parentProgram = resources.registerEffect(barrierProgram("unavailable-parent"));
       const childProgram = resources.registerEffect(barrierProgram("child"), {
         bindings: [compileStatusBinding(["INVINCIBLE"])],
-        contributions: {
-          contributions: [
-            {
-              id: "attack",
-              target: offenseAttackContributions,
-              project: () => [createNumericContribution({ finalAddition: 50 })],
-            },
-          ],
-        },
+        contributions: [attack(() => [createNumericContribution({ finalAddition: 50 })])],
       });
       const receiver = initializeUnit({
         id: 2,
@@ -897,15 +890,7 @@ test("effects: unavailable parents end a child by default and explicit preservat
 test("effects: finish remains terminal when disable tries to reenable and finish the same instance", () => {
   const resources = new CombatResources();
   const program = resources.registerEffect(barrierProgram("reentrant"), {
-    contributions: {
-      contributions: [
-        {
-          id: "attack",
-          target: offenseAttackContributions,
-          project: () => [createNumericContribution({ finalAddition: 50 })],
-        },
-      ],
-    },
+    contributions: [attack(() => [createNumericContribution({ finalAddition: 50 })])],
     bindings: [compileStatusBinding(["INVINCIBLE"])],
     lifecycle: {
       disable: (context) => {
@@ -989,15 +974,7 @@ test("effects: disabling preserves restartable samples and finishing a disabled 
   let finalized = 0;
   const descriptor = resources.registerEffect(barrierProgram("disabled-then-finished"), {
     bindings: [compileStatusBinding(["INVINCIBLE"])],
-    contributions: {
-      contributions: [
-        {
-          id: "attack",
-          target: offenseAttackContributions,
-          project: () => [createNumericContribution({ finalAddition: 50 })],
-        },
-      ],
-    },
+    contributions: [attack(() => [createNumericContribution({ finalAddition: 50 })])],
     lifecycle: {
       disable: (context) => {
         disabled.push(context.instance.finished);

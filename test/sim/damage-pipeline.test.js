@@ -1,3 +1,5 @@
+import { computedAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
+import { computedResistance } from "../../dist/core/tactical/unit/capability/defense/contributions.js";
 import { combatWorkEvents } from "../../dist/core/tactical/battle/execution/work.js";
 import { installFixtureEffect } from "../helpers/effects.js";
 import { test } from "node:test";
@@ -132,14 +134,12 @@ test("damage pipeline: numeric contributions retain four distinct positions and 
 test("damage pipeline: low HP attack contributions read current work after damage and healing", () => {
   const resources = new CombatResources();
   const lowHp = resources.registerEffect(program("low-hp"), {
-    contributions: {
-      attack: ({ unit: owner, battlefield }) => {
+    contributions: [computedAttack(({ unit: owner, battlefield }) => {
         const current = battlefield.getUnit(owner.id);
         return current.vitality.hp < current.definition.vitality.maxHp / 2
           ? [createNumericContribution({ multiplier: 1 })]
           : [];
-      },
-    },
+      })],
   });
   const source = attach(resources, unit(1, { hp: 750, maxHp: 1000 }), lowHp, 11);
   const original = workFor(source, unit(2));
@@ -213,9 +213,7 @@ test("damage pipeline: fixed penetration precedes proportional penetration for d
 test("damage pipeline: resistance contributions are clamped before fixed and proportional penetration", () => {
   const resources = new CombatResources();
   const resistance = resources.registerEffect(program("resistance"), {
-    contributions: {
-      resistance: () => [createNumericContribution({ finalAddition: 70 })],
-    },
+    contributions: [computedResistance(() => [createNumericContribution({ finalAddition: 70 })])],
   });
   const target = attach(resources, unit(2, { resistance: 80 }), resistance, 21);
   const result = resolveDamage(
@@ -342,10 +340,7 @@ test("damage pipeline: strongest grouped instance wins without multiplying or de
 test("damage pipeline: grouped effects compete only with participants in the current parameter or reception stage", () => {
   const resources = new CombatResources();
   const attack = resources.registerEffect(program("grouped-attack"), {
-    contributions: {
-      group: { id: "shared", strength: 100 },
-      attack: () => [createNumericContribution({ multiplier: 1 })],
-    },
+    contributions: [computedAttack(() => [createNumericContribution({ multiplier: 1 })], { group: { id: "shared", strength: 100 } })],
   });
   const weak = resources.registerEffect(program("grouped-weak-reception"), {
     damage: {

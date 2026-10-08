@@ -1,3 +1,4 @@
+import { maxHp } from "../../dist/core/tactical/unit/capability/vitality/contributions.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -71,7 +72,7 @@ test("MaxHP: install, payload, participation, finish and cleanup retain HP perce
     for (const hp of [100, 50, 0]) {
         const resources = new CombatResources();
         const effect = resources.registerEffect(program("max-hp", 100), {
-            contributions: { maxHp: (instance) => [bonus(instance.state.amount)] },
+            contributions: [maxHp((instance) => [bonus(instance.state.amount)])],
         });
         const initial = effectFixtureWork(receiver(hp));
         const installed = install(initial, effect.ref, resources);
@@ -120,10 +121,10 @@ test("MaxHP: callbacks and synchronous nested successors see coordinated facts",
         ]);
     };
     const child = resources.registerEffect(program("child-hp", 50), {
-        contributions: { maxHp: (instance) => [bonus(instance.state.amount)] },
+        contributions: [maxHp((instance) => [bonus(instance.state.amount)])],
     });
     const parent = resources.registerEffect(program("parent-hp", 100), {
-        contributions: { maxHp: (instance) => [bonus(instance.state.amount)] },
+        contributions: [maxHp((instance) => [bonus(instance.state.amount)])],
         lifecycle: {
             start: (context) => {
                 inspect("start", context);
@@ -201,7 +202,7 @@ test("MaxHP: one binding batch coordinates once after every slot has changed", (
 test("MaxHP: ordinary healing consumes the current upper bound and prohibition does not reject coordination", () => {
     const resources = new CombatResources();
     const effect = resources.registerEffect(program("healing-hp", 100), {
-        contributions: { maxHp: (instance) => [bonus(instance.state.amount)] },
+        contributions: [maxHp((instance) => [bonus(instance.state.amount)])],
     });
     const installed = install(effectFixtureWork(receiver()), effect.ref, resources);
     const unit = getCombatUnit(installed, 1);
@@ -231,10 +232,7 @@ test("MaxHP: group winner replacement and fallback preserve the current HP ratio
     const resources = new CombatResources();
     const register = (id, amount, strength) =>
         resources.registerEffect(program(id, amount), {
-            contributions: {
-                group: { id: "hp-group", strength },
-                maxHp: (instance) => [bonus(instance.state.amount)],
-            },
+            contributions: [maxHp((instance) => [bonus(instance.state.amount)], { group: { id: "hp-group", strength } })],
         });
     const weak = register("weak", 50, 1);
     const strong = register("strong", 200, 2);
@@ -264,7 +262,7 @@ test("MaxHP: group winner replacement and fallback preserve the current HP ratio
 test("MaxHP: unchanged effective values, inactive cleanup and snapshots do not reapply coordination", () => {
     const resources = new CombatResources();
     const effect = resources.registerEffect(program("clamped-hp", -500), {
-        contributions: { maxHp: (instance) => [bonus(instance.state.amount)] },
+        contributions: [maxHp((instance) => [bonus(instance.state.amount)])],
     });
     const initial = effectFixtureWork(receiver(Math.PI));
     const installed = install(initial, effect.ref, resources, { expiresAtTick: 5 });
@@ -304,7 +302,7 @@ test("MaxHP: a tick failure does not publish contributions or the HP response", 
     const resources = new CombatResources();
     const fault = { enabled: true };
     const effect = resources.registerEffect(program("transaction-hp", 100), {
-        contributions: { maxHp: (instance) => [bonus(instance.state.amount)] },
+        contributions: [maxHp((instance) => [bonus(instance.state.amount)])],
         lifecycle: {
             enable: (context) => {
                 assert.equal(context.facts.getUnit(1).vitality.hp, 100);
@@ -410,6 +408,10 @@ test("MaxHP: TypeScript permits maintained projections and rejects live-provider
 import { compileNumericProjectionBinding, compileNumericProviderBinding } from ${module("unit/capability/effects/contribution-bindings")};
 import { vitalityMaxHpContributions, type VitalityState } from ${module("unit/capability/vitality/capability")};
 import { offenseAttackContributions } from ${module("unit/capability/offense/capability")};
+import { attack, computedAttack } from ${module("unit/capability/offense/contributions")};
+import { defense, computedDefense, resistance, computedResistance } from ${module("unit/capability/defense/contributions")};
+import { maxHp } from ${module("unit/capability/vitality/contributions")};
+import type { EffectInstance } from ${module("unit/capability/effects/instance")};
 import { createNumericContributionState, registerNumericContribution, updateNumericContribution } from ${module("modifier/contribution")};
 import { NumericContributionResources } from ${module("modifier/providers")};
 import { CombatResources } from ${module("battle/resources")};
@@ -436,9 +438,25 @@ updateNumericContribution(fixed, 'hp', () => ({ id: 'hp', sequence: 0, participa
 const invalid: VitalityState = { hp: 100, maxHp: createNumericContributionState([{ id: 'hp', sequence: 0, participating: true, providerRef: 'hp' }]) };
 const combat = new CombatResources();
 const effect = createEffectProgram({ id: 'hp', initialize: () => ({ bonus: 100 }), ownState: state => ({ ...state }) });
-combat.registerEffect(effect, { contributions: { maxHp: instance => [{ addition: 0, multiplier: 0, finalAddition: instance.state.bonus, finalScaler: 1 }] } });
-// @ts-expect-error MaxHP projection cannot read unsignalled live unit facts.
-combat.registerEffect(effect, { contributions: { maxHp: context => [{ addition: 0, multiplier: 0, finalAddition: context.unit.vitality.hp, finalScaler: 1 }] } });
+const bonus = (amount: number) => [{ addition: 0, multiplier: 0, finalAddition: amount, finalScaler: 1 }];
+combat.registerEffect(effect, { contributions: [
+    maxHp(instance => bonus(instance.state.bonus)),
+    attack(instance => bonus(instance.state.bonus)),
+    computedAttack(({ instance }) => bonus(instance.state.bonus), { id: 'computed-attack' }),
+    defense(instance => bonus(instance.state.bonus)),
+    computedDefense(({ instance }) => bonus(instance.state.bonus), { id: 'computed-defense' }),
+    resistance(instance => bonus(instance.state.bonus)),
+    computedResistance(({ instance }) => bonus(instance.state.bonus), { id: 'computed-resistance' }),
+] });
+// @ts-expect-error MaxHP samples cannot read unsignalled live unit facts.
+combat.registerEffect(effect, { contributions: [maxHp(instance => bonus(instance.unit.vitality.hp))] });
+// @ts-expect-error MaxHP samples cannot read unsignalled battlefield facts.
+combat.registerEffect(effect, { contributions: [maxHp(instance => bonus(instance.battlefield.getUnit(1).vitality.hp))] });
+// @ts-expect-error Computed callbacks preserve the matching program state.
+combat.registerEffect(effect, { contributions: [computedAttack(({ instance }) => bonus(instance.state.missing))] });
+const other = attack((instance: EffectInstance<{ other: number }>) => bonus(instance.state.other));
+// @ts-expect-error An unrelated program state cannot supply a declaration.
+combat.registerEffect(effect, { contributions: [other] });
 `,
     );
     try {
