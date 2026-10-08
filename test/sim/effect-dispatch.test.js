@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { effectFixtureWork, installFixtureEffect } from "../helpers/effects.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
-import { createNumericContribution } from "../../dist/core/tactical/modifier/numeric.js";
+import * as modifier from "../../dist/core/tactical/modifier/value.js";
 import { resolveMaxHp } from "../../dist/core/tactical/unit/capability/vitality/query.js";
 import { combatWorkView, getCombatUnit } from "../../dist/core/tactical/battle/execution/work.js";
 import { compileStatusBinding } from "../../dist/core/tactical/unit/capability/status/binding.js";
@@ -704,7 +704,7 @@ test("effect registration: domain facets coexist and expose the complete healing
       initialized: false,
     }),
     {
-      contributions: [maxHp(() => [createNumericContribution({ finalAddition: 50 })])],
+      contributions: [maxHp(() => [modifier.create({ finalAddition: 50 })])],
       bindings: [compileStatusBinding(["INVISIBLE"])],
       lifecycle: {
         start: (context) =>

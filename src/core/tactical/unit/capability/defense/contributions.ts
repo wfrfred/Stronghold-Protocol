@@ -1,55 +1,49 @@
-import type {
-    ComputedEffectContribution,
-    EffectContributionOptions,
-    SampledEffectContribution,
-} from "../effects/contributions.js";
-import { defenseContributions, resistanceContributions } from "./capability.js";
+import type * as contributions from "../effects/contributions.js";
+import { updateDefenseContributions, updateResistanceContributions } from "./capability.js";
 
 export function defense<S extends object>(
-    sample: SampledEffectContribution<S>["sample"],
-    options: EffectContributionOptions = {},
-): SampledEffectContribution<S> {
+    sample: contributions.Stored<S>["sample"],
+    options: contributions.Options = {},
+): contributions.Stored<S> {
     return {
         id: options.id ?? "defense",
-        target: defenseContributions,
+        target: updateDefenseContributions,
         sample,
         ...(options.group === undefined ? {} : { group: options.group }),
     };
 }
 
 export function computedDefense<S extends object>(
-    compute: ComputedEffectContribution<S>["compute"],
-    options: EffectContributionOptions = {},
-): ComputedEffectContribution<S> {
+    compute: contributions.Computed<S>["compute"],
+    options: contributions.Options = {},
+): contributions.Computed<S> {
     return {
         id: options.id ?? "defense",
-        target: defenseContributions,
-        providers: (resources) => resources.defense,
+        target: updateDefenseContributions,
         compute,
         ...(options.group === undefined ? {} : { group: options.group }),
     };
 }
 
 export function resistance<S extends object>(
-    sample: SampledEffectContribution<S>["sample"],
-    options: EffectContributionOptions = {},
-): SampledEffectContribution<S> {
+    sample: contributions.Stored<S>["sample"],
+    options: contributions.Options = {},
+): contributions.Stored<S> {
     return {
         id: options.id ?? "resistance",
-        target: resistanceContributions,
+        target: updateResistanceContributions,
         sample,
         ...(options.group === undefined ? {} : { group: options.group }),
     };
 }
 
 export function computedResistance<S extends object>(
-    compute: ComputedEffectContribution<S>["compute"],
-    options: EffectContributionOptions = {},
-): ComputedEffectContribution<S> {
+    compute: contributions.Computed<S>["compute"],
+    options: contributions.Options = {},
+): contributions.Computed<S> {
     return {
         id: options.id ?? "resistance",
-        target: resistanceContributions,
-        providers: (resources) => resources.defense,
+        target: updateResistanceContributions,
         compute,
         ...(options.group === undefined ? {} : { group: options.group }),
     };

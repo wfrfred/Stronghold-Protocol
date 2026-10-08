@@ -13,9 +13,9 @@ import {
     createEffectSourceProgramRef,
     effectSourceInstallation,
 } from "../../dist/core/tactical/battlefield/effect-source/program.js";
-import { createNumericContribution } from "../../dist/core/tactical/modifier/numeric.js";
+import * as modifier from "../../dist/core/tactical/modifier/value.js";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
-import { offenseAttackContributions } from "../../dist/core/tactical/unit/capability/offense/capability.js";
+import { updateAttackContributions } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
 import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
@@ -98,7 +98,7 @@ function receiverProgram(resources, id, addition = 20, lifecycle) {
     });
 
     return resources.registerEffect(program, {
-        contributions: [attack(() => [createNumericContribution({ finalAddition: addition })])],
+        contributions: [attack(() => [modifier.create({ finalAddition: addition })])],
         ...(lifecycle === undefined ? {} : { lifecycle }),
     });
 }
@@ -111,7 +111,7 @@ function currentAttack(snapshot, unitId, resources) {
         getUnit: id => byId.get(id),
         blockerOf: () => undefined,
         blockedBy: () => [],
-    }, resources.offense);
+    }, resources.computations);
 }
 
 function sourceMechanism(resources, id, receiver, options = {}) {

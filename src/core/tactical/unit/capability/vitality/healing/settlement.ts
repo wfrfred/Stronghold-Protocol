@@ -1,6 +1,6 @@
 import { hasStatusFlag } from "../../status/capability.js";
 import { EffectDispatchScope, participatingEffect } from "../../effects/dispatch.js";
-import { effectFacts, getEffect } from "../../effects/query.js";
+import { effectView, getEffect } from "../../effects/query.js";
 import { finalizeFinishedEffects } from "../../effects/lifecycle.js";
 import type { EffectAddress } from "../../effects/instance.js";
 import { hasVitality, resolveVitalityMaxHp, type VitalUnit } from "../capability.js";
@@ -63,7 +63,7 @@ function dispatchHealing<V>(
         work = current;
     };
 
-    scope.withCandidates(effectFacts(getWork), ownerUnitId, (addresses) => {
+    scope.withCandidates(effectView(getWork), ownerUnitId, (addresses) => {
         const candidates: HealingCandidate[] = [];
 
         for (const address of addresses) {
@@ -83,7 +83,7 @@ function dispatchHealing<V>(
         candidates.sort(orderCandidates);
 
         for (const candidate of candidates) {
-            const instance = participatingEffect(effectFacts(getWork), candidate.address);
+            const instance = participatingEffect(effectView(getWork), candidate.address);
 
             if (instance === undefined) {
                 continue;

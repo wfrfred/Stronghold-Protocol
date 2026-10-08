@@ -1,65 +1,56 @@
 import { assertFiniteNumber, assertNonnegativeSafeInteger } from "../../common/assert.js";
-import { createNumericContribution, type NumericContribution } from "./numeric.js";
+import * as modifier from "./value.js";
 
-export interface NumericContributionOwner {
+export interface Owner {
     readonly unitId: number;
     readonly instanceId: number;
 }
 
-export interface NumericContributionGroup {
+export interface Group {
     readonly id: string;
     readonly strength: number;
 }
 
-interface NumericContributionBinding {
+interface Binding {
     readonly id: string;
     readonly sequence: number;
     readonly participating: boolean;
-    readonly owner?: NumericContributionOwner;
-    readonly group?: NumericContributionGroup;
+    readonly owner?: Owner;
+    readonly group?: Group;
 }
 
-export interface NumericValueContribution extends NumericContributionBinding {
-    readonly values: readonly NumericContribution[];
+export interface Stored extends Binding {
+    readonly values: readonly modifier.Value[];
 }
 
-export interface NumericProviderContribution extends NumericContributionBinding {
-    readonly providerRef: string;
+export interface Computed extends Binding {
+    readonly computeRef: string;
 }
 
-export type NumericContributionEntry = NumericValueContribution | NumericProviderContribution;
+export type Entry = Stored | Computed;
 
-interface NumericContributionEntries {
-    readonly values: NumericValueContribution;
-    readonly all: NumericContributionEntry;
+interface Entries {
+    readonly stored: Stored;
+    readonly all: Entry;
 }
 
-export type NumericContributionKind = keyof NumericContributionEntries;
+export type Kind = keyof Entries;
 
-export interface NumericContributionState<K extends NumericContributionKind = "all"> {
-    readonly entries: readonly NumericContributionEntries[K][];
+export interface State<K extends Kind = "all"> {
+    readonly entries: readonly Entries[K][];
 }
 
-export type NumericContributionEvaluator = (
-    entry: NumericProviderContribution,
-) => readonly NumericContribution[];
+export type Evaluate = (entry: Computed) => readonly modifier.Value[];
 
-export type NumericContributionTransition<K extends NumericContributionKind = "all"> = (
-    state: NumericContributionState<K>,
-) => NumericContributionState<K>;
+export type Transition<K extends Kind = "all"> = (state: State<K>) => State<K>;
 
-export type NumericProjectionTransition = <K extends NumericContributionKind>(
-    state: NumericContributionState<K>,
-) => NumericContributionState<K>;
+export type ProjectionTransition = <K extends Kind>(state: State<K>) => State<K>;
 
 const emptyState = Object.freeze({ entries: Object.freeze([]) });
-const ownedEntries = new WeakSet<NumericContributionEntry>();
-const ownedArrays = new WeakSet<readonly NumericContributionEntry[]>([emptyState.entries]);
+const ownedEntries = new WeakSet<Entry>();
+const ownedArrays = new WeakSet<readonly Entry[]>([emptyState.entries]);
 
-function ownEntry<K extends NumericContributionKind>(
-    entry: NumericContributionEntries[K],
-    previous?: NumericContributionEntries[K],
-): NumericContributionEntries[K] {
+function ownEntry<K extends Kind>(entry: Entries[K], previous?: Entries[K]): Entries[K] {
     if (ownedEntries.has(entry)) {
         return entry;
     }
@@ -94,13 +85,13 @@ function ownEntry<K extends NumericContributionKind>(
         ...(owner === undefined ? {} : { owner }),
         ...(group === undefined ? {} : { group }),
     };
-    let owned: NumericContributionEntry;
+    let owned: Entry;
 
     if ("values" in entry) {
         if (previous !== undefined && "values" in previous && entry.values === previous.values) {
             owned = Object.freeze({ ...binding, values: previous.values });
         } else {
-            const values: NumericContribution[] = [];
+            const values: modifier.Value[] = [];
 
             for (let index = 0; index < entry.values.length; index++) {
                 if (!Object.hasOwn(entry.values, index)) {
@@ -110,7 +101,7 @@ function ownEntry<K extends NumericContributionKind>(
                 const value = entry.values[index]!;
 
                 values.push(
-                    createNumericContribution({
+                    modifier.create({
                         addition: value.addition,
                         multiplier: value.multiplier,
                         finalAddition: value.finalAddition,
@@ -122,21 +113,19 @@ function ownEntry<K extends NumericContributionKind>(
             owned = Object.freeze({ ...binding, values: Object.freeze(values) });
         }
     } else {
-        if (entry.providerRef.length === 0) {
+        if (entry.computeRef.length === 0) {
             throw new TypeError("numeric contribution provider identity must be nonempty");
         }
 
-        owned = Object.freeze({ ...binding, providerRef: entry.providerRef });
+        owned = Object.freeze({ ...binding, computeRef: entry.computeRef });
     }
 
     ownedEntries.add(owned);
 
-    return owned as NumericContributionEntries[K];
+    return owned as Entries[K];
 }
 
-function publishEntries<K extends NumericContributionKind>(
-    entries: NumericContributionEntries[K][],
-): NumericContributionState<K> {
+function publishEntries<K extends Kind>(entries: Entries[K][]): State<K> {
     if (entries.length === 0) {
         return emptyState;
     }
@@ -147,17 +136,11 @@ function publishEntries<K extends NumericContributionKind>(
     return Object.freeze({ entries });
 }
 
-function getOwnedEntries<K extends NumericContributionKind>(
-    state: NumericContributionState<K>,
-): readonly NumericContributionEntries[K][] {
-    return ownedArrays.has(state.entries)
-        ? state.entries
-        : createNumericContributionState<K>(state.entries).entries;
+function getOwnedEntries<K extends Kind>(state: State<K>): readonly Entries[K][] {
+    return ownedArrays.has(state.entries) ? state.entries : create<K>(state.entries).entries;
 }
 
-export function createNumericContributionState<K extends NumericContributionKind = "all">(
-    entries: readonly NumericContributionEntries[K][] = [],
-): NumericContributionState<K> {
+export function create<K extends Kind = "all">(entries: readonly Entries[K][] = []): State<K> {
     if (entries.length === 0) {
         return emptyState;
     }
@@ -166,7 +149,7 @@ export function createNumericContributionState<K extends NumericContributionKind
     }
 
     const ids = new Set<string>();
-    const owned: NumericContributionEntries[K][] = [];
+    const owned: Entries[K][] = [];
 
     for (let index = 0; index < entries.length; index++) {
         if (!Object.hasOwn(entries, index)) {
@@ -186,16 +169,11 @@ export function createNumericContributionState<K extends NumericContributionKind
     return publishEntries<K>(owned);
 }
 
-export function copyNumericContributionState<K extends NumericContributionKind>(
-    state: NumericContributionState<K>,
-): NumericContributionState<K> {
-    return createNumericContributionState<K>(state.entries);
+export function copy<K extends Kind>(state: State<K>): State<K> {
+    return create<K>(state.entries);
 }
 
-export function registerNumericContribution<K extends NumericContributionKind>(
-    state: NumericContributionState<K>,
-    entry: NumericContributionEntries[K],
-): NumericContributionState<K> {
+export function register<K extends Kind>(state: State<K>, entry: Entries[K]): State<K> {
     const entries = getOwnedEntries(state);
     const owned = ownEntry<K>(entry);
 
@@ -206,11 +184,11 @@ export function registerNumericContribution<K extends NumericContributionKind>(
     return publishEntries<K>([...entries, owned]);
 }
 
-export function updateNumericContribution<K extends NumericContributionKind>(
-    state: NumericContributionState<K>,
+export function update<K extends Kind>(
+    state: State<K>,
     id: string,
-    update: (entry: NumericContributionEntries[K]) => NumericContributionEntries[K],
-): NumericContributionState<K> {
+    update: (entry: Entries[K]) => Entries[K],
+): State<K> {
     const entries = getOwnedEntries(state);
     const index = entries.findIndex((entry) => entry.id === id);
 
@@ -235,29 +213,23 @@ export function updateNumericContribution<K extends NumericContributionKind>(
     return publishEntries<K>(next);
 }
 
-export function setNumericContributionParticipation<K extends NumericContributionKind>(
-    state: NumericContributionState<K>,
+export function setParticipation<K extends Kind>(
+    state: State<K>,
     id: string,
     participating: boolean,
-): NumericContributionState<K> {
-    return updateNumericContribution<K>(state, id, (entry) =>
+): State<K> {
+    return update<K>(state, id, (entry) =>
         entry.participating === participating ? entry : { ...entry, participating },
     );
 }
 
-export function removeNumericContribution<K extends NumericContributionKind>(
-    state: NumericContributionState<K>,
-    id: string,
-): NumericContributionState<K> {
+export function remove<K extends Kind>(state: State<K>, id: string): State<K> {
     const entries = getOwnedEntries(state).filter((entry) => entry.id !== id);
 
     return entries.length === state.entries.length ? state : publishEntries<K>(entries);
 }
 
-export function removeNumericContributionsOwnedBy<K extends NumericContributionKind>(
-    state: NumericContributionState<K>,
-    owner: NumericContributionOwner,
-): NumericContributionState<K> {
+export function removeOwnedBy<K extends Kind>(state: State<K>, owner: Owner): State<K> {
     const entries = getOwnedEntries(state).filter(
         (entry) =>
             entry.owner?.unitId !== owner.unitId || entry.owner.instanceId !== owner.instanceId,
@@ -266,7 +238,7 @@ export function removeNumericContributionsOwnedBy<K extends NumericContributionK
     return entries.length === state.entries.length ? state : publishEntries<K>(entries);
 }
 
-function compareEntries(left: NumericContributionEntry, right: NumericContributionEntry): number {
+function compareEntries(left: Entry, right: Entry): number {
     const order =
         left.sequence - right.sequence ||
         (left.owner?.instanceId ?? 0) - (right.owner?.instanceId ?? 0) ||
@@ -283,12 +255,12 @@ function compareEntries(left: NumericContributionEntry, right: NumericContributi
     return left.id < right.id ? -1 : 1;
 }
 
-export function resolveNumericContributions<K extends NumericContributionKind>(
-    state: NumericContributionState<K>,
-    evaluate?: NumericContributionEvaluator,
-): readonly NumericContribution[] {
+export function resolve<K extends Kind>(
+    state: State<K>,
+    evaluate?: Evaluate,
+): readonly modifier.Value[] {
     const candidates = state.entries.filter((entry) => entry.participating).sort(compareEntries);
-    const winners = new Map<string, NumericContributionEntry>();
+    const winners = new Map<string, Entry>();
 
     for (const entry of candidates) {
         if (entry.group === undefined) {
@@ -302,7 +274,7 @@ export function resolveNumericContributions<K extends NumericContributionKind>(
         }
     }
 
-    const values: NumericContribution[] = [];
+    const values: modifier.Value[] = [];
 
     for (const entry of candidates) {
         if (entry.group !== undefined && winners.get(entry.group.id) !== entry) {
@@ -312,9 +284,7 @@ export function resolveNumericContributions<K extends NumericContributionKind>(
             values.push(...entry.values);
         } else {
             if (evaluate === undefined) {
-                throw new TypeError(
-                    `numeric contribution provider ${entry.providerRef} requires resources`,
-                );
+                throw new TypeError(`computed contribution ${entry.computeRef} requires resources`);
             }
 
             values.push(...evaluate(entry));

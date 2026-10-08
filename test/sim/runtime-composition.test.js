@@ -13,7 +13,7 @@ import { createEffectProgram } from "../../dist/core/tactical/unit/capability/ef
 import { installNewEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { compileStatusBinding } from "../../dist/core/tactical/unit/capability/status/binding.js";
 import { hasStatusFlag } from "../../dist/core/tactical/unit/capability/status/capability.js";
-import { createNumericContribution } from "../../dist/core/tactical/modifier/numeric.js";
+import * as modifier from "../../dist/core/tactical/modifier/value.js";
 import { initializeVitalityState } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
@@ -119,7 +119,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
       initialize: () => ({ starts: 0, enables: 0 }),
       ownState: (state) => ({ ...state }),
     }), {
-      contributions: [computedAttack(() => [createNumericContribution({ finalAddition: addition })])],
+      contributions: [computedAttack(() => [modifier.create({ finalAddition: addition })])],
       bindings: flags.length === 0 ? [] : [compileStatusBinding(flags)],
       lifecycle: {
         start: (context) => {
@@ -160,7 +160,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
     initialize: () => ({ starts: 0, enables: 0, uses: 0 }),
     ownState: (state) => ({ ...state }),
   }), {
-    contributions: [computedAttack(() => [createNumericContribution({ finalAddition: 5 })])],
+    contributions: [computedAttack(() => [modifier.create({ finalAddition: 5 })])],
     lifecycle: {
       start: (context) => {
         context.effects.update(context.address, receiver.ref, (state) => ({
@@ -290,7 +290,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
     const id = context.projectiles.launch(shell.ref, {
       source: source.id, traceTarget: targetUnitId,
       position: source.position, destination: target.position,
-      cachedAtk: resolveAttackPower(source.id, combatWorkView(context.work), services.offense),
+      cachedAtk: resolveAttackPower(source.id, combatWorkView(context.work), services.computations),
       speedPerTick: 1, contactRange, stopDelayTicks: 0, expiresAtTick: null,
     });
     launches.push({ id, executionId: context.executionId, targetUnitId });
@@ -353,7 +353,7 @@ test("runtime composition: late exceptions and invalid settlement discard every 
     assert.equal(before.execution.nextUnitId, 3);
     assert.equal(before.spawning.spawnedCount, 0);
     assert.equal(effect(before, 0, failed.scoped).state.starts, 1);
-    assert.equal(resolveAttackPower(0, view(before), failed.resources.offense), 17);
+    assert.equal(resolveAttackPower(0, view(before), failed.resources.computations), 17);
 
     assert.throws(() => failed.runtime.step(), failure === "late-source" ? /late composition failure/ : RangeError);
     assert.deepEqual(failed.runtime.snapshot(), before);
@@ -382,7 +382,7 @@ test("runtime composition: late exceptions and invalid settlement discard every 
     assert.equal(after.projectiles.nextProjectileId, 3);
     assert.deepEqual(after.projectiles.instances.map((projectile) => projectile.id), [1, 2]);
     assert.deepEqual(after.projectiles.instances.map((projectile) => projectile.cachedAtk), [18, 17]);
-    assert.equal(resolveAttackPower(0, view(after), failed.resources.offense), 18);
+    assert.equal(resolveAttackPower(0, view(after), failed.resources.computations), 18);
     assert.deepEqual(after.mechanisms[0].effectSource.state, { remaining: 2, consumed: 1 });
     assert.deepEqual(after.mechanisms[0].effectSource.receivers.map((binding) => binding.installationAttempts), [1, 1, 1, 1]);
     assert.deepEqual(effect(after, 3, failed.receiver).state, { starts: 1, enables: 1, uses: 0 });
@@ -407,7 +407,7 @@ test("runtime composition: late exceptions and invalid settlement discard every 
         const cleaned = failed.runtime.snapshot();
         assert.equal(cleaned.mechanisms[0].effectSource.finished, true);
         assert.equal(hasStatusFlag(cleaned.units.find((unit) => unit.id === 1), "INVISIBLE"), false);
-        assert.equal(resolveAttackPower(0, view(cleaned), failed.resources.offense), 10);
+        assert.equal(resolveAttackPower(0, view(cleaned), failed.resources.computations), 10);
         assert.equal(effect(cleaned, 0, failed.scoped).finished, true);
         assert.equal(effect(cleaned, 0, failed.scoped).participating, false);
         assert.equal(effect(cleaned, 0, failed.pulse).finished, true);
@@ -462,12 +462,12 @@ test("runtime composition: admission rejection and cancelled damage publish nest
   assert.deepEqual(effect(after, 1, run.marker).state, { starts: 1, enables: 1 });
   assert.equal(effect(after, 1, run.marker).parent, null);
   assert.equal(hasStatusFlag(after.units.find((unit) => unit.id === 1), "INVISIBLE"), true);
-  assert.equal(resolveAttackPower(1, view(after), run.resources.offense), 18);
+  assert.equal(resolveAttackPower(1, view(after), run.resources.computations), 18);
   assert.equal(after.units.find((unit) => unit.id === 1).effects.nextInstanceId, 3);
   while (run.runtime.result === null) run.runtime.step();
   const final = run.runtime.snapshot();
   assert.equal(final.result.reason, "SCHEDULE_COMPLETED");
   assert.equal(final.units.find((unit) => unit.id === 1).vitality.hp, 44);
   assert.equal(hasStatusFlag(final.units.find((unit) => unit.id === 1), "INVISIBLE"), true);
-  assert.equal(resolveAttackPower(1, view(final), run.resources.offense), 13);
+  assert.equal(resolveAttackPower(1, view(final), run.resources.computations), 13);
 });

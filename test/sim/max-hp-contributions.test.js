@@ -24,10 +24,10 @@ import {
     expireEffects,
 } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/transition.js";
-import { createNumericContribution } from "../../dist/core/tactical/modifier/numeric.js";
-import { compileNumericProjectionBinding } from "../../dist/core/tactical/unit/capability/effects/contribution-bindings.js";
+import * as modifier from "../../dist/core/tactical/modifier/value.js";
+import { compileStoredBinding } from "../../dist/core/tactical/unit/capability/effects/binding.js";
 import {
-    vitalityMaxHpContributions,
+    updateMaxHpContributions,
     initializeVitalityState,
 } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import { resolveMaxHp } from "../../dist/core/tactical/unit/capability/vitality/query.js";
@@ -36,7 +36,7 @@ import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js"
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
 import { effectFixtureWork } from "../helpers/effects.js";
 
-const bonus = (amount) => createNumericContribution({ finalAddition: amount });
+const bonus = (amount) => modifier.create({ finalAddition: amount });
 const address = (instanceId = 0) => ({ unitId: 1, instanceId });
 const receiver = (hp = 50) => {
     const unit = initializeUnit({
@@ -168,17 +168,17 @@ test("MaxHP: callbacks and synchronous nested successors see coordinated facts",
 test("MaxHP: one binding batch coordinates once after every slot has changed", () => {
     const resources = new CombatResources();
     const observed = [];
-    const first = compileNumericProjectionBinding({
+    const first = compileStoredBinding({
         id: "first",
-        target: vitalityMaxHpContributions,
+        target: updateMaxHpContributions,
         group: undefined,
-        project: () => [bonus(100)],
+        sample: () => [bonus(100)],
     });
-    const second = compileNumericProjectionBinding({
+    const second = compileStoredBinding({
         id: "second",
-        target: vitalityMaxHpContributions,
+        target: updateMaxHpContributions,
         group: undefined,
-        project: () => [bonus(100)],
+        sample: () => [bonus(100)],
     });
     const effect = resources.registerEffect(program("two-bindings", 0), {
         bindings: [
@@ -405,37 +405,37 @@ test("MaxHP: TypeScript permits maintained projections and rejects live-provider
     writeFileSync(
         path,
         `
-import { compileNumericProjectionBinding, compileNumericProviderBinding } from ${module("unit/capability/effects/contribution-bindings")};
-import { vitalityMaxHpContributions, type VitalityState } from ${module("unit/capability/vitality/capability")};
-import { offenseAttackContributions } from ${module("unit/capability/offense/capability")};
+import { compileStoredBinding, compileComputedBinding } from ${module("unit/capability/effects/binding")};
+import { updateMaxHpContributions, type VitalityState } from ${module("unit/capability/vitality/capability")};
+import { updateAttackContributions } from ${module("unit/capability/offense/capability")};
 import { attack, computedAttack } from ${module("unit/capability/offense/contributions")};
 import { defense, computedDefense, resistance, computedResistance } from ${module("unit/capability/defense/contributions")};
 import { maxHp } from ${module("unit/capability/vitality/contributions")};
 import type { EffectInstance } from ${module("unit/capability/effects/instance")};
-import { createNumericContributionState, registerNumericContribution, updateNumericContribution } from ${module("modifier/contribution")};
-import { NumericContributionResources } from ${module("modifier/providers")};
+import * as contribution from ${module("modifier/contribution")};
+import * as computation from ${module("modifier/computation")};
 import { CombatResources } from ${module("battle/resources")};
 import { createEffectProgram } from ${module("unit/capability/effects/program")};
-import type { NumericContributionTarget, NumericProjectionTarget, NumericProviderFacts } from ${module("unit/capability/contribution")};
-const providers = new NumericContributionResources<NumericProviderFacts>();
+import type { ContributionTarget, StoredContributionTarget, ContributionFacts } from ${module("unit/capability/contribution")};
+const computations = new computation.Resources<ContributionFacts>();
 const group = undefined;
-compileNumericProjectionBinding({ id: 'hp', target: vitalityMaxHpContributions, project: () => [], group });
-compileNumericProjectionBinding({ id: 'attack', target: offenseAttackContributions, project: () => [], group });
-compileNumericProviderBinding({ id: 'attack', target: offenseAttackContributions, providers, providerRef: 'attack', evaluate: () => [], group });
+compileStoredBinding({ id: 'hp', target: updateMaxHpContributions, sample: () => [], group });
+compileStoredBinding({ id: 'attack', target: updateAttackContributions, sample: () => [], group });
+compileComputedBinding({ id: 'attack', target: updateAttackContributions, computations, computeRef: 'attack', compute: () => [], group });
 // @ts-expect-error MaxHP cannot install live provider bindings.
-compileNumericProviderBinding({ id: 'hp', target: vitalityMaxHpContributions, providers, providerRef: 'hp', evaluate: () => [], group });
+compileComputedBinding({ id: 'hp', target: updateMaxHpContributions, computations, computeRef: 'hp', compute: () => [], group });
 // @ts-expect-error A broad target alias cannot hide the MaxHP restriction.
-const broad: NumericContributionTarget = vitalityMaxHpContributions;
-const projection: NumericProjectionTarget = vitalityMaxHpContributions;
+const broad: ContributionTarget = updateMaxHpContributions;
+const projection: StoredContributionTarget = updateMaxHpContributions;
 // @ts-expect-error A projection target alias still rejects a provider transition.
-compileNumericProviderBinding({ id: 'hp', target: projection, providers, providerRef: 'hp', evaluate: () => [], group });
-const fixed = createNumericContributionState<'values'>();
+compileComputedBinding({ id: 'hp', target: projection, computations, computeRef: 'hp', compute: () => [], group });
+const fixed = contribution.create<'stored'>();
 // @ts-expect-error Direct installation cannot insert a provider into value-only state.
-registerNumericContribution(fixed, { id: 'hp', sequence: 0, participating: true, providerRef: 'hp' });
+contribution.register(fixed, { id: 'hp', sequence: 0, participating: true, computeRef: 'hp' });
 // @ts-expect-error An update cannot replace a maintained value with a provider.
-updateNumericContribution(fixed, 'hp', () => ({ id: 'hp', sequence: 0, participating: true, providerRef: 'hp' }));
+contribution.update(fixed, 'hp', () => ({ id: 'hp', sequence: 0, participating: true, computeRef: 'hp' }));
 // @ts-expect-error Vitality cannot hold a provider-bearing state.
-const invalid: VitalityState = { hp: 100, maxHp: createNumericContributionState([{ id: 'hp', sequence: 0, participating: true, providerRef: 'hp' }]) };
+const invalid: VitalityState = { hp: 100, maxHp: contribution.create([{ id: 'hp', sequence: 0, participating: true, computeRef: 'hp' }]) };
 const combat = new CombatResources();
 const effect = createEffectProgram({ id: 'hp', initialize: () => ({ bonus: 100 }), ownState: state => ({ ...state }) });
 const bonus = (amount: number) => [{ addition: 0, multiplier: 0, finalAddition: amount, finalScaler: 1 }];

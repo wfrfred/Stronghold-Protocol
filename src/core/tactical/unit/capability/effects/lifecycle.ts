@@ -21,7 +21,7 @@ import {
     replaceEffectInstance,
 } from "./internal/state.js";
 import type { CompiledEffectLifecycle } from "./lifecycle-resources.js";
-import { effectFacts, getEffect } from "./query.js";
+import { effectView, getEffect } from "./query.js";
 import { EffectDispatchScope } from "./dispatch.js";
 import type { EffectProgramRef } from "./program.js";
 import { transitionEffectBindings, updateEffectState } from "./transition.js";
@@ -131,7 +131,7 @@ function runLifecycleAction(
                 return getEffect(readWork(), address) ?? lastKnown();
             },
             tick,
-            facts: effectFacts(readWork),
+            facts: effectView(readWork),
             effects: {
                 install: (unitId, ref, input) => {
                     const installation = installNewInScope(
@@ -538,7 +538,7 @@ function installInScope<S extends object>(
         (lifecycle.accepts?.({
             address,
             instance: current,
-            facts: effectFacts(() => work),
+            facts: effectView(() => work),
         }) ??
             true);
 

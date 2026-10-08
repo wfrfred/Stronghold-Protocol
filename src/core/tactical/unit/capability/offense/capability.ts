@@ -1,13 +1,6 @@
 import { assertNonnegativeNumber } from "../../../../common/assert.js";
-import {
-    copyNumericContributionState,
-    createNumericContributionState,
-    resolveNumericContributions,
-    type NumericContributionEvaluator,
-    type NumericContributionState,
-    type NumericContributionTransition,
-} from "../../../modifier/contribution.js";
-import { resolveNumericValue } from "../../../modifier/numeric.js";
+import * as contribution from "../../../modifier/contribution.js";
+import * as modifier from "../../../modifier/value.js";
 import { stabilizeUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
 
 export interface OffenseDefinition {
@@ -15,7 +8,7 @@ export interface OffenseDefinition {
 }
 
 export interface OffenseState {
-    readonly attack: NumericContributionState;
+    readonly attack: contribution.State;
 }
 
 export interface Offense {
@@ -45,25 +38,25 @@ export function createOffenseDefinition(definition: OffenseDefinition): OffenseD
 }
 
 export function initializeOffenseState(): OffenseState {
-    return { attack: createNumericContributionState() };
+    return { attack: contribution.create() };
 }
 
 export function copyOffenseState(state: OffenseState): OffenseState {
-    return { attack: copyNumericContributionState(state.attack) };
+    return { attack: contribution.copy(state.attack) };
 }
 
-export function updateOffenseContributions(
+function updateContributions(
     state: OffenseState,
-    transition: NumericContributionTransition,
+    transition: contribution.Transition,
 ): OffenseState {
     const attack = transition(state.attack);
 
     return attack === state.attack ? state : { ...state, attack };
 }
 
-export function offenseAttackContributions<U extends Unit>(
+export function updateAttackContributions<U extends Unit>(
     input: U | StableUnit<U>,
-    transition: NumericContributionTransition,
+    transition: contribution.Transition,
 ): StableUnit<U> {
     const unit = stabilizeUnit<U>(input);
 
@@ -71,7 +64,7 @@ export function offenseAttackContributions<U extends Unit>(
         throw new TypeError("attack contributions require Offense capability");
     }
 
-    const offense = updateOffenseContributions(unit.offense, transition);
+    const offense = updateContributions(unit.offense, transition);
 
     return offense === unit.offense ? unit : { ...unit, offense };
 }
@@ -79,10 +72,10 @@ export function offenseAttackContributions<U extends Unit>(
 export function resolveOffenseAttack(
     definition: OffenseDefinition,
     state: OffenseState,
-    evaluate?: NumericContributionEvaluator,
+    evaluate?: contribution.Evaluate,
 ): number {
     return Math.max(
         0,
-        resolveNumericValue(definition.attack, resolveNumericContributions(state.attack, evaluate)),
+        modifier.apply(definition.attack, contribution.resolve(state.attack, evaluate)),
     );
 }

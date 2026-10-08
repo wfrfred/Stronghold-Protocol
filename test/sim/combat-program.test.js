@@ -25,7 +25,7 @@ import {
 } from "../../dist/core/tactical/battle/execution/work.js";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
 import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
-import { createNumericContribution } from "../../dist/core/tactical/modifier/numeric.js";
+import * as modifier from "../../dist/core/tactical/modifier/value.js";
 import { compileStatusBinding } from "../../dist/core/tactical/unit/capability/status/binding.js";
 import { hasStatusFlag } from "../../dist/core/tactical/unit/capability/status/capability.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
@@ -269,7 +269,7 @@ test("combat program: a compiled source-attack effect reads current contribution
     ownState: (value) => ({ bonus: value.bonus }),
   });
   resources.registerEffect(program, {
-    contributions: [computedAttack(({ instance }) => [createNumericContribution({ addition: instance.state.bonus })])],
+    contributions: [computedAttack(({ instance }) => [modifier.create({ addition: instance.state.bonus })])],
   });
   const effect = compileOperation(
     { type: "DAMAGE", power: 1, powerSource: "SOURCE_ATTACK", damageType: "PHYSICAL" },

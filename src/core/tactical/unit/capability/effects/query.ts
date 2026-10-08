@@ -1,7 +1,7 @@
 import { getCombatUnit, type CombatWork } from "../../../battle/execution/work.js";
 import { hasEffects } from "./capability.js";
 import type { EffectAddress, EffectInstanceValue } from "./instance.js";
-import type { EffectFacts } from "./contract.js";
+import type { EffectView } from "./contract.js";
 
 export function isParticipatingEffect(instance: EffectInstanceValue): boolean {
     return instance.started && instance.participating && !instance.finished;
@@ -18,7 +18,7 @@ export function getEffect(
         : undefined;
 }
 
-export function effectFacts(work: () => CombatWork): EffectFacts {
+export function effectView(work: () => CombatWork): EffectView {
     return {
         getUnit: (id) => getCombatUnit(work(), id),
         getEffect: (address) => getEffect(work(), address),

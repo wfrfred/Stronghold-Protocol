@@ -1,13 +1,13 @@
 import type { UnitId } from "../../unit.js";
 import type {
-    EffectFacts,
+    EffectView,
     EffectLifecycleOperations,
     EffectTransitionResources,
 } from "../effects/contract.js";
 import type { EffectAddress, EffectInstance, EffectInstanceValue } from "../effects/instance.js";
 import { createEffectOperations } from "../effects/operations.js";
 import { EffectDispatchScope } from "../effects/dispatch.js";
-import { effectFacts, getEffect } from "../effects/query.js";
+import { effectView, getEffect } from "../effects/query.js";
 import { resolveMaxHp } from "./query.js";
 import { combatWorkView, type CombatWork } from "../../../battle/execution/work.js";
 import type { DamageReport, DamageRequest, DamageResolution } from "./damage/contract.js";
@@ -18,7 +18,7 @@ import {
 } from "../../../battlefield/effect-source/operations.js";
 import type { EffectSourceResources } from "../../../battlefield/effect-source/resources.js";
 
-export interface VitalityHookFacts extends EffectFacts {
+export interface VitalityHookFacts extends EffectView {
     maxHp(unitId: UnitId): number | undefined;
 }
 
@@ -52,7 +52,7 @@ export type HealingOperation = (
 
 export function vitalityHookFacts(work: () => CombatWork): VitalityHookFacts {
     return {
-        ...effectFacts(work),
+        ...effectView(work),
         maxHp: (unitId) => resolveMaxHp(unitId, combatWorkView(work())),
     };
 }

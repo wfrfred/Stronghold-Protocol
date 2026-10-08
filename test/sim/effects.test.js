@@ -23,8 +23,8 @@ import {
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { combatWorkView, getCombatUnit } from "../../dist/core/tactical/battle/execution/work.js";
-import { createNumericContribution } from "../../dist/core/tactical/modifier/numeric.js";
-import { offenseAttackContributions } from "../../dist/core/tactical/unit/capability/offense/capability.js";
+import * as modifier from "../../dist/core/tactical/modifier/value.js";
+import { updateAttackContributions } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { compileStatusBinding } from "../../dist/core/tactical/unit/capability/status/binding.js";
 import { uniqueEffectAdmission } from "../../dist/core/tactical/unit/capability/effects/lifecycle-resources.js";
@@ -836,7 +836,7 @@ test("effects: unavailable parents end a child by default and explicit preservat
       const parentProgram = resources.registerEffect(barrierProgram("unavailable-parent"));
       const childProgram = resources.registerEffect(barrierProgram("child"), {
         bindings: [compileStatusBinding(["INVINCIBLE"])],
-        contributions: [attack(() => [createNumericContribution({ finalAddition: 50 })])],
+        contributions: [attack(() => [modifier.create({ finalAddition: 50 })])],
       });
       const receiver = initializeUnit({
         id: 2,
@@ -890,7 +890,7 @@ test("effects: unavailable parents end a child by default and explicit preservat
 test("effects: finish remains terminal when disable tries to reenable and finish the same instance", () => {
   const resources = new CombatResources();
   const program = resources.registerEffect(barrierProgram("reentrant"), {
-    contributions: [attack(() => [createNumericContribution({ finalAddition: 50 })])],
+    contributions: [attack(() => [modifier.create({ finalAddition: 50 })])],
     bindings: [compileStatusBinding(["INVINCIBLE"])],
     lifecycle: {
       disable: (context) => {
@@ -974,7 +974,7 @@ test("effects: disabling preserves restartable samples and finishing a disabled 
   let finalized = 0;
   const descriptor = resources.registerEffect(barrierProgram("disabled-then-finished"), {
     bindings: [compileStatusBinding(["INVINCIBLE"])],
-    contributions: [attack(() => [createNumericContribution({ finalAddition: 50 })])],
+    contributions: [attack(() => [modifier.create({ finalAddition: 50 })])],
     lifecycle: {
       disable: (context) => {
         disabled.push(context.instance.finished);

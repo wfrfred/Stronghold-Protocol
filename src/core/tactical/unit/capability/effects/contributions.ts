@@ -1,66 +1,57 @@
-import type { NumericContributionGroup } from "../../../modifier/contribution.js";
-import type { NumericContribution } from "../../../modifier/numeric.js";
-import type { NumericContributionResources } from "../../../modifier/providers.js";
+import type * as contribution from "../../../modifier/contribution.js";
+import type * as modifier from "../../../modifier/value.js";
+import type * as computation from "../../../modifier/computation.js";
 import type { Unit } from "../../unit.js";
 import type { CombatTargetingView } from "../../targeting/query.js";
 import type {
-    NumericContributionTarget,
-    NumericProjectionTarget,
-    NumericProviderFacts,
+    ContributionTarget,
+    StoredContributionTarget,
+    ContributionFacts,
 } from "../contribution.js";
 import { hasEffects } from "./capability.js";
-import {
-    compileNumericProviderBinding,
-    compileNumericProjectionBinding,
-    type CompiledEffectContribution,
-} from "./contribution-bindings.js";
+import { compileComputedBinding, compileStoredBinding, type EffectBinding } from "./binding.js";
 import type { EffectInstance } from "./instance.js";
 import type { EffectProgram } from "./program.js";
 import type { EffectResources } from "./registry.js";
 
-export interface EffectContributionContext<S extends object> {
+export interface Context<S extends object> {
     readonly unit: Unit;
     readonly battlefield: CombatTargetingView;
     readonly instance: EffectInstance<S>;
 }
 
-export interface EffectContributionOptions {
+export interface Options {
     readonly id?: string;
-    readonly group?: NumericContributionGroup;
+    readonly group?: contribution.Group;
 }
 
 interface ContributionDeclaration {
     readonly id: string;
-    readonly group?: NumericContributionGroup;
+    readonly group?: contribution.Group;
 }
 
-export interface SampledEffectContribution<S extends object> extends ContributionDeclaration {
-    readonly target: NumericProjectionTarget;
-    readonly sample: (instance: EffectInstance<S>) => readonly NumericContribution[];
+export interface Stored<S extends object> extends ContributionDeclaration {
+    readonly target: StoredContributionTarget;
+    readonly sample: (instance: EffectInstance<S>) => readonly modifier.Value[];
 }
 
-export interface ComputedEffectContribution<S extends object> extends ContributionDeclaration {
-    readonly target: NumericContributionTarget;
-    readonly providers: (
-        resources: EffectContributionResources,
-    ) => NumericContributionResources<NumericProviderFacts>;
-    readonly compute: (context: EffectContributionContext<S>) => readonly NumericContribution[];
+export interface Computed<S extends object> extends ContributionDeclaration {
+    readonly target: ContributionTarget;
+    readonly compute: (context: Context<S>) => readonly modifier.Value[];
 }
 
-export type EffectContribution<S extends object> =
-    SampledEffectContribution<S> | ComputedEffectContribution<S>;
+export type Definition<S extends object> = Stored<S> | Computed<S>;
 
-export interface EffectContributionResources {
-    readonly effects: EffectResources;
-    readonly offense: NumericContributionResources<NumericProviderFacts>;
-    readonly defense: NumericContributionResources<NumericProviderFacts>;
+export interface Resources {
+    readonly effects: Pick<EffectResources, "typedInstance">;
+    readonly computations: Pick<computation.Resources<ContributionFacts>, "register">;
 }
 
-export function compileEffectContributions<S extends object>(
+export function compile<S extends object>(
     program: EffectProgram<S>,
-    declarations: readonly EffectContribution<NoInfer<S>>[],
-    resources: EffectContributionResources,
-): readonly CompiledEffectContribution[] {
+    declarations: readonly Definition<NoInfer<S>>[],
+    resources: Resources,
+): readonly EffectBinding[] {
     const ids = new Set<string>();
 
     for (const { id } of declarations) {
@@ -82,11 +73,11 @@ export function compileEffectContributions<S extends object>(
         if ("sample" in declaration) {
             const { sample } = declaration;
 
-            return compileNumericProjectionBinding({
+            return compileStoredBinding({
                 id: `projection/${id}`,
                 target,
                 group,
-                project: (instance) => {
+                sample: (instance) => {
                     const typed = resources.effects.typedInstance(instance, program.ref);
 
                     if (typed === undefined) {
@@ -102,13 +93,13 @@ export function compileEffectContributions<S extends object>(
 
         const { compute } = declaration;
 
-        return compileNumericProviderBinding({
+        return compileComputedBinding({
             id: `parameter/${id}`,
             target: declaration.target,
-            providers: declaration.providers(resources),
-            providerRef: `${program.ref.id}/${id}`,
+            computations: resources.computations,
+            computeRef: JSON.stringify([program.ref.id, id]),
             group,
-            evaluate: ({ unit, battlefield }, entry) => {
+            compute: ({ unit, battlefield }, entry) => {
                 const owner = entry.owner;
                 const receiver =
                     owner === undefined ? undefined : battlefield.getUnit(owner.unitId);

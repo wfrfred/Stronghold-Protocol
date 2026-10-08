@@ -10,11 +10,11 @@ import { EffectResources } from "../../dist/core/tactical/unit/capability/effect
 import { EffectDispatchScope } from "../../dist/core/tactical/unit/capability/effects/dispatch.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import {
-  compileNumericProjectionBinding,
-  compileNumericProviderBinding,
-} from "../../dist/core/tactical/unit/capability/effects/contribution-bindings.js";
-import { createNumericContribution } from "../../dist/core/tactical/modifier/numeric.js";
-import { offenseAttackContributions } from "../../dist/core/tactical/unit/capability/offense/capability.js";
+  compileStoredBinding,
+  compileComputedBinding,
+} from "../../dist/core/tactical/unit/capability/effects/binding.js";
+import * as modifier from "../../dist/core/tactical/modifier/value.js";
+import { updateAttackContributions } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { removeEffect, setEffectParticipation } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/transition.js";
@@ -92,25 +92,25 @@ test("resources: caller edits cannot change binding participation or removal aft
 test("resources: binding compilers capture configuration values rather than caller-owned objects", () => {
   for (const kind of ["provider", "projection"]) {
     const resources = new CombatResources();
-    const sample = () => [createNumericContribution({ finalAddition: 20 })];
+    const sample = () => [modifier.create({ finalAddition: 20 })];
     const configuration = {
       id: "sample",
-      target: offenseAttackContributions,
+      target: updateAttackContributions,
       group: { id: "original-group", strength: 1 },
-      providerRef: "sample/attack",
-      providers: resources.offense,
-      evaluate: sample,
-      project: sample,
+      computeRef: "sample/attack",
+      computations: resources.computations,
+      compute: sample,
+      sample: sample,
     };
     const compiled = kind === "provider"
-      ? compileNumericProviderBinding(configuration)
-      : compileNumericProjectionBinding(configuration);
+      ? compileComputedBinding(configuration)
+      : compileStoredBinding(configuration);
     const descriptor = resources.registerEffect(program(`owned-${kind}`), { bindings: [compiled] });
     configuration.id = "changed";
     configuration.target = (owner) => owner;
     configuration.group.strength = 99;
-    configuration.providerRef = "missing-provider";
-    configuration.project = () => [createNumericContribution({ finalAddition: 99 })];
+    configuration.computeRef = "missing-provider";
+    configuration.sample = () => [modifier.create({ finalAddition: 99 })];
 
     const owner = initializeUnit({
       id: 2,
@@ -123,7 +123,7 @@ test("resources: binding compilers capture configuration values rather than call
     const contribution = installed.offense.attack.entries[0];
     assert.equal(contribution.id, "@effect/0/sample");
     assert.deepEqual(contribution.group, { id: "original-group", strength: 1 });
-    assert.equal(resolveAttackPower(2, combatWorkView(effectFixtureWork(installed)), resources.offense), 120);
+    assert.equal(resolveAttackPower(2, combatWorkView(effectFixtureWork(installed)), resources.computations), 120);
     const removed = removeEffect(
       effectFixtureWork(installed), { unitId: 2, instanceId: 0 }, resources, 0,
     );
@@ -136,17 +136,16 @@ test("resources: registered authored contributions retain their behavior after c
     const resources = new CombatResources();
     const group = { id: "original-group", strength: 1 };
     const declaration = computed
-      ? computedAttack(({ instance }) => [createNumericContribution({ finalAddition: instance.state.value * 20 })], { group })
-      : attack((instance) => [createNumericContribution({ finalAddition: instance.state.value * 20 })], { group });
+      ? computedAttack(({ instance }) => [modifier.create({ finalAddition: instance.state.value * 20 })], { group })
+      : attack((instance) => [modifier.create({ finalAddition: instance.state.value * 20 })], { group });
     const contributions = [declaration];
     const descriptor = resources.registerEffect(program(`authored-${computed}`), { contributions });
     contributions.length = 0;
     declaration.id = "changed";
     declaration.target = (owner) => owner;
     group.strength = 99;
-    declaration.sample = () => [createNumericContribution({ finalAddition: 999 })];
-    declaration.compute = () => [createNumericContribution({ finalAddition: 999 })];
-    declaration.providers = () => { throw new Error("caller registry selector"); };
+    declaration.sample = () => [modifier.create({ finalAddition: 999 })];
+    declaration.compute = () => [modifier.create({ finalAddition: 999 })];
 
     const owner = initializeUnit({
       id: 2,
@@ -154,7 +153,7 @@ test("resources: registered authored contributions retain their behavior after c
       definition: { id: "authored-owner", offense: { attack: 100 } },
     });
     const installed = installFixtureEffect(owner, resources.effects.create(descriptor.ref, metadata), resources);
-    const currentAttack = (work) => resolveAttackPower(2, combatWorkView(work), resources.offense);
+    const currentAttack = (work) => resolveAttackPower(2, combatWorkView(work), resources.computations);
     const initial = effectFixtureWork(installed);
     assert.equal(currentAttack(initial), 120);
     assert.deepEqual(installed.offense.attack.entries[0].group, { id: "original-group", strength: 1 });
@@ -177,7 +176,7 @@ test("resources: authored identities are nonempty and unique across stored and c
   ]) {
     const resources = new CombatResources();
     assert.throws(() => resources.registerEffect(program("invalid-authored"), { contributions }), error);
-    assert.throws(() => resources.offense.evaluator({}), /failed resource construction/);
+    assert.throws(() => resources.computations.bind({}), /failed resource construction/);
   }
 });
 
@@ -215,10 +214,10 @@ test("resources: failed composite registration invalidates the entire unpublishe
     const resources = new CombatResources();
     const descriptor = resources.effects.register(program(`partial-${stage}`));
     const instance = resources.effects.create(descriptor.ref, metadata);
-    const evaluator = resources.offense.evaluator({});
+    const evaluator = resources.computations.bind({});
     let facets;
     if (stage === "numeric") {
-      resources.defense.register(`${descriptor.ref.id}/defense`, () => []);
+      resources.computations.register(JSON.stringify([descriptor.ref.id, "defense"]), () => []);
       facets = { contributions: [computedAttack(() => []), computedDefense(() => [])] };
     } else {
       const registry = stage === "lifecycle" ? resources.effectLifecycle : resources[stage];
@@ -236,8 +235,8 @@ test("resources: failed composite registration invalidates the entire unpublishe
       () => resources.damage.get(instance),
       () => resources.healing.get(instance),
       () => resources.effectLifecycle.get(instance),
-      () => resources.offense.evaluator({}),
-      () => evaluator({ providerRef: `${descriptor.ref.id}/attack` }),
+      () => resources.computations.bind({}),
+      () => evaluator({ computeRef: `${descriptor.ref.id}/attack` }),
       () => resources.settleDamage(effectFixtureWork(), {
         sourceUnitId: null, targetUnitId: 2, damageType: "TRUE",
         operands: createDamageOperands(10), tick: 0,
@@ -251,7 +250,7 @@ test("resources: failed composite registration invalidates the entire unpublishe
       assert.throws(read, /failed resource construction/, stage);
     }
     assert.throws(() => resources.registerEffect(descriptor), /failed resource construction/);
-    assert.throws(() => resources.offense.register("retry", () => []), /failed resource construction/);
+    assert.throws(() => resources.computations.register("retry", () => []), /failed resource construction/);
 
     const rebuilt = new CombatResources();
     const rebuiltProgram = rebuilt.registerEffect(program(descriptor.ref.id), facets);
@@ -269,8 +268,8 @@ test("resources: publishing to BattleRuntime closes every registry while preserv
     () => resources.registerEffect(program("late")),
     () => resources.effects.register(program("late-program")),
     () => resources.effectBindings.register(descriptor.ref, []),
-    () => resources.offense.register("late-attack", () => []),
-    () => resources.defense.register("late-defense", () => []),
+    () => resources.computations.register("late-attack", () => []),
+    () => resources.computations.register("late-defense", () => []),
     () => resources.damage.register(descriptor.ref, {}),
     () => resources.healing.register(descriptor.ref, {}),
     () => resources.effectLifecycle.register(descriptor.ref, {}),
@@ -282,4 +281,24 @@ test("resources: publishing to BattleRuntime closes every registry while preserv
   assert.equal(resources.effects.create(descriptor.ref, metadata).state.value, 1);
   runtime.step();
   assert.equal(runtime.snapshot().tickIndex, 1);
+});
+
+
+test("resources: computed contributions distinguish program and binding identities containing separators", () => {
+  const resources = new CombatResources();
+  const first = resources.registerEffect(program("a/b"), {
+    contributions: [computedAttack(() => [modifier.create({ finalAddition: 10 })], { id: "c" })],
+  });
+  const second = resources.registerEffect(program("a"), {
+    contributions: [computedAttack(() => [modifier.create({ finalAddition: 20 })], { id: "b/c" })],
+  });
+  resources.seal();
+  const owner = initializeUnit({
+    id: 2, position: [0, 0], definition: { id: "owner", offense: { attack: 100 } },
+  });
+  const installed = installFixtureEffect(owner, resources.effects.create(first.ref, metadata), resources);
+  const both = installFixtureEffect(installed,
+    resources.effects.create(second.ref, { ...metadata, id: 1, acquiredSequence: 1 }), resources);
+  assert.notEqual(both.offense.attack.entries[0].computeRef, both.offense.attack.entries[1].computeRef);
+  assert.equal(resolveAttackPower(2, combatWorkView(effectFixtureWork(both)), resources.computations), 130);
 });

@@ -1,7 +1,7 @@
 import { stabilizeUnit, type StableUnit, type Unit } from "../../unit.js";
 import { hasVitality, resolveVitalityMaxHp } from "./capability.js";
 
-export function coordinateVitalityMaxHp<U extends Unit>(
+export function preserveHpRatio<U extends Unit>(
     previous: U | StableUnit<U>,
     input: U | StableUnit<U>,
 ): StableUnit<U> {

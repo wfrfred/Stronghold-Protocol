@@ -3,10 +3,10 @@ import type { CombatWork } from "../../../battle/execution/work.js";
 import type { EffectAddress, EffectInstanceValue, EffectLifetimeScope } from "./instance.js";
 import type { EffectProgramRef } from "./program.js";
 import type { EffectResources } from "./registry.js";
-import type { EffectContributionBindings } from "./resources.js";
+import type { EffectBindings } from "./resources.js";
 import type { EffectLifecycleResources } from "./lifecycle-resources.js";
 
-export interface EffectFacts {
+export interface EffectView {
     getUnit(id: UnitId): Unit | undefined;
     getEffect(address: EffectAddress): EffectInstanceValue | undefined;
     participating(unitId: UnitId): readonly EffectInstanceValue[];
@@ -36,14 +36,14 @@ export interface EffectLifecycleContext<S extends object = object> {
     readonly address: EffectAddress;
     readonly instance: EffectInstanceValue & { readonly state: S };
     readonly tick: number;
-    readonly facts: EffectFacts;
+    readonly facts: EffectView;
     readonly effects: EffectLifecycleOperations;
 }
 
 export interface EffectAdmissionContext<S extends object = object> {
     readonly address: EffectAddress;
     readonly instance: EffectInstanceValue & { readonly state: S };
-    readonly facts: EffectFacts;
+    readonly facts: EffectView;
 }
 
 export type EffectLifecycleAction<S extends object> = (
@@ -60,7 +60,7 @@ export interface EffectLifecycleProgram<S extends object> {
 
 export interface EffectTransitionResources {
     readonly effects: Pick<EffectResources, "create" | "restore" | "typedInstance" | "update">;
-    readonly effectBindings: EffectContributionBindings;
+    readonly effectBindings: EffectBindings;
     readonly effectLifecycle: Pick<EffectLifecycleResources, "get">;
 }
 

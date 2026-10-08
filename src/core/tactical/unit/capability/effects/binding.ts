@@ -1,25 +1,15 @@
 import type { EffectInstanceValue } from "./instance.js";
-import {
-    registerNumericContribution,
-    removeNumericContributionsOwnedBy,
-    updateNumericContribution,
-    setNumericContributionParticipation,
-    type NumericContributionGroup,
-    type NumericValueContribution,
-} from "../../../modifier/contribution.js";
-import type { NumericContribution } from "../../../modifier/numeric.js";
+import * as contribution from "../../../modifier/contribution.js";
+import type * as modifier from "../../../modifier/value.js";
+import type * as computation from "../../../modifier/computation.js";
 import type {
-    CompiledNumericProvider,
-    NumericContributionResources,
-} from "../../../modifier/providers.js";
-import type {
-    NumericContributionTarget,
-    NumericProjectionTarget,
-    NumericProviderFacts,
+    ContributionTarget,
+    StoredContributionTarget,
+    ContributionFacts,
 } from "../contribution.js";
 import { stabilizeUnit, type StableUnit, type Unit } from "../../unit.js";
 
-export interface CompiledEffectContribution {
+export interface EffectBinding {
     readonly install: <U extends Unit>(
         unit: U | StableUnit<U>,
         instance: EffectInstanceValue,
@@ -39,13 +29,13 @@ export interface CompiledEffectContribution {
     ) => StableUnit<U>;
 }
 
-interface ContributionBinding<T extends NumericProjectionTarget = NumericProjectionTarget> {
+interface ContributionBinding<T extends StoredContributionTarget = StoredContributionTarget> {
     readonly id: string;
     readonly target: T;
-    readonly group: NumericContributionGroup | undefined;
+    readonly group: contribution.Group | undefined;
 }
 
-function ownBinding<T extends NumericProjectionTarget>(
+function ownBinding<T extends StoredContributionTarget>(
     binding: ContributionBinding<T>,
 ): ContributionBinding<T> {
     return Object.freeze({
@@ -69,12 +59,10 @@ function contributionBinding(
     };
 }
 
-function participationBinding(
-    binding: ContributionBinding,
-): CompiledEffectContribution["setParticipation"] {
+function participationBinding(binding: ContributionBinding): EffectBinding["setParticipation"] {
     return (unit, instance, participating) =>
         binding.target(unit, (state) =>
-            setNumericContributionParticipation(
+            contribution.setParticipation(
                 state,
                 `@effect/${instance.id}/${binding.id}`,
                 participating,
@@ -82,33 +70,33 @@ function participationBinding(
         );
 }
 
-function removeBinding(binding: ContributionBinding): CompiledEffectContribution["remove"] {
+function removeBinding(binding: ContributionBinding): EffectBinding["remove"] {
     return (unit, instance) =>
         binding.target(unit, (state) =>
-            removeNumericContributionsOwnedBy(state, {
+            contribution.removeOwnedBy(state, {
                 unitId: unit.id,
                 instanceId: instance.id,
             }),
         );
 }
 
-export function compileNumericProviderBinding(
-    binding: ContributionBinding<NumericContributionTarget> & {
-        readonly providers: NumericContributionResources<NumericProviderFacts>;
-        readonly providerRef: string;
-        readonly evaluate: CompiledNumericProvider<NumericProviderFacts>;
+export function compileComputedBinding(
+    binding: ContributionBinding<ContributionTarget> & {
+        readonly computations: Pick<computation.Resources<ContributionFacts>, "register">;
+        readonly computeRef: string;
+        readonly compute: computation.Compute<ContributionFacts>;
     },
-): CompiledEffectContribution {
+): EffectBinding {
     const owned = ownBinding(binding);
-    const { providerRef, providers, evaluate } = binding;
-    providers.register(providerRef, evaluate);
+    const { computeRef, computations, compute } = binding;
+    computations.register(computeRef, compute);
 
     return {
         install: (unit, instance) =>
             owned.target(unit, (state) =>
-                registerNumericContribution(state, {
+                contribution.register(state, {
                     ...contributionBinding(unit, instance, owned),
-                    providerRef,
+                    computeRef,
                 }),
             ),
         update: stabilizeUnit,
@@ -117,29 +105,27 @@ export function compileNumericProviderBinding(
     };
 }
 
-export function compileNumericProjectionBinding(
+export function compileStoredBinding(
     binding: ContributionBinding & {
-        readonly project: (instance: EffectInstanceValue) => readonly NumericContribution[];
+        readonly sample: (instance: EffectInstanceValue) => readonly modifier.Value[];
     },
-): CompiledEffectContribution {
+): EffectBinding {
     const owned = ownBinding(binding);
-    const { project } = binding;
-    const projected = (unit: Unit, instance: EffectInstanceValue): NumericValueContribution => ({
+    const { sample } = binding;
+    const projected = (unit: Unit, instance: EffectInstanceValue): contribution.Stored => ({
         ...contributionBinding(unit, instance, owned),
-        values: project(instance),
+        values: sample(instance),
     });
 
     return {
         install: (unit, instance) =>
-            owned.target(unit, (state) =>
-                registerNumericContribution(state, projected(unit, instance)),
-            ),
+            owned.target(unit, (state) => contribution.register(state, projected(unit, instance))),
         update: (unit, instance) => {
-            const contribution = projected(unit, instance);
+            const updated = projected(unit, instance);
 
             return owned.target(unit, (state) =>
-                updateNumericContribution(state, contribution.id, (entry) => ({
-                    ...contribution,
+                contribution.update(state, updated.id, (entry) => ({
+                    ...updated,
                     participating: entry.participating,
                 })),
             );

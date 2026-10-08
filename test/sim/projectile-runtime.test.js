@@ -18,7 +18,7 @@ import { withProjectileOperations } from "../../dist/core/tactical/battlefield/p
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
 import { installNewEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
-import { createNumericContribution } from "../../dist/core/tactical/modifier/numeric.js";
+import * as modifier from "../../dist/core/tactical/modifier/value.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import {
   combatWorkView,
@@ -177,7 +177,7 @@ function launch(context, services, program, overrides = {}) {
     traceTarget: targetId,
     position: source.position,
     destination: target.position,
-    cachedAtk: resolveAttackPower(source.id, combatWorkView(context.work), services.offense),
+    cachedAtk: resolveAttackPower(source.id, combatWorkView(context.work), services.computations),
     speedPerTick: 1,
     contactRange,
     stopDelayTicks: 1,
@@ -378,7 +378,7 @@ test("projectile runtime: current ATK and cached-only ATK stay distinct, while a
         initialize: () => ({}),
         ownState: (state) => ({ ...state }),
       }),
-      { contributions: [computedAttack(() => [createNumericContribution({ addition: 10 })])] },
+      { contributions: [computedAttack(() => [modifier.create({ addition: 10 })])] },
     );
     const runtime = new BattleRuntime(
       spec([

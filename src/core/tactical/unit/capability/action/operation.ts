@@ -58,7 +58,7 @@ export function compile(definition: Definition, resources: ActionResources): Pro
                               : resolveAttackPower(
                                     source.id,
                                     combatWorkView(work),
-                                    resources.offense,
+                                    resources.computations,
                                 )!;
                       }
                     : (): number => definition.power;

@@ -1,16 +1,13 @@
-import type {
-    EffectContributionOptions,
-    SampledEffectContribution,
-} from "../effects/contributions.js";
-import { vitalityMaxHpContributions } from "./capability.js";
+import type * as contributions from "../effects/contributions.js";
+import { updateMaxHpContributions } from "./capability.js";
 
 export function maxHp<S extends object>(
-    sample: SampledEffectContribution<S>["sample"],
-    options: EffectContributionOptions = {},
-): SampledEffectContribution<S> {
+    sample: contributions.Stored<S>["sample"],
+    options: contributions.Options = {},
+): contributions.Stored<S> {
     return {
         id: options.id ?? "maxHp",
-        target: vitalityMaxHpContributions,
+        target: updateMaxHpContributions,
         sample,
         ...(options.group === undefined ? {} : { group: options.group }),
     };

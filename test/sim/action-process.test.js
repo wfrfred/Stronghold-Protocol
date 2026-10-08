@@ -26,7 +26,7 @@ import { installNewEffect } from "../../dist/core/tactical/unit/capability/effec
 import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/transition.js";
 import { compileStatusBinding } from "../../dist/core/tactical/unit/capability/status/binding.js";
 import { hasStatusFlag } from "../../dist/core/tactical/unit/capability/status/capability.js";
-import { createNumericContribution } from "../../dist/core/tactical/modifier/numeric.js";
+import * as modifier from "../../dist/core/tactical/modifier/value.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { combatWorkView } from "../../dist/core/tactical/battle/execution/work.js";
 import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
@@ -345,7 +345,7 @@ test("action process: install then query binds current targets and the next segm
 test("action process: concurrent executions from one source own independent contributions and cleanup", () => {
   const resources = new CombatResources();
   const bonus = resources.registerEffect(effectProgram("owned-bonus"), {
-    contributions: [computedAttack(() => [createNumericContribution({ finalAddition: 20 })])],
+    contributions: [computedAttack(() => [modifier.create({ finalAddition: 20 })])],
   });
   const first = accept();
   const second = accept(first.state, { definition: first.execution.definition });
@@ -363,7 +363,7 @@ test("action process: concurrent executions from one source own independent cont
     resources,
   );
   current = resumeActionExecution(current.work, current.state, 1, segments, 0, resources);
-  const attack = (work) => resolveAttackPower(1, combatWorkView(work), resources.offense);
+  const attack = (work) => resolveAttackPower(1, combatWorkView(work), resources.computations);
   assert.equal(attack(current.work), 50);
   current = cancelActionExecution(current.work, current.state, 0, resources, 1);
   assert.equal(attack(current.work), 30);
@@ -405,7 +405,7 @@ test("action process: content cancellation and normal finish retain completed pr
       }),
       {
         contributions: [computedAttack(({ instance }) => [
-            createNumericContribution({ finalAddition: instance.state.power }),
+            modifier.create({ finalAddition: instance.state.power }),
           ])],
       },
     );
@@ -429,7 +429,7 @@ test("action process: content cancellation and normal finish retain completed pr
               () => ({ power: context.samples.power }),
               resources,
             );
-            assert.equal(resolveAttackPower(1, combatWorkView(work), resources.offense), 33);
+            assert.equal(resolveAttackPower(1, combatWorkView(work), resources.computations), 33);
             return { work, continuation };
           },
         },
@@ -466,7 +466,7 @@ test("action process: content cancellation and normal finish retain completed pr
     assert.equal(getCombatUnit(result.work, 1).vitality.hp, 100);
     assert.equal(getCombatUnit(result.work, 1).effects.instances[0].state.power, 23);
     assert.equal(getCombatUnit(result.work, 1).effects.instances[0].finished, true);
-    assert.equal(resolveAttackPower(1, combatWorkView(result.work), resources.offense), 10);
+    assert.equal(resolveAttackPower(1, combatWorkView(result.work), resources.computations), 10);
     assert.equal(getCombatUnit(original, 1).effects, undefined);
     assert.deepEqual(
       combatWorkEvents(result.work).map((event) => event.type),

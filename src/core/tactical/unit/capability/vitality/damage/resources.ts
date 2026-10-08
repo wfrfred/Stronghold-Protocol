@@ -6,8 +6,8 @@ import type {
     EffectTransitionResources,
     EffectLifecycleOperations,
 } from "../../effects/contract.js";
-import type { NumericProviderFacts } from "../../contribution.js";
-import type { NumericContributionProvider } from "../../../../modifier/providers.js";
+import type { ContributionFacts } from "../../contribution.js";
+import type * as computation from "../../../../modifier/computation.js";
 import type {
     VitalityHookContext,
     VitalityHookOperations,
@@ -22,7 +22,7 @@ import type { EffectSourceResources } from "../../../../battlefield/effect-sourc
 export interface DamageResourceServices extends EffectTransitionResources {
     readonly effectSources: EffectSourceResources;
     readonly damage: DamageResources;
-    readonly defense: NumericContributionProvider<NumericProviderFacts>;
+    readonly computations: computation.Computations<ContributionFacts>;
     readonly settleDamage: DamageOperation;
     readonly settleHealing: HealingOperation;
 }

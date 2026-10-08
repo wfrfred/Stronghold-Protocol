@@ -1,5 +1,5 @@
 import { stabilizeUnit, type StableUnit, type Unit } from "../../unit.js";
-import type { CompiledEffectContribution } from "../effects/contribution-bindings.js";
+import type { EffectBinding } from "../effects/binding.js";
 import type { EffectInstanceValue } from "../effects/instance.js";
 import {
     addStatusContribution,
@@ -30,7 +30,7 @@ function updateStatus<U extends Unit>(
     return status === unit.status ? unit : { ...unit, status };
 }
 
-export function compileStatusBinding(flags: readonly StatusFlag[]): CompiledEffectContribution {
+export function compileStatusBinding(flags: readonly StatusFlag[]): EffectBinding {
     const owned = createStatusDefinition({ initialFlags: flags }).initialFlags;
 
     return {

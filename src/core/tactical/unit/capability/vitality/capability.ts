@@ -1,11 +1,5 @@
-import {
-    copyNumericContributionState,
-    createNumericContributionState,
-    resolveNumericContributions,
-    type NumericContributionState,
-    type NumericContributionTransition,
-} from "../../../modifier/contribution.js";
-import { resolveNumericValue } from "../../../modifier/numeric.js";
+import * as contribution from "../../../modifier/contribution.js";
+import * as modifier from "../../../modifier/value.js";
 import { stabilizeUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
 
 export interface VitalityDefinition {
@@ -14,7 +8,7 @@ export interface VitalityDefinition {
 
 export interface VitalityState {
     readonly hp: number;
-    readonly maxHp: NumericContributionState<"values">;
+    readonly maxHp: contribution.State<"stored">;
 }
 
 export interface Vitality {
@@ -40,25 +34,25 @@ export function hasVitalityDefinition(
 }
 
 export function copyVitalityState(state: Readonly<VitalityState>): VitalityState {
-    return { ...state, maxHp: copyNumericContributionState(state.maxHp) };
+    return { ...state, maxHp: contribution.copy(state.maxHp) };
 }
 
 export function initializeVitalityState(definition: VitalityDefinition): VitalityState {
-    return { hp: definition.maxHp, maxHp: createNumericContributionState<"values">() };
+    return { hp: definition.maxHp, maxHp: contribution.create<"stored">() };
 }
 
-export function updateVitalityMaxHpContributions(
+function updateContributions(
     state: VitalityState,
-    transition: NumericContributionTransition<"values">,
+    transition: contribution.Transition<"stored">,
 ): VitalityState {
     const maxHp = transition(state.maxHp);
 
     return maxHp === state.maxHp ? state : { ...state, maxHp };
 }
 
-export function vitalityMaxHpContributions<U extends Unit>(
+export function updateMaxHpContributions<U extends Unit>(
     input: U | StableUnit<U>,
-    transition: NumericContributionTransition<"values">,
+    transition: contribution.Transition<"stored">,
 ): StableUnit<U> {
     const unit = stabilizeUnit<U>(input);
 
@@ -66,14 +60,11 @@ export function vitalityMaxHpContributions<U extends Unit>(
         throw new TypeError("maximum HP contributions require Vitality capability");
     }
 
-    const vitality = updateVitalityMaxHpContributions(unit.vitality, transition);
+    const vitality = updateContributions(unit.vitality, transition);
 
     return vitality === unit.vitality ? unit : { ...unit, vitality };
 }
 
 export function resolveVitalityMaxHp(definition: VitalityDefinition, state: VitalityState): number {
-    return Math.max(
-        1,
-        resolveNumericValue(definition.maxHp, resolveNumericContributions(state.maxHp)),
-    );
+    return Math.max(1, modifier.apply(definition.maxHp, contribution.resolve(state.maxHp)));
 }

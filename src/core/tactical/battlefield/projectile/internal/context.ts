@@ -111,7 +111,7 @@ export function withProjectileContext<S extends object>(
                     : resolveAttackPower(
                           projectile.source,
                           combatWorkView(readWork()),
-                          services.offense,
+                          services.computations,
                       );
 
             return attack ?? projectile.cachedAtk;

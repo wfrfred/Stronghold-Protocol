@@ -5,15 +5,15 @@ import { replaceEffectInstance } from "./internal/state.js";
 import type { EffectProgramRef } from "./program.js";
 import type { EffectTransitionResources } from "./contract.js";
 import type { EffectInstanceValue } from "./instance.js";
-import type { CompiledEffectContribution } from "./contribution-bindings.js";
-import type { EffectContributionBindings } from "./resources.js";
-import { coordinateVitalityMaxHp } from "../vitality/max-hp.js";
+import type { EffectBinding } from "./binding.js";
+import type { EffectBindings } from "./resources.js";
+import { preserveHpRatio } from "../vitality/max-hp.js";
 
 export function transitionEffectBindings<U extends Unit>(
     unit: U | StableUnit<U>,
     instance: EffectInstanceValue,
-    resources: EffectContributionBindings,
-    apply: (binding: CompiledEffectContribution, current: StableUnit<U>) => StableUnit<U>,
+    resources: EffectBindings,
+    apply: (binding: EffectBinding, current: StableUnit<U>) => StableUnit<U>,
 ): StableUnit<U> {
     let current = stabilizeUnit<U>(unit);
 
@@ -21,7 +21,7 @@ export function transitionEffectBindings<U extends Unit>(
         current = apply(binding, current);
     }
 
-    return coordinateVitalityMaxHp<U>(unit, current);
+    return preserveHpRatio<U>(unit, current);
 }
 
 export function updateEffectState<S extends object>(

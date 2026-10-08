@@ -1,6 +1,6 @@
 import type { UnitId } from "../../unit.js";
 import { hasEffects } from "./capability.js";
-import type { EffectFacts } from "./contract.js";
+import type { EffectView } from "./contract.js";
 import type { EffectAddress, EffectInstanceValue } from "./instance.js";
 import { isParticipatingEffect } from "./query.js";
 
@@ -61,7 +61,7 @@ export class EffectDispatchScope {
     }
 
     withCandidates<T>(
-        facts: EffectFacts,
+        facts: EffectView,
         unitId: UnitId,
         run: (candidates: readonly EffectAddress[]) => T,
     ): T {
@@ -91,7 +91,7 @@ export class EffectDispatchScope {
 }
 
 export function participatingEffect(
-    facts: EffectFacts,
+    facts: EffectView,
     address: EffectAddress,
 ): EffectInstanceValue | undefined {
     const instance = facts.getEffect(address);

@@ -1,5 +1,5 @@
-import type { NumericContributionProvider } from "../../modifier/providers.js";
-import type { NumericProviderFacts } from "../../unit/capability/contribution.js";
+import type * as computation from "../../modifier/computation.js";
+import type { ContributionFacts } from "../../unit/capability/contribution.js";
 import type {
     EffectLifecycleOperations,
     EffectTransitionResources,
@@ -54,7 +54,7 @@ export interface ProjectileContactContext<
 
 export interface ProjectileServices extends EffectTransitionResources {
     readonly projectiles: Pick<ProjectileResources, "ownState" | "withProgram">;
-    readonly offense: NumericContributionProvider<NumericProviderFacts>;
+    readonly computations: computation.Computations<ContributionFacts>;
     readonly settleDamage: DamageOperation;
     readonly settleHealing: HealingOperation;
 }

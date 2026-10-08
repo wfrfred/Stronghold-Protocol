@@ -7,10 +7,7 @@ import assert from "node:assert/strict";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
 import { copyEffectsState } from "../../dist/core/tactical/unit/capability/effects/capability.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
-import {
-  createNumericContribution,
-  resolveNumericValue,
-} from "../../dist/core/tactical/modifier/numeric.js";
+import * as modifier from "../../dist/core/tactical/modifier/value.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
@@ -113,8 +110,8 @@ function request(power, overrides = {}) {
 
 test("damage pipeline: numeric contributions retain four distinct positions and clamp the direct multiplier", () => {
   const contributions = [
-    createNumericContribution({ addition: 10, multiplier: 0.5, finalAddition: 7, finalScaler: 2 }),
-    createNumericContribution({
+    modifier.create({ addition: 10, multiplier: 0.5, finalAddition: 7, finalScaler: 2 }),
+    modifier.create({
       addition: 20,
       multiplier: 0.5,
       finalAddition: 3,
@@ -122,10 +119,10 @@ test("damage pipeline: numeric contributions retain four distinct positions and 
     }),
   ];
 
-  assert.equal(resolveNumericValue(100, contributions), 270);
+  assert.equal(modifier.apply(100, contributions), 270);
   assert.equal(
-    resolveNumericValue(100, [
-      createNumericContribution({ multiplier: -2, finalAddition: 7, finalScaler: 2 }),
+    modifier.apply(100, [
+      modifier.create({ multiplier: -2, finalAddition: 7, finalScaler: 2 }),
     ]),
     14,
   );
@@ -137,7 +134,7 @@ test("damage pipeline: low HP attack contributions read current work after damag
     contributions: [computedAttack(({ unit: owner, battlefield }) => {
         const current = battlefield.getUnit(owner.id);
         return current.vitality.hp < current.definition.vitality.maxHp / 2
-          ? [createNumericContribution({ multiplier: 1 })]
+          ? [modifier.create({ multiplier: 1 })]
           : [];
       })],
   });
@@ -155,11 +152,11 @@ test("damage pipeline: low HP attack contributions read current work after damag
     12,
   );
 
-  assert.equal(resolveAttackPower(source.id, combatWorkView(original), resources.offense), 100);
+  assert.equal(resolveAttackPower(source.id, combatWorkView(original), resources.computations), 100);
   assert.equal(getCombatUnit(damaged.work, 1).vitality.hp, 250);
-  assert.equal(resolveAttackPower(1, combatWorkView(damaged.work), resources.offense), 200);
+  assert.equal(resolveAttackPower(1, combatWorkView(damaged.work), resources.computations), 200);
   assert.equal(getCombatUnit(healed.work, 1).vitality.hp, 650);
-  assert.equal(resolveAttackPower(1, combatWorkView(healed.work), resources.offense), 100);
+  assert.equal(resolveAttackPower(1, combatWorkView(healed.work), resources.computations), 100);
   assert.equal(getCombatUnit(original, 1).vitality.hp, 750);
 });
 
@@ -213,7 +210,7 @@ test("damage pipeline: fixed penetration precedes proportional penetration for d
 test("damage pipeline: resistance contributions are clamped before fixed and proportional penetration", () => {
   const resources = new CombatResources();
   const resistance = resources.registerEffect(program("resistance"), {
-    contributions: [computedResistance(() => [createNumericContribution({ finalAddition: 70 })])],
+    contributions: [computedResistance(() => [modifier.create({ finalAddition: 70 })])],
   });
   const target = attach(resources, unit(2, { resistance: 80 }), resistance, 21);
   const result = resolveDamage(
@@ -340,7 +337,7 @@ test("damage pipeline: strongest grouped instance wins without multiplying or de
 test("damage pipeline: grouped effects compete only with participants in the current parameter or reception stage", () => {
   const resources = new CombatResources();
   const attack = resources.registerEffect(program("grouped-attack"), {
-    contributions: [computedAttack(() => [createNumericContribution({ multiplier: 1 })], { group: { id: "shared", strength: 100 } })],
+    contributions: [computedAttack(() => [modifier.create({ multiplier: 1 })], { group: { id: "shared", strength: 100 } })],
   });
   const weak = resources.registerEffect(program("grouped-weak-reception"), {
     damage: {
@@ -360,7 +357,7 @@ test("damage pipeline: grouped effects compete only with participants in the cur
   const original = workFor(unit(1), target);
   const result = resolveDamage(original, request(100), resources);
 
-  assert.equal(resolveAttackPower(target.id, combatWorkView(original), resources.offense), 200);
+  assert.equal(resolveAttackPower(target.id, combatWorkView(original), resources.computations), 200);
   assert.equal(result.report.hpLoss, 300);
   assert.equal(getCombatUnit(result.work, 2).effects.instances.length, 3);
 });

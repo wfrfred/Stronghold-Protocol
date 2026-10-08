@@ -1,30 +1,25 @@
-import type {
-    ComputedEffectContribution,
-    EffectContributionOptions,
-    SampledEffectContribution,
-} from "../effects/contributions.js";
-import { offenseAttackContributions } from "./capability.js";
+import type * as contributions from "../effects/contributions.js";
+import { updateAttackContributions } from "./capability.js";
 
 export function attack<S extends object>(
-    sample: SampledEffectContribution<S>["sample"],
-    options: EffectContributionOptions = {},
-): SampledEffectContribution<S> {
+    sample: contributions.Stored<S>["sample"],
+    options: contributions.Options = {},
+): contributions.Stored<S> {
     return {
         id: options.id ?? "attack",
-        target: offenseAttackContributions,
+        target: updateAttackContributions,
         sample,
         ...(options.group === undefined ? {} : { group: options.group }),
     };
 }
 
 export function computedAttack<S extends object>(
-    compute: ComputedEffectContribution<S>["compute"],
-    options: EffectContributionOptions = {},
-): ComputedEffectContribution<S> {
+    compute: contributions.Computed<S>["compute"],
+    options: contributions.Options = {},
+): contributions.Computed<S> {
     return {
         id: options.id ?? "attack",
-        target: offenseAttackContributions,
-        providers: (resources) => resources.offense,
+        target: updateAttackContributions,
         compute,
         ...(options.group === undefined ? {} : { group: options.group }),
     };

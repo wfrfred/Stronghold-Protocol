@@ -206,5 +206,5 @@ export function initializeUnitCapabilities(
 }
 
 export function copyUnitCapabilities(unit: Unit): object {
-    return copyPreparedStates(unit as Unit & Partial<CapabilityStates>);
+    return copyPreparedStates(unit);
 }

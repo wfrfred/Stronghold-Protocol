@@ -1,13 +1,6 @@
 import { assertNonnegativeNumber } from "../../../../common/assert.js";
-import {
-    copyNumericContributionState,
-    createNumericContributionState,
-    resolveNumericContributions,
-    type NumericContributionEvaluator,
-    type NumericContributionState,
-    type NumericContributionTransition,
-} from "../../../modifier/contribution.js";
-import { resolveNumericValue } from "../../../modifier/numeric.js";
+import * as contribution from "../../../modifier/contribution.js";
+import * as modifier from "../../../modifier/value.js";
 import { stabilizeUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
 
 export interface DefenseDefinition {
@@ -16,8 +9,8 @@ export interface DefenseDefinition {
 }
 
 export interface DefenseState {
-    readonly defense: NumericContributionState;
-    readonly resistance: NumericContributionState;
+    readonly defense: contribution.State;
+    readonly resistance: contribution.State;
 }
 
 export interface Defense {
@@ -53,22 +46,22 @@ export function createDefenseDefinition(definition: DefenseDefinition): DefenseD
 
 export function initializeDefenseState(): DefenseState {
     return {
-        defense: createNumericContributionState(),
-        resistance: createNumericContributionState(),
+        defense: contribution.create(),
+        resistance: contribution.create(),
     };
 }
 
 export function copyDefenseState(state: DefenseState): DefenseState {
     return {
-        defense: copyNumericContributionState(state.defense),
-        resistance: copyNumericContributionState(state.resistance),
+        defense: contribution.copy(state.defense),
+        resistance: contribution.copy(state.resistance),
     };
 }
 
-export function updateDefenseContributions(
+function updateContributions(
     state: DefenseState,
     parameter: keyof DefenseState,
-    transition: NumericContributionTransition,
+    transition: contribution.Transition,
 ): DefenseState {
     const current = state[parameter];
     const updated = transition(current);
@@ -76,9 +69,9 @@ export function updateDefenseContributions(
     return updated === current ? state : { ...state, [parameter]: updated };
 }
 
-export function defenseContributions<U extends Unit>(
+export function updateDefenseContributions<U extends Unit>(
     input: U | StableUnit<U>,
-    transition: NumericContributionTransition,
+    transition: contribution.Transition,
 ): StableUnit<U> {
     const unit = stabilizeUnit<U>(input);
 
@@ -86,14 +79,14 @@ export function defenseContributions<U extends Unit>(
         throw new TypeError("defense contributions require Defense capability");
     }
 
-    const defense = updateDefenseContributions(unit.defense, "defense", transition);
+    const defense = updateContributions(unit.defense, "defense", transition);
 
     return defense === unit.defense ? unit : { ...unit, defense };
 }
 
-export function resistanceContributions<U extends Unit>(
+export function updateResistanceContributions<U extends Unit>(
     input: U | StableUnit<U>,
-    transition: NumericContributionTransition,
+    transition: contribution.Transition,
 ): StableUnit<U> {
     const unit = stabilizeUnit<U>(input);
 
@@ -101,7 +94,7 @@ export function resistanceContributions<U extends Unit>(
         throw new TypeError("resistance contributions require Defense capability");
     }
 
-    const defense = updateDefenseContributions(unit.defense, "resistance", transition);
+    const defense = updateContributions(unit.defense, "resistance", transition);
 
     return defense === unit.defense ? unit : { ...unit, defense };
 }
@@ -109,23 +102,20 @@ export function resistanceContributions<U extends Unit>(
 export function resolveDefenseParameters(
     definition: DefenseDefinition,
     state: DefenseState,
-    evaluate?: NumericContributionEvaluator,
+    evaluate?: contribution.Evaluate,
 ): DefenseDefinition {
     return {
         defense: Math.max(
             0,
-            resolveNumericValue(
-                definition.defense,
-                resolveNumericContributions(state.defense, evaluate),
-            ),
+            modifier.apply(definition.defense, contribution.resolve(state.defense, evaluate)),
         ),
         resistance: Math.min(
             100,
             Math.max(
                 0,
-                resolveNumericValue(
+                modifier.apply(
                     definition.resistance,
-                    resolveNumericContributions(state.resistance, evaluate),
+                    contribution.resolve(state.resistance, evaluate),
                 ),
             ),
         ),

@@ -23,8 +23,8 @@ import {
 } from "../../dist/core/tactical/battlefield/effect-source/settlement.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
-import { createNumericContribution } from "../../dist/core/tactical/modifier/numeric.js";
-import { offenseAttackContributions } from "../../dist/core/tactical/unit/capability/offense/capability.js";
+import * as modifier from "../../dist/core/tactical/modifier/value.js";
+import { updateAttackContributions } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
@@ -45,7 +45,7 @@ function receiverEffect(resources, id, facets = {}) {
     });
 
     return resources.registerEffect(program, {
-        contributions: [attackContribution(context => [createNumericContribution({ finalAddition: context.state.addition })])],
+        contributions: [attackContribution(context => [modifier.create({ finalAddition: context.state.addition })])],
         ...facets,
     });
 }
@@ -91,7 +91,7 @@ function fixtureWork(source, units = [unit(1), unit(2)]) {
 }
 
 function attack(work, resources, id) {
-    return resolveAttackPower(id, combatWorkView(work), resources.offense);
+    return resolveAttackPower(id, combatWorkView(work), resources.computations);
 }
 
 function observeMechanismCopies(work, run) {

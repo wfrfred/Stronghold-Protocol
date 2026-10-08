@@ -1,13 +1,13 @@
 import { hasDefense, resolveDefenseParameters, type DefenseDefinition } from "./capability.js";
 import type { UnitId } from "../../unit.js";
 import type { CombatTargetingView } from "../../targeting/query.js";
-import type { NumericContributionProvider } from "../../../modifier/providers.js";
-import type { NumericProviderFacts } from "../contribution.js";
+import type * as computation from "../../../modifier/computation.js";
+import type { ContributionFacts } from "../contribution.js";
 
 export function resolveDefense(
     unitId: UnitId,
     battlefield: CombatTargetingView,
-    providers?: NumericContributionProvider<NumericProviderFacts>,
+    computations?: computation.Computations<ContributionFacts>,
 ): DefenseDefinition | undefined {
     const unit = battlefield.getUnit(unitId);
 
@@ -21,6 +21,6 @@ export function resolveDefense(
     return resolveDefenseParameters(
         unit.definition.defense,
         unit.defense,
-        providers?.evaluator({ unit, battlefield }),
+        computations?.bind({ unit, battlefield }),
     );
 }

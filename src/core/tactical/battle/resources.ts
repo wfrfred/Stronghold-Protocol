@@ -2,15 +2,12 @@ import { ResourceRegistration } from "../../common/resource-registration.js";
 import { EffectResources } from "../unit/capability/effects/registry.js";
 import { type EffectProgram } from "../unit/capability/effects/program.js";
 import { EffectBindingResources } from "../unit/capability/effects/resources.js";
-import {
-    compileEffectContributions,
-    type EffectContribution,
-} from "../unit/capability/effects/contributions.js";
+import * as contributions from "../unit/capability/effects/contributions.js";
 import {
     DamageResources,
     type DamageEffectRules,
 } from "../unit/capability/vitality/damage/resources.js";
-import type { CompiledEffectContribution } from "../unit/capability/effects/contribution-bindings.js";
+import type { EffectBinding } from "../unit/capability/effects/binding.js";
 import { EffectLifecycleResources } from "../unit/capability/effects/lifecycle-resources.js";
 import type { EffectLifecycleProgram } from "../unit/capability/effects/contract.js";
 import {
@@ -18,16 +15,16 @@ import {
     type HealingEffectRules,
 } from "../unit/capability/vitality/healing/resources.js";
 import type { DamageOperation, HealingOperation } from "../unit/capability/vitality/hook.js";
-import { NumericContributionResources } from "../modifier/providers.js";
-import type { NumericProviderFacts } from "../unit/capability/contribution.js";
+import * as computation from "../modifier/computation.js";
+import type { ContributionFacts } from "../unit/capability/contribution.js";
 import { EffectSourceResources } from "../battlefield/effect-source/resources.js";
 import { ProjectileResources } from "../battlefield/projectile/resources.js";
 import { resolveDamage } from "../unit/capability/vitality/damage/settlement.js";
 import { resolveHealing } from "../unit/capability/vitality/healing/settlement.js";
 
 export interface CombatEffectFacets<S extends object> {
-    readonly contributions?: readonly EffectContribution<S>[];
-    readonly bindings?: readonly CompiledEffectContribution[];
+    readonly contributions?: readonly contributions.Definition<S>[];
+    readonly bindings?: readonly EffectBinding[];
     readonly damage?: DamageEffectRules<S>;
     readonly healing?: HealingEffectRules<S>;
     readonly lifecycle?: EffectLifecycleProgram<S>;
@@ -36,8 +33,7 @@ export interface CombatEffectFacets<S extends object> {
 export class CombatResources {
     readonly #registration = new ResourceRegistration();
     readonly effects = new EffectResources(this.#registration);
-    readonly offense = new NumericContributionResources<NumericProviderFacts>(this.#registration);
-    readonly defense = new NumericContributionResources<NumericProviderFacts>(this.#registration);
+    readonly computations = new computation.Resources<ContributionFacts>(this.#registration);
     readonly effectBindings = new EffectBindingResources(this.#registration);
     readonly damage = new DamageResources(this.effects, this.#registration);
     readonly effectLifecycle = new EffectLifecycleResources(this.effects, this.#registration);
@@ -73,7 +69,7 @@ export class CombatResources {
             this.effectBindings.register(registered.ref, [
                 ...(facets.contributions === undefined
                     ? []
-                    : compileEffectContributions(registered, facets.contributions, this)),
+                    : contributions.compile(registered, facets.contributions, this)),
                 ...(facets.bindings ?? []),
             ]);
 
