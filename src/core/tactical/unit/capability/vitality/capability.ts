@@ -1,6 +1,6 @@
 import * as contribution from "../../../modifier/contribution.js";
 import * as modifier from "../../../modifier/value.js";
-import { stabilizeUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
+import { widenUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
 
 export interface VitalityDefinition {
     readonly maxHp: number;
@@ -54,7 +54,7 @@ export function updateMaxHpContributions<U extends Unit>(
     input: U | StableUnit<U>,
     transition: contribution.Transition<"stored">,
 ): StableUnit<U> {
-    const unit = stabilizeUnit<U>(input);
+    const unit = widenUnit<U>(input);
 
     if (!hasVitality(unit)) {
         throw new TypeError("maximum HP contributions require Vitality capability");

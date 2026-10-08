@@ -3,7 +3,7 @@ import type { EffectTransitionResources } from "./contract.js";
 import { selectParticipatingEffects } from "./competition.js";
 import { replaceEffectInstances } from "./internal/state.js";
 import { withEffectLifecycle } from "./internal/instance.js";
-import { stabilizeUnit, type StableUnit, type Unit } from "../../unit.js";
+import { widenUnit, type StableUnit, type Unit } from "../../unit.js";
 import type { EffectInstanceValue } from "./instance.js";
 import type { EffectBinding } from "./binding.js";
 import type { EffectBindings } from "./resources.js";
@@ -15,7 +15,7 @@ export function transitionEffectBindings<U extends Unit>(
     resources: EffectBindings,
     apply: (binding: EffectBinding, current: StableUnit<U>) => StableUnit<U>,
 ): StableUnit<U> {
-    let current = stabilizeUnit<U>(unit);
+    let current = widenUnit<U>(unit);
 
     for (const binding of resources.get(instance)) {
         current = apply(binding, current);
@@ -35,7 +35,7 @@ export function reconcileEffectBindings<U extends Unit>(
     resources: EffectTransitionResources,
     updatedId?: number,
 ): { readonly unit: StableUnit<U>; readonly changes: readonly EffectParticipationChange[] } {
-    const owner = stabilizeUnit<U>(input);
+    const owner = widenUnit<U>(input);
 
     if (!hasEffects(owner)) {
         return { unit: owner, changes: [] };

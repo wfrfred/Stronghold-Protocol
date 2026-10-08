@@ -1,4 +1,4 @@
-import { stabilizeUnit, type StableUnit, type Unit } from "../../unit.js";
+import { widenUnit, type StableUnit, type Unit } from "../../unit.js";
 import type { EffectBinding } from "../effects/binding.js";
 import type { EffectInstanceValue } from "../effects/instance.js";
 import {
@@ -19,7 +19,7 @@ function updateStatus<U extends Unit>(
     input: U | StableUnit<U>,
     transition: (state: StatusState) => StatusState,
 ): StableUnit<U> {
-    const unit = stabilizeUnit<U>(input);
+    const unit = widenUnit<U>(input);
 
     if (!hasStatus(unit)) {
         throw new TypeError("status bindings require existing Status capability");
@@ -42,7 +42,7 @@ export function compileStatusBinding(flags: readonly StatusFlag[]): EffectBindin
                     participating: instance.participating,
                 }),
             ),
-        update: stabilizeUnit,
+        update: widenUnit,
         setParticipation: (unit, instance, participating) =>
             updateStatus(unit, (state) =>
                 setStatusContributionParticipation(state, contributionId(instance), participating),

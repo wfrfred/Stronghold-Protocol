@@ -48,7 +48,7 @@ import {
     type RoutedLocomotionState,
 } from "./capability.js";
 import { integrateSteeringDirection } from "./steering.js";
-import { stabilizeUnit, type StableUnit } from "../../unit.js";
+import { widenUnit, type StableUnit } from "../../unit.js";
 import type * as contribution from "../../../modifier/contribution.js";
 
 export interface RoutedLocomotionStepContext {
@@ -91,7 +91,7 @@ export function stepRoutedUnit(
     input: RoutedLocomotiveUnit,
     context: RoutedLocomotionStepContext,
 ): RoutedUnitStep {
-    const unit = stabilizeUnit(input);
+    const unit = widenUnit(input);
     const step = stepRoutedLocomotion(
         unit.locomotion,
         unit.position,

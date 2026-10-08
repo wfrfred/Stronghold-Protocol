@@ -6,7 +6,7 @@ import {
     assertPositiveSafeInteger,
 } from "../../../../common/assert.js";
 import {
-    stabilizeUnit,
+    widenUnit,
     type StableUnit,
     type Unit,
     type UnitDefinition,
@@ -133,7 +133,7 @@ export function setElementalImmunity<U extends Unit>(
     input: U | StableUnit<U>,
     immune: boolean,
 ): StableUnit<U> {
-    const unit = stabilizeUnit<U>(input);
+    const unit = widenUnit<U>(input);
 
     if (!hasElemental(unit)) {
         throw new TypeError("element immunity requires Elemental capability");

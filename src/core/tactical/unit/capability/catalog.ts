@@ -91,13 +91,15 @@ type CapabilityState<K extends CapabilityKey> = Parameters<(typeof capabilities)
 
 export type CapabilityStates = { readonly [K in CapabilityKey]: CapabilityState<K> };
 
+export type WidenedCapabilityState<K extends CapabilityKey, S> = K extends "locomotion"
+    ? NonNullable<S> extends RoutedLocomotionState
+        ? RoutedLocomotionState
+        : CapabilityState<K>
+    : CapabilityState<K>;
+
 export type CopiedCapabilityStates<S extends object> = {
     readonly [K in keyof S as K extends CapabilityKey ? K : never]: K extends CapabilityKey
-        ? K extends "locomotion"
-            ? S[K] extends RoutedLocomotionState
-                ? RoutedLocomotionState
-                : CapabilityState<K>
-            : CapabilityState<K>
+        ? WidenedCapabilityState<K, S[K]>
         : never;
 };
 

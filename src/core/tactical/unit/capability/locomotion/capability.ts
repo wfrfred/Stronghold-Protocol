@@ -4,7 +4,7 @@ import {
     type NavigationState,
 } from "../../../battlefield/navigation/state.js";
 import { copyRouteState, type RouteState } from "./route/state.js";
-import { stabilizeUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
+import { widenUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
 import { createSteeringState, type SteeringParameters, type SteeringState } from "./steering.js";
 import * as contribution from "../../../modifier/contribution.js";
 import * as modifier from "../../../modifier/value.js";
@@ -127,7 +127,7 @@ export function updateMoveSpeedContributions<U extends Unit>(
     input: U | StableUnit<U>,
     transition: contribution.Transition,
 ): StableUnit<U> {
-    const unit = stabilizeUnit<U>(input);
+    const unit = widenUnit<U>(input);
 
     if (!hasLocomotion(unit)) {
         throw new TypeError("move speed contributions require Locomotion capability");

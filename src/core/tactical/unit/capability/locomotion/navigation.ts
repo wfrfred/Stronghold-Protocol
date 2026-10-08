@@ -1,6 +1,6 @@
 import type { NavigationMaps, PathMotionMode } from "../../../battlefield/navigation/map.js";
 import { invalidateNavigationPath } from "../../../battlefield/navigation/state.js";
-import { stabilizeUnit, type StableUnit, type Unit } from "../../unit.js";
+import { widenUnit, type StableUnit, type Unit } from "../../unit.js";
 import {
     hasLocomotion,
     type LocomotionState,
@@ -65,7 +65,7 @@ export function reconcileUnitNavigation<U extends Unit>(
     maps: NavigationMaps,
     modes?: readonly PathMotionMode[],
 ): StableUnit<U> {
-    const unit = stabilizeUnit<U>(input);
+    const unit = widenUnit<U>(input);
 
     if (!hasLocomotion(unit)) {
         return unit;

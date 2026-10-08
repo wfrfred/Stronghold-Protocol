@@ -1,7 +1,7 @@
 import { hasDefenseDefinition, type DefenseDefinition } from "../../defense/capability.js";
 import { hasElemental } from "../../elemental/capability.js";
 import { hasVitality, type Vitality } from "../capability.js";
-import { stabilizeUnit, type StableUnit, type Unit } from "../../../unit.js";
+import { widenUnit, type StableUnit, type Unit } from "../../../unit.js";
 import { hasStatusFlag } from "../../status/capability.js";
 import { resolveDefense } from "../../defense/query.js";
 import { assertFiniteNumber, assertNonnegativeNumber } from "../../../../../common/assert.js";
@@ -87,7 +87,7 @@ export function damageUnit<U extends Unit & Vitality>(
     const amount = unit.vitality.hp - hp;
 
     return {
-        unit: stabilizeUnit<U>(
+        unit: widenUnit<U>(
             amount === 0 ? unit : { ...unit, vitality: { ...unit.vitality, hp } },
         ),
         amount,

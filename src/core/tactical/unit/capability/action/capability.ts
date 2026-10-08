@@ -6,7 +6,7 @@ import {
 import * as contribution from "../../../modifier/contribution.js";
 import * as operation from "./operation.js";
 import { createTargetingDefinition, type TargetingDefinition } from "../../targeting/definition.js";
-import { stabilizeUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
+import { widenUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
 
 export type TargetBindingId = string;
 
@@ -154,7 +154,7 @@ function updateContributions<U extends Unit>(
     key: "attackSpeed" | "baseAttackTime",
     transition: contribution.Transition,
 ): StableUnit<U> {
-    const unit = stabilizeUnit<U>(input);
+    const unit = widenUnit<U>(input);
 
     if (!hasAction(unit)) {
         throw new TypeError("attack timing contributions require Action capability");

@@ -1,11 +1,11 @@
-import { stabilizeUnit, type StableUnit, type Unit } from "../../unit.js";
+import { widenUnit, type StableUnit, type Unit } from "../../unit.js";
 import { hasVitality, resolveVitalityMaxHp } from "./capability.js";
 
 export function preserveHpRatio<U extends Unit>(
     previous: U | StableUnit<U>,
     input: U | StableUnit<U>,
 ): StableUnit<U> {
-    const updated = stabilizeUnit<U>(input);
+    const updated = widenUnit<U>(input);
 
     if (
         previous === updated ||

@@ -3,7 +3,7 @@ import {
     assertNonnegativeNumber,
     assertNonnegativeSafeInteger,
 } from "../../../../common/assert.js";
-import { stabilizeUnit, type StableUnit, type Unit, type UnitId } from "../../unit.js";
+import { widenUnit, type StableUnit, type Unit, type UnitId } from "../../unit.js";
 import {
     ELEMENT_TYPES,
     elementValues,
@@ -81,7 +81,7 @@ export function receiveElementDamage<U extends Unit>(
     input: U | StableUnit<U>,
     request: ElementDamageRequest,
 ): ElementDamageResult<U> {
-    const unit = stabilizeUnit<U>(input);
+    const unit = widenUnit<U>(input);
 
     assertTick(unit, request.tick);
     assertNonnegativeNumber(request.power, "element damage power");
@@ -161,7 +161,7 @@ export function receiveElementHeal<U extends Unit>(
     input: U | StableUnit<U>,
     request: ElementHealRequest,
 ): ElementHealResult<U> {
-    const unit = stabilizeUnit<U>(input);
+    const unit = widenUnit<U>(input);
 
     assertTick(unit, request.tick);
     assertNonnegativeNumber(request.power, "element heal power");
@@ -211,7 +211,7 @@ export function advanceElemental<U extends Unit>(
     input: U | StableUnit<U>,
     tick: number,
 ): ElementalAdvanceResult<U> {
-    const unit = stabilizeUnit<U>(input);
+    const unit = widenUnit<U>(input);
 
     assertTick(unit, tick);
 

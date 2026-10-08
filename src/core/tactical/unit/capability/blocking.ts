@@ -2,7 +2,7 @@ import { assertNonnegativeSafeInteger, assertPositiveSafeInteger } from "../../.
 import { createBlockGeometry, type BlockGeometry } from "../../geometry/shape.js";
 import * as contribution from "../../modifier/contribution.js";
 import * as modifier from "../../modifier/value.js";
-import { stabilizeUnit, type StableUnit, type Unit, type UnitDefinition } from "../unit.js";
+import { widenUnit, type StableUnit, type Unit, type UnitDefinition } from "../unit.js";
 
 export interface BlockerDefinition {
     readonly capacity: number;
@@ -95,7 +95,7 @@ export function updateBlockingCapacityContributions<U extends Unit>(
     input: U | StableUnit<U>,
     transition: contribution.Transition<"stored">,
 ): StableUnit<U> {
-    const unit = stabilizeUnit<U>(input);
+    const unit = widenUnit<U>(input);
 
     if (!hasBlocker(unit)) {
         throw new TypeError("blocking capacity contributions require Blocker capability");

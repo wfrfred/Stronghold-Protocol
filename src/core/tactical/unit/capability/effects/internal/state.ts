@@ -2,7 +2,7 @@ import { assertNonnegativeSafeInteger } from "../../../../../common/assert.js";
 import { copyEffectInstance } from "./instance.js";
 import type { EffectInstanceValue } from "../instance.js";
 import type { Effects, EffectsState } from "../capability.js";
-import { stabilizeUnit, type StableUnit, type Unit } from "../../../unit.js";
+import { widenUnit, type StableUnit, type Unit } from "../../../unit.js";
 
 const ownedArrays = new WeakSet<readonly EffectInstanceValue[]>();
 const ownedStates = new WeakSet<EffectsState>();
@@ -62,7 +62,7 @@ export function replaceEffectInstances<U extends Unit>(
     input: U | StableUnit<U>,
     instances: readonly EffectInstanceValue[],
 ): StableUnit<U> & Effects {
-    const unit = stabilizeUnit<U>(input);
+    const unit = widenUnit<U>(input);
     const progress = unit.effects ?? {
         nextInstanceId: 0,
         nextAcquiredSequence: 0,
@@ -76,7 +76,7 @@ export function replaceEffectInstance<U extends Unit & Effects>(
     instance: EffectInstanceValue,
     updated: EffectInstanceValue,
 ): StableUnit<U> {
-    const unit = stabilizeUnit<U>(input);
+    const unit = widenUnit<U>(input);
     const previous = ownEffectsState(unit.effects);
     const index = previous.instances.indexOf(instance);
 
@@ -104,7 +104,7 @@ export function removeEffectInstance<U extends Unit & Effects>(
     input: U | StableUnit<U>,
     instanceId: number,
 ): StableUnit<U> {
-    const unit = stabilizeUnit<U>(input);
+    const unit = widenUnit<U>(input);
     const previous = ownEffectsState(unit.effects);
     const instances: EffectInstanceValue[] = [];
 
@@ -131,7 +131,7 @@ export function registerEffectInstance<U extends Unit>(
     input: U | StableUnit<U>,
     instance: EffectInstanceValue,
 ): StableUnit<U> & Effects {
-    const unit = stabilizeUnit<U>(input);
+    const unit = widenUnit<U>(input);
     const previous = ownEffectsState(
         unit.effects ?? {
             instances: [],

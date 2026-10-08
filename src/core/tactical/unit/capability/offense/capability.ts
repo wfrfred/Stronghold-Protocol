@@ -1,7 +1,7 @@
 import { assertNonnegativeNumber } from "../../../../common/assert.js";
 import * as contribution from "../../../modifier/contribution.js";
 import * as modifier from "../../../modifier/value.js";
-import { stabilizeUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
+import { widenUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
 
 export interface OffenseDefinition {
     readonly attack: number;
@@ -58,7 +58,7 @@ export function updateAttackContributions<U extends Unit>(
     input: U | StableUnit<U>,
     transition: contribution.Transition,
 ): StableUnit<U> {
-    const unit = stabilizeUnit<U>(input);
+    const unit = widenUnit<U>(input);
 
     if (!hasOffense(unit)) {
         throw new TypeError("attack contributions require Offense capability");

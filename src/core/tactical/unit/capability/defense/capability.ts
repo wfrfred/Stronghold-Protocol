@@ -1,7 +1,7 @@
 import { assertNonnegativeNumber } from "../../../../common/assert.js";
 import * as contribution from "../../../modifier/contribution.js";
 import * as modifier from "../../../modifier/value.js";
-import { stabilizeUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
+import { widenUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
 
 export interface DefenseDefinition {
     readonly defense: number;
@@ -73,7 +73,7 @@ export function updateDefenseContributions<U extends Unit>(
     input: U | StableUnit<U>,
     transition: contribution.Transition,
 ): StableUnit<U> {
-    const unit = stabilizeUnit<U>(input);
+    const unit = widenUnit<U>(input);
 
     if (!hasDefense(unit)) {
         throw new TypeError("defense contributions require Defense capability");
@@ -88,7 +88,7 @@ export function updateResistanceContributions<U extends Unit>(
     input: U | StableUnit<U>,
     transition: contribution.Transition,
 ): StableUnit<U> {
-    const unit = stabilizeUnit<U>(input);
+    const unit = widenUnit<U>(input);
 
     if (!hasDefense(unit)) {
         throw new TypeError("resistance contributions require Defense capability");
