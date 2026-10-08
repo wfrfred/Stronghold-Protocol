@@ -1,10 +1,11 @@
 import { createWorldPosition, type WorldPosition } from "../geometry/coordinate.js";
 import {
     initializeUnitCapabilities,
+    type CopiedCapabilityStates,
     type PreparedCapabilityStates,
     type RuntimeCapabilitiesFor,
 } from "./capability/catalog.js";
-import type { Unit, UnitDefinition, UnitId } from "./unit.js";
+import { ownUnitDefinition, type Unit, type UnitDefinition, type UnitId } from "./unit.js";
 
 export interface UnitInitialization<D extends UnitDefinition = UnitDefinition> {
     readonly id: UnitId;
@@ -23,9 +24,9 @@ export type PreparedUnitInitialization<
 
 type RuntimeCapabilitiesWithStates<D extends UnitDefinition, S extends object> = {
     readonly [K in keyof RuntimeCapabilitiesFor<D>]: S extends Readonly<Record<K, unknown>>
-        ? S[K]
+        ? CopiedCapabilityStates<S>[K & keyof CopiedCapabilityStates<S>]
         : RuntimeCapabilitiesFor<D>[K];
-} & Omit<S, keyof RuntimeCapabilitiesFor<D>>;
+} & Omit<CopiedCapabilityStates<S>, keyof RuntimeCapabilitiesFor<D>>;
 
 export type InitializedUnit<D extends UnitDefinition, S extends object = object> = D extends unknown
     ? Unit<D> & RuntimeCapabilitiesWithStates<D, S>
@@ -40,7 +41,8 @@ export function initializeUnit<D extends UnitDefinition, S extends PreparedCapab
 export function initializeUnit<D extends UnitDefinition>(
     input: Omit<UnitInitialization<D>, "states"> & { readonly states?: object },
 ): Unit<D> {
-    const { id, definition, position } = input;
+    const { id, position } = input;
+    const definition = ownUnitDefinition(input.definition);
     const states = initializeUnitCapabilities(
         definition,
         { tick: input.tick ?? 0 },

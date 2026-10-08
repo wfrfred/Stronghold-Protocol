@@ -1,5 +1,9 @@
 const ownedValues = new WeakSet();
 
+export type ImmutableData<T> = T extends object
+    ? { readonly [K in keyof T]: ImmutableData<T[K]> }
+    : T;
+
 function ownData(
     value: unknown,
     ancestors: Set<object>,
@@ -32,6 +36,7 @@ function ownData(
 
     ancestors.add(value);
     let owned: object;
+    let unchanged = Object.isFrozen(value);
 
     if (Array.isArray(value)) {
         const items: unknown[] = [];
@@ -61,10 +66,12 @@ function ownData(
                 throw new TypeError(`${name} cannot contain accessors`);
             }
 
-            items.push(ownData(descriptor.value, ancestors, copies, name));
+            const item = ownData(descriptor.value, ancestors, copies, name);
+            unchanged &&= item === descriptor.value;
+            items.push(item);
         }
 
-        owned = Object.freeze(items);
+        owned = unchanged ? value : Object.freeze(items);
     } else {
         const record: Record<string, unknown> = {};
 
@@ -79,13 +86,16 @@ function ownData(
                 throw new TypeError(`${name} cannot contain accessors`);
             }
 
+            const item = ownData(descriptor.value, ancestors, copies, name);
+            unchanged &&= descriptor.enumerable === true && item === descriptor.value;
+
             Object.defineProperty(record, key, {
-                value: ownData(descriptor.value, ancestors, copies, name),
+                value: item,
                 enumerable: true,
             });
         }
 
-        owned = Object.freeze(record);
+        owned = unchanged ? value : Object.freeze(record);
     }
 
     ancestors.delete(value);

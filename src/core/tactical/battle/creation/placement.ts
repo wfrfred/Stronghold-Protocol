@@ -12,10 +12,12 @@ import {
     type OccupancyState,
 } from "../../unit/capability/occupancy.js";
 import { initializeUnit, type InitializedUnit } from "../../unit/initialize.js";
-import type { Unit, UnitDefinition } from "../../unit/unit.js";
+import { ownUnitDefinition, type Unit, type UnitDefinition } from "../../unit/unit.js";
+import type { ImmutableData } from "../../../common/immutable-data.js";
 import {
     copyPreparedCapabilityStates,
     type CapabilityStates,
+    type CopiedCapabilityStates,
 } from "../../unit/capability/catalog.js";
 import type { BattleExecutionState } from "../execution/state.js";
 
@@ -49,14 +51,14 @@ type PlacedUnit<P extends UnitPlacementDefinition> = P extends unknown
 
 type NormalizedUnitPlacement<P extends UnitPlacementDefinition> = P extends unknown
     ? {
-          readonly definition: P["definition"];
+          readonly definition: ImmutableData<P["definition"]>;
           readonly position: WorldPosition;
           readonly navigationEffects: readonly UnitNavigationEffectPlacement[];
       } & (P extends { readonly occupancy: OccupancyState }
           ? Occupancy
           : Pick<UnitPlacementDefinition, "occupancy">) &
           (P extends { readonly states: infer S extends object }
-              ? { readonly states: S }
+              ? { readonly states: CopiedCapabilityStates<S> }
               : "states" extends keyof P
                 ? Pick<UnitPlacementDefinition, "states">
                 : object)
@@ -100,7 +102,7 @@ export function createUnitPlacementDefinition(
     }
 
     return Object.freeze({
-        definition: placement.definition,
+        definition: ownUnitDefinition(placement.definition),
         ...(placement.states === undefined
             ? {}
             : {

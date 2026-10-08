@@ -14,7 +14,11 @@ import {
     type DefenseDefinition,
     type DefenseState,
 } from "./defense/capability.js";
-import { copyLocomotionState, initializeLocomotionState } from "./locomotion/capability.js";
+import {
+    copyLocomotionState,
+    initializeLocomotionState,
+    type RoutedLocomotionState,
+} from "./locomotion/capability.js";
 import { copySpatialPresenceState } from "./presence.js";
 import { copyOccupancyState } from "./occupancy.js";
 import {
@@ -83,6 +87,16 @@ type CapabilityState<K extends CapabilityKey> = Parameters<(typeof capabilities)
 
 export type CapabilityStates = { readonly [K in CapabilityKey]: CapabilityState<K> };
 
+export type CopiedCapabilityStates<S extends object> = {
+    readonly [K in keyof S as K extends CapabilityKey ? K : never]: K extends CapabilityKey
+        ? K extends "locomotion"
+            ? S[K] extends RoutedLocomotionState
+                ? RoutedLocomotionState
+                : CapabilityState<K>
+            : CapabilityState<K>
+        : never;
+};
+
 export type RuntimeCapabilitiesFor<D extends UnitDefinition> = {
     readonly [
         K in ConfiguredCapabilityKey as [D] extends [Readonly<Record<K, CapabilityConfig<K>>>]
@@ -143,6 +157,10 @@ function copyCapability<K extends CapabilityKey>(key: K, state: unknown): Capabi
 }
 
 function copyPreparedStates(definition: UnitDefinition, prepared: object): Record<string, unknown> {
+    if (Object.getPrototypeOf(prepared) !== Object.prototype) {
+        throw new TypeError("prepared capabilities must be a plain record");
+    }
+
     const states: Record<string, unknown> = {};
 
     for (const key of Reflect.ownKeys(prepared)) {
