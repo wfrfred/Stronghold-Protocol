@@ -121,10 +121,6 @@ export class EffectResources {
         return program;
     }
 
-    assertInstance(instance: EffectInstanceValue): void {
-        this.#instanceProgram(instance);
-    }
-
     withProgram<R>(
         instance: EffectInstanceValue,
         visitor: <S extends object>(instance: EffectInstance<S>, program: EffectProgram<S>) => R,

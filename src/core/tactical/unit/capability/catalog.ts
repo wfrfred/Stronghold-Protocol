@@ -114,6 +114,28 @@ export type PreparedCapabilityStates<D extends UnitDefinition> = Partial<
 const configuredKeys = Object.keys(configuredCapabilities) as ConfiguredCapabilityKey[];
 const capabilityKeys = Object.keys(capabilities) as CapabilityKey[];
 
+function hasCapabilityState(unit: Unit, key: ConfiguredCapabilityKey): boolean {
+    return key in unit && Reflect.get(unit, key) !== undefined;
+}
+
+export function assertUnitCapabilityPairing(unit: Unit): void {
+    for (const key of configuredKeys) {
+        const configured = key in unit.definition;
+
+        if (configured !== hasCapabilityState(unit, key)) {
+            throw new TypeError(`capability ${key} configuration and state must be paired`);
+        }
+    }
+}
+
+export function assertUnitCapabilityComposition(previous: Unit, unit: Unit): void {
+    for (const key of configuredKeys) {
+        if (hasCapabilityState(previous, key) !== hasCapabilityState(unit, key)) {
+            throw new TypeError(`capability ${key} state cannot be added or removed during update`);
+        }
+    }
+}
+
 function initializeCapability<K extends ConfiguredCapabilityKey>(
     key: K,
     config: CapabilityConfig<K>,

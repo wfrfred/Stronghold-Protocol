@@ -9,6 +9,7 @@ import { EffectResources } from "../../dist/core/tactical/unit/capability/effect
 import {
   expireEffects,
   installEffect,
+  installNewEffect,
   removeEffect,
   finishEffectsOwnedByExecution,
   finishEffectsOwnedByUnit,
@@ -78,6 +79,70 @@ function unit(flags = []) {
     status: initializeStatusState(status),
   };
 }
+
+test("effects: direct installation normalizes typed state before lifecycle behavior and isolates it", () => {
+  const resources = new CombatResources();
+  const observed = [];
+  let normalizationCount = 0;
+  const program = resources.registerEffect(createEffectProgram({
+    id: "normalized-direct",
+    initialize: () => ({ remainingAmount: 10 }),
+    ownState: state => {
+      normalizationCount++;
+      return { remainingAmount: Math.max(0, state.remainingAmount) };
+    },
+  }), { lifecycle: { start: context => { observed.push(context.instance.state.remainingAmount); } } });
+  const original = effectFixtureWork(unit());
+  const instance = resources.effects.create(program.ref, metadata());
+  const input = { ...instance, state: { remainingAmount: -5 } };
+  const copied = copyEffectsState({ instances: [input], nextInstanceId: 2, nextAcquiredSequence: 2 });
+  normalizationCount = 0;
+  const installed = installEffect(original, 2, copied.instances[0], resources, 0);
+  input.state.remainingAmount = 999;
+  assert.equal(normalizationCount, 1);
+  assert.deepEqual(observed, [0]);
+  assert.equal(getCombatUnit(installed.work, 2).effects.instances[0].state.remainingAmount, 0);
+  assert.equal(getCombatUnit(original, 2).effects, undefined);
+
+  normalizationCount = 0;
+  const newInstallation = installNewEffect(original, 2, program.ref, {
+    source: null, scope: null, expiresAtTick: null, initialState: { remainingAmount: -7 },
+  }, resources, 0);
+  assert.equal(normalizationCount, 1);
+  assert.equal(getCombatUnit(newInstallation.work, 2).effects.instances[0].state.remainingAmount, 0);
+  assert.deepEqual(observed, [0, 0]);
+});
+
+test("effects: direct installation rejects program-invalid numeric facts even after ordinary ownership", () => {
+  const resources = new CombatResources();
+  const program = resources.registerEffect(barrierProgram());
+  const instance = resources.effects.create(program.ref, metadata());
+  const copied = copyEffectsState({
+    instances: [{ ...instance, state: { remainingAmount: -1 } }],
+    nextInstanceId: 2, nextAcquiredSequence: 2,
+  });
+  const original = effectFixtureWork(unit());
+  assert.throws(() => installEffect(original, 2, copied.instances[0], resources, 0), /invalid barrier state/);
+  assert.equal(getCombatUnit(original, 2).effects, undefined);
+  assert.throws(() => installEffect(original, 2, { ...instance, started: true }, resources, 0), /only a fresh effect/);
+  const installed = installEffect(original, 2, instance, resources, 0);
+  assert.equal(installed.result.type, "INSTALLED");
+});
+
+test("effects: missing direct-install receivers return absence before program normalization", () => {
+  const resources = new CombatResources();
+  const foreign = new EffectResources();
+  const program = foreign.register(barrierProgram());
+  const instance = foreign.create(program.ref, metadata());
+  const original = effectFixtureWork(unit());
+  const installation = installEffect(original, 99, {
+    ...instance, state: { remainingAmount: -1 },
+  }, resources, 0);
+  assert.equal(installation.work, original);
+  assert.deepEqual(installation.result, {
+    type: "REJECTED", reason: "TARGET_ABSENT", address: { unitId: 99, instanceId: instance.id },
+  });
+});
 
 test("effects: instance resources are separate from snapshot facts and restoration validates the program state", () => {
   const resources = new EffectResources();
@@ -1075,6 +1140,9 @@ test("effects: TypeScript preserves invariant program state references and typed
   const imports = `
 import { createEffectProgram, type EffectProgram, type EffectProgramRef } from ${sourceModule("unit/capability/effects/program")};
 import { EffectResources } from ${sourceModule("unit/capability/effects/registry")};
+import type { EffectInstanceValue } from ${sourceModule("unit/capability/effects/instance")};
+import { installEffect } from ${sourceModule("unit/capability/effects/lifecycle")};
+import type { CombatWork } from ${sourceModule("battle/execution/work")};
 import { CombatResources } from ${sourceModule("battle/resources")};
 import type { DamageRuleContext, DamageFormulaContext, DamageQueryContext } from ${sourceModule("unit/capability/vitality/damage/resources")};
 import type { PendingDamage } from ${sourceModule("unit/capability/vitality/damage/contract")};
@@ -1096,6 +1164,8 @@ const barrier = createEffectProgram({
   id: 'barrier', initialize: (): BarrierState => ({ remainingAmount: 500 }), ownState: ownBarrierState,
 });
 const resources = new EffectResources();
+declare const installationResources: CombatResources;
+declare const work: CombatWork;
 resources.register(barrier);
 const instance = resources.create(barrier.ref, {
   id: 1, source: null, scope: null, acquiredSequence: 0, expiresAtTick: null,
@@ -1129,6 +1199,7 @@ const instance = resources.create(barrier.ref, {
         `
 type InferredReference = Assert<Equal<typeof barrier.ref, EffectProgramRef<BarrierState>>>;
 type InferredState = Assert<Equal<typeof instance.state, BarrierState>>;
+installEffect(work, 2, instance, installationResources, 0);
 const restored = resources.restore(barrier.ref, instance);
 type RestoredState = Assert<Equal<typeof restored.state, BarrierState>>;
 const descriptor = resources.get(barrier.ref);
@@ -1191,6 +1262,9 @@ const cannotForge: EffectProgramRef<ShieldState> = { id: 'barrier' };
         4,
       ],
       ["state-update", `resources.update(instance, { remainingCharges: 2 });`, 1],
+      ["direct-install-wrong-state", `installEffect(work, 2, { ...instance, state: { remainingCharges: 2 } }, installationResources, 0);`, 1],
+      ["direct-install-erased", `const erased: EffectInstanceValue = { ...instance, state: { remainingCharges: 2 } }; installEffect(work, 2, erased, installationResources, 0);`, 1],
+      ["direct-install-widened", `installEffect<object>(work, 2, instance, installationResources, 0);`, 1],
       ["unparsed-restore", `declare const raw: unknown; resources.restore(barrier.ref, raw);`, 1],
       ["wrong-restore-state", `resources.restore(barrier.ref, { ...instance, state: { remainingCharges: 2 } });`, 1],
       ["wrong-installation-state", `effectSourceInstallation(barrier.ref, { expiresAtTick: null, initialState: { remainingCharges: 2 } });`, 1],

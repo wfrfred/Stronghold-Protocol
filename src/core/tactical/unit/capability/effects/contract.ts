@@ -59,10 +59,7 @@ export interface EffectLifecycleProgram<S extends object> {
 }
 
 export interface EffectTransitionResources {
-    readonly effects: Pick<
-        EffectResources,
-        "assertInstance" | "create" | "typedInstance" | "update"
-    >;
+    readonly effects: Pick<EffectResources, "create" | "restore" | "typedInstance" | "update">;
     readonly effectBindings: EffectContributionBindings;
     readonly effectLifecycle: Pick<EffectLifecycleResources, "get">;
 }

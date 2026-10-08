@@ -13,7 +13,7 @@ import type {
     EffectParentBinding,
     EffectTransitionResources,
 } from "./contract.js";
-import type { EffectAddress, EffectInstanceValue } from "./instance.js";
+import type { EffectAddress, EffectInstance, EffectInstanceValue } from "./instance.js";
 import { withEffectLifecycle } from "./internal/instance.js";
 import {
     registerEffectInstance,
@@ -420,10 +420,10 @@ function finalizeFinishedInScope(
     return work;
 }
 
-export function installEffect(
+export function installEffect<S extends object>(
     work: CombatWork,
     ownerUnitId: UnitId,
-    instance: EffectInstanceValue,
+    instance: EffectInstance<S>,
     resources: EffectTransitionResources,
     tick: number,
     dispatch?: EffectDispatchScope,
@@ -434,7 +434,12 @@ export function installEffect(
         work = finalizeFinishedInScope(work, ownerUnitId, resources, tick, scope);
     }
 
-    return installInScope(work, ownerUnitId, instance, resources, tick, scope);
+    const prepared =
+        getCombatUnit(work, ownerUnitId) === undefined
+            ? instance
+            : resources.effects.restore(instance.programRef, instance);
+
+    return installInScope(work, ownerUnitId, prepared, resources, tick, scope);
 }
 
 export function installNewEffect<S extends object>(
@@ -487,10 +492,10 @@ function installNewInScope<S extends object>(
     return installInScope(work, ownerUnitId, instance, resources, tick, scope);
 }
 
-function installInScope(
+function installInScope<S extends object>(
     work: CombatWork,
     ownerUnitId: UnitId,
-    instance: EffectInstanceValue,
+    instance: EffectInstance<S>,
     resources: EffectTransitionResources,
     tick: number,
     scope: EffectDispatchScope,
@@ -501,7 +506,6 @@ function installInScope(
         return { work, result: { type: "REJECTED", reason: "TARGET_ABSENT", address } };
     }
 
-    resources.effects.assertInstance(instance);
     resources.effectBindings.get(instance);
     work = transitionCombatUnit(work, ownerUnitId, (unit) =>
         registerEffectInstance(unit, instance),
