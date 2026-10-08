@@ -15,7 +15,11 @@ import type {
 } from "./contract.js";
 import type { EffectAddress, EffectInstanceValue } from "./instance.js";
 import { withEffectLifecycle } from "./internal/instance.js";
-import { registerEffectInstance, replaceEffectInstances } from "./internal/state.js";
+import {
+    registerEffectInstance,
+    removeEffectInstance,
+    replaceEffectInstance,
+} from "./internal/state.js";
 import type { CompiledEffectLifecycle } from "./lifecycle-resources.js";
 import { effectFacts, getEffect } from "./query.js";
 import { EffectDispatchScope } from "./dispatch.js";
@@ -66,12 +70,7 @@ function changeInstance(
 
         const updated = transition(instance);
 
-        return updated === instance
-            ? unit
-            : replaceEffectInstances(
-                  unit,
-                  unit.effects.instances.map((value) => (value === instance ? updated : value)),
-              );
+        return updated === instance ? unit : replaceEffectInstance(unit, instance, updated);
     });
 }
 
@@ -87,10 +86,7 @@ function changeParticipation(
             return unit;
         }
 
-        let current = replaceEffectInstances(
-            unit,
-            unit.effects.instances.map((value) => (value === instance ? updated : value)),
-        );
+        let current = replaceEffectInstance(unit, instance, updated);
 
         if (instance.started && instance.participating !== updated.participating) {
             for (const binding of resources.effectBindings.get(updated)) {
@@ -327,10 +323,7 @@ function finalizeInScope(
             return unit;
         }
 
-        return replaceEffectInstances(
-            unit,
-            unit.effects.instances.filter((value) => value.id !== address.instanceId),
-        );
+        return removeEffectInstance(unit, address.instanceId);
     });
 
     work = runLifecycleAction(
@@ -407,7 +400,11 @@ function finalizeFinishedInScope(
 ): CombatWork {
     const owner = getCombatUnit(work, ownerUnitId);
 
-    if (owner === undefined || !hasEffects(owner)) {
+    if (
+        owner === undefined ||
+        !hasEffects(owner) ||
+        !owner.effects.instances.some((instance) => instance.finished)
+    ) {
         return work;
     }
 
@@ -702,7 +699,16 @@ export function finishEffectsOnUnit(
     dispatch?: EffectDispatchScope,
 ): CombatWork {
     const scope = dispatch ?? new EffectDispatchScope();
-    const addresses = addressesMatching(work, (_, address) => address.unitId === unitId);
+    const unit = getCombatUnit(work, unitId);
+
+    if (unit === undefined || !hasEffects(unit)) {
+        return work;
+    }
+
+    const addresses = unit.effects.instances.map((instance) => ({
+        unitId,
+        instanceId: instance.id,
+    }));
 
     for (const address of addresses) {
         work = finishInScope(work, address, resources, tick, scope);

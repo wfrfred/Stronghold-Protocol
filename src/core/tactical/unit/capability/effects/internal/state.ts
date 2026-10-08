@@ -11,6 +11,16 @@ interface AllocationProgress {
 
 const ownedArrays = new WeakMap<readonly EffectInstanceValue[], AllocationProgress>();
 
+function ownInstanceArray(
+    instances: EffectInstanceValue[],
+    minimumProgress: AllocationProgress,
+): readonly EffectInstanceValue[] {
+    Object.freeze(instances);
+    ownedArrays.set(instances, minimumProgress);
+
+    return instances;
+}
+
 export function ownEffectsState(state: EffectsState): EffectsState {
     const { instances, nextInstanceId, nextAcquiredSequence } = state;
 
@@ -54,10 +64,14 @@ export function ownEffectsState(state: EffectsState): EffectsState {
         minimumSequence = Math.max(minimumSequence, instance.acquiredSequence + 1);
     }
 
-    Object.freeze(owned);
-    ownedArrays.set(owned, { nextInstanceId: minimumId, nextAcquiredSequence: minimumSequence });
-
-    return Object.freeze({ instances: owned, nextInstanceId, nextAcquiredSequence });
+    return Object.freeze({
+        instances: ownInstanceArray(owned, {
+            nextInstanceId: minimumId,
+            nextAcquiredSequence: minimumSequence,
+        }),
+        nextInstanceId,
+        nextAcquiredSequence,
+    });
 }
 
 export function replaceEffectInstances<U extends Unit>(
@@ -72,12 +86,76 @@ export function replaceEffectInstances<U extends Unit>(
     return { ...unit, effects: ownEffectsState({ ...progress, instances }) };
 }
 
-export function registerEffectInstance<U extends Unit>(unit: U, instance: EffectInstanceValue): U {
-    const previous = (unit as Unit & Partial<Effects>).effects ?? {
-        instances: [],
-        nextInstanceId: 0,
-        nextAcquiredSequence: 0,
+export function replaceEffectInstance<U extends Unit & Effects>(
+    unit: U,
+    instance: EffectInstanceValue,
+    updated: EffectInstanceValue,
+): U {
+    const previous = ownEffectsState(unit.effects);
+    const index = previous.instances.indexOf(instance);
+
+    if (index === -1 || updated === instance) {
+        return unit;
+    }
+
+    copyEffectInstance(updated);
+
+    if (updated.id !== instance.id || updated.acquiredSequence !== instance.acquiredSequence) {
+        throw new TypeError("effect identity and acquisition sequence cannot be changed");
+    }
+
+    const instances = [...previous.instances];
+    instances[index] = updated;
+
+    return {
+        ...unit,
+        effects: Object.freeze({
+            ...previous,
+            instances: ownInstanceArray(instances, ownedArrays.get(previous.instances)!),
+        }),
     };
+}
+
+export function removeEffectInstance<U extends Unit & Effects>(unit: U, instanceId: number): U {
+    const previous = ownEffectsState(unit.effects);
+    const instances: EffectInstanceValue[] = [];
+    let minimumId = 0;
+    let minimumSequence = 0;
+
+    for (const instance of previous.instances) {
+        if (instance.id !== instanceId) {
+            instances.push(instance);
+            minimumId = Math.max(minimumId, instance.id + 1);
+            minimumSequence = Math.max(minimumSequence, instance.acquiredSequence + 1);
+        }
+    }
+
+    if (instances.length === previous.instances.length) {
+        return unit;
+    }
+
+    return {
+        ...unit,
+        effects: Object.freeze({
+            ...previous,
+            instances: ownInstanceArray(instances, {
+                nextInstanceId: minimumId,
+                nextAcquiredSequence: minimumSequence,
+            }),
+        }),
+    };
+}
+
+export function registerEffectInstance<U extends Unit>(unit: U, instance: EffectInstanceValue): U {
+    const previous = ownEffectsState(
+        (unit as Unit & Partial<Effects>).effects ?? {
+            instances: [],
+            nextInstanceId: 0,
+            nextAcquiredSequence: 0,
+        },
+    );
+
+    copyEffectInstance(instance);
 
     if (
         instance.id < previous.nextInstanceId ||
@@ -94,12 +172,24 @@ export function registerEffectInstance<U extends Unit>(unit: U, instance: Effect
         throw new TypeError("only a fresh effect instance can be installed");
     }
 
+    const nextInstanceId = instance.id + 1;
+    const nextAcquiredSequence = instance.acquiredSequence + 1;
+    assertNonnegativeSafeInteger(nextInstanceId, "effect instance allocation progress", TypeError);
+    assertNonnegativeSafeInteger(
+        nextAcquiredSequence,
+        "effect acquired sequence allocation progress",
+        TypeError,
+    );
+
     return {
         ...unit,
-        effects: ownEffectsState({
-            instances: [...previous.instances, instance],
-            nextInstanceId: instance.id + 1,
-            nextAcquiredSequence: instance.acquiredSequence + 1,
+        effects: Object.freeze({
+            instances: ownInstanceArray([...previous.instances, instance], {
+                nextInstanceId,
+                nextAcquiredSequence,
+            }),
+            nextInstanceId,
+            nextAcquiredSequence,
         }),
     };
 }

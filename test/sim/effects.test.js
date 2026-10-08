@@ -29,6 +29,12 @@ import { uniqueEffectAdmission } from "../../dist/core/tactical/unit/capability/
 import { effectFixtureWork, installFixtureEffect } from "../helpers/effects.js";
 import { copyEffectsState } from "../../dist/core/tactical/unit/capability/effects/capability.js";
 import {
+  registerEffectInstance,
+  removeEffectInstance,
+  replaceEffectInstance,
+} from "../../dist/core/tactical/unit/capability/effects/internal/state.js";
+import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/transition.js";
+import {
   createStatusDefinition,
   hasStatusFlag,
   initializeStatusState,
@@ -152,6 +158,120 @@ test("effects: typed updates isolate external facts, retain unchanged instances 
     () => copyEffectsState({ ...installed.effects, nextAcquiredSequence: 1 }),
     /allocation progress/,
   );
+});
+
+test("effects: derived arrays stay frozen and preserve unchanged instances across branches and cleanup", () => {
+  const resources = new CombatResources();
+  const program = resources.registerEffect(barrierProgram());
+  const first = installFixtureEffect(
+    unit(),
+    resources.effects.create(program.ref, metadata(1)),
+    resources,
+  );
+  const second = installFixtureEffect(
+    first,
+    resources.effects.create(program.ref, metadata(2)),
+    resources,
+  );
+  const work = effectFixtureWork(second);
+  const address = { unitId: 2, instanceId: 2 };
+  let calls = 0;
+  const unchanged = updateEffectState(
+    work,
+    2,
+    2,
+    program.ref,
+    (state) => {
+      calls++;
+      return state;
+    },
+    resources,
+  );
+  const updated = updateEffectState(work, 2, 2, program.ref, { remainingAmount: 100 }, resources);
+  const branch = updateEffectState(work, 2, 2, program.ref, { remainingAmount: 200 }, resources);
+  const disabled = setEffectParticipation(updated, address, false, resources, 1);
+  const finished = finishEffect(disabled, address, resources, 1);
+  const cleaned = finalizeEffect(finished, address, resources, 1);
+  const retained = getCombatUnit(cleaned, 2).effects;
+
+  assert.equal(calls, 1);
+  assert.equal(unchanged, work);
+  assert.equal(first.effects.instances[0], second.effects.instances[0]);
+  assert.equal(second.effects.instances[1].state.remainingAmount, 500);
+  assert.equal(getCombatUnit(updated, 2).effects.instances[1].state.remainingAmount, 100);
+  assert.equal(getCombatUnit(branch, 2).effects.instances[1].state.remainingAmount, 200);
+  assert.equal(getCombatUnit(updated, 2).effects.instances[1].participating, true);
+  assert.equal(getCombatUnit(disabled, 2).effects.instances[1].finished, false);
+  const changedUnits = [updated, branch, disabled, finished, cleaned].map((value) =>
+    getCombatUnit(value, 2),
+  );
+  for (const current of [first, second, ...changedUnits]) {
+    assert.ok(Object.isFrozen(current.effects));
+    assert.ok(Object.isFrozen(current.effects.instances));
+    assert.equal(current.effects.instances[0], first.effects.instances[0]);
+    assert.equal(copyEffectsState(current.effects).instances, current.effects.instances);
+  }
+  assert.deepEqual(retained.instances.map((instance) => instance.id), [1]);
+  assert.equal(
+    copyEffectsState({ ...retained, nextInstanceId: 2, nextAcquiredSequence: 2 }).instances,
+    retained.instances,
+  );
+  assert.throws(() => retained.instances.push(second.effects.instances[1]), TypeError);
+  const empty = removeEffect(cleaned, { unitId: 2, instanceId: 1 }, resources, 1);
+  const emptyState = getCombatUnit(empty, 2).effects;
+  assert.ok(Object.isFrozen(emptyState.instances));
+  assert.equal(
+    copyEffectsState({ ...emptyState, nextInstanceId: 0, nextAcquiredSequence: 0 }).instances,
+    emptyState.instances,
+  );
+});
+
+test("effects: array ownership keeps caller arrays separate and rejects forged replacements and progress", () => {
+  const resources = new EffectResources();
+  const program = resources.register(barrierProgram());
+  const instance = resources.create(program.ref, metadata(1));
+  const input = [instance];
+  const effects = copyEffectsState({ instances: input, nextInstanceId: 2, nextAcquiredSequence: 2 });
+  const original = { ...unit(), effects };
+  const forged = Object.freeze({ ...instance });
+
+  assert.notEqual(effects.instances, input);
+  assert.equal(Object.isFrozen(input), false);
+  assert.ok(Object.isFrozen(effects.instances));
+  input.length = 0;
+  assert.deepEqual(effects.instances, [instance]);
+  assert.throws(
+    () => copyEffectsState({ ...effects, instances: Object.freeze([forged]) }),
+    /must be created or restored/,
+  );
+  assert.throws(
+    () => copyEffectsState({ ...effects, instances: [instance, instance] }),
+    /duplicate effect/,
+  );
+  assert.throws(
+    () => replaceEffectInstance(original, instance, forged),
+    /must be created or restored/,
+  );
+  assert.throws(() => registerEffectInstance(unit(), forged), /must be created or restored/);
+  assert.throws(
+    () => removeEffectInstance({ ...original, effects: { ...effects, instances: [forged] } }, 1),
+    /must be created or restored/,
+  );
+  assert.throws(
+    () => replaceEffectInstance(original, instance, resources.create(program.ref, metadata(2))),
+    /cannot be changed/,
+  );
+  for (const invalid of [-1, 1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(
+      () => copyEffectsState({ ...effects, nextInstanceId: invalid }),
+      /allocation progress/,
+    );
+    assert.throws(
+      () => copyEffectsState({ ...effects, nextAcquiredSequence: invalid }),
+      /allocation progress/,
+    );
+  }
+  assert.equal(copyEffectsState(effects).instances, effects.instances);
 });
 
 test("effects: heterogeneous dispatch remains paired and an unrelated typed program cannot update an instance", () => {

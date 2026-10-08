@@ -1,7 +1,7 @@
 import { transitionCombatUnit, type CombatWork } from "../../../battle/execution/work.js";
 import type { UnitId } from "../../unit.js";
 import { hasEffects } from "./capability.js";
-import { replaceEffectInstances } from "./internal/state.js";
+import { replaceEffectInstance } from "./internal/state.js";
 import type { EffectProgramRef } from "./program.js";
 import type { EffectTransitionResources } from "./contract.js";
 
@@ -40,10 +40,7 @@ export function updateEffectState<S extends object>(
             return owner;
         }
 
-        let unit = replaceEffectInstances(
-            owner,
-            owner.effects.instances.map((value) => (value === instance ? updated : value)),
-        );
+        let unit = replaceEffectInstance(owner, instance, updated);
 
         if (updated.started) {
             for (const binding of resources.effectBindings.get(updated)) {

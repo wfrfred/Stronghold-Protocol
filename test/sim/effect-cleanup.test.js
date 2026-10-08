@@ -8,6 +8,8 @@ import {
 import {
     finalizeFinishedEffects,
     finishEffect,
+    finishEffectsOnUnit,
+    finishEffectsOwnedByUnit,
     installNewEffect,
 } from '../../dist/core/tactical/unit/capability/effects/lifecycle.js';
 import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
@@ -38,6 +40,94 @@ test('effect cleanup: missing hosts and hosts without Effects require no members
 
     assert.equal(finalizeFinishedEffects(work, 2, resources, 1), work);
     assert.equal(finalizeFinishedEffects(work, 99, resources, 1), work);
+    assert.equal(finishEffectsOnUnit(work, 2, resources, 1), work);
+    assert.equal(finishEffectsOnUnit(work, 99, resources, 1), work);
+});
+
+test('effect cleanup: hosts without finished instances are read once and retain their work', () => {
+    const resources = new CombatResources();
+    const effect = resources.registerEffect(program('active'));
+    let work = effectFixtureWork(owner());
+
+    for (let index = 0; index < 3; index++) {
+        work = installNewEffect(work, 2, effect.ref, input, resources, 0).work;
+    }
+
+    const unit = getCombatUnit(work, 2);
+    let reads = 0;
+    const local = createCombatWork({
+        get unitIds() {
+            assert.fail('host cleanup must not enumerate units');
+        },
+        getUnit: id => {
+            reads++;
+            assert.equal(id, 2);
+            return unit;
+        },
+        blockerOf: () => undefined,
+        blockedBy: () => [],
+    });
+
+    assert.equal(finalizeFinishedEffects(local, 2, resources, 1), local);
+    assert.equal(reads, 1);
+    assert.equal(getCombatUnit(work, 2), unit);
+});
+
+test('effect cleanup: finishing a host captures its old instances without enumerating unrelated units', () => {
+    const resources = new CombatResources();
+    let newbornAddress;
+    const newborn = resources.registerEffect(program('newborn'));
+    const leader = resources.registerEffect(program('leader'), {
+        lifecycle: {
+            disable: context => {
+                assert.equal(context.instance.finished, true);
+                assert.equal(context.facts.getEffect(context.address).participating, false);
+                const installed = context.effects.install(2, newborn.ref, input);
+                assert.equal(installed.type, 'INSTALLED');
+                newbornAddress = installed.address;
+                assert.equal(context.facts.getEffect(context.address), undefined);
+                assert.equal(context.instance.finished, true);
+            },
+        },
+    });
+    const follower = resources.registerEffect(program('follower'));
+    let work = installNewEffect(effectFixtureWork(owner()), 2, leader.ref, input, resources, 0).work;
+    work = installNewEffect(work, 2, follower.ref, input, resources, 0).work;
+    const host = getCombatUnit(work, 2);
+    const other = { ...owner(), id: 7 };
+    const foreign = installNewEffect(effectFixtureWork(other), 7, follower.ref, input, resources, 0);
+    const unrelated = getCombatUnit(foreign.work, 7);
+    let scoped = false;
+    work = createCombatWork({
+        get unitIds() {
+            assert.equal(scoped, false, 'host finishing must not enumerate units');
+            return [2, 7];
+        },
+        getUnit: id => {
+            if (scoped) {
+                assert.equal(id, 2, 'host finishing must not read unrelated units');
+            }
+            return id === 2 ? host : id === 7 ? unrelated : undefined;
+        },
+        blockerOf: () => undefined,
+        blockedBy: () => [],
+    });
+    assert.equal(finishEffectsOwnedByUnit(work, 99, resources, 0), work);
+    scoped = true;
+
+    const finished = finishEffectsOnUnit(work, 2, resources, 1);
+    const remaining = getCombatUnit(finished, 2).effects.instances;
+
+    assert.deepEqual(remaining.map(instance => [instance.programRef.id, instance.finished]), [
+        ['follower', true],
+        ['newborn', false],
+    ]);
+    assert.equal(remaining[1].id, newbornAddress.instanceId);
+    assert.equal(host.effects.instances[0].finished, false);
+    assert.equal(host.effects.instances[1].finished, false);
+    scoped = false;
+    assert.equal(getCombatUnit(finished, 7), unrelated);
+    assert.equal(unrelated.effects.instances[0].finished, false);
 });
 
 test('effect cleanup: finished host instances are finalized without enumerating other units', () => {
