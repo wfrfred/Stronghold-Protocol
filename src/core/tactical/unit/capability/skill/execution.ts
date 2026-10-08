@@ -175,9 +175,6 @@ export function activateSkill(
 
     const compiled = resources.skills.get(unit.definition.skill);
 
-    if (unit.definition.skill.id !== compiled.definition.id) {
-        throw new TypeError("compiled skill must match the unit skill");
-    }
     if (tick < unit.skill.lastAdvancedTick) {
         throw new RangeError("skill activation cannot precede its current tick");
     }
@@ -242,9 +239,6 @@ export function activateSkill(
         compiled.activate,
     );
 
-    if ("then" in invoked.result) {
-        throw new TypeError("skill activation must return a synchronous outcome");
-    }
     if (invoked.result.type === "REJECTED") {
         const rejectedUnit = getCombatUnit(invoked.work, unitId);
         const refunded =

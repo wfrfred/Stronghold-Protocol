@@ -3,13 +3,16 @@ import {
     actionExecutionsBySource,
 } from "../../unit/capability/action/internal/executions.js";
 import { compileAction } from "../../unit/capability/action/compile.js";
-import { startActionInWork } from "../../unit/capability/action/execution.js";
+import type { ActionStartResources } from "../../unit/capability/action/execution.js";
+import { startActionInWork } from "../../unit/capability/action/internal/execution.js";
+import {
+    cancelActionExecutionInWork,
+    resumeActionExecutionInWork,
+} from "../../unit/capability/action/internal/process.js";
 import { ownCompiledAction, type CompiledAction } from "../../unit/capability/action/program.js";
 import {
     actionExecutionPermissions,
-    cancelActionExecutionInWork,
     createActionExecutionState,
-    resumeActionExecutionInWork,
     type ActionExecution,
     type ActionExecutionState,
     type CompiledActionSegment,
@@ -88,9 +91,8 @@ export function createCombatSystem(
                 const cancelled = cancelActionExecutionInWork(
                     work,
                     executions,
-                    command.executionId,
+                    { executionId: command.executionId, tick: input.tick },
                     resources,
-                    input.tick,
                 );
                 work = cancelled.work;
             }
@@ -107,6 +109,15 @@ export function createCombatSystem(
     const step: BattlePhase<ActionExecutionState, CombatPhaseInput> = (input, state) => {
         const { battlefield, tick } = input;
         const executions = new ActionExecutionWork(state);
+        const actionResources: ActionStartResources = {
+            computations: resources.computations,
+            effects: resources.effects,
+            effectBindings: resources.effectBindings,
+            effectLifecycle: resources.effectLifecycle,
+            actionRelease: resources.actionRelease,
+            completeAttack: resources.completeAttack,
+            ...(input.projectiles === undefined ? {} : { projectileOperations: input.projectiles }),
+        };
         const ids = [
             ...new Set([
                 ...battlefield.unitIds,
@@ -132,11 +143,8 @@ export function createCombatSystem(
                 const resumed = resumeActionExecutionInWork(
                     work,
                     executions,
-                    execution.id,
-                    segmentsOf(execution),
-                    tick,
-                    resources,
-                    input.projectiles,
+                    { executionId: execution.id, segments: segmentsOf(execution), tick },
+                    actionResources,
                 );
                 work = resumed.work;
             }
@@ -155,17 +163,18 @@ export function createCombatSystem(
             work = startActionInWork(
                 work,
                 executions,
-                id,
-                compiledAction(
-                    hasSkill(unit) && unit.skill.active !== null
-                        ? (unit.definition.skill.activeAction ??
-                              unit.definition.action.normalAction)
-                        : unit.definition.action.normalAction,
-                ),
-                tick,
-                resources,
-                mayStart(executions, id),
-                input.projectiles,
+                {
+                    sourceUnitId: id,
+                    compiled: compiledAction(
+                        hasSkill(unit) && unit.skill.active !== null
+                            ? (unit.definition.skill.activeAction ??
+                                  unit.definition.action.normalAction)
+                            : unit.definition.action.normalAction,
+                    ),
+                    tick,
+                    mayStart: mayStart(executions, id),
+                },
+                actionResources,
             );
         }
 

@@ -51,7 +51,12 @@ function reference(initial, segments, resources, tick) {
   let work = createCombatWork(initial.battlefield);
   for (const id of initial.battlefield.unitIds) {
     for (const execution of state.executions.filter(execution => execution.sourceUnitId === id)) {
-      const advanced = resumeActionExecution(work, state, execution.id, segments, tick, resources);
+      const advanced = resumeActionExecution(
+        work,
+        state,
+        { executionId: execution.id, segments, tick },
+        resources,
+      );
       work = advanced.work;
       state = advanced.state;
     }
@@ -116,8 +121,12 @@ test('action execution work: absolute and same-tick consumed waits preserve unch
     const entered = system.step(initial.input, initial.state);
     const unchanged = system.step(initial.input, entered.state);
     assert.equal(unchanged.state, entered.state);
-    const single = resumeActionExecution(createCombatWork(initial.battlefield), entered.state,
-      entered.state.executions[0].id, segments, 0, resources);
+    const single = resumeActionExecution(
+      createCombatWork(initial.battlefield),
+      entered.state,
+      { executionId: entered.state.executions[0].id, segments, tick: 0 },
+      resources,
+    );
     assert.equal(single.state, entered.state);
     assert.deepEqual(unchanged.events, []);
     assert.deepEqual(unchanged.changes, []);

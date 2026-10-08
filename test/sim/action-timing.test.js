@@ -81,7 +81,19 @@ function values(work, resources) {
 }
 
 function advance(work, resources, tick, state = createActionExecutionState(), compiled) {
-    return startAction(work, state, 0, compiled ?? compileAction(getCombatUnit(work, 0).definition.action.normalAction, resources), tick, resources, true);
+    return startAction(
+      work,
+      state,
+      {
+        sourceUnitId: 0,
+        compiled:
+          compiled ??
+          compileAction(getCombatUnit(work, 0).definition.action.normalAction, resources),
+        tick,
+        mayStart: true,
+      },
+      resources,
+    );
 }
 
 function spec(source, maxTicks) {

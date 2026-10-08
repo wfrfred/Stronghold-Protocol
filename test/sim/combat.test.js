@@ -29,8 +29,12 @@ import { combatWorkResult, createCombatWork, updateCombatUnit } from '../../dist
 import { createActionExecutionState } from '../../dist/core/tactical/unit/capability/action/process.js';
 
 const startSingleAction = (source, compiled, context) => {
-  const result = startAction(updateCombatUnit(createCombatWork(context.battlefield), source),
-    createActionExecutionState(), source.id, compiled, context.tick, new CombatResources(), true);
+  const result = startAction(
+    updateCombatUnit(createCombatWork(context.battlefield), source),
+    createActionExecutionState(),
+    { sourceUnitId: source.id, compiled, tick: context.tick, mayStart: true },
+    new CombatResources(),
+  );
   return { ...combatWorkResult(result.work), state: result.state };
 };
 

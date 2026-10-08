@@ -229,7 +229,12 @@ test("action runtime: delayed progress keeps ordinary same-tick order and copied
   };
   const copySignals = [];
   for (const tick of [1, 2]) {
-    copied = resumeActionExecution(copied.work, copied.state, id, process, tick, resources);
+    copied = resumeActionExecution(
+      copied.work,
+      copied.state,
+      { executionId: id, segments: process, tick },
+      resources,
+    );
     copySignals.push(...copied.signals);
   }
   const second = runtime.step();

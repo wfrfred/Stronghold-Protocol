@@ -196,7 +196,12 @@ test("combat program: a custom compiled effect may act on a target without Vital
     bind: () => new Map([["primary", [1]]]),
   };
   const initial = workWith(source, target);
-  const result = startAction(initial, createActionExecutionState(), 0, prepared, 0, resources, true).work;
+  const result = startAction(
+    initial,
+    createActionExecutionState(),
+    { sourceUnitId: 0, compiled: prepared, tick: 0, mayStart: true },
+    resources,
+  ).work;
 
   assert.equal(calls, 1);
   assert.deepEqual(getCombatUnit(result, 1).position, [2, 0]);
@@ -246,7 +251,12 @@ test("combat program: ordered steps can rebind after a prior hit removes a targe
       compiled.program[0],
     ],
   };
-  const result = startAction(workWith(source, first, second), createActionExecutionState(), 0, repeated, 0, resources, true).work;
+  const result = startAction(
+    workWith(source, first, second),
+    createActionExecutionState(),
+    { sourceUnitId: 0, compiled: repeated, tick: 0, mayStart: true },
+    resources,
+  ).work;
 
   assert.deepEqual(observed, { first: undefined, secondHp: 30, candidates: [0, 2] });
   assert.equal(getCombatUnit(result, 1), undefined);
@@ -690,7 +700,12 @@ test("combat program: readiness skips binding and target ownership stays in even
   for (const [readyAtTick, recoveryUntilTick, mayStart] of [[2, 0, true], [0, 2, true], [0, 0, false]]) {
     const waiting = { ...source, action: { ...source.action, readyAtTick, recoveryUntilTick } };
     const initial = workWith(waiting, target);
-    const result = startAction(initial, state, 0, query, 1, resources, mayStart);
+    const result = startAction(
+      initial,
+      state,
+      { sourceUnitId: 0, compiled: query, tick: 1, mayStart },
+      resources,
+    );
 
     assert.equal(result.work, initial);
     assert.equal(result.state, state);
@@ -698,19 +713,39 @@ test("combat program: readiness skips binding and target ownership stays in even
   }
   assert.equal(bindings, 0);
 
-  const started = startAction(workWith(source, target), state, 0, query, 0, resources, true);
+  const started = startAction(
+    workWith(source, target),
+    state,
+    { sourceUnitId: 0, compiled: query, tick: 0, mayStart: true },
+    resources,
+  );
   assert.equal(bindings, 1);
   assert.equal(combatWorkEvents(started.work).find(event => event.type === 'ACTION').targetUnitId, 1);
   assert.deepEqual(started.state, { nextExecutionId: 1, executions: [] });
   assert.equal(combatWorkEvents(started.work).at(-1).type, "ACTION_FINISHED");
 
   const disappeared = removeCombatUnit(started.work, 1, 'RETREAT');
-  const cooling = startAction(disappeared, started.state, 0, query, 1, resources, true);
+  const cooling = startAction(
+    disappeared,
+    started.state,
+    { sourceUnitId: 0, compiled: query, tick: 1, mayStart: true },
+    resources,
+  );
   assert.equal(cooling.work, disappeared);
   assert.equal(bindings, 1);
   assert.deepEqual(Object.keys(getCombatUnit(cooling.work, 0).action).sort(), ['attackSpeed', 'baseAttackTime', 'cooldownIntervalTicks', 'readyAtTick', 'recoveryUntilTick']);
 
-  const ready = startAction(cooling.work, cooling.state, 0, query, definition.action.normalAction.baseAttackTimeTicks, resources, true);
+  const ready = startAction(
+    cooling.work,
+    cooling.state,
+    {
+      sourceUnitId: 0,
+      compiled: query,
+      tick: definition.action.normalAction.baseAttackTimeTicks,
+      mayStart: true,
+    },
+    resources,
+  );
   assert.equal(bindings, 2);
   assert.equal(ready.work, cooling.work);
   assert.deepEqual(ready.state, cooling.state);
@@ -746,7 +781,12 @@ test("combat program: immediate execution cleans owned Effects and cancels succe
       } },
     ],
   };
-  const started = startAction(workWith(source, target), createActionExecutionState(), 0, compiled, 0, resources, true);
+  const started = startAction(
+    workWith(source, target),
+    createActionExecutionState(),
+    { sourceUnitId: 0, compiled, tick: 0, mayStart: true },
+    resources,
+  );
   const receiver = getCombatUnit(started.work, 1);
 
   assert.deepEqual(observed, [["install", 0]]);

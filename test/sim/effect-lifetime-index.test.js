@@ -243,7 +243,12 @@ test('effect lifetime index: Action cancellation finishes execution-owned effect
     });
     const installed = install(host(unit(0), unit(9)).work, resources, effect.ref, 9, scope(accepted.execution.id));
     effectAddressesOwnedByExecution(installed.work, 0, accepted.execution.id);
-    const cancelled = cancelActionExecution(installed.work, accepted.state, accepted.execution.id, resources, 1);
+    const cancelled = cancelActionExecution(
+      installed.work,
+      accepted.state,
+      { executionId: accepted.execution.id, tick: 1 },
+      resources,
+    );
 
     assert.equal(cancelled.result.type, 'CANCELLED');
     assert.deepEqual(cancelled.state.executions, []);
