@@ -156,6 +156,10 @@ function updateExecution(
     activity: NavigationActivity,
     visits: NavigationVisitHistory = state.execution.visits,
 ): NavigationState {
+    if (activity === state.execution.activity && visits === state.execution.visits) {
+        return state;
+    }
+
     return {
         pathMotionMode: state.pathMotionMode,
         execution: {
@@ -289,22 +293,29 @@ export function queryNavigation(state: NavigationState, position: WorldPosition)
 
     switch (selection.decision.type) {
         case "MOVE":
-            nextActivity = { type: "FOLLOWING", path: activity.path, cursor: selection.cursor };
-            break;
-
         case "ARRIVAL_CANDIDATE":
-            nextActivity = { type: "FOLLOWING", path: activity.path, cursor: selection.cursor };
+            nextActivity =
+                activity.type === "FOLLOWING" && activity.cursor === selection.cursor
+                    ? activity
+                    : { type: "FOLLOWING", path: activity.path, cursor: selection.cursor };
             break;
 
         case "UNREACHABLE": {
             const reason = selection.decision.reason;
-            nextActivity = {
-                type: "UNREACHABLE",
-                path: activity.path,
-                cursor: selection.cursor,
-                position: createWorldPosition(position[0], position[1]),
-                reason,
-            };
+            nextActivity =
+                activity.type === "UNREACHABLE" &&
+                activity.cursor === selection.cursor &&
+                activity.position[0] === position[0] &&
+                activity.position[1] === position[1] &&
+                activity.reason === reason
+                    ? activity
+                    : {
+                          type: "UNREACHABLE",
+                          path: activity.path,
+                          cursor: selection.cursor,
+                          position: createWorldPosition(position[0], position[1]),
+                          reason,
+                      };
 
             if (activity.type !== "UNREACHABLE" || activity.reason !== reason) {
                 outcomes.push({ type: "UNREACHABLE", requestId, reason });
@@ -314,7 +325,10 @@ export function queryNavigation(state: NavigationState, position: WorldPosition)
         }
 
         case "OUTSIDE_MAP":
-            nextActivity = { ...activity, cursor: selection.cursor };
+            nextActivity =
+                activity.cursor === selection.cursor
+                    ? activity
+                    : { ...activity, cursor: selection.cursor };
             break;
     }
 

@@ -90,14 +90,20 @@ export function stepRoutedUnit<U extends RoutedLocomotiveUnit>(
         context,
         isSpatiallyPresent(unit),
     );
-    let next = { ...unit, position: step.position, locomotion: step.state };
+    let next =
+        step.position === unit.position && step.state === unit.locomotion
+            ? unit
+            : { ...unit, position: step.position, locomotion: step.state };
 
     if (hasSpatialPresence(unit) || step.signals.some(({ signal }) => signal.type !== "ALERT")) {
         const spatialPresence =
             hasSpatialPresence(unit) && unit.spatialPresence.present === step.present
                 ? unit.spatialPresence
                 : { present: step.present };
-        next = { ...next, spatialPresence };
+
+        if (!hasSpatialPresence(unit) || spatialPresence !== unit.spatialPresence) {
+            next = { ...next, spatialPresence };
+        }
     }
 
     return {
@@ -147,6 +153,7 @@ export function stepRoutedLocomotion(
     context: RoutedLocomotionStepContext,
     present = true,
 ): RoutedLocomotionStep {
+    const initialPosition = position;
     const execution = createRouteExecution(
         createRng(context.rngState),
         context.nextNavigationRequestId,
@@ -188,7 +195,9 @@ export function stepRoutedLocomotion(
             arrived.add(request.id);
         }
 
-        return { ...control, navigation: markNavigationArrived(control.navigation) };
+        const navigation = markNavigationArrived(control.navigation);
+
+        return navigation === control.navigation ? control : { ...control, navigation };
     }
 
     function heading(control: RouteControlState): {
@@ -225,7 +234,11 @@ export function stepRoutedLocomotion(
             }
 
             const next = queryNavigation(control.navigation, position);
-            control = { ...control, navigation: next.state };
+
+            if (next.state !== control.navigation) {
+                control = { ...control, navigation: next.state };
+            }
+
             outcomes.push(...next.outcomes);
             const decision = next.selection.decision;
 
@@ -426,12 +439,30 @@ export function stepRoutedLocomotion(
 
     main = completeAtEnd(main);
 
+    if (position[0] === initialPosition[0] && position[1] === initialPosition[1]) {
+        position = initialPosition;
+    }
+    if (
+        steering.lastVelocity[0] === state.steering.lastVelocity[0] &&
+        steering.lastVelocity[1] === state.steering.lastVelocity[1]
+    ) {
+        steering = state.steering;
+    }
+
+    const nextState =
+        moving === state.moving &&
+        steering === state.steering &&
+        main === state.mainRoute &&
+        alternative === state.alternativeRoute
+            ? state
+            : { ...state, moving, steering, mainRoute: main, alternativeRoute: alternative };
+
     return {
         position,
         present,
         signals,
         outcomes,
-        state: { ...state, moving, steering, mainRoute: main, alternativeRoute: alternative },
+        state: nextState,
         ...execution.state(),
     };
 }

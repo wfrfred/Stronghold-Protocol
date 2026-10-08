@@ -610,6 +610,45 @@ test('core navigation query owns one progress decision and preserves its inputs 
   }
 });
 
+test('core navigation shares unchanged execution and replaces recorded progress', () => {
+  const map = fieldMap(1, 4, Array.from({ length: 4 }, () => fieldCell()));
+  const path = navigationPathFor(map);
+  const following = bindNavigationPath(startNavigationRequest(createNavigationState('WALK', [0, 0]), path.request), path, [0, 0]).state;
+  assert.equal(queryNavigation(following, [0, 0]).state, following);
+  assert.equal(queryNavigation(following, [-2, 0]).state, following);
+  const arrived = queryNavigation(following, [3.2, 0]);
+  assert.notEqual(arrived.state, following);
+  assert.equal(arrived.state.execution.activity.cursor.type, 'GOAL');
+  assert.equal(queryNavigation(arrived.state, [3.2, 0]).state, arrived.state);
+
+  const centerPath = navigationPathFor(map, { options: { visitEveryTileCenter: true } });
+  const centered = bindNavigationPath(startNavigationRequest(createNavigationState('WALK', [0, 0]), centerPath.request), centerPath, [0, 0]).state;
+  const visited = queryNavigation(centered, [0, 0]).state;
+  assert.notEqual(visited, centered);
+  assert.deepEqual(visited.execution.visits.visitedCenters, [[0, 0]]);
+  assert.equal(queryNavigation(visited, [0, 0]).state, visited);
+  const nextCenter = queryNavigation(visited, [1, 0]).state;
+  assert.notEqual(nextCenter, visited);
+  assert.deepEqual(nextCenter.execution.visits.visitedCenters, [[0, 0], [0, 1]]);
+
+  const blockedPath = navigationPathFor(fieldMap(1, 4, [fieldCell(), fieldCell({ passable: false }), fieldCell(), fieldCell()]));
+  const blocked = bindNavigationPath(startNavigationRequest(createNavigationState('WALK', [0, 0]), blockedPath.request), blockedPath, [0, 0]).state;
+  const failed = queryNavigation(blocked, [0, 0]);
+  assert.notEqual(failed.state, blocked);
+  assert.deepEqual(failed.outcomes, [{ type: 'UNREACHABLE', requestId: blockedPath.request.id, reason: 'POSITION_UNREACHABLE' }]);
+  const retry = queryNavigation(failed.state, [0, 0]);
+  assert.equal(retry.state, failed.state);
+  assert.deepEqual(retry.outcomes, []);
+  const displaced = queryNavigation(failed.state, [0.1, 0]);
+  assert.notEqual(displaced.state, failed.state);
+  assert.deepEqual(displaced.state.execution.activity.position, [0.1, 0]);
+  assert.deepEqual(displaced.outcomes, []);
+  assert.equal(queryNavigation(displaced.state, [-2, 0]).state, displaced.state);
+  const recovered = queryNavigation(displaced.state, [2, 0]);
+  assert.notEqual(recovered.state, displaced.state);
+  assert.equal(recovered.state.execution.activity.type, 'FOLLOWING');
+});
+
 test('core navigation rebinds displacement, map replacement and motion mode without replacing the resolved request', () => {
   const path = navigationPathFor(fieldMap(1, 4, Array.from({ length: 4 }, () => fieldCell())), {
     id: 77, options: { visitEveryTileCenter: true },
@@ -1981,6 +2020,106 @@ test('core routed movement preserves frozen input values and shares unchanged do
     unit.locomotion.mainRoute.navigation.execution.visits);
   assert.equal(moved.locomotion.mainRoute.navigation.execution.activity.path,
     unit.locomotion.mainRoute.navigation.execution.activity.path);
+});
+
+test('core routed movement shares the unit when position and locomotion remain unchanged', () => {
+  for (const controls of [
+    { movementAllowed: false },
+    { motionOverride: { type: 'DISPLACEMENT', displacement: [0, 0] } },
+    { motionOverride: { type: 'DIRECTION', direction: [0, 0] } },
+  ]) {
+    const h = routedEnemyHarness({ speedPerTick: 0.1, checkpoints: [coreMove(4)] });
+    const unit = h.enemy, seed = h.rngState, identity = h.nextNavigationRequestId;
+    const result = h.step(controls);
+    assert.equal(result.enemy, unit);
+    assert.equal(result.enemy.position, unit.position);
+    assert.equal(result.enemy.locomotion, unit.locomotion);
+    assert.deepEqual(result.signals, []);
+    assert.deepEqual(result.outcomes, []);
+    assert.equal(result.rngState, seed);
+    assert.equal(result.nextNavigationRequestId, identity);
+  }
+  const stopped = routedEnemyHarness({ speedPerTick: 0, checkpoints: [coreMove(4)] });
+  stopped.step();
+  const ready = stopped.enemy;
+  assert.equal(stopped.step().enemy, ready);
+  const displaced = stopped.step({ motionOverride: { type: 'DISPLACEMENT', displacement: [0.1, 0] } }).enemy;
+  assert.notEqual(displaced, ready);
+  assert.notEqual(displaced.position, ready.position);
+  assert.equal(displaced.locomotion, ready.locomotion);
+
+  const moving = routedEnemyHarness({ speedPerTick: 0.1, checkpoints: [coreMove(4)] });
+  moving.step();
+  const walking = moving.enemy;
+  const paused = moving.step({ movementAllowed: false }).enemy;
+  assert.notEqual(paused, walking);
+  assert.equal(paused.position, walking.position);
+  assert.equal(paused.locomotion.moving, false);
+  assert.equal(paused.locomotion.steering, walking.locomotion.steering);
+  assert.equal(moving.step({ movementAllowed: false }).enemy, paused);
+});
+
+test('core routed movement preserves wait progress, signals and execution consumption while stationary', () => {
+  const h = routedEnemyHarness({ speedPerTick: 0, checkpoints: [
+    { type: 'WAIT_FOR_TICKS', durationTicks: 1 }, { type: 'ALERT' },
+    coreMove(4, { randomizeReachOffset: true, reachOffset: [0.2, 0.1] }),
+  ] });
+  const waiting = h.enemy;
+  assert.equal(h.step({ movementAllowed: false, waitTickAllowed: false }).enemy, waiting);
+  const expired = h.step({ movementAllowed: false, routeAdvanceAllowed: false }).enemy;
+  assert.notEqual(expired, waiting);
+  assert.equal(expired.position, waiting.position);
+  assert.equal(expired.locomotion.steering, waiting.locomotion.steering);
+  assert.equal(expired.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 0);
+  assert.equal(h.step({ movementAllowed: false, routeAdvanceAllowed: false }).enemy, expired);
+  const alert = h.step({ movementAllowed: false });
+  assert.notEqual(alert.enemy, expired);
+  assert.deepEqual(alert.signals, [{ signal: { type: 'ALERT' }, position: expired.position }]);
+  const seed = h.rngState, identity = h.nextNavigationRequestId;
+  const entered = h.step({ movementAllowed: false });
+  assert.notEqual(entered.enemy, alert.enemy);
+  assert.equal(entered.enemy.position, expired.position);
+  assert.notEqual(entered.rngState, seed);
+  assert.equal(entered.nextNavigationRequestId, identity + 1);
+
+  const takeover = routedEnemyHarness({ checkpoints: [{ type: 'WAIT_FOR_TICKS', durationTicks: 3 }] });
+  takeover.setAlternative(createRouteDefinition(coreRoute({ checkpoints: [{ type: 'WAIT_FOR_TICKS', durationTicks: 10 }] })));
+  const controlled = takeover.enemy;
+  assert.equal(takeover.step({ movementAllowed: false, waitTickAllowed: false }).enemy, controlled);
+  const ticked = takeover.step({ movementAllowed: false, routeAdvanceAllowed: false }).enemy;
+  assert.notEqual(ticked.locomotion.mainRoute, controlled.locomotion.mainRoute);
+  assert.notEqual(ticked.locomotion.alternativeRoute, controlled.locomotion.alternativeRoute);
+});
+
+test('core blocked movement retains steering changes and shares stationary unreachable retries', () => {
+  const cells = Array.from({ length: 15 }, () => fieldCell());
+  cells[1] = fieldCell({ passable: false });
+  const map = fieldMap(5, 3, cells);
+  const blocked = routedEnemyHarness({ speedPerTick: 2, checkpoints: [], routeOverrides: { endPosition: [4, 0] } });
+  blocked.setMaps({ WALK: map, FLY: map });
+  blocked.step({ moveMultiplier: 0 });
+  blocked.enemy.definition = createEnemyDefinition({ ...blocked.enemy.definition, locomotion: {
+    ...blocked.enemy.definition.locomotion,
+    steeringParameters: createSteeringParameters({ steeringFactor: 1, maxSteeringForce: 0.25 }),
+  } });
+  blocked.enemy.locomotion.steering.lastVelocity = [2, 0];
+  const before = blocked.enemy;
+  const steered = blocked.step().enemy;
+  assert.equal(steered.position, before.position);
+  assert.notEqual(steered, before);
+  assert.notEqual(steered.locomotion, before.locomotion);
+  assert.notEqual(steered.locomotion.steering, before.locomotion.steering);
+  assert.notDeepEqual(steered.locomotion.steering.lastVelocity, before.locomotion.steering.lastVelocity);
+  assert.equal(steered.locomotion.mainRoute, before.locomotion.mainRoute);
+
+  const unreachable = routedEnemyHarness({ speedPerTick: 2, checkpoints: [], routeOverrides: { endPosition: [0, 2] } });
+  const wall = fieldMap(1, 3, [fieldCell(), fieldCell({ passable: false }), fieldCell()]);
+  unreachable.setMaps({ WALK: wall, FLY: wall });
+  const first = unreachable.step();
+  assert.deepEqual(first.outcomes, [{ type: 'UNREACHABLE', requestId: 0, reason: 'POSITION_UNREACHABLE' }]);
+  const retry = unreachable.step();
+  assert.equal(retry.enemy, first.enemy);
+  assert.deepEqual(retry.outcomes, []);
 });
 
 test('core external unit coordinates and internal effect snapshots retain ownership isolation', () => {
