@@ -109,7 +109,7 @@ test('participation notification scope: exceptions release pending identity leas
 });
 
 test('Buff contribution integration: only effective layer growth resamples the retained source, while renewal preserves the sample', () => {
-  const policy = compileBuffStacking({ overrideType: 'STACK', maxStackCnt: 3, maxValidStackCnt: 2, refreshRemainingTimeWhenStackMax: true, takeSnapshotWhenExtend: false });
+  const policy = compileBuffStacking({ overrideType: 'STACK', maxStackCnt: 3, maxValidStackCnt: 2, refreshRemainingTimeWhenStackMax: true, takeSnapshotWhenExtend: false, clearAllStackCntWhenTimeUp: false });
   const [compiled] = compileAttributeModifiers(parseAttributeModifiers([{
     attributeType: 'ATK', formulaItem: 'MULTIPLIER', value: 0.5,
     loadFromBlackboard: false, fetchBaseValueFromSourceEntity: true,

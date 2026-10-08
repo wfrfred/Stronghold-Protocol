@@ -9,12 +9,14 @@ export interface BuffStacking {
     readonly maxStackCnt: number;
     readonly maxValidStackCnt: number;
     readonly refreshRemainingTimeWhenStackMax: boolean;
+    readonly clearAllStackCntWhenTimeUp: boolean;
     readonly takeSnapshotWhenExtend: boolean;
 }
 
 export interface BuffApplication {
     readonly stackCount: number;
     readonly expiresAtTick: number | null;
+    readonly maxStackCount?: number | null;
 }
 
 export type BuffStackingPlan =
@@ -28,6 +30,15 @@ export type BuffStackingPlan =
           readonly reloadModifiers: boolean;
       };
 
+export type BuffExpiryPlan =
+    | { readonly type: "FINISH" }
+    | {
+          readonly type: "REFRESH";
+          readonly stackCount: number;
+          readonly expiresAtTick: number | null;
+          readonly reloadModifiers: boolean;
+      };
+
 export interface CompiledBuffStacking {
     readonly validStackCount: (count: number) => number;
     readonly plan: (
@@ -35,10 +46,16 @@ export interface CompiledBuffStacking {
         incoming: BuffApplication,
         tick: number,
     ) => BuffStackingPlan;
+    readonly expire: (
+        current: BuffApplication,
+        lifetimeTicks: number | null,
+        tick: number,
+    ) => BuffExpiryPlan;
 }
 
 const install = Object.freeze({ type: "INSTALL" } as const);
 const reject = Object.freeze({ type: "REJECT" } as const);
+const finish = Object.freeze({ type: "FINISH" } as const);
 
 function overrideType(value: unknown): BuffOverrideType {
     for (const key in overrideTypes) {
@@ -67,10 +84,12 @@ export function parseBuffStacking(value: unknown): BuffStacking {
 
     const source = value as Record<string, unknown>;
     const refreshRemainingTimeWhenStackMax = source.refreshRemainingTimeWhenStackMax;
+    const clearAllStackCntWhenTimeUp = source.clearAllStackCntWhenTimeUp;
     const takeSnapshotWhenExtend = source.takeSnapshotWhenExtend;
 
     if (
         typeof refreshRemainingTimeWhenStackMax !== "boolean" ||
+        typeof clearAllStackCntWhenTimeUp !== "boolean" ||
         typeof takeSnapshotWhenExtend !== "boolean"
     ) {
         throw new TypeError("buff stacking refresh and snapshot flags must be boolean");
@@ -81,12 +100,17 @@ export function parseBuffStacking(value: unknown): BuffStacking {
         maxStackCnt: stackLimit(source.maxStackCnt, "maxStackCnt"),
         maxValidStackCnt: stackLimit(source.maxValidStackCnt, "maxValidStackCnt"),
         refreshRemainingTimeWhenStackMax,
+        clearAllStackCntWhenTimeUp,
         takeSnapshotWhenExtend,
     });
 }
 
 function validateApplication(application: BuffApplication, name: string): void {
     assertNonnegativeSafeInteger(application.stackCount, `${name} stack count`);
+
+    if (application.maxStackCount !== undefined && application.maxStackCount !== null) {
+        assertNonnegativeSafeInteger(application.maxStackCount, `${name} stack limit`);
+    }
 
     if (application.expiresAtTick !== null) {
         assertNonnegativeSafeInteger(application.expiresAtTick, `${name} expiration tick`);
@@ -137,6 +161,9 @@ function refresh(
 
 export function compileBuffStacking(definition: BuffStacking): CompiledBuffStacking {
     const rule = parseBuffStacking(definition);
+    const configuredMaxStackCount = rule.maxStackCnt < 0 ? null : rule.maxStackCnt;
+    const reloadModifiers = (count: number) =>
+        rule.maxValidStackCnt < 0 || count <= rule.maxValidStackCnt;
 
     return Object.freeze({
         validStackCount: (count: number) => {
@@ -160,8 +187,13 @@ export function compileBuffStacking(definition: BuffStacking): CompiledBuffStack
                     return reject;
 
                 case "STACK": {
-                    if (rule.maxStackCnt >= 0 && current.stackCount >= rule.maxStackCnt) {
-                        return current.stackCount === rule.maxStackCnt &&
+                    const maxStackCount =
+                        current.maxStackCount === undefined
+                            ? configuredMaxStackCount
+                            : current.maxStackCount;
+
+                    if (maxStackCount !== null && current.stackCount >= maxStackCount) {
+                        return current.stackCount === maxStackCount &&
                             rule.refreshRemainingTimeWhenStackMax
                             ? refresh(
                                   current.stackCount,
@@ -179,7 +211,7 @@ export function compileBuffStacking(definition: BuffStacking): CompiledBuffStack
                         stackCount,
                         latestExpiration(current, incoming),
                         false,
-                        rule.maxValidStackCnt < 0 || stackCount <= rule.maxValidStackCnt,
+                        reloadModifiers(stackCount),
                     );
                 }
 
@@ -199,6 +231,35 @@ export function compileBuffStacking(definition: BuffStacking): CompiledBuffStack
                         false,
                     );
             }
+        },
+        expire: (current: BuffApplication, lifetimeTicks: number | null, tick: number) => {
+            validateApplication(current, "expiring buff");
+            assertNonnegativeSafeInteger(tick, "buff expiration tick");
+
+            if (lifetimeTicks !== null) {
+                assertNonnegativeSafeInteger(lifetimeTicks, "buff lifetime ticks");
+            }
+            if (
+                rule.overrideType !== "STACK" ||
+                rule.clearAllStackCntWhenTimeUp ||
+                current.stackCount <= 1
+            ) {
+                return finish;
+            }
+
+            const stackCount = current.stackCount - 1;
+            const expiresAtTick = lifetimeTicks === null ? null : tick + Math.max(1, lifetimeTicks);
+
+            if (expiresAtTick !== null) {
+                assertNonnegativeSafeInteger(expiresAtTick, "renewed buff expiration tick");
+            }
+
+            return Object.freeze({
+                type: "REFRESH",
+                stackCount,
+                expiresAtTick,
+                reloadModifiers: reloadModifiers(stackCount),
+            });
         },
     });
 }

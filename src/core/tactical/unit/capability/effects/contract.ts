@@ -60,6 +60,7 @@ export interface EffectLifecycleProgram<S extends object> {
     readonly start?: EffectLifecycleAction<S>;
     readonly enable?: EffectLifecycleAction<S>;
     readonly disable?: EffectLifecycleAction<S>;
+    readonly expire?: EffectLifecycleAction<S>;
     readonly finalize?: EffectLifecycleAction<S>;
     readonly accepts?: (context: EffectAdmissionContext<S>) => boolean;
     readonly competition?: (instance: EffectCompetitionInput<S>) => EffectCompetition | undefined;

@@ -14,6 +14,7 @@ export interface CompiledEffectLifecycle {
     readonly start?: (context: EffectLifecycleContext) => undefined;
     readonly enable?: (context: EffectLifecycleContext) => undefined;
     readonly disable?: (context: EffectLifecycleContext) => undefined;
+    readonly expire?: (context: EffectLifecycleContext) => undefined;
     readonly finalize?: (context: EffectLifecycleContext) => undefined;
     readonly accepts?: (context: EffectAdmissionContext) => boolean;
     readonly competition?: (instance: EffectInstanceValue) => EffectCompetition | undefined;
@@ -68,6 +69,7 @@ export class EffectLifecycleResources {
         const start = compile(program.start).run;
         const enable = compile(program.enable).run;
         const disable = compile(program.disable).run;
+        const expire = compile(program.expire).run;
         const finalize = compile(program.finalize).run;
         const accepts = program.accepts;
         const competition = program.competition;
@@ -78,6 +80,7 @@ export class EffectLifecycleResources {
                 ...(start === undefined ? {} : { start }),
                 ...(enable === undefined ? {} : { enable }),
                 ...(disable === undefined ? {} : { disable }),
+                ...(expire === undefined ? {} : { expire }),
                 ...(finalize === undefined ? {} : { finalize }),
                 ...(accepts === undefined
                     ? {}

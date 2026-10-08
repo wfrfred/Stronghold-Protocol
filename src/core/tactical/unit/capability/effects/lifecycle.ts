@@ -820,11 +820,37 @@ export function expireEffects(
     const scope = dispatch ?? new EffectDispatchScope();
     const expired = addressesMatching(
         work,
-        (instance) => instance.expiresAtTick !== null && instance.expiresAtTick <= tick,
+        (instance) =>
+            !instance.finished && instance.expiresAtTick !== null && instance.expiresAtTick <= tick,
     );
 
     for (const address of expired) {
-        work = finishInScope(work, address, resources, tick, scope);
+        const current = getEffect(work, address);
+
+        if (
+            current === undefined ||
+            current.finished ||
+            current.expiresAtTick === null ||
+            current.expiresAtTick > tick
+        ) {
+            continue;
+        }
+
+        const expire = resources.effectLifecycle.get(current).expire;
+        work =
+            expire === undefined
+                ? finishInScope(work, address, resources, tick, scope)
+                : runLifecycleAction(work, address, current, expire, resources, tick, scope);
+        const remaining = getEffect(work, address);
+
+        if (
+            remaining !== undefined &&
+            !remaining.finished &&
+            remaining.expiresAtTick !== null &&
+            remaining.expiresAtTick <= tick
+        ) {
+            throw new TypeError("effect expiration action must resolve its expired deadline");
+        }
     }
 
     return work;
