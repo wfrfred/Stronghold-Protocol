@@ -4,7 +4,7 @@ import { resolveAttackPower } from "../offense/query.js";
 import { createDamageOperands, type DamageType } from "../vitality/damage/contract.js";
 import { EffectDispatchScope } from "../effects/dispatch.js";
 import type { ActionResources } from "./resources.js";
-import { combatWorkView, getCombatUnit, type CombatWork } from "../../../battle/execution/work.js";
+import { combatWorkView, type CombatWork } from "../../../battle/execution/work.js";
 import type { UnitId } from "../../unit.js";
 
 export type Definition =
@@ -50,20 +50,22 @@ export function compile(definition: Definition, resources: ActionResources): Pro
         case "DAMAGE": {
             const readPower =
                 definition.powerSource === "SOURCE_ATTACK"
-                    ? ({ work, sourceUnitId }: Context): number => {
-                          const source = getCombatUnit(work, sourceUnitId);
-
-                          return source === undefined
-                              ? definition.power
-                              : resolveAttackPower(
-                                    source.id,
-                                    combatWorkView(work),
-                                    resources.computations,
-                                )!;
-                      }
+                    ? ({ work, sourceUnitId }: Context): number | undefined =>
+                          resolveAttackPower(
+                              sourceUnitId,
+                              combatWorkView(work),
+                              resources.computations,
+                          )
                     : (): number => definition.power;
 
-            return ({ work, sourceUnitId, targetUnitId, tick }) => {
+            return (context) => {
+                const { work, sourceUnitId, targetUnitId, tick } = context;
+                const power = readPower(context);
+
+                if (power === undefined) {
+                    return work;
+                }
+
                 return resources.settleDamage(
                     work,
                     {
@@ -71,9 +73,7 @@ export function compile(definition: Definition, resources: ActionResources): Pro
                         targetUnitId,
                         tick,
                         damageType: definition.damageType,
-                        operands: createDamageOperands(
-                            readPower({ work, sourceUnitId, targetUnitId, tick }),
-                        ),
+                        operands: createDamageOperands(power),
                     },
                     new EffectDispatchScope(),
                 ).work;

@@ -31,6 +31,7 @@ import { hasStatusFlag } from "../../dist/core/tactical/unit/capability/status/c
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { createOperatorDefinition } from "../../dist/core/tactical/unit/archetype/operator.js";
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
+import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 
 const circle = (radius) =>
   createShapeGeometry({
@@ -296,6 +297,124 @@ test("combat program: a compiled source-attack effect reads current contribution
     combatWorkEvents(second).filter((event) => event.type === "DAMAGE").map((event) => event.amount),
     [25, 40],
   );
+});
+
+test("combat program: unavailable source skips live ATK damage without affecting fixed-power damage", () => {
+  const resources = new CombatResources();
+  const source = initializeUnit({ id: 0, definition: sourceDefinition(), position: [0, 0] });
+  const target = initializeUnit({ id: 1, definition: targetDefinition(), position: [1, 0] });
+  const live = compileOperation(
+    { type: "DAMAGE", power: 7, powerSource: "SOURCE_ATTACK", damageType: "PHYSICAL" },
+    resources,
+  );
+  const fixed = compileOperation({ type: "DAMAGE", power: 7, damageType: "PHYSICAL" }, resources);
+
+  for (const work of [workWith(target), removeCombatUnit(workWith(source, target), 0, "RETREAT")]) {
+    const context = { work, sourceUnitId: 0, targetUnitId: 1, tick: 0 };
+
+    assert.equal(live(context), work);
+    assert.equal(getCombatUnit(work, 1).vitality.hp, 100);
+    assert.deepEqual(combatWorkEvents(work), []);
+    assert.equal(getCombatUnit(fixed(context), 1).vitality.hp, 93);
+  }
+});
+
+test("combat program: zero HP alone does not make a live ATK source unavailable", () => {
+  const resources = new CombatResources();
+  const source = initializeUnit({ id: 0, definition: sourceDefinition(), position: [0, 0] });
+  const target = initializeUnit({ id: 1, definition: targetDefinition(), position: [1, 0] });
+  const work = updateCombatUnit(workWith(source, target), {
+    ...source,
+    vitality: { ...source.vitality, hp: 0 },
+  });
+  const live = compileOperation(
+    { type: "DAMAGE", power: 7, powerSource: "SOURCE_ATTACK", damageType: "PHYSICAL" },
+    resources,
+  );
+  const result = live({ work, sourceUnitId: 0, targetUnitId: 1, tick: 0 });
+
+  assert.equal(getCombatUnit(result, 1).vitality.hp, 90);
+  assert.equal(getCombatUnit(work, 0).vitality.hp, 0);
+});
+
+test("combat program: lethal retaliation skips later unsampled damage and completes the entered segment", () => {
+  const resources = new CombatResources();
+  const retaliation = resources.registerEffect(
+    createEffectProgram({
+      id: "lethal-retaliation",
+      initialize: () => ({}),
+      ownState: () => ({}),
+    }),
+    {
+      damage: {
+        reaction: {
+          priority: 0,
+          apply: (context) => {
+            if (context.request.targetUnitId === context.ownerUnitId) {
+              context.operations.damage({
+                sourceUnitId: context.ownerUnitId,
+                targetUnitId: context.request.sourceUnitId,
+                tick: context.tick,
+                damageType: "TRUE",
+                operands: createDamageOperands(100),
+              });
+            }
+          },
+        },
+      },
+    },
+  );
+  const base = sourceDefinition();
+  const definition = createOperatorDefinition({
+    ...base,
+    offense: { attack: 100 },
+    action: {
+      normalAction: {
+        ...base.action.normalAction,
+        targetGroups: base.action.normalAction.targetGroups.map((group) => ({
+          ...group,
+          targeting: { ...group.targeting, maxTargets: 2 },
+          operations: [{
+            type: "DAMAGE",
+            power: 7,
+            powerSource: "SOURCE_ATTACK",
+            damageType: "PHYSICAL",
+          }],
+        })),
+      },
+    },
+  });
+  const target = targetDefinition("durable-target", 300);
+  const receiver = installFixtureEffect(
+    initializeUnit({ id: 1, definition: target, position: [1, 0] }),
+    effectInstance(resources, retaliation),
+    resources,
+  );
+  const runtime = new BattleRuntime(
+    battleSpec([
+      { definition, position: [0, 0] },
+      { definition: target, position: [1, 0], states: { effects: receiver.effects } },
+      { definition: target, position: [2, 0] },
+    ]),
+    { combat: resources },
+  );
+  const before = runtime.snapshot();
+  const result = runtime.step();
+  const after = runtime.snapshot();
+
+  assert.equal(after.units.some((unit) => unit.id === 0), false);
+  assert.equal(after.units.find((unit) => unit.id === 1).vitality.hp, 200);
+  assert.equal(after.units.find((unit) => unit.id === 2).vitality.hp, 300);
+  assert.deepEqual(
+    result.events.filter((event) => event.type === "DAMAGE")
+      .map((event) => [event.sourceUnitId, event.targetUnitId, event.amount]),
+    [[0, 1, 100], [1, 0, 100]],
+  );
+  assert.equal(result.events.some((event) => event.type === "ACTION_FINISHED"), true);
+  assert.equal(result.events.some((event) => event.type === "ACTION_CANCELLED"), false);
+  assert.deepEqual(after.actionExecution.executions, []);
+  assert.equal(before.units.find((unit) => unit.id === 0).vitality.hp, 100);
+  assert.equal(before.units.find((unit) => unit.id === 1).vitality.hp, 300);
 });
 
 test("combat program: runtime resources compile shared definitions once while snapshots remain data-only", () => {
