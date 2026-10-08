@@ -26,6 +26,7 @@ import {
 import type { SkillActivationContext, SkillFacts } from "./program.js";
 import { spendSkillSp } from "./sp.js";
 import type { SkillResources } from "./resources.js";
+import { spendSkillAmmo, type SkillAmmoResult } from "./ammo.js";
 
 export interface SkillExecutionResources extends EffectTransitionResources {
     readonly skills: SkillResources;
@@ -222,6 +223,9 @@ export function activateSkill(
         startedAtTick: tick,
         endsAtTick,
         ownedEffects: [],
+        ...(compiled.definition.ammo === undefined
+            ? {}
+            : { remainingAmmo: compiled.definition.ammo }),
     };
     const reserved = saveState(work, unitId, {
         ...spent.state,
@@ -292,6 +296,42 @@ export function activateSkill(
     }
 
     return { work: activated, result: { type: "ACTIVATED" }, signals: [signal] };
+}
+
+export interface SkillAmmoTransition {
+    readonly work: CombatWork;
+    readonly result: SkillAmmoResult;
+    readonly signals: readonly SkillSignal[];
+}
+
+export function consumeSkillAmmo(
+    work: CombatWork,
+    unitId: UnitId,
+    tick: number,
+    resources: SkillExecutionResources,
+): SkillAmmoTransition {
+    assertNonnegativeSafeInteger(tick, "skill ammunition consumption tick");
+    const unit = getCombatUnit(work, unitId);
+
+    if (unit === undefined || !hasSkill(unit)) {
+        return { work, result: { type: "REJECTED", reason: "INACTIVE" }, signals: [] };
+    }
+
+    const spent = spendSkillAmmo(unit.skill, unit.definition.skill.ammoPerAttack ?? 1);
+
+    if (spent.result.type === "REJECTED") {
+        return { work, result: spent.result, signals: [] };
+    }
+
+    work = saveState(work, unitId, spent.state);
+
+    if (spent.result.remainingAmmo === 0) {
+        const finished = finishSkill(work, unitId, tick, resources);
+
+        return { work: finished.work, result: spent.result, signals: finished.signals };
+    }
+
+    return { work, result: spent.result, signals: [] };
 }
 
 export function finishSkill(

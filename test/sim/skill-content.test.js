@@ -73,7 +73,7 @@ test("native SP enums and timing values decode without interpreting unrelated te
   assert.equal(passive.definition.spRecovery, "NONE");
   assert.equal(passive.definition.maxCharges, 0);
   assert.throws(() => parseArknightsSkillLevel(attackBuff, 2), /unknown skill level/);
-  assert.throws(() => parseArknightsSkillLevel({ ...attackBuff, levels: [{ ...attackBuff.levels[0], durationType: "AMMO", duration: -1 }] }), /unsupported skill duration mode/);
+  assert.throws(() => parseArknightsSkillLevel({ ...attackBuff, levels: [{ ...attackBuff.levels[0], durationType: "AMMO", duration: -1 }] }), /requires an explicit ammunition count/);
   assert.throws(() => parseArknightsSkillLevel({ ...attackBuff, levels: [{ ...attackBuff.levels[0], spData: { ...attackBuff.levels[0].spData, spType: "unrecognized" } }] }), /unsupported skill SP/);
 });
 

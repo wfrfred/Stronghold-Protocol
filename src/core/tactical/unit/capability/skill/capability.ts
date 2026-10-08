@@ -2,6 +2,7 @@ import {
     assertNonnegativeNumber,
     assertNonnegativeSafeInteger,
     assertPositiveNumber,
+    assertPositiveSafeInteger,
 } from "../../../../common/assert.js";
 import { ownDataRecord } from "../../../../common/immutable-data.js";
 import { TICKS_PER_SECOND } from "../../../tick.js";
@@ -22,6 +23,8 @@ export interface SkillDefinition {
     readonly maxCharges?: number;
     readonly spRecoveryIntervalTicks?: number;
     readonly durationTicks: number | null;
+    readonly ammo?: number;
+    readonly ammoPerAttack?: number;
     readonly activeAction?: ActionDefinition;
 }
 
@@ -30,6 +33,7 @@ export interface SkillActivation {
     readonly startedAtTick: number;
     readonly endsAtTick: number | null;
     readonly ownedEffects: readonly EffectAddress[];
+    readonly remainingAmmo?: number;
 }
 
 export interface SkillState {
@@ -93,6 +97,16 @@ export function createSkillDefinition(definition: SkillDefinition): SkillDefinit
     if (definition.durationTicks !== null) {
         assertNonnegativeSafeInteger(definition.durationTicks, "skill duration ticks");
     }
+    if (definition.ammo !== undefined) {
+        assertPositiveSafeInteger(definition.ammo, "skill ammunition");
+        assertPositiveSafeInteger(definition.ammoPerAttack ?? 1, "skill ammunition per attack");
+
+        if (definition.durationTicks !== null) {
+            throw new TypeError("ammunition skill must end by ammunition consumption");
+        }
+    } else if (definition.ammoPerAttack !== undefined) {
+        throw new TypeError("ammunition consumption requires an ammunition skill");
+    }
     if (definition.activation === "PASSIVE" && definition.spCost !== 0) {
         throw new TypeError("passive skill must not require SP");
     }
@@ -102,6 +116,9 @@ export function createSkillDefinition(definition: SkillDefinition): SkillDefinit
             ...definition,
             maxCharges,
             spRecoveryIntervalTicks,
+            ...(definition.ammo === undefined
+                ? {}
+                : { ammoPerAttack: definition.ammoPerAttack ?? 1 }),
             ...(definition.activeAction === undefined
                 ? {}
                 : { activeAction: createActionDefinition(definition.activeAction) }),
@@ -140,6 +157,9 @@ export function createSkillState(state: SkillState): SkillState {
 
         if (state.active.id >= state.nextActivationId) {
             throw new TypeError("skill allocation progress must exceed its active identity");
+        }
+        if (state.active.remainingAmmo !== undefined) {
+            assertNonnegativeSafeInteger(state.active.remainingAmmo, "skill remaining ammunition");
         }
         if (state.active.endsAtTick !== null) {
             assertNonnegativeSafeInteger(state.active.endsAtTick, "skill ending tick");

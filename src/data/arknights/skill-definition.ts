@@ -72,7 +72,12 @@ function spRecovery(value: unknown): SkillSpRecovery {
     }
 }
 
-export function parseArknightsSkillLevel(value: unknown, level = 1): ArknightsSkillLevel {
+export function parseArknightsSkillLevel(
+    value: unknown,
+    level = 1,
+    ammo?: number,
+    ammoPerAttack = 1,
+): ArknightsSkillLevel {
     const skill = object(value, "skill record");
 
     if (typeof skill.skillId !== "string" || skill.skillId.length === 0) {
@@ -88,13 +93,21 @@ export function parseArknightsSkillLevel(value: unknown, level = 1): ArknightsSk
     }
 
     const selected = object(skill.levels[level - 1], "skill level");
+    const ammunitionMode = selected.durationType === "AMMO" || selected.durationType === 1;
 
     if (
         selected.durationType !== undefined &&
         selected.durationType !== "NONE" &&
-        selected.durationType !== 0
+        selected.durationType !== 0 &&
+        !ammunitionMode
     ) {
         throw new TypeError("unsupported skill duration mode");
+    }
+    if (ammunitionMode && ammo === undefined) {
+        throw new TypeError("AMMO skill requires an explicit ammunition count from its content");
+    }
+    if (!ammunitionMode && ammo !== undefined) {
+        throw new TypeError("ammunition count requires AMMO skill data");
     }
 
     const sp = object(selected.spData, "skill SP data");
@@ -125,7 +138,11 @@ export function parseArknightsSkillLevel(value: unknown, level = 1): ArknightsSk
             ...(recovery === "TIME"
                 ? { spRecoveryIntervalTicks: TICKS_PER_SECOND / increment }
                 : {}),
-            durationTicks: duration === -1 ? null : secondsToTicks(duration, "skill duration"),
+            durationTicks:
+                ammunitionMode || duration === -1
+                    ? null
+                    : secondsToTicks(duration, "skill duration"),
+            ...(ammo === undefined ? {} : { ammo, ammoPerAttack }),
         }),
         level,
         blackboard: parseBlackboard(selected.blackboard, "skill blackboard"),

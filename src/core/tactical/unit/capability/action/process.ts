@@ -14,6 +14,12 @@ import type { ActionDefinition, TargetBindingId } from "./capability.js";
 import type { ProjectileOperations } from "../../../battlefield/projectile/operations.js";
 import { gainUnitSkillSp } from "../../../battle/execution/skill-sp.js";
 import { hasStatusFlag } from "../status/capability.js";
+import { beforeActionRelease, type ActionReleaseResources } from "./release.js";
+
+export interface ActionExecutionResources extends EffectTransitionResources {
+    readonly actionRelease?: ActionReleaseResources;
+    readonly completeAttack?: (work: CombatWork, unitId: UnitId, tick: number) => CombatWork;
+}
 
 export type ActionExecutionId = number;
 
@@ -224,7 +230,7 @@ function endExecution(
     work: CombatWork,
     executions: ActionExecutionWork,
     execution: ActionExecution,
-    resources: EffectTransitionResources,
+    resources: ActionExecutionResources,
     tick: number,
 ): CombatWork {
     const next = finishEffectsOwnedByExecution(
@@ -243,7 +249,7 @@ function finishExecution(
     work: CombatWork,
     executions: ActionExecutionWork,
     execution: ActionExecution,
-    resources: EffectTransitionResources,
+    resources: ActionExecutionResources,
     tick: number,
     signals: readonly ActionExecutionSignal[],
 ): ActionExecutionWorkTransition {
@@ -266,7 +272,7 @@ export function cancelActionExecution(
     work: CombatWork,
     state: ActionExecutionState,
     executionId: ActionExecutionId,
-    resources: EffectTransitionResources,
+    resources: ActionExecutionResources,
     tick: number,
     reason: ActionExecutionCancellationReason = "CANCELLED",
 ): ActionExecutionTransition {
@@ -287,7 +293,7 @@ export function cancelActionExecutionInWork(
     work: CombatWork,
     executions: ActionExecutionWork,
     executionId: ActionExecutionId,
-    resources: EffectTransitionResources,
+    resources: ActionExecutionResources,
     tick: number,
     reason: ActionExecutionCancellationReason = "CANCELLED",
 ): ActionExecutionWorkTransition {
@@ -353,7 +359,7 @@ export function resumeActionExecution(
     executionId: ActionExecutionId,
     segments: readonly CompiledActionSegment[],
     tick: number,
-    resources: EffectTransitionResources,
+    resources: ActionExecutionResources,
     projectiles?: ProjectileOperations,
 ): ActionExecutionTransition {
     const executions = new ActionExecutionWork(state);
@@ -376,7 +382,7 @@ export function resumeActionExecutionInWork(
     executionId: ActionExecutionId,
     segments: readonly CompiledActionSegment[],
     tick: number,
-    resources: EffectTransitionResources,
+    resources: ActionExecutionResources,
     projectiles?: ProjectileOperations,
 ): ActionExecutionWorkTransition {
     let execution = executions.get(executionId);
@@ -427,6 +433,22 @@ export function resumeActionExecutionInWork(
             segment.type === releaseType &&
             !segments.slice(0, execution.cursor).some(({ type }) => type === releaseType)
         ) {
+            const releasing = beforeActionRelease(work, source.id, tick, resources);
+            work = releasing.work;
+
+            if (releasing.interrupted) {
+                const cancelled = cancelActionExecutionInWork(
+                    work,
+                    executions,
+                    executionId,
+                    resources,
+                    tick,
+                    "INTERRUPTED",
+                );
+
+                return { ...cancelled, signals: [...signals, ...cancelled.signals] };
+            }
+
             work = gainUnitSkillSp(work, source.id, "ATTACK");
         }
 
@@ -436,6 +458,17 @@ export function resumeActionExecutionInWork(
                     contextFor(work, execution, tick, projectiles),
                 );
                 work = result.work;
+                const preceding = segments.slice(0, execution.cursor);
+                const releaseIndex = preceding.findIndex(({ type }) => type === "RELEASE");
+                const outputStarted = releaseType === "EXECUTE" || releaseIndex >= 0;
+                const previousOutput = preceding
+                    .slice(releaseIndex + 1)
+                    .some(({ type }) => type === "EXECUTE");
+
+                if (outputStarted && !previousOutput && resources.completeAttack !== undefined) {
+                    work = resources.completeAttack(work, execution.sourceUnitId, tick);
+                }
+
                 execution = Object.freeze({
                     ...execution,
                     cursor: execution.cursor + 1,

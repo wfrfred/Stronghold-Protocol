@@ -5,7 +5,7 @@ import { getCombatUnit, updateCombatUnit } from "../../dist/core/tactical/battle
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
 import { createSkillDefinition, createSkillState, initializeSkillState } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { activateSkill, advanceSkill, finishSkill } from "../../dist/core/tactical/unit/capability/skill/execution.js";
-import { gainSkillSp, spendSkillSp } from "../../dist/core/tactical/unit/capability/skill/sp.js";
+import { drainSkillSp, gainSkillSp, spendSkillSp } from "../../dist/core/tactical/unit/capability/skill/sp.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { effectFixtureWork } from "../helpers/effects.js";
 
@@ -172,6 +172,22 @@ test("a dead unit cannot activate or accumulate time SP before retirement", () =
   const work = effectFixtureWork(dead);
   assert.equal(activateSkill(work, { unitId: 1, tick: 0 }, f.resources).result.reason, "UNAVAILABLE");
   assert.equal(getCombatUnit(advanceSkill(work, 1, 300, f.resources).work, 1).skill.sp, 0);
+});
+
+test("external SP drain can remove retained charges during a skill while activation spending remains locked", () => {
+  const f = fixture({ spCost: 2, initialSp: 4, maxCharges: 2 });
+  const active = activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources);
+  const state = getCombatUnit(active.work, 1).skill;
+  assert.equal(state.sp, 2);
+  assert.equal(spendSkillSp(state, f.definition, 1).result.reason, "LOCKED");
+  const drained = drainSkillSp(state, 5);
+  assert.deepEqual(drained.result, { type: "APPLIED", amount: 2 });
+  assert.equal(drained.state.sp, 0);
+  assert.equal(drained.state.active, state.active);
+  assert.equal(state.sp, 2);
+  assert.deepEqual(drainSkillSp(drained.state, 5).result, { type: "APPLIED", amount: 0 });
+  assert.equal(drainSkillSp(drained.state, 0).state, drained.state);
+  assert.throws(() => drainSkillSp(state, 0.5), /integer/);
 });
 
 test("skill ending clears active state before finish content observes it", () => {

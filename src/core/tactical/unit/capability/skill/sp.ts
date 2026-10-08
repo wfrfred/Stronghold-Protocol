@@ -66,3 +66,19 @@ export function spendSkillSp(
         result: { type: "APPLIED", amount },
     };
 }
+
+export function drainSkillSp(
+    state: SkillState,
+    amount: number,
+): {
+    readonly state: SkillState;
+    readonly result: { readonly type: "APPLIED"; readonly amount: number };
+} {
+    assertNonnegativeSafeInteger(amount, "skill external SP drain");
+    const drained = Math.min(state.sp, amount);
+
+    return {
+        state: drained === 0 ? state : { ...state, sp: state.sp - drained },
+        result: { type: "APPLIED", amount: drained },
+    };
+}

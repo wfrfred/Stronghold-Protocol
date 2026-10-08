@@ -9,11 +9,11 @@ import {
 import type { UnitId } from "../../unit.js";
 import { hasAction } from "./capability.js";
 import type { CompiledAction } from "./program.js";
-import type { EffectTransitionResources } from "../effects/contract.js";
 import {
     acceptActionExecutionInWork,
     resumeActionExecutionInWork,
     type ActionExecutionState,
+    type ActionExecutionResources as ExecutionResources,
 } from "./process.js";
 import type { ProjectileOperations } from "../../../battlefield/projectile/operations.js";
 import { isSpatiallyPresent } from "../presence.js";
@@ -25,7 +25,7 @@ import {
 } from "./timing.js";
 import { hasStatusFlag } from "../status/capability.js";
 
-type ActionExecutionResources = EffectTransitionResources & Pick<ActionResources, "computations">;
+type ActionExecutionResources = ExecutionResources & Pick<ActionResources, "computations">;
 
 export function startAction(
     work: CombatWork,

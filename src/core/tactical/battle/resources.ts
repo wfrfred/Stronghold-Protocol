@@ -21,6 +21,13 @@ import { EffectSourceResources } from "../battlefield/effect-source/resources.js
 import { ProjectileResources } from "../battlefield/projectile/resources.js";
 import { resolveDamage } from "../unit/capability/vitality/damage/settlement.js";
 import { resolveHealing } from "../unit/capability/vitality/healing/settlement.js";
+import { appendCombatEvents, type CombatWork } from "./execution/work.js";
+import type { UnitId } from "../unit/unit.js";
+import { consumeSkillAmmo } from "../unit/capability/skill/execution.js";
+import {
+    ActionReleaseResources,
+    type ActionReleaseRules,
+} from "../unit/capability/action/release.js";
 import { SkillResources } from "../unit/capability/skill/resources.js";
 
 export interface CombatEffectFacets<S extends object> {
@@ -29,6 +36,7 @@ export interface CombatEffectFacets<S extends object> {
     readonly damage?: DamageEffectRules<S>;
     readonly healing?: HealingEffectRules<S>;
     readonly lifecycle?: EffectLifecycleProgram<S>;
+    readonly action?: ActionReleaseRules<S>;
 }
 
 export class CombatResources {
@@ -42,6 +50,13 @@ export class CombatResources {
     readonly effectSources = new EffectSourceResources(this.#registration);
     readonly projectiles = new ProjectileResources(this.#registration);
     readonly skills = new SkillResources(this.#registration);
+    readonly actionRelease = new ActionReleaseResources(this.effects, this.#registration);
+    readonly completeAttack = (work: CombatWork, unitId: UnitId, tick: number): CombatWork => {
+        const consumed = consumeSkillAmmo(work, unitId, tick, this);
+
+        return appendCombatEvents(consumed.work, consumed.signals);
+    };
+
     readonly settleDamage: DamageOperation = (work, request, dispatch) => {
         this.#registration.assertUsable();
 
@@ -80,6 +95,9 @@ export class CombatResources {
             }
             if (facets.healing !== undefined) {
                 this.healing.register(registered.ref, facets.healing);
+            }
+            if (facets.action !== undefined) {
+                this.actionRelease.register(registered.ref, facets.action);
             }
             if (facets.lifecycle !== undefined) {
                 this.effectLifecycle.register(registered.ref, facets.lifecycle);
