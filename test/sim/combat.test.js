@@ -17,10 +17,20 @@ import { createTacticalDemo } from '../../dist/legacy/tactical-demo.js';
 import { createOperatorDefinition } from '../../dist/core/tactical/unit/archetype/operator.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { compileAction } from "../../dist/core/tactical/unit/capability/action/compile.js";
-import { stepAction } from "../../dist/core/tactical/unit/capability/action/execution.js";
+import { startAction } from "../../dist/core/tactical/unit/capability/action/execution.js";
+import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { compileTargeting } from "../../dist/core/tactical/unit/targeting/compile.js";
 import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { selectTargets } from '../../dist/core/tactical/unit/targeting/select.js';
+
+import { combatWorkResult, createCombatWork, updateCombatUnit } from '../../dist/core/tactical/battle/execution/work.js';
+import { createActionExecutionState } from '../../dist/core/tactical/unit/capability/action/process.js';
+
+const startSingleAction = (source, compiled, context) => {
+  const result = startAction(updateCombatUnit(createCombatWork(context.battlefield), source),
+    createActionExecutionState(), source.id, compiled, context.tick, new CombatResources(), true);
+  return { ...combatWorkResult(result.work), state: result.state };
+};
 
 const approx = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
 
@@ -1118,7 +1128,7 @@ test('core action: query and healing settlement ignore flags have independent fo
       const source = actionUnit(0, 'ALLY', [0, 0], { action });
       const target = actionUnit(1, 'ALLY', [1, 0], { hp: 40, flags: ['HEAL_FREE'] });
       const before = structuredClone([source, target]);
-      const result = stepAction(source, compileAction(source.definition.action.normalAction), {
+      const result = startSingleAction(source, compileAction(source.definition.action.normalAction, new CombatResources()), {
         battlefield: actionView([source, target]), tick: 0,
       });
       const heals = result.events.filter(event => event.type === 'HEAL');
@@ -1136,7 +1146,7 @@ test('core action: shared query purposes gate mixed effects while source follow-
   const mixed = actionUnit(0, 'ALLY', [0, 0], { action: normalAction([
     { id: 'attack', targeting: damageTargeting(), effects: [damageEffect(10), healEffect(5)] },
   ]) });
-  const result = stepAction(mixed, compileAction(mixed.definition.action.normalAction), {
+  const result = startSingleAction(mixed, compileAction(mixed.definition.action.normalAction, new CombatResources()), {
     battlefield: actionView([mixed, target]), tick: 0,
   });
   assert.deepEqual(result.events, []);
@@ -1145,10 +1155,10 @@ test('core action: shared query purposes gate mixed effects while source follow-
     const source = actionUnit(0, 'ALLY', [0, 0], { hp: 60, flags: ['HEAL_FREE'], action: normalAction([
       { id: 'attack', targeting: damageTargeting(), effects: [damageEffect(10)] },
     ], [{ receiver: { type: 'SOURCE' }, effect: healEffect(15, ignoreHealFree) }]) });
-    const stepped = stepAction(source, compileAction(source.definition.action.normalAction), {
+    const stepped = startSingleAction(source, compileAction(source.definition.action.normalAction, new CombatResources()), {
       battlefield: actionView([source, target]), tick: 0,
     });
-    assert.deepEqual(stepped.events.map(event => event.type), ['ACTION', 'DAMAGE', 'HEAL']);
+    assert.deepEqual(stepped.events.map(event => event.type), ['ACTION', 'DAMAGE', 'HEAL', 'ACTION_FINISHED']);
     assert.equal(stepped.events[1].hp, 70);
     assert.equal(stepped.events[2].amount, ignoreHealFree ? 15 : 0);
     assert.equal(stepped.units.find(unit => unit.id === 0).vitality.hp, ignoreHealFree ? 75 : 60);
@@ -1163,14 +1173,17 @@ test('core action: secondary target groups cannot trigger the action and use ind
   ]);
   const source = actionUnit(0, 'ALLY', [0, 0], { action: definition });
   const friend = actionUnit(2, 'ALLY', [2, 0], { hp: 40 });
-  const compiled = compileAction(source.definition.action.normalAction);
-  const noEnemy = stepAction(source, compiled, { battlefield: actionView([source, friend]), tick: 0 });
-  assert.deepEqual(noEnemy, { units: [], removedUnitIds: [], events: [] });
+  const compiled = compileAction(source.definition.action.normalAction, new CombatResources());
+  const noEnemy = startSingleAction(source, compiled, { battlefield: actionView([source, friend]), tick: 0 });
+  assert.deepEqual(noEnemy.units, []);
+  assert.deepEqual(noEnemy.removedUnitIds, []);
+  assert.deepEqual(noEnemy.events, []);
+  assert.deepEqual(noEnemy.state, { nextExecutionId: 0, executions: [] });
 
   const enemy = actionUnit(1, 'ENEMY', [1, 0], { hp: 80, flags: ['HEAL_FREE'] });
-  const stepped = stepAction(source, compiled, { battlefield: actionView([source, friend, enemy]), tick: 0 });
+  const stepped = startSingleAction(source, compiled, { battlefield: actionView([source, friend, enemy]), tick: 0 });
   assert.deepEqual(stepped.events.map(event => [event.type, event.targetUnitId]),
-    [['ACTION', 1], ['DAMAGE', 1], ['HEAL', 2]]);
+    [['ACTION', 1], ['DAMAGE', 1], ['HEAL', 2], ['ACTION_FINISHED', undefined]]);
   assert.equal(stepped.units.find(unit => unit.id === 1).vitality.hp, 70);
   assert.equal(stepped.units.find(unit => unit.id === 2).vitality.hp, 60);
   assert.equal(source.vitality.hp, 100);
@@ -1209,7 +1222,7 @@ test('core action: binding follow-ups retain the selected target and read preced
   ], [{ receiver: { type: 'BINDING', bindingId: 'restore' }, effect: healEffect(5) }]) });
   const first = actionUnit(1, 'ALLY', [1, 0], { hp: 30 });
   const second = actionUnit(2, 'ALLY', [2, 0], { hp: 40 });
-  const result = stepAction(source, compileAction(source.definition.action.normalAction), {
+  const result = startSingleAction(source, compileAction(source.definition.action.normalAction, new CombatResources()), {
     battlefield: actionView([source, first, second]), tick: 0,
   });
 

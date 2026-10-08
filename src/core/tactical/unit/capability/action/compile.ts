@@ -5,13 +5,13 @@ import { resolveMaxHp } from "../vitality/query.js";
 import type { ActionDefinition, TargetBindingId } from "./capability.js";
 import { compileEffect, type CompiledEffect } from "./compile-effect.js";
 import { effectPurposes, type EffectDefinition } from "./effect.js";
-import { createActionResources, type ActionResources } from "./resources.js";
+import type { ActionResources } from "./resources.js";
 import type { CompiledAction } from "./program.js";
 import type { ActionExecutionContext, CompiledActionSegment } from "./process.js";
 
 export function compileAction(
     definition: ActionDefinition,
-    resources: ActionResources = createActionResources(),
+    resources: ActionResources,
     compile: (effect: EffectDefinition) => CompiledEffect = (effect) =>
         compileEffect(effect, resources),
 ): CompiledAction {

@@ -1,28 +1,29 @@
 import { ResourceRegistration } from "../../common/resource-registration.js";
-import { type EffectResources } from "../unit/capability/effects/registry.js";
+import { EffectResources } from "../unit/capability/effects/registry.js";
 import { type EffectProgram } from "../unit/capability/effects/program.js";
 import {
     compileEffectContributions,
-    type EffectBindingResources,
+    EffectBindingResources,
     type EffectContributionRules,
 } from "../unit/capability/effects/resources.js";
 import {
-    type DamageResources,
+    DamageResources,
     type DamageEffectRules,
 } from "../unit/capability/vitality/damage/resources.js";
 import type { CompiledEffectContribution } from "../unit/capability/effects/contribution-bindings.js";
-import type { EffectLifecycleResources } from "../unit/capability/effects/lifecycle-resources.js";
+import { EffectLifecycleResources } from "../unit/capability/effects/lifecycle-resources.js";
 import type { EffectLifecycleProgram } from "../unit/capability/effects/contract.js";
-import type {
+import {
     HealingResources,
-    HealingEffectRules,
+    type HealingEffectRules,
 } from "../unit/capability/vitality/healing/resources.js";
 import type { DamageOperation, HealingOperation } from "../unit/capability/vitality/hook.js";
-import type { NumericContributionResources } from "../modifier/providers.js";
+import { NumericContributionResources } from "../modifier/providers.js";
 import type { NumericProviderFacts } from "../unit/capability/contribution.js";
-import { createActionResources } from "../unit/capability/action/resources.js";
-import type { EffectSourceResources } from "../battlefield/effect-source/resources.js";
+import { EffectSourceResources } from "../battlefield/effect-source/resources.js";
 import { ProjectileResources } from "../battlefield/projectile/resources.js";
+import { resolveDamage } from "../unit/capability/vitality/damage/settlement.js";
+import { resolveHealing } from "../unit/capability/vitality/healing/settlement.js";
 
 export interface CombatEffectFacets<S extends object> {
     readonly contributions?: EffectContributionRules<S>;
@@ -34,33 +35,27 @@ export interface CombatEffectFacets<S extends object> {
 
 export class CombatResources {
     readonly #registration = new ResourceRegistration();
-    readonly effects: EffectResources;
-    readonly offense: NumericContributionResources<NumericProviderFacts>;
-    readonly defense: NumericContributionResources<NumericProviderFacts>;
-    readonly vitality: NumericContributionResources<NumericProviderFacts>;
-    readonly effectBindings: EffectBindingResources;
-    readonly damage: DamageResources;
-    readonly effectLifecycle: EffectLifecycleResources;
-    readonly healing: HealingResources;
-    readonly effectSources: EffectSourceResources;
+    readonly effects = new EffectResources(this.#registration);
+    readonly offense = new NumericContributionResources<NumericProviderFacts>(this.#registration);
+    readonly defense = new NumericContributionResources<NumericProviderFacts>(this.#registration);
+    readonly vitality = new NumericContributionResources<NumericProviderFacts>(this.#registration);
+    readonly effectBindings = new EffectBindingResources(this.#registration);
+    readonly damage = new DamageResources(this.effects, this.#registration);
+    readonly effectLifecycle = new EffectLifecycleResources(this.effects, this.#registration);
+    readonly healing = new HealingResources(this.effects, this.#registration);
+    readonly effectSources = new EffectSourceResources(this.#registration);
     readonly projectiles = new ProjectileResources(this.#registration);
-    readonly settleDamage: DamageOperation;
-    readonly settleHealing: HealingOperation;
+    readonly settleDamage: DamageOperation = (work, request, dispatch) => {
+        this.#registration.assertUsable();
 
-    constructor() {
-        const resources = createActionResources(this.#registration);
-        this.effects = resources.effects;
-        this.offense = resources.offense;
-        this.defense = resources.defense;
-        this.vitality = resources.vitality;
-        this.effectBindings = resources.effectBindings;
-        this.damage = resources.damage;
-        this.effectLifecycle = resources.effectLifecycle;
-        this.healing = resources.healing;
-        this.effectSources = resources.effectSources;
-        this.settleDamage = resources.settleDamage;
-        this.settleHealing = resources.settleHealing;
-    }
+        return resolveDamage(work, request, this, dispatch);
+    };
+
+    readonly settleHealing: HealingOperation = (work, request, tick, dispatch) => {
+        this.#registration.assertUsable();
+
+        return resolveHealing(work, request, this, tick, dispatch);
+    };
 
     seal(): this {
         this.#registration.seal();

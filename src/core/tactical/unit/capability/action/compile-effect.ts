@@ -1,8 +1,7 @@
 import { resolveAttackPower } from "../offense/query.js";
 import { createDamageOperands } from "../vitality/damage/contract.js";
-import { resolveDamage } from "../vitality/damage/settlement.js";
+import { EffectDispatchScope } from "../effects/dispatch.js";
 import type { EffectDefinition } from "./effect.js";
-import { resolveHealing } from "../vitality/healing/settlement.js";
 import type { ActionResources } from "./resources.js";
 import { combatWorkView, getCombatUnit, type CombatWork } from "../../../battle/execution/work.js";
 import type { UnitId } from "../../unit.js";
@@ -38,7 +37,7 @@ export function compileEffect(
                     : (): number => definition.power;
 
             return ({ work, sourceUnitId, targetUnitId, tick }) => {
-                return resolveDamage(
+                return resources.settleDamage(
                     work,
                     {
                         sourceUnitId,
@@ -49,14 +48,14 @@ export function compileEffect(
                             readPower({ work, sourceUnitId, targetUnitId, tick }),
                         ),
                     },
-                    resources,
+                    new EffectDispatchScope(),
                 ).work;
             };
         }
 
         case "HEAL":
             return ({ work, sourceUnitId, targetUnitId, tick }) =>
-                resolveHealing(
+                resources.settleHealing(
                     work,
                     {
                         sourceUnitId,
@@ -64,8 +63,8 @@ export function compileEffect(
                         power: definition.power,
                         ignoreHealFree: definition.ignoreHealFree,
                     },
-                    resources,
                     tick,
+                    new EffectDispatchScope(),
                 ).work;
     }
 }
