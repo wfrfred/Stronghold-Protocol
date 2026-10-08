@@ -39,8 +39,8 @@ const materializedEvents = new WeakMap<CombatEventLog, readonly Event[]>();
 export interface CombatWork {
     readonly battlefield: CombatTargetingView;
     readonly mechanismView: MechanismView;
-    readonly mechanisms: ReadonlyMap<MechanismId, MechanismRuntime>;
-    readonly units: ReadonlyMap<UnitId, Unit>;
+    readonly mechanismUpdates: ReadonlyMap<MechanismId, MechanismRuntime>;
+    readonly unitUpdates: ReadonlyMap<UnitId, Unit>;
     readonly removals: ReadonlyMap<UnitId, BattlefieldRemovalReason>;
     readonly lifecycleResults: readonly CombatUnitLifecycleResult[];
     readonly eventLog: CombatEventLog | null;
@@ -67,8 +67,8 @@ export function createCombatWork(
     return {
         battlefield,
         mechanismView,
-        mechanisms: new Map(),
-        units: new Map(),
+        mechanismUpdates: new Map(),
+        unitUpdates: new Map(),
         removals: new Map(),
         lifecycleResults: [],
         eventLog: null,
@@ -80,7 +80,7 @@ export function getCombatMechanism(
     work: CombatWork,
     id: MechanismId,
 ): MechanismRuntime | undefined {
-    return work.mechanisms.get(id) ?? work.mechanismView.getMechanism(id);
+    return work.mechanismUpdates.get(id) ?? work.mechanismView.getMechanism(id);
 }
 
 export function updateCombatMechanism(work: CombatWork, mechanism: MechanismRuntime): CombatWork {
@@ -93,7 +93,7 @@ export function updateCombatMechanism(work: CombatWork, mechanism: MechanismRunt
         throw new TypeError("combat mechanism transition cannot change definition");
     }
 
-    const mechanisms = new Map(work.mechanisms);
+    const mechanisms = new Map(work.mechanismUpdates);
 
     if (work.mechanismView.getMechanism(mechanism.id) === mechanism) {
         mechanisms.delete(mechanism.id);
@@ -101,7 +101,7 @@ export function updateCombatMechanism(work: CombatWork, mechanism: MechanismRunt
         mechanisms.set(mechanism.id, mechanism);
     }
 
-    return { ...work, mechanisms };
+    return { ...work, mechanismUpdates: mechanisms };
 }
 
 export function getCombatUnit(work: CombatWork, id: UnitId): Unit | undefined {
@@ -109,7 +109,7 @@ export function getCombatUnit(work: CombatWork, id: UnitId): Unit | undefined {
         return undefined;
     }
 
-    return work.units.get(id) ?? work.battlefield.getUnit(id);
+    return work.unitUpdates.get(id) ?? work.battlefield.getUnit(id);
 }
 
 export function combatWorkView(work: CombatWork): CombatTargetingView {
@@ -120,7 +120,7 @@ export function combatWorkView(work: CombatWork): CombatTargetingView {
             if (unitIds === undefined) {
                 const ids = new Set(work.battlefield.unitIds);
 
-                for (const id of work.units.keys()) {
+                for (const id of work.unitUpdates.keys()) {
                     ids.add(id);
                 }
                 for (const id of work.removals.keys()) {
@@ -156,13 +156,13 @@ export function updateCombatUnits(work: CombatWork, updates: readonly Unit[]): C
         const baseline = work.battlefield.getUnit(unit.id);
         const current = currentRemovals.has(unit.id)
             ? undefined
-            : ((units ?? work.units).get(unit.id) ?? baseline);
+            : ((units ?? work.unitUpdates).get(unit.id) ?? baseline);
 
         if (current === unit) {
             continue;
         }
 
-        units ??= new Map(work.units);
+        units ??= new Map(work.unitUpdates);
 
         if (baseline === unit) {
             units.delete(unit.id);
@@ -186,7 +186,7 @@ export function updateCombatUnits(work: CombatWork, updates: readonly Unit[]): C
 
     const next: CombatWork = {
         ...work,
-        units,
+        unitUpdates: units,
         removals: removals ?? work.removals,
         lifecycleResults:
             created.length === 0 ? work.lifecycleResults : [...work.lifecycleResults, ...created],
@@ -235,7 +235,7 @@ export function removeCombatUnit(
         return work;
     }
 
-    let units = work.units;
+    let units = work.unitUpdates;
     let removals = work.removals;
 
     if (units.has(id)) {
@@ -251,7 +251,7 @@ export function removeCombatUnit(
 
     const next: CombatWork = {
         ...work,
-        units,
+        unitUpdates: units,
         removals,
         lifecycleResults: [...work.lifecycleResults, { type: "REMOVED", unit, reason }],
     };
@@ -311,10 +311,12 @@ export function withCombatExecution(work: CombatWork, execution: BattleExecution
 }
 
 export function combatWorkChanges(work: CombatWork): readonly BattlefieldChange[] {
-    const ids = [...work.units.keys(), ...work.removals.keys()].sort((left, right) => left - right);
+    const ids = [...work.unitUpdates.keys(), ...work.removals.keys()].sort(
+        (left, right) => left - right,
+    );
 
     const changes = ids.map((unitId): BattlefieldChange => {
-        const unit = work.units.get(unitId);
+        const unit = work.unitUpdates.get(unitId);
 
         if (unit !== undefined) {
             return {
@@ -333,7 +335,7 @@ export function combatWorkChanges(work: CombatWork): readonly BattlefieldChange[
         };
     });
 
-    for (const mechanism of [...work.mechanisms.values()].sort(
+    for (const mechanism of [...work.mechanismUpdates.values()].sort(
         (left, right) => left.id - right.id,
     )) {
         changes.push({
@@ -349,7 +351,7 @@ export function combatWorkChanges(work: CombatWork): readonly BattlefieldChange[
 }
 
 export function combatWorkResult(work: CombatWork): CombatWorkResult {
-    const units = [...work.units.values()].sort((left, right) => left.id - right.id);
+    const units = [...work.unitUpdates.values()].sort((left, right) => left.id - right.id);
     const removals = [...work.removals]
         .sort(([left], [right]) => left - right)
         .map(([unitId, reason]) => ({ unitId, reason }));

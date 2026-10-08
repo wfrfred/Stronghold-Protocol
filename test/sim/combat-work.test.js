@@ -113,7 +113,7 @@ test('combat work: sparse updates expose current units while relation queries re
 
     assert.equal(reads, 0);
     assert.equal(initial.battlefield, battlefield);
-    assert.equal(initial.units.size, 0);
+    assert.equal(initial.unitUpdates.size, 0);
     assert.equal(initial.removals.size, 0);
     assert.deepEqual(initial.execution, {
         rngState: 0,
@@ -130,7 +130,7 @@ test('combat work: sparse updates expose current units while relation queries re
     const removed = removeCombatUnit(updated, 1);
     const view = combatWorkView(removed);
 
-    assert.equal(updated.units.size, 1);
+    assert.equal(updated.unitUpdates.size, 1);
     assert.equal(updated.removals, initial.removals);
     assert.equal(initialView.getUnit(2), second);
     assert.equal(getCombatUnit(updated, 2), moved);
@@ -187,7 +187,7 @@ test('combat work: no-op and reverted changes do not manufacture removals or vit
     const moved = updateCombatUnit(initial, { ...first, position: [1, 1] });
     const restored = updateCombatUnit(moved, first);
 
-    assert.equal(restored.units.size, 0);
+    assert.equal(restored.unitUpdates.size, 0);
     assert.deepEqual(combatWorkChanges(restored), []);
 
     const removed = removeCombatUnit(moved, 1);
@@ -225,7 +225,7 @@ test('combat work: events and execution changes stay local to their pure branch'
     assert.deepEqual(combatWorkEvents(finalWork), [firstEvent, secondEvent]);
     assert.equal(eventWork.execution, initial.execution);
     assert.equal(executionWork.execution, execution);
-    assert.equal(executionWork.units, initial.units);
+    assert.equal(executionWork.unitUpdates, initial.unitUpdates);
     assert.equal(executionWork.removals, initial.removals);
     assert.equal(finalWork.execution, execution);
 });
@@ -256,7 +256,7 @@ test('combat work: batch updates match sequential transitions and isolate existi
     assert.equal(beforeView.getUnit(1).position[0], 3);
     assert.equal(beforeView.getUnit(2), undefined);
     assert.equal(beforeView.getUnit(8), undefined);
-    assert.equal(initial.units.size, 0);
+    assert.equal(initial.unitUpdates.size, 0);
     assert.equal(initial.removals.size, 0);
 
     const sibling = updateCombatUnits(before, [{ ...third, position: [9, 9] }]);

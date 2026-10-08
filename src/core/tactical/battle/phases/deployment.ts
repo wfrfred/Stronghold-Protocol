@@ -123,7 +123,7 @@ export function resolveDeploymentCommands(
                 tick,
             );
 
-            for (const unit of exited.units.values()) {
+            for (const unit of exited.unitUpdates.values()) {
                 units.set(unit.id, unit);
             }
             for (const id of exited.removals.keys()) {

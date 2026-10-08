@@ -37,7 +37,7 @@ import {
 export type { EffectSourceServices } from "./resources.js";
 
 function sourceIds(work: CombatWork): readonly MechanismId[] {
-    const ids = new Set([...work.mechanismView.mechanismIds, ...work.mechanisms.keys()]);
+    const ids = new Set([...work.mechanismView.mechanismIds, ...work.mechanismUpdates.keys()]);
 
     return [...ids].sort((left, right) => left - right);
 }
@@ -264,7 +264,7 @@ function settleSource<S extends object>(
                 work = finishEffect(work, binding.address, resources, tick, dispatch);
                 bind({ ...bindingOf(binding.unitId)!, address: null });
                 binding = bindingOf(binding.unitId)!;
-            } else if (program.followsParticipation?.(input) ?? true) {
+            } else if (program.followsSourceActive?.(input) ?? true) {
                 flush();
                 work = setEffectEnabled(
                     work,

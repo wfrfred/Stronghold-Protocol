@@ -661,6 +661,7 @@ test("effects: lifecycle facts and operation leases close on normal and exceptio
       () => escaped.effects.install(2, program.ref, input),
       () => escaped.effects.update(escaped.address, program.ref, (state) => state),
       () => escaped.effects.setEnabled(escaped.address, false),
+      () => escaped.effects.setExpiration(escaped.address, null),
       () => escaped.effects.finish(escaped.address),
       () => escaped.effects.attachParent(escaped.address, { unitId: 2, instanceId: 99 }),
     ];

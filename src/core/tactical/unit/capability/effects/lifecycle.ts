@@ -27,6 +27,7 @@ import {
 import type { CompiledEffectLifecycle } from "./lifecycle-resources.js";
 import { effectView, getEffect } from "./query.js";
 import { EffectDispatchScope } from "./dispatch.js";
+import { createEffectOperations } from "./operations.js";
 import type { EffectProgramRef } from "./program.js";
 import { reconcileEffectBindings, transitionEffectBindings } from "./transition.js";
 import {
@@ -182,64 +183,15 @@ function runLifecycleAction(
             },
             tick,
             facts: effectView(readWork),
-            effects: {
-                install: (unitId, ref, input) => {
-                    const installation = installNewInScope(
-                        readWork(),
-                        unitId,
-                        ref,
-                        input,
-                        resources,
-                        tick,
-                        scope,
-                    );
-                    currentWork = installation.work;
-
-                    return installation.result;
+            effects: createEffectOperations(
+                readWork,
+                (next) => {
+                    currentWork = next;
                 },
-                update: (target, ref, transition) => {
-                    currentWork = updateEffectState(
-                        readWork(),
-                        target.unitId,
-                        target.instanceId,
-                        ref,
-                        transition,
-                        resources,
-                        tick,
-                        scope,
-                    );
-                },
-                setEnabled: (target, enabled) => {
-                    currentWork = setEnabledInScope(
-                        readWork(),
-                        target,
-                        enabled,
-                        resources,
-                        tick,
-                        scope,
-                    );
-                },
-                setExpiration: (target, expiresAtTick) => {
-                    currentWork = setEffectExpiration(readWork(), target, expiresAtTick);
-                },
-                finish: (target) => {
-                    currentWork = finishInScope(readWork(), target, resources, tick, scope);
-                },
-                attachParent: (child, parent, finishIfParentFinished) => {
-                    const binding = attachParentInScope(
-                        readWork(),
-                        child,
-                        parent,
-                        resources,
-                        tick,
-                        finishIfParentFinished ?? true,
-                        scope,
-                    );
-                    currentWork = binding.work;
-
-                    return binding.result;
-                },
-            },
+                resources,
+                tick,
+                scope,
+            ),
         };
 
         try {

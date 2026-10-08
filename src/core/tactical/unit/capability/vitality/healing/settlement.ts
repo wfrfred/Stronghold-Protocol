@@ -6,9 +6,14 @@ import type { EffectAddress } from "../../effects/instance.js";
 import { hasVitality, resolveVitalityMaxHp, type VitalUnit } from "../capability.js";
 import { widenUnit, type StableUnit, type UnitId } from "../../../unit.js";
 import { resolveMaxHp } from "../query.js";
-import { withVitalityHookContext } from "../hook.js";
+import { withVitalityHookContext, type DispatchResult } from "../hook.js";
 import { assertNonnegativeNumber } from "../../../../../common/assert.js";
-import type { CompiledHealingContext, HealingResourceServices, HealingStage } from "./resources.js";
+import type {
+    CompiledHealingContext,
+    CompiledHealingRules,
+    HealingResourceServices,
+    HealingStage,
+} from "./resources.js";
 import type {
     HealingCancellation,
     HealingReport,
@@ -25,15 +30,20 @@ import {
     type CombatWork,
 } from "../../../../battle/execution/work.js";
 
-interface HealingCandidate {
-    readonly address: EffectAddress;
+interface CompiledHealingStage<V> {
     readonly priority: number;
-    readonly acquiredSequence: number;
+    readonly apply: (context: CompiledHealingContext, value: V) => DispatchResult<V>;
 }
 
-function orderCandidates(left: HealingCandidate, right: HealingCandidate): number {
+interface HealingCandidate<V> {
+    readonly address: EffectAddress;
+    readonly acquiredSequence: number;
+    readonly rule: CompiledHealingStage<V>;
+}
+
+function orderCandidates<V>(left: HealingCandidate<V>, right: HealingCandidate<V>): number {
     return (
-        right.priority - left.priority ||
+        right.rule.priority - left.rule.priority ||
         left.acquiredSequence - right.acquiredSequence ||
         left.address.instanceId - right.address.instanceId
     );
@@ -43,15 +53,11 @@ function dispatchHealing<V>(
     work: CombatWork,
     request: HealingRequest,
     ownerUnitId: UnitId | null,
-    stage: HealingStage | "reaction",
     value: V,
     resources: HealingResourceServices,
     tick: number,
     scope: EffectDispatchScope,
-    run: (
-        context: CompiledHealingContext,
-        value: V,
-    ) => { readonly value: V; readonly stopDispatch?: boolean },
+    select: (rules: CompiledHealingRules) => CompiledHealingStage<V> | undefined,
 ): { readonly work: CombatWork; readonly value: V } {
     if (ownerUnitId === null) {
         return { work, value };
@@ -64,18 +70,18 @@ function dispatchHealing<V>(
     };
 
     scope.withCandidates(effectView(getWork), ownerUnitId, (addresses) => {
-        const candidates: HealingCandidate[] = [];
+        const candidates: HealingCandidate<V>[] = [];
 
         for (const address of addresses) {
             const instance = getEffect(work, address);
             const rule =
-                instance === undefined ? undefined : resources.healing.get(instance)[stage];
+                instance === undefined ? undefined : select(resources.healing.get(instance));
 
             if (instance !== undefined && rule !== undefined) {
                 candidates.push({
                     address,
-                    priority: rule.priority,
                     acquiredSequence: instance.acquiredSequence,
+                    rule,
                 });
             }
         }
@@ -98,7 +104,7 @@ function dispatchHealing<V>(
                 resources,
                 tick,
                 scope,
-                (context) => run(context, value),
+                (context) => candidate.rule.apply(context, value),
             );
             value = result.value;
 
@@ -126,12 +132,11 @@ function applyHealingRules(
         work,
         request,
         ownerUnitId,
-        stage,
         pending,
         resources,
         tick,
         scope,
-        (context, value) => resources.healing.get(context.instance)[stage]!.apply(context, value),
+        (rules) => rules[stage],
     );
 }
 
@@ -152,19 +157,25 @@ function confirmHealing(
                 work,
                 report.request,
                 ownerUnitId,
-                "reaction",
                 report,
                 resources,
                 tick,
                 scope,
-                (context, value) => {
-                    const outcome = resources.healing
-                        .get(context.instance)
-                        .reaction!.apply(context, value);
+                (rules) => {
+                    const reaction = rules.reaction;
 
-                    return outcome?.stopDispatch === true
-                        ? { value, stopDispatch: true }
-                        : { value };
+                    return reaction === undefined
+                        ? undefined
+                        : {
+                              priority: reaction.priority,
+                              apply: (context, value) => {
+                                  const outcome = reaction.apply(context, value);
+
+                                  return outcome?.stopDispatch === true
+                                      ? { value, stopDispatch: true }
+                                      : { value };
+                              },
+                          };
                 },
             );
             work = result.work;

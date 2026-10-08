@@ -57,9 +57,9 @@ export class EffectSourceResources {
                 : { shouldReinstall: program.shouldReinstall }),
             ...(program.keepOnLeave === undefined ? {} : { keepOnLeave: program.keepOnLeave }),
             ...(program.keepOnFinish === undefined ? {} : { keepOnFinish: program.keepOnFinish }),
-            ...(program.followsParticipation === undefined
+            ...(program.followsSourceActive === undefined
                 ? {}
-                : { followsParticipation: program.followsParticipation }),
+                : { followsSourceActive: program.followsSourceActive }),
             ...(program.shouldFinish === undefined ? {} : { shouldFinish: program.shouldFinish }),
         });
 

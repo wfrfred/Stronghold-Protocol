@@ -23,6 +23,7 @@ import {
 } from "../../dist/core/tactical/battlefield/effect-source/settlement.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
+import { finishEffect, installNewEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import * as modifier from "../../dist/core/tactical/modifier/value.js";
 import { updateAttackContributions } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
@@ -96,8 +97,8 @@ function attack(work, resources, id) {
 
 function observeMechanismCopies(work, run) {
     const NativeMap = globalThis.Map;
-    const mechanismMaps = new WeakSet([work.mechanisms]);
-    let currentMechanisms = work.mechanisms;
+    const mechanismMaps = new WeakSet([work.mechanismUpdates]);
+    let currentMechanisms = work.mechanismUpdates;
     let copies = 0;
     class ObservedMap extends NativeMap {
         constructor(entries) {
@@ -166,6 +167,42 @@ test("effect sources: rejected installation is a committed attempt and repeated 
         { unitId: 1, address: null, installationAttempts: 1 },
         { unitId: 2, address: null, installationAttempts: 1 },
     ]);
+});
+
+test("effect sources: receiver enablement follows source activity independently from competition", () => {
+    const resources = new CombatResources();
+    const receiver = receiverEffect(resources, "activity-receiver", {
+        lifecycle: { competition: () => ({ group: "activity", priority: 1 }) },
+    });
+    const competitor = receiverEffect(resources, "activity-competitor", {
+        lifecycle: { competition: () => ({ group: "activity", priority: 2 }) },
+    });
+    const { source } = sourceProgram(resources, receiver, {
+        followsSourceActive: ({ receiver: target }) => target.id === 1,
+    });
+    let work = reconcileEffectSources(fixtureWork(source), resources, 0);
+    const bindings = getCombatMechanism(work, 20).effectSource.receivers;
+    const competing = installNewEffect(work, 1, competitor.ref, {
+        source: null,
+        scope: null,
+        expiresAtTick: null,
+    }, resources, 0);
+    work = competing.work;
+
+    assert.equal(getCombatUnit(work, 1).effects.instances[0].enabled, true);
+    assert.equal(getCombatUnit(work, 1).effects.instances[0].participating, false);
+    work = setEffectSourceActive(work, 20, false, resources, 1);
+    assert.equal(getCombatUnit(work, 1).effects.instances[0].enabled, false);
+    assert.equal(getCombatUnit(work, 2).effects.instances[0].enabled, true);
+    assert.equal(getCombatUnit(work, 2).effects.instances[0].participating, true);
+    work = setEffectSourceActive(work, 20, true, resources, 2);
+    assert.equal(getCombatUnit(work, 1).effects.instances[0].enabled, true);
+    assert.equal(getCombatUnit(work, 1).effects.instances[0].participating, false);
+    work = finishEffect(work, competing.result.address, resources, 2);
+
+    assert.equal(getCombatUnit(work, 1).effects.instances[0].participating, true);
+    assert.deepEqual(getCombatMechanism(work, 20).effectSource.receivers, bindings);
+    assert.deepEqual([1, 2].map(id => getCombatUnit(work, id).effects.nextInstanceId), [2, 1]);
 });
 
 test("effect sources: explicit aura reconciliation tracks receiver identity independently from geometric membership", () => {
@@ -474,7 +511,7 @@ test("effect sources: flushes publish attempts before lifecycle work and preserv
     assert.equal(getCombatMechanism(initial, 20), source);
     assert.equal(source.effectSource.initialized, false);
     assert.deepEqual(source.effectSource.receivers, []);
-    assert.equal(initial.units.size, 0);
+    assert.equal(initial.unitUpdates.size, 0);
     assert.equal(getCombatUnit(initial, 3).effects, undefined);
     for (const context of borrowed) {
         assert.throws(() => context.effects.update(context.address, receiver.ref, state => state), /no longer active/);

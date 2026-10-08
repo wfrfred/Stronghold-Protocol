@@ -8,7 +8,7 @@ type AddressBucket = ReadonlyMap<string, EffectAddress>;
 type LifetimeProjection = ReadonlyMap<string, AddressBucket>;
 
 const projections = new WeakMap<
-    CombatWork["units"],
+    CombatWork["unitUpdates"],
     WeakMap<CombatWork["removals"], LifetimeProjection>
 >();
 
@@ -38,15 +38,15 @@ function relationKeys(instance: EffectInstanceValue): readonly string[] {
 }
 
 function storedProjection(work: CombatWork): LifetimeProjection | undefined {
-    return projections.get(work.units)?.get(work.removals);
+    return projections.get(work.unitUpdates)?.get(work.removals);
 }
 
 function storeProjection(work: CombatWork, projection: LifetimeProjection): void {
-    let byRemovals = projections.get(work.units);
+    let byRemovals = projections.get(work.unitUpdates);
 
     if (byRemovals === undefined) {
         byRemovals = new WeakMap();
-        projections.set(work.units, byRemovals);
+        projections.set(work.unitUpdates, byRemovals);
     }
 
     byRemovals.set(work.removals, projection);
@@ -54,14 +54,14 @@ function storeProjection(work: CombatWork, projection: LifetimeProjection): void
 
 function projectLifetimes(work: CombatWork): LifetimeProjection {
     const projection = new Map<string, Map<string, EffectAddress>>();
-    const ids = new Set([...work.battlefield.unitIds, ...work.units.keys()]);
+    const ids = new Set([...work.battlefield.unitIds, ...work.unitUpdates.keys()]);
 
     for (const unitId of ids) {
         if (work.removals.has(unitId)) {
             continue;
         }
 
-        const unit = work.units.get(unitId) ?? work.battlefield.getUnit(unitId);
+        const unit = work.unitUpdates.get(unitId) ?? work.battlefield.getUnit(unitId);
 
         for (const instance of instancesOf(unit) ?? []) {
             const address = Object.freeze({ unitId, instanceId: instance.id });

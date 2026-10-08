@@ -46,7 +46,7 @@ export interface EffectSourceProgram<S extends object> {
     readonly shouldReinstall?: (context: EffectSourceReceiverContext<S>) => boolean;
     readonly keepOnLeave?: (context: EffectSourceReceiverContext<S>) => boolean;
     readonly keepOnFinish?: (context: EffectSourceReceiverContext<S>) => boolean;
-    readonly followsParticipation?: (context: EffectSourceReceiverContext<S>) => boolean;
+    readonly followsSourceActive?: (context: EffectSourceReceiverContext<S>) => boolean;
     readonly shouldFinish?: (context: EffectSourceContext<S>) => boolean;
 }
 

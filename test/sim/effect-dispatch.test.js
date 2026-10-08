@@ -170,6 +170,95 @@ test("effect dispatch: nested finalization preserves the entered callback contin
   assert.deepEqual(getCombatUnit(result.work, 2).effects.instances, []);
 });
 
+test("effect dispatch: healing retains selected rules while nested candidates and current eligibility stay consistent", () => {
+  for (const operation of ["enable", "finish"]) {
+    const resources = new CombatResources();
+    const calls = [];
+    const added = resources.registerEffect(program("added-healing"), {
+      healing: {
+        reception: {
+          priority: -1,
+          apply: (context, pending) => {
+            calls.push(["added", context.request.power]);
+            return { value: { ...pending, amount: pending.amount + 5 } };
+          },
+        },
+      },
+    });
+    const follower = resources.registerEffect(program("following-healing", { calls: 0 }), {
+      healing: {
+        reception: {
+          priority: 0,
+          apply: (context, pending) => {
+            calls.push(["follower", context.request.power, context.instance.state.calls]);
+            context.operations.effects.update(context.address, follower.ref, (state) => ({
+              calls: state.calls + 1,
+            }));
+            return { value: { ...pending, amount: pending.amount * 2 } };
+          },
+        },
+      },
+    });
+    const first = resources.registerEffect(program("first-healing"), {
+      healing: {
+        reception: {
+          priority: 100,
+          apply: (context, pending) => {
+            calls.push(["first", context.request.power]);
+            if (context.request.power === 10) {
+              const address = { unitId: 2, instanceId: 1 };
+              if (operation === "enable") {
+                context.operations.effects.setEnabled(address, true);
+              } else {
+                context.operations.effects.finish(address);
+              }
+              context.operations.effects.install(2, added.ref, installation(2));
+              context.operations.heal({ sourceUnitId: null, targetUnitId: 2, power: 1 });
+            }
+            return { value: pending };
+          },
+        },
+      },
+    });
+    let target = attach(resources, unit(2, 500), first);
+    target = attach(resources, target, follower);
+    let work = effectFixtureWork(target);
+    if (operation === "enable") {
+      work = setEffectEnabled(work, { unitId: 2, instanceId: 1 }, false, resources, 0);
+    }
+    const lookups = [];
+    const services = {
+      ...resources,
+      healing: {
+        get: instance => {
+          lookups.push(instance.id);
+          return resources.healing.get(instance);
+        },
+      },
+    };
+    const healed = resolveHealing(work, {
+      sourceUnitId: null, targetUnitId: 2, power: 10,
+    }, services, 1);
+
+    assert.deepEqual(calls, operation === "enable"
+      ? [["first", 10], ["first", 1], ["follower", 1, 0], ["follower", 10, 1]]
+      : [["first", 10], ["first", 1]]);
+    assert.deepEqual(lookups, operation === "enable" ? [0, 1, 0, 1, 2] : [0, 1, 0, 2]);
+    assert.equal(healed.amount, operation === "enable" ? 20 : 10);
+    assert.equal(getCombatUnit(healed.work, 2).vitality.hp, operation === "enable" ? 522 : 511);
+    calls.length = 0;
+    const subsequent = resolveHealing(healed.work, {
+      sourceUnitId: null, targetUnitId: 2, power: 1,
+    }, resources, 2);
+
+    assert.deepEqual(calls, operation === "enable"
+      ? [["first", 1], ["follower", 1, 2], ["added", 1]]
+      : [["first", 1], ["added", 1]]);
+    assert.equal(subsequent.amount, operation === "enable" ? 7 : 6);
+    assert.equal(getCombatUnit(work, 2).vitality.hp, 500);
+  }
+});
+
 test("effect dispatch: ordinary facts see new participating UIDs while current and nested dispatch candidates stay frozen", () => {
   const resources = new CombatResources();
   const calls = [];
