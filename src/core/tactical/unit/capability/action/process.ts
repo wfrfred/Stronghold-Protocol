@@ -12,6 +12,8 @@ import type { EffectTransitionResources } from "../effects/contract.js";
 import { finishEffectsOwnedByExecution } from "../effects/lifecycle.js";
 import type { ActionDefinition, TargetBindingId } from "./capability.js";
 import type { ProjectileOperations } from "../../../battlefield/projectile/operations.js";
+import { gainUnitSkillSp } from "../../../battle/execution/skill-sp.js";
+import { hasStatusFlag } from "../status/capability.js";
 
 export type ActionExecutionId = number;
 
@@ -96,7 +98,8 @@ export interface ActionExecutionPermissions {
     readonly allowNewAction: boolean;
 }
 
-export type ActionExecutionCancellationReason = "CANCELLED" | "CONTENT_CANCELLED" | "SOURCE_ABSENT";
+export type ActionExecutionCancellationReason =
+    "CANCELLED" | "CONTENT_CANCELLED" | "SOURCE_ABSENT" | "INTERRUPTED";
 
 export type ActionExecutionSignal = {
     readonly executionId: ActionExecutionId;
@@ -383,6 +386,7 @@ export function resumeActionExecutionInWork(
     }
 
     const signals: ActionExecutionSignal[] = [];
+    const releaseType = segments.some(({ type }) => type === "RELEASE") ? "RELEASE" : "EXECUTE";
 
     while (true) {
         const segment: CompiledActionSegment | undefined = segments[execution.cursor];
@@ -404,6 +408,26 @@ export function resumeActionExecutionInWork(
             );
 
             return { ...cancelled, signals: [...signals, ...cancelled.signals] };
+        }
+
+        if (hasStatusFlag(source, "STUNNED")) {
+            const cancelled = cancelActionExecutionInWork(
+                work,
+                executions,
+                executionId,
+                resources,
+                tick,
+                "INTERRUPTED",
+            );
+
+            return { ...cancelled, signals: [...signals, ...cancelled.signals] };
+        }
+
+        if (
+            segment.type === releaseType &&
+            !segments.slice(0, execution.cursor).some(({ type }) => type === releaseType)
+        ) {
+            work = gainUnitSkillSp(work, source.id, "ATTACK");
         }
 
         switch (segment.type) {

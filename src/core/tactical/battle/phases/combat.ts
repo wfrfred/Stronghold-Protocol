@@ -28,6 +28,8 @@ import { hasVitality } from "../../unit/capability/vitality/capability.js";
 import type { UnitId } from "../../unit/unit.js";
 import type { BattlePhase, BattlePhaseInput } from "../system.js";
 import type { ProjectileOperations } from "../../battlefield/projectile/operations.js";
+import { hasSkill } from "../../unit/capability/skill/capability.js";
+import { hasStatusFlag } from "../../unit/capability/status/capability.js";
 
 export interface CombatPhaseInput extends BattlePhaseInput {
     readonly projectiles?: ProjectileOperations;
@@ -141,7 +143,12 @@ export function createCombatSystem(
 
             const unit = getCombatUnit(work, id);
 
-            if (unit === undefined || !hasAction(unit) || !isSpatiallyPresent(unit)) {
+            if (
+                unit === undefined ||
+                !hasAction(unit) ||
+                !isSpatiallyPresent(unit) ||
+                hasStatusFlag(unit, "STUNNED")
+            ) {
                 continue;
             }
 
@@ -149,7 +156,12 @@ export function createCombatSystem(
                 work,
                 executions,
                 id,
-                compiledAction(unit.definition.action.normalAction),
+                compiledAction(
+                    hasSkill(unit) && unit.skill.active !== null
+                        ? (unit.definition.skill.activeAction ??
+                              unit.definition.action.normalAction)
+                        : unit.definition.action.normalAction,
+                ),
                 tick,
                 resources,
                 mayStart(executions, id),

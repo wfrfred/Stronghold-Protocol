@@ -21,6 +21,7 @@ import { EffectSourceResources } from "../battlefield/effect-source/resources.js
 import { ProjectileResources } from "../battlefield/projectile/resources.js";
 import { resolveDamage } from "../unit/capability/vitality/damage/settlement.js";
 import { resolveHealing } from "../unit/capability/vitality/healing/settlement.js";
+import { SkillResources } from "../unit/capability/skill/resources.js";
 
 export interface CombatEffectFacets<S extends object> {
     readonly contributions?: readonly contributions.Definition<S>[];
@@ -40,6 +41,7 @@ export class CombatResources {
     readonly healing = new HealingResources(this.effects, this.#registration);
     readonly effectSources = new EffectSourceResources(this.#registration);
     readonly projectiles = new ProjectileResources(this.#registration);
+    readonly skills = new SkillResources(this.#registration);
     readonly settleDamage: DamageOperation = (work, request, dispatch) => {
         this.#registration.assertUsable();
 

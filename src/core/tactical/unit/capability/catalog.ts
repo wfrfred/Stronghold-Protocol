@@ -35,6 +35,7 @@ import {
 } from "./spatial.js";
 import { copyStatusState, initializeStatusState } from "./status/capability.js";
 import { copyVitalityState, initializeVitalityState } from "./vitality/capability.js";
+import { copySkillState, initializeSkillState } from "./skill/capability.js";
 
 export interface CapabilityInitializationContext {
     readonly tick: number;
@@ -58,6 +59,7 @@ export const configuredCapabilities = Object.freeze({
         copyDefenseState,
     ),
     action: configuredCapability(initializeActionState, copyActionState),
+    skill: configuredCapability(initializeSkillState, copySkillState),
     allegiance: configuredCapability(initializeAllegianceState, copyAllegianceState),
     spatial: configuredCapability(initializeSpatialState, copySpatialState),
     hit: configuredCapability(initializeHitState, copyHitState),

@@ -25,6 +25,7 @@ import {
 } from "../capability/status/capability.js";
 import type { VitalUnitDefinition } from "../capability/vitality/capability.js";
 import { initializeUnit, type InitializedUnit, type UnitInitialization } from "../initialize.js";
+import { createSkillDefinition, type SkillDefinition } from "../capability/skill/capability.js";
 
 export interface OperatorDefinition
     extends
@@ -37,6 +38,7 @@ export interface OperatorDefinition
         DefendedUnitDefinition,
         BlockingUnitDefinition {
     readonly offense?: OffenseDefinition;
+    readonly skill?: SkillDefinition;
 }
 
 export type Operator<D extends OperatorDefinition = OperatorDefinition> = InitializedUnit<D>;
@@ -64,6 +66,9 @@ export function createOperatorDefinition(definition: OperatorDefinition): Operat
             ? {}
             : { offense: createOffenseDefinition(definition.offense) }),
         blocker: createBlockerDefinition(definition.blocker),
+        ...(definition.skill === undefined
+            ? {}
+            : { skill: createSkillDefinition(definition.skill) }),
     });
 }
 

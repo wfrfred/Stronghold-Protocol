@@ -23,6 +23,7 @@ import {
     reconcileActionCooldown,
     resolveActionIntervalTicks,
 } from "./timing.js";
+import { hasStatusFlag } from "../status/capability.js";
 
 type ActionExecutionResources = EffectTransitionResources & Pick<ActionResources, "computations">;
 
@@ -63,7 +64,12 @@ export function startActionInWork(
 ): CombatWork {
     const source = getCombatUnit(work, sourceUnitId);
 
-    if (source === undefined || !hasAction(source) || !isSpatiallyPresent(source)) {
+    if (
+        source === undefined ||
+        !hasAction(source) ||
+        !isSpatiallyPresent(source) ||
+        hasStatusFlag(source, "STUNNED")
+    ) {
         return work;
     }
 

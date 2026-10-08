@@ -30,6 +30,7 @@ import type {
 } from "../unit/capability/action/process.js";
 import type { ProjectileId, ProjectileState } from "../battlefield/projectile/state.js";
 import type { ProjectileSignal } from "../battlefield/projectile/settlement.js";
+import type { SkillSignal } from "../unit/capability/skill/execution.js";
 
 /** Shared creation data. Keep this input unchanged for the runtime lifetime. */
 export interface Input {
@@ -48,6 +49,8 @@ export type Command =
     | PredefinedCommand
     | AlternativeRouteCommand
     | DeploymentCommand
+    | { readonly type: "ACTIVATE_SKILL"; readonly unitId: UnitId }
+    | { readonly type: "FINISH_SKILL"; readonly unitId: UnitId }
     | { readonly type: "CANCEL_ACTION_EXECUTION"; readonly executionId: ActionExecutionId }
     | { readonly type: "STOP_PROJECTILE"; readonly projectileId: ProjectileId }
     | { readonly type: "TRIGGER_BRANCH"; readonly branchId: string; readonly isLoop: boolean };
@@ -56,6 +59,7 @@ export type Event =
     | CombatEvent
     | ActionExecutionSignal
     | ProjectileSignal
+    | SkillSignal
     | {
           readonly type: "UNIT_DEPLOYED" | "UNIT_RELOCATED";
           readonly unitId: UnitId;

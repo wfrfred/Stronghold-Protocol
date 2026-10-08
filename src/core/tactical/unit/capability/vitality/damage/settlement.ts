@@ -21,6 +21,7 @@ import {
 } from "./dispatch.js";
 import { retireCombatUnit } from "../../../../battle/execution/unit-lifecycle.js";
 import type { DamageResourceServices } from "./resources.js";
+import { gainUnitSkillSp } from "../../../../battle/execution/skill-sp.js";
 import {
     combatWorkView,
     appendCombatEvents,
@@ -240,6 +241,10 @@ export function resolveDamage(
                     reason: "INVINCIBLE",
                 },
             };
+        }
+
+        if (pending.cancellation === null && request.ignoreForSp !== true) {
+            work = gainUnitSkillSp(work, request.targetUnitId, "HIT");
         }
 
         const result = dispatchDamageAmount(

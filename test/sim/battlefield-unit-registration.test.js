@@ -31,6 +31,7 @@ const definition = () => ({
         ignoreTargetFree: false, ignoreInvisible: false, maxTargets: 1 },
     }],
   } }),
+  skill: { id: 'paired-skill', activation: 'MANUAL', spRecovery: 'TIME', spCost: 10, initialSp: 0, durationTicks: 30 },
   allegiance: { side: 'ALLY' },
   spatial: { layer: 'GROUND' },
   hit: { geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.25 }] } },

@@ -260,6 +260,8 @@ export class TacticalDemoPresentation {
                 case "PROJECTILE_REACHED":
                 case "PROJECTILE_HIT":
                 case "PROJECTILE_STOPPED":
+                case "SKILL_ACTIVATED":
+                case "SKILL_FINISHED":
                 case "UNIT_DEPLOYED":
                 case "UNIT_RELOCATED":
                 case "SUPPORT_LOST":

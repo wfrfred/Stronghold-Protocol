@@ -8,6 +8,9 @@ export const STATUS_FLAGS = Object.freeze([
     "CAMOUFLAGE",
     "INVINCIBLE",
     "UNDEADABLE",
+    "STUNNED",
+    "SILENCED",
+    "SP_RECOVERY_BLOCKED",
 ] as const);
 
 export type StatusFlag = (typeof STATUS_FLAGS)[number];

@@ -19,6 +19,7 @@ export interface DamageRequest {
     readonly operands: DamageOperands;
     readonly tick: number;
     readonly receptionPolicy?: DamageReceptionPolicy;
+    readonly ignoreForSp?: boolean;
 }
 
 export interface DamageReceptionPolicy {

@@ -4,6 +4,7 @@ import type * as computation from "../../modifier/computation.js";
 import type { ContributionFacts } from "../../unit/capability/contribution.js";
 import { hasRoutedLocomotion } from "../../unit/capability/locomotion/capability.js";
 import { hasAction } from "../../unit/capability/action/capability.js";
+import { hasStatusFlag } from "../../unit/capability/status/capability.js";
 import { stepRoutedUnit } from "../../unit/capability/locomotion/step.js";
 import type { Unit, UnitId } from "../../unit/unit.js";
 import { changeAlternativeRoutes, type AlternativeRouteCommand } from "./route-control.js";
@@ -78,6 +79,7 @@ export function createMovementSystem(
                 evaluateContributions: resources.computations.bind({ unit, battlefield }),
                 movementAllowed:
                     (input.movementAllowed?.(unitId) ?? true) &&
+                    !hasStatusFlag(unit, "STUNNED") &&
                     battlefield.blockerOf(unitId) === undefined &&
                     (!hasAction(unit) || tick >= unit.action.recoveryUntilTick),
                 waitTickAllowed: true,

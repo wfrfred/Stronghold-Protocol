@@ -1,0 +1,158 @@
+import {
+    assertNonnegativeNumber,
+    assertNonnegativeSafeInteger,
+    assertPositiveNumber,
+} from "../../../../common/assert.js";
+import { ownDataRecord } from "../../../../common/immutable-data.js";
+import { TICKS_PER_SECOND } from "../../../tick.js";
+import type { Unit, UnitDefinition } from "../../unit.js";
+import { createActionDefinition, type ActionDefinition } from "../action/capability.js";
+import type { EffectAddress } from "../effects/instance.js";
+
+export type SkillActivationMode = "MANUAL" | "AUTO" | "PASSIVE";
+
+export type SkillSpRecovery = "TIME" | "ATTACK" | "HIT" | "NONE";
+
+export interface SkillDefinition {
+    readonly id: string;
+    readonly activation: SkillActivationMode;
+    readonly spRecovery: SkillSpRecovery;
+    readonly spCost: number;
+    readonly initialSp: number;
+    readonly maxCharges?: number;
+    readonly spRecoveryIntervalTicks?: number;
+    readonly durationTicks: number | null;
+    readonly activeAction?: ActionDefinition;
+}
+
+export interface SkillActivation {
+    readonly id: number;
+    readonly startedAtTick: number;
+    readonly endsAtTick: number | null;
+    readonly ownedEffects: readonly EffectAddress[];
+}
+
+export interface SkillState {
+    readonly sp: number;
+    readonly spRecoveryProgressTicks: number;
+    readonly lastAdvancedTick: number;
+    readonly nextActivationId: number;
+    readonly active: SkillActivation | null;
+}
+
+export interface Skill {
+    readonly skill: SkillState;
+}
+
+export interface SkilledUnitDefinition extends UnitDefinition {
+    readonly skill: SkillDefinition;
+}
+
+const ownedDefinitions = new WeakSet<SkillDefinition>();
+
+export function hasSkill<U extends Unit>(
+    unit: U,
+): unit is U & Skill & Unit<U["definition"] & SkilledUnitDefinition> {
+    return "skill" in unit && "skill" in unit.definition;
+}
+
+export function hasSkillDefinition(
+    definition: UnitDefinition,
+): definition is SkilledUnitDefinition {
+    return "skill" in definition;
+}
+
+export function skillSpCapacity(definition: SkillDefinition): number {
+    return definition.spCost * (definition.maxCharges ?? 1);
+}
+
+export function createSkillDefinition(definition: SkillDefinition): SkillDefinition {
+    if (ownedDefinitions.has(definition)) {
+        return definition;
+    }
+    if (definition.id.length === 0) {
+        throw new TypeError("skill identity must be nonempty");
+    }
+
+    assertNonnegativeSafeInteger(definition.spCost, "skill SP cost");
+    assertNonnegativeSafeInteger(definition.initialSp, "skill initial SP");
+    const maxCharges = definition.maxCharges ?? 1;
+    const spRecoveryIntervalTicks = definition.spRecoveryIntervalTicks ?? TICKS_PER_SECOND;
+    assertNonnegativeSafeInteger(maxCharges, "skill maximum charges");
+
+    if (maxCharges === 0 && definition.spCost !== 0) {
+        throw new RangeError("skill requiring SP must have a positive charge capacity");
+    }
+
+    assertPositiveNumber(spRecoveryIntervalTicks, "skill SP recovery interval");
+    assertNonnegativeSafeInteger(skillSpCapacity(definition), "skill SP capacity");
+
+    if (definition.initialSp > skillSpCapacity(definition)) {
+        throw new RangeError("skill initial SP exceeds capacity");
+    }
+    if (definition.durationTicks !== null) {
+        assertNonnegativeSafeInteger(definition.durationTicks, "skill duration ticks");
+    }
+    if (definition.activation === "PASSIVE" && definition.spCost !== 0) {
+        throw new TypeError("passive skill must not require SP");
+    }
+
+    const owned = ownDataRecord(
+        {
+            ...definition,
+            maxCharges,
+            spRecoveryIntervalTicks,
+            ...(definition.activeAction === undefined
+                ? {}
+                : { activeAction: createActionDefinition(definition.activeAction) }),
+        },
+        "skill definition",
+    );
+    ownedDefinitions.add(owned);
+
+    return owned;
+}
+
+export function initializeSkillState(
+    definition: SkillDefinition,
+    context: { readonly tick: number } = { tick: 0 },
+): SkillState {
+    assertNonnegativeSafeInteger(context.tick, "skill initialization tick");
+
+    return createSkillState({
+        sp: definition.initialSp,
+        spRecoveryProgressTicks: 0,
+        lastAdvancedTick: context.tick,
+        nextActivationId: 0,
+        active: null,
+    });
+}
+
+export function createSkillState(state: SkillState): SkillState {
+    assertNonnegativeSafeInteger(state.sp, "skill SP");
+    assertNonnegativeNumber(state.spRecoveryProgressTicks, "skill SP recovery progress");
+    assertNonnegativeSafeInteger(state.lastAdvancedTick, "skill last advanced tick");
+    assertNonnegativeSafeInteger(state.nextActivationId, "skill next activation identity");
+
+    if (state.active !== null) {
+        assertNonnegativeSafeInteger(state.active.id, "skill activation identity");
+        assertNonnegativeSafeInteger(state.active.startedAtTick, "skill activation tick");
+
+        if (state.active.id >= state.nextActivationId) {
+            throw new TypeError("skill allocation progress must exceed its active identity");
+        }
+        if (state.active.endsAtTick !== null) {
+            assertNonnegativeSafeInteger(state.active.endsAtTick, "skill ending tick");
+
+            if (state.active.endsAtTick < state.active.startedAtTick) {
+                throw new TypeError("skill ending tick precedes activation");
+            }
+        }
+    }
+
+    return ownDataRecord(state, "skill state");
+}
+
+export function copySkillState(state: SkillState): SkillState {
+    return ownDataRecord(state, "skill state");
+}
