@@ -39,7 +39,7 @@ const geometry = createShapeGeometry({
 function definition() {
   return createActionDefinition({
     triggerBindingId: "primary",
-    intervalTicks: 10,
+    baseAttackTimeTicks: 10,
     recoveryTicks: 0,
     targetGroups: [
       {

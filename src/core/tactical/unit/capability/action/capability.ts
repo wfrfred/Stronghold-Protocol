@@ -1,10 +1,12 @@
 import {
     assertNonnegativeSafeInteger,
-    assertPositiveSafeInteger,
+    assertNonnegativeNumber,
+    assertPositiveNumber,
 } from "../../../../common/assert.js";
+import * as contribution from "../../../modifier/contribution.js";
 import * as operation from "./operation.js";
 import { createTargetingDefinition, type TargetingDefinition } from "../../targeting/definition.js";
-import type { Unit, UnitDefinition } from "../../unit.js";
+import { stabilizeUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
 
 export type TargetBindingId = string;
 
@@ -26,17 +28,21 @@ export interface ActionDefinition {
     readonly triggerBindingId: TargetBindingId;
     readonly targetGroups: readonly [ActionTargetGroupDefinition, ...ActionTargetGroupDefinition[]];
     readonly followUps: readonly FollowUpOperationDefinition[];
-    readonly intervalTicks: number;
+    readonly baseAttackTimeTicks: number;
     readonly recoveryTicks: number;
 }
 
 export interface ActionCapabilityDefinition {
+    readonly attackSpeed?: number;
     readonly normalAction: ActionDefinition;
 }
 
 export interface ActionState {
     readonly readyAtTick: number;
     readonly recoveryUntilTick: number;
+    readonly cooldownIntervalTicks: number | null;
+    readonly attackSpeed: contribution.State;
+    readonly baseAttackTime: contribution.State;
 }
 
 export interface Action {
@@ -92,14 +98,14 @@ export function createActionDefinition(definition: ActionDefinition): ActionDefi
         throw new RangeError("action trigger references an unknown target binding");
     }
 
-    assertPositiveSafeInteger(definition.intervalTicks, "action intervalTicks");
+    assertPositiveNumber(definition.baseAttackTimeTicks, "action baseAttackTimeTicks");
     assertNonnegativeSafeInteger(definition.recoveryTicks, "action recoveryTicks");
 
     return Object.freeze({
         triggerBindingId: definition.triggerBindingId,
         targetGroups: Object.freeze(targetGroups) as ActionDefinition["targetGroups"],
         followUps: Object.freeze(followUps),
-        intervalTicks: definition.intervalTicks,
+        baseAttackTimeTicks: definition.baseAttackTimeTicks,
         recoveryTicks: definition.recoveryTicks,
     });
 }
@@ -107,13 +113,25 @@ export function createActionDefinition(definition: ActionDefinition): ActionDefi
 export function createActionCapabilityDefinition(
     definition: ActionCapabilityDefinition,
 ): ActionCapabilityDefinition {
-    return Object.freeze({ normalAction: createActionDefinition(definition.normalAction) });
+    const attackSpeed = definition.attackSpeed ?? 100;
+    assertNonnegativeNumber(attackSpeed, "attack speed");
+
+    return Object.freeze({
+        attackSpeed,
+        normalAction: createActionDefinition(definition.normalAction),
+    });
 }
 
 export function createActionState(tick = 0): ActionState {
     assertNonnegativeSafeInteger(tick, "action tick");
 
-    return { readyAtTick: tick, recoveryUntilTick: tick };
+    return {
+        readyAtTick: tick,
+        recoveryUntilTick: tick,
+        cooldownIntervalTicks: null,
+        attackSpeed: contribution.create(),
+        baseAttackTime: contribution.create(),
+    };
 }
 
 export function initializeActionState(
@@ -124,5 +142,41 @@ export function initializeActionState(
 }
 
 export function copyActionState(state: Readonly<ActionState>): ActionState {
-    return { ...state };
+    return {
+        ...state,
+        attackSpeed: contribution.copy(state.attackSpeed),
+        baseAttackTime: contribution.copy(state.baseAttackTime),
+    };
+}
+
+function updateContributions<U extends Unit>(
+    input: U | StableUnit<U>,
+    key: "attackSpeed" | "baseAttackTime",
+    transition: contribution.Transition,
+): StableUnit<U> {
+    const unit = stabilizeUnit<U>(input);
+
+    if (!hasAction(unit)) {
+        throw new TypeError("attack timing contributions require Action capability");
+    }
+
+    const state = transition(unit.action[key]);
+
+    return state === unit.action[key]
+        ? unit
+        : { ...unit, action: { ...unit.action, [key]: state } };
+}
+
+export function updateAttackSpeedContributions<U extends Unit>(
+    unit: U | StableUnit<U>,
+    transition: contribution.Transition,
+): StableUnit<U> {
+    return updateContributions<U>(unit, "attackSpeed", transition);
+}
+
+export function updateBaseAttackTimeContributions<U extends Unit>(
+    unit: U | StableUnit<U>,
+    transition: contribution.Transition,
+): StableUnit<U> {
+    return updateContributions<U>(unit, "baseAttackTime", transition);
 }

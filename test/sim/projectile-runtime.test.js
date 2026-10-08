@@ -56,7 +56,7 @@ function actorDefinition(id = "launcher", attack = 10) {
     action: {
       normalAction: {
         triggerBindingId: "primary",
-        intervalTicks: 100,
+        baseAttackTimeTicks: 100,
         recoveryTicks: 0,
         targetGroups: [
           {

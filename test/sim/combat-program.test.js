@@ -52,7 +52,7 @@ function sourceDefinition(id = "source", power = 20) {
     action: {
       normalAction: {
         triggerBindingId: "primary",
-        intervalTicks: 10,
+        baseAttackTimeTicks: 10,
         recoveryTicks: 0,
         targetGroups: [
           {
@@ -694,7 +694,7 @@ test("combat program: readiness skips binding and target ownership stays in even
 
     assert.equal(result.work, initial);
     assert.equal(result.state, state);
-    assert.deepEqual(Object.keys(getCombatUnit(result.work, 0).action).sort(), ['readyAtTick', 'recoveryUntilTick']);
+    assert.deepEqual(Object.keys(getCombatUnit(result.work, 0).action).sort(), ['attackSpeed', 'baseAttackTime', 'cooldownIntervalTicks', 'readyAtTick', 'recoveryUntilTick']);
   }
   assert.equal(bindings, 0);
 
@@ -708,9 +708,9 @@ test("combat program: readiness skips binding and target ownership stays in even
   const cooling = startAction(disappeared, started.state, 0, query, 1, resources, true);
   assert.equal(cooling.work, disappeared);
   assert.equal(bindings, 1);
-  assert.deepEqual(Object.keys(getCombatUnit(cooling.work, 0).action).sort(), ['readyAtTick', 'recoveryUntilTick']);
+  assert.deepEqual(Object.keys(getCombatUnit(cooling.work, 0).action).sort(), ['attackSpeed', 'baseAttackTime', 'cooldownIntervalTicks', 'readyAtTick', 'recoveryUntilTick']);
 
-  const ready = startAction(cooling.work, cooling.state, 0, query, definition.action.normalAction.intervalTicks, resources, true);
+  const ready = startAction(cooling.work, cooling.state, 0, query, definition.action.normalAction.baseAttackTimeTicks, resources, true);
   assert.equal(bindings, 2);
   assert.equal(ready.work, cooling.work);
   assert.deepEqual(ready.state, cooling.state);

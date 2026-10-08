@@ -73,7 +73,7 @@ function damageType(value: unknown): DamageType {
     }
 }
 
-function attackInterval(stats: Record<string, unknown>): number {
+function attackTiming(stats: Record<string, unknown>) {
     const bat = numberField(stats.bat, "base attack time");
     const attackSpeed = numberField(stats.aspd, "attack speed");
 
@@ -81,7 +81,7 @@ function attackInterval(stats: Record<string, unknown>): number {
         throw new RangeError("legacy attack time and attack speed must be positive");
     }
 
-    return Math.max(1, Math.ceil((bat * 100 * TICKS_PER_SECOND) / attackSpeed));
+    return { baseAttackTimeTicks: bat * TICKS_PER_SECOND, attackSpeed };
 }
 
 function attackRange(value: unknown): RangeGrid {
@@ -131,6 +131,7 @@ function operatorDefinition(value: unknown, direction: Direction) {
     const definition = record(value, "operator definition");
     const stats = record(definition.stats, "operator stats");
     rejectContent(definition);
+    const timing = attackTiming(stats);
 
     const canTargetAir = definition.canHitFly ?? false;
 
@@ -159,9 +160,10 @@ function operatorDefinition(value: unknown, direction: Direction) {
             geometry: { radius: 0.70709997 },
         },
         action: {
+            attackSpeed: timing.attackSpeed,
             normalAction: {
                 triggerBindingId: "primary",
-                intervalTicks: attackInterval(stats),
+                baseAttackTimeTicks: timing.baseAttackTimeTicks,
                 recoveryTicks: 0,
                 targetGroups: [
                     {
@@ -203,6 +205,7 @@ function enemyDefinition(value: unknown) {
     const definition = record(value, "enemy definition");
     const stats = record(definition.stats, "enemy stats");
     rejectContent(definition);
+    const timing = attackTiming(stats);
 
     const motion = stats.motion;
     const applyWay = definition.applyWay;
@@ -238,9 +241,10 @@ function enemyDefinition(value: unknown) {
         },
         blockable: { weight: numberField(stats.blockCnt, "block weight") },
         action: {
+            attackSpeed: timing.attackSpeed,
             normalAction: {
                 triggerBindingId: "primary",
-                intervalTicks: attackInterval(stats),
+                baseAttackTimeTicks: timing.baseAttackTimeTicks,
                 recoveryTicks: applyWay === "RANGED" ? Math.ceil(0.35 * TICKS_PER_SECOND) : 0,
                 targetGroups: [
                     {

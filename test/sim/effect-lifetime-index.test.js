@@ -225,7 +225,7 @@ test('effect lifetime index: Action cancellation finishes execution-owned effect
     const resources = new CombatResources();
     const effect = resources.registerEffect(program('cancel'));
     const definition = createActionDefinition({
-        triggerBindingId: 'primary', intervalTicks: 1, recoveryTicks: 0,
+        triggerBindingId: 'primary', baseAttackTimeTicks: 1, recoveryTicks: 0,
         targetGroups: [{
             id: 'primary',
             targeting: {

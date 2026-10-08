@@ -1,3 +1,4 @@
+import { createActionState } from "../../dist/core/tactical/unit/capability/action/capability.js";
 import { computedAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -65,7 +66,7 @@ function actor(id) {
     action: {
       normalAction: {
         triggerBindingId: "primary",
-        intervalTicks: 100,
+        baseAttackTimeTicks: 100,
         recoveryTicks: 0,
         targetGroups: [{
           id: "primary",
@@ -306,7 +307,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
           ...initializeVitalityState({ maxHp: 100 }), hp: 40,
         } } } : {}) },
       { definition: sibling, position: [0, 2],
-        states: { action: { readyAtTick: 1, recoveryUntilTick: 0 } } },
+        states: { action: { ...createActionState(), readyAtTick: 1 } } },
     ],
     initialMechanisms: [source],
     schedule: { type: "TIMELINE", spawns: [{

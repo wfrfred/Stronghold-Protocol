@@ -1,3 +1,4 @@
+import { createActionState } from "../../dist/core/tactical/unit/capability/action/capability.js";
 // Sim core: rng, grid/pathing, damage formulas, stat aggregation, buffs.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -427,7 +428,7 @@ const catalogDefinition = () => Object.freeze({
   allegiance: Object.freeze({ side: 'ALLY' }),
   action: createActionCapabilityDefinition({ normalAction: {
     triggerBindingId: 'primary',
-    intervalTicks: 3, recoveryTicks: 0, followUps: [],
+    baseAttackTimeTicks: 3, recoveryTicks: 0, followUps: [],
     targetGroups: [{ id: 'primary',
       operations: [{ type: 'DAMAGE', power: 10, damageType: 'PHYSICAL' }],
       targeting: { type: 'DAMAGE', scope: { type: 'RANGE', geometry: {
@@ -464,7 +465,7 @@ function catalogRoutedState() {
 test('core unit initialization uses prepared states and separates configuration from runtime-only capabilities', () => {
   const definition = catalogDefinition();
   const vitality = {...initializeVitalityState(definition.vitality), hp: 25};
-  const action = { readyAtTick: 9, recoveryUntilTick: 10 };
+  const action = { ...createActionState(), readyAtTick: 9, recoveryUntilTick: 10 };
   const locomotion = catalogRoutedState();
   const unit = initializeUnit({ id: 1, definition, position: [2, 0], tick: 17,
     states: { vitality, action, locomotion, spatialPresence: { present: false } } });

@@ -17,6 +17,14 @@ import {
 } from "./process.js";
 import type { ProjectileOperations } from "../../../battlefield/projectile/operations.js";
 import { isSpatiallyPresent } from "../presence.js";
+import type { ActionResources } from "./resources.js";
+import {
+    beginActionCooldown,
+    reconcileActionCooldown,
+    resolveActionIntervalTicks,
+} from "./timing.js";
+
+type ActionExecutionResources = EffectTransitionResources & Pick<ActionResources, "computations">;
 
 export function startAction(
     work: CombatWork,
@@ -24,7 +32,7 @@ export function startAction(
     sourceUnitId: UnitId,
     compiled: CompiledAction,
     tick: number,
-    resources: EffectTransitionResources,
+    resources: ActionExecutionResources,
     mayStart: boolean,
     projectiles?: ProjectileOperations,
 ): { readonly work: CombatWork; readonly state: ActionExecutionState } {
@@ -49,24 +57,31 @@ export function startActionInWork(
     sourceUnitId: UnitId,
     compiled: CompiledAction,
     tick: number,
-    resources: EffectTransitionResources,
+    resources: ActionExecutionResources,
     mayStart: boolean,
     projectiles?: ProjectileOperations,
 ): CombatWork {
     const source = getCombatUnit(work, sourceUnitId);
 
-    if (
-        !mayStart ||
-        source === undefined ||
-        !hasAction(source) ||
-        !isSpatiallyPresent(source) ||
-        tick < source.action.readyAtTick ||
-        tick < source.action.recoveryUntilTick
-    ) {
+    if (source === undefined || !hasAction(source) || !isSpatiallyPresent(source)) {
         return work;
     }
 
-    const bindings = compiled.bind({ source, battlefield: combatWorkView(work) });
+    const intervalTicks = resolveActionIntervalTicks(
+        compiled.definition,
+        source.definition.action,
+        source.action,
+        resources.computations.bind({ unit: source, battlefield: combatWorkView(work) }),
+    );
+    const action = reconcileActionCooldown(source.action, intervalTicks, tick);
+    const ready = action === source.action ? source : { ...source, action };
+    work = updateCombatUnit(work, ready);
+
+    if (!mayStart || tick < action.readyAtTick || tick < action.recoveryUntilTick) {
+        return work;
+    }
+
+    const bindings = compiled.bind({ source: ready, battlefield: combatWorkView(work) });
     const targetUnitId = bindings.get(compiled.definition.triggerBindingId)![0] ?? null;
 
     if (targetUnitId === null) {
@@ -75,12 +90,8 @@ export function startActionInWork(
 
     const { definition } = compiled;
     const executing = {
-        ...source,
-        action: {
-            ...source.action,
-            readyAtTick: tick + definition.intervalTicks,
-            recoveryUntilTick: tick + definition.recoveryTicks,
-        },
+        ...ready,
+        action: beginActionCooldown(action, definition, intervalTicks, tick),
     };
     work = updateCombatUnit(work, executing);
     work = appendCombatEvents(work, [{ type: "ACTION", sourceUnitId, targetUnitId, tick }]);

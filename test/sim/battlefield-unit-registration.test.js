@@ -23,7 +23,7 @@ const definition = () => ({
   offense: { attack: 10 },
   defense: { defense: 20, resistance: 10 },
   action: createActionCapabilityDefinition({ normalAction: {
-    triggerBindingId: 'primary', intervalTicks: 3, recoveryTicks: 0, followUps: [],
+    triggerBindingId: 'primary', baseAttackTimeTicks: 3, recoveryTicks: 0, followUps: [],
     targetGroups: [{ id: 'primary', operations: [{ type: 'DAMAGE', power: 10, damageType: 'PHYSICAL' }],
       targeting: { type: 'DAMAGE', scope: { type: 'RANGE', geometry: {
         type: 'SHAPES', geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 1 }] },
@@ -91,7 +91,7 @@ for (const [name, create, operation] of modes) {
         assert.equal(runtime.navigationMaps, maps);
       }
     }
-    const updated = { ...unit, action: { readyAtTick: 7, recoveryUntilTick: 8 },
+    const updated = { ...unit, action: { ...unit.action, readyAtTick: 7, recoveryUntilTick: 8 },
       spatialPresence: { present: false }, occupancy: { claims: [] } };
     runtime[operation]([{ type: 'UPDATE_UNIT', unit: updated }]);
     assert.deepEqual(runtime.getUnit(1).action, updated.action);

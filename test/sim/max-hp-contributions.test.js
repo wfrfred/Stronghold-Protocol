@@ -323,7 +323,7 @@ test("MaxHP: a tick failure does not publish contributions or the HP response", 
         action: {
             normalAction: {
                 triggerBindingId: "primary",
-                intervalTicks: 30,
+                baseAttackTimeTicks: 30,
                 recoveryTicks: 0,
                 targetGroups: [
                     {

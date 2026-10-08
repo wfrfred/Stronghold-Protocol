@@ -1324,7 +1324,7 @@ test('core selective projection retains untouched collections, indexes and live 
   const h = battlefieldProjectionHarness();
   const routed = routedEnemyHarness({ speedPerTick: 0.1, checkpoints: [coreMove(4)] });
   const definition = Object.freeze({ ...routed.enemy.definition, action: createActionCapabilityDefinition({ normalAction: {
-    triggerBindingId: 'normal', intervalTicks: 30, recoveryTicks: 0, followUps: [],
+    triggerBindingId: 'normal', baseAttackTimeTicks: 30, recoveryTicks: 0, followUps: [],
     targetGroups: [{ id: 'normal', operations: [{ type: 'DAMAGE', power: 10, damageType: 'PHYSICAL' }],
       targeting: { type: 'DAMAGE', scope: { type: 'RANGE', geometry: {
         type: 'SHAPES', geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 1 }] },
@@ -1346,7 +1346,7 @@ test('core selective projection retains untouched collections, indexes and live 
   const path = unit.locomotion.mainRoute.navigation.execution.activity.path;
   const field = h.branches[0].fieldCache.get(previous.navigationMaps.WALK, path.request);
   h.commit(state => [{ type: 'UPDATE_UNIT', unit: {
-    ...state.units.get(1), vitality: { ...state.units.get(1).vitality, hp: 90 }, action: { readyAtTick: 7, recoveryUntilTick: 4 },
+    ...state.units.get(1), vitality: { ...state.units.get(1).vitality, hp: 90 }, action: { ...state.units.get(1).action, readyAtTick: 7, recoveryUntilTick: 4 },
   } }]);
   assert.notEqual(h.state.units, previous.units);
   assert.equal(h.state.mechanisms, previous.mechanisms);

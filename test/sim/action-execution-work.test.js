@@ -12,7 +12,7 @@ import {
 } from '../../dist/core/tactical/unit/capability/action/process.js';
 
 const definition = createActionDefinition({
-  triggerBindingId: 'primary', intervalTicks: 1, recoveryTicks: 0,
+  triggerBindingId: 'primary', baseAttackTimeTicks: 1, recoveryTicks: 0,
   targetGroups: [{ id: 'primary', targeting: {
     type: 'DAMAGE', scope: { type: 'BLOCKER' }, canTargetAir: true,
     includeBlockingRelations: false, preferBlockingRelations: false,

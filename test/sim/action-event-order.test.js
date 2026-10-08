@@ -15,7 +15,7 @@ test("action event order: release and damage precede support loss produced by th
     });
     const action = createActionDefinition({
         triggerBindingId: "primary",
-        intervalTicks: 10,
+        baseAttackTimeTicks: 10,
         recoveryTicks: 0,
         targetGroups: [{
             id: "primary",

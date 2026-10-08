@@ -405,11 +405,12 @@ test('core combat: the limited legacy adapter rejects unsupported content and pr
     enemies: [{ definition: walker({ bat: 2, aspd: 100, speed: 1 }), route: coreCombatRoute() }],
   };
   const battle = createLegacyCombatBattle(options);
-  assert.equal(battle.snapshot().units[0].definition.action.normalAction.intervalTicks, 8);
+  assert.equal(battle.snapshot().units[0].definition.action.normalAction.baseAttackTimeTicks, 15);
   battle.step();
   const enemy = battle.snapshot().units.find(unit => unit.id === 1);
 
-  assert.equal(enemy.definition.action.normalAction.intervalTicks, 60);
+  assert.equal(enemy.definition.action.normalAction.baseAttackTimeTicks, 60);
+  assert.equal(battle.snapshot().units[0].definition.action.attackSpeed, 200);
   assert.equal(enemy.definition.locomotion.moveSpeedPerTick, 1 / 60);
   assert.throws(() => createLegacyCombatBattle({ ...options, operators: [{ definition: guard({ skill: { spCost: 1 } }), position: [1, 5] }] }), /does not execute operator skills/);
   assert.throws(() => createLegacyCombatBattle({ ...options, operators: [{ definition: guard({ dmgType: 'heal' }), position: [1, 5] }] }), /only supports physical, arts and true damage/);
@@ -1044,7 +1045,7 @@ const damageEffect = power => ({ type: 'DAMAGE', power, damageType: 'TRUE' });
 const healEffect = (power, ignoreHealFree = false) => ({ type: 'HEAL', power, ignoreHealFree });
 
 const normalAction = (targetGroups, followUps = []) => ({
-  triggerBindingId: targetGroups[0].id, targetGroups, followUps, intervalTicks: 3, recoveryTicks: 0,
+  triggerBindingId: targetGroups[0].id, targetGroups, followUps, baseAttackTimeTicks: 3, recoveryTicks: 0,
 });
 
 function actionUnit(id, side, position, { hp = 100, flags = [], action } = {}) {

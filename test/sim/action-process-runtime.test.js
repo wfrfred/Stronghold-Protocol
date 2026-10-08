@@ -27,7 +27,7 @@ const range = createShapeGeometry({
   shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 10 }],
 });
 
-function actorDefinition(id, { intervalTicks = 10, power = 7, moving = false } = {}) {
+function actorDefinition(id, { baseAttackTimeTicks = 10, power = 7, moving = false } = {}) {
   const common = {
     id,
     vitality: { maxHp: 100 },
@@ -40,7 +40,7 @@ function actorDefinition(id, { intervalTicks = 10, power = 7, moving = false } =
     action: {
       normalAction: {
         triggerBindingId: "primary",
-        intervalTicks,
+        baseAttackTimeTicks,
         recoveryTicks: 0,
         targetGroups: [
           {
@@ -258,7 +258,7 @@ test("action runtime: delayed progress keeps ordinary same-tick order and copied
 });
 
 test("action runtime: same-tick cancellation wins over release and does not affect sibling executions", () => {
-  const actor = actorDefinition("overlapping", { intervalTicks: 1 });
+  const actor = actorDefinition("overlapping", { baseAttackTimeTicks: 1 });
   const runtime = new BattleRuntime(
     spec([
       { definition: actor, position: [0, 0] },
