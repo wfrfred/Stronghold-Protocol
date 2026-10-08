@@ -34,6 +34,7 @@ import { parseBattlefieldMap } from '../../dist/data/arknights/map.js';
 import { parseRouteDefinition } from '../../dist/data/arknights/route.js';
 import { createRng } from '../../dist/core/common/rng.js';
 import { World } from '../../dist/core/tactical/geometry/coordinate.js';
+import { RangeGrid } from '../../dist/core/tactical/geometry/range.js';
 import { createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
 import { initializeRoutedEnemy } from "../../dist/core/tactical/battle/creation/enemy.js";
 import { stepRoutedEnemy } from "../../dist/legacy/enemy.js";
@@ -2379,7 +2380,14 @@ test('core battlefield snapshots isolate nested tiles, markers and edges from th
   assert.equal(BattlefieldMap.get(map, [0, 2]), undefined);
   assert.throws(() => createBattlefieldMap(1, 2, [coreGround(), ,]), RangeError);
   assert.throws(() => createBattlefieldMap(Number.MAX_SAFE_INTEGER, 2, []), RangeError);
-  assert.throws(() => createTile(coreGround({ passableMask: 'E_NUM' })), TypeError);
+  assert.throws(() => createBattlefieldMap(1, 2, [coreGround()]), RangeError);
+  assert.throws(() => createBattlefieldMap(1, 1, [coreGround()], [{ type: 'START', position: [0, 1] }]), /outside the map/);
+  assert.throws(() => createBattlefieldMap(1, 1, [coreGround()], [,]), /missing marker/);
+  assert.throws(() => createBattlefieldMap(1, 1, [coreGround()], [], [,]), /missing block edge/);
+  assert.throws(() => createBattlefieldMap(1, 1, [coreGround()], [], [
+    { position: [0, 2], direction: 'RIGHT', blockMask: 'ALL' },
+  ]), /no endpoint inside/);
+  assert.throws(() => createTile(coreGround({ advancedBuildableMask: 0x1_0000_0000 })), RangeError);
 });
 
 test('core static navigation projects mode-specific passability, costs and both edge departures', () => {
@@ -2404,7 +2412,28 @@ test('core static navigation projects mode-specific passability, costs and both 
   assert.deepEqual(distances(buildNavigationField(fly, fieldQuery([0, 3]))), [-1, 2, 1, 0]);
   assert.equal(walk.cells[0].departures.LEFT, false);
   assert.equal(NavigationMap.canDepart(walk, [0, 0], 'UP'), true);
-  assert.ok(Object.isFrozen(walk.cells[0].departures));
+  assert.ok(Object.isFrozen(walk) && Object.isFrozen(walk.cells));
+  assert.ok(walk.cells.every(cell => Object.isFrozen(cell) && Object.isFrozen(cell.departures)));
+  assert.throws(() => projectStaticNavigationMap(map, 'WALK', -1), RangeError);
+});
+
+test('compiled range grids are shared while mutable and frozen raw inputs keep their boundaries', () => {
+  const raw = [[0, -0], [0, 1]];
+  const range = RangeGrid.create(raw);
+  assert.equal(RangeGrid.create(range), range);
+  assert.equal(Object.is(range[0][1], -0), false);
+  assert.equal(createSpatialEffectRegion({ type: 'FIXED', position: [0, 0], range, direction: 'RIGHT' }).range, range);
+  raw[1][1] = 2;
+  assert.deepEqual(range, [[0, 0], [0, 1]]);
+  assert.deepEqual(RangeGrid.create(raw), [[0, 0], [0, 2]]);
+  const frozenRaw = Object.freeze([Object.freeze([0, -0])]);
+  const compiled = RangeGrid.create(frozenRaw);
+  assert.notEqual(compiled, frozenRaw);
+  assert.equal(Object.is(compiled[0][1], -0), false);
+  assert.throws(() => RangeGrid.create(Object.freeze([[0, 0], [0, -0]])), /duplicate/);
+  assert.throws(() => RangeGrid.create(Object.freeze(Array(1))), /missing range offset/);
+  assert.throws(() => createNavigationEffectDefinition({ id: 'sparse', WALK: { ...walkRestriction(), deniedDepartures: [,] }, FLY: null }), /missing denied departure/);
+  assert.throws(() => createNavigationEffectDefinition({ id: 'duplicate', WALK: { ...walkRestriction(), deniedDepartures: ['RIGHT', 'RIGHT'] }, FLY: null }), /duplicate denied departure/);
 });
 
 test('core navigation rejects malformed costs and preserves raw distance semantics in shared fields', () => {
@@ -2441,11 +2470,7 @@ test('core requests snapshot effective options without quantizing the continuous
   assert.equal(request.options.allowDiagonalMove, true);
   assert.deepEqual(request.goal.position, [2.2, 0]);
   assert.deepEqual(request.targetTile, [0, 2]);
-  assert.throws(() => createNavigationRequest(coreRequest({ targetTile: [0, 2, 3] })), RangeError);
   assert.throws(() => createNavigationRequest(coreRequest({ targetTile: [0, 0.5] })), RangeError);
-  assert.throws(() => createNavigationRequest(coreRequest({ options: {
-    visitEveryTileCenter: false, visitEveryNodeCenter: false, visitEveryNodeStably: false,
-  } })), TypeError);
   assert.throws(() => createNavigationRequest(coreRequest({ goal: { position: [2, 0], reachDistance: -1 } })), RangeError);
   const offset = [0.3, -0.4];
   const state = createNavigationState('FLY', offset);
@@ -2522,15 +2547,13 @@ test('route constructors keep tick timing explicit, snapshots isolated and progr
   assert.equal(a.timing, timing);
   assert.equal(b.timing, timing);
   assert.ok(Object.isFrozen(definition) && Object.isFrozen(definition.checkpoints) && Object.isFrozen(timing));
-  assert.throws(() => createRouteState(definition, timing), TypeError);
   assert.throws(() => createRouteTiming({ waveStartedAtTick: 0, fragmentStartedAtTick: NaN }), RangeError);
   assert.throws(() => createRouteTiming({ waveStartedAtTick: -1, fragmentStartedAtTick: 0 }), RangeError);
   assert.throws(() => createRouteTiming({ waveStartedAtTick: 0, fragmentStartedAtTick: 0.5 }), RangeError);
   assert.throws(() => createRouteDefinition(coreRoute({ checkpoints: [{ type: 'WAIT_FOR_TICKS', durationTicks: -1 }] })), RangeError);
   assert.throws(() => createRouteDefinition(coreRoute({ checkpoints: [{ type: 'WAIT_FOR_TICKS', durationTicks: 0.5 }] })), RangeError);
   assert.throws(() => createRouteDefinition(coreRoute({ checkpoints: [,] })), TypeError);
-  assert.throws(() => createRouteDefinition(coreRoute({ startPosition: [0, 0, 1] })), TypeError);
-  assert.throws(() => createRouteDefinition(coreRoute({ spawnOffset: [0, Infinity] })), TypeError);
+  assert.throws(() => createRouteDefinition(coreRoute({ spawnOffset: [0, Infinity] })), RangeError);
 });
 
 test('core route waits bind absolute deadlines to explicit play ticks and birth timing', () => {

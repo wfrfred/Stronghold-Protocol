@@ -44,13 +44,7 @@ export function hasHit<U extends Unit>(
 }
 
 export function createSpatialDefinition(definition: SpatialDefinition): SpatialDefinition {
-    const layer: unknown = definition.layer;
-
-    if (layer !== "GROUND" && layer !== "AIR") {
-        throw new TypeError("spatial layer must be GROUND or AIR");
-    }
-
-    return Object.freeze({ layer });
+    return Object.freeze({ layer: definition.layer });
 }
 
 export function createHitDefinition(definition: HitDefinition): HitDefinition {

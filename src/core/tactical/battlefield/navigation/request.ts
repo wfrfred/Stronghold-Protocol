@@ -2,8 +2,6 @@ import { assertNonnegativeNumber, assertNonnegativeSafeInteger } from "../../../
 import {
     createTilePosition,
     createWorldPosition,
-    isTilePosition,
-    isWorldPosition,
     World,
     type TilePosition,
     type WorldPosition,
@@ -54,31 +52,12 @@ export function isNavigationGoalReached(
 export function createNavigationRequest(request: NavigationRequest): NavigationRequest {
     assertNonnegativeSafeInteger(request.id, "navigation request id");
 
-    if (!isTilePosition(request.targetTile) || !isWorldPosition(request.goal.position)) {
-        throw new RangeError("navigation coordinates must be valid pairs");
-    }
-
     const [row, col] = request.targetTile;
     const [x, y] = request.goal.position;
 
     assertNonnegativeNumber(request.goal.reachDistance, "navigation reach distance");
 
-    const fields: { readonly arrivalRule: unknown } = request;
-
-    if (fields.arrivalRule !== "DISTANCE" && fields.arrivalRule !== "TARGET_TILE_AND_DISTANCE") {
-        throw new TypeError("invalid navigation arrival rule");
-    }
-
     const options = request.options;
-
-    if (
-        typeof options.allowDiagonalMove !== "boolean" ||
-        typeof options.visitEveryTileCenter !== "boolean" ||
-        typeof options.visitEveryNodeCenter !== "boolean" ||
-        typeof options.visitEveryNodeStably !== "boolean"
-    ) {
-        throw new TypeError("navigation options must be explicit booleans");
-    }
 
     return Object.freeze({
         id: request.id,

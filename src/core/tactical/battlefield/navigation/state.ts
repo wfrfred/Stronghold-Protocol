@@ -2,12 +2,11 @@ import {
     createTilePosition,
     createWorldOffset,
     createWorldPosition,
-    isWorldPosition,
     type WorldOffset,
     type WorldPosition,
 } from "../../geometry/coordinate.js";
 import { initializeNavigationCursor, selectNavigationTarget } from "./query.js";
-import { NavigationMap, PathMotionMode } from "./map.js";
+import { NavigationMap, type PathMotionMode } from "./map.js";
 import type {
     NavigationCursorInitialization,
     NavigationFailureReason,
@@ -174,13 +173,6 @@ export function createNavigationState(
     pathMotionMode: PathMotionMode,
     locatorOffset: WorldOffset,
 ): NavigationState {
-    if (!PathMotionMode.is(pathMotionMode)) {
-        throw new TypeError("invalid path motion mode");
-    }
-    if (!isWorldPosition(locatorOffset)) {
-        throw new RangeError("locator offset must be a valid world pair");
-    }
-
     return {
         pathMotionMode,
         execution: {

@@ -1,6 +1,6 @@
 import { ownProjectileInstance, ProjectileWork } from "./internal/state.js";
 import { assertNonnegativeNumber, assertNonnegativeSafeInteger } from "../../../common/assert.js";
-import { assertSynchronousResult, type SynchronousResult } from "../../../common/synchronous.js";
+import type { SynchronousResult } from "../../../common/synchronous.js";
 import type { WorldPosition } from "../../geometry/coordinate.js";
 import type { RangeGeometry } from "../../geometry/shape.js";
 import type { UnitId } from "../../unit/unit.js";
@@ -29,6 +29,18 @@ export interface ProjectileOperations {
     get(id: ProjectileId): ProjectileInstance | undefined;
 }
 
+export function withProjectileOperations(
+    state: ProjectileState,
+    resources: ProjectileResources,
+    tick: number,
+    run: (operations: ProjectileOperations) => undefined,
+): { readonly state: ProjectileState; readonly result: undefined };
+export function withProjectileOperations<T>(
+    state: ProjectileState,
+    resources: ProjectileResources,
+    tick: number,
+    run: (operations: ProjectileOperations) => SynchronousResult<T>,
+): { readonly state: ProjectileState; readonly result: T };
 export function withProjectileOperations<T>(
     state: ProjectileState,
     resources: ProjectileResources,
@@ -98,8 +110,6 @@ export function withProjectileOperations<T>(
 
     try {
         const result = run(operations);
-
-        assertSynchronousResult(result, "projectile operations");
 
         return { state: current.result(), result };
     } finally {

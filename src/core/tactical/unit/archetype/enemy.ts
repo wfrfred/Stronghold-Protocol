@@ -58,7 +58,7 @@ export interface CombatEnemyDefinition
 export type CombatRoutedEnemy = RoutedEnemy<CombatEnemyDefinition>;
 
 export function createEnemyDefinition(definition: EnemyDefinition): EnemyDefinition {
-    if (typeof definition.id !== "string" || definition.id.length === 0) {
+    if (definition.id.length === 0) {
         throw new TypeError("enemy definition id must be nonempty");
     }
 

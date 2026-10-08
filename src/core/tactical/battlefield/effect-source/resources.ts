@@ -39,9 +39,6 @@ export class EffectSourceResources {
 
             return existing.program as unknown as EffectSourceProgram<S>;
         }
-        if (!Object.isFrozen(program.ref)) {
-            throw new TypeError("effect source program references must be immutable");
-        }
 
         const owned = Object.freeze({
             ref: program.ref,

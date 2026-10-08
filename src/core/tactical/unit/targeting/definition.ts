@@ -26,33 +26,12 @@ export interface HealingTargetingDefinition {
 
 export type TargetingDefinition = DamageTargetingDefinition | HealingTargetingDefinition;
 
-function flags(definition: object, keys: readonly string[]): void {
-    for (const key of keys) {
-        if (typeof Reflect.get(definition, key) !== "boolean") {
-            throw new TypeError(`${key} must be boolean`);
-        }
-    }
-}
-
 export function createTargetingDefinition(definition: TargetingDefinition): TargetingDefinition {
     assertPositiveSafeInteger(definition.maxTargets, "maxTargets");
 
     switch (definition.type) {
         case "DAMAGE": {
-            flags(definition, [
-                "canTargetAir",
-                "includeBlockingRelations",
-                "preferBlockingRelations",
-                "ignoreTargetFree",
-                "ignoreInvisible",
-            ]);
-
             const scope = definition.scope;
-            const scopeType: unknown = scope.type;
-
-            if (scopeType !== "RANGE" && scopeType !== "BLOCKER") {
-                throw new RangeError("unsupported damage target scope");
-            }
 
             return Object.freeze({
                 ...definition,
@@ -67,8 +46,6 @@ export function createTargetingDefinition(definition: TargetingDefinition): Targ
         }
 
         case "HEAL":
-            flags(definition, ["includeSelf", "ignoreAllyTargetFree", "ignoreHealFree"]);
-
             return Object.freeze({
                 ...definition,
                 geometry: createRangeGeometry(definition.geometry),

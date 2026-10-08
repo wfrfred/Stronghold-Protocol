@@ -53,12 +53,13 @@ export function createBattleSpec(spec: BattleSpec): BattleSpec {
 
     const ids = new Set<number>();
 
-    for (const definition of spec.predefines) {
-        const input: unknown = definition;
+    for (let index = 0; index < spec.predefines.length; index++) {
+        const definition = spec.predefines[index];
 
-        if (input === undefined) {
+        if (!Object.hasOwn(spec.predefines, index) || definition === undefined) {
             throw new TypeError("predefined definitions must be dense");
         }
+
         if (ids.has(definition.id)) {
             throw new RangeError(`duplicate predefined definition: ${definition.id}`);
         }

@@ -154,7 +154,7 @@ test("resources: publishing owns program behavior even when the caller's descrip
   assert.equal(resources.effects.get(registered.ref), registered);
   const instance = resources.effects.create(registered.ref, metadata);
   assert.equal(instance.state.value, 1);
-  assert.equal(resources.effects.update(instance, registered.ref, { value: 2 }).state.value, 2);
+  assert.equal(resources.effects.update(instance, { value: 2 }).state.value, 2);
 });
 
 test("resources: failed composite registration invalidates the entire unpublished resource graph", () => {
@@ -178,7 +178,7 @@ test("resources: failed composite registration invalidates the entire unpublishe
     for (const read of [
       () => resources.effects.get(descriptor.ref),
       () => resources.effects.create(descriptor.ref, metadata),
-      () => resources.effects.restore(JSON.parse(JSON.stringify(instance))),
+      () => resources.effects.restore(descriptor.ref, JSON.parse(JSON.stringify(instance))),
       () => resources.effectBindings.get(instance),
       () => resources.damage.get(instance),
       () => resources.healing.get(instance),

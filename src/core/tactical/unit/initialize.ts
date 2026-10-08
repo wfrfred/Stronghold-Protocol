@@ -2,6 +2,7 @@ import { createWorldPosition, type WorldPosition } from "../geometry/coordinate.
 import {
     initializeUnitCapabilities,
     type CopiedCapabilityStates,
+    type CapabilityStates,
     type PreparedCapabilityStates,
     type RuntimeCapabilitiesFor,
 } from "./capability/catalog.js";
@@ -39,7 +40,7 @@ export function initializeUnit<D extends UnitDefinition, S extends PreparedCapab
     prepared: PreparedUnitInitialization<D, S>,
 ): InitializedUnit<D, S>;
 export function initializeUnit<D extends UnitDefinition>(
-    input: Omit<UnitInitialization<D>, "states"> & { readonly states?: object },
+    input: Omit<UnitInitialization<D>, "states"> & { readonly states?: Partial<CapabilityStates> },
 ): Unit<D> {
     const { id, position } = input;
     const definition = ownUnitDefinition(input.definition);

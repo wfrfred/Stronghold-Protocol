@@ -84,10 +84,6 @@ function copyMechanism(mechanism: TileMechanism | null): TileMechanism | null {
     if (mechanism === null) {
         return null;
     }
-    if (typeof mechanism !== "object") {
-        throw new TypeError("invalid tile mechanism");
-    }
-
     switch (mechanism.type) {
         case "INFECTION": {
             const params = mechanism.params;
@@ -154,37 +150,10 @@ function copyMechanism(mechanism: TileMechanism | null): TileMechanism | null {
                 }),
             });
         }
-
-        default:
-            throw new TypeError("unsupported tile mechanism");
     }
 }
 
 export function createTile(tile: Tile): Tile {
-    const input: unknown = tile;
-
-    if (input === null || typeof input !== "object") {
-        throw new TypeError("invalid tile");
-    }
-
-    const fields: { readonly heightType: unknown } = tile;
-
-    if (fields.heightType !== "LOWLAND" && fields.heightType !== "HIGHLAND") {
-        throw new TypeError("invalid tile height type");
-    }
-    if (!["NONE", "MELEE", "RANGED", "ALL"].includes(tile.buildableType)) {
-        throw new TypeError("invalid tile buildable type");
-    }
-    if (!["NONE", "WALK_ONLY", "FLY_ONLY", "ALL"].includes(tile.passableMask)) {
-        throw new TypeError("invalid tile passable mask");
-    }
-    if (!["NONE", "SIDE_A", "SIDE_B", "ALL"].includes(tile.playerSideMask)) {
-        throw new TypeError("invalid tile player side mask");
-    }
-    if (!["NORMAL", "HOLE"].includes(tile.terrain)) {
-        throw new TypeError("invalid tile terrain");
-    }
-
     const advancedBuildableMask = tile.advancedBuildableMask ?? 0;
 
     if (

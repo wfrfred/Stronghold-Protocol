@@ -23,7 +23,7 @@ export interface MechanismRuntime<D extends MechanismDefinition = MechanismDefin
 }
 
 export function createMechanismDefinition(definition: MechanismDefinition): MechanismDefinition {
-    if (typeof definition.id !== "string" || definition.id.length === 0) {
+    if (definition.id.length === 0) {
         throw new TypeError("mechanism definition id must be nonempty");
     }
 
@@ -40,10 +40,6 @@ export function createMechanismRuntime<D extends MechanismDefinition>(
     runtime: MechanismRuntime<D>,
 ): MechanismRuntime<D> {
     assertNonnegativeSafeInteger(runtime.id, "mechanism id");
-
-    if (typeof runtime.active !== "boolean") {
-        throw new TypeError("mechanism active must be boolean");
-    }
 
     return {
         id: runtime.id,

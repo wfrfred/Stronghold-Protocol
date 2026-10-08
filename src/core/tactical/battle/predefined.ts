@@ -67,13 +67,6 @@ export function createPredefinedInstanceDefinition(
 ): PredefinedInstanceDefinition {
     assertNonnegativeSafeInteger(definition.id, "predefined definition id");
 
-    if (definition.alias !== null && typeof definition.alias !== "string") {
-        throw new TypeError("predefined alias must be a string or null");
-    }
-    if (typeof definition.initiallyPresent !== "boolean") {
-        throw new TypeError("predefined presence must be boolean");
-    }
-
     const creation = definition.creation;
 
     return Object.freeze({
@@ -90,11 +83,9 @@ export function createPredefinedInstanceDefinition(
                       ...creation,
                       navigationEffects: Object.freeze(
                           creation.navigationEffects.map((effect) => {
-                              const region = createSpatialEffectRegion(effect.region);
-
-                              if (region.type !== "FIXED") {
-                                  throw new TypeError("predefined mechanism effects must be fixed");
-                              }
+                              const region = createSpatialEffectRegion(
+                                  effect.region,
+                              ) as typeof effect.region;
 
                               return Object.freeze({
                                   definition: effect.definition,

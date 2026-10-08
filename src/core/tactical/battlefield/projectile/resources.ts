@@ -27,9 +27,6 @@ export class ProjectileResources {
 
             return existing.program as unknown as ProjectileProgram<S>;
         }
-        if (!Object.isFrozen(program.ref)) {
-            throw new TypeError("projectile program references must be immutable");
-        }
 
         const owned = Object.freeze({
             ref: program.ref,
@@ -58,7 +55,7 @@ export class ProjectileResources {
         return program as unknown as ProjectileProgram<S>;
     }
 
-    ownState<S extends object>(ref: ProjectileProgramRef<S>, value: unknown): S {
+    ownState<S extends object>(ref: ProjectileProgramRef<S>, value: NoInfer<S>): S {
         return ownDataRecord(this.get(ref).ownState(value), "projectile state");
     }
 

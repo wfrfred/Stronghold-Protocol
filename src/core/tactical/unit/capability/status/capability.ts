@@ -46,7 +46,6 @@ export interface StatusUnitDefinition extends UnitDefinition {
 
 export type EffectiveStatusFlags = ReadonlySet<StatusFlag>;
 
-const knownFlags = new Set<string>(STATUS_FLAGS);
 const ownedFlags = new WeakSet<readonly StatusFlag[]>();
 const ownedContributionValues = new WeakSet<StatusContribution>();
 const ownedContributions = new WeakSet<readonly StatusContribution[]>();
@@ -58,12 +57,12 @@ function createFlags(flags: readonly StatusFlag[]): readonly StatusFlag[] {
 
     const snapshot = new Set<StatusFlag>();
 
-    for (const flag of flags) {
-        if (!knownFlags.has(flag)) {
-            throw new TypeError(`unknown status flag ${flag}`);
+    for (let index = 0; index < flags.length; index++) {
+        if (!Object.hasOwn(flags, index)) {
+            throw new TypeError(`missing status flag at index ${index}`);
         }
 
-        snapshot.add(flag);
+        snapshot.add(flags[index]!);
     }
 
     const owned = Object.freeze([...snapshot]);
@@ -77,11 +76,8 @@ function createContribution(contribution: StatusContribution): StatusContributio
     if (ownedContributionValues.has(contribution)) {
         return contribution;
     }
-    if (typeof contribution.id !== "string" || contribution.id.length === 0) {
+    if (contribution.id.length === 0) {
         throw new TypeError("status contribution id must be nonempty");
-    }
-    if (typeof contribution.participating !== "boolean") {
-        throw new TypeError("status contribution participation must be boolean");
     }
 
     const owned = Object.freeze({

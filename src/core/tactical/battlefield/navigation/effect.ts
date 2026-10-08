@@ -2,10 +2,9 @@ import { assertNonnegativeSafeInteger, assertPositiveSafeInteger } from "../../.
 import {
     createTileOffset,
     createTilePosition,
-    isTilePosition,
     type TilePosition,
 } from "../../geometry/coordinate.js";
-import { Direction } from "../../geometry/direction.js";
+import type { Direction } from "../../geometry/direction.js";
 import { RangeGrid } from "../../geometry/range.js";
 import type { MechanismId } from "../mechanism.js";
 import type { UnitId } from "../../unit/unit.js";
@@ -86,30 +85,16 @@ function identity(value: number, name: string): number {
 }
 
 function restriction(value: FlyNavigationRestriction): FlyNavigationRestriction {
-    const input: unknown = value;
-
-    if (input === null || typeof input !== "object") {
-        throw new TypeError("navigation restriction must be an object");
-    }
-    if (typeof value.denyPassage !== "boolean") {
-        throw new TypeError("denyPassage must be boolean");
-    }
-
-    const departuresAreArray: boolean = Array.isArray(value.deniedDepartures);
-
-    if (!departuresAreArray) {
-        throw new TypeError("deniedDepartures must be an array");
-    }
-
     const seen = new Set<Direction>();
     const deniedDepartures: Direction[] = [];
 
     for (let index = 0; index < value.deniedDepartures.length; index++) {
-        const direction = value.deniedDepartures[index];
-
-        if (!Object.hasOwn(value.deniedDepartures, index) || !Direction.is(direction)) {
-            throw new RangeError(`invalid denied departure at index ${index}`);
+        if (!Object.hasOwn(value.deniedDepartures, index)) {
+            throw new RangeError(`missing denied departure at index ${index}`);
         }
+
+        const direction = value.deniedDepartures[index]!;
+
         if (seen.has(direction)) {
             throw new RangeError(`duplicate denied departure at index ${index}`);
         }
@@ -125,12 +110,6 @@ function restriction(value: FlyNavigationRestriction): FlyNavigationRestriction 
 }
 
 function source(value: SpatialEffectSource): SpatialEffectSource {
-    const input: unknown = value;
-
-    if (input === null || typeof input !== "object") {
-        throw new TypeError("spatial effect source must be an object");
-    }
-
     switch (value.type) {
         case "UNIT":
             return Object.freeze({ type: "UNIT", unitId: identity(value.unitId, "unit id") });
@@ -140,16 +119,13 @@ function source(value: SpatialEffectSource): SpatialEffectSource {
                 type: "MECHANISM",
                 mechanismId: identity(value.mechanismId, "mechanism id"),
             });
-
-        default:
-            throw new RangeError("unsupported spatial effect source");
     }
 }
 
 export function createNavigationEffectDefinition(
     definition: NavigationEffectDefinition,
 ): NavigationEffectDefinition {
-    if (typeof definition.id !== "string" || definition.id.length === 0) {
+    if (definition.id.length === 0) {
         throw new TypeError("navigation effect definition id must be nonempty");
     }
 
@@ -172,23 +148,10 @@ export function createNavigationEffectDefinition(
 }
 
 export function createSpatialEffectRegion(region: SpatialEffectRegion): SpatialEffectRegion {
-    const input: unknown = region;
-
-    if (input === null || typeof input !== "object") {
-        throw new TypeError("spatial effect region must be an object");
-    }
-    if (!Direction.is(region.direction)) {
-        throw new RangeError("invalid spatial effect region direction");
-    }
-
     const range = RangeGrid.create(region.range);
 
     switch (region.type) {
         case "FIXED":
-            if (!isTilePosition(region.position)) {
-                throw new RangeError("fixed spatial effect position must be a valid tile pair");
-            }
-
             return Object.freeze({
                 type: "FIXED",
                 position: createTilePosition(region.position[0], region.position[1]),
@@ -203,19 +166,12 @@ export function createSpatialEffectRegion(region: SpatialEffectRegion): SpatialE
                 range,
                 direction: region.direction,
             });
-
-        default:
-            throw new RangeError("unsupported spatial effect region");
     }
 }
 
 export function createNavigationSpatialEffect(
     effect: NavigationSpatialEffect,
 ): NavigationSpatialEffect {
-    if (typeof effect.active !== "boolean") {
-        throw new TypeError("spatial effect active must be boolean");
-    }
-
     const expiresAtTick =
         effect.expiresAtTick === null
             ? null

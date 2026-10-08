@@ -8,53 +8,42 @@ import type {
     EffectInstanceValue,
     EffectLifecycleFacts,
     EffectLifetimeScope,
+    EffectSnapshot,
 } from "../instance.js";
 import type { UnitId } from "../../../unit.js";
 
 const ownedInstances = new WeakSet<EffectInstanceValue>();
 
-export function ownEffectState<S extends object>(program: EffectProgram<S>, value: unknown): S {
+export function ownEffectState<S extends object>(program: EffectProgram<S>, value: S): S {
     return ownDataRecord(program.ownState(value), "effect state");
 }
 
-function nonnegativeInteger(value: unknown, name: string): number {
+function nonnegativeInteger(value: number, name: string): number {
     assertNonnegativeSafeInteger(value, `effect ${name}`, TypeError);
 
     return value;
 }
 
-function record(value: unknown): Record<string, unknown> {
-    if (value === null || typeof value !== "object" || Array.isArray(value)) {
-        throw new TypeError("effect instance must be a record");
-    }
-
-    return value as Record<string, unknown>;
-}
-
-function unitId(value: unknown): UnitId | null {
+function unitId(value: UnitId | null): UnitId | null {
     return value === null ? null : nonnegativeInteger(value, "unit identity");
 }
 
-function ownLifetimeScope(value: unknown): EffectLifetimeScope | null {
-    if (value === null) {
+function ownLifetimeScope(scope: EffectLifetimeScope | null): EffectLifetimeScope | null {
+    if (scope === null) {
         return null;
     }
 
-    const scope = record(value);
     const scopeUnitId = nonnegativeInteger(scope.unitId, "lifetime scope unit identity");
 
     if (scope.type === "UNIT") {
         return Object.freeze({ type: "UNIT", unitId: scopeUnitId });
     }
-    if (scope.type === "EXECUTION") {
-        return Object.freeze({
-            type: "EXECUTION",
-            unitId: scopeUnitId,
-            executionId: nonnegativeInteger(scope.executionId, "execution identity"),
-        });
-    }
 
-    throw new TypeError("unknown effect lifetime scope");
+    return Object.freeze({
+        type: "EXECUTION",
+        unitId: scopeUnitId,
+        executionId: nonnegativeInteger(scope.executionId, "execution identity"),
+    });
 }
 
 function ownMetadata(value: EffectInstanceMetadata): EffectInstanceMetadata {
@@ -70,10 +59,25 @@ function ownMetadata(value: EffectInstanceMetadata): EffectInstanceMetadata {
     };
 }
 
+function ownParent(parent: EffectAddress | null): EffectAddress | null {
+    return parent === null
+        ? null
+        : Object.freeze({
+              unitId: nonnegativeInteger(parent.unitId, "parent unit identity"),
+              instanceId: nonnegativeInteger(parent.instanceId, "parent instance identity"),
+          });
+}
+
+function assertLifecycleFacts(instance: EffectLifecycleFacts): void {
+    if (instance.participating && (!instance.started || instance.finished)) {
+        throw new TypeError("invalid effect lifecycle facts");
+    }
+}
+
 export function ownEffectInstance<S extends object>(
     program: EffectProgram<S>,
     metadata: EffectInstanceMetadata,
-    state: unknown,
+    state: S,
 ): EffectInstance<S> {
     const instance: EffectInstance<S> = Object.freeze({
         ...ownMetadata(metadata),
@@ -90,12 +94,29 @@ export function ownEffectInstance<S extends object>(
     return instance;
 }
 
+export function copyEffectInstance<S extends object>(
+    instance: EffectInstance<S>,
+): EffectInstance<S>;
+export function copyEffectInstance(instance: EffectInstanceValue): EffectInstanceValue;
 export function copyEffectInstance(instance: EffectInstanceValue): EffectInstanceValue {
-    if (!ownedInstances.has(instance)) {
-        throw new TypeError("effect instance must be created or restored by effect resources");
+    if (ownedInstances.has(instance)) {
+        return instance;
     }
 
-    return instance;
+    assertLifecycleFacts(instance);
+
+    const owned = Object.freeze({
+        ...ownMetadata(instance),
+        programRef: instance.programRef,
+        started: instance.started,
+        participating: instance.participating,
+        finished: instance.finished,
+        parent: ownParent(instance.parent),
+        state: ownDataRecord(instance.state, "effect state"),
+    });
+    ownedInstances.add(owned);
+
+    return owned;
 }
 
 export function withEffectLifecycle<I extends EffectInstanceValue>(
@@ -103,74 +124,23 @@ export function withEffectLifecycle<I extends EffectInstanceValue>(
     facts: Partial<EffectLifecycleFacts>,
 ): I {
     const updated = Object.freeze({ ...instance, ...facts });
-
     ownedInstances.add(updated);
 
     return updated;
 }
 
-export function readEffectSnapshot(value: unknown): {
-    readonly instance: Record<string, unknown>;
-    readonly programId: string;
-} {
-    const instance = record(value);
-    const ref = record(instance.programRef);
-
-    if (typeof ref.id !== "string") {
-        throw new TypeError("effect program identity must be a string");
-    }
-
-    return { instance, programId: ref.id };
-}
-
 export function ownRestoredEffectInstance<S extends object>(
     program: EffectProgram<S>,
-    instance: Record<string, unknown>,
+    instance: EffectSnapshot<S>,
 ): EffectInstance<S> {
-    if (
-        typeof instance.started !== "boolean" ||
-        typeof instance.participating !== "boolean" ||
-        typeof instance.finished !== "boolean" ||
-        (instance.participating && (!instance.started || instance.finished))
-    ) {
-        throw new TypeError("invalid effect lifecycle facts");
-    }
+    assertLifecycleFacts(instance);
 
-    let parent: EffectAddress | null = null;
-
-    if (instance.parent !== null) {
-        const value = record(instance.parent);
-        parent = Object.freeze({
-            unitId: nonnegativeInteger(value.unitId, "parent unit identity"),
-            instanceId: nonnegativeInteger(value.instanceId, "parent instance identity"),
-        });
-    }
-
-    return withEffectLifecycle(
-        ownEffectInstance(
-            program,
-            {
-                id: nonnegativeInteger(instance.id, "identity"),
-                source: unitId(instance.source),
-                scope: ownLifetimeScope(instance.scope),
-                acquiredSequence: nonnegativeInteger(
-                    instance.acquiredSequence,
-                    "acquired sequence",
-                ),
-                expiresAtTick:
-                    instance.expiresAtTick === null
-                        ? null
-                        : nonnegativeInteger(instance.expiresAtTick, "expiration tick"),
-            },
-            instance.state,
-        ),
-        {
-            started: instance.started,
-            participating: instance.participating,
-            finished: instance.finished,
-            parent,
-        },
-    );
+    return withEffectLifecycle(ownEffectInstance(program, instance, instance.state), {
+        started: instance.started,
+        participating: instance.participating,
+        finished: instance.finished,
+        parent: ownParent(instance.parent),
+    });
 }
 
 export function ownUpdatedEffectInstance<S extends object>(
@@ -178,8 +148,7 @@ export function ownUpdatedEffectInstance<S extends object>(
     ref: EffectProgramRef<S>,
     state: S,
 ): EffectInstance<S> {
-    const updated: EffectInstance<S> = Object.freeze({ ...instance, programRef: ref, state });
-
+    const updated = Object.freeze({ ...instance, programRef: ref, state });
     ownedInstances.add(updated);
 
     return updated;

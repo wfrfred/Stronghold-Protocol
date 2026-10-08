@@ -31,8 +31,7 @@ export function updateEffectState<S extends object>(
         }
 
         const updated = resources.effects.update(
-            instance,
-            ref,
+            typed,
             typeof state === "function" ? state(typed.state) : state,
         );
 

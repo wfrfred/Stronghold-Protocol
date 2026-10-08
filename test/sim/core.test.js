@@ -404,25 +404,6 @@ test('core failed presence updates restore spatial membership and projected maps
   assert.deepEqual(runtime.effectsAt([0, 2]), [1]);
 });
 
-test('core battlefield transactions reject thenables and roll back their synchronous prefix', () => {
-  const runtime = presenceBattlefield();
-  let called = false;
-  const thenable = { then() { called = true; } };
-  for (const returned of [thenable, Promise.resolve(), Object.assign(() => {}, { then() {} })]) {
-    assert.throws(() => runtime.transact(field => {
-      field.apply([{ type: 'REGISTER_UNIT', unit: presenceUnit(8, [2, 0]) }]);
-      return returned;
-    }), /synchronously/);
-    assert.deepEqual(runtime.unitIds, []);
-  }
-  assert.equal(called, false);
-  assert.equal(runtime.transact(field => {
-    field.apply([{ type: 'REGISTER_UNIT', unit: presenceUnit(9, [2, 0]) }]);
-    return 17;
-  }), 17);
-  assert.deepEqual(runtime.unitIds, [9]);
-});
-
 test('core placement entrances consistently reject duplicate occupancy', () => {
   const placement = { definition: { id: 'placement' }, position: [0, 0], occupancy: { claims: [] },
     states: { occupancy: { claims: [{ position: [0, 1], slot: 'DEPLOYMENT', type: 'RESERVATION' }] } } };
@@ -547,17 +528,15 @@ test('core definitions acquire immutable ownership once and snapshots share it',
   assert.equal(copied.definition.vitality.maxHp, 50);
 });
 
-test('core prepared states preserve supported state shapes and reject inherited records', () => {
+test('core prepared states preserve supported state shapes', () => {
   const definition = { id: 'state-shapes', offense: { attack: 10 } };
   const unit = initializeUnit({ id: 1, definition, position: [0, 0], states: {
     offense: { ...initializeOffenseState(), marker: 'discarded' },
   } });
   assert.equal(Object.hasOwn(unit.offense, 'marker'), false);
-  const states = Object.create({ locomotion: catalogRoutedState() });
-  assert.throws(() => initializeUnit({ id: 1, definition: catalogDefinition(), position: [0, 0], states }), /plain record/);
 });
 
-test('core capability guards and default snapshots reject unmatched or unregistered runtime state', () => {
+test('core capability guards inspect composition while snapshots and custom copiers isolate state', () => {
   const unit = initializeUnit({ id: 1, definition: catalogDefinition(), position: [0, 0],
     states: { locomotion: catalogRoutedState() } });
   for (const [key, guard] of [
@@ -568,19 +547,16 @@ test('core capability guards and default snapshots reject unmatched or unregiste
     const missingState = { ...unit };
     delete missingState[key];
     assert.equal(guard(missingState), false, `${key}: configuration alone is not a runtime capability`);
-    assert.throws(() => copyUnitSnapshot(missingState), `${key}: missing state`);
 
     const definition = { ...unit.definition };
     delete definition[key];
     const missingConfiguration = { ...unit, definition };
     assert.equal(guard(missingConfiguration), false, `${key}: state alone is not a configured capability`);
-    assert.throws(() => copyUnitSnapshot(missingConfiguration), `${key}: missing configuration`);
     if (key === 'locomotion') assert.equal(hasRoutedLocomotion(missingConfiguration), false);
   }
 
   assert.equal(hasRoutedLocomotion({ ...unit, locomotion: createLocomotionState() }), false);
   assert.equal(hasRoutedLocomotion(unit), true);
-  assert.throws(() => copyUnitSnapshot({ ...unit, memo: { value: 1 } }));
   const presence = { id: 2, definition: Object.freeze({ id: 'presence' }), position: [0, 0],
     spatialPresence: { present: false } };
   assert.deepEqual(copyUnitSnapshot(presence).spatialPresence, { present: false });
@@ -595,9 +571,6 @@ test('core capability guards and default snapshots reject unmatched or unregiste
   assert.equal(snapshot.memo.value, 1);
   snapshot.memo.value = 3;
   assert.equal(runtime.getUnit(3).memo.value, 1);
-  assert.throws(() => runtime.apply([{ type: 'REGISTER_UNIT', unit: {
-    ...custom, id: 4, definition: Object.freeze({ id: 'missing_vitality', vitality: { maxHp: 1 } }),
-  } }]));
 });
 
 test('core snapshots isolate capability state and both routed contexts while sharing immutable definitions', () => {
@@ -720,6 +693,7 @@ test('core grid ranges rotate all four directions around continuous source posit
 });
 
 test('core status contributions retain overlapping flags and isolate sources and unit snapshots', () => {
+  assert.throws(() => createStatusDefinition({ initialFlags: new Array(1) }), /missing status flag/);
   const initialFlags = ['INVINCIBLE'];
   const definition = createStatusDefinition({ initialFlags });
   initialFlags.push('HEAL_FREE');
@@ -768,14 +742,12 @@ test('core blocking uses current state radius and includes center-distance equal
   assert.equal(enlarged.definition.blocker.geometry.radius, 0.5);
 });
 
-test('core external unit updates preserve capability configuration and fail atomically while presence stays dynamic', () => {
+test('core unit updates preserve definition identity and fail atomically while presence stays dynamic', () => {
   const runtime = presenceBattlefield();
   const unit = initializeUnit({ id: 1, definition: catalogDefinition(), position: [2, 0] });
   runtime.apply([{ type: 'REGISTER_UNIT', unit }]);
   const maps = runtime.navigationMaps;
-  const missingState = runtime.getUnit(1);
-  delete missingState.action;
-  for (const invalid of [missingState, { ...unit, definition: Object.freeze({ ...unit.definition }) }]) {
+  for (const invalid of [{ ...unit, definition: Object.freeze({ ...unit.definition }) }]) {
     assert.throws(() => runtime.apply([
       { type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 1, position: [3, 0] },
       { type: 'UPDATE_UNIT', unit: invalid },
@@ -787,9 +759,8 @@ test('core external unit updates preserve capability configuration and fail atom
 
   const bare = initializeUnit({ id: 2, definition: Object.freeze({ id: 'bare' }), position: [0, 0] });
   runtime.apply([{ type: 'REGISTER_UNIT', unit: bare }]);
-  assert.throws(() => runtime.apply([{ type: 'UPDATE_UNIT', unit: { ...bare, vitality: { hp: 1 } } }]));
   assert.throws(() => runtime.apply([{ type: 'UPDATE_UNIT', unit: {
-    ...bare, definition: Object.freeze({ ...bare.definition, vitality: { maxHp: 1 } }), vitality: { hp: 1 },
+    ...bare, definition: Object.freeze({ ...bare.definition, vitality: { maxHp: 1 } }), vitality: initializeVitalityState({ maxHp: 1 }),
   } }]));
 
   const hidden = { ...runtime.getUnit(1), spatialPresence: { present: false } };
@@ -911,20 +882,27 @@ type PublicFactory = Assert<Equal<Extract<keyof typeof battlefield, 'commit' | '
 type RuleCache = Assert<Equal<Extract<keyof BattlefieldView['fieldCache'], 'invalidate' | 'clear'>, never>>;
 const synchronousLiteral = battlefield.transact(() => 17 as const);
 type SynchronousLiteral = Assert<Equal<typeof synchronousLiteral, 17>>;
+const synchronousVoid = battlefield.transact<void>(() => {});
+type SynchronousVoid = Assert<Equal<typeof synchronousVoid, void>>;
 const projectileResult = withProjectileOperations(projectiles, projectileResources, 0, () => 23 as const);
 type ProjectileLiteral = Assert<Equal<typeof projectileResult.result, 23>>;
 const fork = battlefield.fork();
 type PublicFork = Assert<Equal<Extract<keyof typeof fork, 'commit' | 'view'>, never>>;
-battlefield.transact(field => {
+const inferredVoid = battlefield.transact(field => {
   type PublicTransaction = Assert<Equal<Extract<keyof typeof field, 'commit' | 'view'>, never>>;
 });
+type InferredVoid = Assert<Equal<typeof inferredVoid, undefined>>;
+const projectileVoid = withProjectileOperations(projectiles, projectileResources, 0, () => {});
+type ProjectileVoid = Assert<Equal<typeof projectileVoid.result, undefined>>;
 `);
     assert.deepEqual(positive, []);
 
     for (const [name, source] of [
       ['async-transaction', `createBattlefieldRuntime({ map: battlefieldMap }).transact(async () => 1);`],
+      ['async-void-transaction', `createBattlefieldRuntime({ map: battlefieldMap }).transact<void>(async () => {});`],
       ['promise-union-transaction', `declare const mixed: number | Promise<number>; createBattlefieldRuntime({ map: battlefieldMap }).transact(() => mixed);`],
       ['async-projectile-operation', `withProjectileOperations(projectiles, projectileResources, 0, async () => 1);`],
+      ['async-void-projectile-operation', `withProjectileOperations<void>(projectiles, projectileResources, 0, async () => {});`],
       ['promise-union-projectile-operation', `declare const mixed: number | Promise<number>; withProjectileOperations(projectiles, projectileResources, 0, () => mixed);`],
       ['state-extra-field', `initializeUnit({ id: 1, definition: { id: 'offense', offense: { attack: 1 } }, position: [0, 0], states: { offense: { ...initializeOffenseState(), marker: 'extra' as const } } }).offense.marker;`],
       ['normalized-state-extra', `instantiateUnitPlacement(createUnitPlacementDefinition({ definition: { id: 'offense', offense: { attack: 1 } }, position: [0, 0], states: { offense: { ...initializeOffenseState(), marker: 'extra' as const } } }), execution, 0).unit.offense.marker;`],

@@ -5,9 +5,13 @@ import { test } from "node:test";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
 import { createNumericContribution } from "../../dist/core/tactical/modifier/numeric.js";
 import {
+  createNumericContributionState,
+  copyNumericContributionState,
   registerNumericContribution,
   updateNumericContribution,
   setNumericContributionParticipation,
+  removeNumericContribution,
+  removeNumericContributionsOwnedBy,
 } from "../../dist/core/tactical/modifier/contribution.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { copyUnitSnapshot } from "../../dist/core/tactical/unit/snapshot.js";
@@ -57,6 +61,148 @@ const metadata = (id = 0) => ({
   scope: null,
   acquiredSequence: id,
   expiresAtTick: null,
+});
+
+test("contributions: ownership isolates nested inputs and snapshots share frozen entries", () => {
+  const owner = { unitId: 1, instanceId: 2 };
+  const group = { id: "attack", strength: 3 };
+  const sample = { addition: 0, multiplier: 0, finalAddition: 10, finalScaler: 1 };
+  const values = [sample];
+  const input = { id: "sample", sequence: 0, participating: true, owner, group, values };
+  const entries = [input];
+  const state = createNumericContributionState(entries);
+  const entry = state.entries[0];
+  owner.unitId = 9;
+  group.strength = 90;
+  sample.finalAddition = 100;
+  values.push(value(1000));
+  input.participating = false;
+  entries.length = 0;
+  assert.deepEqual(entry.owner, { unitId: 1, instanceId: 2 });
+  assert.deepEqual(entry.group, { id: "attack", strength: 3 });
+  assert.deepEqual(entry.values, [value(10)]);
+  assert.equal(entry.participating, true);
+  for (const owned of [state, state.entries, entry, entry.owner, entry.group, entry.values, entry.values[0]]) {
+    assert.equal(Object.isFrozen(owned), true);
+  }
+  const snapshot = copyNumericContributionState(state);
+  assert.equal(snapshot.entries, state.entries);
+  assert.equal(Object.isFrozen(snapshot), true);
+});
+
+test("contributions: participation changes share existing owner, group, and samples", () => {
+  const state = createNumericContributionState([
+    {
+      id: "sample",
+      sequence: 0,
+      participating: true,
+      owner: { unitId: 1, instanceId: 2 },
+      group: { id: "attack", strength: 3 },
+      values: [value(10)],
+    },
+    { id: "provider", sequence: 1, participating: true, providerRef: "live" },
+  ]);
+  const initial = state.entries[0];
+  const paused = setNumericContributionParticipation(state, "sample", false);
+  const entry = paused.entries[0];
+  assert.notEqual(entry, initial);
+  assert.equal(entry.owner, initial.owner);
+  assert.equal(entry.group, initial.group);
+  assert.equal(entry.values, initial.values);
+  assert.equal(paused.entries[1], state.entries[1]);
+  assert.equal(initial.participating, true);
+  assert.equal(entry.participating, false);
+  assert.equal(Object.isFrozen(entry), true);
+  assert.equal(Object.isFrozen(paused.entries), true);
+  assert.equal(setNumericContributionParticipation(paused, "sample", false), paused);
+  assert.equal(setNumericContributionParticipation(paused, "missing", false), paused);
+  const providerPaused = setNumericContributionParticipation(paused, "provider", false);
+  assert.equal(providerPaused.entries[1].providerRef, "live");
+  assert.equal(providerPaused.entries[0], entry);
+});
+
+test("contributions: callback updates own new payloads and share untouched payloads", () => {
+  const state = createNumericContributionState([
+    {
+      id: "sample",
+      sequence: 0,
+      participating: true,
+      owner: { unitId: 1, instanceId: 2 },
+      group: { id: "attack", strength: 3 },
+      values: [value(10)],
+    },
+  ]);
+  const reordered = updateNumericContribution(state, "sample", (entry) => ({ ...entry, sequence: 1 }));
+  assert.equal(reordered.entries[0].owner, state.entries[0].owner);
+  assert.equal(reordered.entries[0].group, state.entries[0].group);
+  assert.equal(reordered.entries[0].values, state.entries[0].values);
+  const owner = { unitId: 3, instanceId: 4 };
+  const group = { id: "replacement", strength: 5 };
+  const sample = { addition: 0, multiplier: 0, finalAddition: 20, finalScaler: 1 };
+  const values = [sample];
+  const updated = updateNumericContribution(reordered, "sample", (entry) => ({
+    ...entry, owner, group, values,
+  }));
+  owner.instanceId = 100;
+  group.id = "mutated";
+  sample.finalAddition = 200;
+  values.length = 0;
+  assert.deepEqual(updated.entries[0].owner, { unitId: 3, instanceId: 4 });
+  assert.deepEqual(updated.entries[0].group, { id: "replacement", strength: 5 });
+  assert.deepEqual(updated.entries[0].values, [value(20)]);
+  assert.deepEqual(state.entries[0].values, [value(10)]);
+  for (const owned of [updated.entries[0], updated.entries[0].owner, updated.entries[0].group,
+    updated.entries[0].values, updated.entries[0].values[0]]) {
+    assert.equal(Object.isFrozen(owned), true);
+  }
+  assert.throws(
+    () => updateNumericContribution(updated, "sample", (entry) => ({ ...entry, id: "replacement" })),
+    /cannot replace its identity/,
+  );
+});
+
+test("contributions: registration preserves unique identities and removal preserves remaining entries", () => {
+  const entry = {
+    id: "first", sequence: 0, participating: true,
+    owner: { unitId: 1, instanceId: 2 }, values: [value(10)],
+  };
+  const state = createNumericContributionState([entry]);
+  assert.throws(() => createNumericContributionState([entry, entry]), /duplicate numeric contribution/);
+  assert.throws(() => registerNumericContribution(state, entry), /duplicate numeric contribution/);
+  const registered = registerNumericContribution(state, {
+    id: "second", sequence: 1, participating: true,
+    owner: { unitId: 3, instanceId: 4 }, values: [value(20)],
+  });
+  assert.equal(registered.entries[0], state.entries[0]);
+  for (const remaining of [removeNumericContribution(registered, "first"),
+    removeNumericContributionsOwnedBy(registered, { unitId: 1, instanceId: 2 })]) {
+    assert.equal(remaining.entries[0], registered.entries[1]);
+    assert.equal(Object.isFrozen(remaining), true);
+    assert.equal(Object.isFrozen(remaining.entries), true);
+    assert.equal(copyNumericContributionState(remaining).entries, remaining.entries);
+  }
+  assert.equal(removeNumericContribution(registered, "missing"), registered);
+  assert.equal(removeNumericContributionsOwnedBy(registered, { unitId: 9, instanceId: 9 }), registered);
+});
+
+test("contributions: new payloads retain nonempty identities, dense arrays, and numeric constraints", () => {
+  const entry = { id: "sample", sequence: 0, participating: true, values: [value(10)] };
+  const state = createNumericContributionState([entry]);
+  for (const patch of [
+    { sequence: -1 },
+    { owner: { unitId: 1, instanceId: 0.5 } },
+    { group: { id: "", strength: 1 } },
+    { group: { id: "group", strength: Infinity } },
+    { values: [value(10), , value(20)] },
+    { values: [{ ...value(10), addition: NaN }] },
+  ]) {
+    assert.throws(() => updateNumericContribution(state, "sample", (current) => ({ ...current, ...patch })));
+  }
+  assert.throws(() => registerNumericContribution(state, { ...entry, id: "" }), /identity must be nonempty/);
+  assert.throws(() => createNumericContributionState([entry, , entry]), /entries must be dense/);
+  assert.throws(() => registerNumericContribution(state, {
+    id: "provider", sequence: 0, participating: true, providerRef: "",
+  }), /provider identity must be nonempty/);
 });
 
 test("contributions: samples retain one owner and survive participation changes and copies", () => {
@@ -150,7 +296,7 @@ test("contributions: private stack transitions publish maintained projections im
     effects: {
       ...getCombatUnit(updated, 1).effects,
       instances: [
-        resources.effects.restore({
+        resources.effects.restore(program.ref, {
           ...getCombatUnit(updated, 1).effects.instances[0],
           expiresAtTick: 1,
         }),

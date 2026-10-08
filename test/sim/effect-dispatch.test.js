@@ -295,7 +295,7 @@ test("effect dispatch: exceptional exits release candidates before retry on the 
       }),
     /instance frame failed/,
   );
-  const finalized = resources.effects.restore({
+  const finalized = resources.effects.restore(initialInstance.programRef, {
     ...initialInstance,
     state: { attempts: 99 },
     participating: false,

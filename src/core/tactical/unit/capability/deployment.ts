@@ -45,14 +45,8 @@ export function createDeploymentProfile(
         readonly advancedBuildableMask?: number;
     },
 ): DeploymentProfile {
-    const buildableType: unknown = profile.buildableType;
-
-    if (buildableType !== "MELEE" && buildableType !== "RANGED" && buildableType !== "ALL") {
-        throw new TypeError("invalid deployment buildable type");
-    }
-
     return Object.freeze({
-        buildableType,
+        buildableType: profile.buildableType,
         advancedBuildableMask: requireAdvancedBuildableMask(profile.advancedBuildableMask ?? 1),
     });
 }
@@ -62,24 +56,9 @@ export function createTileBindingDefinition(
         readonly advancedBuildableMask?: number | null;
     },
 ): TileBindingDefinition {
-    const heightType: unknown = definition.heightType;
-    const buildableType: unknown = definition.buildableType;
-
-    if (heightType !== null && heightType !== "LOWLAND" && heightType !== "HIGHLAND") {
-        throw new TypeError("invalid tile binding height type");
-    }
-    if (
-        buildableType !== "NONE" &&
-        buildableType !== "MELEE" &&
-        buildableType !== "RANGED" &&
-        buildableType !== "ALL"
-    ) {
-        throw new TypeError("invalid tile binding buildable type");
-    }
-
     return Object.freeze({
-        heightType,
-        buildableType,
+        heightType: definition.heightType,
+        buildableType: definition.buildableType,
         advancedBuildableMask:
             definition.advancedBuildableMask === undefined ||
             definition.advancedBuildableMask === null

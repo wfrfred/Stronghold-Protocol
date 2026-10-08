@@ -60,22 +60,10 @@ export function hasActionDefinition(
 }
 
 export function createActionDefinition(definition: ActionDefinition): ActionDefinition {
-    const groupsAreArray: boolean = Array.isArray(definition.targetGroups);
-
-    if (!groupsAreArray || definition.targetGroups.length === 0) {
-        throw new RangeError("action must have at least one target group");
-    }
-
     const ids = new Set<TargetBindingId>();
     const targetGroups = Array.from(definition.targetGroups, (group) => {
-        if (typeof group.id !== "string" || group.id.length === 0 || ids.has(group.id)) {
+        if (group.id.length === 0 || ids.has(group.id)) {
             throw new RangeError("action target binding IDs must be unique and nonempty");
-        }
-
-        const effectsAreArray: boolean = Array.isArray(group.effects);
-
-        if (!effectsAreArray || group.effects.length === 0) {
-            throw new RangeError("target group must have at least one effect");
         }
 
         ids.add(group.id);
@@ -90,11 +78,6 @@ export function createActionDefinition(definition: ActionDefinition): ActionDefi
         });
     });
     const followUps = Array.from(definition.followUps, ({ receiver, effect }) => {
-        const receiverType: unknown = receiver.type;
-
-        if (receiverType !== "SOURCE" && receiverType !== "BINDING") {
-            throw new RangeError("unsupported effect receiver");
-        }
         if (receiver.type === "BINDING" && !ids.has(receiver.bindingId)) {
             throw new RangeError("follow-up references an unknown target binding");
         }

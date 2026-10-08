@@ -12,9 +12,6 @@ export function ownProjectileInstance<S extends object>(
     if (ownedInstances.has(instance)) {
         return instance;
     }
-    if (!Object.isFrozen(instance.programRef) || instance.programRef.id.length === 0) {
-        throw new TypeError("projectile program references must be immutable and nonempty");
-    }
 
     const owned: ProjectileInstance<S> = Object.freeze({
         ...instance,

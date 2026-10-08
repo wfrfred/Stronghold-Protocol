@@ -47,16 +47,12 @@ function advanceBranches(
     const branchCursors = { ...state.branchCursors };
     const activeBranches = [...state.activeBranches];
 
-    for (const trigger of triggers) {
-        const input: unknown = trigger;
-
-        if (input === undefined) {
+    for (let index = 0; index < triggers.length; index++) {
+        if (!Object.hasOwn(triggers, index)) {
             throw new TypeError("branch triggers must be dense");
         }
 
-        if (typeof trigger.isLoop !== "boolean") {
-            throw new TypeError("branch trigger isLoop must be boolean");
-        }
+        const trigger = triggers[index]!;
 
         if (!Object.hasOwn(definition.branches, trigger.branchId)) {
             throw new RangeError(`unknown scheduler branch: ${trigger.branchId}`);

@@ -21,16 +21,22 @@ export interface EffectSourceReceiverContext<S extends object> extends EffectSou
     readonly binding: EffectSourceReceiver;
 }
 
-export interface EffectSourceInstallation {
-    readonly programRef: { readonly id: string };
+export interface EffectSourceInstallationInput<S extends object> {
     readonly expiresAtTick: number | null;
-    readonly initialState?: object;
+    readonly initialState?: S;
 }
+
+export type EffectSourceInstallation = <R>(
+    install: <S extends object>(
+        ref: EffectProgramRef<S>,
+        input: EffectSourceInstallationInput<NoInfer<S>>,
+    ) => R,
+) => R;
 
 export interface EffectSourceProgram<S extends object> {
     readonly ref: EffectSourceProgramRef<S>;
     readonly initialize: (sourceUnitId: UnitId | null) => S;
-    readonly ownState: (value: unknown) => S;
+    readonly ownState: (value: S) => S;
     readonly selectInitial: (context: EffectSourceContext<S>) => readonly UnitId[];
     readonly acceptsRegistration?: (context: EffectSourceReceiverContext<S>) => boolean;
     readonly selectCurrent?: (context: EffectSourceContext<S>) => readonly UnitId[];
@@ -56,7 +62,7 @@ export function createEffectSourceProgramRef<S extends object>(
 
 export function effectSourceInstallation<S extends object>(
     ref: EffectProgramRef<S>,
-    input: { readonly expiresAtTick: number | null; readonly initialState?: NoInfer<S> },
+    input: EffectSourceInstallationInput<NoInfer<S>>,
 ): EffectSourceInstallation {
-    return { programRef: ref, ...input };
+    return (install) => install(ref, input);
 }

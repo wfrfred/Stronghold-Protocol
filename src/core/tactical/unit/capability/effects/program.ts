@@ -8,13 +8,13 @@ export interface EffectProgramRef<S extends object> {
 export interface EffectProgram<S extends object> {
     readonly ref: EffectProgramRef<S>;
     readonly initialize: () => S;
-    readonly ownState: (value: unknown) => S;
+    readonly ownState: (value: S) => S;
 }
 
 export function createEffectProgram<S extends object>(definition: {
     readonly id: string;
     readonly initialize: () => S;
-    readonly ownState: (value: unknown) => NoInfer<S>;
+    readonly ownState: (value: NoInfer<S>) => NoInfer<S>;
 }): EffectProgram<S> {
     if (definition.id.length === 0) {
         throw new TypeError("effect program identity must be nonempty");

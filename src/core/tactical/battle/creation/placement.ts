@@ -18,6 +18,7 @@ import {
     copyPreparedCapabilityStates,
     type CapabilityStates,
     type CopiedCapabilityStates,
+    type PreparedCapabilityStates,
 } from "../../unit/capability/catalog.js";
 import type { BattleExecutionState } from "../execution/state.js";
 
@@ -74,20 +75,12 @@ export function createUnitPlacementDefinition(
 
     const navigationEffects: UnitNavigationEffectPlacement[] = [];
     const effects = placement.navigationEffects ?? [];
-    const effectsAreArray: boolean = Array.isArray(effects);
-
-    if (!effectsAreArray) {
-        throw new TypeError("unit navigation effects must be an array");
-    }
 
     for (let index = 0; index < effects.length; index++) {
         const effect = effects[index];
 
         if (!Object.hasOwn(effects, index) || effect === undefined) {
             throw new TypeError(`missing unit navigation effect at index ${index}`);
-        }
-        if (!Direction.is(effect.direction)) {
-            throw new RangeError("invalid unit navigation effect direction");
         }
 
         navigationEffects.push(
@@ -104,9 +97,7 @@ export function createUnitPlacementDefinition(
         ...(placement.states === undefined
             ? {}
             : {
-                  states: Object.freeze(
-                      copyPreparedCapabilityStates(placement.definition, placement.states),
-                  ),
+                  states: Object.freeze(copyPreparedCapabilityStates(placement.states)),
               }),
         position: createWorldPosition(...placement.position),
         ...(placement.occupancy === undefined
@@ -149,12 +140,12 @@ export function instantiateUnitPlacement(
     assertSingleOccupancy(placement);
 
     const nextUnitId = nextIdentity(execution.nextUnitId, "unit");
-    const prepared = copyPreparedCapabilityStates(placement.definition, placement.states ?? {});
+    const prepared = placement.states ?? {};
     const states =
         placement.occupancy === undefined
             ? prepared
             : { ...prepared, occupancy: placement.occupancy };
-    const unit = initializeUnit({
+    const unit = initializeUnit<UnitDefinition, PreparedCapabilityStates<UnitDefinition>>({
         id: execution.nextUnitId,
         definition: placement.definition,
         position: placement.position,

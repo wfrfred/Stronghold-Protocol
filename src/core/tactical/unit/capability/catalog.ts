@@ -113,29 +113,6 @@ export type PreparedCapabilityStates<D extends UnitDefinition> = Partial<
 
 const configuredKeys = Object.keys(configuredCapabilities) as ConfiguredCapabilityKey[];
 const capabilityKeys = Object.keys(capabilities) as CapabilityKey[];
-const unitFields = new Set<PropertyKey>(["id", "definition", "position", ...capabilityKeys]);
-
-function stateRecord(value: unknown, key: string): Record<string, unknown> {
-    if (value === null || typeof value !== "object" || Array.isArray(value)) {
-        throw new TypeError(`capability ${key} state must be an object`);
-    }
-
-    return value as Record<string, unknown>;
-}
-
-export function assertUnitCapabilityConsistency(unit: Unit): void {
-    for (const key of configuredKeys) {
-        const configured = key in unit.definition;
-        const present = key in unit;
-
-        if (configured !== present) {
-            throw new TypeError(`capability ${key} configuration and state must be paired`);
-        }
-        if (present) {
-            stateRecord(Reflect.get(unit, key) as unknown, key);
-        }
-    }
-}
 
 function initializeCapability<K extends ConfiguredCapabilityKey>(
     key: K,
@@ -150,49 +127,51 @@ function initializeCapability<K extends ConfiguredCapabilityKey>(
     return initialize(config, context);
 }
 
-function copyCapability<K extends CapabilityKey>(key: K, state: unknown): CapabilityState<K> {
+function copyCapability<K extends CapabilityKey>(
+    key: K,
+    state: CapabilityState<K>,
+): CapabilityState<K> {
     const copy = capabilities[key].copy as (state: CapabilityState<K>) => CapabilityState<K>;
 
-    return copy(stateRecord(state, key) as CapabilityState<K>);
+    return copy(state);
 }
 
-function copyPreparedStates(definition: UnitDefinition, prepared: object): Record<string, unknown> {
-    if (Object.getPrototypeOf(prepared) !== Object.prototype) {
-        throw new TypeError("prepared capabilities must be a plain record");
-    }
-
+function copyPreparedStates(prepared: Partial<CapabilityStates>): Record<string, unknown> {
     const states: Record<string, unknown> = {};
 
-    for (const key of Reflect.ownKeys(prepared)) {
-        if (typeof key !== "string" || !Object.hasOwn(capabilities, key)) {
-            throw new TypeError(`unregistered prepared capability ${String(key)}`);
-        }
-        if (Object.hasOwn(configuredCapabilities, key) && !(key in definition)) {
-            throw new TypeError(`prepared capability ${key} requires configuration`);
-        }
+    for (const key of capabilityKeys) {
+        const state = prepared[key];
 
-        states[key] = copyCapability(key as CapabilityKey, Reflect.get(prepared, key) as unknown);
+        if (state !== undefined) {
+            states[key] = copyCapability(key, state);
+        }
     }
 
     return states;
 }
 
-export function copyPreparedCapabilityStates<D extends UnitDefinition>(
-    definition: D,
-    prepared: Partial<CapabilityStates>,
-): PreparedCapabilityStates<D> {
-    return copyPreparedStates(definition, prepared) as PreparedCapabilityStates<D>;
+export function copyPreparedCapabilityStates<S extends Partial<CapabilityStates>>(
+    prepared: S,
+): CopiedCapabilityStates<S> {
+    return copyPreparedStates(prepared) as CopiedCapabilityStates<S>;
 }
 
 export function initializeUnitCapabilities(
     definition: UnitDefinition,
     context: CapabilityInitializationContext,
-    prepared: object,
+    prepared: Partial<CapabilityStates>,
 ): object {
-    const states = copyPreparedStates(definition, prepared);
+    const states = copyPreparedStates(prepared);
 
     for (const key of configuredKeys) {
-        if (!(key in definition) || key in states) {
+        if (!(key in definition)) {
+            if (key in states) {
+                throw new TypeError(`prepared capability ${key} requires configuration`);
+            }
+
+            continue;
+        }
+        if (key in states) {
             continue;
         }
 
@@ -205,21 +184,5 @@ export function initializeUnitCapabilities(
 }
 
 export function copyUnitCapabilities(unit: Unit): object {
-    assertUnitCapabilityConsistency(unit);
-
-    for (const key of Reflect.ownKeys(unit)) {
-        if (!unitFields.has(key)) {
-            throw new TypeError(`unregistered unit field ${String(key)} requires a custom copier`);
-        }
-    }
-
-    const states: Record<string, unknown> = {};
-
-    for (const key of capabilityKeys) {
-        if (key in unit) {
-            states[key] = copyCapability(key, Reflect.get(unit, key) as unknown);
-        }
-    }
-
-    return states;
+    return copyPreparedStates(unit as Unit & Partial<CapabilityStates>);
 }

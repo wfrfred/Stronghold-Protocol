@@ -1,8 +1,6 @@
 import type { TilePosition } from "../geometry/coordinate.js";
-import { assertSynchronousResult } from "../../common/synchronous.js";
 import { createNavigationFieldCache, type NavigationFieldCache } from "./navigation/cache.js";
 import type { NavigationMaps } from "./navigation/map.js";
-import { assertUnitCapabilityConsistency } from "../unit/capability/catalog.js";
 import type { OccupancySlot } from "../unit/capability/occupancy.js";
 import { copyUnitSnapshot } from "../unit/snapshot.js";
 import type { Unit, UnitId } from "../unit/unit.js";
@@ -219,6 +217,8 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
         return [...(this.#state.spatial.effectsByAnchor.get(unitId) ?? [])];
     }
 
+    transact(operation: (battlefield: BattlefieldRuntime<U>) => undefined): undefined;
+    transact<T>(operation: (battlefield: BattlefieldRuntime<U>) => SynchronousResult<T>): T;
     transact<T>(operation: (battlefield: BattlefieldRuntime<U>) => SynchronousResult<T>): T {
         if (this.#transactionActive) {
             throw new Error("battlefield transaction is already active");
@@ -228,11 +228,7 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
         this.#transactionActive = true;
 
         try {
-            const result = operation(this);
-
-            assertSynchronousResult(result, "battlefield transactions");
-
-            return result;
+            return operation(this);
         } catch (error) {
             this.#state = previous;
             throw error;
@@ -290,9 +286,5 @@ export function createBattlefieldRuntime<U extends Unit>(
 ): Battlefield | Battlefield<U> {
     return copyUnit === undefined
         ? BattlefieldRuntime.create<Unit>(options, copyUnitSnapshot)
-        : BattlefieldRuntime.create<U>(options, (unit) => {
-              assertUnitCapabilityConsistency(unit);
-
-              return copyUnit(unit);
-          });
+        : BattlefieldRuntime.create<U>(options, copyUnit);
 }

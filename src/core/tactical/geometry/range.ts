@@ -3,29 +3,26 @@ import type { Direction } from "./direction.js";
 
 export type RangeGrid = readonly TileOffset[];
 
+const compiledRanges = new WeakSet<RangeGrid>();
+
 export const RangeGrid = {
     create(offsets: readonly TileOffset[]): RangeGrid {
-        const offsetsAreArray: boolean = Array.isArray(offsets);
-
-        if (!offsetsAreArray) {
-            throw new RangeError("range grid must be an array");
+        if (compiledRanges.has(offsets)) {
+            return offsets;
         }
 
         const seen = new Set<string>();
         const snapshot: TileOffset[] = [];
 
         for (let index = 0; index < offsets.length; index++) {
-            const offset = offsets[index]!;
-            const coordinates: readonly unknown[] = offset;
-            const validCoordinates: boolean =
-                Object.hasOwn(offsets, index) &&
-                Array.isArray(coordinates) &&
-                coordinates.length === 2 &&
-                Object.hasOwn(coordinates, 0) &&
-                Object.hasOwn(coordinates, 1);
+            if (!Object.hasOwn(offsets, index)) {
+                throw new RangeError(`missing range offset at index ${index}`);
+            }
 
-            if (!validCoordinates) {
-                throw new RangeError(`range offset ${index} must contain exactly two coordinates`);
+            const offset = offsets[index]!;
+
+            if (!Object.hasOwn(offset, 0) || !Object.hasOwn(offset, 1)) {
+                throw new RangeError(`missing range coordinate at index ${index}`);
             }
 
             const copy = createTileOffset(offset[0], offset[1]);
@@ -39,7 +36,11 @@ export const RangeGrid = {
             snapshot.push(copy);
         }
 
-        return Object.freeze(snapshot);
+        const range = Object.freeze(snapshot);
+
+        compiledRanges.add(range);
+
+        return range;
     },
 
     project(range: RangeGrid, origin: TilePosition, direction: Direction): readonly TilePosition[] {

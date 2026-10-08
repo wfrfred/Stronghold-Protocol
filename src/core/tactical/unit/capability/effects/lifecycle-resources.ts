@@ -55,19 +55,12 @@ export class EffectLifecycleResources {
                 ? {}
                 : {
                       run: (context: EffectLifecycleContext): undefined => {
-                          const invoke: (context: EffectLifecycleContext<S>) => unknown = action;
-                          const result = invoke({
+                          action({
                               ...context,
                               get instance() {
                                   return typed(context.instance);
                               },
                           });
-
-                          if (result !== undefined) {
-                              throw new TypeError(
-                                  "effect lifecycle callbacks must complete synchronously without returning a value",
-                              );
-                          }
                       },
                   };
         const start = compile(program.start).run;

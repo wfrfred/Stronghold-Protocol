@@ -1,14 +1,14 @@
+import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import { Tile, type TilePosition } from "../../geometry/coordinate.js";
 import { Direction, DIRECTIONS } from "../../geometry/direction.js";
 import { BattlefieldMap } from "../map/map.js";
 import type { PassableMask } from "../map/tile.js";
-import {
-    createNavigationMap,
+import type {
     PathMotionMode,
-    type NavigationCell,
-    type NavigationMap,
-    type NavigationMaps,
-    type NavigationRevision,
+    NavigationCell,
+    NavigationMap,
+    NavigationMaps,
+    NavigationRevision,
 } from "./map.js";
 import type { NavigationEffectDefinition } from "./effect.js";
 
@@ -31,9 +31,7 @@ export function projectStaticNavigationMap(
     pathMotionMode: PathMotionMode,
     revision: NavigationRevision,
 ): NavigationMap {
-    if (!PathMotionMode.is(pathMotionMode)) {
-        throw new TypeError("invalid path motion mode");
-    }
+    assertNonnegativeSafeInteger(revision, "navigation revision");
 
     const cells: NavigationCell[] = map.tiles.map((tile) => ({
         passable: includesMode(tile.passableMask, pathMotionMode),
@@ -63,12 +61,16 @@ export function projectStaticNavigationMap(
         }
     }
 
-    return createNavigationMap({
+    return Object.freeze({
         rows: map.rows,
         columns: map.columns,
         pathMotionMode,
         revision,
-        cells,
+        cells: Object.freeze(
+            cells.map((cell) =>
+                Object.freeze({ ...cell, departures: Object.freeze(cell.departures) }),
+            ),
+        ),
     });
 }
 

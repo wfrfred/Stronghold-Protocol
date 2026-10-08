@@ -45,75 +45,73 @@ const emptyState: NumericContributionState = Object.freeze({ entries: Object.fre
 const ownedEntries = new WeakSet<NumericContributionEntry>();
 const ownedArrays = new WeakSet<readonly NumericContributionEntry[]>([emptyState.entries]);
 
-function ownEntry(entry: NumericContributionEntry): NumericContributionEntry {
+function ownEntry(
+    entry: NumericContributionEntry,
+    previous?: NumericContributionEntry,
+): NumericContributionEntry {
     if (ownedEntries.has(entry)) {
         return entry;
     }
-    if (typeof entry.id !== "string" || entry.id.length === 0) {
+    if (previous === undefined && entry.id.length === 0) {
         throw new TypeError("numeric contribution identity must be nonempty");
     }
-    if (typeof entry.participating !== "boolean") {
-        throw new TypeError("numeric contribution participation must be boolean");
+    if (entry.sequence !== previous?.sequence) {
+        assertNonnegativeSafeInteger(entry.sequence, "numeric contribution sequence");
     }
 
-    assertNonnegativeSafeInteger(entry.sequence, "numeric contribution sequence");
+    let owner = entry.owner;
+    let group = entry.group;
 
-    if (entry.owner !== undefined) {
-        assertNonnegativeSafeInteger(entry.owner.unitId, "numeric contribution owner unit id");
-        assertNonnegativeSafeInteger(
-            entry.owner.instanceId,
-            "numeric contribution owner instance id",
-        );
+    if (owner !== undefined && owner !== previous?.owner) {
+        assertNonnegativeSafeInteger(owner.unitId, "numeric contribution owner unit id");
+        assertNonnegativeSafeInteger(owner.instanceId, "numeric contribution owner instance id");
+        owner = Object.freeze({ unitId: owner.unitId, instanceId: owner.instanceId });
     }
-    if (entry.group !== undefined) {
-        if (typeof entry.group.id !== "string" || entry.group.id.length === 0) {
+    if (group !== undefined && group !== previous?.group) {
+        if (group.id.length === 0) {
             throw new TypeError("numeric contribution group must have an identity");
         }
 
-        assertFiniteNumber(entry.group.strength, "numeric contribution group strength", TypeError);
+        assertFiniteNumber(group.strength, "numeric contribution group strength", TypeError);
+        group = Object.freeze({ id: group.id, strength: group.strength });
     }
 
     const binding = {
         id: entry.id,
         sequence: entry.sequence,
         participating: entry.participating,
-        ...(entry.owner === undefined
-            ? {}
-            : {
-                  owner: Object.freeze({
-                      unitId: entry.owner.unitId,
-                      instanceId: entry.owner.instanceId,
-                  }),
-              }),
-        ...(entry.group === undefined
-            ? {}
-            : { group: Object.freeze({ id: entry.group.id, strength: entry.group.strength }) }),
+        ...(owner === undefined ? {} : { owner }),
+        ...(group === undefined ? {} : { group }),
     };
     let owned: NumericContributionEntry;
 
     if ("values" in entry) {
-        const values: NumericContribution[] = [];
+        if (previous !== undefined && "values" in previous && entry.values === previous.values) {
+            owned = Object.freeze({ ...binding, values: previous.values });
+        } else {
+            const values: NumericContribution[] = [];
 
-        for (let index = 0; index < entry.values.length; index++) {
-            if (!Object.hasOwn(entry.values, index)) {
-                throw new TypeError("numeric contribution values must be dense");
+            for (let index = 0; index < entry.values.length; index++) {
+                if (!Object.hasOwn(entry.values, index)) {
+                    throw new TypeError("numeric contribution values must be dense");
+                }
+
+                const value = entry.values[index]!;
+
+                values.push(
+                    createNumericContribution({
+                        addition: value.addition,
+                        multiplier: value.multiplier,
+                        finalAddition: value.finalAddition,
+                        finalScaler: value.finalScaler,
+                    }),
+                );
             }
 
-            const value = entry.values[index]!;
-
-            values.push(
-                createNumericContribution({
-                    addition: value.addition,
-                    multiplier: value.multiplier,
-                    finalAddition: value.finalAddition,
-                    finalScaler: value.finalScaler,
-                }),
-            );
+            owned = Object.freeze({ ...binding, values: Object.freeze(values) });
         }
-
-        owned = Object.freeze({ ...binding, values: Object.freeze(values) });
     } else {
-        if (typeof entry.providerRef !== "string" || entry.providerRef.length === 0) {
+        if (entry.providerRef.length === 0) {
             throw new TypeError("numeric contribution provider identity must be nonempty");
         }
 
@@ -123,6 +121,23 @@ function ownEntry(entry: NumericContributionEntry): NumericContributionEntry {
     ownedEntries.add(owned);
 
     return owned;
+}
+
+function publishEntries(entries: NumericContributionEntry[]): NumericContributionState {
+    if (entries.length === 0) {
+        return emptyState;
+    }
+
+    Object.freeze(entries);
+    ownedArrays.add(entries);
+
+    return Object.freeze({ entries });
+}
+
+function getOwnedEntries(state: NumericContributionState): readonly NumericContributionEntry[] {
+    return ownedArrays.has(state.entries)
+        ? state.entries
+        : createNumericContributionState(state.entries).entries;
 }
 
 export function createNumericContributionState(
@@ -153,10 +168,7 @@ export function createNumericContributionState(
         owned.push(entry);
     }
 
-    Object.freeze(owned);
-    ownedArrays.add(owned);
-
-    return Object.freeze({ entries: owned });
+    return publishEntries(owned);
 }
 
 export function copyNumericContributionState(
@@ -169,7 +181,14 @@ export function registerNumericContribution(
     state: NumericContributionState,
     entry: NumericContributionEntry,
 ): NumericContributionState {
-    return createNumericContributionState([...state.entries, entry]);
+    const entries = getOwnedEntries(state);
+    const owned = ownEntry(entry);
+
+    if (entries.some((current) => current.id === owned.id)) {
+        throw new TypeError(`duplicate numeric contribution ${owned.id}`);
+    }
+
+    return publishEntries([...entries, owned]);
 }
 
 export function updateNumericContribution(
@@ -177,12 +196,14 @@ export function updateNumericContribution(
     id: string,
     update: (entry: NumericContributionEntry) => NumericContributionEntry,
 ): NumericContributionState {
-    const current = state.entries.find((entry) => entry.id === id);
+    const entries = getOwnedEntries(state);
+    const index = entries.findIndex((entry) => entry.id === id);
 
-    if (current === undefined) {
+    if (index === -1) {
         return state;
     }
 
+    const current = entries[index]!;
     const updated = update(current);
 
     if (updated.id !== id) {
@@ -192,9 +213,11 @@ export function updateNumericContribution(
         return state;
     }
 
-    return createNumericContributionState(
-        state.entries.map((entry) => (entry === current ? updated : entry)),
-    );
+    const next = [...entries];
+
+    next[index] = ownEntry(updated, current);
+
+    return publishEntries(next);
 }
 
 export function setNumericContributionParticipation(
@@ -211,25 +234,21 @@ export function removeNumericContribution(
     state: NumericContributionState,
     id: string,
 ): NumericContributionState {
-    const entries = state.entries.filter((entry) => entry.id !== id);
+    const entries = getOwnedEntries(state).filter((entry) => entry.id !== id);
 
-    return entries.length === state.entries.length
-        ? state
-        : createNumericContributionState(entries);
+    return entries.length === state.entries.length ? state : publishEntries(entries);
 }
 
 export function removeNumericContributionsOwnedBy(
     state: NumericContributionState,
     owner: NumericContributionOwner,
 ): NumericContributionState {
-    const entries = state.entries.filter(
+    const entries = getOwnedEntries(state).filter(
         (entry) =>
             entry.owner?.unitId !== owner.unitId || entry.owner.instanceId !== owner.instanceId,
     );
 
-    return entries.length === state.entries.length
-        ? state
-        : createNumericContributionState(entries);
+    return entries.length === state.entries.length ? state : publishEntries(entries);
 }
 
 function compareEntries(left: NumericContributionEntry, right: NumericContributionEntry): number {

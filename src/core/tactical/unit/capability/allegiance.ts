@@ -19,13 +19,7 @@ export function hasAllegiance<U extends Unit>(
 }
 
 export function createAllegianceState(state: Readonly<AllegianceState>): AllegianceState {
-    const side: unknown = state.side;
-
-    if (side !== "ALLY" && side !== "ENEMY" && side !== "NEUTRAL") {
-        throw new RangeError("unsupported allegiance side");
-    }
-
-    return Object.freeze({ side });
+    return Object.freeze({ side: state.side });
 }
 
 export function copyAllegianceState(state: Readonly<AllegianceState>): AllegianceState {

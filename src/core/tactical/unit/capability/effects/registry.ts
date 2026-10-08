@@ -6,9 +6,13 @@ import {
     ownEffectState,
     ownRestoredEffectInstance,
     ownUpdatedEffectInstance,
-    readEffectSnapshot,
 } from "./internal/instance.js";
-import type { EffectInstance, EffectInstanceMetadata, EffectInstanceValue } from "./instance.js";
+import type {
+    EffectInstance,
+    EffectInstanceMetadata,
+    EffectInstanceValue,
+    EffectSnapshot,
+} from "./instance.js";
 
 interface RegisteredEffectProgram {
     readonly source: object;
@@ -34,9 +38,6 @@ export class EffectResources {
             }
 
             return existing.program as unknown as EffectProgram<S>;
-        }
-        if (!Object.isFrozen(ref)) {
-            throw new TypeError("effect program references must be immutable");
         }
 
         const owned = Object.freeze({ ref, initialize, ownState });
@@ -69,16 +70,11 @@ export class EffectResources {
         return ownEffectInstance(program, metadata, initialState ?? program.initialize());
     }
 
-    restore(value: unknown): EffectInstanceValue {
-        this.#registration.assertUsable();
-        const { instance, programId } = readEffectSnapshot(value);
-        const program = this.#programs.get(programId)?.program;
-
-        if (program === undefined) {
-            throw new TypeError(`unregistered effect program ${programId}`);
-        }
-
-        return ownRestoredEffectInstance(program, instance);
+    restore<S extends object>(
+        ref: EffectProgramRef<S>,
+        snapshot: EffectSnapshot<NoInfer<S>>,
+    ): EffectInstance<S> {
+        return ownRestoredEffectInstance(this.get(ref), snapshot);
     }
 
     typedState<S extends object>(
@@ -93,37 +89,29 @@ export class EffectResources {
         ref: EffectProgramRef<S>,
     ): EffectInstance<S> | undefined {
         this.get(ref);
-        copyEffectInstance(instance);
 
         return instance.programRef === ref ? (instance as EffectInstance<S>) : undefined;
     }
 
-    update<S extends object>(
-        instance: EffectInstanceValue,
-        ref: EffectProgramRef<S>,
-        state: NoInfer<S>,
-    ): EffectInstance<S> {
-        const program = this.get(ref);
+    update<S extends object>(instance: EffectInstance<S>, state: NoInfer<S>): EffectInstance<S> {
+        const program = this.get(instance.programRef);
+        const owned = copyEffectInstance(instance);
 
-        if (this.typedState(instance, ref) === undefined) {
-            throw new TypeError("effect state update must use its matching program");
-        }
         if (state === instance.state) {
-            return instance as EffectInstance<S>;
+            return owned;
         }
 
         const ownedState = ownEffectState(program, state);
 
-        if (ownedState === instance.state) {
-            return instance as EffectInstance<S>;
+        if (ownedState === owned.state) {
+            return owned;
         }
 
-        return ownUpdatedEffectInstance(instance, ref, ownedState);
+        return ownUpdatedEffectInstance(owned, owned.programRef, ownedState);
     }
 
     #instanceProgram(instance: EffectInstanceValue): EffectProgram<object> {
         this.#registration.assertUsable();
-        copyEffectInstance(instance);
         const program = this.#programs.get(instance.programRef.id)?.program;
 
         if (program?.ref !== instance.programRef) {

@@ -1,6 +1,6 @@
 import { assertNonnegativeSafeInteger, assertPositiveSafeInteger } from "../../../common/assert.js";
 import type { TilePosition, WorldPosition } from "../../geometry/coordinate.js";
-import { DIRECTIONS, type Direction } from "../../geometry/direction.js";
+import type { Direction } from "../../geometry/direction.js";
 
 export type PathMotionMode = "WALK" | "FLY";
 
@@ -66,45 +66,26 @@ export function createNavigationMap(map: NavigationMap): NavigationMap {
     if (!Number.isSafeInteger(map.rows * map.columns) || map.rows * map.columns > 0xffff_ffff) {
         throw new RangeError("invalid navigation map dimensions");
     }
-    if (!PathMotionMode.is(map.pathMotionMode)) {
-        throw new TypeError("invalid path motion mode");
-    }
 
     assertNonnegativeSafeInteger(map.revision, "navigation revision");
 
-    const cellsAreArray: boolean = Array.isArray(map.cells);
-
-    if (!cellsAreArray || map.cells.length !== map.rows * map.columns) {
+    if (map.cells.length !== map.rows * map.columns) {
         throw new RangeError("navigation cells must match map dimensions");
     }
 
     const cells: NavigationCell[] = [];
 
     for (let index = 0; index < map.cells.length; index++) {
-        const cell = map.cells[index];
-        const cellValue: unknown = cell;
-
-        if (!Object.hasOwn(map.cells, index) || cell === undefined || cellValue === null) {
+        if (!Object.hasOwn(map.cells, index)) {
             throw new RangeError(`missing navigation cell at index ${index}`);
         }
-        if (typeof cell.passable !== "boolean") {
-            throw new TypeError(`invalid passability at index ${index}`);
-        }
+
+        const cell = map.cells[index]!;
 
         assertPositiveSafeInteger(cell.moveCost, `navigation cost at index ${index}`);
 
         if (map.pathMotionMode === "FLY" && cell.moveCost !== 1) {
             throw new RangeError("FLY navigation costs must be 1");
-        }
-
-        const departureValues: unknown = cell.departures;
-
-        if (
-            departureValues === null ||
-            typeof departureValues !== "object" ||
-            DIRECTIONS.some((direction) => typeof cell.departures[direction] !== "boolean")
-        ) {
-            throw new TypeError(`invalid departure directions at index ${index}`);
         }
 
         cells.push(

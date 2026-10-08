@@ -4,25 +4,29 @@ import type { EffectInstanceValue } from "../instance.js";
 import type { Effects, EffectsState } from "../capability.js";
 import type { Unit } from "../../../unit.js";
 
-interface AllocationProgress {
-    readonly nextInstanceId: number;
-    readonly nextAcquiredSequence: number;
+const ownedArrays = new WeakSet<readonly EffectInstanceValue[]>();
+const ownedStates = new WeakSet<EffectsState>();
+
+function effectsState(state: EffectsState): EffectsState {
+    const owned = Object.freeze(state);
+    ownedStates.add(owned);
+
+    return owned;
 }
 
-const ownedArrays = new WeakMap<readonly EffectInstanceValue[], AllocationProgress>();
-
-function ownInstanceArray(
-    instances: EffectInstanceValue[],
-    minimumProgress: AllocationProgress,
-): readonly EffectInstanceValue[] {
+function ownInstanceArray(instances: EffectInstanceValue[]): readonly EffectInstanceValue[] {
     Object.freeze(instances);
-    ownedArrays.set(instances, minimumProgress);
+    ownedArrays.add(instances);
 
     return instances;
 }
 
 export function ownEffectsState(state: EffectsState): EffectsState {
     const { instances, nextInstanceId, nextAcquiredSequence } = state;
+
+    if (ownedStates.has(state)) {
+        return state;
+    }
 
     assertNonnegativeSafeInteger(nextInstanceId, "effect instance allocation progress", TypeError);
     assertNonnegativeSafeInteger(
@@ -31,23 +35,8 @@ export function ownEffectsState(state: EffectsState): EffectsState {
         TypeError,
     );
 
-    const minimumProgress = ownedArrays.get(instances);
-
-    if (minimumProgress !== undefined) {
-        if (
-            nextInstanceId < minimumProgress.nextInstanceId ||
-            nextAcquiredSequence < minimumProgress.nextAcquiredSequence
-        ) {
-            throw new TypeError("effect allocation progress must exceed registered identities");
-        }
-
-        return Object.freeze({ instances, nextInstanceId, nextAcquiredSequence });
-    }
-
     const ids = new Set<number>();
     const owned: EffectInstanceValue[] = [];
-    let minimumId = 0;
-    let minimumSequence = 0;
 
     for (const instance of instances) {
         if (ids.has(instance.id)) {
@@ -60,15 +49,10 @@ export function ownEffectsState(state: EffectsState): EffectsState {
         ids.add(instance.id);
 
         owned.push(copyEffectInstance(instance));
-        minimumId = Math.max(minimumId, instance.id + 1);
-        minimumSequence = Math.max(minimumSequence, instance.acquiredSequence + 1);
     }
 
-    return Object.freeze({
-        instances: ownInstanceArray(owned, {
-            nextInstanceId: minimumId,
-            nextAcquiredSequence: minimumSequence,
-        }),
+    return effectsState({
+        instances: ownedArrays.has(instances) ? instances : ownInstanceArray(owned),
         nextInstanceId,
         nextAcquiredSequence,
     });
@@ -98,20 +82,18 @@ export function replaceEffectInstance<U extends Unit & Effects>(
         return unit;
     }
 
-    copyEffectInstance(updated);
-
     if (updated.id !== instance.id || updated.acquiredSequence !== instance.acquiredSequence) {
         throw new TypeError("effect identity and acquisition sequence cannot be changed");
     }
 
     const instances = [...previous.instances];
-    instances[index] = updated;
+    instances[index] = copyEffectInstance(updated);
 
     return {
         ...unit,
-        effects: Object.freeze({
+        effects: effectsState({
             ...previous,
-            instances: ownInstanceArray(instances, ownedArrays.get(previous.instances)!),
+            instances: ownInstanceArray(instances),
         }),
     };
 }
@@ -119,14 +101,10 @@ export function replaceEffectInstance<U extends Unit & Effects>(
 export function removeEffectInstance<U extends Unit & Effects>(unit: U, instanceId: number): U {
     const previous = ownEffectsState(unit.effects);
     const instances: EffectInstanceValue[] = [];
-    let minimumId = 0;
-    let minimumSequence = 0;
 
     for (const instance of previous.instances) {
         if (instance.id !== instanceId) {
             instances.push(instance);
-            minimumId = Math.max(minimumId, instance.id + 1);
-            minimumSequence = Math.max(minimumSequence, instance.acquiredSequence + 1);
         }
     }
 
@@ -136,12 +114,9 @@ export function removeEffectInstance<U extends Unit & Effects>(unit: U, instance
 
     return {
         ...unit,
-        effects: Object.freeze({
+        effects: effectsState({
             ...previous,
-            instances: ownInstanceArray(instances, {
-                nextInstanceId: minimumId,
-                nextAcquiredSequence: minimumSequence,
-            }),
+            instances: ownInstanceArray(instances),
         }),
     };
 }
@@ -154,8 +129,6 @@ export function registerEffectInstance<U extends Unit>(unit: U, instance: Effect
             nextAcquiredSequence: 0,
         },
     );
-
-    copyEffectInstance(instance);
 
     if (
         instance.id < previous.nextInstanceId ||
@@ -183,11 +156,8 @@ export function registerEffectInstance<U extends Unit>(unit: U, instance: Effect
 
     return {
         ...unit,
-        effects: Object.freeze({
-            instances: ownInstanceArray([...previous.instances, instance], {
-                nextInstanceId,
-                nextAcquiredSequence,
-            }),
+        effects: effectsState({
+            instances: ownInstanceArray([...previous.instances, copyEffectInstance(instance)]),
             nextInstanceId,
             nextAcquiredSequence,
         }),

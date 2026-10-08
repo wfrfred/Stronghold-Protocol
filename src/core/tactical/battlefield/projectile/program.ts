@@ -15,7 +15,7 @@ export interface ProjectileProgramRef<S extends object> {
 export interface ProjectileProgram<S extends object> {
     readonly ref: ProjectileProgramRef<S>;
     readonly initialize: () => S;
-    readonly ownState: (value: unknown) => S;
+    readonly ownState: (value: S) => S;
     readonly acceptsContact: (context: ProjectileQueryContext<S>, target: Unit) => boolean;
     readonly contact?: (context: ProjectileContactContext<S>) => undefined;
     readonly stop?: (context: ProjectileStopContext<S>) => undefined;
@@ -24,7 +24,7 @@ export interface ProjectileProgram<S extends object> {
 export function createProjectileProgram<S extends object>(definition: {
     readonly id: string;
     readonly initialize: () => S;
-    readonly ownState: (value: unknown) => NoInfer<S>;
+    readonly ownState: (value: NoInfer<S>) => NoInfer<S>;
     readonly acceptsContact: (context: ProjectileQueryContext<NoInfer<S>>, target: Unit) => boolean;
     readonly contact?: (context: ProjectileContactContext<NoInfer<S>>) => undefined;
     readonly stop?: (context: ProjectileStopContext<NoInfer<S>>) => undefined;

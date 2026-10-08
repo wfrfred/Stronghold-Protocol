@@ -14,7 +14,6 @@ import {
     setEffectParticipation,
 } from "../../unit/capability/effects/lifecycle.js";
 import { getEffect } from "../../unit/capability/effects/query.js";
-import type { EffectProgramRef } from "../../unit/capability/effects/program.js";
 import type {
     EffectSourceContext,
     EffectSourceProgram,
@@ -162,21 +161,23 @@ function settleSource<S extends object>(
         bind({ ...binding, installationAttempts: binding.installationAttempts + 1 });
         flush();
 
-        const installed = installNewEffect(
-            work,
-            unitId,
-            installation.programRef as EffectProgramRef<object>,
-            {
-                source: source.effectSource.sourceUnitId,
-                scope: null,
-                expiresAtTick: installation.expiresAtTick,
-                ...(installation.initialState === undefined
-                    ? {}
-                    : { initialState: installation.initialState }),
-            },
-            resources,
-            tick,
-            dispatch,
+        const installed = installation((ref, initial) =>
+            installNewEffect(
+                work,
+                unitId,
+                ref,
+                {
+                    source: source.effectSource.sourceUnitId,
+                    scope: null,
+                    expiresAtTick: initial.expiresAtTick,
+                    ...(initial.initialState === undefined
+                        ? {}
+                        : { initialState: initial.initialState }),
+                },
+                resources,
+                tick,
+                dispatch,
+            ),
         );
 
         work = installed.work;

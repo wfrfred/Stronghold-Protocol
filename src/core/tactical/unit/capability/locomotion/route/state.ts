@@ -88,10 +88,6 @@ export function createRouteState(
     timing: RouteTiming,
     alwaysCheckCurrentPoint: boolean,
 ): RouteState {
-    if (typeof alwaysCheckCurrentPoint !== "boolean") {
-        throw new TypeError("alwaysCheckCurrentPoint must be boolean");
-    }
-
     return {
         definition,
         timing,

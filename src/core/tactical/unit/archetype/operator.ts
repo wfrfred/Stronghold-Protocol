@@ -45,16 +45,14 @@ export type OperatorInitialization<D extends OperatorDefinition = OperatorDefini
     UnitInitialization<D>;
 
 export function createOperatorDefinition(definition: OperatorDefinition): OperatorDefinition {
-    const id: unknown = definition.id;
-
-    if (typeof id !== "string" || id.length === 0) {
+    if (definition.id.length === 0) {
         throw new TypeError("operator definition id must be nonempty");
     }
 
     assertPositiveNumber(definition.vitality.maxHp, "operator maxHp");
 
     return Object.freeze({
-        id,
+        id: definition.id,
         vitality: Object.freeze({ maxHp: definition.vitality.maxHp }),
         action: createActionCapabilityDefinition(definition.action),
         allegiance: createAllegianceState(definition.allegiance),

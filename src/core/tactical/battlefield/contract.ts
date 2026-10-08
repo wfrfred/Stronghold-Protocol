@@ -111,6 +111,7 @@ export interface Battlefield<U extends Unit = Unit> extends BattlefieldView<U> {
     effectsFrom(source: SpatialEffectSource): readonly SpatialEffectId[];
     effectsFollowing(unitId: UnitId): readonly SpatialEffectId[];
     fork(): Battlefield<U>;
+    transact(operation: (battlefield: Battlefield<U>) => undefined): undefined;
     transact<T>(operation: (battlefield: Battlefield<U>) => SynchronousResult<T>): T;
     apply(changes: readonly BattlefieldChange<U>[]): BattlefieldChangeResult<U>;
 }

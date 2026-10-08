@@ -2,12 +2,10 @@ import { assertFiniteNumber, assertNonnegativeSafeInteger } from "../../../../..
 import {
     createTilePosition,
     createWorldOffset,
-    isTilePosition,
-    isWorldPosition,
     type TilePosition,
     type WorldOffset,
 } from "../../../../geometry/coordinate.js";
-import { PathMotionMode } from "../../../../battlefield/navigation/map.js";
+import type { PathMotionMode } from "../../../../battlefield/navigation/map.js";
 
 export interface RouteMoveTarget {
     readonly position: TilePosition;
@@ -71,53 +69,25 @@ export interface RouteDefinition {
 }
 
 function copyPosition(position: TilePosition): TilePosition {
-    if (!isTilePosition(position)) {
-        throw new TypeError("route position must contain two coordinates");
-    }
-
     return createTilePosition(position[0], position[1]);
 }
 
 function copyOffset(offset: WorldOffset): WorldOffset {
-    if (!isWorldPosition(offset)) {
-        throw new TypeError("route offset must contain two coordinates");
-    }
-
     return createWorldOffset(offset[0], offset[1]);
 }
 
-function boolean(value: boolean, name: string): boolean {
-    if (typeof value !== "boolean") {
-        throw new TypeError(`${name} must be boolean`);
-    }
-
-    return value;
-}
-
 function copyTarget(target: RouteMoveTarget): RouteMoveTarget {
-    const value: unknown = target;
-
-    if (value === null || typeof value !== "object") {
-        throw new TypeError("route move target must be an object");
-    }
-
     assertFiniteNumber(target.reachDistance, "reachDistance");
 
     return Object.freeze({
         position: copyPosition(target.position),
         reachOffset: copyOffset(target.reachOffset),
-        randomizeReachOffset: boolean(target.randomizeReachOffset, "randomizeReachOffset"),
+        randomizeReachOffset: target.randomizeReachOffset,
         reachDistance: target.reachDistance,
     });
 }
 
 function copyCheckpoint(checkpoint: RouteCheckpoint): RouteCheckpoint {
-    const value: unknown = checkpoint;
-
-    if (value === null || typeof value !== "object") {
-        throw new TypeError("route checkpoint must be an object");
-    }
-
     switch (checkpoint.type) {
         case "MOVE":
         case "PATROL_MOVE":
@@ -159,33 +129,18 @@ function copyCheckpoint(checkpoint: RouteCheckpoint): RouteCheckpoint {
         case "DISAPPEAR":
         case "ALERT":
             return Object.freeze({ type: checkpoint.type });
-
-        default:
-            throw new RangeError("unsupported route checkpoint type");
     }
 }
 
 export function createRouteDefinition(definition: RouteDefinition): RouteDefinition {
-    if (!PathMotionMode.is(definition.pathMotionMode)) {
-        throw new RangeError("unsupported route path motion mode");
-    }
-
-    const checkpointsAreArray: boolean = Array.isArray(definition.checkpoints);
-
-    if (!checkpointsAreArray) {
-        throw new TypeError("route checkpoints must be an array");
-    }
-
     const checkpoints: RouteCheckpoint[] = [];
 
     for (let index = 0; index < definition.checkpoints.length; index++) {
-        const checkpoint = definition.checkpoints[index];
-
-        if (!Object.hasOwn(definition.checkpoints, index) || checkpoint === undefined) {
+        if (!Object.hasOwn(definition.checkpoints, index)) {
             throw new TypeError("route checkpoints must be dense");
         }
 
-        checkpoints.push(copyCheckpoint(checkpoint));
+        checkpoints.push(copyCheckpoint(definition.checkpoints[index]!));
     }
 
     return Object.freeze({
@@ -195,9 +150,9 @@ export function createRouteDefinition(definition: RouteDefinition): RouteDefinit
         spawnOffset: copyOffset(definition.spawnOffset),
         spawnRandomRange: copyOffset(definition.spawnRandomRange),
         checkpoints: Object.freeze(checkpoints),
-        allowDiagonalMove: boolean(definition.allowDiagonalMove, "allowDiagonalMove"),
-        visitEveryTileCenter: boolean(definition.visitEveryTileCenter, "visitEveryTileCenter"),
-        visitEveryNodeCenter: boolean(definition.visitEveryNodeCenter, "visitEveryNodeCenter"),
-        visitEveryCheckPoint: boolean(definition.visitEveryCheckPoint, "visitEveryCheckPoint"),
+        allowDiagonalMove: definition.allowDiagonalMove,
+        visitEveryTileCenter: definition.visitEveryTileCenter,
+        visitEveryNodeCenter: definition.visitEveryNodeCenter,
+        visitEveryCheckPoint: definition.visitEveryCheckPoint,
     });
 }

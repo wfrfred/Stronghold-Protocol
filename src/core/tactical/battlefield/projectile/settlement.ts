@@ -176,10 +176,7 @@ class ProjectileSettlement {
                         targetUnitId,
                     };
 
-                    const invoke: (context: ProjectileContactContext<S>) => unknown =
-                        program.contact!;
-
-                    return invoke(contact);
+                    program.contact!(contact);
                 },
             );
 

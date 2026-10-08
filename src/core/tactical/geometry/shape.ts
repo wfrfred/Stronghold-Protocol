@@ -1,6 +1,6 @@
 import { assertNonnegativeNumber } from "../../common/assert.js";
 import { createWorldOffset, type WorldOffset } from "./coordinate.js";
-import { Direction } from "./direction.js";
+import type { Direction } from "./direction.js";
 import { RangeGrid } from "./range.js";
 
 export type LocalShape =
@@ -124,10 +124,6 @@ export function createRangeGeometry(range: RangeGeometry): RangeGeometry {
             break;
 
         case "GRID":
-            if (!Direction.is(range.direction)) {
-                throw new TypeError("range direction must be cardinal");
-            }
-
             owned = Object.freeze({
                 type: range.type,
                 offsets: RangeGrid.create(range.offsets),

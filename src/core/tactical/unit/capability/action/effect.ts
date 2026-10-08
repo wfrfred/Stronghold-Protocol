@@ -19,35 +19,7 @@ export type EffectDefinition =
 export function createEffectDefinition(effect: EffectDefinition): EffectDefinition {
     assertNonnegativeNumber(effect.power, "effect power");
 
-    switch (effect.type) {
-        case "DAMAGE": {
-            const damageType: unknown = effect.damageType;
-
-            if (damageType !== "PHYSICAL" && damageType !== "ARTS" && damageType !== "TRUE") {
-                throw new RangeError("unsupported attack damage type");
-            }
-
-            const powerSource: unknown = effect.powerSource;
-
-            if (powerSource !== undefined && powerSource !== "SOURCE_ATTACK") {
-                throw new RangeError("unsupported damage power source");
-            }
-
-            return Object.freeze({
-                type: effect.type,
-                power: effect.power,
-                damageType,
-                ...(effect.powerSource === undefined ? {} : { powerSource: effect.powerSource }),
-            });
-        }
-
-        case "HEAL":
-            if (typeof effect.ignoreHealFree !== "boolean") {
-                throw new TypeError("ignoreHealFree must be boolean");
-            }
-
-            return Object.freeze({ ...effect });
-    }
+    return Object.freeze({ ...effect });
 }
 
 export function effectPurposes(effect: EffectDefinition): readonly QueryPurpose[] {

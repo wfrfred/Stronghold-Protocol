@@ -58,24 +58,7 @@ export function addScheduleTicks(left: number, right: number): number {
     return deadline;
 }
 
-function flag(value: boolean, name: string): boolean {
-    if (typeof value !== "boolean") {
-        throw new TypeError(`${name} must be boolean`);
-    }
-
-    return value;
-}
-
 function copySpawnDefinition(spawn: EnemySpawnDefinition): EnemySpawnDefinition {
-    const input: unknown = spawn;
-
-    if (input === undefined) {
-        throw new TypeError("spawn definitions must be dense");
-    }
-
-    flag(spawn.alwaysCheckCurrentPoint, "alwaysCheckCurrentPoint");
-    flag(spawn.notCountInTotal, "notCountInTotal");
-
     return Object.freeze({
         definition: spawn.definition,
         route: spawn.route,
@@ -85,25 +68,18 @@ function copySpawnDefinition(spawn: EnemySpawnDefinition): EnemySpawnDefinition 
 }
 
 function copyFragment(fragment: FragmentDefinition): FragmentDefinition {
-    const input: unknown = fragment;
-
-    if (input === undefined) {
-        throw new TypeError("fragments must be dense");
-    }
-
     const preDelayTicks = fragment.preDelayTicks;
 
     assertNonnegativeSafeInteger(preDelayTicks, "fragment.preDelayTicks");
 
     const actions: SpawnActionDefinition[] = [];
 
-    for (const action of fragment.actions) {
-        const input: unknown = action;
-
-        if (input === undefined) {
+    for (let index = 0; index < fragment.actions.length; index++) {
+        if (!Object.hasOwn(fragment.actions, index)) {
             throw new TypeError("fragment actions must be dense");
         }
 
+        const action = fragment.actions[index]!;
         const offsetsTicks: number[] = [];
 
         for (const offset of action.offsetsTicks) {
@@ -117,12 +93,9 @@ function copyFragment(fragment: FragmentDefinition): FragmentDefinition {
             Object.freeze({
                 spawn: copySpawnDefinition(action.spawn),
                 offsetsTicks: Object.freeze(offsetsTicks),
-                managedByScheduler: flag(action.managedByScheduler, "managedByScheduler"),
-                dontBlockWave: flag(action.dontBlockWave, "dontBlockWave"),
-                forceBlockWaveInBranch: flag(
-                    action.forceBlockWaveInBranch,
-                    "forceBlockWaveInBranch",
-                ),
+                managedByScheduler: action.managedByScheduler,
+                dontBlockWave: action.dontBlockWave,
+                forceBlockWaveInBranch: action.forceBlockWaveInBranch,
             }),
         );
     }
@@ -146,12 +119,12 @@ export function createSpawnScheduleDefinition(
     if (definition.type === "TIMELINE") {
         const spawns: ScheduledEnemySpawn[] = [];
 
-        for (const spawn of definition.spawns) {
-            const input: unknown = spawn;
-
-            if (input === undefined) {
+        for (let index = 0; index < definition.spawns.length; index++) {
+            if (!Object.hasOwn(definition.spawns, index)) {
                 throw new TypeError("timeline spawns must be dense");
             }
+
+            const spawn = definition.spawns[index]!;
 
             assertNonnegativeSafeInteger(spawn.tick, "spawn.tick");
 
@@ -169,26 +142,23 @@ export function createSpawnScheduleDefinition(
         return Object.freeze({ type: "TIMELINE", spawns: Object.freeze(spawns) });
     }
 
-    const type: unknown = definition.type;
-
-    if (type !== "WAVES") {
-        throw new RangeError("unsupported spawn schedule type");
-    }
-
     let count = 0;
     const waves: WaveDefinition[] = [];
 
-    for (const wave of definition.waves) {
-        const input: unknown = wave;
-
-        if (input === undefined) {
+    for (let index = 0; index < definition.waves.length; index++) {
+        if (!Object.hasOwn(definition.waves, index)) {
             throw new TypeError("waves must be dense");
         }
 
+        const wave = definition.waves[index]!;
         const fragments: FragmentDefinition[] = [];
 
-        for (const fragment of wave.fragments) {
-            const copied = copyFragment(fragment);
+        for (let fragmentIndex = 0; fragmentIndex < wave.fragments.length; fragmentIndex++) {
+            if (!Object.hasOwn(wave.fragments, fragmentIndex)) {
+                throw new TypeError("fragments must be dense");
+            }
+
+            const copied = copyFragment(wave.fragments[fragmentIndex]!);
             count = addScheduleTicks(count, countFragmentSpawns(copied));
             fragments.push(copied);
         }
@@ -213,16 +183,14 @@ export function createSpawnScheduleDefinition(
     const branches: [string, BranchDefinition][] = [];
 
     for (const [id, branch] of Object.entries(definition.branches)) {
-        const input: unknown = branch;
-
-        if (input === undefined) {
-            throw new TypeError("branch definitions must be present");
-        }
-
         const phases: FragmentDefinition[] = [];
 
-        for (const phase of branch.phases) {
-            const copied = copyFragment(phase);
+        for (let index = 0; index < branch.phases.length; index++) {
+            if (!Object.hasOwn(branch.phases, index)) {
+                throw new TypeError("fragments must be dense");
+            }
+
+            const copied = copyFragment(branch.phases[index]!);
             count = addScheduleTicks(count, countFragmentSpawns(copied));
             phases.push(copied);
         }

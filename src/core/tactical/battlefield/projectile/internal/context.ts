@@ -77,7 +77,7 @@ export function withProjectileContext<S extends object>(
     services: ProjectileServices,
     access: ProjectileContextAccess,
     tick: number,
-    run: (context: ProjectileStopContext<S>) => unknown,
+    run: (context: ProjectileStopContext<S>) => undefined,
 ): void {
     let active = true;
     const dispatch = new EffectDispatchScope();
@@ -152,13 +152,7 @@ export function withProjectileContext<S extends object>(
     };
 
     try {
-        const result = run(context);
-
-        if (result !== undefined) {
-            throw new TypeError(
-                "projectile content must complete synchronously without returning a value",
-            );
-        }
+        run(context);
     } finally {
         active = false;
     }

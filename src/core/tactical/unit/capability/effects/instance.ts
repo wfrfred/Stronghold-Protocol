@@ -40,3 +40,8 @@ export interface EffectInstance<S extends object> extends EffectInstanceValue {
     readonly programRef: EffectProgramRef<S>;
     readonly state: S;
 }
+
+export interface EffectSnapshot<S extends object>
+    extends EffectInstanceMetadata, EffectLifecycleFacts {
+    readonly state: S;
+}

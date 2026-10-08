@@ -1,10 +1,6 @@
 import { createTile, type PassableMask, type Tile } from "./tile.js";
 import { assertPositiveSafeInteger } from "../../../common/assert.js";
-import {
-    createTilePosition,
-    isTilePosition,
-    type TilePosition,
-} from "../../geometry/coordinate.js";
+import { createTilePosition, type TilePosition } from "../../geometry/coordinate.js";
 import { Direction } from "../../geometry/direction.js";
 
 export interface BattlefieldMarker {
@@ -60,28 +56,18 @@ export function createBattlefieldMap(
         throw new RangeError("map dimensions exceed the supported array length");
     }
 
-    const tilesAreArray: boolean = Array.isArray(tiles);
-
-    if (!tilesAreArray || tiles.length !== tileCount) {
+    if (tiles.length !== tileCount) {
         throw new RangeError(`expected ${rows * columns} tiles, got ${tiles.length}`);
-    }
-
-    const collectionsAreArrays: boolean = Array.isArray(markers) && Array.isArray(blockEdges);
-
-    if (!collectionsAreArrays) {
-        throw new TypeError("map markers and block edges must be arrays");
     }
 
     const copiedTiles: Tile[] = [];
 
     for (let index = 0; index < tiles.length; index++) {
-        const tile = tiles[index];
-
-        if (!Object.hasOwn(tiles, index) || tile === undefined) {
+        if (!Object.hasOwn(tiles, index)) {
             throw new RangeError(`missing tile at index ${index}`);
         }
 
-        copiedTiles.push(createTile(tile));
+        copiedTiles.push(createTile(tiles[index]!));
     }
 
     const copiedMarkers: BattlefieldMarker[] = [];
@@ -95,49 +81,31 @@ export function createBattlefieldMap(
     };
 
     for (let index = 0; index < markers.length; index++) {
-        const marker = markers[index];
-
-        if (!Object.hasOwn(markers, index) || marker === undefined) {
+        if (!Object.hasOwn(markers, index)) {
             throw new RangeError(`missing marker at index ${index}`);
         }
-        if (!["START", "END", "TELEPORT_IN", "TELEPORT_OUT"].includes(marker.type)) {
-            throw new TypeError(`invalid marker type at index ${index}`);
-        }
-        if (!isTilePosition(marker.position)) {
-            throw new RangeError("tile position must contain exactly two safe integer coordinates");
-        }
-        if (!BattlefieldMap.contains(map, marker.position)) {
+
+        const marker = markers[index]!;
+        const position = createTilePosition(marker.position[0], marker.position[1]);
+
+        if (!BattlefieldMap.contains(map, position)) {
             throw new RangeError(`marker at index ${index} is outside the map`);
         }
 
-        const [row, col] = marker.position;
         copiedMarkers.push(
             Object.freeze({
                 type: marker.type,
-                position: createTilePosition(row, col),
+                position,
             }),
         );
     }
 
     for (let index = 0; index < blockEdges.length; index++) {
-        const edge = blockEdges[index];
-
-        if (!Object.hasOwn(blockEdges, index) || edge === undefined) {
+        if (!Object.hasOwn(blockEdges, index)) {
             throw new RangeError(`missing block edge at index ${index}`);
         }
-        if (!Direction.is(edge.direction)) {
-            throw new TypeError(`invalid block edge direction at index ${index}`);
-        }
-        if (!["NONE", "WALK_ONLY", "FLY_ONLY", "ALL"].includes(edge.blockMask)) {
-            throw new TypeError(`invalid block edge mask at index ${index}`);
-        }
 
-        const coordinates: readonly unknown[] = edge.position;
-        const positionIsArray: boolean = Array.isArray(coordinates);
-
-        if (!positionIsArray || coordinates.length !== 2) {
-            throw new RangeError(`invalid block edge position at index ${index}`);
-        }
+        const edge = blockEdges[index]!;
 
         const position = createTilePosition(edge.position[0], edge.position[1]);
         const [dRow, dCol] = Direction.vector(edge.direction);
