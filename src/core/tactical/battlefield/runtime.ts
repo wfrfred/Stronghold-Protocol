@@ -17,16 +17,16 @@ import type {
 import type { BattlefieldMap } from "./map/map.js";
 import type { MechanismId, MechanismRuntime } from "./mechanism.js";
 import {
-    copyNavigationSpatialEffect,
-    type NavigationSpatialEffect,
-    type SpatialEffectId,
-    type SpatialEffectSource,
-} from "./navigation/effect.js";
+    copyNavigationModifier,
+    type NavigationModifier,
+    type NavigationModifierId,
+    type NavigationModifierSource,
+} from "./navigation/modifier.js";
 import { projectStaticNavigationMap } from "./navigation/projection.js";
 import {
     battlefieldTileKey,
     battlefieldOccupancyKey,
-    spatialEffectSourceKey,
+    navigationModifierSourceKey,
 } from "./storage/indexes.js";
 import {
     createBattlefieldState,
@@ -173,8 +173,8 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
         return [...this.#state.mechanisms.keys()];
     }
 
-    get effectIds(): readonly SpatialEffectId[] {
-        return [...this.#state.effects.keys()];
+    get navigationModifierIds(): readonly NavigationModifierId[] {
+        return [...this.#state.navigationModifiers.keys()];
     }
 
     getUnit(id: UnitId): StableUnit<U> | undefined {
@@ -189,10 +189,12 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
         return mechanism === undefined ? undefined : { ...mechanism };
     }
 
-    getEffect(id: SpatialEffectId): NavigationSpatialEffect | undefined {
-        const effect = this.#state.effects.get(id);
+    getNavigationModifier(id: NavigationModifierId): NavigationModifier | undefined {
+        const navigationModifier = this.#state.navigationModifiers.get(id);
 
-        return effect === undefined ? undefined : copyNavigationSpatialEffect(effect);
+        return navigationModifier === undefined
+            ? undefined
+            : copyNavigationModifier(navigationModifier);
     }
 
     unitsAt(position: TilePosition): readonly StableUnit<U>[] {
@@ -206,18 +208,24 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
         return ids === undefined ? [] : [...ids].map((id) => this.#state.units.get(id)!);
     }
 
-    effectsAt(position: TilePosition): readonly SpatialEffectId[] {
+    navigationModifiersAt(position: TilePosition): readonly NavigationModifierId[] {
         const key = battlefieldTileKey(this.map, position);
 
-        return key === undefined ? [] : [...(this.#state.spatial.effectsByTile.get(key) ?? [])];
+        return key === undefined
+            ? []
+            : [...(this.#state.spatial.navigationModifiersByTile.get(key) ?? [])];
     }
 
-    effectsFrom(source: SpatialEffectSource): readonly SpatialEffectId[] {
-        return [...(this.#state.spatial.effectsBySource.get(spatialEffectSourceKey(source)) ?? [])];
+    navigationModifiersFrom(source: NavigationModifierSource): readonly NavigationModifierId[] {
+        return [
+            ...(this.#state.spatial.navigationModifiersBySource.get(
+                navigationModifierSourceKey(source),
+            ) ?? []),
+        ];
     }
 
-    effectsFollowing(unitId: UnitId): readonly SpatialEffectId[] {
-        return [...(this.#state.spatial.effectsByAnchor.get(unitId) ?? [])];
+    navigationModifiersFollowing(unitId: UnitId): readonly NavigationModifierId[] {
+        return [...(this.#state.spatial.navigationModifiersByAnchor.get(unitId) ?? [])];
     }
 
     transact(operation: (battlefield: BattlefieldRuntime<U>) => undefined): undefined;

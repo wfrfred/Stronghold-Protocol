@@ -6,11 +6,11 @@ import type {
 } from "../battlefield/contract.js";
 import type { MechanismDefinition } from "../battlefield/mechanism.js";
 import {
-    createSpatialEffectRegion,
-    type NavigationEffectDefinition,
-    type SpatialEffectSource,
-    type SpatialEffectRegion,
-} from "../battlefield/navigation/effect.js";
+    createNavigationModifierRegion,
+    type NavigationModifierDefinition,
+    type NavigationModifierSource,
+    type NavigationModifierRegion,
+} from "../battlefield/navigation/modifier.js";
 import {
     createUnitPlacementDefinition,
     instantiateUnitPlacement,
@@ -18,7 +18,7 @@ import {
 } from "./creation/placement.js";
 import type { BattleExecutionState } from "./execution/state.js";
 import type { BattlePhase } from "./system.js";
-import type { BattleEvent } from "./contract.js";
+import type { Event } from "./contract.js";
 import type { EffectTransitionResources } from "../unit/capability/effects/contract.js";
 import { removeUnitWithEffects } from "./execution/unit-lifecycle.js";
 import { combatWorkEvents, combatWorkChanges, createCombatWork } from "./execution/work.js";
@@ -30,9 +30,9 @@ export interface PredefinedUnitCreation extends UnitPlacementDefinition {
 export interface PredefinedMechanismCreation {
     readonly type: "MECHANISM";
     readonly definition: MechanismDefinition;
-    readonly navigationEffects: readonly {
-        readonly definition: NavigationEffectDefinition;
-        readonly region: Extract<SpatialEffectRegion, { readonly type: "FIXED" }>;
+    readonly navigationModifiers: readonly {
+        readonly definition: NavigationModifierDefinition;
+        readonly region: Extract<NavigationModifierRegion, { readonly type: "FIXED" }>;
     }[];
 }
 
@@ -45,7 +45,7 @@ export interface PredefinedInstanceDefinition {
 
 export interface PredefinedPresence {
     readonly definitionId: number;
-    readonly source: SpatialEffectSource;
+    readonly source: NavigationModifierSource;
 }
 
 export type PredefinedCommand =
@@ -81,14 +81,14 @@ export function createPredefinedInstanceDefinition(
                   })
                 : Object.freeze({
                       ...creation,
-                      navigationEffects: Object.freeze(
-                          creation.navigationEffects.map((effect) => {
-                              const region = createSpatialEffectRegion(
-                                  effect.region,
-                              ) as typeof effect.region;
+                      navigationModifiers: Object.freeze(
+                          creation.navigationModifiers.map((navigationModifier) => {
+                              const region = createNavigationModifierRegion(
+                                  navigationModifier.region,
+                              ) as typeof navigationModifier.region;
 
                               return Object.freeze({
-                                  definition: effect.definition,
+                                  definition: navigationModifier.definition,
                                   region,
                               });
                           }),
@@ -162,7 +162,7 @@ export function changePredefinedInstances(
         }
 
         const creation = definition.creation;
-        let source: SpatialEffectSource;
+        let source: NavigationModifierSource;
 
         if (creation.type === "UNIT") {
             const instantiated = instantiateUnitPlacement(creation, execution, tick);
@@ -182,11 +182,11 @@ export function changePredefinedInstances(
             });
             execution = { ...execution, nextMechanismId: nextIdentity(execution.nextMechanismId) };
 
-            for (const contribution of creation.navigationEffects) {
+            for (const contribution of creation.navigationModifiers) {
                 changes.push({
-                    type: "ADD_EFFECT",
-                    effect: {
-                        id: execution.nextSpatialEffectId,
+                    type: "ADD_NAVIGATION_MODIFIER",
+                    navigationModifier: {
+                        id: execution.nextNavigationModifierId,
                         definition: contribution.definition,
                         source,
                         active: true,
@@ -196,7 +196,7 @@ export function changePredefinedInstances(
                 });
                 execution = {
                     ...execution,
-                    nextSpatialEffectId: nextIdentity(execution.nextSpatialEffectId),
+                    nextNavigationModifierId: nextIdentity(execution.nextNavigationModifierId),
                 };
             }
         }
@@ -266,7 +266,7 @@ export function createPredefinedSystem(
                 input.battlefield.unitIds.map((id) => [id, input.battlefield.getUnit(id)!]),
             );
             const changes: BattlefieldChange[] = [];
-            const events: BattleEvent[] = [];
+            const events: Event[] = [];
             let execution = changed.execution;
 
             for (const change of changed.changes) {

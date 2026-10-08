@@ -14,7 +14,7 @@ export interface BattlefieldBlockEdge {
     readonly blockMask: PassableMask;
 }
 
-export interface BattlefieldMap {
+interface Fields {
     readonly rows: number;
     readonly columns: number;
     readonly tiles: readonly Tile[];
@@ -22,11 +22,21 @@ export interface BattlefieldMap {
     readonly blockEdges: readonly BattlefieldBlockEdge[];
 }
 
+declare const created: unique symbol;
+
+export interface BattlefieldMap extends Fields {
+    readonly [created]: true;
+}
+
+function contains(map: Fields, position: TilePosition): boolean {
+    const [row, col] = position;
+
+    return row >= 0 && row < map.rows && col >= 0 && col < map.columns;
+}
+
 export const BattlefieldMap = {
     contains(map: BattlefieldMap, position: TilePosition): boolean {
-        const [row, col] = position;
-
-        return row >= 0 && row < map.rows && col >= 0 && col < map.columns;
+        return contains(map, position);
     },
 
     get(map: BattlefieldMap, position: TilePosition): Tile | undefined {
@@ -72,7 +82,7 @@ export function createBattlefieldMap(
 
     const copiedMarkers: BattlefieldMarker[] = [];
     const copiedBlockEdges: BattlefieldBlockEdge[] = [];
-    const map: BattlefieldMap = {
+    const map: Fields = {
         rows,
         columns,
         tiles: copiedTiles,
@@ -88,7 +98,7 @@ export function createBattlefieldMap(
         const marker = markers[index]!;
         const position = createTilePosition(marker.position[0], marker.position[1]);
 
-        if (!BattlefieldMap.contains(map, position)) {
+        if (!contains(map, position)) {
             throw new RangeError(`marker at index ${index} is outside the map`);
         }
 
@@ -111,7 +121,7 @@ export function createBattlefieldMap(
         const [dRow, dCol] = Direction.vector(edge.direction);
         const neighbor = createTilePosition(position[0] + dRow, position[1] + dCol);
 
-        if (!BattlefieldMap.contains(map, position) && !BattlefieldMap.contains(map, neighbor)) {
+        if (!contains(map, position) && !contains(map, neighbor)) {
             throw new RangeError(`block edge at index ${index} has no endpoint inside the map`);
         }
 
@@ -128,5 +138,5 @@ export function createBattlefieldMap(
     Object.freeze(copiedMarkers);
     Object.freeze(copiedBlockEdges);
 
-    return Object.freeze(map);
+    return Object.freeze(map) as BattlefieldMap;
 }

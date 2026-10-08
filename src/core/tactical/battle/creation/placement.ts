@@ -1,8 +1,8 @@
 import type { BattlefieldChange } from "../../battlefield/contract.js";
 import type {
-    NavigationEffectDefinition,
-    SpatialEffectSource,
-} from "../../battlefield/navigation/effect.js";
+    NavigationModifierDefinition,
+    NavigationModifierSource,
+} from "../../battlefield/navigation/modifier.js";
 import { createWorldPosition, type WorldPosition } from "../../geometry/coordinate.js";
 import { Direction } from "../../geometry/direction.js";
 import { RangeGrid } from "../../geometry/range.js";
@@ -22,8 +22,8 @@ import {
 } from "../../unit/capability/catalog.js";
 import type { BattleExecutionState } from "../execution/state.js";
 
-export interface UnitNavigationEffectPlacement {
-    readonly definition: NavigationEffectDefinition;
+export interface UnitNavigationModifierPlacement {
+    readonly definition: NavigationModifierDefinition;
     readonly range: RangeGrid;
     readonly direction: Direction;
 }
@@ -32,7 +32,7 @@ export interface UnitPlacementDefinition<D extends UnitDefinition = UnitDefiniti
     readonly definition: D;
     readonly position: WorldPosition;
     readonly occupancy?: OccupancyState;
-    readonly navigationEffects?: readonly UnitNavigationEffectPlacement[];
+    readonly navigationModifiers?: readonly UnitNavigationModifierPlacement[];
     readonly states?: Partial<CapabilityStates>;
 }
 
@@ -54,7 +54,7 @@ type NormalizedUnitPlacement<P extends UnitPlacementDefinition> = P extends unkn
     ? {
           readonly definition: ImmutableData<P["definition"]>;
           readonly position: WorldPosition;
-          readonly navigationEffects: readonly UnitNavigationEffectPlacement[];
+          readonly navigationModifiers: readonly UnitNavigationModifierPlacement[];
       } & (P extends { readonly occupancy: OccupancyState }
           ? Occupancy
           : Pick<UnitPlacementDefinition, "occupancy">) &
@@ -73,21 +73,21 @@ export function createUnitPlacementDefinition(
 ): NormalizedUnitPlacement<UnitPlacementDefinition> {
     assertSingleOccupancy(placement);
 
-    const navigationEffects: UnitNavigationEffectPlacement[] = [];
-    const effects = placement.navigationEffects ?? [];
+    const navigationModifiers: UnitNavigationModifierPlacement[] = [];
+    const contributions = placement.navigationModifiers ?? [];
 
-    for (let index = 0; index < effects.length; index++) {
-        const effect = effects[index];
+    for (let index = 0; index < contributions.length; index++) {
+        const navigationModifier = contributions[index];
 
-        if (!Object.hasOwn(effects, index) || effect === undefined) {
-            throw new TypeError(`missing unit navigation effect at index ${index}`);
+        if (!Object.hasOwn(contributions, index) || navigationModifier === undefined) {
+            throw new TypeError(`missing unit navigation modifier at index ${index}`);
         }
 
-        navigationEffects.push(
+        navigationModifiers.push(
             Object.freeze({
-                definition: effect.definition,
-                range: RangeGrid.create(effect.range),
-                direction: effect.direction,
+                definition: navigationModifier.definition,
+                range: RangeGrid.create(navigationModifier.range),
+                direction: navigationModifier.direction,
             }),
         );
     }
@@ -107,7 +107,7 @@ export function createUnitPlacementDefinition(
                       claims: createOccupancyClaims(placement.occupancy.claims),
                   }),
               }),
-        navigationEffects: Object.freeze(navigationEffects),
+        navigationModifiers: Object.freeze(navigationModifiers),
     });
 }
 
@@ -153,16 +153,16 @@ export function instantiateUnitPlacement(
         states,
     });
     const changes: BattlefieldChange[] = [{ type: "REGISTER_UNIT", unit }];
-    const source: SpatialEffectSource = Object.freeze({ type: "UNIT", unitId: unit.id });
-    let nextSpatialEffectId = execution.nextSpatialEffectId;
+    const source: NavigationModifierSource = Object.freeze({ type: "UNIT", unitId: unit.id });
+    let nextNavigationModifierId = execution.nextNavigationModifierId;
 
-    for (const contribution of placement.navigationEffects ?? []) {
-        const followingId = nextIdentity(nextSpatialEffectId, "spatial effect");
+    for (const contribution of placement.navigationModifiers ?? []) {
+        const followingId = nextIdentity(nextNavigationModifierId, "navigation modifier");
 
         changes.push({
-            type: "ADD_EFFECT",
-            effect: {
-                id: nextSpatialEffectId,
+            type: "ADD_NAVIGATION_MODIFIER",
+            navigationModifier: {
+                id: nextNavigationModifierId,
                 definition: contribution.definition,
                 source,
                 active: true,
@@ -175,12 +175,12 @@ export function instantiateUnitPlacement(
                 expiresAtTick: null,
             },
         });
-        nextSpatialEffectId = followingId;
+        nextNavigationModifierId = followingId;
     }
 
     return {
         unit,
-        execution: { ...execution, nextUnitId, nextSpatialEffectId },
+        execution: { ...execution, nextUnitId, nextNavigationModifierId },
         changes,
     };
 }

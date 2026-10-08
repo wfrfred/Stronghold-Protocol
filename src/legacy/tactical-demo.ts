@@ -1,8 +1,4 @@
-import {
-    BattleRuntime,
-    type BattleCommand,
-    type BattleEvent,
-} from "../core/tactical/battle/runtime.js";
+import { BattleRuntime, type Command, type Event } from "../core/tactical/battle/runtime.js";
 import type { BattlefieldMap } from "../core/tactical/battlefield/map/map.js";
 import { TICKS_PER_SECOND } from "../core/tactical/tick.js";
 import {
@@ -221,7 +217,7 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
         kind === "boss" ? { r0: 0, r1: 6, c0: 0, c1: 20 } : { r0: 6, r1: 13, c0: 0, c1: 20 };
     const fieldId = "ts-tactical-demo";
 
-    const commands = new Map<number, readonly BattleCommand[]>();
+    const commands = new Map<number, readonly Command[]>();
     const crateIds = spec.predefines
         .filter((definition) => definition.creation.type === "UNIT")
         .map((definition) => definition.id);
@@ -234,7 +230,7 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
     const previousExtrapolate = view.debug.interp.maxExtrapolate;
 
     function publish(
-        events: readonly BattleEvent[] = [],
+        events: readonly Event[] = [],
         visuals: readonly LegacyVisualEvent[] = [],
     ): void {
         const visible = presentation.units(snapshot);
@@ -300,7 +296,7 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
         view.debug.interp.snapToNewest();
     }
 
-    function advance(requested: readonly BattleCommand[] = commands.get(snapshot.tickIndex) ?? []) {
+    function advance(requested: readonly Command[] = commands.get(snapshot.tickIndex) ?? []) {
         const result = runtime.step(requested);
         snapshot = runtime.snapshot();
         const visuals = presentation.advance(snapshot, result.events);
@@ -400,7 +396,7 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
             }
 
             const tick = snapshot.tickIndex;
-            let requested: readonly BattleCommand[];
+            let requested: readonly Command[];
 
             if (type === "TRIGGER_DRAGON") {
                 requested = [{ type: "TRIGGER_BRANCH", branchId: "dragon", isLoop: true }];

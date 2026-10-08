@@ -5,7 +5,6 @@ import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import {
     createMechanismDefinition,
-    createMechanismRuntime,
 } from "../../dist/core/tactical/battlefield/mechanism.js";
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
 import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
@@ -28,7 +27,7 @@ function unitDefinition(id) {
     });
 }
 
-function battleSpec(sources = [], options = {}) {
+function createBattleInput(sources = [], options = {}) {
     const tile = createTile({
         heightType: "LOWLAND",
         buildableType: "ALL",
@@ -80,12 +79,10 @@ function battleSpec(sources = [], options = {}) {
         },
         predefines: [],
         initialMechanisms: sources,
-        initialEffects: [],
+        initialNavigationModifiers: [],
         maxTicks: 10,
-        moveMultiplier: 1,
+        routeMoveMultiplier: 1,
         rngState: 17,
-        nextUnitId: 0,
-        nextNavigationRequestId: 0,
         ...options,
     };
 }
@@ -128,24 +125,23 @@ function sourceMechanism(resources, id, receiver, options = {}) {
         ...(options.shouldFinish === undefined ? {} : { shouldFinish: options.shouldFinish }),
     });
 
-    return createMechanismRuntime({
-        id,
+    return {
         definition: createMechanismDefinition({ id: ref.id }),
         active: true,
-        effectSource: resources.effectSources.create(ref, { sourceUnitId: null }),
-    });
+        effectSource: { programRef: ref, state: { remainingCount: 3 } },
+    };
 }
 
 test("effect source runtime: initialization installs independent receiver facts from a nonspatial source", () => {
     const resources = new CombatResources();
     const receiver = receiverProgram(resources, "initial-receiver");
     const source = sourceMechanism(resources, 40, receiver);
-    const runtime = new BattleRuntime(battleSpec([source]), { combat: resources });
+    const runtime = new BattleRuntime(createBattleInput([source]), { combat: resources });
     const snapshot = runtime.snapshot();
     const registeredSource = snapshot.mechanisms[0];
     const receivers = registeredSource.effectSource.receivers;
 
-    assert.equal(registeredSource.id, 40);
+    assert.equal(registeredSource.id, 0);
     assert.equal(registeredSource.effectSource.initialized, true);
     assert.equal(registeredSource.effectSource.sourceUnitId, null);
     assert.deepEqual(receivers.map(binding => binding.unitId), [0, 1]);
@@ -156,8 +152,9 @@ test("effect source runtime: initialization installs independent receiver facts 
     assert.equal(currentAttack(snapshot, 0, resources), 120);
     assert.equal(currentAttack(snapshot, 1, resources), 120);
     assert.equal(snapshot.units.every(unit => unit.effects.instances[0].source === null), true);
-    assert.deepEqual(source.effectSource.receivers, []);
-    assert.equal(source.effectSource.initialized, false);
+    assert.equal("receivers" in source.effectSource, false);
+    assert.equal("initialized" in source.effectSource, false);
+    assert.deepEqual(source.effectSource.state, { remainingCount: 3 });
 });
 
 test("effect source runtime: scheduled registrations join continuous sources but do not extend initial selection", () => {
@@ -169,7 +166,7 @@ test("effect source runtime: scheduled registrations join continuous sources but
         continuous: false,
         selectFirst: true,
     });
-    const runtime = new BattleRuntime(battleSpec([global, once]), { combat: resources });
+    const runtime = new BattleRuntime(createBattleInput([global, once]), { combat: resources });
     const initial = runtime.snapshot();
 
     assert.equal(currentAttack(initial, 0, resources), 125);
@@ -197,7 +194,7 @@ test("effect source runtime: receiver removal is independent and source ending c
     const source = sourceMechanism(resources, 40, receiver, {
         shouldFinish: ({ tick }) => tick >= 1,
     });
-    const runtime = new BattleRuntime(battleSpec([source]), { combat: resources });
+    const runtime = new BattleRuntime(createBattleInput([source]), { combat: resources });
     const before = runtime.snapshot();
     runtime.step([{ type: "RETREAT_UNIT", unitId: 0 }]);
     const afterRemoval = runtime.snapshot();
@@ -221,7 +218,7 @@ test("effect source runtime: predefined registration joins the source during the
     const receiver = receiverProgram(resources, "predefined-receiver");
     const source = sourceMechanism(resources, 40, receiver);
     const runtime = new BattleRuntime(
-        battleSpec([source], {
+        createBattleInput([source], {
             predefines: [{
                 id: 7,
                 alias: "late-receiver",
@@ -230,7 +227,7 @@ test("effect source runtime: predefined registration joins the source during the
                     type: "UNIT",
                     definition: unitDefinition("predefined-receiver"),
                     position: [3, 0],
-                    navigationEffects: [],
+                    navigationModifiers: [],
                 },
             }],
         }),
@@ -268,7 +265,7 @@ test("effect source runtime: a receiver installation exception discards the comp
         },
     });
     const source = sourceMechanism(resources, 40, receiver);
-    const runtime = new BattleRuntime(battleSpec([source]), { combat: resources });
+    const runtime = new BattleRuntime(createBattleInput([source]), { combat: resources });
     runtime.step();
     runtime.step();
     const before = runtime.snapshot();
@@ -293,7 +290,7 @@ test("effect source runtime: delivering a battle seals the source registry", () 
     const resources = new CombatResources();
     const receiver = receiverProgram(resources, "sealed-receiver");
     const source = sourceMechanism(resources, 40, receiver);
-    const runtime = new BattleRuntime(battleSpec([source]), { combat: resources });
+    const runtime = new BattleRuntime(createBattleInput([source]), { combat: resources });
 
     assert.throws(() => sourceMechanism(resources, 41, receiver), /registration is sealed/);
     runtime.step();

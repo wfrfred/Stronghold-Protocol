@@ -5,7 +5,7 @@ import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { combatWorkView, getCombatUnit } from '../../dist/core/tactical/battle/execution/work.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
-import { createMechanismDefinition, createMechanismRuntime } from '../../dist/core/tactical/battlefield/mechanism.js';
+import { createMechanismDefinition } from '../../dist/core/tactical/battlefield/mechanism.js';
 import { createEffectSourceProgramRef, effectSourceInstallation } from '../../dist/core/tactical/battlefield/effect-source/program.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
@@ -343,10 +343,10 @@ function runtimeScenario(failure) {
     selectInitial: ({ battlefield }) => battlefield.unitIds,
     install: () => effectSourceInstallation(effect.ref, { expiresAtTick: 0 }),
   });
-  const source = createMechanismRuntime({
-    id: 40, definition: createMechanismDefinition({ id: 'expiry-source' }), active: true,
-    effectSource: resources.effectSources.create(sourceRef, { sourceUnitId: null }),
-  });
+  const source = {
+    definition: createMechanismDefinition({ id: 'expiry-source' }), active: true,
+    effectSource: { programRef: sourceRef, state: {} },
+  };
   const tile = createTile({
     heightType: 'LOWLAND', buildableType: 'ALL', passableMask: 'ALL',
     playerSideMask: 'ALL', terrain: 'NORMAL', mechanism: null,
@@ -357,10 +357,10 @@ function runtimeScenario(failure) {
     initialUnits: [{ definition, position: [0, 0] }, { definition, position: [0, 1] }],
     schedule: { type: 'TIMELINE', spawns: [] },
     predefines: [{ id: 7, alias: null, initiallyPresent: false, creation: {
-      type: 'UNIT', definition, position: [0, 2], navigationEffects: [],
+      type: 'UNIT', definition, position: [0, 2], navigationModifiers: [],
     } }],
-    initialMechanisms: [source], initialEffects: [], maxTicks: 10, moveMultiplier: 1,
-    rngState: 17, nextUnitId: 0, nextNavigationRequestId: 0,
+    initialMechanisms: [source], initialNavigationModifiers: [], maxTicks: 10, routeMoveMultiplier: 1,
+    rngState: 17,
   }, { combat: resources });
   return { runtime, fault };
 }

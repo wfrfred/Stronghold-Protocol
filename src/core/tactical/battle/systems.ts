@@ -5,16 +5,18 @@ import { createBlockingSystem } from "./phases/blocking.js";
 import { createCombatSystem } from "./phases/combat.js";
 import { createDeploymentSystem } from "./phases/deployment.js";
 import { instantiateUnitPlacement } from "./creation/placement.js";
+import { instantiateMechanismPlacement } from "./creation/mechanism.js";
+import { instantiateNavigationModifierPlacement } from "./creation/navigation-modifier.js";
+import { createSpawnScheduleDefinition } from "./schedule/definition.js";
 import {
     changePredefinedInstances,
     copyPredefinedPresence,
     createPredefinedSystem,
     type PredefinedPresence,
 } from "./predefined.js";
-import type { BattleCommand, BattleEvent, BattleResult } from "./contract.js";
+import type { Input, Command, Event, Result } from "./contract.js";
 import { cloneScheduleState, type SpawnScheduleExecution } from "./schedule/state.js";
 import { createSpawnScheduleSystem } from "./phases/spawning.js";
-import type { BattleSpec } from "./spec.js";
 import type { BattleExecutionState } from "./execution/state.js";
 import type { BattlePhase } from "./system.js";
 import { battlefieldCommitEvents, finishBattleEvents } from "./events.js";
@@ -62,11 +64,14 @@ function bindStatelessPhase(phase: BattlePhase): BattlePhase<BattleSystemStates>
     return (input, state) => ({ ...phase(input, undefined), state });
 }
 
-export function createBattleSystems(spec: BattleSpec, resources: BattleResources = {}) {
+export function createBattleSystems(input: Input, resources: BattleResources = {}) {
     const combatResources = (resources.combat ?? new CombatResources()).seal();
-    const predefined = createPredefinedSystem(spec.predefines, combatResources);
-    const schedule = createSpawnScheduleSystem(spec.schedule);
-    const movement = createMovementSystem({ moveMultiplier: spec.moveMultiplier }, combatResources);
+    const predefined = createPredefinedSystem(input.predefines, combatResources);
+    const schedule = createSpawnScheduleSystem(createSpawnScheduleDefinition(input.schedule));
+    const movement = createMovementSystem(
+        { routeMoveMultiplier: input.routeMoveMultiplier },
+        combatResources,
+    );
     const blocking = createBlockingSystem();
     const combat = createCombatSystem(combatResources, resources.compileAction);
     const deployment = createDeploymentSystem(combatResources);
@@ -78,7 +83,10 @@ export function createBattleSystems(spec: BattleSpec, resources: BattleResources
 
         return {
             ...prepared,
-            changes: [{ type: "EXPIRE_EFFECTS", tick: input.tick }, ...prepared.changes],
+            changes: [
+                { type: "EXPIRE_NAVIGATION_MODIFIERS", tick: input.tick },
+                ...prepared.changes,
+            ],
         };
     };
 
@@ -132,18 +140,42 @@ export function createBattleSystems(spec: BattleSpec, resources: BattleResources
     return {
         initialize(battlefield: BattlefieldRuntime, execution: BattleExecutionState) {
             const initialChanges: BattlefieldChange[] = [];
+            const initialUnitIds: number[] = [];
+            const initialMechanismIds: number[] = [];
 
-            for (const placement of spec.initialUnits ?? []) {
+            for (const placement of input.initialUnits) {
                 const instantiated = instantiateUnitPlacement(placement, execution, 0);
 
+                initialChanges.push(...instantiated.changes);
+                initialUnitIds.push(instantiated.unit.id);
+                execution = instantiated.execution;
+            }
+
+            for (const placement of input.initialMechanisms) {
+                const instantiated = instantiateMechanismPlacement(
+                    placement,
+                    execution,
+                    initialUnitIds,
+                );
+                initialChanges.push(...instantiated.changes);
+                initialMechanismIds.push(instantiated.mechanism.id);
+                execution = instantiated.execution;
+            }
+            for (const placement of input.initialNavigationModifiers) {
+                const instantiated = instantiateNavigationModifierPlacement(
+                    placement,
+                    execution,
+                    initialUnitIds,
+                    initialMechanismIds,
+                );
                 initialChanges.push(...instantiated.changes);
                 execution = instantiated.execution;
             }
 
             const initialized = changePredefinedInstances(
-                spec.predefines,
+                input.predefines,
                 predefined.createState(),
-                spec.predefines
+                input.predefines
                     .filter((definition) => definition.initiallyPresent)
                     .map((definition) => ({
                         type: "APPEAR_PREDEFINED",
@@ -152,15 +184,7 @@ export function createBattleSystems(spec: BattleSpec, resources: BattleResources
                 execution,
             );
 
-            battlefield.apply([
-                ...initialChanges,
-                ...spec.initialMechanisms.map((mechanism) => ({
-                    type: "REGISTER_MECHANISM" as const,
-                    mechanism,
-                })),
-                ...spec.initialEffects.map((effect) => ({ type: "ADD_EFFECT" as const, effect })),
-                ...initialized.changes,
-            ]);
+            battlefield.apply([...initialChanges, ...initialized.changes]);
 
             const preparedSources = effectSources.step(
                 {
@@ -202,9 +226,9 @@ export function createBattleSystems(spec: BattleSpec, resources: BattleResources
             states: BattleSystemStates,
             execution: BattleExecutionState,
             tick: number,
-            commands: readonly BattleCommand[],
+            commands: readonly Command[],
         ) {
-            const events: BattleEvent[] = [];
+            const events: Event[] = [];
             const removedUnits: BattlefieldChangeResult["removedUnits"][number][] = [];
 
             for (const phase of phases) {
@@ -253,11 +277,11 @@ export function createBattleSystems(spec: BattleSpec, resources: BattleResources
             states: BattleSystemStates,
             elapsedTicks: number,
             completedRouteCount: number,
-            remainingUnitIds: BattleResult["remainingUnitIds"],
-        ): BattleResult | null {
+            remainingUnitIds: Result["remainingUnitIds"],
+        ): Result | null {
             const completed = schedule.isCompleted(states.schedule);
 
-            if (!completed && elapsedTicks < spec.maxTicks) {
+            if (!completed && elapsedTicks < input.maxTicks) {
                 return null;
             }
 

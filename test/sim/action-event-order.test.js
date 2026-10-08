@@ -103,7 +103,7 @@ test("action event order: release and damage precede support loss produced by th
         nextUnitId: 3,
         nextNavigationRequestId: 0,
         nextMechanismId: 0,
-        nextSpatialEffectId: 0,
+        nextNavigationModifierId: 0,
     });
     const output = systems.step(battlefield, initialized.states, initialized.execution, 0, []);
 

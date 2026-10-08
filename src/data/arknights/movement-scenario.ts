@@ -1,5 +1,5 @@
 import type { Seed } from "../../core/common/rng.js";
-import { createBattleSpec, type BattleSpec } from "../../core/tactical/battle/spec.js";
+import type { Input } from "../../core/tactical/battle/contract.js";
 import type { PredefinedInstanceDefinition } from "../../core/tactical/battle/predefined.js";
 import type { ArknightsBlackboardEntry } from "./blackboard.js";
 import type { ArknightsTileContext } from "./map.js";
@@ -40,7 +40,7 @@ export interface ArknightsMovementSelection extends ArknightsScheduleSelection {
 
 export interface ArknightsMovementScenario {
     readonly level: ArknightsLevelDefinition;
-    readonly spec: BattleSpec;
+    readonly spec: Input;
     readonly omittedActions: readonly string[];
     readonly inactiveBranches: readonly string[];
     readonly omittedPredefines: readonly string[];
@@ -193,18 +193,17 @@ export function loadMovementScenario(
 
     return Object.freeze({
         level,
-        spec: createBattleSpec({
+        spec: {
             map: level.map,
             schedule: compiled.schedule,
             predefines,
+            initialUnits: [],
             initialMechanisms: [],
-            initialEffects: [],
+            initialNavigationModifiers: [],
             maxTicks: secondsToTicks(level.options.maxPlayTime),
-            moveMultiplier: level.options.moveMultiplier,
+            routeMoveMultiplier: level.options.moveMultiplier,
             rngState,
-            nextUnitId: 0,
-            nextNavigationRequestId: 0,
-        }),
+        } satisfies Input,
         omittedActions: Object.freeze(compiled.omittedActions),
         inactiveBranches: Object.freeze(compiled.inactiveBranches),
         omittedPredefines: Object.freeze(omittedPredefines),

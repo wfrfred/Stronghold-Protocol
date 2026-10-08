@@ -1,6 +1,6 @@
 import { assertFiniteNumber, assertPositiveSafeInteger } from "../core/common/assert.js";
 import { BattleRuntime } from "../core/tactical/battle/runtime.js";
-import type { BattleSpec } from "../core/tactical/battle/spec.js";
+import type { Input } from "../core/tactical/battle/contract.js";
 import { createBattlefieldMap, type BattlefieldMap } from "../core/tactical/battlefield/map/map.js";
 import { createTile } from "../core/tactical/battlefield/map/tile.js";
 import type { DamageType } from "../core/tactical/unit/capability/vitality/damage/contract.js";
@@ -313,7 +313,7 @@ function combatMap(options: LegacyCombatOptions): BattlefieldMap {
     );
 }
 
-export function createLegacyCombatSpec(options: LegacyCombatOptions): BattleSpec {
+export function createLegacyCombatSpec(options: LegacyCombatOptions): Input {
     const initialUnits = options.operators.map((operator) => ({
         definition: operatorDefinition(operator.definition, operator.direction ?? "RIGHT"),
         position: Tile.center(operator.position),
@@ -333,12 +333,10 @@ export function createLegacyCombatSpec(options: LegacyCombatOptions): BattleSpec
         schedule: { type: "TIMELINE", spawns },
         predefines: [],
         initialMechanisms: [],
-        initialEffects: [],
+        initialNavigationModifiers: [],
         maxTicks: options.maxTicks ?? 600,
-        moveMultiplier: 1,
+        routeMoveMultiplier: 1,
         rngState: options.seed ?? 1,
-        nextUnitId: 0,
-        nextNavigationRequestId: 0,
     };
 }
 

@@ -1,19 +1,14 @@
+import { assert, assertNonnegativeNumber, assertPositiveSafeInteger } from "../../common/assert.js";
+
 import { BattlefieldRuntime } from "../battlefield/runtime.js";
 import type { NavigationMaps } from "../battlefield/navigation/map.js";
 import { copyUnitSnapshot } from "../unit/snapshot.js";
-import { createBattleSpec, type BattleSpec } from "./spec.js";
 import type { BattleExecutionState } from "./execution/state.js";
 import { predefinedIdsForAlias } from "./predefined.js";
 import { createBattleSystems, type BattleSystemStates, type BattleResources } from "./systems.js";
-import type { BattleCommand, BattleResult, BattleSnapshot, BattleStep } from "./contract.js";
+import type { Input, Command, Result, Snapshot, Step } from "./contract.js";
 
-export type {
-    BattleCommand,
-    BattleEvent,
-    BattleResult,
-    BattleSnapshot,
-    BattleStep,
-} from "./contract.js";
+export type { Input, Command, Event, Result, Snapshot, Step } from "./contract.js";
 
 interface BattleRuntimeState {
     readonly battlefield: BattlefieldRuntime;
@@ -21,43 +16,47 @@ interface BattleRuntimeState {
     readonly systems: BattleSystemStates;
     readonly execution: BattleExecutionState;
     readonly completedRouteCount: number;
-    readonly result: BattleResult | null;
+    readonly result: Result | null;
 }
 
-function nextIdentityAfter(ids: readonly number[]): number {
-    const next = ids.reduce((next, id) => Math.max(next, id + 1), 0);
-
-    if (!Number.isSafeInteger(next)) {
-        throw new RangeError("initial instance identity overflow");
-    }
-
-    return next;
-}
-
-function copyBattleResult(result: BattleResult | null): BattleResult | null {
+function copyResult(result: Result | null): Result | null {
     return result === null ? null : { ...result, remainingUnitIds: [...result.remainingUnitIds] };
 }
 
 export class BattleRuntime {
-    readonly #spec: BattleSpec;
+    readonly #input: Input;
     readonly #systems: ReturnType<typeof createBattleSystems>;
     #state: BattleRuntimeState;
 
-    constructor(spec: BattleSpec, resources: BattleResources = {}) {
-        this.#spec = createBattleSpec(spec);
-        this.#systems = createBattleSystems(this.#spec, resources);
+    constructor(input: Input, resources: BattleResources = {}) {
+        assertPositiveSafeInteger(input.maxTicks, "battle tick budget");
+        assertNonnegativeNumber(input.routeMoveMultiplier, "routeMoveMultiplier");
+        assert(
+            Number.isInteger(input.rngState) && input.rngState >= 0 && input.rngState < 2 ** 32,
+            "battle RNG state must be an unsigned 32-bit integer",
+            RangeError,
+        );
 
-        const battlefield = BattlefieldRuntime.create({ map: this.#spec.map }, copyUnitSnapshot);
+        const predefinedIds = new Set<number>();
+
+        for (const definition of input.predefines) {
+            if (predefinedIds.has(definition.id)) {
+                throw new RangeError(`duplicate predefined definition: ${definition.id}`);
+            }
+
+            predefinedIds.add(definition.id);
+        }
+
+        this.#input = input;
+        this.#systems = createBattleSystems(this.#input, resources);
+
+        const battlefield = BattlefieldRuntime.create({ map: this.#input.map }, copyUnitSnapshot);
         const initialized = this.#systems.initialize(battlefield, {
-            rngState: this.#spec.rngState,
-            nextUnitId: this.#spec.nextUnitId,
-            nextNavigationRequestId: this.#spec.nextNavigationRequestId,
-            nextMechanismId: nextIdentityAfter(
-                this.#spec.initialMechanisms.map((mechanism) => mechanism.id),
-            ),
-            nextSpatialEffectId: nextIdentityAfter(
-                this.#spec.initialEffects.map((effect) => effect.id),
-            ),
+            rngState: this.#input.rngState,
+            nextUnitId: 0,
+            nextNavigationRequestId: 0,
+            nextMechanismId: 0,
+            nextNavigationModifierId: 0,
         });
 
         this.#state = {
@@ -75,18 +74,18 @@ export class BattleRuntime {
     }
 
     predefinedIdsForAlias(alias: string): readonly number[] {
-        return predefinedIdsForAlias(this.#spec.predefines, alias);
+        return predefinedIdsForAlias(this.#input.predefines, alias);
     }
 
-    get result(): BattleResult | null {
-        return copyBattleResult(this.#state.result);
+    get result(): Result | null {
+        return copyResult(this.#state.result);
     }
 
     get spawnCounts(): { readonly spawnedCount: number; readonly unspawnedCount: number } {
         return this.#systems.spawnCounts(this.#state.systems);
     }
 
-    snapshot(): BattleSnapshot {
+    snapshot(): Snapshot {
         const { battlefield, tickIndex, systems, execution, completedRouteCount, result } =
             this.#state;
 
@@ -98,13 +97,15 @@ export class BattleRuntime {
             blockingRelations: battlefield.blockingRelations,
             supportRelations: battlefield.supportRelations,
             mechanisms: battlefield.mechanismIds.map((id) => battlefield.getMechanism(id)!),
-            effects: battlefield.effectIds.map((id) => battlefield.getEffect(id)!),
+            navigationModifiers: battlefield.navigationModifierIds.map((id) =>
+                battlefield.getNavigationModifier(id)!,
+            ),
             completedRouteCount,
-            result: copyBattleResult(result),
+            result: copyResult(result),
         };
     }
 
-    step(commands: readonly BattleCommand[] = []): BattleStep {
+    step(commands: readonly Command[] = []): Step {
         if (this.#state.result !== null) {
             return { events: [], result: this.result };
         }
@@ -122,10 +123,10 @@ export class BattleRuntime {
 
     #advance(
         workingState: BattleRuntimeState,
-        commands: readonly BattleCommand[],
+        commands: readonly Command[],
     ): {
         readonly state: BattleRuntimeState;
-        readonly output: BattleStep;
+        readonly output: Step;
     } {
         const stepped = this.#systems.step(
             workingState.battlefield,
@@ -153,13 +154,13 @@ export class BattleRuntime {
                 systems: stepped.states,
                 execution: stepped.execution,
             },
-            output: { events: stepped.events, result: copyBattleResult(result) },
+            output: { events: stepped.events, result: copyResult(result) },
         };
     }
 }
 
-export function simulateBattle(spec: BattleSpec): BattleResult {
-    const runtime = new BattleRuntime(spec);
+export function simulateBattle(input: Input): Result {
+    const runtime = new BattleRuntime(input);
 
     while (runtime.result === null) {
         runtime.step();

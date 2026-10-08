@@ -9,10 +9,10 @@ import { releaseBlockingRelations } from "../blocking/relations.js";
 import type { BattlefieldChange, BattlefieldRemovalReason } from "../contract.js";
 import { createMechanismRuntime, type MechanismId } from "../mechanism.js";
 import {
-    createNavigationSpatialEffect,
-    createSpatialEffectRegion,
-    type SpatialEffectId,
-} from "../navigation/effect.js";
+    createNavigationModifier,
+    createNavigationModifierRegion,
+    type NavigationModifierId,
+} from "../navigation/modifier.js";
 import type { BattlefieldContent } from "./state.js";
 import type { BattlefieldDependencyChanges } from "./dependencies.js";
 import { validateSupportRelations } from "../support/relations.js";
@@ -46,21 +46,24 @@ export function ownBattlefieldChanges<U extends Unit>(
                     mechanism: createMechanismRuntime(change.mechanism),
                 };
 
-            case "ADD_EFFECT":
-                return { ...change, effect: createNavigationSpatialEffect(change.effect) };
+            case "ADD_NAVIGATION_MODIFIER":
+                return {
+                    ...change,
+                    navigationModifier: createNavigationModifier(change.navigationModifier),
+                };
 
             case "SET_POSITION_AND_RELEASE_BLOCKING":
                 return { ...change, position: createWorldPosition(...change.position) };
 
-            case "SET_EFFECT_REGION":
-                return { ...change, region: createSpatialEffectRegion(change.region) };
+            case "SET_NAVIGATION_MODIFIER_REGION":
+                return { ...change, region: createNavigationModifierRegion(change.region) };
 
-            case "EXPIRE_EFFECTS":
+            case "EXPIRE_NAVIGATION_MODIFIERS":
             case "RELEASE_BLOCKING_RELATIONS":
-            case "REMOVE_EFFECT":
+            case "REMOVE_NAVIGATION_MODIFIER":
             case "REMOVE_MECHANISM":
             case "REMOVE_UNIT":
-            case "SET_EFFECT_ACTIVE":
+            case "SET_NAVIGATION_MODIFIER_ACTIVE":
             case "SET_MECHANISM_ACTIVE":
             default:
                 return change;
@@ -109,7 +112,7 @@ export function applyBattlefieldChanges<U extends Unit>(
     let blockingRelations = previous.blockingRelations;
     let supportRelations = previous.supportRelations;
     const mechanisms = copyOnWriteMap(previous.mechanisms);
-    const effects = copyOnWriteMap(previous.effects);
+    const navigationModifiers = copyOnWriteMap(previous.navigationModifiers);
     const removedUnits: {
         unitId: UnitId;
         reason: BattlefieldRemovalReason;
@@ -117,18 +120,18 @@ export function applyBattlefieldChanges<U extends Unit>(
     }[] = [];
     const registeredUnitIds: UnitId[] = [];
     const removedMechanisms: { mechanismId: MechanismId; reason: BattlefieldRemovalReason }[] = [];
-    const removedEffects = new Set<SpatialEffectId>();
+    const removedNavigationModifiers = new Set<NavigationModifierId>();
     const updatedUnitIds = new Set<UnitId>();
     const updatedMechanismIds = new Set<MechanismId>();
-    const updatedEffectIds = new Set<SpatialEffectId>();
+    const updatedNavigationModifierIds = new Set<NavigationModifierId>();
     let unitMembershipChanged = false;
-    let effectMembershipChanged = false;
+    let navigationModifierMembershipChanged = false;
 
-    const removeEffect = (id: SpatialEffectId): void => {
-        effects.edit().delete(id);
-        updatedEffectIds.add(id);
-        effectMembershipChanged = true;
-        removedEffects.add(id);
+    const removeNavigationModifier = (id: NavigationModifierId): void => {
+        navigationModifiers.edit().delete(id);
+        updatedNavigationModifierIds.add(id);
+        navigationModifierMembershipChanged = true;
+        removedNavigationModifiers.add(id);
     };
 
     for (const change of changes) {
@@ -185,14 +188,15 @@ export function applyBattlefieldChanges<U extends Unit>(
                 unitMembershipChanged = true;
                 removedUnits.push({ unitId: change.unitId, reason: change.reason, unit });
 
-                for (const effect of effects.value.values()) {
+                for (const navigationModifier of navigationModifiers.value.values()) {
                     const ownedOrAnchoredByUnit =
-                        (effect.source.type === "UNIT" && effect.source.unitId === change.unitId) ||
-                        (effect.region.type === "FOLLOW_UNIT" &&
-                            effect.region.unitId === change.unitId);
+                        (navigationModifier.source.type === "UNIT" &&
+                            navigationModifier.source.unitId === change.unitId) ||
+                        (navigationModifier.region.type === "FOLLOW_UNIT" &&
+                            navigationModifier.region.unitId === change.unitId);
 
                     if (ownedOrAnchoredByUnit) {
-                        removeEffect(effect.id);
+                        removeNavigationModifier(navigationModifier.id);
                     }
                 }
 
@@ -233,50 +237,70 @@ export function applyBattlefieldChanges<U extends Unit>(
                     reason: change.reason,
                 });
 
-                for (const effect of effects.value.values()) {
+                for (const navigationModifier of navigationModifiers.value.values()) {
                     if (
-                        effect.source.type === "MECHANISM" &&
-                        effect.source.mechanismId === change.mechanismId
+                        navigationModifier.source.type === "MECHANISM" &&
+                        navigationModifier.source.mechanismId === change.mechanismId
                     ) {
-                        removeEffect(effect.id);
+                        removeNavigationModifier(navigationModifier.id);
                     }
                 }
 
                 break;
 
-            case "ADD_EFFECT":
-                register(effects.edit(), change.effect.id, change.effect, "effect");
-                updatedEffectIds.add(change.effect.id);
-                effectMembershipChanged = true;
+            case "ADD_NAVIGATION_MODIFIER":
+                register(
+                    navigationModifiers.edit(),
+                    change.navigationModifier.id,
+                    change.navigationModifier,
+                    "navigation modifier",
+                );
+                updatedNavigationModifierIds.add(change.navigationModifier.id);
+                navigationModifierMembershipChanged = true;
                 break;
 
-            case "SET_EFFECT_ACTIVE":
-                effects.edit().set(change.effectId, {
-                    ...requireEntry(effects.value, change.effectId, "effect"),
+            case "SET_NAVIGATION_MODIFIER_ACTIVE":
+                navigationModifiers.edit().set(change.navigationModifierId, {
+                    ...requireEntry(
+                        navigationModifiers.value,
+                        change.navigationModifierId,
+                        "navigation modifier",
+                    ),
                     active: change.active,
                 });
-                updatedEffectIds.add(change.effectId);
+                updatedNavigationModifierIds.add(change.navigationModifierId);
                 break;
 
-            case "SET_EFFECT_REGION":
-                effects.edit().set(change.effectId, {
-                    ...requireEntry(effects.value, change.effectId, "effect"),
+            case "SET_NAVIGATION_MODIFIER_REGION":
+                navigationModifiers.edit().set(change.navigationModifierId, {
+                    ...requireEntry(
+                        navigationModifiers.value,
+                        change.navigationModifierId,
+                        "navigation modifier",
+                    ),
                     region: change.region,
                 });
-                updatedEffectIds.add(change.effectId);
+                updatedNavigationModifierIds.add(change.navigationModifierId);
                 break;
 
-            case "REMOVE_EFFECT":
-                requireEntry(effects.value, change.effectId, "effect");
-                removeEffect(change.effectId);
+            case "REMOVE_NAVIGATION_MODIFIER":
+                requireEntry(
+                    navigationModifiers.value,
+                    change.navigationModifierId,
+                    "navigation modifier",
+                );
+                removeNavigationModifier(change.navigationModifierId);
                 break;
 
-            case "EXPIRE_EFFECTS":
-                assertNonnegativeSafeInteger(change.tick, "effect expiry tick");
+            case "EXPIRE_NAVIGATION_MODIFIERS":
+                assertNonnegativeSafeInteger(change.tick, "navigation modifier expiry tick");
 
-                for (const effect of effects.value.values()) {
-                    if (effect.expiresAtTick !== null && effect.expiresAtTick <= change.tick) {
-                        removeEffect(effect.id);
+                for (const navigationModifier of navigationModifiers.value.values()) {
+                    if (
+                        navigationModifier.expiresAtTick !== null &&
+                        navigationModifier.expiresAtTick <= change.tick
+                    ) {
+                        removeNavigationModifier(navigationModifier.id);
                     }
                 }
 
@@ -287,16 +311,16 @@ export function applyBattlefieldChanges<U extends Unit>(
     const dependencies: BattlefieldDependencyChanges = {
         updatedUnitIds,
         updatedMechanismIds,
-        updatedEffectIds,
+        updatedNavigationModifierIds,
         unitMembershipChanged,
-        effectMembershipChanged,
+        navigationModifierMembershipChanged,
     };
 
     return {
         content: {
             units: units.value,
             mechanisms: mechanisms.value,
-            effects: effects.value,
+            navigationModifiers: navigationModifiers.value,
             blockingRelations,
             supportRelations,
         },
@@ -305,7 +329,7 @@ export function applyBattlefieldChanges<U extends Unit>(
             registeredUnitIds,
             removedUnits,
             removedMechanisms,
-            removedEffects: [...removedEffects],
+            removedNavigationModifiers: [...removedNavigationModifiers],
         },
     };
 }

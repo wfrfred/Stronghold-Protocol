@@ -8,8 +8,8 @@ import { isSpatiallyPresent } from "../../unit/capability/presence.js";
 import type { Unit, UnitId } from "../../unit/unit.js";
 import type { BattlefieldMap } from "../map/map.js";
 import type { MechanismId } from "../mechanism.js";
-import type { SpatialEffectId, SpatialEffectRegion } from "../navigation/effect.js";
-import { battlefieldTileKey, spatialEffectSourceKey } from "./indexes.js";
+import type { NavigationModifierId, NavigationModifierRegion } from "../navigation/modifier.js";
+import { battlefieldTileKey, navigationModifierSourceKey } from "./indexes.js";
 import type { BattlefieldContent, BattlefieldState } from "./state.js";
 import { readBlockingFacts, sameBlockingFacts } from "../blocking/facts.js";
 import { readSupportFacts, sameSupportFacts } from "../support/facts.js";
@@ -17,9 +17,9 @@ import { readSupportFacts, sameSupportFacts } from "../support/facts.js";
 export interface BattlefieldDependencyChanges {
     readonly updatedUnitIds: ReadonlySet<UnitId>;
     readonly updatedMechanismIds: ReadonlySet<MechanismId>;
-    readonly updatedEffectIds: ReadonlySet<SpatialEffectId>;
+    readonly updatedNavigationModifierIds: ReadonlySet<NavigationModifierId>;
     readonly unitMembershipChanged: boolean;
-    readonly effectMembershipChanged: boolean;
+    readonly navigationModifierMembershipChanged: boolean;
 }
 
 const EMPTY_CLAIMS: readonly OccupancyClaim[] = Object.freeze([]);
@@ -55,7 +55,7 @@ function sameOccupancyInputs(left: Unit, right: Unit): boolean {
     );
 }
 
-function sameRegion(left: SpatialEffectRegion, right: SpatialEffectRegion): boolean {
+function sameRegion(left: NavigationModifierRegion, right: NavigationModifierRegion): boolean {
     if (left === right) {
         return true;
     }
@@ -85,7 +85,7 @@ function sameRegion(left: SpatialEffectRegion, right: SpatialEffectRegion): bool
     });
 }
 
-function anchorId(region: SpatialEffectRegion): UnitId | undefined {
+function anchorId(region: NavigationModifierRegion): UnitId | undefined {
     return region.type === "FOLLOW_UNIT" ? region.unitId : undefined;
 }
 
@@ -99,8 +99,8 @@ export function deriveBattlefieldDependencies<U extends Unit>(
     let occupancy = changes.unitMembershipChanged;
     let support = changes.unitMembershipChanged;
     let blocking = changes.unitMembershipChanged;
-    let effectRelations = changes.effectMembershipChanged;
-    let effectCoverage = changes.effectMembershipChanged;
+    let navigationModifierRelations = changes.navigationModifierMembershipChanged;
+    let navigationModifierCoverage = changes.navigationModifierMembershipChanged;
 
     for (const id of changes.updatedUnitIds) {
         const left = previous.units.get(id);
@@ -111,13 +111,16 @@ export function deriveBattlefieldDependencies<U extends Unit>(
         }
 
         const presenceChanged = isSpatiallyPresent(left) !== isSpatiallyPresent(right);
-        const anchors = previous.spatial.effectsByAnchor.get(id);
+        const anchors = previous.spatial.navigationModifiersByAnchor.get(id);
         const retainedAnchor =
             anchors !== undefined &&
-            [...anchors].some((effectId) => {
-                const effect = content.effects.get(effectId);
+            [...anchors].some((navigationModifierId) => {
+                const navigationModifier = content.navigationModifiers.get(navigationModifierId);
 
-                return effect?.region.type === "FOLLOW_UNIT" && effect.region.unitId === id;
+                return (
+                    navigationModifier?.region.type === "FOLLOW_UNIT" &&
+                    navigationModifier.region.unitId === id
+                );
             });
 
         let tileChanged = false;
@@ -137,8 +140,8 @@ export function deriveBattlefieldDependencies<U extends Unit>(
         occupancy ||= !sameOccupancyInputs(left, right);
         support ||= !sameSupportFacts(readSupportFacts(left), readSupportFacts(right));
         blocking ||= !sameBlockingFacts(map, readBlockingFacts(left), readBlockingFacts(right));
-        effectCoverage ||=
-            (presenceChanged && previous.spatial.effectsBySource.has(`UNIT:${id}`)) ||
+        navigationModifierCoverage ||=
+            (presenceChanged && previous.spatial.navigationModifiersBySource.has(`UNIT:${id}`)) ||
             ((presenceChanged || tileChanged) && retainedAnchor);
     }
 
@@ -146,29 +149,37 @@ export function deriveBattlefieldDependencies<U extends Unit>(
         const left = previous.mechanisms.get(id);
         const right = content.mechanisms.get(id);
 
-        effectCoverage ||=
+        navigationModifierCoverage ||=
             left?.active !== right?.active &&
-            previous.spatial.effectsBySource.has(`MECHANISM:${id}`);
+            previous.spatial.navigationModifiersBySource.has(`MECHANISM:${id}`);
     }
 
-    for (const id of changes.updatedEffectIds) {
-        const left = previous.effects.get(id);
-        const right = content.effects.get(id);
+    for (const id of changes.updatedNavigationModifierIds) {
+        const left = previous.navigationModifiers.get(id);
+        const right = content.navigationModifiers.get(id);
 
         if (left === undefined || right === undefined) {
             continue;
         }
 
         const sourceChanged =
-            spatialEffectSourceKey(left.source) !== spatialEffectSourceKey(right.source);
+            navigationModifierSourceKey(left.source) !== navigationModifierSourceKey(right.source);
 
-        effectRelations ||= sourceChanged || anchorId(left.region) !== anchorId(right.region);
-        effectCoverage ||=
+        navigationModifierRelations ||=
+            sourceChanged || anchorId(left.region) !== anchorId(right.region);
+        navigationModifierCoverage ||=
             sourceChanged ||
             left.active !== right.active ||
             left.definition !== right.definition ||
             !sameRegion(left.region, right.region);
     }
 
-    return { unitTiles, occupancy, support, blocking, effectRelations, effectCoverage };
+    return {
+        unitTiles,
+        occupancy,
+        support,
+        blocking,
+        navigationModifierRelations,
+        navigationModifierCoverage,
+    };
 }

@@ -15,7 +15,7 @@ import { makeBattle, flatStage, chessRec, enemyRec } from '../helpers/battleHarn
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createBattlefieldRuntime } from '../../dist/core/tactical/battlefield/runtime.js';
 import { createMechanismDefinition } from '../../dist/core/tactical/battlefield/mechanism.js';
-import { createNavigationEffectDefinition, createNavigationSpatialEffect } from '../../dist/core/tactical/battlefield/navigation/effect.js';
+import { createNavigationModifierDefinition, createNavigationModifier } from '../../dist/core/tactical/battlefield/navigation/modifier.js';
 import { hasSpatialPresence, isSpatiallyPresent } from '../../dist/core/tactical/unit/capability/presence.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { initializeOffenseState } from '../../dist/core/tactical/unit/capability/offense/capability.js';
@@ -250,9 +250,9 @@ const presenceUnit = (id, position) => ({
   vitality: initializeVitalityState({maxHp:100}), spatialPresence: { present: true },
 });
 
-const presenceEffect = (id, source, region, costFloor = 1000) => createNavigationSpatialEffect({
+const presenceNavigationModifier = (id, source, region, costFloor = 1000) => createNavigationModifier({
   id, source, region,
-  definition: createNavigationEffectDefinition({
+  definition: createNavigationModifierDefinition({
     id: `presence_effect_${id}`, WALK: { denyPassage: false, deniedDepartures: [], costFloor }, FLY: null,
   }),
   active: true, expiresAtTick: null,
@@ -333,7 +333,7 @@ test('core failure to copy a public removal fact leaves battlefield state unpubl
   assert.equal(runtime.navigationMaps, maps);
 });
 
-test('core hidden effect sources and anchors suspend navigation contributions without removing effects', () => {
+test('core hidden navigation modifier sources and anchors suspend contributions without removing effects', () => {
   const runtime = presenceBattlefield();
   const source = presenceUnit(1, [0, 0]), anchor = presenceUnit(2, [2, 0]);
   const bare = { id: 3, definition: Object.freeze({ id: 'bare' }), position: Object.freeze([4, 0]) };
@@ -342,24 +342,24 @@ test('core hidden effect sources and anchors suspend navigation contributions wi
     { type: 'REGISTER_UNIT', unit: source }, { type: 'REGISTER_UNIT', unit: anchor },
     { type: 'REGISTER_UNIT', unit: bare },
     { type: 'REGISTER_MECHANISM', mechanism: { id: 1, definition: createMechanismDefinition({ id: 'presence_mechanism' }), active: true } },
-    { type: 'ADD_EFFECT', effect: presenceEffect(1, { type: 'UNIT', unitId: 1 }, fixed([0, 1])) },
-    { type: 'ADD_EFFECT', effect: presenceEffect(2, { type: 'MECHANISM', mechanismId: 1 },
+    { type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: presenceNavigationModifier(1, { type: 'UNIT', unitId: 1 }, fixed([0, 1])) },
+    { type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: presenceNavigationModifier(2, { type: 'MECHANISM', mechanismId: 1 },
       { type: 'FOLLOW_UNIT', unitId: 2, range: [[0, 0]], direction: 'RIGHT' }) },
-    { type: 'ADD_EFFECT', effect: presenceEffect(3, { type: 'UNIT', unitId: 3 }, fixed([0, 4]), 2000) },
+    { type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: presenceNavigationModifier(3, { type: 'UNIT', unitId: 3 }, fixed([0, 4]), 2000) },
   ]);
   const fly = runtime.navigationMaps.FLY;
   assert.deepEqual(runtime.navigationMaps.WALK.cells.map(cell => cell.moveCost), [1, 1000, 1000, 1, 2000]);
   source.spatialPresence.present = false;
   anchor.spatialPresence.present = false;
   const hidden = runtime.apply([{ type: 'UPDATE_UNIT', unit: source }, { type: 'UPDATE_UNIT', unit: anchor }]);
-  assert.deepEqual(hidden.removedEffects, []);
+  assert.deepEqual(hidden.removedNavigationModifiers, []);
   assert.deepEqual(hidden.changedNavigationModes, ['WALK']);
-  assert.deepEqual(runtime.effectIds, [1, 2, 3]);
-  assert.equal(runtime.getEffect(1).active, true);
-  assert.deepEqual(runtime.effectsFrom({ type: 'UNIT', unitId: 1 }), [1]);
-  assert.deepEqual(runtime.effectsFollowing(2), [2]);
-  assert.deepEqual(runtime.effectsAt([0, 1]), []);
-  assert.deepEqual(runtime.effectsAt([0, 2]), []);
+  assert.deepEqual(runtime.navigationModifierIds, [1, 2, 3]);
+  assert.equal(runtime.getNavigationModifier(1).active, true);
+  assert.deepEqual(runtime.navigationModifiersFrom({ type: 'UNIT', unitId: 1 }), [1]);
+  assert.deepEqual(runtime.navigationModifiersFollowing(2), [2]);
+  assert.deepEqual(runtime.navigationModifiersAt([0, 1]), []);
+  assert.deepEqual(runtime.navigationModifiersAt([0, 2]), []);
   assert.deepEqual(runtime.navigationMaps.WALK.cells.map(cell => cell.moveCost), [1, 1, 1, 1, 2000]);
   const dormant = runtime.navigationMaps;
   runtime.apply([{ type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 2, position: Object.freeze([3, 0]) }]);
@@ -369,7 +369,7 @@ test('core hidden effect sources and anchors suspend navigation contributions wi
   const movedAnchor = runtime.getUnit(2);
   movedAnchor.spatialPresence.present = true;
   runtime.apply([{ type: 'UPDATE_UNIT', unit: source }, { type: 'UPDATE_UNIT', unit: movedAnchor }]);
-  assert.deepEqual(runtime.effectsAt([0, 3]), [2]);
+  assert.deepEqual(runtime.navigationModifiersAt([0, 3]), [2]);
   assert.deepEqual(runtime.unitsAt([0, 3]).map(unit => unit.id), [2]);
   assert.deepEqual(runtime.navigationMaps.WALK.cells.map(cell => cell.moveCost), [1, 1000, 1, 1000, 2000]);
   assert.equal(runtime.navigationMaps.FLY, fly);
@@ -380,7 +380,7 @@ test('core hidden effect sources and anchors suspend navigation contributions wi
   movedAnchor.spatialPresence.present = true;
   runtime.apply([{ type: 'UPDATE_UNIT', unit: movedAnchor }]);
   assert.equal(runtime.navigationMaps, inactive);
-  assert.deepEqual(runtime.effectsAt([0, 3]), []);
+  assert.deepEqual(runtime.navigationModifiersAt([0, 3]), []);
 });
 
 test('core failed presence updates restore spatial membership and projected maps atomically', () => {
@@ -388,7 +388,7 @@ test('core failed presence updates restore spatial membership and projected maps
   const unit = presenceUnit(1, [2, 0]);
   runtime.apply([
     { type: 'REGISTER_UNIT', unit },
-    { type: 'ADD_EFFECT', effect: presenceEffect(1, { type: 'UNIT', unitId: 1 },
+    { type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: presenceNavigationModifier(1, { type: 'UNIT', unitId: 1 },
       { type: 'FOLLOW_UNIT', unitId: 1, range: [[0, 0]], direction: 'RIGHT' }) },
   ]);
   const maps = runtime.navigationMaps;
@@ -397,20 +397,20 @@ test('core failed presence updates restore spatial membership and projected maps
     hidden.spatialPresence.present = false;
     field.apply([{ type: 'UPDATE_UNIT', unit: hidden }]);
     assert.deepEqual(field.unitsAt([0, 2]), []);
-    assert.deepEqual(field.effectsAt([0, 2]), []);
+    assert.deepEqual(field.navigationModifiersAt([0, 2]), []);
     assert.notEqual(field.navigationMaps, maps);
     throw new Error('abort presence');
   }), /abort presence/);
   assert.equal(runtime.navigationMaps, maps);
   assert.equal(runtime.getUnit(1).spatialPresence.present, true);
   assert.deepEqual(runtime.unitsAt([0, 2]).map(unit => unit.id), [1]);
-  assert.deepEqual(runtime.effectsAt([0, 2]), [1]);
+  assert.deepEqual(runtime.navigationModifiersAt([0, 2]), [1]);
 });
 
 test('core placement entrances consistently reject duplicate occupancy', () => {
   const placement = { definition: { id: 'placement' }, position: [0, 0], occupancy: { claims: [] },
     states: { occupancy: { claims: [{ position: [0, 1], slot: 'DEPLOYMENT', type: 'RESERVATION' }] } } };
-  const execution = { rngState: 1, nextUnitId: 0, nextNavigationRequestId: 0, nextMechanismId: 0, nextSpatialEffectId: 0 };
+  const execution = { rngState: 1, nextUnitId: 0, nextNavigationRequestId: 0, nextMechanismId: 0, nextNavigationModifierId: 0 };
   assert.throws(() => createUnitPlacementDefinition(placement), /single initial state/);
   assert.throws(() => instantiateUnitPlacement(placement, execution, 0), /single initial state/);
   const viaStates = { ...placement };
@@ -861,7 +861,7 @@ const requiredPlaced = instantiateUnitPlacement(requiredPlacement, execution, 0)
 requiredPlaced.unit.occupancy.claims;
 type RequiredPlacementCapabilities = Assert<typeof requiredPlaced.unit extends InitializedUnit<EnemyProbe | DeviceProbe> & Occupancy ? true : false>;
 type RequiredPlacementInput = Assert<InitializedUnit<EnemyProbe | DeviceProbe> & Occupancy extends typeof requiredPlaced.unit ? true : false>;
-type NormalizedPlacementFields = Assert<Equal<keyof typeof requiredPlacement, 'definition' | 'position' | 'occupancy' | 'navigationEffects'>>;
+type NormalizedPlacementFields = Assert<Equal<keyof typeof requiredPlacement, 'definition' | 'position' | 'occupancy' | 'navigationModifiers'>>;
 if (union.definition.kind === 'enemy') { const code: 17 = union.definition.enemyCode; }
 else { const code: 29 = union.definition.deviceCode; }
 const prepared = initializeUnit({ id: 3, definition: enemyDefinition, position: [0, 0],

@@ -1,4 +1,4 @@
-import type { BattleEvent, BattleSnapshot } from "../core/tactical/battle/contract.js";
+import type { Event, Snapshot } from "../core/tactical/battle/contract.js";
 import type { DamageType } from "../core/tactical/unit/capability/vitality/damage/contract.js";
 import { hasActionDefinition } from "../core/tactical/unit/capability/action/capability.js";
 import { hasAllegiance } from "../core/tactical/unit/capability/allegiance.js";
@@ -141,7 +141,7 @@ function unitInfo(unit: Unit, data: LegacyData): LegacyUnitInfo {
     };
 }
 
-function unitTuple(unit: Unit, snapshot: BattleSnapshot, dead = false): number[] {
+function unitTuple(unit: Unit, snapshot: Snapshot, dead = false): number[] {
     const blocked = snapshot.blockingRelations.some(
         (relation) => relation.blockedUnitId === unit.id,
     );
@@ -186,7 +186,7 @@ export class TacticalDemoPresentation {
         this.#damageCount = 0;
     }
 
-    advance(after: BattleSnapshot, events: readonly BattleEvent[]): readonly LegacyVisualEvent[] {
+    advance(after: Snapshot, events: readonly Event[]): readonly LegacyVisualEvent[] {
         const visible: LegacyVisualEvent[] = [];
 
         for (const [id, tombstone] of this.#tombstones) {
@@ -272,7 +272,7 @@ export class TacticalDemoPresentation {
         return visible;
     }
 
-    units(snapshot: BattleSnapshot): readonly PresentedUnit[] {
+    units(snapshot: Snapshot): readonly PresentedUnit[] {
         const presented = snapshot.units.filter(isSpatiallyPresent).map((unit) => ({
             info: unitInfo(unit, this.#data),
             tuple: unitTuple(unit, snapshot),
@@ -300,7 +300,7 @@ export class TacticalDemoPresentation {
         };
     }
 
-    replayEvents(snapshot: BattleSnapshot): readonly LegacyVisualEvent[] {
+    replayEvents(snapshot: Snapshot): readonly LegacyVisualEvent[] {
         const live = new Set(snapshot.units.filter(isSpatiallyPresent).map((unit) => unit.id));
 
         return [...this.#attacks]

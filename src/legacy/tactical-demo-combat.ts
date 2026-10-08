@@ -1,4 +1,4 @@
-import type { BattleSpec } from "../core/tactical/battle/spec.js";
+import type { Input } from "../core/tactical/battle/contract.js";
 import type { BattlefieldMap } from "../core/tactical/battlefield/map/map.js";
 import type { RouteDefinition } from "../core/tactical/unit/capability/locomotion/route/definition.js";
 import { TICKS_PER_SECOND } from "../core/tactical/tick.js";
@@ -35,7 +35,7 @@ export function createTacticalCombatDemoSpec(
     data: LegacyData,
     seed: number,
     scenario: TacticalCombatScenario = "MIXED",
-): BattleSpec {
+): Input {
     const operators: LegacyCombatOptions["operators"][number][] = [];
 
     if (scenario !== "RANGED") {

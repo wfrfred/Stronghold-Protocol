@@ -4,7 +4,7 @@ import {
     type PredefinedInstanceDefinition,
 } from "../../core/tactical/battle/predefined.js";
 import { createMechanismDefinition } from "../../core/tactical/battlefield/mechanism.js";
-import { createNavigationEffectDefinition } from "../../core/tactical/battlefield/navigation/effect.js";
+import { createNavigationModifierDefinition } from "../../core/tactical/battlefield/navigation/modifier.js";
 import { Tile, createTileOffset } from "../../core/tactical/geometry/coordinate.js";
 import { RangeGrid } from "../../core/tactical/geometry/range.js";
 import {
@@ -147,12 +147,12 @@ export function parsePredefinedInstanceDefinition(
             creation: {
                 type: "MECHANISM",
                 definition: createMechanismDefinition({ id: instance.inst.characterKey }),
-                navigationEffects: [],
+                navigationModifiers: [],
             },
         });
     }
 
-    const effect = createNavigationEffectDefinition({
+    const navigationModifierDefinition = createNavigationModifierDefinition({
         id: `${profile.prefabKey}:tile-navigation`,
         WALK: { denyPassage: false, deniedDepartures: [], costFloor: profile.walkCostFloor },
         FLY: null,
@@ -169,9 +169,9 @@ export function parsePredefinedInstanceDefinition(
             occupancy: createOccupancyState({
                 claims: [{ position: instance.position, slot: "SUPPORT", type: "PRESENT" }],
             }),
-            navigationEffects: [
+            navigationModifiers: [
                 {
-                    definition: effect,
+                    definition: navigationModifierDefinition,
                     range: RangeGrid.create([createTileOffset(0, 0)]),
                     direction: instance.direction,
                 },

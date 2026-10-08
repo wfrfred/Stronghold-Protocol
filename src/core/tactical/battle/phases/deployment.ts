@@ -21,7 +21,7 @@ import {
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
 import { instantiateUnitPlacement, type UnitPlacementDefinition } from "../creation/placement.js";
 import type { Unit, UnitId } from "../../unit/unit.js";
-import type { BattleEvent } from "../contract.js";
+import type { Event } from "../contract.js";
 import type { BattleExecutionState } from "../execution/state.js";
 import type { BattlePhase } from "../system.js";
 import type { EffectTransitionResources } from "../../unit/capability/effects/contract.js";
@@ -32,7 +32,7 @@ export type DeploymentCommand =
     | {
           readonly type: "DEPLOY_UNIT";
           readonly definition: DeployableUnitDefinition;
-          readonly navigationEffects?: UnitPlacementDefinition["navigationEffects"];
+          readonly navigationModifiers?: UnitPlacementDefinition["navigationModifiers"];
           readonly tilePosition: TilePosition;
           readonly playerSide: "SIDE_A" | "SIDE_B";
       }
@@ -51,7 +51,7 @@ export type DeploymentCommandView = Pick<
 
 export interface DeploymentCommandResolution {
     readonly changes: readonly BattlefieldChange[];
-    readonly events: readonly BattleEvent[];
+    readonly events: readonly Event[];
     readonly execution: BattleExecutionState;
 }
 
@@ -98,7 +98,7 @@ export function resolveDeploymentCommands(
         occupancyAt: (position, slot) => occupancyAt(units, position, slot),
     };
     const changes: BattlefieldChange[] = [];
-    const events: BattleEvent[] = [];
+    const events: Event[] = [];
     let supports = battlefield.supportRelations;
 
     for (const command of commands) {
@@ -186,8 +186,8 @@ export function resolveDeploymentCommands(
                     definition,
                     position,
                     occupancy,
-                    ...(command.type === "DEPLOY_UNIT" && command.navigationEffects !== undefined
-                        ? { navigationEffects: command.navigationEffects }
+                    ...(command.type === "DEPLOY_UNIT" && command.navigationModifiers !== undefined
+                        ? { navigationModifiers: command.navigationModifiers }
                         : {}),
                 },
                 execution,

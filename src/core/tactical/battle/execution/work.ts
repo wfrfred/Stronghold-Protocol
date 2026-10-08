@@ -1,5 +1,5 @@
 import type { BattlefieldChange, BattlefieldRemovalReason } from "../../battlefield/contract.js";
-import type { BattleEvent } from "../contract.js";
+import type { Event } from "../contract.js";
 import type { BattleExecutionState } from "./state.js";
 import type { Unit, UnitId } from "../../unit/unit.js";
 import type { CombatTargetingView } from "../../unit/targeting/query.js";
@@ -16,7 +16,7 @@ const defaultExecution: BattleExecutionState = Object.freeze({
     nextUnitId: 0,
     nextNavigationRequestId: 0,
     nextMechanismId: 0,
-    nextSpatialEffectId: 0,
+    nextNavigationModifierId: 0,
 });
 
 export type CombatUnitLifecycleResult =
@@ -29,12 +29,12 @@ export type CombatUnitLifecycleResult =
 
 export interface CombatEventLog {
     readonly previous: CombatEventLog | null;
-    readonly chunk: readonly BattleEvent[];
+    readonly chunk: readonly Event[];
     readonly length: number;
 }
 
-const emptyEvents: readonly BattleEvent[] = Object.freeze([]);
-const materializedEvents = new WeakMap<CombatEventLog, readonly BattleEvent[]>();
+const emptyEvents: readonly Event[] = Object.freeze([]);
+const materializedEvents = new WeakMap<CombatEventLog, readonly Event[]>();
 
 export interface CombatWork {
     readonly battlefield: CombatTargetingView;
@@ -55,7 +55,7 @@ export interface CombatWorkResult {
         readonly reason: BattlefieldRemovalReason;
     }[];
     readonly lifecycleResults: readonly CombatUnitLifecycleResult[];
-    readonly events: readonly BattleEvent[];
+    readonly events: readonly Event[];
     readonly execution: BattleExecutionState;
 }
 
@@ -260,7 +260,7 @@ export function removeCombatUnit(
     return next;
 }
 
-export function appendCombatEvents(work: CombatWork, events: readonly BattleEvent[]): CombatWork {
+export function appendCombatEvents(work: CombatWork, events: readonly Event[]): CombatWork {
     if (events.length === 0) {
         return work;
     }
@@ -275,7 +275,7 @@ export function appendCombatEvents(work: CombatWork, events: readonly BattleEven
     return { ...work, eventLog };
 }
 
-export function combatWorkEvents(work: CombatWork): readonly BattleEvent[] {
+export function combatWorkEvents(work: CombatWork): readonly Event[] {
     if (work.eventLog === null) {
         return emptyEvents;
     }
@@ -286,7 +286,7 @@ export function combatWorkEvents(work: CombatWork): readonly BattleEvent[] {
         return cached;
     }
 
-    const events = new Array<BattleEvent>(work.eventLog.length);
+    const events = new Array<Event>(work.eventLog.length);
     let cursor: CombatEventLog | null = work.eventLog;
     let offset = events.length;
 

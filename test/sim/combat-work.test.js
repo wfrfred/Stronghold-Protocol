@@ -120,7 +120,7 @@ test('combat work: sparse updates expose current units while relation queries re
         nextUnitId: 0,
         nextNavigationRequestId: 0,
         nextMechanismId: 0,
-        nextSpatialEffectId: 0,
+        nextNavigationModifierId: 0,
     });
     assert.equal(Object.isFrozen(initial.execution), true);
 

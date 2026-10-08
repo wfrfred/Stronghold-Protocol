@@ -9,14 +9,14 @@ import {
 } from "./dependencies.js";
 import type { BattlefieldMap } from "../map/map.js";
 import type { MechanismId, MechanismRuntime } from "../mechanism.js";
-import type { NavigationSpatialEffect, SpatialEffectId } from "../navigation/effect.js";
+import type { NavigationModifier, NavigationModifierId } from "../navigation/modifier.js";
 import { projectNavigationMaps, type NavigationProjection } from "../navigation/projection.js";
 import {
     projectBattlefieldSpatial,
     projectUnitsByTile,
     projectOccupancyBySlot,
-    projectEffectRelations,
-    projectEffectCoverage,
+    projectNavigationModifierRelations,
+    projectNavigationModifierCoverage,
     type BattlefieldSpatialView,
 } from "./indexes.js";
 import {
@@ -30,7 +30,7 @@ export interface BattlefieldContent<U extends Unit> {
     readonly blockingRelations: readonly BlockingRelation[];
     readonly supportRelations: readonly SupportRelation[];
     readonly mechanisms: ReadonlyMap<MechanismId, MechanismRuntime>;
-    readonly effects: ReadonlyMap<SpatialEffectId, NavigationSpatialEffect>;
+    readonly navigationModifiers: ReadonlyMap<NavigationModifierId, NavigationModifier>;
 }
 
 export interface BattlefieldState<U extends Unit> extends BattlefieldContent<U> {
@@ -44,16 +44,16 @@ export function createBattlefieldState<U extends Unit>(
 ): BattlefieldState<U> {
     const units = new Map<UnitId, U>();
     const mechanisms = new Map<MechanismId, MechanismRuntime>();
-    const effects = new Map<SpatialEffectId, NavigationSpatialEffect>();
+    const navigationModifiers = new Map<NavigationModifierId, NavigationModifier>();
 
     return {
         units,
         mechanisms,
-        effects,
+        navigationModifiers,
         blockingRelations: [],
         supportRelations: [],
         navigationMaps: baseline,
-        spatial: projectBattlefieldSpatial(map, units, mechanisms, effects),
+        spatial: projectBattlefieldSpatial(map, units, mechanisms, navigationModifiers),
     };
 }
 
@@ -100,7 +100,7 @@ function finishSettlement<U extends Unit>(
     const unchanged =
         content.units === previous.units &&
         content.mechanisms === previous.mechanisms &&
-        content.effects === previous.effects &&
+        content.navigationModifiers === previous.navigationModifiers &&
         content.blockingRelations === previous.blockingRelations &&
         content.supportRelations === previous.supportRelations &&
         spatial === previous.spatial &&
@@ -133,8 +133,8 @@ export function settleBattlefieldState<U extends Unit>(
     if (
         dependencies.unitTiles ||
         dependencies.occupancy ||
-        dependencies.effectRelations ||
-        dependencies.effectCoverage
+        dependencies.navigationModifierRelations ||
+        dependencies.navigationModifierCoverage
     ) {
         spatial = {
             ...(dependencies.unitTiles
@@ -143,26 +143,35 @@ export function settleBattlefieldState<U extends Unit>(
             ...(dependencies.occupancy
                 ? projectOccupancyBySlot(map, content.units)
                 : { occupancyBySlot: previous.spatial.occupancyBySlot }),
-            ...(dependencies.effectRelations
-                ? projectEffectRelations(content.units, content.mechanisms, content.effects)
+            ...(dependencies.navigationModifierRelations
+                ? projectNavigationModifierRelations(
+                      content.units,
+                      content.mechanisms,
+                      content.navigationModifiers,
+                  )
                 : {
-                      effectsBySource: previous.spatial.effectsBySource,
-                      effectsByAnchor: previous.spatial.effectsByAnchor,
+                      navigationModifiersBySource: previous.spatial.navigationModifiersBySource,
+                      navigationModifiersByAnchor: previous.spatial.navigationModifiersByAnchor,
                   }),
-            ...(dependencies.effectCoverage
-                ? projectEffectCoverage(map, content.units, content.mechanisms, content.effects)
+            ...(dependencies.navigationModifierCoverage
+                ? projectNavigationModifierCoverage(
+                      map,
+                      content.units,
+                      content.mechanisms,
+                      content.navigationModifiers,
+                  )
                 : {
-                      effectsByTile: previous.spatial.effectsByTile,
-                      navigationEffects: previous.spatial.navigationEffects,
+                      navigationModifiersByTile: previous.spatial.navigationModifiersByTile,
+                      navigationModifiers: previous.spatial.navigationModifiers,
                   }),
         };
     }
 
     const projection = projectNavigationMaps(
         baseline,
-        spatial.navigationEffects,
+        spatial.navigationModifiers,
         previous.navigationMaps,
-        previous.spatial.navigationEffects,
+        previous.spatial.navigationModifiers,
     );
     const units = reconcileNavigation<U>(
         content.units,
@@ -196,11 +205,11 @@ export function settleBattlefieldStateFully<U extends Unit>(
         map,
         content.units,
         content.mechanisms,
-        content.effects,
+        content.navigationModifiers,
     );
     const projection = projectNavigationMaps(
         baseline,
-        spatial.navigationEffects,
+        spatial.navigationModifiers,
         previous.navigationMaps,
     );
     const units = reconcileNavigation<U>(content.units, projection.maps);

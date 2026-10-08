@@ -9,13 +9,13 @@ import { RangeGrid } from "../../geometry/range.js";
 import type { MechanismId } from "../mechanism.js";
 import type { UnitId } from "../../unit/unit.js";
 
-export type SpatialEffectId = number;
+export type NavigationModifierId = number;
 
-export type SpatialEffectSource =
+export type NavigationModifierSource =
     | { readonly type: "UNIT"; readonly unitId: UnitId }
     | { readonly type: "MECHANISM"; readonly mechanismId: MechanismId };
 
-export type SpatialEffectRegion =
+export type NavigationModifierRegion =
     | {
           readonly type: "FIXED";
           readonly position: TilePosition;
@@ -40,42 +40,40 @@ export interface FlyNavigationRestriction {
     readonly deniedDepartures: readonly Direction[];
 }
 
-export interface NavigationEffectDefinition {
+export interface NavigationModifierDefinition {
     readonly id: string;
     readonly WALK: WalkNavigationRestriction | null;
     readonly FLY: FlyNavigationRestriction | null;
 }
 
-export interface NavigationSpatialEffect {
-    readonly id: SpatialEffectId;
-    readonly definition: NavigationEffectDefinition;
-    readonly source: SpatialEffectSource;
+export interface NavigationModifier {
+    readonly id: NavigationModifierId;
+    readonly definition: NavigationModifierDefinition;
+    readonly source: NavigationModifierSource;
     readonly active: boolean;
-    readonly region: SpatialEffectRegion;
+    readonly region: NavigationModifierRegion;
     readonly expiresAtTick: number | null;
 }
 
-export function copyNavigationSpatialEffect(
-    effect: NavigationSpatialEffect,
-): NavigationSpatialEffect {
-    const range = effect.region.range.map((offset) =>
+export function copyNavigationModifier(navigationModifier: NavigationModifier): NavigationModifier {
+    const range = navigationModifier.region.range.map((offset) =>
         Object.isFrozen(offset) ? offset : createTileOffset(...offset),
     );
-    let region: SpatialEffectRegion;
+    let region: NavigationModifierRegion;
 
-    if (effect.region.type === "FIXED") {
+    if (navigationModifier.region.type === "FIXED") {
         region = {
-            ...effect.region,
+            ...navigationModifier.region,
             range,
-            position: Object.isFrozen(effect.region.position)
-                ? effect.region.position
-                : createTilePosition(...effect.region.position),
+            position: Object.isFrozen(navigationModifier.region.position)
+                ? navigationModifier.region.position
+                : createTilePosition(...navigationModifier.region.position),
         };
     } else {
-        region = { ...effect.region, range };
+        region = { ...navigationModifier.region, range };
     }
 
-    return { ...effect, source: { ...effect.source }, region };
+    return { ...navigationModifier, source: { ...navigationModifier.source }, region };
 }
 
 function identity(value: number, name: string): number {
@@ -109,7 +107,7 @@ function restriction(value: FlyNavigationRestriction): FlyNavigationRestriction 
     });
 }
 
-function source(value: SpatialEffectSource): SpatialEffectSource {
+function source(value: NavigationModifierSource): NavigationModifierSource {
     switch (value.type) {
         case "UNIT":
             return Object.freeze({ type: "UNIT", unitId: identity(value.unitId, "unit id") });
@@ -122,11 +120,11 @@ function source(value: SpatialEffectSource): SpatialEffectSource {
     }
 }
 
-export function createNavigationEffectDefinition(
-    definition: NavigationEffectDefinition,
-): NavigationEffectDefinition {
+export function createNavigationModifierDefinition(
+    definition: NavigationModifierDefinition,
+): NavigationModifierDefinition {
     if (definition.id.length === 0) {
-        throw new TypeError("navigation effect definition id must be nonempty");
+        throw new TypeError("navigation modifier definition id must be nonempty");
     }
 
     let WALK: WalkNavigationRestriction | null = null;
@@ -147,7 +145,9 @@ export function createNavigationEffectDefinition(
     });
 }
 
-export function createSpatialEffectRegion(region: SpatialEffectRegion): SpatialEffectRegion {
+export function createNavigationModifierRegion(
+    region: NavigationModifierRegion,
+): NavigationModifierRegion {
     const range = RangeGrid.create(region.range);
 
     switch (region.type) {
@@ -169,20 +169,20 @@ export function createSpatialEffectRegion(region: SpatialEffectRegion): SpatialE
     }
 }
 
-export function createNavigationSpatialEffect(
-    effect: NavigationSpatialEffect,
-): NavigationSpatialEffect {
+export function createNavigationModifier(
+    navigationModifier: NavigationModifier,
+): NavigationModifier {
     const expiresAtTick =
-        effect.expiresAtTick === null
+        navigationModifier.expiresAtTick === null
             ? null
-            : identity(effect.expiresAtTick, "spatial effect expiry tick");
+            : identity(navigationModifier.expiresAtTick, "navigation modifier expiry tick");
 
     return {
-        id: identity(effect.id, "spatial effect id"),
-        definition: effect.definition,
-        source: source(effect.source),
-        active: effect.active,
-        region: createSpatialEffectRegion(effect.region),
+        id: identity(navigationModifier.id, "navigation modifier id"),
+        definition: navigationModifier.definition,
+        source: source(navigationModifier.source),
+        active: navigationModifier.active,
+        region: createNavigationModifierRegion(navigationModifier.region),
         expiresAtTick,
     };
 }

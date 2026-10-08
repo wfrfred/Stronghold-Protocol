@@ -1,13 +1,23 @@
+import type { Seed } from "../../common/rng.js";
+import type { BattlefieldMap } from "../battlefield/map/map.js";
+import type { UnitPlacementDefinition } from "./creation/placement.js";
+import type { MechanismPlacementDefinition } from "./creation/mechanism.js";
+import type { NavigationModifierPlacementDefinition } from "./creation/navigation-modifier.js";
+import type { SpawnScheduleDefinition } from "./schedule/definition.js";
 import type { BattlefieldChangeResult } from "../battlefield/contract.js";
 import type { BlockingRelation } from "../battlefield/blocking/relations.js";
 import type { CombatEvent } from "./execution/event.js";
 import type { MechanismRuntime } from "../battlefield/mechanism.js";
-import type { NavigationSpatialEffect } from "../battlefield/navigation/effect.js";
+import type { NavigationModifier } from "../battlefield/navigation/modifier.js";
 import type { NavigationOutcome } from "../battlefield/navigation/state.js";
 import type { WorldPosition } from "../geometry/coordinate.js";
 import type { RouteSignal } from "../unit/capability/locomotion/route/execution.js";
 import type { Unit, UnitId } from "../unit/unit.js";
-import type { PredefinedCommand, PredefinedPresence } from "./predefined.js";
+import type {
+    PredefinedInstanceDefinition,
+    PredefinedCommand,
+    PredefinedPresence,
+} from "./predefined.js";
 import type { SpawnScheduleState } from "./schedule/state.js";
 import type { AlternativeRouteCommand } from "./phases/route-control.js";
 import type { BattleExecutionState } from "./execution/state.js";
@@ -21,7 +31,20 @@ import type {
 import type { ProjectileId, ProjectileState } from "../battlefield/projectile/state.js";
 import type { ProjectileSignal } from "../battlefield/projectile/settlement.js";
 
-export type BattleCommand =
+/** Shared creation data. Keep this input unchanged for the runtime lifetime. */
+export interface Input {
+    readonly map: BattlefieldMap;
+    readonly schedule: SpawnScheduleDefinition;
+    readonly predefines: readonly PredefinedInstanceDefinition[];
+    readonly initialUnits: readonly UnitPlacementDefinition[];
+    readonly initialMechanisms: readonly MechanismPlacementDefinition[];
+    readonly initialNavigationModifiers: readonly NavigationModifierPlacementDefinition[];
+    readonly maxTicks: number;
+    readonly routeMoveMultiplier: number;
+    readonly rngState: Seed;
+}
+
+export type Command =
     | PredefinedCommand
     | AlternativeRouteCommand
     | DeploymentCommand
@@ -29,7 +52,7 @@ export type BattleCommand =
     | { readonly type: "STOP_PROJECTILE"; readonly projectileId: ProjectileId }
     | { readonly type: "TRIGGER_BRANCH"; readonly branchId: string; readonly isLoop: boolean };
 
-export type BattleEvent =
+export type Event =
     | CombatEvent
     | ActionExecutionSignal
     | ProjectileSignal
@@ -60,7 +83,7 @@ export type BattleEvent =
           readonly tick: number;
       } & BattlefieldChangeResult["removedUnits"][number]);
 
-export interface BattleResult {
+export interface Result {
     readonly reason: "SCHEDULE_COMPLETED" | "TIME_LIMIT";
     readonly elapsedTicks: number;
     readonly spawnedCount: number;
@@ -69,7 +92,7 @@ export interface BattleResult {
     readonly unspawnedCount: number;
 }
 
-export interface BattleSnapshot {
+export interface Snapshot {
     readonly tickIndex: number;
     readonly spawning: SpawnScheduleState;
     readonly execution: BattleExecutionState;
@@ -80,12 +103,12 @@ export interface BattleSnapshot {
     readonly blockingRelations: readonly BlockingRelation[];
     readonly supportRelations: readonly SupportRelation[];
     readonly mechanisms: readonly MechanismRuntime[];
-    readonly effects: readonly NavigationSpatialEffect[];
+    readonly navigationModifiers: readonly NavigationModifier[];
     readonly completedRouteCount: number;
-    readonly result: BattleResult | null;
+    readonly result: Result | null;
 }
 
-export interface BattleStep {
-    readonly events: readonly BattleEvent[];
-    readonly result: BattleResult | null;
+export interface Step {
+    readonly events: readonly Event[];
+    readonly result: Result | null;
 }

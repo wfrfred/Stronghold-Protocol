@@ -22,7 +22,6 @@ import { combatWorkView, getCombatUnit } from "../../dist/core/tactical/battle/e
 import { createProjectileProgram } from "../../dist/core/tactical/battlefield/projectile/program.js";
 import {
   createMechanismDefinition,
-  createMechanismRuntime,
 } from "../../dist/core/tactical/battlefield/mechanism.js";
 import {
   createEffectSourceProgramRef,
@@ -178,7 +177,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
       reception: {
         priority: 0,
         apply: (context, pending) => {
-          assert.equal(context.operations.sources.tryConsume(40, sourceRef, (state) =>
+          assert.equal(context.operations.sources.tryConsume(0, sourceRef, (state) =>
             state.remaining === 0 ? undefined : {
               remaining: state.remaining - 1, consumed: state.consumed + 1,
             }), true);
@@ -202,7 +201,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
           }
           attempts.push({
             address: context.address,
-            source: context.operations.sources.get(40, sourceRef).effectSource.state,
+            source: context.operations.sources.get(0, sourceRef).effectSource.state,
             marked: hasStatusFlag(context.facts.getUnit(context.ownerUnitId), "INVISIBLE"),
           });
           return { value: {
@@ -232,12 +231,11 @@ function scenario({ failure = null, cancelled = false } = {}) {
       return tick >= 3;
     },
   });
-  const source = createMechanismRuntime({
-    id: 40,
+  const source = {
     definition: createMechanismDefinition({ id: sourceRef.id }),
     active: true,
-    effectSource: resources.effectSources.create(sourceRef, { sourceUnitId: null }),
-  });
+    effectSource: { programRef: sourceRef, state: { remaining: 3, consumed: 0 } },
+  };
   const shell = resources.projectiles.register(createProjectileProgram({
     id: "combined-shell",
     initialize: () => ({ contacts: 0 }),

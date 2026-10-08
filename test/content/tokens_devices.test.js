@@ -1205,7 +1205,7 @@ test('core act1 m01 initializes all 12 raw crates without changing passage or FL
   const crates = rawLevel.predefines.tokenInsts.filter(instance => instance.inst.characterKey === 'trap_1105_accrate');
   assert.equal(crates.length, 12);
   assert.equal(initial.units.length, 12);
-  assert.equal(initial.effects.length, 12);
+  assert.equal(initial.navigationModifiers.length, 12);
   assert.equal(initial.predefinedPresence.length, 12);
   assert.deepEqual(initial.mechanisms, []);
   assert.deepEqual(runtime.navigationMaps.FLY, baseline.FLY);
@@ -1220,7 +1220,7 @@ test('core act1 m01 initializes all 12 raw crates without changing passage or FL
     const cell = NavigationMap.get(runtime.navigationMaps.WALK, [instance.position.row, instance.position.col]);
     assert.equal(cell.moveCost, 1000);
     assert.deepEqual(cell.departures, NavigationMap.get(baseline.WALK, [instance.position.row, instance.position.col]).departures);
-    const [effect] = initial.effects.filter(effect => effect.source.type === 'UNIT' && effect.source.unitId === unit.id);
+    const [effect] = initial.navigationModifiers.filter(effect => effect.source.type === 'UNIT' && effect.source.unitId === unit.id);
     assert.equal(effect.region.type, 'FOLLOW_UNIT');
     assert.equal(effect.region.unitId, unit.id);
   }
@@ -1231,7 +1231,7 @@ test('core act1 m01 initializes all 12 raw crates without changing passage or FL
   assert.equal(runtime.result.unspawnedCount, 0);
   assert.deepEqual(runtime.result.remainingUnitIds, initial.units.map(unit => unit.id));
   assert.deepEqual(runtime.snapshot().units, initial.units);
-  assert.deepEqual(runtime.snapshot().effects, initial.effects);
+  assert.deepEqual(runtime.snapshot().navigationModifiers, initial.navigationModifiers);
 });
 
 test('core act1 m02 keeps hidden crate recipes out of the battlefield and applies appearance/removal with fresh identities', () => {
@@ -1240,7 +1240,7 @@ test('core act1 m02 keeps hidden crate recipes out of the battlefield and applie
   assert.equal(scenario.spec.predefines.length, 16);
   assert.ok(scenario.spec.predefines.every(definition => !definition.initiallyPresent));
   assert.deepEqual(runtime.snapshot().units, []);
-  assert.deepEqual(runtime.snapshot().effects, []);
+  assert.deepEqual(runtime.snapshot().navigationModifiers, []);
   assert.deepEqual(runtime.snapshot().predefinedPresence, []);
   const [definitionId] = runtime.predefinedIdsForAlias('trap_1105_accrate#001');
   const originalMaps = runtime.navigationMaps;
@@ -1248,7 +1248,7 @@ test('core act1 m02 keeps hidden crate recipes out of the battlefield and applie
   runtime.step([{ type: 'APPEAR_PREDEFINED', definitionId }]);
   const appeared = runtime.snapshot();
   const [unit] = appeared.units;
-  const [effect] = appeared.effects;
+  const [effect] = appeared.navigationModifiers;
   assert.deepEqual(unit.position, [4, 12]);
   assert.equal(unit.id, 0);
   assert.deepEqual(appeared.predefinedPresence, [{ definitionId, source: { type: 'UNIT', unitId: unit.id } }]);
@@ -1265,15 +1265,15 @@ test('core act1 m02 keeps hidden crate recipes out of the battlefield and applie
   assert.strictEqual(runtime.navigationMaps, appearedMaps);
   const external = runtime.snapshot();
   external.units[0].vitality.hp = 0;
-  external.effects[0].active = false;
+  external.navigationModifiers[0].active = false;
   external.predefinedPresence[0].source.unitId = 99;
   assert.deepEqual(runtime.snapshot().units, appeared.units);
-  assert.deepEqual(runtime.snapshot().effects, appeared.effects);
+  assert.deepEqual(runtime.snapshot().navigationModifiers, appeared.navigationModifiers);
   assert.deepEqual(runtime.snapshot().predefinedPresence, appeared.predefinedPresence);
   const removed = runtime.step([{ type: 'REMOVE_PREDEFINED', definitionId, reason: 'SCRIPT' }]);
   assert.deepEqual(removed.events, [{ type: 'UNIT_REMOVED', unitId: unit.id, reason: 'SCRIPT', tick: 2, unit }]);
   assert.deepEqual(runtime.snapshot().units, []);
-  assert.deepEqual(runtime.snapshot().effects, []);
+  assert.deepEqual(runtime.snapshot().navigationModifiers, []);
   assert.deepEqual(runtime.snapshot().predefinedPresence, []);
   assert.deepEqual(NavigationMap.get(runtime.navigationMaps.WALK, [12, 4]), originalCell);
   assert.equal(runtime.navigationMaps.WALK.revision, appearedMaps.WALK.revision + 1);
@@ -1283,7 +1283,7 @@ test('core act1 m02 keeps hidden crate recipes out of the battlefield and applie
   assert.strictEqual(runtime.navigationMaps, removedMaps);
   runtime.step([{ type: 'APPEAR_PREDEFINED', definitionId }]);
   assert.equal(runtime.snapshot().units[0].id, unit.id + 1);
-  assert.equal(runtime.snapshot().effects[0].id, effect.id + 1);
+  assert.equal(runtime.snapshot().navigationModifiers[0].id, effect.id + 1);
   assert.deepEqual(runtime.snapshot().predefinedPresence[0].source, { type: 'UNIT', unitId: unit.id + 1 });
 });
 
@@ -1303,7 +1303,7 @@ test('core predefined aliases can name two real crate recipes at different posit
   assert.deepEqual(runtime.snapshot().predefinedPresence.map(binding => binding.definitionId), definitionIds);
   runtime.step([{ type: 'REMOVE_PREDEFINED', definitionId: definitionIds[0], reason: 'SCRIPT' }]);
   assert.deepEqual(runtime.snapshot().units.map(unit => unit.id), [1]);
-  assert.equal(runtime.snapshot().effects.length, 1);
+  assert.equal(runtime.snapshot().navigationModifiers.length, 1);
   assert.equal(NavigationMap.get(runtime.navigationMaps.WALK, [12, 4]).moveCost, 1);
   assert.equal(NavigationMap.get(runtime.navigationMaps.WALK, [12, 5]).moveCost, 1000);
 });
@@ -1330,7 +1330,7 @@ test('core act2 mire and tide controller prefabs initialize nonspatial mechanism
     assert.ok(!('vitality' in mechanism));
     assert.equal(snapshot.units.length, 4);
     assert.ok(snapshot.units.every(unit => unit.definition.id === 'trap_1105_accrate'));
-    assert.equal(snapshot.effects.length, 4);
+    assert.equal(snapshot.navigationModifiers.length, 4);
     const controller = scenario.spec.predefines.find(definition => definition.creation.definition.id === controllerKey);
     assert.equal(controller.creation.type, 'MECHANISM');
     assert.ok(!('position' in controller.creation));
@@ -1431,7 +1431,7 @@ test('core failed command batches preserve hidden recipes, battlefield projectio
   runtime.step([{ type: 'APPEAR_PREDEFINED', definitionId }]);
   assert.equal(runtime.snapshot().tickIndex, 1);
   assert.equal(runtime.snapshot().units[0].id, 0);
-  assert.equal(runtime.snapshot().effects[0].id, 0);
+  assert.equal(runtime.snapshot().navigationModifiers[0].id, 0);
 });
 
 test('core raw tile modes distinguish crates from platforms and require the referenced prefab mode', () => {

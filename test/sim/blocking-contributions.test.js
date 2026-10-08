@@ -152,7 +152,7 @@ function battlefield(units) {
     blockingPhase(tick) {
       const state = h.state;
       const stepped = createBlockingSystem().step({ tick, commands: [], removedUnits: [],
-        execution: { rngState: 17, nextUnitId: units.length, nextNavigationRequestId: 0, nextMechanismId: 0, nextSpatialEffectId: 0 },
+        execution: { rngState: 17, nextUnitId: units.length, nextNavigationRequestId: 0, nextMechanismId: 0, nextNavigationModifierId: 0 },
         battlefield: { map, unitIds: [...state.units.keys()], getUnit: id => state.units.get(id),
           blockingRelations: state.blockingRelations, supportRelations: state.supportRelations },
       }, undefined);
@@ -279,7 +279,7 @@ test('blocking capacity: replacing contribution entries without changing the res
   assert.equal(capacityOf(changed), capacityOf(owner));
   const result = h.commit([{ type: 'UPDATE_UNIT', unit: changed }]);
   assert.deepEqual(result.dependencies, { unitTiles: false, occupancy: false, support: false,
-    blocking: false, effectRelations: false, effectCoverage: false });
+    blocking: false, navigationModifierRelations: false, navigationModifierCoverage: false });
   assert.equal(h.state.blockingRelations, before.blockingRelations);
   assert.equal(h.state.spatial, before.spatial);
   assert.equal(h.state.navigationMaps, before.navigationMaps);

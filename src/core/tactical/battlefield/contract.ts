@@ -6,11 +6,11 @@ import type { OccupancySlot } from "../unit/capability/occupancy.js";
 import type { BattlefieldMap } from "./map/map.js";
 import type { MechanismId, MechanismRuntime, MechanismView } from "./mechanism.js";
 import type {
-    NavigationSpatialEffect,
-    SpatialEffectId,
-    SpatialEffectRegion,
-    SpatialEffectSource,
-} from "./navigation/effect.js";
+    NavigationModifier,
+    NavigationModifierId,
+    NavigationModifierRegion,
+    NavigationModifierSource,
+} from "./navigation/modifier.js";
 import type { BlockingRelation } from "./blocking/relations.js";
 import type { SupportRelation } from "./support/relations.js";
 import type { SynchronousResult } from "../../common/synchronous.js";
@@ -50,19 +50,22 @@ export type BattlefieldChange<U extends Unit = Unit> =
           readonly mechanismId: MechanismId;
           readonly reason: BattlefieldRemovalReason;
       }
-    | { readonly type: "ADD_EFFECT"; readonly effect: NavigationSpatialEffect }
+    | { readonly type: "ADD_NAVIGATION_MODIFIER"; readonly navigationModifier: NavigationModifier }
     | {
-          readonly type: "SET_EFFECT_ACTIVE";
-          readonly effectId: SpatialEffectId;
+          readonly type: "SET_NAVIGATION_MODIFIER_ACTIVE";
+          readonly navigationModifierId: NavigationModifierId;
           readonly active: boolean;
       }
     | {
-          readonly type: "SET_EFFECT_REGION";
-          readonly effectId: SpatialEffectId;
-          readonly region: SpatialEffectRegion;
+          readonly type: "SET_NAVIGATION_MODIFIER_REGION";
+          readonly navigationModifierId: NavigationModifierId;
+          readonly region: NavigationModifierRegion;
       }
-    | { readonly type: "REMOVE_EFFECT"; readonly effectId: SpatialEffectId }
-    | { readonly type: "EXPIRE_EFFECTS"; readonly tick: number };
+    | {
+          readonly type: "REMOVE_NAVIGATION_MODIFIER";
+          readonly navigationModifierId: NavigationModifierId;
+      }
+    | { readonly type: "EXPIRE_NAVIGATION_MODIFIERS"; readonly tick: number };
 
 export interface BattlefieldChangeResult<U extends Unit = Unit> {
     readonly changedNavigationModes: readonly PathMotionMode[];
@@ -76,7 +79,7 @@ export interface BattlefieldChangeResult<U extends Unit = Unit> {
         readonly mechanismId: MechanismId;
         readonly reason: BattlefieldRemovalReason;
     }[];
-    readonly removedEffects: readonly SpatialEffectId[];
+    readonly removedNavigationModifiers: readonly NavigationModifierId[];
     readonly lostSupports: readonly SupportRelation[];
 }
 
@@ -104,12 +107,12 @@ export interface BattlefieldView<U extends Unit = Unit> extends MechanismView {
 export interface Battlefield<U extends Unit = Unit> extends BattlefieldView<U> {
     readonly fieldCache: NavigationFieldCache;
     readonly mechanismIds: readonly MechanismId[];
-    readonly effectIds: readonly SpatialEffectId[];
+    readonly navigationModifierIds: readonly NavigationModifierId[];
     getMechanism(id: MechanismId): MechanismRuntime | undefined;
-    getEffect(id: SpatialEffectId): NavigationSpatialEffect | undefined;
-    effectsAt(position: TilePosition): readonly SpatialEffectId[];
-    effectsFrom(source: SpatialEffectSource): readonly SpatialEffectId[];
-    effectsFollowing(unitId: UnitId): readonly SpatialEffectId[];
+    getNavigationModifier(id: NavigationModifierId): NavigationModifier | undefined;
+    navigationModifiersAt(position: TilePosition): readonly NavigationModifierId[];
+    navigationModifiersFrom(source: NavigationModifierSource): readonly NavigationModifierId[];
+    navigationModifiersFollowing(unitId: UnitId): readonly NavigationModifierId[];
     fork(): Battlefield<U>;
     transact(operation: (battlefield: Battlefield<U>) => undefined): undefined;
     transact<T>(operation: (battlefield: Battlefield<U>) => SynchronousResult<T>): T;

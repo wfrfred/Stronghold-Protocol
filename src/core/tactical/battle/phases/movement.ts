@@ -7,7 +7,7 @@ import { hasAction } from "../../unit/capability/action/capability.js";
 import { stepRoutedUnit } from "../../unit/capability/locomotion/step.js";
 import type { Unit, UnitId } from "../../unit/unit.js";
 import { changeAlternativeRoutes, type AlternativeRouteCommand } from "./route-control.js";
-import type { BattleEvent } from "../contract.js";
+import type { Event } from "../contract.js";
 import type { BattlePhase, BattlePhaseInput } from "../system.js";
 import { removeUnitWithEffects } from "../execution/unit-lifecycle.js";
 import {
@@ -22,7 +22,7 @@ export interface MovementPhaseInput extends BattlePhaseInput {
 }
 
 export function createMovementSystem(
-    { moveMultiplier }: { readonly moveMultiplier: number },
+    { routeMoveMultiplier }: { readonly routeMoveMultiplier: number },
     resources: EffectTransitionResources & {
         readonly computations: computation.Computations<ContributionFacts>;
     },
@@ -59,7 +59,7 @@ export function createMovementSystem(
         const { battlefield, tick } = input;
         let execution = input.execution;
         const changes: BattlefieldChange[] = [];
-        const events: BattleEvent[] = [];
+        const events: Event[] = [];
         const movedUnits: Unit[] = [];
         const completed: UnitId[] = [];
 
@@ -74,7 +74,7 @@ export function createMovementSystem(
                 tick,
                 maps: battlefield.navigationMaps,
                 fieldCache: battlefield.fieldCache,
-                moveMultiplier,
+                moveMultiplier: routeMoveMultiplier,
                 evaluateContributions: resources.computations.bind({ unit, battlefield }),
                 movementAllowed:
                     (input.movementAllowed?.(unitId) ?? true) &&

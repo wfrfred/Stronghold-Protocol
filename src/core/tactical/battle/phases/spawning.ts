@@ -3,7 +3,7 @@ import { type RoutedEnemy } from "../../unit/archetype/enemy.js";
 import type { BattleExecutionState } from "../execution/state.js";
 import type { UnitRouteSignal } from "./route-control.js";
 import type { UnitId } from "../../unit/unit.js";
-import type { BattleEvent } from "../contract.js";
+import type { Event } from "../contract.js";
 import type { BattlePhase } from "../system.js";
 import {
     advanceSpawnSchedule,
@@ -70,7 +70,7 @@ export function spawnEnemies(
     };
 }
 
-function enemySpawnEvents(spawned: SpawnedEnemies, tick: number): BattleEvent[] {
+function enemySpawnEvents(spawned: SpawnedEnemies, tick: number): Event[] {
     const signalsByUnit = new Map<UnitId, UnitRouteSignal[]>();
 
     for (const signal of spawned.signals) {
@@ -79,7 +79,7 @@ function enemySpawnEvents(spawned: SpawnedEnemies, tick: number): BattleEvent[] 
         signalsByUnit.set(signal.unitId, signals);
     }
 
-    const events: BattleEvent[] = [];
+    const events: Event[] = [];
 
     for (const enemy of spawned.enemies) {
         events.push({ type: "ENEMY_SPAWNED", unitId: enemy.id, tick });

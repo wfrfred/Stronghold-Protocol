@@ -10,19 +10,19 @@ import {
 import { BattlefieldMap } from "../map/map.js";
 import type { MechanismId, MechanismRuntime } from "../mechanism.js";
 import type {
-    NavigationSpatialEffect,
-    SpatialEffectId,
-    SpatialEffectSource,
-} from "../navigation/effect.js";
-import type { ProjectedNavigationEffect } from "../navigation/projection.js";
+    NavigationModifier,
+    NavigationModifierId,
+    NavigationModifierSource,
+} from "../navigation/modifier.js";
+import type { ProjectedNavigationModifier } from "../navigation/projection.js";
 
 export interface BattlefieldSpatialView {
     readonly unitsByTile: ReadonlyMap<number, ReadonlySet<UnitId>>;
     readonly occupancyBySlot: ReadonlyMap<string, ReadonlySet<UnitId>>;
-    readonly effectsByTile: ReadonlyMap<number, ReadonlySet<SpatialEffectId>>;
-    readonly effectsBySource: ReadonlyMap<string, ReadonlySet<SpatialEffectId>>;
-    readonly effectsByAnchor: ReadonlyMap<UnitId, ReadonlySet<SpatialEffectId>>;
-    readonly navigationEffects: readonly ProjectedNavigationEffect[];
+    readonly navigationModifiersByTile: ReadonlyMap<number, ReadonlySet<NavigationModifierId>>;
+    readonly navigationModifiersBySource: ReadonlyMap<string, ReadonlySet<NavigationModifierId>>;
+    readonly navigationModifiersByAnchor: ReadonlyMap<UnitId, ReadonlySet<NavigationModifierId>>;
+    readonly navigationModifiers: readonly ProjectedNavigationModifier[];
 }
 
 export function battlefieldTileKey(
@@ -34,7 +34,7 @@ export function battlefieldTileKey(
         : undefined;
 }
 
-export function spatialEffectSourceKey(source: SpatialEffectSource): string {
+export function navigationModifierSourceKey(source: NavigationModifierSource): string {
     return source.type === "UNIT" ? `UNIT:${source.unitId}` : `MECHANISM:${source.mechanismId}`;
 }
 
@@ -125,48 +125,68 @@ export function projectOccupancyBySlot(
     return { occupancyBySlot };
 }
 
-export function projectEffectRelations(
+export function projectNavigationModifierRelations(
     units: ReadonlyMap<UnitId, Unit>,
     mechanisms: ReadonlyMap<MechanismId, MechanismRuntime>,
-    effects: ReadonlyMap<SpatialEffectId, NavigationSpatialEffect>,
-): Pick<BattlefieldSpatialView, "effectsBySource" | "effectsByAnchor"> {
-    const effectsBySource = new Map<string, Set<SpatialEffectId>>();
-    const effectsByAnchor = new Map<UnitId, Set<SpatialEffectId>>();
+    navigationModifiers: ReadonlyMap<NavigationModifierId, NavigationModifier>,
+): Pick<BattlefieldSpatialView, "navigationModifiersBySource" | "navigationModifiersByAnchor"> {
+    const navigationModifiersBySource = new Map<string, Set<NavigationModifierId>>();
+    const navigationModifiersByAnchor = new Map<UnitId, Set<NavigationModifierId>>();
 
-    for (const effect of effects.values()) {
-        if (effect.source.type === "UNIT") {
-            requireEntry(units, effect.source.unitId, "effect source unit");
+    for (const navigationModifier of navigationModifiers.values()) {
+        if (navigationModifier.source.type === "UNIT") {
+            requireEntry(
+                units,
+                navigationModifier.source.unitId,
+                "navigation modifier source unit",
+            );
         } else {
-            requireEntry(mechanisms, effect.source.mechanismId, "effect source mechanism");
+            requireEntry(
+                mechanisms,
+                navigationModifier.source.mechanismId,
+                "navigation modifier source mechanism",
+            );
         }
 
-        indexId(effectsBySource, spatialEffectSourceKey(effect.source), effect.id);
+        indexId(
+            navigationModifiersBySource,
+            navigationModifierSourceKey(navigationModifier.source),
+            navigationModifier.id,
+        );
 
-        if (effect.region.type === "FOLLOW_UNIT") {
-            requireEntry(units, effect.region.unitId, "effect anchor unit");
-            indexId(effectsByAnchor, effect.region.unitId, effect.id);
+        if (navigationModifier.region.type === "FOLLOW_UNIT") {
+            requireEntry(
+                units,
+                navigationModifier.region.unitId,
+                "navigation modifier anchor unit",
+            );
+            indexId(
+                navigationModifiersByAnchor,
+                navigationModifier.region.unitId,
+                navigationModifier.id,
+            );
         }
     }
 
-    return { effectsBySource, effectsByAnchor };
+    return { navigationModifiersBySource, navigationModifiersByAnchor };
 }
 
-export function projectEffectCoverage(
+export function projectNavigationModifierCoverage(
     map: BattlefieldMap,
     units: ReadonlyMap<UnitId, Unit>,
     mechanisms: ReadonlyMap<MechanismId, MechanismRuntime>,
-    effects: ReadonlyMap<SpatialEffectId, NavigationSpatialEffect>,
-): Pick<BattlefieldSpatialView, "effectsByTile" | "navigationEffects"> {
-    const effectsByTile = new Map<number, Set<SpatialEffectId>>();
-    const navigationEffects: ProjectedNavigationEffect[] = [];
+    navigationModifiers: ReadonlyMap<NavigationModifierId, NavigationModifier>,
+): Pick<BattlefieldSpatialView, "navigationModifiersByTile" | "navigationModifiers"> {
+    const navigationModifiersByTile = new Map<number, Set<NavigationModifierId>>();
+    const projected: ProjectedNavigationModifier[] = [];
 
-    for (const effect of effects.values()) {
+    for (const navigationModifier of navigationModifiers.values()) {
         const sourceActive =
-            effect.source.type === "UNIT"
-                ? isSpatiallyPresent(units.get(effect.source.unitId)!)
-                : mechanisms.get(effect.source.mechanismId)!.active;
+            navigationModifier.source.type === "UNIT"
+                ? isSpatiallyPresent(units.get(navigationModifier.source.unitId)!)
+                : mechanisms.get(navigationModifier.source.mechanismId)!.active;
 
-        const region = effect.region;
+        const region = navigationModifier.region;
         let origin: TilePosition;
         let anchorActive = true;
 
@@ -178,7 +198,7 @@ export function projectEffectCoverage(
             origin = World.toTile(anchor.position);
         }
 
-        if (!effect.active || !sourceActive || !anchorActive) {
+        if (!navigationModifier.active || !sourceActive || !anchorActive) {
             continue;
         }
 
@@ -187,25 +207,29 @@ export function projectEffectCoverage(
         );
 
         for (const position of positions) {
-            indexId(effectsByTile, battlefieldTileKey(map, position)!, effect.id);
+            indexId(
+                navigationModifiersByTile,
+                battlefieldTileKey(map, position)!,
+                navigationModifier.id,
+            );
         }
 
-        navigationEffects.push({ definition: effect.definition, positions });
+        projected.push({ definition: navigationModifier.definition, positions });
     }
 
-    return { effectsByTile, navigationEffects };
+    return { navigationModifiersByTile, navigationModifiers: projected };
 }
 
 export function projectBattlefieldSpatial(
     map: BattlefieldMap,
     units: ReadonlyMap<UnitId, Unit>,
     mechanisms: ReadonlyMap<MechanismId, MechanismRuntime>,
-    effects: ReadonlyMap<SpatialEffectId, NavigationSpatialEffect>,
+    navigationModifiers: ReadonlyMap<NavigationModifierId, NavigationModifier>,
 ): BattlefieldSpatialView {
     return {
         ...projectUnitsByTile(map, units),
         ...projectOccupancyBySlot(map, units),
-        ...projectEffectRelations(units, mechanisms, effects),
-        ...projectEffectCoverage(map, units, mechanisms, effects),
+        ...projectNavigationModifierRelations(units, mechanisms, navigationModifiers),
+        ...projectNavigationModifierCoverage(map, units, mechanisms, navigationModifiers),
     };
 }

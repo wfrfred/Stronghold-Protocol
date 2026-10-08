@@ -1,6 +1,9 @@
 import type { Seed } from "../../core/common/rng.js";
-import { createBattleSpec, type BattleSpec } from "../../core/tactical/battle/spec.js";
-import type { ScheduledEnemySpawn } from "../../core/tactical/battle/schedule/definition.js";
+import {
+    createSpawnScheduleDefinition,
+    type ScheduledEnemySpawn,
+} from "../../core/tactical/battle/schedule/definition.js";
+import type { Input } from "../../core/tactical/battle/contract.js";
 import { createRouteTiming } from "../../core/tactical/unit/capability/locomotion/route/state.js";
 import type { ArknightsLevelDefinition } from "./level.js";
 import { resolveActionSpawn, type ArknightsEnemyResolver } from "./schedule.js";
@@ -18,7 +21,7 @@ export interface ArknightsFragmentOptions {
 }
 
 export interface ArknightsMovementFragment {
-    readonly spec: BattleSpec;
+    readonly spec: Input;
     readonly selection: ArknightsFragmentSelection;
     readonly omittedActions: readonly string[];
     readonly inactiveBranches: readonly string[];
@@ -131,18 +134,17 @@ export function compileLevelMovementFragment(
     }
 
     return Object.freeze({
-        spec: createBattleSpec({
+        spec: {
             map: level.map,
-            schedule: { type: "TIMELINE", spawns },
+            schedule: createSpawnScheduleDefinition({ type: "TIMELINE", spawns }),
             predefines: [],
+            initialUnits: [],
             initialMechanisms: [],
-            initialEffects: [],
+            initialNavigationModifiers: [],
             maxTicks: secondsToTicks(level.options.maxPlayTime),
-            moveMultiplier: level.options.moveMultiplier,
+            routeMoveMultiplier: level.options.moveMultiplier,
             rngState: options.rngState,
-            nextUnitId: 0,
-            nextNavigationRequestId: 0,
-        }),
+        } satisfies Input,
         selection: Object.freeze({
             ...selection,
             actionIndices: Object.freeze([...selected].sort((left, right) => left - right)),

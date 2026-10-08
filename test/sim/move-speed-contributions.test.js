@@ -51,7 +51,7 @@ function harness({ speed = 0.25, minimum = 0, definition = route(), maps } = {})
         alwaysCheckCurrentPoint: true, rngState: 17, nextNavigationRequestId: 0,
     });
     let work = effectFixtureWork(initialized.enemy);
-    let execution = { rngState: initialized.rngState, nextUnitId: 1, nextNavigationRequestId: initialized.nextNavigationRequestId, nextMechanismId: 0, nextSpatialEffectId: 0 };
+    let execution = { rngState: initialized.rngState, nextUnitId: 1, nextNavigationRequestId: initialized.nextNavigationRequestId, nextMechanismId: 0, nextNavigationModifierId: 0 };
     const fieldCache = createNavigationFieldCache();
     return {
         battlefield,
@@ -216,7 +216,7 @@ test("move speed: computed providers read phase facts without becoming stored fi
     const fullHp = h.unit;
     h.work = updateCombatUnit(h.work, { ...fullHp, vitality: { ...fullHp.vitality, hp: 50 } });
     h.battlefield.apply([{ type: "REGISTER_UNIT", unit: h.unit }]);
-    const moved = createMovementSystem({ moveMultiplier: 0.5 }, resources).step({
+    const moved = createMovementSystem({ routeMoveMultiplier: 0.5 }, resources).step({
         battlefield: h.battlefield.view, tick: 0, execution: h.execution, commands: [], removedUnits: [],
     }, undefined);
     h.battlefield.commit(moved.changes);

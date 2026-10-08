@@ -10,10 +10,10 @@ import type {
     NavigationMaps,
     NavigationRevision,
 } from "./map.js";
-import type { NavigationEffectDefinition } from "./effect.js";
+import type { NavigationModifierDefinition } from "./modifier.js";
 
-export interface ProjectedNavigationEffect {
-    readonly definition: NavigationEffectDefinition;
+export interface ProjectedNavigationModifier {
+    readonly definition: NavigationModifierDefinition;
     readonly positions: readonly TilePosition[];
 }
 
@@ -76,18 +76,18 @@ export function projectStaticNavigationMap(
 
 function projectCells(
     baseline: NavigationMap,
-    effects: readonly ProjectedNavigationEffect[],
+    navigationModifiers: readonly ProjectedNavigationModifier[],
 ): readonly NavigationCell[] {
     const cells = baseline.cells.slice();
 
-    for (const effect of effects) {
-        const restriction = effect.definition[baseline.pathMotionMode];
+    for (const navigationModifier of navigationModifiers) {
+        const restriction = navigationModifier.definition[baseline.pathMotionMode];
 
         if (restriction === null) {
             continue;
         }
 
-        for (const position of effect.positions) {
+        for (const position of navigationModifier.positions) {
             const index = position[0] * baseline.columns + position[1];
             const cell = cells[index]!;
             let departures = cell.departures;
@@ -101,7 +101,7 @@ function projectCells(
             const passable = cell.passable && !restriction.denyPassage;
             const moveCost =
                 baseline.pathMotionMode === "WALK"
-                    ? Math.max(cell.moveCost, effect.definition.WALK!.costFloor)
+                    ? Math.max(cell.moveCost, navigationModifier.definition.WALK!.costFloor)
                     : 1;
 
             if (
@@ -144,41 +144,42 @@ function sameCells(
 }
 
 function sameContributions(
-    leftEffects: readonly ProjectedNavigationEffect[],
-    rightEffects: readonly ProjectedNavigationEffect[],
+    leftNavigationModifiers: readonly ProjectedNavigationModifier[],
+    rightNavigationModifiers: readonly ProjectedNavigationModifier[],
     mode: PathMotionMode,
 ): boolean {
-    if (leftEffects === rightEffects) {
+    if (leftNavigationModifiers === rightNavigationModifiers) {
         return true;
     }
 
-    const contributes = (effect: ProjectedNavigationEffect) =>
-        effect.definition[mode] !== null && effect.positions.length > 0;
-    const left = leftEffects.filter(contributes);
-    const right = rightEffects.filter(contributes);
+    const contributes = (navigationModifier: ProjectedNavigationModifier) =>
+        navigationModifier.definition[mode] !== null && navigationModifier.positions.length > 0;
+    const left = leftNavigationModifiers.filter(contributes);
+    const right = rightNavigationModifiers.filter(contributes);
 
     if (left.length !== right.length) {
         return false;
     }
 
     for (let index = 0; index < left.length; index++) {
-        const leftEffect = left[index]!;
-        const rightEffect = right[index]!;
-        const leftRestriction = leftEffect.definition[mode]!;
-        const rightRestriction = rightEffect.definition[mode]!;
+        const leftNavigationModifier = left[index]!;
+        const rightNavigationModifier = right[index]!;
+        const leftRestriction = leftNavigationModifier.definition[mode]!;
+        const rightRestriction = rightNavigationModifier.definition[mode]!;
 
         if (
             leftRestriction.denyPassage !== rightRestriction.denyPassage ||
             (mode === "WALK" &&
-                leftEffect.definition.WALK!.costFloor !== rightEffect.definition.WALK!.costFloor) ||
+                leftNavigationModifier.definition.WALK!.costFloor !==
+                    rightNavigationModifier.definition.WALK!.costFloor) ||
             DIRECTIONS.some(
                 (direction) =>
                     leftRestriction.deniedDepartures.includes(direction) !==
                     rightRestriction.deniedDepartures.includes(direction),
             ) ||
-            leftEffect.positions.length !== rightEffect.positions.length ||
-            leftEffect.positions.some((position, positionIndex) => {
-                const other = rightEffect.positions[positionIndex]!;
+            leftNavigationModifier.positions.length !== rightNavigationModifier.positions.length ||
+            leftNavigationModifier.positions.some((position, positionIndex) => {
+                const other = rightNavigationModifier.positions[positionIndex]!;
 
                 return position[0] !== other[0] || position[1] !== other[1];
             })
@@ -192,21 +193,24 @@ function sameContributions(
 
 export function projectNavigationMaps(
     baseline: NavigationMaps,
-    effects: readonly ProjectedNavigationEffect[],
+    navigationModifiers: readonly ProjectedNavigationModifier[],
     previous: NavigationMaps,
-    previousEffects?: readonly ProjectedNavigationEffect[],
+    previousNavigationModifiers?: readonly ProjectedNavigationModifier[],
 ): NavigationProjection {
     const maps: Record<PathMotionMode, NavigationMap> = { WALK: previous.WALK, FLY: previous.FLY };
     const changedModes: PathMotionMode[] = [];
 
     for (const mode of ["WALK", "FLY"] as const) {
-        if (previousEffects !== undefined && sameContributions(effects, previousEffects, mode)) {
+        if (
+            previousNavigationModifiers !== undefined &&
+            sameContributions(navigationModifiers, previousNavigationModifiers, mode)
+        ) {
             continue;
         }
 
         const baselineMap = baseline[mode];
         const previousMap = previous[mode];
-        const cells = projectCells(baselineMap, effects);
+        const cells = projectCells(baselineMap, navigationModifiers);
 
         if (sameCells(cells, previousMap.cells)) {
             continue;

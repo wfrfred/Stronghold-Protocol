@@ -12,9 +12,8 @@ import { LocalBossPool } from '../../server/sim/spec.js';
 import { BattlefieldRuntime, createBattlefieldRuntime } from '../../dist/core/tactical/battlefield/runtime.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createMechanismDefinition, createMechanismRuntime } from '../../dist/core/tactical/battlefield/mechanism.js';
-import { createNavigationEffectDefinition, createNavigationSpatialEffect, createSpatialEffectRegion } from '../../dist/core/tactical/battlefield/navigation/effect.js';
+import { createNavigationModifierDefinition, createNavigationModifier, createNavigationModifierRegion } from '../../dist/core/tactical/battlefield/navigation/modifier.js';
 import { createRng } from '../../dist/core/common/rng.js';
-import { createBattleSpec } from '../../dist/core/tactical/battle/spec.js';
 import { BattleRuntime, simulateBattle } from '../../dist/core/tactical/battle/runtime.js';
 import { advanceSpawnSchedule, getSpawnedCount, getUnspawnedCount, isSpawnScheduleCompleted, recordScheduleSpawns, resolveScheduleUnits } from "../../dist/core/tactical/battle/schedule/runtime.js";
 import { cloneScheduleState, createSpawnScheduleExecution } from "../../dist/core/tactical/battle/schedule/state.js";
@@ -654,7 +653,7 @@ test('core raw 01 slime fragment preserves map, route flags and stats; spawns at
   assert.deepEqual(spec.schedule.spawns[0].route.checkpoints, []);
   assert.equal(spec.schedule.spawns[0].definition.vitality.maxHp, 550);
   assert.equal(spec.schedule.spawns[0].definition.locomotion.moveSpeedPerTick, 1 / 30);
-  assert.equal(spec.moveMultiplier, 0.5);
+  assert.equal(spec.routeMoveMultiplier, 0.5);
   assert.equal(spec.maxTicks, 1350);
   assert.deepEqual(omittedActions, ['waves[0].fragments[0].actions[1]', 'waves[0].fragments[0].actions[2]']);
   assert.deepEqual(inactiveBranches, ['dragon']);
@@ -671,7 +670,7 @@ test('core raw 01 slime fragment preserves map, route flags and stats; spawns at
   assert.equal(first.spawning.cursor, 1);
   assert.equal(first.spawning.spawnedCount, 1);
   assert.deepEqual(first.spawning.managedFinalUnitIds, [0]);
-  assert.deepEqual(first.execution, { rngState: expectedRng.state(), nextUnitId: 1, nextNavigationRequestId: 1, nextMechanismId: 0, nextSpatialEffectId: 0 });
+  assert.deepEqual(first.execution, { rngState: expectedRng.state(), nextUnitId: 1, nextNavigationRequestId: 1, nextMechanismId: 0, nextNavigationModifierId: 0 });
   assert.equal(first.units[0].vitality.hp, 550);
   assert.equal(first.units[0].locomotion.mainRoute.route.progress.move.navigationRequestId, 0);
   assert.deepEqual(first.units[0].locomotion.mainRoute.route.timing, { waveStartedAtTick: 0, fragmentStartedAtTick: 0 });
@@ -688,7 +687,7 @@ test('core raw 01 slime fragment preserves map, route flags and stats; spawns at
   assert.equal(second.spawning.cursor, 2);
   assert.equal(second.spawning.spawnedCount, 2);
   assert.deepEqual(second.spawning.managedFinalUnitIds, [0, 1]);
-  assert.deepEqual(second.execution, { rngState: expectedRng.state(), nextUnitId: 2, nextNavigationRequestId: 2, nextMechanismId: 0, nextSpatialEffectId: 0 });
+  assert.deepEqual(second.execution, { rngState: expectedRng.state(), nextUnitId: 2, nextNavigationRequestId: 2, nextMechanismId: 0, nextNavigationModifierId: 0 });
   assert.deepEqual(second.units.map(unit => unit.locomotion.mainRoute.route.progress.move.navigationRequestId), [0, 1]);
   assert.deepEqual(second.units.map(unit => unit.locomotion.mainRoute.route.timing), [
     { waveStartedAtTick: 0, fragmentStartedAtTick: 0 },
@@ -734,9 +733,10 @@ test('core raw 01 movement fragment replays every tick and completes routes with
 test('core battle snapshots isolate vitality, locomotion, route progress, navigation and counters', () => {
   const { spec } = slimeMovementFragment();
   const inputTiming = { ...spec.schedule.spawns[0].timing };
-  const isolated = createBattleSpec(withTimelineSpawns(spec, [{ ...spec.schedule.spawns[0], timing: inputTiming }]));
+  const isolated = new BattleRuntime(withTimelineSpawns(spec, [{ ...spec.schedule.spawns[0], timing: inputTiming }]));
   inputTiming.fragmentStartedAtTick = 99;
-  assert.equal(isolated.schedule.spawns[0].timing.fragmentStartedAtTick, 0);
+  while (isolated.snapshot().units.length === 0) isolated.step();
+  assert.equal(isolated.snapshot().units[0].locomotion.mainRoute.route.timing.fragmentStartedAtTick, 0);
   const runtime = new BattleRuntime(spec);
   while (runtime.snapshot().tickIndex < 91) runtime.step();
   const before = runtime.snapshot();
@@ -886,17 +886,17 @@ test('core absolute wait overflow rolls back same-tick spawns, expiry, identitie
     { type: 'WAIT_CURRENT_WAVE_TICKS', targetElapsedTicks: Number.MAX_SAFE_INTEGER },
   ] });
   const mechanism = createMechanismRuntime({ id: 0, definition: createMechanismDefinition({ id: 'wait-expiry' }), active: true });
-  const effect = createNavigationSpatialEffect({
-    id: 0, definition: createNavigationEffectDefinition({ id: 'wait-expiry',
+  const effect = createNavigationModifier({
+    id: 0, definition: createNavigationModifierDefinition({ id: 'wait-expiry',
       WALK: { denyPassage: false, deniedDepartures: [], costFloor: 2 }, FLY: null,
     }), source: { type: 'MECHANISM', mechanismId: 0 }, active: true,
-    region: createSpatialEffectRegion({ type: 'FIXED', position: [9, 6], range: [[0, 0]], direction: 'RIGHT' }),
+    region: createNavigationModifierRegion({ type: 'FIXED', position: [9, 6], range: [[0, 0]], direction: 'RIGHT' }),
     expiresAtTick: 5,
   });
   const runtime = new BattleRuntime({ ...withTimelineSpawns(spec, [
     { ...spawn, tick: 5 },
     { ...spawn, tick: 5, route, alwaysCheckCurrentPoint: true, timing: { waveStartedAtTick: 2, fragmentStartedAtTick: 3 } },
-  ]), initialMechanisms: [mechanism], initialEffects: [effect] });
+  ]), initialMechanisms: [{ definition: mechanism.definition, active: mechanism.active }], initialNavigationModifiers: [{ definition: effect.definition, source: { type: 'MECHANISM', mechanismIndex: 0 }, region: effect.region, active: effect.active, expiresAtTick: effect.expiresAtTick }] });
   while (runtime.snapshot().tickIndex < 5) runtime.step();
   const before = runtime.snapshot(), maps = runtime.navigationMaps;
   for (let retry = 0; retry < 2; retry++) {
@@ -1041,14 +1041,14 @@ test('core failed alternative route commands roll back same-tick expiry, births,
   const initial = routeCommandBattle([{ type: 'WAIT_FOR_TICKS', durationTicks: 30 }]);
   const spawn = initial.schedule.spawns[0];
   const mechanism = createMechanismRuntime({ id: 0, definition: createMechanismDefinition({ id: 'alternative-expiry' }), active: true });
-  const effect = createNavigationSpatialEffect({
-    id: 0, definition: createNavigationEffectDefinition({ id: 'alternative-expiry',
+  const effect = createNavigationModifier({
+    id: 0, definition: createNavigationModifierDefinition({ id: 'alternative-expiry',
       WALK: { denyPassage: false, deniedDepartures: [], costFloor: 2 }, FLY: null,
     }), source: { type: 'MECHANISM', mechanismId: 0 }, active: true,
-    region: createSpatialEffectRegion({ type: 'FIXED', position: [9, 6], range: [[0, 0]], direction: 'RIGHT' }),
+    region: createNavigationModifierRegion({ type: 'FIXED', position: [9, 6], range: [[0, 0]], direction: 'RIGHT' }),
     expiresAtTick: 1,
   });
-  const input = { ...withTimelineSpawns(initial, [spawn, { ...spawn, tick: 1 }]), initialMechanisms: [mechanism], initialEffects: [effect] };
+  const input = { ...withTimelineSpawns(initial, [spawn, { ...spawn, tick: 1 }]), initialMechanisms: [{ definition: mechanism.definition, active: mechanism.active }], initialNavigationModifiers: [{ definition: effect.definition, source: { type: 'MECHANISM', mechanismIndex: 0 }, region: effect.region, active: effect.active, expiresAtTick: effect.expiresAtTick }] };
   const runtime = new BattleRuntime(input), replay = new BattleRuntime(input);
   runtime.step(); replay.step();
   const before = runtime.snapshot(), maps = runtime.navigationMaps;
@@ -1064,7 +1064,7 @@ test('core failed alternative route commands roll back same-tick expiry, births,
   assert.deepEqual(runtime.step([command]), replay.step([command]));
   assert.deepEqual(runtime.snapshot(), replay.snapshot());
   const fixed = new BattleRuntime({ ...initial, predefines: [{ id: 0, alias: null, initiallyPresent: true,
-    creation: { type: 'UNIT', definition: Object.freeze({ id: 'fixed' }), position: [10, 9], navigationEffects: [] },
+    creation: { type: 'UNIT', definition: Object.freeze({ id: 'fixed' }), position: [10, 9], navigationModifiers: [] },
   }] });
   const fixedBefore = fixed.snapshot();
   assert.throws(() => fixed.step([{ ...command, unitId: 0 }]), /no routed locomotion/);
@@ -1079,12 +1079,12 @@ test('core battle publishes every tick once and retries a final-stage failure wi
     const initialMechanism = createMechanismRuntime({
       id: 0, definition: createMechanismDefinition({ id: 'late-failure-initial' }), active: true,
     });
-    const restriction = createNavigationEffectDefinition({
+    const restriction = createNavigationModifierDefinition({
       id: 'late-failure-restriction', WALK: { denyPassage: false, deniedDepartures: [], costFloor: 3 }, FLY: null,
     });
-    const initialEffect = createNavigationSpatialEffect({
+    const initialEffect = createNavigationModifier({
       id: 0, definition: restriction, source: { type: 'MECHANISM', mechanismId: 0 }, active: true,
-      region: createSpatialEffectRegion({ type: 'FIXED', position: [9, 6], range: [[0, 0]], direction: 'RIGHT' }),
+      region: createNavigationModifierRegion({ type: 'FIXED', position: [9, 6], range: [[0, 0]], direction: 'RIGHT' }),
       expiresAtTick: 1,
     });
     const predefinedUnit = Object.freeze({ id: 'late-failure-predefined', vitality: Object.freeze({ maxHp: 25 }) });
@@ -1093,17 +1093,17 @@ test('core battle publishes every tick once and retries a final-stage failure wi
         ...(reason === 'TIME_LIMIT' ? [source] : []),
         { ...source, tick: 1, route: completedRoute },
       ]),
-      initialMechanisms: [initialMechanism], initialEffects: [initialEffect],
+      initialMechanisms: [{ definition: initialMechanism.definition, active: initialMechanism.active }], initialNavigationModifiers: [{ definition: initialEffect.definition, source: { type: 'MECHANISM', mechanismIndex: 0 }, region: initialEffect.region, active: initialEffect.active, expiresAtTick: initialEffect.expiresAtTick }],
       predefines: [
         { id: 0, alias: null, initiallyPresent: true,
-          creation: { type: 'UNIT', definition: predefinedUnit, position: Object.freeze([8, 9]), navigationEffects: [] } },
+          creation: { type: 'UNIT', definition: predefinedUnit, position: Object.freeze([8, 9]), navigationModifiers: [] } },
         { id: 1, alias: null, initiallyPresent: false,
-          creation: { type: 'MECHANISM', definition: createMechanismDefinition({ id: 'late-failure-created' }), navigationEffects: [
+          creation: { type: 'MECHANISM', definition: createMechanismDefinition({ id: 'late-failure-created' }), navigationModifiers: [
             { definition: restriction,
-              region: createSpatialEffectRegion({ type: 'FIXED', position: [9, 7], range: [[0, 0]], direction: 'RIGHT' }) },
+              region: createNavigationModifierRegion({ type: 'FIXED', position: [9, 7], range: [[0, 0]], direction: 'RIGHT' }) },
           ] } },
         { id: 2, alias: null, initiallyPresent: false,
-          creation: { type: 'UNIT', definition: predefinedUnit, position: Object.freeze([8, 9]), navigationEffects: [] } },
+          creation: { type: 'UNIT', definition: predefinedUnit, position: Object.freeze([8, 9]), navigationModifiers: [] } },
       ],
     };
     const runtime = new BattleRuntime(input), replay = new BattleRuntime(input);
@@ -1124,7 +1124,7 @@ test('core battle publishes every tick once and retries a final-stage failure wi
     assert.ok(expectedSnapshot.execution.nextNavigationRequestId > before.execution.nextNavigationRequestId);
     assert.ok(expectedSnapshot.execution.nextUnitId > before.execution.nextUnitId);
     assert.ok(expectedSnapshot.execution.nextMechanismId > before.execution.nextMechanismId);
-    assert.ok(expectedSnapshot.execution.nextSpatialEffectId > before.execution.nextSpatialEffectId);
+    assert.ok(expectedSnapshot.execution.nextNavigationModifierId > before.execution.nextNavigationModifierId);
     const fork = BattlefieldRuntime.prototype.fork;
     const unitIds = Object.getOwnPropertyDescriptor(BattlefieldRuntime.prototype, 'unitIds').get;
     let failures = 0;
@@ -1135,7 +1135,7 @@ test('core battle publishes every tick once and retries a final-stage failure wi
           const ids = unitIds.call(field);
           if (JSON.stringify(ids) === JSON.stringify(expectedSnapshot.units.map(unit => unit.id))) {
             assert.deepEqual(field.mechanismIds, expectedSnapshot.mechanisms.map(mechanism => mechanism.id));
-            assert.deepEqual(field.effectIds, [1]);
+            assert.deepEqual(field.navigationModifierIds, [1]);
             assert.deepEqual(runtime.snapshot(), before);
             assert.equal(runtime.navigationMaps, maps);
             failures++;
@@ -1223,7 +1223,7 @@ test('core clearing derived navigation fields preserves every tick, event and RN
 
 test('core battle deadline keeps live units separate from spawns due at the excluded final edge', () => {
   const { spec } = slimeMovementFragment();
-  const limited = createBattleSpec({ ...spec, maxTicks: 240 });
+  const limited = { ...spec, maxTicks: 240 };
   const runtime = new BattleRuntime(limited);
   const events = [];
   while (runtime.result === null) events.push(...runtime.step().events);
@@ -1341,12 +1341,12 @@ test('core fragment projects periodic spawns from absolute source times without 
 test('core battle uses integer tick boundaries for spawning, effect expiry and deadlines', () => {
   const { spec } = slimeMovementFragment();
   const mechanism = createMechanismRuntime({ id: 0, definition: createMechanismDefinition({ id: 'expiry' }), active: true });
-  const effect = createNavigationSpatialEffect({
+  const effect = createNavigationModifier({
     id: 0,
-    definition: createNavigationEffectDefinition({ id: 'expiry', WALK: { denyPassage: false, deniedDepartures: [], costFloor: 2 }, FLY: null }),
+    definition: createNavigationModifierDefinition({ id: 'expiry', WALK: { denyPassage: false, deniedDepartures: [], costFloor: 2 }, FLY: null }),
     source: { type: 'MECHANISM', mechanismId: 0 },
     active: true,
-    region: createSpatialEffectRegion({ type: 'FIXED', position: [9, 6], range: [[0, 0]], direction: 'RIGHT' }),
+    region: createNavigationModifierRegion({ type: 'FIXED', position: [9, 6], range: [[0, 0]], direction: 'RIGHT' }),
     expiresAtTick: secondsToTicks(0.9),
   });
   assert.equal(secondsToTicks(0.1 + 0.2), 9);
@@ -1354,16 +1354,16 @@ test('core battle uses integer tick boundaries for spawning, effect expiry and d
   assert.equal(secondsToTicks(0), 0);
   assert.equal(secondsToTicks(0.15), 5);
   for (const seconds of [NaN, Infinity, Number.MAX_VALUE]) assert.throws(() => secondsToTicks(seconds), RangeError);
-  const boundary = createBattleSpec({ ...withTimelineSpawns(spec, [{ ...spec.schedule.spawns[0], tick: secondsToTicks(0.9) }]),
-    maxTicks: secondsToTicks(1.2), initialMechanisms: [mechanism], initialEffects: [effect],
-  });
+  const boundary = { ...withTimelineSpawns(spec, [{ ...spec.schedule.spawns[0], tick: secondsToTicks(0.9) }]),
+    maxTicks: secondsToTicks(1.2), initialMechanisms: [{ definition: mechanism.definition, active: mechanism.active }], initialNavigationModifiers: [{ definition: effect.definition, source: { type: 'MECHANISM', mechanismIndex: 0 }, region: effect.region, active: effect.active, expiresAtTick: effect.expiresAtTick }],
+  };
   const runtime = new BattleRuntime(boundary);
   for (let index = 0; index < 27; index++) assert.deepEqual(runtime.step().events, []);
-  assert.equal(runtime.snapshot().effects.length, 1);
+  assert.equal(runtime.snapshot().navigationModifiers.length, 1);
   const step = runtime.step();
   assert.equal(step.events[0].type, 'ENEMY_SPAWNED');
   assert.equal(step.events[0].tick, 27);
-  assert.equal(runtime.snapshot().effects.length, 0);
+  assert.equal(runtime.snapshot().navigationModifiers.length, 0);
   assert.equal(runtime.snapshot().tickIndex, 28);
   while (runtime.result === null) runtime.step();
   assert.equal(runtime.result.reason, 'TIME_LIMIT');
@@ -1381,12 +1381,12 @@ test('core battle uses integer tick boundaries for spawning, effect expiry and d
     assert.throws(() => new BattleRuntime({ ...boundary, rngState }), /unsigned 32-bit/);
   }
   for (const maxTicks of [0, -1, 0.5, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
-    assert.throws(() => createBattleSpec({ ...boundary, maxTicks }), /tick budget/);
+    assert.throws(() => new BattleRuntime({ ...boundary, maxTicks }), /tick budget/);
   }
   for (const tick of [-1, 0.5, NaN, Number.MAX_SAFE_INTEGER + 1]) {
-    assert.throws(() => createBattleSpec(withTimelineSpawns(boundary, [{ ...boundary.schedule.spawns[0], tick }])), /spawn.tick/);
+    assert.throws(() => new BattleRuntime(withTimelineSpawns(boundary, [{ ...boundary.schedule.spawns[0], tick }])), /spawn.tick/);
   }
-  assert.throws(() => createBattleSpec(withTimelineSpawns(boundary, [{ ...boundary.schedule.spawns[0],
+  assert.throws(() => new BattleRuntime(withTimelineSpawns(boundary, [{ ...boundary.schedule.spawns[0],
     timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0.5 },
   }])), /fragmentStartedAtTick/);
 });
@@ -1394,21 +1394,21 @@ test('core battle uses integer tick boundaries for spawning, effect expiry and d
 test('core battle rolls back spawning, expiry, RNG and tick progress when movement cannot be computed', () => {
   const { spec } = slimeMovementFragment();
   const mechanism = createMechanismRuntime({ id: 0, definition: createMechanismDefinition({ id: 'overflow' }), active: true });
-  const region = createSpatialEffectRegion({ type: 'FIXED', position: [0, 0], direction: 'RIGHT',
+  const region = createNavigationModifierRegion({ type: 'FIXED', position: [0, 0], direction: 'RIGHT',
     range: Array.from({ length: spec.map.rows }, (_, row) => Array.from({ length: spec.map.columns }, (_, col) => [row, col])).flat(),
   });
-  const effect = createNavigationSpatialEffect({ id: 0,
-    definition: createNavigationEffectDefinition({ id: 'overflow', WALK: { denyPassage: false, deniedDepartures: [], costFloor: Number.MAX_SAFE_INTEGER }, FLY: null }),
+  const effect = createNavigationModifier({ id: 0,
+    definition: createNavigationModifierDefinition({ id: 'overflow', WALK: { denyPassage: false, deniedDepartures: [], costFloor: Number.MAX_SAFE_INTEGER }, FLY: null }),
     source: { type: 'MECHANISM', mechanismId: 0 }, active: true, region, expiresAtTick: null,
   });
-  const expired = createNavigationSpatialEffect({ ...effect, id: 1, expiresAtTick: 0 });
+  const expired = createNavigationModifier({ ...effect, id: 1, expiresAtTick: 0 });
   const predefinedLevel = parseLevelDefinition(arknightsFixture('level_act1autochess_m02'), () => ({
     consumeTileBlackboard: (_, entry) => ['isValidHand', 'previewNotAlloed'].includes(entry.key),
   }));
   const hiddenCrate = parsePredefinedInstanceDefinition(0, predefinedLevel.predefines.tokenInsts[13],
     parsePredefinedPrefab(arknightsFixture('prefab_trap_1105_accrate')), arknightsFixture('character_trap_1105_accrate'));
   const runtime = new BattleRuntime({ ...withTimelineSpawns(spec, [{ ...spec.schedule.spawns[0], tick: 0 }]),
-    predefines: [hiddenCrate], initialMechanisms: [mechanism], initialEffects: [effect, expired],
+    predefines: [hiddenCrate], initialMechanisms: [{ definition: mechanism.definition, active: mechanism.active }], initialNavigationModifiers: [{ definition: effect.definition, source: { type: 'MECHANISM', mechanismIndex: 0 }, region: effect.region, active: effect.active, expiresAtTick: effect.expiresAtTick }, { definition: expired.definition, source: { type: 'MECHANISM', mechanismIndex: 0 }, region: expired.region, active: expired.active, expiresAtTick: expired.expiresAtTick }],
   });
   const before = runtime.snapshot();
   const maps = runtime.navigationMaps;
@@ -1910,15 +1910,15 @@ test('core same-position alternative disappearance and appearance replace an exi
   const runtime = new BattleRuntime({
     map, initialUnits: [{ definition: operator.definition, position: [1, 0] }],
     predefines: [{ id: 99, alias: null, initiallyPresent: false, creation: {
-      type: 'UNIT', definition: operator.definition, position: [1.5, 0], navigationEffects: [],
+      type: 'UNIT', definition: operator.definition, position: [1.5, 0], navigationModifiers: [],
     } }],
     schedule: { type: 'TIMELINE', spawns: [{
       definition: enemy.definition, route, tick: 0,
       timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 },
       alwaysCheckCurrentPoint: true, notCountInTotal: false,
     }] },
-    initialMechanisms: [], initialEffects: [], maxTicks: 20, moveMultiplier: 1,
-    rngState: 1, nextUnitId: 0, nextNavigationRequestId: 0,
+    initialMechanisms: [], initialNavigationModifiers: [], maxTicks: 20, routeMoveMultiplier: 1,
+    rngState: 1,
   });
   runtime.step();
   const before = runtime.snapshot();
@@ -1997,22 +1997,22 @@ test('core battle deploys, relocates and retreats units with owned occupancy and
   assert.equal(runtime.navigationMaps, maps);
 
   const occupancy = createOccupancyState({ claims: [{ position: [0, 5], slot: 'DEPLOYMENT', type: 'RESERVATION' }] });
-  const initialEffects = [{
-    definition: createNavigationEffectDefinition({ id: 'initial_placement_navigation',
+  const initialNavigationModifiers = [{
+    definition: createNavigationModifierDefinition({ id: 'initial_placement_navigation',
       WALK: { denyPassage: false, deniedDepartures: [], costFloor: 1000 }, FLY: null }),
     range: [[0, 0]], direction: 'RIGHT',
   }];
-  const initialInput = createBattleSpec(deploymentBattleInput({
+  const initialInput = deploymentBattleInput({
     initialUnits: [{ definition: Object.freeze({ id: 'reserved_home' }), position: [5, 0], occupancy,
-      navigationEffects: initialEffects }],
-  }));
+      navigationModifiers: initialNavigationModifiers }],
+  });
   const reserved = new BattleRuntime(initialInput);
   occupancy.claims[0].position = [0, 4];
-  initialEffects[0].range[0][1] = 1;
+  initialNavigationModifiers[0].range[0][1] = 1;
   assert.deepEqual(reserved.snapshot().units[0].occupancy.claims,
     [{ position: [0, 5], slot: 'DEPLOYMENT', type: 'RESERVATION' }]);
-  assert.deepEqual(initialInput.initialUnits[0].navigationEffects[0].range, [[0, 0]]);
-  assert.deepEqual(reserved.snapshot().effects[0].region.range, [[0, 0]]);
+  assert.deepEqual(initialInput.initialUnits[0].navigationModifiers[0].range, [[0, 1]]);
+  assert.deepEqual(reserved.snapshot().navigationModifiers[0].region.range, [[0, 0]]);
   assert.deepEqual(reserved.navigationMaps.WALK.cells.map(cell => cell.moveCost), [1, 1, 1, 1, 1, 1000]);
   const before = reserved.snapshot();
   assert.throws(() => reserved.step([{ type: 'DEPLOY_UNIT', definition, tilePosition: [0, 5], playerSide: 'SIDE_A' }]));
@@ -2025,31 +2025,31 @@ test('core battle deploys, relocates and retreats units with owned occupancy and
     level.predefines.tokenInsts.find(instance => instance.inst.characterKey === 'trap_1105_accrate'),
     parsePredefinedPrefab(arknightsFixture('prefab_trap_1105_accrate')), arknightsFixture('character_trap_1105_accrate'));
   const crate = recipe.creation.definition;
-  const navigationEffects = recipe.creation.navigationEffects.map(contribution => ({
+  const navigationModifiers = recipe.creation.navigationModifiers.map(contribution => ({
     ...contribution, range: contribution.range.map(offset => [...offset]),
   }));
   const crates = new BattleRuntime(deploymentBattleInput());
   const baseline = crates.navigationMaps;
-  crates.step([{ type: 'DEPLOY_UNIT', definition: crate, tilePosition: [0, 1], playerSide: 'SIDE_A', navigationEffects }]);
+  crates.step([{ type: 'DEPLOY_UNIT', definition: crate, tilePosition: [0, 1], playerSide: 'SIDE_A', navigationModifiers }]);
   assert.deepEqual(crates.navigationMaps.WALK.cells.map(cell => cell.moveCost), [1, 1000, 1, 1, 1, 1]);
   assert.deepEqual(crates.navigationMaps.WALK.cells.map(cell => cell.passable), baseline.WALK.cells.map(cell => cell.passable));
   assert.equal(crates.navigationMaps.FLY, baseline.FLY);
-  const [effect] = crates.snapshot().effects;
+  const [effect] = crates.snapshot().navigationModifiers;
   assert.deepEqual(effect.source, { type: 'UNIT', unitId: 0 });
   assert.equal(effect.region.type, 'FOLLOW_UNIT');
   assert.equal(effect.region.unitId, 0);
   assert.equal(crates.snapshot().units[0].definition, crate);
-  navigationEffects[0].range[0][1] = 1;
-  navigationEffects.push({ ...navigationEffects[0], range: [[0, 2]] });
+  navigationModifiers[0].range[0][1] = 1;
+  navigationModifiers.push({ ...navigationModifiers[0], range: [[0, 2]] });
   crates.step([{ type: 'RELOCATE_UNIT', unitId: 0, tilePosition: [0, 3], playerSide: 'SIDE_A' }]);
   assert.deepEqual(crates.navigationMaps.WALK.cells.map(cell => cell.moveCost), [1, 1, 1, 1000, 1, 1]);
   assert.equal(crates.navigationMaps.FLY, baseline.FLY);
-  assert.equal(crates.snapshot().effects[0].id, effect.id);
-  assert.equal(crates.snapshot().effects.length, 1);
-  assert.deepEqual(crates.snapshot().effects[0].region.range, [[0, 0]]);
+  assert.equal(crates.snapshot().navigationModifiers[0].id, effect.id);
+  assert.equal(crates.snapshot().navigationModifiers.length, 1);
+  assert.deepEqual(crates.snapshot().navigationModifiers[0].region.range, [[0, 0]]);
   crates.step([{ type: 'RETREAT_UNIT', unitId: 0 }]);
   assert.deepEqual(crates.snapshot().units, []);
-  assert.deepEqual(crates.snapshot().effects, []);
+  assert.deepEqual(crates.snapshot().navigationModifiers, []);
   assert.deepEqual(crates.navigationMaps.WALK.cells, baseline.WALK.cells);
   assert.equal(crates.navigationMaps.FLY, baseline.FLY);
 });
@@ -2083,7 +2083,7 @@ test('core visibility: commands from different domains execute in phase order be
   const definition = deployableDefinition();
   const spec = deploymentBattleInput({ predefines: [{
     id: 17, alias: null, initiallyPresent: true, creation: {
-      type: 'UNIT', definition, position: [1, 0], navigationEffects: [],
+      type: 'UNIT', definition, position: [1, 0], navigationModifiers: [],
       occupancy: createOccupancyState({ claims: [{ position: [0, 1], slot: 'DEPLOYMENT', type: 'PRESENT' }] }),
     },
   }] });
@@ -2115,7 +2115,7 @@ test('core visibility: movement reads one navigation projection before following
   const definition = createEnemyDefinition({ id: 'moving_effect_anchor', vitality: { maxHp: 100 }, locomotion: {
     moveSpeedPerTick: 1, steeringParameters: createSteeringParameters({ steeringFactor: 1, maxSteeringForce: 1 }),
   } });
-  let execution = { rngState: 123, nextUnitId: 2, nextNavigationRequestId: 0, nextMechanismId: 0, nextSpatialEffectId: 1 };
+  let execution = { rngState: 123, nextUnitId: 2, nextNavigationRequestId: 0, nextMechanismId: 0, nextNavigationModifierId: 1 };
 
   for (const [id, pathMotionMode, column] of [[0, 'FLY', 1], [1, 'WALK', 3]]) {
     const route = createRouteDefinition({
@@ -2135,15 +2135,15 @@ test('core visibility: movement reads one navigation projection before following
     battlefield.apply([{ type: 'REGISTER_UNIT', unit: spawned.enemy }]);
   }
 
-  battlefield.apply([{ type: 'ADD_EFFECT', effect: createNavigationSpatialEffect({
-    id: 0, definition: createNavigationEffectDefinition({ id: 'moving_denied_tile',
+  battlefield.apply([{ type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: createNavigationModifier({
+    id: 0, definition: createNavigationModifierDefinition({ id: 'moving_denied_tile',
       WALK: { denyPassage: true, deniedDepartures: [], costFloor: 1 }, FLY: null }),
     source: { type: 'UNIT', unitId: 0 }, active: true,
     region: { type: 'FOLLOW_UNIT', unitId: 0, range: [[0, 0]], direction: 'RIGHT' }, expiresAtTick: null,
   }) }]);
   assert.deepEqual(battlefield.navigationMaps.WALK.cells.map(cell => cell.passable), [true, false, true, true, true]);
 
-  const moved = createMovementSystem({ moveMultiplier: 1 }, new CombatResources()).step({
+  const moved = createMovementSystem({ routeMoveMultiplier: 1 }, new CombatResources()).step({
     battlefield, tick: 0, commands: [], execution, removedUnits: [],
   }, undefined);
   battlefield.apply(moved.changes);
@@ -2152,7 +2152,7 @@ test('core visibility: movement reads one navigation projection before following
   assert.deepEqual(moved.events.filter(event => event.type === 'NAVIGATION').map(event => [event.unitId, event.outcome.type]),
     [[0, 'ARRIVED'], [1, 'ARRIVED']]);
   assert.deepEqual(battlefield.navigationMaps.WALK.cells.map(cell => cell.passable), [true, true, false, true, true]);
-  assert.deepEqual(battlefield.effectsAt([0, 2]), [0]);
+  assert.deepEqual(battlefield.navigationModifiersAt([0, 2]), [0]);
   assert.deepEqual(moved.execution, execution);
 });
 
@@ -2167,37 +2167,37 @@ test('core elevated support disables blocking without changing target layer and 
   });
   const occupancy = createOccupancyState({ claims: [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }] });
   const recipe = createPredefinedInstanceDefinition({ id: 50, alias: 'test_platform', initiallyPresent: true, creation: {
-    type: 'UNIT', definition: provider, position: [1, 0], navigationEffects: [], occupancy,
+    type: 'UNIT', definition: provider, position: [1, 0], navigationModifiers: [], occupancy,
   } });
   occupancy.claims[0].position = [0, 4];
   occupancy.claims.push({ position: [0, 5], slot: 'SUPPORT', type: 'PRESENT' });
   assert.deepEqual(recipe.creation.occupancy.claims, [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }]);
   const claims = [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }];
-  const navigationEffects = [{
-    definition: createNavigationEffectDefinition({ id: 'platform_navigation',
+  const navigationModifiers = [{
+    definition: createNavigationModifierDefinition({ id: 'platform_navigation',
       WALK: { denyPassage: false, deniedDepartures: [], costFloor: 1000 }, FLY: null }),
     range: [[0, 0]], direction: 'RIGHT',
   }];
-  const hiddenRecipe = { ...recipe, initiallyPresent: false,
-    creation: { ...recipe.creation, occupancy: { claims }, navigationEffects } };
+  const hiddenRecipe = createPredefinedInstanceDefinition({ ...recipe, initiallyPresent: false,
+    creation: { ...recipe.creation, occupancy: { claims }, navigationModifiers } });
   const runtime = new BattleRuntime(deploymentBattleInput({
     initialUnits: [{ definition: enemyDefinition, position: [1, 0] }],
     predefines: [hiddenRecipe],
   }));
   claims[0].position[1] = 4;
   claims.push({ position: [0, 5], slot: 'SUPPORT', type: 'PRESENT' });
-  navigationEffects[0].range[0][1] = 1;
-  navigationEffects[0].direction = 'UP';
-  navigationEffects.push({ ...navigationEffects[0], range: [[0, 2]] });
+  navigationModifiers[0].range[0][1] = 1;
+  navigationModifiers[0].direction = 'UP';
+  navigationModifiers.push({ ...navigationModifiers[0], range: [[0, 2]] });
   assert.deepEqual(runtime.snapshot().predefinedPresence, []);
   runtime.step([{ type: 'APPEAR_PREDEFINED', definitionId: 50 }]);
   const platformId = runtime.snapshot().predefinedPresence[0].source.unitId;
   const platform = runtime.snapshot().units.find(unit => unit.id === platformId);
   assert.deepEqual(platform.occupancy.claims, [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }]);
   assert.deepEqual(runtime.navigationMaps.WALK.cells.map(cell => cell.moveCost), [1, 1000, 1, 1, 1, 1]);
-  assert.equal(runtime.snapshot().effects.length, 1);
-  assert.deepEqual(runtime.snapshot().effects[0].region.range, [[0, 0]]);
-  assert.equal(runtime.snapshot().effects[0].region.direction, 'RIGHT');
+  assert.equal(runtime.snapshot().navigationModifiers.length, 1);
+  assert.deepEqual(runtime.snapshot().navigationModifiers[0].region.range, [[0, 0]]);
+  assert.equal(runtime.snapshot().navigationModifiers[0].region.direction, 'RIGHT');
   const deployed = runtime.step([{ type: 'DEPLOY_UNIT', definition, tilePosition: [0, 1], playerSide: 'SIDE_A' }]);
   const occupantId = deployed.events.find(event => event.type === 'UNIT_DEPLOYED').unitId;
   const supported = runtime.snapshot();

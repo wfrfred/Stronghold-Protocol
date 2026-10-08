@@ -3,13 +3,13 @@ import type {
     BattlefieldChangeResult,
     BattlefieldView,
 } from "../battlefield/contract.js";
-import type { BattleCommand, BattleEvent } from "./contract.js";
+import type { Command, Event } from "./contract.js";
 import type { BattleExecutionState } from "./execution/state.js";
 
 export interface BattlePhaseInput {
     readonly battlefield: BattlefieldView;
     readonly tick: number;
-    readonly commands: readonly BattleCommand[];
+    readonly commands: readonly Command[];
     readonly execution: BattleExecutionState;
     readonly removedUnits: BattlefieldChangeResult["removedUnits"];
 }
@@ -17,7 +17,7 @@ export interface BattlePhaseInput {
 export interface BattlePhaseResult<S = void> {
     readonly state: S;
     readonly changes: readonly BattlefieldChange[];
-    readonly events: readonly BattleEvent[];
+    readonly events: readonly Event[];
     readonly execution: BattleExecutionState;
 }
 
