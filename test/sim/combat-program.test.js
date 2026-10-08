@@ -148,8 +148,8 @@ test("combat program: action compilation uses only injected query and settlement
         ...current, vitality: { ...current.vitality, hp: current.vitality.hp - request.operands.power },
       }) };
     },
-    settleHealing: (work, request, tick, scope) => {
-      calls.push({ request, tick, scope, targetHp: getCombatUnit(work, 1).vitality.hp });
+    settleHealing: (work, request, scope) => {
+      calls.push({ request, scope, targetHp: getCombatUnit(work, 1).vitality.hp });
       return { work };
     },
   };
@@ -169,9 +169,8 @@ test("combat program: action compilation uses only injected query and settlement
     operands: { power: 10, attackScale: 1, attackAddition: 0, fixedPenetration: 0, proportionalPenetration: 0 },
   });
   assert.deepEqual(calls[1].request, {
-    sourceUnitId: 0, targetUnitId: 0, power: 5, ignoreHealFree: false,
+    sourceUnitId: 0, targetUnitId: 0, power: 5, ignoreHealFree: false, tick: 7,
   });
-  assert.equal(calls[1].tick, 7);
   assert.equal(calls[1].targetHp, 90);
   assert.equal(calls.every(call => call.scope instanceof EffectDispatchScope), true);
   assert.notEqual(calls[0].scope, calls[1].scope);
