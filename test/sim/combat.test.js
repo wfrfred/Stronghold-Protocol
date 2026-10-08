@@ -88,7 +88,7 @@ test('core combat: the real m01 demonstration targets at range, blocks three dog
   assert.ok(tile.buildableType === 'MELEE' || tile.buildableType === 'ALL');
   assert.deepEqual(placement.position, [6, 5]);
   assert.equal(placement.definition.vitality.maxHp, operator.stats.maxHp);
-  assert.equal(placement.definition.action.normalAction.targetGroups[0].effects[0].power, operator.stats.atk);
+  assert.equal(placement.definition.action.normalAction.targetGroups[0].operations[0].power, operator.stats.atk);
   const rangedPlacement = spec.initialUnits[1];
   const rangedTile = BattlefieldMap.get(spec.map, World.toTile(rangedPlacement.position));
   assert.ok(rangedTile.buildableType === 'RANGED' || rangedTile.buildableType === 'ALL');
@@ -1055,7 +1055,7 @@ function actionUnit(id, side, position, { hp = 100, flags = [], action } = {}) {
     } }, status: { initialFlags: flags }, defense: { defense: 0, resistance: 0 },
     blocker: { capacity: 0, geometry: { radius: 0 } },
     action: { normalAction: action ?? normalAction([
-      { id: 'primary', targeting: damageTargeting(), effects: [damageEffect(0)] },
+      { id: 'primary', targeting: damageTargeting(), operations: [damageEffect(0)] },
     ]) },
   });
   const unit = initializeUnit({ id, definition, position });
@@ -1124,7 +1124,7 @@ test('core action: query and healing settlement ignore flags have independent fo
   for (const queryIgnore of [false, true]) {
     for (const effectIgnore of [false, true]) {
       const action = normalAction([{ id: 'heal', targeting: healingTargeting({ ignoreHealFree: queryIgnore }),
-        effects: [healEffect(30, effectIgnore)] }]);
+        operations: [healEffect(30, effectIgnore)] }]);
       const source = actionUnit(0, 'ALLY', [0, 0], { action });
       const target = actionUnit(1, 'ALLY', [1, 0], { hp: 40, flags: ['HEAL_FREE'] });
       const before = structuredClone([source, target]);
@@ -1144,7 +1144,7 @@ test('core action: query and healing settlement ignore flags have independent fo
 test('core action: shared query purposes gate mixed effects while source follow-ups retain their own settlement', () => {
   const target = actionUnit(1, 'ENEMY', [1, 0], { hp: 80, flags: ['HEAL_FREE'] });
   const mixed = actionUnit(0, 'ALLY', [0, 0], { action: normalAction([
-    { id: 'attack', targeting: damageTargeting(), effects: [damageEffect(10), healEffect(5)] },
+    { id: 'attack', targeting: damageTargeting(), operations: [damageEffect(10), healEffect(5)] },
   ]) });
   const result = startSingleAction(mixed, compileAction(mixed.definition.action.normalAction, new CombatResources()), {
     battlefield: actionView([mixed, target]), tick: 0,
@@ -1153,8 +1153,8 @@ test('core action: shared query purposes gate mixed effects while source follow-
 
   for (const ignoreHealFree of [false, true]) {
     const source = actionUnit(0, 'ALLY', [0, 0], { hp: 60, flags: ['HEAL_FREE'], action: normalAction([
-      { id: 'attack', targeting: damageTargeting(), effects: [damageEffect(10)] },
-    ], [{ receiver: { type: 'SOURCE' }, effect: healEffect(15, ignoreHealFree) }]) });
+      { id: 'attack', targeting: damageTargeting(), operations: [damageEffect(10)] },
+    ], [{ receiver: { type: 'SOURCE' }, operation: healEffect(15, ignoreHealFree) }]) });
     const stepped = startSingleAction(source, compileAction(source.definition.action.normalAction, new CombatResources()), {
       battlefield: actionView([source, target]), tick: 0,
     });
@@ -1168,8 +1168,8 @@ test('core action: shared query purposes gate mixed effects while source follow-
 
 test('core action: secondary target groups cannot trigger the action and use independent query purposes', () => {
   const definition = normalAction([
-    { id: 'attack', targeting: damageTargeting(), effects: [damageEffect(10)] },
-    { id: 'heal', targeting: healingTargeting(), effects: [healEffect(20)] },
+    { id: 'attack', targeting: damageTargeting(), operations: [damageEffect(10)] },
+    { id: 'heal', targeting: healingTargeting(), operations: [healEffect(20)] },
   ]);
   const source = actionUnit(0, 'ALLY', [0, 0], { action: definition });
   const friend = actionUnit(2, 'ALLY', [2, 0], { hp: 40 });
@@ -1194,11 +1194,11 @@ test('core action: secondary target groups cannot trigger the action and use ind
 test('core combat: healing sees earlier phase damage and replays without executable rules in snapshots', () => {
   const base = createLegacyCombatSpec({ rows: 1, columns: 4, operators: [], enemies: [], maxTicks: 2 });
   const attacker = actionUnit(0, 'ENEMY', [0, 0], { action: normalAction([
-    { id: 'attack', targeting: damageTargeting(), effects: [damageEffect(20)] },
+    { id: 'attack', targeting: damageTargeting(), operations: [damageEffect(20)] },
   ]) });
   const friend = actionUnit(1, 'ALLY', [1, 0]);
   const medic = actionUnit(2, 'ALLY', [3, 0], { action: normalAction([
-    { id: 'heal', targeting: healingTargeting(), effects: [healEffect(10)] },
+    { id: 'heal', targeting: healingTargeting(), operations: [healEffect(10)] },
   ]) });
   const input = { ...base, initialUnits: [attacker, friend, medic].map(unit => ({
     definition: unit.definition, position: unit.position,
@@ -1218,8 +1218,8 @@ test('core combat: healing sees earlier phase damage and replays without executa
 
 test('core action: binding follow-ups retain the selected target and read preceding effect updates', () => {
   const source = actionUnit(0, 'ALLY', [0, 0], { action: normalAction([
-    { id: 'restore', targeting: healingTargeting(), effects: [healEffect(20)] },
-  ], [{ receiver: { type: 'BINDING', bindingId: 'restore' }, effect: healEffect(5) }]) });
+    { id: 'restore', targeting: healingTargeting(), operations: [healEffect(20)] },
+  ], [{ receiver: { type: 'BINDING', bindingId: 'restore' }, operation: healEffect(5) }]) });
   const first = actionUnit(1, 'ALLY', [1, 0], { hp: 30 });
   const second = actionUnit(2, 'ALLY', [2, 0], { hp: 40 });
   const result = startSingleAction(source, compileAction(source.definition.action.normalAction, new CombatResources()), {

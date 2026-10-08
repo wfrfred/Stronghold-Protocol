@@ -70,7 +70,7 @@ function actorDefinition(id = "launcher", attack = 10) {
               ignoreInvisible: false,
               maxTargets: 1,
             },
-            effects: [{ type: "DAMAGE", power: 999, damageType: "TRUE" }],
+            operations: [{ type: "DAMAGE", power: 999, damageType: "TRUE" }],
           },
         ],
         followUps: [],

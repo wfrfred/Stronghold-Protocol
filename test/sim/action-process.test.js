@@ -53,7 +53,7 @@ function definition() {
           ignoreInvisible: false,
           maxTargets: 1,
         },
-        effects: [{ type: "DAMAGE", power: 7, damageType: "TRUE" }],
+        operations: [{ type: "DAMAGE", power: 7, damageType: "TRUE" }],
       },
     ],
     followUps: [],

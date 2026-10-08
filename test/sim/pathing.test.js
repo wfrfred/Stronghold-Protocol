@@ -1325,7 +1325,7 @@ test('core selective projection retains untouched collections, indexes and live 
   const routed = routedEnemyHarness({ speedPerTick: 0.1, checkpoints: [coreMove(4)] });
   const definition = Object.freeze({ ...routed.enemy.definition, action: createActionCapabilityDefinition({ normalAction: {
     triggerBindingId: 'normal', intervalTicks: 30, recoveryTicks: 0, followUps: [],
-    targetGroups: [{ id: 'normal', effects: [{ type: 'DAMAGE', power: 10, damageType: 'PHYSICAL' }],
+    targetGroups: [{ id: 'normal', operations: [{ type: 'DAMAGE', power: 10, damageType: 'PHYSICAL' }],
       targeting: { type: 'DAMAGE', scope: { type: 'RANGE', geometry: {
         type: 'SHAPES', geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 1 }] },
       } }, canTargetAir: false, includeBlockingRelations: false, preferBlockingRelations: false,

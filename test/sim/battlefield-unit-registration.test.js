@@ -24,7 +24,7 @@ const definition = () => ({
   defense: { defense: 20, resistance: 10 },
   action: createActionCapabilityDefinition({ normalAction: {
     triggerBindingId: 'primary', intervalTicks: 3, recoveryTicks: 0, followUps: [],
-    targetGroups: [{ id: 'primary', effects: [{ type: 'DAMAGE', power: 10, damageType: 'PHYSICAL' }],
+    targetGroups: [{ id: 'primary', operations: [{ type: 'DAMAGE', power: 10, damageType: 'PHYSICAL' }],
       targeting: { type: 'DAMAGE', scope: { type: 'RANGE', geometry: {
         type: 'SHAPES', geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 1 }] },
       } }, canTargetAir: false, includeBlockingRelations: false, preferBlockingRelations: false,

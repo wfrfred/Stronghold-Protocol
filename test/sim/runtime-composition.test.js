@@ -78,7 +78,7 @@ function actor(id) {
             ignoreInvisible: false,
             maxTargets: 1,
           },
-          effects: [{ type: "DAMAGE", power: 10, damageType: "TRUE" }],
+          operations: [{ type: "DAMAGE", power: 10, damageType: "TRUE" }],
         }],
         followUps: [],
       },

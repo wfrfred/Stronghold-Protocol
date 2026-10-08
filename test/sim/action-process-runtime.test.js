@@ -55,7 +55,7 @@ function actorDefinition(id, { intervalTicks = 10, power = 7, moving = false } =
               ignoreInvisible: false,
               maxTargets: 1,
             },
-            effects: [{ type: "DAMAGE", power, damageType: "TRUE" }],
+            operations: [{ type: "DAMAGE", power, damageType: "TRUE" }],
           },
         ],
         followUps: [],

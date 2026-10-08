@@ -2,7 +2,7 @@ import {
     assertNonnegativeSafeInteger,
     assertPositiveSafeInteger,
 } from "../../../../common/assert.js";
-import { createEffectDefinition, type EffectDefinition } from "./effect.js";
+import * as operation from "./operation.js";
 import { createTargetingDefinition, type TargetingDefinition } from "../../targeting/definition.js";
 import type { Unit, UnitDefinition } from "../../unit.js";
 
@@ -11,21 +11,21 @@ export type TargetBindingId = string;
 export interface ActionTargetGroupDefinition {
     readonly id: TargetBindingId;
     readonly targeting: TargetingDefinition;
-    readonly effects: readonly [EffectDefinition, ...EffectDefinition[]];
+    readonly operations: readonly [operation.Definition, ...operation.Definition[]];
 }
 
-export type EffectReceiver =
+export type OperationReceiver =
     { readonly type: "SOURCE" } | { readonly type: "BINDING"; readonly bindingId: TargetBindingId };
 
-export interface FollowUpEffectDefinition {
-    readonly receiver: EffectReceiver;
-    readonly effect: EffectDefinition;
+export interface FollowUpOperationDefinition {
+    readonly receiver: OperationReceiver;
+    readonly operation: operation.Definition;
 }
 
 export interface ActionDefinition {
     readonly triggerBindingId: TargetBindingId;
     readonly targetGroups: readonly [ActionTargetGroupDefinition, ...ActionTargetGroupDefinition[]];
-    readonly followUps: readonly FollowUpEffectDefinition[];
+    readonly followUps: readonly FollowUpOperationDefinition[];
     readonly intervalTicks: number;
     readonly recoveryTicks: number;
 }
@@ -71,20 +71,20 @@ export function createActionDefinition(definition: ActionDefinition): ActionDefi
         return Object.freeze({
             id: group.id,
             targeting: createTargetingDefinition(group.targeting),
-            effects: Object.freeze(Array.from(group.effects, createEffectDefinition)) as readonly [
-                EffectDefinition,
-                ...EffectDefinition[],
+            operations: Object.freeze(Array.from(group.operations, operation.create)) as readonly [
+                operation.Definition,
+                ...operation.Definition[],
             ],
         });
     });
-    const followUps = Array.from(definition.followUps, ({ receiver, effect }) => {
+    const followUps = Array.from(definition.followUps, ({ receiver, operation: followUp }) => {
         if (receiver.type === "BINDING" && !ids.has(receiver.bindingId)) {
             throw new RangeError("follow-up references an unknown target binding");
         }
 
         return Object.freeze({
             receiver: Object.freeze({ ...receiver }),
-            effect: createEffectDefinition(effect),
+            operation: operation.create(followUp),
         });
     });
 

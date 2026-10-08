@@ -3,8 +3,7 @@ import { selectTargets } from "../../targeting/select.js";
 import { compileTargeting } from "../../targeting/compile.js";
 import { resolveMaxHp } from "../vitality/query.js";
 import type { ActionDefinition, TargetBindingId } from "./capability.js";
-import { compileEffect, type CompiledEffect } from "./compile-effect.js";
-import { effectPurposes, type EffectDefinition } from "./effect.js";
+import * as operation from "./operation.js";
 import type { ActionResources } from "./resources.js";
 import type { CompiledAction } from "./program.js";
 import type { ActionExecutionContext, CompiledActionSegment } from "./process.js";
@@ -12,21 +11,21 @@ import type { ActionExecutionContext, CompiledActionSegment } from "./process.js
 export function compileAction(
     definition: ActionDefinition,
     resources: ActionResources,
-    compile: (effect: EffectDefinition) => CompiledEffect = (effect) =>
-        compileEffect(effect, resources),
+    compile: (definition: operation.Definition) => operation.Program = (definition) =>
+        operation.compile(definition, resources),
 ): CompiledAction {
     const groups = definition.targetGroups.map((group) => ({
         id: group.id,
         targeting: compileTargeting(
             group.targeting,
-            group.effects.flatMap(effectPurposes),
+            group.operations.flatMap(operation.purposes),
             (unit, context) => resolveMaxHp(unit.id, context.battlefield)!,
         ),
-        effects: group.effects.map(compile),
+        operations: group.operations.map(compile),
     }));
 
     const applyTo = (
-        effect: CompiledEffect,
+        run: operation.Program,
         ids: (context: ActionExecutionContext) => readonly UnitId[],
     ): CompiledActionSegment => ({
         type: "EXECUTE",
@@ -34,7 +33,7 @@ export function compileAction(
             let { work } = context;
 
             for (const targetUnitId of ids(context)) {
-                work = effect({
+                work = run({
                     work,
                     sourceUnitId: context.sourceUnitId,
                     targetUnitId,
@@ -47,18 +46,16 @@ export function compileAction(
     });
 
     const program = groups.flatMap((group) =>
-        group.effects.map((effect) =>
-            applyTo(effect, (context) => context.bindings.get(group.id)!),
-        ),
+        group.operations.map((run) => applyTo(run, (context) => context.bindings.get(group.id)!)),
     );
 
-    for (const { receiver, effect } of definition.followUps) {
+    for (const { receiver, operation: followUp } of definition.followUps) {
         const ids =
             receiver.type === "SOURCE"
                 ? (context: ActionExecutionContext) => [context.sourceUnitId]
                 : (context: ActionExecutionContext) => context.bindings.get(receiver.bindingId)!;
 
-        program.push(applyTo(compile(effect), ids));
+        program.push(applyTo(compile(followUp), ids));
     }
 
     return {

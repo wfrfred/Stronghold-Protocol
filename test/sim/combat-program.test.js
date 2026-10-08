@@ -8,7 +8,7 @@ import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { compileAction } from "../../dist/core/tactical/unit/capability/action/compile.js";
 import { startAction } from "../../dist/core/tactical/unit/capability/action/execution.js";
 import { createActionExecutionState } from "../../dist/core/tactical/unit/capability/action/process.js";
-import { compileEffect } from "../../dist/core/tactical/unit/capability/action/compile-effect.js";
+import { compile as compileOperation } from "../../dist/core/tactical/unit/capability/action/operation.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { EffectDispatchScope } from "../../dist/core/tactical/unit/capability/effects/dispatch.js";
 import {
@@ -65,7 +65,7 @@ function sourceDefinition(id = "source", power = 20) {
               ignoreInvisible: false,
               maxTargets: 1,
             },
-            effects: [{ type: "DAMAGE", power, damageType: "PHYSICAL" }],
+            operations: [{ type: "DAMAGE", power, damageType: "PHYSICAL" }],
           },
         ],
         followUps: [],
@@ -128,9 +128,9 @@ test("combat program: action compilation uses only injected query and settlement
     ...definition.action.normalAction,
     targetGroups: definition.action.normalAction.targetGroups.map(group => ({
       ...group,
-      effects: [{ type: "DAMAGE", powerSource: "SOURCE_ATTACK", power: 1, damageType: "PHYSICAL" }],
+      operations: [{ type: "DAMAGE", powerSource: "SOURCE_ATTACK", power: 1, damageType: "PHYSICAL" }],
     })),
-    followUps: [{ receiver: { type: "SOURCE" }, effect: { type: "HEAL", power: 5, ignoreHealFree: false } }],
+    followUps: [{ receiver: { type: "SOURCE" }, operation: { type: "HEAL", power: 5, ignoreHealFree: false } }],
   };
   const source = initializeUnit({ id: 0, definition, position: [0, 0] });
   const target = initializeUnit({ id: 1, definition: targetDefinition(), position: [1, 0] });
@@ -272,7 +272,7 @@ test("combat program: a compiled source-attack effect reads current contribution
       attack: ({ instance }) => [createNumericContribution({ addition: instance.state.bonus })],
     },
   });
-  const effect = compileEffect(
+  const effect = compileOperation(
     { type: "DAMAGE", power: 1, powerSource: "SOURCE_ATTACK", damageType: "PHYSICAL" },
     resources,
   );

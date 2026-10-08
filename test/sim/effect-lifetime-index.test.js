@@ -233,7 +233,7 @@ test('effect lifetime index: Action cancellation finishes execution-owned effect
                 canTargetAir: true, includeBlockingRelations: false, preferBlockingRelations: false,
                 ignoreTargetFree: false, ignoreInvisible: false,
             },
-            effects: [{ type: 'DAMAGE', power: 1, damageType: 'TRUE' }],
+            operations: [{ type: 'DAMAGE', power: 1, damageType: 'TRUE' }],
         }],
         followUps: [],
     });

@@ -183,7 +183,7 @@ function operatorDefinition(value: unknown, direction: Direction) {
                             ignoreInvisible: false,
                             maxTargets: 1,
                         },
-                        effects: [
+                        operations: [
                             {
                                 type: "DAMAGE",
                                 power: numberField(stats.atk, "attack"),
@@ -268,7 +268,7 @@ function enemyDefinition(value: unknown) {
                             ignoreInvisible: false,
                             maxTargets: 1,
                         },
-                        effects: [
+                        operations: [
                             {
                                 type: "DAMAGE",
                                 power: numberField(stats.atk, "attack"),

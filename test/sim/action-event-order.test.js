@@ -29,7 +29,7 @@ test("action event order: release and damage precede support loss produced by th
                 ignoreInvisible: false,
                 maxTargets: 1,
             },
-            effects: [{ type: "DAMAGE", power: 10, damageType: "TRUE" }],
+            operations: [{ type: "DAMAGE", power: 10, damageType: "TRUE" }],
         }],
         followUps: [],
     });

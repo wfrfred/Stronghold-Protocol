@@ -17,7 +17,7 @@ const definition = createActionDefinition({
     type: 'DAMAGE', scope: { type: 'BLOCKER' }, canTargetAir: true,
     includeBlockingRelations: false, preferBlockingRelations: false,
     ignoreTargetFree: false, ignoreInvisible: false, maxTargets: 1,
-  }, effects: [{ type: 'DAMAGE', power: 1, damageType: 'TRUE' }] }], followUps: [],
+  }, operations: [{ type: 'DAMAGE', power: 1, damageType: 'TRUE' }] }], followUps: [],
 });
 
 function fixture(count = 8, perSource = 2) {
