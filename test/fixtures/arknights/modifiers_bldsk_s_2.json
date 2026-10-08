@@ -1,0 +1,16 @@
+{
+  "source": {
+    "bundle": "battle/prefabs/[uc]skills.ab",
+    "prefabKey": "bldsk_s_2",
+    "objectId": "5978367411090055933"
+  },
+  "attributeModifiers": [
+    {
+      "attributeType": 1,
+      "formulaItem": 1,
+      "value": 0.0,
+      "loadFromBlackboard": true,
+      "fetchBaseValueFromSourceEntity": false
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "source": {
+    "bundle": "config/buff_template_holder.ab",
+    "templateKey": "atk_to_atk[final_addition]",
+    "eventId": 2,
+    "nodeIndex": 2
+  },
+  "node": {
+    "_buff": {
+      "attributes": {
+        "abnormalFlags": [],
+        "abnormalImmunes": [],
+        "abnormalAntis": [],
+        "abnormalCombos": [],
+        "abnormalComboImmunes": [],
+        "attributeModifiers": [
+          {
+            "attributeType": "ATK",
+            "formulaItem": "FINAL_SCALER",
+            "value": 0.0,
+            "loadFromBlackboard": true,
+            "fetchBaseValueFromSourceEntity": true
+          }
+        ]
+      },
+      "buffKey": "encourage[atk]",
+      "loadFromDB": true,
+      "isDurableBuff": false,
+      "isDamageMissable": false,
+      "isSilenceable": false,
+      "isStunnable": false,
+      "isFreezable": false,
+      "isLevitatable": false,
+      "isGroundBoundable": false,
+      "statusResistable": "AUTOMATIC",
+      "templateKey": "empty",
+      "disableOverride": false,
+      "overrideKey": null,
+      "overrideType": "DEFAULT",
+      "maxStackCnt": 1,
+      "refreshRemainingTimeWhenStackMax": false,
+      "clearAllStackCntWhenTimeUp": false,
+      "maxValidStackCnt": -1,
+      "independentCharacterSource": false,
+      "overrideEffectKey": null,
+      "overrideOnEventPriority": false,
+      "onEventPriority": "DEFAULT",
+      "audioSignal": null,
+      "lifeTimeType": "INFINITY",
+      "takeSnapshotWhenExtend": false,
+      "durationKey": null,
+      "remainingTimeKey": null,
+      "lifeTime": 0.0,
+      "triggerLifeType": "IMMEDIATELY",
+      "triggerCnt": 0,
+      "triggerInterval": -1.0,
+      "waitFirstTriggerInterval": true,
+      "firstTriggerInterval": -1.0,
+      "priority": -1,
+      "priorityBBKeys": [],
+      "stripBlackboardParamsWithBuffKey": false,
+      "blackboard": [],
+      "enableInitDirectionFromSource": false
+    },
+    "_buffOwner": "BUFF_OWNER",
+    "_useSpecialBuffSource": false,
+    "_specialBuffSource": "BUFF_SOURCE",
+    "_isDerivedBuff": true,
+    "_finishDerivedBuffIfParentFinish": false,
+    "_inherateSourceProjectileFromParentBuff": false,
+    "_hookEffectKeyFromSourceProjectile": false,
+    "$type": "Torappu.Battle.Action.Nodes+CreateBuff"
+  }
+}
