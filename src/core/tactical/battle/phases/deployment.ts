@@ -24,8 +24,7 @@ import type { Unit, UnitId } from "../../unit/unit.js";
 import type { Event } from "../contract.js";
 import type { BattleExecutionState } from "../execution/state.js";
 import type { BattlePhaseInput, BattlePhaseOutput } from "../phase.js";
-import type { EffectTransitionResources } from "../../unit/capability/effects/contract.js";
-import { removeUnitWithEffects } from "../execution/unit-lifecycle.js";
+import { removeUnitWithEffects, type UnitLifecycleResources } from "../execution/unit-lifecycle.js";
 import { combatWorkEvents, combatWorkChanges, createCombatWork } from "../execution/work.js";
 
 export type DeploymentCommand =
@@ -85,7 +84,7 @@ export function resolveDeploymentCommands(
     commands: readonly DeploymentCommand[],
     execution: BattleExecutionState,
     tick: number,
-    resources: EffectTransitionResources,
+    resources: UnitLifecycleResources,
 ): DeploymentCommandResolution {
     if (commands.length === 0) {
         return { changes: [], events: [], execution };
@@ -231,7 +230,7 @@ export function resolveDeploymentCommands(
 
 export function advanceDeployment(
     input: BattlePhaseInput,
-    resources: EffectTransitionResources,
+    resources: UnitLifecycleResources,
 ): BattlePhaseOutput {
     const commands = input.commands.filter(
         (command): command is DeploymentCommand =>

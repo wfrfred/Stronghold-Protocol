@@ -1,5 +1,4 @@
 import type { BattlefieldChange } from "../../battlefield/contract.js";
-import type { EffectTransitionResources } from "../../unit/capability/effects/contract.js";
 import type * as computation from "../../modifier/computation.js";
 import type { ContributionFacts } from "../../unit/capability/contribution.js";
 import { hasRoutedLocomotion } from "../../unit/capability/locomotion/capability.js";
@@ -10,7 +9,7 @@ import type { Unit, UnitId } from "../../unit/unit.js";
 import { changeAlternativeRoutes, type AlternativeRouteCommand } from "./route-control.js";
 import type { Event } from "../contract.js";
 import type { BattlePhaseInput, BattlePhaseOutput } from "../phase.js";
-import { removeUnitWithEffects } from "../execution/unit-lifecycle.js";
+import { removeUnitWithEffects, type UnitLifecycleResources } from "../execution/unit-lifecycle.js";
 import {
     combatWorkChanges,
     combatWorkEvents,
@@ -48,7 +47,7 @@ export function applyRouteCommands(input: BattlePhaseInput): BattlePhaseOutput {
 export function advanceMovement(
     input: MovementPhaseInput,
     { routeMoveMultiplier }: { readonly routeMoveMultiplier: number },
-    resources: EffectTransitionResources & {
+    resources: UnitLifecycleResources & {
         readonly computations: computation.Computations<ContributionFacts>;
     },
 ): BattlePhaseOutput {

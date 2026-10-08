@@ -19,8 +19,7 @@ import {
 import type { BattleExecutionState } from "./execution/state.js";
 import type { BattlePhase } from "./phase.js";
 import type { Event } from "./contract.js";
-import type { EffectTransitionResources } from "../unit/capability/effects/contract.js";
-import { removeUnitWithEffects } from "./execution/unit-lifecycle.js";
+import { removeUnitWithEffects, type UnitLifecycleResources } from "./execution/unit-lifecycle.js";
 import { combatWorkEvents, combatWorkChanges, createCombatWork } from "./execution/work.js";
 
 export interface PredefinedUnitCreation extends UnitPlacementDefinition {
@@ -230,7 +229,7 @@ function reconcilePredefinedPresence(
 
 export function createPredefinedSystem(
     definitions: readonly PredefinedInstanceDefinition[],
-    resources: EffectTransitionResources,
+    resources: UnitLifecycleResources,
 ): {
     createState(): readonly PredefinedPresence[];
     readonly step: BattlePhase<readonly PredefinedPresence[]>;

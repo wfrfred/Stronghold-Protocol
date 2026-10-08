@@ -24,7 +24,8 @@ import { resolveDamage } from "../unit/capability/vitality/damage/settlement.js"
 import { resolveHealing } from "../unit/capability/vitality/healing/settlement.js";
 import { appendCombatEvents, type CombatWork } from "./execution/work.js";
 import type { UnitId } from "../unit/unit.js";
-import { consumeSkillAmmo } from "../unit/capability/skill/execution.js";
+import { consumeSkillAmmo, finishSkill } from "../unit/capability/skill/execution.js";
+import type { EffectDispatchScope } from "../unit/capability/effects/dispatch.js";
 import {
     ActionReleaseResources,
     type ActionReleaseRules,
@@ -76,6 +77,17 @@ export class CombatResources {
         const consumed = consumeSkillAmmo(work, unitId, tick, this);
 
         return appendCombatEvents(consumed.work, consumed.signals);
+    };
+
+    readonly finishSkill = (
+        work: CombatWork,
+        unitId: UnitId,
+        tick: number,
+        dispatch?: EffectDispatchScope,
+    ): CombatWork => {
+        const finished = finishSkill(work, unitId, tick, this, dispatch);
+
+        return appendCombatEvents(finished.work, finished.signals);
     };
 
     readonly settleDamage: DamageOperation = (work, request, dispatch) => {

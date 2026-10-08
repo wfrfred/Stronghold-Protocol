@@ -2,10 +2,8 @@ import { ResourceRegistration } from "../../../../../common/resource-registratio
 import type { EffectInstanceValue } from "../../effects/instance.js";
 import type { EffectProgramRef } from "../../effects/program.js";
 import type { EffectResources } from "../../effects/registry.js";
-import type {
-    EffectTransitionResources,
-    EffectLifecycleOperations,
-} from "../../effects/contract.js";
+import type { EffectLifecycleOperations } from "../../effects/contract.js";
+import type { UnitLifecycleResources } from "../../../../battle/execution/unit-lifecycle.js";
 import type { ContributionFacts } from "../../contribution.js";
 import type * as computation from "../../../../modifier/computation.js";
 import type {
@@ -24,7 +22,7 @@ import type {
 } from "./contract.js";
 import type { EffectSourceResources } from "../../../../battlefield/effect-source/resources.js";
 
-export interface DamageResourceServices extends EffectTransitionResources {
+export interface DamageResourceServices extends UnitLifecycleResources {
     readonly effectSources: EffectSourceResources;
     readonly damage: DamageResources;
     readonly computations: computation.Computations<ContributionFacts>;

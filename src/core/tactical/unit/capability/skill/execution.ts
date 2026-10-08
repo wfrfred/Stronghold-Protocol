@@ -98,10 +98,10 @@ function withSkillContext<R>(
     resources: SkillExecutionResources,
     tick: number,
     run: (context: SkillActivationContext) => R,
+    dispatch = new EffectDispatchScope(),
 ): { readonly work: CombatWork; readonly result: R } {
     let current = work;
     let active = true;
-    const dispatch = new EffectDispatchScope();
 
     const readWork = () => {
         if (!active) {
@@ -231,6 +231,7 @@ export function activateSkill(
         nextActivationId,
         active: activation,
     });
+    const dispatch = new EffectDispatchScope();
     const invoked = withSkillContext(
         reserved,
         unitId,
@@ -238,6 +239,7 @@ export function activateSkill(
         resources,
         tick,
         compiled.activate,
+        dispatch,
     );
 
     if (invoked.result.type === "REJECTED") {
@@ -264,11 +266,17 @@ export function activateSkill(
     const current = getCombatUnit(invoked.work, unitId);
     let activated = invoked.work;
 
-    if (current !== undefined && hasSkill(current)) {
+    if (current !== undefined && hasSkill(current) && current.skill.active?.id === activation.id) {
         activated = saveState(activated, unitId, {
             ...current.skill,
-            active: { ...activation, ownedEffects: invoked.result.ownedEffects ?? [] },
+            active: { ...current.skill.active, ownedEffects: invoked.result.ownedEffects ?? [] },
         });
+    } else {
+        for (const address of invoked.result.ownedEffects ?? []) {
+            activated = finishEffect(activated, address, resources, tick, dispatch);
+        }
+
+        return { work: activated, result: { type: "FINISHED" }, signals: [] };
     }
 
     const signal: SkillSignal = {
@@ -281,7 +289,7 @@ export function activateSkill(
     };
 
     if (endsAtTick === tick) {
-        const finished = finishSkill(activated, unitId, tick, resources);
+        const finished = finishSkill(activated, unitId, tick, resources, dispatch);
 
         return {
             ...finished,
@@ -334,6 +342,7 @@ export function finishSkill(
     unitId: UnitId,
     tick: number,
     resources: SkillExecutionResources,
+    dispatch = new EffectDispatchScope(),
 ): SkillTransition {
     assertNonnegativeSafeInteger(tick, "skill finish tick");
     const unit = getCombatUnit(work, unitId);
@@ -345,14 +354,21 @@ export function finishSkill(
     const compiled = resources.skills.get(unit.definition.skill);
 
     const { active } = unit.skill;
-    const dispatch = new EffectDispatchScope();
     work = saveState(work, unitId, { ...unit.skill, active: null, lastAdvancedTick: tick });
 
     for (const address of active.ownedEffects) {
         work = finishEffect(work, address, resources, tick, dispatch);
     }
     if (compiled.finish !== undefined) {
-        work = withSkillContext(work, unitId, active, resources, tick, compiled.finish).work;
+        work = withSkillContext(
+            work,
+            unitId,
+            active,
+            resources,
+            tick,
+            compiled.finish,
+            dispatch,
+        ).work;
     }
 
     return {
@@ -445,7 +461,7 @@ export function advanceSkill(
         work = attempted.work;
         signals.push(...attempted.signals);
 
-        if (attempted.result.type === "ACTIVATED") {
+        if (attempted.result.type === "ACTIVATED" || attempted.result.type === "FINISHED") {
             return { work, result: attempted.result, signals };
         }
     }
