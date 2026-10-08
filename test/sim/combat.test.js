@@ -22,6 +22,8 @@ import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { compileTargeting } from "../../dist/core/tactical/unit/targeting/compile.js";
 import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { selectTargets } from '../../dist/core/tactical/unit/targeting/select.js';
+import * as contribution from '../../dist/core/tactical/modifier/contribution.js';
+import * as modifier from '../../dist/core/tactical/modifier/value.js';
 
 import { combatWorkResult, createCombatWork, updateCombatUnit } from '../../dist/core/tactical/battle/execution/work.js';
 import { createActionExecutionState } from '../../dist/core/tactical/unit/capability/action/process.js';
@@ -375,7 +377,8 @@ test('core combat: copied action, allegiance, spatial, hit, status and blocking 
   operator.spatial.layer = 'AIR';
   operator.hit.geometry = { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 100 }] };
   operator.status.contributions = [{ id: 'snapshot_only', flags: ['TARGET_FREE'] }];
-  operator.blocker.capacity = 0;
+  operator.blocker.capacity = contribution.create([{ id: 'snapshot-only-capacity', sequence: 0,
+    participating: true, values: [modifier.create({ finalScaler: 0 })] }]);
   operator.vitality.hp = 0;
   snapshot.blockingRelations[0].blockerUnitId = 999999;
   snapshot.blockingRelations.length = 0;

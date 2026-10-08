@@ -1,6 +1,10 @@
 import { World, type WorldPosition } from "../../geometry/coordinate.js";
 import { hasAllegiance, type AllegianceState } from "../../unit/capability/allegiance.js";
-import { hasBlockable, hasBlocker } from "../../unit/capability/blocking.js";
+import {
+    hasBlockable,
+    hasBlocker,
+    resolveBlockingCapacity,
+} from "../../unit/capability/blocking.js";
 import { hasTileBindingDefinition } from "../../unit/capability/deployment.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
 import { hasSpatial } from "../../unit/capability/spatial.js";
@@ -38,7 +42,7 @@ export function readBlockingFacts(unit: Unit): BlockingFacts {
     const blocker = hasBlocker(unit)
         ? {
               enabled: unit.blocker.enabled,
-              capacity: unit.blocker.capacity,
+              capacity: resolveBlockingCapacity(unit.definition.blocker, unit.blocker),
               radius: unit.blocker.geometry.radius,
           }
         : undefined;

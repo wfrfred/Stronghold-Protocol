@@ -23,7 +23,9 @@ import { copyUnitSnapshot } from '../../dist/core/tactical/unit/snapshot.js';
 import { hasVitality, initializeVitalityState } from '../../dist/core/tactical/unit/capability/vitality/capability.js';
 import { createActionCapabilityDefinition, hasAction } from '../../dist/core/tactical/unit/capability/action/capability.js';
 import { hasAllegiance } from '../../dist/core/tactical/unit/capability/allegiance.js';
-import { createBlockerDefinition, hasBlockable, hasBlocker } from '../../dist/core/tactical/unit/capability/blocking.js';
+import { createBlockerDefinition, hasBlockable, hasBlocker, resolveBlockingCapacity } from '../../dist/core/tactical/unit/capability/blocking.js';
+import * as contribution from '../../dist/core/tactical/modifier/contribution.js';
+import * as modifier from '../../dist/core/tactical/modifier/value.js';
 import { createHitDefinition, createSpatialDefinition, hasHit, hasSpatial } from '../../dist/core/tactical/unit/capability/spatial.js';
 import { addStatusContribution, copyStatusState, createStatusDefinition, deriveEffectiveStatusFlags, hasStatus, initializeStatusState, removeStatusContribution } from '../../dist/core/tactical/unit/capability/status/capability.js';
 import { createBlockGeometry, createRangeGeometry, createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
@@ -477,7 +479,8 @@ test('core unit initialization uses prepared states and separates configuration 
   assert.equal(unit.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 9);
   assert.equal(unit.spatialPresence.present, false);
   assert.equal(Object.hasOwn(unit, 'defense'), true);
-  assert.deepEqual(unit.blocker, { capacity: 2, geometry: { radius: 0.7 }, enabled: true });
+  assert.deepEqual(unit.blocker, { capacity: contribution.create(), geometry: { radius: 0.7 }, enabled: true });
+  assert.equal(resolveBlockingCapacity(unit.definition.blocker, unit.blocker), 2);
   assert.deepEqual(unit.blockable, { weight: 1, enabled: true });
 
   vitality.hp = 0;
@@ -586,11 +589,13 @@ test('core snapshots isolate capability state and both routed contexts while sha
   snapshot.action.readyAtTick = 7;
   assert.equal(snapshot.hit.geometry, unit.hit.geometry);
   assert.equal(snapshot.blocker.geometry, unit.blocker.geometry);
+  assert.equal(snapshot.blocker.capacity.entries, unit.blocker.capacity.entries);
   assert.equal(snapshot.status.contributions, unit.status.contributions);
   snapshot.spatial.layer = 'AIR';
   snapshot.hit.geometry = createShapeGeometry({ shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 2 }] });
   snapshot.status.contributions = [];
-  snapshot.blocker.capacity = 0;
+  snapshot.blocker.capacity = contribution.create([{ id: 'snapshot-only-capacity', sequence: 0,
+    participating: true, values: [modifier.create({ finalScaler: 0 })] }]);
   snapshot.blocker.geometry = createBlockGeometry({ radius: 2 });
   snapshot.blockable.weight = 2;
   snapshot.spatialPresence.present = false;
@@ -612,7 +617,8 @@ test('core snapshots isolate capability state and both routed contexts while sha
   assert.equal(unit.spatial.layer, 'GROUND');
   assert.equal(unit.hit.geometry.shapes[0].radius, 0.25);
   assert.deepEqual([...deriveEffectiveStatusFlags(unit.status)], ['HEAL_FREE']);
-  assert.equal(unit.blocker.capacity, 2);
+  assert.deepEqual(unit.blocker.capacity.entries, []);
+  assert.equal(resolveBlockingCapacity(unit.definition.blocker, unit.blocker), 2);
   assert.equal(unit.blocker.geometry.radius, 0.7);
   assert.equal(unit.blockable.weight, 1);
   assert.equal(unit.spatialPresence.present, true);

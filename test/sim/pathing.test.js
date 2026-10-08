@@ -55,6 +55,8 @@ import { canTraverseNavigationSegment, navigationSegmentCost } from '../../dist/
 import { getDefaultSource, hasGeneratedData } from '../../server/sim/simdata.js';
 import { makeBattle, flatStage, enemyRec } from '../helpers/battleHarness.js';
 import { remainingDistance } from '../../server/sim/ai.js';
+import * as contribution from '../../dist/core/tactical/modifier/contribution.js';
+import * as modifier from '../../dist/core/tactical/modifier/value.js';
 
 const REAL = { skip: !hasGeneratedData() && 'no generated data' };
 const NORMAL = { r0: 9, r1: 12, c0: 0, c1: 10 };
@@ -1501,8 +1503,9 @@ test('core selective and full projection preserve relation history and explicit 
     assert.deepEqual(h.state.blockingRelations, []);
   }
   for (const blockerState of [
-    { capacity: 0, geometry: blocker.blocker.geometry, enabled: true },
-    { capacity: 2, geometry: blocker.blocker.geometry, enabled: false },
+    { capacity: contribution.create([{ id: 'capacity-zero', sequence: 0, participating: true,
+      values: [modifier.create({ finalScaler: 0 })] }]), geometry: blocker.blocker.geometry, enabled: true },
+    { capacity: blocker.blocker.capacity, geometry: blocker.blocker.geometry, enabled: false },
   ]) {
     h.commit([{ type: 'UPDATE_UNIT', unit: enemy }, { type: 'UPDATE_UNIT', unit: blocker },
       { type: 'SET_BLOCKING_RELATIONS', relations: blocking }]);

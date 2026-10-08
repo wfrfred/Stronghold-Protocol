@@ -7,6 +7,7 @@ const attributes = {
     ATK: 1,
     DEF: 2,
     MAGIC_RESISTANCE: 3,
+    BLOCK_CNT: 5,
     MOVE_SPEED: 6,
     ATTACK_SPEED: 7,
     BASE_ATTACK_TIME: 8,

@@ -1,6 +1,8 @@
 import { assertNonnegativeSafeInteger, assertPositiveSafeInteger } from "../../../common/assert.js";
 import { createBlockGeometry, type BlockGeometry } from "../../geometry/shape.js";
-import type { Unit, UnitDefinition } from "../unit.js";
+import * as contribution from "../../modifier/contribution.js";
+import * as modifier from "../../modifier/value.js";
+import { stabilizeUnit, type StableUnit, type Unit, type UnitDefinition } from "../unit.js";
 
 export interface BlockerDefinition {
     readonly capacity: number;
@@ -8,7 +10,7 @@ export interface BlockerDefinition {
 }
 
 export interface BlockerState {
-    readonly capacity: number;
+    readonly capacity: contribution.State<"stored">;
     readonly geometry: BlockGeometry;
     readonly enabled: boolean;
 }
@@ -66,7 +68,11 @@ export function createBlockableDefinition(definition: BlockableDefinition): Bloc
 }
 
 export function copyBlockerState(state: BlockerState): BlockerState {
-    return { ...state, geometry: createBlockGeometry(state.geometry) };
+    return {
+        ...state,
+        capacity: contribution.copy(state.capacity),
+        geometry: createBlockGeometry(state.geometry),
+    };
 }
 
 export function copyBlockableState(state: BlockableState): BlockableState {
@@ -75,7 +81,7 @@ export function copyBlockableState(state: BlockableState): BlockableState {
 
 export function initializeBlockerState(definition: BlockerDefinition): BlockerState {
     return {
-        capacity: definition.capacity,
+        capacity: contribution.create<"stored">(),
         geometry: createBlockGeometry(definition.geometry),
         enabled: true,
     };
@@ -83,4 +89,34 @@ export function initializeBlockerState(definition: BlockerDefinition): BlockerSt
 
 export function initializeBlockableState(definition: BlockableDefinition): BlockableState {
     return { weight: definition.weight, enabled: true };
+}
+
+export function updateBlockingCapacityContributions<U extends Unit>(
+    input: U | StableUnit<U>,
+    transition: contribution.Transition<"stored">,
+): StableUnit<U> {
+    const unit = stabilizeUnit<U>(input);
+
+    if (!hasBlocker(unit)) {
+        throw new TypeError("blocking capacity contributions require Blocker capability");
+    }
+
+    const capacity = transition(unit.blocker.capacity);
+
+    return capacity === unit.blocker.capacity
+        ? unit
+        : { ...unit, blocker: { ...unit.blocker, capacity } };
+}
+
+export function resolveBlockingCapacity(
+    definition: BlockerDefinition,
+    state: BlockerState,
+): number {
+    const value = Math.max(
+        0,
+        modifier.apply(definition.capacity, contribution.resolve(state.capacity)),
+    );
+    const lower = Math.floor(value);
+
+    return value - lower === 0.5 ? lower + (lower % 2) : Math.round(value);
 }

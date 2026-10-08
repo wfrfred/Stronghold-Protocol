@@ -101,6 +101,15 @@ test("attribute modifiers: BAT and MOVE_SPEED normalize only additive operands t
     assert.equal(sourced.finalAddition, 1 / 30);
 });
 
+test("attribute modifiers: BLOCK_CNT uses native number 5 and leaves quantization to Blocking", () => {
+    const named = description("ADDITION", 0, { attributeType: "BLOCK_CNT", loadFromBlackboard: true });
+    const numeric = { ...named, attributeType: 5 };
+    assert.deepEqual(parseAttributeModifiers([named]), parseAttributeModifiers([numeric]));
+    const value = sample(numeric, context({ blackboard: new Map([["block_cnt", -0.25]]), stackCount: 2 }));
+    assert.equal(value.addition, -0.5);
+    assert.equal(modifier.apply(3, [value]), 2.5);
+});
+
 test("attribute modifiers: Warfarin's actual ATK descriptor is a percentage contribution", () => {
     const raw = fixture("modifiers_bldsk_s_2");
     const [compiled] = compileAttributeModifiers(parseAttributeModifiers(raw.attributeModifiers));

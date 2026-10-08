@@ -1,0 +1,166 @@
+[
+  {
+    "source": {
+      "bundle": "/mnt/c/Program Files/Hypergryph Launcher/games/Arknights Game/Arknights_Data/StreamingAssets/AB/Windows/config/buff_template_holder.ab",
+      "holderObjectId": "6070581171229484677",
+      "templateKey": "enemy_mcnist_block_advance",
+      "eventId": 0,
+      "nodePath": [
+        0
+      ]
+    },
+    "node": {
+      "_buff": {
+        "attributes": {
+          "abnormalFlags": [],
+          "abnormalImmunes": [],
+          "abnormalAntis": [],
+          "abnormalCombos": [],
+          "abnormalComboImmunes": [],
+          "attributeModifiers": [
+            {
+              "attributeType": "BLOCK_CNT",
+              "formulaItem": "ADDITION",
+              "value": 0.0,
+              "loadFromBlackboard": true,
+              "fetchBaseValueFromSourceEntity": false
+            }
+          ]
+        },
+        "buffKey": "enemy_mcnist_block_cnt_advance",
+        "loadFromDB": false,
+        "isDurableBuff": false,
+        "isDamageMissable": false,
+        "isSilenceable": false,
+        "isStunnable": false,
+        "isFreezable": false,
+        "isLevitatable": false,
+        "isGroundBoundable": false,
+        "statusResistable": "AUTOMATIC",
+        "templateKey": "empty",
+        "disableOverride": false,
+        "overrideKey": null,
+        "overrideType": "STACK",
+        "maxStackCnt": 99,
+        "refreshRemainingTimeWhenStackMax": false,
+        "clearAllStackCntWhenTimeUp": false,
+        "maxValidStackCnt": -1,
+        "independentCharacterSource": false,
+        "overrideEffectKey": "enemy_mcnist_cross_debuff_01",
+        "overrideOnEventPriority": false,
+        "onEventPriority": "DEFAULT",
+        "audioSignal": null,
+        "lifeTimeType": "LIMITED",
+        "takeSnapshotWhenExtend": false,
+        "durationKey": "block_down",
+        "remainingTimeKey": null,
+        "lifeTime": 0.0,
+        "triggerLifeType": "IMMEDIATELY",
+        "triggerCnt": 0,
+        "triggerInterval": -1.0,
+        "waitFirstTriggerInterval": true,
+        "firstTriggerInterval": -1.0,
+        "priority": -1,
+        "priorityBBKeys": [],
+        "stripBlackboardParamsWithBuffKey": false,
+        "blackboard": [],
+        "enableInitDirectionFromSource": false
+      },
+      "_buffOwner": "BUFF_OWNER",
+      "_useSpecialBuffSource": false,
+      "_specialBuffSource": "BUFF_SOURCE",
+      "_isDerivedBuff": false,
+      "_finishDerivedBuffIfParentFinish": false,
+      "_inherateSourceProjectileFromParentBuff": false,
+      "_hookEffectKeyFromSourceProjectile": false,
+      "$type": "Torappu.Battle.Action.Nodes+CreateBuff"
+    }
+  },
+  {
+    "source": {
+      "bundle": "/mnt/c/Program Files/Hypergryph Launcher/games/Arknights Game/Arknights_Data/StreamingAssets/AB/Windows/config/buff_template_holder.ab",
+      "holderObjectId": "6070581171229484677",
+      "templateKey": "redace_tal_trigger",
+      "eventId": 10,
+      "nodePath": [
+        3
+      ]
+    },
+    "node": {
+      "_buff": {
+        "attributes": {
+          "abnormalFlags": [
+            "FORCE_DISARMED",
+            "DISABLE_COMBAT"
+          ],
+          "abnormalImmunes": [],
+          "abnormalAntis": [],
+          "abnormalCombos": [],
+          "abnormalComboImmunes": [],
+          "attributeModifiers": [
+            {
+              "attributeType": "TAUNT_LEVEL",
+              "formulaItem": "ADDITION",
+              "value": -1.0,
+              "loadFromBlackboard": true,
+              "fetchBaseValueFromSourceEntity": false
+            },
+            {
+              "attributeType": "BLOCK_CNT",
+              "formulaItem": "FINAL_SCALER",
+              "value": 0.0,
+              "loadFromBlackboard": false,
+              "fetchBaseValueFromSourceEntity": false
+            }
+          ]
+        },
+        "buffKey": "redace[taunt]",
+        "loadFromDB": false,
+        "isDurableBuff": false,
+        "isDamageMissable": false,
+        "isSilenceable": false,
+        "isStunnable": false,
+        "isFreezable": false,
+        "isLevitatable": false,
+        "isGroundBoundable": false,
+        "statusResistable": "AUTOMATIC",
+        "templateKey": "redace_release_ghost",
+        "disableOverride": false,
+        "overrideKey": null,
+        "overrideType": "DEFAULT",
+        "maxStackCnt": 1,
+        "refreshRemainingTimeWhenStackMax": false,
+        "clearAllStackCntWhenTimeUp": false,
+        "maxValidStackCnt": -1,
+        "independentCharacterSource": false,
+        "overrideEffectKey": "enemy_redace_buff_01",
+        "overrideOnEventPriority": false,
+        "onEventPriority": "DEFAULT",
+        "audioSignal": null,
+        "lifeTimeType": "INFINITY",
+        "takeSnapshotWhenExtend": false,
+        "durationKey": null,
+        "remainingTimeKey": null,
+        "lifeTime": 0.0,
+        "triggerLifeType": "INFINITY",
+        "triggerCnt": 0,
+        "triggerInterval": 0.1,
+        "waitFirstTriggerInterval": true,
+        "firstTriggerInterval": -1.0,
+        "priority": -1,
+        "priorityBBKeys": [],
+        "stripBlackboardParamsWithBuffKey": false,
+        "blackboard": [],
+        "enableInitDirectionFromSource": false
+      },
+      "_buffOwner": "BUFF_OWNER",
+      "_useSpecialBuffSource": false,
+      "_specialBuffSource": "BUFF_SOURCE",
+      "_isDerivedBuff": false,
+      "_finishDerivedBuffIfParentFinish": false,
+      "_inherateSourceProjectileFromParentBuff": false,
+      "_hookEffectKeyFromSourceProjectile": false,
+      "$type": "Torappu.Battle.Action.Nodes+CreateBuff"
+    }
+  }
+]
