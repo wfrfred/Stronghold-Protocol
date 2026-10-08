@@ -1,11 +1,15 @@
+import {
+    ActionExecutionWork,
+    actionExecutionsBySource,
+} from "../../unit/capability/action/internal/executions.js";
 import { compileAction } from "../../unit/capability/action/compile.js";
-import { startAction } from "../../unit/capability/action/execution.js";
+import { startActionInWork } from "../../unit/capability/action/execution.js";
 import { ownCompiledAction, type CompiledAction } from "../../unit/capability/action/program.js";
 import {
     actionExecutionPermissions,
-    cancelActionExecution,
+    cancelActionExecutionInWork,
     createActionExecutionState,
-    resumeActionExecution,
+    resumeActionExecutionInWork,
     type ActionExecution,
     type ActionExecutionState,
     type CompiledActionSegment,
@@ -60,14 +64,16 @@ export function createCombatSystem(
     const segmentsOf = (execution: ActionExecution): readonly CompiledActionSegment[] =>
         compiledAction(execution.definition).program;
 
-    const mayStart = (state: ActionExecutionState, unitId: UnitId): boolean =>
-        state.executions.every(
-            (execution) =>
-                execution.sourceUnitId !== unitId ||
-                actionExecutionPermissions(execution, segmentsOf(execution)).allowNewAction,
-        );
+    const mayStart = (executions: ActionExecutionWork, unitId: UnitId): boolean =>
+        executions
+            .forSource(unitId)
+            .every(
+                (execution) =>
+                    actionExecutionPermissions(execution, segmentsOf(execution)).allowNewAction,
+            );
 
     const prepare: BattlePhase<ActionExecutionState> = (input, state) => {
+        let executions: ActionExecutionWork | undefined;
         let work = prepareCombatEffects(
             createCombatWork(input.battlefield, input.execution, input.battlefield),
             input.tick,
@@ -76,20 +82,20 @@ export function createCombatSystem(
 
         for (const command of input.commands) {
             if (command.type === "CANCEL_ACTION_EXECUTION") {
-                const cancelled = cancelActionExecution(
+                executions ??= new ActionExecutionWork(state);
+                const cancelled = cancelActionExecutionInWork(
                     work,
-                    state,
+                    executions,
                     command.executionId,
                     resources,
                     input.tick,
                 );
                 work = cancelled.work;
-                state = cancelled.state;
             }
         }
 
         return {
-            state,
+            state: executions?.result() ?? state,
             changes: combatWorkChanges(work),
             events: combatWorkEvents(work),
             execution: work.execution,
@@ -98,6 +104,7 @@ export function createCombatSystem(
 
     const step: BattlePhase<ActionExecutionState, CombatPhaseInput> = (input, state) => {
         const { battlefield, tick } = input;
+        const executions = new ActionExecutionWork(state);
         const ids = [
             ...new Set([
                 ...battlefield.unitIds,
@@ -119,12 +126,10 @@ export function createCombatSystem(
         }
 
         for (const id of ids) {
-            const executions = state.executions.filter(({ sourceUnitId }) => sourceUnitId === id);
-
-            for (const execution of executions) {
-                const resumed = resumeActionExecution(
+            for (const execution of executions.forSource(id)) {
+                const resumed = resumeActionExecutionInWork(
                     work,
-                    state,
+                    executions,
                     execution.id,
                     segmentsOf(execution),
                     tick,
@@ -132,7 +137,6 @@ export function createCombatSystem(
                     input.projectiles,
                 );
                 work = resumed.work;
-                state = resumed.state;
             }
 
             const unit = getCombatUnit(work, id);
@@ -141,22 +145,20 @@ export function createCombatSystem(
                 continue;
             }
 
-            const started = startAction(
+            work = startActionInWork(
                 work,
-                state,
+                executions,
                 id,
                 compiledAction(unit.definition.action.normalAction),
                 tick,
                 resources,
-                mayStart(state, id),
+                mayStart(executions, id),
                 input.projectiles,
             );
-            work = started.work;
-            state = started.state;
         }
 
         return {
-            state,
+            state: executions.result(),
             changes: combatWorkChanges(work),
             events: combatWorkEvents(work),
             execution: work.execution,
@@ -168,9 +170,8 @@ export function createCombatSystem(
         prepare,
         step,
         allowsMovement: (state, unitId) =>
-            state.executions.every(
+            (actionExecutionsBySource(state).get(unitId) ?? []).every(
                 (execution) =>
-                    execution.sourceUnitId !== unitId ||
                     !actionExecutionPermissions(execution, segmentsOf(execution)).blockingMovement,
             ),
     };

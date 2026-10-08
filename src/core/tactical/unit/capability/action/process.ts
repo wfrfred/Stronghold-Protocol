@@ -1,3 +1,4 @@
+import { ActionExecutionWork } from "./internal/executions.js";
 import { assertFiniteNumber, assertNonnegativeSafeInteger } from "../../../../common/assert.js";
 import { ownDataRecord } from "../../../../common/immutable-data.js";
 import {
@@ -149,7 +150,17 @@ export function acceptActionExecution(
     state: ActionExecutionState,
     input: ActionExecutionInput,
 ): { readonly state: ActionExecutionState; readonly execution: ActionExecution } {
-    const nextExecutionId = state.nextExecutionId + 1;
+    const executions = new ActionExecutionWork(state);
+    const execution = acceptActionExecutionInWork(executions, input);
+
+    return { state: executions.result(), execution };
+}
+
+export function acceptActionExecutionInWork(
+    executions: ActionExecutionWork,
+    input: ActionExecutionInput,
+): ActionExecution {
+    const nextExecutionId = executions.nextExecutionId + 1;
 
     if (!Number.isSafeInteger(nextExecutionId)) {
         throw new RangeError("action execution identity overflow");
@@ -158,7 +169,7 @@ export function acceptActionExecution(
     assertNonnegativeSafeInteger(input.tick, "action acceptance tick");
 
     const execution: ActionExecution = Object.freeze({
-        id: state.nextExecutionId,
+        id: executions.nextExecutionId,
         sourceUnitId: input.sourceUnitId,
         definition: input.definition,
         acceptedAtTick: input.tick,
@@ -168,14 +179,9 @@ export function acceptActionExecution(
         samples: ownSamples(input.samples ?? {}),
         wait: null,
     });
+    executions.add(execution);
 
-    return {
-        execution,
-        state: Object.freeze({
-            nextExecutionId,
-            executions: Object.freeze([...state.executions, execution]),
-        }),
-    };
+    return execution;
 }
 
 export function actionExecutionPermissions(
@@ -209,61 +215,45 @@ function contextFor(
     };
 }
 
-function replaceExecution(
-    state: ActionExecutionState,
-    execution: ActionExecution,
-): ActionExecutionState {
-    return Object.freeze({
-        nextExecutionId: state.nextExecutionId,
-        executions: Object.freeze(
-            state.executions.map((current) => (current.id === execution.id ? execution : current)),
-        ),
-    });
-}
+type ActionExecutionWorkTransition = Omit<ActionExecutionTransition, "state">;
 
 function endExecution(
     work: CombatWork,
-    state: ActionExecutionState,
+    executions: ActionExecutionWork,
     execution: ActionExecution,
     resources: EffectTransitionResources,
     tick: number,
-): { readonly work: CombatWork; readonly state: ActionExecutionState } {
-    return {
-        work: finishEffectsOwnedByExecution(
-            work,
-            execution.sourceUnitId,
-            execution.id,
-            resources,
-            tick,
-        ),
-        state: Object.freeze({
-            nextExecutionId: state.nextExecutionId,
-            executions: Object.freeze(
-                state.executions.filter((current) => current.id !== execution.id),
-            ),
-        }),
-    };
+): CombatWork {
+    const next = finishEffectsOwnedByExecution(
+        work,
+        execution.sourceUnitId,
+        execution.id,
+        resources,
+        tick,
+    );
+    executions.remove(execution);
+
+    return next;
 }
 
 function finishExecution(
     work: CombatWork,
-    state: ActionExecutionState,
+    executions: ActionExecutionWork,
     execution: ActionExecution,
     resources: EffectTransitionResources,
     tick: number,
     signals: readonly ActionExecutionSignal[],
-): ActionExecutionTransition {
+): ActionExecutionWorkTransition {
     const signal: ActionExecutionSignal = {
         type: "ACTION_FINISHED",
         executionId: execution.id,
         sourceUnitId: execution.sourceUnitId,
         tick,
     };
-    const ended = endExecution(work, state, execution, resources, tick);
+    const ended = endExecution(work, executions, execution, resources, tick);
 
     return {
-        ...ended,
-        work: appendCombatEvents(ended.work, [signal]),
+        work: appendCombatEvents(ended, [signal]),
         result: { type: "FINISHED" },
         signals: [...signals, signal],
     };
@@ -277,10 +267,31 @@ export function cancelActionExecution(
     tick: number,
     reason: ActionExecutionCancellationReason = "CANCELLED",
 ): ActionExecutionTransition {
-    const execution = state.executions.find((current) => current.id === executionId);
+    const executions = new ActionExecutionWork(state);
+    const result = cancelActionExecutionInWork(
+        work,
+        executions,
+        executionId,
+        resources,
+        tick,
+        reason,
+    );
+
+    return { ...result, state: executions.result() };
+}
+
+export function cancelActionExecutionInWork(
+    work: CombatWork,
+    executions: ActionExecutionWork,
+    executionId: ActionExecutionId,
+    resources: EffectTransitionResources,
+    tick: number,
+    reason: ActionExecutionCancellationReason = "CANCELLED",
+): ActionExecutionWorkTransition {
+    const execution = executions.get(executionId);
 
     if (execution === undefined) {
-        return { work, state, result: { type: "ABSENT" }, signals: [] };
+        return { work, result: { type: "ABSENT" }, signals: [] };
     }
 
     const signal: ActionExecutionSignal = {
@@ -290,11 +301,10 @@ export function cancelActionExecution(
         tick,
         reason,
     };
-    const ended = endExecution(work, state, execution, resources, tick);
+    const ended = endExecution(work, executions, execution, resources, tick);
 
     return {
-        ...ended,
-        work: appendCombatEvents(ended.work, [signal]),
+        work: appendCombatEvents(ended, [signal]),
         result: { type: "CANCELLED", reason },
         signals: [signal],
     };
@@ -343,12 +353,33 @@ export function resumeActionExecution(
     resources: EffectTransitionResources,
     projectiles?: ProjectileOperations,
 ): ActionExecutionTransition {
-    let execution: ActionExecution | undefined = state.executions.find(
-        (current) => current.id === executionId,
+    const executions = new ActionExecutionWork(state);
+    const result = resumeActionExecutionInWork(
+        work,
+        executions,
+        executionId,
+        segments,
+        tick,
+        resources,
+        projectiles,
     );
 
+    return { ...result, state: executions.result() };
+}
+
+export function resumeActionExecutionInWork(
+    work: CombatWork,
+    executions: ActionExecutionWork,
+    executionId: ActionExecutionId,
+    segments: readonly CompiledActionSegment[],
+    tick: number,
+    resources: EffectTransitionResources,
+    projectiles?: ProjectileOperations,
+): ActionExecutionWorkTransition {
+    let execution = executions.get(executionId);
+
     if (execution === undefined) {
-        return { work, state, result: { type: "ABSENT" }, signals: [] };
+        return { work, result: { type: "ABSENT" }, signals: [] };
     }
 
     const signals: ActionExecutionSignal[] = [];
@@ -357,15 +388,15 @@ export function resumeActionExecution(
         const segment: CompiledActionSegment | undefined = segments[execution.cursor];
 
         if (segment === undefined) {
-            return finishExecution(work, state, execution, resources, tick, signals);
+            return finishExecution(work, executions, execution, resources, tick, signals);
         }
 
         const source = getCombatUnit(work, execution.sourceUnitId);
 
         if (source === undefined || !isSpatiallyPresent(source)) {
-            const cancelled = cancelActionExecution(
+            const cancelled = cancelActionExecutionInWork(
                 work,
-                state,
+                executions,
                 executionId,
                 resources,
                 tick,
@@ -395,12 +426,13 @@ export function resumeActionExecution(
                 });
 
                 if (result.continuation === "FINISH") {
-                    return finishExecution(work, state, execution, resources, tick, signals);
+                    return finishExecution(work, executions, execution, resources, tick, signals);
                 }
                 if (result.continuation === "CANCEL") {
-                    const cancelled = cancelActionExecution(
+                    executions.replace(execution);
+                    const cancelled = cancelActionExecutionInWork(
                         work,
-                        replaceExecution(state, execution),
+                        executions,
                         executionId,
                         resources,
                         tick,
@@ -423,11 +455,13 @@ export function resumeActionExecution(
                         : advanceWait(execution.wait, tick);
 
                 if (!waitComplete(wait, tick)) {
-                    execution = Object.freeze({ ...execution, wait });
+                    if (wait !== execution.wait) {
+                        execution = Object.freeze({ ...execution, wait });
+                        executions.replace(execution);
+                    }
 
                     return {
                         work,
-                        state: replaceExecution(state, execution),
                         result: { type: "WAITING" },
                         signals,
                     };
