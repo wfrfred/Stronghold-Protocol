@@ -251,3 +251,129 @@ test("effect sources: nested damage hooks share current source quota and source 
     assert.throws(() => retained.update(20, sourceRef, state => state), /no longer active/);
     assert.throws(() => retained.tryConsume(20, sourceRef, state => state), /no longer active/);
 });
+
+test("effect sources: receiver callbacks see completed bindings while retained source values keep their original facts", () => {
+    const resources = new CombatResources();
+    const receiver = receiverEffect(resources, "binding-visibility");
+    const snapshots = [];
+    const observations = [];
+    let selectedSource;
+    let derivedSource;
+    const { source, program } = sourceProgram(resources, receiver, {
+        selectInitial: () => [3, 1, 2],
+        selectCurrent: ({ source: current }) => {
+            selectedSource = current;
+            return [1, 2, 3];
+        },
+        install: ({ source: current, receiver: target }) => {
+            snapshots.push(current);
+            observations.push(current.effectSource.receivers.map(binding => ({ ...binding })));
+            if (target.id === 2) {
+                derivedSource = resources.effectSources.update(current, program.ref, { remaining: 1 });
+            }
+            return effectSourceInstallation(receiver.ref, { expiresAtTick: null });
+        },
+    });
+    const initial = fixtureWork(source, [unit(3), unit(1), unit(2)]);
+    const work = reconcileEffectSources(initial, resources, 0);
+    const completed = getCombatMechanism(work, 20);
+
+    assert.deepEqual(completed.effectSource.receivers.map(binding => binding.unitId), [1, 2, 3]);
+    assert.deepEqual(observations.map(bindings => bindings.map(binding => binding.installationAttempts)), [
+        [0, 0, 0], [1, 0, 0], [1, 1, 0],
+    ]);
+    assert.deepEqual(observations.map(bindings => bindings.map(binding => binding.address)), [
+        [null, null, null],
+        [{ unitId: 1, instanceId: 0 }, null, null],
+        [{ unitId: 1, instanceId: 0 }, { unitId: 2, instanceId: 0 }, null],
+    ]);
+    assert.deepEqual(snapshots.map(current => current.effectSource.receivers), observations);
+    assert.deepEqual(selectedSource.effectSource.receivers.map(binding => binding.installationAttempts), [0, 0, 0]);
+    assert.deepEqual(derivedSource.effectSource.receivers, observations[1]);
+    assert.equal(derivedSource.effectSource.state.remaining, 1);
+    assert.equal(completed.effectSource.state.remaining, 3);
+    assert.deepEqual(getCombatMechanism(initial, 20).effectSource.receivers, []);
+    assert.equal(Object.isFrozen(completed.effectSource), true);
+    assert.equal(Object.isFrozen(completed.effectSource.receivers), true);
+    assert.equal(completed.effectSource.receivers.every(binding => Object.isFrozen(binding) && Object.isFrozen(binding.address)), true);
+    assert.equal(Object.values(Object.getOwnPropertyDescriptors(completed.effectSource)).every(descriptor => "value" in descriptor), true);
+});
+
+test("effect sources: finish callbacks observe the current cleared prefix and output keeps ordinary data", () => {
+    const resources = new CombatResources();
+    const receiver = receiverEffect(resources, "finish-visibility");
+    const snapshots = [];
+    const { source } = sourceProgram(resources, receiver, {
+        keepOnFinish: ({ source: current }) => { snapshots.push(current); return false; },
+    });
+    const installed = reconcileEffectSources(fixtureWork(source), resources, 0);
+    const work = finishEffectSource(installed, 20, resources, 1);
+    const completed = getCombatMechanism(work, 20);
+
+    assert.deepEqual(snapshots.map(current => current.effectSource.receivers.map(binding => binding.address)), [
+        [{ unitId: 1, instanceId: 0 }, { unitId: 2, instanceId: 0 }],
+        [null, { unitId: 2, instanceId: 0 }],
+    ]);
+    assert.equal(snapshots.every(current => current.effectSource.finished && !current.active), true);
+    assert.deepEqual(completed.effectSource.receivers.map(binding => binding.address), [null, null]);
+    assert.deepEqual(getCombatMechanism(installed, 20).effectSource.receivers.map(binding => binding.address), [
+        { unitId: 1, instanceId: 0 }, { unitId: 2, instanceId: 0 },
+    ]);
+    assert.equal(Object.values(Object.getOwnPropertyDescriptors(completed.effectSource)).every(descriptor => "value" in descriptor), true);
+});
+
+test("effect sources: clearing many absent receivers preserves the input branch and binding histories", () => {
+    const resources = new CombatResources();
+    const receiver = receiverEffect(resources, "absent-bindings");
+    const { source } = sourceProgram(resources, receiver, { selectCurrent: () => [] });
+    const registered = {
+        ...source,
+        effectSource: copyEffectSourceState({
+            ...source.effectSource,
+            initialized: true,
+            receivers: Array.from({ length: 512 }, (_, unitId) => ({
+                unitId,
+                address: { unitId, instanceId: unitId + 10 },
+                installationAttempts: 2,
+            })),
+        }),
+    };
+    const initial = fixtureWork(registered, []);
+    const work = reconcileEffectSources(initial, resources, 0);
+    const completed = getCombatMechanism(work, 20);
+
+    assert.equal(completed.effectSource.receivers.length, 512);
+    assert.equal(completed.effectSource.receivers.every(binding => binding.address === null && binding.installationAttempts === 2), true);
+    assert.deepEqual(getCombatMechanism(initial, 20).effectSource.receivers, registered.effectSource.receivers);
+    assert.equal(registered.effectSource.receivers.every(binding => binding.address !== null), true);
+    assert.equal(reconcileEffectSources(work, resources, 1), work);
+});
+
+test("effect sources: preserved binding order is unchanged until a new receiver joins", () => {
+    const resources = new CombatResources();
+    const receiver = receiverEffect(resources, "existing-binding-order");
+    const installedOrder = [];
+    const { source } = sourceProgram(resources, receiver, {
+        install: ({ receiver: target }) => {
+            installedOrder.push(target.id);
+            return effectSourceInstallation(receiver.ref, { expiresAtTick: null });
+        },
+    });
+    const registered = {
+        ...source,
+        effectSource: copyEffectSourceState({
+            ...source.effectSource,
+            initialized: true,
+            receivers: [3, 1, 2].map(unitId => ({ unitId, address: null, installationAttempts: 0 })),
+        }),
+    };
+    let work = reconcileEffectSources(fixtureWork(registered, [unit(3), unit(1), unit(2)]), resources, 0);
+
+    assert.deepEqual(installedOrder, [3, 1, 2]);
+    assert.deepEqual(getCombatMechanism(work, 20).effectSource.receivers.map(binding => binding.unitId), [3, 1, 2]);
+    work = registerCombatUnit(work, unit(0));
+    work = registerEffectSourceUnits(work, [0], resources, 1);
+
+    assert.deepEqual(getCombatMechanism(work, 20).effectSource.receivers.map(binding => binding.unitId), [0, 1, 2, 3]);
+    assert.deepEqual(installedOrder, [3, 1, 2, 0]);
+});

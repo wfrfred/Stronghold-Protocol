@@ -3,6 +3,7 @@ import { ResourceRegistration } from "../../../common/resource-registration.js";
 import type { EffectTransitionResources } from "../../unit/capability/effects/contract.js";
 import type { UnitId } from "../../unit/unit.js";
 import type { EffectSourceProgram, EffectSourceProgramRef } from "./program.js";
+import { updateEffectSourceReceiverView } from "./internal/receivers.js";
 import {
     copyEffectSourceState,
     type EffectSourceMechanism,
@@ -128,12 +129,13 @@ export class EffectSourceResources {
             return source as TypedEffectSourceMechanism<S>;
         }
 
+        const next = ownDataRecord(program.ownState(state), "effect source state");
+
         return {
             ...source,
-            effectSource: copyEffectSourceState({
-                ...source.effectSource,
-                state: ownDataRecord(program.ownState(state), "effect source state"),
-            }),
+            effectSource:
+                updateEffectSourceReceiverView(source.effectSource, { state: next }) ??
+                copyEffectSourceState({ ...source.effectSource, state: next }),
         } as TypedEffectSourceMechanism<S>;
     }
 

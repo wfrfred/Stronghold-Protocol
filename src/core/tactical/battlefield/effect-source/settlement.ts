@@ -22,6 +22,11 @@ import type {
 } from "./program.js";
 import type { EffectSourceServices } from "./resources.js";
 import {
+    EffectSourceReceiverWork,
+    updateEffectSourceReceiverView,
+    createEffectSourceReceiverView,
+} from "./internal/receivers.js";
+import {
     copyEffectSourceState,
     hasEffectSource,
     type EffectSourceMechanism,
@@ -48,8 +53,14 @@ function settleSource<S extends object>(
     operation: "RECONCILE" | "REGISTER" | "FINISH",
     registrations: readonly UnitId[] = [],
 ): CombatWork {
+    if (initialSource.effectSource.finished) {
+        return initialWork;
+    }
+
     let work = initialWork;
     const sourceId = initialSource.id;
+    const receivers = new EffectSourceReceiverWork(initialSource.effectSource.receivers);
+    let receiversChanged = false;
 
     const current = () => {
         const source = getCombatMechanism(work, sourceId);
@@ -67,25 +78,41 @@ function settleSource<S extends object>(
         tick,
     });
 
-    const patch = (changes: Partial<Omit<EffectSourceStateValue, "programRef" | "state">>) => {
+    const patch = (changes: Partial<Pick<EffectSourceStateValue, "initialized" | "finished">>) => {
         const source = current();
         const next: EffectSourceMechanism = {
             ...source,
-            effectSource: copyEffectSourceState({ ...source.effectSource, ...changes }),
+            effectSource:
+                updateEffectSourceReceiverView(source.effectSource, changes) ??
+                copyEffectSourceState({ ...source.effectSource, ...changes }),
         };
         work = updateCombatMechanism(work, next);
     };
 
-    const bindingOf = (unitId: UnitId) =>
-        current().effectSource.receivers.find((binding) => binding.unitId === unitId);
+    const bindingOf = (unitId: UnitId) => receivers.get(unitId);
 
     const bind = (binding: EffectSourceReceiver) => {
-        const bindings = current().effectSource.receivers;
-        const next = bindings.some((existing) => existing.unitId === binding.unitId)
-            ? bindings.map((existing) => (existing.unitId === binding.unitId ? binding : existing))
-            : [...bindings, binding].sort((left, right) => left.unitId - right.unitId);
+        const source = current();
+        const readReceivers = receivers.set(binding);
+        receiversChanged = true;
 
-        patch({ receivers: next });
+        const next: EffectSourceMechanism = {
+            ...source,
+            effectSource: createEffectSourceReceiverView(source.effectSource, readReceivers),
+        };
+        work = updateCombatMechanism(work, next);
+    };
+    const finishWork = () => {
+        if (receiversChanged) {
+            const source = current();
+            const next: EffectSourceMechanism = {
+                ...source,
+                effectSource: copyEffectSourceState(source.effectSource),
+            };
+            work = updateCombatMechanism(work, next);
+        }
+
+        return work;
     };
     const receiverContext = (
         binding: EffectSourceReceiver,
@@ -155,8 +182,8 @@ function settleSource<S extends object>(
         patch({ finished: true });
         work = updateCombatMechanism(work, { ...current(), active: false });
 
-        for (const candidate of current().effectSource.receivers) {
-            const binding = bindingOf(candidate.unitId)!;
+        for (const unitId of receivers.ids()) {
+            const binding = bindingOf(unitId)!;
             const input = receiverContext(binding);
 
             if (
@@ -169,13 +196,10 @@ function settleSource<S extends object>(
         }
     };
 
-    if (current().effectSource.finished) {
-        return work;
-    }
     if (operation === "FINISH" || (program.shouldFinish?.(context()) ?? false)) {
         stop();
 
-        return work;
+        return finishWork();
     }
     if (!current().effectSource.initialized) {
         const initial = program.selectInitial(context());
@@ -200,16 +224,13 @@ function settleSource<S extends object>(
         }
     }
 
-    const selected = new Set(
-        program.selectCurrent?.(context()) ??
-            current().effectSource.receivers.map((binding) => binding.unitId),
-    );
+    const selected = new Set(program.selectCurrent?.(context()) ?? receivers.ids());
 
     for (const unitId of selected) {
         retainReceiver(unitId);
     }
-    for (const candidate of current().effectSource.receivers) {
-        let binding = bindingOf(candidate.unitId)!;
+    for (const unitId of receivers.ids()) {
+        let binding = bindingOf(unitId)!;
         const input = receiverContext(binding);
 
         if (input === undefined) {
@@ -245,7 +266,7 @@ function settleSource<S extends object>(
         }
     }
 
-    return work;
+    return finishWork();
 }
 
 function applyToSource(

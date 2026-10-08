@@ -1,16 +1,11 @@
-import { ownProjectileInstance } from "./internal/state.js";
+import { ownProjectileInstance, ProjectileWork } from "./internal/state.js";
 import { assertNonnegativeNumber, assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import type { WorldPosition } from "../../geometry/coordinate.js";
 import type { RangeGeometry } from "../../geometry/shape.js";
 import type { UnitId } from "../../unit/unit.js";
 import type { ProjectileProgramRef } from "./program.js";
 import type { ProjectileResources } from "./resources.js";
-import {
-    copyProjectileState,
-    type ProjectileId,
-    type ProjectileInstance,
-    type ProjectileState,
-} from "./state.js";
+import type { ProjectileId, ProjectileInstance, ProjectileState } from "./state.js";
 
 export interface ProjectileLaunchInput<S extends object = object> {
     readonly source: UnitId | null;
@@ -39,10 +34,10 @@ export function withProjectileOperations<T>(
     tick: number,
     run: (operations: ProjectileOperations) => T,
 ): { readonly state: ProjectileState; readonly result: T } {
-    let current = copyProjectileState(state);
+    const current = new ProjectileWork(state);
     let active = true;
 
-    const readState = (): ProjectileState => {
+    const readWork = (): ProjectileWork => {
         if (!active) {
             throw new TypeError("projectile operations are no longer active");
         }
@@ -51,9 +46,9 @@ export function withProjectileOperations<T>(
     };
 
     const operations: ProjectileOperations = {
-        get: (id) => readState().instances.find((instance) => instance.id === id),
+        get: (id) => readWork().get(id),
         launch: (ref, input) => {
-            const previous = readState();
+            const previous = readWork();
             const nextProjectileId = previous.nextProjectileId + 1;
 
             if (!Number.isSafeInteger(nextProjectileId)) {
@@ -94,10 +89,7 @@ export function withProjectileOperations<T>(
                 hitUnitIds: [],
                 state: resources.ownState(ref, input.initialState ?? program.initialize()),
             });
-            current = copyProjectileState({
-                nextProjectileId,
-                instances: [...previous.instances, instance],
-            });
+            current.add(instance);
 
             return instance.id;
         },
@@ -110,7 +102,7 @@ export function withProjectileOperations<T>(
             throw new TypeError("projectile operations must complete synchronously");
         }
 
-        return { state: current, result };
+        return { state: current.result(), result };
     } finally {
         active = false;
     }

@@ -3,7 +3,7 @@ import {
     withProjectileQuery,
     type ProjectileContextAccess,
 } from "./internal/context.js";
-import { removeProjectile, replaceProjectile, updateProjectileInstance } from "./internal/state.js";
+import { ProjectileWork, updateProjectileInstance } from "./internal/state.js";
 import { World, type WorldPosition } from "../../geometry/coordinate.js";
 import { rangeOverlapsHit } from "../../geometry/intersection.js";
 import {
@@ -18,7 +18,6 @@ import { isSpatiallyPresent } from "../../unit/capability/presence.js";
 import type { ProjectileContactContext, ProjectileServices } from "./context.js";
 import type { ProjectileProgram } from "./program.js";
 import {
-    copyProjectileState,
     type ProjectileId,
     type ProjectileInstance,
     type ProjectileState,
@@ -43,7 +42,7 @@ export interface ProjectileTransition {
 
 class ProjectileSettlement {
     work: CombatWork;
-    state: ProjectileState;
+    readonly #projectiles: ProjectileWork;
     readonly #services: ProjectileServices;
     readonly #tick: number;
     readonly #lastKnown = new Map<ProjectileId, ProjectileInstance>();
@@ -55,18 +54,18 @@ class ProjectileSettlement {
         tick: number,
     ) {
         this.work = work;
-        this.state = copyProjectileState(state);
+        this.#projectiles = new ProjectileWork(state);
         this.#services = services;
         this.#tick = tick;
     }
 
     #get(id: ProjectileId): ProjectileInstance | undefined {
-        return this.state.instances.find((instance) => instance.id === id);
+        return this.#projectiles.get(id);
     }
 
     #update(instance: ProjectileInstance): void {
         this.#lastKnown.set(instance.id, instance);
-        this.state = replaceProjectile(this.state, instance);
+        this.#projectiles.update(instance);
     }
 
     #signal(instance: ProjectileInstance, signal: ProjectileSignal): void {
@@ -223,7 +222,7 @@ class ProjectileSettlement {
                 );
             }
         });
-        this.state = removeProjectile(this.state, id);
+        this.#projectiles.remove(id);
     }
 
     advance(id: ProjectileId): void {
@@ -312,7 +311,15 @@ class ProjectileSettlement {
     }
 
     result(): ProjectileTransition {
-        return { work: this.work, state: this.state };
+        return { work: this.work, state: this.#projectiles.result() };
+    }
+
+    advanceAll(): void {
+        const ids = [...this.#projectiles.ids].sort((left, right) => left - right);
+
+        for (const id of ids) {
+            this.advance(id);
+        }
     }
 }
 
@@ -323,11 +330,7 @@ export function stepProjectiles(
     tick: number,
 ): ProjectileTransition {
     const settlement = new ProjectileSettlement(work, state, services, tick);
-    const ids = state.instances.map((instance) => instance.id).sort((left, right) => left - right);
-
-    for (const id of ids) {
-        settlement.advance(id);
-    }
+    settlement.advanceAll();
 
     return settlement.result();
 }

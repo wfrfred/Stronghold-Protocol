@@ -160,7 +160,7 @@ test("effect source runtime: initialization installs independent receiver facts 
     assert.deepEqual(snapshot.units.map(unit => unit.id), [0, 1]);
     assert.equal(currentAttack(snapshot, 0, resources), 120);
     assert.equal(currentAttack(snapshot, 1, resources), 120);
-    assert.equal(snapshot.units.every(unit => unit.effects.instances[0].sourceUnitId === null), true);
+    assert.equal(snapshot.units.every(unit => unit.effects.instances[0].source === null), true);
     assert.deepEqual(source.effectSource.receivers, []);
     assert.equal(source.effectSource.initialized, false);
 });

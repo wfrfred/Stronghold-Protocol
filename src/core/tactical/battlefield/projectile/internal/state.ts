@@ -100,21 +100,60 @@ export function ownProjectileState(state: ProjectileState): ProjectileState {
     return owned;
 }
 
-export function replaceProjectile(
-    state: ProjectileState,
-    instance: ProjectileInstance,
-): ProjectileState {
-    return ownProjectileState({
-        ...state,
-        instances: state.instances.map((current) =>
-            current.id === instance.id ? instance : current,
-        ),
-    });
-}
+export class ProjectileWork {
+    readonly #instances: Map<ProjectileId, ProjectileInstance>;
+    #nextProjectileId: ProjectileId;
+    #snapshot: ProjectileState | null;
 
-export function removeProjectile(state: ProjectileState, id: ProjectileId): ProjectileState {
-    return ownProjectileState({
-        ...state,
-        instances: state.instances.filter((instance) => instance.id !== id),
-    });
+    constructor(state: ProjectileState) {
+        const owned = ownProjectileState(state);
+        this.#instances = new Map(owned.instances.map((instance) => [instance.id, instance]));
+        this.#nextProjectileId = owned.nextProjectileId;
+        this.#snapshot = owned;
+    }
+
+    get nextProjectileId(): ProjectileId {
+        return this.#nextProjectileId;
+    }
+
+    get ids(): Iterable<ProjectileId> {
+        return this.#instances.keys();
+    }
+
+    get(id: ProjectileId): ProjectileInstance | undefined {
+        return this.#instances.get(id);
+    }
+
+    add(instance: ProjectileInstance): void {
+        this.#instances.set(instance.id, ownProjectileInstance(instance));
+        this.#nextProjectileId = instance.id + 1;
+        this.#snapshot = null;
+    }
+
+    update(instance: ProjectileInstance): void {
+        const current = this.#instances.get(instance.id);
+
+        if (current !== undefined && current !== instance) {
+            this.#instances.set(instance.id, ownProjectileInstance(instance));
+            this.#snapshot = null;
+        }
+    }
+
+    remove(id: ProjectileId): void {
+        if (this.#instances.delete(id)) {
+            this.#snapshot = null;
+        }
+    }
+
+    result(): ProjectileState {
+        if (this.#snapshot === null) {
+            this.#snapshot = Object.freeze({
+                nextProjectileId: this.#nextProjectileId,
+                instances: Object.freeze([...this.#instances.values()]),
+            });
+            ownedStates.add(this.#snapshot);
+        }
+
+        return this.#snapshot;
+    }
 }
