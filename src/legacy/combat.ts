@@ -313,7 +313,7 @@ function combatMap(options: LegacyCombatOptions): BattlefieldMap {
     );
 }
 
-export function createLegacyCombatSpec(options: LegacyCombatOptions): Input {
+export function createLegacyCombatSpec(options: LegacyCombatOptions) {
     const initialUnits = options.operators.map((operator) => ({
         definition: operatorDefinition(operator.definition, operator.direction ?? "RIGHT"),
         position: Tile.center(operator.position),
@@ -337,7 +337,7 @@ export function createLegacyCombatSpec(options: LegacyCombatOptions): Input {
         maxTicks: options.maxTicks ?? 600,
         routeMoveMultiplier: 1,
         rngState: options.seed ?? 1,
-    };
+    } satisfies Input;
 }
 
 export function createLegacyCombatBattle(options: LegacyCombatOptions): BattleRuntime {

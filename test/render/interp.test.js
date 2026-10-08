@@ -108,7 +108,7 @@ describe('TacticalDemoPresentation', () => {
     step(runtime, presentation);
     const killed = step(runtime, presentation);
     assert.deepEqual(killed.visual, [['atk', 0, 1, 'none'], ['dmg', 1, 5, 'phys'], ['die', 1, 'killed']]);
-    assert.deepEqual(presentation.stats(), { killedCount: 1, attackCount: 3, damageCount: 3 });
+    assert.deepEqual(presentation.stats(), { killedCount: 1, attackCount: 3, damageCount: 3, elementDamageCount: 0, elementBurstCount: 0 });
     const corpse = presentation.units(killed.snapshot).find(unit => unit.info.id === 1);
     assert.deepEqual(corpse.tuple, [1, 1, 0, 0, 15, 0, 0, 0, 4]);
     assert.deepEqual(normalizeSnapshot({ gt: killed.snapshot.tickIndex / 30, units: presentation.units(killed.snapshot).map(unit => unit.tuple) }).units.get(1), corpse.tuple);
@@ -137,7 +137,7 @@ describe('TacticalDemoPresentation', () => {
       assert.deepEqual(runtime.snapshot().units.map(unit => unit.id), [0]);
       const killed = step(runtime, presentation);
       assert.deepEqual(killed.snapshot.units.map(unit => unit.id), [0]);
-      assert.deepEqual(presentation.stats(), { killedCount: 1, attackCount: 1, damageCount: 1 });
+      assert.deepEqual(presentation.stats(), { killedCount: 1, attackCount: 1, damageCount: 1, elementDamageCount: 0, elementBurstCount: 0 });
       assert.deepEqual(killed.visual, [['atk', 0, 1, 'none'], ['dmg', 1, 7, 'phys'], ['die', 1, 'killed']]);
       const corpse = presentation.units(killed.snapshot).find(unit => unit.info.id === 1);
       assert.equal(corpse.info.name, enemies.enemy_1000_gopro_2.name);
@@ -177,7 +177,7 @@ describe('TacticalDemoPresentation', () => {
     assert.deepEqual(first[5].replay, [['atk', 0, 1, 'none']]);
     assert.deepEqual(first[13].replay, []);
     presentation.reset();
-    assert.deepEqual(presentation.stats(), { killedCount: 0, attackCount: 0, damageCount: 0 });
+    assert.deepEqual(presentation.stats(), { killedCount: 0, attackCount: 0, damageCount: 0, elementDamageCount: 0, elementBurstCount: 0 });
     assert.deepEqual(presentation.units(first[5].snapshot).map(unit => unit.info.id), [0]);
     assert.deepEqual(presentation.replayEvents(first[5].snapshot), []);
     assert.deepEqual(run(), first);
@@ -197,7 +197,7 @@ describe('TacticalDemoPresentation', () => {
     let leaks = [];
     while (runtime.result === null) leaks.push(...step(runtime, presentation).visual);
     assert.deepEqual(leaks, [['leak', 0]]);
-    assert.deepEqual(presentation.stats(), { killedCount: 0, attackCount: 0, damageCount: 0 });
+    assert.deepEqual(presentation.stats(), { killedCount: 0, attackCount: 0, damageCount: 0, elementDamageCount: 0, elementBurstCount: 0 });
     assert.deepEqual(presentation.units(runtime.snapshot()), []);
     const removed = presentation.advance(runtime.snapshot(), [
       { type: 'UNIT_REMOVED', unitId: 99, reason: 'SCRIPT', tick: 10,
@@ -216,7 +216,7 @@ describe('TacticalDemoPresentation', () => {
     ]);
 
     assert.deepEqual(visual, [['atk', 0, 0, 'none'], ['heal', 0, 13]]);
-    assert.deepEqual(presentation.stats(), { killedCount: 0, attackCount: 1, damageCount: 0 });
+    assert.deepEqual(presentation.stats(), { killedCount: 0, attackCount: 1, damageCount: 0, elementDamageCount: 0, elementBurstCount: 0 });
     assert.deepEqual(presentation.replayEvents(snapshot), [['atk', 0, 0, 'none']]);
   });
 });

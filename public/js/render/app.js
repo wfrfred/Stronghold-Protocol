@@ -1770,6 +1770,11 @@ export async function createFieldView(host, options = {}) {
     enterBattle,
     pushSnapshot,
     pushEvents,
+    setProjectiles(projectiles) {
+      if (destroyed) return false;
+      fx.setProjectiles(projectiles);
+      return true;
+    },
     /**
      * Client-side combat glue (DESIGN §14): battle frames come from the local simulation (public/js/battle/runner.js)
      * every animation frame instead of the network, so the render clock trails them by ~2 frames (not the 100 ms

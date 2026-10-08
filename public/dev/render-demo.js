@@ -40,7 +40,7 @@ let demoHover = null;
 const STAGE_IDS = ['act2autochess_m01', 'act2autochess_m02', 'act2autochess_m03', 'act2autochess_m04', 'act1autochess_m01', 'act1autochess_m02', 'act1autochess_m03', 'act1autochess_m04'];
 const CORE_STAGE_IDS = ['act1autochess_01', 'act1autochess_m01', 'act1autochess_m02', 'act2autochess_m02', 'act2autochess_m04'];
 const COMBAT_STAGE_IDS = ['act1autochess_m01'];
-const isCoreScene = (name) => name === 'core' || name === 'core-combat';
+const isCoreScene = (name) => ['core', 'core-combat', 'core-ranged', 'core-blocking', 'core-projectile', 'core-projectile-cached', 'core-skill', 'core-element-neural', 'core-element-erosion', 'core-element-burn', 'core-element-necrosis'].includes(name);
 
 async function main() {
   if (q.get('panel') === '0') $('panel').classList.add('is-hidden');
@@ -56,7 +56,24 @@ async function main() {
 
   // ---- UI --------------------------------------------------------------------------------------------------
   const sceneSel = $('scene');
-  const scenes = [{ name: 'prep', title: '休整期 · 拖拽演示' }, { name: 'core-combat', title: '交战演示 · 普攻与阻挡', mode: 'COMBAT' }, { name: 'core', title: 'TS 战场 · 生成与移动', mode: 'MOVEMENT' }, ...index.map((r) => ({ name: r.name, title: r.title, rec: r })), { name: 'stress', title: '压力测试 · 120 单位' }, { name: 'fx', title: '特效图鉴 · 全部 fx' }, { name: 'numbers', title: '伤害数字 · 重叠测试' }];
+  const scenes = [
+    { name: 'prep', title: '休整期 · 拖拽演示' },
+    { name: 'core-skill', title: '地灵技能 · 攻击力强化β', mode: 'COMBAT', combatScenario: 'SKILL' },
+    { name: 'core-element-neural', title: '元素机制 · 神经损伤', mode: 'COMBAT', combatScenario: 'ELEMENT_NEURAL' },
+    { name: 'core-element-erosion', title: '元素机制 · 侵蚀损伤', mode: 'COMBAT', combatScenario: 'ELEMENT_EROSION' },
+    { name: 'core-element-burn', title: '元素机制 · 灼燃损伤', mode: 'COMBAT', combatScenario: 'ELEMENT_BURN' },
+    { name: 'core-element-necrosis', title: '元素机制 · 坏死损伤', mode: 'COMBAT', combatScenario: 'ELEMENT_NECROSIS' },
+    { name: 'core-combat', title: '交战演示 · 远程索敌与阻挡', mode: 'COMBAT' },
+    { name: 'core-ranged', title: '交战演示 · 仅能天使远程索敌', mode: 'COMBAT', combatScenario: 'RANGED' },
+    { name: 'core-blocking', title: '交战演示 · 斯卡蒂阻挡三狗同波', mode: 'COMBAT', combatScenario: 'BLOCKING' },
+    { name: 'core-projectile', title: '地灵弹道测试 · 当前 ATK', mode: 'COMBAT', combatScenario: 'PROJECTILE' },
+    { name: 'core-projectile-cached', title: '地灵弹道测试 · 发射缓存', mode: 'COMBAT', combatScenario: 'PROJECTILE_CACHED' },
+    { name: 'core', title: 'TS 战场 · 生成与移动', mode: 'MOVEMENT' },
+    ...index.map((r) => ({ name: r.name, title: r.title, rec: r })),
+    { name: 'stress', title: '压力测试 · 120 单位' },
+    { name: 'fx', title: '特效图鉴 · 全部 fx' },
+    { name: 'numbers', title: '伤害数字 · 重叠测试' },
+  ];
   for (const s of scenes) sceneSel.append(new Option(s.title, s.name));
   const stageSel = $('stage');
   for (const id of STAGE_IDS) { const st = data.lookup('stages', id); if (st) stageSel.append(new Option(st.name || id, id)); }
@@ -88,6 +105,12 @@ async function main() {
   $('appear-crates').onclick = () => current?.command?.('APPEAR_CRATES');
   $('remove-crates').onclick = () => current?.command?.('REMOVE_CRATES');
   $('trigger-dragon').onclick = () => current?.command?.('TRIGGER_DRAGON');
+  $('next-release').onclick = () => { setPlay(false); current?.nextRelease?.(); };
+  $('retreat-source').onclick = () => { setPlay(false); current?.command?.('RETREAT_SOURCE'); };
+  $('stop-projectiles').onclick = () => { setPlay(false); current?.command?.('STOP_PROJECTILES'); };
+  $('next-skill-ready').onclick = () => { setPlay(false); current?.nextSkillReady?.(); };
+  $('activate-skill').onclick = () => { setPlay(false); current?.command?.('ACTIVATE_SKILL'); };
+  $('finish-skill').onclick = () => { setPlay(false); current?.command?.('FINISH_SKILL'); };
   // board layer toggle (3D official scene ⇄ 2D atlas board) and the official camera framings
   const syncBoardBtn = () => { const on = !!view.stats().board3d?.on; $('board3d').classList.toggle('is-on', on); $('board3d').textContent = on ? '3D' : '2D'; };
   $('board3d').onclick = async () => { await view.setBoardMode?.(view.stats().board3d?.on ? '2d' : '3d'); syncBoardBtn(); };
@@ -105,6 +128,9 @@ async function main() {
     const s = scenes.find((x) => x.name === name) || scenes[0];
     const core = isCoreScene(s.name);
     const combat = s.mode === 'COMBAT';
+    const projectiles = s.combatScenario === 'PROJECTILE' || s.combatScenario === 'PROJECTILE_CACHED';
+    const skill = s.combatScenario === 'SKILL';
+    const elemental = s.combatScenario?.startsWith('ELEMENT_') ?? false;
     const stageIds = combat ? COMBAT_STAGE_IDS : CORE_STAGE_IDS;
     if (core) {
       $('core-controls').hidden = false;
@@ -130,18 +156,20 @@ async function main() {
     }
     const selectedStage = core && !stageIds.includes(requestedStage) ? stageIds[0] : requestedStage;
     if (core) stageSel.value = selectedStage;
-    for (const id of ['step', 'reset', 'appear-crates', 'remove-crates', 'trigger-dragon']) $(id).disabled = true;
+    for (const id of ['step', 'reset', 'appear-crates', 'remove-crates', 'trigger-dragon', 'next-release', 'retreat-source', 'stop-projectiles', 'next-skill-ready', 'activate-skill', 'finish-skill']) $(id).disabled = true;
     sceneLoad = sceneLoad.catch(() => {}).then(async () => {
       if (request !== sceneRequest) return current;
       try { current?.stop?.(); } catch { /* ignore */ }
       current = null;
+      logLines.length = 0;
+      $('log').textContent = '';
       demo.scene = null;
       $('title').textContent = s.title;
       let next;
       if (core) {
         const { createTacticalDemo } = await import('/dist/legacy/tactical-demo.js');
         if (request !== sceneRequest) return current;
-        next = await createTacticalDemo(view, { stageId: selectedStage, data, seed, mode: s.mode, onEvent: log });
+        next = await createTacticalDemo(view, { stageId: selectedStage, data, seed, mode: s.mode, combatScenario: s.combatScenario, onEvent: log });
       } else if (s.name === 'prep') next = await prepScene(view, selectedStage, index);
       else if (s.name === 'numbers') next = numbersScene(view, stageId || q.get('stage') || 'act2autochess_m02');
       else if (s.name === 'stress') next = stressScene(view, selectedStage);
@@ -154,7 +182,16 @@ async function main() {
       sceneSel.value = s.name;
       $('core-controls').hidden = !core;
       $('core-scope').hidden = !core;
-      $('core-scope').textContent = combat ? '普攻与阻挡演示；技能、天赋与地形效果暂未接入' : '生成与移动演示；地形伤害、部署和交战尚未接入';
+      const combatScope = s.combatScenario === 'RANGED' ? '仅能天使远程索敌，无斯卡蒂阻挡' : s.combatScenario === 'BLOCKING' ? '仅斯卡蒂阻挡；第 3 秒同时生成三条狗，阻挡数为 1' : '斯卡蒂阻挡，能天使远程索敌';
+      $('core-scope').textContent = combat ? `${combatScope}；攻击即时命中，技能、天赋与地形效果暂未接入` : '生成与移动演示；地形伤害、部署和交战尚未接入';
+      $('projectile-controls').hidden = !projectiles;
+      $('skill-controls').hidden = !skill;
+      if (projectiles) $('core-scope').textContent = `地灵普攻弹道测试：蓄力 6 tick，发射后 ATK +60；${s.combatScenario === 'PROJECTILE_CACHED' ? '伤害读发射缓存' : '伤害读当前来源 ATK，缺席则回退缓存'}，命中附着 45 tick 禁疗标记`;
+      if (skill) $('core-scope').textContent = '地灵 · 攻击力强化β：自动回复 37 SP，手动释放，攻击力 +35%，持续 25 秒；固定靶用于观察技能前后的数值。';
+      if (elemental) $('core-scope').textContent = '元素机制测试：借用地灵与狗的模型，每次攻击额外造成 400 点元素损伤，固定靶 200000 HP；这是测试配置，并非地灵原技能。';
+      $('next-release').disabled = !projectiles;
+      $('retreat-source').disabled = !projectiles;
+      $('stop-projectiles').disabled = !projectiles;
       $('core-result').hidden = true;
       $('editable').hidden = core;
       if (current.stageId) stageSel.value = current.stageId;
@@ -177,7 +214,7 @@ async function main() {
   demo.pause = () => setPlay(false);
   demo.stats = () => ({ ...view.stats(), scene: currentSceneName, t: current?.time ?? 0, duration: current?.duration ?? 0, ...(isCoreScene(currentSceneName) ? { core: current?.stats?.() ?? null } : {}) });
 
-  const initialScene = q.get('scene') === 'core' && q.get('mode') === 'combat' ? 'core-combat' : q.get('scene') || 'prep';
+  const initialScene = q.get('scene') === 'core' && q.get('mode') === 'combat' ? 'core-combat' : q.get('scene') === 'core' && q.get('mode') === 'projectile' ? 'core-projectile' : q.get('scene') || 'prep';
   await setScene(initialScene);
   const t0 = Number(q.get('t'));
   if (Number.isFinite(t0) && t0 > 0) current?.seek?.(t0);
@@ -203,12 +240,34 @@ async function main() {
       const core = current.stats();
       $('stats').textContent += `\n逻辑帧 ${core.tickIndex}  已生成 ${core.spawnedCount}  路线完成 ${core.completedRouteCount}\n场上单位 ${core.units}  机制 ${core.mechanisms}  WALK revision ${core.walkRevision}  seed ${core.seed}`;
       if (core.mode === 'COMBAT') $('stats').textContent += `\n击败 ${core.killedCount}  攻击 ${core.attackCount}  伤害 ${core.damageCount}  当前阻挡 ${core.blockingCount}`;
+      if (core.projectileActions) {
+        $('stats').textContent += `\n进行中行动 ${core.activeActionCount}  在途弹道 ${core.projectileCount}`;
+        $('next-release').disabled = core.result !== null || !core.sourcePresent;
+        $('retreat-source').disabled = core.result !== null || !core.sourcePresent;
+        $('stop-projectiles').disabled = core.result !== null || core.projectileCount === 0;
+      }
+      if (core.skill) {
+        const skill = core.skill;
+        $('stats').textContent += `\n技能 SP ${skill.sp} / ${skill.maxSp}  ${skill.active ? `持续 ${(skill.remainingTicks / 30).toFixed(1)} s` : skill.ready ? '可释放' : '回复中'}`;
+        if (skill.remainingAmmo !== undefined && skill.remainingAmmo !== null) $('stats').textContent += `  弹药 ${skill.remainingAmmo}`;
+        $('next-skill-ready').disabled = core.result !== null || skill.active || skill.ready;
+        $('activate-skill').disabled = core.result !== null || skill.active || !skill.ready;
+        $('finish-skill').disabled = core.result !== null || !skill.active;
+      }
+      if (core.elementType) {
+        const elementNames = { NEURAL: '神经', EROSION: '侵蚀', BURN: '灼燃', NECROSIS: '坏死' };
+        $('stats').textContent += `\n${elementNames[core.elementType] || core.elementType}损伤 ${core.elementDamageCount} 次  爆发 ${core.elementBurstCount} 次`;
+        if (core.element) {
+          const element = core.element;
+          $('stats').textContent += `\n元素槽剩余 ${element.remainingEp.toFixed(0)} / ${element.maxEp}${element.recoveryTicks > 0 ? `  爆发恢复 ${(element.recoveryTicks / 30).toFixed(1)} s` : ''}`;
+        }
+      }
       $('step').disabled = core.result !== null;
       $('core-result').hidden = core.result === null;
       if (core.result) {
         setPlay(false);
         if (core.result.reason !== 'SCHEDULE_COMPLETED') $('core-result').textContent = '达到演示时间上限';
-        else if (core.mode === 'COMBAT') $('core-result').textContent = `交战结束 · 击败 ${core.killedCount} 名敌人`;
+        else if (core.mode === 'COMBAT') $('core-result').textContent = `交战结束 · 击败 ${core.killedCount} 名敌人 · 漏过 ${core.completedRouteCount} 名`;
         else $('core-result').textContent = '移动演示完成';
         $('stats').textContent += `\n${core.result.reason}`;
         if (!completionLogged) {

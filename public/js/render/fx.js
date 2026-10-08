@@ -315,6 +315,7 @@ export class FxSystem {
     this.parts = [];          // active particle records { sp, add, x, y, vx, … }
     this.freeAdd = []; this.freeNorm = [];   // pooled particle records (their sprites stay in the containers)
     this.projs = [];
+    this.coreProjs = new Map();
     this.projFree = [];
     this.projLayer = new P.Container();
     ctx.layers.fxAdd.addChild(this.projLayer);
@@ -504,8 +505,8 @@ export class FxSystem {
   }
 
   /** A pooled projectile record: trail + halo + core sprites (additive, above units) and a ground shadow. */
-  _takeProj() {
-    if (this.projs.length >= MAX_PROJ) this._releaseProj(this.projs.shift());
+  _takeProj(enforceCap = true) {
+    if (enforceCap && this.projs.length >= MAX_PROJ) this._releaseProj(this.projs.shift());
     let pr = this.projFree.pop();
     if (!pr) {
       const P = this.P;
@@ -567,6 +568,56 @@ export class FxSystem {
       this.projs[w++] = pr;
     }
     this.projs.length = w;
+  }
+
+  setProjectiles(projectiles) {
+    const present = new Set();
+    for (const projectile of projectiles) {
+      present.add(projectile.id);
+      let pr = this.coreProjs.get(projectile.id);
+      if (!pr) {
+        pr = this._takeProj(false);
+        pr.spec = PROJ.bolt;
+        pr.glow = pr.spec.glow;
+        pr.trailTint = pr.spec.trail;
+        this._dressProj(pr);
+        this.coreProjs.set(projectile.id, pr);
+      }
+      pr.x = projectile.position[0];
+      pr.y = projectile.position[1];
+      pr.tx = projectile.destination[0];
+      pr.ty = projectile.destination[1];
+    }
+    for (const [id, pr] of this.coreProjs) {
+      if (present.has(id)) continue;
+      this._releaseProj(pr);
+      this.coreProjs.delete(id);
+    }
+    this._updateCoreProjs();
+  }
+
+  _updateCoreProjs() {
+    const cam = this.ctx.cam();
+    for (const pr of this.coreProjs.values()) {
+      const z = this._groundZ(pr.x, pr.y) + 0.5;
+      const p = cam.project(pr.x, pr.y, z, this._p);
+      const dx = pr.tx - pr.x, dy = pr.ty - pr.y;
+      const distance = Math.hypot(dx, dy);
+      const tail = distance > 1e-6 ? Math.min(0.4, distance) / distance : 0;
+      const q = cam.project(pr.x - dx * tail, pr.y - dy * tail, z, this._q);
+      const length = Math.hypot(p.x - q.x, p.y - q.y);
+      pr.trail.visible = length > 0.5;
+      pr.trail.position.set(p.x, p.y);
+      pr.trail.rotation = Math.atan2(p.y - q.y, p.x - q.x);
+      pr.trail.scale.set(Math.max(0.001, length / 128), p.s * 0.1 / 16);
+      pr.trail.alpha = 0.9;
+      pr.halo.position.set(p.x, p.y);
+      pr.halo.scale.set(p.s * 0.4 / 128);
+      pr.halo.alpha = 0.8;
+      pr.core.position.set(p.x, p.y);
+      pr.core.scale.set(p.s * 0.12 / 32);
+      pr.core.alpha = 1;
+    }
   }
 
   /** Screen point of a straight / lobbed shot at flight fraction k (a parabola of height `arc` over the line). */
@@ -2151,6 +2202,8 @@ export class FxSystem {
     this.parts.length = 0;
     for (const pr of this.projs) this._releaseProj(pr);
     this.projs.length = 0;
+    for (const pr of this.coreProjs.values()) this._releaseProj(pr);
+    this.coreProjs.clear();
     for (const L of this.locks) this._freeLock(L);
     this.locks.length = 0;
     this._slashAt = null;
@@ -2181,6 +2234,7 @@ export class FxSystem {
     this.time += dt;
     this._updateParticles(dt);
     this._updateProjs(dt);
+    this._updateCoreProjs();
     this._updateLocks(dt);
     this._updateBeams(dt);
     this._updateFlames(dt);
@@ -2206,7 +2260,7 @@ export class FxSystem {
   }
 
   get counts() {
-    return { particles: this.parts.length, projectiles: this.projs.length, numbers: this.nums.length, rings: this.rings.length, auras: this.auras.size, locks: this.locks.length, flames: this.flames.length, promotions: this.promotions || 0 };
+    return { particles: this.parts.length, projectiles: this.projs.length + this.coreProjs.size, authoritativeProjectiles: this.coreProjs.size, numbers: this.nums.length, rings: this.rings.length, auras: this.auras.size, locks: this.locks.length, flames: this.flames.length, promotions: this.promotions || 0 };
   }
 
   destroy() {

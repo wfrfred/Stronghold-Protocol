@@ -13,9 +13,19 @@ import {
 import {
     TacticalDemoPresentation,
     type LegacyData,
+    type LegacyElementGauge,
     type LegacyUnitInfo,
     type LegacyVisualEvent,
 } from "./tactical-demo-presentation.js";
+import { createTacticalProjectileResources } from "./projectile-demo.js";
+import { hasAllegiance } from "../core/tactical/unit/capability/allegiance.js";
+import { hasSkill } from "../core/tactical/unit/capability/skill/capability.js";
+import {
+    createTacticalMechanicsDemo,
+    isTacticalMechanicsScenario,
+    type TacticalMechanicsScenario,
+} from "./tactical-demo-mechanics.js";
+import { hasElemental } from "../core/tactical/unit/capability/elemental/capability.js";
 
 interface LegacyView {
     setStage(stage: Record<string, unknown>): unknown;
@@ -32,6 +42,7 @@ interface LegacyView {
         fieldId: string;
         gt: number;
         units: readonly number[][];
+        elem: readonly LegacyElementGauge[];
         dp: number;
         killed: number;
         total: number;
@@ -41,6 +52,14 @@ interface LegacyView {
         gt: number;
         ev: readonly (LegacyVisualEvent | readonly ["spawn", LegacyUnitInfo])[];
     }): unknown;
+    setProjectiles?(
+        projectiles: readonly {
+            readonly id: number;
+            readonly source: number | null;
+            readonly position: readonly [number, number];
+            readonly destination: readonly [number, number];
+        }[],
+    ): unknown;
     debug: { interp: { snapToNewest(): unknown; maxExtrapolate: number } };
 }
 
@@ -49,11 +68,19 @@ export interface TacticalDemoOptions {
     readonly data: LegacyData;
     readonly seed?: number;
     readonly mode?: "MOVEMENT" | "COMBAT";
-    readonly combatScenario?: TacticalCombatScenario;
+    readonly combatScenario?:
+        TacticalCombatScenario | TacticalMechanicsScenario | "PROJECTILE_CACHED";
     readonly onEvent?: (event: unknown) => void;
 }
 
-export type TacticalDemoCommand = "APPEAR_CRATES" | "REMOVE_CRATES" | "TRIGGER_DRAGON";
+export type TacticalDemoCommand =
+    | "APPEAR_CRATES"
+    | "REMOVE_CRATES"
+    | "TRIGGER_DRAGON"
+    | "RETREAT_SOURCE"
+    | "STOP_PROJECTILES"
+    | "ACTIVATE_SKILL"
+    | "FINISH_SKILL";
 
 const STAGE_IDS = new Set([
     "act1autochess_01",
@@ -147,6 +174,13 @@ function stageRows(map: BattlefieldMap): string[] {
 
 export async function createTacticalDemo(view: LegacyView, options: TacticalDemoOptions) {
     const { stageId, data, seed = 123, mode = "MOVEMENT" } = options;
+    const projectileActions =
+        mode === "COMBAT" &&
+        (options.combatScenario === "PROJECTILE" || options.combatScenario === "PROJECTILE_CACHED");
+    const combatScenario =
+        options.combatScenario === "PROJECTILE_CACHED" ? "PROJECTILE" : options.combatScenario;
+    const mechanicsScenario =
+        mode === "COMBAT" && isTacticalMechanicsScenario(combatScenario) ? combatScenario : null;
 
     if (!STAGE_IDS.has(stageId)) {
         throw new RangeError(`unsupported demo stage: ${stageId}`);
@@ -192,17 +226,29 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
     const scenario = loadMovementScenario(rawLevel, selection, catalog, seed);
 
     const route = scenario.level.routes[0]!;
+    const mechanics =
+        mechanicsScenario === null
+            ? null
+            : createTacticalMechanicsDemo(
+                  scenario.spec.map,
+                  route,
+                  data,
+                  seed,
+                  mechanicsScenario,
+                  mechanicsScenario === "SKILL" ? await fixture("skill_skcom_atk_up_2") : undefined,
+              );
     const spec =
-        mode === "COMBAT"
+        mechanics?.input ??
+        (mode === "COMBAT"
             ? createTacticalCombatDemoSpec(
                   scenario.spec.map,
                   route,
                   data,
                   seed,
-                  options.combatScenario,
+                  isTacticalMechanicsScenario(combatScenario) ? undefined : combatScenario,
               )
-            : scenario.spec;
-    const presentation = new TacticalDemoPresentation(data);
+            : scenario.spec);
+    const presentation = new TacticalDemoPresentation(data, { projectileActions });
 
     const legacyStage = record(data.lookup("stages", stageId));
     const renderedStageId = `ts-demo:${stageId}`;
@@ -222,7 +268,15 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
         .filter((definition) => definition.creation.type === "UNIT")
         .map((definition) => definition.id);
 
-    let runtime = new BattleRuntime(spec);
+    const resources = mechanics === null ? {} : { combat: mechanics.combat };
+    const createRuntime = () =>
+        new BattleRuntime(
+            spec,
+            projectileActions
+                ? createTacticalProjectileResources(options.combatScenario === "PROJECTILE_CACHED")
+                : resources,
+        );
+    let runtime = createRuntime();
     let snapshot = runtime.snapshot();
     let knownUnits = new Set<number>();
     let accumulatedTicks = 0;
@@ -249,14 +303,15 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
             fieldId,
             gt: snapshot.tickIndex / TICKS_PER_SECOND,
             units: visible.map((unit) => unit.tuple),
+            elem: presentation.elements(snapshot),
             dp: 0,
             killed: presentation.stats().killedCount,
             total: runtime.spawnCounts.spawnedCount + runtime.spawnCounts.unspawnedCount,
         });
+        view.setProjectiles?.(snapshot.projectiles.instances);
 
         for (const event of events) {
             if (event.type === "UNIT_REMOVED") {
-                // Removed units retain navigation paths and fields; keep those out of the UI log.
                 options.onEvent?.({
                     type: event.type,
                     unitId: event.unitId,
@@ -270,8 +325,20 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
                 event.type === "ENEMY_SPAWNED" ||
                 event.type === "ROUTE_COMPLETED" ||
                 event.type === "ACTION" ||
+                event.type === "ACTION_RELEASED" ||
+                event.type === "ACTION_FINISHED" ||
+                event.type === "ACTION_CANCELLED" ||
+                event.type === "PROJECTILE_REACHED" ||
+                event.type === "PROJECTILE_HIT" ||
+                event.type === "PROJECTILE_STOPPED" ||
                 event.type === "DAMAGE" ||
-                event.type === "HEAL"
+                event.type === "HEAL" ||
+                event.type === "SKILL_ACTIVATED" ||
+                event.type === "SKILL_FINISHED" ||
+                event.type === "ELEMENT_DAMAGE" ||
+                event.type === "ELEMENT_HEAL" ||
+                event.type === "ELEMENT_BURST" ||
+                event.type === "ELEMENT_RECOVERED"
             ) {
                 options.onEvent?.(event);
             }
@@ -319,7 +386,7 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
         }
 
         const target = Math.max(0, Math.min(spec.maxTicks, Math.round(seconds * TICKS_PER_SECOND)));
-        runtime = new BattleRuntime(spec);
+        runtime = createRuntime();
         snapshot = runtime.snapshot();
         accumulatedTicks = 0;
         presentation.reset();
@@ -329,6 +396,48 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
         }
 
         enter();
+    }
+
+    function skillStats() {
+        const source = snapshot.units.find(hasSkill);
+
+        if (source === undefined) {
+            return null;
+        }
+
+        const { skill } = source;
+        const { spCost } = source.definition.skill;
+        const active = skill.active;
+
+        return {
+            sp: skill.sp,
+            maxSp: spCost,
+            active: active !== null,
+            remainingTicks:
+                active?.endsAtTick == null
+                    ? 0
+                    : Math.max(0, active.endsAtTick - snapshot.tickIndex),
+            remainingAmmo: active?.remainingAmmo,
+            ready: active === null && skill.sp >= spCost && snapshot.result === null,
+        };
+    }
+
+    function elementStats() {
+        const target = snapshot.units.find(hasElemental);
+        const type = mechanics?.elementType;
+
+        if (target === undefined || type == null) {
+            return null;
+        }
+
+        return {
+            remainingEp: target.elemental.ep[type],
+            maxEp: target.definition.elemental.maxEp,
+            recoveryTicks: Math.max(
+                0,
+                (target.elemental.recovery?.endsAtTick ?? 0) - snapshot.tickIndex,
+            ),
+        };
     }
 
     enter();
@@ -345,8 +454,18 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
         snapshot: () => runtime.snapshot(),
         stats: () => ({
             mode,
+            combatScenario: options.combatScenario ?? "MIXED",
             ...presentation.stats(),
+            skill: skillStats(),
+            elementType: mechanics?.elementType ?? null,
+            element: elementStats(),
             blockingCount: snapshot.blockingRelations.length,
+            activeActionCount: snapshot.actionExecution.executions.length,
+            projectileCount: snapshot.projectiles.instances.length,
+            projectileActions,
+            sourcePresent: snapshot.units.some(
+                (unit) => hasAllegiance(unit) && unit.allegiance.side === "ALLY",
+            ),
             tickIndex: snapshot.tickIndex,
             units: snapshot.units.length,
             mechanisms: snapshot.mechanisms.length,
@@ -359,6 +478,47 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
 
         step() {
             step();
+            view.debug.interp.snapToNewest();
+        },
+
+        nextRelease(): void {
+            if (!projectileActions || stopped || runtime.result !== null) {
+                return;
+            }
+
+            const events: Event[] = [];
+            const visuals: LegacyVisualEvent[] = [];
+
+            while (snapshot.tickIndex < spec.maxTicks) {
+                const advanced = advance();
+                events.push(...advanced.events);
+                visuals.push(...advanced.visuals);
+
+                if (
+                    snapshot.result !== null ||
+                    advanced.events.some((event) => event.type === "ACTION_RELEASED")
+                ) {
+                    break;
+                }
+            }
+
+            publish(events, visuals);
+            view.debug.interp.snapToNewest();
+        },
+
+        nextSkillReady(): void {
+            if (mechanicsScenario !== "SKILL" || stopped || runtime.result !== null) {
+                return;
+            }
+
+            const events: Event[] = [];
+
+            while (snapshot.result === null && skillStats()?.ready !== true) {
+                const advanced = advance();
+                events.push(...advanced.events);
+            }
+
+            publish(events, presentation.replayEvents(snapshot));
             view.debug.interp.snapToNewest();
         },
 
@@ -391,14 +551,47 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
         },
 
         command(type: TacticalDemoCommand): void {
-            if (stopped || runtime.result !== null || mode === "COMBAT") {
+            if (stopped || runtime.result !== null) {
                 return;
             }
 
             const tick = snapshot.tickIndex;
             let requested: readonly Command[];
 
-            if (type === "TRIGGER_DRAGON") {
+            if (type === "ACTIVATE_SKILL" || type === "FINISH_SKILL") {
+                const source = snapshot.units.find(hasSkill);
+
+                if (source === undefined) {
+                    return;
+                }
+
+                requested = [{ type, unitId: source.id }];
+            } else if (type === "RETREAT_SOURCE") {
+                if (!projectileActions) {
+                    return;
+                }
+
+                const source = snapshot.units.find(
+                    (unit) => hasAllegiance(unit) && unit.allegiance.side === "ALLY",
+                );
+
+                if (source === undefined) {
+                    return;
+                }
+
+                requested = [{ type: "RETREAT_UNIT", unitId: source.id }];
+            } else if (type === "STOP_PROJECTILES") {
+                if (!projectileActions || snapshot.projectiles.instances.length === 0) {
+                    return;
+                }
+
+                requested = snapshot.projectiles.instances.map((instance) => ({
+                    type: "STOP_PROJECTILE",
+                    projectileId: instance.id,
+                }));
+            } else if (mode === "COMBAT") {
+                return;
+            } else if (type === "TRIGGER_DRAGON") {
                 requested = [{ type: "TRIGGER_BRANCH", branchId: "dragon", isLoop: true }];
             } else {
                 requested = crateIds.map((definitionId) =>
