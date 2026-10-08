@@ -819,6 +819,9 @@ import type { BattlefieldView } from ${sourceModule('../battlefield/contract')};
 import type { BattlefieldMap } from ${sourceModule('../battlefield/map/map')};
 import { createUnitPlacementDefinition, instantiateUnitPlacement, type UnitPlacementDefinition } from ${sourceModule('../battle/creation/placement')};
 import type { BattleExecutionState } from ${sourceModule('../battle/execution/state')};
+import { withProjectileOperations } from ${sourceModule('../battlefield/projectile/operations')};
+import type { ProjectileState } from ${sourceModule('../battlefield/projectile/state')};
+import type { ProjectileResources } from ${sourceModule('../battlefield/projectile/resources')};
 import type { Occupancy, OccupancyState } from ${sourceModule('capability/occupancy')};
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
 type Assert<T extends true> = T;
@@ -830,6 +833,8 @@ declare const unionDefinition: EnemyProbe | DeviceProbe;
 declare const routed: RoutedLocomotionState;
 declare const battlefieldMap: BattlefieldMap;
 declare const execution: BattleExecutionState;
+declare const projectiles: ProjectileState;
+declare const projectileResources: ProjectileResources;
 declare const placement: { readonly definition: EnemyProbe; readonly position: readonly [number, number]; readonly occupancy: OccupancyState }
   | { readonly definition: DeviceProbe; readonly position: readonly [number, number] };
 `;
@@ -906,6 +911,8 @@ type PublicFactory = Assert<Equal<Extract<keyof typeof battlefield, 'commit' | '
 type RuleCache = Assert<Equal<Extract<keyof BattlefieldView['fieldCache'], 'invalidate' | 'clear'>, never>>;
 const synchronousLiteral = battlefield.transact(() => 17 as const);
 type SynchronousLiteral = Assert<Equal<typeof synchronousLiteral, 17>>;
+const projectileResult = withProjectileOperations(projectiles, projectileResources, 0, () => 23 as const);
+type ProjectileLiteral = Assert<Equal<typeof projectileResult.result, 23>>;
 const fork = battlefield.fork();
 type PublicFork = Assert<Equal<Extract<keyof typeof fork, 'commit' | 'view'>, never>>;
 battlefield.transact(field => {
@@ -917,6 +924,8 @@ battlefield.transact(field => {
     for (const [name, source] of [
       ['async-transaction', `createBattlefieldRuntime({ map: battlefieldMap }).transact(async () => 1);`],
       ['promise-union-transaction', `declare const mixed: number | Promise<number>; createBattlefieldRuntime({ map: battlefieldMap }).transact(() => mixed);`],
+      ['async-projectile-operation', `withProjectileOperations(projectiles, projectileResources, 0, async () => 1);`],
+      ['promise-union-projectile-operation', `declare const mixed: number | Promise<number>; withProjectileOperations(projectiles, projectileResources, 0, () => mixed);`],
       ['state-extra-field', `initializeUnit({ id: 1, definition: { id: 'offense', offense: { attack: 1 } }, position: [0, 0], states: { offense: { ...initializeOffenseState(), marker: 'extra' as const } } }).offense.marker;`],
       ['normalized-state-extra', `instantiateUnitPlacement(createUnitPlacementDefinition({ definition: { id: 'offense', offense: { attack: 1 } }, position: [0, 0], states: { offense: { ...initializeOffenseState(), marker: 'extra' as const } } }), execution, 0).unit.offense.marker;`],
       ['mutable-definition', `initializeUnit({ id: 1, definition: { id: 'mutable', vitality: { maxHp: 10 } }, position: [0, 0] }).definition.vitality.maxHp = 99;`],

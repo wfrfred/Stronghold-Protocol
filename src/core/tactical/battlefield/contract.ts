@@ -13,11 +13,11 @@ import type {
 } from "./navigation/effect.js";
 import type { BlockingRelation } from "./blocking/relations.js";
 import type { SupportRelation } from "./support/relations.js";
+import type { SynchronousResult } from "../../common/synchronous.js";
+
+export type { SynchronousResult } from "../../common/synchronous.js";
 
 export type BattlefieldRemovalReason = "DEATH" | "RETREAT" | "EXPIRED" | "SCRIPT";
-
-export type SynchronousResult<T> = T &
-    (Extract<T, PromiseLike<unknown>> extends never ? unknown : never);
 
 export type BattlefieldChange<U extends Unit = Unit> =
     | { readonly type: "REGISTER_UNIT"; readonly unit: U }

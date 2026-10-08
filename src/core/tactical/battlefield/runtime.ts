@@ -1,4 +1,5 @@
 import type { TilePosition } from "../geometry/coordinate.js";
+import { assertSynchronousResult } from "../../common/synchronous.js";
 import { createNavigationFieldCache, type NavigationFieldCache } from "./navigation/cache.js";
 import type { NavigationMaps } from "./navigation/map.js";
 import { assertUnitCapabilityConsistency } from "../unit/capability/catalog.js";
@@ -229,13 +230,7 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
         try {
             const result = operation(this);
 
-            if (
-                result !== null &&
-                (typeof result === "object" || typeof result === "function") &&
-                typeof (Reflect.get(result, "then") as unknown) === "function"
-            ) {
-                throw new TypeError("battlefield transactions must complete synchronously");
-            }
+            assertSynchronousResult(result, "battlefield transactions");
 
             return result;
         } catch (error) {

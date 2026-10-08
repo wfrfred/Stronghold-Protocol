@@ -1,22 +1,18 @@
 import { World } from "../../geometry/coordinate.js";
-import { hasAllegiance } from "../../unit/capability/allegiance.js";
-import { hasBlockable, hasBlocker } from "../../unit/capability/blocking.js";
-import { hasTileBindingDefinition } from "../../unit/capability/deployment.js";
 import {
     hasOccupancy,
     isOccupancyClaimActive,
     type OccupancyClaim,
 } from "../../unit/capability/occupancy.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
-import { hasSpatial } from "../../unit/capability/spatial.js";
-import { hasVitality } from "../../unit/capability/vitality/capability.js";
 import type { Unit, UnitId } from "../../unit/unit.js";
 import type { BattlefieldMap } from "../map/map.js";
 import type { MechanismId } from "../mechanism.js";
 import type { SpatialEffectId, SpatialEffectRegion } from "../navigation/effect.js";
 import { battlefieldTileKey, spatialEffectSourceKey } from "./indexes.js";
 import type { BattlefieldContent, BattlefieldState } from "./state.js";
-import { canBlockGround } from "../blocking/relations.js";
+import { readBlockingFacts, sameBlockingFacts } from "../blocking/facts.js";
+import { readSupportFacts, sameSupportFacts } from "../support/facts.js";
 
 export interface BattlefieldDependencyChanges {
     readonly updatedUnitIds: ReadonlySet<UnitId>;
@@ -56,53 +52,6 @@ function sameOccupancyInputs(left: Unit, right: Unit): boolean {
     return sameClaims(
         leftClaims.filter((claim) => isOccupancyClaimActive(left, claim)),
         rightClaims.filter((claim) => isOccupancyClaimActive(right, claim)),
-    );
-}
-
-function sameSupportInputs(left: Unit, right: Unit): boolean {
-    const leftProvider =
-        hasTileBindingDefinition(left.definition) &&
-        left.definition.tileBinding.buildableType !== "NONE";
-    const rightProvider =
-        hasTileBindingDefinition(right.definition) &&
-        right.definition.tileBinding.buildableType !== "NONE";
-    const leftClaims = hasOccupancy(left) ? left.occupancy.claims : EMPTY_CLAIMS;
-    const rightClaims = hasOccupancy(right) ? right.occupancy.claims : EMPTY_CLAIMS;
-
-    return (
-        isSpatiallyPresent(left) === isSpatiallyPresent(right) &&
-        leftProvider === rightProvider &&
-        (leftClaims === rightClaims ||
-            sameClaims(
-                leftClaims.filter((claim) => claim.type === "PRESENT"),
-                rightClaims.filter((claim) => claim.type === "PRESENT"),
-            ))
-    );
-}
-
-function sameBlockingInputs(map: BattlefieldMap, left: Unit, right: Unit): boolean {
-    const active = (unit: Unit) =>
-        isSpatiallyPresent(unit) && (!hasVitality(unit) || unit.vitality.hp > 0);
-    const ground = (unit: Unit) => !hasSpatial(unit) || unit.spatial.layer === "GROUND";
-    const highland = (unit: Unit) =>
-        hasTileBindingDefinition(unit.definition) &&
-        unit.definition.tileBinding.heightType === "HIGHLAND";
-    const leftBlocker = hasBlocker(left) ? left.blocker : undefined;
-    const rightBlocker = hasBlocker(right) ? right.blocker : undefined;
-    const leftBlockable = hasBlockable(left) ? left.blockable : undefined;
-    const rightBlockable = hasBlockable(right) ? right.blockable : undefined;
-
-    return (
-        active(left) === active(right) &&
-        ground(left) === ground(right) &&
-        highland(left) === highland(right) &&
-        canBlockGround(left, map) === canBlockGround(right, map) &&
-        leftBlocker?.enabled === rightBlocker?.enabled &&
-        leftBlocker?.capacity === rightBlocker?.capacity &&
-        leftBlockable?.enabled === rightBlockable?.enabled &&
-        leftBlockable?.weight === rightBlockable?.weight &&
-        (hasAllegiance(left) ? left.allegiance.side : undefined) ===
-            (hasAllegiance(right) ? right.allegiance.side : undefined)
     );
 }
 
@@ -186,8 +135,8 @@ export function deriveBattlefieldDependencies<U extends Unit>(
         }
 
         occupancy ||= !sameOccupancyInputs(left, right);
-        support ||= !sameSupportInputs(left, right);
-        blocking ||= !sameBlockingInputs(map, left, right);
+        support ||= !sameSupportFacts(readSupportFacts(left), readSupportFacts(right));
+        blocking ||= !sameBlockingFacts(map, readBlockingFacts(left), readBlockingFacts(right));
         effectCoverage ||=
             (presenceChanged && previous.spatial.effectsBySource.has(`UNIT:${id}`)) ||
             ((presenceChanged || tileChanged) && retainedAnchor);

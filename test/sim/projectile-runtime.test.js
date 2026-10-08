@@ -805,6 +805,45 @@ test("projectile runtime: bulk launch owns inputs once and exposes each latest i
   assert.equal(stepProjectiles(work, advanced.state, resources, 1).state, advanced.state);
 });
 
+test("projectile runtime: asynchronous scope results reject launches and close borrowed operations", () => {
+  const resources = new CombatResources();
+  const program = registerProjectile(resources);
+  const previous = createProjectileState();
+  const input = {
+    source: null,
+    traceTarget: null,
+    position: [0, 0],
+    destination: [2, 0],
+    cachedAtk: 10,
+    speedPerTick: 1,
+    contactRange,
+    stopDelayTicks: 1,
+  };
+  let thenCalled = false;
+  const thenable = { then() { thenCalled = true; } };
+  const callableThenable = Object.assign(() => {}, { then() { thenCalled = true; } });
+
+  for (const result of [Promise.resolve(1), thenable, callableThenable]) {
+    let borrowed;
+    assert.throws(() => withProjectileOperations(previous, resources.projectiles, 0, (operations) => {
+      borrowed = operations;
+      assert.equal(operations.launch(program.ref, input), 0);
+      assert.equal(operations.get(0).id, 0);
+      return result;
+    }), /must complete synchronously/);
+    assert.deepEqual(previous, { nextProjectileId: 0, instances: [] });
+    assert.throws(() => borrowed.get(0), /no longer active/);
+    assert.throws(() => borrowed.launch(program.ref, input), /no longer active/);
+  }
+
+  assert.equal(thenCalled, false);
+  const retried = withProjectileOperations(previous, resources.projectiles, 0,
+    (operations) => operations.launch(program.ref, input));
+  assert.equal(retried.result, 0);
+  assert.equal(retried.state.nextProjectileId, 1);
+  assert.deepEqual(previous, { nextProjectileId: 0, instances: [] });
+});
+
 test("projectile runtime: stop callbacks see latest peer progress while removals leave sibling snapshots isolated", () => {
   const resources = new CombatResources();
   const observations = [];

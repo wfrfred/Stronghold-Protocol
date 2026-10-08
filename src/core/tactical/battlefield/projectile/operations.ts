@@ -1,5 +1,6 @@
 import { ownProjectileInstance, ProjectileWork } from "./internal/state.js";
 import { assertNonnegativeNumber, assertNonnegativeSafeInteger } from "../../../common/assert.js";
+import { assertSynchronousResult, type SynchronousResult } from "../../../common/synchronous.js";
 import type { WorldPosition } from "../../geometry/coordinate.js";
 import type { RangeGeometry } from "../../geometry/shape.js";
 import type { UnitId } from "../../unit/unit.js";
@@ -32,7 +33,7 @@ export function withProjectileOperations<T>(
     state: ProjectileState,
     resources: ProjectileResources,
     tick: number,
-    run: (operations: ProjectileOperations) => T,
+    run: (operations: ProjectileOperations) => SynchronousResult<T>,
 ): { readonly state: ProjectileState; readonly result: T } {
     const current = new ProjectileWork(state);
     let active = true;
@@ -98,9 +99,7 @@ export function withProjectileOperations<T>(
     try {
         const result = run(operations);
 
-        if (result instanceof Promise) {
-            throw new TypeError("projectile operations must complete synchronously");
-        }
+        assertSynchronousResult(result, "projectile operations");
 
         return { state: current.result(), result };
     } finally {

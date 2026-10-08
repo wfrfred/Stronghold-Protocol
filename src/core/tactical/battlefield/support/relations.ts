@@ -1,7 +1,6 @@
-import { hasTileBindingDefinition } from "../../unit/capability/deployment.js";
-import { hasOccupancy } from "../../unit/capability/occupancy.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
 import type { Unit, UnitId } from "../../unit/unit.js";
+import { readSupportFacts } from "./facts.js";
 
 export interface SupportRelation {
     readonly supportedUnitId: UnitId;
@@ -15,31 +14,27 @@ function isValidSupportRelation(
     const provider = units.get(relation.supportUnitId);
     const supported = units.get(relation.supportedUnitId);
 
-    if (
-        provider === undefined ||
-        supported === undefined ||
-        provider.id === supported.id ||
-        !isSpatiallyPresent(provider) ||
-        !isSpatiallyPresent(supported) ||
-        !hasTileBindingDefinition(provider.definition) ||
-        provider.definition.tileBinding.buildableType === "NONE" ||
-        !hasOccupancy(provider) ||
-        !hasOccupancy(supported)
-    ) {
+    if (provider === undefined || supported === undefined || provider.id === supported.id) {
         return false;
     }
 
-    return provider.occupancy.claims.some(
-        (providerClaim) =>
-            providerClaim.slot === "SUPPORT" &&
-            providerClaim.type === "PRESENT" &&
-            supported.occupancy.claims.some(
-                (supportedClaim) =>
-                    supportedClaim.slot === "DEPLOYMENT" &&
-                    supportedClaim.type === "PRESENT" &&
-                    providerClaim.position[0] === supportedClaim.position[0] &&
-                    providerClaim.position[1] === supportedClaim.position[1],
-            ),
+    const providerFacts = readSupportFacts(provider);
+    const supportedFacts = readSupportFacts(supported);
+
+    return (
+        providerFacts.present &&
+        supportedFacts.present &&
+        providerFacts.provider &&
+        providerFacts.claims.some(
+            (providerClaim) =>
+                providerClaim.slot === "SUPPORT" &&
+                supportedFacts.claims.some(
+                    (supportedClaim) =>
+                        supportedClaim.slot === "DEPLOYMENT" &&
+                        providerClaim.position[0] === supportedClaim.position[0] &&
+                        providerClaim.position[1] === supportedClaim.position[1],
+                ),
+        )
     );
 }
 

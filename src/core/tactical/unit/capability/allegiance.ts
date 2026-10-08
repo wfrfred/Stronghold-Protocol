@@ -41,9 +41,13 @@ export function areHostile(left: Unit, right: Unit): boolean {
         return false;
     }
 
-    const leftSide = left.allegiance.side;
-    const rightSide = right.allegiance.side;
+    return areHostileSides(left.allegiance.side, right.allegiance.side);
+}
 
+export function areHostileSides(
+    leftSide: AllegianceState["side"] | undefined,
+    rightSide: AllegianceState["side"] | undefined,
+): boolean {
     return (
         (leftSide === "ALLY" && rightSide === "ENEMY") ||
         (leftSide === "ENEMY" && rightSide === "ALLY")
