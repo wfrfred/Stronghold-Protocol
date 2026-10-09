@@ -353,12 +353,65 @@ function finishBatch(
         indegrees.set(key, count);
     }
 
-    const ready = [...ending.keys()].filter((key) => indegrees.get(key) === 0);
+    // A local min-heap preserves stable identity order without sorting every dequeue.
+    const ready: string[] = [];
+    const before = (left: string, right: string): boolean =>
+        compareRefs(ending.get(left)!.ref, ending.get(right)!.ref) < 0;
+
+    const enqueue = (key: string): void => {
+        let index = ready.length;
+        ready.push(key);
+
+        while (index > 0) {
+            const parent = Math.floor((index - 1) / 2);
+
+            if (!before(key, ready[parent]!)) {
+                break;
+            }
+
+            ready[index] = ready[parent]!;
+            index = parent;
+        }
+
+        ready[index] = key;
+    };
+    const dequeue = (): string => {
+        const first = ready[0]!;
+        const last = ready.pop()!;
+
+        if (ready.length > 0) {
+            let index = 0;
+
+            while (index * 2 + 1 < ready.length) {
+                let child = index * 2 + 1;
+
+                if (child + 1 < ready.length && before(ready[child + 1]!, ready[child]!)) {
+                    child++;
+                }
+                if (!before(ready[child]!, last)) {
+                    break;
+                }
+
+                ready[index] = ready[child]!;
+                index = child;
+            }
+
+            ready[index] = last;
+        }
+
+        return first;
+    };
+
+    for (const key of ending.keys()) {
+        if (indegrees.get(key) === 0) {
+            enqueue(key);
+        }
+    }
+
     const ordered: Ending[] = [];
 
     while (ready.length > 0) {
-        ready.sort((a, b) => compareRefs(ending.get(a)!.ref, ending.get(b)!.ref));
-        const key = ready.shift()!;
+        const key = dequeue();
         ordered.push(ending.get(key)!);
 
         for (const child of children.get(key) ?? []) {
@@ -366,7 +419,7 @@ function finishBatch(
             indegrees.set(child, remaining);
 
             if (remaining === 0) {
-                ready.push(child);
+                enqueue(child);
             }
         }
     }
