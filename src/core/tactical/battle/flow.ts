@@ -1,4 +1,4 @@
-import type { BattlefieldChange, BattlefieldChangeResult } from "../battlefield/contract.js";
+import type { BattlefieldChange } from "../battlefield/contract.js";
 import type { BattlefieldRuntime } from "../battlefield/runtime.js";
 import { advanceMovement, applyRouteCommands } from "./phases/movement.js";
 import { advanceBlocking } from "./phases/blocking.js";
@@ -10,30 +10,20 @@ import { instantiateNavigationModifierPlacement } from "./creation/navigation-mo
 import { createSpawnScheduleDefinition } from "./schedule/definition.js";
 import {
     changePredefinedInstances,
-    copyPredefinedPresence,
     createPredefinedSystem,
     type PredefinedPresence,
 } from "./predefined.js";
-import type { Input, Command, Event, Result } from "./contract.js";
-import {
-    cloneScheduleState,
-    createSpawnScheduleExecution,
-    type SpawnScheduleExecution,
-} from "./schedule/state.js";
-import { getSpawnScheduleCounts, isSpawnScheduleCompleted } from "./schedule/runtime.js";
+import type { Input } from "./contract.js";
+import { createSpawnScheduleExecution, type SpawnScheduleExecution } from "./schedule/state.js";
 import { advanceSpawning, resolveSpawning } from "./phases/spawning.js";
 import type { BattleExecutionState } from "./execution/state.js";
 import type { BattlePhase, BattlePhaseInput, BattlePhaseOutput } from "./phase.js";
-import { battlefieldCommitEvents, finishBattleEvents } from "./events.js";
 import { CombatResources } from "./resources.js";
 import type { compileAction } from "../unit/capability/action/compile.js";
-import { advanceEffectSources, registerEffectSources } from "./phases/effect-sources.js";
-import {
-    copyActionExecutionState,
-    type ActionExecutionState,
-} from "../unit/capability/action/process.js";
+import { advanceEffectSources } from "./phases/effect-sources.js";
+import type { ActionExecutionState } from "../unit/capability/action/process.js";
 import { createProjectileSystem } from "./phases/projectiles.js";
-import { copyProjectileState, type ProjectileState } from "../battlefield/projectile/state.js";
+import type { ProjectileState } from "../battlefield/projectile/state.js";
 import { withProjectileOperations } from "../battlefield/projectile/operations.js";
 import { advanceElements } from "./phases/elemental.js";
 import { advanceSkills } from "./phases/skills.js";
@@ -73,7 +63,7 @@ function statelessPhase(
     return (input, state) => ({ ...advance(input, state), state });
 }
 
-export function createBattleFlow(input: Input, resources: BattleResources = {}) {
+export function createBattlePhases(input: Input, resources: BattleResources = {}) {
     const combatResources = (resources.combat ?? new CombatResources()).seal();
     const predefined = createPredefinedSystem(input.predefines, combatResources);
     const scheduleDefinition = createSpawnScheduleDefinition(input.schedule);
@@ -142,6 +132,9 @@ export function createBattleFlow(input: Input, resources: BattleResources = {}) 
     ]);
 
     return {
+        phases,
+        combatResources,
+
         initialize(battlefield: BattlefieldRuntime, execution: BattleExecutionState) {
             const initialChanges: BattlefieldChange[] = [];
             const initialUnitIds: number[] = [];
@@ -210,93 +203,6 @@ export function createBattleFlow(input: Input, resources: BattleResources = {}) 
             };
 
             return { phaseState, execution: preparedSources.execution };
-        },
-
-        spawnCounts(phaseState: BattlePhaseState) {
-            return getSpawnScheduleCounts(phaseState.schedule);
-        },
-
-        snapshot(phaseState: BattlePhaseState) {
-            return {
-                spawning: cloneScheduleState(phaseState.schedule),
-                predefinedPresence: copyPredefinedPresence(phaseState.predefined),
-                actionExecution: copyActionExecutionState(phaseState.actionExecution),
-                projectiles: copyProjectileState(phaseState.projectiles),
-            };
-        },
-
-        step(
-            battlefield: BattlefieldRuntime,
-            phaseState: BattlePhaseState,
-            execution: BattleExecutionState,
-            tick: number,
-            commands: readonly Command[],
-        ) {
-            const events: Event[] = [];
-            const removedUnits: BattlefieldChangeResult["removedUnits"][number][] = [];
-
-            for (const phase of phases) {
-                const phaseResult = phase(
-                    { battlefield: battlefield.view, execution, tick, commands, removedUnits },
-                    phaseState,
-                );
-                let nextExecution = phaseResult.execution;
-                events.push(...phaseResult.events);
-
-                if (phaseResult.changes.length > 0) {
-                    const committed = battlefield.commitOwned(phaseResult.changes);
-                    removedUnits.push(...committed.removedUnits);
-                    events.push(...battlefieldCommitEvents(committed, tick));
-
-                    if (committed.registeredUnitIds.length > 0) {
-                        const joined = registerEffectSources(
-                            {
-                                battlefield: battlefield.view,
-                                execution: nextExecution,
-                                tick,
-                                commands,
-                                removedUnits,
-                            },
-                            committed.registeredUnitIds,
-                            combatResources,
-                        );
-                        const installed = battlefield.commitOwned(joined.changes);
-                        removedUnits.push(...installed.removedUnits);
-                        events.push(...battlefieldCommitEvents(installed, tick), ...joined.events);
-                        nextExecution = joined.execution;
-                    }
-                }
-
-                phaseState = phaseResult.state;
-                execution = nextExecution;
-            }
-
-            return {
-                phaseState,
-                execution,
-                ...finishBattleEvents(events, removedUnits, tick),
-            };
-        },
-
-        finish(
-            phaseState: BattlePhaseState,
-            elapsedTicks: number,
-            completedRouteCount: number,
-            remainingUnitIds: Result["remainingUnitIds"],
-        ): Result | null {
-            const completed = isSpawnScheduleCompleted(phaseState.schedule);
-
-            if (!completed && elapsedTicks < input.maxTicks) {
-                return null;
-            }
-
-            return {
-                reason: completed ? "SCHEDULE_COMPLETED" : "TIME_LIMIT",
-                elapsedTicks,
-                completedRouteCount,
-                remainingUnitIds,
-                ...getSpawnScheduleCounts(phaseState.schedule),
-            };
         },
     };
 }

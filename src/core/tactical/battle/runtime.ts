@@ -3,9 +3,18 @@ import { BattlefieldRuntime } from "../battlefield/runtime.js";
 import type { NavigationMaps } from "../battlefield/navigation/map.js";
 import { copyUnitSnapshot } from "../unit/snapshot.js";
 import type { BattleExecutionState } from "./execution/state.js";
-import { predefinedIdsForAlias } from "./predefined.js";
-import { createBattleFlow, type BattlePhaseState, type BattleResources } from "./flow.js";
-import type { Input, Command, Result, Snapshot, Step } from "./contract.js";
+import { predefinedIdsForAlias, copyPredefinedPresence } from "./predefined.js";
+import { createBattlePhases, type BattlePhaseState, type BattleResources } from "./flow.js";
+import type { Input, Command, Event, Result, Snapshot, Step } from "./contract.js";
+import type { BattlePhase } from "./phase.js";
+import type { BattlefieldChangeResult } from "../battlefield/contract.js";
+import { battlefieldCommitEvents, finishBattleEvents } from "./events.js";
+import { registerEffectSources } from "./phases/effect-sources.js";
+import type { CombatResources } from "./resources.js";
+import { getSpawnScheduleCounts, isSpawnScheduleCompleted } from "./schedule/runtime.js";
+import { cloneScheduleState } from "./schedule/state.js";
+import { copyActionExecutionState } from "../unit/capability/action/process.js";
+import { copyProjectileState } from "../battlefield/projectile/state.js";
 
 export type { Input, Command, Event, Result, Snapshot, Step } from "./contract.js";
 
@@ -24,7 +33,8 @@ function copyResult(result: Result | null): Result | null {
 
 export class BattleRuntime {
     readonly #input: Input;
-    readonly #flow: ReturnType<typeof createBattleFlow>;
+    readonly #phases: readonly BattlePhase<BattlePhaseState>[];
+    readonly #combatResources: CombatResources;
     #state: BattleRuntimeState;
 
     constructor(input: Input, resources: BattleResources = {}) {
@@ -47,10 +57,12 @@ export class BattleRuntime {
         }
 
         this.#input = input;
-        this.#flow = createBattleFlow(this.#input, resources);
+        const assembled = createBattlePhases(this.#input, resources);
+        this.#phases = assembled.phases;
+        this.#combatResources = assembled.combatResources;
 
         const battlefield = BattlefieldRuntime.create({ map: this.#input.map }, copyUnitSnapshot);
-        const initialized = this.#flow.initialize(battlefield, {
+        const initialized = assembled.initialize(battlefield, {
             rngState: this.#input.rngState,
             nextUnitId: 0,
             nextNavigationRequestId: 0,
@@ -81,7 +93,7 @@ export class BattleRuntime {
     }
 
     get spawnCounts(): { readonly spawnedCount: number; readonly unspawnedCount: number } {
-        return this.#flow.spawnCounts(this.#state.phaseState);
+        return getSpawnScheduleCounts(this.#state.phaseState.schedule);
     }
 
     snapshot(): Snapshot {
@@ -90,7 +102,10 @@ export class BattleRuntime {
 
         return {
             tickIndex,
-            ...this.#flow.snapshot(phaseState),
+            spawning: cloneScheduleState(phaseState.schedule),
+            predefinedPresence: copyPredefinedPresence(phaseState.predefined),
+            actionExecution: copyActionExecutionState(phaseState.actionExecution),
+            projectiles: copyProjectileState(phaseState.projectiles),
             execution: { ...execution },
             units: battlefield.unitIds.map((id) => battlefield.getUnit(id)!),
             blockingRelations: battlefield.blockingRelations,
@@ -113,32 +128,72 @@ export class BattleRuntime {
             ...this.#state,
             battlefield: this.#state.battlefield.fork(),
         };
-        const stepped = this.#flow.step(
-            workingState.battlefield,
-            workingState.phaseState,
-            workingState.execution,
-            workingState.tickIndex,
-            commands,
-        );
+        const { battlefield, tickIndex: tick } = workingState;
+        let { phaseState, execution } = workingState;
+        const events: Event[] = [];
+        const removedUnits: BattlefieldChangeResult["removedUnits"][number][] = [];
 
-        const tickIndex = workingState.tickIndex + 1;
-        const completedRouteCount = workingState.completedRouteCount + stepped.completedRouteCount;
-        const result = this.#flow.finish(
-            stepped.phaseState,
-            tickIndex,
-            completedRouteCount,
-            workingState.battlefield.unitIds,
-        );
+        for (const phase of this.#phases) {
+            const phaseResult = phase(
+                { battlefield: battlefield.view, execution, tick, commands, removedUnits },
+                phaseState,
+            );
+            let nextExecution = phaseResult.execution;
+            events.push(...phaseResult.events);
 
-        const output: Step = { events: stepped.events, result: copyResult(result) };
+            if (phaseResult.changes.length > 0) {
+                const committed = battlefield.commitOwned(phaseResult.changes);
+                removedUnits.push(...committed.removedUnits);
+                events.push(...battlefieldCommitEvents(committed, tick));
+
+                if (committed.registeredUnitIds.length > 0) {
+                    const joined = registerEffectSources(
+                        {
+                            battlefield: battlefield.view,
+                            execution: nextExecution,
+                            tick,
+                            commands,
+                            removedUnits,
+                        },
+                        committed.registeredUnitIds,
+                        this.#combatResources,
+                    );
+                    const installed = battlefield.commitOwned(joined.changes);
+                    removedUnits.push(...installed.removedUnits);
+                    events.push(...battlefieldCommitEvents(installed, tick), ...joined.events);
+                    nextExecution = joined.execution;
+                }
+            }
+
+            phaseState = phaseResult.state;
+            execution = nextExecution;
+        }
+
+        const finishedEvents = finishBattleEvents(events, removedUnits, tick);
+        const tickIndex = tick + 1;
+        const completedRouteCount =
+            workingState.completedRouteCount + finishedEvents.completedRouteCount;
+        const completed = isSpawnScheduleCompleted(phaseState.schedule);
+        const result: Result | null =
+            completed || tickIndex >= this.#input.maxTicks
+                ? {
+                      reason: completed ? "SCHEDULE_COMPLETED" : "TIME_LIMIT",
+                      elapsedTicks: tickIndex,
+                      completedRouteCount,
+                      remainingUnitIds: battlefield.unitIds,
+                      ...getSpawnScheduleCounts(phaseState.schedule),
+                  }
+                : null;
+
+        const output: Step = { events: finishedEvents.events, result: copyResult(result) };
 
         this.#state = {
             ...workingState,
             tickIndex,
             completedRouteCount,
             result,
-            phaseState: stepped.phaseState,
-            execution: stepped.execution,
+            phaseState,
+            execution,
         };
 
         return output;

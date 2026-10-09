@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
-import { createBattleFlow } from "../../dist/core/tactical/battle/flow.js";
+import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { BattlefieldRuntime } from "../../dist/core/tactical/battlefield/runtime.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { copyUnitSnapshot } from "../../dist/core/tactical/unit/snapshot.js";
@@ -9,7 +9,7 @@ import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js"
 import { createActionDefinition } from "../../dist/core/tactical/unit/capability/action/capability.js";
 import { compileAction } from "../../dist/core/tactical/unit/capability/action/compile.js";
 
-test("action event order: release and damage precede support loss produced by the phase commit", () => {
+test("action event order: release and damage precede support loss produced by the phase commit", (t) => {
     const geometry = createShapeGeometry({
         shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 5 }],
     });
@@ -85,7 +85,9 @@ test("action event order: release and damage precede support loss produced by th
         ...[attacker, support, recipient].map(unit => ({ type: "REGISTER_UNIT", unit })),
         { type: "SET_SUPPORT_RELATIONS", relations: [{ supportedUnitId: 2, supportUnitId: 1 }] },
     ]);
-    const flow = createBattleFlow(spec, {
+    // Supply the battlefield fixture with an established support relation.
+    t.mock.method(BattlefieldRuntime, "create", () => battlefield);
+    const runtime = new BattleRuntime(spec, {
         compileAction: (definition, resources) => {
             const compiled = compileAction(definition, resources);
 
@@ -98,14 +100,8 @@ test("action event order: release and damage precede support loss produced by th
             };
         },
     });
-    const initialized = flow.initialize(battlefield, {
-        rngState: 17,
-        nextUnitId: 3,
-        nextNavigationRequestId: 0,
-        nextMechanismId: 0,
-        nextNavigationModifierId: 0,
-    });
-    const output = flow.step(battlefield, initialized.phaseState, initialized.execution, 0, []);
+    const output = runtime.step();
+    const snapshot = runtime.snapshot();
 
     assert.deepEqual(output.events.map(event => event.type), [
         "ACTION", "ACTION_RELEASED", "DAMAGE", "ACTION_FINISHED", "SUPPORT_LOST", "UNIT_REMOVED",
@@ -113,7 +109,7 @@ test("action event order: release and damage precede support loss produced by th
     const lost = output.events.find(event => event.type === "SUPPORT_LOST");
     assert.equal(lost.supportedUnitId, 2);
     assert.equal(lost.supportUnitId, 1);
-    assert.equal(battlefield.getUnit(1), undefined);
-    assert.equal(battlefield.getUnit(2).vitality.hp, 100);
-    assert.deepEqual(battlefield.supportRelations, []);
+    assert.equal(snapshot.units.find(unit => unit.id === 1), undefined);
+    assert.equal(snapshot.units.find(unit => unit.id === 2).vitality.hp, 100);
+    assert.deepEqual(snapshot.supportRelations, []);
 });
