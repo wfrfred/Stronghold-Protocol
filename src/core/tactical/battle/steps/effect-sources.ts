@@ -2,12 +2,12 @@ import {
     reconcileEffectSources,
     registerEffectSourceUnits,
     type EffectSourceServices,
-} from "../battlefield/effect-source/settlement.js";
-import type { UnitId } from "../unit/unit.js";
-import type { BattlefieldChange, BattlefieldView } from "../battlefield/contract.js";
-import type { Event } from "./contract.js";
-import type { BattleExecutionState } from "./execution/state.js";
-import { combatWorkEvents, combatWorkChanges, createCombatWork } from "./execution/work.js";
+} from "../../battlefield/effect-source/settlement.js";
+import type { UnitId } from "../../unit/unit.js";
+import type { BattlefieldChange, BattlefieldView } from "../../battlefield/contract.js";
+import type { Event } from "../contract.js";
+import type { BattleExecutionState } from "../execution/state.js";
+import { combatWorkEvents, combatWorkChanges, createCombatWork } from "../execution/work.js";
 
 interface EffectSourceInput {
     readonly battlefield: BattlefieldView;

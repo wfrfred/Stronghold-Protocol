@@ -1,6 +1,6 @@
 import type { Seed } from "../../core/common/rng.js";
 import type { Input } from "../../core/tactical/battle/contract.js";
-import type { PredefinedInstanceDefinition } from "../../core/tactical/battle/predefined.js";
+import type { PredefinedInstanceDefinition } from "../../core/tactical/battle/steps/predefined.js";
 import type { ArknightsBlackboardEntry } from "./blackboard.js";
 import type { ArknightsMapOptions, ArknightsTileContext } from "./map.js";
 import {

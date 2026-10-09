@@ -2,7 +2,7 @@ import { assertPositiveNumber, assertPositiveSafeInteger } from "../../core/comm
 import {
     createPredefinedInstanceDefinition,
     type PredefinedInstanceDefinition,
-} from "../../core/tactical/battle/predefined.js";
+} from "../../core/tactical/battle/steps/predefined.js";
 import { createMechanismDefinition } from "../../core/tactical/battlefield/mechanism.js";
 import { createNavigationModifierDefinition } from "../../core/tactical/battlefield/navigation/modifier.js";
 import { Tile, createTileOffset } from "../../core/tactical/geometry/coordinate.js";

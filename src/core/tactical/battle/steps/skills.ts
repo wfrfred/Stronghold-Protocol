@@ -3,16 +3,16 @@ import {
     advanceSkill,
     finishSkill,
     type SkillExecutionResources,
-} from "../unit/capability/skill/execution.js";
-import type { BattlefieldChange, BattlefieldView } from "../battlefield/contract.js";
-import type { Command, Event } from "./contract.js";
-import type { BattleExecutionState } from "./execution/state.js";
+} from "../../unit/capability/skill/execution.js";
+import type { BattlefieldChange, BattlefieldView } from "../../battlefield/contract.js";
+import type { Command, Event } from "../contract.js";
+import type { BattleExecutionState } from "../execution/state.js";
 import {
     appendCombatEvents,
     combatWorkChanges,
     combatWorkEvents,
     createCombatWork,
-} from "./execution/work.js";
+} from "../execution/work.js";
 
 interface SkillInput {
     readonly battlefield: BattlefieldView;

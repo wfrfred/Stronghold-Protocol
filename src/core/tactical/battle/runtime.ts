@@ -17,19 +17,19 @@ import {
     reconcilePredefinedPresence,
     advancePredefined,
     type PredefinedPresence,
-} from "./predefined.js";
+} from "./steps/predefined.js";
 import type { Input, Command, Event, Result, Snapshot, Step } from "./contract.js";
 import { battlefieldCommitEvents, finishBattleEvents } from "./events.js";
-import { advanceEffectSources, registerEffectSources } from "./effect-sources.js";
+import { advanceEffectSources, registerEffectSources } from "./steps/effect-sources.js";
 import { CombatResources } from "./resources.js";
-import { createCombat } from "./combat.js";
-import { advanceBlocking } from "./blocking.js";
-import { advanceSpawning } from "./spawning.js";
-import { resolveDeploymentCommands } from "./deployment.js";
-import { advanceMovement, advanceRouteCommands } from "./movement.js";
-import { advanceProjectiles } from "./projectiles.js";
-import { advanceElements } from "./elemental.js";
-import { advanceSkills } from "./skills.js";
+import { createCombat } from "./steps/combat.js";
+import { advanceBlocking } from "./steps/blocking.js";
+import { advanceSpawning } from "./steps/spawning.js";
+import { resolveDeploymentCommands } from "./steps/deployment.js";
+import { advanceMovement, advanceRouteCommands } from "./steps/movement.js";
+import { advanceProjectiles } from "./steps/projectiles.js";
+import { advanceElements } from "./steps/elemental.js";
+import { advanceSkills } from "./steps/skills.js";
 import {
     getSpawnScheduleCounts,
     isSpawnScheduleCompleted,

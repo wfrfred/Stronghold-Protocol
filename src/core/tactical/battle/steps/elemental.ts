@@ -1,11 +1,11 @@
 import {
     advanceElementalInWork,
     type ElementalExecutionResources,
-} from "../unit/capability/elemental/execution.js";
-import type { BattlefieldChange, BattlefieldView } from "../battlefield/contract.js";
-import type { Event } from "./contract.js";
-import type { BattleExecutionState } from "./execution/state.js";
-import { combatWorkChanges, combatWorkEvents, createCombatWork } from "./execution/work.js";
+} from "../../unit/capability/elemental/execution.js";
+import type { BattlefieldChange, BattlefieldView } from "../../battlefield/contract.js";
+import type { Event } from "../contract.js";
+import type { BattleExecutionState } from "../execution/state.js";
+import { combatWorkChanges, combatWorkEvents, createCombatWork } from "../execution/work.js";
 
 interface ElementalInput {
     readonly battlefield: BattlefieldView;

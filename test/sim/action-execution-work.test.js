@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createCombat } from '../../dist/core/tactical/battle/combat.js';
+import { createCombat } from '../../dist/core/tactical/battle/steps/combat.js';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { createCombatWork } from '../../dist/core/tactical/battle/execution/work.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';

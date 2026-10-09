@@ -17,11 +17,11 @@ import type {
     PredefinedInstanceDefinition,
     PredefinedCommand,
     PredefinedPresence,
-} from "./predefined.js";
+} from "./steps/predefined.js";
 import type { SpawnScheduleState } from "./schedule/state.js";
-import type { AlternativeRouteCommand } from "./route-control.js";
+import type { AlternativeRouteCommand } from "./steps/route-control.js";
 import type { BattleExecutionState } from "./execution/state.js";
-import type { DeploymentCommand } from "./deployment.js";
+import type { DeploymentCommand } from "./steps/deployment.js";
 import type { SupportRelation } from "../battlefield/support/relations.js";
 import type {
     ActionExecutionId,

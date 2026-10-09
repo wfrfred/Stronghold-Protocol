@@ -1,9 +1,9 @@
-import { advanceProjectiles as advanceProjectileInstances } from "../battlefield/projectile/settlement.js";
-import type { ProjectileServices } from "../battlefield/projectile/context.js";
-import { combatWorkEvents, combatWorkChanges, createCombatWork } from "./execution/work.js";
-import type { BattlefieldView } from "../battlefield/contract.js";
-import type { BattleExecutionState } from "./execution/state.js";
-import type { Command } from "./contract.js";
+import { advanceProjectiles as advanceProjectileInstances } from "../../battlefield/projectile/settlement.js";
+import type { ProjectileServices } from "../../battlefield/projectile/context.js";
+import { combatWorkEvents, combatWorkChanges, createCombatWork } from "../execution/work.js";
+import type { BattlefieldView } from "../../battlefield/contract.js";
+import type { BattleExecutionState } from "../execution/state.js";
+import type { Command } from "../contract.js";
 
 export function advanceProjectiles(
     battlefield: BattlefieldView,

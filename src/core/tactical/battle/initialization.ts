@@ -3,11 +3,11 @@ import type { BattlefieldRuntime } from "../battlefield/runtime.js";
 import { instantiateUnitPlacement } from "./creation/placement.js";
 import { instantiateMechanismPlacement } from "./creation/mechanism.js";
 import { instantiateNavigationModifierPlacement } from "./creation/navigation-modifier.js";
-import { changePredefinedInstances } from "./predefined.js";
+import { changePredefinedInstances } from "./steps/predefined.js";
 import type { Input } from "./contract.js";
 import type { BattleExecutionState } from "./execution/state.js";
 import type { CombatResources } from "./resources.js";
-import { advanceEffectSources } from "./effect-sources.js";
+import { advanceEffectSources } from "./steps/effect-sources.js";
 
 export function initializeBattlefield(
     input: Input,

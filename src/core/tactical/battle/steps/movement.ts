@@ -1,21 +1,21 @@
-import type { BattlefieldChange, BattlefieldView } from "../battlefield/contract.js";
-import type * as computation from "../modifier/computation.js";
-import type { ContributionFacts } from "../unit/capability/contribution.js";
-import { hasRoutedLocomotion } from "../unit/capability/locomotion/capability.js";
-import { hasAction } from "../unit/capability/action/capability.js";
-import { hasStatusFlag } from "../unit/capability/status/capability.js";
-import { stepRoutedUnit } from "../unit/capability/locomotion/step.js";
-import type { Unit, UnitId } from "../unit/unit.js";
+import type { BattlefieldChange, BattlefieldView } from "../../battlefield/contract.js";
+import type * as computation from "../../modifier/computation.js";
+import type { ContributionFacts } from "../../unit/capability/contribution.js";
+import { hasRoutedLocomotion } from "../../unit/capability/locomotion/capability.js";
+import { hasAction } from "../../unit/capability/action/capability.js";
+import { hasStatusFlag } from "../../unit/capability/status/capability.js";
+import { stepRoutedUnit } from "../../unit/capability/locomotion/step.js";
+import type { Unit, UnitId } from "../../unit/unit.js";
 import { changeAlternativeRoutes } from "./route-control.js";
-import type { Command, Event } from "./contract.js";
-import type { BattleExecutionState } from "./execution/state.js";
-import { removeUnitWithEffects, type UnitLifecycleResources } from "./execution/unit-lifecycle.js";
+import type { Command, Event } from "../contract.js";
+import type { BattleExecutionState } from "../execution/state.js";
+import { removeUnitWithEffects, type UnitLifecycleResources } from "../execution/unit-lifecycle.js";
 import {
     combatWorkChanges,
     combatWorkEvents,
     createCombatWork,
     updateCombatUnits,
-} from "./execution/work.js";
+} from "../execution/work.js";
 
 interface MovementInput {
     readonly battlefield: BattlefieldView;

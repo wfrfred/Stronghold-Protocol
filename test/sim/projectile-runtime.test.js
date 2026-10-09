@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
-import { advanceProjectiles as advanceBattleProjectiles } from "../../dist/core/tactical/battle/projectiles.js";
+import { advanceProjectiles as advanceBattleProjectiles } from "../../dist/core/tactical/battle/steps/projectiles.js";
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
 import { createOperatorDefinition } from "../../dist/core/tactical/unit/archetype/operator.js";
 import { createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";

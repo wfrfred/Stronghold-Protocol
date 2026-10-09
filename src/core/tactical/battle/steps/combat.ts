@@ -1,42 +1,42 @@
 import {
     ActionExecutionWork,
     actionExecutionsBySource,
-} from "../unit/capability/action/internal/executions.js";
-import { compileAction } from "../unit/capability/action/compile.js";
-import type { ActionStartResources } from "../unit/capability/action/execution.js";
-import { startActionInWork } from "../unit/capability/action/internal/execution.js";
+} from "../../unit/capability/action/internal/executions.js";
+import { compileAction } from "../../unit/capability/action/compile.js";
+import type { ActionStartResources } from "../../unit/capability/action/execution.js";
+import { startActionInWork } from "../../unit/capability/action/internal/execution.js";
 import {
     cancelActionExecutionInWork,
     resumeActionExecutionInWork,
-} from "../unit/capability/action/internal/process.js";
-import { ownCompiledAction, type CompiledAction } from "../unit/capability/action/program.js";
+} from "../../unit/capability/action/internal/process.js";
+import { ownCompiledAction, type CompiledAction } from "../../unit/capability/action/program.js";
 import {
     actionExecutionPermissions,
     type ActionExecution,
     type ActionExecutionState,
     type CompiledActionSegment,
-} from "../unit/capability/action/process.js";
-import { prepareCombatEffects, retireCombatUnit } from "./execution/unit-lifecycle.js";
-import { CombatResources } from "./resources.js";
+} from "../../unit/capability/action/process.js";
+import { prepareCombatEffects, retireCombatUnit } from "../execution/unit-lifecycle.js";
+import { CombatResources } from "../resources.js";
 import {
     combatWorkEvents,
     combatWorkChanges,
     createCombatWork,
     getCombatUnit,
-} from "./execution/work.js";
-import { hasAction, type ActionDefinition } from "../unit/capability/action/capability.js";
-import { isSpatiallyPresent } from "../unit/capability/presence.js";
-import { hasVitality } from "../unit/capability/vitality/capability.js";
-import type { UnitId } from "../unit/unit.js";
-import type { BattlefieldChange, BattlefieldView } from "../battlefield/contract.js";
-import type { Command, Event } from "./contract.js";
-import type { BattleExecutionState } from "./execution/state.js";
+} from "../execution/work.js";
+import { hasAction, type ActionDefinition } from "../../unit/capability/action/capability.js";
+import { isSpatiallyPresent } from "../../unit/capability/presence.js";
+import { hasVitality } from "../../unit/capability/vitality/capability.js";
+import type { UnitId } from "../../unit/unit.js";
+import type { BattlefieldChange, BattlefieldView } from "../../battlefield/contract.js";
+import type { Command, Event } from "../contract.js";
+import type { BattleExecutionState } from "../execution/state.js";
 import {
     withProjectileOperations,
     type ProjectileOperations,
-} from "../battlefield/projectile/operations.js";
-import { hasSkill } from "../unit/capability/skill/capability.js";
-import { hasStatusFlag } from "../unit/capability/status/capability.js";
+} from "../../battlefield/projectile/operations.js";
+import { hasSkill } from "../../unit/capability/skill/capability.js";
+import { hasStatusFlag } from "../../unit/capability/status/capability.js";
 
 interface CombatPreparationInput {
     readonly battlefield: BattlefieldView;

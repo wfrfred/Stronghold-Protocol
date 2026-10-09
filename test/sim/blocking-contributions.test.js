@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
-import { advanceBlocking } from '../../dist/core/tactical/battle/blocking.js';
+import { advanceBlocking } from '../../dist/core/tactical/battle/steps/blocking.js';
 import { combatWorkChanges, combatWorkView, getCombatUnit } from '../../dist/core/tactical/battle/execution/work.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';

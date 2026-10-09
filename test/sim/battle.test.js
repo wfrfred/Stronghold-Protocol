@@ -35,8 +35,8 @@ import { loadMovementScenario } from '../../dist/data/arknights/movement-scenari
 import { createLegacyCombatBattle } from '../../dist/legacy/combat.js';
 import { createDeploymentProfile, createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/deployment.js';
 import { createOccupancyState } from '../../dist/core/tactical/unit/capability/occupancy.js';
-import { createPredefinedInstanceDefinition } from '../../dist/core/tactical/battle/predefined.js';
-import { advanceMovement } from '../../dist/core/tactical/battle/movement.js';
+import { createPredefinedInstanceDefinition } from '../../dist/core/tactical/battle/steps/predefined.js';
+import { advanceMovement } from '../../dist/core/tactical/battle/steps/movement.js';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 
 const approx = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);

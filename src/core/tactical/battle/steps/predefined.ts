@@ -1,25 +1,25 @@
-import { assertNonnegativeSafeInteger } from "../../common/assert.js";
+import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import type {
     BattlefieldChange,
     BattlefieldRemovalReason,
     BattlefieldView,
-} from "../battlefield/contract.js";
-import type { MechanismDefinition } from "../battlefield/mechanism.js";
+} from "../../battlefield/contract.js";
+import type { MechanismDefinition } from "../../battlefield/mechanism.js";
 import {
     createNavigationModifierRegion,
     type NavigationModifierDefinition,
     type NavigationModifierSource,
     type NavigationModifierRegion,
-} from "../battlefield/navigation/modifier.js";
+} from "../../battlefield/navigation/modifier.js";
 import {
     createUnitPlacementDefinition,
     instantiateUnitPlacement,
     type UnitPlacementDefinition,
-} from "./creation/placement.js";
-import type { BattleExecutionState } from "./execution/state.js";
-import type { Command, Event } from "./contract.js";
-import { removeUnitWithEffects, type UnitLifecycleResources } from "./execution/unit-lifecycle.js";
-import { combatWorkEvents, combatWorkChanges, createCombatWork } from "./execution/work.js";
+} from "../creation/placement.js";
+import type { BattleExecutionState } from "../execution/state.js";
+import type { Command, Event } from "../contract.js";
+import { removeUnitWithEffects, type UnitLifecycleResources } from "../execution/unit-lifecycle.js";
+import { combatWorkEvents, combatWorkChanges, createCombatWork } from "../execution/work.js";
 
 export interface PredefinedUnitCreation extends UnitPlacementDefinition {
     readonly type: "UNIT";
