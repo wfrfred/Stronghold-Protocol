@@ -1,7 +1,13 @@
 import type { UnitId } from "../../unit.js";
 import { hasEffects } from "./capability.js";
 import type { EffectView } from "./contract.js";
-import type { EffectAddress, EffectInstanceValue } from "./instance.js";
+import {
+    lifetimeKey,
+    type LifetimeRef,
+    type EffectRef,
+    type EffectInstanceValue,
+} from "./instance.js";
+import type { CombatWork } from "../../../battle/execution/work.js";
 import { isParticipatingEffect } from "./query.js";
 
 interface ActiveInstance {
@@ -9,7 +15,60 @@ interface ActiveInstance {
 }
 
 export class EffectDispatchScope {
-    readonly #candidates = new Map<UnitId, readonly EffectAddress[]>();
+    readonly #closing = new Set<string>();
+    readonly #pendingEnds = new Map<string, EffectRef>();
+    readonly #deferredRemovals = new Map<UnitId, (work: CombatWork) => CombatWork>();
+
+    markClosing(lifetimes: readonly LifetimeRef[]): void {
+        for (const lifetime of lifetimes) {
+            this.#closing.add(lifetimeKey(lifetime));
+        }
+    }
+
+    isClosing(lifetime: LifetimeRef): boolean {
+        return this.#closing.has(lifetimeKey(lifetime));
+    }
+
+    beginEnds(refs: readonly EffectRef[]): void {
+        this.markClosing(refs);
+
+        for (const ref of refs) {
+            this.#pendingEnds.set(lifetimeKey(ref), ref);
+        }
+    }
+
+    completeEnd(ref: EffectRef): void {
+        this.#pendingEnds.delete(lifetimeKey(ref));
+    }
+
+    hasPendingEnd(ref: EffectRef): boolean {
+        return this.#pendingEnds.has(lifetimeKey(ref));
+    }
+
+    hasPendingEnds(unitId: UnitId): boolean {
+        return [...this.#pendingEnds.values()].some((ref) => ref.unitId === unitId);
+    }
+
+    deferUnitRemoval(unitId: UnitId, finish: (work: CombatWork) => CombatWork): void {
+        if (!this.#deferredRemovals.has(unitId)) {
+            this.#deferredRemovals.set(unitId, finish);
+        }
+    }
+
+    drainDeferred(work: CombatWork): CombatWork {
+        for (const [unitId, finish] of this.#deferredRemovals) {
+            if (this.hasPendingEnds(unitId)) {
+                continue;
+            }
+
+            this.#deferredRemovals.delete(unitId);
+            work = finish(work);
+        }
+
+        return work;
+    }
+
+    readonly #candidates = new Map<UnitId, readonly EffectRef[]>();
     readonly #activeInstances = new Map<UnitId, Map<number, Set<ActiveInstance>>>();
     readonly #participationChanges = new Map<
         UnitId,
@@ -17,7 +76,7 @@ export class EffectDispatchScope {
     >();
 
     withParticipationChanges<T>(
-        changes: readonly { address: EffectAddress; participating: boolean }[],
+        changes: readonly { address: EffectRef; participating: boolean }[],
         run: (isPending: (index: number) => boolean) => T,
     ): T {
         const cells = changes.map(({ address, participating }) => {
@@ -28,14 +87,14 @@ export class EffectDispatchScope {
                 this.#participationChanges.set(address.unitId, instances);
             }
 
-            const previous = instances.get(address.instanceId);
+            const previous = instances.get(address.effectId);
 
             if (previous !== undefined) {
                 previous.pending = false;
             }
 
             const cell = { pending: true, participating };
-            instances.set(address.instanceId, cell);
+            instances.set(address.effectId, cell);
 
             return cell;
         });
@@ -48,8 +107,8 @@ export class EffectDispatchScope {
                 const cell = cells[index]!;
                 cell.pending = false;
 
-                if (instances?.get(address.instanceId) === cell) {
-                    instances.delete(address.instanceId);
+                if (instances?.get(address.effectId) === cell) {
+                    instances.delete(address.effectId);
                 }
                 if (instances?.size === 0) {
                     this.#participationChanges.delete(address.unitId);
@@ -58,8 +117,8 @@ export class EffectDispatchScope {
         }
     }
 
-    consumeParticipationChange(address: EffectAddress, participating: boolean): boolean {
-        const cell = this.#participationChanges.get(address.unitId)?.get(address.instanceId);
+    consumeParticipationChange(address: EffectRef, participating: boolean): boolean {
+        const cell = this.#participationChanges.get(address.unitId)?.get(address.effectId);
 
         if (cell?.pending !== true || cell.participating !== participating) {
             return false;
@@ -71,7 +130,7 @@ export class EffectDispatchScope {
     }
 
     withInstance<T>(
-        address: EffectAddress,
+        address: EffectRef,
         instance: EffectInstanceValue,
         run: (lastKnown: () => EffectInstanceValue) => T,
     ): T {
@@ -82,11 +141,11 @@ export class EffectDispatchScope {
             this.#activeInstances.set(address.unitId, instances);
         }
 
-        let active = instances.get(address.instanceId);
+        let active = instances.get(address.effectId);
 
         if (active === undefined) {
             active = new Set();
-            instances.set(address.instanceId, active);
+            instances.set(address.effectId, active);
         }
 
         const cell = { instance };
@@ -98,7 +157,7 @@ export class EffectDispatchScope {
             active.delete(cell);
 
             if (active.size === 0) {
-                instances.delete(address.instanceId);
+                instances.delete(address.effectId);
             }
             if (instances.size === 0) {
                 this.#activeInstances.delete(address.unitId);
@@ -106,8 +165,8 @@ export class EffectDispatchScope {
         }
     }
 
-    retainFinalizedInstance(address: EffectAddress, instance: EffectInstanceValue): void {
-        const active = this.#activeInstances.get(address.unitId)?.get(address.instanceId);
+    retainFinalizedInstance(address: EffectRef, instance: EffectInstanceValue): void {
+        const active = this.#activeInstances.get(address.unitId)?.get(address.effectId);
 
         if (active === undefined) {
             return;
@@ -121,7 +180,7 @@ export class EffectDispatchScope {
     withCandidates<T>(
         facts: EffectView,
         unitId: UnitId,
-        run: (candidates: readonly EffectAddress[]) => T,
+        run: (candidates: readonly EffectRef[]) => T,
     ): T {
         const existing = this.#candidates.get(unitId);
 
@@ -133,7 +192,7 @@ export class EffectDispatchScope {
         const candidates = Object.freeze(
             unit !== undefined && hasEffects(unit)
                 ? unit.effects.instances.map((instance) =>
-                      Object.freeze({ unitId, instanceId: instance.id }),
+                      Object.freeze({ type: "EFFECT" as const, unitId, effectId: instance.id }),
                   )
                 : [],
         );
@@ -150,7 +209,7 @@ export class EffectDispatchScope {
 
 export function participatingEffect(
     facts: EffectView,
-    address: EffectAddress,
+    address: EffectRef,
 ): EffectInstanceValue | undefined {
     const instance = facts.getEffect(address);
 

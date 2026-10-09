@@ -1,11 +1,48 @@
 import type { EffectProgramRef } from "./program.js";
 import type { UnitId } from "../../unit.js";
+import type { ActionExecutionId } from "../action/process.js";
 
-export type EffectInstanceId = number;
+export type EffectId = number;
 
-export interface EffectAddress {
-    readonly unitId: UnitId;
-    readonly instanceId: EffectInstanceId;
+export type LifetimeRef =
+    | { readonly type: "UNIT"; readonly unitId: UnitId }
+    | { readonly type: "ACTION"; readonly executionId: ActionExecutionId }
+    | { readonly type: "SKILL"; readonly unitId: UnitId; readonly activationId: number }
+    | { readonly type: "EFFECT"; readonly unitId: UnitId; readonly effectId: EffectId };
+
+export type EffectRef = Extract<LifetimeRef, { type: "EFFECT" }>;
+
+export type Scope = LifetimeRef | { readonly type: "TICK"; readonly tick: number };
+
+export function lifetimeKey(ref: Scope): string {
+    switch (ref.type) {
+        case "UNIT":
+            return `UNIT:${ref.unitId}`;
+
+        case "ACTION":
+            return `ACTION:${ref.executionId}`;
+
+        case "SKILL":
+            return `SKILL:${ref.unitId}:${ref.activationId}`;
+
+        case "EFFECT":
+            return `EFFECT:${ref.unitId}:${ref.effectId}`;
+
+        case "TICK":
+            return `TICK:${ref.tick}`;
+    }
+}
+
+export const refKey = lifetimeKey;
+
+export function sameLifetime(left: Scope, right: Scope): boolean {
+    return lifetimeKey(left) === lifetimeKey(right);
+}
+
+export function effectTick(instance: EffectInstanceValue): number | null {
+    const scope = instance.scopes.find((scope) => scope.type === "TICK");
+
+    return scope?.type === "TICK" ? scope.tick : null;
 }
 
 export interface EffectLifecycleFacts {
@@ -13,23 +50,13 @@ export interface EffectLifecycleFacts {
     readonly enabled: boolean;
     readonly participating: boolean;
     readonly finished: boolean;
-    readonly parent: EffectAddress | null;
 }
 
-export type EffectLifetimeScope =
-    | { readonly type: "UNIT"; readonly unitId: UnitId }
-    | {
-          readonly type: "EXECUTION";
-          readonly unitId: UnitId;
-          readonly executionId: number;
-      };
-
 export interface EffectInstanceMetadata {
-    readonly id: EffectInstanceId;
+    readonly id: EffectId;
     readonly source: UnitId | null;
-    readonly scope: EffectLifetimeScope | null;
+    readonly scopes: readonly Scope[];
     readonly acquiredSequence: number;
-    readonly expiresAtTick: number | null;
 }
 
 export interface EffectInstanceValue extends EffectInstanceMetadata, EffectLifecycleFacts {

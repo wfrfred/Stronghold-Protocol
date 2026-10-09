@@ -1,3 +1,4 @@
+import { removeUnitWithEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
 import { computedAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import { combatWorkEvents } from "../../dist/core/tactical/battle/execution/work.js";
 import assert from "node:assert/strict";
@@ -110,12 +111,7 @@ function installOwned(resources, ref, context, unitId = 1) {
     ref,
     {
       source: context.sourceUnitId,
-      scope: {
-        type: "EXECUTION",
-        unitId: context.sourceUnitId,
-        executionId: context.executionId,
-      },
-      expiresAtTick: null,
+      scopes: [{ type: "ACTION", executionId: context.executionId }],
     },
     resources,
     context.tick,
@@ -297,8 +293,7 @@ test("action process: install then query binds current targets and the next segm
           invisible.ref,
           {
             source: 0,
-            scope: null,
-            expiresAtTick: null,
+            scopes: [],
           },
           resources,
           context.tick,
@@ -393,7 +388,7 @@ test("action process: concurrent executions from one source own independent cont
   );
   assert.deepEqual(
     getCombatUnit(current.work, 1).effects.instances.map((instance) => [
-      instance.scope.executionId,
+      instance.scopes.find(scope => scope.type === "ACTION").executionId,
       instance.finished,
     ]),
     [
@@ -665,4 +660,73 @@ test("action process: a completed final segment can finish after removing its ow
   assert.equal(result.result.type, 'FINISHED');
   assert.deepEqual(result.signals.map(signal => signal.type), ['ACTION_FINISHED']);
   assert.equal(getCombatUnit(result.work, 0), undefined);
+});
+
+test("action process: nested source departure cancels the current execution without resuming later segments", () => {
+  const resources = new CombatResources();
+  const dependent = resources.registerEffect(effectProgram("departing-action-dependent"));
+  const accepted = accept();
+  const visited = [];
+  const segments = [
+    {
+      type: "EXECUTE",
+      run: context => {
+        visited.push("remove");
+        const attached = installOwned(resources, dependent.ref, context);
+        return { work: removeUnitWithEffects(attached, 0, "SCRIPT", resources, context.tick) };
+      },
+    },
+    {
+      type: "EXECUTE",
+      run: context => {
+        visited.push("after removal");
+        return { work: context.work };
+      },
+    },
+  ];
+  const advanced = resumeActionExecution(
+    workWith(unit(0), unit(1)),
+    accepted.state,
+    { executionId: accepted.execution.id, segments, tick: 0 },
+    resources,
+  );
+
+  assert.deepEqual(visited, ["remove"]);
+  assert.deepEqual(advanced.state.executions, []);
+  assert.equal(getCombatUnit(advanced.work, 0), undefined);
+  assert.equal(getCombatUnit(advanced.work, 1).effects.instances.every(instance => instance.finished), true);
+  assert.deepEqual(combatWorkEvents(advanced.work).filter(event => event.type.startsWith("ACTION_")), [
+    { type: "ACTION_CANCELLED", executionId: 0, sourceUnitId: 0, tick: 0, reason: "SOURCE_ABSENT" },
+  ]);
+});
+
+test("action process: source removal in attack completion cannot revive the execution", () => {
+  const resources = new CombatResources();
+  const accepted = accept();
+  let continued = false;
+  const advanced = resumeActionExecution(
+    workWith(unit(0), unit(1)),
+    accepted.state,
+    {
+      executionId: 0,
+      tick: 2,
+      segments: [
+        { type: "EXECUTE", run: context => ({ work: context.work }) },
+        { type: "EXECUTE", run: context => {
+          continued = true;
+          return { work: context.work };
+        } },
+      ],
+    },
+    {
+      ...resources,
+      completeAttack: (work, sourceUnitId, tick) =>
+        removeUnitWithEffects(work, sourceUnitId, "DEATH", resources, tick),
+    },
+  );
+
+  assert.equal(continued, false);
+  assert.deepEqual(advanced.state.executions, []);
+  assert.equal(combatWorkEvents(advanced.work).filter(event => event.type === "ACTION_CANCELLED").length, 1);
+  assert.equal(combatWorkEvents(advanced.work).some(event => event.type === "ACTION_FINISHED"), false);
 });

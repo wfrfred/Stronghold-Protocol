@@ -1,3 +1,6 @@
+import { createCombatWork } from "./execution/work.js";
+import { validateEffectLifetimes } from "../unit/capability/effects/lifecycle.js";
+import { ActionExecutionWork } from "../unit/capability/action/internal/executions.js";
 import { assert, assertNonnegativeNumber, assertPositiveSafeInteger } from "../../common/assert.js";
 import { BattlefieldRuntime } from "../battlefield/runtime.js";
 import type { BattlefieldChange, BattlefieldChangeResult } from "../battlefield/contract.js";
@@ -110,10 +113,20 @@ export class BattleRuntime {
             this.#combatResources,
         );
 
+        const actionExecution = createActionExecutionState();
+        validateEffectLifetimes(
+            createCombatWork(
+                battlefield.view,
+                initialized.execution,
+                battlefield.view,
+                new ActionExecutionWork(actionExecution),
+            ),
+        );
+
         this.#state = {
             battlefield,
             schedule: createSpawnScheduleExecution(scheduleDefinition),
-            actionExecution: createActionExecutionState(),
+            actionExecution,
             predefinedPresence: initialized.predefinedPresence,
             execution: initialized.execution,
             tickIndex: 0,
@@ -181,7 +194,8 @@ export class BattleRuntime {
         const battlefield = previous.battlefield.fork();
         const view = battlefield.view;
         const tick = previous.tickIndex;
-        let { schedule, actionExecution, predefinedPresence, execution } = previous;
+        let { schedule, predefinedPresence, execution } = previous;
+        const actionExecutions = new ActionExecutionWork(previous.actionExecution);
         const resources = this.#combatResources;
         const events: Event[] = [];
         const removedUnits: BattlefieldChangeResult["removedUnits"][number][] = [];
@@ -212,7 +226,7 @@ export class BattleRuntime {
 
             if (committed.registeredUnitIds.length > 0) {
                 const joined = registerEffectSources(
-                    { battlefield: view, execution, tick },
+                    { battlefield: view, execution, tick, actionExecutions },
                     committed.registeredUnitIds,
                     resources,
                 );
@@ -226,7 +240,7 @@ export class BattleRuntime {
         const predefined = advancePredefined(
             this.#input.predefines,
             predefinedPresence,
-            { battlefield: view, execution, tick, commands },
+            { battlefield: view, execution, tick, commands, actionExecutions },
             resources,
         );
         predefinedPresence = predefined.presence;
@@ -236,26 +250,41 @@ export class BattleRuntime {
         });
 
         const prepared = this.#combat.prepare(
-            { battlefield: view, execution, tick, commands },
-            actionExecution,
+            { battlefield: view, execution, tick, commands, actionExecutions },
+            actionExecutions.result(),
         );
-        actionExecution = prepared.actionExecution;
         commit(prepared);
 
-        const deployed = resolveDeploymentCommands(view, commands, execution, tick, resources);
+        const deployed = resolveDeploymentCommands(
+            view,
+            commands,
+            execution,
+            tick,
+            resources,
+            actionExecutions,
+        );
         commit(deployed);
 
         const spawned = advanceSpawning({ tick, execution, commands }, schedule);
         schedule = spawned.schedule;
         commit(spawned);
 
-        const elemental = advanceElements({ battlefield: view, execution, tick }, resources);
+        const elemental = advanceElements(
+            { battlefield: view, execution, tick, actionExecutions },
+            resources,
+        );
         commit(elemental);
 
-        const skills = advanceSkills({ battlefield: view, execution, tick, commands }, resources);
+        const skills = advanceSkills(
+            { battlefield: view, execution, tick, commands, actionExecutions },
+            resources,
+        );
         commit(skills);
 
-        const sources = advanceEffectSources({ battlefield: view, execution, tick }, resources);
+        const sources = advanceEffectSources(
+            { battlefield: view, execution, tick, actionExecutions },
+            resources,
+        );
         commit(sources);
 
         const routed = advanceRouteCommands(view, commands, execution, tick);
@@ -263,11 +292,20 @@ export class BattleRuntime {
 
         commit(advanceBlocking(view));
 
-        const acted = this.#combat.advance({ battlefield: view, execution, tick }, actionExecution);
-        actionExecution = acted.actionExecution;
+        const acted = this.#combat.advance(
+            { battlefield: view, execution, tick, actionExecutions },
+            actionExecutions.result(),
+        );
         commit(acted);
 
-        const projectiles = advanceProjectiles(view, execution, tick, commands, resources);
+        const projectiles = advanceProjectiles(
+            view,
+            execution,
+            tick,
+            commands,
+            resources,
+            actionExecutions,
+        );
         commit(projectiles);
 
         const moved = advanceMovement(
@@ -275,7 +313,9 @@ export class BattleRuntime {
                 battlefield: view,
                 execution,
                 tick,
-                movementAllowed: (unitId) => this.#combat.allowsMovement(actionExecution, unitId),
+                actionExecutions,
+                movementAllowed: (unitId) =>
+                    this.#combat.allowsMovement(actionExecutions.result(), unitId),
             },
             { routeMoveMultiplier: this.#input.routeMoveMultiplier },
             resources,
@@ -283,7 +323,7 @@ export class BattleRuntime {
         commit(moved);
 
         const reconciledSources = advanceEffectSources(
-            { battlefield: view, execution, tick },
+            { battlefield: view, execution, tick, actionExecutions },
             resources,
         );
         commit(reconciledSources);
@@ -320,7 +360,7 @@ export class BattleRuntime {
             completedRouteCount,
             result,
             schedule,
-            actionExecution,
+            actionExecution: actionExecutions.result(),
             predefinedPresence,
             execution,
         };

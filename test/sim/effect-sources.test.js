@@ -23,7 +23,7 @@ import {
 } from "../../dist/core/tactical/battlefield/effect-source/settlement.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
-import { finishEffect, installNewEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
+import { finishEffects, installNewEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import * as modifier from "../../dist/core/tactical/modifier/value.js";
 import { updateAttackContributions } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
@@ -60,7 +60,7 @@ function sourceProgram(resources, receiver, overrides = {}) {
         selectInitial: ({ battlefield }) => battlefield.unitIds,
         acceptsRegistration: () => true,
         install: ({ source, receiver: target }) => effectSourceInstallation(receiver.ref, {
-            expiresAtTick: null,
+            scopes: [],
             initialState: { addition: target.id * 10, sourceId: source.id },
         }),
         ...overrides,
@@ -184,8 +184,7 @@ test("effect sources: receiver enablement follows source activity independently 
     const bindings = getCombatMechanism(work, 20).effectSource.receivers;
     const competing = installNewEffect(work, 1, competitor.ref, {
         source: null,
-        scope: null,
-        expiresAtTick: null,
+                scopes: [],
     }, resources, 0);
     work = competing.work;
 
@@ -198,7 +197,7 @@ test("effect sources: receiver enablement follows source activity independently 
     work = setEffectSourceActive(work, 20, true, resources, 2);
     assert.equal(getCombatUnit(work, 1).effects.instances[0].enabled, true);
     assert.equal(getCombatUnit(work, 1).effects.instances[0].participating, false);
-    work = finishEffect(work, competing.result.address, resources, 2);
+    work = finishEffects(work, [competing.result.ref], resources, 2);
 
     assert.equal(getCombatUnit(work, 1).effects.instances[0].participating, true);
     assert.deepEqual(getCombatMechanism(work, 20).effectSource.receivers, bindings);
@@ -329,7 +328,7 @@ test("effect sources: receiver callbacks see completed bindings while retained s
             if (target.id === 2) {
                 derivedSource = resources.effectSources.update(current, program.ref, { remaining: 1 });
             }
-            return effectSourceInstallation(receiver.ref, { expiresAtTick: null });
+            return effectSourceInstallation(receiver.ref, { scopes: [] });
         },
     });
     const initial = fixtureWork(source, [unit(3), unit(1), unit(2)]);
@@ -342,8 +341,8 @@ test("effect sources: receiver callbacks see completed bindings while retained s
     ]);
     assert.deepEqual(observations.map(bindings => bindings.map(binding => binding.address)), [
         [null, null, null],
-        [{ unitId: 1, instanceId: 0 }, null, null],
-        [{ unitId: 1, instanceId: 0 }, { unitId: 2, instanceId: 0 }, null],
+        [{ type: "EFFECT", unitId: 1, effectId: 0 }, null, null],
+        [{ type: "EFFECT", unitId: 1, effectId: 0 }, { type: "EFFECT", unitId: 2, effectId: 0 }, null],
     ]);
     assert.deepEqual(snapshots.map(current => current.effectSource.receivers), observations);
     assert.deepEqual(selectedSource.effectSource.receivers.map(binding => binding.installationAttempts), [0, 0, 0]);
@@ -369,13 +368,13 @@ test("effect sources: finish callbacks observe the current cleared prefix and ou
     const completed = getCombatMechanism(work, 20);
 
     assert.deepEqual(snapshots.map(current => current.effectSource.receivers.map(binding => binding.address)), [
-        [{ unitId: 1, instanceId: 0 }, { unitId: 2, instanceId: 0 }],
-        [null, { unitId: 2, instanceId: 0 }],
+        [{ type: "EFFECT", unitId: 1, effectId: 0 }, { type: "EFFECT", unitId: 2, effectId: 0 }],
+        [null, { type: "EFFECT", unitId: 2, effectId: 0 }],
     ]);
     assert.equal(snapshots.every(current => current.effectSource.finished && !current.active), true);
     assert.deepEqual(completed.effectSource.receivers.map(binding => binding.address), [null, null]);
     assert.deepEqual(getCombatMechanism(installed, 20).effectSource.receivers.map(binding => binding.address), [
-        { unitId: 1, instanceId: 0 }, { unitId: 2, instanceId: 0 },
+        { type: "EFFECT", unitId: 1, effectId: 0 }, { type: "EFFECT", unitId: 2, effectId: 0 },
     ]);
     assert.equal(Object.values(Object.getOwnPropertyDescriptors(completed.effectSource)).every(descriptor => "value" in descriptor), true);
 });
@@ -391,7 +390,7 @@ test("effect sources: clearing many absent receivers preserves the input branch 
             initialized: true,
             receivers: Array.from({ length: 512 }, (_, unitId) => ({
                 unitId,
-                address: { unitId, instanceId: unitId + 10 },
+                address: { type: "EFFECT", unitId, effectId: unitId + 10 },
                 installationAttempts: 2,
             })),
         }),
@@ -416,7 +415,7 @@ test("effect sources: preserved binding order is unchanged until a new receiver 
     const { source } = sourceProgram(resources, receiver, {
         install: ({ receiver: target }) => {
             installedOrder.push(target.id);
-            return effectSourceInstallation(receiver.ref, { expiresAtTick: null });
+            return effectSourceInstallation(receiver.ref, { scopes: [] });
         },
     });
     const registered = {
@@ -448,7 +447,7 @@ test("effect sources: flushes publish attempts before lifecycle work and preserv
     const marker = receiverEffect(resources, "nested-buffer-marker", {
         lifecycle: {
             start: context => {
-                context.effects.update(context.address, marker.ref, state => ({ ...state, addition: 77 }));
+                context.effects.update(context.ref, marker.ref, state => ({ ...state, addition: 77 }));
             },
         },
     });
@@ -458,13 +457,12 @@ test("effect sources: flushes publish attempts before lifecycle work and preserv
                 borrowed.push(context);
                 const nested = context.effects.install(3, marker.ref, {
                     source: null,
-                    scope: null,
-                    expiresAtTick: null,
+                                        scopes: [],
                 });
                 assert.equal(nested.type, "INSTALLED");
-                assert.equal(context.facts.getEffect(nested.address).state.addition, 77);
-                context.effects.update(context.address, receiver.ref, state => ({ ...state, nested: nested.address }));
-                if (fault.enabled && context.address.unitId === 2) {
+                assert.equal(context.facts.getEffect(nested.ref).state.addition, 77);
+                context.effects.update(context.ref, receiver.ref, state => ({ ...state, nested: nested.ref }));
+                if (fault.enabled && context.ref.unitId === 2) {
                     throw new Error("buffered source install failed");
                 }
             },
@@ -474,7 +472,7 @@ test("effect sources: flushes publish attempts before lifecycle work and preserv
         selectInitial: () => [1, 2],
         install: ({ source: current }) => {
             prefixes.push(current);
-            return effectSourceInstallation(receiver.ref, { expiresAtTick: null });
+            return effectSourceInstallation(receiver.ref, { scopes: [] });
         },
     });
     const initial = fixtureWork(source, [unit(1), unit(2), unit(3)]);
@@ -490,9 +488,9 @@ test("effect sources: flushes publish attempts before lifecycle work and preserv
                             const current = getCombatMechanism({ ...initial, mechanismUpdates: readMechanisms() }, 20);
                             published.push(current);
                             assert.equal(current.effectSource.initialized, true);
-                            assert.equal(current.effectSource.receivers.find(binding => binding.unitId === context.address.unitId).installationAttempts, 1);
-                            if (context.address.unitId === 2) {
-                                assert.deepEqual(current.effectSource.receivers[0].address, { unitId: 1, instanceId: 0 });
+                            assert.equal(current.effectSource.receivers.find(binding => binding.unitId === context.ref.unitId).installationAttempts, 1);
+                            if (context.ref.unitId === 2) {
+                                assert.deepEqual(current.effectSource.receivers[0].address, { type: "EFFECT", unitId: 1, effectId: 0 });
                             }
                             lifecycle.start(context);
                         },
@@ -514,7 +512,7 @@ test("effect sources: flushes publish attempts before lifecycle work and preserv
     assert.equal(initial.unitUpdates.size, 0);
     assert.equal(getCombatUnit(initial, 3).effects, undefined);
     for (const context of borrowed) {
-        assert.throws(() => context.effects.update(context.address, receiver.ref, state => state), /no longer active/);
+        assert.throws(() => context.effects.update(context.ref, receiver.ref, state => state), /no longer active/);
     }
 
     fault.enabled = false;
@@ -531,7 +529,7 @@ test("effect sources: flushes publish attempts before lifecycle work and preserv
     assert.deepEqual(combatWorkChanges(retry.result), combatWorkChanges(ordinary.result));
     assert.deepEqual(getCombatUnit(retry.result, 3).effects.instances.map(instance => [instance.id, instance.state.addition]), [[0, 77], [1, 77]]);
     assert.deepEqual([1, 2].map(id => getCombatUnit(retry.result, id).effects.instances[0].state.nested), [
-        { unitId: 3, instanceId: 0 }, { unitId: 3, instanceId: 1 },
+        { type: "EFFECT", unitId: 3, effectId: 0 }, { type: "EFFECT", unitId: 3, effectId: 1 },
     ]);
     assert.deepEqual(prefixes.map(current => current.effectSource.receivers.map(binding => binding.installationAttempts)), [
         [0, 0], [1, 0], [0, 0], [1, 0], [0, 0], [1, 0],

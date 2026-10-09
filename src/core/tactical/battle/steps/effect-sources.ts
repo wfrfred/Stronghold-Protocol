@@ -1,3 +1,4 @@
+import type { ActionExecutionWork } from "../../unit/capability/action/internal/executions.js";
 import {
     reconcileEffectSources,
     registerEffectSourceUnits,
@@ -13,6 +14,7 @@ interface EffectSourceInput {
     readonly battlefield: BattlefieldView;
     readonly tick: number;
     readonly execution: BattleExecutionState;
+    readonly actionExecutions?: ActionExecutionWork;
 }
 
 interface EffectSourceResult {
@@ -26,7 +28,12 @@ export function advanceEffectSources(
     resources: EffectSourceServices,
 ): EffectSourceResult {
     const work = reconcileEffectSources(
-        createCombatWork(input.battlefield, input.execution, input.battlefield),
+        createCombatWork(
+            input.battlefield,
+            input.execution,
+            input.battlefield,
+            input.actionExecutions,
+        ),
         resources,
         input.tick,
     );
@@ -44,7 +51,12 @@ export function registerEffectSources(
     resources: EffectSourceServices,
 ): EffectSourceResult {
     const work = registerEffectSourceUnits(
-        createCombatWork(input.battlefield, input.execution, input.battlefield),
+        createCombatWork(
+            input.battlefield,
+            input.execution,
+            input.battlefield,
+            input.actionExecutions,
+        ),
         unitIds,
         resources,
         input.tick,

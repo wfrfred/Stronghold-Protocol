@@ -40,7 +40,8 @@ const program = (id) => createEffectProgram({
 });
 const install = (work, resources, program, id, state, source = null) => {
   const result = installEffect(work, 1, resources.effects.create(program.ref, {
-    id, source, scope: null, acquiredSequence: id, expiresAtTick: null,
+    id, source, scopes: [],
+  acquiredSequence: id,
   }, state), resources, 0);
   assert.equal(result.result.type, "INSTALLED");
   return result.work;
@@ -75,7 +76,7 @@ test("contribution groups: the ATK coefficient wins, while other facets particip
   assert.deepEqual(getCombatUnit(work, 1).effects.instances.map((instance) => instance.participating), [true, true]);
   const loserValues = entries(work)[0].values;
 
-  work = removeEffect(work, { unitId: 1, instanceId: 1 }, resources, 0);
+  work = removeEffect(work, { type: "EFFECT", unitId: 1, effectId: 1 }, resources, 0);
   assert.equal(attackPower(work, resources), 400);
   assert.equal(resolveDefense(1, combatWorkView(work)).defense, 10);
   assert.equal(entries(work)[0].values, loserValues);
@@ -148,7 +149,7 @@ test("contribution groups: computed values stay live without reranking, and expl
   assert.equal(entries(work)[0].computeRef, originalRef);
   assert.equal(attackPower(work, resources), 800);
 
-  work = setEffectEnabled(work, { unitId: 1, instanceId: 0 }, false, resources, 0);
+  work = setEffectEnabled(work, { type: "EFFECT", unitId: 1, effectId: 0 }, false, resources, 0);
   const beforeUpdate = computes;
   work = updateEffectState(work, 1, 0, effect.ref,
     (state) => ({ ...state, grouped: false }), resources, 0);

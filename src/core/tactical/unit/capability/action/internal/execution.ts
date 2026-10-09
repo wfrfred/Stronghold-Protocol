@@ -64,6 +64,10 @@ export function startActionInWork(
     work = updateCombatUnit(work, executing);
     work = appendCombatEvents(work, [{ type: "ACTION", sourceUnitId, targetUnitId, tick }]);
 
+    if (work.actionExecutions !== executions) {
+        work = { ...work, actionExecutions: executions };
+    }
+
     const initialized = acceptActionExecutionInWork(executions, {
         sourceUnitId,
         definition,

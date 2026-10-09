@@ -1,5 +1,5 @@
 import type { UnitId } from "../../../unit.js";
-import type { EffectAddress, EffectInstanceValue } from "../../effects/instance.js";
+import type { EffectRef, EffectInstanceValue } from "../../effects/instance.js";
 import { EffectDispatchScope, participatingEffect } from "../../effects/dispatch.js";
 import { finalizeFinishedEffects } from "../../effects/lifecycle.js";
 import type { CombatWork } from "../../../../battle/execution/work.js";
@@ -36,23 +36,23 @@ function dispatchStage<V>(
     const facts = vitalityHookFacts(() => work);
     dispatch.withCandidates(facts, ownerUnitId, (identities) => {
         const candidates = identities
-            .flatMap((address) => {
-                const instance = facts.getEffect(address);
+            .flatMap((ref) => {
+                const instance = facts.getEffect(ref);
                 const hook =
                     instance === undefined ? undefined : select(resources.damage.get(instance));
 
                 return instance === undefined || hook === undefined
                     ? []
-                    : [{ address, sequence: instance.acquiredSequence, hook }];
+                    : [{ ref, sequence: instance.acquiredSequence, hook }];
             })
             .sort(
                 (left, right) =>
                     right.hook.priority - left.hook.priority ||
                     left.sequence - right.sequence ||
-                    left.address.instanceId - right.address.instanceId,
+                    left.ref.effectId - right.ref.effectId,
             );
 
-        const isGroupWinner = (instance: EffectInstanceValue, address: EffectAddress): boolean => {
+        const isGroupWinner = (instance: EffectInstanceValue, ref: EffectRef): boolean => {
             const group = resources.damage.get(instance).group;
 
             if (group === undefined) {
@@ -62,7 +62,7 @@ function dispatchStage<V>(
             return !identities.some((otherAddress) => {
                 const other = participatingEffect(facts, otherAddress);
 
-                if (other === undefined || other.id === address.instanceId) {
+                if (other === undefined || other.id === ref.effectId) {
                     return false;
                 }
 
@@ -81,10 +81,10 @@ function dispatchStage<V>(
             });
         };
 
-        for (const { address, hook } of candidates) {
-            const instance = participatingEffect(facts, address);
+        for (const { ref, hook } of candidates) {
+            const instance = participatingEffect(facts, ref);
 
-            if (instance === undefined || !isGroupWinner(instance, address)) {
+            if (instance === undefined || !isGroupWinner(instance, ref)) {
                 continue;
             }
 
@@ -93,7 +93,7 @@ function dispatchStage<V>(
                 (next) => {
                     work = next;
                 },
-                address,
+                ref,
                 instance,
                 request,
                 resources,

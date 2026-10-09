@@ -15,6 +15,7 @@ import type { BlockingRelation } from "./blocking/relations.js";
 import type { SupportRelation } from "./support/relations.js";
 import type { ProjectileId, ProjectileInstance, ProjectileView } from "./projectile/state.js";
 import type { SynchronousResult } from "../../common/synchronous.js";
+import type { EffectLifetimeProjection } from "../unit/capability/effects/lifetime-index.js";
 
 export type { SynchronousResult } from "../../common/synchronous.js";
 
@@ -96,6 +97,7 @@ export interface BattlefieldView<U extends Unit = Unit> extends MechanismView, P
     readonly navigationMaps: NavigationMaps;
     readonly fieldCache: NavigationFieldProvider;
     readonly unitIds: readonly UnitId[];
+    readonly effectLifetimes?: EffectLifetimeProjection;
     readonly blockingRelations: readonly BlockingRelation[];
     readonly supportRelations: readonly SupportRelation[];
     getUnit(id: UnitId): U | undefined;

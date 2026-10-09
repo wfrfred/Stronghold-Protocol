@@ -2,12 +2,12 @@ import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import { ownDataRecord } from "../../../common/immutable-data.js";
 import type { MechanismRuntime } from "../mechanism.js";
 import type { UnitId } from "../../unit/unit.js";
-import type { EffectAddress } from "../../unit/capability/effects/instance.js";
+import type { EffectRef, LifetimeRef } from "../../unit/capability/effects/instance.js";
 import type { EffectSourceProgramRef } from "./program.js";
 
 export interface EffectSourceReceiver {
     readonly unitId: UnitId;
-    readonly address: EffectAddress | null;
+    readonly address: EffectRef | null;
     readonly installationAttempts: number;
 }
 
@@ -81,6 +81,12 @@ function copyReceivers(
                 throw new TypeError("effect source receiver address must match its unit");
             }
 
+            assertNonnegativeSafeInteger(receiver.unitId, "effect source receiver identity");
+
+            if (receiver.address !== null) {
+                assertEffectReference(receiver.address);
+            }
+
             ids.add(receiver.unitId);
 
             return Object.freeze({
@@ -94,4 +100,12 @@ function copyReceivers(
     ownedReceiverArrays.add(owned);
 
     return owned;
+}
+
+function assertEffectReference(ref: LifetimeRef): asserts ref is EffectRef {
+    if (ref.type !== "EFFECT") {
+        throw new TypeError("effect source receiver requires an Effect reference");
+    }
+
+    assertNonnegativeSafeInteger(ref.effectId, "effect source receiver Effect identity");
 }

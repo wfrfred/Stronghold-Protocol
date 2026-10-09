@@ -13,14 +13,24 @@ import type {
     EffectInstallation,
     EffectInstallationInput,
     EffectLifecycleContext,
-    EffectParentBinding,
+    EffectLifetimeBinding,
+    EffectEnd,
+    EffectEndReason,
     EffectTransitionResources,
 } from "./contract.js";
-import type { EffectAddress, EffectInstance, EffectInstanceValue } from "./instance.js";
-import { withEffectLifecycle } from "./internal/instance.js";
+import {
+    effectTick,
+    lifetimeKey,
+    sameLifetime,
+    type EffectRef,
+    type LifetimeRef,
+    type EffectInstance,
+    type EffectInstanceValue,
+    type Scope,
+} from "./instance.js";
+import { ownLifetime, ownScopes, withEffectLifecycle } from "./internal/instance.js";
 import {
     registerEffectInstance,
-    removeEffectInstance,
     replaceEffectInstance,
     replaceEffectInstances,
 } from "./internal/state.js";
@@ -30,36 +40,11 @@ import { EffectDispatchScope } from "./dispatch.js";
 import { createEffectOperations } from "./operations.js";
 import type { EffectProgramRef } from "./program.js";
 import { reconcileEffectBindings, transitionEffectBindings } from "./transition.js";
-import {
-    effectAddressesOwnedByExecution,
-    effectAddressesOwnedByUnit,
-    effectChildAddresses,
-} from "./lifetime-index.js";
-
-function sameAddress(left: EffectAddress | null, right: EffectAddress): boolean {
-    return left !== null && left.unitId === right.unitId && left.instanceId === right.instanceId;
-}
-
-function addressesMatching(
-    work: CombatWork,
-    matches: (instance: EffectInstanceValue, address: EffectAddress) => boolean,
-): readonly EffectAddress[] {
-    return combatWorkView(work).unitIds.flatMap((unitId) => {
-        const unit = getCombatUnit(work, unitId)!;
-
-        return hasEffects(unit)
-            ? unit.effects.instances.flatMap((instance) => {
-                  const address = { unitId, instanceId: instance.id };
-
-                  return matches(instance, address) ? [address] : [];
-              })
-            : [];
-    });
-}
+import { effectDependents, effectTickCandidates } from "./lifetime-index.js";
 
 function changeInstance(
     work: CombatWork,
-    address: EffectAddress,
+    address: EffectRef,
     transition: (instance: EffectInstanceValue) => EffectInstanceValue,
 ): CombatWork {
     return transitionCombatUnit(work, address.unitId, (unit) => {
@@ -67,7 +52,7 @@ function changeInstance(
             return unit;
         }
 
-        const instance = unit.effects.instances.find((value) => value.id === address.instanceId);
+        const instance = unit.effects.instances.find((value) => value.id === address.effectId);
 
         if (instance === undefined) {
             return unit;
@@ -100,7 +85,7 @@ function reconcileInScope(
     return runParticipationActions(
         work,
         changes.map(({ instanceId, participating }) => ({
-            address: { unitId: ownerUnitId, instanceId },
+            address: { type: "EFFECT", unitId: ownerUnitId, effectId: instanceId },
             participating,
         })),
         resources,
@@ -111,7 +96,7 @@ function reconcileInScope(
 
 function runParticipationActions(
     work: CombatWork,
-    changes: readonly { address: EffectAddress; participating: boolean }[],
+    changes: readonly { address: EffectRef; participating: boolean }[],
     resources: EffectTransitionResources,
     tick: number,
     scope: EffectDispatchScope,
@@ -153,7 +138,7 @@ function runParticipationActions(
 
 function runLifecycleAction(
     work: CombatWork,
-    address: EffectAddress,
+    address: EffectRef,
     instance: EffectInstanceValue,
     action: CompiledEffectLifecycle["start"],
     resources: EffectTransitionResources,
@@ -177,7 +162,7 @@ function runLifecycleAction(
         };
 
         const context: EffectLifecycleContext = {
-            address,
+            ref: address,
             get instance() {
                 return getEffect(readWork(), address) ?? lastKnown();
             },
@@ -214,7 +199,7 @@ export function updateEffectState<S extends object>(
     tick: number,
     dispatch?: EffectDispatchScope,
 ): CombatWork {
-    const address = { unitId: ownerUnitId, instanceId };
+    const address: EffectRef = { type: "EFFECT", unitId: ownerUnitId, effectId: instanceId };
     const instance = getEffect(work, address);
 
     if (instance === undefined || instance.finished) {
@@ -250,25 +235,29 @@ export function updateEffectState<S extends object>(
     );
 }
 
-export function setEffectExpiration(
-    work: CombatWork,
-    address: EffectAddress,
-    expiresAtTick: number | null,
-): CombatWork {
-    if (expiresAtTick !== null) {
-        assertNonnegativeSafeInteger(expiresAtTick, "effect expiration tick");
+export function setEffectTick(work: CombatWork, ref: EffectRef, tick: number | null): CombatWork {
+    if (tick !== null) {
+        assertNonnegativeSafeInteger(tick, "effect expiration tick");
     }
 
-    return changeInstance(work, address, (instance) =>
-        instance.finished || instance.expiresAtTick === expiresAtTick
-            ? instance
-            : Object.freeze({ ...instance, expiresAtTick }),
-    );
+    return changeInstance(work, ref, (instance) => {
+        if (instance.finished || effectTick(instance) === tick) {
+            return instance;
+        }
+
+        const scopes: Scope[] = instance.scopes.filter((scope) => scope.type !== "TICK");
+
+        if (tick !== null) {
+            scopes.push({ type: "TICK", tick });
+        }
+
+        return Object.freeze({ ...instance, scopes: ownScopes(scopes) });
+    });
 }
 
 export function setEffectEnabled(
     work: CombatWork,
-    address: EffectAddress,
+    address: EffectRef,
     enabled: boolean,
     resources: EffectTransitionResources,
     tick: number,
@@ -286,7 +275,7 @@ export function setEffectEnabled(
 
 function setEnabledInScope(
     work: CombatWork,
-    address: EffectAddress,
+    address: EffectRef,
     enabled: boolean,
     resources: EffectTransitionResources,
     tick: number,
@@ -304,57 +293,98 @@ function setEnabledInScope(
     return reconcileInScope(work, address.unitId, before, resources, tick, scope);
 }
 
-export function finishEffect(
-    work: CombatWork,
-    address: EffectAddress,
-    resources: EffectTransitionResources,
-    tick: number,
-    dispatch?: EffectDispatchScope,
-): CombatWork {
-    return finishInScope(work, address, resources, tick, dispatch ?? new EffectDispatchScope());
+function compareRefs(left: EffectRef, right: EffectRef): number {
+    return left.unitId - right.unitId || left.effectId - right.effectId;
 }
 
-function finishInScope(
+interface Ending {
+    readonly ref: EffectRef;
+    readonly end: EffectEnd;
+}
+
+function finishBatch(
     work: CombatWork,
-    address: EffectAddress,
+    roots: readonly Ending[],
     resources: EffectTransitionResources,
     tick: number,
-    scope: EffectDispatchScope,
+    dispatch: EffectDispatchScope,
 ): CombatWork {
-    const instance = getEffect(work, address);
+    const ending = new Map<string, Ending>();
+    const pending = [...roots].sort((a, b) => compareRefs(a.ref, b.ref));
 
-    if (instance === undefined || instance.finished) {
+    for (const entry of pending) {
+        const instance = getEffect(work, entry.ref);
+        const key = lifetimeKey(entry.ref);
+
+        if (instance === undefined || instance.finished || ending.has(key)) {
+            continue;
+        }
+
+        ending.set(key, entry);
+
+        for (const child of effectDependents(work, entry.ref)) {
+            pending.push({ ref: child, end: entry.end });
+        }
+    }
+
+    if (ending.size === 0) {
         return work;
     }
 
-    const ending = new Map<UnitId, Set<number>>();
-    const order = new Map<string, number>();
-    const pending = [address];
+    // A dependent may have several parents; DFS discovery order is not sufficient.
+    const indegrees = new Map<string, number>();
+    const children = new Map<string, string[]>();
 
-    while (pending.length > 0) {
-        const target = pending.pop()!;
-        const current = getEffect(work, target);
+    for (const [key, { ref }] of ending) {
+        let count = 0;
 
-        if (current === undefined || current.finished) {
-            continue;
+        for (const scope of getEffect(work, ref)!.scopes) {
+            if (scope.type !== "EFFECT" || !ending.has(lifetimeKey(scope))) {
+                continue;
+            }
+
+            count++;
+            const parentKey = lifetimeKey(scope);
+            const bucket = children.get(parentKey) ?? [];
+            bucket.push(key);
+            children.set(parentKey, bucket);
         }
 
-        let ids = ending.get(target.unitId);
-
-        if (ids === undefined) {
-            ids = new Set();
-            ending.set(target.unitId, ids);
-        }
-        if (ids.has(target.instanceId)) {
-            continue;
-        }
-
-        ids.add(target.instanceId);
-        order.set(`${target.unitId}/${target.instanceId}`, order.size);
-        pending.push(...[...effectChildAddresses(work, target)].reverse());
+        indegrees.set(key, count);
     }
 
-    const owners = [...ending.keys()].map((unitId) => getCombatUnit(work, unitId)!);
+    const ready = [...ending.keys()].filter((key) => indegrees.get(key) === 0);
+    const ordered: Ending[] = [];
+
+    while (ready.length > 0) {
+        ready.sort((a, b) => compareRefs(ending.get(a)!.ref, ending.get(b)!.ref));
+        const key = ready.shift()!;
+        ordered.push(ending.get(key)!);
+
+        for (const child of children.get(key) ?? []) {
+            const remaining = indegrees.get(child)! - 1;
+            indegrees.set(child, remaining);
+
+            if (remaining === 0) {
+                ready.push(child);
+            }
+        }
+    }
+
+    if (ordered.length !== ending.size) {
+        throw new TypeError("effect scopes cannot form a cycle");
+    }
+
+    const byHost = new Map<UnitId, Set<number>>();
+
+    for (const { ref } of ordered) {
+        const ids = byHost.get(ref.unitId) ?? new Set<number>();
+        ids.add(ref.effectId);
+        byHost.set(ref.unitId, ids);
+    }
+
+    dispatch.beginEnds(ordered.map(({ ref }) => ref));
+    const owners = [...byHost.keys()].sort((a, b) => a - b).map((id) => getCombatUnit(work, id)!);
     work = updateCombatUnits(
         work,
         owners.map((owner) => {
@@ -362,102 +392,149 @@ function finishInScope(
                 return owner;
             }
 
-            const ids = ending.get(owner.id)!;
+            const ids = byHost.get(owner.id)!;
 
             return replaceEffectInstances(
                 owner,
-                owner.effects.instances.map((value) =>
-                    ids.has(value.id)
-                        ? withEffectLifecycle(value, { participating: false, finished: true })
-                        : value,
+                owner.effects.instances.map((instance) =>
+                    ids.has(instance.id)
+                        ? withEffectLifecycle(instance, { finished: true, participating: false })
+                        : instance,
                 ),
             );
         }),
     );
+    const changes: { address: EffectRef; participating: boolean }[] = [];
+    work = updateCombatUnits(
+        work,
+        owners.map((before) => {
+            const result = reconcileEffectBindings(
+                before,
+                getCombatUnit(work, before.id)!,
+                resources,
+            );
+            changes.push(
+                ...result.changes.map(({ instanceId, participating }) => ({
+                    address: { type: "EFFECT" as const, unitId: before.id, effectId: instanceId },
+                    participating,
+                })),
+            );
 
-    const changes: { address: EffectAddress; participating: boolean }[] = [];
-    const updates = owners.map((before) => {
-        const result = reconcileEffectBindings(before, getCombatUnit(work, before.id)!, resources);
-        changes.push(
-            ...result.changes.map(({ instanceId, participating }) => ({
-                address: { unitId: before.id, instanceId },
-                participating,
-            })),
-        );
-
-        return result.unit;
-    });
-    work = updateCombatUnits(work, updates);
-    changes.sort(
-        (left, right) =>
-            (order.get(`${left.address.unitId}/${left.address.instanceId}`) ?? order.size) -
-            (order.get(`${right.address.unitId}/${right.address.instanceId}`) ?? order.size),
+            return result.unit;
+        }),
     );
+    const order = new Map(ordered.map(({ ref }, index) => [lifetimeKey(ref), index]));
+    changes.sort(
+        (a, b) =>
+            (order.get(lifetimeKey(a.address)) ?? order.size) -
+                (order.get(lifetimeKey(b.address)) ?? order.size) ||
+            compareRefs(a.address, b.address),
+    );
+    work = runParticipationActions(work, changes, resources, tick, dispatch);
 
-    return runParticipationActions(work, changes, resources, tick, scope);
+    for (const { ref } of ordered) {
+        dispatch.completeEnd(ref);
+    }
+
+    return dispatch.drainDeferred(work);
 }
 
-export function finalizeEffect(
+export function finishEffects(
     work: CombatWork,
-    address: EffectAddress,
+    refs: readonly EffectRef[],
+    resources: EffectTransitionResources,
+    tick: number,
+    reason: EffectEndReason = "EXPLICIT",
+    dispatch = new EffectDispatchScope(),
+): CombatWork {
+    return finishBatch(
+        work,
+        refs.map((ref) => ({ ref, end: { root: ref, reason } })),
+        resources,
+        tick,
+        dispatch,
+    );
+}
+
+export function finishEffect(
+    work: CombatWork,
+    ref: EffectRef,
     resources: EffectTransitionResources,
     tick: number,
     dispatch?: EffectDispatchScope,
 ): CombatWork {
-    return finalizeInScope(work, address, resources, tick, dispatch ?? new EffectDispatchScope());
+    return finishEffects(work, [ref], resources, tick, "EXPLICIT", dispatch);
 }
 
-function finalizeInScope(
+export function closeEffectLifetimes(
     work: CombatWork,
-    address: EffectAddress,
+    lifetimes: readonly LifetimeRef[],
     resources: EffectTransitionResources,
     tick: number,
-    scope: EffectDispatchScope,
+    reason: EffectEndReason = "SCOPE_CLOSED",
+    dispatch = new EffectDispatchScope(),
 ): CombatWork {
-    let instance = getEffect(work, address);
+    const owned = lifetimes.map(ownLifetime);
+    dispatch.markClosing(owned);
+    const roots: Ending[] = [];
 
-    if (!instance?.finished) {
-        return work;
-    }
+    for (const root of owned) {
+        for (const ref of effectDependents(work, root)) {
+            roots.push({ ref, end: { root, reason } });
+        }
+        if (root.type === "UNIT") {
+            const host = getCombatUnit(work, root.unitId);
 
-    if (scope.consumeParticipationChange(address, false)) {
-        work = runLifecycleAction(
-            work,
-            address,
-            instance,
-            resources.effectLifecycle.get(instance).disable,
-            resources,
-            tick,
-            scope,
-        );
-        instance = getEffect(work, address);
-
-        if (!instance?.finished) {
-            return work;
+            if (host !== undefined && hasEffects(host)) {
+                for (const instance of host.effects.instances) {
+                    roots.push({
+                        ref: { type: "EFFECT", unitId: host.id, effectId: instance.id },
+                        end: { root, reason },
+                    });
+                }
+            }
         }
     }
 
-    scope.retainFinalizedInstance(address, instance);
-    work = transitionCombatUnit(work, address.unitId, (unit) => {
+    return finishBatch(work, roots, resources, tick, dispatch);
+}
+
+export function finalizeEffect(
+    work: CombatWork,
+    ref: EffectRef,
+    resources: EffectTransitionResources,
+    tick: number,
+    dispatch = new EffectDispatchScope(),
+): CombatWork {
+    const instance = getEffect(work, ref);
+
+    if (!instance?.finished || dispatch.hasPendingEnd(ref)) {
+        return work;
+    }
+
+    dispatch.retainFinalizedInstance(ref, instance);
+    work = transitionCombatUnit(work, ref.unitId, (unit) => {
         if (!hasEffects(unit)) {
             return unit;
         }
 
-        return removeEffectInstance(unit, address.instanceId);
+        return replaceEffectInstances(
+            unit,
+            unit.effects.instances.filter((instance) => instance.id !== ref.effectId),
+        );
     });
-
     work = runLifecycleAction(
         work,
-        address,
+        ref,
         instance,
         resources.effectLifecycle.get(instance).finalize,
         resources,
         tick,
-        scope,
+        dispatch,
     );
 
     return instance.started
-        ? transitionCombatUnit(work, address.unitId, (unit) =>
+        ? transitionCombatUnit(work, ref.unitId, (unit) =>
               transitionEffectBindings(
                   unit,
                   instance,
@@ -468,339 +545,298 @@ function finalizeInScope(
         : work;
 }
 
-export function removeEffect(
-    work: CombatWork,
-    address: EffectAddress,
-    resources: EffectTransitionResources,
-    tick: number,
-    dispatch?: EffectDispatchScope,
-): CombatWork {
-    return removeInScope(work, address, resources, tick, dispatch ?? new EffectDispatchScope());
-}
-
-function removeInScope(
-    work: CombatWork,
-    address: EffectAddress,
-    resources: EffectTransitionResources,
-    tick: number,
-    scope: EffectDispatchScope,
-): CombatWork {
-    return finalizeInScope(
-        finishInScope(work, address, resources, tick, scope),
-        address,
-        resources,
-        tick,
-        scope,
-    );
-}
-
 export function finalizeFinishedEffects(
     work: CombatWork,
-    ownerUnitId: UnitId,
+    unitId: UnitId,
     resources: EffectTransitionResources,
     tick: number,
-    dispatch?: EffectDispatchScope,
+    dispatch = new EffectDispatchScope(),
 ): CombatWork {
-    return finalizeFinishedInScope(
-        work,
-        ownerUnitId,
-        resources,
-        tick,
-        dispatch ?? new EffectDispatchScope(),
-    );
-}
+    const unit = getCombatUnit(work, unitId);
 
-function finalizeFinishedInScope(
-    work: CombatWork,
-    ownerUnitId: UnitId,
-    resources: EffectTransitionResources,
-    tick: number,
-    scope: EffectDispatchScope,
-): CombatWork {
-    const owner = getCombatUnit(work, ownerUnitId);
-
-    if (
-        owner === undefined ||
-        !hasEffects(owner) ||
-        !owner.effects.instances.some((instance) => instance.finished)
-    ) {
+    if (unit === undefined || !hasEffects(unit)) {
         return work;
     }
 
-    const addresses = owner.effects.instances.map((instance) => ({
-        unitId: ownerUnitId,
-        instanceId: instance.id,
-    }));
+    const refs: EffectRef[] = unit.effects.instances
+        .filter((instance) => instance.finished)
+        .map((instance) => ({ type: "EFFECT", unitId, effectId: instance.id }));
 
-    for (const address of addresses) {
-        work = finalizeInScope(work, address, resources, tick, scope);
+    for (const ref of refs) {
+        work = finalizeEffect(work, ref, resources, tick, dispatch);
     }
 
     return work;
 }
 
+export function removeEffect(
+    work: CombatWork,
+    ref: EffectRef,
+    resources: EffectTransitionResources,
+    tick: number,
+    dispatch = new EffectDispatchScope(),
+): CombatWork {
+    return finalizeEffect(
+        finishEffects(work, [ref], resources, tick, "EXPLICIT", dispatch),
+        ref,
+        resources,
+        tick,
+        dispatch,
+    );
+}
+
+function lifetimeAvailable(
+    work: CombatWork,
+    lifetime: LifetimeRef,
+    dispatch: EffectDispatchScope,
+): boolean {
+    if (dispatch.isClosing(lifetime)) {
+        return false;
+    }
+    switch (lifetime.type) {
+        case "UNIT":
+            return getCombatUnit(work, lifetime.unitId) !== undefined;
+
+        case "ACTION":
+            return work.actionExecutions?.get(lifetime.executionId) !== undefined;
+
+        case "SKILL":
+            return (
+                getCombatUnit(work, lifetime.unitId)?.skill?.active?.id === lifetime.activationId
+            );
+
+        case "EFFECT": {
+            const effect = getEffect(work, lifetime);
+
+            return effect !== undefined && !effect.finished;
+        }
+    }
+}
+
+function wouldCycle(work: CombatWork, ref: EffectRef, lifetime: LifetimeRef): boolean {
+    if (lifetime.type !== "EFFECT") {
+        return false;
+    }
+
+    const pending: EffectRef[] = [lifetime];
+    const seen = new Set<string>();
+
+    while (pending.length > 0) {
+        const current = pending.pop()!;
+
+        if (sameLifetime(current, ref)) {
+            return true;
+        }
+
+        const key = lifetimeKey(current);
+
+        if (seen.has(key)) {
+            continue;
+        }
+
+        seen.add(key);
+
+        for (const scope of getEffect(work, current)?.scopes ?? []) {
+            if (scope.type === "EFFECT") {
+                pending.push(scope);
+            }
+        }
+    }
+
+    return false;
+}
+
+export function bindEffectLifetime(
+    work: CombatWork,
+    ref: EffectRef,
+    lifetime: LifetimeRef,
+    dispatch = new EffectDispatchScope(),
+): EffectLifetimeBinding {
+    lifetime = ownLifetime(lifetime);
+    const instance = getEffect(work, ref);
+
+    if (instance === undefined) {
+        return { work, result: { type: "EFFECT_ABSENT" } };
+    }
+    if (instance.finished) {
+        return { work, result: { type: "EFFECT_FINISHED" } };
+    }
+    if (!lifetimeAvailable(work, lifetime, dispatch)) {
+        return { work, result: { type: "LIFETIME_UNAVAILABLE" } };
+    }
+    if (wouldCycle(work, ref, lifetime)) {
+        throw new TypeError("effect scopes cannot form a cycle");
+    }
+    if (!instance.scopes.some((scope) => sameLifetime(scope, lifetime))) {
+        work = changeInstance(work, ref, (instance) =>
+            Object.freeze({ ...instance, scopes: ownScopes([...instance.scopes, lifetime]) }),
+        );
+    }
+
+    return { work, result: { type: "BOUND" } };
+}
+
 export function installEffect<S extends object>(
     work: CombatWork,
-    ownerUnitId: UnitId,
+    unitId: UnitId,
     instance: EffectInstance<S>,
     resources: EffectTransitionResources,
     tick: number,
-    dispatch?: EffectDispatchScope,
+    dispatch = new EffectDispatchScope(),
 ): EffectInstallation {
-    const scope = dispatch ?? new EffectDispatchScope();
-
-    if (getCombatUnit(work, ownerUnitId) !== undefined) {
-        work = finalizeFinishedInScope(work, ownerUnitId, resources, tick, scope);
+    if (getCombatUnit(work, unitId) === undefined) {
+        return { work, result: { type: "REJECTED", reason: "TARGET_ABSENT" } };
     }
 
-    const prepared =
-        getCombatUnit(work, ownerUnitId) === undefined
-            ? instance
-            : resources.effects.restore(instance.programRef, instance);
+    const prepared = resources.effects.restore(instance.programRef, instance);
 
-    return installInScope(work, ownerUnitId, prepared, resources, tick, scope);
+    return installPrepared(work, unitId, prepared, resources, tick, dispatch);
 }
 
 export function installNewEffect<S extends object>(
     work: CombatWork,
-    ownerUnitId: UnitId,
-    ref: EffectProgramRef<S>,
+    unitId: UnitId,
+    program: EffectProgramRef<S>,
     input: EffectInstallationInput<NoInfer<S>>,
     resources: EffectTransitionResources,
     tick: number,
-    dispatch?: EffectDispatchScope,
+    dispatch = new EffectDispatchScope(),
 ): EffectInstallation {
-    return installNewInScope(
-        work,
-        ownerUnitId,
-        ref,
-        input,
-        resources,
-        tick,
-        dispatch ?? new EffectDispatchScope(),
-    );
-}
+    const scopes = ownScopes(input.scopes);
+    const host = getCombatUnit(work, unitId);
 
-function installNewInScope<S extends object>(
-    work: CombatWork,
-    ownerUnitId: UnitId,
-    ref: EffectProgramRef<S>,
-    input: EffectInstallationInput<NoInfer<S>>,
-    resources: EffectTransitionResources,
-    tick: number,
-    scope: EffectDispatchScope,
-): EffectInstallation {
-    if (getCombatUnit(work, ownerUnitId) !== undefined) {
-        work = finalizeFinishedInScope(work, ownerUnitId, resources, tick, scope);
+    if (host === undefined) {
+        return { work, result: { type: "REJECTED", reason: "TARGET_ABSENT" } };
+    }
+    if (dispatch.isClosing({ type: "UNIT", unitId })) {
+        return { work, result: { type: "REJECTED", reason: "TARGET_CLOSING" } };
+    }
+    if (
+        scopes.some((scope) => scope.type !== "TICK" && !lifetimeAvailable(work, scope, dispatch))
+    ) {
+        return { work, result: { type: "REJECTED", reason: "LIFETIME_UNAVAILABLE" } };
     }
 
-    const unit = getCombatUnit(work, ownerUnitId);
-    const progress = unit !== undefined && hasEffects(unit) ? unit.effects : undefined;
     const instance = resources.effects.create(
-        ref,
+        program,
         {
             source: input.source,
-            scope: input.scope,
-            expiresAtTick: input.expiresAtTick,
-            id: progress?.nextInstanceId ?? 0,
-            acquiredSequence: progress?.nextAcquiredSequence ?? 0,
+            scopes,
+            id: host.effects?.nextInstanceId ?? 0,
+            acquiredSequence: host.effects?.nextAcquiredSequence ?? 0,
         },
         input.initialState,
     );
 
-    return installInScope(work, ownerUnitId, instance, resources, tick, scope);
+    return installPrepared(work, unitId, instance, resources, tick, dispatch);
 }
 
-function installInScope<S extends object>(
+function installPrepared<S extends object>(
     work: CombatWork,
-    ownerUnitId: UnitId,
+    unitId: UnitId,
     instance: EffectInstance<S>,
     resources: EffectTransitionResources,
     tick: number,
-    scope: EffectDispatchScope,
+    dispatch: EffectDispatchScope,
 ): EffectInstallation {
-    const address = Object.freeze({ unitId: ownerUnitId, instanceId: instance.id });
+    const ref: EffectRef = Object.freeze({ type: "EFFECT", unitId, effectId: instance.id });
 
-    if (getCombatUnit(work, ownerUnitId) === undefined) {
-        return { work, result: { type: "REJECTED", reason: "TARGET_ABSENT", address } };
+    if (getCombatUnit(work, unitId) === undefined) {
+        return { work, result: { type: "REJECTED", reason: "TARGET_ABSENT" } };
+    }
+    if (dispatch.isClosing({ type: "UNIT", unitId })) {
+        return { work, result: { type: "REJECTED", reason: "TARGET_CLOSING" } };
+    }
+    for (const scope of instance.scopes) {
+        if (scope.type === "TICK") {
+            continue;
+        }
+        if (wouldCycle(work, ref, scope)) {
+            throw new TypeError("effect scopes cannot form a cycle");
+        }
+        if (!lifetimeAvailable(work, scope, dispatch)) {
+            return { work, result: { type: "REJECTED", reason: "LIFETIME_UNAVAILABLE" } };
+        }
+    }
+
+    const lifecycle = resources.effectLifecycle.get(instance);
+
+    if (!(lifecycle.accepts?.({ unitId, instance, facts: effectView(() => work) }) ?? true)) {
+        return { work, result: { type: "REJECTED", reason: "ADMISSION_REJECTED" } };
     }
 
     resources.effectBindings.get(instance);
-    work = transitionCombatUnit(work, ownerUnitId, (unit) =>
-        registerEffectInstance(unit, instance),
-    );
-    const lifecycle = resources.effectLifecycle.get(instance);
-    work = runLifecycleAction(work, address, instance, lifecycle.start, resources, tick, scope);
-    let current = getEffect(work, address);
+    work = finalizeFinishedEffects(work, unitId, resources, tick, dispatch);
 
-    if (current === undefined) {
-        return { work, result: { type: "REJECTED", reason: "START_FINISHED", address } };
+    // Cleanup callbacks may have retired the host or closed a dependency.
+    if (getCombatUnit(work, unitId) === undefined || dispatch.isClosing({ type: "UNIT", unitId })) {
+        return { work, result: { type: "REJECTED", reason: "TARGET_CLOSING" } };
     }
-    if (current.finished) {
-        work = finalizeInScope(work, address, resources, tick, scope);
-
-        return { work, result: { type: "REJECTED", reason: "START_FINISHED", address } };
+    if (
+        instance.scopes.some(
+            (scope) => scope.type !== "TICK" && !lifetimeAvailable(work, scope, dispatch),
+        )
+    ) {
+        return { work, result: { type: "REJECTED", reason: "LIFETIME_UNAVAILABLE" } };
     }
 
-    work = changeInstance(work, address, (value) => withEffectLifecycle(value, { started: true }));
-    current = getEffect(work, address)!;
+    work = transitionCombatUnit(work, unitId, (unit) => registerEffectInstance(unit, instance));
+    work = runLifecycleAction(work, ref, instance, lifecycle.start, resources, tick, dispatch);
+    let current = getEffect(work, ref);
+
+    if (current === undefined || current.finished) {
+        return { work, result: { type: "ENDED", ref } };
+    }
+
+    work = changeInstance(work, ref, (value) => withEffectLifecycle(value, { started: true }));
+    current = getEffect(work, ref)!;
     const started = current;
-    work = transitionCombatUnit(work, ownerUnitId, (unit) =>
+    work = transitionCombatUnit(work, unitId, (unit) =>
         transitionEffectBindings(unit, started, resources.effectBindings, (binding, current) =>
             binding.install(current, started),
         ),
     );
+    work = reconcileInScope(work, unitId, getCombatUnit(work, unitId)!, resources, tick, dispatch);
+    current = getEffect(work, ref);
 
-    const accepted =
-        !current.finished &&
-        (lifecycle.accepts?.({
-            address,
-            instance: current,
-            facts: effectView(() => work),
-        }) ??
-            true);
-
-    if (!accepted) {
-        const reason = current.finished ? "START_FINISHED" : "ADMISSION_REJECTED";
-        work = removeInScope(work, address, resources, tick, scope);
-
-        return { work, result: { type: "REJECTED", reason, address } };
-    }
-
-    work = reconcileInScope(
+    return {
         work,
-        ownerUnitId,
-        getCombatUnit(work, ownerUnitId)!,
-        resources,
-        tick,
-        scope,
-    );
-    current = getEffect(work, address);
-
-    if (current === undefined || current.finished) {
-        work = finalizeInScope(work, address, resources, tick, scope);
-
-        return { work, result: { type: "REJECTED", reason: "START_FINISHED", address } };
-    }
-
-    return { work, result: { type: "INSTALLED", address } };
-}
-
-export function attachEffectParent(
-    work: CombatWork,
-    childAddress: EffectAddress,
-    parentAddress: EffectAddress,
-    resources: EffectTransitionResources,
-    tick: number,
-    finishIfParentFinished = true,
-    dispatch?: EffectDispatchScope,
-): EffectParentBinding {
-    return attachParentInScope(
-        work,
-        childAddress,
-        parentAddress,
-        resources,
-        tick,
-        finishIfParentFinished,
-        dispatch ?? new EffectDispatchScope(),
-    );
-}
-
-function attachParentInScope(
-    work: CombatWork,
-    childAddress: EffectAddress,
-    parentAddress: EffectAddress,
-    resources: EffectTransitionResources,
-    tick: number,
-    finishIfParentFinished: boolean,
-    scope: EffectDispatchScope,
-): EffectParentBinding {
-    const child = getEffect(work, childAddress);
-
-    if (child === undefined) {
-        return { work, result: { type: "CHILD_ABSENT" } };
-    }
-    if (child.finished) {
-        return { work, result: { type: "CHILD_FINISHED" } };
-    }
-
-    const parent = getEffect(work, parentAddress);
-
-    if (parent === undefined || parent.finished) {
-        if (finishIfParentFinished) {
-            work = finishInScope(work, childAddress, resources, tick, scope);
-        }
-
-        return {
-            work,
-            result: {
-                type: "PARENT_UNAVAILABLE",
-                reason: parent === undefined ? "ABSENT" : "FINISHED",
-            },
-        };
-    }
-    if (sameAddress(child.parent, parentAddress)) {
-        return { work, result: { type: "BOUND" } };
-    }
-    if (child.parent !== null) {
-        throw new TypeError("effect parent identity cannot be replaced");
-    }
-
-    let ancestor: EffectAddress | null = parentAddress;
-
-    while (ancestor !== null) {
-        if (sameAddress(ancestor, childAddress)) {
-            throw new TypeError("effect parent relationships cannot form a cycle");
-        }
-
-        ancestor = getEffect(work, ancestor)?.parent ?? null;
-    }
-
-    work = changeInstance(work, childAddress, (instance) =>
-        withEffectLifecycle(instance, { parent: Object.freeze({ ...parentAddress }) }),
-    );
-
-    return { work, result: { type: "BOUND" } };
+        result: { type: current === undefined || current.finished ? "ENDED" : "INSTALLED", ref },
+    };
 }
 
 export function expireEffects(
     work: CombatWork,
     tick: number,
     resources: EffectTransitionResources,
-    dispatch?: EffectDispatchScope,
+    dispatch = new EffectDispatchScope(),
 ): CombatWork {
-    const scope = dispatch ?? new EffectDispatchScope();
-    const expired = addressesMatching(
-        work,
-        (instance) =>
-            !instance.finished && instance.expiresAtTick !== null && instance.expiresAtTick <= tick,
-    );
+    const candidates = effectTickCandidates(work).filter((ref) => {
+        const instance = getEffect(work, ref);
+        const deadline = instance === undefined ? null : effectTick(instance);
 
-    for (const address of expired) {
-        const current = getEffect(work, address);
+        return (
+            instance !== undefined && !instance.finished && deadline !== null && deadline <= tick
+        );
+    });
 
-        if (
-            current === undefined ||
-            current.finished ||
-            current.expiresAtTick === null ||
-            current.expiresAtTick > tick
-        ) {
+    for (const ref of candidates) {
+        const current = getEffect(work, ref);
+        const deadline = current === undefined ? null : effectTick(current);
+
+        if (current === undefined || current.finished || deadline === null || deadline > tick) {
             continue;
         }
 
         const expire = resources.effectLifecycle.get(current).expire;
         work =
             expire === undefined
-                ? finishInScope(work, address, resources, tick, scope)
-                : runLifecycleAction(work, address, current, expire, resources, tick, scope);
-        const remaining = getEffect(work, address);
+                ? finishEffects(work, [ref], resources, tick, "EXPIRED", dispatch)
+                : runLifecycleAction(work, ref, current, expire, resources, tick, dispatch);
+        const remaining = getEffect(work, ref);
+        const next = remaining === undefined ? null : effectTick(remaining);
 
-        if (
-            remaining !== undefined &&
-            !remaining.finished &&
-            remaining.expiresAtTick !== null &&
-            remaining.expiresAtTick <= tick
-        ) {
+        if (remaining !== undefined && !remaining.finished && next !== null && next <= tick) {
             throw new TypeError("effect expiration action must resolve its expired deadline");
         }
     }
@@ -808,84 +844,34 @@ export function expireEffects(
     return work;
 }
 
-export function finishEffectsOwnedByUnit(
-    work: CombatWork,
-    ownerUnitId: UnitId,
-    resources: EffectTransitionResources,
-    tick: number,
-    dispatch?: EffectDispatchScope,
-): CombatWork {
-    const scope = dispatch ?? new EffectDispatchScope();
-    const addresses = effectAddressesOwnedByUnit(work, ownerUnitId);
+/** Validate references once after a complete world has been initialized or restored. */
+export function validateEffectLifetimes(work: CombatWork): void {
+    const dispatch = new EffectDispatchScope();
 
-    for (const address of addresses) {
-        work = finishInScope(work, address, resources, tick, scope);
+    for (const unitId of combatWorkView(work).unitIds) {
+        const host = getCombatUnit(work, unitId)!;
+
+        if (!hasEffects(host)) {
+            continue;
+        }
+        for (const instance of host.effects.instances) {
+            if (instance.finished) {
+                continue;
+            }
+
+            const ref: EffectRef = { type: "EFFECT", unitId, effectId: instance.id };
+
+            for (const scope of instance.scopes) {
+                if (scope.type === "TICK") {
+                    continue;
+                }
+                if (wouldCycle(work, ref, scope)) {
+                    throw new TypeError("effect scopes cannot form a cycle");
+                }
+                if (!lifetimeAvailable(work, scope, dispatch)) {
+                    throw new TypeError(`unavailable effect scope ${lifetimeKey(scope)}`);
+                }
+            }
+        }
     }
-
-    return work;
-}
-
-export function finishEffectsOwnedByExecution(
-    work: CombatWork,
-    ownerUnitId: UnitId,
-    executionId: number,
-    resources: EffectTransitionResources,
-    tick: number,
-    dispatch?: EffectDispatchScope,
-): CombatWork {
-    const scope = dispatch ?? new EffectDispatchScope();
-    const addresses = effectAddressesOwnedByExecution(work, ownerUnitId, executionId);
-
-    for (const address of addresses) {
-        work = finishInScope(work, address, resources, tick, scope);
-    }
-
-    return work;
-}
-
-export function finishEffectsOnUnit(
-    work: CombatWork,
-    unitId: UnitId,
-    resources: EffectTransitionResources,
-    tick: number,
-    dispatch?: EffectDispatchScope,
-): CombatWork {
-    const scope = dispatch ?? new EffectDispatchScope();
-    const unit = getCombatUnit(work, unitId);
-
-    if (unit === undefined || !hasEffects(unit)) {
-        return work;
-    }
-
-    const addresses = unit.effects.instances.map((instance) => ({
-        unitId,
-        instanceId: instance.id,
-    }));
-
-    for (const address of addresses) {
-        work = finishInScope(work, address, resources, tick, scope);
-    }
-
-    return work;
-}
-
-export function removeEffectsOwnedByUnit(
-    work: CombatWork,
-    ownerUnitId: UnitId,
-    resources: EffectTransitionResources,
-    tick: number,
-    dispatch?: EffectDispatchScope,
-): CombatWork {
-    const scope = dispatch ?? new EffectDispatchScope();
-    const addresses = effectAddressesOwnedByUnit(work, ownerUnitId);
-
-    for (const address of addresses) {
-        work = finishInScope(work, address, resources, tick, scope);
-    }
-
-    for (const address of addresses) {
-        work = finalizeInScope(work, address, resources, tick, scope);
-    }
-
-    return work;
 }

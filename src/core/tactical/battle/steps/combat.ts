@@ -43,12 +43,14 @@ interface CombatPreparationInput {
     readonly tick: number;
     readonly commands: readonly Command[];
     readonly execution: BattleExecutionState;
+    readonly actionExecutions?: ActionExecutionWork;
 }
 
 interface CombatAdvanceInput {
     readonly battlefield: BattlefieldView;
     readonly tick: number;
     readonly execution: BattleExecutionState;
+    readonly actionExecutions?: ActionExecutionWork;
 }
 
 interface CombatAdvanceResult {
@@ -96,9 +98,9 @@ export function createCombat(
         input: CombatPreparationInput,
         state: ActionExecutionState,
     ): CombatAdvanceResult => {
-        let executions: ActionExecutionWork | undefined;
+        const executions = input.actionExecutions ?? new ActionExecutionWork(state);
         let work = prepareCombatEffects(
-            createCombatWork(input.battlefield, input.execution, input.battlefield),
+            createCombatWork(input.battlefield, input.execution, input.battlefield, executions),
             input.tick,
             resources,
         );
@@ -108,7 +110,6 @@ export function createCombat(
                 continue;
             }
 
-            executions ??= new ActionExecutionWork(state);
             const cancelled = cancelActionExecutionInWork(
                 work,
                 executions,
@@ -119,7 +120,7 @@ export function createCombat(
         }
 
         return {
-            actionExecution: executions?.result() ?? state,
+            actionExecution: executions.result(),
             changes: combatWorkChanges(work),
             events: combatWorkEvents(work),
             execution: work.execution,
@@ -132,7 +133,7 @@ export function createCombat(
         projectiles: ProjectileOperations,
     ): CombatAdvanceResult => {
         const { battlefield, tick } = input;
-        const executions = new ActionExecutionWork(state);
+        const executions = input.actionExecutions ?? new ActionExecutionWork(state);
         const actionResources: ActionStartResources = {
             computations: resources.computations,
             effects: resources.effects,
@@ -145,11 +146,11 @@ export function createCombat(
         const ids = [
             ...new Set([
                 ...battlefield.unitIds,
-                ...state.executions.map(({ sourceUnitId }) => sourceUnitId),
+                ...executions.result().executions.map(({ sourceUnitId }) => sourceUnitId),
             ]),
         ].sort((left, right) => left - right);
         let work = prepareCombatEffects(
-            createCombatWork(battlefield, input.execution, battlefield),
+            createCombatWork(battlefield, input.execution, battlefield, executions),
             tick,
             resources,
         );

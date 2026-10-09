@@ -18,7 +18,7 @@ import { createEffectProgram } from "../../dist/core/tactical/unit/capability/ef
 import {
     installNewEffect,
     setEffectEnabled,
-    finishEffect,
+    finishEffects,
     finalizeEffect,
     removeEffect,
     expireEffects,
@@ -37,7 +37,7 @@ import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
 import { effectFixtureWork } from "../helpers/effects.js";
 
 const bonus = (amount) => modifier.create({ finalAddition: amount });
-const address = (instanceId = 0) => ({ unitId: 1, instanceId });
+const address = (instanceId = 0) => ({ type: "EFFECT", unitId: 1, effectId: instanceId });
 const receiver = (hp = 50) => {
     const unit = initializeUnit({
         id: 1,
@@ -60,8 +60,7 @@ const install = (work, ref, resources, patch = {}) =>
         ref,
         {
             source: null,
-            scope: null,
-            expiresAtTick: null,
+            scopes: [],
             ...patch,
         },
         resources,
@@ -99,7 +98,7 @@ test("MaxHP: install, payload, participation, finish and cleanup retain HP perce
         assert.deepEqual(pair(refreshed), [hp, 100]);
         const enabled = setEffectEnabled(refreshed, address(), true, resources, 2);
         assert.deepEqual(pair(enabled), [hp * 4, 400]);
-        const finished = finishEffect(enabled, address(), resources, 3);
+        const finished = finishEffects(enabled, [address()], resources, 3);
         assert.deepEqual(pair(finished), [hp, 100]);
         const cleared = finalizeEffect(finished, address(), resources, 3);
         assert.deepEqual(pair(cleared), [hp, 100]);
@@ -131,17 +130,16 @@ test("MaxHP: callbacks and synchronous nested successors see coordinated facts",
             },
             enable: (context) => {
                 inspect("enable", context);
-                context.effects.update(context.address, parent.ref, (state) => ({
+                context.effects.update(context.ref, parent.ref, (state) => ({
                     ...state,
                     amount: 200,
                 }));
                 inspect("update", context);
                 const installed = context.effects.install(1, child.ref, {
                     source: null,
-                    scope: null,
-                    expiresAtTick: null,
+                    scopes: [],
                 });
-                context.effects.attachParent(installed.address, context.address);
+                context.effects.bind(installed.ref, context.ref);
                 inspect("child", context);
             },
             disable: (context) => {
@@ -265,7 +263,7 @@ test("MaxHP: unchanged effective values, inactive cleanup and snapshots do not r
         contributions: [maxHp((instance) => [bonus(instance.state.amount)])],
     });
     const initial = effectFixtureWork(receiver(Math.PI));
-    const installed = install(initial, effect.ref, resources, { expiresAtTick: 5 });
+    const installed = install(initial, effect.ref, resources, { scopes: [{ type: "TICK", tick: 5 }] });
     const copied = copyUnitSnapshot(getCombatUnit(installed, 1));
     assert.equal(copied.vitality.maxHp.entries, getCombatUnit(installed, 1).vitality.maxHp.entries);
     assert.deepEqual(pair(effectFixtureWork(copied)), pair(installed));
@@ -293,7 +291,7 @@ test("MaxHP: unchanged effective values, inactive cleanup and snapshots do not r
     const hp = getCombatUnit(expired, 1).vitality.hp;
     const cleared = finalizeEffect(expired, address(), resources, 5);
     assert.equal(getCombatUnit(cleared, 1).vitality.hp, hp);
-    assert.equal(finishEffect(cleared, address(), resources, 5), cleared);
+    assert.equal(finishEffects(cleared, [address()], resources, 5), cleared);
     assert.equal(copied.vitality.hp, Math.PI / 100);
     assert.deepEqual(pair(initial), [Math.PI, 100]);
 });

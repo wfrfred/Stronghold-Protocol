@@ -47,10 +47,11 @@ function scenario(skill, { targets = 1, content, compile } = {}) {
   const fault = { enabled: false };
   resources.skills.register({ definition: skill, activate: content ?? ((context) => {
     const installed = context.effects.install(context.unitId, buff.ref, {
-      source: context.unitId, scope: { type: 'UNIT', unitId: context.unitId }, expiresAtTick: null,
+      source: context.unitId, scopes: [{ type: 'SKILL', unitId: context.unitId, activationId: context.activationId }],
     });
     if (fault.enabled) { throw new Error('skill fault'); }
-    return { type: 'ACTIVATED', ownedEffects: installed.type === 'INSTALLED' ? [installed.address] : [] };
+    assert.equal(installed.type, 'INSTALLED');
+    return { type: 'ACTIVATED' };
   }) });
   const base = createLegacyCombatSpec({ rows: 1, columns: 8, operators: [], enemies: [], maxTicks: 200, seed: 7 });
   const definition = actor(skill);

@@ -1,7 +1,6 @@
 import type { UnitId } from "../../unit.js";
 import type { CombatTargetingView } from "../../targeting/query.js";
 import type { EffectLifecycleOperations } from "../effects/contract.js";
-import type { EffectAddress } from "../effects/instance.js";
 import type { SkillDefinition } from "./capability.js";
 import type { DamageReport, DamageRequest } from "../vitality/damage/contract.js";
 import type { HealingReport, HealingRequest } from "../vitality/healing/contract.js";
@@ -23,8 +22,7 @@ export interface SkillActivationContext extends SkillQueryContext {
 }
 
 export type SkillContentResult =
-    | { readonly type: "ACTIVATED"; readonly ownedEffects?: readonly EffectAddress[] }
-    | { readonly type: "REJECTED"; readonly reason: string };
+    { readonly type: "ACTIVATED" } | { readonly type: "REJECTED"; readonly reason: string };
 
 export interface CompiledSkill {
     readonly definition: SkillDefinition;

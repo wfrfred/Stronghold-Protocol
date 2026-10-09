@@ -43,13 +43,18 @@ export function compileArknightsAttackBuffSkill(
         activate: (context) => {
             const installed = context.effects.install(context.unitId, buff.ref, {
                 source: context.unitId,
-                scope: { type: "UNIT", unitId: context.unitId },
-                expiresAtTick: null,
+                scopes: [
+                    {
+                        type: "SKILL",
+                        unitId: context.unitId,
+                        activationId: context.activationId,
+                    },
+                ],
             });
 
-            return installed.type === "INSTALLED"
-                ? { type: "ACTIVATED", ownedEffects: [installed.address] }
-                : { type: "REJECTED", reason: installed.reason };
+            return installed.type === "REJECTED"
+                ? { type: "REJECTED", reason: installed.reason }
+                : { type: "ACTIVATED" };
         },
     } satisfies CompiledSkill);
 }

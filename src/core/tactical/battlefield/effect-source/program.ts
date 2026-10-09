@@ -1,6 +1,7 @@
 import type { Unit, UnitId } from "../../unit/unit.js";
 import type { CombatTargetingView } from "../../unit/targeting/query.js";
 import type { EffectProgramRef } from "../../unit/capability/effects/program.js";
+import type { Scope } from "../../unit/capability/effects/instance.js";
 import type { EffectSourceReceiver, TypedEffectSourceMechanism } from "./state.js";
 
 declare const sourceStateType: unique symbol;
@@ -22,7 +23,7 @@ export interface EffectSourceReceiverContext<S extends object> extends EffectSou
 }
 
 export interface EffectSourceInstallationInput<S extends object> {
-    readonly expiresAtTick: number | null;
+    readonly scopes: readonly Scope[];
     readonly initialState?: S;
 }
 

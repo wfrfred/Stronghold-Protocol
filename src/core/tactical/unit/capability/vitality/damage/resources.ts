@@ -124,8 +124,8 @@ export class DamageResources {
 
         const effects = this.#effects;
         const contextFor = (invocation: DamageHookInvocation): DamageRuleContext<S> => ({
-            address: invocation.address,
-            ownerUnitId: invocation.address.unitId,
+            ref: invocation.ref,
+            ownerUnitId: invocation.ref.unitId,
             get instance() {
                 return effects.typedInstance(invocation.instance, ref)!;
             },

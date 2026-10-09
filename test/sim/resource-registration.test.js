@@ -33,8 +33,7 @@ const metadata = {
   id: 0,
   acquiredSequence: 0,
   source: null,
-  scope: null,
-  expiresAtTick: null,
+  scopes: [],
 };
 const unit = () => initializeUnit({
   id: 2,
@@ -83,7 +82,7 @@ test("resources: caller edits cannot change binding participation or removal aft
   binding.setParticipation = (owner) => owner;
   binding.remove = (owner) => owner;
   const removed = removeEffect(
-    effectFixtureWork(installed), { unitId: 2, instanceId: 0 }, resources, 0,
+    effectFixtureWork(installed), { type: "EFFECT", unitId: 2, effectId: 0 }, resources, 0,
   );
   assert.equal(hasStatusFlag(getCombatUnit(removed, 2), "INVINCIBLE"), false);
   assert.deepEqual(getCombatUnit(removed, 2).effects.instances, []);
@@ -125,7 +124,7 @@ test("resources: binding compilers capture configuration values rather than call
     assert.deepEqual(contribution.group, { id: "original-group", strength: 1 });
     assert.equal(resolveAttackPower(2, combatWorkView(effectFixtureWork(installed)), resources.computations), 120);
     const removed = removeEffect(
-      effectFixtureWork(installed), { unitId: 2, instanceId: 0 }, resources, 0,
+      effectFixtureWork(installed), { type: "EFFECT", unitId: 2, effectId: 0 }, resources, 0,
     );
     assert.deepEqual(getCombatUnit(removed, 2).offense.attack.entries, []);
   }
@@ -159,7 +158,7 @@ test("resources: registered authored contributions retain their behavior after c
     assert.deepEqual(installed.offense.attack.entries[0].group, { id: "original-group", strength: 1 });
     const updated = updateEffectState(initial, 2, 0, descriptor.ref, () => ({ value: 2 }), resources, 0);
     assert.equal(currentAttack(updated), 140);
-    const address = { unitId: 2, instanceId: 0 };
+    const address = { type: "EFFECT", unitId: 2, effectId: 0 };
     const disabled = setEffectEnabled(updated, address, false, resources, 0);
     assert.equal(currentAttack(disabled), 100);
     assert.equal(currentAttack(setEffectEnabled(disabled, address, true, resources, 0)), 140);

@@ -82,8 +82,7 @@ function attach(resources, owner, descriptor, id, acquiredSequence = id) {
     id,
     acquiredSequence,
     source: null,
-    scope: { type: "UNIT", unitId: owner.id },
-    expiresAtTick: null,
+    scopes: [{ type: "UNIT", unitId: owner.id }],
   });
 
   return installFixtureEffect(owner, instance, resources);
@@ -383,7 +382,7 @@ test("damage pipeline: one group can independently provide source formula, outpu
         priority: 0,
         apply: (context) => {
           context.operations.effects.update(
-            context.address,
+            context.ref,
             context.instance.programRef,
             (state) => ({ reports: state.reports + 1 }),
           );
@@ -520,7 +519,7 @@ test("damage pipeline: invincibility skips reception resources and still gives r
           priority: 0,
           apply: (context, pending) => {
             context.operations.effects.update(
-              context.address,
+              context.ref,
               context.instance.programRef,
               (state) => ({
                 ...state,
@@ -549,7 +548,7 @@ test("damage pipeline: invincibility skips reception resources and still gives r
           priority: 0,
           apply: (context, report) => {
             context.operations.effects.update(
-              context.address,
+              context.ref,
               context.instance.programRef,
               (state) => ({
                 reports: state.reports + 1,
@@ -615,7 +614,7 @@ test("damage pipeline: nested reaction damage and healing preserve latest HP and
             }
             if (context.instance.state.remainingCharges > 0) {
               context.operations.effects.update(
-                context.address,
+                context.ref,
                 context.instance.programRef,
                 (state) => ({
                   ...state,
@@ -636,7 +635,7 @@ test("damage pipeline: nested reaction damage and healing preserve latest HP and
               });
             }
             context.operations.effects.update(
-              context.address,
+              context.ref,
               context.instance.programRef,
               (state) => ({
                 ...state,

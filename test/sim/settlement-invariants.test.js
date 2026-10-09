@@ -44,8 +44,7 @@ function attach(resources, owner, descriptor) {
     id: owner.effects?.nextInstanceId ?? 0,
     acquiredSequence: owner.effects?.nextAcquiredSequence ?? 0,
     source: null,
-    scope: null,
-    expiresAtTick: null,
+    scopes: [],
   });
 
   return installFixtureEffect(owner, instance, resources);
@@ -75,7 +74,7 @@ test("settlement invariants: invalid final damage rejects hook results without p
         reception: {
           priority: 0,
           apply: (context, pending) => {
-            context.operations.effects.update(context.address, descriptor.ref, (current) => ({
+            context.operations.effects.update(context.ref, descriptor.ref, (current) => ({
               ...current,
               uses: current.uses + 1,
             }));
@@ -120,7 +119,7 @@ test("settlement invariants: invalid final healing rejects after synchronous dam
         reception: {
           priority: 0,
           apply: (context, pending) => {
-            context.operations.effects.update(context.address, descriptor.ref, (current) => ({
+            context.operations.effects.update(context.ref, descriptor.ref, (current) => ({
               ...current,
               uses: current.uses + 1,
             }));

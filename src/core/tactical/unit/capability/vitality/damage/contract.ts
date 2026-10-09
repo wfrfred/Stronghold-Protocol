@@ -1,5 +1,5 @@
 import type { EffectDispatchScope } from "../../effects/dispatch.js";
-import type { EffectInstanceId } from "../../effects/instance.js";
+import type { EffectId } from "../../effects/instance.js";
 import type { UnitId } from "../../../unit.js";
 import type { CombatWork } from "../../../../battle/execution/work.js";
 
@@ -45,7 +45,7 @@ export interface DamageCancellation {
 
 export interface DamageResourceConsumption {
     readonly ownerUnitId: UnitId;
-    readonly instanceId: EffectInstanceId;
+    readonly instanceId: EffectId;
     readonly resource: string;
     readonly amount: number;
 }

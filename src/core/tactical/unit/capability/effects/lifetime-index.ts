@@ -1,47 +1,64 @@
 import type { CombatWork } from "../../../battle/execution/work.js";
 import type { Unit, UnitId } from "../../unit.js";
 import { hasEffects } from "./capability.js";
-import type { EffectAddress, EffectInstanceValue } from "./instance.js";
+import {
+    lifetimeKey,
+    refKey,
+    type EffectRef,
+    type EffectInstanceValue,
+    type LifetimeRef,
+} from "./instance.js";
 
-type AddressBucket = ReadonlyMap<string, EffectAddress>;
+type RefBucket = ReadonlyMap<string, EffectRef>;
 
-type LifetimeProjection = ReadonlyMap<string, AddressBucket>;
+export interface EffectLifetimeProjection {
+    readonly dependents: ReadonlyMap<string, RefBucket>;
+    readonly timed: ReadonlyMap<string, EffectRef>;
+}
+
+export interface EffectUnitTransition {
+    readonly previousUnit: Unit | undefined;
+    readonly nextUnit: Unit | undefined;
+}
 
 const projections = new WeakMap<
     CombatWork["unitUpdates"],
-    WeakMap<CombatWork["removals"], LifetimeProjection>
+    WeakMap<CombatWork["removals"], EffectLifetimeProjection>
 >();
 
 function instancesOf(unit: Unit | undefined): readonly EffectInstanceValue[] | undefined {
     return unit !== undefined && hasEffects(unit) ? unit.effects.instances : undefined;
 }
 
-function addressKey(address: EffectAddress): string {
-    return `${address.unitId}:${address.instanceId}`;
+function relationKeys(instance: EffectInstanceValue | undefined): readonly string[] {
+    return instance === undefined || instance.finished
+        ? []
+        : [
+              ...new Set(
+                  instance.scopes.flatMap((scope) =>
+                      scope.type === "TICK" ? [] : [lifetimeKey(scope)],
+                  ),
+              ),
+          ];
 }
 
-function relationKeys(instance: EffectInstanceValue): readonly string[] {
-    const keys: string[] = [];
-
-    if (instance.scope !== null) {
-        keys.push(`unit:${instance.scope.unitId}`);
-
-        if (instance.scope.type === "EXECUTION") {
-            keys.push(`execution:${instance.scope.unitId}:${instance.scope.executionId}`);
-        }
-    }
-    if (instance.parent !== null) {
-        keys.push(`parent:${addressKey(instance.parent)}`);
-    }
-
-    return keys;
+function isTimed(instance: EffectInstanceValue | undefined): boolean {
+    return (
+        instance !== undefined &&
+        !instance.finished &&
+        instance.scopes.some((scope) => scope.type === "TICK")
+    );
 }
 
-function storedProjection(work: CombatWork): LifetimeProjection | undefined {
+function effectRef(unitId: UnitId, effectId: number): EffectRef {
+    return Object.freeze({ type: "EFFECT", unitId, effectId });
+}
+
+function storedProjection(work: CombatWork): EffectLifetimeProjection | undefined {
     return projections.get(work.unitUpdates)?.get(work.removals);
 }
 
-function storeProjection(work: CombatWork, projection: LifetimeProjection): void {
+function storeProjection(work: CombatWork, projection: EffectLifetimeProjection): void {
     let byRemovals = projections.get(work.unitUpdates);
 
     if (byRemovals === undefined) {
@@ -52,101 +69,123 @@ function storeProjection(work: CombatWork, projection: LifetimeProjection): void
     byRemovals.set(work.removals, projection);
 }
 
-function projectLifetimes(work: CombatWork): LifetimeProjection {
-    const projection = new Map<string, Map<string, EffectAddress>>();
-    const ids = new Set([...work.battlefield.unitIds, ...work.unitUpdates.keys()]);
+/** Captures the immutable projection belonging to this Work's Battlefield baseline. */
+export function captureEffectLifetimeProjection(work: CombatWork): void {
+    if ("effectLifetimes" in work.battlefield && work.battlefield.effectLifetimes !== undefined) {
+        storeProjection(work, work.battlefield.effectLifetimes as EffectLifetimeProjection);
+    }
+}
 
-    for (const unitId of ids) {
-        if (work.removals.has(unitId)) {
-            continue;
-        }
+export function projectEffectLifetimes(units: Iterable<Unit>): EffectLifetimeProjection {
+    const dependents = new Map<string, Map<string, EffectRef>>();
+    const timed = new Map<string, EffectRef>();
 
-        const unit = work.unitUpdates.get(unitId) ?? work.battlefield.getUnit(unitId);
-
+    for (const unit of units) {
         for (const instance of instancesOf(unit) ?? []) {
-            const address = Object.freeze({ unitId, instanceId: instance.id });
+            const ref = effectRef(unit.id, instance.id);
+            const id = refKey(ref);
 
             for (const key of relationKeys(instance)) {
-                let bucket = projection.get(key);
+                let bucket = dependents.get(key);
 
                 if (bucket === undefined) {
                     bucket = new Map();
-                    projection.set(key, bucket);
+                    dependents.set(key, bucket);
                 }
 
-                bucket.set(addressKey(address), address);
+                bucket.set(id, ref);
+            }
+            if (isTimed(instance)) {
+                timed.set(id, ref);
             }
         }
     }
 
+    return { dependents, timed };
+}
+
+function projectionOf(work: CombatWork): EffectLifetimeProjection {
+    const stored = storedProjection(work);
+
+    if (stored !== undefined) {
+        return stored;
+    }
+
+    const ids = new Set([...work.battlefield.unitIds, ...work.unitUpdates.keys()]);
+
+    const units = function* () {
+        for (const unitId of ids) {
+            if (!work.removals.has(unitId)) {
+                const unit = work.unitUpdates.get(unitId) ?? work.battlefield.getUnit(unitId);
+
+                if (unit !== undefined) {
+                    yield unit;
+                }
+            }
+        }
+    };
+
+    const projection = projectEffectLifetimes(units());
+    storeProjection(work, projection);
+
     return projection;
 }
 
-function addressesFor(work: CombatWork, key: string): readonly EffectAddress[] {
-    let projection = storedProjection(work);
+export function deriveEffectLifetimes(
+    projection: EffectLifetimeProjection,
+    transitions: readonly EffectUnitTransition[],
+): EffectLifetimeProjection {
+    let dependents: Map<string, RefBucket> | undefined;
+    let timed: Map<string, EffectRef> | undefined;
+    const editedBuckets = new Map<string, Map<string, EffectRef>>();
 
-    if (projection === undefined) {
-        projection = projectLifetimes(work);
-        storeProjection(work, projection);
-    }
-
-    return Object.freeze(
-        [...(projection.get(key)?.values() ?? [])].sort(
-            (left, right) => left.unitId - right.unitId || left.instanceId - right.instanceId,
-        ),
-    );
-}
-
-export function deriveEffectLifetimeProjection(
-    previous: CombatWork,
-    next: CombatWork,
-    transitions: readonly {
-        readonly previousUnit: Unit | undefined;
-        readonly nextUnit: Unit | undefined;
-    }[],
-): void {
-    const projection = storedProjection(previous);
-
-    if (projection === undefined) {
-        return;
-    }
-
-    let updated: Map<string, AddressBucket> | undefined;
-    const editedBuckets = new Map<string, Map<string, EffectAddress>>();
-
-    const editBucket = (key: string): Map<string, EffectAddress> => {
+    const editBucket = (key: string): Map<string, EffectRef> => {
         let bucket = editedBuckets.get(key);
 
         if (bucket === undefined) {
-            updated ??= new Map(projection);
-            bucket = new Map(projection.get(key));
+            dependents ??= new Map(projection.dependents);
+            bucket = new Map(projection.dependents.get(key));
             editedBuckets.set(key, bucket);
         }
 
         return bucket;
     };
-
     const changeRelations = (
         unitId: UnitId,
         before: EffectInstanceValue | undefined,
         after: EffectInstanceValue | undefined,
     ): void => {
-        if (before === after) {
+        if (
+            before === after ||
+            (before !== undefined &&
+                before.scopes === after?.scopes &&
+                before.finished === after.finished)
+        ) {
             return;
         }
 
-        const address = Object.freeze({ unitId, instanceId: (after ?? before)!.id });
-        const beforeKeys = before === undefined ? [] : relationKeys(before);
-        const afterKeys = after === undefined ? [] : relationKeys(after);
+        const ref = effectRef(unitId, (after ?? before)!.id);
+        const id = refKey(ref);
+        const beforeKeys = relationKeys(before);
+        const afterKeys = relationKeys(after);
 
         for (const key of beforeKeys) {
             if (!afterKeys.includes(key)) {
-                editBucket(key).delete(addressKey(address));
+                editBucket(key).delete(id);
             }
         }
         for (const key of afterKeys) {
             if (!beforeKeys.includes(key)) {
-                editBucket(key).set(addressKey(address), address);
+                editBucket(key).set(id, ref);
+            }
+        }
+        if (isTimed(before) !== isTimed(after)) {
+            timed ??= new Map(projection.timed);
+
+            if (isTimed(after)) {
+                timed.set(id, ref);
+            } else {
+                timed.delete(id);
             }
         }
     };
@@ -171,37 +210,45 @@ export function deriveEffectLifetimeProjection(
         }
     }
 
-    if (updated !== undefined) {
+    if (dependents !== undefined) {
         for (const [key, bucket] of editedBuckets) {
             if (bucket.size === 0) {
-                updated.delete(key);
+                dependents.delete(key);
             } else {
-                updated.set(key, bucket);
+                dependents.set(key, bucket);
             }
         }
     }
 
-    storeProjection(next, updated ?? projection);
+    return dependents === undefined && timed === undefined
+        ? projection
+        : { dependents: dependents ?? projection.dependents, timed: timed ?? projection.timed };
 }
 
-export function effectAddressesOwnedByUnit(
-    work: CombatWork,
-    unitId: UnitId,
-): readonly EffectAddress[] {
-    return addressesFor(work, `unit:${unitId}`);
+export function deriveEffectLifetimeProjection(
+    previous: CombatWork,
+    next: CombatWork,
+    transitions: readonly EffectUnitTransition[],
+): void {
+    const projection = storedProjection(previous);
+
+    if (projection !== undefined) {
+        storeProjection(next, deriveEffectLifetimes(projection, transitions));
+    }
 }
 
-export function effectAddressesOwnedByExecution(
-    work: CombatWork,
-    unitId: UnitId,
-    executionId: number,
-): readonly EffectAddress[] {
-    return addressesFor(work, `execution:${unitId}:${executionId}`);
+function sortedRefs(refs: Iterable<EffectRef>): readonly EffectRef[] {
+    return Object.freeze(
+        [...refs].sort(
+            (left, right) => left.unitId - right.unitId || left.effectId - right.effectId,
+        ),
+    );
 }
 
-export function effectChildAddresses(
-    work: CombatWork,
-    parent: EffectAddress,
-): readonly EffectAddress[] {
-    return addressesFor(work, `parent:${addressKey(parent)}`);
+export function effectDependents(work: CombatWork, lifetime: LifetimeRef): readonly EffectRef[] {
+    return sortedRefs(projectionOf(work).dependents.get(lifetimeKey(lifetime))?.values() ?? []);
+}
+
+export function effectTickCandidates(work: CombatWork): readonly EffectRef[] {
+    return sortedRefs(projectionOf(work).timed.values());
 }

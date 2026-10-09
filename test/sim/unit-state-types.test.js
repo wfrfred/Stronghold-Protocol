@@ -73,7 +73,7 @@ declare const maxHpTransition: contribution.Transition<'stored'>;
 declare const movementContext: RoutedLocomotionStepContext;
 declare const instance: EffectInstanceValue;
 declare const bindings: EffectBindings;
-declare const fresh: EffectInstance<{ readonly strength: 5 }> & { readonly id: 10; readonly started: false; readonly participating: false; readonly finished: false; readonly parent: null };
+declare const fresh: EffectInstance<{ readonly strength: 5 }> & { readonly id: 10; readonly started: false; readonly participating: false; readonly finished: false; readonly enabled: true };
 const reconciled = reconcileUnitNavigation(narrow, maps);
 const moved = stepRoutedUnit(narrow, movementContext).unit;
 const copied = copyUnitSnapshot(narrow);
@@ -170,7 +170,7 @@ if (optionalResult.locomotion !== undefined) {
     "const staleReplacedEffects: readonly [] = replaced.effects.instances;",
     "const staleRemovedEffects: readonly [] = emptied.effects.instances;",
     "const staleStarted: false = changed.started;",
-    "const staleParent: null = changed.parent;",
+    "const staleEnabled: true = changed.enabled;",
   ];
   try {
     writeFileSync(positivePath, declarations + positive);

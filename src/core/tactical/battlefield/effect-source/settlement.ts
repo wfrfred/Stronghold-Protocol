@@ -7,9 +7,9 @@ import {
 } from "../../battle/execution/work.js";
 import type { MechanismId } from "../mechanism.js";
 import type { UnitId } from "../../unit/unit.js";
-import type { EffectDispatchScope } from "../../unit/capability/effects/dispatch.js";
+import { EffectDispatchScope } from "../../unit/capability/effects/dispatch.js";
 import {
-    finishEffect,
+    finishEffects,
     installNewEffect,
     setEffectEnabled,
 } from "../../unit/capability/effects/lifecycle.js";
@@ -168,8 +168,7 @@ function settleSource<S extends object>(
                 ref,
                 {
                     source: source.effectSource.sourceUnitId,
-                    scope: null,
-                    expiresAtTick: initial.expiresAtTick,
+                    scopes: initial.scopes,
                     ...(initial.initialState === undefined
                         ? {}
                         : { initialState: initial.initialState }),
@@ -183,7 +182,7 @@ function settleSource<S extends object>(
         work = installed.work;
 
         if (installed.result.type === "INSTALLED") {
-            bind({ ...bindingOf(unitId)!, address: installed.result.address });
+            bind({ ...bindingOf(unitId)!, address: installed.result.ref });
         }
     };
     const stop = () => {
@@ -203,7 +202,14 @@ function settleSource<S extends object>(
                 !(input !== undefined && (program.keepOnFinish?.(input) ?? false))
             ) {
                 flush();
-                work = finishEffect(work, binding.address, resources, tick, dispatch);
+                work = finishEffects(
+                    work,
+                    [binding.address],
+                    resources,
+                    tick,
+                    "SOURCE_FINISHED",
+                    dispatch,
+                );
                 bind({ ...bindingOf(binding.unitId)!, address: null });
             }
         }
@@ -261,7 +267,14 @@ function settleSource<S extends object>(
                 binding = bindingOf(binding.unitId)!;
             } else if (!selected.has(binding.unitId) && !(program.keepOnLeave?.(input) ?? false)) {
                 flush();
-                work = finishEffect(work, binding.address, resources, tick, dispatch);
+                work = finishEffects(
+                    work,
+                    [binding.address],
+                    resources,
+                    tick,
+                    "SOURCE_LEFT",
+                    dispatch,
+                );
                 bind({ ...bindingOf(binding.unitId)!, address: null });
                 binding = bindingOf(binding.unitId)!;
             } else if (program.followsSourceActive?.(input) ?? true) {
@@ -310,8 +323,10 @@ export function reconcileEffectSources(
     tick: number,
     dispatch?: EffectDispatchScope,
 ): CombatWork {
+    const scope = dispatch ?? new EffectDispatchScope();
+
     for (const id of sourceIds(work)) {
-        work = applyToSource(work, id, resources, tick, dispatch, "RECONCILE");
+        work = applyToSource(work, id, resources, tick, scope, "RECONCILE");
     }
 
     return work;
@@ -327,8 +342,11 @@ export function registerEffectSourceUnits(
     if (unitIds.length === 0) {
         return work;
     }
+
+    const scope = dispatch ?? new EffectDispatchScope();
+
     for (const id of sourceIds(work)) {
-        work = applyToSource(work, id, resources, tick, dispatch, "REGISTER", unitIds);
+        work = applyToSource(work, id, resources, tick, scope, "REGISTER", unitIds);
     }
 
     return work;
@@ -350,7 +368,14 @@ export function setEffectSourceActive(
 
     work = updateCombatMechanism(work, { ...source, active });
 
-    return applyToSource(work, sourceId, resources, tick, dispatch, "RECONCILE");
+    return applyToSource(
+        work,
+        sourceId,
+        resources,
+        tick,
+        dispatch ?? new EffectDispatchScope(),
+        "RECONCILE",
+    );
 }
 
 export function finishEffectSource(
@@ -360,5 +385,12 @@ export function finishEffectSource(
     tick: number,
     dispatch?: EffectDispatchScope,
 ): CombatWork {
-    return applyToSource(work, sourceId, resources, tick, dispatch, "FINISH");
+    return applyToSource(
+        work,
+        sourceId,
+        resources,
+        tick,
+        dispatch ?? new EffectDispatchScope(),
+        "FINISH",
+    );
 }

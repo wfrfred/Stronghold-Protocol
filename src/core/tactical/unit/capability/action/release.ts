@@ -12,7 +12,7 @@ import type {
     EffectView,
 } from "../effects/contract.js";
 import { EffectDispatchScope, participatingEffect } from "../effects/dispatch.js";
-import type { EffectAddress, EffectInstance, EffectInstanceValue } from "../effects/instance.js";
+import type { EffectRef, EffectInstance, EffectInstanceValue } from "../effects/instance.js";
 import { finalizeFinishedEffects } from "../effects/lifecycle.js";
 import { createEffectOperations } from "../effects/operations.js";
 import type { EffectProgramRef } from "../effects/program.js";
@@ -26,7 +26,7 @@ export type ActionReleaseDirective =
 export interface ActionReleaseContext<S extends object> {
     readonly unitId: UnitId;
     readonly tick: number;
-    readonly address: EffectAddress;
+    readonly ref: EffectRef;
     readonly instance: EffectInstance<S>;
     readonly facts: EffectView;
     readonly effects: EffectLifecycleOperations;
@@ -102,6 +102,7 @@ export function beforeActionRelease(
     unitId: UnitId,
     tick: number,
     resources: EffectTransitionResources & { readonly actionRelease?: ActionReleaseResources },
+    dispatch?: EffectDispatchScope,
 ): { readonly work: CombatWork; readonly interrupted: boolean } {
     assertNonnegativeSafeInteger(unitId, "action release unit identity");
     assertNonnegativeSafeInteger(tick, "action release tick");
@@ -114,7 +115,7 @@ export function beforeActionRelease(
     }
 
     let work = input;
-    const scope = new EffectDispatchScope();
+    const scope = dispatch ?? new EffectDispatchScope();
     const getWork = () => work;
 
     const setWork = (current: CombatWork) => {
@@ -126,15 +127,15 @@ export function beforeActionRelease(
     const directive = scope.withCandidates(facts, unitId, (addresses) => {
         let latest: ActionReleaseDirective | undefined;
 
-        for (const address of addresses) {
-            const instance = participatingEffect(facts, address);
+        for (const ref of addresses) {
+            const instance = participatingEffect(facts, ref);
             const rules = instance === undefined ? undefined : release.get(instance);
 
             if (instance === undefined || rules === undefined) {
                 continue;
             }
 
-            latest = scope.withInstance(address, instance, (lastKnown) => {
+            latest = scope.withInstance(ref, instance, (lastKnown) => {
                 let active = true;
 
                 const readWork = (): CombatWork => {
@@ -149,9 +150,9 @@ export function beforeActionRelease(
                     return rules.beforeRelease({
                         unitId,
                         tick,
-                        address,
+                        ref,
                         get instance() {
-                            return getEffect(readWork(), address) ?? lastKnown();
+                            return getEffect(readWork(), ref) ?? lastKnown();
                         },
                         facts: effectView(readWork),
                         effects: createEffectOperations(readWork, setWork, resources, tick, scope),

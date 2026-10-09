@@ -1,3 +1,4 @@
+import type { ActionExecutionWork } from "../../unit/capability/action/internal/executions.js";
 import {
     advanceElementalInWork,
     type ElementalExecutionResources,
@@ -11,6 +12,7 @@ interface ElementalInput {
     readonly battlefield: BattlefieldView;
     readonly tick: number;
     readonly execution: BattleExecutionState;
+    readonly actionExecutions?: ActionExecutionWork;
 }
 
 interface ElementalResult {
@@ -23,7 +25,12 @@ export function advanceElements(
     input: ElementalInput,
     resources: ElementalExecutionResources,
 ): ElementalResult {
-    let work = createCombatWork(input.battlefield, input.execution, input.battlefield);
+    let work = createCombatWork(
+        input.battlefield,
+        input.execution,
+        input.battlefield,
+        input.actionExecutions,
+    );
 
     for (const id of input.battlefield.unitIds) {
         work = advanceElementalInWork(work, id, input.tick, resources);

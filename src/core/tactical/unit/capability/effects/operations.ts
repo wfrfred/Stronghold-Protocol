@@ -2,11 +2,11 @@ import type { CombatWork } from "../../../battle/execution/work.js";
 import type { EffectLifecycleOperations, EffectTransitionResources } from "./contract.js";
 import type { EffectDispatchScope } from "./dispatch.js";
 import {
-    attachEffectParent,
-    finishEffect,
+    bindEffectLifetime,
+    finishEffects,
     installNewEffect,
     setEffectEnabled,
-    setEffectExpiration,
+    setEffectTick,
     updateEffectState,
 } from "./lifecycle.js";
 
@@ -32,13 +32,13 @@ export function createEffectOperations(
 
             return installation.result;
         },
-        update: (address, ref, transition) => {
+        update: (ref, program, transition) => {
             setWork(
                 updateEffectState(
                     getWork(),
-                    address.unitId,
-                    address.instanceId,
-                    ref,
+                    ref.unitId,
+                    ref.effectId,
+                    program,
                     transition,
                     resources,
                     tick,
@@ -46,25 +46,17 @@ export function createEffectOperations(
                 ),
             );
         },
-        setEnabled: (address, enabled) => {
-            setWork(setEffectEnabled(getWork(), address, enabled, resources, tick, dispatch));
+        setEnabled: (ref, enabled) => {
+            setWork(setEffectEnabled(getWork(), ref, enabled, resources, tick, dispatch));
         },
-        setExpiration: (address, expiresAtTick) => {
-            setWork(setEffectExpiration(getWork(), address, expiresAtTick));
+        setTick: (ref, expires) => {
+            setWork(setEffectTick(getWork(), ref, expires));
         },
-        finish: (address) => {
-            setWork(finishEffect(getWork(), address, resources, tick, dispatch));
+        finish: (refs, reason) => {
+            setWork(finishEffects(getWork(), refs, resources, tick, reason, dispatch));
         },
-        attachParent: (child, parent, finishIfParentFinished) => {
-            const binding = attachEffectParent(
-                getWork(),
-                child,
-                parent,
-                resources,
-                tick,
-                finishIfParentFinished,
-                dispatch,
-            );
+        bind: (ref, lifetime) => {
+            const binding = bindEffectLifetime(getWork(), ref, lifetime, dispatch);
             setWork(binding.work);
 
             return binding.result;

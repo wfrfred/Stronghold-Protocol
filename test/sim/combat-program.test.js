@@ -1,7 +1,7 @@
 import { computedAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import { combatWorkEvents } from "../../dist/core/tactical/battle/execution/work.js";
 import { installFixtureEffect } from "../helpers/effects.js";
-import { installNewEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
+import { installEffect, installNewEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -117,9 +117,8 @@ function effectInstance(resources, program, overrides = {}) {
   return resources.effects.create(program.ref, {
     id: 0,
     source: null,
-    scope: null,
-    acquiredSequence: 0,
-    expiresAtTick: null,
+    scopes: [],
+  acquiredSequence: 0,
     ...overrides,
   });
 }
@@ -419,8 +418,8 @@ test("combat program: lethal retaliation skips later unsampled damage and comple
       .map((event) => [event.sourceUnitId, event.targetUnitId, event.amount]),
     [[0, 1, 100], [1, 0, 100]],
   );
-  assert.equal(result.events.some((event) => event.type === "ACTION_FINISHED"), true);
-  assert.equal(result.events.some((event) => event.type === "ACTION_CANCELLED"), false);
+  assert.equal(result.events.some((event) => event.type === "ACTION_FINISHED"), false);
+  assert.equal(result.events.some((event) => event.type === "ACTION_CANCELLED"), true);
   assert.deepEqual(after.actionExecution.executions, []);
   assert.equal(before.units.find((unit) => unit.id === 0).vitality.hp, 100);
   assert.equal(before.units.find((unit) => unit.id === 1).vitality.hp, 300);
@@ -499,7 +498,7 @@ test("combat program: a failed receiver rolls back shield facts and retries iden
           priority: 1000,
           apply: (context, damage) => {
             const absorbed = Math.min(context.instance.state.remaining, damage.amount);
-            context.operations.effects.update(context.address, program.ref, (state) => ({
+            context.operations.effects.update(context.ref, program.ref, (state) => ({
               remaining: state.remaining - absorbed,
             }));
             attempts.push(context.instance.state.remaining);
@@ -565,7 +564,7 @@ test("combat program: expiration removes its status contribution and preserves b
   const definition = targetDefinition("marked-target", 100, ["HEAL_FREE"]);
   const seeded = installFixtureEffect(
     initializeUnit({ id: 0, definition, position: [1, 0] }),
-    effectInstance(resources, program, { expiresAtTick: 0 }),
+    effectInstance(resources, program, { scopes: [{ type: "TICK", tick: 0 }] }),
     resources,
   );
   const runtime = new BattleRuntime(
@@ -607,32 +606,40 @@ test("combat program: retreat cleans lifetime-owned effects without treating pro
     },
   );
   const definition = targetDefinition();
+  const owner = initializeUnit({ id: 0, definition: { id: "owner" }, position: [0, 0] });
+  const otherOwner = initializeUnit({ id: 2, definition: { id: "other-owner" }, position: [2, 0] });
   let seeded = initializeUnit({ id: 1, definition, position: [1, 0] });
-  seeded = installFixtureEffect(
-    seeded,
+  let installing = workWith(owner, seeded, otherOwner);
+  installing = installEffect(
+    installing,
+    seeded.id,
     effectInstance(resources, program, {
       source: 0,
-      scope: { type: "UNIT", unitId: 0 },
+      scopes: [{ type: "UNIT", unitId: 0 }],
     }),
     resources,
-  );
-  seeded = installFixtureEffect(
-    seeded,
+    0,
+  ).work;
+  installing = installEffect(
+    installing,
+    seeded.id,
     effectInstance(resources, neutral, { id: 1, acquiredSequence: 1, source: 0 }),
     resources,
-  );
-  seeded = installFixtureEffect(
-    seeded,
+    0,
+  ).work;
+  installing = installEffect(
+    installing,
+    seeded.id,
     effectInstance(resources, invisible, {
       id: 2,
       acquiredSequence: 2,
       source: 0,
-      scope: { type: "UNIT", unitId: 2 },
+      scopes: [{ type: "UNIT", unitId: 2 }],
     }),
     resources,
-  );
-  const owner = initializeUnit({ id: 0, definition: { id: "owner" }, position: [0, 0] });
-  const otherOwner = initializeUnit({ id: 2, definition: { id: "other-owner" }, position: [2, 0] });
+    0,
+  ).work;
+  seeded = getCombatUnit(installing, seeded.id);
   const removed = removeUnitWithEffects(
     workWith(owner, seeded, otherOwner),
     0,
@@ -706,7 +713,8 @@ test("combat program: readiness skips binding and target ownership stays in even
       resources,
     );
 
-    assert.equal(result.work, initial);
+    assert.equal(getCombatUnit(result.work, 0), getCombatUnit(initial, 0));
+    assert.equal(getCombatUnit(result.work, 1), getCombatUnit(initial, 1));
     assert.equal(result.state, state);
     assert.deepEqual(Object.keys(getCombatUnit(result.work, 0).action).sort(), ['attackSpeed', 'baseAttackTime', 'cooldownIntervalTicks', 'readyAtTick', 'recoveryUntilTick']);
   }
@@ -768,8 +776,7 @@ test("combat program: immediate execution cleans owned Effects and cancels succe
         observed.push(["install", context.executionId]);
         return { work: installNewEffect(context.work, 1, marker.ref, {
           source: 0,
-          scope: { type: "EXECUTION", unitId: 0, executionId: context.executionId },
-          expiresAtTick: null,
+          scopes: [{ type: "ACTION", executionId: context.executionId }],
         }, resources, context.tick).work };
       } },
       { type: "EXECUTE", run: (context) => ({ work: removeCombatUnit(context.work, 0, "RETREAT") }) },

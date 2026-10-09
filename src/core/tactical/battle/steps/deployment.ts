@@ -1,3 +1,4 @@
+import type { ActionExecutionWork } from "../../unit/capability/action/internal/executions.js";
 import type { BattlefieldChange, BattlefieldView } from "../../battlefield/contract.js";
 import { evaluateDeployment, type DeploymentView } from "../../battlefield/deployment/query.js";
 import {
@@ -24,7 +25,14 @@ import type { Unit, UnitId } from "../../unit/unit.js";
 import type { Command, Event } from "../contract.js";
 import type { BattleExecutionState } from "../execution/state.js";
 import { removeUnitWithEffects, type UnitLifecycleResources } from "../execution/unit-lifecycle.js";
-import { combatWorkEvents, combatWorkChanges, createCombatWork } from "../execution/work.js";
+import {
+    combatWorkEvents,
+    combatWorkChanges,
+    createCombatWork,
+    updateCombatUnit,
+    appendCombatEvents,
+    withCombatExecution,
+} from "../execution/work.js";
 
 export type DeploymentCommand =
     | {
@@ -79,6 +87,7 @@ export function resolveDeploymentCommands(
     execution: BattleExecutionState,
     tick: number,
     resources: UnitLifecycleResources,
+    actionExecutions?: ActionExecutionWork,
 ): DeploymentCommandResolution {
     const deploymentCommands = commands.filter(
         (command) =>
@@ -98,7 +107,7 @@ export function resolveDeploymentCommands(
         occupancyAt: (position, slot) => occupancyAt(units, position, slot),
     };
     const changes: BattlefieldChange[] = [];
-    const events: Event[] = [];
+    let work = createCombatWork(battlefield, execution, battlefield, actionExecutions);
     let supports = battlefield.supportRelations;
 
     for (const command of deploymentCommands) {
@@ -107,31 +116,20 @@ export function resolveDeploymentCommands(
                 throw new RangeError(`unknown retreat unit ${command.unitId}`);
             }
 
-            const exited = removeUnitWithEffects(
-                createCombatWork(
-                    {
-                        unitIds: [...units.keys()],
-                        getUnit: (id) => units.get(id),
-                        blockerOf: (id) => battlefield.blockerOf(id),
-                        blockedBy: (id) => battlefield.blockedBy(id),
-                    },
-                    execution,
-                ),
-                command.unitId,
-                "RETREAT",
-                resources,
-                tick,
-            );
+            const previous = work;
+            work = removeUnitWithEffects(work, command.unitId, "RETREAT", resources, tick);
+            changes.push(...combatWorkChanges(work, previous));
+            const exited = work;
 
             for (const unit of exited.unitUpdates.values()) {
                 units.set(unit.id, unit);
             }
-            for (const id of exited.removals.keys()) {
-                units.delete(id);
+            for (const result of exited.lifecycleResults.slice(previous.lifecycleResults.length)) {
+                if (result.type === "REMOVED") {
+                    units.delete(result.unit.id);
+                }
             }
 
-            changes.push(...combatWorkChanges(exited));
-            events.push(...combatWorkEvents(exited));
             execution = exited.execution;
             continue;
         }
@@ -196,19 +194,24 @@ export function resolveDeploymentCommands(
             unit = placed.unit;
             execution = placed.execution;
             changes.push(...placed.changes);
-            events.push({ type: "UNIT_DEPLOYED", unitId: unit.id, position, tick });
+            work = appendCombatEvents(work, [
+                { type: "UNIT_DEPLOYED", unitId: unit.id, position, tick },
+            ]);
         } else {
             unit = { ...existing, position, occupancy };
             changes.push({ type: "UPDATE_UNIT", unit });
             changes.push({ type: "RELEASE_BLOCKING_RELATIONS", unitId: unit.id });
-            events.push({
-                type: "UNIT_RELOCATED",
-                unitId: unit.id,
-                position,
-                tick,
-            });
+            work = appendCombatEvents(work, [
+                {
+                    type: "UNIT_RELOCATED",
+                    unitId: unit.id,
+                    position,
+                    tick,
+                },
+            ]);
         }
 
+        work = updateCombatUnit(withCombatExecution(work, execution), unit);
         units.set(unit.id, unit);
         supports = supports.filter((relation) => relation.supportedUnitId !== unit.id);
 
@@ -226,5 +229,9 @@ export function resolveDeploymentCommands(
         relations: reconcileSupportRelations(units, supports),
     });
 
-    return { changes, events, execution };
+    return {
+        changes,
+        events: combatWorkEvents(work),
+        execution: work.execution,
+    };
 }

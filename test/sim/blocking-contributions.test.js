@@ -1,3 +1,4 @@
+import { effectTick } from "../../dist/core/tactical/unit/capability/effects/instance.js";
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
@@ -22,8 +23,8 @@ import {
 import { blockingCapacity } from '../../dist/core/tactical/unit/capability/blocking-contributions.js';
 import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
 import {
-  expireEffects, finalizeEffect, finishEffect, installNewEffect,
-  setEffectEnabled, setEffectExpiration, updateEffectState,
+  expireEffects, finalizeEffect, finishEffects, installNewEffect,
+  setEffectEnabled, setEffectTick, updateEffectState,
 } from '../../dist/core/tactical/unit/capability/effects/lifecycle.js';
 import { maxHp } from '../../dist/core/tactical/unit/capability/vitality/contributions.js';
 import { resolveMaxHp } from '../../dist/core/tactical/unit/capability/vitality/query.js';
@@ -35,7 +36,7 @@ import { effectFixtureWork } from '../helpers/effects.js';
 
 const fixtures = JSON.parse(readFileSync(new URL('../fixtures/arknights/blocking_buffs.json', import.meta.url), 'utf8'));
 const fixture = key => fixtures.find(entry => entry.node._buff.buffKey === key);
-const effectAddress = { unitId: 0, instanceId: 0 };
+const effectAddress = { type: "EFFECT", unitId: 0, effectId: 0 };
 const program = (id, state = {}) => createEffectProgram({ id, initialize: () => state, ownState: value => ({ ...value }) });
 const blocker = (capacity = 3) => initializeUnit({
   id: 0, position: [0, 0], definition: {
@@ -51,7 +52,7 @@ const enemy = (id, weight = 1) => initializeUnit({
 const capacityOf = unit => resolveBlockingCapacity(unit.definition.blocker, unit.blocker);
 const capacity = work => capacityOf(getCombatUnit(work, 0));
 const install = (work, effect, resources, expiresAtTick = null) => installNewEffect(
-  work, 0, effect.ref, { source: 7, scope: null, expiresAtTick }, resources, 0,
+  work, 0, effect.ref, { source: 7, scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }] }, resources, 0,
 ).work;
 const entry = (id, value, participating = true) => ({ id, sequence: 0, participating, values: [value] });
 
@@ -107,7 +108,7 @@ test('blocking capacity: effect updates, participation and terminal cleanup pres
   assert.equal(capacity(work), 0);
   assert.equal(getCombatUnit(work, 0).vitality.hp, 100);
   assert.equal(resolveMaxHp(0, combatWorkView(work)), 200);
-  work = finishEffect(work, effectAddress, resources, 3);
+  work = finishEffects(work, [effectAddress], resources, 3);
   assert.equal(capacity(work), 3);
   assert.equal(getCombatUnit(work, 0).vitality.hp, 100);
   assert.equal(resolveMaxHp(0, combatWorkView(work)), 200);
@@ -183,12 +184,12 @@ test('blocking capacity: native STACK layers release enemies and expiry restores
     })])],
     lifecycle: { expire: context => {
       const plan = rule.expire({ stackCount: context.instance.state.stackCount,
-        expiresAtTick: context.instance.expiresAtTick }, context.instance.state.lifetimeTicks, context.tick);
+        expiresAtTick: effectTick(context.instance) }, context.instance.state.lifetimeTicks, context.tick);
       if (plan.type === 'FINISH') {
-        context.effects.finish(context.address);
+        context.effects.finish([context.ref]);
       } else {
-        context.effects.setExpiration(context.address, plan.expiresAtTick);
-        context.effects.update(context.address, effect.ref, state => ({ ...state, stackCount: plan.stackCount }));
+        context.effects.setTick(context.ref, plan.expiresAtTick);
+        context.effects.update(context.ref, effect.ref, state => ({ ...state, stackCount: plan.stackCount }));
       }
     } },
   });
@@ -200,13 +201,13 @@ test('blocking capacity: native STACK layers release enemies and expiry restores
     let work = h.work();
     const current = getCombatUnit(work, 0).effects?.instances.find(instance => instance.programRef === effect.ref);
     const plan = rule.plan(current === undefined ? undefined : {
-      stackCount: current.state.stackCount, expiresAtTick: current.expiresAtTick,
+      stackCount: current.state.stackCount, expiresAtTick: effectTick(current),
     }, { stackCount: 1, expiresAtTick: 2 }, 0);
     if (plan.type === 'INSTALL') {
       work = install(work, effect, resources, 2);
     } else {
       assert.equal(plan.type, 'REFRESH');
-      work = setEffectExpiration(work, effectAddress, plan.expiresAtTick);
+      work = setEffectTick(work, effectAddress, plan.expiresAtTick);
       work = updateEffectState(work, 0, 0, effect.ref, state => ({ ...state, stackCount: plan.stackCount }), resources, 0);
     }
     assert.equal(h.publish(work).dependencies.blocking, true);
@@ -258,7 +259,7 @@ test('blocking capacity: the native zero scaler releases weighted enemies and pa
   assert.deepEqual(h.blocked(), [1, 2]);
   h.publish(setEffectEnabled(h.work(), effectAddress, true, resources, 2));
   assert.deepEqual(h.blocked(), []);
-  h.publish(finishEffect(h.work(), effectAddress, resources, 3));
+  h.publish(finishEffects(h.work(), [effectAddress], resources, 3));
   assert.equal(capacityOf(h.state.units.get(0)), 3);
   h.blockingPhase(3);
   assert.deepEqual(h.blocked(), [1, 2]);

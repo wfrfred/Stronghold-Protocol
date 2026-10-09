@@ -9,7 +9,7 @@ import type { UnitId } from "../../unit.js";
 import { TICKS_PER_SECOND } from "../../../tick.js";
 import type { EffectTransitionResources } from "../effects/contract.js";
 import { EffectDispatchScope } from "../effects/dispatch.js";
-import { finishEffect } from "../effects/lifecycle.js";
+import { closeEffectLifetimes } from "../effects/lifecycle.js";
 import { createEffectOperations } from "../effects/operations.js";
 import { isSpatiallyPresent } from "../presence.js";
 import { hasStatusFlag } from "../status/capability.js";
@@ -24,7 +24,7 @@ import {
     type SkillActivationMode,
     type SkillState,
 } from "./capability.js";
-import type { SkillActivationContext, SkillFacts } from "./program.js";
+import type { CompiledSkill, SkillActivationContext, SkillFacts } from "./program.js";
 import { spendSkillSp } from "./sp.js";
 import type { SkillResources } from "./resources.js";
 import { spendSkillAmmo, type SkillAmmoResult } from "./ammo.js";
@@ -151,6 +151,7 @@ export function activateSkill(
     work: CombatWork,
     input: SkillActivationInput,
     resources: SkillExecutionResources,
+    dispatch = new EffectDispatchScope(),
 ): SkillTransition {
     const { unitId, tick, trigger = "MANUAL" } = input;
     assertNonnegativeSafeInteger(tick, "skill activation tick");
@@ -220,7 +221,6 @@ export function activateSkill(
         id: unit.skill.nextActivationId,
         startedAtTick: tick,
         endsAtTick,
-        ownedEffects: [],
         ...(compiled.definition.ammo === undefined
             ? {}
             : { remainingAmmo: compiled.definition.ammo }),
@@ -231,7 +231,6 @@ export function activateSkill(
         nextActivationId,
         active: activation,
     });
-    const dispatch = new EffectDispatchScope();
     const invoked = withSkillContext(
         reserved,
         unitId,
@@ -245,7 +244,9 @@ export function activateSkill(
     if (invoked.result.type === "REJECTED") {
         const rejectedUnit = getCombatUnit(invoked.work, unitId);
         const refunded =
-            rejectedUnit !== undefined && hasSkill(rejectedUnit)
+            rejectedUnit !== undefined &&
+            hasSkill(rejectedUnit) &&
+            rejectedUnit.skill.active?.id === activation.id
                 ? saveState(invoked.work, unitId, {
                       ...rejectedUnit.skill,
                       sp: Math.min(
@@ -257,26 +258,35 @@ export function activateSkill(
                 : invoked.work;
 
         return {
-            work: refunded,
+            work: closeEffectLifetimes(
+                refunded,
+                [{ type: "SKILL", unitId, activationId: activation.id }],
+                resources,
+                tick,
+                "SKILL_REJECTED",
+                dispatch,
+            ),
             result: { type: "REJECTED", reason: "CONTENT_REJECTED", detail: invoked.result.reason },
             signals: [],
         };
     }
 
     const current = getCombatUnit(invoked.work, unitId);
-    let activated = invoked.work;
+    const activated = invoked.work;
 
-    if (current !== undefined && hasSkill(current) && current.skill.active?.id === activation.id) {
-        activated = saveState(activated, unitId, {
-            ...current.skill,
-            active: { ...current.skill.active, ownedEffects: invoked.result.ownedEffects ?? [] },
-        });
-    } else {
-        for (const address of invoked.result.ownedEffects ?? []) {
-            activated = finishEffect(activated, address, resources, tick, dispatch);
-        }
-
-        return { work: activated, result: { type: "FINISHED" }, signals: [] };
+    if (current === undefined || !hasSkill(current) || current.skill.active?.id !== activation.id) {
+        return {
+            work: closeEffectLifetimes(
+                activated,
+                [{ type: "SKILL", unitId, activationId: activation.id }],
+                resources,
+                tick,
+                "SKILL_FINISHED",
+                dispatch,
+            ),
+            result: { type: "FINISHED" },
+            signals: [],
+        };
     }
 
     const signal: SkillSignal = {
@@ -312,6 +322,7 @@ export function consumeSkillAmmo(
     unitId: UnitId,
     tick: number,
     resources: SkillExecutionResources,
+    dispatch = new EffectDispatchScope(),
 ): SkillAmmoTransition {
     assertNonnegativeSafeInteger(tick, "skill ammunition consumption tick");
     const unit = getCombatUnit(work, unitId);
@@ -329,7 +340,7 @@ export function consumeSkillAmmo(
     work = saveState(work, unitId, spent.state);
 
     if (spent.result.remainingAmmo === 0) {
-        const finished = finishSkill(work, unitId, tick, resources);
+        const finished = finishSkill(work, unitId, tick, resources, dispatch);
 
         return { work: finished.work, result: spent.result, signals: finished.signals };
     }
@@ -344,11 +355,41 @@ export function finishSkill(
     resources: SkillExecutionResources,
     dispatch = new EffectDispatchScope(),
 ): SkillTransition {
+    const stopped = stopSkillActivation(work, unitId, tick, resources);
+
+    if (stopped.activation === null) {
+        return { work: stopped.work, result: { type: "ABSENT" }, signals: [] };
+    }
+
+    work = closeEffectLifetimes(
+        stopped.work,
+        [{ type: "SKILL", unitId, activationId: stopped.activation.active.id }],
+        resources,
+        tick,
+        "SKILL_FINISHED",
+        dispatch,
+    );
+
+    return notifySkillFinished(work, stopped.activation, tick, resources, dispatch);
+}
+
+export interface StoppedSkillActivation {
+    readonly unitId: UnitId;
+    readonly active: SkillActivation;
+    readonly compiled: CompiledSkill;
+}
+
+export function stopSkillActivation(
+    work: CombatWork,
+    unitId: UnitId,
+    tick: number,
+    resources: SkillExecutionResources,
+): { readonly work: CombatWork; readonly activation: StoppedSkillActivation | null } {
     assertNonnegativeSafeInteger(tick, "skill finish tick");
     const unit = getCombatUnit(work, unitId);
 
     if (unit === undefined || !hasSkill(unit) || unit.skill.active === null) {
-        return { work, result: { type: "ABSENT" }, signals: [] };
+        return { work, activation: null };
     }
 
     const compiled = resources.skills.get(unit.definition.skill);
@@ -356,9 +397,18 @@ export function finishSkill(
     const { active } = unit.skill;
     work = saveState(work, unitId, { ...unit.skill, active: null, lastAdvancedTick: tick });
 
-    for (const address of active.ownedEffects) {
-        work = finishEffect(work, address, resources, tick, dispatch);
-    }
+    return { work, activation: { unitId, active, compiled } };
+}
+
+export function notifySkillFinished(
+    work: CombatWork,
+    activation: StoppedSkillActivation,
+    tick: number,
+    resources: SkillExecutionResources,
+    dispatch = new EffectDispatchScope(),
+): SkillTransition {
+    const { unitId, active, compiled } = activation;
+
     if (compiled.finish !== undefined) {
         work = withSkillContext(
             work,
@@ -391,6 +441,7 @@ export function advanceSkill(
     unitId: UnitId,
     tick: number,
     resources: SkillExecutionResources,
+    dispatch = new EffectDispatchScope(),
 ): SkillTransition {
     assertNonnegativeSafeInteger(tick, "skill advancement tick");
     let unit = getCombatUnit(work, unitId);
@@ -414,7 +465,7 @@ export function advanceSkill(
         unit.skill.active.endsAtTick !== null &&
         tick >= unit.skill.active.endsAtTick
     ) {
-        const finished = finishSkill(work, unitId, tick, resources);
+        const finished = finishSkill(work, unitId, tick, resources, dispatch);
         work = finished.work;
         signals.push(...finished.signals);
         unit = getCombatUnit(work, unitId);
@@ -457,6 +508,7 @@ export function advanceSkill(
             work,
             { unitId, tick, trigger: compiled.definition.activation },
             resources,
+            dispatch,
         );
         work = attempted.work;
         signals.push(...attempted.signals);

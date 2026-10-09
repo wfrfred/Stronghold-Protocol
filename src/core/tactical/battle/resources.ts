@@ -24,7 +24,13 @@ import { resolveDamage } from "../unit/capability/vitality/damage/settlement.js"
 import { resolveHealing } from "../unit/capability/vitality/healing/settlement.js";
 import { appendCombatEvents, type CombatWork } from "./execution/work.js";
 import type { UnitId } from "../unit/unit.js";
-import { consumeSkillAmmo, finishSkill } from "../unit/capability/skill/execution.js";
+import {
+    consumeSkillAmmo,
+    finishSkill,
+    stopSkillActivation,
+    notifySkillFinished,
+    type StoppedSkillActivation,
+} from "../unit/capability/skill/execution.js";
 import type { EffectDispatchScope } from "../unit/capability/effects/dispatch.js";
 import {
     ActionReleaseResources,
@@ -73,10 +79,29 @@ export class CombatResources {
     };
 
     readonly actionRelease = new ActionReleaseResources(this.effects, this.#registration);
-    readonly completeAttack = (work: CombatWork, unitId: UnitId, tick: number): CombatWork => {
-        const consumed = consumeSkillAmmo(work, unitId, tick, this);
+    readonly completeAttack = (
+        work: CombatWork,
+        unitId: UnitId,
+        tick: number,
+        dispatch?: EffectDispatchScope,
+    ): CombatWork => {
+        const consumed = consumeSkillAmmo(work, unitId, tick, this, dispatch);
 
         return appendCombatEvents(consumed.work, consumed.signals);
+    };
+
+    readonly stopSkillActivation = (work: CombatWork, unitId: UnitId, tick: number) =>
+        stopSkillActivation(work, unitId, tick, this);
+
+    readonly notifySkillFinished = (
+        work: CombatWork,
+        activation: StoppedSkillActivation,
+        tick: number,
+        dispatch: EffectDispatchScope,
+    ): CombatWork => {
+        const finished = notifySkillFinished(work, activation, tick, this, dispatch);
+
+        return appendCombatEvents(finished.work, finished.signals);
     };
 
     readonly finishSkill = (

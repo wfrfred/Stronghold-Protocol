@@ -12,13 +12,13 @@ import { resolveMaxHp } from '../../dist/core/tactical/unit/capability/vitality/
 import { compileStatusBinding } from '../../dist/core/tactical/unit/capability/status/binding.js';
 import { hasStatusFlag } from '../../dist/core/tactical/unit/capability/status/capability.js';
 import {
-  installNewEffect, setEffectEnabled, updateEffectState, finishEffect,
-  expireEffects, attachEffectParent, finalizeEffect,
+  installNewEffect, setEffectEnabled, updateEffectState, finishEffects,
+  expireEffects, bindEffectLifetime, finalizeEffect,
 } from '../../dist/core/tactical/unit/capability/effects/lifecycle.js';
 import * as modifier from '../../dist/core/tactical/modifier/value.js';
 import { effectFixtureWork } from '../helpers/effects.js';
 
-const address = instanceId => ({ unitId: 0, instanceId });
+const address = instanceId => ({ type: "EFFECT", unitId: 0, effectId: instanceId });
 function harness() {
   const resources = new CombatResources();
   const unit = initializeUnit({ id: 0, definition: {
@@ -53,11 +53,11 @@ function definition(resources, id = 'inspiration', lifecycle = {}, onSample = ()
 }
 function install(h, program, state, expiresAtTick = null, source = null) {
   const result = installNewEffect(h.work, 0, program.ref, {
-    source, scope: null, expiresAtTick, initialState: state,
+    source, scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }], initialState: state,
   }, h.resources, 0);
   h.work = result.work;
   assert.equal(result.result.type, 'INSTALLED');
-  return result.result.address;
+  return result.result.ref;
 }
 
 test('effect competition: coefficient wins independently of sampled value; recovery preserves history', () => {
@@ -73,13 +73,13 @@ test('effect competition: coefficient wins independently of sampled value; recov
   assert.equal(instances[0].participating, false);
   assert.equal(instances[0].source, 10);
   assert.deepEqual(values(h.work, h.resources), { attack: 160, maxHp: 4000, hp: 2000 });
-  h.work = finishEffect(h.work, strong, h.resources, 1);
+  h.work = finishEffects(h.work, [strong], h.resources, 1);
   assert.deepEqual(values(h.work, h.resources), { attack: 350, maxHp: 2000, hp: 1000 });
   assert.equal(getCombatUnit(h.work, 0).effects.instances[0].state.sourceAttack, 500);
   assert.equal(starts, 2);
   assert.deepEqual(samples, [0, 1]);
   h.work = finalizeEffect(h.work, strong, h.resources, 1);
-  assert.equal(getCombatUnit(h.work, 0).effects.instances[0].id, weak.instanceId);
+  assert.equal(getCombatUnit(h.work, 0).effects.instances[0].id, weak.effectId);
   assert.deepEqual(values(first, h.resources), { attack: 350, maxHp: 2000, hp: 1000 });
 });
 
@@ -110,7 +110,7 @@ test('effect competition: same group spans programs and equal priority keeps ear
   const old = install(h, first, { ratio: 0.5, sourceAttack: 100, hpBonus: 1000 });
   install(h, second, { ratio: 0.5, sourceAttack: 1000, hpBonus: 3000 });
   assert.equal(values(h.work, h.resources).attack, 150);
-  h.work = finishEffect(h.work, old, h.resources, 1);
+  h.work = finishEffects(h.work, [old], h.resources, 1);
   assert.equal(values(h.work, h.resources).attack, 600);
 });
 
@@ -119,7 +119,7 @@ test('effect competition: state refresh publishes complete facts and all binding
   const observations = [];
   const observe = kind => context => {
     const unit = context.facts.getUnit(0);
-    observations.push({ kind, id: context.address.instanceId, active: context.facts.participating(0).map(instance => instance.id),
+    observations.push({ kind, id: context.ref.effectId, active: context.facts.participating(0).map(instance => instance.id),
       hp: unit.vitality.hp, maxHp: resolveMaxHp(0, { getUnit: id => context.facts.getUnit(id) }),
       attack: resolveAttackPower(0, { getUnit: id => context.facts.getUnit(id) }, h.resources.computations) });
   };
@@ -142,7 +142,7 @@ test('effect competition: overridden instances continue expiring and cannot be r
   h.work = expireEffects(h.work, 2, h.resources);
   assert.equal(getCombatUnit(h.work, 0).effects.instances[0].finished, true);
   assert.equal(values(h.work, h.resources).attack, 190);
-  h.work = finishEffect(h.work, strong, h.resources, 3);
+  h.work = finishEffects(h.work, [strong], h.resources, 3);
   assert.equal(values(h.work, h.resources).attack, 100);
   assert.equal(setEffectEnabled(h.work, weak, true, h.resources, 4), h.work);
 });
@@ -154,8 +154,8 @@ test('effect competition: parent finish restores the surviving independent sourc
   const program = definition(h.resources);
   install(h, program, { ratio: 0.5, sourceAttack: 100, hpBonus: 1000 }, null, 1);
   const child = install(h, program, { ratio: 0.9, sourceAttack: 100, hpBonus: 3000 }, null, 2);
-  h.work = attachEffectParent(h.work, child, parentAddress, h.resources, 0).work;
-  h.work = finishEffect(h.work, parentAddress, h.resources, 1);
+  h.work = bindEffectLifetime(h.work, child, parentAddress).work;
+  h.work = finishEffects(h.work, [parentAddress], h.resources, 1);
   assert.equal(getCombatUnit(h.work, 0).effects.instances[2].finished, true);
   assert.equal(values(h.work, h.resources).attack, 150);
 });
@@ -165,22 +165,21 @@ test('effect competition: nested finish invalidates a pending enable callback, t
   const callbacks = [];
   const program = definition(h.resources, 'nested', {
     disable: context => {
-      callbacks.push(['disable', context.address.instanceId]);
-      if (context.address.instanceId === 0 && !context.instance.finished) {
-        context.effects.finish(address(1));
+      callbacks.push(['disable', context.ref.effectId]);
+      if (context.ref.effectId === 0 && !context.instance.finished) {
+        context.effects.finish([address(1)]);
         callbacks.push(['continued', context.facts.participating(0).map(instance => instance.id)]);
       }
     },
-    enable: context => { callbacks.push(['enable', context.address.instanceId]); },
+    enable: context => { callbacks.push(['enable', context.ref.effectId]); },
   });
   install(h, program, { ratio: 0.5, sourceAttack: 100, hpBonus: 1000 });
   callbacks.length = 0;
   const result = installNewEffect(h.work, 0, program.ref, {
-    source: null, scope: null, expiresAtTick: null, initialState: { ratio: 0.9, sourceAttack: 100, hpBonus: 3000 },
+    source: null, scopes: [], initialState: { ratio: 0.9, sourceAttack: 100, hpBonus: 3000 },
   }, h.resources, 0);
   h.work = result.work;
-  assert.equal(result.result.type, 'REJECTED');
-  assert.equal(result.result.reason, 'START_FINISHED');
+  assert.deepEqual(result.result, { type: 'ENDED', ref: address(1) });
   assert.deepEqual(callbacks, [['disable', 0], ['disable', 1], ['enable', 0], ['continued', [0]]]);
   assert.equal(values(h.work, h.resources).attack, 150);
 });
@@ -204,10 +203,10 @@ test('effect competition: nested enable changes supersede a pending outer notifi
   const h = harness();
   const events = [];
   const program = definition(h.resources, 'reentrant', {
-    enable: context => { events.push(['enable', context.address.instanceId]); },
+    enable: context => { events.push(['enable', context.ref.effectId]); },
     disable: context => {
-      events.push(['disable', context.address.instanceId]);
-      if (context.address.instanceId === 1 && context.instance.finished) {
+      events.push(['disable', context.ref.effectId]);
+      if (context.ref.effectId === 1 && context.instance.finished) {
         context.effects.setEnabled(address(0), false);
         context.effects.setEnabled(address(0), true);
       }
@@ -216,7 +215,7 @@ test('effect competition: nested enable changes supersede a pending outer notifi
   install(h, program, { ratio: 0.5, sourceAttack: 100, hpBonus: 1000 });
   const strong = install(h, program, { ratio: 0.9, sourceAttack: 100, hpBonus: 3000 });
   events.length = 0;
-  h.work = finishEffect(h.work, strong, h.resources, 1);
+  h.work = finishEffects(h.work, [strong], h.resources, 1);
   assert.deepEqual(events, [['disable', 1], ['disable', 0], ['enable', 0]]);
   assert.equal(values(h.work, h.resources).attack, 150);
 });
@@ -225,18 +224,18 @@ test('effect competition: ending a strong parent never enables its weaker child'
   const h = harness();
   const events = [];
   const program = definition(h.resources, 'parent-group', {
-    enable: context => { events.push(['enable', context.address.instanceId]); },
+    enable: context => { events.push(['enable', context.ref.effectId]); },
     disable: context => {
-      events.push(['disable', context.address.instanceId]);
+      events.push(['disable', context.ref.effectId]);
       assert.equal(context.facts.getEffect(address(1)).finished, true);
       assert.deepEqual(context.facts.participating(0), []);
     },
   });
   const parent = install(h, program, { ratio: 0.9, sourceAttack: 100, hpBonus: 3000 });
   const child = install(h, program, { ratio: 0.5, sourceAttack: 100, hpBonus: 1000 });
-  h.work = attachEffectParent(h.work, child, parent, h.resources, 0).work;
+  h.work = bindEffectLifetime(h.work, child, parent).work;
   events.length = 0;
-  h.work = finishEffect(h.work, parent, h.resources, 1);
+  h.work = finishEffects(h.work, [parent], h.resources, 1);
   assert.deepEqual(events, [['disable', 0]]);
   assert.equal(getCombatUnit(h.work, 0).effects.instances[1].finished, true);
   assert.deepEqual(values(h.work, h.resources), { attack: 100, maxHp: 1000, hp: 500 });
@@ -261,8 +260,8 @@ test('effect competition: cross-unit parent completion publishes child recovery 
   const observations = [];
   const program = definition(h.resources, 'cross-unit', {
     disable: context => {
-      if (context.address.unitId === 0) {
-        const child = context.facts.getEffect({ unitId: 1, instanceId: 1 });
+      if (context.ref.unitId === 0) {
+        const child = context.facts.getEffect({ type: "EFFECT", unitId: 1, effectId: 1 });
         const receiver = context.facts.getUnit(1);
         observations.push([
           child.finished, child.participating, context.facts.participating(1).map(instance => instance.id),
@@ -274,12 +273,12 @@ test('effect competition: cross-unit parent completion publishes child recovery 
   const parent = install(h, program, { ratio: 0.9, sourceAttack: 100, hpBonus: 3000 });
   for (const ratio of [0.5, 0.9]) {
     h.work = installNewEffect(h.work, 1, program.ref, {
-      source: null, scope: null, expiresAtTick: null,
+      source: null, scopes: [],
       initialState: { ratio, sourceAttack: 100, hpBonus: ratio === 0.5 ? 1000 : 3000 },
     }, h.resources, 0).work;
   }
-  h.work = attachEffectParent(h.work, { unitId: 1, instanceId: 1 }, parent, h.resources, 0).work;
-  h.work = finishEffect(h.work, parent, h.resources, 1);
+  h.work = bindEffectLifetime(h.work, { type: "EFFECT", unitId: 1, effectId: 1 }, parent).work;
+  h.work = finishEffects(h.work, [parent], h.resources, 1);
   assert.deepEqual(observations, [[true, false, [0], 1000, 2000]]);
   assert.deepEqual(values(h.work, h.resources), { attack: 100, hp: 500, maxHp: 1000 });
 });

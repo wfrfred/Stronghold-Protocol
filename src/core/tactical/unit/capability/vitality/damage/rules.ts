@@ -6,7 +6,7 @@ export type DamageValueProvider<S extends object> = (context: DamageQueryContext
 
 function queryContext<S extends object>(context: DamageQueryContext<S>): DamageQueryContext<S> {
     return {
-        address: context.address,
+        ref: context.ref,
         ownerUnitId: context.ownerUnitId,
         get instance() {
             return context.instance;
@@ -88,7 +88,7 @@ export function absorbBarrier<S extends { readonly remainingAmount: number }>():
             return { value: pending };
         }
 
-        context.operations.effects.update(context.address, instance.programRef, (current) => ({
+        context.operations.effects.update(context.ref, instance.programRef, (current) => ({
             ...current,
             remainingAmount: current.remainingAmount - absorbed,
         }));

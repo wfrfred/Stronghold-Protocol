@@ -1,3 +1,4 @@
+import { effectTick } from "../../dist/core/tactical/unit/capability/effects/instance.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -7,7 +8,7 @@ import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { combatWorkView, getCombatUnit } from "../../dist/core/tactical/battle/execution/work.js";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
 import {
-    expireEffects, installNewEffect, setEffectEnabled, setEffectExpiration, updateEffectState,
+    expireEffects, installNewEffect, setEffectEnabled, setEffectTick, updateEffectState,
 } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { attack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
@@ -27,7 +28,7 @@ const refresh = (stackCount, expiresAtTick, reloadModifiers) => ({
 });
 const instance = work => getCombatUnit(work, 0).effects.instances[0];
 const power = work => resolveAttackPower(0, combatWorkView(work));
-const address = { unitId: 0, instanceId: 0 };
+const address = { type: "EFFECT", unitId: 0, effectId: 0 };
 
 test("buff expiry: a native STACK descriptor peels one layer and resets the caller's fixed lifetime", () => {
     const rule = compileBuffStacking(parseBuffStacking(native("sbell2_e_002_trait[interval]")));
@@ -118,16 +119,16 @@ function harness({ descriptor = description(), stackCount = 3, lifetimeTicks = 3
             expire: context => {
                 const plan = policy.expire({
                     stackCount: context.instance.state.stackCount,
-                    expiresAtTick: context.instance.expiresAtTick,
+                    expiresAtTick: effectTick(context.instance),
                     maxStackCount: context.instance.state.maxStackCount,
                 }, context.instance.state.lifetimeTicks, context.tick);
                 expirations.push({ tick: context.tick, plan });
                 if (plan.type === "FINISH") {
-                    context.effects.finish(context.address);
+                    context.effects.finish([context.ref]);
                 } else {
                     const source = context.instance.source;
-                    context.effects.setExpiration(context.address, plan.expiresAtTick);
-                    context.effects.update(context.address, effect.ref, state => ({
+                    context.effects.setTick(context.ref, plan.expiresAtTick);
+                    context.effects.update(context.ref, effect.ref, state => ({
                         ...state, stackCount: plan.stackCount,
                         sample: plan.reloadModifiers ? sample(source, plan.stackCount) : state.sample,
                     }));
@@ -137,7 +138,7 @@ function harness({ descriptor = description(), stackCount = 3, lifetimeTicks = 3
     });
     let work = installNewEffect(effectFixtureWork(initializeUnit({
         id: 0, position: [0, 0], definition: { id: "buff-owner", offense: { attack: 100 } },
-    })), 0, effect.ref, { source: 10, scope: null, expiresAtTick, initialState: initial }, resources, 0).work;
+    })), 0, effect.ref, { source: 10, scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }], initialState: initial }, resources, 0).work;
     return {
         get work() { return work; },
         get starts() { return starts; },
@@ -152,7 +153,7 @@ function harness({ descriptor = description(), stackCount = 3, lifetimeTicks = 3
             const winner = resources.registerEffect(createEffectProgram({
                 id: "buff-expiry-winner", initialize: () => ({}), ownState: state => ({ ...state }),
             }), { lifecycle: { competition: () => ({ group: "buff-expiry", priority: 2 }) } });
-            work = installNewEffect(work, 0, winner.ref, { source: 20, scope: null, expiresAtTick: null }, resources, tick).work;
+            work = installNewEffect(work, 0, winner.ref, { source: 20, scopes: [] }, resources, tick).work;
         },
         apply: (expiresAtTick, tick, maxStackCount = undefined) => {
             const current = instance(work);
@@ -161,11 +162,11 @@ function harness({ descriptor = description(), stackCount = 3, lifetimeTicks = 3
                 source: 20, blackboard: { atk: 0.9 },
             };
             const plan = policy.plan({
-                stackCount: current.state.stackCount, expiresAtTick: current.expiresAtTick,
+                stackCount: current.state.stackCount, expiresAtTick: effectTick(current),
                 maxStackCount: current.state.maxStackCount,
             }, incoming, tick);
             if (plan.type === "REFRESH") {
-                work = setEffectExpiration(work, address, plan.expiresAtTick);
+                work = setEffectTick(work, address, plan.expiresAtTick);
                 work = updateEffectState(work, 0, 0, effect.ref, state => ({
                     ...state, stackCount: plan.stackCount,
                     sample: plan.reloadModifiers ? sample(current.source, plan.stackCount) : state.sample,
@@ -186,9 +187,9 @@ test("buff expiry integration: 30 tick renewals preserve identity, retain termin
     buff.expire(30);
     const renewed = buff.work;
     assert.equal(instance(renewed).state.stackCount, 2);
-    assert.equal(instance(renewed).expiresAtTick, 60);
+    assert.equal(effectTick(instance(renewed)), 60);
     assert.equal(power(renewed), 200);
-    for (const key of ["id", "source", "programRef", "acquiredSequence", "scope", "parent"]) {
+    for (const key of ["id", "source", "programRef", "acquiredSequence"]) {
         assert.deepEqual(instance(renewed)[key], first[key]);
     }
     assert.notEqual(instance(renewed).state.blackboard, first.state.blackboard);
@@ -222,7 +223,7 @@ test("buff expiry integration: disabled and overridden buffs still peel and fini
         assert.equal(power(buff.work), 100);
         buff.expire(30);
         assert.equal(instance(buff.work).state.stackCount, 1);
-        assert.equal(instance(buff.work).expiresAtTick, 60);
+        assert.equal(effectTick(instance(buff.work)), 60);
         assert.equal(instance(buff.work).enabled, inactive !== "disabled");
         assert.equal(instance(buff.work).participating, false);
         buff.expire(60);
@@ -235,13 +236,13 @@ test("buff expiry integration: disabled and overridden buffs still peel and fini
 test("buff expiry integration: extended remaining time does not replace the original lifetime", () => {
     const buff = harness({ stackCount: 1 });
     assert.equal(buff.apply(75, 15, 0).type, "REFRESH");
-    assert.equal(instance(buff.work).expiresAtTick, 75);
+    assert.equal(effectTick(instance(buff.work)), 75);
     assert.equal(instance(buff.work).state.lifetimeTicks, 30);
     buff.expire(74);
     assert.equal(buff.expirations.length, 0);
     buff.expire(75);
     assert.equal(instance(buff.work).state.stackCount, 1);
-    assert.equal(instance(buff.work).expiresAtTick, 105);
+    assert.equal(effectTick(instance(buff.work)), 105);
     buff.expire(105);
     assert.equal(instance(buff.work).finished, true);
 });
@@ -309,7 +310,7 @@ test("buff expiry integration: dynamic caps preserve raw count and samples until
     assert.equal(buff.apply(90, 4, 0).type, "REFRESH");
     assert.equal(instance(buff.work).state.stackCount, 5);
     assert.equal(instance(buff.work).state.maxStackCount, 5);
-    assert.equal(instance(buff.work).expiresAtTick, 90);
+    assert.equal(effectTick(instance(buff.work)), 90);
     assert.deepEqual(buff.reads, [[10, 100]]);
     assert.equal(power(buff.work), 200);
     assert.equal(instance(original).state.maxStackCount, undefined);
@@ -324,7 +325,7 @@ test("buff expiry integration: zero duration peels once per tick and an overdue 
     const zero = harness({ lifetimeTicks: 0, expiresAtTick: 0 });
     zero.expire(0);
     assert.equal(instance(zero.work).state.stackCount, 2);
-    assert.equal(instance(zero.work).expiresAtTick, 1);
+    assert.equal(effectTick(instance(zero.work)), 1);
     zero.expire(0);
     assert.equal(zero.expirations.length, 1);
     zero.expire(1);
@@ -334,7 +335,7 @@ test("buff expiry integration: zero duration peels once per tick and an overdue 
     const late = harness({ stackCount: 4 });
     late.expire(300);
     assert.equal(instance(late.work).state.stackCount, 3);
-    assert.equal(instance(late.work).expiresAtTick, 330);
+    assert.equal(effectTick(instance(late.work)), 330);
     assert.equal(late.expirations.length, 1);
     late.expire(300);
     assert.equal(late.expirations.length, 1);

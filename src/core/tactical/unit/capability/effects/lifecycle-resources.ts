@@ -108,18 +108,14 @@ export class EffectLifecycleResources {
 export function uniqueEffectAdmission(
     key: string,
 ): NonNullable<EffectLifecycleProgram<object>["accepts"]> {
-    return ({ address, facts }) => {
-        const unit = facts.getUnit(address.unitId);
+    return ({ unitId, facts }) => {
+        const unit = facts.getUnit(unitId);
 
         return (
             unit === undefined ||
             !hasEffects(unit) ||
             !unit.effects.instances.some(
-                (instance) =>
-                    instance.id !== address.instanceId &&
-                    instance.started &&
-                    !instance.finished &&
-                    instance.programRef.id === key,
+                (instance) => !instance.finished && instance.programRef.id === key,
             )
         );
     };

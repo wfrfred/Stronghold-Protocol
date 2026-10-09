@@ -13,16 +13,14 @@ import {
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
 import {
-    attachEffectParent,
+    bindEffectLifetime,
     finalizeEffect,
-    finishEffect,
-    finishEffectsOwnedByExecution,
+    finishEffects,
+    closeEffectLifetimes,
     installNewEffect,
 } from '../../dist/core/tactical/unit/capability/effects/lifecycle.js';
 import {
-    effectAddressesOwnedByExecution,
-    effectAddressesOwnedByUnit,
-    effectChildAddresses,
+    effectDependents,
 } from '../../dist/core/tactical/unit/capability/effects/lifetime-index.js';
 import {
     acceptActionExecution,
@@ -32,14 +30,45 @@ import {
 import { createActionDefinition } from '../../dist/core/tactical/unit/capability/action/capability.js';
 import { getEffect } from '../../dist/core/tactical/unit/capability/effects/query.js';
 
-const scope = executionId => ({ type: 'EXECUTION', unitId: 0, executionId });
-const input = lifetime => ({ source: 0, scope: lifetime, expiresAtTick: null });
+import { ActionExecutionWork } from '../../dist/core/tactical/unit/capability/action/internal/executions.js';
+
+const scope = executionId => ({ type: 'ACTION', executionId });
+
+const input = lifetime => ({ source: 0, scopes: lifetime === null ? [] : [lifetime] });
 const unit = id => initializeUnit({ id, definition: { id: `receiver-${id}` }, position: [id, 0] });
 const program = id => createEffectProgram({
     id,
     initialize: () => ({}),
     ownState: value => value,
 });
+
+function actionDefinition() {
+    return createActionDefinition({
+        triggerBindingId: 'primary', baseAttackTimeTicks: 1, recoveryTicks: 0,
+        targetGroups: [{
+            id: 'primary',
+            targeting: {
+                type: 'DAMAGE', scope: { type: 'BLOCKER' }, maxTargets: 1,
+                canTargetAir: true, includeBlockingRelations: false, preferBlockingRelations: false,
+                ignoreTargetFree: false, ignoreInvisible: false,
+            },
+            operations: [{ type: 'DAMAGE', power: 1, damageType: 'TRUE' }],
+        }],
+        followUps: [],
+    });
+}
+
+function actionWork() {
+    let state = createActionExecutionState();
+    const definition = actionDefinition();
+    for (let id = 0; id < 6; id++) {
+        state = acceptActionExecution(state, {
+            sourceUnitId: 0, definition, inputTargetUnitId: null,
+            bindings: new Map(), tick: 0,
+        }).state;
+    }
+    return new ActionExecutionWork(state);
+}
 
 function host(...units) {
     const byId = new Map(units.map(value => [value.id, value]));
@@ -58,7 +87,7 @@ function host(...units) {
     return {
         battlefield,
         byId,
-        work: createCombatWork(battlefield),
+        work: createCombatWork(battlefield, undefined, undefined, actionWork()),
         reads: () => membershipReads,
         forbidMembership: () => { rejectMembership = true; },
     };
@@ -67,7 +96,7 @@ function host(...units) {
 function install(work, resources, ref, receiver, lifetime = null) {
     const installed = installNewEffect(work, receiver, ref, input(lifetime), resources, 0);
     assert.equal(installed.result.type, 'INSTALLED');
-    return { work: installed.work, address: installed.result.address };
+    return { work: installed.work, address: installed.result.ref };
 }
 
 test('effect lifetime index: foreign receivers are ordered by receiver then instance identity', () => {
@@ -82,18 +111,18 @@ test('effect lifetime index: foreign receivers are ordered by receiver then inst
     }
     const unitOwned = install(work, resources, effect.ref, 2, { type: 'UNIT', unitId: 0 });
     const foreignOwner = install(unitOwned.work, resources, effect.ref, 9, {
-        type: 'EXECUTION', unitId: 1, executionId: 3,
+        type: 'ACTION', executionId: 5,
     });
     work = foreignOwner.work;
 
-    assert.deepEqual(effectAddressesOwnedByExecution(work, 0, 3), [
+    assert.deepEqual(effectDependents(work, scope(3)), [
         addresses[1], addresses[3], addresses[0], addresses[2],
     ]);
-    assert.deepEqual(effectAddressesOwnedByUnit(work, 0), [
-        addresses[1], addresses[3], unitOwned.address, addresses[0], addresses[2],
+    assert.deepEqual(effectDependents(work, { type: 'UNIT', unitId: 0 }), [
+        unitOwned.address,
     ]);
-    assert.deepEqual(effectAddressesOwnedByExecution(work, 1, 3), [foreignOwner.address]);
-    assert.deepEqual(effectAddressesOwnedByExecution(work, 0, 99), []);
+    assert.deepEqual(effectDependents(work, scope(5)), [foreignOwner.address]);
+    assert.deepEqual(effectDependents(work, scope(99)), []);
 });
 
 test('effect lifetime index: ordinary Unit and event updates reuse the projection without a world scan', () => {
@@ -101,7 +130,7 @@ test('effect lifetime index: ordinary Unit and event updates reuse the projectio
     const effect = resources.registerEffect(program('stable'));
     const fixture = host(unit(0), unit(2), unit(9));
     let { work, address } = install(fixture.work, resources, effect.ref, 9, scope(3));
-    assert.deepEqual(effectAddressesOwnedByExecution(work, 0, 3), [address]);
+    assert.deepEqual(effectDependents(work, scope(3)), [address]);
     const reads = fixture.reads();
     fixture.forbidMembership();
 
@@ -110,8 +139,8 @@ test('effect lifetime index: ordinary Unit and event updates reuse the projectio
         work = updateCombatUnit(work, { ...getCombatUnit(work, 9), position: [tick, 1] });
         work = appendCombatEvents(work, [{ type: 'ACTION', sourceUnitId: 0, targetUnitId: 9, tick }]);
         work = withCombatExecution(work, { ...work.execution, nextUnitId: tick + 10 });
-        assert.deepEqual(effectAddressesOwnedByExecution(work, 0, 3), [address]);
-        assert.equal(finishEffectsOwnedByExecution(work, 0, tick + 10, resources, tick), work);
+        assert.deepEqual(effectDependents(work, scope(3)), [address]);
+        assert.equal(closeEffectLifetimes(work, [scope(tick + 10)], resources, tick), work);
     }
 
     assert.equal(fixture.reads(), reads);
@@ -124,7 +153,7 @@ test('effect lifetime index: lazy construction sees earlier overlay installs and
     const second = install(first.work, resources, effect.ref, 9, scope(3));
     const work = removeCombatUnit(second.work, 2);
 
-    assert.deepEqual(effectAddressesOwnedByExecution(work, 0, 3), [second.address]);
+    assert.deepEqual(effectDependents(work, scope(3)), [second.address]);
 });
 
 test('effect lifetime index: immutable branches and removal preserve previous candidates', () => {
@@ -132,7 +161,7 @@ test('effect lifetime index: immutable branches and removal preserve previous ca
     const effect = resources.registerEffect(program('branch'));
     const installed = install(host(unit(0), unit(2), unit(9)).work, resources, effect.ref, 2, scope(3));
     const original = installed.work;
-    const captured = effectAddressesOwnedByExecution(original, 0, 3);
+    const captured = effectDependents(original, scope(3));
     const other = install(original, resources, effect.ref, 9, scope(3));
     const removed = removeCombatUnit(other.work, 2);
     const restored = updateCombatUnit(removed, getCombatUnit(original, 2));
@@ -140,44 +169,44 @@ test('effect lifetime index: immutable branches and removal preserve previous ca
     assert.deepEqual(captured, [installed.address]);
     assert.ok(Object.isFrozen(captured));
     assert.ok(Object.isFrozen(captured[0]));
-    assert.deepEqual(effectAddressesOwnedByExecution(original, 0, 3), captured);
-    assert.deepEqual(effectAddressesOwnedByExecution(other.work, 0, 3), [installed.address, other.address]);
-    assert.deepEqual(effectAddressesOwnedByExecution(removed, 0, 3), [other.address]);
-    assert.deepEqual(effectAddressesOwnedByExecution(restored, 0, 3), [installed.address, other.address]);
+    assert.deepEqual(effectDependents(original, scope(3)), captured);
+    assert.deepEqual(effectDependents(other.work, scope(3)), [installed.address, other.address]);
+    assert.deepEqual(effectDependents(removed, scope(3)), [other.address]);
+    assert.deepEqual(effectDependents(restored, scope(3)), [installed.address, other.address]);
 });
 
 test('effect lifetime index: a fresh Work sees changes behind the same mutable battlefield view', () => {
     const resources = new CombatResources();
     const effect = resources.registerEffect(program('phase'));
     const fixture = host(unit(0), unit(2));
-    assert.deepEqual(effectAddressesOwnedByExecution(fixture.work, 0, 3), []);
+    assert.deepEqual(effectDependents(fixture.work, scope(3)), []);
     const installed = install(fixture.work, resources, effect.ref, 2, scope(3));
     fixture.byId.set(2, getCombatUnit(installed.work, 2));
-    const nextPhase = createCombatWork(fixture.battlefield);
+    const nextPhase = createCombatWork(fixture.battlefield, undefined, undefined, fixture.work.actionExecutions);
 
-    assert.deepEqual(effectAddressesOwnedByExecution(nextPhase, 0, 3), [installed.address]);
+    assert.deepEqual(effectDependents(nextPhase, scope(3)), [installed.address]);
 });
 
 test('effect lifetime index: parent attachment, finish and finalization track other receivers', () => {
     const resources = new CombatResources();
     const disabled = [];
     const effect = resources.registerEffect(program('tree'), {
-        lifecycle: { disable: context => { disabled.push(context.address); } },
+        lifecycle: { disable: context => { disabled.push(context.ref); } },
     });
     const parent = install(host(unit(0), unit(2), unit(9)).work, resources, effect.ref, 9, scope(3));
     const child = install(parent.work, resources, effect.ref, 2);
-    assert.deepEqual(effectChildAddresses(child.work, parent.address), []);
-    const attached = attachEffectParent(child.work, child.address, parent.address, resources, 0);
+    assert.deepEqual(effectDependents(child.work, parent.address), []);
+    const attached = bindEffectLifetime(child.work, child.address, parent.address);
     assert.equal(attached.result.type, 'BOUND');
-    assert.deepEqual(effectChildAddresses(attached.work, parent.address), [child.address]);
-    const finished = finishEffectsOwnedByExecution(attached.work, 0, 3, resources, 1);
+    assert.deepEqual(effectDependents(attached.work, parent.address), [child.address]);
+    const finished = closeEffectLifetimes(attached.work, [scope(3)], resources, 1);
 
     assert.deepEqual(disabled, [parent.address, child.address]);
     assert.equal(getEffect(finished, parent.address).finished, true);
     assert.equal(getEffect(finished, child.address).finished, true);
     const finalized = finalizeEffect(finished, child.address, resources, 1);
-    assert.deepEqual(effectChildAddresses(finalized, parent.address), []);
-    assert.deepEqual(effectChildAddresses(attached.work, parent.address), [child.address]);
+    assert.deepEqual(effectDependents(finalized, parent.address), []);
+    assert.deepEqual(effectDependents(attached.work, parent.address), [child.address]);
 });
 
 test('effect lifetime index: nested finalization rechecks frozen candidates and exposes new identities to later queries', () => {
@@ -192,10 +221,10 @@ test('effect lifetime index: nested finalization rechecks frozen candidates and 
         lifecycle: {
             disable: context => {
                 trace.push('leader');
-                context.effects.finish(followerAddress);
-                const installed = context.effects.install(9, newborn.ref, input(scope(3)));
+                context.effects.finish([followerAddress]);
+                const installed = context.effects.install(9, newborn.ref, input(null));
                 assert.equal(installed.type, 'INSTALLED');
-                newbornAddress = installed.address;
+                newbornAddress = installed.ref;
             },
         },
     });
@@ -208,15 +237,17 @@ test('effect lifetime index: nested finalization rechecks frozen candidates and 
     const first = install(host(unit(0), unit(2), unit(9)).work, resources, leader.ref, 2, scope(3));
     const second = install(first.work, resources, follower.ref, 9, scope(3));
     followerAddress = second.address;
-    const captured = effectAddressesOwnedByExecution(second.work, 0, 3);
-    const finished = finishEffectsOwnedByExecution(second.work, 0, 3, resources, 1);
+    const captured = effectDependents(second.work, scope(3));
+    const finished = closeEffectLifetimes(second.work, [scope(3)], resources, 1);
 
-    assert.deepEqual(trace, ['leader', 'follower', 'follower-finalized']);
+    assert.deepEqual(trace, ['leader', 'follower']);
     assert.deepEqual(captured, [first.address, followerAddress]);
-    assert.equal(getEffect(finished, followerAddress), undefined);
+    assert.equal(getEffect(finished, followerAddress).finished, true);
     assert.equal(getEffect(finished, newbornAddress).finished, false);
-    assert.deepEqual(effectAddressesOwnedByExecution(finished, 0, 3), [first.address, newbornAddress]);
-    const next = finishEffectsOwnedByExecution(finished, 0, 3, resources, 2);
+    assert.deepEqual(effectDependents(finished, scope(3)), []);
+    const settled = finalizeEffect(finished, followerAddress, resources, 1);
+    assert.equal(getEffect(settled, followerAddress), undefined);
+    const next = finishEffects(settled, [newbornAddress], resources, 2);
     assert.deepEqual(trace, ['leader', 'follower', 'follower-finalized', 'newborn']);
     assert.equal(getEffect(next, newbornAddress).finished, true);
 });
@@ -224,25 +255,15 @@ test('effect lifetime index: nested finalization rechecks frozen candidates and 
 test('effect lifetime index: Action cancellation finishes execution-owned effects on other receivers', () => {
     const resources = new CombatResources();
     const effect = resources.registerEffect(program('cancel'));
-    const definition = createActionDefinition({
-        triggerBindingId: 'primary', baseAttackTimeTicks: 1, recoveryTicks: 0,
-        targetGroups: [{
-            id: 'primary',
-            targeting: {
-                type: 'DAMAGE', scope: { type: 'BLOCKER' }, maxTargets: 1,
-                canTargetAir: true, includeBlockingRelations: false, preferBlockingRelations: false,
-                ignoreTargetFree: false, ignoreInvisible: false,
-            },
-            operations: [{ type: 'DAMAGE', power: 1, damageType: 'TRUE' }],
-        }],
-        followUps: [],
-    });
+    const definition = actionDefinition();
     const accepted = acceptActionExecution(createActionExecutionState(), {
         sourceUnitId: 0, definition, inputTargetUnitId: 9,
         bindings: new Map([['primary', [9]]]), tick: 0,
     });
-    const installed = install(host(unit(0), unit(9)).work, resources, effect.ref, 9, scope(accepted.execution.id));
-    effectAddressesOwnedByExecution(installed.work, 0, accepted.execution.id);
+    const fixture = host(unit(0), unit(9));
+    const initial = { ...fixture.work, actionExecutions: new ActionExecutionWork(accepted.state) };
+    const installed = install(initial, resources, effect.ref, 9, scope(accepted.execution.id));
+    effectDependents(installed.work, scope(accepted.execution.id));
     const cancelled = cancelActionExecution(
       installed.work,
       accepted.state,
@@ -262,10 +283,10 @@ test('effect lifetime index: a failed working branch leaves the previous scope a
     });
     const installed = install(host(unit(0), unit(2)).work, resources, leader.ref, 2, scope(3));
     const original = installed.work;
-    const before = effectAddressesOwnedByExecution(original, 0, 3);
+    const before = effectDependents(original, scope(3));
 
-    assert.throws(() => finishEffect(original, installed.address, resources, 1), /abort/);
-    assert.deepEqual(effectAddressesOwnedByExecution(original, 0, 3), before);
+    assert.throws(() => finishEffects(original, [installed.address], resources, 1), /abort/);
+    assert.deepEqual(effectDependents(original, scope(3)), before);
     assert.equal(getEffect(original, installed.address).finished, false);
 });
 
@@ -276,15 +297,15 @@ test('effect lifetime index: batch updates share unchanged relations without res
     const fixture = host(unit(0), unit(2), unit(9));
     const installed = install(fixture.work, resources, effect.ref, 9, scope(3));
     const before = installed.work;
-    const addresses = effectAddressesOwnedByExecution(before, 0, 3);
+    const addresses = effectDependents(before, scope(3));
     fixture.forbidMembership();
     const next = updateCombatUnits(before, [
         { ...getCombatUnit(before, 2), position: [4, 5] },
         { ...getCombatUnit(before, 9), position: [6, 7] },
     ]);
 
-    assert.deepEqual(effectAddressesOwnedByExecution(next, 0, 3), addresses);
-    assert.deepEqual(effectAddressesOwnedByExecution(before, 0, 3), addresses);
+    assert.deepEqual(effectDependents(next, scope(3)), addresses);
+    assert.deepEqual(effectDependents(before, scope(3)), addresses);
     assert.deepEqual(getCombatUnit(before, 2).position, [2, 0]);
     assert.deepEqual(getCombatUnit(next, 2).position, [4, 5]);
 });
@@ -297,11 +318,11 @@ test('effect lifetime index: batch relation edits and repeated receiver IDs pres
     const otherParent = install(parent.work, resources, effect.ref, 0);
     const first = install(otherParent.work, resources, effect.ref, 2, scope(3));
     const second = install(first.work, resources, effect.ref, 9, scope(3));
-    const attachedFirst = attachEffectParent(second.work, first.address, parent.address, resources, 0);
-    const attachedSecond = attachEffectParent(attachedFirst.work, second.address, parent.address, resources, 0);
+    const attachedFirst = bindEffectLifetime(second.work, first.address, parent.address);
+    const attachedSecond = bindEffectLifetime(attachedFirst.work, second.address, parent.address);
     const before = attachedSecond.work;
-    assert.deepEqual(effectAddressesOwnedByExecution(before, 0, 3), [first.address, second.address]);
-    assert.deepEqual(effectChildAddresses(before, parent.address), [first.address, second.address]);
+    assert.deepEqual(effectDependents(before, scope(3)), [first.address, second.address]);
+    assert.deepEqual(effectDependents(before, parent.address), [first.address, second.address]);
     fixture.forbidMembership();
 
     const change = (receiver, lifetime, parentAddress) => ({
@@ -309,7 +330,7 @@ test('effect lifetime index: batch relation edits and repeated receiver IDs pres
         effects: {
             ...receiver.effects,
             instances: receiver.effects.instances.map(instance => ({
-                ...instance, scope: lifetime, parent: parentAddress,
+                ...instance, scopes: [lifetime, ...(parentAddress === null ? [] : [parentAddress])],
             })),
         },
     });
@@ -320,12 +341,12 @@ test('effect lifetime index: batch relation edits and repeated receiver IDs pres
     const firstRestored = change(firstReceiver, scope(3), null);
     const next = updateCombatUnits(before, [firstMoved, secondMoved, firstRestored]);
 
-    assert.deepEqual(effectAddressesOwnedByExecution(next, 0, 3), [first.address]);
-    assert.deepEqual(effectAddressesOwnedByExecution(next, 0, 4), [second.address]);
-    assert.deepEqual(effectChildAddresses(next, parent.address), []);
-    assert.deepEqual(effectChildAddresses(next, otherParent.address), [second.address]);
-    assert.deepEqual(effectAddressesOwnedByExecution(before, 0, 3), [first.address, second.address]);
-    assert.deepEqual(effectAddressesOwnedByExecution(before, 0, 4), []);
-    assert.deepEqual(effectChildAddresses(before, parent.address), [first.address, second.address]);
-    assert.deepEqual(effectChildAddresses(before, otherParent.address), []);
+    assert.deepEqual(effectDependents(next, scope(3)), [first.address]);
+    assert.deepEqual(effectDependents(next, scope(4)), [second.address]);
+    assert.deepEqual(effectDependents(next, parent.address), []);
+    assert.deepEqual(effectDependents(next, otherParent.address), [second.address]);
+    assert.deepEqual(effectDependents(before, scope(3)), [first.address, second.address]);
+    assert.deepEqual(effectDependents(before, scope(4)), []);
+    assert.deepEqual(effectDependents(before, parent.address), [first.address, second.address]);
+    assert.deepEqual(effectDependents(before, otherParent.address), []);
 });

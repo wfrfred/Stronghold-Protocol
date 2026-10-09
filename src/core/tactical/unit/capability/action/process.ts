@@ -1,3 +1,4 @@
+import type { EffectDispatchScope } from "../effects/dispatch.js";
 import { ActionExecutionWork } from "./internal/executions.js";
 import {
     acceptActionExecutionInWork,
@@ -15,7 +16,12 @@ import type { ActionReleaseResources } from "./release.js";
 export interface ActionExecutionResources extends EffectTransitionResources {
     readonly actionRelease?: ActionReleaseResources;
     readonly projectileOperations?: ProjectileOperations;
-    readonly completeAttack?: (work: CombatWork, unitId: UnitId, tick: number) => CombatWork;
+    readonly completeAttack?: (
+        work: CombatWork,
+        unitId: UnitId,
+        tick: number,
+        dispatch?: EffectDispatchScope,
+    ) => CombatWork;
 }
 
 export type ActionExecutionId = number;

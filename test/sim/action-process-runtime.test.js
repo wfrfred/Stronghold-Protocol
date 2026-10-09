@@ -386,12 +386,7 @@ test("action runtime: failed continuation publishes no progress, sample, settlem
                     marker.ref,
                     {
                       source: 0,
-                      scope: {
-                        type: "EXECUTION",
-                        unitId: 0,
-                        executionId: context.executionId,
-                      },
-                      expiresAtTick: null,
+                      scopes: [{ type: "ACTION", executionId: context.executionId }],
                     },
                     services,
                     context.tick,

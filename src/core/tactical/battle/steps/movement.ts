@@ -1,3 +1,4 @@
+import type { ActionExecutionWork } from "../../unit/capability/action/internal/executions.js";
 import type { BattlefieldChange, BattlefieldView } from "../../battlefield/contract.js";
 import type * as computation from "../../modifier/computation.js";
 import type { ContributionFacts } from "../../unit/capability/contribution.js";
@@ -19,6 +20,7 @@ import {
 
 interface MovementInput {
     readonly battlefield: BattlefieldView;
+    readonly actionExecutions?: ActionExecutionWork;
     readonly tick: number;
     readonly execution: BattleExecutionState;
     readonly movementAllowed?: (unitId: UnitId) => boolean;
@@ -28,6 +30,7 @@ interface RouteCommandResult {
     readonly changes: readonly BattlefieldChange[];
     readonly events: readonly Event[];
     readonly execution: BattleExecutionState;
+    readonly actionExecutions?: ActionExecutionWork;
 }
 
 interface MovementResult {
@@ -133,7 +136,10 @@ export function advanceMovement(
         movedUnits.push(moved.unit);
     }
 
-    let work = updateCombatUnits(createCombatWork(battlefield, execution, battlefield), movedUnits);
+    let work = updateCombatUnits(
+        createCombatWork(battlefield, execution, battlefield, input.actionExecutions),
+        movedUnits,
+    );
 
     for (const unitId of completed) {
         work = removeUnitWithEffects(work, unitId, "SCRIPT", resources, tick);

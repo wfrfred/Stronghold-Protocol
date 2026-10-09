@@ -1,14 +1,15 @@
 import { assertNonnegativeSafeInteger } from "../../../../../common/assert.js";
 import { ownDataRecord } from "../../../../../common/immutable-data.js";
 import type { EffectProgram, EffectProgramRef } from "../program.js";
-import type {
-    EffectAddress,
-    EffectInstance,
-    EffectInstanceMetadata,
-    EffectInstanceValue,
-    EffectLifecycleFacts,
-    EffectLifetimeScope,
-    EffectSnapshot,
+import {
+    type EffectInstance,
+    type EffectInstanceMetadata,
+    type EffectInstanceValue,
+    type EffectLifecycleFacts,
+    type Scope,
+    type LifetimeRef,
+    type EffectSnapshot,
+    lifetimeKey,
 } from "../instance.js";
 import type { UnitId } from "../../../unit.js";
 
@@ -28,44 +29,83 @@ function unitId(value: UnitId | null): UnitId | null {
     return value === null ? null : nonnegativeInteger(value, "unit identity");
 }
 
-function ownLifetimeScope(scope: EffectLifetimeScope | null): EffectLifetimeScope | null {
-    if (scope === null) {
-        return null;
+export function ownLifetime(ref: LifetimeRef): LifetimeRef {
+    switch (ref.type) {
+        case "UNIT":
+            return Object.freeze({
+                type: "UNIT",
+                unitId: nonnegativeInteger(ref.unitId, "scope unit identity"),
+            });
+
+        case "ACTION":
+            return Object.freeze({
+                type: "ACTION",
+                executionId: nonnegativeInteger(ref.executionId, "execution identity"),
+            });
+
+        case "SKILL":
+            return Object.freeze({
+                type: "SKILL",
+                unitId: nonnegativeInteger(ref.unitId, "scope unit identity"),
+                activationId: nonnegativeInteger(ref.activationId, "activation identity"),
+            });
+
+        case "EFFECT":
+            return Object.freeze({
+                type: "EFFECT",
+                unitId: nonnegativeInteger(ref.unitId, "scope unit identity"),
+                effectId: nonnegativeInteger(ref.effectId, "effect identity"),
+            });
+
+        default:
+            throw new TypeError("invalid effect lifetime type");
+    }
+}
+
+export function ownScopes(scopes: readonly Scope[]): readonly Scope[] {
+    if (!Array.isArray(scopes)) {
+        throw new TypeError("effect scopes must be an array");
     }
 
-    const scopeUnitId = nonnegativeInteger(scope.unitId, "lifetime scope unit identity");
+    const keys = new Set<string>();
+    const result: Scope[] = [];
+    let hasTick = false;
+    const inputs: readonly Scope[] = scopes;
 
-    if (scope.type === "UNIT") {
-        return Object.freeze({ type: "UNIT", unitId: scopeUnitId });
+    for (const scope of inputs) {
+        if (scope.type === "TICK") {
+            if (hasTick) {
+                throw new TypeError("effect may have only one TICK scope");
+            }
+
+            hasTick = true;
+        }
+
+        const owned =
+            scope.type === "TICK"
+                ? Object.freeze({
+                      type: "TICK" as const,
+                      tick: nonnegativeInteger(scope.tick, "expiration tick"),
+                  })
+                : ownLifetime(scope);
+        const key = lifetimeKey(owned);
+
+        if (!keys.has(key)) {
+            keys.add(key);
+            result.push(owned);
+        }
     }
 
-    return Object.freeze({
-        type: "EXECUTION",
-        unitId: scopeUnitId,
-        executionId: nonnegativeInteger(scope.executionId, "execution identity"),
-    });
+    return Object.freeze(result);
 }
 
 function ownMetadata(value: EffectInstanceMetadata): EffectInstanceMetadata {
     return {
         id: nonnegativeInteger(value.id, "identity"),
         source: unitId(value.source),
-        scope: ownLifetimeScope(value.scope),
+        scopes: ownScopes(value.scopes),
         acquiredSequence: nonnegativeInteger(value.acquiredSequence, "acquired sequence"),
-        expiresAtTick:
-            value.expiresAtTick === null
-                ? null
-                : nonnegativeInteger(value.expiresAtTick, "expiration tick"),
     };
-}
-
-function ownParent(parent: EffectAddress | null): EffectAddress | null {
-    return parent === null
-        ? null
-        : Object.freeze({
-              unitId: nonnegativeInteger(parent.unitId, "parent unit identity"),
-              instanceId: nonnegativeInteger(parent.instanceId, "parent instance identity"),
-          });
 }
 
 function assertLifecycleFacts(instance: EffectLifecycleFacts): void {
@@ -87,7 +127,6 @@ export function ownEffectInstance<S extends object>(
         enabled: true,
         participating: false,
         finished: false,
-        parent: null,
     });
 
     ownedInstances.add(instance);
@@ -113,7 +152,6 @@ export function copyEffectInstance(instance: EffectInstanceValue): EffectInstanc
         enabled: instance.enabled,
         participating: instance.participating,
         finished: instance.finished,
-        parent: ownParent(instance.parent),
         state: ownDataRecord(instance.state, "effect state"),
     });
     ownedInstances.add(owned);
@@ -146,7 +184,6 @@ export function ownRestoredEffectInstance<S extends object>(
         enabled: instance.enabled,
         participating: instance.participating,
         finished: instance.finished,
-        parent: ownParent(instance.parent),
     });
 }
 

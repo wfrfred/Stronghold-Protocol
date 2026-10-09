@@ -1,3 +1,4 @@
+import type { ActionExecutionWork } from "../../unit/capability/action/internal/executions.js";
 import { advanceProjectiles as advanceProjectileInstances } from "../../battlefield/projectile/settlement.js";
 import type { ProjectileServices } from "../../battlefield/projectile/context.js";
 import { combatWorkEvents, combatWorkChanges, createCombatWork } from "../execution/work.js";
@@ -11,8 +12,9 @@ export function advanceProjectiles(
     tick: number,
     commands: readonly Command[],
     resources: ProjectileServices,
+    actionExecutions?: ActionExecutionWork,
 ) {
-    const work = createCombatWork(battlefield, execution, battlefield);
+    const work = createCombatWork(battlefield, execution, battlefield, actionExecutions);
     const stopIds = commands
         .filter((command) => command.type === "STOP_PROJECTILE")
         .map((command) => command.projectileId);

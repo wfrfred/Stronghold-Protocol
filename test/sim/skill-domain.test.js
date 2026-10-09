@@ -137,7 +137,7 @@ test("content refusal retains effect prefix and allocated identities while refun
   let ref;
   const f = fixture({}, {
     activate: (context) => {
-      assert.equal(context.effects.install(context.unitId, ref, { source: 1, scope: null, expiresAtTick: null }).type, "INSTALLED");
+      assert.equal(context.effects.install(context.unitId, ref, { source: 1, scopes: [] }).type, "INSTALLED");
       return { type: "REJECTED", reason: "later prerequisite unavailable" };
     },
   });
@@ -152,13 +152,96 @@ test("content refusal retains effect prefix and allocated identities while refun
   assert.equal(unit.skill.active, null);
 });
 
+test("content refusal closes activation scopes while independent effects survive", () => {
+  let ref;
+  const f = fixture({}, {
+    activate: (context) => {
+      for (const scopes of [
+        [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }],
+        [],
+      ]) {
+        assert.equal(context.effects.install(context.unitId, ref, { source: 1, scopes }).type, "INSTALLED");
+      }
+      return { type: "REJECTED", reason: "content prerequisite" };
+    },
+  });
+  ref = f.resources.registerEffect(createEffectProgram({
+    id: "activation-refusal-scopes", initialize: () => ({}), ownState: (state) => state,
+  })).ref;
+  const refused = activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources);
+  const unit = getCombatUnit(refused.work, 1);
+  assert.equal(refused.result.type, "REJECTED");
+  assert.equal(unit.skill.active, null);
+  assert.equal(unit.skill.sp, 2);
+  assert.deepEqual(unit.effects.instances.map(({ finished, participating }) => ({ finished, participating })), [
+    { finished: true, participating: false },
+    { finished: false, participating: true },
+  ]);
+});
+
+test("zero-duration activation closes its scope before skill finish content", () => {
+  let ref;
+  const observed = [];
+  const f = fixture({ durationTicks: 0 }, {
+    activate: (context) => {
+      assert.equal(context.effects.install(context.unitId, ref, {
+        source: context.unitId,
+        scopes: [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }],
+      }).type, "INSTALLED");
+      return { type: "ACTIVATED" };
+    },
+    finish: (context) => {
+      const instance = context.facts.getUnit(context.unitId).effects.instances[0];
+      observed.push({ active: context.facts.getUnit(context.unitId).skill.active, finished: instance.finished });
+      assert.equal(context.effects.install(context.unitId, ref, {
+        source: context.unitId,
+        scopes: [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }],
+      }).type, "REJECTED");
+    },
+  });
+  ref = f.resources.registerEffect(createEffectProgram({
+    id: "zero-duration-scope", initialize: () => ({}), ownState: (state) => state,
+  })).ref;
+  const activated = activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources);
+  assert.deepEqual(activated.signals.map(({ type }) => type), ["SKILL_ACTIVATED", "SKILL_FINISHED"]);
+  assert.deepEqual(observed, [{ active: null, finished: true }]);
+  assert.equal(getCombatUnit(activated.work, 1).effects.nextInstanceId, 1);
+});
+
+test("skill finish rejects binding a surviving independent effect to its closed activation", () => {
+  let program;
+  let independent;
+  const f = fixture({}, {
+    activate: (context) => {
+      const installed = context.effects.install(context.unitId, program, { source: 1, scopes: [] });
+      assert.equal(installed.type, "INSTALLED");
+      independent = installed.ref;
+      return { type: "ACTIVATED" };
+    },
+    finish: (context) => {
+      assert.equal(context.effects.bind(independent, {
+        type: "SKILL", unitId: context.unitId, activationId: context.activationId,
+      }).type, "LIFETIME_UNAVAILABLE");
+    },
+  });
+  program = f.resources.registerEffect(createEffectProgram({
+    id: "independent-skill-binding", initialize: () => ({}), ownState: (state) => state,
+  })).ref;
+  const activated = activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources);
+  const ended = finishSkill(activated.work, 1, 30, f.resources);
+  const instance = getCombatUnit(ended.work, 1).effects.instances[0];
+  assert.deepEqual(instance.scopes, []);
+  assert.equal(instance.finished, false);
+  assert.equal(instance.participating, true);
+});
+
 test("callback errors propagate and escaped skill ports are closed even after errors", () => {
   let captured;
   const failure = new Error("content failed");
   const f = fixture({}, { activate: (context) => { captured = context; throw failure; } });
   assert.throws(() => activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources), (error) => error === failure);
   assert.throws(() => captured.facts.getUnit(1), /no longer active/);
-  assert.throws(() => captured.effects.finish({ unitId: 1, instanceId: 0 }), /no longer active/);
+  assert.throws(() => captured.effects.finish([{ type: "EFFECT", unitId: 1, effectId: 0 }]), /no longer active/);
   assert.throws(() => captured.damage({ sourceUnitId: 1, targetUnitId: 1, damageType: "TRUE", operands: { power: 1 } }), /no longer active/);
   assert.throws(() => captured.heal({ sourceUnitId: 1, targetUnitId: 1, power: 1, ignoreHealFree: false }), /no longer active/);
   assert.equal(getCombatUnit(f.work, 1).skill.sp, 2);

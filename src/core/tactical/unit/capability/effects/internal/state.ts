@@ -146,12 +146,7 @@ export function registerEffectInstance<U extends Unit>(
     ) {
         throw new TypeError("effect identity and acquisition sequence cannot be reused");
     }
-    if (
-        instance.started ||
-        instance.participating ||
-        instance.finished ||
-        instance.parent !== null
-    ) {
+    if (instance.started || instance.participating || instance.finished) {
         throw new TypeError("only a fresh effect instance can be installed");
     }
 

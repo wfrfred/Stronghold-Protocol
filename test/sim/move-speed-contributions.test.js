@@ -20,14 +20,14 @@ import { moveSpeed, computedMoveSpeed } from "../../dist/core/tactical/unit/capa
 import { stepRoutedUnit } from "../../dist/core/tactical/unit/capability/locomotion/step.js";
 import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
-import { installNewEffect, setEffectEnabled, finishEffect, finalizeEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
+import { installNewEffect, setEffectEnabled, finishEffects, finalizeEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { copyUnitSnapshot } from "../../dist/core/tactical/unit/snapshot.js";
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
 import * as modifier from "../../dist/core/tactical/modifier/value.js";
 import { effectFixtureWork } from "../helpers/effects.js";
 
-const address = { unitId: 0, instanceId: 0 };
+const address = { type: "EFFECT", unitId: 0, effectId: 0 };
 const fixture = (name) => JSON.parse(readFileSync(new URL(`../fixtures/arknights/${name}.json`, import.meta.url), "utf8"));
 const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} ≈ ${expected}`);
 
@@ -87,7 +87,7 @@ function register(resources, value = modifier.create({ multiplier: -0.5 })) {
 }
 
 const install = (work, program, resources, expiresAtTick = null) => installNewEffect(work, 0, program.ref, {
-    source: null, scope: null, expiresAtTick,
+    source: null, scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }],
 }, resources, 0).work;
 
 function speed(work, resources) {
@@ -131,7 +131,7 @@ test("move speed: lifecycle and copies retain route samples, identities and visi
     close(speed(h.work, resources), 0.25);
     h.work = setEffectEnabled(h.work, address, true, resources, 2);
     const participating = copyUnitSnapshot(h.unit);
-    h.work = finishEffect(h.work, address, resources, 3);
+    h.work = finishEffects(h.work, [address], resources, 3);
     h.work = finalizeEffect(h.work, address, resources, 3);
     assert.equal(h.unit.locomotion.mainRoute.navigation.execution, cursor);
     assert.equal(h.unit.locomotion.moveSpeed.entries.length, 0);

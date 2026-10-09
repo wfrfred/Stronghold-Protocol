@@ -112,13 +112,13 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                             }
 
                             const remaining = context.instance.state.remaining - 1;
-                            context.effects.update(context.address, paralysis.ref, (state) => ({
+                            context.effects.update(context.ref, paralysis.ref, (state) => ({
                                 ...state,
                                 remaining,
                             }));
 
                             if (remaining === 0) {
-                                context.effects.finish(context.address);
+                                context.effects.finish([context.ref]);
                             }
 
                             const target = context.facts.getUnit(context.unitId);
@@ -127,8 +127,7 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                             if (target !== undefined && hasStatus(target)) {
                                 context.effects.install(context.unitId, paralysisStun.ref, {
                                     source: null,
-                                    scope: { type: "UNIT", unitId: context.unitId },
-                                    expiresAtTick: context.tick + recoveryTicks,
+                                    scopes: [{ type: "TICK", tick: context.tick + recoveryTicks }],
                                 });
                             }
 
@@ -163,8 +162,7 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
 
                     const input = {
                         source: null,
-                        scope: { type: "UNIT" as const, unitId },
-                        expiresAtTick: context.burst.endsAtTick,
+                        scopes: [{ type: "TICK" as const, tick: context.burst.endsAtTick }],
                     };
 
                     if (
@@ -173,7 +171,7 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                     ) {
                         context.effects.install(unitId, reduction.ref, {
                             ...input,
-                            expiresAtTick: profile.defReduction > 0 ? null : input.expiresAtTick,
+                            scopes: profile.defReduction > 0 ? [] : input.scopes,
                         });
                     }
                     if (hasStatus(unit) && flags.length > 0) {
@@ -185,7 +183,7 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                     if (profile.paralysisStacks > 0) {
                         context.effects.install(unitId, paralysis.ref, {
                             ...input,
-                            expiresAtTick: null,
+                            scopes: [],
                         });
                     }
                     if (profile.burstDamage !== null) {
@@ -220,7 +218,11 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                                 (candidate) =>
                                     candidate.programRef.id === weakness.ref.id &&
                                     !candidate.finished &&
-                                    candidate.expiresAtTick === context.burst.endsAtTick,
+                                    candidate.scopes.some(
+                                        (scope) =>
+                                            scope.type === "TICK" &&
+                                            scope.tick === context.burst.endsAtTick,
+                                    ),
                             );
 
                             if (instance !== undefined) {
@@ -232,7 +234,7 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                                     profile.attackReductionRatio *
                                         Math.max(0, 1 - second / durationSeconds);
                                 context.effects.update(
-                                    { unitId: unit.id, instanceId: instance.id },
+                                    { type: "EFFECT", unitId: unit.id, effectId: instance.id },
                                     weakness.ref,
                                     () => ({ scaler }),
                                 );

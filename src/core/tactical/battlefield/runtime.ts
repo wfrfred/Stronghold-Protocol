@@ -35,6 +35,7 @@ import {
 } from "./storage/state.js";
 import type { ProjectileId, ProjectileInstance } from "./projectile/state.js";
 import type { SupportRelation } from "./support/relations.js";
+import type { EffectLifetimeProjection } from "../unit/capability/effects/lifetime-index.js";
 
 interface BattlefieldResources<U extends Unit> {
     readonly map: BattlefieldMap;
@@ -69,6 +70,9 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
             },
             get unitIds() {
                 return runtime.unitIds;
+            },
+            get effectLifetimes() {
+                return runtime.#state.effectLifetimes;
             },
             get projectileIds() {
                 return runtime.projectileIds;
@@ -124,6 +128,10 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
 
     get navigationMaps(): NavigationMaps {
         return this.#state.navigationMaps;
+    }
+
+    get effectLifetimes(): EffectLifetimeProjection {
+        return this.#state.effectLifetimes;
     }
 
     get fieldCache(): NavigationFieldCache {

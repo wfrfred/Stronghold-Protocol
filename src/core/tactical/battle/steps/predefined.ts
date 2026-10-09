@@ -1,3 +1,4 @@
+import type { ActionExecutionWork } from "../../unit/capability/action/internal/executions.js";
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import type {
     BattlefieldChange,
@@ -19,7 +20,13 @@ import {
 import type { BattleExecutionState } from "../execution/state.js";
 import type { Command, Event } from "../contract.js";
 import { removeUnitWithEffects, type UnitLifecycleResources } from "../execution/unit-lifecycle.js";
-import { combatWorkEvents, combatWorkChanges, createCombatWork } from "../execution/work.js";
+import {
+    combatWorkEvents,
+    combatWorkChanges,
+    createCombatWork,
+    updateCombatUnit,
+    updateCombatMechanism,
+} from "../execution/work.js";
 
 export interface PredefinedUnitCreation extends UnitPlacementDefinition {
     readonly type: "UNIT";
@@ -234,6 +241,7 @@ export function advancePredefined(
         readonly commands: readonly Command[];
         readonly execution: BattleExecutionState;
         readonly tick: number;
+        readonly actionExecutions?: ActionExecutionWork;
     },
     resources: UnitLifecycleResources,
 ): PredefinedTransition & { readonly events: readonly Event[] } {
@@ -249,7 +257,13 @@ export function advancePredefined(
         tick,
     );
 
-    return settlePredefinedChanges(battlefield, transition, resources, tick);
+    return settlePredefinedChanges(
+        battlefield,
+        transition,
+        resources,
+        tick,
+        input.actionExecutions,
+    );
 }
 
 /** Settle removals against the pending unit facts before committing predefined changes. */
@@ -258,55 +272,35 @@ function settlePredefinedChanges(
     transition: PredefinedTransition,
     resources: UnitLifecycleResources,
     tick: number,
+    actionExecutions?: ActionExecutionWork,
 ): PredefinedTransition & { readonly events: readonly Event[] } {
     if (transition.changes.length === 0) {
         return { ...transition, events: [] };
     }
 
-    const units = new Map(battlefield.unitIds.map((id) => [id, battlefield.getUnit(id)!]));
     const changes: BattlefieldChange[] = [];
-    const events: Event[] = [];
-    let execution = transition.execution;
+    let work = createCombatWork(battlefield, transition.execution, battlefield, actionExecutions);
 
     for (const change of transition.changes) {
         if (change.type === "REGISTER_UNIT" || change.type === "UPDATE_UNIT") {
-            units.set(change.unit.id, change.unit);
-        }
-        if (change.type !== "REMOVE_UNIT") {
+            work = updateCombatUnit(work, change.unit);
             changes.push(change);
-            continue;
+        } else if (change.type === "REGISTER_MECHANISM" || change.type === "UPDATE_MECHANISM") {
+            work = updateCombatMechanism(work, change.mechanism);
+            changes.push(change);
+        } else if (change.type === "REMOVE_UNIT") {
+            const previous = work;
+            work = removeUnitWithEffects(work, change.unitId, change.reason, resources, tick);
+            changes.push(...combatWorkChanges(work, previous));
+        } else {
+            changes.push(change);
         }
-
-        const work = removeUnitWithEffects(
-            createCombatWork(
-                {
-                    unitIds: [...units.keys()],
-                    getUnit: (id) => units.get(id),
-                    blockerOf: (id) => battlefield.blockerOf(id),
-                    blockedBy: (id) => battlefield.blockedBy(id),
-                },
-                execution,
-                battlefield,
-            ),
-            change.unitId,
-            change.reason,
-            resources,
-            tick,
-        );
-        const settled = combatWorkChanges(work);
-
-        for (const update of settled) {
-            if (update.type === "REGISTER_UNIT" || update.type === "UPDATE_UNIT") {
-                units.set(update.unit.id, update.unit);
-            } else if (update.type === "REMOVE_UNIT") {
-                units.delete(update.unitId);
-            }
-        }
-
-        changes.push(...settled);
-        events.push(...combatWorkEvents(work));
-        execution = work.execution;
     }
 
-    return { presence: transition.presence, changes, events, execution };
+    return {
+        presence: transition.presence,
+        changes,
+        events: combatWorkEvents(work),
+        execution: work.execution,
+    };
 }

@@ -1,3 +1,4 @@
+import { effectTick } from "../../dist/core/tactical/unit/capability/effects/instance.js";
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -11,7 +12,7 @@ import { attack } from '../../dist/core/tactical/unit/capability/offense/contrib
 import { resolveAttackPower } from '../../dist/core/tactical/unit/capability/offense/query.js';
 import { defense } from '../../dist/core/tactical/unit/capability/defense/contributions.js';
 import { resolveDefense } from '../../dist/core/tactical/unit/capability/defense/query.js';
-import { installNewEffect, updateEffectState, setEffectExpiration, setEffectEnabled, finishEffect, expireEffects } from '../../dist/core/tactical/unit/capability/effects/lifecycle.js';
+import { installNewEffect, updateEffectState, setEffectTick, setEffectEnabled, finishEffects, expireEffects } from '../../dist/core/tactical/unit/capability/effects/lifecycle.js';
 import { EffectDispatchScope } from '../../dist/core/tactical/unit/capability/effects/dispatch.js';
 import { effectFixtureWork } from '../helpers/effects.js';
 
@@ -43,12 +44,12 @@ test('Buff contribution integration: the native Astesia DEF facet merges layers,
   const original = work;
   const apply = (source, defenseRatio, expiresAtTick, tick) => {
     const current = getCombatUnit(work, 0).effects?.instances.find(instance => instance.programRef === program.ref && !instance.finished);
-    const plan = policy.plan(current === undefined ? undefined : { stackCount: current.state.stackCount, expiresAtTick: current.expiresAtTick }, { stackCount: 1, expiresAtTick }, tick);
+    const plan = policy.plan(current === undefined ? undefined : { stackCount: current.state.stackCount, expiresAtTick: effectTick(current) }, { stackCount: 1, expiresAtTick }, tick);
     if (plan.type === 'INSTALL') {
-      work = installNewEffect(work, 0, program.ref, { source, scope: null, expiresAtTick, initialState: { stackCount: 1, defenseRatio } }, resources, tick).work;
+      work = installNewEffect(work, 0, program.ref, { source, scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }], initialState: { stackCount: 1, defenseRatio } }, resources, tick).work;
     } else if (plan.type === 'REFRESH') {
-      const address = { unitId: 0, instanceId: current.id };
-      work = setEffectExpiration(work, address, plan.expiresAtTick);
+      const address = { type: "EFFECT", unitId: 0, effectId: current.id };
+      work = setEffectTick(work, address, plan.expiresAtTick);
       work = updateEffectState(work, 0, current.id, program.ref, state => ({ ...state, stackCount: plan.stackCount }), resources, tick);
     }
     return plan;
@@ -63,11 +64,11 @@ test('Buff contribution integration: the native Astesia DEF facet merges layers,
   assert.equal(instance.source, 10);
   assert.equal(instance.state.defenseRatio, 0.2);
   assert.equal(instance.state.stackCount, 2);
-  assert.equal(instance.expiresAtTick, 15);
+  assert.equal(effectTick(instance), 15);
   assert.equal(getCombatUnit(work, 0).effects.instances.length, 1);
   assert.equal(getCombatUnit(first, 0).effects.instances[0].state.stackCount, 1);
   assert.equal(starts, 1);
-  const address = { unitId: 0, instanceId: instance.id };
+  const address = { type: "EFFECT", unitId: 0, effectId: instance.id };
   work = setEffectEnabled(work, address, false, resources, 2);
   apply(30, 0.8, 20, 3);
   assert.equal(effective(), 100);
@@ -81,7 +82,7 @@ test('Buff contribution integration: the native Astesia DEF facet merges layers,
   assert.equal(work, capped);
   work = expireEffects(work, 19, resources);
   close(effective(), 200);
-  work = finishEffect(work, address, resources, 20);
+  work = finishEffects(work, [address], resources, 20);
   assert.equal(effective(), 100);
   assert.equal(resolveDefense(0, combatWorkView(original)).defense, 100);
   assert.equal(starts, 1);
@@ -91,7 +92,7 @@ test('Buff contribution integration: the native Astesia DEF facet merges layers,
 
 test('participation notification scope: exceptions release pending identity leases before retry', () => {
   const scope = new EffectDispatchScope();
-  const address = { unitId: 0, instanceId: 1 };
+  const address = { type: "EFFECT", unitId: 0, effectId: 1 };
   let escaped;
   assert.throws(() => scope.withParticipationChanges([{ address, participating: true }], isPending => {
     escaped = isPending;
@@ -122,14 +123,14 @@ test('Buff contribution integration: only effective layer growth resamples the r
     readSourceAttribute: () => instance.state.sourceAttack,
   })])] });
   let work = effectFixtureWork(initializeUnit({ id: 0, position: [0, 0], definition: { id: 'receiver', offense: { attack: 100 } } }));
-  work = installNewEffect(work, 0, program.ref, { source: 10, scope: null, expiresAtTick: 10 }, resources, 0).work;
+  work = installNewEffect(work, 0, program.ref, { source: 10, scopes: [{ type: "TICK", tick: 10 }]}, resources, 0).work;
   const power = () => resolveAttackPower(0, combatWorkView(work));
   assert.equal(power(), 150);
   const apply = (currentSourceAttack, tick, expiresAtTick) => {
     const current = getCombatUnit(work, 0).effects.instances[0];
-    const plan = policy.plan({ stackCount: current.state.stackCount, expiresAtTick: current.expiresAtTick }, { stackCount: 1, expiresAtTick }, tick);
+    const plan = policy.plan({ stackCount: current.state.stackCount, expiresAtTick: effectTick(current) }, { stackCount: 1, expiresAtTick }, tick);
     assert.equal(plan.type, 'REFRESH');
-    work = setEffectExpiration(work, { unitId: 0, instanceId: 0 }, plan.expiresAtTick);
+    work = setEffectTick(work, { type: "EFFECT", unitId: 0, effectId: 0 }, plan.expiresAtTick);
     work = updateEffectState(work, 0, 0, program.ref, state => ({ ...state,
       stackCount: plan.stackCount, sourceAttack: plan.reloadModifiers ? currentSourceAttack : state.sourceAttack,
     }), resources, tick);
@@ -144,6 +145,6 @@ test('Buff contribution integration: only effective layer growth resamples the r
   const current = getCombatUnit(work, 0).effects.instances[0];
   assert.equal(current.state.stackCount, 3);
   assert.equal(current.state.sourceAttack, 200);
-  assert.equal(current.expiresAtTick, 40);
+  assert.equal(effectTick(current), 40);
   assert.equal(current.source, 10);
 });

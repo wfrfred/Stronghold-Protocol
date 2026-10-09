@@ -33,9 +33,9 @@ import { prepareCombatEffects } from "../../dist/core/tactical/battle/execution/
 import {
   installEffect,
   setEffectEnabled,
-  finishEffect,
+  finishEffects,
   finalizeEffect,
-  attachEffectParent,
+  bindEffectLifetime,
 } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 
 const unit = (id, attack = 100) =>
@@ -57,9 +57,8 @@ const value = (amount) => modifier.create({ finalAddition: amount });
 const metadata = (id = 0) => ({
   id,
   source: null,
-  scope: null,
+  scopes: [],
   acquiredSequence: id,
-  expiresAtTick: null,
 });
 
 test("contributions: ownership isolates nested inputs and snapshots share frozen entries", () => {
@@ -289,7 +288,7 @@ test("contributions: private stack transitions publish maintained projections im
       instances: [
         resources.effects.restore(program.ref, {
           ...getCombatUnit(updated, 1).effects.instances[0],
-          expiresAtTick: 1,
+          scopes: [{ type: "TICK", tick: 1 }],
         }),
       ],
     },
@@ -396,15 +395,15 @@ test("contributions: a sampled child retains its input until an explicit parent 
         start: (context) => {
           const source = context.facts.getUnit(1);
           const sample = resolveOffenseAttack(source.definition.offense, source.offense) * 0.5;
-          context.effects.update(context.address, childProgram.ref, () => ({ sample }));
+          context.effects.update(context.ref, childProgram.ref, () => ({ sample }));
         },
       },
     },
   );
 
   let work = workFor(unit(1, 300), unit(2, 500));
-  const parent = { unitId: 2, instanceId: 0 };
-  const first = { unitId: 2, instanceId: 1 };
+  const parent = { type: "EFFECT", unitId: 2, effectId: 0 };
+  const first = { type: "EFFECT", unitId: 2, effectId: 1 };
   work = installEffect(
     work,
     2,
@@ -419,7 +418,7 @@ test("contributions: a sampled child retains its input until an explicit parent 
     resources,
     0,
   ).work;
-  work = attachEffectParent(work, first, parent, resources, 0).work;
+  work = bindEffectLifetime(work, first, parent).work;
   assert.equal(resolveAttackPower(2, combatWorkView(work)), 650);
   work = transitionCombatUnit(work, 1, (current) =>
     updateAttackContributions(current, (state) =>
@@ -437,9 +436,9 @@ test("contributions: a sampled child retains its input until an explicit parent 
   assert.deepEqual(getCombatUnit(paused, 2).effects.instances[1].state, { sample: 150 });
   work = setEffectEnabled(paused, first, true, resources, 1);
   assert.equal(resolveAttackPower(2, combatWorkView(work)), 650);
-  work = finishEffect(work, first, resources, 2);
+  work = finishEffects(work, [first], resources, 2);
   assert.equal(resolveAttackPower(2, combatWorkView(work)), 500);
-  const second = { unitId: 2, instanceId: 2 };
+  const second = { type: "EFFECT", unitId: 2, effectId: 2 };
   work = installEffect(
     work,
     2,
@@ -447,7 +446,7 @@ test("contributions: a sampled child retains its input until an explicit parent 
     resources,
     2,
   ).work;
-  work = attachEffectParent(work, second, parent, resources, 2).work;
+  work = bindEffectLifetime(work, second, parent).work;
   assert.deepEqual(
     getCombatUnit(work, 2).effects.instances.map((instance) => instance.id),
     [0, 2],
@@ -456,7 +455,7 @@ test("contributions: a sampled child retains its input until an explicit parent 
   assert.deepEqual(getCombatUnit(work, 2).effects.instances[1].state, { sample: 200 });
   const copied = copyUnitSnapshot(getCombatUnit(work, 2));
   assert.equal(resolveAttackPower(2, combatWorkView(workFor(copied))), 700);
-  work = finishEffect(work, parent, resources, 3);
+  work = finishEffects(work, [parent], resources, 3);
   assert.equal(resolveAttackPower(2, combatWorkView(work)), 500);
   work = finalizeEffect(work, second, resources, 3);
   assert.deepEqual(getCombatUnit(work, 2).offense.attack.entries, []);

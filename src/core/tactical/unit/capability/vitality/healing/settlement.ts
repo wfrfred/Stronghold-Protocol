@@ -2,7 +2,7 @@ import { hasStatusFlag } from "../../status/capability.js";
 import { EffectDispatchScope, participatingEffect } from "../../effects/dispatch.js";
 import { effectView, getEffect } from "../../effects/query.js";
 import { finalizeFinishedEffects } from "../../effects/lifecycle.js";
-import type { EffectAddress } from "../../effects/instance.js";
+import type { EffectRef } from "../../effects/instance.js";
 import { hasVitality, resolveVitalityMaxHp, type VitalUnit } from "../capability.js";
 import { widenUnit, type StableUnit, type UnitId } from "../../../unit.js";
 import { resolveMaxHp } from "../query.js";
@@ -36,7 +36,7 @@ interface CompiledHealingStage<V> {
 }
 
 interface HealingCandidate<V> {
-    readonly address: EffectAddress;
+    readonly ref: EffectRef;
     readonly acquiredSequence: number;
     readonly rule: CompiledHealingStage<V>;
 }
@@ -45,7 +45,7 @@ function orderCandidates<V>(left: HealingCandidate<V>, right: HealingCandidate<V
     return (
         right.rule.priority - left.rule.priority ||
         left.acquiredSequence - right.acquiredSequence ||
-        left.address.instanceId - right.address.instanceId
+        left.ref.effectId - right.ref.effectId
     );
 }
 
@@ -72,14 +72,14 @@ function dispatchHealing<V>(
     scope.withCandidates(effectView(getWork), ownerUnitId, (addresses) => {
         const candidates: HealingCandidate<V>[] = [];
 
-        for (const address of addresses) {
-            const instance = getEffect(work, address);
+        for (const ref of addresses) {
+            const instance = getEffect(work, ref);
             const rule =
                 instance === undefined ? undefined : select(resources.healing.get(instance));
 
             if (instance !== undefined && rule !== undefined) {
                 candidates.push({
-                    address,
+                    ref,
                     acquiredSequence: instance.acquiredSequence,
                     rule,
                 });
@@ -89,7 +89,7 @@ function dispatchHealing<V>(
         candidates.sort(orderCandidates);
 
         for (const candidate of candidates) {
-            const instance = participatingEffect(effectView(getWork), candidate.address);
+            const instance = participatingEffect(effectView(getWork), candidate.ref);
 
             if (instance === undefined) {
                 continue;
@@ -98,7 +98,7 @@ function dispatchHealing<V>(
             const result = withVitalityHookContext(
                 getWork,
                 setWork,
-                candidate.address,
+                candidate.ref,
                 instance,
                 request,
                 resources,

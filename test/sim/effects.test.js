@@ -1,3 +1,4 @@
+import { ActionExecutionWork } from "../../dist/core/tactical/unit/capability/action/internal/executions.js";
 import { attack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -12,13 +13,12 @@ import {
   installEffect,
   installNewEffect,
   removeEffect,
-  finishEffectsOwnedByExecution,
-  finishEffectsOwnedByUnit,
+  closeEffectLifetimes,
   setEffectEnabled,
   finishEffect,
   finalizeEffect,
   finalizeFinishedEffects,
-  attachEffectParent,
+  bindEffectLifetime,
 } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
@@ -64,9 +64,9 @@ function metadata(id = 1, overrides = {}) {
   return {
     id,
     source: 7,
-    scope: { type: "UNIT", unitId: 9 },
+    scopes: [],
     acquiredSequence: id,
-    expiresAtTick: null,
+
     ...overrides,
   };
 }
@@ -107,7 +107,7 @@ test("effects: direct installation normalizes typed state before lifecycle behav
 
   normalizationCount = 0;
   const newInstallation = installNewEffect(original, 2, program.ref, {
-    source: null, scope: null, expiresAtTick: null, initialState: { remainingAmount: -7 },
+    source: null, scopes: [],  initialState: { remainingAmount: -7 },
   }, resources, 0);
   assert.equal(normalizationCount, 1);
   assert.equal(getCombatUnit(newInstallation.work, 2).effects.instances[0].state.remainingAmount, 0);
@@ -141,7 +141,7 @@ test("effects: missing direct-install receivers return absence before program no
   }, resources, 0);
   assert.equal(installation.work, original);
   assert.deepEqual(installation.result, {
-    type: "REJECTED", reason: "TARGET_ABSENT", address: { unitId: 99, instanceId: instance.id },
+    type: "REJECTED", reason: "TARGET_ABSENT",
   });
 });
 
@@ -240,7 +240,7 @@ test("effects: derived arrays stay frozen and preserve unchanged instances acros
     resources,
   );
   const work = effectFixtureWork(second);
-  const address = { unitId: 2, instanceId: 2 };
+  const address = { type: "EFFECT", unitId: 2, effectId: 2 };
   let calls = 0;
   const unchanged = updateEffectState(
     work,
@@ -283,7 +283,7 @@ test("effects: derived arrays stay frozen and preserve unchanged instances acros
     retained.instances,
   );
   assert.throws(() => retained.instances.push(second.effects.instances[1]), TypeError);
-  const empty = removeEffect(cleaned, { unitId: 2, instanceId: 1 }, resources, 1);
+  const empty = removeEffect(cleaned, { type: "EFFECT", unitId: 2, effectId: 1 }, resources, 1);
   const emptyState = getCombatUnit(empty, 2).effects;
   assert.ok(Object.isFrozen(emptyState.instances));
   assert.equal(
@@ -314,18 +314,18 @@ test("effects: array ownership isolates mutable instances and preserves allocati
   assert.equal(copyEffectsState(copied), copied);
   const mutableBound = {
     ...instance, state: { remainingAmount: 100 },
-    scope: { type: "UNIT", unitId: 2 }, parent: { unitId: 2, instanceId: 1 },
+    scopes: [{type: "UNIT",unitId: 2}, { type: "EFFECT", unitId: 2, effectId: 1 }],
   };
   const unchanged = resources.update(mutableBound, mutableBound.state);
   const changed = resources.update(mutableBound, { remainingAmount: 200 });
-  mutableBound.parent.instanceId = 99;
-  mutableBound.scope.unitId = 99;
+  mutableBound.scopes[1].effectId = 99;
+  mutableBound.scopes[0].unitId = 99;
   mutableBound.state.remainingAmount = 999;
   for (const owned of [unchanged, changed]) {
-    assert.equal(owned.parent.instanceId, 1);
-    assert.equal(owned.scope.unitId, 2);
-    assert.ok(Object.isFrozen(owned.parent));
-    assert.ok(Object.isFrozen(owned.scope));
+    assert.equal(owned.scopes[1].effectId, 1);
+    assert.equal(owned.scopes[0].unitId, 2);
+    assert.ok(Object.isFrozen(owned.scopes[1]));
+    assert.ok(Object.isFrozen(owned.scopes[0]));
   }
   assert.equal(unchanged.state.remainingAmount, 100);
   assert.equal(changed.state.remainingAmount, 200);
@@ -334,8 +334,8 @@ test("effects: array ownership isolates mutable instances and preserves allocati
     /invalid effect lifecycle/,
   );
   assert.throws(
-    () => copyEffectsState({ ...effects, instances: [{ ...instance, parent: { unitId: NaN, instanceId: -1 } }] }),
-    /parent unit identity/,
+    () => copyEffectsState({ ...effects, instances: [{ ...instance, scopes: [{ type: "EFFECT", unitId: NaN, effectId: -1 }] }] }),
+    /scope unit identity/,
   );
   assert.throws(
     () => copyEffectsState({ ...effects, instances: [instance, instance] }),
@@ -417,8 +417,8 @@ test("effects: installation and removal keep effect identity and status contribu
     resources,
   );
   const work = effectFixtureWork(second);
-  const removed = removeEffect(work, { unitId: 2, instanceId: 1 }, resources, 0);
-  const cleared = removeEffect(removed, { unitId: 2, instanceId: 2 }, resources, 0);
+  const removed = removeEffect(work, { type: "EFFECT", unitId: 2, effectId: 1 }, resources, 0);
+  const cleared = removeEffect(removed, { type: "EFFECT", unitId: 2, effectId: 2 }, resources, 0);
 
   assert.equal(original.effects, undefined);
   assert.equal(hasStatusFlag(original, "INVINCIBLE"), false);
@@ -427,7 +427,7 @@ test("effects: installation and removal keep effect identity and status contribu
   assert.equal(getCombatUnit(removed, 2).effects.instances[0].id, 2);
   assert.equal(hasStatusFlag(getCombatUnit(cleared, 2), "INVINCIBLE"), false);
   assert.deepEqual(getCombatUnit(cleared, 2).status.contributions, original.status.contributions);
-  assert.equal(removeEffect(cleared, { unitId: 2, instanceId: 99 }, resources, 0), cleared);
+  assert.equal(removeEffect(cleared, { type: "EFFECT", unitId: 2, effectId: 99 }, resources, 0), cleared);
 });
 
 test("effects: installing flags requires existing Status and baseline facts survive effect removal", () => {
@@ -451,7 +451,7 @@ test("effects: installing flags requires existing Status and baseline facts surv
   const marked = installFixtureEffect(baseline, instance, resources);
   const removed = removeEffect(
     effectFixtureWork(marked),
-    { unitId: 2, instanceId: 1 },
+    { type: "EFFECT", unitId: 2, effectId: 1 },
     resources,
     0,
   );
@@ -463,29 +463,29 @@ test("effects: expiration is independent of source and lifetime scope cleanup do
   const program = resources.registerEffect(barrierProgram(), {
     bindings: [compileStatusBinding(["HEAL_FREE"])],
   });
-  let current = unit();
+  const owner7 = { id: 7, definition: { id: "owner7" } };
+  const owner9 = { id: 9, definition: { id: "owner9" } };
+  const actions = new ActionExecutionWork({ nextExecutionId: 12, executions: [10, 11].map(id => ({
+    id, sourceUnitId: 9, definition: { segments: [] }, acceptedAtTick: 0, inputTargetUnitId: null, cursor: 0, bindings: {}, samples: {}, wait: null,
+  })) });
+  let work = { ...effectFixtureWork(unit(), owner7, owner9), actionExecutions: actions };
   const values = [
-    metadata(1, { source: 9, scope: { type: "UNIT", unitId: 7 }, expiresAtTick: 5 }),
+    metadata(1, { source: 9, scopes: [{type: "UNIT",unitId: 7}, { type: "TICK", tick: 5 }], }),
     metadata(2, {
       source: 7,
-      scope: { type: "EXECUTION", unitId: 9, executionId: 10 },
+      scopes: [{type: "ACTION",executionId: 10}],
     }),
     metadata(3, {
       source: 7,
-      scope: { type: "EXECUTION", unitId: 9, executionId: 11 },
+      scopes: [{type: "ACTION",executionId: 11}],
     }),
-    metadata(4, { source: 9, scope: null }),
+    metadata(4, { source: 9, scopes: [] }),
   ];
 
   for (const value of values) {
-    current = installFixtureEffect(
-      current,
-      resources.effects.create(program.ref, value),
-      resources,
-    );
+    work = installEffect(work, 2, resources.effects.create(program.ref, value), resources, 0).work;
   }
 
-  const work = effectFixtureWork(current);
   const activeIds = (work) =>
     getCombatUnit(work, 2)
       .effects.instances.filter((effect) => effect.participating)
@@ -500,8 +500,8 @@ test("effects: expiration is independent of source and lifetime scope cleanup do
     ),
     [2, 3, 4],
   );
-  assert.deepEqual(activeIds(finishEffectsOwnedByExecution(work, 9, 10, resources, 0)), [1, 3, 4]);
-  assert.deepEqual(activeIds(finishEffectsOwnedByUnit(work, 9, resources, 0)), [1, 4]);
+  assert.deepEqual(activeIds(closeEffectLifetimes(work, [{ type: "ACTION", executionId: 10 }], resources, 0)), [1, 3, 4]);
+  assert.deepEqual(activeIds(closeEffectLifetimes(work, [{ type: "ACTION", executionId: 10 }, { type: "ACTION", executionId: 11 }], resources, 0)), [1, 4]);
 });
 
 test("effects: start can read its registered identity before status bindings participate", () => {
@@ -511,12 +511,12 @@ test("effects: start can read its registered identity before status bindings par
     lifecycle: {
       start: (context) => {
         observed.push([
-          context.facts.getEffect(context.address).id,
+          context.facts.getEffect(context.ref).id,
           context.instance.started,
-          context.facts.participating(context.address.unitId).length,
-          hasStatusFlag(context.facts.getUnit(context.address.unitId), "INVINCIBLE"),
+          context.facts.participating(context.ref.unitId).length,
+          hasStatusFlag(context.facts.getUnit(context.ref.unitId), "INVINCIBLE"),
         ]);
-        context.effects.update(context.address, program.ref, (state) => ({
+        context.effects.update(context.ref, program.ref, (state) => ({
           ...state,
           remainingAmount: 100,
         }));
@@ -525,7 +525,7 @@ test("effects: start can read its registered identity before status bindings par
       enable: (context) => {
         observed.push([
           context.instance.started,
-          hasStatusFlag(context.facts.getUnit(context.address.unitId), "INVINCIBLE"),
+          hasStatusFlag(context.facts.getUnit(context.ref.unitId), "INVINCIBLE"),
         ]);
       },
     },
@@ -577,13 +577,13 @@ test("effects: start termination preserves its prefix without initializing or re
     ],
     lifecycle: {
       start: (context) => {
-        context.effects.update({ unitId: 2, instanceId: 0 }, keeper.ref, (state) => ({
+        context.effects.update({ type: "EFFECT", unitId: 2, effectId: 0 }, keeper.ref, (state) => ({
           attempts: state.attempts + 1,
         }));
-        context.effects.update(context.address, program.ref, () => ({
+        context.effects.update(context.ref, program.ref, () => ({
           remainingAmount: 200,
         }));
-        context.effects.finish(context.address);
+        context.effects.finish([context.ref]);
         assert.equal(context.instance.finished, true);
         assert.equal(context.instance.participating, false);
         assert.equal(context.facts.participating(2).length, 1);
@@ -613,16 +613,15 @@ test("effects: start termination preserves its prefix without initializing or re
   );
 
   assert.deepEqual(result.result, {
-    type: "REJECTED",
-    reason: "START_FINISHED",
-    address: { unitId: 2, instanceId: 1 },
+    type: "ENDED",
+    ref: { type: "EFFECT", unitId: 2, effectId: 1 },
   });
-  assert.deepEqual(finalizations, [[false, true, 200]]);
+  assert.deepEqual(finalizations, []);
   assert.equal(installed, 0);
   assert.equal(removed, 0);
   assert.deepEqual(
     getCombatUnit(result.work, 2).effects.instances.map((instance) => instance.id),
-    [0],
+    [0, 1],
   );
   assert.equal(getCombatUnit(result.work, 2).effects.instances[0].state.attempts, 1);
   assert.equal(getCombatUnit(result.work, 2).effects.nextInstanceId, 2);
@@ -652,18 +651,18 @@ test("effects: lifecycle facts and operation leases close on normal and exceptio
     } else {
       result = install();
     }
-    const input = { source: null, scope: null, expiresAtTick: null };
+    const input = { source: null, scopes: [], };
     const calls = [
       () => escaped.instance,
       () => escaped.facts.getUnit(2),
-      () => escaped.facts.getEffect(escaped.address),
+      () => escaped.facts.getEffect(escaped.ref),
       () => escaped.facts.participating(2),
       () => escaped.effects.install(2, program.ref, input),
-      () => escaped.effects.update(escaped.address, program.ref, (state) => state),
-      () => escaped.effects.setEnabled(escaped.address, false),
-      () => escaped.effects.setExpiration(escaped.address, null),
-      () => escaped.effects.finish(escaped.address),
-      () => escaped.effects.attachParent(escaped.address, { unitId: 2, instanceId: 99 }),
+      () => escaped.effects.update(escaped.ref, program.ref, (state) => state),
+      () => escaped.effects.setEnabled(escaped.ref, false),
+      () => escaped.effects.setTick(escaped.ref, null),
+      () => escaped.effects.finish([escaped.ref]),
+      () => escaped.effects.bind(escaped.ref, { type: "EFFECT", unitId: 2, effectId: 99 }),
     ];
     for (const call of calls) {
       assert.throws(call, /no longer active/);
@@ -675,7 +674,7 @@ test("effects: lifecycle facts and operation leases close on normal and exceptio
   }
 });
 
-test("effects: rejected unique installation preserves completed start transitions", () => {
+test("effects: rejected unique installation runs no start and consumes no identity", () => {
   const resources = new CombatResources();
   const keeper = resources.registerEffect(
     createEffectProgram({
@@ -687,13 +686,13 @@ test("effects: rejected unique installation preserves completed start transition
   const candidate = resources.registerEffect(barrierProgram("unique"), {
     lifecycle: {
       start: (context) => {
-        context.effects.update({ unitId: 2, instanceId: 0 }, keeper.ref, (state) => ({
+        context.effects.update({ type: "EFFECT", unitId: 2, effectId: 0 }, keeper.ref, (state) => ({
           attempts: state.attempts + 1,
         }));
       },
       accepts: uniqueEffectAdmission("unique"),
       finalize: (context) => {
-        finalized.push(context.address.instanceId);
+        finalized.push(context.ref.effectId);
       },
     },
   });
@@ -724,16 +723,16 @@ test("effects: rejected unique installation preserves completed start transition
 
   assert.equal(accepted.result.type, "INSTALLED");
   assert.equal(rejected.result.reason, "ADMISSION_REJECTED");
-  assert.equal(getCombatUnit(rejected.work, 2).effects.instances[0].state.attempts, 2);
+  assert.equal(getCombatUnit(rejected.work, 2).effects.instances[0].state.attempts, 1);
   assert.deepEqual(
     getCombatUnit(rejected.work, 2).effects.instances.map((instance) => instance.id),
     [0, 1],
   );
-  assert.deepEqual(finalized, [2]);
-  assert.equal(getCombatUnit(rejected.work, 2).effects.nextInstanceId, 3);
+  assert.deepEqual(finalized, []);
+  assert.equal(getCombatUnit(rejected.work, 2).effects.nextInstanceId, 2);
   const paused = setEffectEnabled(
     rejected.work,
-    { unitId: 2, instanceId: 1 },
+    { type: "EFFECT", unitId: 2, effectId: 1 },
     false,
     resources,
     1,
@@ -746,10 +745,10 @@ test("effects: rejected unique installation preserves completed start transition
     1,
   );
   assert.equal(duplicate.result.reason, "ADMISSION_REJECTED");
-  assert.equal(getCombatUnit(duplicate.work, 2).effects.instances[0].state.attempts, 3);
+  assert.equal(getCombatUnit(duplicate.work, 2).effects.instances[0].state.attempts, 1);
   const resumed = setEffectEnabled(
     duplicate.work,
-    { unitId: 2, instanceId: 1 },
+    { type: "EFFECT", unitId: 2, effectId: 1 },
     true,
     resources,
     1,
@@ -762,8 +761,8 @@ test("effects: rejected unique installation preserves completed start transition
       .map((instance) => instance.id),
     [1],
   );
-  assert.deepEqual(finalized, [2, 3]);
-  assert.equal(getCombatUnit(resumed, 2).effects.nextInstanceId, 4);
+  assert.deepEqual(finalized, []);
+  assert.equal(getCombatUnit(resumed, 2).effects.nextInstanceId, 2);
 });
 
 test("effects: parent finish stops a cross-unit child before independent finalization and identities are not reused", () => {
@@ -776,7 +775,7 @@ test("effects: parent finish stops a cross-unit child before independent finaliz
   for (const program of [parentProgram, childProgram]) {
     resources.effectLifecycle.register(program.ref, {
       finalize: (context) => {
-        assert.equal(context.facts.getEffect(context.address), undefined);
+        assert.equal(context.facts.getEffect(context.ref), undefined);
         finalized.push(context.instance.programRef.id);
       },
     });
@@ -798,9 +797,9 @@ test("effects: parent finish stops a cross-unit child before independent finaliz
     resources,
     0,
   ).work;
-  const parent = { unitId: 9, instanceId: 1 };
-  const child = { unitId: 2, instanceId: 1 };
-  work = attachEffectParent(work, child, parent, resources, 0).work;
+  const parent = { type: "EFFECT", unitId: 9, effectId: 1 };
+  const child = { type: "EFFECT", unitId: 2, effectId: 1 };
+  work = bindEffectLifetime(work, child, parent).work;
   const finished = finishEffect(work, parent, resources, 1);
 
   assert.equal(getCombatUnit(finished, 7), source);
@@ -830,7 +829,7 @@ test("effects: parent finish stops a cross-unit child before independent finaliz
   assert.equal(getCombatUnit(cleared, 9).effects.nextInstanceId, 2);
 });
 
-test("effects: unavailable parents end a child by default and explicit preservation rejects binding", () => {
+test("effects: binding an unavailable lifetime rejects without changing the independent effect", () => {
   for (const reason of ["ABSENT", "FINISHED"]) {
     for (const preserve of [false, true]) {
       const resources = new CombatResources();
@@ -849,8 +848,8 @@ test("effects: unavailable parents end a child by default and explicit preservat
         },
       });
       const owner = { id: 9, definition: { id: "parent-owner" }, position: [0, 0] };
-      const parent = { unitId: 9, instanceId: 1 };
-      const child = { unitId: 2, instanceId: 1 };
+      const parent = { type: "EFFECT", unitId: 9, effectId: 1 };
+      const child = { type: "EFFECT", unitId: 2, effectId: 1 };
       let work = effectFixtureWork(owner, receiver);
       if (reason === "FINISHED") {
         work = installEffect(
@@ -871,16 +870,16 @@ test("effects: unavailable parents end a child by default and explicit preservat
       ).work;
       assert.equal(resolveAttackPower(2, combatWorkView(work)), 150);
       const binding = preserve
-        ? attachEffectParent(work, child, parent, resources, 1, false)
-        : attachEffectParent(work, child, parent, resources, 1);
+        ? bindEffectLifetime(work, child, parent)
+        : bindEffectLifetime(work, child, parent);
       const current = getCombatUnit(binding.work, 2);
 
-      assert.deepEqual(binding.result, { type: "PARENT_UNAVAILABLE", reason });
-      assert.equal(current.effects.instances[0].parent, null);
-      assert.equal(current.effects.instances[0].finished, !preserve);
-      assert.equal(current.offense.attack.entries[0].participating, preserve);
-      assert.equal(hasStatusFlag(current, "INVINCIBLE"), preserve);
-      assert.equal(resolveAttackPower(2, combatWorkView(binding.work)), preserve ? 150 : 100);
+      assert.deepEqual(binding.result, { type: "LIFETIME_UNAVAILABLE" });
+      assert.deepEqual(current.effects.instances[0].scopes, []);
+      assert.equal(current.effects.instances[0].finished, false);
+      assert.equal(current.offense.attack.entries[0].participating, true);
+      assert.equal(hasStatusFlag(current, "INVINCIBLE"), true);
+      assert.equal(resolveAttackPower(2, combatWorkView(binding.work)), 150);
       if (preserve) {
         assert.equal(binding.work, work);
       }
@@ -898,23 +897,23 @@ test("effects: finish remains terminal when disable tries to reenable and finish
         disables++;
         assert.equal(context.instance.finished, true);
         assert.equal(context.instance.participating, false);
-        assert.equal(context.facts.getEffect(context.address), context.instance);
+        assert.equal(context.facts.getEffect(context.ref), context.instance);
         assert.equal(context.facts.getUnit(2).offense.attack.entries[0].participating, false);
         assert.equal(hasStatusFlag(context.facts.getUnit(2), "INVINCIBLE"), false);
         assert.deepEqual(
           context.facts.participating(2).map((instance) => instance.id),
           [2],
         );
-        context.effects.setEnabled(context.address, true);
-        context.effects.finish(context.address);
+        context.effects.setEnabled(context.ref, true);
+        context.effects.finish([context.ref]);
       },
       finalize: (context) => {
-        assert.equal(context.facts.getEffect(context.address), undefined);
+        assert.equal(context.facts.getEffect(context.ref), undefined);
         const contribution = context.facts.getUnit(2).offense.attack.entries[0];
         assert.equal(contribution.participating, false);
         finalizedSample = contribution.values[0].finalAddition;
         finalizations.push("reentrant");
-        context.effects.finish({ unitId: 2, instanceId: 2 });
+        context.effects.finish([{ type: "EFFECT", unitId: 2, effectId: 2 }]);
       },
     },
   });
@@ -948,7 +947,7 @@ test("effects: finish remains terminal when disable tries to reenable and finish
     resources,
     0,
   ).work;
-  const address = { unitId: 2, instanceId: 1 };
+  const address = { type: "EFFECT", unitId: 2, effectId: 1 };
   assert.equal(resolveAttackPower(2, combatWorkView(installed)), 150);
   assert.equal(hasStatusFlag(getCombatUnit(installed, 2), "INVINCIBLE"), true);
 
@@ -964,8 +963,8 @@ test("effects: finish remains terminal when disable tries to reenable and finish
   assert.equal(receiver.effects.instances[1].finished, false);
   const finalized = finalizeFinishedEffects(finished, 2, resources, 1);
   assert.equal(finalizedSample, 50);
-  assert.deepEqual(finalizations, ["reentrant", "follower"]);
-  assert.deepEqual(getCombatUnit(finalized, 2).effects.instances, []);
+  assert.deepEqual(finalizations, ["reentrant"]);
+  assert.equal(getCombatUnit(finalized, 2).effects.instances[0].finished, true);
   assert.deepEqual(getCombatUnit(finalized, 2).offense.attack.entries, []);
 });
 
@@ -1000,7 +999,7 @@ test("effects: disabling preserves restartable samples and finishing a disabled 
     resources,
     0,
   ).work;
-  const address = { unitId: 2, instanceId: 1 };
+  const address = { type: "EFFECT", unitId: 2, effectId: 1 };
   const inactive = setEffectEnabled(installed, address, false, resources, 1);
   assert.equal(getCombatUnit(inactive, 2).effects.instances[0].finished, false);
   assert.equal(getCombatUnit(inactive, 2).offense.attack.entries[0].values[0].finalAddition, 50);
@@ -1031,21 +1030,21 @@ test("effects: nested finalization during disable preserves the terminal continu
         assert.equal(hasStatusFlag(context.facts.getUnit(2), "INVINCIBLE"), false);
         const installed = context.effects.install(2, replacement.ref, {
           source: null,
-          scope: null,
-          expiresAtTick: null,
+          scopes: [],
+
         });
         assert.equal(installed.type, "INSTALLED");
-        assert.equal(context.facts.getEffect(context.address), undefined);
+        assert.equal(context.facts.getEffect(context.ref).finished, true);
         assert.equal(context.instance.finished, true);
         assert.equal(context.instance.state.remainingAmount, 500);
-        context.effects.setEnabled(context.address, true);
-        context.effects.finish(context.address);
+        context.effects.setEnabled(context.ref, true);
+        context.effects.finish([context.ref]);
         events.push("parent-continued");
       },
       finalize: (context) => {
         events.push("parent-finalize");
         assert.equal(context.instance.finished, true);
-        assert.equal(context.facts.getEffect(context.address), undefined);
+        assert.equal(context.facts.getEffect(context.ref), undefined);
       },
     },
   });
@@ -1054,8 +1053,8 @@ test("effects: nested finalization during disable preserves the terminal continu
       disable: (context) => {
         events.push("child-disable");
         assert.equal(context.instance.finished, true);
-        context.effects.finish({ unitId: 2, instanceId: 1 });
-        context.effects.setEnabled(context.address, true);
+        context.effects.finish([{ type: "EFFECT", unitId: 2, effectId: 1 }]);
+        context.effects.setEnabled(context.ref, true);
       },
       finalize: () => {
         events.push("child-finalize");
@@ -1076,30 +1075,28 @@ test("effects: nested finalization during disable preserves the terminal continu
     resources,
     0,
   ).work;
-  const parentAddress = { unitId: 2, instanceId: 1 };
-  const childAddress = { unitId: 2, instanceId: 2 };
-  work = attachEffectParent(work, childAddress, parentAddress, resources, 0).work;
+  const parentAddress = { type: "EFFECT", unitId: 2, effectId: 1 };
+  const childAddress = { type: "EFFECT", unitId: 2, effectId: 2 };
+  work = bindEffectLifetime(work, childAddress, parentAddress).work;
   const finished = finishEffect(work, parentAddress, resources, 1);
 
   assert.deepEqual(events, [
     "parent-disable",
-    "parent-finalize",
-    "child-disable",
-    "child-finalize",
     "parent-continued",
+    "child-disable",
   ]);
   const instances = getCombatUnit(finished, 2).effects.instances;
-  assert.equal(instances.length, 1);
-  assert.equal(instances[0].programRef, replacement.ref);
-  assert.equal(instances[0].participating, true);
+  assert.equal(instances.length, 3);
+  assert.equal(instances[2].programRef, replacement.ref);
+  assert.equal(instances[2].participating, true);
   assert.equal(finishEffect(finished, parentAddress, resources, 1), finished);
   const finalized = finalizeFinishedEffects(finished, 2, resources, 1);
   assert.deepEqual(events, [
     "parent-disable",
-    "parent-finalize",
-    "child-disable",
-    "child-finalize",
     "parent-continued",
+    "child-disable",
+    "parent-finalize",
+    "child-finalize",
   ]);
   assert.deepEqual(
     getCombatUnit(finalized, 2).effects.instances.map((instance) => instance.programRef),
@@ -1145,7 +1142,7 @@ declare const installationResources: CombatResources;
 declare const work: CombatWork;
 resources.register(barrier);
 const instance = resources.create(barrier.ref, {
-  id: 1, source: null, scope: null, acquiredSequence: 0, expiresAtTick: null,
+  id: 1, source: null, scopes: [], acquiredSequence: 0,
 });
 `;
   const compile = (name, source) => {
@@ -1190,9 +1187,9 @@ const projectile = createProjectileProgram({
   ownState: state => ({ remainingAmount: state.remainingAmount }), acceptsContact: () => true,
 });
 type ProjectileReference = Assert<Equal<typeof projectile.ref, ProjectileProgramRef<BarrierState>>>;
-const installation = effectSourceInstallation(barrier.ref, { expiresAtTick: null, initialState: instance.state });
+const installation = effectSourceInstallation(barrier.ref, { scopes: [], initialState: instance.state });
 const installed = installation((ref, input) => resources.create(ref, {
-  id: 2, source: null, scope: null, acquiredSequence: 1, expiresAtTick: input.expiresAtTick,
+  id: 2, source: null, scopes: input.scopes, acquiredSequence: 1,
 }, input.initialState).id);
 type InstalledIdentity = Assert<Equal<typeof installed, number>>;
 resources.withProgram(instance, (bound, program) => resources.update(bound, bound.state).id);
@@ -1201,24 +1198,24 @@ combat.registerEffect(barrier, {
  damage: {
   reception: { priority: 0, apply: (context, pending) => {
     const amount: number = context.instance.state.remainingAmount;
-    context.operations.effects.update(context.address, context.instance.programRef, state => ({ remainingAmount: Math.max(0, state.remainingAmount - pending.amount) }));
+    context.operations.effects.update(context.ref, context.instance.programRef, state => ({ remainingAmount: Math.max(0, state.remainingAmount - pending.amount) }));
     return { value: pending };
   } },
   reaction: { priority: 0, apply: (context, report) => {
     const amount: number = context.instance.state.remainingAmount;
     const hpLoss: number = report.hpLoss;
-    context.operations.effects.update(context.address, context.instance.programRef, state => ({ remainingAmount: state.remainingAmount + hpLoss }));
+    context.operations.effects.update(context.ref, context.instance.programRef, state => ({ remainingAmount: state.remainingAmount + hpLoss }));
   } },
  },
  healing: {
   reception: { priority: 0, apply: (context, pending) => {
     const amount: number = context.instance.state.remainingAmount;
-    context.operations.effects.update(context.address, context.instance.programRef, state => ({ remainingAmount: state.remainingAmount + amount }));
+    context.operations.effects.update(context.ref, context.instance.programRef, state => ({ remainingAmount: state.remainingAmount + amount }));
     return { value: pending };
   } },
  },
  lifecycle: {
-  start: context => { context.effects.update(context.address, barrier.ref, state => ({ remainingAmount: state.remainingAmount })); },
+  start: context => { context.effects.update(context.ref, barrier.ref, state => ({ remainingAmount: state.remainingAmount })); },
  },
 });
 `,
@@ -1244,8 +1241,8 @@ const cannotForge: EffectProgramRef<ShieldState> = { id: 'barrier' };
       ["direct-install-widened", `installEffect<object>(work, 2, instance, installationResources, 0);`, 1],
       ["unparsed-restore", `declare const raw: unknown; resources.restore(barrier.ref, raw);`, 1],
       ["wrong-restore-state", `resources.restore(barrier.ref, { ...instance, state: { remainingCharges: 2 } });`, 1],
-      ["wrong-installation-state", `effectSourceInstallation(barrier.ref, { expiresAtTick: null, initialState: { remainingCharges: 2 } });`, 1],
-      ["erased-installation", `const installation: EffectSourceInstallation = { programRef: barrier.ref, initialState: { remainingCharges: 2 }, expiresAtTick: null };`, 1],
+      ["wrong-installation-state", `effectSourceInstallation(barrier.ref, { scopes: [], initialState: { remainingCharges: 2 } });`, 1],
+      ["erased-installation", `const installation: EffectSourceInstallation = { programRef: barrier.ref, initialState: { remainingCharges: 2 }, scopes: [] };`, 1],
       [
         "hook-authority",
         `
@@ -1265,7 +1262,7 @@ reception.operations.spawn;
         "async-lifecycle",
         `
 const combat = new CombatResources();
-combat.registerEffect(barrier, { lifecycle: { start: async context => { await Promise.resolve(); context.effects.finish(context.address); } } });
+combat.registerEffect(barrier, { lifecycle: { start: async context => { await Promise.resolve(); context.effects.finish([context.ref]); } } });
 `,
         1,
       ],

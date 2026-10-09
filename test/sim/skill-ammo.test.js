@@ -34,8 +34,9 @@ function ammoFixture(ammo = 31, ammoPerAttack = 1) {
     contributions: [attack(() => [modifier.create({ multiplier: 1 })])],
   });
   resources.skills.register({ definition, activate: (context) => {
-    const installed = context.effects.install(context.unitId, buff.ref, { source: 1, scope: { type: "UNIT", unitId: 1 }, expiresAtTick: null });
-    return { type: "ACTIVATED", ownedEffects: [installed.address] };
+    const installed = context.effects.install(context.unitId, buff.ref, { source: 1, scopes: [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }] });
+    assert.equal(installed.type, "INSTALLED");
+    return { type: "ACTIVATED" };
   } });
   const unit = initializeUnit({ id: 1, position: [0, 0], definition: { id: "ammo-caster", skill: definition, offense: { attack: 100 } } });
   const enemy = initializeUnit({ id: 2, position: [1, 0], definition: { id: "ammo-target", vitality: { maxHp: 1000 }, hit: { geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.2 }] } } } });

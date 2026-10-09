@@ -24,6 +24,11 @@ import {
     reconcileSupportRelations,
     type SupportRelation,
 } from "../support/relations.js";
+import {
+    deriveEffectLifetimes,
+    projectEffectLifetimes,
+    type EffectLifetimeProjection,
+} from "../../unit/capability/effects/lifetime-index.js";
 
 export interface BattlefieldContent<U extends Unit> {
     readonly projectiles: ReadonlyMap<ProjectileId, ProjectileInstance>;
@@ -37,6 +42,7 @@ export interface BattlefieldContent<U extends Unit> {
 export interface BattlefieldState<U extends Unit> extends BattlefieldContent<U> {
     readonly navigationMaps: NavigationMaps;
     readonly spatial: BattlefieldSpatialView;
+    readonly effectLifetimes: EffectLifetimeProjection;
 }
 
 export function createBattlefieldState<U extends Unit>(
@@ -56,6 +62,7 @@ export function createBattlefieldState<U extends Unit>(
         supportRelations: [],
         navigationMaps: baseline,
         spatial: projectBattlefieldSpatial(map, units, mechanisms, navigationModifiers),
+        effectLifetimes: projectEffectLifetimes(units.values()),
     };
 }
 
@@ -64,6 +71,7 @@ function finishSettlement<U extends Unit>(
     content: BattlefieldContent<U>,
     spatial: BattlefieldSpatialView,
     projection: NavigationProjection,
+    effectLifetimes: EffectLifetimeProjection,
 ): {
     readonly state: BattlefieldState<U>;
     readonly facts: Pick<BattlefieldChangeResult, "changedNavigationModes" | "lostSupports">;
@@ -76,10 +84,11 @@ function finishSettlement<U extends Unit>(
         content.blockingRelations === previous.blockingRelations &&
         content.supportRelations === previous.supportRelations &&
         spatial === previous.spatial &&
-        projection.maps === previous.navigationMaps;
+        projection.maps === previous.navigationMaps &&
+        effectLifetimes === previous.effectLifetimes;
     const state: BattlefieldState<U> = unchanged
         ? previous
-        : { ...content, spatial, navigationMaps: projection.maps };
+        : { ...content, spatial, navigationMaps: projection.maps, effectLifetimes };
     const lostSupports =
         content.supportRelations === previous.supportRelations
             ? []
@@ -162,6 +171,15 @@ export function settleBattlefieldState<U extends Unit>(
         { ...content, supportRelations, blockingRelations },
         spatial,
         projection,
+        content.units === previous.units
+            ? previous.effectLifetimes
+            : deriveEffectLifetimes(
+                  previous.effectLifetimes,
+                  [...changes.updatedUnitIds].map((unitId) => ({
+                      previousUnit: previous.units.get(unitId),
+                      nextUnit: content.units.get(unitId),
+                  })),
+              ),
     );
 }
 
@@ -195,5 +213,6 @@ export function settleBattlefieldStateFully<U extends Unit>(
         { ...content, supportRelations, blockingRelations },
         spatial,
         projection,
+        projectEffectLifetimes(content.units.values()),
     );
 }

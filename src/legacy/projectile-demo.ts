@@ -58,8 +58,7 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
             contact: (context) => {
                 context.operations.effects.install(context.targetUnitId, marker.ref, {
                     source: context.projectile.source,
-                    scope: null,
-                    expiresAtTick: context.tick + 45,
+                    scopes: [{ type: "TICK", tick: context.tick + 45 }],
                 });
                 context.operations.damage({
                     sourceUnitId: context.projectile.source,
@@ -127,8 +126,7 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
                             boost.ref,
                             {
                                 source: source.id,
-                                scope: { type: "UNIT", unitId: source.id },
-                                expiresAtTick: context.tick + 70,
+                                scopes: [{ type: "TICK", tick: context.tick + 70 }],
                             },
                             resources,
                             context.tick,

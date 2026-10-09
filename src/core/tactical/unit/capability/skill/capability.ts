@@ -8,7 +8,6 @@ import { ownDataRecord } from "../../../../common/immutable-data.js";
 import { TICKS_PER_SECOND } from "../../../tick.js";
 import type { Unit, UnitDefinition } from "../../unit.js";
 import { createActionDefinition, type ActionDefinition } from "../action/capability.js";
-import type { EffectAddress } from "../effects/instance.js";
 
 export type SkillActivationMode = "MANUAL" | "AUTO" | "PASSIVE";
 
@@ -32,7 +31,6 @@ export interface SkillActivation {
     readonly id: number;
     readonly startedAtTick: number;
     readonly endsAtTick: number | null;
-    readonly ownedEffects: readonly EffectAddress[];
     readonly remainingAmmo?: number;
 }
 

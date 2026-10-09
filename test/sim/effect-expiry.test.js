@@ -1,3 +1,4 @@
+import { effectTick } from "../../dist/core/tactical/unit/capability/effects/instance.js";
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
@@ -21,7 +22,7 @@ import { resolveAttackPower } from '../../dist/core/tactical/unit/capability/off
 import * as modifier from '../../dist/core/tactical/modifier/value.js';
 import { effectFixtureWork } from '../helpers/effects.js';
 
-const address = instanceId => ({ unitId: 0, instanceId });
+const address = instanceId => ({ type: "EFFECT", unitId: 0, effectId: instanceId });
 const instances = work => getCombatUnit(work, 0).effects.instances;
 const power = work => resolveAttackPower(0, combatWorkView(work));
 const program = (id, initial = {}) => createEffectProgram({
@@ -32,7 +33,7 @@ const owner = () => initializeUnit({
 });
 const install = (work, effect, resources, expiresAtTick, initialState) => installNewEffect(
   work, 0, effect.ref,
-  { source: 7, scope: { type: 'UNIT', unitId: 0 }, expiresAtTick, ...(initialState === undefined ? {} : { initialState }) },
+  { source: 7, scopes: [{type: 'UNIT',unitId: 0}, ...(expiresAtTick === null ? [] : [{ type: 'TICK', tick: expiresAtTick }])], ...(initialState === undefined ? {} : { initialState }) },
   resources, 0,
 ).work;
 
@@ -75,7 +76,7 @@ test('effect expiry: disabled and overridden instances retain their expiration b
           competition: () => ({ group: 'expiry', priority: 1 }),
           ...(custom ? { expire: context => {
             calls.push([context.instance.enabled, context.instance.participating]);
-            context.effects.finish(context.address);
+            context.effects.finish([context.ref]);
           } } : {}),
         },
       });
@@ -105,16 +106,16 @@ test('effect expiry: an earlier callback can renew or finish a later expired can
     const first = resources.registerEffect(program('first'), {
       lifecycle: { disable: context => {
         if (change === 'finish') {
-          context.effects.finish(address(1));
+          context.effects.finish([address(1)]);
         } else {
-          context.effects.setExpiration(address(1), change === 'renew' ? 12 : null);
+          context.effects.setTick(address(1), change === 'renew' ? 12 : null);
         }
       } },
     });
     const later = resources.registerEffect(program('later'), {
       lifecycle: { expire: context => {
         calls.push('later');
-        context.effects.finish(context.address);
+        context.effects.finish([context.ref]);
       } },
     });
     let work = install(effectFixtureWork(owner()), first, resources, 5);
@@ -123,7 +124,7 @@ test('effect expiry: an earlier callback can renew or finish a later expired can
     assert.deepEqual(calls, []);
     assert.equal(instances(expired)[0].finished, true);
     assert.equal(instances(expired)[1].finished, change === 'finish');
-    assert.equal(instances(expired)[1].expiresAtTick, change === 'renew' ? 12 : change === 'clear' ? null : 5);
+    assert.equal(effectTick(instances(expired)[1]), change === 'renew' ? 12 : change === 'clear' ? null : 5);
   }
 });
 
@@ -140,12 +141,12 @@ test('effect expiry: content can remove one layer, renew the same identity, and 
       expire: context => {
         expires++;
         if (context.instance.state.layers === 1) {
-          context.effects.finish(context.address);
+          context.effects.finish([context.ref]);
         } else {
-          context.effects.setExpiration(context.address, context.tick + context.instance.state.intervalTicks);
-          context.effects.update(context.address, effect.ref, state => ({ ...state, layers: state.layers - 1 }));
-          assert.equal(context.facts.getEffect(context.address).state.layers, context.instance.state.layers);
-          assert.equal(context.facts.getEffect(context.address).expiresAtTick, context.tick + 4);
+          context.effects.setTick(context.ref, context.tick + context.instance.state.intervalTicks);
+          context.effects.update(context.ref, effect.ref, state => ({ ...state, layers: state.layers - 1 }));
+          assert.equal(context.facts.getEffect(context.ref).state.layers, context.instance.state.layers);
+          assert.equal(effectTick(context.facts.getEffect(context.ref)), context.tick + 4);
         }
       },
     },
@@ -154,14 +155,14 @@ test('effect expiry: content can remove one layer, renew the same identity, and 
   const initial = instances(original)[0];
   let work = expireEffects(original, 2, resources);
   assert.equal(power(work), 120);
-  assert.equal(instances(work)[0].expiresAtTick, 6);
+  assert.equal(effectTick(instances(work)[0]), 6);
   assert.equal(expireEffects(work, 2, resources), work);
   work = expireEffects(work, 7, resources);
   assert.equal(expires, 2, 'an overdue deadline enters the callback once per pass');
   assert.equal(power(work), 110);
-  assert.equal(instances(work)[0].expiresAtTick, 11);
+  assert.equal(effectTick(instances(work)[0]), 11);
   const remaining = instances(work)[0];
-  for (const key of ['id', 'source', 'scope', 'acquiredSequence', 'programRef', 'parent']) {
+  for (const key of ['id', 'source', 'acquiredSequence', 'programRef']) {
     assert.deepEqual(remaining[key], initial[key]);
   }
   assert.equal(instances(work).length, 1);
@@ -181,13 +182,13 @@ test('effect expiry: clearing a deadline and nested terminal removal are normal 
     const replacement = resources.registerEffect(program('replacement'));
     const effect = resources.registerEffect(program('normal-outcome', { count: 0 }), {
       lifecycle: { expire: context => {
-        context.effects.update(context.address, effect.ref, () => ({ count: 1 }));
+        context.effects.update(context.ref, effect.ref, () => ({ count: 1 }));
         if (settlement === 'clear') {
-          context.effects.setExpiration(context.address, null);
+          context.effects.setTick(context.ref, null);
         } else {
-          context.effects.finish(context.address);
-          context.effects.install(0, replacement.ref, { source: null, scope: null, expiresAtTick: null });
-          assert.equal(context.facts.getEffect(context.address), undefined);
+          context.effects.finish([context.ref]);
+          context.effects.install(0, replacement.ref, { source: null, scopes: [], });
+          assert.equal(context.facts.getEffect(context.ref), undefined);
           assert.equal(context.instance.finished, true);
           assert.equal(context.instance.state.count, 1);
         }
@@ -196,7 +197,7 @@ test('effect expiry: clearing a deadline and nested terminal removal are normal 
     const original = install(effectFixtureWork(owner()), effect, resources, 5);
     const expired = expireEffects(original, 5, resources);
     assert.equal(instances(expired).length, 1);
-    assert.equal(instances(expired)[0].expiresAtTick, null);
+    assert.equal(effectTick(instances(expired)[0]), null);
     assert.equal(instances(expired)[0].finished, false);
     assert.equal(instances(expired)[0].programRef, settlement === 'clear' ? effect.ref : replacement.ref);
   }
@@ -209,7 +210,7 @@ test('effect expiry: renewed deadlines and updated bindings are visible to parti
     const layered = context.facts.getEffect(address(0));
     const unit = context.facts.getUnit(0);
     observed.push({
-      kind, layers: layered.state.layers, deadline: layered.expiresAtTick,
+      kind, layers: layered.state.layers, deadline: effectTick(layered),
       active: context.facts.participating(0).map(instance => instance.id),
       retainedAddition: unit.offense.attack.entries.find(entry => entry.owner?.instanceId === 0).values[0].finalAddition,
       attack: resolveAttackPower(0, { getUnit: id => context.facts.getUnit(id) }),
@@ -221,8 +222,8 @@ test('effect expiry: renewed deadlines and updated bindings are visible to parti
       competition: instance => ({ group: 'layers', priority: instance.state.layers }),
       disable: observe('disable'),
       expire: context => {
-        context.effects.setExpiration(context.address, context.tick + 5);
-        context.effects.update(context.address, layered.ref, state => ({ layers: state.layers - 1 }));
+        context.effects.setTick(context.ref, context.tick + 5);
+        context.effects.update(context.ref, layered.ref, state => ({ layers: state.layers - 1 }));
       },
     },
   });
@@ -250,15 +251,15 @@ test('effect expiry: unresolved deadlines fail without publishing state and rele
       lifecycle: { expire: context => {
         escaped = context;
         if (!fail || failure !== 'unchanged') {
-          context.effects.update(context.address, effect.ref, state => ({ layers: state.layers - 1 }));
+          context.effects.update(context.ref, effect.ref, state => ({ layers: state.layers - 1 }));
         }
         if (fail && failure === 'exception') {
           throw new Error('expiration failed');
         }
         if (!fail) {
-          context.effects.setExpiration(context.address, context.tick + 1);
+          context.effects.setTick(context.ref, context.tick + 1);
         } else if (failure === 'overdue') {
-          context.effects.setExpiration(context.address, context.tick - 1);
+          context.effects.setTick(context.ref, context.tick - 1);
         }
       } },
     });
@@ -266,21 +267,21 @@ test('effect expiry: unresolved deadlines fail without publishing state and rele
     assert.throws(() => expireEffects(original, 10, resources, scope),
       failure === 'exception' ? /expiration failed/ : /must resolve its expired deadline/);
     assert.equal(instances(original)[0].state.layers, 3);
-    assert.equal(instances(original)[0].expiresAtTick, 5);
+    assert.equal(effectTick(instances(original)[0]), 5);
     assert.equal(power(original), 130);
     for (const read of [
       () => escaped.instance,
-      () => escaped.facts.getEffect(escaped.address),
-      () => escaped.effects.setExpiration(escaped.address, 11),
-      () => escaped.effects.update(escaped.address, effect.ref, state => state),
-      () => escaped.effects.finish(escaped.address),
+      () => escaped.facts.getEffect(escaped.ref),
+      () => escaped.effects.setTick(escaped.ref, 11),
+      () => escaped.effects.update(escaped.ref, effect.ref, state => state),
+      () => escaped.effects.finish([escaped.ref]),
     ]) {
       assert.throws(read, /no longer active/);
     }
     fail = false;
     const retry = expireEffects(original, 10, resources, scope);
     assert.equal(instances(retry)[0].state.layers, 2);
-    assert.equal(instances(retry)[0].expiresAtTick, 11);
+    assert.equal(effectTick(instances(retry)[0]), 11);
     assert.equal(power(retry), 120);
     assert.throws(() => escaped.facts.getUnit(0), /no longer active/);
   }
@@ -292,7 +293,7 @@ test('effect expiry: a newly installed expired effect is visible to facts and wa
   const newborn = resources.registerEffect(program('newborn'), {
     lifecycle: { expire: context => {
       calls.push('newborn');
-      context.effects.finish(context.address);
+      context.effects.finish([context.ref]);
     } },
   });
   let newbornAddress;
@@ -300,21 +301,21 @@ test('effect expiry: a newly installed expired effect is visible to facts and wa
     lifecycle: { expire: context => {
       calls.push('installer');
       const installed = context.effects.install(0, newborn.ref, {
-        source: null, scope: null, expiresAtTick: context.tick,
+        source: null, scopes: [...(context.tick === null ? [] : [{ type: "TICK", tick: context.tick }])],
       });
       assert.equal(installed.type, 'INSTALLED');
-      newbornAddress = installed.address;
+      newbornAddress = installed.ref;
       assert.equal(context.facts.getEffect(newbornAddress).participating, true);
-      context.effects.finish(context.address);
+      context.effects.finish([context.ref]);
     } },
   });
   const original = install(effectFixtureWork(owner()), first, resources, 5);
   const firstPass = expireEffects(original, 5, resources);
   assert.deepEqual(calls, ['installer']);
-  assert.equal(instances(firstPass).find(instance => instance.id === newbornAddress.instanceId).finished, false);
+  assert.equal(instances(firstPass).find(instance => instance.id === newbornAddress.effectId).finished, false);
   const secondPass = expireEffects(firstPass, 5, resources);
   assert.deepEqual(calls, ['installer', 'newborn']);
-  assert.equal(instances(secondPass).find(instance => instance.id === newbornAddress.instanceId).finished, true);
+  assert.equal(instances(secondPass).find(instance => instance.id === newbornAddress.effectId).finished, true);
 });
 
 function runtimeScenario(failure) {
@@ -324,16 +325,16 @@ function runtimeScenario(failure) {
   const effect = resources.registerEffect(program('runtime-expiry', { layers: 3 }), {
     contributions: [attack(instance => [modifier.create({ finalAddition: instance.state.layers * 10 })])],
     lifecycle: { expire: context => {
-      context.effects.update(context.address, effect.ref, state => ({ layers: state.layers - 1 }));
-      if (context.address.unitId === 0) {
-        context.effects.install(0, marker.ref, { source: null, scope: null, expiresAtTick: null });
+      context.effects.update(context.ref, effect.ref, state => ({ layers: state.layers - 1 }));
+      if (context.ref.unitId === 0) {
+        context.effects.install(0, marker.ref, { source: null, scopes: [], });
       }
-      if (fault.enabled && context.address.unitId === 1) {
+      if (fault.enabled && context.ref.unitId === 1) {
         if (failure === 'exception') {
           throw new Error('runtime expiration failed');
         }
       } else {
-        context.effects.setExpiration(context.address, context.tick + 3);
+        context.effects.setTick(context.ref, context.tick + 3);
       }
     } },
   });
@@ -341,7 +342,7 @@ function runtimeScenario(failure) {
   resources.effectSources.register({
     ref: sourceRef, initialize: () => ({}), ownState: state => state,
     selectInitial: ({ battlefield }) => battlefield.unitIds,
-    install: () => effectSourceInstallation(effect.ref, { expiresAtTick: 0 }),
+    install: () => effectSourceInstallation(effect.ref, { scopes: [{ type: "TICK", tick: 0 }] }),
   });
   const source = {
     definition: createMechanismDefinition({ id: 'expiry-source' }), active: true,
@@ -385,8 +386,31 @@ test('effect expiry: a runtime exception or invalid deadline discards the comple
     assert.equal(after.tickIndex, 1);
     assert.equal(after.execution.nextUnitId, 3);
     assert.deepEqual(after.units.slice(0, 2).map(unit => unit.effects.instances[0].state.layers), [2, 2]);
-    assert.deepEqual(after.units.slice(0, 2).map(unit => unit.effects.instances[0].expiresAtTick), [3, 3]);
+    assert.deepEqual(after.units.slice(0, 2).map(unit => effectTick(unit.effects.instances[0])), [3, 3]);
     assert.equal(after.units[0].effects.instances.length, 2);
     assert.equal(after.units[0].effects.nextInstanceId, 2);
   }
+});
+
+test('effect expiry: shortening an initially future deadline waits for the next frozen pass', () => {
+  const resources = new CombatResources();
+  const calls = [];
+  const first = resources.registerEffect(program('shortener'), {
+    lifecycle: { expire: context => {
+      calls.push('first');
+      context.effects.setTick(address(1), 5);
+      context.effects.finish([context.ref]);
+    } },
+  });
+  const future = resources.registerEffect(program('future'), {
+    lifecycle: { expire: context => { calls.push('future'); context.effects.finish([context.ref]); } },
+  });
+  let work = install(effectFixtureWork(owner()), first, resources, 5);
+  work = install(work, future, resources, 10);
+  work = expireEffects(work, 5, resources);
+  assert.deepEqual(calls, ['first']);
+  assert.equal(instances(work)[1].finished, false);
+  work = expireEffects(work, 5, resources);
+  assert.deepEqual(calls, ['first', 'future']);
+  assert.equal(instances(work)[1].finished, true);
 });

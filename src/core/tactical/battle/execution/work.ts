@@ -4,7 +4,11 @@ import type { BattleExecutionState } from "./state.js";
 import type { Unit, UnitId } from "../../unit/unit.js";
 import type { CombatTargetingView } from "../../unit/targeting/query.js";
 import type { MechanismId, MechanismRuntime, MechanismView } from "../../battlefield/mechanism.js";
-import { deriveEffectLifetimeProjection } from "../../unit/capability/effects/lifetime-index.js";
+import type { ActionExecutionWork } from "../../unit/capability/action/internal/executions.js";
+import {
+    captureEffectLifetimeProjection,
+    deriveEffectLifetimeProjection,
+} from "../../unit/capability/effects/lifetime-index.js";
 
 const emptyMechanismView: MechanismView = Object.freeze({
     mechanismIds: [],
@@ -46,6 +50,7 @@ export interface CombatWork {
     readonly lifecycleResults: readonly CombatUnitLifecycleResult[];
     readonly eventLog: CombatEventLog | null;
     readonly execution: BattleExecutionState;
+    readonly actionExecutions?: ActionExecutionWork;
 }
 
 export interface CombatWorkResult {
@@ -64,8 +69,9 @@ export function createCombatWork(
     battlefield: CombatTargetingView,
     execution: BattleExecutionState = defaultExecution,
     mechanismView: MechanismView = emptyMechanismView,
+    actionExecutions?: ActionExecutionWork,
 ): CombatWork {
-    return {
+    const work: CombatWork = {
         battlefield,
         mechanismView,
         mechanismUpdates: new Map(),
@@ -74,7 +80,11 @@ export function createCombatWork(
         lifecycleResults: [],
         eventLog: null,
         execution,
+        ...(actionExecutions === undefined ? {} : { actionExecutions }),
     };
+    captureEffectLifetimeProjection(work);
+
+    return work;
 }
 
 export function getCombatMechanism(
@@ -311,41 +321,61 @@ export function withCombatExecution(work: CombatWork, execution: BattleExecution
     return execution === work.execution ? work : { ...work, execution };
 }
 
-export function combatWorkChanges(work: CombatWork): readonly BattlefieldChange[] {
-    const ids = [...work.unitUpdates.keys(), ...work.removals.keys()].sort(
-        (left, right) => left - right,
-    );
+export function combatWorkChanges(
+    work: CombatWork,
+    previous?: CombatWork,
+): readonly BattlefieldChange[] {
+    const ids = new Set([
+        ...work.unitUpdates.keys(),
+        ...work.removals.keys(),
+        ...(previous?.unitUpdates.keys() ?? []),
+        ...(previous?.removals.keys() ?? []),
+    ]);
+    const changes: BattlefieldChange[] = [];
+    const removalReasons =
+        previous === undefined
+            ? work.removals
+            : new Map(
+                  work.lifecycleResults.flatMap((result) =>
+                      result.type === "REMOVED" ? [[result.unit.id, result.reason] as const] : [],
+                  ),
+              );
 
-    const changes = ids.map((unitId): BattlefieldChange => {
-        const unit = work.unitUpdates.get(unitId);
+    for (const unitId of [...ids].sort((left, right) => left - right)) {
+        const before =
+            previous === undefined
+                ? work.battlefield.getUnit(unitId)
+                : getCombatUnit(previous, unitId);
+        const unit = getCombatUnit(work, unitId);
 
-        if (unit !== undefined) {
-            return {
-                type:
-                    work.battlefield.getUnit(unitId) === undefined
-                        ? "REGISTER_UNIT"
-                        : "UPDATE_UNIT",
-                unit,
-            };
+        if (unit === before) {
+            continue;
         }
+        if (unit !== undefined) {
+            changes.push({ type: before === undefined ? "REGISTER_UNIT" : "UPDATE_UNIT", unit });
+        } else {
+            changes.push({ type: "REMOVE_UNIT", unitId, reason: removalReasons.get(unitId)! });
+        }
+    }
 
-        return {
-            type: "REMOVE_UNIT",
-            unitId,
-            reason: work.removals.get(unitId)!,
-        };
-    });
+    const mechanismIds = new Set([
+        ...work.mechanismUpdates.keys(),
+        ...(previous?.mechanismUpdates.keys() ?? []),
+    ]);
 
-    for (const mechanism of [...work.mechanismUpdates.values()].sort(
-        (left, right) => left.id - right.id,
-    )) {
-        changes.push({
-            type:
-                work.mechanismView.getMechanism(mechanism.id) === undefined
-                    ? "REGISTER_MECHANISM"
-                    : "UPDATE_MECHANISM",
-            mechanism,
-        });
+    for (const id of [...mechanismIds].sort((left, right) => left - right)) {
+        const mechanism = getCombatMechanism(work, id)!;
+        const before =
+            previous === undefined
+                ? work.mechanismView.getMechanism(id)
+                : getCombatMechanism(previous, id);
+
+        if (mechanism !== before) {
+            changes.push({
+                type: before === undefined ? "REGISTER_MECHANISM" : "UPDATE_MECHANISM",
+                mechanism,
+            });
+        }
     }
 
     return changes;

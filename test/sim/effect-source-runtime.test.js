@@ -121,7 +121,7 @@ function sourceMechanism(resources, id, receiver, options = {}) {
         selectInitial: ({ battlefield }) =>
             options.selectFirst ? battlefield.unitIds.slice(0, 1) : battlefield.unitIds,
         ...(continuous ? { acceptsRegistration: () => true } : {}),
-        install: () => effectSourceInstallation(receiver.ref, { expiresAtTick: null }),
+        install: () => effectSourceInstallation(receiver.ref, { scopes: [] }),
         ...(options.shouldFinish === undefined ? {} : { shouldFinish: options.shouldFinish }),
     });
 
@@ -250,13 +250,13 @@ test("effect source runtime: a receiver installation exception discards the comp
     let receiver;
     receiver = receiverProgram(resources, "fallible-receiver", 20, {
         start: context => {
-            context.effects.update(context.address, receiver.ref, state => ({
+            context.effects.update(context.ref, receiver.ref, state => ({
                 ...state,
                 starts: (state.starts ?? 0) + 1,
             }));
 
-            if (context.address.unitId === 2) {
-                attempts.push(context.address);
+            if (context.ref.unitId === 2) {
+                attempts.push(context.ref);
 
                 if (shouldThrow) {
                     throw new Error("receiver installation failed");
@@ -281,7 +281,7 @@ test("effect source runtime: a receiver installation exception discards the comp
     assert.equal(currentAttack(after, 2, resources), 120);
     assert.equal(spawned.effects.instances.length, 1);
     assert.equal(spawned.effects.instances[0].state.starts, 1);
-    assert.deepEqual(attempts, [{ unitId: 2, instanceId: 0 }, { unitId: 2, instanceId: 0 }]);
+    assert.deepEqual(attempts, [{ type: "EFFECT", unitId: 2, effectId: 0 }, { type: "EFFECT", unitId: 2, effectId: 0 }]);
     assert.equal(after.mechanisms[0].effectSource.receivers.find(binding => binding.unitId === 2).installationAttempts, 1);
     assert.deepEqual(before.mechanisms[0].effectSource.receivers.map(binding => binding.unitId), [0, 1]);
 });

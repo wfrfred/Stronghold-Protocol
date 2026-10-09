@@ -34,11 +34,11 @@ function services(resources) {
 function attach(resources, unit, registered) {
   return installFixtureEffect(unit, resources.effects.create(registered.ref, {
     id: unit.effects?.nextInstanceId ?? 0, acquiredSequence: unit.effects?.nextAcquiredSequence ?? 0,
-    source: null, scope: { type: 'UNIT', unitId: unit.id }, expiresAtTick: null,
+    source: null, scopes: [{ type: "UNIT", unitId: unit.id }],
   }), resources);
 }
 function installation(unitId) {
-  return { source: null, scope: { type: 'UNIT', unitId }, expiresAtTick: null };
+  return { source: null, scopes: [{ type: 'UNIT', unitId }] };
 }
 
 test('action release: resources validate registered references, own the callback and respect registration sealing', () => {
@@ -77,7 +77,7 @@ test('action release: absent resources, action, owner or participating rules pre
   const registered = resources.registerEffect(program('disabled-release'));
   supplied.actionRelease.register(registered.ref, { beforeRelease: () => { throw new Error('disabled ran'); } });
   const attached = effectFixtureWork(attach(resources, actor(), registered));
-  const disabled = setEffectEnabled(attached, { unitId: 0, instanceId: 0 }, false, resources, 0);
+  const disabled = setEffectEnabled(attached, { type: "EFFECT", unitId: 0, effectId: 0 }, false, resources, 0);
   assert.equal(beforeActionRelease(disabled, 0, 0, supplied).work, disabled);
 });
 
@@ -89,8 +89,8 @@ test('action release: a content rule consumes charges and only requests interrup
     assert.equal(context.unitId, 0);
     assert.equal(context.tick, 7);
     assert.equal(context.instance.state.remaining > 0, true);
-    context.effects.update(context.address, registered.ref, state => ({ remaining: state.remaining - 1 }));
-    if (context.instance.state.remaining === 0) { context.effects.finish(context.address); }
+    context.effects.update(context.ref, registered.ref, state => ({ remaining: state.remaining - 1 }));
+    if (context.instance.state.remaining === 0) { context.effects.finish([context.ref]); }
     return { type: 'INTERRUPT', recoveryTicks: 15 };
   } });
   let unit = attach(resources, actor(), registered);
@@ -142,12 +142,12 @@ test('action release: candidate identities freeze, participation is rechecked an
     supplied.actionRelease.register(a.ref, { beforeRelease: context => {
       calls.push('A');
       if (!context.instance.state.entered) {
-        context.effects.update(context.address, a.ref, () => ({ entered: true }));
-        if (operation === 'enable') { context.effects.setEnabled({ unitId: 0, instanceId: 1 }, true); }
-        else { context.effects.finish({ unitId: 0, instanceId: 1 }); }
+        context.effects.update(context.ref, a.ref, () => ({ entered: true }));
+        if (operation === 'enable') { context.effects.setEnabled({ type: "EFFECT", unitId: 0, effectId: 1 }, true); }
+        else { context.effects.finish([{ type: "EFFECT", unitId: 0, effectId: 1 }]); }
         const installed = context.effects.install(0, c.ref, installation(0));
         assert.equal(installed.type, 'INSTALLED');
-        assert.equal(context.facts.getEffect(installed.address).programRef, c.ref);
+        assert.equal(context.facts.getEffect(installed.ref).programRef, c.ref);
         assert.equal(context.facts.participating(0).some(instance => instance.programRef === c.ref), true);
       }
       return { type: 'CONTINUE' };
@@ -155,7 +155,7 @@ test('action release: candidate identities freeze, participation is rechecked an
     const b = resources.registerEffect(program(`second-${operation}`));
     supplied.actionRelease.register(b.ref, { beforeRelease: () => { calls.push('B'); return { type: 'CONTINUE' }; } });
     let work = effectFixtureWork(attach(resources, attach(resources, actor(), a), b));
-    if (operation === 'enable') { work = setEffectEnabled(work, { unitId: 0, instanceId: 1 }, false, resources, 0); }
+    if (operation === 'enable') { work = setEffectEnabled(work, { type: "EFFECT", unitId: 0, effectId: 1 }, false, resources, 0); }
     const first = beforeActionRelease(work, 0, 0, supplied);
     assert.deepEqual(calls, operation === 'enable' ? ['A', 'B'] : ['A']);
     calls.length = 0;
@@ -171,9 +171,9 @@ test('action release: the live typed instance tracks updates and all borrowed op
   const registered = resources.registerEffect(program('live-release', { value: 0 }));
   supplied.actionRelease.register(registered.ref, { beforeRelease: context => {
     borrowed = context;
-    context.effects.update(context.address, registered.ref, state => ({ value: state.value + 1 }));
+    context.effects.update(context.ref, registered.ref, state => ({ value: state.value + 1 }));
     assert.equal(context.instance.state.value, 1);
-    context.effects.finish(context.address);
+    context.effects.finish([context.ref]);
     assert.equal(context.instance.finished, true);
     assert.equal(context.instance.state.value, 1);
     return { type: 'CONTINUE' };
@@ -183,9 +183,9 @@ test('action release: the live typed instance tracks updates and all borrowed op
   assert.deepEqual(getCombatUnit(result.work, 0).effects.instances, []);
   assert.throws(() => borrowed.instance, /no longer active/);
   assert.throws(() => borrowed.facts.getUnit(0), /no longer active/);
-  assert.throws(() => borrowed.facts.getEffect(borrowed.address), /no longer active/);
+  assert.throws(() => borrowed.facts.getEffect(borrowed.ref), /no longer active/);
   assert.throws(() => borrowed.facts.participating(0), /no longer active/);
-  assert.throws(() => borrowed.effects.finish(borrowed.address), /no longer active/);
+  assert.throws(() => borrowed.effects.finish([borrowed.ref]), /no longer active/);
 });
 
 test('action release: content exceptions propagate and release borrowed state without publishing a partial transition', () => {
@@ -196,7 +196,7 @@ test('action release: content exceptions propagate and release borrowed state wi
   const registered = resources.registerEffect(program('failed-release', { attempts: 0 }));
   supplied.actionRelease.register(registered.ref, { beforeRelease: context => {
     borrowed = context;
-    context.effects.update(context.address, registered.ref, state => ({ attempts: state.attempts + 1 }));
+    context.effects.update(context.ref, registered.ref, state => ({ attempts: state.attempts + 1 }));
     if (fail) { throw new Error('release content failed'); }
     return { type: 'CONTINUE' };
   } });

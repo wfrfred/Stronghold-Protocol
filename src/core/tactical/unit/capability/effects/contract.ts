@@ -1,10 +1,11 @@
 import type { Unit, UnitId } from "../../unit.js";
 import type { CombatWork } from "../../../battle/execution/work.js";
 import type {
-    EffectAddress,
+    EffectRef,
     EffectInstanceValue,
-    EffectLifetimeScope,
+    Scope,
     EffectInstanceMetadata,
+    LifetimeRef,
 } from "./instance.js";
 import type { EffectProgramRef } from "./program.js";
 import type { EffectResources } from "./registry.js";
@@ -13,7 +14,7 @@ import type { EffectLifecycleResources } from "./lifecycle-resources.js";
 
 export interface EffectView {
     getUnit(id: UnitId): Unit | undefined;
-    getEffect(address: EffectAddress): EffectInstanceValue | undefined;
+    getEffect(address: EffectRef): EffectInstanceValue | undefined;
     participating(unitId: UnitId): readonly EffectInstanceValue[];
 }
 
@@ -24,22 +25,18 @@ export interface EffectLifecycleOperations {
         input: EffectInstallationInput<NoInfer<S>>,
     ): EffectInstallationResult;
     update<S extends object>(
-        address: EffectAddress,
+        address: EffectRef,
         ref: EffectProgramRef<S>,
         transition: (current: NoInfer<S>) => NoInfer<S>,
     ): void;
-    setEnabled(address: EffectAddress, enabled: boolean): void;
-    setExpiration(address: EffectAddress, expiresAtTick: number | null): void;
-    finish(address: EffectAddress): void;
-    attachParent(
-        child: EffectAddress,
-        parent: EffectAddress,
-        finishIfParentFinished?: boolean,
-    ): EffectParentBindingResult;
+    setEnabled(address: EffectRef, enabled: boolean): void;
+    setTick(ref: EffectRef, tick: number | null): void;
+    finish(refs: readonly EffectRef[], reason?: EffectEndReason): void;
+    bind(ref: EffectRef, lifetime: LifetimeRef): EffectBindingResult;
 }
 
 export interface EffectLifecycleContext<S extends object = object> {
-    readonly address: EffectAddress;
+    readonly ref: EffectRef;
     readonly instance: EffectInstanceValue & { readonly state: S };
     readonly tick: number;
     readonly facts: EffectView;
@@ -47,9 +44,16 @@ export interface EffectLifecycleContext<S extends object = object> {
 }
 
 export interface EffectAdmissionContext<S extends object = object> {
-    readonly address: EffectAddress;
+    readonly unitId: UnitId;
     readonly instance: EffectInstanceValue & { readonly state: S };
     readonly facts: EffectView;
+}
+
+export type EffectEndReason = string;
+
+export interface EffectEnd {
+    readonly root: LifetimeRef;
+    readonly reason: EffectEndReason;
 }
 
 export type EffectLifecycleAction<S extends object> = (
@@ -87,17 +91,16 @@ export interface EffectTransitionResources {
 
 export interface EffectInstallationInput<S extends object = object> {
     readonly source: UnitId | null;
-    readonly scope: EffectLifetimeScope | null;
-    readonly expiresAtTick: number | null;
+    readonly scopes: readonly Scope[];
     readonly initialState?: S;
 }
 
 export type EffectInstallationResult =
-    | { readonly type: "INSTALLED"; readonly address: EffectAddress }
+    | { readonly type: "INSTALLED" | "ENDED"; readonly ref: EffectRef }
     | {
           readonly type: "REJECTED";
-          readonly reason: "TARGET_ABSENT" | "START_FINISHED" | "ADMISSION_REJECTED";
-          readonly address: EffectAddress;
+          readonly reason:
+              "TARGET_ABSENT" | "TARGET_CLOSING" | "LIFETIME_UNAVAILABLE" | "ADMISSION_REJECTED";
       };
 
 export interface EffectInstallation {
@@ -105,13 +108,13 @@ export interface EffectInstallation {
     readonly result: EffectInstallationResult;
 }
 
-export type EffectParentBindingResult =
+export type EffectBindingResult =
     | { readonly type: "BOUND" }
-    | { readonly type: "CHILD_ABSENT" }
-    | { readonly type: "CHILD_FINISHED" }
-    | { readonly type: "PARENT_UNAVAILABLE"; readonly reason: "ABSENT" | "FINISHED" };
+    | { readonly type: "EFFECT_ABSENT" }
+    | { readonly type: "EFFECT_FINISHED" }
+    | { readonly type: "LIFETIME_UNAVAILABLE" };
 
-export interface EffectParentBinding {
+export interface EffectLifetimeBinding {
     readonly work: CombatWork;
-    readonly result: EffectParentBindingResult;
+    readonly result: EffectBindingResult;
 }

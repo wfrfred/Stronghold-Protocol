@@ -163,7 +163,7 @@ test('elemental HP damage ignores physical defense, magic resistance, source att
     const attackBuff = supplied.registerEffect(createEffectProgram({ id: `source-attack-${damageResistance}`, initialize: () => ({}), ownState: value => ({ ...value }) }),
       { contributions: [attack(() => [modifier({ multiplier: 100 })])] });
     let input = effectFixtureWork(source, unit('ENEMY', { defense: { defense: 100000, resistance: 99 } }, { damageResistance, elementResistance: 100 }));
-    input = installNewEffect(input, 0, attackBuff.ref, { source: 0, scope: { type: 'UNIT', unitId: 0 }, expiresAtTick: null }, supplied, 0).work;
+    input = installNewEffect(input, 0, attackBuff.ref, { source: 0, scopes: [{ type: "UNIT", unitId: 0 }] }, supplied, 0).work;
     const result = resolveDamage(input, { sourceUnitId: 0, targetUnitId: 1, damageType: 'ELEMENTAL', operands: createDamageOperands(100), tick: 0 }, supplied);
     assert.equal(result.report.hpLoss, expected);
     assert.equal(result.report.formulaDamage, expected);
@@ -298,7 +298,7 @@ test('elemental runtime: nested burst damage failure publishes neither EP progre
     },
     targetStates: (supplied, selected) => {
       const target = initializeUnit({ id: 1, position: [1, 0], definition: selected });
-      const installed = installNewEffect(effectFixtureWork(target), 1, faultRef, { source: null, scope: { type: 'UNIT', unitId: 1 }, expiresAtTick: null }, supplied, 0);
+      const installed = installNewEffect(effectFixtureWork(target), 1, faultRef, { source: null, scopes: [{ type: "UNIT", unitId: 1 }] }, supplied, 0);
       return { effects: getCombatUnit(installed.work, 1).effects };
     },
   });

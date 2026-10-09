@@ -1,3 +1,4 @@
+import { EffectDispatchScope } from "../../effects/dispatch.js";
 import type { ActionExecutionWork } from "./executions.js";
 import { assertFiniteNumber, assertNonnegativeSafeInteger } from "../../../../../common/assert.js";
 import { ownDataRecord } from "../../../../../common/immutable-data.js";
@@ -9,7 +10,7 @@ import {
 import type { UnitId } from "../../../unit.js";
 import { isSpatiallyPresent } from "../../presence.js";
 import type { EffectTransitionResources } from "../../effects/contract.js";
-import { finishEffectsOwnedByExecution } from "../../effects/lifecycle.js";
+import { closeEffectLifetimes } from "../../effects/lifecycle.js";
 import type { TargetBindingId } from "../capability.js";
 import type { ProjectileOperations } from "../../../../battlefield/projectile/operations.js";
 import { gainUnitSkillSp } from "../../../../battle/execution/skill-sp.js";
@@ -101,17 +102,19 @@ function endExecution(
     execution: ActionExecution,
     resources: EffectTransitionResources,
     tick: number,
+    reason: string,
+    dispatch: EffectDispatchScope,
 ): CombatWork {
-    const next = finishEffectsOwnedByExecution(
-        work,
-        execution.sourceUnitId,
-        execution.id,
-        resources,
-        tick,
-    );
     executions.remove(execution);
 
-    return next;
+    return closeEffectLifetimes(
+        work,
+        [{ type: "ACTION", executionId: execution.id }],
+        resources,
+        tick,
+        reason,
+        dispatch,
+    );
 }
 
 function finishExecution(
@@ -121,6 +124,7 @@ function finishExecution(
     resources: EffectTransitionResources,
     tick: number,
     signals: readonly ActionExecutionSignal[],
+    dispatch: EffectDispatchScope,
 ): ActionExecutionWorkTransition {
     const signal: ActionExecutionSignal = {
         type: "ACTION_FINISHED",
@@ -128,7 +132,15 @@ function finishExecution(
         sourceUnitId: execution.sourceUnitId,
         tick,
     };
-    const ended = endExecution(work, executions, execution, resources, tick);
+    const ended = endExecution(
+        work,
+        executions,
+        execution,
+        resources,
+        tick,
+        "ACTION_FINISHED",
+        dispatch,
+    );
 
     return {
         work: appendCombatEvents(ended, [signal]),
@@ -142,12 +154,17 @@ export function cancelActionExecutionInWork(
     executions: ActionExecutionWork,
     request: ActionExecutionCancelRequest,
     resources: EffectTransitionResources,
+    dispatch = new EffectDispatchScope(),
 ): ActionExecutionWorkTransition {
     const { executionId, tick, reason = "CANCELLED" } = request;
     const execution = executions.get(executionId);
 
     if (execution === undefined) {
         return { work, result: { type: "ABSENT" }, signals: [] };
+    }
+
+    if (work.actionExecutions !== executions) {
+        work = { ...work, actionExecutions: executions };
     }
 
     const signal: ActionExecutionSignal = {
@@ -157,7 +174,7 @@ export function cancelActionExecutionInWork(
         tick,
         reason,
     };
-    const ended = endExecution(work, executions, execution, resources, tick);
+    const ended = endExecution(work, executions, execution, resources, tick, reason, dispatch);
 
     return {
         work: appendCombatEvents(ended, [signal]),
@@ -213,6 +230,11 @@ export function resumeActionExecutionInWork(
         return { work, result: { type: "ABSENT" }, signals: [] };
     }
 
+    if (work.actionExecutions !== executions) {
+        work = { ...work, actionExecutions: executions };
+    }
+
+    const dispatch = new EffectDispatchScope();
     const signals: ActionExecutionSignal[] = [];
     const releaseType = segments.some(({ type }) => type === "RELEASE") ? "RELEASE" : "EXECUTE";
 
@@ -220,7 +242,7 @@ export function resumeActionExecutionInWork(
         const segment: CompiledActionSegment | undefined = segments[execution.cursor];
 
         if (segment === undefined) {
-            return finishExecution(work, executions, execution, resources, tick, signals);
+            return finishExecution(work, executions, execution, resources, tick, signals, dispatch);
         }
 
         const source = getCombatUnit(work, execution.sourceUnitId);
@@ -231,6 +253,7 @@ export function resumeActionExecutionInWork(
                 executions,
                 { executionId, tick, reason: "SOURCE_ABSENT" },
                 resources,
+                dispatch,
             );
 
             return { ...cancelled, signals: [...signals, ...cancelled.signals] };
@@ -242,6 +265,7 @@ export function resumeActionExecutionInWork(
                 executions,
                 { executionId, tick, reason: "INTERRUPTED" },
                 resources,
+                dispatch,
             );
 
             return { ...cancelled, signals: [...signals, ...cancelled.signals] };
@@ -251,8 +275,12 @@ export function resumeActionExecutionInWork(
             segment.type === releaseType &&
             !segments.slice(0, execution.cursor).some(({ type }) => type === releaseType)
         ) {
-            const releasing = beforeActionRelease(work, source.id, tick, resources);
+            const releasing = beforeActionRelease(work, source.id, tick, resources, dispatch);
             work = releasing.work;
+
+            if (executions.get(executionId) === undefined) {
+                return { work, result: { type: "ABSENT" }, signals };
+            }
 
             if (releasing.interrupted) {
                 const cancelled = cancelActionExecutionInWork(
@@ -260,6 +288,7 @@ export function resumeActionExecutionInWork(
                     executions,
                     { executionId, tick, reason: "INTERRUPTED" },
                     resources,
+                    dispatch,
                 );
 
                 return { ...cancelled, signals: [...signals, ...cancelled.signals] };
@@ -274,6 +303,11 @@ export function resumeActionExecutionInWork(
                     contextFor(work, execution, tick, resources.projectileOperations),
                 );
                 work = result.work;
+
+                if (executions.get(executionId) === undefined) {
+                    return { work, result: { type: "ABSENT" }, signals };
+                }
+
                 const preceding = segments.slice(0, execution.cursor);
                 const releaseIndex = preceding.findIndex(({ type }) => type === "RELEASE");
                 const outputStarted = releaseType === "EXECUTE" || releaseIndex >= 0;
@@ -282,7 +316,11 @@ export function resumeActionExecutionInWork(
                     .some(({ type }) => type === "EXECUTE");
 
                 if (outputStarted && !previousOutput && resources.completeAttack !== undefined) {
-                    work = resources.completeAttack(work, execution.sourceUnitId, tick);
+                    work = resources.completeAttack(work, execution.sourceUnitId, tick, dispatch);
+
+                    if (executions.get(executionId) === undefined) {
+                        return { work, result: { type: "ABSENT" }, signals };
+                    }
                 }
 
                 execution = Object.freeze({
@@ -299,7 +337,15 @@ export function resumeActionExecutionInWork(
                 });
 
                 if (result.continuation === "FINISH") {
-                    return finishExecution(work, executions, execution, resources, tick, signals);
+                    return finishExecution(
+                        work,
+                        executions,
+                        execution,
+                        resources,
+                        tick,
+                        signals,
+                        dispatch,
+                    );
                 }
                 if (result.continuation === "CANCEL") {
                     executions.replace(execution);
@@ -308,6 +354,7 @@ export function resumeActionExecutionInWork(
                         executions,
                         { executionId, tick, reason: "CONTENT_CANCELLED" },
                         resources,
+                        dispatch,
                     );
 
                     return { ...cancelled, signals: [...signals, ...cancelled.signals] };
@@ -362,5 +409,7 @@ export function resumeActionExecutionInWork(
                 break;
             }
         }
+
+        executions.replace(execution);
     }
 }

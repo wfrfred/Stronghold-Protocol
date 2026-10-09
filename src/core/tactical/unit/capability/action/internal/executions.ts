@@ -86,7 +86,10 @@ export class ActionExecutionWork {
     }
 
     replace(execution: ActionExecution): void {
-        if (this.#executions.get(execution.id) === execution) {
+        if (
+            !this.#executions.has(execution.id) ||
+            this.#executions.get(execution.id) === execution
+        ) {
             return;
         }
 

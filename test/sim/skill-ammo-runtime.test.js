@@ -36,10 +36,11 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, program } = {}) {
   });
   resources.skills.register({ definition: skill, activate: (context) => {
     const installed = context.effects.install(context.unitId, buff.ref, {
-      source: context.unitId, scope: { type: "UNIT", unitId: context.unitId }, expiresAtTick: null,
+      source: context.unitId, scopes: [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }],
     });
     assert.equal(installed.type, "INSTALLED");
-    return { type: "ACTIVATED", ownedEffects: [installed.address] };
+    assert.equal(installed.type, "INSTALLED");
+    return { type: "ACTIVATED" };
   } });
   const definition = createOperatorDefinition({
     id: "ammo-actor", vitality: { maxHp: 10000 }, offense: { attack: 100 },

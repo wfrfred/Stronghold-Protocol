@@ -22,7 +22,7 @@ import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/
 import { effectFixtureWork } from "../helpers/effects.js";
 
 const geometry = createShapeGeometry({ shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 5 }] });
-const address = { unitId: 0, instanceId: 0 };
+const address = { type: "EFFECT", unitId: 0, effectId: 0 };
 const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} ≈ ${expected}`);
 
 function actor(baseAttackTimeTicks = 30, recoveryTicks = 0) {
@@ -66,7 +66,7 @@ function register(resources, speed = 100, time = modifier.create()) {
 
 function install(work, program, resources, tick = 0, expiresAtTick = null) {
     return installNewEffect(work, 0, program.ref, {
-        source: null, scope: null, expiresAtTick,
+        source: null, scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }],
     }, resources, tick).work;
 }
 

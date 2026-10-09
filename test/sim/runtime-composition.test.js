@@ -123,12 +123,12 @@ function scenario({ failure = null, cancelled = false } = {}) {
       bindings: flags.length === 0 ? [] : [compileStatusBinding(flags)],
       lifecycle: {
         start: (context) => {
-          context.effects.update(context.address, program.ref, (state) => ({
+          context.effects.update(context.ref, program.ref, (state) => ({
             ...state, starts: state.starts + 1,
           }));
         },
         enable: (context) => {
-          context.effects.update(context.address, program.ref, (state) => ({
+          context.effects.update(context.ref, program.ref, (state) => ({
             ...state, enables: state.enables + 1,
           }));
         },
@@ -146,8 +146,8 @@ function scenario({ failure = null, cancelled = false } = {}) {
   }), {
     lifecycle: {
       start: (context) => {
-        const prefix = context.effects.install(context.address.unitId, marker.ref, {
-          source: 0, scope: null, expiresAtTick: null,
+        const prefix = context.effects.install(context.ref.unitId, marker.ref, {
+          source: 0, scopes: [],
         });
         assert.equal(prefix.type, "INSTALLED");
       },
@@ -163,12 +163,12 @@ function scenario({ failure = null, cancelled = false } = {}) {
     contributions: [computedAttack(() => [modifier.create({ finalAddition: 5 })])],
     lifecycle: {
       start: (context) => {
-        context.effects.update(context.address, receiver.ref, (state) => ({
+        context.effects.update(context.ref, receiver.ref, (state) => ({
           ...state, starts: state.starts + 1,
         }));
       },
       enable: (context) => {
-        context.effects.update(context.address, receiver.ref, (state) => ({
+        context.effects.update(context.ref, receiver.ref, (state) => ({
           ...state, enables: state.enables + 1,
         }));
       },
@@ -181,12 +181,12 @@ function scenario({ failure = null, cancelled = false } = {}) {
             state.remaining === 0 ? undefined : {
               remaining: state.remaining - 1, consumed: state.consumed + 1,
             }), true);
-          context.operations.effects.update(context.address, receiver.ref, (state) => ({
+          context.operations.effects.update(context.ref, receiver.ref, (state) => ({
             ...state, uses: state.uses + 1,
           }));
           if (cancelled) {
             rejected.push(context.operations.effects.install(context.ownerUnitId, refused.ref, {
-              source: 0, scope: null, expiresAtTick: null,
+              source: 0, scopes: [],
             }));
             context.operations.heal({
               sourceUnitId: 0, targetUnitId: context.ownerUnitId,
@@ -194,13 +194,13 @@ function scenario({ failure = null, cancelled = false } = {}) {
             });
           } else {
             const installed = context.operations.effects.install(context.ownerUnitId, marker.ref, {
-              source: 0, scope: null, expiresAtTick: null,
+              source: 0, scopes: [],
             });
             assert.equal(installed.type, "INSTALLED");
-            assert.equal(context.operations.effects.attachParent(installed.address, context.address).type, "BOUND");
+            assert.equal(context.operations.effects.bind(installed.ref, context.ref).type, "BOUND");
           }
           attempts.push({
-            address: context.address,
+            address: context.ref,
             source: context.operations.sources.get(0, sourceRef).effectSource.state,
             marked: hasStatusFlag(context.facts.getUnit(context.ownerUnitId), "INVISIBLE"),
           });
@@ -219,7 +219,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
     ownState: (state) => ({ ...state }),
     selectInitial: ({ battlefield }) => battlefield.unitIds,
     acceptsRegistration: () => true,
-    install: () => effectSourceInstallation(receiver.ref, { expiresAtTick: null }),
+    install: () => effectSourceInstallation(receiver.ref, { scopes: [] }),
     shouldFinish: ({ source, battlefield, tick }) => {
       if (fault.enabled && failure === "late-source" && source.effectSource.state.consumed > 0) {
         assert.deepEqual(source.effectSource.receivers.map((binding) => binding.unitId), [0, 1, 2, 3]);
@@ -279,8 +279,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
   const installation = (context, services, program) => installNewEffect(
     context.work, context.sourceUnitId, program.ref, {
       source: context.sourceUnitId,
-      scope: { type: "EXECUTION", unitId: context.sourceUnitId, executionId: context.executionId },
-      expiresAtTick: null,
+      scopes: [{ type: "ACTION", executionId: context.executionId }],
     }, services, context.tick,
   ).work;
   const launch = (context, services, targetUnitId) => {
@@ -359,7 +358,7 @@ test("runtime composition: late exceptions and invalid settlement discard every 
     assert.equal(failed.runtime.navigationMaps, maps);
     assert.deepEqual(failed.launches.map((launch) => [launch.id, launch.executionId]), [[0, 0], [1, 0], [2, 1]]);
     assert.deepEqual(failed.attempts, [{
-      address: { unitId: 1, instanceId: 0 },
+      address: { type: "EFFECT", unitId: 1, effectId: 0 },
       source: { remaining: 2, consumed: 1 }, marked: true,
     }]);
     assert.throws(() => failed.scopes[0].facts.getUnit(1), /no longer active/);
@@ -387,7 +386,7 @@ test("runtime composition: late exceptions and invalid settlement discard every 
     assert.deepEqual(effect(after, 3, failed.receiver).state, { starts: 1, enables: 1, uses: 0 });
     assert.deepEqual(effect(after, 1, failed.receiver).state, { starts: 1, enables: 1, uses: 1 });
     assert.equal(effect(after, 1, failed.marker).id, 1);
-    assert.deepEqual(effect(after, 1, failed.marker).parent, { unitId: 1, instanceId: 0 });
+    assert.deepEqual(effect(after, 1, failed.marker).scopes, [{ type: "EFFECT", unitId: 1, effectId: 0 }]);
     assert.equal(after.units.find((unit) => unit.id === 1).effects.nextInstanceId, 2);
     assert.equal(before.units.find((unit) => unit.id === 1).effects.nextInstanceId, 1);
     assert.equal(hasStatusFlag(after.units.find((unit) => unit.id === 1), "INVISIBLE"), true);
@@ -436,13 +435,13 @@ test("runtime composition: late exceptions and invalid settlement discard every 
   }
 });
 
-test("runtime composition: admission rejection and cancelled damage publish nested lifecycle, shared consumption and healing prefixes", () => {
+test("runtime composition: admission rejection skips start while cancelled damage retains shared consumption and healing", () => {
   const run = scenario({ cancelled: true });
   run.runtime.step();
   const reached = run.runtime.step();
   const after = run.runtime.snapshot();
   assert.deepEqual(run.rejected, [{
-    type: "REJECTED", reason: "ADMISSION_REJECTED", address: { unitId: 1, instanceId: 1 },
+    type: "REJECTED", reason: "ADMISSION_REJECTED",
   }]);
   assert.equal(run.reports[0].hpLoss, 0);
   assert.deepEqual(run.reports[0].cancellation, { stage: "RECEPTION", reason: "BLOCKED" });
@@ -457,16 +456,14 @@ test("runtime composition: admission rejection and cancelled damage publish nest
   assert.equal(after.projectiles.nextProjectileId, 3);
   assert.deepEqual(after.mechanisms[0].effectSource.state, { remaining: 2, consumed: 1 });
   assert.equal(effect(after, 1, run.receiver).state.uses, 1);
-  assert.equal(effect(after, 1, run.marker).id, 2);
-  assert.deepEqual(effect(after, 1, run.marker).state, { starts: 1, enables: 1 });
-  assert.equal(effect(after, 1, run.marker).parent, null);
-  assert.equal(hasStatusFlag(after.units.find((unit) => unit.id === 1), "INVISIBLE"), true);
-  assert.equal(resolveAttackPower(1, view(after), run.resources.computations), 18);
-  assert.equal(after.units.find((unit) => unit.id === 1).effects.nextInstanceId, 3);
+  assert.equal(effect(after, 1, run.marker), undefined);
+  assert.equal(hasStatusFlag(after.units.find((unit) => unit.id === 1), "INVISIBLE"), false);
+  assert.equal(resolveAttackPower(1, view(after), run.resources.computations), 15);
+  assert.equal(after.units.find((unit) => unit.id === 1).effects.nextInstanceId, 1);
   while (run.runtime.result === null) run.runtime.step();
   const final = run.runtime.snapshot();
   assert.equal(final.result.reason, "SCHEDULE_COMPLETED");
   assert.equal(final.units.find((unit) => unit.id === 1).vitality.hp, 44);
-  assert.equal(hasStatusFlag(final.units.find((unit) => unit.id === 1), "INVISIBLE"), true);
-  assert.equal(resolveAttackPower(1, view(final), run.resources.computations), 13);
+  assert.equal(hasStatusFlag(final.units.find((unit) => unit.id === 1), "INVISIBLE"), false);
+  assert.equal(resolveAttackPower(1, view(final), run.resources.computations), 10);
 });

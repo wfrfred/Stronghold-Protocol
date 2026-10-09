@@ -1,3 +1,4 @@
+import type { ActionExecutionWork } from "../../unit/capability/action/internal/executions.js";
 import {
     activateSkill,
     advanceSkill,
@@ -16,6 +17,7 @@ import {
 
 interface SkillInput {
     readonly battlefield: BattlefieldView;
+    readonly actionExecutions?: ActionExecutionWork;
     readonly tick: number;
     readonly execution: BattleExecutionState;
     readonly commands: readonly Command[];
@@ -25,10 +27,16 @@ interface SkillResult {
     readonly changes: readonly BattlefieldChange[];
     readonly events: readonly Event[];
     readonly execution: BattleExecutionState;
+    readonly actionExecutions?: ActionExecutionWork;
 }
 
 export function advanceSkills(input: SkillInput, resources: SkillExecutionResources): SkillResult {
-    let work = createCombatWork(input.battlefield, input.execution, input.battlefield);
+    let work = createCombatWork(
+        input.battlefield,
+        input.execution,
+        input.battlefield,
+        input.actionExecutions,
+    );
 
     for (const id of input.battlefield.unitIds) {
         const advanced = advanceSkill(work, id, input.tick, resources);
