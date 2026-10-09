@@ -2,6 +2,7 @@ import { computedAttack } from "../../dist/core/tactical/unit/capability/offense
 import { combatWorkEvents } from "../../dist/core/tactical/battle/execution/work.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { createRng } from "../../dist/core/common/rng.js";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { advanceProjectiles as advanceBattleProjectiles } from "../../dist/core/tactical/battle/steps/projectiles.js";
@@ -24,6 +25,7 @@ import {
   combatWorkView,
   createCombatWork,
   getCombatUnit,
+  withCombatExecution,
 } from "../../dist/core/tactical/battle/execution/work.js";
 
 const hit = createShapeGeometry({
@@ -717,7 +719,15 @@ test("projectile runtime: a failed stop rolls back launch, samples, receiver tra
               run: (context) => {
                 borrowed.push(context.projectiles);
                 attempted.push(launch(context, services, child));
-                return { work: context.work, samples: { emitted: 2 } };
+                const rng = createRng(context.work.execution.rngState);
+                const sample = rng.next();
+                return {
+                  work: withCombatExecution(context.work, {
+                    ...context.work.execution,
+                    rngState: rng.state(),
+                  }),
+                  samples: { emitted: 2, sample },
+                };
               },
             },
             { type: "WAIT", resolve: () => ({ type: "FOR_TICKS", ticks: 4 }) },
@@ -756,6 +766,8 @@ test("projectile runtime: a failed stop rolls back launch, samples, receiver tra
   assert.equal(before.projectiles.nextProjectileId, 1);
   assert.equal(before.actionExecution.executions[0].samples.emitted, 1);
   assert.equal(before.units.find((unit) => unit.id === 1).vitality.hp, 100);
+  const expectedRng = createRng(before.execution.rngState);
+  const expectedSample = expectedRng.next();
 
   failed.fault.enabled = false;
   const retried = failed.runtime.step();
@@ -767,6 +779,12 @@ test("projectile runtime: a failed stop rolls back launch, samples, receiver tra
   assert.equal(failed.runtime.snapshot().units.find((unit) => unit.id === 1).vitality.hp, 92);
   assert.equal(failed.runtime.snapshot().projectiles.nextProjectileId, 2);
   assert.equal(failed.runtime.snapshot().actionExecution.executions[0].samples.emitted, 2);
+  assert.equal(failed.runtime.snapshot().actionExecution.executions[0].samples.sample, expectedSample);
+  assert.deepEqual(failed.runtime.snapshot().execution, {
+    ...before.execution,
+    rngState: expectedRng.state(),
+    nextProjectileId: 2,
+  });
 });
 
 test("projectile runtime: bulk launch returns changes and exposes each latest instance within its scope", () => {
@@ -787,7 +805,7 @@ test("projectile runtime: bulk launch returns changes and exposes each latest in
   };
   let borrowed;
   const observed = [];
-  const launched = withProjectileOperations(previous, previousExecution, resources.projectiles, 0, (operations) => {
+  const launched = withProjectileOperations(previous, previousExecution.nextProjectileId, resources.projectiles, 0, (operations) => {
     borrowed = operations;
     for (let index = 0; index < 32; index++) {
       assert.equal(operations.launch(program.ref, input), index);
@@ -802,7 +820,7 @@ test("projectile runtime: bulk launch returns changes and exposes each latest in
   input.initialState.history.push(2);
   assert.deepEqual(previous.projectileIds, []);
   assert.equal(previousExecution.nextProjectileId, 0);
-  assert.equal(launched.execution.nextProjectileId, 32);
+  assert.equal(launched.nextProjectileId, 32);
   assert.equal(launched.result, observed[0]);
   assert.deepEqual(observed[0].position, [0, 0]);
   assert.deepEqual(observed[0].destination, [100, 0]);
@@ -814,7 +832,7 @@ test("projectile runtime: bulk launch returns changes and exposes each latest in
   released.apply(launched.changes);
   assert.deepEqual(projectileInstances(released), observed);
   assert.deepEqual(previous.projectileIds, []);
-  const work = createCombatWork(released, launched.execution);
+  const work = createCombatWork(released, { ...previousExecution, nextProjectileId: launched.nextProjectileId });
   const advanced = advanceProjectiles(work, released, resources, 1);
   const sibling = advanceProjectiles(work, released, resources, 1);
   assert.deepEqual(advanced, sibling);
@@ -842,7 +860,7 @@ test("projectile runtime: failed launch scopes discard allocation and close borr
     stopDelayTicks: 1,
   };
   let borrowed;
-  assert.throws(() => withProjectileOperations(previous, previousExecution, resources.projectiles, 0, (operations) => {
+  assert.throws(() => withProjectileOperations(previous, previousExecution.nextProjectileId, resources.projectiles, 0, (operations) => {
     borrowed = operations;
     assert.equal(operations.launch(program.ref, input), 0);
     assert.equal(operations.get(0).id, 0);
@@ -853,10 +871,10 @@ test("projectile runtime: failed launch scopes discard allocation and close borr
   assert.throws(() => borrowed.get(0), /no longer active/);
   assert.throws(() => borrowed.launch(program.ref, input), /no longer active/);
 
-  const retried = withProjectileOperations(previous, previousExecution, resources.projectiles, 0,
+  const retried = withProjectileOperations(previous, previousExecution.nextProjectileId, resources.projectiles, 0,
     (operations) => operations.launch(program.ref, input));
   assert.equal(retried.result, 0);
-  assert.equal(retried.execution.nextProjectileId, 1);
+  assert.equal(retried.nextProjectileId, 1);
   assert.deepEqual(previous.projectileIds, []);
   assert.equal(previousExecution.nextProjectileId, 0);
 });
@@ -890,13 +908,13 @@ test("projectile runtime: stop callbacks see latest peer progress while removals
     stopDelayTicks: 0,
   });
   const empty = projectileBattlefield();
-  const launched = withProjectileOperations(empty, execution(), resources.projectiles, 0, (operations) => {
+  const launched = withProjectileOperations(empty, 0, resources.projectiles, 0, (operations) => {
     launchAt(operations, [1, 0]);
     launchAt(operations, [100, 0]);
   });
   const battlefield = empty.fork();
   battlefield.apply([...launched.changes].reverse());
-  const work = createCombatWork(battlefield, launched.execution);
+  const work = createCombatWork(battlefield, execution(launched.nextProjectileId));
   const advanced = advanceProjectiles(work, battlefield, resources, 1);
   const progressed = battlefield.fork();
   progressed.apply(advanced.changes);
@@ -924,7 +942,7 @@ test("projectile runtime: command stops share one container before advancing sur
     },
   });
   const battlefield = projectileBattlefield();
-  const launched = withProjectileOperations(battlefield, execution(), resources.projectiles, 0, (operations) => {
+  const launched = withProjectileOperations(battlefield, 0, resources.projectiles, 0, (operations) => {
     for (let index = 0; index < 32; index++) {
       operations.launch(program.ref, {
         source: null,
@@ -957,7 +975,7 @@ test("projectile runtime: command stops share one container before advancing sur
   let advanced;
   try {
     globalThis.Map = ObservedMap;
-    advanced = advanceBattleProjectiles(battlefield, launched.execution, 1,
+    advanced = advanceBattleProjectiles(battlefield, execution(launched.nextProjectileId), 1,
       stopIds.map(projectileId => ({ type: "STOP_PROJECTILE", projectileId })), resources);
   } finally {
     globalThis.Map = NativeMap;
@@ -978,7 +996,7 @@ test("projectile Battlefield changes: rejected batches and transactions preserve
   const resources = new CombatResources();
   const program = registerProjectile(resources);
   const battlefield = projectileBattlefield();
-  const launched = withProjectileOperations(battlefield, execution(), resources.projectiles, 0,
+  const launched = withProjectileOperations(battlefield, 0, resources.projectiles, 0,
     (operations) => operations.launch(program.ref, {
       source: null, traceTarget: null, position: [0, 0], destination: [3, 0],
       cachedAtk: 0, speedPerTick: 1, contactRange, stopDelayTicks: 1,

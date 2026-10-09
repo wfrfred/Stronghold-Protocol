@@ -892,7 +892,7 @@ const synchronousLiteral = battlefield.transact(() => 17 as const);
 type SynchronousLiteral = Assert<Equal<typeof synchronousLiteral, 17>>;
 const synchronousVoid = battlefield.transact<void>(() => {});
 type SynchronousVoid = Assert<Equal<typeof synchronousVoid, void>>;
-const projectileResult = withProjectileOperations(projectileBattlefield, execution, projectileResources, 0, () => 23 as const);
+const projectileResult = withProjectileOperations(projectileBattlefield, execution.nextProjectileId, projectileResources, 0, () => 23 as const);
 type ProjectileLiteral = Assert<Equal<typeof projectileResult.result, 23>>;
 const fork = battlefield.fork();
 type PublicFork = Assert<Equal<Extract<keyof typeof fork, 'commit' | 'view'>, never>>;
@@ -900,7 +900,7 @@ const inferredVoid = battlefield.transact(field => {
   type PublicTransaction = Assert<Equal<Extract<keyof typeof field, 'commit' | 'view'>, never>>;
 });
 type InferredVoid = Assert<Equal<typeof inferredVoid, undefined>>;
-const projectileVoid = withProjectileOperations(projectileBattlefield, execution, projectileResources, 0, () => {});
+const projectileVoid = withProjectileOperations(projectileBattlefield, execution.nextProjectileId, projectileResources, 0, () => {});
 type ProjectileVoid = Assert<Equal<typeof projectileVoid.result, undefined>>;
 `);
     assert.deepEqual(positive, []);
@@ -909,9 +909,9 @@ type ProjectileVoid = Assert<Equal<typeof projectileVoid.result, undefined>>;
       ['async-transaction', `createBattlefieldRuntime({ map: battlefieldMap }).transact(async () => 1);`],
       ['async-void-transaction', `createBattlefieldRuntime({ map: battlefieldMap }).transact<void>(async () => {});`],
       ['promise-union-transaction', `declare const mixed: number | Promise<number>; createBattlefieldRuntime({ map: battlefieldMap }).transact(() => mixed);`],
-      ['async-projectile-operation', `withProjectileOperations(projectileBattlefield, execution, projectileResources, 0, async () => 1);`],
-      ['async-void-projectile-operation', `withProjectileOperations<void>(projectileBattlefield, execution, projectileResources, 0, async () => {});`],
-      ['promise-union-projectile-operation', `declare const mixed: number | Promise<number>; withProjectileOperations(projectileBattlefield, execution, projectileResources, 0, () => mixed);`],
+      ['async-projectile-operation', `withProjectileOperations(projectileBattlefield, execution.nextProjectileId, projectileResources, 0, async () => 1);`],
+      ['async-void-projectile-operation', `withProjectileOperations<void>(projectileBattlefield, execution.nextProjectileId, projectileResources, 0, async () => {});`],
+      ['promise-union-projectile-operation', `declare const mixed: number | Promise<number>; withProjectileOperations(projectileBattlefield, execution.nextProjectileId, projectileResources, 0, () => mixed);`],
       ['state-extra-field', `initializeUnit({ id: 1, definition: { id: 'offense', offense: { attack: 1 } }, position: [0, 0], states: { offense: { ...initializeOffenseState(), marker: 'extra' as const } } }).offense.marker;`],
       ['normalized-state-extra', `instantiateUnitPlacement(createUnitPlacementDefinition({ definition: { id: 'offense', offense: { attack: 1 } }, position: [0, 0], states: { offense: { ...initializeOffenseState(), marker: 'extra' as const } } }), execution, 0).unit.offense.marker;`],
       ['mutable-definition', `initializeUnit({ id: 1, definition: { id: 'mutable', vitality: { maxHp: 10 } }, position: [0, 0] }).definition.vitality.maxHp = 99;`],

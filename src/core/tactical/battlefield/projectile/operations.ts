@@ -7,7 +7,6 @@ import type { UnitId } from "../../unit/unit.js";
 import type { ProjectileProgramRef } from "./program.js";
 import type { ProjectileResources } from "./resources.js";
 import type { BattlefieldChange } from "../contract.js";
-import type { BattleExecutionState } from "../../battle/execution/state.js";
 import type { ProjectileId, ProjectileInstance, ProjectileView } from "./state.js";
 
 export interface ProjectileLaunchInput<S extends object = object> {
@@ -33,40 +32,39 @@ export interface ProjectileOperations {
 
 export function withProjectileOperations(
     battlefield: ProjectileView,
-    execution: BattleExecutionState,
+    nextProjectileId: ProjectileId,
     resources: Pick<ProjectileResources, "get" | "ownState">,
     tick: number,
     run: (operations: ProjectileOperations) => undefined,
 ): {
     readonly changes: readonly BattlefieldChange[];
-    readonly execution: BattleExecutionState;
+    readonly nextProjectileId: ProjectileId;
     readonly result: undefined;
 };
 export function withProjectileOperations<T>(
     battlefield: ProjectileView,
-    execution: BattleExecutionState,
+    nextProjectileId: ProjectileId,
     resources: Pick<ProjectileResources, "get" | "ownState">,
     tick: number,
     run: (operations: ProjectileOperations) => SynchronousResult<T>,
 ): {
     readonly changes: readonly BattlefieldChange[];
-    readonly execution: BattleExecutionState;
+    readonly nextProjectileId: ProjectileId;
     readonly result: T;
 };
 export function withProjectileOperations<T>(
     battlefield: ProjectileView,
-    execution: BattleExecutionState,
+    nextProjectileId: ProjectileId,
     resources: Pick<ProjectileResources, "get" | "ownState">,
     tick: number,
     run: (operations: ProjectileOperations) => SynchronousResult<T>,
 ): {
     readonly changes: readonly BattlefieldChange[];
-    readonly execution: BattleExecutionState;
+    readonly nextProjectileId: ProjectileId;
     readonly result: T;
 } {
-    assertNonnegativeSafeInteger(execution.nextProjectileId, "projectile identity");
+    assertNonnegativeSafeInteger(nextProjectileId, "projectile identity");
     const current = new ProjectileWork(battlefield);
-    let nextProjectileId = execution.nextProjectileId;
     let active = true;
 
     const readWork = (): ProjectileWork => {
@@ -133,10 +131,7 @@ export function withProjectileOperations<T>(
 
         return {
             changes: current.changes(),
-            execution:
-                nextProjectileId === execution.nextProjectileId
-                    ? execution
-                    : { ...execution, nextProjectileId },
+            nextProjectileId,
             result,
         };
     } finally {

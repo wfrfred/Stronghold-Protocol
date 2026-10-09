@@ -216,7 +216,7 @@ export function createCombat(
     ): CombatAdvanceResult => {
         const launched = withProjectileOperations(
             input.battlefield,
-            input.execution,
+            input.execution.nextProjectileId,
             resources.projectiles,
             input.tick,
             (projectiles) => advanceActions(input, state, projectiles),
@@ -227,7 +227,7 @@ export function createCombat(
             changes: [...launched.result.changes, ...launched.changes],
             execution: {
                 ...launched.result.execution,
-                nextProjectileId: launched.execution.nextProjectileId,
+                nextProjectileId: launched.nextProjectileId,
             },
         };
     };

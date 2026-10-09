@@ -117,11 +117,11 @@ test("the final shot is sampled with its buff before consumption and its project
   }));
   const attackPower = resolveAttackPower(1, combatWorkView(f.work), f.resources.computations);
   assert.equal(attackPower, 200);
-  const launched = withProjectileOperations({ projectileIds: [], getProjectile: () => undefined }, f.work.execution, f.resources.projectiles, 0, (operations) => operations.launch(shell.ref, {
+  const launched = withProjectileOperations({ projectileIds: [], getProjectile: () => undefined }, f.work.execution.nextProjectileId, f.resources.projectiles, 0, (operations) => operations.launch(shell.ref, {
     source: 1, traceTarget: 2, position: [0, 0], destination: [1, 0], cachedAtk: attackPower,
     speedPerTick: 1, contactRange: { type: "SHAPES", geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.2 }] } }, stopDelayTicks: 0,
   }));
-  const consumed = consumeSkillAmmo(withCombatExecution(f.work, launched.execution), 1, 0, f.resources);
+  const consumed = consumeSkillAmmo(withCombatExecution(f.work, { ...f.work.execution, nextProjectileId: launched.nextProjectileId }), 1, 0, f.resources);
   assert.equal(resolveAttackPower(1, combatWorkView(consumed.work), f.resources.computations), 100);
   const projectile = launched.changes.find((change) => change.type === "REGISTER_PROJECTILE").projectile;
   assert.equal(projectile.cachedAtk, 200);
