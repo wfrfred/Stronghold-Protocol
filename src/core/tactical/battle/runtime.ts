@@ -113,20 +113,6 @@ export class BattleRuntime {
             ...this.#state,
             battlefield: this.#state.battlefield.fork(),
         };
-        const advanced = this.#advance(workingState, commands);
-
-        this.#state = advanced.state;
-
-        return advanced.output;
-    }
-
-    #advance(
-        workingState: BattleRuntimeState,
-        commands: readonly Command[],
-    ): {
-        readonly state: BattleRuntimeState;
-        readonly output: Step;
-    } {
         const stepped = this.#flow.step(
             workingState.battlefield,
             workingState.phaseState,
@@ -144,17 +130,18 @@ export class BattleRuntime {
             workingState.battlefield.unitIds,
         );
 
-        return {
-            state: {
-                ...workingState,
-                tickIndex,
-                completedRouteCount,
-                result,
-                phaseState: stepped.phaseState,
-                execution: stepped.execution,
-            },
-            output: { events: stepped.events, result: copyResult(result) },
+        const output: Step = { events: stepped.events, result: copyResult(result) };
+
+        this.#state = {
+            ...workingState,
+            tickIndex,
+            completedRouteCount,
+            result,
+            phaseState: stepped.phaseState,
+            execution: stepped.execution,
         };
+
+        return output;
     }
 }
 
