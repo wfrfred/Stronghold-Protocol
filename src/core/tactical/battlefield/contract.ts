@@ -120,5 +120,6 @@ export interface Battlefield<U extends Unit = Unit> extends BattlefieldView<U> {
     fork(): Battlefield<U>;
     transact(operation: (battlefield: Battlefield<U>) => undefined): undefined;
     transact<T>(operation: (battlefield: Battlefield<U>) => SynchronousResult<T>): T;
+    /** Applies values directly; callers must not mutate submitted state or returned facts. */
     apply(changes: readonly BattlefieldChange<U>[]): BattlefieldChangeResult<U>;
 }

@@ -4,12 +4,11 @@ import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/m
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
 import { projectStaticNavigationMap } from '../../dist/core/tactical/battlefield/navigation/projection.js';
 import { acquireBlockingRelations } from '../../dist/core/tactical/battlefield/blocking/relations.js';
-import { applyBattlefieldChanges, ownBattlefieldChanges } from '../../dist/core/tactical/battlefield/storage/changes.js';
+import { applyBattlefieldChanges } from '../../dist/core/tactical/battlefield/storage/changes.js';
 import {
   createBattlefieldState, settleBattlefieldState, settleBattlefieldStateFully,
 } from '../../dist/core/tactical/battlefield/storage/state.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
-import { copyUnitSnapshot } from '../../dist/core/tactical/unit/snapshot.js';
 import { createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/deployment.js';
 
 function projectionHarness() {
@@ -32,7 +31,7 @@ function projectionHarness() {
         const previous = branch.state;
         const snapshot = structuredClone(previous);
         const batch = typeof changes === 'function' ? changes(previous) : changes;
-        const applied = applyBattlefieldChanges(previous, ownBattlefieldChanges(batch, copyUnitSnapshot));
+        const applied = applyBattlefieldChanges(previous, batch);
         const settled = branch.settle(map, baseline, previous, applied.content, applied.dependencies);
         assert.deepEqual(previous, snapshot, 'settlement must preserve the prior state');
         branch.state = settled.state;

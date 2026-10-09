@@ -1,5 +1,4 @@
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
-import { createWorldPosition } from "../../geometry/coordinate.js";
 import type { StableUnit, Unit, UnitId } from "../../unit/unit.js";
 import {
     assertUnitCapabilityComposition,
@@ -7,75 +6,11 @@ import {
 } from "../../unit/capability/catalog.js";
 import { releaseBlockingRelations } from "../blocking/relations.js";
 import type { BattlefieldChange, BattlefieldRemovalReason } from "../contract.js";
-import { createMechanismRuntime, type MechanismId } from "../mechanism.js";
-import {
-    createNavigationModifier,
-    createNavigationModifierRegion,
-    type NavigationModifierId,
-} from "../navigation/modifier.js";
-import { ownProjectileInstance } from "../projectile/internal/state.js";
+import type { MechanismId } from "../mechanism.js";
+import type { NavigationModifierId } from "../navigation/modifier.js";
 import type { BattlefieldContent } from "./state.js";
 import type { BattlefieldDependencyChanges } from "./dependencies.js";
 import { validateSupportRelations } from "../support/relations.js";
-
-export function ownBattlefieldChanges<U extends Unit>(
-    changes: readonly BattlefieldChange<U>[],
-    copyUnit: (unit: Readonly<U>) => U,
-): BattlefieldChange<U>[] {
-    return changes.map((change): BattlefieldChange<U> => {
-        switch (change.type) {
-            case "REGISTER_PROJECTILE":
-            case "UPDATE_PROJECTILE":
-                return { ...change, projectile: ownProjectileInstance(change.projectile) };
-
-            case "REGISTER_UNIT":
-            case "UPDATE_UNIT":
-                return { ...change, unit: copyUnit(change.unit) };
-
-            case "SET_BLOCKING_RELATIONS":
-                return {
-                    ...change,
-                    relations: change.relations.map((relation) => ({ ...relation })),
-                };
-
-            case "SET_SUPPORT_RELATIONS":
-                return {
-                    ...change,
-                    relations: change.relations.map((relation) => ({ ...relation })),
-                };
-
-            case "REGISTER_MECHANISM":
-            case "UPDATE_MECHANISM":
-                return {
-                    ...change,
-                    mechanism: createMechanismRuntime(change.mechanism),
-                };
-
-            case "ADD_NAVIGATION_MODIFIER":
-                return {
-                    ...change,
-                    navigationModifier: createNavigationModifier(change.navigationModifier),
-                };
-
-            case "SET_POSITION_AND_RELEASE_BLOCKING":
-                return { ...change, position: createWorldPosition(...change.position) };
-
-            case "SET_NAVIGATION_MODIFIER_REGION":
-                return { ...change, region: createNavigationModifierRegion(change.region) };
-
-            case "REMOVE_PROJECTILE":
-            case "EXPIRE_NAVIGATION_MODIFIERS":
-            case "RELEASE_BLOCKING_RELATIONS":
-            case "REMOVE_NAVIGATION_MODIFIER":
-            case "REMOVE_MECHANISM":
-            case "REMOVE_UNIT":
-            case "SET_NAVIGATION_MODIFIER_ACTIVE":
-            case "SET_MECHANISM_ACTIVE":
-            default:
-                return change;
-        }
-    });
-}
 
 function requireEntry<K extends number, V>(entries: ReadonlyMap<K, V>, id: K, name: string): V {
     const entry = entries.get(id);
@@ -236,6 +171,7 @@ export function applyBattlefieldChanges<U extends Unit>(
             }
 
             case "REGISTER_MECHANISM":
+                assertNonnegativeSafeInteger(change.mechanism.id, "mechanism id");
                 register(mechanisms.edit(), change.mechanism.id, change.mechanism, "mechanism");
                 updatedMechanismIds.add(change.mechanism.id);
                 break;
@@ -281,6 +217,10 @@ export function applyBattlefieldChanges<U extends Unit>(
                 break;
 
             case "ADD_NAVIGATION_MODIFIER":
+                assertNonnegativeSafeInteger(
+                    change.navigationModifier.id,
+                    "navigation modifier id",
+                );
                 register(
                     navigationModifiers.edit(),
                     change.navigationModifier.id,

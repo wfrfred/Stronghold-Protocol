@@ -267,10 +267,9 @@ test('core spatial presence keeps unit identity and isolates state while removin
   assert.equal(isSpatiallyPresent(bare), true);
   runtime.apply([{ type: 'REGISTER_UNIT', unit }, { type: 'REGISTER_UNIT', unit: bare }]);
   const baseline = runtime.navigationMaps;
-  unit.spatialPresence.present = false;
-  assert.equal(runtime.getUnit(1).spatialPresence.present, true);
   const hidden = runtime.getUnit(1);
   hidden.spatialPresence.present = false;
+  assert.equal(runtime.getUnit(1).spatialPresence.present, true);
   const result = runtime.apply([{ type: 'UPDATE_UNIT', unit: hidden }]);
   assert.deepEqual(result.removedUnits, []);
   assert.deepEqual(runtime.unitIds, [1, 2]);
@@ -278,15 +277,14 @@ test('core spatial presence keeps unit identity and isolates state while removin
   assert.equal(runtime.getUnit(1).definition, hidden.definition);
   assert.equal(runtime.getUnit(1).vitality.hp, 100);
   assert.equal(runtime.navigationMaps, baseline);
-  hidden.spatialPresence.present = true;
-  assert.equal(runtime.getUnit(1).spatialPresence.present, false);
   const restored = runtime.getUnit(1);
   restored.spatialPresence.present = true;
+  assert.equal(runtime.getUnit(1).spatialPresence.present, false);
   runtime.apply([{ type: 'UPDATE_UNIT', unit: restored }]);
   assert.deepEqual(runtime.unitsAt([0, 2]).map(unit => unit.id), [1, 2]);
 });
 
-test('core removal facts retain the latest unit and isolate it from retained battlefield forks', () => {
+test('core removal facts share the latest unit while updates preserve retained battlefield forks', () => {
   const runtime = presenceBattlefield();
   const unit = presenceUnit(1, [2, 0]);
   runtime.apply([{ type: 'REGISTER_UNIT', unit }]);
@@ -300,36 +298,40 @@ test('core removal facts retain the latest unit and isolate it from retained bat
     ...updated, position: Object.freeze([3, 0]),
   } }]);
   assert.equal(removed.removedUnits[0].unit.definition, unit.definition);
+  assert.equal(removed.removedUnits[0].unit, updated);
   assert.deepEqual(runtime.unitIds, []);
   const retained = fork.fork();
   const old = fork.apply([{ type: 'REMOVE_UNIT', unitId: 1, reason: 'SCRIPT' }]);
   assert.deepEqual(old.removedUnits[0].unit, unit);
-  old.removedUnits[0].unit.vitality.hp = 0;
-  old.removedUnits[0].unit.spatialPresence.present = false;
+  assert.equal(old.removedUnits[0].unit, unit);
+  const snapshot = retained.getUnit(1);
+  snapshot.vitality.hp = 0;
+  snapshot.spatialPresence.present = false;
   assert.deepEqual(retained.getUnit(1), unit);
   assert.equal(unit.vitality.hp, 100);
   assert.equal(unit.spatialPresence.present, true);
   assert.equal(removed.removedUnits[0].unit.vitality.hp, 20);
 });
 
-test('core failure to copy a public removal fact leaves battlefield state unpublished', () => {
+test('core apply returns removal facts without invoking the snapshot copier', () => {
   let rejectCopy = false;
   const runtime = createBattlefieldRuntime({ map: presenceBattlefield().map }, unit => {
     if (rejectCopy) {
-      throw new Error('removal snapshot rejected');
+      throw new Error('snapshot rejected');
     }
     return copyUnitSnapshot(unit);
   });
   runtime.apply([{ type: 'REGISTER_UNIT', unit: presenceUnit(1, [2, 0]) }]);
-  const unit = runtime.getUnit(1);
+  const unit = runtime.view.getUnit(1);
   const maps = runtime.navigationMaps;
   rejectCopy = true;
-  assert.throws(() => runtime.apply([{ type: 'REMOVE_UNIT', unitId: 1, reason: 'SCRIPT' }]),
-    /removal snapshot rejected/);
+  assert.throws(() => runtime.getUnit(1), /snapshot rejected/);
+  const removed = runtime.apply([{ type: 'REMOVE_UNIT', unitId: 1, reason: 'SCRIPT' }]);
+  assert.equal(removed.removedUnits[0].unit, unit);
   rejectCopy = false;
-  assert.deepEqual(runtime.unitIds, [1]);
-  assert.deepEqual(runtime.getUnit(1), unit);
-  assert.deepEqual(runtime.unitsAt([0, 2]), [unit]);
+  assert.deepEqual(runtime.unitIds, []);
+  assert.equal(runtime.getUnit(1), undefined);
+  assert.deepEqual(runtime.unitsAt([0, 2]), []);
   assert.equal(runtime.navigationMaps, maps);
 });
 
@@ -349,9 +351,9 @@ test('core hidden navigation modifier sources and anchors suspend contributions 
   ]);
   const fly = runtime.navigationMaps.FLY;
   assert.deepEqual(runtime.navigationMaps.WALK.cells.map(cell => cell.moveCost), [1, 1000, 1000, 1, 2000]);
-  source.spatialPresence.present = false;
-  anchor.spatialPresence.present = false;
-  const hidden = runtime.apply([{ type: 'UPDATE_UNIT', unit: source }, { type: 'UPDATE_UNIT', unit: anchor }]);
+  const hiddenSource = { ...source, spatialPresence: { present: false } };
+  const hiddenAnchor = { ...anchor, spatialPresence: { present: false } };
+  const hidden = runtime.apply([{ type: 'UPDATE_UNIT', unit: hiddenSource }, { type: 'UPDATE_UNIT', unit: hiddenAnchor }]);
   assert.deepEqual(hidden.removedNavigationModifiers, []);
   assert.deepEqual(hidden.changedNavigationModes, ['WALK']);
   assert.deepEqual(runtime.navigationModifierIds, [1, 2, 3]);
@@ -365,7 +367,6 @@ test('core hidden navigation modifier sources and anchors suspend contributions 
   runtime.apply([{ type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 2, position: Object.freeze([3, 0]) }]);
   assert.equal(runtime.navigationMaps, dormant);
   assert.deepEqual(runtime.unitsAt([0, 3]), []);
-  source.spatialPresence.present = true;
   const movedAnchor = runtime.getUnit(2);
   movedAnchor.spatialPresence.present = true;
   runtime.apply([{ type: 'UPDATE_UNIT', unit: source }, { type: 'UPDATE_UNIT', unit: movedAnchor }]);
@@ -375,9 +376,7 @@ test('core hidden navigation modifier sources and anchors suspend contributions 
   assert.equal(runtime.navigationMaps.FLY, fly);
   runtime.apply([{ type: 'SET_MECHANISM_ACTIVE', mechanismId: 1, active: false }]);
   const inactive = runtime.navigationMaps;
-  movedAnchor.spatialPresence.present = false;
-  runtime.apply([{ type: 'UPDATE_UNIT', unit: movedAnchor }]);
-  movedAnchor.spatialPresence.present = true;
+  runtime.apply([{ type: 'UPDATE_UNIT', unit: { ...movedAnchor, spatialPresence: { present: false } } }]);
   runtime.apply([{ type: 'UPDATE_UNIT', unit: movedAnchor }]);
   assert.equal(runtime.navigationMaps, inactive);
   assert.deepEqual(runtime.navigationModifiersAt([0, 3]), []);
@@ -568,7 +567,6 @@ test('core capability guards inspect composition while snapshots and custom copi
   const runtime = createBattlefieldRuntime({ map: presenceBattlefield().map }, customCopy);
   const custom = { id: 3, definition: Object.freeze({ id: 'custom' }), position: [0, 0], memo: { value: 1 } };
   runtime.apply([{ type: 'REGISTER_UNIT', unit: custom }]);
-  custom.memo.value = 2;
   const snapshot = runtime.getUnit(3);
   assert.equal(snapshot.memo.value, 1);
   snapshot.memo.value = 3;
@@ -1008,8 +1006,6 @@ test('core occupancy separates present claims, reservations and geometric member
   runtime.apply([{ type: 'UPDATE_UNIT', unit: restored }]);
   assert.deepEqual(runtime.occupancyAt([0, 1], 'DEPLOYMENT'), [1]);
   assert.deepEqual(runtime.unitsAt([0, 1]).map(unit => unit.id), [1, 3]);
-  restored.occupancy.claims = [];
-  assert.deepEqual(runtime.occupancyAt([0, 1], 'DEPLOYMENT'), [1]);
   const snapshot = runtime.getUnit(1);
   snapshot.occupancy.claims[0].slot = 'SUPPORT';
   snapshot.occupancy.claims.push({ position: [0, 3], slot: 'DEPLOYMENT', type: 'RESERVATION' });
@@ -1052,7 +1048,6 @@ test('core support allows a platform and occupant to coexist without treating th
   const fork = runtime.fork();
   const removed = runtime.apply([{ type: 'REMOVE_UNIT', unitId: 1, reason: 'SCRIPT' }]);
   assert.deepEqual(removed.lostSupports, [{ supportedUnitId: 2, supportUnitId: 1 }]);
-  removed.lostSupports[0].supportUnitId = 99;
   assert.equal(fork.supportOf(2), 1);
   assert.deepEqual(fork.supportRelations, [{ supportedUnitId: 2, supportUnitId: 1 }]);
   assert.equal(runtime.supportOf(2), undefined);
@@ -1067,12 +1062,14 @@ test('core navigation definitions are owned once and shared across copied observ
   const placement = createUnitPlacementDefinition({ definition: { id: 'source' }, position: [0, 0],
     navigationModifiers: [{ definition, range: [[0, 1]], direction: 'RIGHT' }] });
   const runtime = presenceBattlefield();
+  const ownedDefinition = createNavigationModifierDefinition(definition);
   const modifier = { ...presenceNavigationModifier(1, { type: 'UNIT', unitId: 1 },
-    { type: 'FIXED', position: [0, 1], range: [[0, 0]], direction: 'RIGHT' }), definition };
+    { type: 'FIXED', position: [0, 1], range: [[0, 0]], direction: 'RIGHT' }), definition: ownedDefinition };
   runtime.apply([{ type: 'REGISTER_UNIT', unit: presenceUnit(1, [0, 0]) },
     { type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: modifier }]);
   const maps = runtime.navigationMaps;
   const owned = runtime.getNavigationModifier(1).definition;
+  assert.equal(owned, ownedDefinition);
   definition.WALK.costFloor = 1;
   definition.WALK.denyPassage = true;
   definition.WALK.deniedDepartures.push('RIGHT');

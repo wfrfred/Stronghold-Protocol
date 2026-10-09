@@ -5,7 +5,7 @@ import type { OccupancySlot } from "../unit/capability/occupancy.js";
 import { copyUnitSnapshot } from "../unit/snapshot.js";
 import type { StableUnit, Unit, UnitId } from "../unit/unit.js";
 import { blockingUsedCapacity, type BlockingRelation } from "./blocking/relations.js";
-import { applyBattlefieldChanges, ownBattlefieldChanges } from "./storage/changes.js";
+import { applyBattlefieldChanges } from "./storage/changes.js";
 import type {
     Battlefield,
     BattlefieldChange,
@@ -264,32 +264,6 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
     apply(
         changes: readonly BattlefieldChange<StableUnit<U>>[],
     ): BattlefieldChangeResult<StableUnit<U>> {
-        const owned = ownBattlefieldChanges(changes, this.#resources.copyUnit);
-        const prepared = this.#prepare(owned);
-        const result: BattlefieldChangeResult<StableUnit<U>> = {
-            ...prepared.facts,
-            removedUnits: prepared.facts.removedUnits.map((removed) => ({
-                ...removed,
-                unit: this.#resources.copyUnit(removed.unit),
-            })),
-            lostSupports: prepared.facts.lostSupports.map((relation) => ({ ...relation })),
-        };
-
-        this.#state = prepared.state;
-
-        return result;
-    }
-
-    commitOwned(
-        changes: readonly BattlefieldChange<StableUnit<U>>[],
-    ): BattlefieldChangeResult<StableUnit<U>> {
-        const prepared = this.#prepare(changes);
-        this.#state = prepared.state;
-
-        return prepared.facts;
-    }
-
-    #prepare(changes: readonly BattlefieldChange<StableUnit<U>>[]) {
         const applied = applyBattlefieldChanges<U>(this.#state, changes);
         const settled = settleBattlefieldState<U>(
             this.map,
@@ -299,7 +273,10 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
             applied.dependencies,
         );
 
-        return { state: settled.state, facts: { ...applied.facts, ...settled.facts } };
+        const result = { ...applied.facts, ...settled.facts };
+        this.#state = settled.state;
+
+        return result;
     }
 }
 

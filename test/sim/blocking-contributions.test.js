@@ -7,7 +7,7 @@ import { combatWorkChanges, combatWorkView, getCombatUnit } from '../../dist/cor
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
 import { projectStaticNavigationMap } from '../../dist/core/tactical/battlefield/navigation/projection.js';
-import { applyBattlefieldChanges, ownBattlefieldChanges } from '../../dist/core/tactical/battlefield/storage/changes.js';
+import { applyBattlefieldChanges } from '../../dist/core/tactical/battlefield/storage/changes.js';
 import { deriveBattlefieldDependencies } from '../../dist/core/tactical/battlefield/storage/dependencies.js';
 import { createBattlefieldState, settleBattlefieldState, settleBattlefieldStateFully } from '../../dist/core/tactical/battlefield/storage/state.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
@@ -133,7 +133,7 @@ function battlefield(units) {
   const commit = changes => {
     const results = branches.map(branch => {
       const previous = branch.state;
-      const applied = applyBattlefieldChanges(previous, ownBattlefieldChanges(changes, copyUnitSnapshot));
+      const applied = applyBattlefieldChanges(previous, changes);
       const dependencies = deriveBattlefieldDependencies(map, previous, applied.content, applied.dependencies);
       const settled = branch.settle(map, baseline, previous, applied.content, applied.dependencies);
       branch.state = settled.state;

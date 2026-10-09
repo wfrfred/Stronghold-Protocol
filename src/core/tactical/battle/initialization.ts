@@ -66,7 +66,7 @@ export function initializeBattlefield(
         },
         combatResources,
     );
-    battlefield.commitOwned(preparedSources.changes);
+    battlefield.apply(preparedSources.changes);
 
     return { predefinedPresence: initialized.presence, execution: preparedSources.execution };
 }

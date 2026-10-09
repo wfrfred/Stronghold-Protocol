@@ -177,13 +177,11 @@ export class BattleRuntime {
             return { events: [], result: this.result };
         }
 
-        const workingState: BattleRuntimeState = {
-            ...this.#state,
-            battlefield: this.#state.battlefield.fork(),
-        };
-        const { battlefield, tickIndex: tick } = workingState;
+        const previous = this.#state;
+        const battlefield = previous.battlefield.fork();
         const view = battlefield.view;
-        let { schedule, actionExecution, predefinedPresence, execution } = workingState;
+        const tick = previous.tickIndex;
+        let { schedule, actionExecution, predefinedPresence, execution } = previous;
         const resources = this.#combatResources;
         const events: Event[] = [];
         const removedUnits: BattlefieldChangeResult["removedUnits"][number][] = [];
@@ -208,7 +206,7 @@ export class BattleRuntime {
                 return;
             }
 
-            const committed = battlefield.commitOwned(changes);
+            const committed = battlefield.apply(changes);
             removedUnits.push(...committed.removedUnits);
             events.push(...battlefieldCommitEvents(committed, tick));
 
@@ -218,7 +216,7 @@ export class BattleRuntime {
                     committed.registeredUnitIds,
                     resources,
                 );
-                const installed = battlefield.commitOwned(joined.changes);
+                const installed = battlefield.apply(joined.changes);
                 removedUnits.push(...installed.removedUnits);
                 events.push(...battlefieldCommitEvents(installed, tick), ...joined.events);
                 execution = joined.execution;
@@ -300,7 +298,7 @@ export class BattleRuntime {
         const finishedEvents = finishBattleEvents(events, removedUnits, tick);
         const tickIndex = tick + 1;
         const completedRouteCount =
-            workingState.completedRouteCount + finishedEvents.completedRouteCount;
+            previous.completedRouteCount + finishedEvents.completedRouteCount;
         const completed = isSpawnScheduleCompleted(schedule);
         const result: Result | null =
             completed || tickIndex >= this.#input.maxTicks
@@ -316,7 +314,8 @@ export class BattleRuntime {
         const output: Step = { events: finishedEvents.events, result: copyResult(result) };
 
         this.#state = {
-            ...workingState,
+            ...previous,
+            battlefield,
             tickIndex,
             completedRouteCount,
             result,

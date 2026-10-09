@@ -219,7 +219,7 @@ test("move speed: computed providers read phase facts without becoming stored fi
     const moved = advanceMovement({
         battlefield: h.battlefield.view, tick: 0, execution: h.execution,
     }, { routeMoveMultiplier: 0.5 }, resources);
-    h.battlefield.commitOwned(moved.changes);
+    h.battlefield.apply(moved.changes);
     close(h.battlefield.getUnit(0).position[0], 0.125);
     assert.equal(h.battlefield.getUnit(0).definition.locomotion.moveSpeedPerTick, 0.5);
     assert.equal(fullHp.vitality.hp, 100);

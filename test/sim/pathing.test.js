@@ -5,7 +5,7 @@ import { createBattlefieldMap, BattlefieldMap } from '../../dist/core/tactical/b
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
 import { projectStaticNavigationMap } from '../../dist/core/tactical/battlefield/navigation/projection.js';
 import { createBattlefieldRuntime } from '../../dist/core/tactical/battlefield/runtime.js';
-import { applyBattlefieldChanges, ownBattlefieldChanges } from '../../dist/core/tactical/battlefield/storage/changes.js';
+import { applyBattlefieldChanges } from '../../dist/core/tactical/battlefield/storage/changes.js';
 import {
   createBattlefieldState, settleBattlefieldState, settleBattlefieldStateFully,
 } from '../../dist/core/tactical/battlefield/storage/state.js';
@@ -1287,7 +1287,7 @@ function battlefieldProjectionHarness(rows = 2, columns = 5,
       const previous = branch.state;
       const snapshot = structuredClone(previous);
       const batch = typeof changes === 'function' ? changes(previous, index) : changes;
-      const applied = applyBattlefieldChanges(previous, ownBattlefieldChanges(batch, copyUnitSnapshot));
+      const applied = applyBattlefieldChanges(previous, batch);
       const settled = branch.settle(map, branch.baseline, previous, applied.content, applied.dependencies);
       assert.deepEqual(previous, snapshot);
       branch.state = settled.state;
@@ -1307,7 +1307,7 @@ function battlefieldProjectionHarness(rows = 2, columns = 5,
       const snapshot = structuredClone(previous);
       assert.throws(() => {
         const batch = typeof changes === 'function' ? changes(previous) : changes;
-        const applied = applyBattlefieldChanges(previous, ownBattlefieldChanges(batch, copyUnitSnapshot));
+        const applied = applyBattlefieldChanges(previous, batch);
         branch.settle(map, branch.baseline, previous, applied.content, applied.dependencies);
       }, expected);
       assert.equal(branch.state, previous);
@@ -1802,10 +1802,8 @@ test('core battlefield isolates dynamic snapshots and rejects a failed batch wit
   const unit = h.enemy, mechanism = battlefieldMechanism(1);
   const effect = fixedNavigationModifier(1, { type: 'MECHANISM', mechanismId: 1 }, [0, 2], modifierDefinition('snapshot-crate', walkRestriction({ costFloor: 1000 })));
   runtime.apply([{ type: 'REGISTER_UNIT', unit }, { type: 'REGISTER_MECHANISM', mechanism }, { type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: effect }]);
-  unit.vitality.hp = 1;
-  unit.locomotion.mainRoute.navigation.execution.visits.visitedCenters.push(Object.freeze([0, 4]));
-  mechanism.active = false;
-  effect.active = false;
+  assert.equal(runtime.view.getUnit(1), unit);
+  assert.equal(runtime.view.getMechanism(1), mechanism);
   const snapshot = runtime.getUnit(1);
   snapshot.vitality.hp = 2;
   snapshot.position = Object.freeze([3, 0]);
@@ -1920,8 +1918,6 @@ test('core battlefield forks isolate mutable state while preserving map, field a
   assert.deepEqual(fork.unitsAt([0, 0]), []);
   assert.equal(fork.navigationMaps, maps);
   assert.equal(fork.getUnit(1).locomotion.mainRoute.navigation.execution.activity.path, path);
-  updated.vitality.hp = 1;
-  updated.locomotion.mainRoute.navigation.execution.visits.visitedCenters.push(Object.freeze([0, 2]));
   assert.equal(fork.getUnit(1).vitality.hp, 50);
   assert.deepEqual(fork.getUnit(1).locomotion.mainRoute.navigation.execution.visits.visitedCenters, [[0, 1]]);
   fork.apply([{ type: 'SET_MECHANISM_ACTIVE', mechanismId: 1, active: true }]);
@@ -1950,14 +1946,14 @@ test('core battlefield shares immutable unit values internally and copies only a
   h.setMaps(runtime.navigationMaps);
   h.step({ moveMultiplier: 0 });
   runtime.apply([{ type: 'REGISTER_UNIT', unit: h.enemy }]);
-  assert.equal(copies, 1);
+  assert.equal(copies, 0);
   const unit = runtime.view.getUnit(1), maps = runtime.navigationMaps;
   const path = unit.locomotion.mainRoute.navigation.execution.activity.path;
   const field = runtime.fieldCache.get(maps.WALK, path.request);
-  assert.notEqual(unit, h.enemy);
+  assert.equal(unit, h.enemy);
   assert.equal(runtime.view.getUnit(1), unit);
   assert.equal(runtime.view.unitsAt([0, 0])[0], unit);
-  assert.equal(copies, 1);
+  assert.equal(copies, 0);
   const fork = runtime.fork(), view = fork.view;
   assert.equal(view.getUnit(1), unit);
   const moved = stepRoutedEnemy(unit, {
@@ -1966,8 +1962,8 @@ test('core battlefield shares immutable unit values internally and copies only a
     rngState: h.rngState, nextNavigationRequestId: h.nextNavigationRequestId,
   }).enemy;
   const added = { ...moved, id: 2, position: Object.freeze([2, 0]) };
-  fork.commitOwned([{ type: 'UPDATE_UNIT', unit: moved }, { type: 'REGISTER_UNIT', unit: added }]);
-  assert.equal(copies, 1);
+  fork.apply([{ type: 'UPDATE_UNIT', unit: moved }, { type: 'REGISTER_UNIT', unit: added }]);
+  assert.equal(copies, 0);
   assert.equal(view.getUnit(1), moved);
   assert.equal(view.getUnit(2), added);
   assert.equal(view.unitsAt([0, 0])[0], moved);
@@ -1980,21 +1976,20 @@ test('core battlefield shares immutable unit values internally and copies only a
   assert.equal(path.field.map, maps.WALK);
   assert.equal(view.fieldCache.get(maps.WALK, path.request), field);
   assert.throws(() => fork.transact(working => {
-    working.commitOwned([{ type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 1, position: Object.freeze([3, 0]) }]);
+    working.apply([{ type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 1, position: Object.freeze([3, 0]) }]);
     throw new Error('immutable commit failed');
   }), /immutable commit failed/);
   assert.equal(view.getUnit(1), moved);
-  assert.equal(copies, 1);
+  assert.equal(copies, 0);
   const snapshot = fork.getUnit(1);
-  assert.equal(copies, 2);
+  assert.equal(copies, 1);
   snapshot.vitality.hp = 50;
   fork.unitsAt([0, 0])[0].vitality.hp = 1;
-  assert.equal(copies, 3);
+  assert.equal(copies, 2);
   assert.equal(view.getUnit(1).vitality.hp, 100);
   fork.apply([{ type: 'UPDATE_UNIT', unit: snapshot }]);
-  assert.equal(copies, 4);
-  assert.notEqual(view.getUnit(1), snapshot);
-  snapshot.vitality.hp = 0;
+  assert.equal(copies, 2);
+  assert.equal(view.getUnit(1), snapshot);
   assert.equal(view.getUnit(1).vitality.hp, 50);
   assert.equal(runtime.view.getUnit(1).vitality.hp, 100);
 });
@@ -2127,7 +2122,7 @@ test('core blocked movement retains steering changes and shares stationary unrea
   assert.deepEqual(retry.outcomes, []);
 });
 
-test('core external unit coordinates and internal navigation modifier snapshots retain ownership isolation', () => {
+test('core apply shares submitted coordinates while observation snapshots isolate navigation state', () => {
   const runtime = flatBattlefieldRuntime();
   const h = routedEnemyHarness();
   h.setMaps(runtime.navigationMaps);
@@ -2143,18 +2138,19 @@ test('core external unit coordinates and internal navigation modifier snapshots 
     } },
   } };
   runtime.apply([{ type: 'REGISTER_UNIT', unit }]);
-  position[0] = 4;
-  velocity[0] = 4;
-  locator[0] = 4;
-  visited[1] = 4;
   const stored = runtime.view.getUnit(1);
+  assert.equal(stored, unit);
+  assert.equal(stored.position, position);
+  assert.equal(stored.locomotion.steering.lastVelocity, velocity);
+  assert.equal(stored.locomotion.mainRoute.navigation.execution.locatorOffset, locator);
+  assert.equal(stored.locomotion.mainRoute.navigation.execution.visits.visitedCenters[0], visited);
   assert.deepEqual(stored.position, [0, 0]);
   assert.deepEqual(stored.locomotion.steering.lastVelocity, [0, 0]);
   assert.deepEqual(stored.locomotion.mainRoute.navigation.execution.locatorOffset, [0, 0]);
   assert.deepEqual(stored.locomotion.mainRoute.navigation.execution.visits.visitedCenters, [[0, 0]]);
   const moved = [1, 0];
   runtime.apply([{ type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 1, position: moved }]);
-  moved[0] = 4;
+  assert.equal(runtime.view.getUnit(1).position, moved);
   assert.deepEqual(runtime.view.getUnit(1).position, [1, 0]);
   assert.deepEqual(runtime.view.unitsAt([0, 1]).map(entry => entry.id), [1]);
   const effect = {
@@ -2163,7 +2159,7 @@ test('core external unit coordinates and internal navigation modifier snapshots 
     active: true, expiresAtTick: null,
     region: { type: 'FOLLOW_UNIT', unitId: 1, range: [[0, 0]], direction: 'RIGHT' },
   };
-  runtime.commitOwned([{ type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: effect }]);
+  runtime.apply([{ type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: effect }]);
   const snapshot = runtime.getNavigationModifier(1), maps = runtime.navigationMaps;
   snapshot.source.unitId = 999;
   snapshot.region.unitId = 999;
@@ -2178,8 +2174,6 @@ test('core external unit coordinates and internal navigation modifier snapshots 
   runtime.apply([{ type: 'SET_NAVIGATION_MODIFIER_REGION', navigationModifierId: 1,
     region: { type: 'FIXED', position: fixedPosition, range, direction: 'RIGHT' },
   }]);
-  fixedPosition[1] = 4;
-  range[0][1] = 2;
   assert.deepEqual(runtime.getNavigationModifier(1).region.position, [0, 2]);
   assert.deepEqual(runtime.getNavigationModifier(1).region.range, [[0, 0]]);
   assert.deepEqual(runtime.navigationModifiersAt([0, 2]), [1]);
@@ -2192,8 +2186,7 @@ test('core battlefield isolates custom unit state using its explicit snapshot co
   });
   const unit = { ...battlefieldUnit(10, [0, 0]), charges: { remaining: 3, spent: [] } };
   runtime.apply([{ type: 'REGISTER_UNIT', unit }]);
-  unit.charges.remaining = 0;
-  unit.charges.spent.push(0);
+  assert.equal(runtime.view.getUnit(10), unit);
   const snapshot = runtime.getUnit(10);
   assert.deepEqual(snapshot.charges, { remaining: 3, spent: [] });
   snapshot.charges.remaining = 2;
@@ -2201,8 +2194,7 @@ test('core battlefield isolates custom unit state using its explicit snapshot co
   assert.deepEqual(runtime.getUnit(10).charges, { remaining: 3, spent: [] });
   const maps = runtime.navigationMaps;
   runtime.apply([{ type: 'UPDATE_UNIT', unit: snapshot }]);
-  snapshot.charges.remaining = 0;
-  snapshot.charges.spent.push(2);
+  assert.equal(runtime.view.getUnit(10), snapshot);
   runtime.unitsAt([0, 0])[0].charges.spent.push(3);
   assert.deepEqual(runtime.getUnit(10).charges, { remaining: 2, spent: [1] });
   assert.equal(runtime.navigationMaps, maps);
@@ -2273,8 +2265,8 @@ test('core battlefield retains paths on commit and consumers rebind changed navi
   assert.equal(runtime.getUnit(4).locomotion.mainRoute.navigation.execution.activity.type, 'ARRIVED');
   const changedMaps = runtime.navigationMaps;
   const changedField = runtime.fieldCache.get(changedMaps.WALK, request);
-  hpUpdate.vitality.hp = 80;
-  assert.deepEqual(runtime.apply([{ type: 'UPDATE_UNIT', unit: hpUpdate }]).changedNavigationModes, []);
+  const secondHpUpdate = { ...hpUpdate, vitality: { ...hpUpdate.vitality, hp: 80 } };
+  assert.deepEqual(runtime.apply([{ type: 'UPDATE_UNIT', unit: secondHpUpdate }]).changedNavigationModes, []);
   assert.equal(runtime.navigationMaps, changedMaps);
   assert.equal(runtime.fieldCache.get(changedMaps.WALK, request), changedField);
   assert.equal(hpUpdate.locomotion.mainRoute.navigation.execution.activity.path, oldPath);
