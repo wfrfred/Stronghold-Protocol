@@ -13,6 +13,7 @@ import {
     createNavigationModifierRegion,
     type NavigationModifierId,
 } from "../navigation/modifier.js";
+import { ownProjectileInstance } from "../projectile/internal/state.js";
 import type { BattlefieldContent } from "./state.js";
 import type { BattlefieldDependencyChanges } from "./dependencies.js";
 import { validateSupportRelations } from "../support/relations.js";
@@ -23,6 +24,10 @@ export function ownBattlefieldChanges<U extends Unit>(
 ): BattlefieldChange<U>[] {
     return changes.map((change): BattlefieldChange<U> => {
         switch (change.type) {
+            case "REGISTER_PROJECTILE":
+            case "UPDATE_PROJECTILE":
+                return { ...change, projectile: ownProjectileInstance(change.projectile) };
+
             case "REGISTER_UNIT":
             case "UPDATE_UNIT":
                 return { ...change, unit: copyUnit(change.unit) };
@@ -58,6 +63,7 @@ export function ownBattlefieldChanges<U extends Unit>(
             case "SET_NAVIGATION_MODIFIER_REGION":
                 return { ...change, region: createNavigationModifierRegion(change.region) };
 
+            case "REMOVE_PROJECTILE":
             case "EXPIRE_NAVIGATION_MODIFIERS":
             case "RELEASE_BLOCKING_RELATIONS":
             case "REMOVE_NAVIGATION_MODIFIER":
@@ -109,6 +115,7 @@ export function applyBattlefieldChanges<U extends Unit>(
     changes: readonly BattlefieldChange<StableUnit<U>>[],
 ) {
     const units = copyOnWriteMap(previous.units);
+    const projectiles = copyOnWriteMap(previous.projectiles);
     let blockingRelations = previous.blockingRelations;
     let supportRelations = previous.supportRelations;
     const mechanisms = copyOnWriteMap(previous.mechanisms);
@@ -136,6 +143,31 @@ export function applyBattlefieldChanges<U extends Unit>(
 
     for (const change of changes) {
         switch (change.type) {
+            case "REGISTER_PROJECTILE":
+                assertNonnegativeSafeInteger(change.projectile.id, "projectile id");
+                register(projectiles.edit(), change.projectile.id, change.projectile, "projectile");
+                break;
+
+            case "UPDATE_PROJECTILE": {
+                const previous = requireEntry(
+                    projectiles.value,
+                    change.projectile.id,
+                    "projectile",
+                );
+
+                if (previous.programRef.id !== change.projectile.programRef.id) {
+                    throw new RangeError("projectile program cannot change during update");
+                }
+
+                projectiles.edit().set(change.projectile.id, change.projectile);
+                break;
+            }
+
+            case "REMOVE_PROJECTILE":
+                requireEntry(projectiles.value, change.projectileId, "projectile");
+                projectiles.edit().delete(change.projectileId);
+                break;
+
             case "REGISTER_UNIT":
                 assertNonnegativeSafeInteger(change.unit.id, "unit id");
                 assertUnitCapabilityPairing(change.unit);
@@ -319,6 +351,7 @@ export function applyBattlefieldChanges<U extends Unit>(
     return {
         content: {
             units: units.value,
+            projectiles: projectiles.value,
             mechanisms: mechanisms.value,
             navigationModifiers: navigationModifiers.value,
             blockingRelations,

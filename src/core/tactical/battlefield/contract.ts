@@ -13,6 +13,7 @@ import type {
 } from "./navigation/modifier.js";
 import type { BlockingRelation } from "./blocking/relations.js";
 import type { SupportRelation } from "./support/relations.js";
+import type { ProjectileId, ProjectileInstance, ProjectileView } from "./projectile/state.js";
 import type { SynchronousResult } from "../../common/synchronous.js";
 
 export type { SynchronousResult } from "../../common/synchronous.js";
@@ -20,6 +21,9 @@ export type { SynchronousResult } from "../../common/synchronous.js";
 export type BattlefieldRemovalReason = "DEATH" | "RETREAT" | "EXPIRED" | "SCRIPT";
 
 export type BattlefieldChange<U extends Unit = Unit> =
+    | { readonly type: "REGISTER_PROJECTILE"; readonly projectile: ProjectileInstance }
+    | { readonly type: "UPDATE_PROJECTILE"; readonly projectile: ProjectileInstance }
+    | { readonly type: "REMOVE_PROJECTILE"; readonly projectileId: ProjectileId }
     | { readonly type: "REGISTER_UNIT"; readonly unit: U }
     | { readonly type: "UPDATE_UNIT"; readonly unit: U }
     | {
@@ -87,7 +91,7 @@ export interface BattlefieldRuntimeOptions {
     readonly map: BattlefieldMap;
 }
 
-export interface BattlefieldView<U extends Unit = Unit> extends MechanismView {
+export interface BattlefieldView<U extends Unit = Unit> extends MechanismView, ProjectileView {
     readonly map: BattlefieldMap;
     readonly navigationMaps: NavigationMaps;
     readonly fieldCache: NavigationFieldProvider;

@@ -1,6 +1,6 @@
 import { computedAttack } from "../core/tactical/unit/capability/offense/contributions.js";
 import { CombatResources } from "../core/tactical/battle/resources.js";
-import type { BattleResources } from "../core/tactical/battle/flow.js";
+import type { BattleResources } from "../core/tactical/battle/runtime.js";
 import { combatWorkView, getCombatUnit } from "../core/tactical/battle/execution/work.js";
 import { createProjectileProgram } from "../core/tactical/battlefield/projectile/program.js";
 import { createShapeGeometry, type RangeGeometry } from "../core/tactical/geometry/shape.js";

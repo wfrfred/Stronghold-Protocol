@@ -1,16 +1,16 @@
-import { createRng } from "../../../common/rng.js";
-import type { BattlefieldChange } from "../../battlefield/contract.js";
-import { createWorldOffset } from "../../geometry/coordinate.js";
-import type { RouteDefinition } from "../../unit/capability/locomotion/route/definition.js";
-import { createRouteExecution } from "../../unit/capability/locomotion/route/execution.js";
+import { createRng } from "../../common/rng.js";
+import type { BattlefieldChange } from "../battlefield/contract.js";
+import { createWorldOffset } from "../geometry/coordinate.js";
+import type { RouteDefinition } from "../unit/capability/locomotion/route/definition.js";
+import { createRouteExecution } from "../unit/capability/locomotion/route/execution.js";
 import {
     initializeRouteControl,
     type LocatedRouteSignal,
-} from "../../unit/capability/locomotion/route-control.js";
-import { hasRoutedLocomotion } from "../../unit/capability/locomotion/capability.js";
-import { isSpatiallyPresent } from "../../unit/capability/presence.js";
-import type { Unit, UnitId } from "../../unit/unit.js";
-import type { BattleExecutionState } from "../execution/state.js";
+} from "../unit/capability/locomotion/route-control.js";
+import { hasRoutedLocomotion } from "../unit/capability/locomotion/capability.js";
+import { isSpatiallyPresent } from "../unit/capability/presence.js";
+import type { Unit, UnitId } from "../unit/unit.js";
+import type { BattleExecutionState } from "./execution/state.js";
 
 export type AlternativeRouteCommand =
     | {

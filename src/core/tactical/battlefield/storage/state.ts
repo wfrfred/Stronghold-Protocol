@@ -1,3 +1,4 @@
+import type { ProjectileId, ProjectileInstance } from "../projectile/state.js";
 import type { NavigationMaps, PathMotionMode } from "../navigation/map.js";
 import { reconcileUnitNavigation } from "../../unit/capability/locomotion/navigation.js";
 import type { StableUnit, Unit, UnitId } from "../../unit/unit.js";
@@ -26,6 +27,7 @@ import {
 } from "../support/relations.js";
 
 export interface BattlefieldContent<U extends Unit> {
+    readonly projectiles: ReadonlyMap<ProjectileId, ProjectileInstance>;
     readonly units: ReadonlyMap<UnitId, U>;
     readonly blockingRelations: readonly BlockingRelation[];
     readonly supportRelations: readonly SupportRelation[];
@@ -48,6 +50,7 @@ export function createBattlefieldState<U extends Unit>(
 
     return {
         units,
+        projectiles: new Map(),
         mechanisms,
         navigationModifiers,
         blockingRelations: [],
@@ -99,6 +102,7 @@ function finishSettlement<U extends Unit>(
 } {
     const unchanged =
         content.units === previous.units &&
+        content.projectiles === previous.projectiles &&
         content.mechanisms === previous.mechanisms &&
         content.navigationModifiers === previous.navigationModifiers &&
         content.blockingRelations === previous.blockingRelations &&

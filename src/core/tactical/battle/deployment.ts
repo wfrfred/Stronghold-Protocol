@@ -1,15 +1,15 @@
-import type { BattlefieldChange, BattlefieldView } from "../../battlefield/contract.js";
-import { evaluateDeployment, type DeploymentView } from "../../battlefield/deployment/query.js";
+import type { BattlefieldChange, BattlefieldView } from "../battlefield/contract.js";
+import { evaluateDeployment, type DeploymentView } from "../battlefield/deployment/query.js";
 import {
     reconcileSupportRelations,
     type SupportRelation,
-} from "../../battlefield/support/relations.js";
-import { Tile, type TilePosition } from "../../geometry/coordinate.js";
+} from "../battlefield/support/relations.js";
+import { Tile, type TilePosition } from "../geometry/coordinate.js";
 import {
     hasDeploymentDefinition,
     hasTileBindingDefinition,
     type DeployableUnitDefinition,
-} from "../../unit/capability/deployment.js";
+} from "../unit/capability/deployment.js";
 import {
     createOccupancyState,
     hasOccupancy,
@@ -17,15 +17,14 @@ import {
     type OccupancyClaim,
     type OccupancySlot,
     type Occupancy,
-} from "../../unit/capability/occupancy.js";
-import { isSpatiallyPresent } from "../../unit/capability/presence.js";
-import { instantiateUnitPlacement, type UnitPlacementDefinition } from "../creation/placement.js";
-import type { Unit, UnitId } from "../../unit/unit.js";
-import type { Event } from "../contract.js";
-import type { BattleExecutionState } from "../execution/state.js";
-import type { BattlePhaseInput, BattlePhaseOutput } from "../phase.js";
-import { removeUnitWithEffects, type UnitLifecycleResources } from "../execution/unit-lifecycle.js";
-import { combatWorkEvents, combatWorkChanges, createCombatWork } from "../execution/work.js";
+} from "../unit/capability/occupancy.js";
+import { isSpatiallyPresent } from "../unit/capability/presence.js";
+import { instantiateUnitPlacement, type UnitPlacementDefinition } from "./creation/placement.js";
+import type { Unit, UnitId } from "../unit/unit.js";
+import type { Event } from "./contract.js";
+import type { BattleExecutionState } from "./execution/state.js";
+import { removeUnitWithEffects, type UnitLifecycleResources } from "./execution/unit-lifecycle.js";
+import { combatWorkEvents, combatWorkChanges, createCombatWork } from "./execution/work.js";
 
 export type DeploymentCommand =
     | {
@@ -226,24 +225,4 @@ export function resolveDeploymentCommands(
     });
 
     return { changes, events, execution };
-}
-
-export function advanceDeployment(
-    input: BattlePhaseInput,
-    resources: UnitLifecycleResources,
-): BattlePhaseOutput {
-    const commands = input.commands.filter(
-        (command): command is DeploymentCommand =>
-            command.type === "DEPLOY_UNIT" ||
-            command.type === "RELOCATE_UNIT" ||
-            command.type === "RETREAT_UNIT",
-    );
-
-    return resolveDeploymentCommands(
-        input.battlefield,
-        commands,
-        input.execution,
-        input.tick,
-        resources,
-    );
 }

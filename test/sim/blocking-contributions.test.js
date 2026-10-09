@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
-import { advanceBlocking } from '../../dist/core/tactical/battle/phases/blocking.js';
+import { advanceBlocking } from '../../dist/core/tactical/battle/blocking.js';
 import { combatWorkChanges, combatWorkView, getCombatUnit } from '../../dist/core/tactical/battle/execution/work.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
@@ -151,12 +151,11 @@ function battlefield(units) {
     blocked() { return h.state.blockingRelations.map(relation => relation.blockedUnitId); },
     blockingPhase(tick) {
       const state = h.state;
-      const stepped = advanceBlocking({ tick, commands: [], removedUnits: [],
-        execution: { rngState: 17, nextUnitId: units.length, nextNavigationRequestId: 0, nextMechanismId: 0, nextNavigationModifierId: 0 },
-        battlefield: { map, unitIds: [...state.units.keys()], getUnit: id => state.units.get(id),
-          blockingRelations: state.blockingRelations, supportRelations: state.supportRelations },
+      const changes = advanceBlocking({
+        map, unitIds: [...state.units.keys()], getUnit: id => state.units.get(id),
+        blockingRelations: state.blockingRelations, supportRelations: state.supportRelations,
       });
-      commit(stepped.changes);
+      commit(changes);
     },
   };
   commit(units.map(unit => ({ type: 'REGISTER_UNIT', unit })));

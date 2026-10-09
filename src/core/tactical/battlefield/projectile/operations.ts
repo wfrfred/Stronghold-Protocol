@@ -6,7 +6,9 @@ import type { RangeGeometry } from "../../geometry/shape.js";
 import type { UnitId } from "../../unit/unit.js";
 import type { ProjectileProgramRef } from "./program.js";
 import type { ProjectileResources } from "./resources.js";
-import type { ProjectileId, ProjectileInstance, ProjectileState } from "./state.js";
+import type { BattlefieldChange } from "../contract.js";
+import type { BattleExecutionState } from "../../battle/execution/state.js";
+import type { ProjectileId, ProjectileInstance, ProjectileView } from "./state.js";
 
 export interface ProjectileLaunchInput<S extends object = object> {
     readonly source: UnitId | null;
@@ -30,24 +32,41 @@ export interface ProjectileOperations {
 }
 
 export function withProjectileOperations(
-    state: ProjectileState,
+    battlefield: ProjectileView,
+    execution: BattleExecutionState,
     resources: Pick<ProjectileResources, "get" | "ownState">,
     tick: number,
     run: (operations: ProjectileOperations) => undefined,
-): { readonly state: ProjectileState; readonly result: undefined };
+): {
+    readonly changes: readonly BattlefieldChange[];
+    readonly execution: BattleExecutionState;
+    readonly result: undefined;
+};
 export function withProjectileOperations<T>(
-    state: ProjectileState,
+    battlefield: ProjectileView,
+    execution: BattleExecutionState,
     resources: Pick<ProjectileResources, "get" | "ownState">,
     tick: number,
     run: (operations: ProjectileOperations) => SynchronousResult<T>,
-): { readonly state: ProjectileState; readonly result: T };
+): {
+    readonly changes: readonly BattlefieldChange[];
+    readonly execution: BattleExecutionState;
+    readonly result: T;
+};
 export function withProjectileOperations<T>(
-    state: ProjectileState,
+    battlefield: ProjectileView,
+    execution: BattleExecutionState,
     resources: Pick<ProjectileResources, "get" | "ownState">,
     tick: number,
     run: (operations: ProjectileOperations) => SynchronousResult<T>,
-): { readonly state: ProjectileState; readonly result: T } {
-    const current = new ProjectileWork(state);
+): {
+    readonly changes: readonly BattlefieldChange[];
+    readonly execution: BattleExecutionState;
+    readonly result: T;
+} {
+    assertNonnegativeSafeInteger(execution.nextProjectileId, "projectile identity");
+    const current = new ProjectileWork(battlefield);
+    let nextProjectileId = execution.nextProjectileId;
     let active = true;
 
     const readWork = (): ProjectileWork => {
@@ -62,9 +81,9 @@ export function withProjectileOperations<T>(
         get: (id) => readWork().get(id),
         launch: (ref, input) => {
             const previous = readWork();
-            const nextProjectileId = previous.nextProjectileId + 1;
+            const allocatedNextId = nextProjectileId + 1;
 
-            if (!Number.isSafeInteger(nextProjectileId)) {
+            if (!Number.isSafeInteger(allocatedNextId)) {
                 throw new RangeError("projectile identity overflow");
             }
 
@@ -85,7 +104,7 @@ export function withProjectileOperations<T>(
 
             const program = resources.get(ref);
             const instance = ownProjectileInstance({
-                id: previous.nextProjectileId,
+                id: nextProjectileId,
                 programRef: ref,
                 source: input.source,
                 traceTarget: input.traceTarget,
@@ -102,7 +121,8 @@ export function withProjectileOperations<T>(
                 hitUnitIds: [],
                 state: resources.ownState(ref, input.initialState ?? program.initialize()),
             });
-            current.add(instance);
+            previous.add(instance);
+            nextProjectileId = allocatedNextId;
 
             return instance.id;
         },
@@ -111,7 +131,14 @@ export function withProjectileOperations<T>(
     try {
         const result = run(operations);
 
-        return { state: current.result(), result };
+        return {
+            changes: current.changes(),
+            execution:
+                nextProjectileId === execution.nextProjectileId
+                    ? execution
+                    : { ...execution, nextProjectileId },
+            result,
+        };
     } finally {
         active = false;
     }

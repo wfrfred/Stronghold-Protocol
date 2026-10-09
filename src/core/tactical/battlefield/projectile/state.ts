@@ -1,5 +1,4 @@
 import { ownProjectileState } from "./internal/state.js";
-import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import type { WorldPosition } from "../../geometry/coordinate.js";
 import type { RangeGeometry } from "../../geometry/shape.js";
 import type { UnitId } from "../../unit/unit.js";
@@ -32,15 +31,15 @@ export interface ProjectileInstance<S extends object = object> {
     readonly state: S;
 }
 
+export interface ProjectileView {
+    readonly projectileIds: readonly ProjectileId[];
+    getProjectile(id: ProjectileId): ProjectileInstance | undefined;
+}
+
+/** Snapshot projection; live instances belong to Battlefield. */
 export interface ProjectileState {
     readonly nextProjectileId: ProjectileId;
     readonly instances: readonly ProjectileInstance[];
-}
-
-export function createProjectileState(nextProjectileId = 0): ProjectileState {
-    assertNonnegativeSafeInteger(nextProjectileId, "projectile identity");
-
-    return copyProjectileState({ nextProjectileId, instances: [] });
 }
 
 export function copyProjectileState(state: ProjectileState): ProjectileState {

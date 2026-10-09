@@ -33,6 +33,7 @@ import {
     settleBattlefieldState,
     type BattlefieldState,
 } from "./storage/state.js";
+import type { ProjectileId, ProjectileInstance } from "./projectile/state.js";
 import type { SupportRelation } from "./support/relations.js";
 
 interface BattlefieldResources<U extends Unit> {
@@ -69,6 +70,10 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
             get unitIds() {
                 return runtime.unitIds;
             },
+            get projectileIds() {
+                return runtime.projectileIds;
+            },
+            getProjectile: (id) => runtime.#state.projectiles.get(id),
             get mechanismIds() {
                 return runtime.mechanismIds;
             },
@@ -167,6 +172,14 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
 
     blockingUsedCapacity(unitId: UnitId): number {
         return blockingUsedCapacity(this.#state.units, this.#state.blockingRelations, unitId);
+    }
+
+    get projectileIds(): readonly ProjectileId[] {
+        return [...this.#state.projectiles.keys()];
+    }
+
+    getProjectile(id: ProjectileId): ProjectileInstance | undefined {
+        return this.#state.projectiles.get(id);
     }
 
     get mechanismIds(): readonly MechanismId[] {

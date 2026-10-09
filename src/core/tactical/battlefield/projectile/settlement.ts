@@ -15,12 +15,13 @@ import {
 import type { Unit, UnitId } from "../../unit/unit.js";
 import { hasHit } from "../../unit/capability/spatial.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
+import type { BattlefieldChange } from "../contract.js";
 import type { ProjectileContactContext, ProjectileServices } from "./context.js";
 import type { ProjectileProgram } from "./program.js";
 import {
     type ProjectileId,
     type ProjectileInstance,
-    type ProjectileState,
+    type ProjectileView,
     type ProjectileStopReason,
 } from "./state.js";
 
@@ -37,7 +38,7 @@ export type ProjectileSignal = {
 
 export interface ProjectileTransition {
     readonly work: CombatWork;
-    readonly state: ProjectileState;
+    readonly changes: readonly BattlefieldChange[];
 }
 
 class ProjectileSettlement {
@@ -49,12 +50,12 @@ class ProjectileSettlement {
 
     constructor(
         work: CombatWork,
-        state: ProjectileState,
+        battlefield: ProjectileView,
         services: ProjectileServices,
         tick: number,
     ) {
         this.work = work;
-        this.#projectiles = new ProjectileWork(state);
+        this.#projectiles = new ProjectileWork(battlefield);
         this.#services = services;
         this.#tick = tick;
     }
@@ -308,7 +309,7 @@ class ProjectileSettlement {
     }
 
     result(): ProjectileTransition {
-        return { work: this.work, state: this.#projectiles.result() };
+        return { work: this.work, changes: this.#projectiles.changes() };
     }
 
     advanceAll(): void {
@@ -320,14 +321,14 @@ class ProjectileSettlement {
     }
 }
 
-export function stepProjectiles(
+export function advanceProjectiles(
     work: CombatWork,
-    state: ProjectileState,
+    battlefield: ProjectileView,
     services: ProjectileServices,
     tick: number,
     stopIds: readonly ProjectileId[] = [],
 ): ProjectileTransition {
-    const settlement = new ProjectileSettlement(work, state, services, tick);
+    const settlement = new ProjectileSettlement(work, battlefield, services, tick);
 
     for (const id of stopIds) {
         settlement.stop(id, "EXPLICIT");
@@ -340,13 +341,13 @@ export function stepProjectiles(
 
 export function stopProjectile(
     work: CombatWork,
-    state: ProjectileState,
+    battlefield: ProjectileView,
     id: ProjectileId,
     services: ProjectileServices,
     tick: number,
     reason: ProjectileStopReason = "EXPLICIT",
 ): ProjectileTransition {
-    const settlement = new ProjectileSettlement(work, state, services, tick);
+    const settlement = new ProjectileSettlement(work, battlefield, services, tick);
     settlement.stop(id, reason);
 
     return settlement.result();

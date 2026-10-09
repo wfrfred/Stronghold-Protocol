@@ -1,7 +1,13 @@
 import { ownDataRecord } from "../../../../common/immutable-data.js";
 import { createWorldPosition } from "../../../geometry/coordinate.js";
 import { createRangeGeometry } from "../../../geometry/shape.js";
-import type { ProjectileId, ProjectileInstance, ProjectileState } from "../state.js";
+import type { BattlefieldChange } from "../../contract.js";
+import type {
+    ProjectileId,
+    ProjectileInstance,
+    ProjectileState,
+    ProjectileView,
+} from "../state.js";
 
 const ownedInstances = new WeakSet<ProjectileInstance>();
 const ownedStates = new WeakSet<ProjectileState>();
@@ -98,19 +104,15 @@ export function ownProjectileState(state: ProjectileState): ProjectileState {
 }
 
 export class ProjectileWork {
+    readonly #baseline: ProjectileView;
     readonly #instances: Map<ProjectileId, ProjectileInstance>;
-    #nextProjectileId: ProjectileId;
-    #snapshot: ProjectileState | null;
+    readonly #updated = new Set<ProjectileId>();
 
-    constructor(state: ProjectileState) {
-        const owned = ownProjectileState(state);
-        this.#instances = new Map(owned.instances.map((instance) => [instance.id, instance]));
-        this.#nextProjectileId = owned.nextProjectileId;
-        this.#snapshot = owned;
-    }
-
-    get nextProjectileId(): ProjectileId {
-        return this.#nextProjectileId;
+    constructor(battlefield: ProjectileView) {
+        this.#baseline = battlefield;
+        this.#instances = new Map(
+            battlefield.projectileIds.map((id) => [id, battlefield.getProjectile(id)!]),
+        );
     }
 
     get ids(): Iterable<ProjectileId> {
@@ -122,9 +124,12 @@ export class ProjectileWork {
     }
 
     add(instance: ProjectileInstance): void {
+        if (this.#instances.has(instance.id)) {
+            throw new RangeError(`duplicate projectile: ${instance.id}`);
+        }
+
         this.#instances.set(instance.id, ownProjectileInstance(instance));
-        this.#nextProjectileId = instance.id + 1;
-        this.#snapshot = null;
+        this.#updated.add(instance.id);
     }
 
     update(instance: ProjectileInstance): void {
@@ -132,25 +137,36 @@ export class ProjectileWork {
 
         if (current !== undefined && current !== instance) {
             this.#instances.set(instance.id, ownProjectileInstance(instance));
-            this.#snapshot = null;
+            this.#updated.add(instance.id);
         }
     }
 
     remove(id: ProjectileId): void {
         if (this.#instances.delete(id)) {
-            this.#snapshot = null;
+            this.#updated.add(id);
         }
     }
 
-    result(): ProjectileState {
-        if (this.#snapshot === null) {
-            this.#snapshot = Object.freeze({
-                nextProjectileId: this.#nextProjectileId,
-                instances: Object.freeze([...this.#instances.values()]),
-            });
-            ownedStates.add(this.#snapshot);
+    changes(): readonly BattlefieldChange[] {
+        const changes: BattlefieldChange[] = [];
+
+        for (const id of this.#updated) {
+            const previous = this.#baseline.getProjectile(id);
+            const current = this.#instances.get(id);
+
+            if (current === previous) {
+                continue;
+            }
+            if (current === undefined) {
+                changes.push({ type: "REMOVE_PROJECTILE", projectileId: id });
+            } else {
+                changes.push({
+                    type: previous === undefined ? "REGISTER_PROJECTILE" : "UPDATE_PROJECTILE",
+                    projectile: current,
+                });
+            }
         }
 
-        return this.#snapshot;
+        return changes;
     }
 }

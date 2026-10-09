@@ -1,36 +1,52 @@
-import type { BattlefieldChange } from "../../battlefield/contract.js";
-import type * as computation from "../../modifier/computation.js";
-import type { ContributionFacts } from "../../unit/capability/contribution.js";
-import { hasRoutedLocomotion } from "../../unit/capability/locomotion/capability.js";
-import { hasAction } from "../../unit/capability/action/capability.js";
-import { hasStatusFlag } from "../../unit/capability/status/capability.js";
-import { stepRoutedUnit } from "../../unit/capability/locomotion/step.js";
-import type { Unit, UnitId } from "../../unit/unit.js";
+import type { BattlefieldChange, BattlefieldView } from "../battlefield/contract.js";
+import type * as computation from "../modifier/computation.js";
+import type { ContributionFacts } from "../unit/capability/contribution.js";
+import { hasRoutedLocomotion } from "../unit/capability/locomotion/capability.js";
+import { hasAction } from "../unit/capability/action/capability.js";
+import { hasStatusFlag } from "../unit/capability/status/capability.js";
+import { stepRoutedUnit } from "../unit/capability/locomotion/step.js";
+import type { Unit, UnitId } from "../unit/unit.js";
 import { changeAlternativeRoutes, type AlternativeRouteCommand } from "./route-control.js";
-import type { Event } from "../contract.js";
-import type { BattlePhaseInput, BattlePhaseOutput } from "../phase.js";
-import { removeUnitWithEffects, type UnitLifecycleResources } from "../execution/unit-lifecycle.js";
+import type { Event } from "./contract.js";
+import type { BattleExecutionState } from "./execution/state.js";
+import { removeUnitWithEffects, type UnitLifecycleResources } from "./execution/unit-lifecycle.js";
 import {
     combatWorkChanges,
     combatWorkEvents,
     createCombatWork,
     updateCombatUnits,
-} from "../execution/work.js";
+} from "./execution/work.js";
 
-export interface MovementPhaseInput extends BattlePhaseInput {
+export interface MovementInput {
+    readonly battlefield: BattlefieldView;
+    readonly tick: number;
+    readonly execution: BattleExecutionState;
     readonly movementAllowed?: (unitId: UnitId) => boolean;
 }
 
-export function applyRouteCommands(input: BattlePhaseInput): BattlePhaseOutput {
-    const commands = input.commands.filter(
-        (command): command is AlternativeRouteCommand =>
-            command.type === "SET_ALTERNATIVE_ROUTE" || command.type === "CLEAR_ALTERNATIVE_ROUTE",
-    );
+export interface RouteCommandResult {
+    readonly changes: readonly BattlefieldChange[];
+    readonly events: readonly Event[];
+    readonly execution: BattleExecutionState;
+}
+
+export interface MovementResult {
+    readonly changes: readonly BattlefieldChange[];
+    readonly events: readonly Event[];
+    readonly execution: BattleExecutionState;
+}
+
+export function advanceRouteCommands(
+    battlefield: Pick<BattlefieldView, "getUnit">,
+    commands: readonly AlternativeRouteCommand[],
+    execution: BattleExecutionState,
+    tick: number,
+): RouteCommandResult {
     const changed = changeAlternativeRoutes(
-        (id) => input.battlefield.getUnit(id),
+        (id) => battlefield.getUnit(id),
         commands,
-        input.execution,
-        input.tick,
+        execution,
+        tick,
     );
 
     return {
@@ -38,19 +54,19 @@ export function applyRouteCommands(input: BattlePhaseInput): BattlePhaseOutput {
         events: changed.signals.map((signal) => ({
             type: "ROUTE",
             ...signal,
-            tick: input.tick,
+            tick,
         })),
         execution: changed.execution,
     };
 }
 
 export function advanceMovement(
-    input: MovementPhaseInput,
+    input: MovementInput,
     { routeMoveMultiplier }: { readonly routeMoveMultiplier: number },
     resources: UnitLifecycleResources & {
         readonly computations: computation.Computations<ContributionFacts>;
     },
-): BattlePhaseOutput {
+): MovementResult {
     const { battlefield, tick } = input;
     let execution = input.execution;
     const changes: BattlefieldChange[] = [];

@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
-import { combatWorkView, getCombatUnit, updateCombatUnit } from "../../dist/core/tactical/battle/execution/work.js";
+import { combatWorkView, getCombatUnit, updateCombatUnit, withCombatExecution } from "../../dist/core/tactical/battle/execution/work.js";
 import { createProjectileProgram } from "../../dist/core/tactical/battlefield/projectile/program.js";
 import { withProjectileOperations } from "../../dist/core/tactical/battlefield/projectile/operations.js";
-import { stepProjectiles } from "../../dist/core/tactical/battlefield/projectile/settlement.js";
-import { createProjectileState } from "../../dist/core/tactical/battlefield/projectile/state.js";
+import { advanceProjectiles } from "../../dist/core/tactical/battlefield/projectile/settlement.js";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
 import { attack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
@@ -118,13 +117,17 @@ test("the final shot is sampled with its buff before consumption and its project
   }));
   const attackPower = resolveAttackPower(1, combatWorkView(f.work), f.resources.computations);
   assert.equal(attackPower, 200);
-  const launched = withProjectileOperations(createProjectileState(), f.resources.projectiles, 0, (operations) => operations.launch(shell.ref, {
+  const launched = withProjectileOperations({ projectileIds: [], getProjectile: () => undefined }, f.work.execution, f.resources.projectiles, 0, (operations) => operations.launch(shell.ref, {
     source: 1, traceTarget: 2, position: [0, 0], destination: [1, 0], cachedAtk: attackPower,
     speedPerTick: 1, contactRange: { type: "SHAPES", geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.2 }] } }, stopDelayTicks: 0,
   }));
-  const consumed = consumeSkillAmmo(f.work, 1, 0, f.resources);
+  const consumed = consumeSkillAmmo(withCombatExecution(f.work, launched.execution), 1, 0, f.resources);
   assert.equal(resolveAttackPower(1, combatWorkView(consumed.work), f.resources.computations), 100);
-  assert.equal(launched.state.instances[0].cachedAtk, 200);
-  const hit = stepProjectiles(consumed.work, launched.state, f.resources, 1);
+  const projectile = launched.changes.find((change) => change.type === "REGISTER_PROJECTILE").projectile;
+  assert.equal(projectile.cachedAtk, 200);
+  const hit = advanceProjectiles(consumed.work, {
+    projectileIds: [projectile.id],
+    getProjectile: (id) => id === projectile.id ? projectile : undefined,
+  }, f.resources, 1);
   assert.equal(getCombatUnit(hit.work, 2).vitality.hp, 800);
 });

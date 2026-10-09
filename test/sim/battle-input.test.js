@@ -41,7 +41,7 @@ const { ${field}: omitted${index}, ...without${index} } = input;
 // @ts-expect-error Every initial collection must be supplied explicitly.
 new BattleRuntime(without${index});
 `).join('')}
-${['nextUnitId', 'nextNavigationRequestId', 'nextMechanismId', 'nextNavigationModifierId'].map(field => `
+${['nextUnitId', 'nextNavigationRequestId', 'nextMechanismId', 'nextNavigationModifierId', 'nextProjectileId'].map(field => `
 // @ts-expect-error Instance identity allocation belongs to the runtime.
 new BattleRuntime({ ...input, ${field}: 100 });
 `).join('')}
@@ -178,7 +178,7 @@ test('runtime allocates initial IDs, resolves creation references, and never reu
   assert.deepEqual(initial.navigationModifiers.map(modifier => modifier.id), [0, 1, 2, 3, 4]);
   assert.deepEqual(initial.execution, {
     rngState: 17, nextUnitId: 3, nextNavigationRequestId: 0,
-    nextMechanismId: 3, nextNavigationModifierId: 5,
+    nextMechanismId: 3, nextNavigationModifierId: 5, nextProjectileId: 0,
   });
   assert.deepEqual(initial.navigationModifiers[1].source, { type: 'MECHANISM', mechanismId: 1 });
   assert.deepEqual(initial.navigationModifiers[2].source, { type: 'UNIT', unitId: 1 });

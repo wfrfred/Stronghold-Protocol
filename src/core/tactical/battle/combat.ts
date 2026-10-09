@@ -1,52 +1,65 @@
 import {
     ActionExecutionWork,
     actionExecutionsBySource,
-} from "../../unit/capability/action/internal/executions.js";
-import { compileAction } from "../../unit/capability/action/compile.js";
-import type { ActionStartResources } from "../../unit/capability/action/execution.js";
-import { startActionInWork } from "../../unit/capability/action/internal/execution.js";
+} from "../unit/capability/action/internal/executions.js";
+import { compileAction } from "../unit/capability/action/compile.js";
+import type { ActionStartResources } from "../unit/capability/action/execution.js";
+import { startActionInWork } from "../unit/capability/action/internal/execution.js";
 import {
     cancelActionExecutionInWork,
     resumeActionExecutionInWork,
-} from "../../unit/capability/action/internal/process.js";
-import { ownCompiledAction, type CompiledAction } from "../../unit/capability/action/program.js";
+} from "../unit/capability/action/internal/process.js";
+import { ownCompiledAction, type CompiledAction } from "../unit/capability/action/program.js";
 import {
     actionExecutionPermissions,
-    createActionExecutionState,
     type ActionExecution,
     type ActionExecutionState,
     type CompiledActionSegment,
-} from "../../unit/capability/action/process.js";
-import { prepareCombatEffects, retireCombatUnit } from "../execution/unit-lifecycle.js";
-import { CombatResources } from "../resources.js";
+} from "../unit/capability/action/process.js";
+import { prepareCombatEffects, retireCombatUnit } from "./execution/unit-lifecycle.js";
+import { CombatResources } from "./resources.js";
 import {
     combatWorkEvents,
     combatWorkChanges,
     createCombatWork,
     getCombatUnit,
-} from "../execution/work.js";
-import { hasAction, type ActionDefinition } from "../../unit/capability/action/capability.js";
-import { isSpatiallyPresent } from "../../unit/capability/presence.js";
-import { hasVitality } from "../../unit/capability/vitality/capability.js";
-import type { UnitId } from "../../unit/unit.js";
-import type { BattlePhase, BattlePhaseInput } from "../phase.js";
-import type { ProjectileOperations } from "../../battlefield/projectile/operations.js";
-import { hasSkill } from "../../unit/capability/skill/capability.js";
-import { hasStatusFlag } from "../../unit/capability/status/capability.js";
+} from "./execution/work.js";
+import { hasAction, type ActionDefinition } from "../unit/capability/action/capability.js";
+import { isSpatiallyPresent } from "../unit/capability/presence.js";
+import { hasVitality } from "../unit/capability/vitality/capability.js";
+import type { UnitId } from "../unit/unit.js";
+import type { BattlefieldChange, BattlefieldView } from "../battlefield/contract.js";
+import type { Command, Event } from "./contract.js";
+import type { BattleExecutionState } from "./execution/state.js";
+import type { ProjectileOperations } from "../battlefield/projectile/operations.js";
+import { hasSkill } from "../unit/capability/skill/capability.js";
+import { hasStatusFlag } from "../unit/capability/status/capability.js";
 
-export interface CombatPhaseInput extends BattlePhaseInput {
+export interface CombatPreparationInput {
+    readonly battlefield: BattlefieldView;
+    readonly tick: number;
+    readonly commands: readonly Extract<Command, { readonly type: "CANCEL_ACTION_EXECUTION" }>[];
+    readonly execution: BattleExecutionState;
+}
+
+export interface CombatAdvanceInput {
+    readonly battlefield: BattlefieldView;
+    readonly tick: number;
+    readonly execution: BattleExecutionState;
     readonly projectiles?: ProjectileOperations;
 }
 
-export function createCombatSystem(
+export interface CombatAdvanceResult {
+    readonly actionExecution: ActionExecutionState;
+    readonly changes: readonly BattlefieldChange[];
+    readonly events: readonly Event[];
+    readonly execution: BattleExecutionState;
+}
+
+export function createCombat(
     resources = new CombatResources(),
     compile: typeof compileAction = compileAction,
-): {
-    createState(): ActionExecutionState;
-    readonly prepare: BattlePhase<ActionExecutionState>;
-    readonly step: BattlePhase<ActionExecutionState, CombatPhaseInput>;
-    allowsMovement(state: ActionExecutionState, unitId: UnitId): boolean;
-} {
+) {
     const compiledActions = new WeakMap<ActionDefinition, CompiledAction>();
 
     const compiledAction = (definition: ActionDefinition): CompiledAction => {
@@ -77,7 +90,10 @@ export function createCombatSystem(
                     actionExecutionPermissions(execution, segmentsOf(execution)).allowNewAction,
             );
 
-    const prepare: BattlePhase<ActionExecutionState> = (input, state) => {
+    const prepare = (
+        input: CombatPreparationInput,
+        state: ActionExecutionState,
+    ): CombatAdvanceResult => {
         let executions: ActionExecutionWork | undefined;
         let work = prepareCombatEffects(
             createCombatWork(input.battlefield, input.execution, input.battlefield),
@@ -86,27 +102,28 @@ export function createCombatSystem(
         );
 
         for (const command of input.commands) {
-            if (command.type === "CANCEL_ACTION_EXECUTION") {
-                executions ??= new ActionExecutionWork(state);
-                const cancelled = cancelActionExecutionInWork(
-                    work,
-                    executions,
-                    { executionId: command.executionId, tick: input.tick },
-                    resources,
-                );
-                work = cancelled.work;
-            }
+            executions ??= new ActionExecutionWork(state);
+            const cancelled = cancelActionExecutionInWork(
+                work,
+                executions,
+                { executionId: command.executionId, tick: input.tick },
+                resources,
+            );
+            work = cancelled.work;
         }
 
         return {
-            state: executions?.result() ?? state,
+            actionExecution: executions?.result() ?? state,
             changes: combatWorkChanges(work),
             events: combatWorkEvents(work),
             execution: work.execution,
         };
     };
 
-    const step: BattlePhase<ActionExecutionState, CombatPhaseInput> = (input, state) => {
+    const advance = (
+        input: CombatAdvanceInput,
+        state: ActionExecutionState,
+    ): CombatAdvanceResult => {
         const { battlefield, tick } = input;
         const executions = new ActionExecutionWork(state);
         const actionResources: ActionStartResources = {
@@ -179,7 +196,7 @@ export function createCombatSystem(
         }
 
         return {
-            state: executions.result(),
+            actionExecution: executions.result(),
             changes: combatWorkChanges(work),
             events: combatWorkEvents(work),
             execution: work.execution,
@@ -187,10 +204,9 @@ export function createCombatSystem(
     };
 
     return {
-        createState: createActionExecutionState,
         prepare,
-        step,
-        allowsMovement: (state, unitId) =>
+        advance,
+        allowsMovement: (state: ActionExecutionState, unitId: UnitId) =>
             (actionExecutionsBySource(state).get(unitId) ?? []).every(
                 (execution) =>
                     !actionExecutionPermissions(execution, segmentsOf(execution)).blockingMovement,

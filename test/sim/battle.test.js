@@ -36,7 +36,7 @@ import { createLegacyCombatBattle } from '../../dist/legacy/combat.js';
 import { createDeploymentProfile, createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/deployment.js';
 import { createOccupancyState } from '../../dist/core/tactical/unit/capability/occupancy.js';
 import { createPredefinedInstanceDefinition } from '../../dist/core/tactical/battle/predefined.js';
-import { advanceMovement } from '../../dist/core/tactical/battle/phases/movement.js';
+import { advanceMovement } from '../../dist/core/tactical/battle/movement.js';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 
 const approx = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
@@ -671,7 +671,7 @@ test('core raw 01 slime fragment preserves map, route flags and stats; spawns at
   assert.equal(first.spawning.cursor, 1);
   assert.equal(first.spawning.spawnedCount, 1);
   assert.deepEqual(first.spawning.managedFinalUnitIds, [0]);
-  assert.deepEqual(first.execution, { rngState: expectedRng.state(), nextUnitId: 1, nextNavigationRequestId: 1, nextMechanismId: 0, nextNavigationModifierId: 0 });
+  assert.deepEqual(first.execution, { rngState: expectedRng.state(), nextUnitId: 1, nextNavigationRequestId: 1, nextMechanismId: 0, nextNavigationModifierId: 0, nextProjectileId: 0 });
   assert.equal(first.units[0].vitality.hp, 550);
   assert.equal(getNavigationRequest(first.units[0].locomotion.mainRoute.navigation).id, 0);
   assert.deepEqual(first.units[0].locomotion.mainRoute.route.timing, { waveStartedAtTick: 0, fragmentStartedAtTick: 0 });
@@ -688,7 +688,7 @@ test('core raw 01 slime fragment preserves map, route flags and stats; spawns at
   assert.equal(second.spawning.cursor, 2);
   assert.equal(second.spawning.spawnedCount, 2);
   assert.deepEqual(second.spawning.managedFinalUnitIds, [0, 1]);
-  assert.deepEqual(second.execution, { rngState: expectedRng.state(), nextUnitId: 2, nextNavigationRequestId: 2, nextMechanismId: 0, nextNavigationModifierId: 0 });
+  assert.deepEqual(second.execution, { rngState: expectedRng.state(), nextUnitId: 2, nextNavigationRequestId: 2, nextMechanismId: 0, nextNavigationModifierId: 0, nextProjectileId: 0 });
   assert.deepEqual(second.units.map(unit => getNavigationRequest(unit.locomotion.mainRoute.navigation).id), [0, 1]);
   assert.deepEqual(second.units.map(unit => unit.locomotion.mainRoute.route.timing), [
     { waveStartedAtTick: 0, fragmentStartedAtTick: 0 },
@@ -2170,7 +2170,7 @@ test('core visibility: movement reads one navigation projection before following
   const definition = createEnemyDefinition({ id: 'moving_effect_anchor', vitality: { maxHp: 100 }, locomotion: {
     moveSpeedPerTick: 1, steeringParameters: createSteeringParameters({ steeringFactor: 1, maxSteeringForce: 1 }),
   } });
-  let execution = { rngState: 123, nextUnitId: 2, nextNavigationRequestId: 0, nextMechanismId: 0, nextNavigationModifierId: 1 };
+  let execution = { rngState: 123, nextUnitId: 2, nextNavigationRequestId: 0, nextMechanismId: 0, nextNavigationModifierId: 1, nextProjectileId: 0 };
 
   for (const [id, pathMotionMode, column] of [[0, 'FLY', 1], [1, 'WALK', 3]]) {
     const route = createRouteDefinition({
@@ -2199,7 +2199,7 @@ test('core visibility: movement reads one navigation projection before following
   assert.deepEqual(battlefield.navigationMaps.WALK.cells.map(cell => cell.passable), [true, false, true, true, true]);
 
   const moved = advanceMovement({
-    battlefield, tick: 0, commands: [], execution, removedUnits: [],
+    battlefield, tick: 0, execution,
   }, { routeMoveMultiplier: 1 }, new CombatResources());
   battlefield.apply(moved.changes);
 

@@ -19,9 +19,9 @@ import type {
     PredefinedPresence,
 } from "./predefined.js";
 import type { SpawnScheduleState } from "./schedule/state.js";
-import type { AlternativeRouteCommand } from "./phases/route-control.js";
+import type { AlternativeRouteCommand } from "./route-control.js";
 import type { BattleExecutionState } from "./execution/state.js";
-import type { DeploymentCommand } from "./phases/deployment.js";
+import type { DeploymentCommand } from "./deployment.js";
 import type { SupportRelation } from "../battlefield/support/relations.js";
 import type {
     ActionExecutionId,

@@ -2,15 +2,29 @@ import {
     reconcileEffectSources,
     registerEffectSourceUnits,
     type EffectSourceServices,
-} from "../../battlefield/effect-source/settlement.js";
-import type { UnitId } from "../../unit/unit.js";
-import { combatWorkEvents, combatWorkChanges, createCombatWork } from "../execution/work.js";
-import type { BattlePhaseInput, BattlePhaseOutput } from "../phase.js";
+} from "../battlefield/effect-source/settlement.js";
+import type { UnitId } from "../unit/unit.js";
+import type { BattlefieldChange, BattlefieldView } from "../battlefield/contract.js";
+import type { Event } from "./contract.js";
+import type { BattleExecutionState } from "./execution/state.js";
+import { combatWorkEvents, combatWorkChanges, createCombatWork } from "./execution/work.js";
+
+export interface EffectSourceInput {
+    readonly battlefield: BattlefieldView;
+    readonly tick: number;
+    readonly execution: BattleExecutionState;
+}
+
+export interface EffectSourceResult {
+    readonly changes: readonly BattlefieldChange[];
+    readonly events: readonly Event[];
+    readonly execution: BattleExecutionState;
+}
 
 export function advanceEffectSources(
-    input: BattlePhaseInput,
+    input: EffectSourceInput,
     resources: EffectSourceServices,
-): BattlePhaseOutput {
+): EffectSourceResult {
     const work = reconcileEffectSources(
         createCombatWork(input.battlefield, input.execution, input.battlefield),
         resources,
@@ -25,10 +39,10 @@ export function advanceEffectSources(
 }
 
 export function registerEffectSources(
-    input: BattlePhaseInput,
+    input: EffectSourceInput,
     unitIds: readonly UnitId[],
     resources: EffectSourceServices,
-): BattlePhaseOutput {
+): EffectSourceResult {
     const work = registerEffectSourceUnits(
         createCombatWork(input.battlefield, input.execution, input.battlefield),
         unitIds,

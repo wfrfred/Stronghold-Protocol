@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createCombatSystem } from '../../dist/core/tactical/battle/phases/combat.js';
+import { createCombat } from '../../dist/core/tactical/battle/combat.js';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { createCombatWork } from '../../dist/core/tactical/battle/execution/work.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
@@ -42,7 +42,7 @@ function fixture(count = 8, perSource = 2) {
   state = Object.freeze({ ...state, executions: Object.freeze([...state.executions].reverse()) });
   return {
     state, battlefield,
-    input: { battlefield, tick: 0, commands: [], removedUnits: [], execution: createCombatWork(battlefield).execution },
+    input: { battlefield, tick: 0, execution: createCombatWork(battlefield).execution },
   };
 }
 
@@ -64,7 +64,7 @@ function reference(initial, segments, resources, tick) {
   return { state, work };
 }
 
-test('action execution work: phase batching preserves execution order, samples, and immutable input branches', () => {
+test('action execution work: combat batching preserves execution order, samples, and immutable input branches', () => {
   const initial = fixture(128);
   const resources = new CombatResources();
   const observed = [];
@@ -76,7 +76,7 @@ test('action execution work: phase batching preserves execution order, samples, 
     { type: 'WAIT', allowNewAction: false, blockingMovement: true,
       resolve: () => ({ type: 'FOR_TICKS', ticks: 3 }) },
   ];
-  const system = createCombatSystem(resources, action => ({ definition: action, bind: () => new Map(), program: segments }));
+  const combat = createCombat(resources, action => ({ definition: action, bind: () => new Map(), program: segments }));
   const before = structuredClone(initial.state);
   const expected = reference(initial, segments, resources, 0);
   const expectedOrder = [...observed];
@@ -88,25 +88,25 @@ test('action execution work: phase batching preserves execution order, samples, 
     return freeze(value);
   };
   let actual;
-  try { actual = system.step(initial.input, initial.state); }
+  try { actual = combat.advance(initial.input, initial.state); }
   finally { Object.freeze = freeze; }
 
   assert.equal(executionArrays, 1);
   assert.deepEqual(observed, expectedOrder);
-  assert.deepEqual(actual.state, expected.state);
+  assert.deepEqual(actual.actionExecution, expected.state);
   assert.deepEqual(initial.state, before);
-  assert.equal(Object.isFrozen(actual.state), true);
-  assert.equal(Object.isFrozen(actual.state.executions), true);
-  assert.equal(actual.state.executions.every(execution => Object.isFrozen(execution)), true);
+  assert.equal(Object.isFrozen(actual.actionExecution), true);
+  assert.equal(Object.isFrozen(actual.actionExecution.executions), true);
+  assert.equal(actual.actionExecution.executions.every(execution => Object.isFrozen(execution)), true);
   assert.deepEqual(actual.changes, []);
   assert.deepEqual(actual.events, []);
-  assert.equal(system.allowsMovement(actual.state, 0), false);
-  assert.equal(system.allowsMovement(actual.state, 128), true);
-  const repeated = system.step(initial.input, initial.state);
+  assert.equal(combat.allowsMovement(actual.actionExecution, 0), false);
+  assert.equal(combat.allowsMovement(actual.actionExecution, 128), true);
+  const repeated = combat.advance(initial.input, initial.state);
   assert.deepEqual(repeated, actual);
-  const advanced = system.step({ ...initial.input, tick: 1 }, actual.state);
-  assert.equal(advanced.state.executions.every(execution => execution.wait.remainingTicks === 2), true);
-  assert.equal(actual.state.executions.every(execution => execution.wait.remainingTicks === 3), true);
+  const advanced = combat.advance({ ...initial.input, tick: 1 }, actual.actionExecution);
+  assert.equal(advanced.actionExecution.executions.every(execution => execution.wait.remainingTicks === 2), true);
+  assert.equal(actual.actionExecution.executions.every(execution => execution.wait.remainingTicks === 3), true);
 });
 
 test('action execution work: absolute and same-tick consumed waits preserve unchanged state identities', () => {
@@ -117,17 +117,17 @@ test('action execution work: absolute and same-tick consumed waits preserve unch
     const initial = fixture(8, 1);
     const resources = new CombatResources();
     const segments = [{ type: 'WAIT', resolve, allowNewAction: false }];
-    const system = createCombatSystem(resources, action => ({ definition: action, bind: () => new Map(), program: segments }));
-    const entered = system.step(initial.input, initial.state);
-    const unchanged = system.step(initial.input, entered.state);
-    assert.equal(unchanged.state, entered.state);
+    const combat = createCombat(resources, action => ({ definition: action, bind: () => new Map(), program: segments }));
+    const entered = combat.advance(initial.input, initial.state);
+    const unchanged = combat.advance(initial.input, entered.actionExecution);
+    assert.equal(unchanged.actionExecution, entered.actionExecution);
     const single = resumeActionExecution(
       createCombatWork(initial.battlefield),
-      entered.state,
-      { executionId: entered.state.executions[0].id, segments, tick: 0 },
+      entered.actionExecution,
+      { executionId: entered.actionExecution.executions[0].id, segments, tick: 0 },
       resources,
     );
-    assert.equal(single.state, entered.state);
+    assert.equal(single.state, entered.actionExecution);
     assert.deepEqual(unchanged.events, []);
     assert.deepEqual(unchanged.changes, []);
   }
@@ -144,12 +144,12 @@ test('action execution work: a later callback exception leaves the input executi
     } },
     { type: 'WAIT', resolve: () => ({ type: 'FOR_TICKS', ticks: 2 }) },
   ];
-  const system = createCombatSystem(resources, action => ({ definition: action, bind: () => new Map(), program: segments }));
+  const combat = createCombat(resources, action => ({ definition: action, bind: () => new Map(), program: segments }));
   const before = structuredClone(initial.state);
-  assert.throws(() => system.step(initial.input, initial.state), /late action failure/);
+  assert.throws(() => combat.advance(initial.input, initial.state), /late action failure/);
   assert.deepEqual(initial.state, before);
   fail = false;
-  const retried = system.step(initial.input, initial.state);
-  assert.deepEqual(retried.state, reference(initial, segments, resources, 0).state);
+  const retried = combat.advance(initial.input, initial.state);
+  assert.deepEqual(retried.actionExecution, reference(initial, segments, resources, 0).state);
   assert.deepEqual(initial.state, before);
 });

@@ -17,6 +17,7 @@ const defaultExecution: BattleExecutionState = Object.freeze({
     nextNavigationRequestId: 0,
     nextMechanismId: 0,
     nextNavigationModifierId: 0,
+    nextProjectileId: 0,
 });
 
 export type CombatUnitLifecycleResult =
