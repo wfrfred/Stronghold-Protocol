@@ -6,8 +6,8 @@ import { hasAction } from "../unit/capability/action/capability.js";
 import { hasStatusFlag } from "../unit/capability/status/capability.js";
 import { stepRoutedUnit } from "../unit/capability/locomotion/step.js";
 import type { Unit, UnitId } from "../unit/unit.js";
-import { changeAlternativeRoutes, type AlternativeRouteCommand } from "./route-control.js";
-import type { Event } from "./contract.js";
+import { changeAlternativeRoutes } from "./route-control.js";
+import type { Command, Event } from "./contract.js";
 import type { BattleExecutionState } from "./execution/state.js";
 import { removeUnitWithEffects, type UnitLifecycleResources } from "./execution/unit-lifecycle.js";
 import {
@@ -17,34 +17,38 @@ import {
     updateCombatUnits,
 } from "./execution/work.js";
 
-export interface MovementInput {
+interface MovementInput {
     readonly battlefield: BattlefieldView;
     readonly tick: number;
     readonly execution: BattleExecutionState;
     readonly movementAllowed?: (unitId: UnitId) => boolean;
 }
 
-export interface RouteCommandResult {
+interface RouteCommandResult {
     readonly changes: readonly BattlefieldChange[];
     readonly events: readonly Event[];
     readonly execution: BattleExecutionState;
 }
 
-export interface MovementResult {
+interface MovementResult {
     readonly changes: readonly BattlefieldChange[];
     readonly events: readonly Event[];
     readonly execution: BattleExecutionState;
 }
 
 export function advanceRouteCommands(
-    battlefield: Pick<BattlefieldView, "getUnit">,
-    commands: readonly AlternativeRouteCommand[],
+    battlefield: BattlefieldView,
+    commands: readonly Command[],
     execution: BattleExecutionState,
     tick: number,
 ): RouteCommandResult {
     const changed = changeAlternativeRoutes(
         (id) => battlefield.getUnit(id),
-        commands,
+        commands.filter(
+            (command) =>
+                command.type === "SET_ALTERNATIVE_ROUTE" ||
+                command.type === "CLEAR_ALTERNATIVE_ROUTE",
+        ),
         execution,
         tick,
     );

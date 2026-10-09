@@ -29,6 +29,7 @@ function fixture(count = 8, perSource = 2) {
     unitIds: units.map(unit => unit.id), getUnit: id => byId.get(id),
     blockerOf: () => undefined, blockedBy: () => [],
     mechanismIds: [], getMechanism: () => undefined,
+    projectileIds: [], getProjectile: () => undefined,
   };
   let state = createActionExecutionState();
   for (const unit of units) {

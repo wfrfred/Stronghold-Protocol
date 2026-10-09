@@ -9,13 +9,13 @@ import type { Event } from "./contract.js";
 import type { BattleExecutionState } from "./execution/state.js";
 import { combatWorkEvents, combatWorkChanges, createCombatWork } from "./execution/work.js";
 
-export interface EffectSourceInput {
+interface EffectSourceInput {
     readonly battlefield: BattlefieldView;
     readonly tick: number;
     readonly execution: BattleExecutionState;
 }
 
-export interface EffectSourceResult {
+interface EffectSourceResult {
     readonly changes: readonly BattlefieldChange[];
     readonly events: readonly Event[];
     readonly execution: BattleExecutionState;

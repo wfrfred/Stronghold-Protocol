@@ -4,35 +4,31 @@ import type { BattleExecutionState } from "./execution/state.js";
 import type { UnitRouteSignal } from "./route-control.js";
 import type { UnitId } from "../unit/unit.js";
 import type { BattlefieldChange } from "../battlefield/contract.js";
-import type { Event } from "./contract.js";
-import {
-    advanceSpawnSchedule,
-    recordScheduleSpawns,
-    type SpawnScheduleTrigger,
-} from "./schedule/runtime.js";
+import type { Command, Event } from "./contract.js";
+import { advanceSpawnSchedule, recordScheduleSpawns } from "./schedule/runtime.js";
 import type { SpawnScheduleExecution } from "./schedule/state.js";
 import type { ScheduledEnemySpawn } from "./schedule/definition.js";
 
-export interface SpawnedEnemies {
+interface SpawnedEnemies {
     readonly execution: BattleExecutionState;
     readonly enemies: readonly RoutedEnemy[];
     readonly signals: readonly UnitRouteSignal[];
 }
 
-export interface SpawningInput {
+interface SpawningInput {
     readonly tick: number;
-    readonly triggers: readonly SpawnScheduleTrigger[];
+    readonly commands: readonly Command[];
     readonly execution: BattleExecutionState;
 }
 
-export interface SpawningResult {
+interface SpawningResult {
     readonly schedule: SpawnScheduleExecution;
     readonly changes: readonly BattlefieldChange[];
     readonly events: readonly Event[];
     readonly execution: BattleExecutionState;
 }
 
-export function spawnEnemies(
+function spawnEnemies(
     spawns: readonly ScheduledEnemySpawn[],
     execution: BattleExecutionState,
     tick: number,
@@ -107,7 +103,7 @@ export function advanceSpawning(
 ): SpawningResult {
     const scheduled = advanceSpawnSchedule(schedule, {
         tick: input.tick,
-        triggers: input.triggers,
+        triggers: input.commands.filter((command) => command.type === "TRIGGER_BRANCH"),
     });
     const spawned = spawnEnemies(scheduled.spawns, input.execution, input.tick);
 

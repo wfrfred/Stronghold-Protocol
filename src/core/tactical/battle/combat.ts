@@ -31,25 +31,27 @@ import type { UnitId } from "../unit/unit.js";
 import type { BattlefieldChange, BattlefieldView } from "../battlefield/contract.js";
 import type { Command, Event } from "./contract.js";
 import type { BattleExecutionState } from "./execution/state.js";
-import type { ProjectileOperations } from "../battlefield/projectile/operations.js";
+import {
+    withProjectileOperations,
+    type ProjectileOperations,
+} from "../battlefield/projectile/operations.js";
 import { hasSkill } from "../unit/capability/skill/capability.js";
 import { hasStatusFlag } from "../unit/capability/status/capability.js";
 
-export interface CombatPreparationInput {
+interface CombatPreparationInput {
     readonly battlefield: BattlefieldView;
     readonly tick: number;
-    readonly commands: readonly Extract<Command, { readonly type: "CANCEL_ACTION_EXECUTION" }>[];
+    readonly commands: readonly Command[];
     readonly execution: BattleExecutionState;
 }
 
-export interface CombatAdvanceInput {
+interface CombatAdvanceInput {
     readonly battlefield: BattlefieldView;
     readonly tick: number;
     readonly execution: BattleExecutionState;
-    readonly projectiles?: ProjectileOperations;
 }
 
-export interface CombatAdvanceResult {
+interface CombatAdvanceResult {
     readonly actionExecution: ActionExecutionState;
     readonly changes: readonly BattlefieldChange[];
     readonly events: readonly Event[];
@@ -102,6 +104,10 @@ export function createCombat(
         );
 
         for (const command of input.commands) {
+            if (command.type !== "CANCEL_ACTION_EXECUTION") {
+                continue;
+            }
+
             executions ??= new ActionExecutionWork(state);
             const cancelled = cancelActionExecutionInWork(
                 work,
@@ -120,9 +126,10 @@ export function createCombat(
         };
     };
 
-    const advance = (
+    const advanceActions = (
         input: CombatAdvanceInput,
         state: ActionExecutionState,
+        projectiles: ProjectileOperations,
     ): CombatAdvanceResult => {
         const { battlefield, tick } = input;
         const executions = new ActionExecutionWork(state);
@@ -133,7 +140,7 @@ export function createCombat(
             effectLifecycle: resources.effectLifecycle,
             actionRelease: resources.actionRelease,
             completeAttack: resources.completeAttack,
-            ...(input.projectiles === undefined ? {} : { projectileOperations: input.projectiles }),
+            projectileOperations: projectiles,
         };
         const ids = [
             ...new Set([
@@ -200,6 +207,28 @@ export function createCombat(
             changes: combatWorkChanges(work),
             events: combatWorkEvents(work),
             execution: work.execution,
+        };
+    };
+
+    const advance = (
+        input: CombatAdvanceInput,
+        state: ActionExecutionState,
+    ): CombatAdvanceResult => {
+        const launched = withProjectileOperations(
+            input.battlefield,
+            input.execution,
+            resources.projectiles,
+            input.tick,
+            (projectiles) => advanceActions(input, state, projectiles),
+        );
+
+        return {
+            ...launched.result,
+            changes: [...launched.result.changes, ...launched.changes],
+            execution: {
+                ...launched.result.execution,
+                nextProjectileId: launched.execution.nextProjectileId,
+            },
         };
     };
 

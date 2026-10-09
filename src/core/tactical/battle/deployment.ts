@@ -21,7 +21,7 @@ import {
 import { isSpatiallyPresent } from "../unit/capability/presence.js";
 import { instantiateUnitPlacement, type UnitPlacementDefinition } from "./creation/placement.js";
 import type { Unit, UnitId } from "../unit/unit.js";
-import type { Event } from "./contract.js";
+import type { Command, Event } from "./contract.js";
 import type { BattleExecutionState } from "./execution/state.js";
 import { removeUnitWithEffects, type UnitLifecycleResources } from "./execution/unit-lifecycle.js";
 import { combatWorkEvents, combatWorkChanges, createCombatWork } from "./execution/work.js";
@@ -42,12 +42,7 @@ export type DeploymentCommand =
       }
     | { readonly type: "RETREAT_UNIT"; readonly unitId: UnitId };
 
-export type DeploymentCommandView = Pick<
-    BattlefieldView,
-    "map" | "unitIds" | "getUnit" | "supportRelations" | "blockerOf" | "blockedBy"
->;
-
-export interface DeploymentCommandResolution {
+interface DeploymentCommandResolution {
     readonly changes: readonly BattlefieldChange[];
     readonly events: readonly Event[];
     readonly execution: BattleExecutionState;
@@ -79,13 +74,20 @@ function occupancyAt(
 }
 
 export function resolveDeploymentCommands(
-    battlefield: DeploymentCommandView,
-    commands: readonly DeploymentCommand[],
+    battlefield: BattlefieldView,
+    commands: readonly Command[],
     execution: BattleExecutionState,
     tick: number,
     resources: UnitLifecycleResources,
 ): DeploymentCommandResolution {
-    if (commands.length === 0) {
+    const deploymentCommands = commands.filter(
+        (command) =>
+            command.type === "DEPLOY_UNIT" ||
+            command.type === "RELOCATE_UNIT" ||
+            command.type === "RETREAT_UNIT",
+    );
+
+    if (deploymentCommands.length === 0) {
         return { changes: [], events: [], execution };
     }
 
@@ -99,7 +101,7 @@ export function resolveDeploymentCommands(
     const events: Event[] = [];
     let supports = battlefield.supportRelations;
 
-    for (const command of commands) {
+    for (const command of deploymentCommands) {
         if (command.type === "RETREAT_UNIT") {
             if (!units.has(command.unitId)) {
                 throw new RangeError(`unknown retreat unit ${command.unitId}`);

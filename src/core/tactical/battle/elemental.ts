@@ -7,13 +7,13 @@ import type { Event } from "./contract.js";
 import type { BattleExecutionState } from "./execution/state.js";
 import { combatWorkChanges, combatWorkEvents, createCombatWork } from "./execution/work.js";
 
-export interface ElementalInput {
+interface ElementalInput {
     readonly battlefield: BattlefieldView;
     readonly tick: number;
     readonly execution: BattleExecutionState;
 }
 
-export interface ElementalResult {
+interface ElementalResult {
     readonly changes: readonly BattlefieldChange[];
     readonly events: readonly Event[];
     readonly execution: BattleExecutionState;

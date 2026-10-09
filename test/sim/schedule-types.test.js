@@ -15,7 +15,7 @@ test('schedule execution carries its definition through phases and queries and r
 import type { SpawnScheduleDefinition, TimelineScheduleDefinition, WavesScheduleDefinition } from ${sourceModule('schedule/definition')};
 import { createSpawnScheduleExecution, cloneScheduleState, type SpawnScheduleExecution, type SpawnScheduleState, type TimelineScheduleState, type WavesScheduleState } from ${sourceModule('schedule/state')};
 import { advanceSpawnSchedule, recordScheduleSpawns, resolveScheduleUnits, isSpawnScheduleCompleted, getUnspawnedCount, getSpawnScheduleCounts } from ${sourceModule('schedule/runtime')};
-import { advanceSpawning, type SpawningInput } from ${sourceModule('spawning')};
+import { advanceSpawning } from ${sourceModule('spawning')};
 import { advanceBlocking } from ${sourceModule('blocking')};
 declare const definition: SpawnScheduleDefinition;
 declare const progress: SpawnScheduleState;
@@ -23,7 +23,7 @@ declare const timelineDefinition: TimelineScheduleDefinition;
 declare const wavesDefinition: WavesScheduleDefinition;
 declare const timelineProgress: TimelineScheduleState;
 declare const wavesProgress: WavesScheduleState;
-declare const input: SpawningInput;
+declare const input: Parameters<typeof advanceSpawning>[0];
 declare const battlefield: Parameters<typeof advanceBlocking>[0];
 const timeline: SpawnScheduleExecution = { ...timelineProgress, definition: timelineDefinition };
 const waves: SpawnScheduleExecution = { ...wavesProgress, definition: wavesDefinition };

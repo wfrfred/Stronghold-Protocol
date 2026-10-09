@@ -17,7 +17,7 @@ import {
     type UnitPlacementDefinition,
 } from "./creation/placement.js";
 import type { BattleExecutionState } from "./execution/state.js";
-import type { Event } from "./contract.js";
+import type { Command, Event } from "./contract.js";
 import { removeUnitWithEffects, type UnitLifecycleResources } from "./execution/unit-lifecycle.js";
 import { combatWorkEvents, combatWorkChanges, createCombatWork } from "./execution/work.js";
 
@@ -54,7 +54,7 @@ export type PredefinedCommand =
           readonly reason: BattlefieldRemovalReason;
       };
 
-export interface PredefinedTransition {
+interface PredefinedTransition {
     readonly presence: readonly PredefinedPresence[];
     readonly execution: BattleExecutionState;
     readonly changes: readonly BattlefieldChange[];
@@ -226,8 +226,34 @@ export function reconcilePredefinedPresence(
     return remaining.length === presence.length ? presence : remaining;
 }
 
+export function advancePredefined(
+    definitions: readonly PredefinedInstanceDefinition[],
+    presence: readonly PredefinedPresence[],
+    input: {
+        readonly battlefield: BattlefieldView;
+        readonly commands: readonly Command[];
+        readonly execution: BattleExecutionState;
+        readonly tick: number;
+    },
+    resources: UnitLifecycleResources,
+): PredefinedTransition & { readonly events: readonly Event[] } {
+    const { battlefield, commands, execution, tick } = input;
+    const transition = changePredefinedInstances(
+        definitions,
+        reconcilePredefinedPresence(presence, battlefield),
+        commands.filter(
+            (command) =>
+                command.type === "APPEAR_PREDEFINED" || command.type === "REMOVE_PREDEFINED",
+        ),
+        execution,
+        tick,
+    );
+
+    return settlePredefinedChanges(battlefield, transition, resources, tick);
+}
+
 /** Settle removals against the pending unit facts before committing predefined changes. */
-export function settlePredefinedChanges(
+function settlePredefinedChanges(
     battlefield: BattlefieldView,
     transition: PredefinedTransition,
     resources: UnitLifecycleResources,

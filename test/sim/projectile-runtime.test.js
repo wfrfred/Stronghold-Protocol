@@ -957,7 +957,8 @@ test("projectile runtime: command stops share one container before advancing sur
   let advanced;
   try {
     globalThis.Map = ObservedMap;
-    advanced = advanceBattleProjectiles(battlefield, launched.execution, 1, stopIds, resources);
+    advanced = advanceBattleProjectiles(battlefield, launched.execution, 1,
+      stopIds.map(projectileId => ({ type: "STOP_PROJECTILE", projectileId })), resources);
   } finally {
     globalThis.Map = NativeMap;
   }

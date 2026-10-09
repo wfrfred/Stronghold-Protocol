@@ -14,17 +14,14 @@ import {
     createCombatWork,
 } from "./execution/work.js";
 
-export interface SkillInput {
+interface SkillInput {
     readonly battlefield: BattlefieldView;
     readonly tick: number;
     readonly execution: BattleExecutionState;
-    readonly commands: readonly Extract<
-        Command,
-        { readonly type: "ACTIVATE_SKILL" | "FINISH_SKILL" }
-    >[];
+    readonly commands: readonly Command[];
 }
 
-export interface SkillResult {
+interface SkillResult {
     readonly changes: readonly BattlefieldChange[];
     readonly events: readonly Event[];
     readonly execution: BattleExecutionState;
@@ -39,6 +36,10 @@ export function advanceSkills(input: SkillInput, resources: SkillExecutionResour
     }
 
     for (const command of input.commands) {
+        if (command.type !== "ACTIVATE_SKILL" && command.type !== "FINISH_SKILL") {
+            continue;
+        }
+
         const changed =
             command.type === "ACTIVATE_SKILL"
                 ? activateSkill(work, { unitId: command.unitId, tick: input.tick }, resources)
