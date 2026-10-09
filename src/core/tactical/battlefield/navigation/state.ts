@@ -203,7 +203,7 @@ export function invalidateNavigationPath(
     const activity = state.execution.activity;
 
     return (activity.type === "FOLLOWING" || activity.type === "UNREACHABLE") &&
-        activity.path.field.map !== map
+        !NavigationMap.sameContent(activity.path.field.map, map)
         ? startNavigationRequest(state, activity.path.request)
         : state;
 }

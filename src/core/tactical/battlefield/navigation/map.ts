@@ -1,6 +1,7 @@
 import { assertNonnegativeSafeInteger, assertPositiveSafeInteger } from "../../../common/assert.js";
 import type { TilePosition, WorldPosition } from "../../geometry/coordinate.js";
-import type { Direction } from "../../geometry/direction.js";
+import { DIRECTIONS, type Direction } from "../../geometry/direction.js";
+import { createNavigationContentHash } from "./hash.js";
 
 export type PathMotionMode = "WALK" | "FLY";
 
@@ -17,6 +18,7 @@ export interface NavigationMap {
     readonly columns: number;
     readonly pathMotionMode: PathMotionMode;
     readonly revision: NavigationRevision;
+    readonly contentHash: number;
     readonly cells: readonly NavigationCell[];
 }
 
@@ -28,7 +30,73 @@ export const PathMotionMode = {
     },
 };
 
+const immutableMaps = new WeakSet<NavigationMap>();
+const contentComparisons = new WeakMap<NavigationMap, WeakMap<NavigationMap, boolean>>();
+
+function isImmutable(map: NavigationMap): boolean {
+    if (immutableMaps.has(map)) {
+        return true;
+    }
+
+    if (
+        !Object.isFrozen(map) ||
+        !Object.isFrozen(map.cells) ||
+        !map.cells.every((cell) => Object.isFrozen(cell) && Object.isFrozen(cell.departures))
+    ) {
+        return false;
+    }
+
+    immutableMaps.add(map);
+
+    return true;
+}
+
 export const NavigationMap = {
+    sameContent(left: NavigationMap, right: NavigationMap): boolean {
+        if (left === right) {
+            return true;
+        }
+
+        if (
+            left.rows !== right.rows ||
+            left.columns !== right.columns ||
+            left.pathMotionMode !== right.pathMotionMode ||
+            left.cells.length !== right.cells.length ||
+            left.contentHash !== right.contentHash
+        ) {
+            return false;
+        }
+
+        const comparisons = contentComparisons.get(left);
+        const cached = comparisons?.get(right);
+
+        if (cached !== undefined) {
+            return cached;
+        }
+
+        const same = left.cells.every((cell, index) => {
+            const other = right.cells[index]!;
+
+            return (
+                cell === other ||
+                (cell.passable === other.passable &&
+                    cell.moveCost === other.moveCost &&
+                    DIRECTIONS.every(
+                        (direction) => cell.departures[direction] === other.departures[direction],
+                    ))
+            );
+        });
+
+        if (isImmutable(left) && isImmutable(right)) {
+            const remembered = comparisons ?? new WeakMap<NavigationMap, boolean>();
+
+            remembered.set(right, same);
+            contentComparisons.set(left, remembered);
+        }
+
+        return same;
+    },
+
     bounds(map: NavigationMap): readonly [min: WorldPosition, max: WorldPosition] {
         const margin = Number.EPSILON * Math.max(map.rows, map.columns);
 
@@ -59,7 +127,7 @@ export const NavigationMap = {
     },
 };
 
-export function createNavigationMap(map: NavigationMap): NavigationMap {
+export function createNavigationMap(map: Omit<NavigationMap, "contentHash">): NavigationMap {
     assertPositiveSafeInteger(map.rows, "navigation row count");
     assertPositiveSafeInteger(map.columns, "navigation column count");
 
@@ -107,6 +175,7 @@ export function createNavigationMap(map: NavigationMap): NavigationMap {
         columns: map.columns,
         pathMotionMode: map.pathMotionMode,
         revision: map.revision,
+        contentHash: createNavigationContentHash(map.rows, map.columns, map.pathMotionMode, cells),
         cells: Object.freeze(cells),
     });
 }

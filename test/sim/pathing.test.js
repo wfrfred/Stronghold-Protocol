@@ -19,7 +19,7 @@ import { createNavigationRequest } from '../../dist/core/tactical/battlefield/na
 import { deriveNavigationFieldQuery } from '../../dist/core/tactical/battlefield/navigation/field.js';
 import { createNavigationPath } from '../../dist/core/tactical/battlefield/navigation/path.js';
 import {
-  bindNavigationPath, createNavigationState, queryNavigation,
+  bindNavigationPath, createNavigationState, invalidateNavigationPath, queryNavigation,
   markNavigationArrived, setNavigationMotionMode, startNavigationRequest,
 } from '../../dist/core/tactical/battlefield/navigation/state.js';
 import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
@@ -29,7 +29,7 @@ import {
 import { createRouteTiming, createRouteState } from '../../dist/core/tactical/unit/capability/locomotion/route/state.js';
 import { initializeRouteSpawn } from '../../dist/core/tactical/unit/capability/locomotion/route/spawn.js';
 import { predictRouteTarget } from '../../dist/core/tactical/unit/capability/locomotion/route/plan.js';
-import { initializeRouteControl } from '../../dist/core/tactical/unit/capability/locomotion/route-control.js';
+import { bindRouteNavigation, initializeRouteControl } from '../../dist/core/tactical/unit/capability/locomotion/route-control.js';
 import { parseBattlefieldMap } from '../../dist/data/arknights/map.js';
 import { parseRouteDefinition } from '../../dist/data/arknights/route.js';
 import { createRng } from '../../dist/core/common/rng.js';
@@ -1114,9 +1114,10 @@ test('core routed enemy keeps one randomized goal across map changes, motion mod
     WALK: createNavigationMap({ rows: 1, columns: 5, pathMotionMode: 'WALK', revision: 1, cells: Array.from({ length: 5 }, () => fieldCell()) }),
     FLY: createNavigationMap({ rows: 1, columns: 5, pathMotionMode: 'FLY', revision: 1, cells: Array.from({ length: 5 }, () => fieldCell()) }),
   });
+  const retainedPath = h.enemy.locomotion.mainRoute.navigation.execution.activity.path;
   h.setMaps(changedMaps);
   h.step({ moveMultiplier: 0 });
-  assert.equal(h.enemy.locomotion.mainRoute.navigation.execution.activity.path.field.map, changedMaps.WALK);
+  assert.equal(h.enemy.locomotion.mainRoute.navigation.execution.activity.path, retainedPath);
   const walkingLocomotion = h.enemy.locomotion, walkingMainRoute = walkingLocomotion.mainRoute;
   h.setMotionMode('FLY');
   assert.equal(h.enemy.locomotion.steering.lastVelocity, walkingLocomotion.steering.lastVelocity);
@@ -1520,7 +1521,7 @@ test('core selective and full projection preserve relation history and explicit 
   assert.equal(h.state.spatial, spatial);
 });
 
-test('core selective projection reconciles externally brought paths without changing maps or request identity', () => {
+test('core selective projection preserves externally brought paths until consumption', () => {
   const h = battlefieldProjectionHarness();
   const external = routedEnemyHarness({ speedPerTick: 0.1, checkpoints: [coreMove(4)] });
   external.step({ moveMultiplier: 0 });
@@ -1530,12 +1531,12 @@ test('core selective projection reconciles externally brought paths without chan
   const maps = h.state.navigationMaps;
   h.commit([{ type: 'REGISTER_UNIT', unit: incoming }]);
   assert.equal(h.state.navigationMaps, maps);
-  assert.equal(h.state.units.get(1).locomotion.mainRoute.navigation.execution.activity.type, 'NEEDS_PATH');
+  assert.equal(h.state.units.get(1).locomotion.mainRoute.navigation.execution.activity.path, path);
   assert.equal(routedEnemyRequest(h.state.units.get(1)), request);
   assert.equal(incoming.locomotion.mainRoute.navigation.execution.activity.path, path);
   h.commit(state => [{ type: 'UPDATE_UNIT', unit: { ...state.units.get(1), locomotion: incoming.locomotion } }]);
   assert.equal(h.state.navigationMaps, maps);
-  assert.equal(h.state.units.get(1).locomotion.mainRoute.navigation.execution.activity.type, 'NEEDS_PATH');
+  assert.equal(h.state.units.get(1).locomotion.mainRoute.navigation.execution.activity.path, path);
   assert.equal(routedEnemyRequest(h.state.units.get(1)), request);
 });
 
@@ -1926,7 +1927,7 @@ test('core battlefield forks isolate mutable state while preserving map, field a
   fork.apply([{ type: 'SET_MECHANISM_ACTIVE', mechanismId: 1, active: true }]);
   assert.notEqual(fork.navigationMaps.WALK, maps.WALK);
   assert.equal(fork.navigationMaps.FLY, maps.FLY);
-  assert.equal(fork.getUnit(1).locomotion.mainRoute.navigation.execution.activity.type, 'NEEDS_PATH');
+  assert.equal(fork.getUnit(1).locomotion.mainRoute.navigation.execution.activity.path, path);
   assert.equal(runtime.getUnit(1).locomotion.mainRoute.navigation.execution.activity.path, path);
   assert.equal(runtime.navigationMaps, maps);
   assert.equal(path.field.map, maps.WALK);
@@ -2213,7 +2214,7 @@ test('core battlefield isolates custom unit state using its explicit snapshot co
   assert.deepEqual(runtime.getUnit(10).charges, { remaining: 2, spent: [1] });
 });
 
-test('core battlefield invalidates only changed navigation modes and preserves routed intent through rebinding', () => {
+test('core battlefield retains paths on commit and consumers rebind changed navigation content', () => {
   const runtime = flatBattlefieldRuntime();
   const h = routedEnemyHarness({ speedPerTick: 1, checkpoints: [coreMove(4, { randomizeReachOffset: true, reachOffset: [0.1, 0] })], routeOverrides: {
     spawnOffset: [0.1, -0.2], visitEveryTileCenter: true,
@@ -2245,7 +2246,7 @@ test('core battlefield invalidates only changed navigation modes and preserves r
     { type: 'REGISTER_UNIT', unit: externalUnit },
     { type: 'REGISTER_MECHANISM', mechanism: battlefieldMechanism(1) },
   ]);
-  assert.equal(runtime.getUnit(5).locomotion.mainRoute.navigation.execution.activity.type, 'NEEDS_PATH');
+  assert.equal(runtime.getUnit(5).locomotion.mainRoute.navigation.execution.activity.path, externalPath);
   assert.equal(routedEnemyRequest(runtime.getUnit(5)), request);
   assert.equal(externalUnit.locomotion.mainRoute.navigation.execution.activity.path, externalPath);
   const oldMaps = runtime.navigationMaps;
@@ -2280,9 +2281,9 @@ test('core battlefield invalidates only changed navigation modes and preserves r
   const pending = runtime.getUnit(1);
   assert.equal(pending.vitality.hp, 80);
   for (const control of [pending.locomotion.mainRoute, pending.locomotion.alternativeRoute]) {
-    assert.equal(control.navigation.execution.activity.type, 'NEEDS_PATH');
-    assert.equal(control.navigation.execution.activity.request, request);
-    assert.equal(control.navigation.execution.activity.request.goal, goal);
+    assert.equal(control.navigation.execution.activity.path, oldPath);
+    assert.equal(control.navigation.execution.activity.path.request, request);
+    assert.equal(control.navigation.execution.activity.path.request.goal, goal);
     assert.deepEqual(control.navigation.execution.visits, oldNavigation.execution.visits);
     assert.equal(control.navigation.execution.locatorOffset, oldNavigation.execution.locatorOffset);
   }
@@ -2311,10 +2312,143 @@ test('core battlefield invalidates only changed navigation modes and preserves r
   runtime.apply([{ type: 'UPDATE_UNIT', unit: failed.enemy }]);
   runtime.apply([{ type: 'REMOVE_NAVIGATION_MODIFIER', navigationModifierId: 2 }]);
   const retry = runtime.getUnit(1).locomotion.mainRoute.navigation;
-  assert.equal(retry.execution.activity.type, 'NEEDS_PATH');
-  assert.equal(retry.execution.activity.request, request);
-  assert.equal(retry.execution.activity.request.goal, goal);
+  assert.equal(retry.execution.activity.type, 'UNREACHABLE');
+  assert.equal(retry.execution.activity.path, failed.enemy.locomotion.mainRoute.navigation.execution.activity.path);
+  assert.equal(retry.execution.activity.path.request, request);
+  assert.equal(retry.execution.activity.path.request.goal, goal);
   assert.deepEqual(retry.execution.visits, oldNavigation.execution.visits);
+  const recovered = stepRoutedEnemy(runtime.getUnit(1), { ...context, tick: context.tick + 2, maps: runtime.navigationMaps });
+  assert.equal(recovered.enemy.locomotion.mainRoute.navigation.execution.activity.type, 'FOLLOWING');
+  assert.equal(recovered.enemy.locomotion.mainRoute.navigation.execution.activity.path.field.map, runtime.navigationMaps.WALK);
+  assert.equal(routedEnemyRequest(recovered.enemy), request);
+});
+
+test('unobserved A -> B -> A maps retain FOLLOWING paths and cursors across separate commits', () => {
+  const battlefield = battlefieldProjectionHarness(1, 5);
+  const h = routedEnemyHarness({ speedPerTick: 1, checkpoints: [coreMove(4)] });
+  h.setMaps(battlefield.state.navigationMaps);
+  h.step({ moveMultiplier: 0 });
+  battlefield.commit([
+    { type: 'REGISTER_UNIT', unit: h.enemy },
+    { type: 'REGISTER_MECHANISM', mechanism: battlefieldMechanism(1) },
+  ]);
+  const previous = battlefield.branches.map(branch => branch.state);
+  const wall = fixedNavigationModifier(1, { type: 'MECHANISM', mechanismId: 1 }, [0, 2],
+    modifierDefinition('temporary-wall', walkRestriction({ denyPassage: true })));
+  battlefield.commit([{ type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: wall }]);
+  assert.equal(battlefield.state.navigationMaps.WALK.cells[2].passable, false);
+  battlefield.commit([{ type: 'REMOVE_NAVIGATION_MODIFIER', navigationModifierId: 1 }]);
+
+  battlefield.branches.forEach((branch, index) => {
+    const before = previous[index];
+    const unit = branch.state.units.get(1);
+    const control = unit.locomotion.mainRoute;
+    const original = before.units.get(1).locomotion.mainRoute;
+    const map = branch.state.navigationMaps.WALK;
+    assert.notEqual(map, before.navigationMaps.WALK);
+    assert.ok(map.revision > before.navigationMaps.WALK.revision);
+    assert.equal(map.contentHash, before.navigationMaps.WALK.contentHash);
+    assert.equal(branch.state.units, before.units);
+    assert.equal(control, original);
+    assert.equal(invalidateNavigationPath(control.navigation, map), control.navigation);
+    assert.equal(bindRouteNavigation(control, unit.position, {
+      maps: branch.state.navigationMaps, fieldCache: branch.fieldCache,
+    }), control);
+    const stepped = stepRoutedEnemy(unit, {
+      tick: h.tick, maps: branch.state.navigationMaps, fieldCache: branch.fieldCache,
+      moveMultiplier: 0, movementAllowed: true, waitTickAllowed: true, routeAdvanceAllowed: true,
+      rngState: h.rngState, nextNavigationRequestId: h.nextNavigationRequestId,
+    });
+    const navigation = stepped.enemy.locomotion.mainRoute.navigation;
+    assert.equal(navigation.execution.activity.path, original.navigation.execution.activity.path);
+    assert.deepEqual(navigation.execution.activity.cursor, original.navigation.execution.activity.cursor);
+    assert.deepEqual(navigation.execution.visits, original.navigation.execution.visits);
+    assert.equal(routedEnemyRequest(stepped.enemy), routedEnemyRequest(unit));
+    assert.equal(stepped.rngState, h.rngState);
+    assert.equal(stepped.nextNavigationRequestId, h.nextNavigationRequestId);
+    assert.deepEqual(stepped.outcomes, []);
+  });
+});
+
+test('expiry followed by replacement retains unobserved UNREACHABLE paths without repeated outcomes', () => {
+  const battlefield = battlefieldProjectionHarness(1, 5);
+  const wall = fixedNavigationModifier(1, { type: 'MECHANISM', mechanismId: 1 }, [0, 2],
+    modifierDefinition('expiring-wall', walkRestriction({ denyPassage: true })), { expiresAtTick: 5 });
+  battlefield.commit([
+    { type: 'REGISTER_MECHANISM', mechanism: battlefieldMechanism(1) },
+    { type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: wall },
+  ]);
+  const h = routedEnemyHarness({ speedPerTick: 1, checkpoints: [coreMove(4)] });
+  h.setMaps(battlefield.state.navigationMaps);
+  const failed = h.step({ moveMultiplier: 0 });
+  assert.equal(h.enemy.locomotion.mainRoute.navigation.execution.activity.type, 'UNREACHABLE');
+  assert.equal(failed.outcomes.length, 1);
+  battlefield.commit([{ type: 'REGISTER_UNIT', unit: h.enemy }]);
+  const previous = battlefield.branches.map(branch => branch.state);
+  battlefield.commit([{ type: 'EXPIRE_NAVIGATION_MODIFIERS', tick: 5 }]);
+  assert.equal(battlefield.state.navigationMaps.WALK.cells[2].passable, true);
+  battlefield.commit([{ type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: fixedNavigationModifier(2,
+    { type: 'MECHANISM', mechanismId: 1 }, [0, 2],
+    modifierDefinition('replacement-wall', walkRestriction({ denyPassage: true }))) }]);
+
+  battlefield.branches.forEach((branch, index) => {
+    const unit = branch.state.units.get(1);
+    const control = unit.locomotion.mainRoute;
+    const original = previous[index].units.get(1).locomotion.mainRoute;
+    assert.notEqual(branch.state.navigationMaps.WALK, previous[index].navigationMaps.WALK);
+    assert.equal(branch.state.navigationMaps.WALK.contentHash, previous[index].navigationMaps.WALK.contentHash);
+    assert.equal(control, original);
+    assert.equal(invalidateNavigationPath(control.navigation, branch.state.navigationMaps.WALK), control.navigation);
+    assert.equal(bindRouteNavigation(control, unit.position, {
+      maps: branch.state.navigationMaps, fieldCache: branch.fieldCache,
+    }), control);
+    assert.deepEqual(queryNavigation(control.navigation, unit.position).outcomes, []);
+    const stepped = stepRoutedEnemy(unit, {
+      tick: 5, maps: branch.state.navigationMaps, fieldCache: branch.fieldCache,
+      moveMultiplier: 0, movementAllowed: true, waitTickAllowed: true, routeAdvanceAllowed: true,
+      rngState: h.rngState, nextNavigationRequestId: h.nextNavigationRequestId,
+    });
+    assert.equal(stepped.enemy.locomotion.mainRoute.navigation, original.navigation);
+    assert.deepEqual(stepped.outcomes, []);
+    assert.equal(stepped.rngState, h.rngState);
+    assert.equal(stepped.nextNavigationRequestId, h.nextNavigationRequestId);
+  });
+});
+
+test('consuming B before restoring A rebinds both observed navigation contents', () => {
+  const runtime = flatBattlefieldRuntime();
+  const h = routedEnemyHarness({ speedPerTick: 1, checkpoints: [coreMove(4)] });
+  h.setMaps(runtime.navigationMaps);
+  h.step({ moveMultiplier: 0 });
+  runtime.apply([
+    { type: 'REGISTER_UNIT', unit: h.enemy },
+    { type: 'REGISTER_MECHANISM', mechanism: battlefieldMechanism(1) },
+  ]);
+  const original = runtime.getUnit(1).locomotion.mainRoute;
+  runtime.apply([{ type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: fixedNavigationModifier(1,
+    { type: 'MECHANISM', mechanismId: 1 }, [0, 2],
+    modifierDefinition('observed-wall', walkRestriction({ denyPassage: true }))) }]);
+  const unit = runtime.getUnit(1);
+  const blocked = bindRouteNavigation(unit.locomotion.mainRoute, unit.position, {
+    maps: runtime.navigationMaps, fieldCache: runtime.fieldCache,
+  });
+  assert.notEqual(blocked.navigation.execution.activity.path, original.navigation.execution.activity.path);
+  assert.equal(blocked.navigation.execution.activity.path.field.map, runtime.navigationMaps.WALK);
+  const observed = queryNavigation(blocked.navigation, unit.position);
+  assert.equal(observed.state.execution.activity.type, 'UNREACHABLE');
+  assert.equal(observed.outcomes.length, 1);
+  runtime.apply([{ type: 'UPDATE_UNIT', unit: { ...unit, locomotion: {
+    ...unit.locomotion, mainRoute: { ...blocked, navigation: observed.state },
+  } } }]);
+  runtime.apply([{ type: 'REMOVE_NAVIGATION_MODIFIER', navigationModifierId: 1 }]);
+  const current = runtime.getUnit(1);
+  const restored = bindRouteNavigation(current.locomotion.mainRoute, current.position, {
+    maps: runtime.navigationMaps, fieldCache: runtime.fieldCache,
+  });
+  assert.notEqual(restored.navigation.execution.activity.path, blocked.navigation.execution.activity.path);
+  assert.equal(restored.navigation.execution.activity.type, 'FOLLOWING');
+  assert.equal(restored.navigation.execution.activity.path.field.map, runtime.navigationMaps.WALK);
+  assert.equal(restored.navigation.execution.activity.path.request, original.navigation.execution.activity.path.request);
 });
 
 test('a pushed ground enemy re-plans from its tile centre: never cuts a fence corner or breaks the stage crate on it (act1 m03, tile 11,5)', REAL, () => {

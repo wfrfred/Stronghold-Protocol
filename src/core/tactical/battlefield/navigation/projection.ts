@@ -3,6 +3,7 @@ import { Tile, type TilePosition } from "../../geometry/coordinate.js";
 import { Direction, DIRECTIONS } from "../../geometry/direction.js";
 import { BattlefieldMap } from "../map/map.js";
 import type { PassableMask } from "../map/tile.js";
+import { createNavigationContentHash, updateNavigationContentHash } from "./hash.js";
 import type {
     PathMotionMode,
     NavigationCell,
@@ -68,6 +69,7 @@ export function projectStaticNavigationMap(
         columns: map.columns,
         pathMotionMode,
         revision,
+        contentHash: createNavigationContentHash(map.rows, map.columns, pathMotionMode, cells),
         cells: Object.freeze(
             cells.map((cell) =>
                 Object.freeze({ ...cell, departures: Object.freeze(cell.departures) }),
@@ -117,32 +119,6 @@ function projectCells(
     }
 
     return Object.freeze(cells);
-}
-
-function sameCells(
-    leftCells: readonly NavigationCell[],
-    rightCells: readonly NavigationCell[],
-): boolean {
-    for (let index = 0; index < leftCells.length; index++) {
-        const left = leftCells[index]!;
-        const right = rightCells[index]!;
-
-        if (left === right) {
-            continue;
-        }
-
-        if (
-            left.passable !== right.passable ||
-            left.moveCost !== right.moveCost ||
-            DIRECTIONS.some(
-                (direction) => left.departures[direction] !== right.departures[direction],
-            )
-        ) {
-            return false;
-        }
-    }
-
-    return true;
 }
 
 function sameContributions(
@@ -213,8 +189,9 @@ export function projectNavigationMaps(
         const baselineMap = baseline[mode];
         const previousMap = previous[mode];
         const cells = projectCells(baselineMap, navigationModifiers);
+        const contentHash = updateNavigationContentHash(previousMap, cells);
 
-        if (sameCells(cells, previousMap.cells)) {
+        if (contentHash === null) {
             continue;
         }
 
@@ -229,6 +206,7 @@ export function projectNavigationMaps(
             columns: baselineMap.columns,
             pathMotionMode: mode,
             revision,
+            contentHash,
             cells,
         });
         changedModes.push(mode);

@@ -1,6 +1,6 @@
 import { World, type WorldOffset, type WorldPosition } from "../../../geometry/coordinate.js";
 import type { NavigationFieldProvider } from "../../../battlefield/navigation/cache.js";
-import type { NavigationMaps } from "../../../battlefield/navigation/map.js";
+import { NavigationMap, type NavigationMaps } from "../../../battlefield/navigation/map.js";
 import { createNavigationPath } from "../../../battlefield/navigation/path.js";
 import {
     bindNavigationPath,
@@ -141,7 +141,7 @@ export function bindRouteNavigation(
 
     if (
         (activity.type === "FOLLOWING" || activity.type === "UNREACHABLE") &&
-        activity.path.field.map === map
+        NavigationMap.sameContent(activity.path.field.map, map)
     ) {
         return control;
     }

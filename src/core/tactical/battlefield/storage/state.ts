@@ -1,6 +1,5 @@
 import type { ProjectileId, ProjectileInstance } from "../projectile/state.js";
-import type { NavigationMaps, PathMotionMode } from "../navigation/map.js";
-import { reconcileUnitNavigation } from "../../unit/capability/locomotion/navigation.js";
+import type { NavigationMaps } from "../navigation/map.js";
 import type { StableUnit, Unit, UnitId } from "../../unit/unit.js";
 import { reconcileBlockingRelations, type BlockingRelation } from "../blocking/relations.js";
 import type { BattlefieldChangeResult } from "../contract.js";
@@ -58,37 +57,6 @@ export function createBattlefieldState<U extends Unit>(
         navigationMaps: baseline,
         spatial: projectBattlefieldSpatial(map, units, mechanisms, navigationModifiers),
     };
-}
-
-function reconcileNavigation<U extends Unit>(
-    units: ReadonlyMap<UnitId, StableUnit<U>>,
-    maps: NavigationMaps,
-    updatedIds?: ReadonlySet<UnitId>,
-    changedModes?: readonly PathMotionMode[],
-): ReadonlyMap<UnitId, StableUnit<U>> {
-    let reconciled: Map<UnitId, StableUnit<U>> | undefined;
-    const ids = updatedIds !== undefined && changedModes?.length === 0 ? updatedIds : units.keys();
-
-    for (const id of ids) {
-        const unit = units.get(id);
-
-        if (unit === undefined) {
-            continue;
-        }
-
-        const next = reconcileUnitNavigation<U>(
-            unit,
-            maps,
-            updatedIds?.has(id) === true ? undefined : changedModes,
-        );
-
-        if (next !== unit) {
-            reconciled ??= new Map(units);
-            reconciled.set(id, next);
-        }
-    }
-
-    return reconciled ?? units;
 }
 
 function finishSettlement<U extends Unit>(
@@ -177,22 +145,21 @@ export function settleBattlefieldState<U extends Unit>(
         previous.navigationMaps,
         previous.spatial.navigationModifiers,
     );
-    const units = reconcileNavigation<U>(
-        content.units,
-        projection.maps,
-        changes.updatedUnitIds,
-        projection.changedModes,
-    );
     const blockingRelations =
         dependencies.blocking ||
         supportRelations !== previous.supportRelations ||
         content.blockingRelations !== previous.blockingRelations
-            ? reconcileBlockingRelations(map, units, content.blockingRelations, supportRelations)
+            ? reconcileBlockingRelations(
+                  map,
+                  content.units,
+                  content.blockingRelations,
+                  supportRelations,
+              )
             : previous.blockingRelations;
 
     return finishSettlement(
         previous,
-        { ...content, units, supportRelations, blockingRelations },
+        { ...content, supportRelations, blockingRelations },
         spatial,
         projection,
     );
@@ -216,17 +183,16 @@ export function settleBattlefieldStateFully<U extends Unit>(
         spatial.navigationModifiers,
         previous.navigationMaps,
     );
-    const units = reconcileNavigation<U>(content.units, projection.maps);
     const blockingRelations = reconcileBlockingRelations(
         map,
-        units,
+        content.units,
         content.blockingRelations,
         supportRelations,
     );
 
     return finishSettlement(
         previous,
-        { ...content, units, supportRelations, blockingRelations },
+        { ...content, supportRelations, blockingRelations },
         spatial,
         projection,
     );
