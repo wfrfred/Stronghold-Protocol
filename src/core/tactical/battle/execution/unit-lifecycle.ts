@@ -102,7 +102,7 @@ export function removeUnitWithEffects(
         return removeCombatUnit(current, unitId, reason);
     };
 
-    if (dispatch.hasPendingEnds(unitId)) {
+    if (dispatch.hasPendingEnds()) {
         dispatch.deferUnitRemoval(unitId, finishRemoval);
 
         return work;

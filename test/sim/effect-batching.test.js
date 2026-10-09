@@ -80,3 +80,25 @@ test('effect batching: closing many roots reconciles a surviving competitor once
     assert.equal(getCombatUnit(work, 0).effects.instances[0].participating, true);
   }
 });
+
+test('effect batching: finish business can supersede a surviving competitor before its queued enable', () => {
+  const resources = new CombatResources();
+  const calls = [];
+  let followerRef;
+  const follower = resources.registerEffect(program('queued-follower'), { lifecycle: {
+    competition: () => ({ group: 'rank', priority: 0 }),
+    enable: () => { calls.push('enable'); },
+    finish: () => { calls.push('finish'); },
+  } });
+  const leader = resources.registerEffect(program('leader'), { lifecycle: {
+    competition: () => ({ group: 'rank', priority: 1 }),
+    finish: context => { context.effects.finish([followerRef]); },
+  } });
+  const initial = installNewEffect(effectFixtureWork(host(0)), 0, follower.ref, input, resources, 0);
+  followerRef = initial.result.ref;
+  const installed = installNewEffect(initial.work, 0, leader.ref, input, resources, 0);
+  calls.length = 0;
+  const ended = finishEffects(installed.work, [installed.result.ref], resources, 1);
+  assert.deepEqual(calls, ['finish']);
+  assert.ok(getCombatUnit(ended, 0).effects.instances.every(instance => instance.finished));
+});

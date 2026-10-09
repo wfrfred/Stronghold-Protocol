@@ -1,6 +1,7 @@
 import { ResourceRegistration } from "../../../../common/resource-registration.js";
 import type {
     EffectAdmissionContext,
+    EffectFinishContext,
     EffectLifecycleContext,
     EffectLifecycleProgram,
     EffectCompetition,
@@ -15,7 +16,7 @@ export interface CompiledEffectLifecycle {
     readonly enable?: (context: EffectLifecycleContext) => undefined;
     readonly disable?: (context: EffectLifecycleContext) => undefined;
     readonly expire?: (context: EffectLifecycleContext) => undefined;
-    readonly finalize?: (context: EffectLifecycleContext) => undefined;
+    readonly finish?: (context: EffectFinishContext) => undefined;
     readonly accepts?: (context: EffectAdmissionContext) => boolean;
     readonly competition?: (instance: EffectInstanceValue) => EffectCompetition | undefined;
 }
@@ -70,7 +71,20 @@ export class EffectLifecycleResources {
         const enable = compile(program.enable).run;
         const disable = compile(program.disable).run;
         const expire = compile(program.expire).run;
-        const finalize = compile(program.finalize).run;
+        const finishAction = program.finish;
+
+        const finish =
+            finishAction === undefined
+                ? undefined
+                : (context: EffectFinishContext): undefined => {
+                      finishAction({
+                          ...context,
+                          get instance() {
+                              return typed(context.instance);
+                          },
+                      });
+                  };
+
         const accepts = program.accepts;
         const competition = program.competition;
 
@@ -81,7 +95,7 @@ export class EffectLifecycleResources {
                 ...(enable === undefined ? {} : { enable }),
                 ...(disable === undefined ? {} : { disable }),
                 ...(expire === undefined ? {} : { expire }),
-                ...(finalize === undefined ? {} : { finalize }),
+                ...(finish === undefined ? {} : { finish }),
                 ...(accepts === undefined
                     ? {}
                     : {

@@ -100,9 +100,13 @@ function runParticipationActions(
     resources: EffectTransitionResources,
     tick: number,
     scope: EffectDispatchScope,
+    beforeEnables?: (work: CombatWork) => CombatWork,
 ): CombatWork {
     return scope.withParticipationChanges(changes, (isPending) => {
         for (const participating of [false, true]) {
+            if (participating) {
+                work = beforeEnables?.(work) ?? work;
+            }
             for (const [index, change] of changes.entries()) {
                 if (!isPending(index) || change.participating !== participating) {
                     continue;
@@ -177,6 +181,30 @@ function runLifecycleAction(
                 tick,
                 scope,
             ),
+            damage: (input) => {
+                const work = readWork();
+
+                if (resources.settleDamage === undefined) {
+                    throw new TypeError("effect damage service is unavailable");
+                }
+
+                const result = resources.settleDamage(work, { ...input, tick }, scope);
+                currentWork = result.work;
+
+                return result.report;
+            },
+            heal: (input) => {
+                const work = readWork();
+
+                if (resources.settleHealing === undefined) {
+                    throw new TypeError("effect healing service is unavailable");
+                }
+
+                const result = resources.settleHealing(work, { ...input, tick }, scope);
+                currentWork = result.work;
+
+                return result.report;
+            },
         };
 
         try {
@@ -483,11 +511,38 @@ function finishBatch(
                 (order.get(lifetimeKey(b.address)) ?? order.size) ||
             compareRefs(a.address, b.address),
     );
-    work = runParticipationActions(work, changes, resources, tick, dispatch);
+    work = runParticipationActions(work, changes, resources, tick, dispatch, (currentWork) => {
+        work = currentWork;
 
-    for (const { ref } of ordered) {
-        dispatch.completeEnd(ref);
-    }
+        for (const { ref, end } of ordered) {
+            const current = getEffect(work, ref)!;
+            const finish = resources.effectLifecycle.get(current).finish;
+
+            if (finish !== undefined) {
+                work = runLifecycleAction(
+                    work,
+                    ref,
+                    current,
+                    (context) => {
+                        finish({
+                            ...context,
+                            end,
+                            get instance() {
+                                return context.instance;
+                            },
+                        });
+                    },
+                    resources,
+                    tick,
+                    dispatch,
+                );
+            }
+
+            dispatch.completeEnd(ref);
+        }
+
+        return work;
+    });
 
     return dispatch.drainDeferred(work);
 }
@@ -552,57 +607,71 @@ export function closeEffectLifetimes(
     return finishBatch(work, roots, resources, tick, dispatch);
 }
 
+function cleanupEffects(
+    work: CombatWork,
+    unitId: UnitId,
+    refs: readonly EffectRef[],
+    resources: EffectTransitionResources,
+    dispatch: EffectDispatchScope,
+): CombatWork {
+    const host = getCombatUnit(work, unitId);
+
+    if (host === undefined || !hasEffects(host)) {
+        return work;
+    }
+
+    const selected = new Set(refs.map((ref) => ref.effectId));
+    const instances = host.effects.instances.filter(
+        (instance) =>
+            instance.finished &&
+            selected.has(instance.id) &&
+            !dispatch.hasPendingEnd({ type: "EFFECT", unitId, effectId: instance.id }),
+    );
+
+    if (instances.length === 0) {
+        return work;
+    }
+
+    const removed = new Set(instances.map((instance) => instance.id));
+    let unit = replaceEffectInstances(
+        host,
+        host.effects.instances.filter((instance) => !removed.has(instance.id)),
+    );
+
+    for (const instance of instances) {
+        dispatch.retainFinalizedInstance(
+            { type: "EFFECT", unitId, effectId: instance.id },
+            instance,
+        );
+
+        if (instance.started) {
+            unit = transitionEffectBindings(
+                unit,
+                instance,
+                resources.effectBindings,
+                (binding, current) => binding.remove(current, instance),
+            );
+        }
+    }
+
+    return updateCombatUnit(work, unit);
+}
+
 export function finalizeEffect(
     work: CombatWork,
     ref: EffectRef,
     resources: EffectTransitionResources,
-    tick: number,
+    _tick: number,
     dispatch = new EffectDispatchScope(),
 ): CombatWork {
-    const instance = getEffect(work, ref);
-
-    if (!instance?.finished || dispatch.hasPendingEnd(ref)) {
-        return work;
-    }
-
-    dispatch.retainFinalizedInstance(ref, instance);
-    work = transitionCombatUnit(work, ref.unitId, (unit) => {
-        if (!hasEffects(unit)) {
-            return unit;
-        }
-
-        return replaceEffectInstances(
-            unit,
-            unit.effects.instances.filter((instance) => instance.id !== ref.effectId),
-        );
-    });
-    work = runLifecycleAction(
-        work,
-        ref,
-        instance,
-        resources.effectLifecycle.get(instance).finalize,
-        resources,
-        tick,
-        dispatch,
-    );
-
-    return instance.started
-        ? transitionCombatUnit(work, ref.unitId, (unit) =>
-              transitionEffectBindings(
-                  unit,
-                  instance,
-                  resources.effectBindings,
-                  (binding, current) => binding.remove(current, instance),
-              ),
-          )
-        : work;
+    return cleanupEffects(work, ref.unitId, [ref], resources, dispatch);
 }
 
 export function finalizeFinishedEffects(
     work: CombatWork,
     unitId: UnitId,
     resources: EffectTransitionResources,
-    tick: number,
+    _tick: number,
     dispatch = new EffectDispatchScope(),
 ): CombatWork {
     const unit = getCombatUnit(work, unitId);
@@ -615,11 +684,7 @@ export function finalizeFinishedEffects(
         .filter((instance) => instance.finished)
         .map((instance) => ({ type: "EFFECT", unitId, effectId: instance.id }));
 
-    for (const ref of refs) {
-        work = finalizeEffect(work, ref, resources, tick, dispatch);
-    }
-
-    return work;
+    return cleanupEffects(work, unitId, refs, resources, dispatch);
 }
 
 export function removeEffect(

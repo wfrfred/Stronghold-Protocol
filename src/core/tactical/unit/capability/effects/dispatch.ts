@@ -16,7 +16,7 @@ interface ActiveInstance {
 
 export class EffectDispatchScope {
     readonly #closing = new Set<string>();
-    readonly #pendingEnds = new Map<string, EffectRef>();
+    readonly #pendingEnds = new Set<string>();
     readonly #deferredRemovals = new Map<UnitId, (work: CombatWork) => CombatWork>();
 
     markClosing(lifetimes: readonly LifetimeRef[]): void {
@@ -33,7 +33,7 @@ export class EffectDispatchScope {
         this.markClosing(refs);
 
         for (const ref of refs) {
-            this.#pendingEnds.set(lifetimeKey(ref), ref);
+            this.#pendingEnds.add(lifetimeKey(ref));
         }
     }
 
@@ -45,8 +45,8 @@ export class EffectDispatchScope {
         return this.#pendingEnds.has(lifetimeKey(ref));
     }
 
-    hasPendingEnds(unitId: UnitId): boolean {
-        return [...this.#pendingEnds.values()].some((ref) => ref.unitId === unitId);
+    hasPendingEnds(): boolean {
+        return this.#pendingEnds.size > 0;
     }
 
     deferUnitRemoval(unitId: UnitId, finish: (work: CombatWork) => CombatWork): void {
@@ -56,11 +56,11 @@ export class EffectDispatchScope {
     }
 
     drainDeferred(work: CombatWork): CombatWork {
+        // Remote dependents can still be notifying even after their host's notices finish.
+        if (this.hasPendingEnds()) {
+            return work;
+        }
         for (const [unitId, finish] of this.#deferredRemovals) {
-            if (this.hasPendingEnds(unitId)) {
-                continue;
-            }
-
             this.#deferredRemovals.delete(unitId);
             work = finish(work);
         }

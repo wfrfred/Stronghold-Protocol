@@ -209,7 +209,7 @@ test('effect lifetime index: parent attachment, finish and finalization track ot
     assert.deepEqual(effectDependents(attached.work, parent.address), [child.address]);
 });
 
-test('effect lifetime index: nested finalization rechecks frozen candidates and exposes new identities to later queries', () => {
+test('effect lifetime index: nested ending protects pending notices and exposes new independent identities to later queries', () => {
     const resources = new CombatResources();
     const trace = [];
     let followerAddress;
@@ -225,13 +225,14 @@ test('effect lifetime index: nested finalization rechecks frozen candidates and 
                 const installed = context.effects.install(9, newborn.ref, input(null));
                 assert.equal(installed.type, 'INSTALLED');
                 newbornAddress = installed.ref;
+                assert.equal(context.facts.getEffect(followerAddress).finished, true);
             },
         },
     });
     const follower = resources.registerEffect(program('follower'), {
         lifecycle: {
             disable: () => { trace.push('follower'); },
-            finalize: () => { trace.push('follower-finalized'); },
+            finish: () => { trace.push('follower-finished'); },
         },
     });
     const first = install(host(unit(0), unit(2), unit(9)).work, resources, leader.ref, 2, scope(3));
@@ -240,15 +241,16 @@ test('effect lifetime index: nested finalization rechecks frozen candidates and 
     const captured = effectDependents(second.work, scope(3));
     const finished = closeEffectLifetimes(second.work, [scope(3)], resources, 1);
 
-    assert.deepEqual(trace, ['leader', 'follower']);
+    assert.deepEqual(trace, ['leader', 'follower', 'follower-finished']);
     assert.deepEqual(captured, [first.address, followerAddress]);
     assert.equal(getEffect(finished, followerAddress).finished, true);
     assert.equal(getEffect(finished, newbornAddress).finished, false);
     assert.deepEqual(effectDependents(finished, scope(3)), []);
     const settled = finalizeEffect(finished, followerAddress, resources, 1);
     assert.equal(getEffect(settled, followerAddress), undefined);
+    assert.deepEqual(trace, ['leader', 'follower', 'follower-finished']);
     const next = finishEffects(settled, [newbornAddress], resources, 2);
-    assert.deepEqual(trace, ['leader', 'follower', 'follower-finalized', 'newborn']);
+    assert.deepEqual(trace, ['leader', 'follower', 'follower-finished', 'newborn']);
     assert.equal(getEffect(next, newbornAddress).finished, true);
 });
 

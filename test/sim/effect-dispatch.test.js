@@ -552,7 +552,7 @@ test("effect dispatch: domain cancellation retains prefix transitions and stops 
   }
 });
 
-test("effect dispatch: shield cancellation completes nested healing before return and finalizes after the entered callback", () => {
+test("effect dispatch: shield cancellation notifies terminal business before return and cleans up after the entered callback", () => {
   const resources = new CombatResources();
   const observed = [];
   const recharge = resources.registerEffect(program("recharge"));
@@ -592,7 +592,8 @@ test("effect dispatch: shield cancellation completes nested healing before retur
       },
     },
     lifecycle: {
-      finalize: (context) => {
+      finish: (context) => {
+        assert.equal(context.facts.getEffect(context.ref).finished, true);
         context.effects.install(2, recharge.ref, installation(2));
       },
     },
@@ -601,7 +602,7 @@ test("effect dispatch: shield cancellation completes nested healing before retur
   const original = effectFixtureWork(attach(resources, unit(2, 500, ["HEAL_FREE"]), shield));
   const result = resolveDamage(original, request(), resources);
 
-  assert.deepEqual(observed, [{ amount: 20, hp: 520, finished: true, recharge: false }]);
+  assert.deepEqual(observed, [{ amount: 20, hp: 520, finished: true, recharge: true }]);
   assert.equal(result.report.hpLoss, 0);
   assert.equal(getCombatUnit(result.work, 2).vitality.hp, 520);
   assert.deepEqual(

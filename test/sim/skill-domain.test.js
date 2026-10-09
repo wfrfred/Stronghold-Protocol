@@ -3,6 +3,8 @@ import { test } from "node:test";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { getCombatUnit, updateCombatUnit } from "../../dist/core/tactical/battle/execution/work.js";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
+import { effectTick } from "../../dist/core/tactical/unit/capability/effects/instance.js";
+import { expireEffects, finishEffects } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { createSkillDefinition, createSkillState, initializeSkillState } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { activateSkill, advanceSkill, finishSkill } from "../../dist/core/tactical/unit/capability/skill/execution.js";
 import { drainSkillSp, gainSkillSp, spendSkillSp } from "../../dist/core/tactical/unit/capability/skill/sp.js";
@@ -234,6 +236,74 @@ test("skill finish rejects binding a surviving independent effect to its closed 
   assert.equal(instance.finished, false);
   assert.equal(instance.participating, true);
 });
+
+for (const trigger of ["SKILL", "EFFECT", "TICK"]) {
+  test(`combined scopes: renewal preserves Skill and Effect constraints until ${trigger} closes`, () => {
+    let parent;
+    let dependent;
+    let parentRef;
+    let dependentRef;
+    const ended = [];
+    let expirations = 0;
+    const f = fixture({}, {
+      activate: (context) => {
+        const installedParent = context.effects.install(context.unitId, parent, { source: 1, scopes: [] });
+        assert.equal(installedParent.type, "INSTALLED");
+        parentRef = installedParent.ref;
+        const installedDependent = context.effects.install(context.unitId, dependent, {
+          source: 1,
+          scopes: [
+            { type: "SKILL", unitId: context.unitId, activationId: context.activationId },
+            parentRef,
+            { type: "TICK", tick: 5 },
+          ],
+        });
+        assert.equal(installedDependent.type, "INSTALLED");
+        dependentRef = installedDependent.ref;
+        return { type: "ACTIVATED" };
+      },
+    });
+    parent = f.resources.registerEffect(createEffectProgram({
+      id: `combined-parent-${trigger}`, initialize: () => ({}), ownState: (state) => state,
+    })).ref;
+    dependent = f.resources.registerEffect(createEffectProgram({
+      id: `combined-dependent-${trigger}`, initialize: () => ({}), ownState: (state) => state,
+    }), {
+      lifecycle: {
+        expire: (context) => {
+          expirations++;
+          if (expirations === 1) context.effects.setTick(context.ref, 10);
+          else context.effects.finish([context.ref], "EXPIRED");
+        },
+        finish: (context) => { ended.push(context.end); },
+      },
+    }).ref;
+    let work = activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources).work;
+    work = expireEffects(work, 5, f.resources);
+    const renewed = getCombatUnit(work, 1).effects.instances.find(({ id }) => id === dependentRef.effectId);
+    assert.equal(renewed.finished, false);
+    assert.equal(effectTick(renewed), 10);
+    assert.deepEqual(renewed.scopes.filter(({ type }) => type !== "TICK"), [
+      { type: "SKILL", unitId: 1, activationId: 0 }, parentRef,
+    ]);
+
+    if (trigger === "SKILL") work = finishSkill(work, 1, 6, f.resources).work;
+    else if (trigger === "EFFECT") work = finishEffects(work, [parentRef], f.resources, 6, "DISPELLED");
+    else work = expireEffects(work, 10, f.resources);
+
+    const unit = getCombatUnit(work, 1);
+    assert.equal(unit.effects.instances.find(({ id }) => id === dependentRef.effectId).finished, true);
+    assert.equal(unit.skill.active === null, trigger === "SKILL");
+    assert.equal(unit.effects.instances.find(({ id }) => id === parentRef.effectId).finished, trigger === "EFFECT");
+    assert.deepEqual(ended, [{
+      root: trigger === "SKILL" ? { type: "SKILL", unitId: 1, activationId: 0 }
+        : trigger === "EFFECT" ? parentRef : dependentRef,
+      reason: trigger === "SKILL" ? "SKILL_FINISHED" : trigger === "EFFECT" ? "DISPELLED" : "EXPIRED",
+    }]);
+    work = expireEffects(work, 100, f.resources);
+    assert.equal(ended.length, 1);
+  });
+}
 
 test("callback errors propagate and escaped skill ports are closed even after errors", () => {
   let captured;

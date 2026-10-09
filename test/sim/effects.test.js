@@ -588,7 +588,7 @@ test("effects: start termination preserves its prefix without initializing or re
         assert.equal(context.instance.participating, false);
         assert.equal(context.facts.participating(2).length, 1);
       },
-      finalize: (context) => {
+      finish: (context) => {
         finalizations.push([
           context.instance.started,
           context.instance.finished,
@@ -616,7 +616,7 @@ test("effects: start termination preserves its prefix without initializing or re
     type: "ENDED",
     ref: { type: "EFFECT", unitId: 2, effectId: 1 },
   });
-  assert.deepEqual(finalizations, []);
+  assert.deepEqual(finalizations, [[false, true, 200]]);
   assert.equal(installed, 0);
   assert.equal(removed, 0);
   assert.deepEqual(
@@ -654,6 +654,8 @@ test("effects: lifecycle facts and operation leases close on normal and exceptio
     const input = { source: null, scopes: [], };
     const calls = [
       () => escaped.instance,
+      () => escaped.heal({ sourceUnitId: null, targetUnitId: 2, power: 1 }),
+      () => escaped.damage({ sourceUnitId: null, targetUnitId: 2, damageType: "TRUE", operands: { power: 1 } }),
       () => escaped.facts.getUnit(2),
       () => escaped.facts.getEffect(escaped.ref),
       () => escaped.facts.participating(2),
@@ -691,7 +693,7 @@ test("effects: rejected unique installation runs no start and consumes no identi
         }));
       },
       accepts: uniqueEffectAdmission("unique"),
-      finalize: (context) => {
+      finish: (context) => {
         finalized.push(context.ref.effectId);
       },
     },
@@ -774,8 +776,8 @@ test("effects: parent finish stops a cross-unit child before independent finaliz
   const finalized = [];
   for (const program of [parentProgram, childProgram]) {
     resources.effectLifecycle.register(program.ref, {
-      finalize: (context) => {
-        assert.equal(context.facts.getEffect(context.ref), undefined);
+      finish: (context) => {
+        assert.equal(context.facts.getEffect(context.ref).finished, true);
         finalized.push(context.instance.programRef.id);
       },
     });
@@ -806,11 +808,11 @@ test("effects: parent finish stops a cross-unit child before independent finaliz
   assert.equal(getCombatUnit(finished, 9).effects.instances[0].finished, true);
   assert.equal(getCombatUnit(finished, 2).effects.instances[0].finished, true);
   assert.equal(hasStatusFlag(getCombatUnit(finished, 2), "INVINCIBLE"), false);
-  assert.deepEqual(finalized, []);
+  assert.deepEqual(finalized, ["parent", "child"]);
   assert.equal(finishEffect(finished, parent, resources, 1), finished);
 
   const parentFinalized = finalizeEffect(finished, parent, resources, 1);
-  assert.deepEqual(finalized, ["parent"]);
+  assert.deepEqual(finalized, ["parent", "child"]);
   assert.equal(getCombatUnit(parentFinalized, 2).effects.instances.length, 1);
   const cleared = finalizeEffect(parentFinalized, child, resources, 1);
   assert.deepEqual(finalized, ["parent", "child"]);
@@ -907,8 +909,8 @@ test("effects: finish remains terminal when disable tries to reenable and finish
         context.effects.setEnabled(context.ref, true);
         context.effects.finish([context.ref]);
       },
-      finalize: (context) => {
-        assert.equal(context.facts.getEffect(context.ref), undefined);
+      finish: (context) => {
+        assert.equal(context.facts.getEffect(context.ref).finished, true);
         const contribution = context.facts.getUnit(2).offense.attack.entries[0];
         assert.equal(contribution.participating, false);
         finalizedSample = contribution.values[0].finalAddition;
@@ -919,7 +921,7 @@ test("effects: finish remains terminal when disable tries to reenable and finish
   });
   const follower = resources.registerEffect(barrierProgram("follower"), {
     lifecycle: {
-      finalize: () => {
+      finish: () => {
         finalizations.push("follower");
       },
     },
@@ -960,11 +962,11 @@ test("effects: finish remains terminal when disable tries to reenable and finish
   assert.equal(resolveAttackPower(2, combatWorkView(finished)), 100);
   assert.equal(hasStatusFlag(receiver, "INVINCIBLE"), false);
   assert.equal(finishEffect(finished, address, resources, 1), finished);
-  assert.equal(receiver.effects.instances[1].finished, false);
+  assert.equal(receiver.effects.instances[1].finished, true);
   const finalized = finalizeFinishedEffects(finished, 2, resources, 1);
   assert.equal(finalizedSample, 50);
-  assert.deepEqual(finalizations, ["reentrant"]);
-  assert.equal(getCombatUnit(finalized, 2).effects.instances[0].finished, true);
+  assert.deepEqual(finalizations, ["reentrant", "follower"]);
+  assert.deepEqual(getCombatUnit(finalized, 2).effects.instances, []);
   assert.deepEqual(getCombatUnit(finalized, 2).offense.attack.entries, []);
 });
 
@@ -982,7 +984,7 @@ test("effects: disabling preserves restartable samples and finishing a disabled 
         assert.equal(context.facts.getUnit(2).offense.attack.entries[0].participating, false);
         assert.equal(hasStatusFlag(context.facts.getUnit(2), "INVINCIBLE"), false);
       },
-      finalize: () => {
+      finish: () => {
         finalized++;
       },
     },
@@ -1010,13 +1012,13 @@ test("effects: disabling preserves restartable samples and finishing a disabled 
   assert.deepEqual(disabled, [false, false]);
   assert.equal(getCombatUnit(finished, 2).effects.instances[0].finished, true);
   assert.equal(setEffectEnabled(finished, address, true, resources, 4), finished);
-  assert.equal(finalized, 0);
+  assert.equal(finalized, 1);
   const cleaned = finalizeFinishedEffects(finished, 2, resources, 4);
   assert.equal(finalized, 1);
   assert.deepEqual(getCombatUnit(cleaned, 2).offense.attack.entries, []);
 });
 
-test("effects: nested finalization during disable preserves the terminal continuation and finishes existing children", () => {
+test("effects: pending terminal notices survive nested cleanup during disable preserves the terminal continuation and finishes existing children", () => {
   const resources = new CombatResources();
   const events = [];
   const replacement = resources.registerEffect(barrierProgram("replacement"));
@@ -1041,10 +1043,10 @@ test("effects: nested finalization during disable preserves the terminal continu
         context.effects.finish([context.ref]);
         events.push("parent-continued");
       },
-      finalize: (context) => {
-        events.push("parent-finalize");
+      finish: (context) => {
+        events.push("parent-finish");
         assert.equal(context.instance.finished, true);
-        assert.equal(context.facts.getEffect(context.ref), undefined);
+        assert.equal(context.facts.getEffect(context.ref).finished, true);
       },
     },
   });
@@ -1056,8 +1058,8 @@ test("effects: nested finalization during disable preserves the terminal continu
         context.effects.finish([{ type: "EFFECT", unitId: 2, effectId: 1 }]);
         context.effects.setEnabled(context.ref, true);
       },
-      finalize: () => {
-        events.push("child-finalize");
+      finish: () => {
+        events.push("child-finish");
       },
     },
   });
@@ -1084,6 +1086,8 @@ test("effects: nested finalization during disable preserves the terminal continu
     "parent-disable",
     "parent-continued",
     "child-disable",
+    "parent-finish",
+    "child-finish",
   ]);
   const instances = getCombatUnit(finished, 2).effects.instances;
   assert.equal(instances.length, 3);
@@ -1095,8 +1099,8 @@ test("effects: nested finalization during disable preserves the terminal continu
     "parent-disable",
     "parent-continued",
     "child-disable",
-    "parent-finalize",
-    "child-finalize",
+    "parent-finish",
+    "child-finish",
   ]);
   assert.deepEqual(
     getCombatUnit(finalized, 2).effects.instances.map((instance) => instance.programRef),

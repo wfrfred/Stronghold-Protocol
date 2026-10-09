@@ -83,3 +83,32 @@ test('effect cleanup: a pending end notification prevents physical removal', () 
     const cleaned = finalizeFinishedEffects(local, 2, resources, 1, dispatch);
     assert.deepEqual(getCombatUnit(cleaned, 2).effects.instances, []);
 });
+
+test('effect cleanup: a host removes terminal instances as one array before binding cleanup and runs no lifecycle business', () => {
+    const resources = new CombatResources();
+    const arrays = [];
+    const effect = resources.registerEffect(program('bulk-cleanup'), { bindings: [{
+        install: unit => unit,
+        update: unit => unit,
+        setParticipation: unit => unit,
+        remove: unit => { arrays.push(unit.effects.instances); return unit; },
+    }] });
+    let work = effectFixtureWork(owner());
+    const roots = [];
+    for (let index = 0; index < 64; index++) {
+        const installed = installNewEffect(work, 2, effect.ref, input, resources, 0);
+        work = installed.work;
+        roots.push(installed.result.ref);
+    }
+    work = finishEffects(work, roots, resources, 1);
+    const services = {
+        effectBindings: resources.effectBindings,
+        effectLifecycle: { get: () => { assert.fail('physical cleanup cannot dispatch lifecycle business'); } },
+    };
+    const cleaned = finalizeFinishedEffects(work, 2, services, 1);
+    assert.equal(arrays.length, 64);
+    assert.equal(new Set(arrays).size, 1);
+    assert.deepEqual(arrays[0], []);
+    assert.equal(getCombatUnit(cleaned, 2).effects.instances, arrays[0]);
+    assert.equal(getCombatUnit(work, 2).effects.instances.length, 64);
+});

@@ -37,14 +37,14 @@ const install = (work, effect, resources, expiresAtTick, initialState) => instal
   resources, 0,
 ).work;
 
-test('effect expiry: the default finishes at the deadline and defers finalization', () => {
+test('effect expiry: the default notifies finish at the deadline and defers physical cleanup', () => {
   const resources = new CombatResources();
   const events = [];
   const effect = resources.registerEffect(program('default'), {
     contributions: [attack(() => [modifier.create({ finalAddition: 20 })])],
     lifecycle: {
       disable: context => { events.push(['disable', context.instance.finished]); },
-      finalize: () => { events.push(['finalize']); },
+      finish: context => { assert.deepEqual(context.end, { root: context.ref, reason: 'EXPIRED' }); events.push(['finish']); },
     },
   });
   const original = install(effectFixtureWork(owner()), effect, resources, 5);
@@ -52,11 +52,11 @@ test('effect expiry: the default finishes at the deadline and defers finalizatio
   const finished = expireEffects(original, 5, resources);
   assert.equal(power(finished), 100);
   assert.equal(instances(finished)[0].finished, true);
-  assert.deepEqual(events, [['disable', true]]);
+  assert.deepEqual(events, [['disable', true], ['finish']]);
   assert.equal(expireEffects(finished, 6, resources), finished);
   const cleared = finalizeFinishedEffects(finished, 0, resources, 6);
   assert.deepEqual(instances(cleared), []);
-  assert.deepEqual(events, [['disable', true], ['finalize']]);
+  assert.deepEqual(events, [['disable', true], ['finish']]);
   assert.equal(instances(original)[0].finished, false);
   assert.equal(power(original), 120);
   for (const deadline of [null, 10]) {

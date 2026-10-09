@@ -538,3 +538,48 @@ test("effect sources: flushes publish attempts before lifecycle work and preserv
         [1, 0], [1, 1], [1, 0], [1, 1], [1, 0], [1, 1],
     ]);
 });
+
+for (const operation of ["FINISH", "LEAVE"]) {
+    test(`effect sources: ${operation.toLowerCase()} retention sees a marker installed by the previous receiver's finish`, () => {
+        const resources = new CombatResources();
+        const marker = receiverEffect(resources, `retention-marker-${operation}`);
+        const receiver = receiverEffect(resources, `retention-receiver-${operation}`, {
+            lifecycle: {
+                finish: context => {
+                    if (context.ref.unitId === 1) {
+                        const installed = context.effects.install(2, marker.ref, {
+                            source: 1,
+                            scopes: [],
+                        });
+                        assert.equal(installed.type, "INSTALLED");
+                    }
+                },
+            },
+        });
+        let selected = [1, 2];
+        const decisions = [];
+        const retain = ({ receiver: current }) => {
+            const keep = current.effects?.instances.some(instance =>
+                !instance.finished && instance.programRef.id === marker.ref.id) ?? false;
+            decisions.push([current.id, keep]);
+            return keep;
+        };
+        const { source } = sourceProgram(resources, receiver, {
+            selectCurrent: () => selected,
+            keepOnFinish: retain,
+            keepOnLeave: retain,
+        });
+        const installed = reconcileEffectSources(fixtureWork(source), resources, 0);
+        const originalBinding = getCombatMechanism(installed, 20).effectSource.receivers[1].address;
+        selected = [];
+        const work = operation === "FINISH"
+            ? finishEffectSource(installed, 20, resources, 1)
+            : reconcileEffectSources(installed, resources, 1);
+
+        assert.deepEqual(decisions, [[1, false], [2, true]]);
+        assert.deepEqual(getCombatMechanism(work, 20).effectSource.receivers.map(binding => binding.address), [null, originalBinding]);
+        assert.equal(getCombatUnit(work, 2).effects.instances.find(instance => instance.id === originalBinding.effectId).finished, false);
+        assert.equal(getCombatUnit(work, 2).effects.instances.some(instance => instance.programRef.id === marker.ref.id && !instance.finished), true);
+        assert.equal(getCombatUnit(installed, 2).effects.instances.length, 1);
+    });
+}

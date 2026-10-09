@@ -1,3 +1,4 @@
+import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
@@ -438,4 +439,56 @@ test("action runtime: failed continuation publishes no progress, sample, settlem
   assert.deepEqual(retried.attemptedIds, [0, 0]);
   assert.equal(retried.runtime.snapshot().actionExecution.nextExecutionId, 1);
   assert.equal(retried.runtime.snapshot().units[1].vitality.hp, 93);
+});
+
+test("action runtime: a throwing Effect finish after nested host death leaves execution and battlefield retryable", () => {
+  let fail = true;
+  const reasons = [];
+  const resources = new CombatResources();
+  const terminal = resources.registerEffect(createEffectProgram({
+    id: "throwing-action-terminal",
+    initialize: () => ({}),
+    ownState: value => value,
+  }), { lifecycle: { finish: context => {
+    reasons.push(context.end.reason);
+    context.damage({ sourceUnitId: null, targetUnitId: 0, damageType: "TRUE", operands: createDamageOperands(100) });
+    if (fail) throw new Error("terminal failure");
+  } } });
+  const runtime = new BattleRuntime(spec([
+    { definition: actorDefinition("terminal-retry"), position: [0, 0] },
+    { definition: passiveDefinition(), position: [3, 0] },
+  ]), {
+    combat: resources,
+    compileAction: (action, services) => {
+      const compiled = compileAction(action, services);
+      return {
+        ...compiled,
+        program: [
+          { type: "EXECUTE", run: context => ({
+            work: installNewEffect(context.work, 0, terminal.ref, {
+              source: 0, scopes: [{ type: "ACTION", executionId: context.executionId }],
+            }, services, context.tick).work,
+          }) },
+          { type: "WAIT", allowNewAction: false, resolve: () => ({ type: "FOR_TICKS", ticks: 10 }) },
+          ...compiled.program,
+        ],
+      };
+    },
+  });
+  runtime.step();
+  const before = runtime.snapshot();
+  const cancel = [{ type: "CANCEL_ACTION_EXECUTION", executionId: 0 }];
+
+  assert.throws(() => runtime.step(cancel), /terminal failure/);
+  assert.deepEqual(runtime.snapshot(), before);
+  assert.equal(before.actionExecution.executions[0].id, 0);
+  assert.equal(before.units[0].vitality.hp, 100);
+
+  fail = false;
+  const recovered = runtime.step(cancel);
+  assert.deepEqual(runtime.snapshot().actionExecution.executions, []);
+  assert.deepEqual(runtime.snapshot().units.map(unit => unit.id), [1]);
+  assert.deepEqual(reasons, ["CANCELLED", "CANCELLED"]);
+  assert.equal(recovered.events.filter(event => event.type === "ACTION_CANCELLED").length, 1);
+  assert.equal(recovered.events.filter(event => event.type === "UNIT_REMOVED").length, 1);
 });

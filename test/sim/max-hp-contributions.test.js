@@ -145,21 +145,27 @@ test("MaxHP: callbacks and synchronous nested successors see coordinated facts",
             disable: (context) => {
                 inspect("disable", context);
             },
-            finalize: (context) => {
-                inspect("finalize", context);
+            finish: (context) => {
+                inspect("finish", context);
+                assert.deepEqual(context.end, { root: address(), reason: "EXPLICIT" });
+                assert.equal(context.facts.getEffect(context.ref).finished, true);
             },
         },
     });
     const installed = install(effectFixtureWork(receiver()), parent.ref, resources);
-    const removed = removeEffect(installed, address(), resources, 1);
+    const finished = finishEffects(installed, [address()], resources, 1);
     assert.deepEqual(observed, [
         ["start", 50, 100],
         ["enable", 100, 200],
         ["update", 150, 300],
         ["child", 175, 350],
         ["disable", 50, 100],
-        ["finalize", 50, 100],
+        ["finish", 50, 100],
     ]);
+    const notices = observed.length;
+    const removed = finalizeEffect(finished, address(), resources, 1);
+    assert.equal(observed.length, notices);
+    assert.equal(getCombatUnit(removed, 1).effects.instances.some(({ id }) => id === address().effectId), false);
     assert.deepEqual(pair(removed), [50, 100]);
 });
 

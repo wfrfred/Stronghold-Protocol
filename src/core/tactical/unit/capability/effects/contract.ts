@@ -11,6 +11,12 @@ import type { EffectProgramRef } from "./program.js";
 import type { EffectResources } from "./registry.js";
 import type { EffectBindings } from "./resources.js";
 import type { EffectLifecycleResources } from "./lifecycle-resources.js";
+import type { DamageOperation, DamageRequest, DamageReport } from "../vitality/damage/contract.js";
+import type {
+    HealingOperation,
+    HealingRequest,
+    HealingReport,
+} from "../vitality/healing/contract.js";
 
 export interface EffectView {
     getUnit(id: UnitId): Unit | undefined;
@@ -41,6 +47,8 @@ export interface EffectLifecycleContext<S extends object = object> {
     readonly tick: number;
     readonly facts: EffectView;
     readonly effects: EffectLifecycleOperations;
+    damage(request: Omit<DamageRequest, "tick">): DamageReport;
+    heal(request: Omit<HealingRequest, "tick">): HealingReport;
 }
 
 export interface EffectAdmissionContext<S extends object = object> {
@@ -56,6 +64,10 @@ export interface EffectEnd {
     readonly reason: EffectEndReason;
 }
 
+export interface EffectFinishContext<S extends object = object> extends EffectLifecycleContext<S> {
+    readonly end: EffectEnd;
+}
+
 export type EffectLifecycleAction<S extends object> = (
     context: EffectLifecycleContext<S>,
 ) => undefined;
@@ -65,7 +77,7 @@ export interface EffectLifecycleProgram<S extends object> {
     readonly enable?: EffectLifecycleAction<S>;
     readonly disable?: EffectLifecycleAction<S>;
     readonly expire?: EffectLifecycleAction<S>;
-    readonly finalize?: EffectLifecycleAction<S>;
+    readonly finish?: (context: EffectFinishContext<S>) => undefined;
     readonly accepts?: (context: EffectAdmissionContext<S>) => boolean;
     readonly competition?: (instance: EffectCompetitionInput<S>) => EffectCompetition | undefined;
 }
@@ -87,6 +99,8 @@ export interface EffectTransitionResources {
     readonly effects: Pick<EffectResources, "create" | "restore" | "typedInstance" | "update">;
     readonly effectBindings: EffectBindings;
     readonly effectLifecycle: Pick<EffectLifecycleResources, "get">;
+    readonly settleDamage?: DamageOperation;
+    readonly settleHealing?: HealingOperation;
 }
 
 export interface EffectInstallationInput<S extends object = object> {
