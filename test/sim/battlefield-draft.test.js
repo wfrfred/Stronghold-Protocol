@@ -113,7 +113,7 @@ test('draft removal maintains support, blocking and lifetime projections before 
     { position: [0, 0], slot: 'DEPLOYMENT', type: 'PRESENT' },
   ] } });
   const effect = {
-    id: 0, source: 1, definitionRef: { id: 'draft-effect' }, state: {}, acquiredSequence: 0,
+    id: 0, source: 1, definition: { id: 'draft-effect' }, state: {}, acquiredSequence: 0,
     scopes: [{ type: 'UNIT', unitId: 1 }, { type: 'TICK', tick: 10 }],
     started: true, enabled: true, participating: true, finished: false,
   };

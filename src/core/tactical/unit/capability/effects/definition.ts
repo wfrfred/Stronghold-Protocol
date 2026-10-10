@@ -1,12 +1,5 @@
-declare const effectStateType: unique symbol;
-
-export interface EffectDefinitionRef<S extends object> {
+export interface EffectDefinition<in out S extends object> {
     readonly id: string;
-    readonly [effectStateType]: (state: S) => S;
-}
-
-export interface EffectDefinition<S extends object> {
-    readonly ref: EffectDefinitionRef<S>;
     readonly initialize: () => S;
 }
 
@@ -19,7 +12,7 @@ export function createEffectDefinition<S extends object>(definition: {
     }
 
     return Object.freeze({
-        ref: Object.freeze({ id: definition.id }) as EffectDefinitionRef<S>,
+        id: definition.id,
         initialize: definition.initialize,
     });
 }

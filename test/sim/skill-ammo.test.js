@@ -34,7 +34,7 @@ function ammoFixture(ammo = 31, ammoPerAttack = 1) {
     contributions: [attack(() => [modifier.create({ multiplier: 1 })])],
   });
   resources.skills.register({ definition, activate: (context) => {
-    const installed = context.effects.install(context.unitId, buff.ref, { source: 1, scopes: [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }] });
+    const installed = context.effects.install(context.unitId, buff, { source: 1, scopes: [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }] });
     assert.equal(installed.type, "INSTALLED");
     return { type: "ACTIVATED" };
   } });

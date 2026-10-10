@@ -35,7 +35,7 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, program } = {}) {
     ...(interrupt ? { action: { beforeRelease: () => ({ type: "INTERRUPT", recoveryTicks: 15 }) } } : {}),
   });
   resources.skills.register({ definition: skill, activate: (context) => {
-    const installed = context.effects.install(context.unitId, buff.ref, {
+    const installed = context.effects.install(context.unitId, buff, {
       source: context.unitId, scopes: [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }],
     });
     assert.equal(installed.type, "INSTALLED");

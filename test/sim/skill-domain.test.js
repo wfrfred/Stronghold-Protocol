@@ -144,7 +144,7 @@ test("content refusal retains effect prefix and allocated identities while refun
       return { type: "REJECTED", reason: "later prerequisite unavailable" };
     },
   });
-  ref = f.resources.registerEffect(createEffectDefinition({ id: "skill-rejected-prefix", initialize: () => ({}) })).ref;
+  ref = f.resources.registerEffect(createEffectDefinition({ id: "skill-rejected-prefix", initialize: () => ({}) }));
   const rejected = activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources);
   assert.equal(rejected.result.reason, "CONTENT_REJECTED");
   const unit = getUnit(f.work, 1);
@@ -170,7 +170,7 @@ test("content refusal closes activation scopes while independent effects survive
   });
   ref = f.resources.registerEffect(createEffectDefinition({
     id: "activation-refusal-scopes", initialize: () => ({}),
-  })).ref;
+  }));
   const refused = activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources);
   const unit = getUnit(f.work, 1);
   assert.equal(refused.result.type, "REJECTED");
@@ -204,7 +204,7 @@ test("zero-duration activation closes its scope before skill finish content", ()
   });
   ref = f.resources.registerEffect(createEffectDefinition({
     id: "zero-duration-scope", initialize: () => ({}),
-  })).ref;
+  }));
   const activated = activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources);
   assert.deepEqual(activated.signals.map(({ type }) => type), ["SKILL_ACTIVATED", "SKILL_FINISHED"]);
   assert.deepEqual(observed, [{ active: null, finished: true }]);
@@ -229,7 +229,7 @@ test("skill finish rejects binding a surviving independent effect to its closed 
   });
   program = f.resources.registerEffect(createEffectDefinition({
     id: "independent-skill-binding", initialize: () => ({}),
-  })).ref;
+  }));
   activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources);
   finishSkill(f.work, 1, 30, f.resources);
   const instance = getUnit(f.work, 1).effects.instances[0];
@@ -266,7 +266,7 @@ for (const trigger of ["SKILL", "EFFECT", "TICK"]) {
     });
     parent = f.resources.registerEffect(createEffectDefinition({
       id: `combined-parent-${trigger}`, initialize: () => ({}),
-    })).ref;
+    }));
     dependent = f.resources.registerEffect(createEffectDefinition({
       id: `combined-dependent-${trigger}`, initialize: () => ({}),
     }), {
@@ -278,7 +278,7 @@ for (const trigger of ["SKILL", "EFFECT", "TICK"]) {
         },
         finish: (context) => { ended.push(context.end); },
       },
-    }).ref;
+    });
     let work = f.work;
     activateSkill(work, { unitId: 1, tick: 0 }, f.resources);
     expireEffects(work, 5, f.resources);

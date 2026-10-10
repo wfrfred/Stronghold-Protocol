@@ -72,14 +72,14 @@ test("MaxHP: install, payload, participation, finish and cleanup retain HP perce
         });
         const work = effectFixtureWork(receiver(hp));
         const before = work.battlefield.snapshot("draft");
-        install(work, effect.ref, resources);
+        install(work, effect, resources);
         assert.deepEqual(pair(work), [hp * 2, 200]);
 
         updateEffectState(
             work,
             1,
             0,
-            effect.ref,
+            effect,
             (state) => ({ ...state, amount: 200 }),
             resources,
             0,
@@ -93,7 +93,7 @@ test("MaxHP: install, payload, participation, finish and cleanup retain HP perce
             work,
             1,
             0,
-            effect.ref,
+            effect,
             (state) => ({ ...state, amount: 300 }),
             resources,
             0,
@@ -137,12 +137,12 @@ test("MaxHP: callbacks and synchronous nested successors see coordinated facts",
             },
             enable: (context) => {
                 inspect("enable", context);
-                context.effects.update(context.ref, parent.ref, (state) => ({
+                context.effects.update(context.ref, parent, (state) => ({
                     ...state,
                     amount: 200,
                 }));
                 inspect("update", context);
-                const installed = context.effects.install(1, child.ref, {
+                const installed = context.effects.install(1, child, {
                     source: null,
                     scopes: [],
                 });
@@ -160,7 +160,7 @@ test("MaxHP: callbacks and synchronous nested successors see coordinated facts",
         },
     });
     const work = effectFixtureWork(receiver());
-    install(work, parent.ref, resources);
+    install(work, parent, resources);
     finishEffects(work, [address()], resources, 1);
     assert.deepEqual(observed, [
         ["start", 50, 100],
@@ -208,7 +208,7 @@ test("MaxHP: one binding batch coordinates once after every slot has changed", (
         ],
     });
     const work = effectFixtureWork(receiver());
-    install(work, effect.ref, resources);
+    install(work, effect, resources);
     const installedPair = pair(work);
     assert.deepEqual(coordinatedSlots, [[false, false], [true, true]]);
     setEffectEnabled(work, address(), false, resources, 1);
@@ -224,7 +224,7 @@ test("MaxHP: ordinary healing consumes the current upper bound and prohibition d
         contributions: [maxHp((instance) => [bonus(instance.state.amount)])],
     });
     const work = effectFixtureWork(receiver());
-    install(work, effect.ref, resources);
+    install(work, effect, resources);
     const unit = getUnit(work, 1);
     const healed = healUnit(unit, 500);
     assert.equal(healed.amount, 100);
@@ -242,7 +242,7 @@ test("MaxHP: ordinary healing consumes the current upper bound and prohibition d
         ...blocked,
         vitality: { ...blocked.vitality, hp: 50 },
     });
-    install(coordinated, effect.ref, resources);
+    install(coordinated, effect, resources);
     assert.deepEqual(pair(coordinated), [100, 200]);
     assert.equal(healUnit(getUnit(coordinated, 1), 50).amount, 0);
     assert.deepEqual(coordinated.events, []);
@@ -261,13 +261,13 @@ test("MaxHP: group winner replacement and fallback preserve the current HP ratio
     const weak = register("weak", 50, 1);
     const strong = register("strong", 200, 2);
     const work = effectFixtureWork(receiver());
-    install(work, weak.ref, resources);
+    install(work, weak, resources);
     const firstPair = pair(work);
-    install(work, strong.ref, resources);
+    install(work, strong, resources);
     assert.deepEqual(firstPair, [75, 150]);
     assert.deepEqual(pair(work), [150, 300]);
 
-    updateEffectState(work, 1, 0, weak.ref, (state) => ({ ...state, amount: 100 }), resources, 0);
+    updateEffectState(work, 1, 0, weak, (state) => ({ ...state, amount: 100 }), resources, 0);
     assert.deepEqual(pair(work), [150, 300]);
 
     setEffectEnabled(work, address(1), false, resources, 1);
@@ -289,7 +289,7 @@ test("MaxHP: unchanged effective values, inactive cleanup and snapshots do not r
     });
     const work = effectFixtureWork(receiver(Math.PI));
     const before = work.battlefield.snapshot("draft");
-    install(work, effect.ref, resources, { scopes: [{ type: "TICK", tick: 5 }] });
+    install(work, effect, resources, { scopes: [{ type: "TICK", tick: 5 }] });
     const installedUnit = getUnit(work, 1);
     const copied = copyUnitSnapshot(installedUnit);
     assert.equal(copied.vitality.maxHp.entries, installedUnit.vitality.maxHp.entries);
@@ -300,7 +300,7 @@ test("MaxHP: unchanged effective values, inactive cleanup and snapshots do not r
         work,
         1,
         0,
-        effect.ref,
+        effect,
         (state) => ({ ...state, amount: -600 }),
         resources,
         0,
@@ -308,7 +308,7 @@ test("MaxHP: unchanged effective values, inactive cleanup and snapshots do not r
     assert.equal(getUnit(work, 1).vitality.hp, installedUnit.vitality.hp);
     assert.equal(resolveMaxHp(1, battlefieldView(work)), 1);
     const beforeRevision = getUnit(work, 1);
-    updateEffectState(work, 1, 0, effect.ref, (state) => ({ ...state, revision: 1 }), resources, 0);
+    updateEffectState(work, 1, 0, effect, (state) => ({ ...state, revision: 1 }), resources, 0);
     assert.equal(getUnit(work, 1).vitality.hp, beforeRevision.vitality.hp);
     expireEffects(work, 5, resources);
     const beforeCleanup = getUnit(work, 1);
@@ -398,7 +398,7 @@ test("MaxHP: a tick failure does not publish contributions or the HP response", 
                     {
                         type: "EXECUTE",
                         run: (context) => {
-                            install(context.work, effect.ref, resources);
+                            install(context.work, effect, resources);
                         },
                     },
                 ],

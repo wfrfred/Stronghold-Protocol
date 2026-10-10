@@ -1,7 +1,14 @@
 import type { Unit, UnitId } from "../../unit.js";
 import type { BattlefieldView } from "../../../battlefield/contract.js";
-import type { EffectRef, EffectValue, Scope, EffectMetadata, LifetimeRef } from "./effect.js";
-import type { EffectDefinitionRef } from "./definition.js";
+import type {
+    Effect,
+    EffectRef,
+    EffectValue,
+    Scope,
+    EffectMetadata,
+    LifetimeRef,
+} from "./effect.js";
+import type { EffectDefinition } from "./definition.js";
 import type { EffectResources } from "./registry.js";
 import type { EffectBindings } from "./resources.js";
 import type { EffectLifecycleResources } from "./lifecycle-resources.js";
@@ -21,12 +28,12 @@ export interface EffectView {
 export interface EffectLifecycleOperations {
     install<S extends object>(
         unitId: UnitId,
-        ref: EffectDefinitionRef<S>,
+        definition: EffectDefinition<S>,
         input: EffectInstallationInput<NoInfer<S>>,
     ): EffectInstallationResult;
     update<S extends object>(
         address: EffectRef,
-        ref: EffectDefinitionRef<S>,
+        definition: EffectDefinition<S>,
         transition: (current: NoInfer<S>) => NoInfer<S>,
     ): void;
     setEnabled(address: EffectRef, enabled: boolean): void;
@@ -37,7 +44,7 @@ export interface EffectLifecycleOperations {
 
 export interface EffectLifecycleContext<S extends object = object> {
     readonly ref: EffectRef;
-    readonly instance: EffectValue & { readonly state: S };
+    readonly instance: Effect<S>;
     readonly tick: number;
     readonly facts: EffectView;
     /** Each access reads the current draft; a saved view remains fixed. */
@@ -49,7 +56,7 @@ export interface EffectLifecycleContext<S extends object = object> {
 
 export interface EffectAdmissionContext<S extends object = object> {
     readonly unitId: UnitId;
-    readonly instance: EffectValue & { readonly state: S };
+    readonly instance: Effect<S>;
     readonly facts: EffectView;
 }
 
@@ -84,7 +91,7 @@ export interface EffectCompetitionInput<S extends object> extends Pick<
     EffectMetadata,
     "id" | "source" | "acquiredSequence"
 > {
-    readonly definitionRef: { readonly id: string };
+    readonly definition: EffectDefinition<S>;
     readonly state: S;
 }
 

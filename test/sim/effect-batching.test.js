@@ -22,7 +22,7 @@ test('effect batching: overlapping roots and diamond dependencies mark the compl
   let work = effectFixtureWork(host(0), host(1));
   const refs = [];
   for (const id of [0, 1, 1, 0]) {
-    const installed = installNewEffect(work, id, effect.ref, input, resources, 0);
+    const installed = installNewEffect(work, id, effect, input, resources, 0);
      refs.push(installed.ref);
   }
   // Root → left/right → leaf; the leaf has a lower host ID than both parents.
@@ -46,7 +46,7 @@ test('effect batching: a departing host never temporarily enables suppressed com
       competition: () => ({ group: 'rank', priority }),
       enable: () => { calls.push(priority); },
     } });
-    installNewEffect(work, 0, effect.ref, input, resources, 0);
+    installNewEffect(work, 0, effect, input, resources, 0);
   }
   calls.length = 0;
   closeEffectLifetimes(work, [{ type: 'UNIT', unitId: 0 }], resources, 1);
@@ -67,11 +67,11 @@ test('effect batching: closing many roots reconciles a surviving competitor once
       competition: () => ({ group: 'rank', priority: 1 }),
     } });
     const installedState = effectFixtureWork(host(0));
-    let installed = installNewEffect(installedState, 0, survivor.ref, input, resources, 0);
+    let installed = installNewEffect(installedState, 0, survivor, input, resources, 0);
     let work = installedState;
     const roots = [];
     for (let index = 0; index < count; index++) {
-      installed = installNewEffect(work, 0, ending.ref, input, resources, 0);
+      installed = installNewEffect(work, 0, ending, input, resources, 0);
       roots.push(installed.ref);
     }
     checks = 0; enables = 0;
@@ -96,9 +96,9 @@ test('effect batching: finish business can supersede a surviving competitor befo
     finish: context => { context.effects.finish([followerRef]); },
   } });
   const initialState = effectFixtureWork(host(0));
-  const initial = installNewEffect(initialState, 0, follower.ref, input, resources, 0);
+  const initial = installNewEffect(initialState, 0, follower, input, resources, 0);
   followerRef = initial.ref;
-  const installed = installNewEffect(initialState, 0, leader.ref, input, resources, 0);
+  const installed = installNewEffect(initialState, 0, leader, input, resources, 0);
   calls.length = 0;
   const ended = initialState;
   finishEffects(ended, [installed.ref], resources, 1);

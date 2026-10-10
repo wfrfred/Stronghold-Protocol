@@ -214,7 +214,7 @@ test("action process: cancellation and source exit keep installed prefixes but p
     const segments = [
       {
         type: "EXECUTE",
-        run: (context) => {installOwned(resources, effect.ref, context);},
+        run: (context) => {installOwned(resources, effect, context);},
       },
       { type: "WAIT", resolve: () => ({ type: "FOR_TICKS", ticks: 5 }) },
       { type: "RELEASE", markerId: "late" },
@@ -290,7 +290,7 @@ test("action process: install then query binds current targets and the next segm
       run: (context) => {installNewEffect(
           context.work,
           1,
-          invisible.ref,
+          invisible,
           {
             source: 0,
             scopes: [],
@@ -350,7 +350,7 @@ test("action process: concurrent executions from one source own independent cont
   const first = accept();
   const second = accept(first.state, { definition: first.execution.definition });
   const segments = [
-    { type: "EXECUTE", run: (context) => {installOwned(resources, bonus.ref, context);} },
+    { type: "EXECUTE", run: (context) => {installOwned(resources, bonus, context);} },
     { type: "WAIT", resolve: () => ({ type: "UNTIL_TICK", targetTick: 5 }) },
     { type: "RELEASE", markerId: "release" },
   ];
@@ -434,13 +434,13 @@ test("action process: content cancellation and normal finish retain completed pr
           {
             type: "EXECUTE",
             run: (context) => {
-              installOwned(resources, sampled.ref, context);
+              installOwned(resources, sampled, context);
               const work = context.work;
               updateEffectState(
                 work,
                 1,
                 0,
-                sampled.ref,
+                sampled,
                 () => ({ power: context.samples.power }),
                 resources,
                 0,
@@ -564,7 +564,7 @@ test("action process: source departure completes the entered segment and cancels
   const accepted = accept();
   const observed = [];
   const segments = [
-    { type: "EXECUTE", run: (context) => {installOwned(resources, marker.ref, context);} },
+    { type: "EXECUTE", run: (context) => {installOwned(resources, marker, context);} },
     { type: "EXECUTE", run: (context) => {
       const work = context.work;
       removeUnit(work, 0, "RETREAT");
@@ -668,7 +668,7 @@ test("action process: nested source departure cancels the current execution with
       type: "EXECUTE",
       run: context => {
         visited.push("remove");
-        installOwned(resources, dependent.ref, context);
+        installOwned(resources, dependent, context);
         removeUnitWithEffects(context.work, 0, "SCRIPT", resources, context.tick);return;
       },
     },

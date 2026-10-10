@@ -70,7 +70,7 @@ export function compile<S extends object>(
             throw new TypeError("effect contribution identity must be nonempty");
         }
         if (ids.has(id)) {
-            throw new TypeError(`duplicate effect contribution ${definition.ref.id}/${id}`);
+            throw new TypeError(`duplicate effect contribution ${definition.id}/${id}`);
         }
 
         ids.add(id);
@@ -84,7 +84,7 @@ export function compile<S extends object>(
             typeof declaredGroup !== "function"
                 ? declaredGroup
                 : (instance: EffectValue) => {
-                      const typed = resources.effects.typedEffect(instance, definition.ref);
+                      const typed = resources.effects.typedEffect(instance, definition);
 
                       if (typed === undefined) {
                           throw new TypeError(
@@ -106,7 +106,7 @@ export function compile<S extends object>(
                     ? {}
                     : { reconcile: declaration.reconcile }),
                 sample: (instance) => {
-                    const typed = resources.effects.typedEffect(instance, definition.ref);
+                    const typed = resources.effects.typedEffect(instance, definition);
 
                     if (typed === undefined) {
                         throw new TypeError(
@@ -125,7 +125,7 @@ export function compile<S extends object>(
             id: `parameter/${id}`,
             target: declaration.target,
             computations: resources.computations,
-            evaluator: JSON.stringify([definition.ref.id, id]),
+            evaluator: JSON.stringify([definition.id, id]),
             group,
             evaluate: ({ unit, battlefield }, entry) => {
                 const owner = entry.owner;
@@ -140,7 +140,7 @@ export function compile<S extends object>(
                 const instance =
                     value === undefined
                         ? undefined
-                        : resources.effects.typedEffect(value, definition.ref);
+                        : resources.effects.typedEffect(value, definition);
 
                 return instance === undefined ? [] : evaluate({ unit, battlefield, instance });
             },

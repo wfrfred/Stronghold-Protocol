@@ -51,7 +51,7 @@ function definition(resources, id = 'inspiration', lifecycle = {}, onSample = ()
   });
 }
 function install(h, program, state, expiresAtTick = null, source = null) {
-  const result = installNewEffect(h.work, 0, program.ref, {
+  const result = installNewEffect(h.work, 0, program, {
     source, scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }], initialState: state,
   }, h.resources, 0);
 
@@ -126,7 +126,7 @@ test('effect competition: state refresh publishes complete facts and all binding
   install(h, program, { ratio: 0.5, sourceAttack: 100, hpBonus: 1000 });
   install(h, program, { ratio: 0.6, sourceAttack: 100, hpBonus: 3000 });
   observations.length = 0;
-  updateEffectState(h.work, 0, 0, program.ref, state => ({ ...state, ratio: 0.8, sourceAttack: 200, hpBonus: 7000 }), h.resources, 5);
+  updateEffectState(h.work, 0, 0, program, state => ({ ...state, ratio: 0.8, sourceAttack: 200, hpBonus: 7000 }), h.resources, 5);
   assert.deepEqual(observations, [
     { kind: 'disable', id: 1, active: [0], hp: 4000, maxHp: 8000, attack: 260 },
     { kind: 'enable', id: 0, active: [0], hp: 4000, maxHp: 8000, attack: 260 },
@@ -174,7 +174,7 @@ test('effect competition: nested finish invalidates a pending enable callback, t
   });
   install(h, program, { ratio: 0.5, sourceAttack: 100, hpBonus: 1000 });
   callbacks.length = 0;
-  const result = installNewEffect(h.work, 0, program.ref, {
+  const result = installNewEffect(h.work, 0, program, {
     source: null, scopes: [], initialState: { ratio: 0.9, sourceAttack: 100, hpBonus: 3000 },
   }, h.resources, 0);
 
@@ -194,7 +194,7 @@ test('effect competition: callback exception leaves input facts and contribution
   install(h, program, { ratio: 0.6, sourceAttack: 100, hpBonus: 3000 });
   const original = h.work;
   original.battlefield.apply();
-  assert.throws(() => updateEffectState(original, 0, 0, program.ref, state => ({ ...state, ratio: 0.9 }), h.resources, 1), /content bug/);
+  assert.throws(() => updateEffectState(original, 0, 0, program, state => ({ ...state, ratio: 0.9 }), h.resources, 1), /content bug/);
   assert.equal(original.battlefield.snapshot("state").getUnit(0).effects.instances[0].state.ratio, 0.5);
   original.battlefield.drop();
   assert.deepEqual(values(original, h.resources), { attack: 160, maxHp: 4000, hp: 2000 });
@@ -274,7 +274,7 @@ test('effect competition: cross-unit parent completion publishes child recovery 
   });
   const parent = install(h, program, { ratio: 0.9, sourceAttack: 100, hpBonus: 3000 });
   for (const ratio of [0.5, 0.9]) {
-    installNewEffect(h.work, 1, program.ref, {
+    installNewEffect(h.work, 1, program, {
       source: null, scopes: [],
       initialState: { ratio, sourceAttack: 100, hpBonus: ratio === 0.5 ? 1000 : 3000 },
     }, h.resources, 0);

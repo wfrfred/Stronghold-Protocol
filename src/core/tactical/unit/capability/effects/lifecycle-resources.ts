@@ -7,18 +7,30 @@ import type {
     EffectCompetition,
 } from "./contract.js";
 import type { EffectValue } from "./effect.js";
-import type { EffectDefinitionRef } from "./definition.js";
+import type { EffectDefinition } from "./definition.js";
 import type { EffectResources } from "./registry.js";
 import { hasEffects } from "./capability.js";
 
+export type EffectLifecycleInvocation = Omit<EffectLifecycleContext, "instance"> & {
+    readonly instance: EffectValue;
+};
+
+type EffectFinishInvocation = Omit<EffectFinishContext, "instance"> & {
+    readonly instance: EffectValue;
+};
+
+type EffectAdmissionInvocation = Omit<EffectAdmissionContext, "instance"> & {
+    readonly instance: EffectValue;
+};
+
 export interface CompiledEffectLifecycle {
-    readonly start?: (context: EffectLifecycleContext) => undefined;
-    readonly enable?: (context: EffectLifecycleContext) => undefined;
-    readonly disable?: (context: EffectLifecycleContext) => undefined;
-    readonly advance?: (context: EffectLifecycleContext) => undefined;
-    readonly expire?: (context: EffectLifecycleContext) => undefined;
-    readonly finish?: (context: EffectFinishContext) => undefined;
-    readonly accepts?: (context: EffectAdmissionContext) => boolean;
+    readonly start?: (context: EffectLifecycleInvocation) => undefined;
+    readonly enable?: (context: EffectLifecycleInvocation) => undefined;
+    readonly disable?: (context: EffectLifecycleInvocation) => undefined;
+    readonly advance?: (context: EffectLifecycleInvocation) => undefined;
+    readonly expire?: (context: EffectLifecycleInvocation) => undefined;
+    readonly finish?: (context: EffectFinishInvocation) => undefined;
+    readonly accepts?: (context: EffectAdmissionInvocation) => boolean;
     readonly competition?: (instance: EffectValue) => EffectCompetition | undefined;
 }
 
@@ -35,18 +47,18 @@ export class EffectLifecycleResources {
     }
 
     register<S extends object>(
-        ref: EffectDefinitionRef<S>,
-        definition: NoInfer<EffectLifecycleDefinition<S>>,
+        definition: EffectDefinition<S>,
+        lifecycle: NoInfer<EffectLifecycleDefinition<S>>,
     ): void {
         this.#registration.assertWritable();
-        this.#effects.get(ref);
+        this.#effects.get(definition);
 
-        if (this.#definitions.has(ref.id)) {
-            throw new TypeError(`duplicate effect lifecycle ${ref.id}`);
+        if (this.#definitions.has(definition.id)) {
+            throw new TypeError(`duplicate effect lifecycle ${definition.id}`);
         }
 
         const typed = (instance: EffectValue) => {
-            const value = this.#effects.typedEffect(instance, ref);
+            const value = this.#effects.typedEffect(instance, definition);
 
             if (value === undefined) {
                 throw new TypeError("effect lifecycle requires its matching definition");
@@ -59,7 +71,7 @@ export class EffectLifecycleResources {
             action === undefined
                 ? {}
                 : {
-                      run: (context: EffectLifecycleContext): undefined => {
+                      run: (context: EffectLifecycleInvocation): undefined => {
                           action({
                               ...context,
                               get instance() {
@@ -71,17 +83,17 @@ export class EffectLifecycleResources {
                           });
                       },
                   };
-        const start = compile(definition.start).run;
-        const enable = compile(definition.enable).run;
-        const disable = compile(definition.disable).run;
-        const advance = compile(definition.advance).run;
-        const expire = compile(definition.expire).run;
-        const finishAction = definition.finish;
+        const start = compile(lifecycle.start).run;
+        const enable = compile(lifecycle.enable).run;
+        const disable = compile(lifecycle.disable).run;
+        const advance = compile(lifecycle.advance).run;
+        const expire = compile(lifecycle.expire).run;
+        const finishAction = lifecycle.finish;
 
         const finish =
             finishAction === undefined
                 ? undefined
-                : (context: EffectFinishContext): undefined => {
+                : (context: EffectFinishInvocation): undefined => {
                       finishAction({
                           ...context,
                           get instance() {
@@ -93,11 +105,11 @@ export class EffectLifecycleResources {
                       });
                   };
 
-        const accepts = definition.accepts;
-        const competition = definition.competition;
+        const accepts = lifecycle.accepts;
+        const competition = lifecycle.competition;
 
         this.#definitions.set(
-            ref.id,
+            definition.id,
             Object.freeze({
                 ...(start === undefined ? {} : { start }),
                 ...(enable === undefined ? {} : { enable }),
@@ -108,7 +120,7 @@ export class EffectLifecycleResources {
                 ...(accepts === undefined
                     ? {}
                     : {
-                          accepts: (context: EffectAdmissionContext) =>
+                          accepts: (context: EffectAdmissionInvocation) =>
                               accepts({ ...context, instance: typed(context.instance) }),
                       }),
                 ...(competition === undefined
@@ -123,13 +135,13 @@ export class EffectLifecycleResources {
     get(instance: EffectValue): CompiledEffectLifecycle {
         this.#registration.assertUsable();
 
-        return this.#definitions.get(instance.definitionRef.id) ?? emptyLifecycle;
+        return this.#definitions.get(instance.definition.id) ?? emptyLifecycle;
     }
 }
 
 export function uniqueEffectAdmission(
     key: string,
-): NonNullable<EffectLifecycleDefinition<object>["accepts"]> {
+): NonNullable<CompiledEffectLifecycle["accepts"]> {
     return ({ unitId, facts }) => {
         const unit = facts.getUnit(unitId);
 
@@ -137,7 +149,7 @@ export function uniqueEffectAdmission(
             unit === undefined ||
             !hasEffects(unit) ||
             !unit.effects.instances.some(
-                (instance) => !instance.finished && instance.definitionRef.id === key,
+                (instance) => !instance.finished && instance.definition.id === key,
             )
         );
     };

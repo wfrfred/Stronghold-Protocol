@@ -52,7 +52,7 @@ const capacityOf = unit => resolveBlockingCapacity(unit.definition.blocker, unit
 const capacity = work => capacityOf(getUnit(work, 0));
 const install = (work, effect, resources, expiresAtTick = null) => {
   installNewEffect(
-    work, 0, effect.ref, { source: 7, scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }] }, resources, 0,
+    work, 0, effect, { source: 7, scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }] }, resources, 0,
   );
 };
 const entry = (id, value, participating = true) => ({ id, sequence: 0, kind: "SAMPLED", participating, values: [value] });
@@ -94,11 +94,11 @@ test('blocking capacity: effect updates, participation and terminal cleanup pres
   assert.equal(capacity(work), 2);
   assert.equal(getUnit(work, 0).vitality.hp, 50);
   assert.equal(resolveMaxHp(0, battlefieldView(work)), 100);
-  updateEffectState(work, 0, 0, effect.ref, () => ({ amount: -2 }), resources, 0);
+  updateEffectState(work, 0, 0, effect, () => ({ amount: -2 }), resources, 0);
   assert.equal(capacity(work), 1);
   setEffectEnabled(work, effectAddress, false, resources, 1);
   assert.equal(capacity(work), 3);
-  updateEffectState(work, 0, 0, effect.ref, () => ({ amount: -9 }), resources, 1);
+  updateEffectState(work, 0, 0, effect, () => ({ amount: -9 }), resources, 1);
   assert.equal(capacity(work), 3);
   setEffectEnabled(work, effectAddress, true, resources, 2);
   assert.equal(capacity(work), 0);
@@ -184,7 +184,7 @@ test('blocking capacity: native STACK layers release enemies and expiry immediat
         context.effects.finish([context.ref]);
       } else {
         context.effects.setTick(context.ref, plan.expiresAtTick);
-        context.effects.update(context.ref, effect.ref, state => ({ ...state, stackCount: plan.stackCount }));
+        context.effects.update(context.ref, effect, state => ({ ...state, stackCount: plan.stackCount }));
       }
     } },
   });
@@ -193,7 +193,7 @@ test('blocking capacity: native STACK layers release enemies and expiry immediat
   const original = h.state;
   const apply = () => {
     const work = h.work();
-    const current = getUnit(work, 0).effects?.instances.find(instance => instance.definitionRef === effect.ref);
+    const current = getUnit(work, 0).effects?.instances.find(instance => instance.definition === effect);
     const plan = rule.plan(current === undefined ? undefined : {
       stackCount: current.state.stackCount, expiresAtTick: effectTick(current),
     }, { stackCount: 1, expiresAtTick: 2 }, 0);
@@ -202,7 +202,7 @@ test('blocking capacity: native STACK layers release enemies and expiry immediat
     } else {
       assert.equal(plan.type, 'REFRESH');
       setEffectTick(work, effectAddress, plan.expiresAtTick);
-      updateEffectState(work, 0, 0, effect.ref, state => ({ ...state, stackCount: plan.stackCount }), resources, 0);
+      updateEffectState(work, 0, 0, effect, state => ({ ...state, stackCount: plan.stackCount }), resources, 0);
     }
     assert.equal(h.publish(work).dependencies.blocking, true);
   };

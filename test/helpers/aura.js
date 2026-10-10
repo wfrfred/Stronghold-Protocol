@@ -45,7 +45,7 @@ export function registerAura(resources, receiver, {
         for (const binding of context.instance.state.bindings) {
             if (context.instance.finished) return;
             if (selected.includes(binding.unitId)) continue;
-            context.effects.update(context.ref, aura.ref, state => ({
+            context.effects.update(context.ref, aura, state => ({
                 ...state, bindings: state.bindings.filter(current => current.unitId !== binding.unitId),
             }));
             context.effects.finish(binding.refs, 'AURA_LEFT');
@@ -54,17 +54,17 @@ export function registerAura(resources, receiver, {
             if (context.instance.finished || !context.instance.participating) break;
             if (context.instance.state.bindings.some(binding => binding.unitId === unitId)) continue;
             // Reserve the entering member before installation invokes nested content callbacks.
-            context.effects.update(context.ref, aura.ref, state => ({
+            context.effects.update(context.ref, aura, state => ({
                 ...state, bindings: [...state.bindings, { unitId, refs: [] }],
             }));
             const value = initialState(context, unitId);
-            const installed = context.effects.install(unitId, receiver.ref, {
+            const installed = context.effects.install(unitId, receiver, {
                 source: context.ref.unitId,
                 scopes: bindLifetime ? [context.ref] : [],
                 ...(value === undefined ? {} : { initialState: value }),
             });
             if (installed.type !== 'INSTALLED' || context.instance.finished) continue;
-            context.effects.update(context.ref, aura.ref, state => ({
+            context.effects.update(context.ref, aura, state => ({
                 ...state,
                 bindings: state.bindings.map(binding => binding.unitId === unitId
                     ? { ...binding, refs: [installed.ref] } : binding),
@@ -81,7 +81,7 @@ export function registerAura(resources, receiver, {
             ...(competition === undefined ? {} : { competition }),
             advance: context => {
                 if (context.tick < context.instance.state.nextRefreshTick) return;
-                context.effects.update(context.ref, aura.ref, state => ({
+                context.effects.update(context.ref, aura, state => ({
                     ...state, nextRefreshTick: context.tick + refreshInterval,
                 }));
                 refreshTargets(context);
@@ -109,7 +109,7 @@ export function registerAura(resources, receiver, {
 
 export function seededPlacement(resources, effect, unit = auraUnit(0), scopes = []) {
     const state = effectFixtureWork(unit);
-    const installed = installNewEffect(state, unit.id, effect.ref,
+    const installed = installNewEffect(state, unit.id, effect,
         { source: unit.id, scopes }, resources, 0);
     if (installed.type !== 'INSTALLED') throw new Error(`seed failed: ${installed.type}`);
     const seeded = getUnit(state, unit.id);

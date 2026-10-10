@@ -1215,7 +1215,7 @@ test('core battle propagates nested settlement errors without publishing battlef
         registerUnit(context.work, unit);
         context.work.execution = { ...context.work.execution, nextUnitId: unit.id + 1 };
         appendEvents(context.work, [{ type: 'UNIT_DEPLOYED', unitId: unit.id, position: unit.position, tick: context.tick }]);
-        installNewEffect(context.work, 1, effect.ref, { source: 0, scopes: [] }, resources, context.tick);
+        installNewEffect(context.work, 1, effect, { source: 0, scopes: [] }, resources, context.tick);
       } },
       { type: 'WAIT', resolve: () => ({ type: 'FOR_TICKS', ticks: 2 }), allowNewAction: false },
     ],

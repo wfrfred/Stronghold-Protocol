@@ -11,7 +11,7 @@ import { EffectDispatchScope, participatingEffect } from "../effects/dispatch.js
 import type { EffectRef, Effect, EffectValue } from "../effects/effect.js";
 import { finalizeFinishedEffects } from "../effects/lifecycle.js";
 import { createEffectOperations } from "../effects/operations.js";
-import type { EffectDefinitionRef } from "../effects/definition.js";
+import type { EffectDefinition } from "../effects/definition.js";
 import { effectView, getEffect } from "../effects/query.js";
 import type { EffectResources } from "../effects/registry.js";
 import { hasAction } from "./capability.js";
@@ -51,27 +51,27 @@ export class ActionReleaseResources {
     }
 
     register<S extends object>(
-        ref: EffectDefinitionRef<S>,
+        definition: EffectDefinition<S>,
         rules: NoInfer<ActionReleaseRules<S>>,
     ): void {
         this.#registration.assertWritable();
-        this.#effects.get(ref);
+        this.#effects.get(definition);
 
-        if (this.#rules.has(ref.id)) {
-            throw new TypeError(`duplicate action release effect ${ref.id}`);
+        if (this.#rules.has(definition.id)) {
+            throw new TypeError(`duplicate action release effect ${definition.id}`);
         }
 
         const effects = this.#effects;
         const beforeRelease = rules.beforeRelease;
 
         this.#rules.set(
-            ref.id,
+            definition.id,
             Object.freeze({
                 beforeRelease: (context: ActionReleaseInvocation) =>
                     beforeRelease({
                         ...context,
                         get instance() {
-                            const instance = effects.typedEffect(context.instance, ref);
+                            const instance = effects.typedEffect(context.instance, definition);
 
                             if (instance === undefined) {
                                 throw new TypeError(
@@ -89,7 +89,7 @@ export class ActionReleaseResources {
     get(instance: EffectValue): CompiledActionReleaseRules | undefined {
         this.#registration.assertUsable();
 
-        return this.#rules.get(instance.definitionRef.id);
+        return this.#rules.get(instance.definition.id);
     }
 }
 

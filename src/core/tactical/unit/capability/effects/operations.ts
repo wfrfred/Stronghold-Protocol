@@ -17,8 +17,16 @@ export function createEffectOperations(
     dispatch: EffectDispatchScope,
 ): EffectLifecycleOperations {
     return {
-        install: (unitId, ref, input) => {
-            return installNewEffect(readState(), unitId, ref, input, resources, tick, dispatch);
+        install: (unitId, definition, input) => {
+            return installNewEffect(
+                readState(),
+                unitId,
+                definition,
+                input,
+                resources,
+                tick,
+                dispatch,
+            );
         },
         update: (ref, definition, transition) => {
             updateEffectState(

@@ -94,7 +94,7 @@ function view(snapshot) {
 
 function effect(snapshot, unitId, ref) {
   return snapshot.units.find((unit) => unit.id === unitId).effects.instances
-    .find((instance) => instance.definitionRef.id === ref.id);
+    .find((instance) => instance.definition.id === ref.id);
 }
 
 function scenario({ failure = null, cancelled = false } = {}) {
@@ -118,12 +118,12 @@ function scenario({ failure = null, cancelled = false } = {}) {
       bindings: flags.length === 0 ? [] : [compileStatusBinding(flags)],
       lifecycle: {
         start: (context) => {
-          context.effects.update(context.ref, program.ref, (state) => ({
+          context.effects.update(context.ref, program, (state) => ({
             ...state, starts: state.starts + 1,
           }));
         },
         enable: (context) => {
-          context.effects.update(context.ref, program.ref, (state) => ({
+          context.effects.update(context.ref, program, (state) => ({
             ...state, enables: state.enables + 1,
           }));
         },
@@ -140,7 +140,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
   }), {
     lifecycle: {
       start: (context) => {
-        const prefix = context.effects.install(context.ref.unitId, marker.ref, {
+        const prefix = context.effects.install(context.ref.unitId, marker, {
           source: 0, scopes: [],
         });
         assert.equal(prefix.type, "INSTALLED");
@@ -156,12 +156,12 @@ function scenario({ failure = null, cancelled = false } = {}) {
     contributions: [liveAttack(() => [modifier.create({ finalAddition: 5 })])],
     lifecycle: {
       start: (context) => {
-        context.effects.update(context.ref, receiver.ref, (state) => ({
+        context.effects.update(context.ref, receiver, (state) => ({
           ...state, starts: state.starts + 1,
         }));
       },
       enable: (context) => {
-        context.effects.update(context.ref, receiver.ref, (state) => ({
+        context.effects.update(context.ref, receiver, (state) => ({
           ...state, enables: state.enables + 1,
         }));
       },
@@ -171,14 +171,14 @@ function scenario({ failure = null, cancelled = false } = {}) {
         priority: 0,
         apply: (context, pending) => {
           assert.ok(context.facts.getEffect(auraAddress).state.remaining > 0);
-          context.operations.effects.update(auraAddress, aura.ref, (state) => ({
+          context.operations.effects.update(auraAddress, aura, (state) => ({
             ...state, remaining: state.remaining - 1, consumed: state.consumed + 1,
           }));
-          context.operations.effects.update(context.ref, receiver.ref, (state) => ({
+          context.operations.effects.update(context.ref, receiver, (state) => ({
             ...state, uses: state.uses + 1,
           }));
           if (cancelled) {
-            rejected.push(context.operations.effects.install(context.ownerUnitId, refused.ref, {
+            rejected.push(context.operations.effects.install(context.ownerUnitId, refused, {
               source: 0, scopes: [],
             }));
             context.operations.heal({
@@ -186,7 +186,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
               power: 4, ignoreHealFree: false,
             });
           } else {
-            const installed = context.operations.effects.install(context.ownerUnitId, marker.ref, {
+            const installed = context.operations.effects.install(context.ownerUnitId, marker, {
               source: 0, scopes: [],
             });
             assert.equal(installed.type, "INSTALLED");
@@ -219,14 +219,14 @@ function scenario({ failure = null, cancelled = false } = {}) {
       for (const unitId of context.battlefield.unitIds) {
         if (context.instance.finished) return;
         if (context.instance.state.receivers.some(binding => binding.unitId === unitId)) continue;
-        context.effects.update(context.ref, aura.ref, state => ({
+        context.effects.update(context.ref, aura, state => ({
           ...state, receivers: [...state.receivers, { unitId, ref: null, attempts: 1 }],
         }));
-        const installed = context.effects.install(unitId, receiver.ref, {
+        const installed = context.effects.install(unitId, receiver, {
           source: context.ref.unitId, scopes: [context.ref],
         });
         assert.equal(installed.type, "INSTALLED");
-        context.effects.update(context.ref, aura.ref, state => ({
+        context.effects.update(context.ref, aura, state => ({
           ...state, receivers: state.receivers.map(binding => binding.unitId === unitId
             ? { ...binding, ref: installed.ref } : binding),
         }));
@@ -251,7 +251,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
       context.operations.stopSelf();
       if (fault.enabled && failure === "late-projectile") {
         const auraState = context.facts.getUnit(0).effects.instances
-          .find(instance => instance.definitionRef === aura.ref).state;
+          .find(instance => instance.definition === aura).state;
         assert.deepEqual(auraState.receivers.map(binding => binding.unitId), [0, 1, 2, 3]);
         assert.equal(context.facts.getUnit(1).vitality.hp, 83);
         assert.equal(hasStatusFlag(context.facts.getUnit(1), "INVISIBLE"), true);
@@ -282,7 +282,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
     visitEveryNodeCenter: false, visitEveryCheckPoint: true,
   });
   const installation = (context, services, program) => installNewEffect(
-    context.work, context.sourceUnitId, program.ref, {
+    context.work, context.sourceUnitId, program, {
       source: context.sourceUnitId,
       scopes: [{ type: "ACTION", executionId: context.executionId }],
     }, services, context.tick,
@@ -340,7 +340,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
     },
   });
   return { runtime, resources, fault, launches, attempts, scopes, reports, rejected,
-    aura: aura.ref, receiver: receiver.ref, marker: marker.ref, scoped: scoped.ref, pulse: pulse.ref };
+    aura: aura, receiver: receiver, marker: marker, scoped: scoped, pulse: pulse };
 }
 
 test("runtime composition: late exceptions and invalid settlement propagate without publishing any domain", () => {
@@ -375,15 +375,19 @@ test("runtime composition: late exceptions and invalid settlement propagate with
 test("runtime composition: a successful battle preserves identities, snapshots and the terminal trace", () => {
   const run = scenario();
   const replay = scenario();
+  const serialized = value => JSON.parse(JSON.stringify(value));
   const first = run.runtime.step();
-  assert.deepEqual(first, replay.runtime.step());
+  assert.deepEqual(serialized(first), serialized(replay.runtime.step()));
   const events = [...first.events];
   const before = run.runtime.snapshot();
   const second = run.runtime.step();
-  assert.deepEqual(second, replay.runtime.step());
-  assert.deepEqual(run.runtime.snapshot(), replay.runtime.snapshot());
+  assert.deepEqual(serialized(second), serialized(replay.runtime.step()));
+  assert.deepEqual(serialized(run.runtime.snapshot()), serialized(replay.runtime.snapshot()));
   events.push(...second.events);
   const after = run.runtime.snapshot();
+  assert.equal(effect(before, 0, run.aura).definition, run.aura);
+  assert.equal(effect(after, 0, run.aura).definition, run.aura);
+  assert.equal(effect(after, 1, run.receiver).definition, run.receiver);
   assert.notEqual(after.execution.rngState, before.execution.rngState);
   assert.equal(after.execution.nextUnitId, 4);
   assert.equal(after.spawning.cursor, 1);
@@ -415,8 +419,8 @@ test("runtime composition: a successful battle preserves identities, snapshots a
 
   while (run.runtime.result === null) {
     const actual = run.runtime.step();
-    assert.deepEqual(actual, replay.runtime.step());
-    assert.deepEqual(run.runtime.snapshot(), replay.runtime.snapshot());
+    assert.deepEqual(serialized(actual), serialized(replay.runtime.step()));
+    assert.deepEqual(serialized(run.runtime.snapshot()), serialized(replay.runtime.snapshot()));
     events.push(...actual.events);
     if (run.runtime.snapshot().tickIndex === 4) {
       const cleaned = run.runtime.snapshot();

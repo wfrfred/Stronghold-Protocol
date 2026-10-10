@@ -150,11 +150,11 @@ function fixture({ spawnTick = 100 } = {}) {
     routeMoveMultiplier: 1,
     rngState: 17,
   };
-  return { fields, resources, ref: initial.ref };
+  return { fields, resources, effectDefinition: initial };
 }
 
 test('runtime allocates initial IDs, resolves creation references, and never reuses predefined instance IDs', () => {
-  const { fields, resources, ref } = fixture();
+  const { fields, resources, effectDefinition } = fixture();
   const input = fields;
   const runtime = new BattleRuntime(input, { combat: resources });
   const initial = runtime.snapshot();
@@ -175,7 +175,7 @@ test('runtime allocates initial IDs, resolves creation references, and never reu
     type: 'FOLLOW_UNIT', unitId: 0, range: [[0, 0]], direction: 'RIGHT',
   });
   assert.equal(initial.units[1].effects.instances[0].source, 1);
-  assert.equal(initial.units[1].effects.instances[0].definitionRef, ref);
+  assert.equal(initial.units[1].effects.instances[0].definition, effectDefinition);
   assert.equal(initial.units[1].effects.instances[0].started, true);
   assert.deepEqual(initial.units[1].effects.instances[0].state, { quota: { remaining: 3 }, marks: [1, 2] });
 

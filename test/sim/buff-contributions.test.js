@@ -42,14 +42,14 @@ test('Buff contribution integration: the native Astesia DEF facet merges layers,
   const work = effectFixtureWork(initializeUnit({ id: 0, position: [0, 0], definition: { id: 'receiver', defense: { defense: 100, resistance: 0 } } }));
   const original = work.battlefield.snapshot("draft");
   const apply = (source, defenseRatio, expiresAtTick, tick) => {
-    const current = getUnit(work, 0).effects?.instances.find(instance => instance.definitionRef === program.ref && !instance.finished);
+    const current = getUnit(work, 0).effects?.instances.find(instance => instance.definition === program && !instance.finished);
     const plan = policy.plan(current === undefined ? undefined : { stackCount: current.state.stackCount, expiresAtTick: effectTick(current) }, { stackCount: 1, expiresAtTick }, tick);
     if (plan.type === 'INSTALL') {
-      installNewEffect(work, 0, program.ref, { source, scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }], initialState: { stackCount: 1, defenseRatio } }, resources, tick);
+      installNewEffect(work, 0, program, { source, scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }], initialState: { stackCount: 1, defenseRatio } }, resources, tick);
     } else if (plan.type === 'REFRESH') {
       const address = { type: "EFFECT", unitId: 0, effectId: current.id };
       setEffectTick(work, address, plan.expiresAtTick);
-      updateEffectState(work, 0, current.id, program.ref, state => ({ ...state, stackCount: plan.stackCount }), resources, tick);
+      updateEffectState(work, 0, current.id, program, state => ({ ...state, stackCount: plan.stackCount }), resources, tick);
     }
     return plan;
   };
@@ -122,7 +122,7 @@ test('Buff contribution integration: only effective layer growth resamples the r
     readSourceAttribute: () => instance.state.sourceAttack,
   })])] });
   const work = effectFixtureWork(initializeUnit({ id: 0, position: [0, 0], definition: { id: 'receiver', offense: { attack: 100 } } }));
-  installNewEffect(work, 0, program.ref, { source: 10, scopes: [{ type: "TICK", tick: 10 }]}, resources, 0);
+  installNewEffect(work, 0, program, { source: 10, scopes: [{ type: "TICK", tick: 10 }]}, resources, 0);
   const power = () => resolveAttackPower(0, battlefieldView(work));
   assert.equal(power(), 150);
   const apply = (currentSourceAttack, tick, expiresAtTick) => {
@@ -130,7 +130,7 @@ test('Buff contribution integration: only effective layer growth resamples the r
     const plan = policy.plan({ stackCount: current.state.stackCount, expiresAtTick: effectTick(current) }, { stackCount: 1, expiresAtTick }, tick);
     assert.equal(plan.type, 'REFRESH');
     setEffectTick(work, { type: "EFFECT", unitId: 0, effectId: 0 }, plan.expiresAtTick);
-    updateEffectState(work, 0, 0, program.ref, state => ({ ...state,
+    updateEffectState(work, 0, 0, program, state => ({ ...state,
       stackCount: plan.stackCount, sourceAttack: plan.reloadModifiers ? currentSourceAttack : state.sourceAttack,
     }), resources, tick);
     return plan;

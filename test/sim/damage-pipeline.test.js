@@ -65,7 +65,7 @@ function program(id, initialState = {}) {
 }
 
 function attach(resources, owner, descriptor, id, acquiredSequence = id) {
-  const instance = resources.effects.create(descriptor.ref, {
+  const instance = resources.effects.create(descriptor, {
     id,
     acquiredSequence,
     source: null,
@@ -80,7 +80,7 @@ function stateOf(work, resources, ownerId, descriptor, instanceId) {
     (value) => value.id === instanceId,
   );
 
-  return resources.effects.typedState(instance, descriptor.ref);
+  return resources.effects.typedState(instance, descriptor);
 }
 
 function request(power, overrides = {}) {
@@ -375,7 +375,7 @@ test("damage pipeline: one group can independently provide source formula, outpu
         apply: (context) => {
           context.operations.effects.update(
             context.ref,
-            context.instance.definitionRef,
+            context.instance.definition,
             (state) => ({ reports: state.reports + 1 }),
           );
           reactions.push("source");
@@ -459,7 +459,7 @@ test("damage pipeline: priority, acquisition sequence and stable instance order 
           ...target.effects,
           instances: insertion.map((index) =>
             target.effects.instances.find(
-              (instance) => instance.definitionRef === entries[index][0].ref,
+              (instance) => instance.definition === entries[index][0],
             ),
           ),
         },
@@ -512,7 +512,7 @@ test("damage pipeline: invincibility skips reception resources and still gives r
           apply: (context, pending) => {
             context.operations.effects.update(
               context.ref,
-              context.instance.definitionRef,
+              context.instance.definition,
               (state) => ({
                 ...state,
                 rejected: state.rejected + Number(pending.cancellation?.reason === "INVINCIBLE"),
@@ -541,7 +541,7 @@ test("damage pipeline: invincibility skips reception resources and still gives r
           apply: (context, report) => {
             context.operations.effects.update(
               context.ref,
-              context.instance.definitionRef,
+              context.instance.definition,
               (state) => ({
                 reports: state.reports + 1,
                 formula: report.formulaDamage,
@@ -608,7 +608,7 @@ test("damage pipeline: nested reaction damage and healing preserve latest HP and
             if (context.instance.state.remainingCharges > 0) {
               context.operations.effects.update(
                 context.ref,
-                context.instance.definitionRef,
+                context.instance.definition,
                 (state) => ({
                   ...state,
                   remainingCharges: 0,
@@ -629,7 +629,7 @@ test("damage pipeline: nested reaction damage and healing preserve latest HP and
             }
             context.operations.effects.update(
               context.ref,
-              context.instance.definitionRef,
+              context.instance.definition,
               (state) => ({
                 ...state,
                 observedSourceHp: context.facts.getUnit(context.ownerUnitId).vitality.hp,

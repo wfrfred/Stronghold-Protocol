@@ -40,13 +40,13 @@ test('periodic effects: the tick callback controls trigger intervals independent
             if (context.tick < context.instance.state.nextTriggerTick) return;
             context.damage({ sourceUnitId: null, targetUnitId: context.ref.unitId,
                 damageType: 'TRUE', operands: createDamageOperands(10) });
-            context.effects.update(context.ref, poison.ref, state => ({
+            context.effects.update(context.ref, poison, state => ({
                 ...state, triggers: state.triggers + 1, nextTriggerTick: context.tick + 2,
             }));
         } },
     });
     const state = effectFixtureWork(auraUnit(0));
-    const installed = installNewEffect(state, 0, poison.ref, { source: null,
+    const installed = installNewEffect(state, 0, poison, { source: null,
         scopes: [{ type: 'TICK', tick: 5 }] }, resources, 0);
     for (let tick = 0; tick < 5; tick++) {
         advanceEffects(state, tick, resources);
@@ -75,14 +75,14 @@ test('periodic effects: advance freezes candidates and rechecks participation af
         lifecycle: { advance: context => {
             trace.push('parent');
             if (context.instance.state.installed) return;
-            context.effects.update(context.ref, parent.ref, state => ({ ...state, installed: true }));
+            context.effects.update(context.ref, parent, state => ({ ...state, installed: true }));
             context.effects.setEnabled(laterRef, false);
-            context.effects.install(0, child.ref, { source: null, scopes: [] });
+            context.effects.install(0, child, { source: null, scopes: [] });
         } },
     });
     const state = effectFixtureWork(auraUnit(0), auraUnit(1));
-    installNewEffect(state, 0, parent.ref, { source: null, scopes: [] }, resources, 0);
-    laterRef = installNewEffect(state, 1, later.ref, { source: null, scopes: [] }, resources, 0).ref;
+    installNewEffect(state, 0, parent, { source: null, scopes: [] }, resources, 0);
+    laterRef = installNewEffect(state, 1, later, { source: null, scopes: [] }, resources, 0).ref;
     advanceEffects(state, 0, resources);
     assert.deepEqual(trace, ['parent']);
     advanceEffects(state, 1, resources);
@@ -101,10 +101,10 @@ test('periodic effects: disabled and overridden effects do not advance but still
             lifecycle: { competition: () => ({ group: 'periodic', priority: 2 }) },
         });
         const state = effectFixtureWork(auraUnit(0));
-        const ref = installNewEffect(state, 0, periodic.ref,
+        const ref = installNewEffect(state, 0, periodic,
             { source: null, scopes: [{ type: 'TICK', tick: 2 }] }, resources, 0).ref;
         if (inactive === 'disabled') setEffectEnabled(state, ref, false, resources, 0);
-        else installNewEffect(state, 0, winner.ref, { source: null, scopes: [] }, resources, 0);
+        else installNewEffect(state, 0, winner, { source: null, scopes: [] }, resources, 0);
         advanceEffects(state, 1, resources);
         expireEffects(state, 2, resources);
         assert.equal(calls, 0);
@@ -120,7 +120,7 @@ test('periodic effects: Runtime advances once per tick regardless of unit regist
             advance: context => {
                 context.damage({ sourceUnitId: null, targetUnitId: 0,
                     damageType: 'TRUE', operands: createDamageOperands(10) });
-                context.effects.update(context.ref, periodic.ref, state => ({ ...state, advances: state.advances + 1 }));
+                context.effects.update(context.ref, periodic, state => ({ ...state, advances: state.advances + 1 }));
             },
         },
     });
@@ -146,7 +146,7 @@ test('periodic effects: a skill installs after the effect tick and starts advanc
     const skill = createSkillDefinition({ id: 'periodic-skill', activation: 'MANUAL',
         spRecovery: 'TIME', spCost: 1, initialSp: 1, durationTicks: 10 });
     resources.skills.register({ definition: skill, activate: context => {
-        const installed = context.effects.install(context.unitId, periodic.ref, {
+        const installed = context.effects.install(context.unitId, periodic, {
             source: context.unitId,
             scopes: [{ type: 'SKILL', unitId: context.unitId, activationId: context.activationId }],
         });
@@ -171,7 +171,7 @@ test('periodic effects: failed time advancement propagates without publishing da
         lifecycle: { advance: context => {
             context.damage({ sourceUnitId: null, targetUnitId: 0,
                 damageType: 'TRUE', operands: createDamageOperands(10) });
-            context.effects.update(context.ref, periodic.ref, state => ({ advances: state.advances + 1 }));
+            context.effects.update(context.ref, periodic, state => ({ advances: state.advances + 1 }));
             throw failure;
         } },
     });

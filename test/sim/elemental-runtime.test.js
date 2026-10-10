@@ -169,7 +169,7 @@ test('elemental HP damage ignores physical defense, magic resistance, source att
     const attackBuff = supplied.registerEffect(createEffectDefinition({ id: `source-attack-${damageResistance}`, initialize: () => ({}) }),
       { contributions: [attack(() => [modifier({ multiplier: 100 })])] });
     let input = effectFixtureWork(source, unit('ENEMY', { defense: { defense: 100000, resistance: 99 } }, { damageResistance, elementResistance: 100 }));
-    installNewEffect(input, 0, attackBuff.ref, { source: 0, scopes: [{ type: "UNIT", unitId: 0 }] }, supplied, 0);
+    installNewEffect(input, 0, attackBuff, { source: 0, scopes: [{ type: "UNIT", unitId: 0 }] }, supplied, 0);
     const result = resolveDamage(input, { sourceUnitId: 0, targetUnitId: 1, damageType: 'ELEMENTAL', operands: createDamageOperands(100), tick: 0 }, supplied);
     assert.equal(result.hpLoss, expected);
     assert.equal(result.formulaDamage, expected);
@@ -306,7 +306,7 @@ test('elemental runtime: nested burst damage failure publishes neither EP progre
   const { runtime } = battle('CHARACTER', 'BURN', {
     prepare: supplied => {
       faultRef = supplied.registerEffect(createEffectDefinition({ id: 'elemental-fault', initialize: () => ({}) }),
-        { damage: { reception: { priority: 100, apply: () => { throw new Error('nested burst failed'); } } } }).ref;
+        { damage: { reception: { priority: 100, apply: () => { throw new Error('nested burst failed'); } } } });
     },
     targetStates: (supplied, selected) => {
       const target = initializeUnit({ id: 1, position: [1, 0], definition: selected });

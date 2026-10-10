@@ -1,4 +1,4 @@
-import type { EffectDefinitionRef } from "./definition.js";
+import type { EffectDefinition } from "./definition.js";
 import type { UnitId } from "../../unit.js";
 import type { ActionExecutionId } from "../action/process.js";
 
@@ -60,12 +60,12 @@ export interface EffectMetadata {
 }
 
 export interface EffectValue extends EffectMetadata, EffectLifecycleFacts {
-    readonly definitionRef: { readonly id: string };
+    readonly definition: { readonly id: string };
     readonly state: object;
 }
 
 export interface Effect<S extends object> extends EffectValue {
-    readonly definitionRef: EffectDefinitionRef<S>;
+    readonly definition: EffectDefinition<S>;
     readonly state: S;
 }
 

@@ -229,15 +229,15 @@ test("contributions: private stack transitions publish maintained projections im
   });
   const installed = installFixtureEffect(
     unit(1),
-    resources.effects.create(program.ref, metadata()),
+    resources.effects.create(program, metadata()),
     resources,
   );
   const initial = workFor(installed);
   const original = initial.battlefield.snapshot("draft");
 
-  updateEffectState(initial, 1, 0, program.ref, (current) => ({ ...current, remaining: 10 }), resources, 0);
+  updateEffectState(initial, 1, 0, program, (current) => ({ ...current, remaining: 10 }), resources, 0);
 
-  updateEffectState(initial, 1, 0, program.ref, (current) => ({ ...current, layers: current.layers + 1 }), resources, 0);
+  updateEffectState(initial, 1, 0, program, (current) => ({ ...current, layers: current.layers + 1 }), resources, 0);
   assert.equal(resolveAttackPower(1, battlefieldView(initial)), 130);
   assert.deepEqual(getUnit(initial, 1).effects.instances[0].state, {
     layers: 3,
@@ -249,7 +249,7 @@ test("contributions: private stack transitions publish maintained projections im
     effects: {
       ...getUnit(initial, 1).effects,
       instances: [
-        resources.effects.restore(program.ref, {
+        resources.effects.restore(program, {
           ...getUnit(initial, 1).effects.instances[0],
           scopes: [{ type: "TICK", tick: 1 }],
         }),
@@ -271,7 +271,7 @@ test("contributions: live evaluation reads latest working facts without changing
   });
   const installed = installFixtureEffect(
     unit(1),
-    resources.effects.create(program.ref, metadata()),
+    resources.effects.create(program, metadata()),
     resources,
   );
   const initial = workFor(installed);
@@ -322,7 +322,7 @@ test("contributions: defense queries clamp resistance after sampled and live con
         );
         defended = installFixtureEffect(
           initial,
-          resources.effects.create(program.ref, metadata()),
+          resources.effects.create(program, metadata()),
           resources,
         );
       }
@@ -363,7 +363,7 @@ test("contributions: a sampled child retains its input until an explicit parent 
         start: (context) => {
           const source = context.facts.getUnit(1);
           const sample = resolveOffenseAttack(source.definition.offense, source.offense) * 0.5;
-          context.effects.update(context.ref, childProgram.ref, () => ({ sample }));
+          context.effects.update(context.ref, childProgram, () => ({ sample }));
         },
       },
     },
@@ -375,14 +375,14 @@ test("contributions: a sampled child retains its input until an explicit parent 
   installEffect(
     work,
     2,
-    resources.effects.create(parentProgram.ref, metadata(0)),
+    resources.effects.create(parentProgram, metadata(0)),
     resources,
     0,
   );
   installEffect(
     work,
     2,
-    resources.effects.create(childProgram.ref, metadata(1)),
+    resources.effects.create(childProgram, metadata(1)),
     resources,
     0,
   );
@@ -412,7 +412,7 @@ test("contributions: a sampled child retains its input until an explicit parent 
   installEffect(
     work,
     2,
-    resources.effects.create(childProgram.ref, metadata(2)),
+    resources.effects.create(childProgram, metadata(2)),
     resources,
     2,
   );

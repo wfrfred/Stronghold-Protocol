@@ -32,7 +32,7 @@ function services(resources) {
     effectLifecycle: resources.effectLifecycle, actionRelease: new ActionReleaseResources(resources.effects) };
 }
 function attach(resources, unit, registered) {
-  return installFixtureEffect(unit, resources.effects.create(registered.ref, {
+  return installFixtureEffect(unit, resources.effects.create(registered, {
     id: unit.effects?.nextInstanceId ?? 0, acquiredSequence: unit.effects?.nextAcquiredSequence ?? 0,
     source: null, scopes: [{ type: "UNIT", unitId: unit.id }],
   }), resources);
@@ -41,27 +41,28 @@ function installation(unitId) {
   return { source: null, scopes: [{ type: 'UNIT', unitId }] };
 }
 
-test('action release: resources validate registered references, own the callback and respect registration sealing', () => {
+test('action release: resources validate registered definitions, own the callback and respect registration sealing', () => {
   const resources = new CombatResources();
   const registration = new ResourceRegistration();
   const release = new ActionReleaseResources(resources.effects, registration);
   const registered = resources.registerEffect(program('release-contract'));
-  assert.throws(() => release.register(program('unregistered').ref, { beforeRelease: () => ({ type: 'CONTINUE' }) }), /unregistered/);
-  assert.throws(() => release.register({ id: registered.ref.id }, { beforeRelease: () => ({ type: 'CONTINUE' }) }), /unregistered/);
+  assert.throws(() => release.register(program('unregistered'), { beforeRelease: () => ({ type: 'CONTINUE' }) }), /unregistered/);
+  const other = program(registered.id);
+  assert.throws(() => release.register(other, { beforeRelease: () => ({ type: 'CONTINUE' }) }), /unregistered/);
   const rules = { beforeRelease: context => {
-    assert.equal(context.instance.definitionRef, registered.ref);
+    assert.equal(context.instance.definition, registered);
     return { type: 'CONTINUE' };
   } };
-  release.register(registered.ref, rules);
+  release.register(registered, rules);
   rules.beforeRelease = () => { throw new Error('replacement'); };
-  assert.throws(() => release.register(registered.ref, rules), /duplicate/);
+  assert.throws(() => release.register(registered, rules), /duplicate/);
   const unit = attach(resources, actor(), registered);
   const instance = unit.effects.instances[0];
   assert.equal(Object.isFrozen(release.get(instance)), true);
   assert.deepEqual(release.get(instance).beforeRelease({ instance }), { type: 'CONTINUE' });
-  assert.throws(() => release.get(instance).beforeRelease({ instance: { ...instance, definitionRef: { id: registered.ref.id } } }), /matching/);
+  assert.throws(() => release.get(instance).beforeRelease({ instance: { ...instance, definition: other } }), /matching/);
   registration.seal();
-  assert.throws(() => release.register(registered.ref, rules), /sealed/);
+  assert.throws(() => release.register(registered, rules), /sealed/);
 });
 
 test('action release: absent resources, action, owner or participating rules preserve the original work', () => {
@@ -75,7 +76,7 @@ test('action release: absent resources, action, owner or participating rules pre
   const ordinaryWork = effectFixtureWork(ordinary);
   assert.equal(beforeActionRelease(ordinaryWork, 0, 0, supplied), false);
   const registered = resources.registerEffect(program('disabled-release'));
-  supplied.actionRelease.register(registered.ref, { beforeRelease: () => { throw new Error('disabled ran'); } });
+  supplied.actionRelease.register(registered, { beforeRelease: () => { throw new Error('disabled ran'); } });
   const attached = effectFixtureWork(attach(resources, actor(), registered));
   setEffectEnabled(attached, { type: "EFFECT", unitId: 0, effectId: 0 }, false, resources, 0);
   assert.equal(beforeActionRelease(attached, 0, 0, supplied), false);
@@ -85,18 +86,18 @@ test('action release: a content rule consumes charges and only requests interrup
   const resources = new CombatResources();
   const supplied = services(resources);
   const registered = resources.registerEffect(program('release-charges', { remaining: 3 }));
-  supplied.actionRelease.register(registered.ref, { beforeRelease: context => {
+  supplied.actionRelease.register(registered, { beforeRelease: context => {
     assert.equal(context.unitId, 0);
     assert.equal(context.tick, 7);
     assert.equal(context.instance.state.remaining > 0, true);
-    context.effects.update(context.ref, registered.ref, state => ({ remaining: state.remaining - 1 }));
+    context.effects.update(context.ref, registered, state => ({ remaining: state.remaining - 1 }));
     if (context.instance.state.remaining === 0) { context.effects.finish([context.ref]); }
     return { type: 'INTERRUPT', recoveryTicks: 15 };
   } });
   let unit = attach(resources, actor(), registered);
   unit = { ...unit, action: { ...unit.action, recoveryUntilTick: 40 } };
   const input = effectFixtureWork(unit);
-  const initialState = structuredClone(unit);
+  const initialEffects = unit.effects;
   const execution = input.execution;
   let result = beforeActionRelease(input, 0, 7, supplied);
   assert.equal(result, true);
@@ -104,7 +105,10 @@ test('action release: a content rule consumes charges and only requests interrup
   assert.equal(getUnit(input, 0).effects.instances[0].state.remaining, 2);
   assert.equal(input.execution, execution);
   assert.deepEqual(input.events, []);
-  assert.deepEqual(unit, initialState);
+  assert.equal(unit.effects, initialEffects);
+  assert.equal(input.battlefield.snapshot('state').getUnit(0).effects, initialEffects);
+  assert.equal(initialEffects.instances[0].definition, registered);
+  assert.deepEqual(initialEffects.instances[0].state, { remaining: 3 });
   result = beforeActionRelease(input, 0, 7, supplied);
   result = beforeActionRelease(input, 0, 7, supplied);
   assert.equal(result, true);
@@ -123,7 +127,7 @@ test('action release: the first interruption stops subsequent content rules', ()
   let unit = actor();
   for (const [id, type] of [['continue', 'CONTINUE'], ['interrupt', 'INTERRUPT'], ['later', 'CONTINUE']]) {
     const registered = resources.registerEffect(program(id));
-    supplied.actionRelease.register(registered.ref, { beforeRelease: () => {
+    supplied.actionRelease.register(registered, { beforeRelease: () => {
       calls.push(id);
       return type === 'CONTINUE' ? { type } : { type, recoveryTicks: 0 };
     } });
@@ -140,23 +144,23 @@ test('action release: candidate identities freeze, participation is rechecked an
     const supplied = services(resources);
     const calls = [];
     const c = resources.registerEffect(program(`new-${operation}`));
-    supplied.actionRelease.register(c.ref, { beforeRelease: () => { calls.push('C'); return { type: 'CONTINUE' }; } });
+    supplied.actionRelease.register(c, { beforeRelease: () => { calls.push('C'); return { type: 'CONTINUE' }; } });
     const a = resources.registerEffect(program(`first-${operation}`, { entered: false }));
-    supplied.actionRelease.register(a.ref, { beforeRelease: context => {
+    supplied.actionRelease.register(a, { beforeRelease: context => {
       calls.push('A');
       if (!context.instance.state.entered) {
-        context.effects.update(context.ref, a.ref, () => ({ entered: true }));
+        context.effects.update(context.ref, a, () => ({ entered: true }));
         if (operation === 'enable') { context.effects.setEnabled({ type: "EFFECT", unitId: 0, effectId: 1 }, true); }
         else { context.effects.finish([{ type: "EFFECT", unitId: 0, effectId: 1 }]); }
-        const installed = context.effects.install(0, c.ref, installation(0));
+        const installed = context.effects.install(0, c, installation(0));
         assert.equal(installed.type, 'INSTALLED');
-        assert.equal(context.facts.getEffect(installed.ref).definitionRef, c.ref);
-        assert.equal(context.facts.participating(0).some(instance => instance.definitionRef === c.ref), true);
+        assert.equal(context.facts.getEffect(installed.ref).definition, c);
+        assert.equal(context.facts.participating(0).some(instance => instance.definition === c), true);
       }
       return { type: 'CONTINUE' };
     } });
     const b = resources.registerEffect(program(`second-${operation}`));
-    supplied.actionRelease.register(b.ref, { beforeRelease: () => { calls.push('B'); return { type: 'CONTINUE' }; } });
+    supplied.actionRelease.register(b, { beforeRelease: () => { calls.push('B'); return { type: 'CONTINUE' }; } });
     const work = effectFixtureWork(attach(resources, attach(resources, actor(), a), b));
     if (operation === 'enable') { setEffectEnabled(work, { type: "EFFECT", unitId: 0, effectId: 1 }, false, resources, 0); }
     beforeActionRelease(work, 0, 0, supplied);
@@ -172,9 +176,9 @@ test('action release: the live typed instance tracks updates and all borrowed op
   const supplied = services(resources);
   let borrowed;
   const registered = resources.registerEffect(program('live-release', { value: 0 }));
-  supplied.actionRelease.register(registered.ref, { beforeRelease: context => {
+  supplied.actionRelease.register(registered, { beforeRelease: context => {
     borrowed = context;
-    context.effects.update(context.ref, registered.ref, state => ({ value: state.value + 1 }));
+    context.effects.update(context.ref, registered, state => ({ value: state.value + 1 }));
     assert.equal(context.instance.state.value, 1);
     context.effects.finish([context.ref]);
     assert.equal(context.instance.finished, true);
@@ -198,9 +202,9 @@ test('action release: content exceptions propagate and release borrowed state wi
   let borrowed;
   let fail = true;
   const registered = resources.registerEffect(program('failed-release', { attempts: 0 }));
-  supplied.actionRelease.register(registered.ref, { beforeRelease: context => {
+  supplied.actionRelease.register(registered, { beforeRelease: context => {
     borrowed = context;
-    context.effects.update(context.ref, registered.ref, state => ({ attempts: state.attempts + 1 }));
+    context.effects.update(context.ref, registered, state => ({ attempts: state.attempts + 1 }));
     if (fail) { throw new Error('release content failed'); }
     return { type: 'CONTINUE' };
   } });
@@ -219,7 +223,7 @@ test('action release: malformed recovery deadlines are programming errors', () =
     const resources = new CombatResources();
     const supplied = services(resources);
     const registered = resources.registerEffect(program(`invalid-${recoveryTicks}`));
-    supplied.actionRelease.register(registered.ref, { beforeRelease: () => ({ type: 'INTERRUPT', recoveryTicks }) });
+    supplied.actionRelease.register(registered, { beforeRelease: () => ({ type: 'INTERRUPT', recoveryTicks }) });
     assert.throws(() => beforeActionRelease(effectFixtureWork(attach(resources, actor(), registered)), 0, 1, supplied), RangeError);
   }
 });

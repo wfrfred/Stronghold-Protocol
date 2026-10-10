@@ -91,7 +91,7 @@ export function createEffect<S extends object>(
     return {
         ...metadata,
         scopes: validateMetadata(metadata),
-        definitionRef: definition.ref,
+        definition,
         state,
         started: false,
         enabled: true,
@@ -120,6 +120,6 @@ export function restoreEffect<S extends object>(
     return {
         ...snapshot,
         scopes: validateMetadata(snapshot),
-        definitionRef: definition.ref,
+        definition,
     };
 }

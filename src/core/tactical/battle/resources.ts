@@ -139,7 +139,7 @@ export class CombatResources {
 
         try {
             const registered = this.effects.register(definition);
-            this.effectBindings.register(registered.ref, [
+            this.effectBindings.register(registered, [
                 ...(facets.contributions === undefined
                     ? []
                     : contributions.compile(registered, facets.contributions, this)),
@@ -147,16 +147,16 @@ export class CombatResources {
             ]);
 
             if (facets.damage !== undefined) {
-                this.damage.register(registered.ref, facets.damage);
+                this.damage.register(registered, facets.damage);
             }
             if (facets.healing !== undefined) {
-                this.healing.register(registered.ref, facets.healing);
+                this.healing.register(registered, facets.healing);
             }
             if (facets.action !== undefined) {
-                this.actionRelease.register(registered.ref, facets.action);
+                this.actionRelease.register(registered, facets.action);
             }
             if (facets.lifecycle !== undefined) {
-                this.effectLifecycle.register(registered.ref, facets.lifecycle);
+                this.effectLifecycle.register(registered, facets.lifecycle);
             }
 
             return registered;

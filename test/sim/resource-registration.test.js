@@ -49,8 +49,8 @@ test("resources: direct binding registration shares immutable descriptors and ar
   const descriptor = resources.effects.register(definition("direct-binding"));
   const binding = compileStatusBinding(["INVINCIBLE"]);
   const bindings = [binding];
-  resources.effectBindings.register(descriptor.ref, bindings);
-  const instance = resources.effects.create(descriptor.ref, metadata);
+  resources.effectBindings.register(descriptor, bindings);
+  const instance = resources.effects.create(descriptor, metadata);
   const registered = resources.effectBindings.get(instance);
 
   assert.equal(registered, bindings);
@@ -66,7 +66,7 @@ test("resources: binding participation and removal leave earlier unit values unc
   const binding = compileStatusBinding(["INVINCIBLE"]);
   const descriptor = resources.registerEffect(definition("shared-binding"), { bindings: [binding] });
   const installed = installFixtureEffect(
-    unit(), resources.effects.create(descriptor.ref, metadata), resources,
+    unit(), resources.effects.create(descriptor, metadata), resources,
   );
   const current = effectFixtureWork(installed);
   const address = { type: "EFFECT", unitId: 2, effectId: 0 };
@@ -98,7 +98,7 @@ test("resources: contribution compilation shares declared groups and sampled mod
       definition: { id: `owner-${kind}`, offense: { attack: 100 } },
     });
     const installed = installFixtureEffect(
-      owner, resources.effects.create(descriptor.ref, metadata), resources,
+      owner, resources.effects.create(descriptor, metadata), resources,
     );
     const contribution = installed.offense.attack.entries[0];
     assert.equal(contribution.id, `@effect/0/${kind === "live" ? "parameter" : "projection"}/sample`);
@@ -130,13 +130,13 @@ test("resources: authored contributions retain prior snapshots across lifecycle 
       position: [0, 0],
       definition: { id: "authored-owner", offense: { attack: 100 } },
     });
-    const installed = installFixtureEffect(owner, resources.effects.create(descriptor.ref, metadata), resources);
+    const installed = installFixtureEffect(owner, resources.effects.create(descriptor, metadata), resources);
     const currentAttack = (work) => resolveAttackPower(2, battlefieldView(work), resources.computations);
     const current = effectFixtureWork(installed);
     const original = current.battlefield.snapshot("draft");
     assert.equal(currentAttack(current), 120);
     assert.equal(installed.offense.attack.entries[0].group, group);
-    updateEffectState(current, 2, 0, descriptor.ref, () => ({ value: 2 }), resources, 0);
+    updateEffectState(current, 2, 0, descriptor, () => ({ value: 2 }), resources, 0);
     assert.equal(currentAttack(current), 140);
     assert.equal(resolveAttackPower(2, original, resources.computations), 120);
     const address = { type: "EFFECT", unitId: 2, effectId: 0 };
@@ -163,17 +163,17 @@ test("resources: authored identities are nonempty and unique across sampled and 
   }
 });
 
-test("resources: a shared reference cannot replace an existing definition descriptor", () => {
+test("resources: a second definition with the same ID cannot replace an existing definition", () => {
   const resources = new EffectResources();
   const original = definition("stable-definition");
   const registered = resources.register(original);
   const replacement = { ...original, initialize: () => ({ value: 99 }) };
 
   assert.throws(() => resources.register(replacement), /duplicate effect definition/);
-  assert.equal(resources.get(original.ref), registered);
+  assert.equal(resources.get(original), registered);
   assert.equal(resources.register(original), registered);
   assert.equal(resources.register(registered), registered);
-  assert.equal(resources.create(original.ref, metadata).state.value, 1);
+  assert.equal(resources.create(original, metadata).state.value, 1);
 });
 
 test("resources: registration shares the authored definition and state updates retain previous values", () => {
@@ -183,8 +183,8 @@ test("resources: registration shares the authored definition and state updates r
   new BattleRuntime(spec(), { combat: resources });
 
   assert.equal(registered, descriptor);
-  assert.equal(resources.effects.get(registered.ref), descriptor);
-  const instance = resources.effects.create(registered.ref, metadata);
+  assert.equal(resources.effects.get(registered), descriptor);
+  const instance = resources.effects.create(registered, metadata);
   const nextState = { value: 2 };
   const updated = resources.effects.update(instance, nextState);
   assert.equal(instance.state.value, 1);
@@ -195,30 +195,30 @@ test("resources: failed composite registration invalidates the entire unpublishe
   for (const stage of ["numeric", "damage", "healing", "lifecycle"]) {
     const resources = new CombatResources();
     const descriptor = resources.effects.register(definition(`partial-${stage}`));
-    const instance = resources.effects.create(descriptor.ref, metadata);
+    const instance = resources.effects.create(descriptor, metadata);
     const evaluator = resources.computations.bind({});
     let facets;
     if (stage === "numeric") {
-      resources.computations.register(JSON.stringify([descriptor.ref.id, "defense"]), () => []);
+      resources.computations.register(JSON.stringify([descriptor.id, "defense"]), () => []);
       facets = { contributions: [liveAttack(() => []), liveDefense(() => [])] };
     } else {
       const registry = stage === "lifecycle" ? resources.effectLifecycle : resources[stage];
-      registry.register(descriptor.ref, {});
+      registry.register(descriptor, {});
       facets = { damage: {}, healing: {}, lifecycle: {} };
     }
 
     assert.throws(() => resources.registerEffect(descriptor, facets), /duplicate/);
 
     for (const read of [
-      () => resources.effects.get(descriptor.ref),
-      () => resources.effects.create(descriptor.ref, metadata),
-      () => resources.effects.restore(descriptor.ref, JSON.parse(JSON.stringify(instance))),
+      () => resources.effects.get(descriptor),
+      () => resources.effects.create(descriptor, metadata),
+      () => resources.effects.restore(descriptor, JSON.parse(JSON.stringify(instance))),
       () => resources.effectBindings.get(instance),
       () => resources.damage.get(instance),
       () => resources.healing.get(instance),
       () => resources.effectLifecycle.get(instance),
       () => resources.computations.bind({}),
-      () => evaluator({ evaluator: `${descriptor.ref.id}/attack` }),
+      () => evaluator({ evaluator: `${descriptor.id}/attack` }),
       () => resources.settleDamage(effectFixtureWork(), {
         sourceUnitId: null, targetUnitId: 2, damageType: "TRUE",
         operands: createDamageOperands(10), tick: 0,
@@ -237,9 +237,9 @@ test("resources: failed composite registration invalidates the entire unpublishe
     assert.throws(() => resources.computations.register("retry", () => []), /failed resource construction/);
 
     const rebuilt = new CombatResources();
-    const rebuiltDefinition = rebuilt.registerEffect(definition(descriptor.ref.id), facets);
+    const rebuiltDefinition = rebuilt.registerEffect(definition(descriptor.id), facets);
     rebuilt.seal();
-    assert.equal(rebuilt.effects.create(rebuiltDefinition.ref, metadata).state.value, 1);
+    assert.equal(rebuilt.effects.create(rebuiltDefinition, metadata).state.value, 1);
   }
 });
 
@@ -251,18 +251,18 @@ test("resources: publishing to BattleRuntime closes every registry while preserv
   for (const write of [
     () => resources.registerEffect(definition("late")),
     () => resources.effects.register(definition("late-definition")),
-    () => resources.effectBindings.register(descriptor.ref, []),
+    () => resources.effectBindings.register(descriptor, []),
     () => resources.computations.register("late-attack", () => []),
     () => resources.computations.register("late-defense", () => []),
-    () => resources.damage.register(descriptor.ref, {}),
-    () => resources.healing.register(descriptor.ref, {}),
-    () => resources.effectLifecycle.register(descriptor.ref, {}),
+    () => resources.damage.register(descriptor, {}),
+    () => resources.healing.register(descriptor, {}),
+    () => resources.effectLifecycle.register(descriptor, {}),
   ]) {
     assert.throws(write, /registration is sealed/);
   }
 
   assert.equal(resources.seal(), resources);
-  assert.equal(resources.effects.create(descriptor.ref, metadata).state.value, 1);
+  assert.equal(resources.effects.create(descriptor, metadata).state.value, 1);
   runtime.step();
   assert.equal(runtime.snapshot().tickIndex, 1);
 });
@@ -280,9 +280,9 @@ test("resources: live contributions distinguish definition and binding identitie
   const owner = initializeUnit({
     id: 2, position: [0, 0], definition: { id: "owner", offense: { attack: 100 } },
   });
-  const installed = installFixtureEffect(owner, resources.effects.create(first.ref, metadata), resources);
+  const installed = installFixtureEffect(owner, resources.effects.create(first, metadata), resources);
   const both = installFixtureEffect(installed,
-    resources.effects.create(second.ref, { ...metadata, id: 1, acquiredSequence: 1 }), resources);
+    resources.effects.create(second, { ...metadata, id: 1, acquiredSequence: 1 }), resources);
   assert.notEqual(both.offense.attack.entries[0].evaluator, both.offense.attack.entries[1].evaluator);
   assert.equal(resolveAttackPower(2, battlefieldView(effectFixtureWork(both)), resources.computations), 130);
 });

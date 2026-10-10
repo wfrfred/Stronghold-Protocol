@@ -30,7 +30,7 @@ const owner = () => initializeUnit({
   id: 0, position: [0, 0], definition: { id: 'expiry-owner', offense: { attack: 100 } },
 });
 const install = (work, effect, resources, expiresAtTick, initialState) => { installNewEffect(
-  work, 0, effect.ref,
+  work, 0, effect,
   { source: 7, scopes: [{type: 'UNIT',unitId: 0}, ...(expiresAtTick === null ? [] : [{ type: 'TICK', tick: expiresAtTick }])], ...(initialState === undefined ? {} : { initialState }) },
   resources, 0,
 ); return work; };
@@ -147,7 +147,7 @@ test('effect expiry: content can remove one layer, renew the same identity, and 
           context.effects.finish([context.ref]);
         } else {
           context.effects.setTick(context.ref, context.tick + context.instance.state.intervalTicks);
-          context.effects.update(context.ref, effect.ref, state => ({ ...state, layers: state.layers - 1 }));
+          context.effects.update(context.ref, effect, state => ({ ...state, layers: state.layers - 1 }));
           assert.equal(context.facts.getEffect(context.ref).state.layers, context.instance.state.layers);
           assert.equal(effectTick(context.facts.getEffect(context.ref)), context.tick + 4);
         }
@@ -167,7 +167,7 @@ test('effect expiry: content can remove one layer, renew the same identity, and 
   assert.equal(power(work), 110);
   assert.equal(effectTick(instances(work)[0]), 11);
   const remaining = instances(work)[0];
-  for (const key of ['id', 'source', 'acquiredSequence', 'definitionRef']) {
+  for (const key of ['id', 'source', 'acquiredSequence', 'definition']) {
     assert.deepEqual(remaining[key], initial[key]);
   }
   assert.equal(instances(work).length, 1);
@@ -187,12 +187,12 @@ test('effect expiry: clearing a deadline and nested terminal removal are normal 
     const replacement = resources.registerEffect(program('replacement'));
     const effect = resources.registerEffect(program('normal-outcome', { count: 0 }), {
       lifecycle: { expire: context => {
-        context.effects.update(context.ref, effect.ref, () => ({ count: 1 }));
+        context.effects.update(context.ref, effect, () => ({ count: 1 }));
         if (settlement === 'clear') {
           context.effects.setTick(context.ref, null);
         } else {
           context.effects.finish([context.ref]);
-          context.effects.install(0, replacement.ref, { source: null, scopes: [] });
+          context.effects.install(0, replacement, { source: null, scopes: [] });
           assert.equal(context.facts.getEffect(context.ref), undefined);
           assert.equal(context.instance.finished, true);
           assert.equal(context.instance.state.count, 1);
@@ -205,7 +205,7 @@ test('effect expiry: clearing a deadline and nested terminal removal are normal 
     assert.equal(instances(expired).length, 1);
     assert.equal(effectTick(instances(expired)[0]), null);
     assert.equal(instances(expired)[0].finished, false);
-    assert.equal(instances(expired)[0].definitionRef, settlement === 'clear' ? effect.ref : replacement.ref);
+    assert.equal(instances(expired)[0].definition, settlement === 'clear' ? effect : replacement);
   }
 });
 
@@ -229,7 +229,7 @@ test('effect expiry: renewed deadlines and updated bindings are visible to parti
       disable: observe('disable'),
       expire: context => {
         context.effects.setTick(context.ref, context.tick + 5);
-        context.effects.update(context.ref, layered.ref, state => ({ layers: state.layers - 1 }));
+        context.effects.update(context.ref, layered, state => ({ layers: state.layers - 1 }));
       },
     },
   });
@@ -258,7 +258,7 @@ test('effect expiry: unresolved deadlines fail without publishing state and rele
       lifecycle: { expire: context => {
         escaped = context;
         if (!fail || failure !== 'unchanged') {
-          context.effects.update(context.ref, effect.ref, state => ({ layers: state.layers - 1 }));
+          context.effects.update(context.ref, effect, state => ({ layers: state.layers - 1 }));
         }
         if (fail && failure === 'exception') {
           throw new Error('expiration failed');
@@ -282,7 +282,7 @@ test('effect expiry: unresolved deadlines fail without publishing state and rele
       () => escaped.instance,
       () => escaped.facts.getEffect(escaped.ref),
       () => escaped.effects.setTick(escaped.ref, 11),
-      () => escaped.effects.update(escaped.ref, effect.ref, state => state),
+      () => escaped.effects.update(escaped.ref, effect, state => state),
       () => escaped.effects.finish([escaped.ref]),
     ]) {
       assert.throws(read, /no longer active/);
@@ -310,7 +310,7 @@ test('effect expiry: a newly installed expired effect is visible to facts and wa
   const first = resources.registerEffect(program('installer'), {
     lifecycle: { expire: context => {
       calls.push('installer');
-      const installed = context.effects.install(0, newborn.ref, {
+      const installed = context.effects.install(0, newborn, {
         source: null, scopes: [...(context.tick === null ? [] : [{ type: "TICK", tick: context.tick }])],
       });
       assert.equal(installed.type, 'INSTALLED');
@@ -337,9 +337,9 @@ function runtimeScenario(failure) {
   const effect = resources.registerEffect(program('runtime-expiry', { layers: 3 }), {
     contributions: [attack(instance => [modifier.create({ finalAddition: instance.state.layers * 10 })])],
     lifecycle: { expire: context => {
-      context.effects.update(context.ref, effect.ref, state => ({ layers: state.layers - 1 }));
+      context.effects.update(context.ref, effect, state => ({ layers: state.layers - 1 }));
       if (context.ref.unitId === 0) {
-        context.effects.install(0, marker.ref, { source: null, scopes: [] });
+        context.effects.install(0, marker, { source: null, scopes: [] });
       }
       if (fault.enabled && context.ref.unitId === 1) {
         if (failure === 'exception') {
@@ -357,7 +357,7 @@ function runtimeScenario(failure) {
   const definition = { id: 'runtime-owner', offense: { attack: 100 } };
   const placement = (id, column) => {
     const state = effectFixtureWork(initializeUnit({ id, definition, position: [0, column] }));
-    const installed = installNewEffect(state, id, effect.ref,
+    const installed = installNewEffect(state, id, effect,
       { source: null, scopes: [{ type: 'TICK', tick: 0 }] }, resources, 0);
     assert.equal(installed.type, 'INSTALLED');
     const unit = getUnit(state, id);

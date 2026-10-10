@@ -49,7 +49,7 @@ function program(resources, id, lifecycle = {}, facets = {}) {
 }
 
 function install(work, resources, effect, unitId, scopes = [], initialState = {}, source = null) {
-    const installed = installNewEffect(work, unitId, effect.ref, {
+    const installed = installNewEffect(work, unitId, effect, {
         source, scopes, initialState,
     }, resources, 0);
     assert.equal(installed.type, 'INSTALLED');
@@ -179,7 +179,7 @@ test('Effect admission: an accepted instance blocks duplicate admission while it
             starts++;
             assert.equal(context.instance.started, false);
             assert.equal(context.instance.participating, false);
-            nested = context.effects.install(0, effect.ref, { source: null, scopes: [] });
+            nested = context.effects.install(0, effect, { source: null, scopes: [] });
             assert.equal(context.facts.getUnit(0).effects.nextInstanceId, 1);
         },
     });
@@ -203,7 +203,7 @@ test('Effect admission: a start that ends its accepted instance returns ENDED an
         finish: context => { notices.push(context.end); },
     });
     const acceptedState = workOf([unit(0)]);
-const accepted = installNewEffect(acceptedState, 0, effect.ref, { source: null, scopes: [] }, resources, 0);
+const accepted = installNewEffect(acceptedState, 0, effect, { source: null, scopes: [] }, resources, 0);
 
     assert.equal(accepted.type, 'ENDED');
     assert.deepEqual(notices, [{ root: accepted.ref, reason: 'SELF_ENDED' }]);
@@ -256,7 +256,7 @@ activateSkill(work, { unitId: 0, tick: 0 }, resources);
             assert.equal(context.facts.getUnit(0).skill.active, null);
             assert.equal(actions.get(accepted.execution.id), undefined);
             const before = context.facts.getUnit(1).effects;
-            checks.push(context.effects.install(0, remote.ref, { source: null, scopes: [] }));
+            checks.push(context.effects.install(0, remote, { source: null, scopes: [] }));
             const unavailable = [
                 { type: 'UNIT', unitId: 0 },
                 { type: 'ACTION', executionId: accepted.execution.id },
@@ -264,11 +264,11 @@ activateSkill(work, { unitId: 0, tick: 0 }, resources);
                 context.ref,
             ];
             for (const scope of unavailable) {
-                checks.push(context.effects.install(1, remote.ref, { source: null, scopes: [scope] }));
+                checks.push(context.effects.install(1, remote, { source: null, scopes: [scope] }));
                 assert.deepEqual(context.effects.bind(survivor, scope), { type: 'LIFETIME_UNAVAILABLE' });
             }
             assert.equal(context.facts.getUnit(1).effects, before);
-            independent = context.effects.install(1, remote.ref, { source: 0, scopes: [] });
+            independent = context.effects.install(1, remote, { source: 0, scopes: [] });
             assert.equal(independent.type, 'INSTALLED');
             assert.equal(context.facts.getEffect(independent.ref).source, 0);
         },
@@ -361,7 +361,7 @@ test('Effect closing: an inner finish cannot drain host removal while a remote d
         finish: context => {
             trace.push('dependent-start');
             assert.notEqual(context.facts.getUnit(0), undefined);
-            const ended = context.effects.install(1, nested.ref, { source: null, scopes: [] });
+            const ended = context.effects.install(1, nested, { source: null, scopes: [] });
             assert.equal(ended.type, 'ENDED');
             assert.notEqual(context.facts.getUnit(0), undefined);
             trace.push('dependent-end');

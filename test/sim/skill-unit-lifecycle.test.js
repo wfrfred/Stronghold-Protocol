@@ -38,7 +38,7 @@ function fixture(content = {}) {
     spCost: 1, initialSp: 1, durationTicks: null,
   });
   const installOwned = (context, expected = 'INSTALLED') => [[], [{ type: 'UNIT', unitId: 1 }]].map(additional => {
-    const result = context.effects.install(1, owned.ref, {
+    const result = context.effects.install(1, owned, {
       source: context.unitId, scopes: [{ type: 'SKILL', unitId: context.unitId, activationId: context.activationId }, ...additional],
     });
     assert.equal(result.type, expected);
@@ -109,11 +109,11 @@ test('skill ownership: finish content retains the caller dispatch candidates thr
   const hits = [];
   let observer;
   const f = fixture({ finish: context => {
-    const installed = context.effects.install(1, observer.ref, {
+    const installed = context.effects.install(1, observer, {
       source: 0, scopes: [],
     });
     assert.equal(installed.type, 'INSTALLED');
-    assert.equal(context.facts.getUnit(1).effects.instances.some(instance => instance.definitionRef === observer.ref && instance.participating), true);
+    assert.equal(context.facts.getUnit(1).effects.instances.some(instance => instance.definition === observer && instance.participating), true);
     context.damage({ sourceUnitId: 0, targetUnitId: 1, damageType: 'TRUE', operands: createDamageOperands(1) });
   } });
   observer = f.resources.registerEffect(effectProgram('finish-installed-observer'), {
@@ -171,7 +171,7 @@ test('skill scope: refusal after self-death keeps independent remote effects but
     context.damage({ sourceUnitId: null, targetUnitId: 0,
       damageType: 'TRUE', operands: createDamageOperands(100) });
     installOwned(context, 'REJECTED');
-    assert.equal(context.effects.install(1, independent.ref, { source: context.unitId, scopes: [] }).type, 'INSTALLED');
+    assert.equal(context.effects.install(1, independent, { source: context.unitId, scopes: [] }).type, 'INSTALLED');
     return { type: 'REJECTED', reason: 'late prerequisite' };
   } });
   independent = f.resources.registerEffect(effectProgram('independent-after-refusal'));
@@ -207,7 +207,7 @@ function runtime(f) {
 test('skill ownership: a throwing departure callback propagates without publishing the tick', () => {
   let prefix;
   const f = fixture({ finish: context => {
-    assert.equal(context.effects.install(1, prefix.ref, { source: 0, scopes: [] }).type, 'INSTALLED');
+    assert.equal(context.effects.install(1, prefix, { source: 0, scopes: [] }).type, 'INSTALLED');
     throw new Error('skill departure failed');
   } });
   prefix = f.resources.registerEffect(effectProgram('finish-prefix'));

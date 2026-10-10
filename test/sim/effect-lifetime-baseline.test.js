@@ -39,7 +39,7 @@ function fixture(count) {
     let work = createBattleState(battlefield);
 
     for (let id = 0; id < count; id++) {
-        const installed = installNewEffect(work, id, program.ref, {
+        const installed = installNewEffect(work, id, program, {
             source: null,
             scopes: [{ type: "UNIT", unitId: 0 }, { type: "TICK", tick: 10 }],
         }, resources, 0);

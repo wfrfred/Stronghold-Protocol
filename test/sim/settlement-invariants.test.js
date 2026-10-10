@@ -38,7 +38,7 @@ function program(id) {
 }
 
 function attach(resources, owner, descriptor) {
-  const instance = resources.effects.create(descriptor.ref, {
+  const instance = resources.effects.create(descriptor, {
     id: owner.effects?.nextInstanceId ?? 0,
     acquiredSequence: owner.effects?.nextAcquiredSequence ?? 0,
     source: null,
@@ -72,7 +72,7 @@ test("settlement invariants: invalid final damage leaves the published battlefie
         reception: {
           priority: 0,
           apply: (context, pending) => {
-            context.operations.effects.update(context.ref, descriptor.ref, (current) => ({
+            context.operations.effects.update(context.ref, descriptor, (current) => ({
               ...current,
               uses: current.uses + 1,
             }));
@@ -119,7 +119,7 @@ test("settlement invariants: invalid final healing rejects after synchronous dam
         reception: {
           priority: 0,
           apply: (context, pending) => {
-            context.operations.effects.update(context.ref, descriptor.ref, (current) => ({
+            context.operations.effects.update(context.ref, descriptor, (current) => ({
               ...current,
               uses: current.uses + 1,
             }));

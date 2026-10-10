@@ -114,7 +114,7 @@ function workWith(...units) {
 }
 
 function effectInstance(resources, program, overrides = {}) {
-  return resources.effects.create(program.ref, {
+  return resources.effects.create(program, {
     id: 0,
     source: null,
     scopes: [],
@@ -287,7 +287,7 @@ test("combat program: a compiled source-attack effect reads current contribution
     tick: 0,
   });
   const firstSnapshot = first.battlefield.snapshot("draft");
-  updateEffectState(first, 0, 0, program.ref, { bonus: 30 }, resources, 0);
+  updateEffectState(first, 0, 0, program, { bonus: 30 }, resources, 0);
   effect({ work: first, sourceUnitId: 0, targetUnitId: 1, tick: 0 });
 
   assert.equal(firstSnapshot.getUnit(1).vitality.hp, 75);
@@ -419,7 +419,7 @@ test("combat program: lethal retaliation skips later unsampled damage and comple
   assert.equal(before.units.find((unit) => unit.id === 1).vitality.hp, 300);
 });
 
-test("combat program: runtime resources compile shared definitions once while snapshots remain data-only", () => {
+test("combat program: runtime compiles definitions once and shares them across stable snapshots", () => {
   const resources = new CombatResources();
   const markerProgram = createEffectDefinition({
     id: "marker",
@@ -461,8 +461,8 @@ test("combat program: runtime resources compile shared definitions once while sn
   });
   const before = runtime.snapshot();
 
-  assert.deepEqual(structuredClone(before), before);
-  assert.deepEqual(before.units[0].effects.instances[0].definitionRef, { id: "marker" });
+  assert.equal(before.units[0].effects.instances[0].definition, markerProgram);
+  assert.equal(before.units[0].effects.instances[0].state, seeded.effects.instances[0].state);
   assert.equal(before.units[0].definition, definition);
 
   const step = runtime.step();
@@ -471,7 +471,9 @@ test("combat program: runtime resources compile shared definitions once while sn
   assert.equal(compilations, 1);
   assert.equal(step.events.filter((event) => event.type === "ACTION").length, 2);
   assert.deepEqual(after.units.find((unit) => unit.id === 2).position, [2, 0]);
-  assert.deepEqual(structuredClone(after), after);
+  assert.equal(after.units[0].effects.instances[0].definition, markerProgram);
+  assert.equal(before.units[0].effects.instances[0].definition, markerProgram);
+  assert.deepEqual(before.units[0].effects.instances[0].state, { value: 7 });
   assert.deepEqual(before.units.find((unit) => unit.id === 2).position, [1, 0]);
 });
 
@@ -490,7 +492,7 @@ test("combat program: a failed receiver does not publish shield consumption or d
           priority: 1000,
           apply: (context, damage) => {
             const absorbed = Math.min(context.instance.state.remaining, damage.amount);
-            context.operations.effects.update(context.ref, program.ref, (state) => ({
+            context.operations.effects.update(context.ref, program, (state) => ({
               remaining: state.remaining - absorbed,
             }));
             attempts.push(context.instance.state.remaining);
@@ -754,7 +756,7 @@ test("combat program: immediate execution cleans owned Effects and cancels succe
     program: [
       { type: "EXECUTE", run: (context) => {
         observed.push(["install", context.executionId]);
-        installNewEffect(context.work, 1, marker.ref, {
+        installNewEffect(context.work, 1, marker, {
           source: 0,
           scopes: [{ type: "ACTION", executionId: context.executionId }],
         }, resources, context.tick);

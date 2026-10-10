@@ -80,7 +80,8 @@ test("effects: installation shares typed state and lifecycle updates preserve th
   const original = effectFixtureWork(unit());
   const state = { remainingAmount: 5 };
   const scopes = [];
-  const instance = resources.effects.create(definition.ref, metadata(1, { scopes }), state);
+  const instance = resources.effects.create(definition, metadata(1, { scopes }), state);
+  assert.equal(instance.definition, definition);
   assert.equal(instance.state, state);
   assert.equal(instance.scopes, scopes);
   const installed = installEffect(original, 2, instance, resources, 0);
@@ -88,6 +89,7 @@ test("effects: installation shares typed state and lifecycle updates preserve th
 
   assert.equal(installed.type, "INSTALLED");
   assert.equal(observed[0], state);
+  assert.equal(current.definition, definition);
   assert.equal(current.state, state);
   assert.equal(current.scopes, scopes);
   assert.equal(current.started, true);
@@ -95,7 +97,7 @@ test("effects: installation shares typed state and lifecycle updates preserve th
   assert.equal(original.battlefield.snapshot("state").getUnit(2).effects, undefined);
 
   const nextState = { remainingAmount: 7 };
-  const newInstallation = installNewEffect(original, 2, definition.ref, {
+  const newInstallation = installNewEffect(original, 2, definition, {
     source: null, scopes: [], initialState: nextState,
   }, resources, 0);
   assert.equal(newInstallation.type, "INSTALLED");
@@ -106,7 +108,7 @@ test("effects: installation shares typed state and lifecycle updates preserve th
 test("effects: direct installation accepts only a fresh lifecycle instance", () => {
   const resources = new CombatResources();
   const definition = resources.registerEffect(barrierDefinition());
-  const instance = resources.effects.create(definition.ref, metadata());
+  const instance = resources.effects.create(definition, metadata());
   const original = effectFixtureWork(unit());
   assert.throws(() => installEffect(original, 2, { ...instance, started: true }, resources, 0), /only a fresh effect/);
   assert.equal(original.battlefield.snapshot("state").getUnit(2).effects, undefined);
@@ -118,7 +120,7 @@ test("effects: missing direct-install receivers return absence before definition
   const resources = new CombatResources();
   const foreign = new EffectResources();
   const definition = foreign.register(barrierDefinition());
-  const instance = foreign.create(definition.ref, metadata());
+  const instance = foreign.create(definition, metadata());
   const original = effectFixtureWork(unit());
   const installation = installEffect(original, 99, {
     ...instance, state: { remainingAmount: -1 },
@@ -132,39 +134,38 @@ test("effects: missing direct-install receivers return absence before definition
 test("effects: instance restoration validates lifecycle facts and shares typed state", () => {
   const resources = new EffectResources();
   const definition = resources.register(barrierDefinition());
-  const instance = resources.create(definition.ref, metadata());
+  const instance = resources.create(definition, metadata());
   const serialized = JSON.parse(JSON.stringify(instance));
-  const restored = resources.restore(definition.ref, serialized);
+  const restored = resources.restore(definition, serialized);
 
-  assert.deepEqual(instance.definitionRef, { id: "barrier" });
-  assert.deepEqual(Object.keys(definition.ref), ["id"]);
+  assert.equal(instance.definition, definition);
   assert.deepEqual(restored, instance);
-  assert.equal(restored.definitionRef, definition.ref);
-  assert.equal(resources.typedState(restored, definition.ref).remainingAmount, 500);
+  assert.equal(restored.definition, definition);
+  assert.equal(resources.typedState(restored, definition).remainingAmount, 500);
   assert.equal(restored.state, serialized.state);
   assert.equal(restored.scopes, serialized.scopes);
-  assert.throws(() => resources.restore(definition.ref, { ...serialized, participating: true }), /invalid effect lifecycle/);
-  assert.throws(() => resources.restore(definition.ref, { ...serialized, id: -1 }), /identity/);
+  assert.throws(() => resources.restore(definition, { ...serialized, participating: true }), /invalid effect lifecycle/);
+  assert.throws(() => resources.restore(definition, { ...serialized, id: -1 }), /identity/);
   assert.throws(
-    () => resources.restore(barrierDefinition().ref, serialized),
+    () => resources.restore(barrierDefinition(), serialized),
     /unregistered/,
   );
 });
 
-test("effects: reference and descriptor binding cannot be replaced by a second schema with the same identity", () => {
+test("effects: a registered definition cannot be replaced by a second definition with the same identity", () => {
   const resources = new EffectResources();
   const definition = resources.register(barrierDefinition());
   const other = barrierDefinition();
 
   assert.equal(resources.register(definition), definition);
   assert.throws(() => resources.register(other), /duplicate effect definition/);
-  assert.throws(() => resources.get(other.ref), /unregistered effect definition/);
+  assert.throws(() => resources.get(other), /unregistered effect definition/);
   const runtimeResources = new CombatResources();
   runtimeResources.registerEffect(definition);
   const foreignResources = new EffectResources();
   const foreign = foreignResources.register(
     createEffectDefinition({
-      id: definition.ref.id,
+      id: definition.id,
       initialize: () => ({ remainingCharges: 2 }),
     }),
   );
@@ -173,7 +174,7 @@ test("effects: reference and descriptor binding cannot be replaced by a second s
       installEffect(
         effectFixtureWork(unit()),
         2,
-        foreignResources.create(foreign.ref, metadata()),
+        foreignResources.create(foreign, metadata()),
         runtimeResources,
         0,
       ),
@@ -185,7 +186,7 @@ test("effects: typed updates share new state and preserve the previous instance"
   const lifecycleResources = new CombatResources();
   const resources = lifecycleResources.effects;
   const definition = lifecycleResources.registerEffect(barrierDefinition());
-  const instance = resources.create(definition.ref, metadata());
+  const instance = resources.create(definition, metadata());
   const input = { remainingAmount: 200, details: { applications: [1, 2] } };
   const updated = resources.update(instance, input);
   const installed = installFixtureEffect(unit(), updated, lifecycleResources);
@@ -203,12 +204,12 @@ test("effects: immutable updates preserve unchanged instances across branches an
   const definition = resources.registerEffect(barrierDefinition());
   const first = installFixtureEffect(
     unit(),
-    resources.effects.create(definition.ref, metadata(1)),
+    resources.effects.create(definition, metadata(1)),
     resources,
   );
   const second = installFixtureEffect(
     first,
-    resources.effects.create(definition.ref, metadata(2)),
+    resources.effects.create(definition, metadata(2)),
     resources,
   );
   const work = effectFixtureWork(second);
@@ -219,7 +220,7 @@ updateEffectState(
     unchanged,
     2,
     2,
-    definition.ref,
+    definition,
     (state) => {
       calls++;
       return state;
@@ -228,10 +229,10 @@ updateEffectState(
   );
   const branchState = createBattleState(fixtureBattlefield(work.battlefield.snapshot('draft')));
   const updated = work;
-updateEffectState(updated, 2, 2, definition.ref, { remainingAmount: 100 }, resources, 0);
+updateEffectState(updated, 2, 2, definition, { remainingAmount: 100 }, resources, 0);
   const updatedUnit = getUnit(updated, 2);
   const branch = branchState;
-updateEffectState(branch, 2, 2, definition.ref, { remainingAmount: 200 }, resources, 0);
+updateEffectState(branch, 2, 2, definition, { remainingAmount: 200 }, resources, 0);
   const disabled = updated;
   setEffectEnabled(disabled, address, false, resources, 1);
   const disabledUnit = getUnit(disabled, 2);
@@ -271,28 +272,28 @@ test("effects: creation validates scope identities and deduplicates lifetime dep
   const definition = resources.register(barrierDefinition());
   const lifetime = { type: "UNIT", unitId: 2 };
   const scopes = [lifetime];
-  const first = resources.create(definition.ref, metadata(1, { scopes }));
+  const first = resources.create(definition, metadata(1, { scopes }));
   assert.equal(first.scopes, scopes);
   assert.equal(first.scopes[0], lifetime);
-  const deduplicated = resources.create(definition.ref, metadata(2, { scopes: [lifetime, lifetime] }));
+  const deduplicated = resources.create(definition, metadata(2, { scopes: [lifetime, lifetime] }));
   assert.deepEqual(deduplicated.scopes, [lifetime]);
   assert.equal(deduplicated.scopes[0], lifetime);
-  assert.throws(() => resources.create(definition.ref, metadata(3, { scopes: [
+  assert.throws(() => resources.create(definition, metadata(3, { scopes: [
     { type: "TICK", tick: 2 }, { type: "TICK", tick: 3 },
   ] })), /only one TICK/);
-  assert.throws(() => resources.create(definition.ref, metadata(3, { scopes: [
+  assert.throws(() => resources.create(definition, metadata(3, { scopes: [
     { type: "EFFECT", unitId: NaN, effectId: -1 },
   ] })), /scope unit identity/);
   for (const invalid of [-1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
-    assert.throws(() => resources.create(definition.ref, metadata(invalid)), /identity/);
-    assert.throws(() => resources.create(definition.ref, metadata(3, { acquiredSequence: invalid })), /acquired sequence/);
+    assert.throws(() => resources.create(definition, metadata(invalid)), /identity/);
+    assert.throws(() => resources.create(definition, metadata(3, { acquiredSequence: invalid })), /acquired sequence/);
   }
 
   const original = registerEffect(unit(), first);
   assert.equal(original.effects.instances[0], first);
   assert.throws(() => registerEffect(original, first), /cannot be reused/);
   assert.throws(() => replaceEffect(original, first, deduplicated), /cannot be changed/);
-  assert.throws(() => registerEffect(original, resources.create(definition.ref, metadata(Number.MAX_SAFE_INTEGER))), /allocation progress/);
+  assert.throws(() => registerEffect(original, resources.create(definition, metadata(Number.MAX_SAFE_INTEGER))), /allocation progress/);
 });
 
 test("effects: heterogeneous dispatch remains paired and an unrelated typed definition cannot update an instance", () => {
@@ -304,14 +305,15 @@ test("effects: heterogeneous dispatch remains paired and an unrelated typed defi
       initialize: () => ({ remainingCharges: 2 }),
     }),
   );
-  const instance = resources.create(barrier.ref, metadata());
+  const instance = resources.create(barrier, metadata());
 
-  assert.equal(resources.typedState(instance, shield.ref), undefined);
-  assert.equal(resources.typedEffect(instance, shield.ref), undefined);
+  assert.equal(resources.typedState(instance, shield), undefined);
+  assert.equal(resources.typedEffect(instance, shield), undefined);
+  assert.equal(resources.withDefinition(instance, (bound, descriptor) => bound.definition === descriptor), true);
   assert.deepEqual(
     resources.withDefinition(instance, (bound, descriptor) => [
-      bound.definitionRef.id,
-      descriptor.ref.id,
+      bound.definition.id,
+      descriptor.id,
     ]),
     ["barrier", "barrier"],
   );
@@ -321,7 +323,7 @@ test("effects: state updates share unchanged nested values", () => {
   const resources = new EffectResources();
   const definition = resources.register(barrierDefinition());
   const sample = { applications: [1, 2] };
-  const original = resources.create(definition.ref, metadata(), { remainingAmount: 500, sample });
+  const original = resources.create(definition, metadata(), { remainingAmount: 500, sample });
   const nextState = { ...original.state, remainingAmount: 250 };
   const updated = resources.update(original, nextState);
 
@@ -339,12 +341,12 @@ test("effects: installation and removal keep effect identity and status contribu
   const original = unit();
   const first = installFixtureEffect(
     original,
-    resources.effects.create(definition.ref, metadata(1)),
+    resources.effects.create(definition, metadata(1)),
     resources,
   );
   const second = installFixtureEffect(
     first,
-    resources.effects.create(definition.ref, metadata(2)),
+    resources.effects.create(definition, metadata(2)),
     resources,
   );
   const work = effectFixtureWork(second);
@@ -369,7 +371,7 @@ test("effects: installing flags requires existing Status and baseline facts surv
   const definition = resources.registerEffect(barrierDefinition(), {
     bindings: [compileStatusBinding(["INVINCIBLE"])],
   });
-  const instance = resources.effects.create(definition.ref, metadata());
+  const instance = resources.effects.create(definition, metadata());
   const bare = { id: 2, definition: { id: "bare" }, position: [0, 0] };
   const baseline = unit(["INVINCIBLE"]);
 
@@ -378,7 +380,7 @@ test("effects: installing flags requires existing Status and baseline facts surv
   const plain = resources.registerEffect(barrierDefinition("plain"));
   const installed = installFixtureEffect(
     bare,
-    resources.effects.create(plain.ref, metadata()),
+    resources.effects.create(plain, metadata()),
     resources,
   );
   assert.equal(installed.effects.instances[0].id, instance.id);
@@ -418,7 +420,7 @@ test("effects: expiration is independent of source and lifetime scope cleanup do
   ];
 
   for (const value of values) {
-    installEffect(work, 2, resources.effects.create(definition.ref, value), resources, 0);
+    installEffect(work, 2, resources.effects.create(definition, value), resources, 0);
   }
 
   const activeIds = (work) =>
@@ -455,7 +457,7 @@ test("effects: start can read its registered identity before status bindings par
           context.facts.participating(context.ref.unitId).length,
           hasStatusFlag(context.facts.getUnit(context.ref.unitId), "INVINCIBLE"),
         ]);
-        context.effects.update(context.ref, definition.ref, (state) => ({
+        context.effects.update(context.ref, definition, (state) => ({
           ...state,
           remainingAmount: 100,
         }));
@@ -475,7 +477,7 @@ test("effects: start can read its registered identity before status bindings par
   const result = installEffect(
     resultState,
     2,
-    resources.effects.create(definition.ref, metadata()),
+    resources.effects.create(definition, metadata()),
     resources,
     0,
   );
@@ -516,10 +518,10 @@ test("effects: start termination preserves its prefix without initializing or re
     ],
     lifecycle: {
       start: (context) => {
-        context.effects.update({ type: "EFFECT", unitId: 2, effectId: 0 }, keeper.ref, (state) => ({
+        context.effects.update({ type: "EFFECT", unitId: 2, effectId: 0 }, keeper, (state) => ({
           attempts: state.attempts + 1,
         }));
-        context.effects.update(context.ref, definition.ref, () => ({
+        context.effects.update(context.ref, definition, () => ({
           remainingAmount: 200,
         }));
         context.effects.finish([context.ref]);
@@ -539,14 +541,14 @@ test("effects: start termination preserves its prefix without initializing or re
   const bare = { id: 2, definition: { id: "bare" }, position: [0, 0] };
   const seeded = installFixtureEffect(
     bare,
-    resources.effects.create(keeper.ref, metadata(0)),
+    resources.effects.create(keeper, metadata(0)),
     resources,
   );
   const original = effectFixtureWork(seeded);
   const result = installEffect(
     original,
     2,
-    resources.effects.create(definition.ref, metadata(1)),
+    resources.effects.create(definition, metadata(1)),
     resources,
     0,
   );
@@ -583,7 +585,7 @@ test("effects: lifecycle facts and operation leases close on normal and exceptio
     });
     const original = effectFixtureWork(unit());
     const install = () =>
-      installEffect(original, 2, resources.effects.create(definition.ref, metadata()), resources, 0);
+      installEffect(original, 2, resources.effects.create(definition, metadata()), resources, 0);
     let result;
     if (throws) {
       assert.throws(install, /start failed/);
@@ -598,8 +600,8 @@ test("effects: lifecycle facts and operation leases close on normal and exceptio
       () => escaped.facts.getUnit(2),
       () => escaped.facts.getEffect(escaped.ref),
       () => escaped.facts.participating(2),
-      () => escaped.effects.install(2, definition.ref, input),
-      () => escaped.effects.update(escaped.ref, definition.ref, (state) => state),
+      () => escaped.effects.install(2, definition, input),
+      () => escaped.effects.update(escaped.ref, definition, (state) => state),
       () => escaped.effects.setEnabled(escaped.ref, false),
       () => escaped.effects.setTick(escaped.ref, null),
       () => escaped.effects.finish([escaped.ref]),
@@ -626,7 +628,7 @@ test("effects: rejected unique installation runs no start and consumes no identi
   const candidate = resources.registerEffect(barrierDefinition("unique"), {
     lifecycle: {
       start: (context) => {
-        context.effects.update({ type: "EFFECT", unitId: 2, effectId: 0 }, keeper.ref, (state) => ({
+        context.effects.update({ type: "EFFECT", unitId: 2, effectId: 0 }, keeper, (state) => ({
           attempts: state.attempts + 1,
         }));
       },
@@ -642,21 +644,21 @@ test("effects: rejected unique installation runs no start and consumes no identi
   installEffect(
     work,
     2,
-    resources.effects.create(keeper.ref, metadata(0)),
+    resources.effects.create(keeper, metadata(0)),
     resources,
     0,
   );
   const accepted = installEffect(
     work,
     2,
-    resources.effects.create(candidate.ref, metadata(1)),
+    resources.effects.create(candidate, metadata(1)),
     resources,
     0,
   );
   const rejected = installEffect(
     work,
     2,
-    resources.effects.create(candidate.ref, metadata(2)),
+    resources.effects.create(candidate, metadata(2)),
     resources,
     0,
   );
@@ -681,7 +683,7 @@ test("effects: rejected unique installation runs no start and consumes no identi
   const duplicate = installEffect(
     paused,
     2,
-    resources.effects.create(candidate.ref, metadata(3)),
+    resources.effects.create(candidate, metadata(3)),
     resources,
     1,
   );
@@ -698,7 +700,7 @@ test("effects: rejected unique installation runs no start and consumes no identi
   assert.deepEqual(
     getUnit(resumed, 2)
       .effects.instances.filter(
-        (instance) => instance.definitionRef === candidate.ref && instance.participating,
+        (instance) => instance.definition === candidate && instance.participating,
       )
       .map((instance) => instance.id),
     [1],
@@ -715,10 +717,10 @@ test("effects: parent finish stops a cross-unit child before independent finaliz
   });
   const finalized = [];
   for (const definition of [parentDefinition, childDefinition]) {
-    resources.effectLifecycle.register(definition.ref, {
+    resources.effectLifecycle.register(definition, {
       finish: (context) => {
         assert.equal(context.facts.getEffect(context.ref).finished, true);
-        finalized.push(context.instance.definitionRef.id);
+        finalized.push(context.instance.definition.id);
       },
     });
   }
@@ -728,14 +730,14 @@ test("effects: parent finish stops a cross-unit child before independent finaliz
   installEffect(
     work,
     9,
-    resources.effects.create(parentDefinition.ref, metadata(1)),
+    resources.effects.create(parentDefinition, metadata(1)),
     resources,
     0,
   );
   installEffect(
     work,
     2,
-    resources.effects.create(childDefinition.ref, metadata(1)),
+    resources.effects.create(childDefinition, metadata(1)),
     resources,
     0,
   );
@@ -765,7 +767,7 @@ test("effects: parent finish stops a cross-unit child before independent finaliz
       installEffect(
         cleared,
         9,
-        resources.effects.create(parentDefinition.ref, metadata(1)),
+        resources.effects.create(parentDefinition, metadata(1)),
         resources,
         1,
       ),
@@ -800,7 +802,7 @@ test("effects: binding an unavailable lifetime rejects without changing the inde
         installEffect(
           work,
           9,
-          resources.effects.create(parentDefinition.ref, metadata(1)),
+          resources.effects.create(parentDefinition, metadata(1)),
           resources,
           0,
         );
@@ -809,7 +811,7 @@ test("effects: binding an unavailable lifetime rejects without changing the inde
       installEffect(
         work,
         2,
-        resources.effects.create(childDefinition.ref, metadata(1)),
+        resources.effects.create(childDefinition, metadata(1)),
         resources,
         0,
       );
@@ -877,14 +879,14 @@ test("effects: finish remains terminal when disable tries to reenable and finish
   installEffect(
     installed,
     2,
-    resources.effects.create(definition.ref, metadata()),
+    resources.effects.create(definition, metadata()),
     resources,
     0,
   );
   installEffect(
     installed,
     2,
-    resources.effects.create(follower.ref, metadata(2)),
+    resources.effects.create(follower, metadata(2)),
     resources,
     0,
   );
@@ -939,7 +941,7 @@ test("effects: disabling preserves restartable samples and finishing a disabled 
   installEffect(
     installed,
     2,
-    resources.effects.create(descriptor.ref, metadata()),
+    resources.effects.create(descriptor, metadata()),
     resources,
     0,
   );
@@ -977,7 +979,7 @@ test("effects: pending terminal notices survive nested cleanup during disable pr
         assert.equal(context.instance.finished, true);
         assert.equal(context.instance.participating, false);
         assert.equal(hasStatusFlag(context.facts.getUnit(2), "INVINCIBLE"), false);
-        const installed = context.effects.install(2, replacement.ref, {
+        const installed = context.effects.install(2, replacement, {
           source: null,
           scopes: [],
 
@@ -1014,14 +1016,14 @@ test("effects: pending terminal notices survive nested cleanup during disable pr
   installEffect(
     work,
     2,
-    resources.effects.create(parent.ref, metadata(1)),
+    resources.effects.create(parent, metadata(1)),
     resources,
     0,
   );
   installEffect(
     work,
     2,
-    resources.effects.create(child.ref, metadata(2)),
+    resources.effects.create(child, metadata(2)),
     resources,
     0,
   );
@@ -1041,7 +1043,7 @@ test("effects: pending terminal notices survive nested cleanup during disable pr
   ]);
   const instances = getUnit(finished, 2).effects.instances;
   assert.equal(instances.length, 3);
-  assert.equal(instances[2].definitionRef, replacement.ref);
+  assert.equal(instances[2].definition, replacement);
   assert.equal(instances[2].participating, true);
   finishEffect(finished, parentAddress, resources, 1);
   const finalized = finished;
@@ -1054,20 +1056,20 @@ test("effects: pending terminal notices survive nested cleanup during disable pr
     "child-finish",
   ]);
   assert.deepEqual(
-    getUnit(finalized, 2).effects.instances.map((instance) => instance.definitionRef),
-    [replacement.ref],
+    getUnit(finalized, 2).effects.instances.map((instance) => instance.definition),
+    [replacement],
   );
   assert.equal(beforeFinish.getUnit(2).effects.instances[0].finished, false);
   assert.equal(hasStatusFlag(beforeFinish.getUnit(2), "INVINCIBLE"), true);
 });
 
-test("effects: TypeScript preserves invariant definition state references and typed combat hook inference", async () => {
+test("effects: TypeScript preserves invariant definition state types and typed combat hook inference", async () => {
   const { default: ts } = await import("typescript");
   const directory = mkdtempSync(join(tmpdir(), "stronghold-effect-types-"));
   const sourceModule = (name) =>
     JSON.stringify(fileURLToPath(new URL(`../../src/core/tactical/${name}.js`, import.meta.url)));
   const imports = `
-import { createEffectDefinition, type EffectDefinition, type EffectDefinitionRef } from ${sourceModule("unit/capability/effects/definition")};
+import { createEffectDefinition, type EffectDefinition } from ${sourceModule("unit/capability/effects/definition")};
 import { EffectResources } from ${sourceModule("unit/capability/effects/registry")};
 import type { EffectValue } from ${sourceModule("unit/capability/effects/effect")};
 import { installEffect } from ${sourceModule("unit/capability/effects/lifecycle")};
@@ -1091,7 +1093,7 @@ declare const installationResources: CombatResources;
 declare const work: BattleState;
 declare const lifecycle: EffectLifecycleContext<BarrierState>;
 resources.register(barrier);
-const instance = resources.create(barrier.ref, {
+const instance = resources.create(barrier, {
   id: 1, source: null, scopes: [], acquiredSequence: 0,
 });
 `;
@@ -1121,23 +1123,23 @@ const instance = resources.create(barrier.ref, {
       compile(
         "positive",
         `
-type InferredReference = Assert<Equal<typeof barrier.ref, EffectDefinitionRef<BarrierState>>>;
+type InferredDefinition = Assert<Equal<typeof barrier, EffectDefinition<BarrierState>>>;
 type InferredState = Assert<Equal<typeof instance.state, BarrierState>>;
 installEffect(work, 2, instance, installationResources, 0);
-const restored = resources.restore(barrier.ref, instance);
+const restored = resources.restore(barrier, instance);
 type RestoredState = Assert<Equal<typeof restored.state, BarrierState>>;
-const descriptor = resources.get(barrier.ref);
+const descriptor = resources.get(barrier);
 type InferredDescriptor = Assert<Equal<typeof descriptor, EffectDefinition<BarrierState>>>;
 const updated = resources.update(instance, { remainingAmount: 200 });
 type UpdatedState = Assert<Equal<typeof updated.state, BarrierState>>;
-const current = resources.typedState(updated, barrier.ref);
+const current = resources.typedState(updated, barrier);
 type OptionalState = Assert<Equal<typeof current, BarrierState | undefined>>;
 const projectile = createProjectileDefinition({
   id: 'typed-projectile', initialize: (): BarrierState => ({ remainingAmount: 1 }),
   acceptsContact: () => true,
 });
 type ProjectileReference = Assert<Equal<typeof projectile.ref, ProjectileDefinitionRef<BarrierState>>>;
-const installed = lifecycle.effects.install(2, barrier.ref, { source: null, scopes: [], initialState: instance.state });
+const installed = lifecycle.effects.install(2, lifecycle.instance.definition, { source: null, scopes: [], initialState: instance.state });
 type InstalledResult = Assert<Equal<typeof installed, EffectInstallationResult>>;
 resources.withDefinition(instance, (bound, definition) => resources.update(bound, bound.state).id);
 const combat = new CombatResources();
@@ -1145,24 +1147,24 @@ combat.registerEffect(barrier, {
  damage: {
   reception: { priority: 0, apply: (context, pending) => {
     const amount: number = context.instance.state.remainingAmount;
-    context.operations.effects.update(context.ref, context.instance.definitionRef, state => ({ remainingAmount: Math.max(0, state.remainingAmount - pending.amount) }));
+    context.operations.effects.update(context.ref, context.instance.definition, state => ({ remainingAmount: Math.max(0, state.remainingAmount - pending.amount) }));
     return { value: pending };
   } },
   reaction: { priority: 0, apply: (context, report) => {
     const amount: number = context.instance.state.remainingAmount;
     const hpLoss: number = report.hpLoss;
-    context.operations.effects.update(context.ref, context.instance.definitionRef, state => ({ remainingAmount: state.remainingAmount + hpLoss }));
+    context.operations.effects.update(context.ref, context.instance.definition, state => ({ remainingAmount: state.remainingAmount + hpLoss }));
   } },
  },
  healing: {
   reception: { priority: 0, apply: (context, pending) => {
     const amount: number = context.instance.state.remainingAmount;
-    context.operations.effects.update(context.ref, context.instance.definitionRef, state => ({ remainingAmount: state.remainingAmount + amount }));
+    context.operations.effects.update(context.ref, context.instance.definition, state => ({ remainingAmount: state.remainingAmount + amount }));
     return { value: pending };
   } },
  },
  lifecycle: {
-  start: context => { context.effects.update(context.ref, barrier.ref, state => ({ remainingAmount: state.remainingAmount })); },
+  start: context => { context.effects.update(context.ref, context.instance.definition, state => ({ remainingAmount: state.remainingAmount })); },
  },
 });
 `,
@@ -1172,24 +1174,23 @@ combat.registerEffect(barrier, {
 
     for (const [name, source, errors] of [
       [
-        "references",
+        "definition-invariance",
         `
-declare const specializedRef: EffectDefinitionRef<SpecializedBarrierState>;
-const incompatible: EffectDefinitionRef<ShieldState> = barrier.ref;
-const cannotWiden: EffectDefinitionRef<BarrierState> = specializedRef;
-const cannotNarrow: EffectDefinitionRef<SpecializedBarrierState> = barrier.ref;
-const cannotForge: EffectDefinitionRef<ShieldState> = { id: 'barrier' };
+declare const specialized: EffectDefinition<SpecializedBarrierState>;
+const incompatible: EffectDefinition<ShieldState> = barrier;
+const cannotWiden: EffectDefinition<BarrierState> = specialized;
+const cannotNarrow: EffectDefinition<SpecializedBarrierState> = barrier;
 `,
-        4,
+        3,
       ],
       ["state-update", `resources.update(instance, { remainingCharges: 2 });`, 1],
       ["direct-install-wrong-state", `installEffect(work, 2, { ...instance, state: { remainingCharges: 2 } }, installationResources, 0);`, 1],
       ["direct-install-erased", `const erased: EffectValue = { ...instance, state: { remainingCharges: 2 } }; installEffect(work, 2, erased, installationResources, 0);`, 1],
       ["direct-install-widened", `installEffect<object>(work, 2, instance, installationResources, 0);`, 1],
-      ["unparsed-restore", `declare const raw: unknown; resources.restore(barrier.ref, raw);`, 1],
-      ["wrong-restore-state", `resources.restore(barrier.ref, { ...instance, state: { remainingCharges: 2 } });`, 1],
-      ["wrong-installation-state", `lifecycle.effects.install(2, barrier.ref, { source: null, scopes: [], initialState: { remainingCharges: 2 } });`, 1],
-      ["erased-installation", `const installation: EffectInstallationInput = { source: null, initialState: { remainingCharges: 2 }, scopes: [] }; lifecycle.effects.install(2, barrier.ref, installation);`, 1],
+      ["unparsed-restore", `declare const raw: unknown; resources.restore(barrier, raw);`, 1],
+      ["wrong-restore-state", `resources.restore(barrier, { ...instance, state: { remainingCharges: 2 } });`, 1],
+      ["wrong-installation-state", `lifecycle.effects.install(2, barrier, { source: null, scopes: [], initialState: { remainingCharges: 2 } });`, 1],
+      ["erased-installation", `const installation: EffectInstallationInput = { source: null, initialState: { remainingCharges: 2 }, scopes: [] }; lifecycle.effects.install(2, barrier, installation);`, 1],
       [
         "hook-authority",
         `

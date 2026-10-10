@@ -410,7 +410,7 @@ test("projectile runtime: current ATK and cached-only ATK stay distinct, while a
               installNewEffect(
                 context.work,
                 context.sourceUnitId,
-                bonus.ref,
+                bonus,
                 { source: context.sourceUnitId, scopes: [] },
                 services,
                 context.tick,
@@ -512,14 +512,14 @@ test("projectile runtime: contact history prevents stop fallback damage while sy
       trace.push({ stage: "CONTACT", hitUnitIds: [...context.projectile.hitUnitIds] });
       borrowed = context.operations;
       context.operations.updateState((state) => ({ contacts: state.contacts + 1 }));
-      const installed = context.operations.effects.install(context.targetUnitId, attached.ref, {
+      const installed = context.operations.effects.install(context.targetUnitId, attached, {
         source: context.projectile.source,
         scopes: [],
       });
       assert.equal(installed.type, "INSTALLED");
       assert.equal(
         context.facts.getUnit(context.targetUnitId).effects.instances.some(
-          (effect) => effect.definitionRef.id === attached.ref.id,
+          (effect) => effect.definition.id === attached.id,
         ),
         true,
       );

@@ -1,7 +1,7 @@
 import { ResourceRegistration } from "../../../../../common/resource-registration.js";
 import type { EffectTransitionResources } from "../../effects/contract.js";
 import type { EffectValue } from "../../effects/effect.js";
-import type { EffectDefinitionRef } from "../../effects/definition.js";
+import type { EffectDefinition } from "../../effects/definition.js";
 import type { EffectResources } from "../../effects/registry.js";
 import type {
     DispatchResult,
@@ -84,24 +84,24 @@ export class HealingResources {
     }
 
     register<S extends object>(
-        ref: EffectDefinitionRef<S>,
+        definition: EffectDefinition<S>,
         rules: NoInfer<HealingEffectRules<S>>,
     ): void {
         this.#registration.assertWritable();
-        this.#effects.get(ref);
+        this.#effects.get(definition);
 
-        if (this.#rules.has(ref.id)) {
-            throw new TypeError(`duplicate healing effect ${ref.id}`);
+        if (this.#rules.has(definition.id)) {
+            throw new TypeError(`duplicate healing effect ${definition.id}`);
         }
 
         const effects = this.#effects;
         const contextFor = (context: CompiledHealingContext): HealingRuleContext<S> => ({
             ...context,
             get instance() {
-                const instance = effects.typedEffect(context.instance, ref);
+                const instance = effects.typedEffect(context.instance, definition);
 
                 if (instance === undefined) {
-                    throw new TypeError("healing hook requires its matching program");
+                    throw new TypeError("healing hook requires its matching definition");
                 }
 
                 return instance;
@@ -128,7 +128,7 @@ export class HealingResources {
         const reaction = rules.reaction === undefined ? undefined : { ...rules.reaction };
 
         this.#rules.set(
-            ref.id,
+            definition.id,
             Object.freeze({
                 ...(output === undefined ? {} : { output }),
                 ...(reception === undefined ? {} : { reception }),
@@ -149,6 +149,6 @@ export class HealingResources {
     get(instance: EffectValue): CompiledHealingRules {
         this.#registration.assertUsable();
 
-        return this.#rules.get(instance.definitionRef.id) ?? emptyRules;
+        return this.#rules.get(instance.definition.id) ?? emptyRules;
     }
 }

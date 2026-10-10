@@ -49,7 +49,7 @@ test('aura runtime: a restored aura refreshes on its first tick without creating
     const runtime = new BattleRuntime(input(host), { combat: resources });
     const initial = runtime.snapshot();
     assert.deepEqual(initial.mechanisms, []);
-    assert.equal(initial.units[0].effects.instances[0].definitionRef, aura.ref);
+    assert.equal(initial.units[0].effects.instances[0].definition, aura);
     assert.deepEqual(initial.units[0].effects.instances[0].state.bindings, []);
     assert.equal(snapshotAttack(initial, 1, resources), 100);
     assert.deepEqual(host.states.effects.instances[0].state.bindings, []);
@@ -72,11 +72,11 @@ test('aura runtime: predefined, deployment and spawning join before the same tic
     const observer = resources.registerEffect(effectProgram('registration-observer'), {
         lifecycle: { advance: context => {
             seen.push(context.battlefield.unitIds.map(id => [id,
-                context.battlefield.getUnit(id).effects?.instances.some(effect => effect.definitionRef === receiver.ref) ?? false]));
+                context.battlefield.getUnit(id).effects?.instances.some(effect => effect.definition === receiver) ?? false]));
         } },
     });
     const hostState = effectFixtureWork(auraUnit(0));
-    for (const effect of [observer, aura]) installNewEffect(hostState, 0, effect.ref,
+    for (const effect of [observer, aura]) installNewEffect(hostState, 0, effect,
         { source: 0, scopes: [] }, resources, 0);
     const hostUnit = getUnit(hostState, 0);
     const host = { definition: hostUnit.definition, position: hostUnit.position, states: { effects: hostUnit.effects } };
@@ -93,7 +93,7 @@ test('aura runtime: predefined, deployment and spawning join before the same tic
     assert.deepEqual(starts, [[1, 0], [2, 0], [3, 0], [4, 0]]);
     assert.deepEqual(seen, [[[0, false], [1, false], [2, false], [3, false], [4, false]]]);
     const after = runtime.snapshot();
-    const auraInstance = after.units[0].effects.instances.find(effect => effect.definitionRef === aura.ref);
+    const auraInstance = after.units[0].effects.instances.find(effect => effect.definition === aura);
     assert.deepEqual(auraInstance.state.bindings.map(binding => binding.unitId), [1, 2, 3, 4]);
     assert.deepEqual([1, 2, 3, 4].map(id => snapshotAttack(after, id, resources)), [120, 120, 120, 120]);
 });
@@ -138,7 +138,7 @@ test('aura runtime: callback failure propagates the original error without publi
     const attempts = [];
     let receiver;
     receiver = attackEffect(resources, 'fallible-aura-receiver', { lifecycle: { start: context => {
-        context.effects.update(context.ref, receiver.ref, state => ({ ...state, starts: 1 }));
+        context.effects.update(context.ref, receiver, state => ({ ...state, starts: 1 }));
         if (context.ref.unitId === 2) {
             attempts.push(context.ref);
             throw failure;

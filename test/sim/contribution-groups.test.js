@@ -38,7 +38,7 @@ const program = (id) => createEffectDefinition({
   initialize: () => ({ coefficient: 0, amount: 0, defense: 0, grouped: true }),
 });
 const install = (work, resources, program, id, state, source = null) => {
-  const result = installEffect(work, 1, resources.effects.create(program.ref, {
+  const result = installEffect(work, 1, resources.effects.create(program, {
     id, source, scopes: [],
   acquiredSequence: id,
   }, state), resources, 0);
@@ -97,14 +97,14 @@ test("contribution groups: explicit sampled state updates refresh strength, samp
     { coefficient: 0.6, amount: 60, grouped: true });
   const original = work.battlefield.snapshot("draft");
 
-  updateEffectState(work, 1, 0, effect.ref,
+  updateEffectState(work, 1, 0, effect,
     (state) => ({ ...state, coefficient: 0.7, amount: 70 }), resources, 0);
   assert.equal(entries(work)[0].group.strength, 0.7);
   assert.equal(attackPower(work, resources), 170);
   assert.equal(resolveAttackPower(1, original, resources.computations), 160);
   assert.equal(samples, 3);
 
-  updateEffectState(work, 1, 0, effect.ref,
+  updateEffectState(work, 1, 0, effect,
     (state) => ({ ...state, grouped: false }), resources, 0);
   assert.equal(Object.hasOwn(entries(work)[0], "group"), false);
   assert.equal(attackPower(work, resources), 230);
@@ -142,7 +142,7 @@ test("contribution groups: live values stay current without reranking, and expli
   assert.equal(computes, 2);
 
   const originalRef = entries(work)[0].evaluator;
-  updateEffectState(work, 1, 0, effect.ref,
+  updateEffectState(work, 1, 0, effect,
     (state) => ({ ...state, coefficient: 0.7 }), resources, 0);
   assert.equal(computes, 2);
   assert.equal(groupReads, 3);
@@ -152,7 +152,7 @@ test("contribution groups: live values stay current without reranking, and expli
 
   setEffectEnabled(work, { type: "EFFECT", unitId: 1, effectId: 0 }, false, resources, 0);
   const beforeUpdate = computes;
-  updateEffectState(work, 1, 0, effect.ref,
+  updateEffectState(work, 1, 0, effect,
     (state) => ({ ...state, grouped: false }), resources, 0);
   assert.equal(computes, beforeUpdate);
   assert.equal(entries(work)[0].participating, false);
@@ -186,7 +186,7 @@ test("contribution groups: static groups are shared and dynamic updates retain p
     assert.equal(initialGroup, returned);
     assert.deepEqual(initialGroup, { id: "dynamic", strength: 2 });
 
-    updateEffectState(work, 1, 0, effect.ref,
+    updateEffectState(work, 1, 0, effect,
       (state) => ({ ...state, coefficient: 3 }), resources, 0);
     const updatedGroup = entries(work)[1].group;
     assert.equal(entries(work)[0].group, fixed);

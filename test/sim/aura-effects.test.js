@@ -13,7 +13,7 @@ import { effectFixtureWork } from '../helpers/effects.js';
 import { attackEffect, auraUnit, effectProgram, registerAura } from '../helpers/aura.js';
 
 const install = (state, resources, unitId, effect, scopes = []) => installNewEffect(state, unitId,
-    effect.ref, { source: unitId, scopes }, resources, 0).ref;
+    effect, { source: unitId, scopes }, resources, 0).ref;
 const power = (state, id, resources) => resolveAttackPower(id, battlefieldView(state), resources.computations);
 
 test('aura effects: selection reuses targeting and entered members are not retried after rejection or buff ending', () => {
@@ -112,7 +112,7 @@ test('aura effects: ordinary finish preserves sequential receiver decisions base
             trace.push(['finish', context.ref.unitId]);
             if (context.ref.unitId !== 1) return;
             assert.equal(context.battlefield.getUnit(0).effects.instances[0].finished, true);
-            const installed = context.effects.install(2, marker.ref, { source: 1, scopes: [] });
+            const installed = context.effects.install(2, marker, { source: 1, scopes: [] });
             assert.equal(installed.type, 'INSTALLED');
             trace.push(['marker', installed.ref.unitId]);
         } },
@@ -122,11 +122,11 @@ test('aura effects: ordinary finish preserves sequential receiver decisions base
         lifecycle: {
             enable: context => {
                 for (const unitId of [1, 2]) {
-                    const installed = context.effects.install(unitId, receiver.ref, {
+                    const installed = context.effects.install(unitId, receiver, {
                         source: context.ref.unitId, scopes: [],
                     });
                     assert.equal(installed.type, 'INSTALLED');
-                    context.effects.update(context.ref, aura.ref, state => ({
+                    context.effects.update(context.ref, aura, state => ({
                         ...state, bindings: [...state.bindings, { unitId, ref: installed.ref }],
                     }));
                 }
@@ -134,9 +134,9 @@ test('aura effects: ordinary finish preserves sequential receiver decisions base
             finish: context => {
                 for (const binding of context.instance.state.bindings) {
                     const keep = context.facts.participating(binding.unitId)
-                        .some(instance => instance.definitionRef === marker.ref);
+                        .some(instance => instance.definition === marker);
                     assert.equal(context.battlefield.getUnit(binding.unitId).effects.instances
-                        .some(instance => instance.definitionRef === marker.ref && instance.participating), keep);
+                        .some(instance => instance.definition === marker && instance.participating), keep);
                     trace.push(['decide', binding.unitId, keep]);
                     if (!keep) context.effects.finish([binding.ref], 'AURA_FINISHED');
                 }
@@ -156,7 +156,7 @@ test('aura effects: ordinary finish preserves sequential receiver decisions base
     assert.equal(getEffect(state, second).participating, true);
     assert.equal(power(state, 1, resources), 100);
     assert.equal(power(state, 2, resources), 120);
-    assert.equal(before.getUnit(2).effects.instances.some(instance => instance.definitionRef === marker.ref), false);
+    assert.equal(before.getUnit(2).effects.instances.some(instance => instance.definition === marker), false);
 });
 
 test('aura effects: skill content installs an aura and skill completion closes its descendants', () => {
@@ -166,7 +166,7 @@ test('aura effects: skill content installs an aura and skill completion closes i
     const skill = createSkillDefinition({ id: 'aura-skill', activation: 'MANUAL',
         spRecovery: 'TIME', spCost: 1, initialSp: 1, durationTicks: 10 });
     resources.skills.register({ definition: skill, activate: context => {
-        const installed = context.effects.install(context.unitId, aura.ref, { source: context.unitId,
+        const installed = context.effects.install(context.unitId, aura, { source: context.unitId,
             scopes: [{ type: 'SKILL', unitId: context.unitId, activationId: context.activationId }] });
         assert.equal(installed.type, 'INSTALLED');
         return { type: 'ACTIVATED' };
@@ -262,7 +262,7 @@ test('aura effects: nested receiver start cannot revive its finished parent', ()
     });
     const aura = registerAura(resources, receiver);
     const state = effectFixtureWork(auraUnit(0), auraUnit(1), auraUnit(2));
-    const ref = installNewEffect(state, 0, aura.ref, { source: 0, scopes: [] }, resources, 0).ref;
+    const ref = installNewEffect(state, 0, aura, { source: 0, scopes: [] }, resources, 0).ref;
     assert.equal(getEffect(state, ref).finished, true);
     assert.equal(getEffect(state, ref).participating, false);
     assert.deepEqual(starts, [1]);

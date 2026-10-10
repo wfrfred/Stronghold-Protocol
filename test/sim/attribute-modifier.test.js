@@ -141,7 +141,7 @@ test("attribute modifiers: native Mire percentages affect existing ASPD and norm
         }], followUps: [] } },
     } });
     const installed = effectFixtureWork(unit);
-    installNewEffect(installed, 0, program.ref, { source: null, scopes: [] }, resources, 0);
+    installNewEffect(installed, 0, program, { source: null, scopes: [] }, resources, 0);
     const receiver = getUnit(installed, 0);
     assert.equal(resolveAttackSpeed(receiver.definition.action, receiver.action), 190);
     close(resolveMoveSpeedPerTick(receiver.definition.locomotion, receiver.locomotion), 0.95 / 30);
@@ -164,17 +164,17 @@ test("attribute modifiers: inspiration samples belong to the Effect input and re
     const work = effectFixtureWork(unit(0, 100), unit(1, 20));
     const resolve = (work, id) => resolveAttackPower(id, battlefieldView(work), resources.computations);
     const sampleInput = (work) => ({ sourceAttack: resolve(work, 0), ratio: 0.6 });
-    installNewEffect(work, 1, program.ref, { source: 0, scopes: [], initialState: sampleInput(work) }, resources, 0);
+    installNewEffect(work, 1, program, { source: 0, scopes: [], initialState: sampleInput(work) }, resources, 0);
     assert.equal(resolve(work, 1), 80);
     const copied = getUnit(work, 1);
-    installNewEffect(work, 0, amplify.ref, { source: null, scopes: [] }, resources, 1);
+    installNewEffect(work, 0, amplify, { source: null, scopes: [] }, resources, 1);
     assert.equal(resolve(work, 0), 200);
     assert.equal(resolve(work, 1), 80);
     setEffectEnabled(work, { type: "EFFECT", unitId: 1, effectId: 0 }, false, resources, 1);
     assert.equal(resolve(work, 1), 20);
     setEffectEnabled(work, { type: "EFFECT", unitId: 1, effectId: 0 }, true, resources, 2);
     assert.equal(resolve(work, 1), 80);
-    updateEffectState(work, 1, 0, program.ref, () => sampleInput(work), resources, 0);
+    updateEffectState(work, 1, 0, program, () => sampleInput(work), resources, 0);
     assert.equal(resolve(work, 1), 140);
     removeUnit(work, 0, "RETREAT");
     assert.equal(resolve(work, 1), 140);

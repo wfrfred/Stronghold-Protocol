@@ -65,7 +65,7 @@ function register(resources, speed = 100, time = modifier.create()) {
 }
 
 function install(work, program, resources, tick = 0, expiresAtTick = null) {
-    installNewEffect(work, 0, program.ref, {
+    installNewEffect(work, 0, program, {
         source: null, scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }],
     }, resources, tick);
     return work;
@@ -127,9 +127,9 @@ test("action timing: ASPD attribute floor, interval cap and BAT algebra remain d
     const original = initial.battlefield.snapshot("draft");
     let work = install(initial, program, resources);
     assert.deepEqual(values(work, resources), [20, 19.5, 97.5]);
-    updateEffectState(work, 0, 0, program.ref, (state) => ({ ...state, speed: 900 }), resources, 0);
+    updateEffectState(work, 0, 0, program, (state) => ({ ...state, speed: 900 }), resources, 0);
     assert.deepEqual(values(work, resources), [1000, 19.5, 3.25]);
-    updateEffectState(work, 0, 0, program.ref, (state) => ({ ...state, time: modifier.create({ addition: -100 }) }), resources, 0);
+    updateEffectState(work, 0, 0, program, (state) => ({ ...state, time: modifier.create({ addition: -100 }) }), resources, 0);
     assert.deepEqual(values(work, resources), [1000, 0, 1]);
     assert.deepEqual(valuesAt(original, resources), [100, 30, 30]);
 });

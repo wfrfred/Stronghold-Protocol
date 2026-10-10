@@ -99,12 +99,12 @@ test('effect lifetime index: foreign receivers are ordered by receiver then inst
     let work = host(unit(9), unit(0), unit(2)).work;
     const addresses = [];
     for (const receiver of [9, 2, 9, 2]) {
-        const installed = install(work, resources, effect.ref, receiver, scope(3));
+        const installed = install(work, resources, effect, receiver, scope(3));
         work = installed.work;
         addresses.push(installed.address);
     }
-    const unitOwned = install(work, resources, effect.ref, 2, { type: 'UNIT', unitId: 0 });
-    const foreignOwner = install(unitOwned.work, resources, effect.ref, 9, {
+    const unitOwned = install(work, resources, effect, 2, { type: 'UNIT', unitId: 0 });
+    const foreignOwner = install(unitOwned.work, resources, effect, 9, {
         type: 'ACTION', executionId: 5,
     });
     work = foreignOwner.work;
@@ -123,7 +123,7 @@ test('effect lifetime index: ordinary Unit and event updates reuse the projectio
     const resources = new CombatResources();
     const effect = resources.registerEffect(program('stable'));
     const fixture = host(unit(0), unit(2), unit(9));
-    let { work, address } = install(fixture.work, resources, effect.ref, 9, scope(3));
+    let { work, address } = install(fixture.work, resources, effect, 9, scope(3));
     assert.deepEqual(effectDependents(work, scope(3)), [address]);
     const reads = fixture.reads();
     fixture.forbidMembership();
@@ -143,8 +143,8 @@ test('effect lifetime index: ordinary Unit and event updates reuse the projectio
 test('effect lifetime index: Battlefield projections observe earlier draft installs and removals', () => {
     const resources = new CombatResources();
     const effect = resources.registerEffect(program('lazy'));
-    const first = install(host(unit(0), unit(2), unit(9)).work, resources, effect.ref, 2, scope(3));
-    const second = install(first.work, resources, effect.ref, 9, scope(3));
+    const first = install(host(unit(0), unit(2), unit(9)).work, resources, effect, 2, scope(3));
+    const second = install(first.work, resources, effect, 9, scope(3));
     const work = second.work;
 removeUnit(work, 2);
 
@@ -154,12 +154,12 @@ removeUnit(work, 2);
 test('effect lifetime index: fixed snapshots retain their previous candidates during draft removal', () => {
     const resources = new CombatResources();
     const effect = resources.registerEffect(program('branch'));
-    const installed = install(host(unit(0), unit(2), unit(9)).work, resources, effect.ref, 2, scope(3));
+    const installed = install(host(unit(0), unit(2), unit(9)).work, resources, effect, 2, scope(3));
     const original = installed.work;
     const captured = effectDependents(original, scope(3));
     const originalReceiver = getUnit(original, 2);
     const snapshot = original.battlefield.snapshot("draft");
-    const other = install(original, resources, effect.ref, 9, scope(3));
+    const other = install(original, resources, effect, 9, scope(3));
     removeUnit(original, 2);
     assert.deepEqual(captured, [installed.address]);
     assert.ok(Object.isFrozen(captured));
@@ -175,7 +175,7 @@ test('effect lifetime index: a new domain context reads the same current battlef
     const effect = resources.registerEffect(program('phase'));
     const fixture = host(unit(0), unit(2));
     assert.deepEqual(effectDependents(fixture.work, scope(3)), []);
-    const installed = install(fixture.work, resources, effect.ref, 2, scope(3));
+    const installed = install(fixture.work, resources, effect, 2, scope(3));
     const nextPhase = createBattleState(fixture.battlefield, undefined, fixture.work.actionExecutions);
 
     assert.deepEqual(effectDependents(nextPhase, scope(3)), [installed.address]);
@@ -187,8 +187,8 @@ test('effect lifetime index: parent attachment, finish and finalization track ot
     const effect = resources.registerEffect(program('tree'), {
         lifecycle: { disable: context => { disabled.push(context.ref); } },
     });
-    const parent = install(host(unit(0), unit(2), unit(9)).work, resources, effect.ref, 9, scope(3));
-    const child = install(parent.work, resources, effect.ref, 2);
+    const parent = install(host(unit(0), unit(2), unit(9)).work, resources, effect, 9, scope(3));
+    const child = install(parent.work, resources, effect, 2);
     assert.deepEqual(effectDependents(child.work, parent.address), []);
     const attached = bindEffectLifetime(child.work, child.address, parent.address);
     assert.equal(attached.type, 'BOUND');
@@ -219,7 +219,7 @@ test('effect lifetime index: nested ending protects pending notices and exposes 
             disable: context => {
                 trace.push('leader');
                 context.effects.finish([followerAddress]);
-                const installed = context.effects.install(9, newborn.ref, input(null));
+                const installed = context.effects.install(9, newborn, input(null));
                 assert.equal(installed.type, 'INSTALLED');
                 newbornAddress = installed.ref;
                 assert.equal(context.facts.getEffect(followerAddress).finished, true);
@@ -232,8 +232,8 @@ test('effect lifetime index: nested ending protects pending notices and exposes 
             finish: () => { trace.push('follower-finished'); },
         },
     });
-    const first = install(host(unit(0), unit(2), unit(9)).work, resources, leader.ref, 2, scope(3));
-    const second = install(first.work, resources, follower.ref, 9, scope(3));
+    const first = install(host(unit(0), unit(2), unit(9)).work, resources, leader, 2, scope(3));
+    const second = install(first.work, resources, follower, 9, scope(3));
     followerAddress = second.address;
     const captured = effectDependents(second.work, scope(3));
     const finished = second.work;
@@ -264,7 +264,7 @@ test('effect lifetime index: Action cancellation finishes execution-owned effect
     });
     const fixture = host(unit(0), unit(9));
     const initial = { ...fixture.work, actionExecutions: new ActionExecutionWork(accepted.state) };
-    const installed = install(initial, resources, effect.ref, 9, scope(accepted.execution.id));
+    const installed = install(initial, resources, effect, 9, scope(accepted.execution.id));
     effectDependents(installed.work, scope(accepted.execution.id));
     const cancelled = cancelActionExecution(
       installed.work,
@@ -283,7 +283,7 @@ test('effect lifetime index: failed settlement can be discarded without changing
     const leader = resources.registerEffect(program('throws'), {
         lifecycle: { disable: () => { throw new Error('abort'); } },
     });
-    const installed = install(host(unit(0), unit(2)).work, resources, leader.ref, 2, scope(3));
+    const installed = install(host(unit(0), unit(2)).work, resources, leader, 2, scope(3));
     const original = installed.work;
     original.battlefield.apply();
     const before = effectDependents(original, scope(3));
@@ -299,7 +299,7 @@ test('effect lifetime index: batch updates share unchanged relations without res
     const resources = new CombatResources();
     const effect = resources.registerEffect(program('batch-stable'));
     const fixture = host(unit(0), unit(2), unit(9));
-    const installed = install(fixture.work, resources, effect.ref, 9, scope(3));
+    const installed = install(fixture.work, resources, effect, 9, scope(3));
     const before = installed.work;
     const addresses = effectDependents(before, scope(3));
     const snapshot = before.battlefield.snapshot("draft");
@@ -320,10 +320,10 @@ test('effect lifetime index: batch relation edits and repeated receiver IDs pres
     const resources = new CombatResources();
     const effect = resources.registerEffect(program('batch-relations'));
     const fixture = host(unit(0), unit(2), unit(9));
-    const parent = install(fixture.work, resources, effect.ref, 0);
-    const otherParent = install(parent.work, resources, effect.ref, 0);
-    const first = install(otherParent.work, resources, effect.ref, 2, scope(3));
-    const second = install(first.work, resources, effect.ref, 9, scope(3));
+    const parent = install(fixture.work, resources, effect, 0);
+    const otherParent = install(parent.work, resources, effect, 0);
+    const first = install(otherParent.work, resources, effect, 2, scope(3));
+    const second = install(first.work, resources, effect, 9, scope(3));
     const attachedFirst = bindEffectLifetime(second.work, first.address, parent.address);
     const attachedSecond = bindEffectLifetime(second.work, second.address, parent.address);
     const before = second.work;

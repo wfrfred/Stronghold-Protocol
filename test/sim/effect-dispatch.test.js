@@ -44,7 +44,7 @@ function program(id, state = {}) {
 function attach(resources, owner, descriptor) {
   const id = owner.effects?.nextInstanceId ?? 0;
   const acquiredSequence = owner.effects?.nextAcquiredSequence ?? 0;
-  const instance = resources.effects.create(descriptor.ref, {
+  const instance = resources.effects.create(descriptor, {
     id,
     acquiredSequence,
     source: null,
@@ -170,7 +170,7 @@ test("effect dispatch: nested finalization preserves the entered callback contin
           if (context.request.operands.power === 1) {
             context.operations.effects.update(
               context.ref,
-              context.instance.definitionRef,
+              context.instance.definition,
               (state) => ({ count: state.count + 1 }),
             );
             context.operations.effects.finish([context.ref]);
@@ -236,7 +236,7 @@ test("effect dispatch: healing retains selected rules while nested candidates an
           priority: 0,
           apply: (context, pending) => {
             calls.push(["follower", context.request.power, context.instance.state.calls]);
-            context.operations.effects.update(context.ref, follower.ref, (state) => ({
+            context.operations.effects.update(context.ref, follower, (state) => ({
               calls: state.calls + 1,
             }));
             return { value: { ...pending, amount: pending.amount * 2 } };
@@ -257,7 +257,7 @@ test("effect dispatch: healing retains selected rules while nested candidates an
               } else {
                 context.operations.effects.finish([address]);
               }
-              context.operations.effects.install(2, added.ref, installation(2));
+              context.operations.effects.install(2, added, installation(2));
               context.operations.heal({ sourceUnitId: null, targetUnitId: 2, power: 1 });
             }
             return { value: pending };
@@ -348,16 +348,16 @@ test("effect dispatch: ordinary facts see new participating UIDs while current a
           if (context.instance.state.entered) {
             return { value: pending };
           }
-          context.operations.effects.update(context.ref, context.instance.definitionRef, () => ({
+          context.operations.effects.update(context.ref, context.instance.definition, () => ({
             entered: true,
           }));
-          const installed = context.operations.effects.install(2, c.ref, installation(2));
-          context.operations.effects.install(3, d.ref, installation(3));
+          const installed = context.operations.effects.install(2, c, installation(2));
+          context.operations.effects.install(3, d, installation(3));
           assert.equal(installed.type, "INSTALLED");
-          assert.equal(context.facts.getEffect(installed.ref).definitionRef.id, "new-C");
+          assert.equal(context.facts.getEffect(installed.ref).definition.id, "new-C");
           assert.equal(context.facts.getUnit(2).effects.instances.length, 2);
           assert.equal(
-            context.facts.participating(2).some((instance) => instance.definitionRef.id === "new-C"),
+            context.facts.participating(2).some((instance) => instance.definition.id === "new-C"),
             true,
           );
           context.operations.damage(request(1, { sourceUnitId: 2, targetUnitId: 3 }));
@@ -388,7 +388,7 @@ test("effect dispatch: exceptional exits release candidates before retry on the 
         apply: (context, pending) => {
           context.operations.effects.update(
             context.ref,
-            context.instance.definitionRef,
+            context.instance.definition,
             (state) => ({ attempts: state.attempts + 1 }),
           );
           if (fail) {
@@ -435,7 +435,7 @@ const retry = resolveDamage(
       }),
     /instance frame failed/,
   );
-  const finalized = resources.effects.restore(initialInstance.definitionRef, {
+  const finalized = resources.effects.restore(initialInstance.definition, {
     ...initialInstance,
     state: { attempts: 99 },
     participating: false,
@@ -458,7 +458,7 @@ test("effect dispatch: Damage and Healing borrowed facts and operations close af
               escaped = context;
               context.operations.effects.update(
                 context.ref,
-                context.instance.definitionRef,
+                context.instance.definition,
                 (state) => ({ calls: state.calls + 1 }),
               );
               if (fails) {
@@ -488,8 +488,8 @@ test("effect dispatch: Damage and Healing borrowed facts and operations close af
         () => escaped.facts.getEffect(escaped.ref),
         () => escaped.facts.participating(2),
         () => escaped.facts.maxHp(2),
-        () => escaped.operations.effects.install(2, descriptor.ref, installation(2)),
-        () => escaped.operations.effects.update(escaped.ref, descriptor.ref, (state) => state),
+        () => escaped.operations.effects.install(2, descriptor, installation(2)),
+        () => escaped.operations.effects.update(escaped.ref, descriptor, (state) => state),
         () => escaped.operations.effects.setEnabled(escaped.ref, false),
         () => escaped.operations.effects.finish([escaped.ref]),
         () =>
@@ -518,7 +518,7 @@ test("effect dispatch: domain cancellation retains prefix transitions and stops 
         reception: {
           priority: 100,
           apply: (context, pending) => {
-            context.operations.effects.update(context.ref, context.instance.definitionRef, () => ({
+            context.operations.effects.update(context.ref, context.instance.definition, () => ({
               used: true,
             }));
             return {
@@ -567,7 +567,7 @@ test("effect dispatch: shield cancellation notifies terminal business before ret
         apply: (context, pending) => {
           context.operations.effects.update(
             context.ref,
-            context.instance.definitionRef,
+            context.instance.definition,
             (state) => ({ charges: state.charges - 1 }),
           );
           const healing = context.operations.heal({
@@ -583,7 +583,7 @@ test("effect dispatch: shield cancellation notifies terminal business before ret
             finished: context.facts.getEffect(context.ref).finished,
             recharge: context.facts
               .getUnit(2)
-              .effects.instances.some((instance) => instance.definitionRef.id === "recharge"),
+              .effects.instances.some((instance) => instance.definition.id === "recharge"),
           });
           return {
             value: {
@@ -598,7 +598,7 @@ test("effect dispatch: shield cancellation notifies terminal business before ret
     lifecycle: {
       finish: (context) => {
         assert.equal(context.facts.getEffect(context.ref).finished, true);
-        context.effects.install(2, recharge.ref, installation(2));
+        context.effects.install(2, recharge, installation(2));
       },
     },
   });
@@ -610,7 +610,7 @@ test("effect dispatch: shield cancellation notifies terminal business before ret
   assert.equal(result.hpLoss, 0);
   assert.equal(getUnit(original, 2).vitality.hp, 520);
   assert.deepEqual(
-    getUnit(original, 2).effects.instances.map((instance) => instance.definitionRef.id),
+    getUnit(original, 2).effects.instances.map((instance) => instance.definition.id),
     ["recharge"],
   );
   assert.deepEqual(
@@ -701,14 +701,14 @@ test("effect dispatch: healing observes reception rejection without retrospectiv
             calls++;
             context.operations.effects.update(
               context.ref,
-              context.instance.definitionRef,
+              context.instance.definition,
               (state) => ({
                 receipts: state.receipts + 1,
                 rejected: state.rejected + Number(pending.cancellation !== null),
               }),
             );
             if (context.request.power === 30 && pending.cancellation === null) {
-              context.operations.effects.install(2, blockHealing.ref, installation(2));
+              context.operations.effects.install(2, blockHealing, installation(2));
             }
             return { value: { ...pending, amount: pending.amount * 2 } };
           },
@@ -847,7 +847,7 @@ test("effect registration: domain facets coexist and expose the complete healing
       bindings: [compileStatusBinding(["INVISIBLE"])],
       lifecycle: {
         start: (context) =>
-          context.effects.update(context.ref, context.instance.definitionRef, (state) => ({
+          context.effects.update(context.ref, context.instance.definition, (state) => ({
             ...state,
             initialized: true,
           })),
@@ -858,7 +858,7 @@ test("effect registration: domain facets coexist and expose the complete healing
           apply: (context, pending) => {
             context.operations.effects.update(
               context.ref,
-              context.instance.definitionRef,
+              context.instance.definition,
               (state) => ({ ...state, damage: state.damage + 1 }),
             );
             return { value: { ...pending, amount: pending.amount * 2 } };
@@ -871,7 +871,7 @@ test("effect registration: domain facets coexist and expose the complete healing
           apply: (context, pending) => {
             context.operations.effects.update(
               context.ref,
-              context.instance.definitionRef,
+              context.instance.definition,
               (state) => ({ ...state, output: state.output + 1 }),
             );
             return { value: { ...pending, amount: pending.amount + 5 } };
@@ -882,7 +882,7 @@ test("effect registration: domain facets coexist and expose the complete healing
           apply: (context, pending) => {
             context.operations.effects.update(
               context.ref,
-              context.instance.definitionRef,
+              context.instance.definition,
               (state) => ({ ...state, reception: state.reception + 1 }),
             );
             return { value: { ...pending, amount: pending.amount * 2 } };
@@ -893,7 +893,7 @@ test("effect registration: domain facets coexist and expose the complete healing
           apply: (context, pending) => {
             context.operations.effects.update(
               context.ref,
-              context.instance.definitionRef,
+              context.instance.definition,
               (state) => ({ ...state, skipped: state.skipped + 1 }),
             );
             return { value: { ...pending, amount: pending.amount + 1 } };
@@ -904,7 +904,7 @@ test("effect registration: domain facets coexist and expose the complete healing
           apply: (context) => {
             context.operations.effects.update(
               context.ref,
-              context.instance.definitionRef,
+              context.instance.definition,
               (state) => ({ ...state, reactions: state.reactions + 1 }),
             );
           },

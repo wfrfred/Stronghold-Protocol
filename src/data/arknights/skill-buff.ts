@@ -40,7 +40,7 @@ export function compileArknightsAttackBuffSkill(
     return Object.freeze({
         definition: parsed.definition,
         activate: (context) => {
-            const installed = context.effects.install(context.unitId, buff.ref, {
+            const installed = context.effects.install(context.unitId, buff, {
                 source: context.unitId,
                 scopes: [
                     {

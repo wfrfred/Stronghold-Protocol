@@ -85,7 +85,7 @@ function register(resources, value = modifier.create({ multiplier: -0.5 })) {
     }), { contributions: [moveSpeed((instance) => [instance.state.value])] });
 }
 
-const install = (work, program, resources, expiresAtTick = null) => { installNewEffect(work, 0, program.ref, {
+const install = (work, program, resources, expiresAtTick = null) => { installNewEffect(work, 0, program, {
     source: null, scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }],
 }, resources, 0); };
 
@@ -106,7 +106,7 @@ test("move speed: normalized minimum, arithmetic and movement permission are sep
     assert.deepEqual(denied.unit.position, [0, 0]);
     const moved = h.step(resources, 2, { moveMultiplier: 0.5 });
     close(moved.unit.position[0], 0.1 / 60);
-    updateEffectState(h.work, 0, 0, program.ref, (state) => ({ ...state, value: modifier.create({ addition: 1 / 30, multiplier: 0.5, finalAddition: 1 / 30, finalScaler: 2 }) }), resources, 0);
+    updateEffectState(h.work, 0, 0, program, (state) => ({ ...state, value: modifier.create({ addition: 1 / 30, multiplier: 0.5, finalAddition: 1 / 30, finalScaler: 2 }) }), resources, 0);
     close(speed(h.work, resources), 8 / 30);
 });
 
@@ -153,10 +153,10 @@ test("move speed: in-flight acceleration, zero budget and restoration do not res
     install(h.work, program, resources);
     h.step(resources, 1);
     close(h.unit.position[0], 0.375);
-    updateEffectState(h.work, 0, 0, program.ref, (state) => ({ ...state, value: modifier.create({ multiplier: 1 }) }), resources, 0);
+    updateEffectState(h.work, 0, 0, program, (state) => ({ ...state, value: modifier.create({ multiplier: 1 }) }), resources, 0);
     h.step(resources, 2);
     close(h.unit.position[0], 0.875);
-    updateEffectState(h.work, 0, 0, program.ref, (state) => ({ ...state, value: modifier.create({ multiplier: -1 }) }), resources, 0);
+    updateEffectState(h.work, 0, 0, program, (state) => ({ ...state, value: modifier.create({ multiplier: -1 }) }), resources, 0);
     h.step(resources, 3);
     close(h.unit.position[0], 0.875);
     setEffectEnabled(h.work, address, false, resources, 4);

@@ -36,7 +36,7 @@ function fixture() {
     id: 'consume-on-damage', initialize: () => ({ consumed: 0 }),
   }), {
     damage: { reception: { priority: 0, apply: (context, value) => {
-      context.operations.effects.update(context.ref, counter.ref,
+      context.operations.effects.update(context.ref, counter,
         state => ({ consumed: state.consumed + 1 }));
       return { value };
     } } },
@@ -55,7 +55,7 @@ function fixture() {
   };
   const work = createBattleState(fixtureBattlefield(battlefield), undefined);
   for (const id of [0, 1]) activateSkill(work, { unitId: id, tick: 0 }, resources);
-  installNewEffect(work, 2, counter.ref, { source: null, scopes: [] }, resources, 0);
+  installNewEffect(work, 2, counter, { source: null, scopes: [] }, resources, 0);
   work.battlefield.apply();
   return { battlefield: work.battlefield, resources, execution: work.execution };
 }
@@ -177,7 +177,7 @@ test('effect finish: nested host death stops Action and Skill before their depen
       order.push('skill');
       assert.equal(context.facts.getUnit(0).skill.active, null);
       assert.equal(executions.get(0), undefined);
-      assert.equal(context.effects.install(1, independent.ref, { source: 0, scopes: [] }).type, 'INSTALLED');
+      assert.equal(context.effects.install(1, independent, { source: 0, scopes: [] }).type, 'INSTALLED');
     },
   });
   const first = resources.registerEffect(createEffectDefinition({
@@ -188,7 +188,7 @@ test('effect finish: nested host death stops Action and Skill before their depen
     order.push('first after damage');
     assert.equal(context.facts.getUnit(0).skill.active, null);
     assert.equal(executions.get(0), undefined);
-    assert.deepEqual(context.effects.install(0, forbidden.ref, { source: null, scopes: [] }),
+    assert.deepEqual(context.effects.install(0, forbidden, { source: null, scopes: [] }),
       { type: 'REJECTED', reason: 'TARGET_CLOSING' });
     assert.equal(context.instance.finished, true);
     assert.equal(order.includes('skill'), false);
@@ -221,10 +221,10 @@ test('effect finish: nested host death stops Action and Skill before their depen
   activateSkill(work, { unitId: 0, tick: 0 }, resources);
   const refs = [];
   for (const program of [first, second]) {
-    const installed = installNewEffect(work, 0, program.ref, { source: null, scopes: [] }, resources, 0);
+    const installed = installNewEffect(work, 0, program, { source: null, scopes: [] }, resources, 0);
     refs.push(installed.ref);
   }
-  installNewEffect(work, 1, dependent.ref, {
+  installNewEffect(work, 1, dependent, {
     source: 0, scopes: [{ type: 'ACTION', executionId: 0 }],
   }, resources, 0);
   const hostBefore = getUnit(work, 0);
@@ -236,7 +236,7 @@ test('effect finish: nested host death stops Action and Skill before their depen
   assert.deepEqual(executions.result().executions, []);
   assert.equal(work.events.filter(event => event.type === 'ACTION_CANCELLED').length, 1);
   assert.equal(work.events.filter(event => event.type === 'SKILL_FINISHED').length, 1);
-  assert.equal(getUnit(work, 1).effects.instances.find(instance => instance.definitionRef === independent.ref).participating, true);
+  assert.equal(getUnit(work, 1).effects.instances.find(instance => instance.definition === independent).participating, true);
   assert.equal(hostBefore.effects.nextInstanceId, 2);
 });
 
@@ -272,7 +272,7 @@ test('effect finish: remote dependent notices delay Skill notification and host 
   }), { lifecycle: { finish: context => {
     order.push('child');
     assert.equal(context.facts.getUnit(0).skill.active, null);
-    assert.equal(context.effects.install(1, transient.ref, { source: 0, scopes: [] }).type, 'ENDED');
+    assert.equal(context.effects.install(1, transient, { source: 0, scopes: [] }).type, 'ENDED');
     order.push('child after nested ending');
     assert.equal(context.facts.getUnit(0).skill.active, null);
     assert.equal(order.includes('skill'), false);
@@ -286,8 +286,8 @@ test('effect finish: remote dependent notices delay Skill notification and host 
     unitIds: [0, 1], getUnit: id => byId.get(id), blockerOf: () => undefined, blockedBy: () => [],
   }));
   activateSkill(work, { unitId: 0, tick: 0 }, resources);
-  const installed = installNewEffect(work, 0, parent.ref, { source: null, scopes: [] }, resources, 0);
-  installNewEffect(work, 1, child.ref, { source: 0, scopes: [installed.ref] }, resources, 0);
+  const installed = installNewEffect(work, 0, parent, { source: null, scopes: [] }, resources, 0);
+  installNewEffect(work, 1, child, { source: 0, scopes: [installed.ref] }, resources, 0);
 
   finishEffects(work, [installed.ref], resources, 1);
 

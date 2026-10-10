@@ -1,5 +1,5 @@
 import { ResourceRegistration } from "../../../../common/resource-registration.js";
-import type { EffectDefinition, EffectDefinitionRef } from "./definition.js";
+import type { EffectDefinition } from "./definition.js";
 import { createEffect, restoreEffect } from "./internal/effect.js";
 import type { Effect, EffectMetadata, EffectValue, EffectSnapshot } from "./effect.js";
 
@@ -13,64 +13,62 @@ export class EffectResources {
 
     register<S extends object>(definition: EffectDefinition<S>): EffectDefinition<S> {
         this.#registration.assertWritable();
-        const { ref } = definition;
-        const existing = this.#definitions.get(ref.id);
+        const existing = this.#definitions.get(definition.id);
 
         if (existing !== undefined) {
             if (!Object.is(existing, definition)) {
-                throw new TypeError(`duplicate effect definition ${ref.id}`);
+                throw new TypeError(`duplicate effect definition ${definition.id}`);
             }
 
             return existing as unknown as EffectDefinition<S>;
         }
 
-        this.#definitions.set(ref.id, definition as unknown as EffectDefinition<object>);
+        this.#definitions.set(definition.id, definition as unknown as EffectDefinition<object>);
 
         return definition;
     }
 
-    get<S extends object>(ref: EffectDefinitionRef<S>): EffectDefinition<S> {
+    get<S extends object>(definition: EffectDefinition<S>): EffectDefinition<S> {
         this.#registration.assertUsable();
-        const definition = this.#definitions.get(ref.id);
 
-        if (!Object.is(definition?.ref, ref)) {
-            throw new TypeError(`unregistered effect definition ${ref.id}`);
+        if (!Object.is(this.#definitions.get(definition.id), definition)) {
+            throw new TypeError(`unregistered effect definition ${definition.id}`);
         }
 
-        return definition as unknown as EffectDefinition<S>;
+        return definition;
     }
 
     create<S extends object>(
-        ref: EffectDefinitionRef<S>,
+        definition: EffectDefinition<S>,
         metadata: EffectMetadata,
         initialState?: NoInfer<S>,
     ): Effect<S> {
-        const definition = this.get(ref);
+        this.get(definition);
 
         return createEffect(definition, metadata, initialState ?? definition.initialize());
     }
 
     restore<S extends object>(
-        ref: EffectDefinitionRef<S>,
+        definition: EffectDefinition<S>,
         snapshot: EffectSnapshot<NoInfer<S>>,
     ): Effect<S> {
-        return restoreEffect(this.get(ref), snapshot);
+        return restoreEffect(this.get(definition), snapshot);
     }
 
     typedState<S extends object>(
         instance: EffectValue,
-        ref: EffectDefinitionRef<S>,
+        definition: EffectDefinition<S>,
     ): S | undefined {
-        return this.typedEffect(instance, ref)?.state;
+        return this.typedEffect(instance, definition)?.state;
     }
 
     typedEffect<S extends object>(
         instance: EffectValue,
-        ref: EffectDefinitionRef<S>,
+        definition: EffectDefinition<S>,
     ): Effect<S> | undefined {
-        this.get(ref);
+        this.get(definition);
 
-        return instance.definitionRef === ref ? (instance as Effect<S>) : undefined;
+        return instance.definition === definition ? (instance as Effect<S>) : undefined;
     }
 
     update<S extends object>(instance: Effect<S>, state: NoInfer<S>): Effect<S> {
@@ -85,10 +83,10 @@ export class EffectResources {
 
     #effectDefinition(instance: EffectValue): EffectDefinition<object> {
         this.#registration.assertUsable();
-        const definition = this.#definitions.get(instance.definitionRef.id);
+        const definition = this.#definitions.get(instance.definition.id);
 
-        if (definition?.ref !== instance.definitionRef) {
-            throw new TypeError(`unregistered effect definition ${instance.definitionRef.id}`);
+        if (definition !== instance.definition) {
+            throw new TypeError(`unregistered effect definition ${instance.definition.id}`);
         }
 
         return definition;

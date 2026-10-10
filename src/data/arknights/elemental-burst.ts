@@ -107,7 +107,7 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                             }
 
                             const remaining = context.instance.state.remaining - 1;
-                            context.effects.update(context.ref, paralysis.ref, (state) => ({
+                            context.effects.update(context.ref, paralysis, (state) => ({
                                 ...state,
                                 remaining,
                             }));
@@ -120,7 +120,7 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                             const recoveryTicks = TICKS_PER_SECOND / 2;
 
                             if (target !== undefined && hasStatus(target)) {
-                                context.effects.install(context.unitId, paralysisStun.ref, {
+                                context.effects.install(context.unitId, paralysisStun, {
                                     source: null,
                                     scopes: [{ type: "TICK", tick: context.tick + recoveryTicks }],
                                 });
@@ -164,19 +164,19 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                         hasDefense(unit) &&
                         (profile.defReduction !== 0 || profile.resReduction !== 0)
                     ) {
-                        context.effects.install(unitId, reduction.ref, {
+                        context.effects.install(unitId, reduction, {
                             ...input,
                             scopes: profile.defReduction > 0 ? [] : input.scopes,
                         });
                     }
                     if (hasStatus(unit) && flags.length > 0) {
-                        context.effects.install(unitId, status.ref, input);
+                        context.effects.install(unitId, status, input);
                     }
                     if (hasOffense(unit) && profile.attackReductionRatio > 0) {
-                        context.effects.install(unitId, weakness.ref, input);
+                        context.effects.install(unitId, weakness, input);
                     }
                     if (profile.paralysisStacks > 0) {
-                        context.effects.install(unitId, paralysis.ref, {
+                        context.effects.install(unitId, paralysis, {
                             ...input,
                             scopes: [],
                         });
@@ -211,7 +211,7 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                         ) {
                             const instance = unit.effects.instances.find(
                                 (candidate) =>
-                                    candidate.definitionRef.id === weakness.ref.id &&
+                                    candidate.definition.id === weakness.id &&
                                     !candidate.finished &&
                                     candidate.scopes.some(
                                         (scope) =>
@@ -230,7 +230,7 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                                         Math.max(0, 1 - second / durationSeconds);
                                 context.effects.update(
                                     { type: "EFFECT", unitId: unit.id, effectId: instance.id },
-                                    weakness.ref,
+                                    weakness,
                                     () => ({ scaler }),
                                 );
                             }

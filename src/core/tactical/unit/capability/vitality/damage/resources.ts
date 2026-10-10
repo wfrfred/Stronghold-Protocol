@@ -1,6 +1,6 @@
 import { ResourceRegistration } from "../../../../../common/resource-registration.js";
 import type { EffectValue } from "../../effects/effect.js";
-import type { EffectDefinitionRef } from "../../effects/definition.js";
+import type { EffectDefinition } from "../../effects/definition.js";
 import type { EffectResources } from "../../effects/registry.js";
 import type { EffectLifecycleOperations } from "../../effects/contract.js";
 import type { UnitLifecycleResources } from "../../../../battle/execution/unit-lifecycle.js";
@@ -110,14 +110,14 @@ export class DamageResources {
     }
 
     register<S extends object>(
-        ref: EffectDefinitionRef<S>,
+        definition: EffectDefinition<S>,
         rules: NoInfer<DamageEffectRules<S>>,
     ): void {
         this.#registration.assertWritable();
-        this.#effects.get(ref);
+        this.#effects.get(definition);
 
-        if (this.#rules.has(ref.id)) {
-            throw new TypeError(`duplicate damage effect ${ref.id}`);
+        if (this.#rules.has(definition.id)) {
+            throw new TypeError(`duplicate damage effect ${definition.id}`);
         }
 
         const effects = this.#effects;
@@ -125,7 +125,7 @@ export class DamageResources {
             ref: invocation.ref,
             ownerUnitId: invocation.ref.unitId,
             get instance() {
-                return effects.typedEffect(invocation.instance, ref)!;
+                return effects.typedEffect(invocation.instance, definition)!;
             },
             request: invocation.request,
             tick: invocation.tick,
@@ -180,7 +180,7 @@ export class DamageResources {
         const reaction = rules.reaction === undefined ? undefined : { ...rules.reaction };
 
         this.#rules.set(
-            ref.id,
+            definition.id,
             Object.freeze({
                 ...(rules.group === undefined ? {} : { group: Object.freeze({ ...rules.group }) }),
                 ...(sourceFormula === undefined ? {} : { sourceFormula }),
@@ -204,6 +204,6 @@ export class DamageResources {
     get(instance: EffectValue): CompiledDamageRules {
         this.#registration.assertUsable();
 
-        return this.#rules.get(instance.definitionRef.id) ?? emptyRules;
+        return this.#rules.get(instance.definition.id) ?? emptyRules;
     }
 }

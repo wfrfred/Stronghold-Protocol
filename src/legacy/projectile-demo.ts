@@ -53,7 +53,7 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
                 hasVitality(target) &&
                 target.vitality.hp > 0,
             contact: (context) => {
-                context.operations.effects.install(context.targetUnitId, marker.ref, {
+                context.operations.effects.install(context.targetUnitId, marker, {
                     source: context.projectile.source,
                     scopes: [{ type: "TICK", tick: context.tick + 45 }],
                 });
@@ -118,7 +118,7 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
                         installNewEffect(
                             context.work,
                             source.id,
-                            boost.ref,
+                            boost,
                             {
                                 source: source.id,
                                 scopes: [{ type: "TICK", tick: context.tick + 70 }],

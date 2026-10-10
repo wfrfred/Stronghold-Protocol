@@ -12,7 +12,6 @@ import { assertNonnegativeSafeInteger } from "../../../../common/assert.js";
 import type {
     EffectInstallationResult,
     EffectInstallationInput,
-    EffectLifecycleContext,
     EffectBindingResult,
     EffectEnd,
     EffectEndReason,
@@ -30,11 +29,11 @@ import {
 } from "./effect.js";
 import { validateLifetime, withEffectLifecycle } from "./internal/effect.js";
 import { registerEffect, replaceEffect, replaceEffects } from "./internal/state.js";
-import type { CompiledEffectLifecycle } from "./lifecycle-resources.js";
+import type { CompiledEffectLifecycle, EffectLifecycleInvocation } from "./lifecycle-resources.js";
 import { effectView, getEffect } from "./query.js";
 import { EffectDispatchScope } from "./dispatch.js";
 import { createEffectOperations } from "./operations.js";
-import type { EffectDefinitionRef } from "./definition.js";
+import type { EffectDefinition } from "./definition.js";
 import { reconcileEffectBindings, transitionEffectBindings } from "./transition.js";
 import { effectDependents, effectTickCandidates } from "./lifetime-index.js";
 
@@ -158,7 +157,7 @@ function runLifecycleAction(
             return state;
         };
 
-        const context: EffectLifecycleContext = {
+        const context: EffectLifecycleInvocation = {
             ref: address,
             get instance() {
                 return getEffect(readState(), address) ?? lastKnown();
@@ -201,7 +200,7 @@ export function updateEffectState<S extends object>(
     state: BattleState,
     ownerUnitId: UnitId,
     instanceId: number,
-    ref: EffectDefinitionRef<S>,
+    definition: EffectDefinition<S>,
     value: NoInfer<S> | ((current: NoInfer<S>) => NoInfer<S>),
     resources: EffectTransitionResources,
     tick: number,
@@ -214,7 +213,7 @@ export function updateEffectState<S extends object>(
         return;
     }
 
-    const typed = resources.effects.typedEffect(instance, ref);
+    const typed = resources.effects.typedEffect(instance, definition);
 
     if (typed === undefined) {
         throw new TypeError("effect state update must use its matching definition");
@@ -772,7 +771,7 @@ export function installEffect<S extends object>(
         return { type: "REJECTED", reason: "TARGET_ABSENT" };
     }
 
-    resources.effects.get(instance.definitionRef);
+    resources.effects.get(instance.definition);
 
     return installPrepared(state, unitId, instance, resources, tick, dispatch);
 }
@@ -780,7 +779,7 @@ export function installEffect<S extends object>(
 export function installNewEffect<S extends object>(
     state: BattleState,
     unitId: UnitId,
-    definition: EffectDefinitionRef<S>,
+    definition: EffectDefinition<S>,
     input: EffectInstallationInput<NoInfer<S>>,
     resources: EffectTransitionResources,
     tick: number,
