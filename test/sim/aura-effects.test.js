@@ -5,7 +5,7 @@ import { battlefieldView, getUnit, registerUnit, updateUnit } from '../../dist/c
 import { removeUnitWithEffects } from '../../dist/core/tactical/battle/execution/unit-lifecycle.js';
 import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
 import { getEffect } from '../../dist/core/tactical/unit/capability/effects/query.js';
-import { finishEffects, installNewEffect, reconcileEffects, setEffectEnabled } from '../../dist/core/tactical/unit/capability/effects/lifecycle.js';
+import { advanceEffects, finishEffects, installNewEffect, setEffectEnabled } from '../../dist/core/tactical/unit/capability/effects/lifecycle.js';
 import { resolveAttackPower } from '../../dist/core/tactical/unit/capability/offense/query.js';
 import { createSkillDefinition } from '../../dist/core/tactical/unit/capability/skill/capability.js';
 import { activateSkill, finishSkill } from '../../dist/core/tactical/unit/capability/skill/execution.js';
@@ -25,16 +25,16 @@ test('aura effects: selection reuses targeting and entered members are not retri
     const aura = registerAura(resources, receiver, { accepts: target => target.position[0] < 2 });
     const state = effectFixtureWork(auraUnit(0), auraUnit(1, [1, 0]), auraUnit(2, [3, 0]));
     const ref = install(state, resources, 0, aura);
-    reconcileEffects(state, 0, resources);
+    advanceEffects(state, 0, resources);
     assert.deepEqual(attempts, [1]);
     assert.deepEqual(getEffect(state, ref).state.bindings, [{ unitId: 1, refs: [] }]);
 
     updateUnit(state, { ...getUnit(state, 2), position: [1.5, 0] });
-    reconcileEffects(state, 1, resources);
+    advanceEffects(state, 1, resources);
     const child = getEffect(state, ref).state.bindings.find(binding => binding.unitId === 2).refs[0];
     assert.equal(power(state, 2, resources), 120);
     finishEffects(state, [child], resources, 1);
-    for (let tick = 2; tick < 5; tick++) reconcileEffects(state, tick, resources);
+    for (let tick = 2; tick < 5; tick++) advanceEffects(state, tick, resources);
     assert.deepEqual(attempts, [1, 2]);
     assert.equal(power(state, 2, resources), 100);
     assert.deepEqual(getEffect(state, ref).state.bindings.map(binding => binding.unitId), [1, 2]);
@@ -49,17 +49,43 @@ test('aura effects: leaving ends the bound buff and reentry installs a new ident
     const oldView = battlefieldView(state);
     const first = getEffect(state, ref).state.bindings[0].refs[0];
     updateUnit(state, { ...getUnit(state, 1), position: [3, 0] });
-    reconcileEffects(state, 1, resources);
+    advanceEffects(state, 1, resources);
     assert.deepEqual(getEffect(state, ref).state.bindings, []);
     assert.equal(getEffect(state, first).finished, true);
     assert.equal(power(state, 1, resources), 100);
     updateUnit(state, { ...getUnit(state, 1), position: [1, 0] });
-    reconcileEffects(state, 2, resources);
+    advanceEffects(state, 2, resources);
     const second = getEffect(state, ref).state.bindings[0].refs[0];
     assert.notDeepEqual(second, first);
     assert.equal(power(state, 1, resources), 120);
     assert.equal(oldView.getUnit(1).effects.instances[0].finished, false);
     assert.equal(oldView.getUnit(0).effects.instances[0].state.bindings[0].refs[0].effectId, first.effectId);
+});
+
+test('aura effects: the program controls its target refresh interval in its tick callback', () => {
+    const resources = new CombatResources();
+    const receiver = attackEffect(resources, 'interval-receiver');
+    const aura = registerAura(resources, receiver, {
+        accepts: target => target.position[0] < 2, refreshInterval: 3,
+    });
+    const state = effectFixtureWork(auraUnit(0), auraUnit(1, [1, 0]), auraUnit(2, [3, 0]));
+    const ref = install(state, resources, 0, aura);
+    advanceEffects(state, 0, resources);
+    const child = getEffect(state, ref).state.bindings[0].refs[0];
+    updateUnit(state, { ...getUnit(state, 1), position: [3, 0] });
+    updateUnit(state, { ...getUnit(state, 2), position: [1, 0] });
+    for (const tick of [1, 2]) {
+        advanceEffects(state, tick, resources);
+        assert.equal(power(state, 1, resources), 120);
+        assert.equal(power(state, 2, resources), 100);
+        assert.deepEqual(getEffect(state, ref).state.bindings.map(binding => binding.unitId), [1]);
+    }
+    advanceEffects(state, 3, resources);
+    assert.equal(getEffect(state, child).finished, true);
+    assert.equal(power(state, 1, resources), 100);
+    assert.equal(power(state, 2, resources), 120);
+    assert.deepEqual(getEffect(state, ref).state.bindings.map(binding => binding.unitId), [2]);
+    assert.equal(getEffect(state, ref).state.nextRefreshTick, 6);
 });
 
 test('aura effects: host departure cascades bound children and keeps independently installed children', () => {
@@ -190,7 +216,7 @@ test('aura effects: resuming ends departed receivers before their enable callbac
     enabled.length = 0;
     setEffectEnabled(state, ref, false, resources, 1);
     updateUnit(state, { ...getUnit(state, 1), position: [3, 0] });
-    reconcileEffects(state, 1, resources);
+    advanceEffects(state, 1, resources);
     setEffectEnabled(state, ref, true, resources, 2);
     assert.deepEqual(enabled, [2]);
     assert.equal(getEffect(state, child).finished, true);
@@ -221,7 +247,7 @@ test('aura effects: nested receiver start can stop the aura without leaving acti
     assert.equal(child.participating, false);
     assert.equal(power(state, 1, resources), 100);
     assert.equal(getUnit(state, 2).effects, undefined);
-    reconcileEffects(state, 1, resources);
+    advanceEffects(state, 1, resources);
     assert.deepEqual(starts, [1]);
 });
 
@@ -243,7 +269,7 @@ test('aura effects: nested receiver start cannot revive its finished parent', ()
     assert.equal(getUnit(state, 1).effects.instances[0].finished, true);
     assert.equal(power(state, 1, resources), 100);
     assert.equal(getUnit(state, 2).effects, undefined);
-    reconcileEffects(state, 1, resources);
+    advanceEffects(state, 1, resources);
     assert.deepEqual(starts, [1]);
 });
 
@@ -271,7 +297,7 @@ test('aura effects: nested installation reads current state and retains old batt
     assert.equal(captured.getUnit(2).vitality.hp, 100);
     assert.deepEqual(captured.getUnit(0).effects.instances[0].state.bindings, [{ unitId: 1, refs: [] }]);
     registerUnit(state, auraUnit(3));
-    reconcileEffects(state, 0, resources);
+    advanceEffects(state, 1, resources);
     assert.deepEqual(getEffect(state, ref).state.bindings.map(binding => binding.unitId), [1, 2, 3]);
     assert.equal(captured.unitIds.includes(3), false);
 });

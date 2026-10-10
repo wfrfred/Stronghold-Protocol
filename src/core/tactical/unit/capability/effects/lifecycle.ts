@@ -892,12 +892,12 @@ function installPrepared<S extends object>(
     return { type: current === undefined || current.finished ? "ENDED" : "INSTALLED", ref };
 }
 
-function runEffectUpdates(
+/** Advance periodic content once at the tick's time boundary. */
+export function advanceEffects(
     state: BattleState,
     tick: number,
     resources: EffectTransitionResources,
-    action: "advance" | "reconcile",
-    dispatch: EffectDispatchScope,
+    dispatch = new EffectDispatchScope(),
 ): void {
     const view = battlefieldView(state);
     const candidates: EffectRef[] = [];
@@ -907,7 +907,7 @@ function runEffectUpdates(
 
         if (hasEffects(unit)) {
             for (const instance of unit.effects.instances) {
-                if (resources.effectLifecycle.get(instance)[action] !== undefined) {
+                if (resources.effectLifecycle.get(instance).advance !== undefined) {
                     candidates.push({ type: "EFFECT", unitId, effectId: instance.id });
                 }
             }
@@ -930,32 +930,12 @@ function runEffectUpdates(
             state,
             ref,
             instance,
-            resources.effectLifecycle.get(instance)[action],
+            resources.effectLifecycle.get(instance).advance,
             resources,
             tick,
             dispatch,
         );
     }
-}
-
-/** Advance periodic content once at the tick's time boundary. */
-export function advanceEffects(
-    state: BattleState,
-    tick: number,
-    resources: EffectTransitionResources,
-    dispatch = new EffectDispatchScope(),
-): void {
-    runEffectUpdates(state, tick, resources, "advance", dispatch);
-}
-
-/** Coordinate content with current facts without advancing its timers. */
-export function reconcileEffects(
-    state: BattleState,
-    tick: number,
-    resources: EffectTransitionResources,
-    dispatch = new EffectDispatchScope(),
-): void {
-    runEffectUpdates(state, tick, resources, "reconcile", dispatch);
 }
 
 export function expireEffects(

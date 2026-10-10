@@ -216,18 +216,9 @@ function scenario({ failure = null, cancelled = false } = {}) {
     ownState: (state) => ({ ...state }),
   }), { lifecycle: {
     advance: context => {
-      if (context.tick >= 3) context.effects.finish([context.ref], "AURA_FINISHED");
-    },
-    reconcile: context => {
-      if (fault.enabled && failure === "late-aura" && context.instance.state.consumed > 0) {
-        assert.deepEqual(context.instance.state.receivers.map(binding => binding.unitId), [0, 1, 2, 3]);
-        assert.equal(context.battlefield.getUnit(1).vitality.hp, 83);
-        assert.equal(hasStatusFlag(context.battlefield.getUnit(1), "INVISIBLE"), true);
-        assert.equal(context.battlefield.getUnit(2).action.readyAtTick, 101);
-        throw new Error("late composition failure");
-      }
-      if (fault.enabled && failure === "reentrant" && context.instance.state.consumed > 0) {
-        runtime.step();
+      if (context.tick >= 3) {
+        context.effects.finish([context.ref], "AURA_FINISHED");
+        return;
       }
       for (const unitId of context.battlefield.unitIds) {
         if (context.instance.finished) return;
@@ -263,6 +254,16 @@ function scenario({ failure = null, cancelled = false } = {}) {
         tick: context.tick,
       }));
       context.operations.stopSelf();
+      if (fault.enabled && failure === "late-projectile") {
+        const auraState = context.facts.getUnit(0).effects.instances
+          .find(instance => instance.programRef === aura.ref).state;
+        assert.deepEqual(auraState.receivers.map(binding => binding.unitId), [0, 1, 2, 3]);
+        assert.equal(context.facts.getUnit(1).vitality.hp, 83);
+        assert.equal(hasStatusFlag(context.facts.getUnit(1), "INVISIBLE"), true);
+        assert.equal(context.facts.getUnit(2).action.readyAtTick, 101);
+        throw new Error("late composition failure");
+      }
+      if (fault.enabled && failure === "reentrant") runtime.step();
     },
   }));
   const primary = actor("primary-launcher");
@@ -349,7 +350,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
 }
 
 test("runtime composition: late exceptions and invalid settlement discard every domain, then retry the same identities and terminal trace", () => {
-  for (const failure of ["late-aura", "invalid-damage", "reentrant"]) {
+  for (const failure of ["late-projectile", "invalid-damage", "reentrant"]) {
     const failed = scenario({ failure });
     const clean = scenario();
     const events = [...failed.runtime.step().events];
@@ -364,7 +365,7 @@ test("runtime composition: late exceptions and invalid settlement discard every 
     assert.equal(resolveAttackPower(0, view(before), failed.resources.computations), 17);
 
     assert.throws(() => failed.runtime.step(), {
-      "late-aura": /late composition failure/,
+      "late-projectile": /late composition failure/,
       "invalid-damage": RangeError,
       "reentrant": /battle step is already active/,
     }[failure]);

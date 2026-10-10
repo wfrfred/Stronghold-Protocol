@@ -29,11 +29,10 @@ export function attackEffect(resources, id, facets = {}) {
 /** Ordinary aura content: membership persists even when its installed buff disappears. */
 export function registerAura(resources, receiver, {
     id = 'aura', accepts = () => true, bindLifetime = true,
-    initialState = () => undefined, competition, onReconcile,
+    initialState = () => undefined, competition, refreshInterval = 1,
 } = {}) {
     let aura;
-    const reconcile = context => {
-        onReconcile?.(context);
+    const refreshTargets = context => {
         const host = context.battlefield.getUnit(context.ref.unitId);
         if (host === undefined || context.instance.finished || !context.instance.participating) return;
         const selected = selectTargets({ battlefield: context.battlefield, host }, {
@@ -77,12 +76,18 @@ export function registerAura(resources, receiver, {
             }
         }
     };
-    aura = resources.registerEffect(effectProgram(id, () => ({ bindings: [] })), {
+    aura = resources.registerEffect(effectProgram(id, () => ({ bindings: [], nextRefreshTick: 0 })), {
         lifecycle: {
             ...(competition === undefined ? {} : { competition }),
-            reconcile,
+            advance: context => {
+                if (context.tick < context.instance.state.nextRefreshTick) return;
+                context.effects.update(context.ref, aura.ref, state => ({
+                    ...state, nextRefreshTick: context.tick + refreshInterval,
+                }));
+                refreshTargets(context);
+            },
             enable: context => {
-                reconcile(context);
+                refreshTargets(context);
                 for (const binding of context.instance.state.bindings) {
                     if (context.instance.finished || !context.instance.participating) break;
                     for (const ref of binding.refs) {

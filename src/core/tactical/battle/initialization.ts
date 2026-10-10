@@ -5,14 +5,8 @@ import { instantiateNavigationModifierPlacement } from "./creation/navigation-mo
 import { changePredefinedInstances } from "./steps/predefined.js";
 import type { Input } from "./contract.js";
 import { advanceBattlefield, type BattleState } from "./execution/context.js";
-import type { CombatResources } from "./resources.js";
-import { reconcileEffects } from "../unit/capability/effects/lifecycle.js";
 
-export function initializeBattlefield(
-    input: Input,
-    state: BattleState,
-    combatResources: CombatResources,
-) {
+export function initializeBattlefield(input: Input, state: BattleState) {
     const initialChanges: BattlefieldChange[] = [];
     const initialUnitIds: number[] = [];
     const initialMechanismIds: number[] = [];
@@ -56,7 +50,6 @@ export function initializeBattlefield(
 
     state.execution = initialized.execution;
     advanceBattlefield(state, [...initialChanges, ...initialized.changes]);
-    reconcileEffects(state, 0, combatResources);
 
     return initialized.presence;
 }

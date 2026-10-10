@@ -1,9 +1,5 @@
 import { advanceBattlefield, battlefieldView, createBattleState } from "./execution/context.js";
-import {
-    advanceEffects,
-    reconcileEffects,
-    validateEffectLifetimes,
-} from "../unit/capability/effects/lifecycle.js";
+import { advanceEffects, validateEffectLifetimes } from "../unit/capability/effects/lifecycle.js";
 import { ActionExecutionWork } from "../unit/capability/action/internal/executions.js";
 import { assert, assertNonnegativeNumber, assertPositiveSafeInteger } from "../../common/assert.js";
 import { BattlefieldRuntime } from "../battlefield/runtime.js";
@@ -116,7 +112,7 @@ export class BattleRuntime {
             },
             new ActionExecutionWork(actionExecution),
         );
-        const predefinedPresence = initializeBattlefield(input, initial, this.#combatResources);
+        const predefinedPresence = initializeBattlefield(input, initial);
         validateEffectLifetimes(initial);
         battlefield.apply();
 
@@ -200,15 +196,6 @@ export class BattleRuntime {
         const actionExecutions = new ActionExecutionWork(previous.actionExecution);
         const state = createBattleState(battlefield, previous.execution, actionExecutions, tick);
         const resources = this.#combatResources;
-        let registrationCursor = 0;
-
-        const settleRegistrations = (): void => {
-            while (registrationCursor < state.registeredUnitIds.length) {
-                registrationCursor = state.registeredUnitIds.length;
-                reconcileEffects(state, tick, resources);
-            }
-        };
-
         this.#stepping = true;
 
         try {
@@ -221,37 +208,25 @@ export class BattleRuntime {
                 tick,
                 resources,
             );
-            settleRegistrations();
 
             this.#combat.prepare(state, commands, tick);
-            settleRegistrations();
 
             resolveDeploymentCommands(state, commands, tick, resources);
-            settleRegistrations();
 
             schedule = advanceSpawning(state, schedule, commands, tick);
-            settleRegistrations();
 
             advanceEffects(state, tick, resources);
-            settleRegistrations();
 
             advanceElements(state, tick, resources);
-            settleRegistrations();
 
             advanceSkills(state, commands, tick, resources);
-            settleRegistrations();
-
-            reconcileEffects(state, tick, resources);
-            settleRegistrations();
 
             advanceRouteCommands(state, commands, tick);
             advanceBattlefield(state, advanceBlocking(battlefieldView(state)));
 
             this.#combat.advance(state, tick);
-            settleRegistrations();
 
             advanceProjectiles(state, tick, commands, resources);
-            settleRegistrations();
 
             advanceMovement(
                 state,
@@ -263,10 +238,6 @@ export class BattleRuntime {
                 },
                 resources,
             );
-            settleRegistrations();
-
-            reconcileEffects(state, tick, resources);
-            settleRegistrations();
 
             advanceBattlefield(state, advanceBlocking(battlefieldView(state)));
             predefinedPresence = reconcilePredefinedPresence(

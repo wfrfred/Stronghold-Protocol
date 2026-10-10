@@ -80,8 +80,6 @@ export interface EffectLifecycleProgram<S extends object> {
     readonly disable?: EffectLifecycleAction<S>;
     /** Periodic work, called once per Runtime tick for participating effects. */
     readonly advance?: EffectLifecycleAction<S>;
-    /** Synchronize with battlefield facts; may run multiple times in one tick. */
-    readonly reconcile?: EffectLifecycleAction<S>;
     readonly expire?: EffectLifecycleAction<S>;
     readonly finish?: (context: EffectFinishContext<S>) => undefined;
     readonly accepts?: (context: EffectAdmissionContext<S>) => boolean;

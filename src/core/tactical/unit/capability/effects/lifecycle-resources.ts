@@ -16,7 +16,6 @@ export interface CompiledEffectLifecycle {
     readonly enable?: (context: EffectLifecycleContext) => undefined;
     readonly disable?: (context: EffectLifecycleContext) => undefined;
     readonly advance?: (context: EffectLifecycleContext) => undefined;
-    readonly reconcile?: (context: EffectLifecycleContext) => undefined;
     readonly expire?: (context: EffectLifecycleContext) => undefined;
     readonly finish?: (context: EffectFinishContext) => undefined;
     readonly accepts?: (context: EffectAdmissionContext) => boolean;
@@ -76,7 +75,6 @@ export class EffectLifecycleResources {
         const enable = compile(program.enable).run;
         const disable = compile(program.disable).run;
         const advance = compile(program.advance).run;
-        const reconcile = compile(program.reconcile).run;
         const expire = compile(program.expire).run;
         const finishAction = program.finish;
 
@@ -105,7 +103,6 @@ export class EffectLifecycleResources {
                 ...(enable === undefined ? {} : { enable }),
                 ...(disable === undefined ? {} : { disable }),
                 ...(advance === undefined ? {} : { advance }),
-                ...(reconcile === undefined ? {} : { reconcile }),
                 ...(expire === undefined ? {} : { expire }),
                 ...(finish === undefined ? {} : { finish }),
                 ...(accepts === undefined

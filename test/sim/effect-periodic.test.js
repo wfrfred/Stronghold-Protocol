@@ -6,9 +6,10 @@ import { getUnit } from '../../dist/core/tactical/battle/execution/context.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
 import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
-import { advanceEffects, expireEffects, installNewEffect, reconcileEffects, setEffectEnabled } from '../../dist/core/tactical/unit/capability/effects/lifecycle.js';
+import { advanceEffects, expireEffects, installNewEffect, setEffectEnabled } from '../../dist/core/tactical/unit/capability/effects/lifecycle.js';
 import { getEffect } from '../../dist/core/tactical/unit/capability/effects/query.js';
 import { effectTick } from '../../dist/core/tactical/unit/capability/effects/instance.js';
+import { createSkillDefinition } from '../../dist/core/tactical/unit/capability/skill/capability.js';
 import { effectFixtureWork } from '../helpers/effects.js';
 import { auraUnit, effectProgram, seededPlacement } from '../helpers/aura.js';
 
@@ -31,7 +32,7 @@ function battleInput(placement) {
         }] }, maxTicks: 10, routeMoveMultiplier: 1, rngState: 17 };
 }
 
-test('periodic effects: repeated reconciliation does not consume time or damage before the next trigger', () => {
+test('periodic effects: the tick callback controls trigger intervals independently of expiration', () => {
     const resources = new CombatResources();
     let poison;
     poison = resources.registerEffect(effectProgram('poison', () => ({ nextTriggerTick: 0, triggers: 0 })), {
@@ -48,9 +49,7 @@ test('periodic effects: repeated reconciliation does not consume time or damage 
     const installed = installNewEffect(state, 0, poison.ref, { source: null,
         scopes: [{ type: 'TICK', tick: 5 }] }, resources, 0);
     for (let tick = 0; tick < 5; tick++) {
-        for (let pass = 0; pass < 4; pass++) reconcileEffects(state, tick, resources);
         advanceEffects(state, tick, resources);
-        reconcileEffects(state, tick, resources);
     }
     assert.equal(getUnit(state, 0).vitality.hp, 70);
     assert.equal(getEffect(state, installed.ref).state.triggers, 3);
@@ -96,7 +95,7 @@ test('periodic effects: disabled and overridden effects do not advance but still
         let calls = 0;
         const periodic = resources.registerEffect(effectProgram('inactive-periodic'), {
             lifecycle: { competition: () => ({ group: 'periodic', priority: 1 }),
-                advance: () => { calls++; }, reconcile: () => { calls++; } },
+                advance: () => { calls++; } },
         });
         const winner = resources.registerEffect(effectProgram('periodic-winner'), {
             lifecycle: { competition: () => ({ group: 'periodic', priority: 2 }) },
@@ -106,7 +105,6 @@ test('periodic effects: disabled and overridden effects do not advance but still
             { source: null, scopes: [{ type: 'TICK', tick: 2 }] }, resources, 0).ref;
         if (inactive === 'disabled') setEffectEnabled(state, ref, false, resources, 0);
         else installNewEffect(state, 0, winner.ref, { source: null, scopes: [] }, resources, 0);
-        reconcileEffects(state, 1, resources);
         advanceEffects(state, 1, resources);
         expireEffects(state, 2, resources);
         assert.equal(calls, 0);
@@ -114,18 +112,15 @@ test('periodic effects: disabled and overridden effects do not advance but still
     }
 });
 
-test('periodic effects: Runtime advances once per tick while registration and spatial reconciliation repeat', () => {
+test('periodic effects: Runtime advances once per tick regardless of unit registration', () => {
     const resources = new CombatResources();
     let periodic;
-    periodic = resources.registerEffect(effectProgram('runtime-periodic', () => ({ advances: 0, reconciles: 0 })), {
+    periodic = resources.registerEffect(effectProgram('runtime-periodic', () => ({ advances: 0 })), {
         lifecycle: {
             advance: context => {
                 context.damage({ sourceUnitId: null, targetUnitId: 0,
                     damageType: 'TRUE', operands: createDamageOperands(10) });
                 context.effects.update(context.ref, periodic.ref, state => ({ ...state, advances: state.advances + 1 }));
-            },
-            reconcile: context => {
-                context.effects.update(context.ref, periodic.ref, state => ({ ...state, reconciles: state.reconciles + 1 }));
             },
         },
     });
@@ -137,10 +132,35 @@ test('periodic effects: Runtime advances once per tick while registration and sp
     const after = runtime.snapshot();
     assert.equal(after.units[0].vitality.hp, 90);
     assert.equal(after.units[0].effects.instances[0].state.advances, 1);
-    assert.ok(after.units[0].effects.instances[0].state.reconciles - before.units[0].effects.instances[0].state.reconciles >= 3);
     runtime.step();
     assert.equal(runtime.snapshot().units[0].vitality.hp, 80);
     assert.equal(runtime.snapshot().units[0].effects.instances[0].state.advances, 2);
+});
+
+test('periodic effects: a skill installs after the effect tick and starts advancing on the next tick', () => {
+    const resources = new CombatResources();
+    const trace = [];
+    const periodic = resources.registerEffect(effectProgram('skill-periodic'), {
+        lifecycle: { advance: context => { trace.push(context.tick); } },
+    });
+    const skill = createSkillDefinition({ id: 'periodic-skill', activation: 'MANUAL',
+        spRecovery: 'TIME', spCost: 1, initialSp: 1, durationTicks: 10 });
+    resources.skills.register({ definition: skill, activate: context => {
+        const installed = context.effects.install(context.unitId, periodic.ref, {
+            source: context.unitId,
+            scopes: [{ type: 'SKILL', unitId: context.unitId, activationId: context.activationId }],
+        });
+        assert.equal(installed.type, 'INSTALLED');
+        return { type: 'ACTIVATED' };
+    } });
+    const host = auraUnit(0, [0, 0], { skill });
+    const runtime = new BattleRuntime(battleInput({ definition: host.definition, position: host.position }),
+        { combat: resources });
+    runtime.step([{ type: 'ACTIVATE_SKILL', unitId: 0 }]);
+    assert.deepEqual(trace, []);
+    assert.equal(runtime.snapshot().units[0].effects.instances[0].started, true);
+    runtime.step();
+    assert.deepEqual(trace, [1]);
 });
 
 test('periodic effects: failed time advancement rolls back damage and progress before retry', () => {
