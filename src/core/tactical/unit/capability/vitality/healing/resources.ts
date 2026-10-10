@@ -16,10 +16,8 @@ import type {
     HealingRequest,
     PendingHealing,
 } from "./contract.js";
-import type { EffectSourceResources } from "../../../../battlefield/effect-source/resources.js";
 
 export interface HealingResourceServices extends EffectTransitionResources {
-    readonly effectSources: EffectSourceResources;
     readonly healing: HealingResources;
     readonly settleDamage: DamageOperation;
     readonly settleHealing: HealingOperation;

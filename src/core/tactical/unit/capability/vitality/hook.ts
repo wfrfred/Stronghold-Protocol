@@ -12,11 +12,6 @@ import { resolveMaxHp } from "./query.js";
 import { battlefieldView, type BattleState } from "../../../battle/execution/context.js";
 import type { DamageReport, DamageRequest, DamageOperation } from "./damage/contract.js";
 import type { HealingReport, HealingRequest, HealingOperation } from "./healing/contract.js";
-import {
-    createEffectSourceOperations,
-    type EffectSourceOperations,
-} from "../../../battlefield/effect-source/operations.js";
-import type { EffectSourceResources } from "../../../battlefield/effect-source/resources.js";
 
 export interface VitalityHookFacts extends EffectView {
     maxHp(unitId: UnitId): number | undefined;
@@ -32,7 +27,6 @@ export interface VitalityHookContext<S extends object> {
 
 export interface VitalityHookOperations {
     readonly effects: EffectLifecycleOperations;
-    readonly sources: EffectSourceOperations;
     damage(request: Omit<DamageRequest, "tick">): DamageReport;
     heal(request: Omit<HealingRequest, "tick">): HealingReport;
 }
@@ -50,7 +44,6 @@ export interface DispatchResult<V> {
 }
 
 export interface VitalityHookServices extends EffectTransitionResources {
-    readonly effectSources: EffectSourceResources;
     readonly settleDamage: DamageOperation;
     readonly settleHealing: HealingOperation;
 }
@@ -93,7 +86,6 @@ export function withVitalityHookContext<R, T>(
             facts: vitalityHookFacts(readWork),
             operations: {
                 effects: createEffectOperations(readWork, resources, tick, dispatch),
-                sources: createEffectSourceOperations(readWork, resources),
                 damage: (input) => {
                     return resources.settleDamage(readWork(), { ...input, tick }, dispatch);
                 },

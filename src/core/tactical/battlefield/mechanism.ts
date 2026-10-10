@@ -1,9 +1,4 @@
 import { assertNonnegativeSafeInteger } from "../../common/assert.js";
-import {
-    copyEffectSourceState,
-    hasEffectSource,
-    type EffectSourceMechanism,
-} from "./effect-source/state.js";
 
 export type MechanismId = number;
 
@@ -31,12 +26,6 @@ export function createMechanismDefinition(definition: MechanismDefinition): Mech
 }
 
 export function createMechanismRuntime<D extends MechanismDefinition>(
-    runtime: MechanismRuntime<D> & EffectSourceMechanism,
-): MechanismRuntime<D> & EffectSourceMechanism;
-export function createMechanismRuntime<D extends MechanismDefinition>(
-    runtime: MechanismRuntime<D>,
-): MechanismRuntime<D>;
-export function createMechanismRuntime<D extends MechanismDefinition>(
     runtime: MechanismRuntime<D>,
 ): MechanismRuntime<D> {
     assertNonnegativeSafeInteger(runtime.id, "mechanism id");
@@ -45,8 +34,5 @@ export function createMechanismRuntime<D extends MechanismDefinition>(
         id: runtime.id,
         definition: runtime.definition,
         active: runtime.active,
-        ...(hasEffectSource(runtime)
-            ? { effectSource: copyEffectSourceState(runtime.effectSource) }
-            : {}),
     };
 }

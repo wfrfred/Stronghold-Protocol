@@ -1,5 +1,9 @@
 import { advanceBattlefield, battlefieldView, createBattleState } from "./execution/context.js";
-import { validateEffectLifetimes } from "../unit/capability/effects/lifecycle.js";
+import {
+    advanceEffects,
+    reconcileEffects,
+    validateEffectLifetimes,
+} from "../unit/capability/effects/lifecycle.js";
 import { ActionExecutionWork } from "../unit/capability/action/internal/executions.js";
 import { assert, assertNonnegativeNumber, assertPositiveSafeInteger } from "../../common/assert.js";
 import { BattlefieldRuntime } from "../battlefield/runtime.js";
@@ -23,7 +27,6 @@ import {
 } from "./steps/predefined.js";
 import type { Input, Command, Result, Snapshot, Step } from "./contract.js";
 import { finishBattleEvents } from "./events.js";
-import { advanceEffectSources, registerEffectSources } from "./steps/effect-sources.js";
 import { CombatResources } from "./resources.js";
 import { createCombat } from "./steps/combat.js";
 import { advanceBlocking } from "./steps/blocking.js";
@@ -201,9 +204,8 @@ export class BattleRuntime {
 
         const settleRegistrations = (): void => {
             while (registrationCursor < state.registeredUnitIds.length) {
-                const ids = state.registeredUnitIds.slice(registrationCursor);
                 registrationCursor = state.registeredUnitIds.length;
-                registerEffectSources(state, ids, tick, resources);
+                reconcileEffects(state, tick, resources);
             }
         };
 
@@ -230,13 +232,16 @@ export class BattleRuntime {
             schedule = advanceSpawning(state, schedule, commands, tick);
             settleRegistrations();
 
+            advanceEffects(state, tick, resources);
+            settleRegistrations();
+
             advanceElements(state, tick, resources);
             settleRegistrations();
 
             advanceSkills(state, commands, tick, resources);
             settleRegistrations();
 
-            advanceEffectSources(state, tick, resources);
+            reconcileEffects(state, tick, resources);
             settleRegistrations();
 
             advanceRouteCommands(state, commands, tick);
@@ -260,7 +265,7 @@ export class BattleRuntime {
             );
             settleRegistrations();
 
-            advanceEffectSources(state, tick, resources);
+            reconcileEffects(state, tick, resources);
             settleRegistrations();
 
             advanceBattlefield(state, advanceBlocking(battlefieldView(state)));

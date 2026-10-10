@@ -7,6 +7,8 @@ import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
 import { createOperatorDefinition } from "../../dist/core/tactical/unit/archetype/operator.js";
 import { createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
+import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { seededPlacement } from "../helpers/aura.js";
 import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
 import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
 import { compileAction } from "../../dist/core/tactical/unit/capability/action/compile.js";
@@ -20,13 +22,6 @@ import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/off
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/execution/context.js";
 import { createProjectileProgram } from "../../dist/core/tactical/battlefield/projectile/program.js";
-import {
-  createMechanismDefinition,
-} from "../../dist/core/tactical/battlefield/mechanism.js";
-import {
-  createEffectSourceProgramRef,
-  effectSourceInstallation,
-} from "../../dist/core/tactical/battlefield/effect-source/program.js";
 
 const hit = createShapeGeometry({
   shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.1 }],
@@ -110,7 +105,8 @@ function scenario({ failure = null, cancelled = false } = {}) {
   const attempts = [];
   const reports = [];
   const rejected = [];
-  const sourceRef = createEffectSourceProgramRef("combined-source");
+  const auraAddress = { type: "EFFECT", unitId: 0, effectId: 0 };
+  let aura;
 
   const registerBuff = (id, addition, flags = []) => {
     let program;
@@ -156,7 +152,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
   });
   let receiver;
   receiver = resources.registerEffect(createEffectProgram({
-    id: "source-receiver",
+    id: "aura-receiver",
     initialize: () => ({ starts: 0, enables: 0, uses: 0 }),
     ownState: (state) => ({ ...state }),
   }), {
@@ -177,10 +173,10 @@ function scenario({ failure = null, cancelled = false } = {}) {
       reception: {
         priority: 0,
         apply: (context, pending) => {
-          assert.equal(context.operations.sources.tryConsume(0, sourceRef, (state) =>
-            state.remaining === 0 ? undefined : {
-              remaining: state.remaining - 1, consumed: state.consumed + 1,
-            }), true);
+          assert.ok(context.facts.getEffect(auraAddress).state.remaining > 0);
+          context.operations.effects.update(auraAddress, aura.ref, (state) => ({
+            ...state, remaining: state.remaining - 1, consumed: state.consumed + 1,
+          }));
           context.operations.effects.update(context.ref, receiver.ref, (state) => ({
             ...state, uses: state.uses + 1,
           }));
@@ -199,9 +195,10 @@ function scenario({ failure = null, cancelled = false } = {}) {
             assert.equal(installed.type, "INSTALLED");
             assert.equal(context.operations.effects.bind(installed.ref, context.ref).type, "BOUND");
           }
+          const quota = context.facts.getEffect(auraAddress).state;
           attempts.push({
             address: context.ref,
-            source: context.operations.sources.get(0, sourceRef).effectSource.state,
+            quota: { remaining: quota.remaining, consumed: quota.consumed },
             marked: hasStatusFlag(context.facts.getUnit(context.ownerUnitId), "INVISIBLE"),
           });
           return { value: {
@@ -213,32 +210,42 @@ function scenario({ failure = null, cancelled = false } = {}) {
       },
     },
   });
-  resources.effectSources.register({
-    ref: sourceRef,
-    initialize: () => ({ remaining: 3, consumed: 0 }),
+  aura = resources.registerEffect(createEffectProgram({
+    id: "combined-aura",
+    initialize: () => ({ remaining: 3, consumed: 0, receivers: [] }),
     ownState: (state) => ({ ...state }),
-    selectInitial: ({ battlefield }) => battlefield.unitIds,
-    acceptsRegistration: () => true,
-    install: () => effectSourceInstallation(receiver.ref, { scopes: [] }),
-    shouldFinish: ({ source, battlefield, tick }) => {
-      if (fault.enabled && failure === "late-source" && source.effectSource.state.consumed > 0) {
-        assert.deepEqual(source.effectSource.receivers.map((binding) => binding.unitId), [0, 1, 2, 3]);
-        assert.equal(battlefield.getUnit(1).vitality.hp, 83);
-        assert.equal(hasStatusFlag(battlefield.getUnit(1), "INVISIBLE"), true);
-        assert.equal(battlefield.getUnit(2).action.readyAtTick, 101);
+  }), { lifecycle: {
+    advance: context => {
+      if (context.tick >= 3) context.effects.finish([context.ref], "AURA_FINISHED");
+    },
+    reconcile: context => {
+      if (fault.enabled && failure === "late-aura" && context.instance.state.consumed > 0) {
+        assert.deepEqual(context.instance.state.receivers.map(binding => binding.unitId), [0, 1, 2, 3]);
+        assert.equal(context.battlefield.getUnit(1).vitality.hp, 83);
+        assert.equal(hasStatusFlag(context.battlefield.getUnit(1), "INVISIBLE"), true);
+        assert.equal(context.battlefield.getUnit(2).action.readyAtTick, 101);
         throw new Error("late composition failure");
       }
-      if (fault.enabled && failure === "reentrant" && source.effectSource.state.consumed > 0) {
+      if (fault.enabled && failure === "reentrant" && context.instance.state.consumed > 0) {
         runtime.step();
       }
-      return tick >= 3;
+      for (const unitId of context.battlefield.unitIds) {
+        if (context.instance.finished) return;
+        if (context.instance.state.receivers.some(binding => binding.unitId === unitId)) continue;
+        context.effects.update(context.ref, aura.ref, state => ({
+          ...state, receivers: [...state.receivers, { unitId, ref: null, attempts: 1 }],
+        }));
+        const installed = context.effects.install(unitId, receiver.ref, {
+          source: context.ref.unitId, scopes: [context.ref],
+        });
+        assert.equal(installed.type, "INSTALLED");
+        context.effects.update(context.ref, aura.ref, state => ({
+          ...state, receivers: state.receivers.map(binding => binding.unitId === unitId
+            ? { ...binding, ref: installed.ref } : binding),
+        }));
+      }
     },
-  });
-  const source = {
-    definition: createMechanismDefinition({ id: sourceRef.id }),
-    active: true,
-    effectSource: { programRef: sourceRef, state: { remaining: 3, consumed: 0 } },
-  };
+  } });
   const shell = resources.projectiles.register(createProjectileProgram({
     id: "combined-shell",
     initialize: () => ({ contacts: 0 }),
@@ -301,7 +308,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
       rows: 3, columns: 8, operators: [], enemies: [], maxTicks: 20, seed: 17,
     }),
     initialUnits: [
-      { definition: primary, position: [0, 0] },
+      seededPlacement(resources, aura, initializeUnit({ id: 0, definition: primary, position: [0, 0] })),
       { definition: passive("first-target"), position: [1, 0],
         ...(cancelled ? { states: { vitality: {
           ...initializeVitalityState({ maxHp: 100 }), hp: 40,
@@ -309,7 +316,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
       { definition: sibling, position: [0, 2],
         states: { action: { ...createActionState(), readyAtTick: 1 } } },
     ],
-    initialMechanisms: [source],
+    initialMechanisms: [],
     schedule: { type: "TIMELINE", spawns: [{
       definition: scheduled, route, tick: 1,
       timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 },
@@ -338,11 +345,11 @@ function scenario({ failure = null, cancelled = false } = {}) {
     },
   });
   return { runtime, resources, fault, launches, attempts, scopes, reports, rejected,
-    receiver: receiver.ref, marker: marker.ref, scoped: scoped.ref, pulse: pulse.ref };
+    aura: aura.ref, receiver: receiver.ref, marker: marker.ref, scoped: scoped.ref, pulse: pulse.ref };
 }
 
 test("runtime composition: late exceptions and invalid settlement discard every domain, then retry the same identities and terminal trace", () => {
-  for (const failure of ["late-source", "invalid-damage", "reentrant"]) {
+  for (const failure of ["late-aura", "invalid-damage", "reentrant"]) {
     const failed = scenario({ failure });
     const clean = scenario();
     const events = [...failed.runtime.step().events];
@@ -357,7 +364,7 @@ test("runtime composition: late exceptions and invalid settlement discard every 
     assert.equal(resolveAttackPower(0, view(before), failed.resources.computations), 17);
 
     assert.throws(() => failed.runtime.step(), {
-      "late-source": /late composition failure/,
+      "late-aura": /late composition failure/,
       "invalid-damage": RangeError,
       "reentrant": /battle step is already active/,
     }[failure]);
@@ -366,7 +373,7 @@ test("runtime composition: late exceptions and invalid settlement discard every 
     assert.deepEqual(failed.launches.map((launch) => [launch.id, launch.executionId]), [[0, 0], [1, 0], [2, 1]]);
     assert.deepEqual(failed.attempts, [{
       address: { type: "EFFECT", unitId: 1, effectId: 0 },
-      source: { remaining: 2, consumed: 1 }, marked: true,
+      quota: { remaining: 2, consumed: 1 }, marked: true,
     }]);
     assert.throws(() => failed.scopes[0].facts.getUnit(1), /no longer active/);
     assert.throws(() => failed.scopes[0].operations.updateState((state) => state), /no longer active/);
@@ -388,8 +395,9 @@ test("runtime composition: late exceptions and invalid settlement discard every 
     assert.deepEqual(after.projectiles.instances.map((projectile) => projectile.id), [1, 2]);
     assert.deepEqual(after.projectiles.instances.map((projectile) => projectile.cachedAtk), [18, 17]);
     assert.equal(resolveAttackPower(0, view(after), failed.resources.computations), 18);
-    assert.deepEqual(after.mechanisms[0].effectSource.state, { remaining: 2, consumed: 1 });
-    assert.deepEqual(after.mechanisms[0].effectSource.receivers.map((binding) => binding.installationAttempts), [1, 1, 1, 1]);
+    assert.equal(effect(after, 0, failed.aura).state.remaining, 2);
+    assert.equal(effect(after, 0, failed.aura).state.consumed, 1);
+    assert.deepEqual(effect(after, 0, failed.aura).state.receivers.map(binding => binding.attempts), [1, 1, 1, 1]);
     assert.deepEqual(effect(after, 3, failed.receiver).state, { starts: 1, enables: 1, uses: 0 });
     assert.deepEqual(effect(after, 1, failed.receiver).state, { starts: 1, enables: 1, uses: 1 });
     assert.equal(effect(after, 1, failed.marker).id, 1);
@@ -400,7 +408,9 @@ test("runtime composition: late exceptions and invalid settlement discard every 
     assert.equal(after.units.find((unit) => unit.id === 1).vitality.hp, 83);
     assert.deepEqual(failed.launches.map((launch) => launch.id), [0, 1, 2, 1, 2]);
     assert.deepEqual(before.units.map((unit) => unit.id), [0, 1, 2]);
-    assert.deepEqual(before.mechanisms[0].effectSource.state, { remaining: 3, consumed: 0 });
+    assert.equal(effect(before, 0, failed.aura).state.remaining, 3);
+    assert.equal(effect(before, 0, failed.aura).state.consumed, 0);
+    assert.deepEqual(effect(before, 0, failed.aura).state.receivers.map(binding => binding.unitId), [0, 1, 2]);
     assert.equal(before.units[1].vitality.hp, 100);
 
     while (failed.runtime.result === null) {
@@ -410,7 +420,9 @@ test("runtime composition: late exceptions and invalid settlement discard every 
       events.push(...actual.events);
       if (failed.runtime.snapshot().tickIndex === 4) {
         const cleaned = failed.runtime.snapshot();
-        assert.equal(cleaned.mechanisms[0].effectSource.finished, true);
+        assert.equal(effect(cleaned, 0, failed.aura), undefined);
+        assert.ok(cleaned.units.every(unit => effect(cleaned, unit.id, failed.receiver) === undefined));
+        assert.equal(effect(before, 0, failed.aura).finished, false);
         assert.equal(hasStatusFlag(cleaned.units.find((unit) => unit.id === 1), "INVISIBLE"), false);
         assert.equal(resolveAttackPower(0, view(cleaned), failed.resources.computations), 10);
         assert.equal(effect(cleaned, 0, failed.scoped).finished, true);
@@ -461,7 +473,8 @@ test("runtime composition: admission rejection skips start while cancelled damag
   assert.equal(after.spawning.spawnedCount, 1);
   assert.equal(after.actionExecution.nextExecutionId, 2);
   assert.equal(after.projectiles.nextProjectileId, 3);
-  assert.deepEqual(after.mechanisms[0].effectSource.state, { remaining: 2, consumed: 1 });
+  assert.equal(effect(after, 0, run.aura).state.remaining, 2);
+  assert.equal(effect(after, 0, run.aura).state.consumed, 1);
   assert.equal(effect(after, 1, run.receiver).state.uses, 1);
   assert.equal(effect(after, 1, run.marker), undefined);
   assert.equal(hasStatusFlag(after.units.find((unit) => unit.id === 1), "INVISIBLE"), false);

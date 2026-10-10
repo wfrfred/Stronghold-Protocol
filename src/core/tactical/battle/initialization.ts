@@ -6,7 +6,7 @@ import { changePredefinedInstances } from "./steps/predefined.js";
 import type { Input } from "./contract.js";
 import { advanceBattlefield, type BattleState } from "./execution/context.js";
 import type { CombatResources } from "./resources.js";
-import { advanceEffectSources } from "./steps/effect-sources.js";
+import { reconcileEffects } from "../unit/capability/effects/lifecycle.js";
 
 export function initializeBattlefield(
     input: Input,
@@ -26,11 +26,7 @@ export function initializeBattlefield(
     }
 
     for (const placement of input.initialMechanisms) {
-        const instantiated = instantiateMechanismPlacement(
-            placement,
-            state.execution,
-            initialUnitIds,
-        );
+        const instantiated = instantiateMechanismPlacement(placement, state.execution);
         initialChanges.push(...instantiated.changes);
         initialMechanismIds.push(instantiated.mechanism.id);
         state.execution = instantiated.execution;
@@ -60,7 +56,7 @@ export function initializeBattlefield(
 
     state.execution = initialized.execution;
     advanceBattlefield(state, [...initialChanges, ...initialized.changes]);
-    advanceEffectSources(state, 0, combatResources);
+    reconcileEffects(state, 0, combatResources);
 
     return initialized.presence;
 }

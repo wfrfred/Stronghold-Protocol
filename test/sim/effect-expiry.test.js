@@ -6,8 +6,6 @@ import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { battlefieldView, getUnit } from '../../dist/core/tactical/battle/execution/context.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
-import { createMechanismDefinition } from '../../dist/core/tactical/battlefield/mechanism.js';
-import { createEffectSourceProgramRef, effectSourceInstallation } from '../../dist/core/tactical/battlefield/effect-source/program.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
 import { EffectDispatchScope } from '../../dist/core/tactical/unit/capability/effects/dispatch.js';
@@ -352,29 +350,29 @@ function runtimeScenario(failure) {
       }
     } },
   });
-  const sourceRef = createEffectSourceProgramRef('expiry-source');
-  resources.effectSources.register({
-    ref: sourceRef, initialize: () => ({}), ownState: state => state,
-    selectInitial: ({ battlefield }) => battlefield.unitIds,
-    install: () => effectSourceInstallation(effect.ref, { scopes: [{ type: "TICK", tick: 0 }] }),
-  });
-  const source = {
-    definition: createMechanismDefinition({ id: 'expiry-source' }), active: true,
-    effectSource: { programRef: sourceRef, state: {} },
-  };
   const tile = createTile({
     heightType: 'LOWLAND', buildableType: 'ALL', passableMask: 'ALL',
     playerSideMask: 'ALL', terrain: 'NORMAL', mechanism: null,
   });
   const definition = { id: 'runtime-owner', offense: { attack: 100 } };
+  const placement = (id, column) => {
+    const state = effectFixtureWork(initializeUnit({ id, definition, position: [0, column] }));
+    const installed = installNewEffect(state, id, effect.ref,
+      { source: null, scopes: [{ type: 'TICK', tick: 0 }] }, resources, 0);
+    assert.equal(installed.type, 'INSTALLED');
+    const unit = getUnit(state, id);
+    return { definition, position: unit.position, states: {
+      effects: unit.effects, offense: unit.offense,
+    } };
+  };
   const runtime = new BattleRuntime({
     map: createBattlefieldMap(1, 3, [tile, tile, tile]),
-    initialUnits: [{ definition, position: [0, 0] }, { definition, position: [0, 1] }],
+    initialUnits: [placement(0, 0), placement(1, 1)],
     schedule: { type: 'TIMELINE', spawns: [] },
     predefines: [{ id: 7, alias: null, initiallyPresent: false, creation: {
-      type: 'UNIT', definition, position: [0, 2], navigationModifiers: [],
+      type: 'UNIT', ...placement(2, 2), navigationModifiers: [],
     } }],
-    initialMechanisms: [source], initialNavigationModifiers: [], maxTicks: 10, routeMoveMultiplier: 1,
+    initialMechanisms: [], initialNavigationModifiers: [], maxTicks: 10, routeMoveMultiplier: 1,
     rngState: 17,
   }, { combat: resources });
   return { runtime, fault };
@@ -393,6 +391,7 @@ test('effect expiry: a runtime exception or invalid deadline discards the comple
     assert.equal(failed.runtime.navigationMaps, maps);
     assert.equal(before.execution.nextUnitId, 2);
     assert.deepEqual(before.units.map(unit => unit.effects.instances[0].state.layers), [3, 3]);
+    assert.equal(resolveAttackPower(0, { getUnit: id => before.units.find(unit => unit.id === id) }), 130);
     failed.fault.enabled = false;
     assert.deepEqual(failed.runtime.step(commands), clean.runtime.step(commands));
     const after = failed.runtime.snapshot();
@@ -401,6 +400,7 @@ test('effect expiry: a runtime exception or invalid deadline discards the comple
     assert.equal(after.execution.nextUnitId, 3);
     assert.deepEqual(after.units.slice(0, 2).map(unit => unit.effects.instances[0].state.layers), [2, 2]);
     assert.deepEqual(after.units.slice(0, 2).map(unit => effectTick(unit.effects.instances[0])), [3, 3]);
+    assert.equal(resolveAttackPower(0, { getUnit: id => after.units.find(unit => unit.id === id) }), 120);
     assert.equal(after.units[0].effects.instances.length, 2);
     assert.equal(after.units[0].effects.nextInstanceId, 2);
   }

@@ -1157,7 +1157,7 @@ import { CombatResources } from ${sourceModule("battle/resources")};
 import type { DamageRuleContext, DamageFormulaContext, DamageQueryContext } from ${sourceModule("unit/capability/vitality/damage/resources")};
 import type { PendingDamage } from ${sourceModule("unit/capability/vitality/damage/contract")};
 import { createProjectileProgram, type ProjectileProgramRef } from ${sourceModule("battlefield/projectile/program")};
-import { effectSourceInstallation, type EffectSourceInstallation } from ${sourceModule("battlefield/effect-source/program")};
+import type { EffectLifecycleContext, EffectInstallationInput, EffectInstallationResult } from ${sourceModule("unit/capability/effects/contract")};
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
 type Assert<T extends true> = T;
 interface BarrierState { readonly remainingAmount: number; }
@@ -1176,6 +1176,7 @@ const barrier = createEffectProgram({
 const resources = new EffectResources();
 declare const installationResources: CombatResources;
 declare const work: BattleState;
+declare const lifecycle: EffectLifecycleContext<BarrierState>;
 resources.register(barrier);
 const instance = resources.create(barrier.ref, {
   id: 1, source: null, scopes: [], acquiredSequence: 0,
@@ -1223,11 +1224,8 @@ const projectile = createProjectileProgram({
   ownState: state => ({ remainingAmount: state.remainingAmount }), acceptsContact: () => true,
 });
 type ProjectileReference = Assert<Equal<typeof projectile.ref, ProjectileProgramRef<BarrierState>>>;
-const installation = effectSourceInstallation(barrier.ref, { scopes: [], initialState: instance.state });
-const installed = installation((ref, input) => resources.create(ref, {
-  id: 2, source: null, scopes: input.scopes, acquiredSequence: 1,
-}, input.initialState).id);
-type InstalledIdentity = Assert<Equal<typeof installed, number>>;
+const installed = lifecycle.effects.install(2, barrier.ref, { source: null, scopes: [], initialState: instance.state });
+type InstalledResult = Assert<Equal<typeof installed, EffectInstallationResult>>;
 resources.withProgram(instance, (bound, program) => resources.update(bound, bound.state).id);
 const combat = new CombatResources();
 combat.registerEffect(barrier, {
@@ -1277,8 +1275,8 @@ const cannotForge: EffectProgramRef<ShieldState> = { id: 'barrier' };
       ["direct-install-widened", `installEffect<object>(work, 2, instance, installationResources, 0);`, 1],
       ["unparsed-restore", `declare const raw: unknown; resources.restore(barrier.ref, raw);`, 1],
       ["wrong-restore-state", `resources.restore(barrier.ref, { ...instance, state: { remainingCharges: 2 } });`, 1],
-      ["wrong-installation-state", `effectSourceInstallation(barrier.ref, { scopes: [], initialState: { remainingCharges: 2 } });`, 1],
-      ["erased-installation", `const installation: EffectSourceInstallation = { programRef: barrier.ref, initialState: { remainingCharges: 2 }, scopes: [] };`, 1],
+      ["wrong-installation-state", `lifecycle.effects.install(2, barrier.ref, { source: null, scopes: [], initialState: { remainingCharges: 2 } });`, 1],
+      ["erased-installation", `const installation: EffectInstallationInput = { source: null, initialState: { remainingCharges: 2 }, scopes: [] }; lifecycle.effects.install(2, barrier.ref, installation);`, 1],
       [
         "hook-authority",
         `

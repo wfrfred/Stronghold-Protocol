@@ -1,4 +1,5 @@
 import type { Unit, UnitId } from "../../unit.js";
+import type { BattlefieldView } from "../../../battlefield/contract.js";
 import type {
     EffectRef,
     EffectInstanceValue,
@@ -45,6 +46,8 @@ export interface EffectLifecycleContext<S extends object = object> {
     readonly instance: EffectInstanceValue & { readonly state: S };
     readonly tick: number;
     readonly facts: EffectView;
+    /** Each access reads the current draft; a saved view remains fixed. */
+    readonly battlefield: BattlefieldView;
     readonly effects: EffectLifecycleOperations;
     damage(request: Omit<DamageRequest, "tick">): DamageReport;
     heal(request: Omit<HealingRequest, "tick">): HealingReport;
@@ -75,6 +78,10 @@ export interface EffectLifecycleProgram<S extends object> {
     readonly start?: EffectLifecycleAction<S>;
     readonly enable?: EffectLifecycleAction<S>;
     readonly disable?: EffectLifecycleAction<S>;
+    /** Periodic work, called once per Runtime tick for participating effects. */
+    readonly advance?: EffectLifecycleAction<S>;
+    /** Synchronize with battlefield facts; may run multiple times in one tick. */
+    readonly reconcile?: EffectLifecycleAction<S>;
     readonly expire?: EffectLifecycleAction<S>;
     readonly finish?: (context: EffectFinishContext<S>) => undefined;
     readonly accepts?: (context: EffectAdmissionContext<S>) => boolean;

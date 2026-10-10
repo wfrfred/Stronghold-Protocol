@@ -7,7 +7,9 @@ import { fileURLToPath } from 'node:url';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
-import { createEffectSourceProgramRef } from '../../dist/core/tactical/battlefield/effect-source/program.js';
+import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
+import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
+import { seededPlacement } from '../helpers/aura.js';
 import { createEnemyDefinition } from '../../dist/core/tactical/unit/archetype/enemy.js';
 import { ownUnitDefinition } from '../../dist/core/tactical/unit/unit.js';
 import { createNavigationModifierDefinition } from '../../dist/core/tactical/battlefield/navigation/modifier.js';
@@ -47,9 +49,6 @@ new BattleRuntime({ ...input, ${field}: 100 });
 `).join('')}
 // @ts-expect-error Runtime instance sources carry IDs rather than creation indices.
 new BattleRuntime({ ...input, initialNavigationModifiers: [runtimeModifier] });
-// @ts-expect-error Runtime source state cannot replace a creation reference.
-new BattleRuntime({ ...input, initialMechanisms: [{ definition: { id: 'source' }, effectSource: { programRef: { id: 'program' }, state: {}, sourceUnitId: 10 } }] });
-new BattleRuntime({ ...input, initialMechanisms: [{ definition: { id: 'source' }, effectSource: { programRef: { id: 'program' }, state: {}, sourceUnitIndex: 0 } }] });
 new BattleRuntime({ ...input, initialNavigationModifiers: [{ definition: runtimeModifier.definition, source: { type: 'UNIT', unitIndex: 0 }, region: { type: 'FOLLOW_UNIT', unitIndex: 1, range: [[0, 0]], direction: 'RIGHT' } }] });
 `);
     const program = ts.createProgram([path], {
@@ -86,14 +85,11 @@ function fixture({ spawnTick = 100 } = {}) {
   };
   const map = createBattlefieldMap(1, 8, Array.from({ length: 8 }, () => tile));
   const resources = new CombatResources();
-  const ref = createEffectSourceProgramRef('initial-source');
-  resources.effectSources.register({
-    ref,
-    initialize: () => ({ quota: { remaining: 0 }, marks: [] }),
+  const initial = resources.registerEffect(createEffectProgram({
+    id: 'initial-state',
+    initialize: () => ({ quota: { remaining: 3 }, marks: [1, 2] }),
     ownState: state => state,
-    selectInitial: () => [],
-    install: () => undefined,
-  });
+  }));
   const enemy = createEnemyDefinition({
     id: 'scheduled-enemy', vitality: { maxHp: 100 },
     locomotion: {
@@ -117,15 +113,10 @@ function fixture({ spawnTick = 100 } = {}) {
     }] },
     initialUnits: [
       placement('placed-a', 0, [attached('unit-navigation', 2)]),
-      placement('placed-b', 1),
+      seededPlacement(resources, initial, initializeUnit({ id: 1, ...placement('placed-b', 1) })),
     ],
     initialMechanisms: [
-      {
-        definition: { id: 'source-mechanism' },
-        effectSource: {
-          programRef: ref, state: { quota: { remaining: 3 }, marks: [1, 2] }, sourceUnitIndex: 1,
-        },
-      },
+      { definition: { id: 'first-mechanism' } },
       { definition: { id: 'plain-mechanism' } },
     ],
     initialNavigationModifiers: [
@@ -161,7 +152,7 @@ function fixture({ spawnTick = 100 } = {}) {
     routeMoveMultiplier: 1,
     rngState: 17,
   };
-  return { fields, resources, ref };
+  return { fields, resources, ref: initial.ref };
 }
 
 test('runtime allocates initial IDs, resolves creation references, and never reuses predefined instance IDs', () => {
@@ -185,9 +176,10 @@ test('runtime allocates initial IDs, resolves creation references, and never reu
   assert.deepEqual(initial.navigationModifiers[2].region, {
     type: 'FOLLOW_UNIT', unitId: 0, range: [[0, 0]], direction: 'RIGHT',
   });
-  assert.equal(initial.mechanisms[0].effectSource.sourceUnitId, 1);
-  assert.equal(initial.mechanisms[0].effectSource.programRef, ref);
-  assert.equal(initial.mechanisms[0].effectSource.initialized, true);
+  assert.equal(initial.units[1].effects.instances[0].source, 1);
+  assert.equal(initial.units[1].effects.instances[0].programRef, ref);
+  assert.equal(initial.units[1].effects.instances[0].started, true);
+  assert.deepEqual(initial.units[1].effects.instances[0].state, { quota: { remaining: 3 }, marks: [1, 2] });
 
   runtime.step([
     { type: 'APPEAR_PREDEFINED', definitionId: 102 },
@@ -232,11 +224,6 @@ for (const scenario of [
     name: 'followed unit',
     change: fields => { fields.initialNavigationModifiers[1].region.unitIndex = 2; },
     message: /unknown initial followed unit index: 2/,
-  },
-  {
-    name: 'mechanism source unit',
-    change: fields => { fields.initialMechanisms[0].effectSource.sourceUnitIndex = 2; },
-    message: /unknown initial unit index: 2/,
   },
 ]) {
   test(`runtime rejects an unknown initial ${scenario.name} reference during initialization`, () => {

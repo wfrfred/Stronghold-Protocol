@@ -169,6 +169,9 @@ function runLifecycleAction(
             },
             tick,
             facts: effectView(readState),
+            get battlefield() {
+                return battlefieldView(readState());
+            },
             effects: createEffectOperations(readState, resources, tick, scope),
             damage: (input) => {
                 const state = readState();
@@ -504,6 +507,9 @@ function finishBatch(
                             end,
                             get instance() {
                                 return context.instance;
+                            },
+                            get battlefield() {
+                                return context.battlefield;
                             },
                         });
                     },
@@ -884,6 +890,72 @@ function installPrepared<S extends object>(
     current = getEffect(state, ref);
 
     return { type: current === undefined || current.finished ? "ENDED" : "INSTALLED", ref };
+}
+
+function runEffectUpdates(
+    state: BattleState,
+    tick: number,
+    resources: EffectTransitionResources,
+    action: "advance" | "reconcile",
+    dispatch: EffectDispatchScope,
+): void {
+    const view = battlefieldView(state);
+    const candidates: EffectRef[] = [];
+
+    for (const unitId of view.unitIds) {
+        const unit = view.getUnit(unitId)!;
+
+        if (hasEffects(unit)) {
+            for (const instance of unit.effects.instances) {
+                if (resources.effectLifecycle.get(instance)[action] !== undefined) {
+                    candidates.push({ type: "EFFECT", unitId, effectId: instance.id });
+                }
+            }
+        }
+    }
+
+    for (const ref of candidates) {
+        const instance = getEffect(state, ref);
+
+        if (
+            instance === undefined ||
+            !instance.started ||
+            !instance.participating ||
+            instance.finished
+        ) {
+            continue;
+        }
+
+        runLifecycleAction(
+            state,
+            ref,
+            instance,
+            resources.effectLifecycle.get(instance)[action],
+            resources,
+            tick,
+            dispatch,
+        );
+    }
+}
+
+/** Advance periodic content once at the tick's time boundary. */
+export function advanceEffects(
+    state: BattleState,
+    tick: number,
+    resources: EffectTransitionResources,
+    dispatch = new EffectDispatchScope(),
+): void {
+    runEffectUpdates(state, tick, resources, "advance", dispatch);
+}
+
+/** Coordinate content with current facts without advancing its timers. */
+export function reconcileEffects(
+    state: BattleState,
+    tick: number,
+    resources: EffectTransitionResources,
+    dispatch = new EffectDispatchScope(),
+): void {
+    runEffectUpdates(state, tick, resources, "reconcile", dispatch);
 }
 
 export function expireEffects(

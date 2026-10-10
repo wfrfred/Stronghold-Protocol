@@ -18,7 +18,6 @@ import type { DamageOperation } from "../unit/capability/vitality/damage/contrac
 import type { HealingOperation } from "../unit/capability/vitality/healing/contract.js";
 import * as computation from "../modifier/computation.js";
 import type { ContributionFacts } from "../unit/capability/contribution.js";
-import { EffectSourceResources } from "../battlefield/effect-source/resources.js";
 import { ProjectileResources } from "../battlefield/projectile/resources.js";
 import { resolveDamage } from "../unit/capability/vitality/damage/settlement.js";
 import { resolveHealing } from "../unit/capability/vitality/healing/settlement.js";
@@ -62,7 +61,6 @@ export class CombatResources {
     readonly damage = new DamageResources(this.effects, this.#registration);
     readonly effectLifecycle = new EffectLifecycleResources(this.effects, this.#registration);
     readonly healing = new HealingResources(this.effects, this.#registration);
-    readonly effectSources = new EffectSourceResources(this.#registration);
     readonly projectiles = new ProjectileResources(this.#registration);
     readonly skills = new SkillResources(this.#registration);
     readonly elemental = new ElementalResources(this.#registration);

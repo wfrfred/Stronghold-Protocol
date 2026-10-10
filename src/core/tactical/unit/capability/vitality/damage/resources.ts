@@ -20,10 +20,8 @@ import type {
     DamageRequest,
     PendingDamage,
 } from "./contract.js";
-import type { EffectSourceResources } from "../../../../battlefield/effect-source/resources.js";
 
 export interface DamageResourceServices extends UnitLifecycleResources {
-    readonly effectSources: EffectSourceResources;
     readonly damage: DamageResources;
     readonly computations: computation.Computations<ContributionFacts>;
     readonly settleDamage: DamageOperation;

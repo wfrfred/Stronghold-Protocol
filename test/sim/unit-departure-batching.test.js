@@ -18,25 +18,9 @@ import { activateSkill } from '../../dist/core/tactical/unit/capability/skill/ex
 import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
 import { installNewEffect, finishEffects } from '../../dist/core/tactical/unit/capability/effects/lifecycle.js';
 import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
-import { createMechanismDefinition, createMechanismRuntime } from '../../dist/core/tactical/battlefield/mechanism.js';
-import { createEffectSourceProgramRef } from '../../dist/core/tactical/battlefield/effect-source/program.js';
 
 function fixture() {
   const resources = new CombatResources();
-  const sourceRef = createEffectSourceProgramRef('departure-shared-counter');
-  resources.effectSources.register({
-    ref: sourceRef,
-    initialize: () => ({ consumed: 0 }),
-    ownState: state => ({ ...state }),
-    selectInitial: () => [],
-    install: () => undefined,
-  });
-  const mechanism = createMechanismRuntime({
-    id: 20,
-    definition: createMechanismDefinition({ id: sourceRef.id }),
-    active: true,
-    effectSource: resources.effectSources.create(sourceRef, { sourceUnitId: null }),
-  });
   const skill = createSkillDefinition({
     id: 'departing-counter-skill', activation: 'MANUAL', spRecovery: 'NONE',
     spCost: 0, initialSp: 0, durationTicks: null,
@@ -49,11 +33,11 @@ function fixture() {
     },
   });
   const counter = resources.registerEffect(createEffectProgram({
-    id: 'consume-on-damage', initialize: () => ({}), ownState: state => state,
+    id: 'consume-on-damage', initialize: () => ({ consumed: 0 }), ownState: state => state,
   }), {
     damage: { reception: { priority: 0, apply: (context, value) => {
-      assert.equal(context.operations.sources.tryConsume(20, sourceRef,
-        state => ({ consumed: state.consumed + 1 })), true);
+      context.operations.effects.update(context.ref, counter.ref,
+        state => ({ consumed: state.consumed + 1 }));
       return { value };
     } } },
   });
@@ -67,10 +51,9 @@ function fixture() {
   const battlefield = {
     unitIds: [0, 1, 2], getUnit: id => byId.get(id),
     blockerOf: () => undefined, blockedBy: () => [],
-    mechanismIds: [20], getMechanism: id => id === 20 ? mechanism : undefined,
     supportRelations: [],
   };
-  const work = createBattleState(fixtureBattlefield(battlefield, battlefield), undefined);
+  const work = createBattleState(fixtureBattlefield(battlefield), undefined);
   for (const id of [0, 1]) activateSkill(work, { unitId: id, tick: 0 }, resources);
   installNewEffect(work, 2, counter.ref, { source: null, scopes: [] }, resources, 0);
   work.battlefield.apply();
@@ -78,7 +61,7 @@ function fixture() {
 }
 
 for (const domain of ['deployment', 'predefined']) {
-  test(`${domain}: successive departures share mechanism updates from skill finish damage`, () => {
+  test(`${domain}: successive departures share effect updates from skill finish damage`, () => {
     const { battlefield, resources, execution } = fixture();
     const before = battlefield.snapshot('state');
     const state = createBattleState(battlefield, execution, undefined, 1);
@@ -104,8 +87,8 @@ for (const domain of ['deployment', 'predefined']) {
       );
     }
 
-    assert.equal(state.battlefield.snapshot("draft").getMechanism(20).effectSource.state.consumed, 2);
-    assert.equal(before.getMechanism(20).effectSource.state.consumed, 0);
+    assert.equal(getUnit(state, 2).effects.instances[0].state.consumed, 2);
+    assert.equal(before.getUnit(2).effects.instances[0].state.consumed, 0);
     assert.deepEqual(state.removedUnits.map(unit => unit.unitId), [0, 1]);
     assert.equal(state.events.filter(event => event.type === 'SKILL_FINISHED').length, 2);
     assert.equal(getUnit(state, 2).vitality.hp, 98);
