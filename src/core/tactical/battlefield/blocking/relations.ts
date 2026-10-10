@@ -1,7 +1,7 @@
 import { World } from "../../geometry/coordinate.js";
 import { areHostileSides } from "../../unit/capability/allegiance.js";
 import type { Unit, UnitId } from "../../unit/unit.js";
-import { hasBlocker } from "../../unit/capability/blocking.js";
+import { hasBlocker } from "../../unit/capability/blocking/capability.js";
 import type { SupportRelation } from "../support/relations.js";
 import { BattlefieldMap } from "../map/map.js";
 import {

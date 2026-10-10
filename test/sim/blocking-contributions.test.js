@@ -19,8 +19,8 @@ import {
   initializeBlockerState,
   resolveBlockingCapacity,
   updateBlockingCapacityContributions,
-} from '../../dist/core/tactical/unit/capability/blocking.js';
-import { blockingCapacity } from '../../dist/core/tactical/unit/capability/blocking-contributions.js';
+} from '../../dist/core/tactical/unit/capability/blocking/capability.js';
+import { capacity as capacityContribution } from '../../dist/core/tactical/unit/capability/blocking/contributions.js';
 import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
 import {
   expireEffects, finalizeEffect, finishEffects, installNewEffect,
@@ -56,9 +56,9 @@ const install = (work, effect, resources, expiresAtTick = null) => {
     work, 0, effect.ref, { source: 7, scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }] }, resources, 0,
   );
 };
-const entry = (id, value, participating = true) => ({ id, sequence: 0, participating, values: [value] });
+const entry = (id, value, participating = true) => ({ id, sequence: 0, kind: "SAMPLED", participating, values: [value] });
 
-test('blocking capacity: initialization and copying retain stored contributions and resolve ties to even after clamping', () => {
+test('blocking capacity: initialization and copying retain sampled contributions and resolve ties to even after clamping', () => {
   const definition = createBlockerDefinition({ capacity: 3, geometry: { radius: 1 } });
   const state = initializeBlockerState(definition);
   assert.equal(definition.capacity, 3);
@@ -85,7 +85,7 @@ test('blocking capacity: initialization and copying retain stored contributions 
 test('blocking capacity: effect updates, participation and terminal cleanup preserve base capacity and unrelated HP', () => {
   const resources = new CombatResources();
   const effect = resources.registerEffect(program('capacity-effect', { amount: -1 }), {
-    contributions: [blockingCapacity(instance => [modifier.create({ addition: instance.state.amount })])],
+    contributions: [capacityContribution(instance => [modifier.create({ addition: instance.state.amount })])],
   });
   const hpEffect = resources.registerEffect(program('hp-effect'), {
     contributions: [maxHp(() => [modifier.create({ finalAddition: 100 })])],
@@ -178,7 +178,7 @@ test('blocking capacity: native STACK layers release enemies and expiry immediat
   const compiled = nativeModifier(raw);
   const resources = new CombatResources();
   const effect = resources.registerEffect(program(raw.node._buff.buffKey, { stackCount: 1, lifetimeTicks: 2 }), {
-    contributions: [blockingCapacity(instance => [compiled.sample({
+    contributions: [capacityContribution(instance => [compiled.sample({
       blackboard: new Map([['block_cnt', -1]]), stackCount: rule.validStackCount(instance.state.stackCount),
       readSourceAttribute: () => undefined,
     })])],
@@ -238,7 +238,7 @@ test('blocking capacity: the native zero scaler releases weighted enemies and pa
   const compiled = nativeModifier(raw);
   const resources = new CombatResources();
   const effect = resources.registerEffect(program(raw.node._buff.buffKey), {
-    contributions: [blockingCapacity(() => [compiled.sample({
+    contributions: [capacityContribution(() => [compiled.sample({
       blackboard: new Map(), stackCount: 1, readSourceAttribute: () => undefined,
     })])],
   });

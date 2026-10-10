@@ -6,7 +6,7 @@ import {
     copyBlockerState,
     initializeBlockableState,
     initializeBlockerState,
-} from "./blocking.js";
+} from "./blocking/capability.js";
 import { copyEffectsState } from "./effects/capability.js";
 import {
     copyDefenseState,

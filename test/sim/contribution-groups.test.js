@@ -9,7 +9,7 @@ import {
 import * as contribution from "../../dist/core/tactical/modifier/contribution.js";
 import * as modifier from "../../dist/core/tactical/modifier/value.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
-import { attack, computedAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
+import { attack, liveAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import { defense } from "../../dist/core/tactical/unit/capability/defense/contributions.js";
 import { resolveDefense } from "../../dist/core/tactical/unit/capability/defense/query.js";
 import { updateAttackContributions } from "../../dist/core/tactical/unit/capability/offense/capability.js";
@@ -52,9 +52,9 @@ const slot = (instance) => instance.state.grouped
   ? { id: "inspiration/attack", strength: instance.state.coefficient }
   : undefined;
 
-test("contribution groups: the ATK coefficient wins, while other facets participate and removal restores the stored loser", () => {
+test("contribution groups: the ATK coefficient wins, while other facets participate and removal restores the sampled loser", () => {
   const resources = new CombatResources();
-  const effect = program("stored-inspiration");
+  const effect = program("sampled-inspiration");
   let samples = 0;
   resources.registerEffect(effect, { contributions: [
     attack((instance) => {
@@ -83,7 +83,7 @@ test("contribution groups: the ATK coefficient wins, while other facets particip
   assert.equal(samples, 2);
 });
 
-test("contribution groups: explicit stored state updates refresh strength, samples, and optional group membership", () => {
+test("contribution groups: explicit sampled state updates refresh strength, samples, and optional group membership", () => {
   const resources = new CombatResources();
   const effect = program("updated-inspiration");
   let samples = 0;
@@ -112,12 +112,12 @@ test("contribution groups: explicit stored state updates refresh strength, sampl
   assert.equal(samples, 4);
 });
 
-test("contribution groups: computed values stay live without reranking, and explicit group updates never compute", () => {
+test("contribution groups: live values stay current without reranking, and explicit group updates never evaluate", () => {
   const resources = new CombatResources();
-  const effect = program("computed-inspiration");
+  const effect = program("live-inspiration");
   let computes = 0;
   let groupReads = 0;
-  resources.registerEffect(effect, { contributions: [computedAttack(({ instance, battlefield }) => {
+  resources.registerEffect(effect, { contributions: [liveAttack(({ instance, battlefield }) => {
     computes += 1;
     return [value(resolveAttackPower(instance.source, battlefield) * instance.state.coefficient)];
   }, { group: (instance) => {
@@ -136,19 +136,19 @@ test("contribution groups: computed values stay live without reranking, and expl
   const originalEntries = entries(work);
 
   transitionUnit(work, 3, (provider) => updateAttackContributions(provider, (state) =>
-    contribution.register(state, { id: "provider-buff", sequence: 0, participating: true, values: [value(100)] })));
+    contribution.register(state, { id: "provider-buff", sequence: 0, kind: "SAMPLED", participating: true, values: [value(100)] })));
   assert.equal(attackPower(work, resources), 220);
   assert.equal(entries(work), originalEntries);
   assert.equal(groupReads, 2);
   assert.equal(computes, 2);
 
-  const originalRef = entries(work)[0].computeRef;
+  const originalRef = entries(work)[0].evaluator;
   updateEffectState(work, 1, 0, effect.ref,
     (state) => ({ ...state, coefficient: 0.7 }), resources, 0);
   assert.equal(computes, 2);
   assert.equal(groupReads, 3);
   assert.equal(entries(work)[0].group.strength, 0.7);
-  assert.equal(entries(work)[0].computeRef, originalRef);
+  assert.equal(entries(work)[0].evaluator, originalRef);
   assert.equal(attackPower(work, resources), 800);
 
   setEffectEnabled(work, { type: "EFFECT", unitId: 1, effectId: 0 }, false, resources, 0);
@@ -157,19 +157,19 @@ test("contribution groups: computed values stay live without reranking, and expl
     (state) => ({ ...state, grouped: false }), resources, 0);
   assert.equal(computes, beforeUpdate);
   assert.equal(entries(work)[0].participating, false);
-  assert.equal(entries(work)[0].computeRef, originalRef);
+  assert.equal(entries(work)[0].evaluator, originalRef);
   assert.equal(Object.hasOwn(entries(work)[0], "group"), false);
   assert.equal(attackPower(work, resources), 220);
 });
 
 test("contribution groups: static declarations and dynamic results have immutable ownership", () => {
-  for (const computed of [false, true]) {
+  for (const useLive of [false, true]) {
     const resources = new CombatResources();
-    const effect = program(`owned-groups-${computed}`);
+    const effect = program(`owned-groups-${useLive}`);
     const fixed = { id: "fixed", strength: 1 };
     let returned;
-    const factory = computed
-      ? (options) => computedAttack(() => [value(10)], options)
+    const factory = useLive
+      ? (options) => liveAttack(() => [value(10)], options)
       : (options) => attack(() => [value(10)], options);
     resources.registerEffect(effect, { contributions: [
       factory({ id: "fixed", group: fixed }),

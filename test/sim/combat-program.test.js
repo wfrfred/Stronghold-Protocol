@@ -1,5 +1,5 @@
 import { fixtureBattlefield } from "../helpers/battlefield.js";
-import { computedAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
+import { liveAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import { installFixtureEffect } from "../helpers/effects.js";
 import { installEffect, installNewEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
@@ -268,7 +268,7 @@ test("combat program: a compiled source-attack effect reads current contribution
     ownState: (value) => ({ bonus: value.bonus }),
   });
   resources.registerEffect(program, {
-    contributions: [computedAttack(({ instance }) => [modifier.create({ addition: instance.state.bonus })])],
+    contributions: [liveAttack(({ instance }) => [modifier.create({ addition: instance.state.bonus })])],
   });
   const effect = compileOperation(
     { type: "DAMAGE", power: 1, powerSource: "SOURCE_ATTACK", damageType: "PHYSICAL" },

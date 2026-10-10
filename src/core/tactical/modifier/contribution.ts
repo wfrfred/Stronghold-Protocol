@@ -19,38 +19,42 @@ interface Binding {
     readonly group?: Group;
 }
 
-export interface Stored extends Binding {
+export interface Sampled extends Binding {
+    readonly kind: "SAMPLED";
     readonly values: readonly modifier.Value[];
 }
 
-export interface Computed extends Binding {
-    readonly computeRef: string;
+export interface Live extends Binding {
+    readonly kind: "LIVE";
+    readonly evaluator: string;
 }
-
-export type Entry = Stored | Computed;
 
 interface Entries {
-    readonly stored: Stored;
-    readonly all: Entry;
+    readonly SAMPLED: Sampled;
+    readonly LIVE: Live;
 }
 
-export type Kind = keyof Entries;
+export type Mode = keyof Entries;
 
-export interface State<K extends Kind = "all"> {
-    readonly entries: readonly Entries[K][];
+export type Entry<M extends Mode = Mode> = M extends Mode ? Entries[M] : never;
+
+export interface State<M extends Mode = Mode> {
+    readonly entries: readonly Entry<M>[];
 }
 
-export type Evaluate = (entry: Computed) => readonly modifier.Value[];
+export type Evaluate = (entry: Live) => readonly modifier.Value[];
 
-export type Transition<K extends Kind = "all"> = (state: State<K>) => State<K>;
+export type Transition<M extends Mode = Mode> = (state: State<M>) => State<M>;
 
-export type ProjectionTransition = <K extends Kind>(state: State<K>) => State<K>;
+export type SampledTransition = <M extends Mode>(
+    state: State<M | "SAMPLED">,
+) => State<M | "SAMPLED">;
 
 const emptyState = Object.freeze({ entries: Object.freeze([]) });
 const ownedEntries = new WeakSet<Entry>();
 const ownedArrays = new WeakSet<readonly Entry[]>([emptyState.entries]);
 
-function ownEntry<K extends Kind>(entry: Entries[K], previous?: Entries[K]): Entries[K] {
+function ownEntry<M extends Mode>(entry: Entry<M>, previous?: Entry<M>): Entry<M> {
     if (ownedEntries.has(entry)) {
         return entry;
     }
@@ -87,9 +91,9 @@ function ownEntry<K extends Kind>(entry: Entries[K], previous?: Entries[K]): Ent
     };
     let owned: Entry;
 
-    if ("values" in entry) {
-        if (previous !== undefined && "values" in previous && entry.values === previous.values) {
-            owned = Object.freeze({ ...binding, values: previous.values });
+    if (entry.kind === "SAMPLED") {
+        if (previous?.kind === "SAMPLED" && entry.values === previous.values) {
+            owned = Object.freeze({ ...binding, kind: "SAMPLED", values: previous.values });
         } else {
             const values: modifier.Value[] = [];
 
@@ -110,22 +114,22 @@ function ownEntry<K extends Kind>(entry: Entries[K], previous?: Entries[K]): Ent
                 );
             }
 
-            owned = Object.freeze({ ...binding, values: Object.freeze(values) });
+            owned = Object.freeze({ ...binding, kind: "SAMPLED", values: Object.freeze(values) });
         }
     } else {
-        if (entry.computeRef.length === 0) {
+        if (entry.evaluator.length === 0) {
             throw new TypeError("numeric contribution provider identity must be nonempty");
         }
 
-        owned = Object.freeze({ ...binding, computeRef: entry.computeRef });
+        owned = Object.freeze({ ...binding, kind: "LIVE", evaluator: entry.evaluator });
     }
 
     ownedEntries.add(owned);
 
-    return owned as Entries[K];
+    return owned as Entry<M>;
 }
 
-function publishEntries<K extends Kind>(entries: Entries[K][]): State<K> {
+function publishEntries<M extends Mode>(entries: Entry<M>[]): State<M> {
     if (entries.length === 0) {
         return emptyState;
     }
@@ -136,11 +140,11 @@ function publishEntries<K extends Kind>(entries: Entries[K][]): State<K> {
     return Object.freeze({ entries });
 }
 
-function getOwnedEntries<K extends Kind>(state: State<K>): readonly Entries[K][] {
-    return ownedArrays.has(state.entries) ? state.entries : create<K>(state.entries).entries;
+function getOwnedEntries<M extends Mode>(state: State<M>): readonly Entry<M>[] {
+    return ownedArrays.has(state.entries) ? state.entries : create<M>(state.entries).entries;
 }
 
-export function create<K extends Kind = "all">(entries: readonly Entries[K][] = []): State<K> {
+export function create<M extends Mode = Mode>(entries: readonly Entry<M>[] = []): State<M> {
     if (entries.length === 0) {
         return emptyState;
     }
@@ -149,14 +153,14 @@ export function create<K extends Kind = "all">(entries: readonly Entries[K][] = 
     }
 
     const ids = new Set<string>();
-    const owned: Entries[K][] = [];
+    const owned: Entry<M>[] = [];
 
     for (let index = 0; index < entries.length; index++) {
         if (!Object.hasOwn(entries, index)) {
             throw new TypeError("numeric contribution entries must be dense");
         }
 
-        const entry = ownEntry<K>(entries[index]!);
+        const entry = ownEntry<M>(entries[index]!);
 
         if (ids.has(entry.id)) {
             throw new TypeError(`duplicate numeric contribution ${entry.id}`);
@@ -166,29 +170,29 @@ export function create<K extends Kind = "all">(entries: readonly Entries[K][] = 
         owned.push(entry);
     }
 
-    return publishEntries<K>(owned);
+    return publishEntries<M>(owned);
 }
 
-export function copy<K extends Kind>(state: State<K>): State<K> {
-    return create<K>(state.entries);
+export function copy<M extends Mode>(state: State<M>): State<M> {
+    return create<M>(state.entries);
 }
 
-export function register<K extends Kind>(state: State<K>, entry: Entries[K]): State<K> {
+export function register<M extends Mode>(state: State<M>, entry: Entry<M>): State<M> {
     const entries = getOwnedEntries(state);
-    const owned = ownEntry<K>(entry);
+    const owned = ownEntry<M>(entry);
 
     if (entries.some((current) => current.id === owned.id)) {
         throw new TypeError(`duplicate numeric contribution ${owned.id}`);
     }
 
-    return publishEntries<K>([...entries, owned]);
+    return publishEntries<M>([...entries, owned]);
 }
 
-export function update<K extends Kind>(
-    state: State<K>,
+export function update<M extends Mode>(
+    state: State<M>,
     id: string,
-    update: (entry: Entries[K]) => Entries[K],
-): State<K> {
+    update: (entry: Entry<M>) => Entry<M>,
+): State<M> {
     const entries = getOwnedEntries(state);
     const index = entries.findIndex((entry) => entry.id === id);
 
@@ -208,34 +212,34 @@ export function update<K extends Kind>(
 
     const next = [...entries];
 
-    next[index] = ownEntry<K>(updated, current);
+    next[index] = ownEntry<M>(updated, current);
 
-    return publishEntries<K>(next);
+    return publishEntries<M>(next);
 }
 
-export function setParticipation<K extends Kind>(
-    state: State<K>,
+export function setParticipation<M extends Mode>(
+    state: State<M>,
     id: string,
     participating: boolean,
-): State<K> {
-    return update<K>(state, id, (entry) =>
+): State<M> {
+    return update<M>(state, id, (entry) =>
         entry.participating === participating ? entry : { ...entry, participating },
     );
 }
 
-export function remove<K extends Kind>(state: State<K>, id: string): State<K> {
+export function remove<M extends Mode>(state: State<M>, id: string): State<M> {
     const entries = getOwnedEntries(state).filter((entry) => entry.id !== id);
 
-    return entries.length === state.entries.length ? state : publishEntries<K>(entries);
+    return entries.length === state.entries.length ? state : publishEntries<M>(entries);
 }
 
-export function removeOwnedBy<K extends Kind>(state: State<K>, owner: Owner): State<K> {
+export function removeOwnedBy<M extends Mode>(state: State<M>, owner: Owner): State<M> {
     const entries = getOwnedEntries(state).filter(
         (entry) =>
             entry.owner?.unitId !== owner.unitId || entry.owner.instanceId !== owner.instanceId,
     );
 
-    return entries.length === state.entries.length ? state : publishEntries<K>(entries);
+    return entries.length === state.entries.length ? state : publishEntries<M>(entries);
 }
 
 function compareEntries(left: Entry, right: Entry): number {
@@ -255,8 +259,8 @@ function compareEntries(left: Entry, right: Entry): number {
     return left.id < right.id ? -1 : 1;
 }
 
-export function resolve<K extends Kind>(
-    state: State<K>,
+export function resolve<M extends Mode>(
+    state: State<M>,
     evaluate?: Evaluate,
 ): readonly modifier.Value[] {
     const candidates = state.entries.filter((entry) => entry.participating).sort(compareEntries);
@@ -280,11 +284,11 @@ export function resolve<K extends Kind>(
         if (entry.group !== undefined && winners.get(entry.group.id) !== entry) {
             continue;
         }
-        if ("values" in entry) {
+        if (entry.kind === "SAMPLED") {
             values.push(...entry.values);
         } else {
             if (evaluate === undefined) {
-                throw new TypeError(`computed contribution ${entry.computeRef} requires resources`);
+                throw new TypeError(`live contribution ${entry.evaluator} requires resources`);
             }
 
             values.push(...evaluate(entry));

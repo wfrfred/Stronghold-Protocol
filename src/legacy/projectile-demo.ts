@@ -1,4 +1,4 @@
-import { computedAttack } from "../core/tactical/unit/capability/offense/contributions.js";
+import { attack } from "../core/tactical/unit/capability/offense/contributions.js";
 import { CombatResources } from "../core/tactical/battle/resources.js";
 import type { BattleResources } from "../core/tactical/battle/runtime.js";
 import { battlefieldView, getUnit } from "../core/tactical/battle/execution/context.js";
@@ -32,7 +32,7 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
         }),
         {
             contributions: [
-                computedAttack(() => [modifier.create({ addition: 60 })], {
+                attack(() => [modifier.create({ addition: 60 })], {
                     group: { id: "demo-attack-boost", strength: 1 },
                 }),
             ],

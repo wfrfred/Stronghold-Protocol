@@ -1,22 +1,14 @@
 import type * as contribution from "../../../modifier/contribution.js";
 import type * as modifier from "../../../modifier/value.js";
 import type * as computation from "../../../modifier/computation.js";
-import type { Unit } from "../../unit.js";
-import type { CombatTargetingView } from "../../targeting/query.js";
-import type {
-    ContributionTarget,
-    StoredContributionTarget,
-    ContributionFacts,
-} from "../contribution.js";
+import type * as numeric from "../contribution.js";
 import { hasEffects } from "./capability.js";
-import { compileComputedBinding, compileStoredBinding, type EffectBinding } from "./binding.js";
+import * as binding from "./binding.js";
 import type { EffectInstance, EffectInstanceValue } from "./instance.js";
 import type { EffectProgram } from "./program.js";
 import type { EffectResources } from "./registry.js";
 
-export interface Context<S extends object> {
-    readonly unit: Unit;
-    readonly battlefield: CombatTargetingView;
+export interface Context<S extends object> extends numeric.Context {
     readonly instance: EffectInstance<S>;
 }
 
@@ -26,33 +18,36 @@ export interface Options<S extends object = object> {
         contribution.Group | ((instance: EffectInstance<S>) => contribution.Group | undefined);
 }
 
-interface ContributionDeclaration<S extends object> {
+interface Declaration<S extends object> {
     readonly id: string;
     readonly group?: Options<S>["group"];
 }
 
-export interface Stored<S extends object> extends ContributionDeclaration<S> {
-    readonly target: StoredContributionTarget;
+export interface Sampled<S extends object> extends Declaration<S> {
+    readonly kind: "SAMPLED";
+    readonly target: numeric.SampledTarget;
     readonly sample: (instance: EffectInstance<S>) => readonly modifier.Value[];
+    readonly reconcile?: binding.Binding["reconcile"];
 }
 
-export interface Computed<S extends object> extends ContributionDeclaration<S> {
-    readonly target: ContributionTarget;
-    readonly compute: (context: Context<S>) => readonly modifier.Value[];
+export interface Live<S extends object> extends Declaration<S> {
+    readonly kind: "LIVE";
+    readonly target: numeric.Target;
+    readonly evaluate: (context: Context<S>) => readonly modifier.Value[];
 }
 
-export type Definition<S extends object> = Stored<S> | Computed<S>;
+export type Definition<S extends object> = Sampled<S> | Live<S>;
 
 export interface Resources {
     readonly effects: Pick<EffectResources, "typedInstance">;
-    readonly computations: Pick<computation.Resources<ContributionFacts>, "register">;
+    readonly computations: Pick<computation.Resources<numeric.Context>, "register">;
 }
 
 export function compile<S extends object>(
     program: EffectProgram<S>,
     declarations: readonly Definition<NoInfer<S>>[],
     resources: Resources,
-): readonly EffectBinding[] {
+): readonly binding.Binding[] {
     const ids = new Set<string>();
 
     for (const { id } of declarations) {
@@ -85,13 +80,16 @@ export function compile<S extends object>(
                       return declaredGroup(typed);
                   };
 
-        if ("sample" in declaration) {
+        if (declaration.kind === "SAMPLED") {
             const { sample } = declaration;
 
-            return compileStoredBinding({
+            return binding.sampled({
                 id: `projection/${id}`,
                 target,
                 group,
+                ...(declaration.reconcile === undefined
+                    ? {}
+                    : { reconcile: declaration.reconcile }),
                 sample: (instance) => {
                     const typed = resources.effects.typedInstance(instance, program.ref);
 
@@ -106,15 +104,15 @@ export function compile<S extends object>(
             });
         }
 
-        const { compute } = declaration;
+        const { evaluate } = declaration;
 
-        return compileComputedBinding({
+        return binding.live({
             id: `parameter/${id}`,
             target: declaration.target,
             computations: resources.computations,
-            computeRef: JSON.stringify([program.ref.id, id]),
+            evaluator: JSON.stringify([program.ref.id, id]),
             group,
-            compute: ({ unit, battlefield }, entry) => {
+            evaluate: ({ unit, battlefield }, entry) => {
                 const owner = entry.owner;
                 const receiver =
                     owner === undefined ? undefined : battlefield.getUnit(owner.unitId);
@@ -129,7 +127,7 @@ export function compile<S extends object>(
                         ? undefined
                         : resources.effects.typedInstance(value, program.ref);
 
-                return instance === undefined ? [] : compute({ unit, battlefield, instance });
+                return instance === undefined ? [] : evaluate({ unit, battlefield, instance });
             },
         });
     });

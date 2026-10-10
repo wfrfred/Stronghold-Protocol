@@ -2,10 +2,11 @@ import type * as contributions from "../effects/contributions.js";
 import { updateAttackContributions } from "./capability.js";
 
 export function attack<S extends object>(
-    sample: contributions.Stored<S>["sample"],
+    sample: contributions.Sampled<S>["sample"],
     options: contributions.Options<S> = {},
-): contributions.Stored<S> {
+): contributions.Sampled<S> {
     return {
+        kind: "SAMPLED",
         id: options.id ?? "attack",
         target: updateAttackContributions,
         sample,
@@ -13,14 +14,15 @@ export function attack<S extends object>(
     };
 }
 
-export function computedAttack<S extends object>(
-    compute: contributions.Computed<S>["compute"],
+export function liveAttack<S extends object>(
+    evaluate: contributions.Live<S>["evaluate"],
     options: contributions.Options<S> = {},
-): contributions.Computed<S> {
+): contributions.Live<S> {
     return {
+        kind: "LIVE",
         id: options.id ?? "attack",
         target: updateAttackContributions,
-        compute,
+        evaluate,
         ...(options.group === undefined ? {} : { group: options.group }),
     };
 }

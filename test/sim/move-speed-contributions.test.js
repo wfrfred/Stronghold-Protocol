@@ -16,7 +16,7 @@ import { canTraverseNavigationSegment } from "../../dist/core/tactical/battlefie
 import { getNavigationRequest } from "../../dist/core/tactical/battlefield/navigation/state.js";
 import { createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
 import { resolveMoveSpeedPerTick } from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
-import { moveSpeed, computedMoveSpeed } from "../../dist/core/tactical/unit/capability/locomotion/contributions.js";
+import { moveSpeed, liveMoveSpeed } from "../../dist/core/tactical/unit/capability/locomotion/contributions.js";
 import { stepRoutedUnit } from "../../dist/core/tactical/unit/capability/locomotion/step.js";
 import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
@@ -202,10 +202,10 @@ test("move speed: route WAIT consumes ticks independently of a speed contributio
     close(h.unit.position[0], 0.125);
 });
 
-test("move speed: computed providers read phase facts without becoming stored final speed", () => {
+test("move speed: live contributions read phase facts without storing final speed", () => {
     const resources = new CombatResources();
     const program = resources.registerEffect(createEffectProgram({ id: "live-move", initialize: () => ({}), ownState: (state) => state }), {
-        contributions: [computedMoveSpeed(({ unit, battlefield }) => {
+        contributions: [liveMoveSpeed(({ unit, battlefield }) => {
             assert.equal(battlefield.getUnit(unit.id).vitality.hp, unit.vitality.hp);
             return [modifier.create({ finalScaler: unit.vitality.hp / 100 })];
         })],

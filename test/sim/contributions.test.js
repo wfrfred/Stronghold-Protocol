@@ -1,6 +1,6 @@
 import { fixtureBattlefield } from "../helpers/battlefield.js";
-import { attack, computedAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
-import { computedResistance } from "../../dist/core/tactical/unit/capability/defense/contributions.js";
+import { attack, liveAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
+import { liveResistance } from "../../dist/core/tactical/unit/capability/defense/contributions.js";
 import { installFixtureEffect } from "../helpers/effects.js";
 import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import assert from "node:assert/strict";
@@ -66,7 +66,7 @@ test("contributions: ownership isolates nested inputs and snapshots share frozen
   const group = { id: "attack", strength: 3 };
   const sample = { addition: 0, multiplier: 0, finalAddition: 10, finalScaler: 1 };
   const values = [sample];
-  const input = { id: "sample", sequence: 0, participating: true, owner, group, values };
+  const input = { id: "sample", sequence: 0, kind: "SAMPLED", participating: true, owner, group, values };
   const entries = [input];
   const state = contribution.create(entries);
   const entry = state.entries[0];
@@ -79,6 +79,8 @@ test("contributions: ownership isolates nested inputs and snapshots share frozen
   assert.deepEqual(entry.owner, { unitId: 1, instanceId: 2 });
   assert.deepEqual(entry.group, { id: "attack", strength: 3 });
   assert.deepEqual(entry.values, [value(10)]);
+  assert.equal(entry.kind, "SAMPLED");
+  assert.equal(Object.hasOwn(entry, "evaluator"), false);
   assert.equal(entry.participating, true);
   for (const owned of [state, state.entries, entry, entry.owner, entry.group, entry.values, entry.values[0]]) {
     assert.equal(Object.isFrozen(owned), true);
@@ -93,12 +95,13 @@ test("contributions: participation changes share existing owner, group, and samp
     {
       id: "sample",
       sequence: 0,
+      kind: "SAMPLED",
       participating: true,
       owner: { unitId: 1, instanceId: 2 },
       group: { id: "attack", strength: 3 },
       values: [value(10)],
     },
-    { id: "provider", sequence: 1, participating: true, computeRef: "live" },
+    { id: "provider", sequence: 1, kind: "LIVE", participating: true, evaluator: "live" },
   ]);
   const initial = state.entries[0];
   const paused = contribution.setParticipation(state, "sample", false);
@@ -115,7 +118,7 @@ test("contributions: participation changes share existing owner, group, and samp
   assert.equal(contribution.setParticipation(paused, "sample", false), paused);
   assert.equal(contribution.setParticipation(paused, "missing", false), paused);
   const providerPaused = contribution.setParticipation(paused, "provider", false);
-  assert.equal(providerPaused.entries[1].computeRef, "live");
+  assert.equal(providerPaused.entries[1].evaluator, "live");
   assert.equal(providerPaused.entries[0], entry);
 });
 
@@ -124,6 +127,7 @@ test("contributions: callback updates own new payloads and share untouched paylo
     {
       id: "sample",
       sequence: 0,
+      kind: "SAMPLED",
       participating: true,
       owner: { unitId: 1, instanceId: 2 },
       group: { id: "attack", strength: 3 },
@@ -161,14 +165,14 @@ test("contributions: callback updates own new payloads and share untouched paylo
 
 test("contributions: registration preserves unique identities and removal preserves remaining entries", () => {
   const entry = {
-    id: "first", sequence: 0, participating: true,
+    id: "first", sequence: 0, kind: "SAMPLED", participating: true,
     owner: { unitId: 1, instanceId: 2 }, values: [value(10)],
   };
   const state = contribution.create([entry]);
   assert.throws(() => contribution.create([entry, entry]), /duplicate numeric contribution/);
   assert.throws(() => contribution.register(state, entry), /duplicate numeric contribution/);
   const registered = contribution.register(state, {
-    id: "second", sequence: 1, participating: true,
+    id: "second", sequence: 1, kind: "SAMPLED", participating: true,
     owner: { unitId: 3, instanceId: 4 }, values: [value(20)],
   });
   assert.equal(registered.entries[0], state.entries[0]);
@@ -184,7 +188,7 @@ test("contributions: registration preserves unique identities and removal preser
 });
 
 test("contributions: new payloads retain nonempty identities, dense arrays, and numeric constraints", () => {
-  const entry = { id: "sample", sequence: 0, participating: true, values: [value(10)] };
+  const entry = { id: "sample", sequence: 0, kind: "SAMPLED", participating: true, values: [value(10)] };
   const state = contribution.create([entry]);
   for (const patch of [
     { sequence: -1 },
@@ -199,7 +203,7 @@ test("contributions: new payloads retain nonempty identities, dense arrays, and 
   assert.throws(() => contribution.register(state, { ...entry, id: "" }), /identity must be nonempty/);
   assert.throws(() => contribution.create([entry, , entry]), /entries must be dense/);
   assert.throws(() => contribution.register(state, {
-    id: "provider", sequence: 0, participating: true, computeRef: "",
+    id: "provider", sequence: 0, kind: "LIVE", participating: true, evaluator: "",
   }), /provider identity must be nonempty/);
 });
 
@@ -210,6 +214,7 @@ test("contributions: samples retain one owner and survive participation changes 
     contribution.register(state, {
       id: "inspiration",
       sequence: 0,
+      kind: "SAMPLED",
       participating: true,
       values: [value(150)],
     }),
@@ -290,11 +295,11 @@ test("contributions: private stack transitions publish maintained projections im
   assert.deepEqual(getUnit(expiredState, 1).offense.attack.entries, []);
 });
 
-test("contributions: live provider reads latest working facts without changing stored payloads", () => {
+test("contributions: live evaluation reads latest working facts without changing contribution entries", () => {
   const resources = new CombatResources();
   const program = createEffectProgram({ id: "live", initialize: () => ({}), ownState: () => ({}) });
   resources.registerEffect(program, {
-    contributions: [computedAttack(({ unit }) => [value(unit.vitality.hp < 50 ? 100 : 0)])],
+    contributions: [liveAttack(({ unit }) => [value(unit.vitality.hp < 50 ? 100 : 0)])],
   });
   const installed = installFixtureEffect(
     unit(1),
@@ -304,6 +309,8 @@ test("contributions: live provider reads latest working facts without changing s
   const initial = workFor(installed);
   const original = initial.battlefield.snapshot("draft");
 
+  assert.equal(installed.offense.attack.entries[0].kind, "LIVE");
+  assert.equal(Object.hasOwn(installed.offense.attack.entries[0], "values"), false);
   transitionUnit(initial, 1, (current) => ({
     ...current,
     vitality: { ...current.vitality, hp: 30 },
@@ -332,6 +339,7 @@ test("contributions: defense queries clamp resistance after sampled and live con
           contribution.register(state, {
             id: "resistance",
             sequence: 0,
+            kind: "SAMPLED",
             participating: true,
             values: [value(amount)],
           }),
@@ -343,7 +351,7 @@ test("contributions: defense queries clamp resistance after sampled and live con
             initialize: () => ({}),
             ownState: () => ({}),
           }),
-          { contributions: [computedResistance(() => [value(amount)])] },
+          { contributions: [liveResistance(() => [value(amount)])] },
         );
         defended = installFixtureEffect(
           initial,
@@ -419,6 +427,7 @@ test("contributions: a sampled child retains its input until an explicit parent 
       contribution.register(state, {
         id: "source-change",
         sequence: 0,
+        kind: "SAMPLED",
         participating: true,
         values: [value(100)],
       }),

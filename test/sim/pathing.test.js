@@ -1504,7 +1504,7 @@ test('core selective and full projection preserve relation history and reacquire
     assert.deepEqual(h.state.blockingRelations, []);
   }
   for (const blockerState of [
-    { capacity: contribution.create([{ id: 'capacity-zero', sequence: 0, participating: true,
+    { capacity: contribution.create([{ id: 'capacity-zero', sequence: 0, kind: "SAMPLED", participating: true,
       values: [modifier.create({ finalScaler: 0 })] }]), geometry: blocker.blocker.geometry, enabled: true },
     { capacity: blocker.blocker.capacity, geometry: blocker.blocker.geometry, enabled: false },
   ]) {

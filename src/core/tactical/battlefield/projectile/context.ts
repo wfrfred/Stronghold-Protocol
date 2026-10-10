@@ -1,5 +1,5 @@
 import type * as computation from "../../modifier/computation.js";
-import type { ContributionFacts } from "../../unit/capability/contribution.js";
+import type { Context } from "../../unit/capability/contribution.js";
 import type {
     EffectLifecycleOperations,
     EffectTransitionResources,
@@ -55,7 +55,7 @@ export interface ProjectileContactContext<
 
 export interface ProjectileServices extends EffectTransitionResources {
     readonly projectiles: Pick<ProjectileResources, "ownState" | "withProgram">;
-    readonly computations: computation.Computations<ContributionFacts>;
+    readonly computations: computation.Computations<Context>;
     readonly settleDamage: DamageOperation;
     readonly settleHealing: HealingOperation;
 }

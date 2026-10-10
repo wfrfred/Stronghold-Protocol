@@ -4,7 +4,7 @@ import {
     hasBlockable,
     hasBlocker,
     resolveBlockingCapacity,
-} from "../../unit/capability/blocking.js";
+} from "../../unit/capability/blocking/capability.js";
 import { hasTileBindingDefinition } from "../../unit/capability/deployment.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
 import { hasSpatial } from "../../unit/capability/spatial.js";

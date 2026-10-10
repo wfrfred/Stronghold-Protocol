@@ -1,5 +1,5 @@
-import { attack, computedAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
-import { computedDefense } from "../../dist/core/tactical/unit/capability/defense/contributions.js";
+import { attack, liveAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
+import { liveDefense } from "../../dist/core/tactical/unit/capability/defense/contributions.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
@@ -10,8 +10,8 @@ import { EffectResources } from "../../dist/core/tactical/unit/capability/effect
 import { EffectDispatchScope } from "../../dist/core/tactical/unit/capability/effects/dispatch.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import {
-  compileStoredBinding,
-  compileComputedBinding,
+  sampled,
+  live,
 } from "../../dist/core/tactical/unit/capability/effects/binding.js";
 import * as modifier from "../../dist/core/tactical/modifier/value.js";
 import { updateAttackContributions } from "../../dist/core/tactical/unit/capability/offense/capability.js";
@@ -89,27 +89,27 @@ test("resources: caller edits cannot change binding participation or removal aft
   assert.deepEqual(getUnit(removed, 2).effects.instances, []);
 });
 
-test("resources: binding compilers capture configuration values rather than caller-owned objects", () => {
-  for (const kind of ["provider", "projection"]) {
+test("resources: binding factories capture configuration values rather than caller-owned objects", () => {
+  for (const kind of ["live", "sampled"]) {
     const resources = new CombatResources();
     const sample = () => [modifier.create({ finalAddition: 20 })];
     const configuration = {
       id: "sample",
       target: updateAttackContributions,
       group: { id: "original-group", strength: 1 },
-      computeRef: "sample/attack",
+      evaluator: "sample/attack",
       computations: resources.computations,
-      compute: sample,
+      evaluate: sample,
       sample: sample,
     };
-    const compiled = kind === "provider"
-      ? compileComputedBinding(configuration)
-      : compileStoredBinding(configuration);
+    const compiled = kind === "live"
+      ? live(configuration)
+      : sampled(configuration);
     const descriptor = resources.registerEffect(program(`owned-${kind}`), { bindings: [compiled] });
     configuration.id = "changed";
     configuration.target = (owner) => owner;
     configuration.group.strength = 99;
-    configuration.computeRef = "missing-provider";
+    configuration.evaluator = "missing-evaluator";
     configuration.sample = () => [modifier.create({ finalAddition: 99 })];
 
     const owner = initializeUnit({
@@ -133,20 +133,20 @@ test("resources: binding compilers capture configuration values rather than call
 });
 
 test("resources: registered authored contributions retain their behavior after caller edits", () => {
-  for (const computed of [false, true]) {
+  for (const useLive of [false, true]) {
     const resources = new CombatResources();
     const group = { id: "original-group", strength: 1 };
-    const declaration = computed
-      ? computedAttack(({ instance }) => [modifier.create({ finalAddition: instance.state.value * 20 })], { group })
+    const declaration = useLive
+      ? liveAttack(({ instance }) => [modifier.create({ finalAddition: instance.state.value * 20 })], { group })
       : attack((instance) => [modifier.create({ finalAddition: instance.state.value * 20 })], { group });
     const contributions = [declaration];
-    const descriptor = resources.registerEffect(program(`authored-${computed}`), { contributions });
+    const descriptor = resources.registerEffect(program(`authored-${useLive}`), { contributions });
     contributions.length = 0;
     declaration.id = "changed";
     declaration.target = (owner) => owner;
     group.strength = 99;
     declaration.sample = () => [modifier.create({ finalAddition: 999 })];
-    declaration.compute = () => [modifier.create({ finalAddition: 999 })];
+    declaration.evaluate = () => [modifier.create({ finalAddition: 999 })];
 
     const owner = initializeUnit({
       id: 2,
@@ -170,10 +170,10 @@ test("resources: registered authored contributions retain their behavior after c
   }
 });
 
-test("resources: authored identities are nonempty and unique across stored and computed attributes", () => {
+test("resources: authored identities are nonempty and unique across sampled and live attributes", () => {
   for (const [contributions, error] of [
-    [[attack(() => []), computedAttack(() => [])], /duplicate effect contribution/],
-    [[attack(() => [], { id: "same" }), computedDefense(() => [], { id: "same" })], /duplicate effect contribution/],
+    [[attack(() => []), liveAttack(() => [])], /duplicate effect contribution/],
+    [[attack(() => [], { id: "same" }), liveDefense(() => [], { id: "same" })], /duplicate effect contribution/],
     [[attack(() => [], { id: "" })], /identity must be nonempty/],
   ]) {
     const resources = new CombatResources();
@@ -220,7 +220,7 @@ test("resources: failed composite registration invalidates the entire unpublishe
     let facets;
     if (stage === "numeric") {
       resources.computations.register(JSON.stringify([descriptor.ref.id, "defense"]), () => []);
-      facets = { contributions: [computedAttack(() => []), computedDefense(() => [])] };
+      facets = { contributions: [liveAttack(() => []), liveDefense(() => [])] };
     } else {
       const registry = stage === "lifecycle" ? resources.effectLifecycle : resources[stage];
       registry.register(descriptor.ref, {});
@@ -238,7 +238,7 @@ test("resources: failed composite registration invalidates the entire unpublishe
       () => resources.healing.get(instance),
       () => resources.effectLifecycle.get(instance),
       () => resources.computations.bind({}),
-      () => evaluator({ computeRef: `${descriptor.ref.id}/attack` }),
+      () => evaluator({ evaluator: `${descriptor.ref.id}/attack` }),
       () => resources.settleDamage(effectFixtureWork(), {
         sourceUnitId: null, targetUnitId: 2, damageType: "TRUE",
         operands: createDamageOperands(10), tick: 0,
@@ -288,13 +288,13 @@ test("resources: publishing to BattleRuntime closes every registry while preserv
 });
 
 
-test("resources: computed contributions distinguish program and binding identities containing separators", () => {
+test("resources: live contributions distinguish program and binding identities containing separators", () => {
   const resources = new CombatResources();
   const first = resources.registerEffect(program("a/b"), {
-    contributions: [computedAttack(() => [modifier.create({ finalAddition: 10 })], { id: "c" })],
+    contributions: [liveAttack(() => [modifier.create({ finalAddition: 10 })], { id: "c" })],
   });
   const second = resources.registerEffect(program("a"), {
-    contributions: [computedAttack(() => [modifier.create({ finalAddition: 20 })], { id: "b/c" })],
+    contributions: [liveAttack(() => [modifier.create({ finalAddition: 20 })], { id: "b/c" })],
   });
   resources.seal();
   const owner = initializeUnit({
@@ -303,6 +303,6 @@ test("resources: computed contributions distinguish program and binding identiti
   const installed = installFixtureEffect(owner, resources.effects.create(first.ref, metadata), resources);
   const both = installFixtureEffect(installed,
     resources.effects.create(second.ref, { ...metadata, id: 1, acquiredSequence: 1 }), resources);
-  assert.notEqual(both.offense.attack.entries[0].computeRef, both.offense.attack.entries[1].computeRef);
+  assert.notEqual(both.offense.attack.entries[0].evaluator, both.offense.attack.entries[1].evaluator);
   assert.equal(resolveAttackPower(2, battlefieldView(effectFixtureWork(both)), resources.computations), 130);
 });

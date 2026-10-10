@@ -2,10 +2,11 @@ import type * as contributions from "../effects/contributions.js";
 import { updateAttackSpeedContributions, updateBaseAttackTimeContributions } from "./capability.js";
 
 export function attackSpeed<S extends object>(
-    sample: contributions.Stored<S>["sample"],
+    sample: contributions.Sampled<S>["sample"],
     options: contributions.Options<S> = {},
-): contributions.Stored<S> {
+): contributions.Sampled<S> {
     return {
+        kind: "SAMPLED",
         id: options.id ?? "attackSpeed",
         target: updateAttackSpeedContributions,
         sample,
@@ -13,23 +14,25 @@ export function attackSpeed<S extends object>(
     };
 }
 
-export function computedAttackSpeed<S extends object>(
-    compute: contributions.Computed<S>["compute"],
+export function liveAttackSpeed<S extends object>(
+    evaluate: contributions.Live<S>["evaluate"],
     options: contributions.Options<S> = {},
-): contributions.Computed<S> {
+): contributions.Live<S> {
     return {
+        kind: "LIVE",
         id: options.id ?? "attackSpeed",
         target: updateAttackSpeedContributions,
-        compute,
+        evaluate,
         ...(options.group === undefined ? {} : { group: options.group }),
     };
 }
 
 export function baseAttackTime<S extends object>(
-    sample: contributions.Stored<S>["sample"],
+    sample: contributions.Sampled<S>["sample"],
     options: contributions.Options<S> = {},
-): contributions.Stored<S> {
+): contributions.Sampled<S> {
     return {
+        kind: "SAMPLED",
         id: options.id ?? "baseAttackTime",
         target: updateBaseAttackTimeContributions,
         sample,
@@ -37,14 +40,15 @@ export function baseAttackTime<S extends object>(
     };
 }
 
-export function computedBaseAttackTime<S extends object>(
-    compute: contributions.Computed<S>["compute"],
+export function liveBaseAttackTime<S extends object>(
+    evaluate: contributions.Live<S>["evaluate"],
     options: contributions.Options<S> = {},
-): contributions.Computed<S> {
+): contributions.Live<S> {
     return {
+        kind: "LIVE",
         id: options.id ?? "baseAttackTime",
         target: updateBaseAttackTimeContributions,
-        compute,
+        evaluate,
         ...(options.group === undefined ? {} : { group: options.group }),
     };
 }

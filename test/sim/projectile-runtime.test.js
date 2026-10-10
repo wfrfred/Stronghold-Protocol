@@ -1,5 +1,5 @@
 import { fixtureBattlefield } from "../helpers/battlefield.js";
-import { computedAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
+import { liveAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createRng } from "../../dist/core/common/rng.js";
@@ -394,7 +394,7 @@ test("projectile runtime: current ATK and cached-only ATK stay distinct, while a
         initialize: () => ({}),
         ownState: (state) => ({ ...state }),
       }),
-      { contributions: [computedAttack(() => [modifier.create({ addition: 10 })])] },
+      { contributions: [liveAttack(() => [modifier.create({ addition: 10 })])] },
     );
     const runtime = new BattleRuntime(
       spec([

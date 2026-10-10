@@ -1,5 +1,5 @@
 import { createActionState } from "../../dist/core/tactical/unit/capability/action/capability.js";
-import { computedAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
+import { liveAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
@@ -115,7 +115,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
       initialize: () => ({ starts: 0, enables: 0 }),
       ownState: (state) => ({ ...state }),
     }), {
-      contributions: [computedAttack(() => [modifier.create({ finalAddition: addition })])],
+      contributions: [liveAttack(() => [modifier.create({ finalAddition: addition })])],
       bindings: flags.length === 0 ? [] : [compileStatusBinding(flags)],
       lifecycle: {
         start: (context) => {
@@ -156,7 +156,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
     initialize: () => ({ starts: 0, enables: 0, uses: 0 }),
     ownState: (state) => ({ ...state }),
   }), {
-    contributions: [computedAttack(() => [modifier.create({ finalAddition: 5 })])],
+    contributions: [liveAttack(() => [modifier.create({ finalAddition: 5 })])],
     lifecycle: {
       start: (context) => {
         context.effects.update(context.ref, receiver.ref, (state) => ({

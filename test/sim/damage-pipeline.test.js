@@ -1,6 +1,6 @@
 import { fixtureBattlefield } from "../helpers/battlefield.js";
-import { computedAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
-import { computedResistance } from "../../dist/core/tactical/unit/capability/defense/contributions.js";
+import { liveAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
+import { liveResistance } from "../../dist/core/tactical/unit/capability/defense/contributions.js";
 import { installFixtureEffect } from "../helpers/effects.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -129,7 +129,7 @@ test("damage pipeline: numeric contributions retain four distinct positions and 
 test("damage pipeline: low HP attack contributions read current work after damage and healing", () => {
   const resources = new CombatResources();
   const lowHp = resources.registerEffect(program("low-hp"), {
-    contributions: [computedAttack(({ unit: owner, battlefield }) => {
+    contributions: [liveAttack(({ unit: owner, battlefield }) => {
         const current = battlefield.getUnit(owner.id);
         return current.vitality.hp < current.definition.vitality.maxHp / 2
           ? [modifier.create({ multiplier: 1 })]
@@ -210,7 +210,7 @@ const result = resolveDamage(
 test("damage pipeline: resistance contributions are clamped before fixed and proportional penetration", () => {
   const resources = new CombatResources();
   const resistance = resources.registerEffect(program("resistance"), {
-    contributions: [computedResistance(() => [modifier.create({ finalAddition: 70 })])],
+    contributions: [liveResistance(() => [modifier.create({ finalAddition: 70 })])],
   });
   const target = attach(resources, unit(2, { resistance: 80 }), resistance, 21);
   const resultState = workFor(unit(1), target);
@@ -339,7 +339,7 @@ const result = resolveDamage(resultState, request(100), resources);
 test("damage pipeline: grouped effects compete only with participants in the current parameter or reception stage", () => {
   const resources = new CombatResources();
   const attack = resources.registerEffect(program("grouped-attack"), {
-    contributions: [computedAttack(() => [modifier.create({ multiplier: 1 })], { group: { id: "shared", strength: 100 } })],
+    contributions: [liveAttack(() => [modifier.create({ multiplier: 1 })], { group: { id: "shared", strength: 100 } })],
   });
   const weak = resources.registerEffect(program("grouped-weak-reception"), {
     damage: {

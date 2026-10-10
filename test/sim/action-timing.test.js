@@ -4,7 +4,7 @@ import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { battlefieldView, getUnit, updateUnit } from "../../dist/core/tactical/battle/execution/context.js";
 import { createActionCapabilityDefinition, createActionState } from "../../dist/core/tactical/unit/capability/action/capability.js";
-import { attackSpeed, baseAttackTime, computedAttackSpeed, computedBaseAttackTime } from "../../dist/core/tactical/unit/capability/action/contributions.js";
+import { attackSpeed, baseAttackTime, liveAttackSpeed, liveBaseAttackTime } from "../../dist/core/tactical/unit/capability/action/contributions.js";
 import { compileAction } from "../../dist/core/tactical/unit/capability/action/compile.js";
 import { startAction } from "../../dist/core/tactical/unit/capability/action/execution.js";
 import { createActionExecutionState } from "../../dist/core/tactical/unit/capability/action/process.js";
@@ -190,12 +190,12 @@ test("action timing: BAT changes adjust cooldown without rescaling recovery", ()
     assert.equal(getUnit(work, 0).action.readyAtTick, 35);
 });
 
-test("action timing: computed values read current facts rather than installation samples", () => {
+test("action timing: live values read current facts rather than installation samples", () => {
     const resources = new CombatResources();
     const program = resources.registerEffect(createEffectProgram({ id: "live-timing", initialize: () => ({}), ownState: (state) => state }), {
         contributions: [
-            computedAttackSpeed(({ unit }) => [modifier.create({ addition: unit.vitality.hp })]),
-            computedBaseAttackTime(({ unit }) => [modifier.create({ addition: unit.vitality.hp / 10 })]),
+            liveAttackSpeed(({ unit }) => [modifier.create({ addition: unit.vitality.hp })]),
+            liveBaseAttackTime(({ unit }) => [modifier.create({ addition: unit.vitality.hp / 10 })]),
         ],
     });
     const installed = install(effectFixtureWork(actor(), target()), program, resources);

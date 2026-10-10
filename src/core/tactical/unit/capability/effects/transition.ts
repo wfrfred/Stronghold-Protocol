@@ -5,23 +5,31 @@ import { replaceEffectInstances } from "./internal/state.js";
 import { withEffectLifecycle } from "./internal/instance.js";
 import { widenUnit, type StableUnit, type Unit } from "../../unit.js";
 import type { EffectInstanceValue } from "./instance.js";
-import type { EffectBinding } from "./binding.js";
+import type { Binding } from "./binding.js";
 import type { EffectBindings } from "./resources.js";
-import { preserveHpRatio } from "../vitality/max-hp.js";
 
 export function transitionEffectBindings<U extends Unit>(
     unit: U | StableUnit<U>,
     instance: EffectInstanceValue,
     resources: EffectBindings,
-    apply: (binding: EffectBinding, current: StableUnit<U>) => StableUnit<U>,
+    apply: (binding: Binding, current: StableUnit<U>) => StableUnit<U>,
 ): StableUnit<U> {
     let current = widenUnit<U>(unit);
+    const reconciles = new Set<NonNullable<Binding["reconcile"]>>();
 
     for (const binding of resources.get(instance)) {
         current = apply(binding, current);
+
+        if (binding.reconcile !== undefined) {
+            reconciles.add(binding.reconcile);
+        }
     }
 
-    return preserveHpRatio<U>(unit, current);
+    for (const reconcile of reconciles) {
+        current = reconcile<U>(unit, current);
+    }
+
+    return current;
 }
 
 export interface EffectParticipationChange {
@@ -67,6 +75,7 @@ export function reconcileEffectBindings<U extends Unit>(
     )
         ? replaceEffectInstances<U>(owner, instances)
         : owner;
+    const reconciles = new Set<NonNullable<Binding["reconcile"]>>();
 
     for (const instance of instances) {
         if (!instance.started) {
@@ -88,8 +97,16 @@ export function reconcileEffectBindings<U extends Unit>(
             if (changedParticipation) {
                 next = binding.setParticipation(next, instance, instance.participating);
             }
+
+            if (binding.reconcile !== undefined) {
+                reconciles.add(binding.reconcile);
+            }
         }
     }
 
-    return { unit: preserveHpRatio<U>(before, next), changes };
+    for (const reconcile of reconciles) {
+        next = reconcile<U>(before, next);
+    }
+
+    return { unit: next, changes };
 }

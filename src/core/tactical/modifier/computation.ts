@@ -2,7 +2,7 @@ import { ResourceRegistration } from "../../common/resource-registration.js";
 import type * as contribution from "./contribution.js";
 import type * as modifier from "./value.js";
 
-export type Compute<C> = (context: C, entry: contribution.Computed) => readonly modifier.Value[];
+export type Compute<C> = (context: C, entry: contribution.Live) => readonly modifier.Value[];
 
 export interface Computations<C> {
     bind(context: C): contribution.Evaluate;
@@ -31,10 +31,10 @@ export class Resources<C> implements Computations<C> {
 
         return (entry) => {
             this.#registration.assertUsable();
-            const compute = this.#computations.get(entry.computeRef);
+            const compute = this.#computations.get(entry.evaluator);
 
             if (compute === undefined) {
-                throw new TypeError(`unregistered computation ${entry.computeRef}`);
+                throw new TypeError(`unregistered computation ${entry.evaluator}`);
             }
 
             return compute(context, entry);

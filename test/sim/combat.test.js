@@ -385,6 +385,7 @@ test('core combat: copied action, allegiance, spatial, hit, status and blocking 
   operator.hit.geometry = { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 100 }] };
   operator.status.contributions = [{ id: 'snapshot_only', flags: ['TARGET_FREE'] }];
   operator.blocker.capacity = contribution.create([{ id: 'snapshot-only-capacity', sequence: 0,
+    kind: "SAMPLED",
     participating: true, values: [modifier.create({ finalScaler: 0 })] }]);
   operator.vitality.hp = 0;
   snapshot.blockingRelations[0].blockerUnitId = 999999;

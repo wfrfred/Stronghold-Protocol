@@ -1,18 +1,18 @@
 import type * as contribution from "../../modifier/contribution.js";
-import type { CombatTargetingView } from "../targeting/query.js";
+import type { BattlefieldView } from "../../battlefield/contract.js";
 import type { StableUnit, Unit } from "../unit.js";
 
-export type ContributionTarget<K extends contribution.Kind = "all"> = <U extends Unit>(
+export type Target<M extends contribution.Mode = contribution.Mode> = <U extends Unit>(
     unit: U | StableUnit<U>,
-    transition: contribution.Transition<K>,
+    transition: contribution.Transition<M>,
 ) => StableUnit<U>;
 
-export type StoredContributionTarget = <U extends Unit>(
+export type SampledTarget = <U extends Unit>(
     unit: U | StableUnit<U>,
-    transition: contribution.ProjectionTransition,
+    transition: contribution.SampledTransition,
 ) => StableUnit<U>;
 
-export interface ContributionFacts {
+export interface Context {
     readonly unit: Unit;
-    readonly battlefield: CombatTargetingView;
+    readonly battlefield: BattlefieldView;
 }

@@ -4,7 +4,10 @@ import {
     type ActingUnitDefinition,
 } from "../capability/action/capability.js";
 import { createAllegianceState, type AllegiantUnitDefinition } from "../capability/allegiance.js";
-import { createBlockableDefinition, type BlockableUnitDefinition } from "../capability/blocking.js";
+import {
+    createBlockableDefinition,
+    type BlockableUnitDefinition,
+} from "../capability/blocking/capability.js";
 import {
     createDefenseDefinition,
     type DefendedUnitDefinition,

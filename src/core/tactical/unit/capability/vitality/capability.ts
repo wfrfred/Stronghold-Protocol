@@ -8,7 +8,7 @@ export interface VitalityDefinition {
 
 export interface VitalityState {
     readonly hp: number;
-    readonly maxHp: contribution.State<"stored">;
+    readonly maxHp: contribution.State<"SAMPLED">;
 }
 
 export interface Vitality {
@@ -38,12 +38,12 @@ export function copyVitalityState(state: Readonly<VitalityState>): VitalityState
 }
 
 export function initializeVitalityState(definition: VitalityDefinition): VitalityState {
-    return { hp: definition.maxHp, maxHp: contribution.create<"stored">() };
+    return { hp: definition.maxHp, maxHp: contribution.create<"SAMPLED">() };
 }
 
 function updateContributions(
     state: VitalityState,
-    transition: contribution.Transition<"stored">,
+    transition: contribution.Transition<"SAMPLED">,
 ): VitalityState {
     const maxHp = transition(state.maxHp);
 
@@ -52,7 +52,7 @@ function updateContributions(
 
 export function updateMaxHpContributions<U extends Unit>(
     input: U | StableUnit<U>,
-    transition: contribution.Transition<"stored">,
+    transition: contribution.Transition<"SAMPLED">,
 ): StableUnit<U> {
     const unit = widenUnit<U>(input);
 

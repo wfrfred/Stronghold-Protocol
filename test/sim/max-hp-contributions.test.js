@@ -21,7 +21,8 @@ import {
 } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import * as modifier from "../../dist/core/tactical/modifier/value.js";
-import { compileStoredBinding } from "../../dist/core/tactical/unit/capability/effects/binding.js";
+import { sampled } from "../../dist/core/tactical/unit/capability/effects/binding.js";
+import { preserveHpRatio } from "../../dist/core/tactical/unit/capability/vitality/max-hp.js";
 import {
     updateMaxHpContributions,
     initializeVitalityState,
@@ -183,15 +184,17 @@ test("MaxHP: callbacks and synchronous nested successors see coordinated facts",
 test("MaxHP: one binding batch coordinates once after every slot has changed", () => {
     const resources = new CombatResources();
     const observed = [];
-    const first = compileStoredBinding({
+    const first = sampled({
         id: "first",
         target: updateMaxHpContributions,
+        reconcile: preserveHpRatio,
         group: undefined,
         sample: () => [bonus(100)],
     });
-    const second = compileStoredBinding({
+    const second = sampled({
         id: "second",
         target: updateMaxHpContributions,
+        reconcile: preserveHpRatio,
         group: undefined,
         sample: () => [bonus(100)],
     });
@@ -409,7 +412,7 @@ test("MaxHP: a tick failure does not publish contributions or the HP response", 
     assert.equal(before.units.find((unit) => unit.id === 1).vitality.hp, 50);
 });
 
-test("MaxHP: TypeScript permits maintained projections and rejects live-provider installation", async () => {
+test("capabilities: TypeScript permits sampled MaxHP and blocking contributions and rejects live installation", async () => {
     const { default: ts } = await import("typescript");
     const directory = mkdtempSync(join(tmpdir(), "stronghold-max-hp-types-"));
     const module = (name) =>
@@ -420,55 +423,65 @@ test("MaxHP: TypeScript permits maintained projections and rejects live-provider
     writeFileSync(
         path,
         `
-import { compileStoredBinding, compileComputedBinding } from ${module("unit/capability/effects/binding")};
+import { sampled, live } from ${module("unit/capability/effects/binding")};
 import { updateMaxHpContributions, type VitalityState } from ${module("unit/capability/vitality/capability")};
 import { updateAttackContributions } from ${module("unit/capability/offense/capability")};
-import { attack, computedAttack } from ${module("unit/capability/offense/contributions")};
-import { defense, computedDefense, resistance, computedResistance } from ${module("unit/capability/defense/contributions")};
+import { attack, liveAttack } from ${module("unit/capability/offense/contributions")};
+import { defense, liveDefense, resistance, liveResistance } from ${module("unit/capability/defense/contributions")};
 import { maxHp } from ${module("unit/capability/vitality/contributions")};
+import { capacity } from ${module("unit/capability/blocking/contributions")};
+import { updateBlockingCapacityContributions, type BlockerState } from ${module("unit/capability/blocking/capability")};
 import type { EffectInstance } from ${module("unit/capability/effects/instance")};
 import * as contribution from ${module("modifier/contribution")};
 import * as computation from ${module("modifier/computation")};
 import { CombatResources } from ${module("battle/resources")};
 import { createEffectProgram } from ${module("unit/capability/effects/program")};
-import type { ContributionTarget, StoredContributionTarget, ContributionFacts } from ${module("unit/capability/contribution")};
-const computations = new computation.Resources<ContributionFacts>();
+import type { Target, SampledTarget, Context } from ${module("unit/capability/contribution")};
+const computations = new computation.Resources<Context>();
 const group = undefined;
-compileStoredBinding({ id: 'hp', target: updateMaxHpContributions, sample: () => [], group });
-compileStoredBinding({ id: 'attack', target: updateAttackContributions, sample: () => [], group });
-compileComputedBinding({ id: 'attack', target: updateAttackContributions, computations, computeRef: 'attack', compute: () => [], group });
-// @ts-expect-error MaxHP cannot install live provider bindings.
-compileComputedBinding({ id: 'hp', target: updateMaxHpContributions, computations, computeRef: 'hp', compute: () => [], group });
+sampled({ id: 'hp', target: updateMaxHpContributions, sample: () => [], group });
+sampled({ id: 'capacity', target: updateBlockingCapacityContributions, sample: () => [], group });
+sampled({ id: 'attack', target: updateAttackContributions, sample: () => [], group });
+live({ id: 'attack', target: updateAttackContributions, computations, evaluator: 'attack', evaluate: () => [], group });
+// @ts-expect-error MaxHP cannot install live bindings.
+live({ id: 'hp', target: updateMaxHpContributions, computations, evaluator: 'hp', evaluate: () => [], group });
+// @ts-expect-error Blocking cannot install live bindings.
+live({ id: 'capacity', target: updateBlockingCapacityContributions, computations, evaluator: 'capacity', evaluate: () => [], group });
 // @ts-expect-error A broad target alias cannot hide the MaxHP restriction.
-const broad: ContributionTarget = updateMaxHpContributions;
-const projection: StoredContributionTarget = updateMaxHpContributions;
-// @ts-expect-error A projection target alias still rejects a provider transition.
-compileComputedBinding({ id: 'hp', target: projection, computations, computeRef: 'hp', compute: () => [], group });
-const fixed = contribution.create<'stored'>();
-// @ts-expect-error Direct installation cannot insert a provider into value-only state.
-contribution.register(fixed, { id: 'hp', sequence: 0, participating: true, computeRef: 'hp' });
-// @ts-expect-error An update cannot replace a maintained value with a provider.
-contribution.update(fixed, 'hp', () => ({ id: 'hp', sequence: 0, participating: true, computeRef: 'hp' }));
-// @ts-expect-error Vitality cannot hold a provider-bearing state.
-const invalid: VitalityState = { hp: 100, maxHp: contribution.create([{ id: 'hp', sequence: 0, participating: true, computeRef: 'hp' }]) };
+const broad: Target = updateMaxHpContributions;
+// @ts-expect-error A broad target alias cannot hide the blocking restriction.
+const broadCapacity: Target = updateBlockingCapacityContributions;
+const projection: SampledTarget = updateMaxHpContributions;
+// @ts-expect-error A sampled target alias still rejects a live transition.
+live({ id: 'hp', target: projection, computations, evaluator: 'hp', evaluate: () => [], group });
+const fixed = contribution.create<'SAMPLED'>();
+// @ts-expect-error Direct installation cannot insert a live contribution into sampled state.
+contribution.register(fixed, { id: 'hp', sequence: 0, kind: "LIVE", participating: true, evaluator: 'hp' });
+// @ts-expect-error An update cannot replace a sampled contribution with a live contribution.
+contribution.update(fixed, 'hp', () => ({ id: 'hp', sequence: 0, kind: "LIVE", participating: true, evaluator: 'hp' }));
+// @ts-expect-error Vitality cannot hold a live contribution.
+const invalid: VitalityState = { hp: 100, maxHp: contribution.create([{ id: 'hp', sequence: 0, kind: "LIVE", participating: true, evaluator: 'hp' }]) };
+// @ts-expect-error Blocking cannot hold a live contribution.
+const invalidBlocker: BlockerState = { capacity: contribution.create([{ id: 'capacity', sequence: 0, kind: "LIVE", participating: true, evaluator: 'capacity' }]), enabled: true, geometry: { radius: 1 } };
 const combat = new CombatResources();
 const effect = createEffectProgram({ id: 'hp', initialize: () => ({ bonus: 100 }), ownState: state => ({ ...state }) });
 const bonus = (amount: number) => [{ addition: 0, multiplier: 0, finalAddition: amount, finalScaler: 1 }];
 combat.registerEffect(effect, { contributions: [
     maxHp(instance => bonus(instance.state.bonus)),
+    capacity(instance => bonus(instance.state.bonus)),
     attack(instance => bonus(instance.state.bonus)),
-    computedAttack(({ instance }) => bonus(instance.state.bonus), { id: 'computed-attack' }),
+    liveAttack(({ instance }) => bonus(instance.state.bonus), { id: 'live-attack' }),
     defense(instance => bonus(instance.state.bonus)),
-    computedDefense(({ instance }) => bonus(instance.state.bonus), { id: 'computed-defense' }),
+    liveDefense(({ instance }) => bonus(instance.state.bonus), { id: 'live-defense' }),
     resistance(instance => bonus(instance.state.bonus)),
-    computedResistance(({ instance }) => bonus(instance.state.bonus), { id: 'computed-resistance' }),
+    liveResistance(({ instance }) => bonus(instance.state.bonus), { id: 'live-resistance' }),
 ] });
 // @ts-expect-error MaxHP samples cannot read unsignalled live unit facts.
 combat.registerEffect(effect, { contributions: [maxHp(instance => bonus(instance.unit.vitality.hp))] });
 // @ts-expect-error MaxHP samples cannot read unsignalled battlefield facts.
 combat.registerEffect(effect, { contributions: [maxHp(instance => bonus(instance.battlefield.getUnit(1).vitality.hp))] });
-// @ts-expect-error Computed callbacks preserve the matching program state.
-combat.registerEffect(effect, { contributions: [computedAttack(({ instance }) => bonus(instance.state.missing))] });
+// @ts-expect-error Live callbacks preserve the matching program state.
+combat.registerEffect(effect, { contributions: [liveAttack(({ instance }) => bonus(instance.state.missing))] });
 const other = attack((instance: EffectInstance<{ other: number }>) => bonus(instance.state.other));
 // @ts-expect-error An unrelated program state cannot supply a declaration.
 combat.registerEffect(effect, { contributions: [other] });

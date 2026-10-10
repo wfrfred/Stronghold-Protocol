@@ -4,7 +4,7 @@ import type { EffectProgramRef } from "../../effects/program.js";
 import type { EffectResources } from "../../effects/registry.js";
 import type { EffectLifecycleOperations } from "../../effects/contract.js";
 import type { UnitLifecycleResources } from "../../../../battle/execution/unit-lifecycle.js";
-import type { ContributionFacts } from "../../contribution.js";
+import type { Context } from "../../contribution.js";
 import type * as computation from "../../../../modifier/computation.js";
 import type {
     VitalityHookContext,
@@ -23,7 +23,7 @@ import type {
 
 export interface DamageResourceServices extends UnitLifecycleResources {
     readonly damage: DamageResources;
-    readonly computations: computation.Computations<ContributionFacts>;
+    readonly computations: computation.Computations<Context>;
     readonly settleDamage: DamageOperation;
     readonly settleHealing: HealingOperation;
 }

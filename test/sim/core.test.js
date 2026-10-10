@@ -23,7 +23,7 @@ import { copyUnitSnapshot } from '../../dist/core/tactical/unit/snapshot.js';
 import { hasVitality, initializeVitalityState } from '../../dist/core/tactical/unit/capability/vitality/capability.js';
 import { createActionCapabilityDefinition, hasAction } from '../../dist/core/tactical/unit/capability/action/capability.js';
 import { hasAllegiance } from '../../dist/core/tactical/unit/capability/allegiance.js';
-import { createBlockerDefinition, hasBlockable, hasBlocker, resolveBlockingCapacity } from '../../dist/core/tactical/unit/capability/blocking.js';
+import { createBlockerDefinition, hasBlockable, hasBlocker, resolveBlockingCapacity } from '../../dist/core/tactical/unit/capability/blocking/capability.js';
 import * as contribution from '../../dist/core/tactical/modifier/contribution.js';
 import * as modifier from '../../dist/core/tactical/modifier/value.js';
 import { createHitDefinition, createSpatialDefinition, hasHit, hasSpatial } from '../../dist/core/tactical/unit/capability/spatial.js';
@@ -564,6 +564,7 @@ test('core snapshots isolate capability state and both routed contexts while sha
   snapshot.hit.geometry = createShapeGeometry({ shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 2 }] });
   snapshot.status.contributions = [];
   snapshot.blocker.capacity = contribution.create([{ id: 'snapshot-only-capacity', sequence: 0,
+    kind: "SAMPLED",
     participating: true, values: [modifier.create({ finalScaler: 0 })] }]);
   snapshot.blocker.geometry = createBlockGeometry({ radius: 2 });
   snapshot.blockable.weight = 2;

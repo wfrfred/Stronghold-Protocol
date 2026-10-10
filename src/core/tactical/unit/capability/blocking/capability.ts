@@ -1,8 +1,11 @@
-import { assertNonnegativeSafeInteger, assertPositiveSafeInteger } from "../../../common/assert.js";
-import { createBlockGeometry, type BlockGeometry } from "../../geometry/shape.js";
-import * as contribution from "../../modifier/contribution.js";
-import * as modifier from "../../modifier/value.js";
-import { widenUnit, type StableUnit, type Unit, type UnitDefinition } from "../unit.js";
+import {
+    assertNonnegativeSafeInteger,
+    assertPositiveSafeInteger,
+} from "../../../../common/assert.js";
+import { createBlockGeometry, type BlockGeometry } from "../../../geometry/shape.js";
+import * as contribution from "../../../modifier/contribution.js";
+import * as modifier from "../../../modifier/value.js";
+import { widenUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
 
 export interface BlockerDefinition {
     readonly capacity: number;
@@ -10,7 +13,7 @@ export interface BlockerDefinition {
 }
 
 export interface BlockerState {
-    readonly capacity: contribution.State<"stored">;
+    readonly capacity: contribution.State<"SAMPLED">;
     readonly geometry: BlockGeometry;
     readonly enabled: boolean;
 }
@@ -81,7 +84,7 @@ export function copyBlockableState(state: BlockableState): BlockableState {
 
 export function initializeBlockerState(definition: BlockerDefinition): BlockerState {
     return {
-        capacity: contribution.create<"stored">(),
+        capacity: contribution.create<"SAMPLED">(),
         geometry: createBlockGeometry(definition.geometry),
         enabled: true,
     };
@@ -93,7 +96,7 @@ export function initializeBlockableState(definition: BlockableDefinition): Block
 
 export function updateBlockingCapacityContributions<U extends Unit>(
     input: U | StableUnit<U>,
-    transition: contribution.Transition<"stored">,
+    transition: contribution.Transition<"SAMPLED">,
 ): StableUnit<U> {
     const unit = widenUnit<U>(input);
 

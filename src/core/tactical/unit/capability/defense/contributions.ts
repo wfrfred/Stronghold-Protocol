@@ -2,10 +2,11 @@ import type * as contributions from "../effects/contributions.js";
 import { updateDefenseContributions, updateResistanceContributions } from "./capability.js";
 
 export function defense<S extends object>(
-    sample: contributions.Stored<S>["sample"],
+    sample: contributions.Sampled<S>["sample"],
     options: contributions.Options<S> = {},
-): contributions.Stored<S> {
+): contributions.Sampled<S> {
     return {
+        kind: "SAMPLED",
         id: options.id ?? "defense",
         target: updateDefenseContributions,
         sample,
@@ -13,23 +14,25 @@ export function defense<S extends object>(
     };
 }
 
-export function computedDefense<S extends object>(
-    compute: contributions.Computed<S>["compute"],
+export function liveDefense<S extends object>(
+    evaluate: contributions.Live<S>["evaluate"],
     options: contributions.Options<S> = {},
-): contributions.Computed<S> {
+): contributions.Live<S> {
     return {
+        kind: "LIVE",
         id: options.id ?? "defense",
         target: updateDefenseContributions,
-        compute,
+        evaluate,
         ...(options.group === undefined ? {} : { group: options.group }),
     };
 }
 
 export function resistance<S extends object>(
-    sample: contributions.Stored<S>["sample"],
+    sample: contributions.Sampled<S>["sample"],
     options: contributions.Options<S> = {},
-): contributions.Stored<S> {
+): contributions.Sampled<S> {
     return {
+        kind: "SAMPLED",
         id: options.id ?? "resistance",
         target: updateResistanceContributions,
         sample,
@@ -37,14 +40,15 @@ export function resistance<S extends object>(
     };
 }
 
-export function computedResistance<S extends object>(
-    compute: contributions.Computed<S>["compute"],
+export function liveResistance<S extends object>(
+    evaluate: contributions.Live<S>["evaluate"],
     options: contributions.Options<S> = {},
-): contributions.Computed<S> {
+): contributions.Live<S> {
     return {
+        kind: "LIVE",
         id: options.id ?? "resistance",
         target: updateResistanceContributions,
-        compute,
+        evaluate,
         ...(options.group === undefined ? {} : { group: options.group }),
     };
 }

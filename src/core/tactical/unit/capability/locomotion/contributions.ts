@@ -2,10 +2,11 @@ import type * as contributions from "../effects/contributions.js";
 import { updateMoveSpeedContributions } from "./capability.js";
 
 export function moveSpeed<S extends object>(
-    sample: contributions.Stored<S>["sample"],
+    sample: contributions.Sampled<S>["sample"],
     options: contributions.Options<S> = {},
-): contributions.Stored<S> {
+): contributions.Sampled<S> {
     return {
+        kind: "SAMPLED",
         id: options.id ?? "moveSpeed",
         target: updateMoveSpeedContributions,
         sample,
@@ -13,14 +14,15 @@ export function moveSpeed<S extends object>(
     };
 }
 
-export function computedMoveSpeed<S extends object>(
-    compute: contributions.Computed<S>["compute"],
+export function liveMoveSpeed<S extends object>(
+    evaluate: contributions.Live<S>["evaluate"],
     options: contributions.Options<S> = {},
-): contributions.Computed<S> {
+): contributions.Live<S> {
     return {
+        kind: "LIVE",
         id: options.id ?? "moveSpeed",
         target: updateMoveSpeedContributions,
-        compute,
+        evaluate,
         ...(options.group === undefined ? {} : { group: options.group }),
     };
 }
