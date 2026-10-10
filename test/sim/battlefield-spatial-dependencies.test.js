@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
 import { projectStaticNavigationMap } from '../../dist/core/tactical/battlefield/navigation/projection.js';
-import { acquireBlockingRelations } from '../../dist/core/tactical/battlefield/blocking/relations.js';
+import { updateBlockingRelations } from '../../dist/core/tactical/battlefield/blocking/relations.js';
 import { applyBattlefieldChanges } from '../../dist/core/tactical/battlefield/storage/changes.js';
 import {
   createBattlefieldState, settleBattlefieldState, settleBattlefieldStateFully,
@@ -128,13 +128,11 @@ function blockingHarness() {
     blockable: { weight: 1 }, spatial: { layer: 'GROUND' },
   });
   h.commit(register([blocker, blocked]));
-  const relations = acquireBlockingRelations(h.map, h.state.units, []);
-  assert.deepEqual(relations, [{ blockerUnitId: 1, blockedUnitId: 2 }]);
-  h.commit([{ type: 'SET_BLOCKING_RELATIONS', relations }]);
+  assert.deepEqual(h.state.blockingRelations, [{ blockerUnitId: 1, blockedUnitId: 2 }]);
   return h;
 }
 
-test('blocking retention ignores positive HP and acquisition radius while acquisition remains explicit', () => {
+test('blocking retains existing relations beyond acquisition radius and acquires automatically after movement', () => {
   const h = blockingHarness();
   const previous = h.state;
   h.commit(update(1, unit => ({
@@ -145,11 +143,11 @@ test('blocking retention ignores positive HP and acquisition radius while acquis
   assert.equal(h.state.spatial, previous.spatial);
   h.commit(update(2, unit => ({ ...unit, position: [4, 0] })));
   assert.equal(h.state.blockingRelations, previous.blockingRelations);
-  assert.deepEqual(acquireBlockingRelations(h.map, h.state.units, []), []);
+  assert.deepEqual(updateBlockingRelations(h.map, h.state.units, [], h.state.spatial.unitsByTile), []);
   h.commit([{ type: 'RELEASE_BLOCKING_RELATIONS', unitId: 2 }]);
   h.commit(update(2, unit => ({ ...unit, position: [1, 0] })));
-  assert.deepEqual(h.state.blockingRelations, [], 'settlement must not acquire new relations');
-  assert.deepEqual(acquireBlockingRelations(h.map, h.state.units, []), previous.blockingRelations);
+  assert.deepEqual(h.state.blockingRelations, previous.blockingRelations);
+  assert.deepEqual(updateBlockingRelations(h.map, h.state.units, [], h.state.spatial.unitsByTile), previous.blockingRelations);
 });
 
 for (const [name, mutate] of [
@@ -160,7 +158,7 @@ for (const [name, mutate] of [
     const h = blockingHarness();
     h.commit(update(1, mutate));
     assert.deepEqual(h.state.blockingRelations, []);
-    assert.deepEqual(acquireBlockingRelations(h.map, h.state.units, []), []);
+    assert.deepEqual(updateBlockingRelations(h.map, h.state.units, [], h.state.spatial.unitsByTile), []);
   });
 }
 
@@ -178,9 +176,9 @@ test('blocking acquisition preserves unit ID tie breaks, capacity and retained r
     { blockerUnitId: 10, blockedUnitId: 3 },
   ];
   for (const units of [h.state.units, new Map([...h.state.units].reverse())]) {
-    assert.deepEqual(acquireBlockingRelations(h.map, units, []), expected);
+    assert.deepEqual(updateBlockingRelations(h.map, units, [], h.state.spatial.unitsByTile), expected);
     const retained = [expected[1]];
-    assert.deepEqual(acquireBlockingRelations(h.map, units, retained), [expected[1], expected[0]]);
+    assert.deepEqual(updateBlockingRelations(h.map, units, retained, h.state.spatial.unitsByTile), [expected[1], expected[0]]);
   }
   h.commit([{ type: 'SET_BLOCKING_RELATIONS', relations: expected }]);
   assert.deepEqual(h.state.blockingRelations, expected);

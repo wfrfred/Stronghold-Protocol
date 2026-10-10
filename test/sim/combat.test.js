@@ -304,7 +304,7 @@ test('core visibility: consecutive attacks consume the current target HP within 
   assert.equal(battle.snapshot().units.find(unit => unit.id === 2).vitality.hp, 5);
 });
 
-test('core visibility: later enemies cannot attack a new blocker before the post-movement blocking phase', () => {
+test('core visibility: later enemies immediately see a new blocker after the previous blocker dies', () => {
   const battle = createLegacyCombatBattle({
     rows: 3, columns: 10,
     operators: [
@@ -324,12 +324,10 @@ test('core visibility: later enemies cannot attack a new blocker before the post
 
   assert.deepEqual(events.filter(event => event.type === 'UNIT_REMOVED').map(event => event.unitId), [2, 1]);
   assert.deepEqual(events.filter(event => event.type === 'ACTION').map(event => [event.sourceUnitId, event.targetUnitId]),
-    [[0, 2], [1, 3], [3, 1]]);
-  assert.equal(battle.snapshot().units.find(unit => unit.id === 0).vitality.hp, 1000);
+    [[0, 2], [1, 3], [3, 1], [4, 0]]);
+  assert.equal(battle.snapshot().units.find(unit => unit.id === 0).vitality.hp, 990);
   assert.deepEqual(battle.snapshot().blockingRelations,
     [{ blockerUnitId: 0, blockedUnitId: 3 }, { blockerUnitId: 0, blockedUnitId: 4 }]);
-  const next = battle.step();
-  assert.ok(next.events.some(event => event.type === 'ACTION' && event.sourceUnitId === 4 && event.targetUnitId === 0));
 });
 
 test('core combat: air targeting follows unit data independently of the route motion mode', () => {

@@ -151,7 +151,7 @@ test('core visibility: blocker death releases its enemy before movement in the s
   assert.ok(coreBlockingUnit(battle, 1).position[0] < stopped[0]);
 });
 
-test('core visibility: a freed front operator takes over after movement and holds the next tick', () => {
+test('core visibility: a freed front operator takes over before movement and holds the next tick', () => {
   const battle = coreBlockingBattle(
     [
       { definition: chessRec({ id: FRONT, stats: { maxHp: 1e6, atk: 100, def: 0, blockCnt: 1 }, skill: null }), position: [1, 6] },
@@ -166,8 +166,7 @@ test('core visibility: a freed front operator takes over after movement and hold
   const position = coreBlockingUnit(battle, 3).position;
 
   assert.deepEqual(first.events.filter(event => event.type === 'UNIT_REMOVED').map(event => event.unitId), [2, 1]);
-  assert.ok(position[0] < 5.4);
-  assert.ok(position[0] > 5.4 - 1 / 30);
+  assert.deepEqual(position, [5.4, 1]);
   assert.deepEqual(coreBlockedBy(battle, 0), [3]);
   battle.step();
   assert.deepEqual(coreBlockedBy(battle, 0), [3]);

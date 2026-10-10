@@ -9,6 +9,7 @@ import { hasTileBindingDefinition } from "../../unit/capability/deployment.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
 import { hasSpatial } from "../../unit/capability/spatial.js";
 import { hasVitality } from "../../unit/capability/vitality/capability.js";
+import { hasStatusFlag } from "../../unit/capability/status/capability.js";
 import type { Unit } from "../../unit/unit.js";
 import { BattlefieldMap } from "../map/map.js";
 
@@ -41,7 +42,7 @@ export function readBlockingFacts(unit: Unit): BlockingFacts {
     const active = isSpatiallyPresent(unit) && (!hasVitality(unit) || unit.vitality.hp > 0);
     const blocker = hasBlocker(unit)
         ? {
-              enabled: unit.blocker.enabled,
+              enabled: unit.blocker.enabled && !hasStatusFlag(unit, "STUNNED"),
               capacity: resolveBlockingCapacity(unit.definition.blocker, unit.blocker),
               radius: unit.blocker.geometry.radius,
           }
@@ -76,12 +77,15 @@ export function sameBlockingFacts(
     right: BlockingFacts,
 ): boolean {
     return (
+        left.position[0] === right.position[0] &&
+        left.position[1] === right.position[1] &&
         left.active === right.active &&
         left.ground === right.ground &&
         left.highland === right.highland &&
         isGroundBlocker(map, left) === isGroundBlocker(map, right) &&
         left.blocker?.enabled === right.blocker?.enabled &&
         left.blocker?.capacity === right.blocker?.capacity &&
+        left.blocker?.radius === right.blocker?.radius &&
         left.blockable?.enabled === right.blockable?.enabled &&
         left.blockable?.weight === right.blockable?.weight &&
         left.side === right.side

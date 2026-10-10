@@ -4,7 +4,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
-import { advanceBlocking } from '../../dist/core/tactical/battle/steps/blocking.js';
 import { createBattleState, battlefieldView, getUnit } from '../../dist/core/tactical/battle/execution/context.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
@@ -159,14 +158,6 @@ function battlefield(units) {
       return commit(work.battlefield.snapshot("draft").unitIds.map(id => ({ type: 'UPDATE_UNIT', unit: getUnit(work, id) })));
     },
     blocked() { return h.state.blockingRelations.map(relation => relation.blockedUnitId); },
-    blockingPhase(tick) {
-      const state = h.state;
-      const changes = advanceBlocking({
-        map, unitIds: [...state.units.keys()], getUnit: id => state.units.get(id),
-        blockingRelations: state.blockingRelations, supportRelations: state.supportRelations,
-      });
-      commit(changes);
-    },
   };
   commit(units.map(unit => ({ type: 'REGISTER_UNIT', unit })));
   return h;
@@ -179,7 +170,7 @@ function nativeModifier(raw) {
   return compileAttributeModifiers(parsed)[0];
 }
 
-test('blocking capacity: native STACK layers release enemies and expiry restores acquisition at the next blocking phase', () => {
+test('blocking capacity: native STACK layers release enemies and expiry immediately restores acquisition', () => {
   const raw = fixture('enemy_mcnist_block_cnt_advance');
   assert.equal(raw.source.templateKey, 'enemy_mcnist_block_advance');
   assert.deepEqual(raw.source.nodePath, [0]);
@@ -203,7 +194,6 @@ test('blocking capacity: native STACK layers release enemies and expiry restores
     } },
   });
   const h = battlefield([blocker(), enemy(1), enemy(2), enemy(3), enemy(4, 4)]);
-  h.blockingPhase(0);
   assert.deepEqual(h.blocked(), [1, 2, 3]);
   const original = h.state;
   const apply = () => {
@@ -227,13 +217,10 @@ test('blocking capacity: native STACK layers release enemies and expiry restores
     assert.deepEqual(h.blocked(), blocked);
   }
   for (const [tick, restored] of [[2, 1], [4, 2], [6, 3]]) {
-    const beforePhase = h.blocked();
     const work = h.work();
     expireEffects(work, tick, resources);
     h.publish(work);
     assert.equal(capacityOf(h.state.units.get(0)), restored);
-    assert.deepEqual(h.blocked(), beforePhase, 'restoring capacity does not acquire relations during settlement');
-    h.blockingPhase(tick);
     assert.deepEqual(h.blocked(), Array.from({ length: restored }, (_, index) => index + 1));
   }
   assert.equal(h.state.units.get(0).effects.instances[0].finished, true);
@@ -256,21 +243,16 @@ test('blocking capacity: the native zero scaler releases weighted enemies and pa
     })])],
   });
   const h = battlefield([blocker(), enemy(1, 2), enemy(2), enemy(3, 4)]);
-  h.blockingPhase(0);
   assert.deepEqual(h.blocked(), [1, 2]);
   const installedWork = h.work();
   install(installedWork, effect, resources);
   h.publish(installedWork);
   assert.equal(capacityOf(h.state.units.get(0)), 0);
   assert.deepEqual(h.blocked(), []);
-  h.blockingPhase(0);
-  assert.deepEqual(h.blocked(), []);
   const pausedWork = h.work();
   setEffectEnabled(pausedWork, effectAddress, false, resources, 1);
   h.publish(pausedWork);
   assert.equal(capacityOf(h.state.units.get(0)), 3);
-  assert.deepEqual(h.blocked(), []);
-  h.blockingPhase(1);
   assert.deepEqual(h.blocked(), [1, 2]);
   const resumedWork = h.work();
   setEffectEnabled(resumedWork, effectAddress, true, resources, 2);
@@ -280,14 +262,12 @@ test('blocking capacity: the native zero scaler releases weighted enemies and pa
   finishEffects(finishedWork, [effectAddress], resources, 3);
   h.publish(finishedWork);
   assert.equal(capacityOf(h.state.units.get(0)), 3);
-  h.blockingPhase(3);
   assert.deepEqual(h.blocked(), [1, 2]);
   assert.deepEqual([...h.state.units.values()].slice(1).map(unit => unit.blockable.weight), [2, 1, 4]);
 });
 
 test('blocking capacity: replacing contribution entries without changing the resolved number leaves projection clean', () => {
   const h = battlefield([blocker(), enemy(1)]);
-  h.blockingPhase(0);
   const before = h.state;
   const owner = before.units.get(0);
   const changed = updateBlockingCapacityContributions(owner, () => contribution.create([

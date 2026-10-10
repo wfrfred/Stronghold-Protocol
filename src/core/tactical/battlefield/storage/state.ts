@@ -1,7 +1,7 @@
 import type { ProjectileId, ProjectileInstance } from "../projectile/state.js";
 import type { NavigationMaps } from "../navigation/map.js";
 import type { StableUnit, Unit, UnitId } from "../../unit/unit.js";
-import { reconcileBlockingRelations, type BlockingRelation } from "../blocking/relations.js";
+import { updateBlockingRelations, type BlockingRelation } from "../blocking/relations.js";
 import type { BattlefieldChangeResult } from "../contract.js";
 import {
     deriveBattlefieldDependencies,
@@ -158,10 +158,11 @@ export function settleBattlefieldState<U extends Unit>(
         dependencies.blocking ||
         supportRelations !== previous.supportRelations ||
         content.blockingRelations !== previous.blockingRelations
-            ? reconcileBlockingRelations(
+            ? updateBlockingRelations(
                   map,
                   content.units,
                   content.blockingRelations,
+                  spatial.unitsByTile,
                   supportRelations,
               )
             : previous.blockingRelations;
@@ -201,10 +202,11 @@ export function settleBattlefieldStateFully<U extends Unit>(
         spatial.navigationModifiers,
         previous.navigationMaps,
     );
-    const blockingRelations = reconcileBlockingRelations(
+    const blockingRelations = updateBlockingRelations(
         map,
         content.units,
         content.blockingRelations,
+        spatial.unitsByTile,
         supportRelations,
     );
 

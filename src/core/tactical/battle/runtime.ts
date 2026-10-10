@@ -25,7 +25,6 @@ import type { Input, Command, Result, Snapshot, Step } from "./contract.js";
 import { finishBattleEvents } from "./events.js";
 import { CombatResources } from "./resources.js";
 import { createCombat } from "./steps/combat.js";
-import { advanceBlocking } from "./steps/blocking.js";
 import { advanceSpawning } from "./steps/spawning.js";
 import { resolveDeploymentCommands } from "./steps/deployment.js";
 import { advanceMovement, advanceRouteCommands } from "./steps/movement.js";
@@ -215,7 +214,6 @@ export class BattleRuntime {
         advanceSkills(state, commands, tick, resources);
 
         advanceRouteCommands(state, commands, tick);
-        advanceBattlefield(state, advanceBlocking(battlefieldView(state)));
 
         this.#combat.advance(state, tick);
 
@@ -232,7 +230,6 @@ export class BattleRuntime {
             resources,
         );
 
-        advanceBattlefield(state, advanceBlocking(battlefieldView(state)));
         predefinedPresence = reconcilePredefinedPresence(
             predefinedPresence,
             battlefieldView(state),

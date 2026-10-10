@@ -16,7 +16,6 @@ import type { SpawnScheduleDefinition, TimelineScheduleDefinition, WavesSchedule
 import { createSpawnScheduleExecution, cloneScheduleState, type SpawnScheduleExecution, type SpawnScheduleState, type TimelineScheduleState, type WavesScheduleState } from ${sourceModule('schedule/state')};
 import { advanceSpawnSchedule, recordScheduleSpawns, resolveScheduleUnits, isSpawnScheduleCompleted, getUnspawnedCount, getSpawnScheduleCounts } from ${sourceModule('schedule/runtime')};
 import { advanceSpawning } from ${sourceModule('steps/spawning')};
-import { advanceBlocking } from ${sourceModule('steps/blocking')};
 declare const definition: SpawnScheduleDefinition;
 declare const progress: SpawnScheduleState;
 declare const timelineDefinition: TimelineScheduleDefinition;
@@ -24,7 +23,6 @@ declare const wavesDefinition: WavesScheduleDefinition;
 declare const timelineProgress: TimelineScheduleState;
 declare const wavesProgress: WavesScheduleState;
 declare const input: Parameters<typeof advanceSpawning>[0];
-declare const battlefield: Parameters<typeof advanceBlocking>[0];
 const timeline: SpawnScheduleExecution = { ...timelineProgress, definition: timelineDefinition };
 const waves: SpawnScheduleExecution = { ...wavesProgress, definition: wavesDefinition };
 // @ts-expect-error Timeline progress cannot use a waves definition.
@@ -49,7 +47,6 @@ if (resolved.type === 'TIMELINE') {
 getSpawnScheduleCounts(execution);
 const spawned = advanceSpawning(input, execution, [], 0);
 resolveScheduleUnits(spawned, []);
-const blocked = advanceBlocking(battlefield);
 // @ts-expect-error A bare snapshot cannot advance an execution.
 advanceSpawnSchedule(progress, { tick: 0 });
 // @ts-expect-error A bare snapshot cannot be paired by a separate definition argument.
@@ -62,8 +59,6 @@ getUnspawnedCount(progress);
 getSpawnScheduleCounts(progress);
 // @ts-expect-error Spawning requires progress paired with its definition.
 advanceSpawning(input, progress, [], 0);
-// @ts-expect-error Blocking produces only battlefield changes.
-blocked.state;
 const snapshot = cloneScheduleState(execution);
 // @ts-expect-error Public progress snapshots do not carry runtime definitions.
 snapshot.definition;

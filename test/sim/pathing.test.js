@@ -1455,7 +1455,7 @@ test('core selective and full projection release ground blocking when a blocker 
   assert.deepEqual(h.state.blockingRelations, []);
 });
 
-test('core selective and full projection preserve relation history and explicit same-position release', () => {
+test('core selective and full projection preserve relation history and reacquire after same-position release', () => {
   const h = battlefieldProjectionHarness();
   const blocker = projectionUnit(10, [1, 0], {
     vitality: { maxHp: 100 }, allegiance: { side: 'ALLY' }, blocker: { capacity: 2, geometry: { radius: 1 } },
@@ -1517,7 +1517,7 @@ test('core selective and full projection preserve relation history and explicit 
     { type: 'SET_BLOCKING_RELATIONS', relations: blocking }]);
   const spatial = h.state.spatial;
   h.commit([{ type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 11, position: enemy.position }]);
-  assert.deepEqual(h.state.blockingRelations, []);
+  assert.deepEqual(h.state.blockingRelations, blocking);
   assert.equal(h.state.spatial, spatial);
 });
 

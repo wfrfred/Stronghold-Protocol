@@ -30,7 +30,8 @@ import { createHitDefinition, createSpatialDefinition, hasHit, hasSpatial } from
 import { addStatusContribution, copyStatusState, createStatusDefinition, deriveEffectiveStatusFlags, hasStatus, initializeStatusState, removeStatusContribution } from '../../dist/core/tactical/unit/capability/status/capability.js';
 import { createBlockGeometry, createRangeGeometry, createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { geometryContainsPosition, rangeContainsPosition, rangeOverlapsHit } from '../../dist/core/tactical/geometry/intersection.js';
-import { acquireBlockingRelations } from '../../dist/core/tactical/battlefield/blocking/relations.js';
+import { updateBlockingRelations } from '../../dist/core/tactical/battlefield/blocking/relations.js';
+import { projectUnitsByTile } from '../../dist/core/tactical/battlefield/storage/indexes.js';
 import { createLocomotionState, createRoutedLocomotionState, hasLocomotion, hasRoutedLocomotion } from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
 import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
 import { createRouteState, createRouteTiming } from '../../dist/core/tactical/unit/capability/locomotion/route/state.js';
@@ -709,11 +710,14 @@ test('core blocking uses current state radius and includes center-distance equal
     allegiance: { side: 'ENEMY' }, blockable: { weight: 1 }, spatial: { layer: 'GROUND' },
     hit: createHitDefinition({ geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 10 }] } }),
   }), position: [1, 0] });
-  const acquire = current => acquireBlockingRelations(map, new Map([[1, current], [2, blocked]]), []);
-  assert.deepEqual(acquire(blocker), []);
+  const update = current => {
+    const units = new Map([[1, current], [2, blocked]]);
+    return updateBlockingRelations(map, units, [], projectUnitsByTile(map, units).unitsByTile);
+  };
+  assert.deepEqual(update(blocker), []);
   const enlarged = { ...blocker, blocker: { ...blocker.blocker, geometry: createBlockGeometry({ radius: 1 }) } };
-  assert.deepEqual(acquire(enlarged), [{ blockerUnitId: 1, blockedUnitId: 2 }]);
-  assert.deepEqual(acquire({ ...enlarged, blocker: { ...enlarged.blocker, geometry: createBlockGeometry({ radius: 0.999 }) } }), []);
+  assert.deepEqual(update(enlarged), [{ blockerUnitId: 1, blockedUnitId: 2 }]);
+  assert.deepEqual(update({ ...enlarged, blocker: { ...enlarged.blocker, geometry: createBlockGeometry({ radius: 0.999 }) } }), []);
   assert.equal(enlarged.definition.blocker.geometry.radius, 0.5);
 });
 

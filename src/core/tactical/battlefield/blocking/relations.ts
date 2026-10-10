@@ -1,8 +1,9 @@
 import { World } from "../../geometry/coordinate.js";
 import { areHostileSides } from "../../unit/capability/allegiance.js";
 import type { Unit, UnitId } from "../../unit/unit.js";
+import { hasBlocker } from "../../unit/capability/blocking.js";
 import type { SupportRelation } from "../support/relations.js";
-import type { BattlefieldMap } from "../map/map.js";
+import { BattlefieldMap } from "../map/map.js";
 import {
     isGroundBlocker,
     readBlockableFacts,
@@ -30,11 +31,10 @@ export function canBlockGround(unit: Unit, map: BattlefieldMap): boolean {
     return isGroundBlocker(map, readBlockingFacts(unit));
 }
 
-function canBlock(
+function canBlockFrom(
     map: BattlefieldMap,
     blockerId: UnitId,
     blocker: BlockingFacts,
-    blocked: BlockingFacts,
     units: ReadonlyMap<UnitId, Unit>,
     supports: readonly SupportRelation[],
 ): boolean {
@@ -47,8 +47,11 @@ function canBlock(
         return false;
     }
 
+    return isGroundBlocker(map, blocker);
+}
+
+function canBlockTarget(blocker: BlockingFacts, blocked: BlockingFacts): boolean {
     return (
-        isGroundBlocker(map, blocker) &&
         blocked.blockable?.enabled === true &&
         blocked.ground &&
         blocked.active &&
@@ -56,7 +59,7 @@ function canBlock(
     );
 }
 
-export function reconcileBlockingRelations(
+function reconcileBlockingRelations(
     map: BattlefieldMap,
     units: ReadonlyMap<UnitId, Unit>,
     relations: readonly BlockingRelation[],
@@ -77,7 +80,8 @@ export function reconcileBlockingRelations(
             blocked === undefined ||
             blockerFacts?.blocker === undefined ||
             blockedFacts?.blockable === undefined ||
-            !canBlock(map, blocker.id, blockerFacts, blockedFacts, units, supports) ||
+            !canBlockFrom(map, blocker.id, blockerFacts, units, supports) ||
+            !canBlockTarget(blockerFacts, blockedFacts) ||
             blockedIds.has(blocked.id)
         ) {
             continue;
@@ -119,62 +123,146 @@ export function blockingUsedCapacity(
     return used;
 }
 
-export function acquireBlockingRelations(
+export function updateBlockingRelations(
     map: BattlefieldMap,
     units: ReadonlyMap<UnitId, Unit>,
     previous: readonly BlockingRelation[],
+    unitsByTile: ReadonlyMap<number, ReadonlySet<UnitId>>,
     supports: readonly SupportRelation[] = [],
 ): readonly BlockingRelation[] {
     const retained = reconcileBlockingRelations(map, units, previous, supports);
     const blockedIds = new Set(retained.map((relation) => relation.blockedUnitId));
     const used = new Map<UnitId, number>();
     const additions: BlockingRelation[] = [];
-    const ordered = [...units.values()].sort((left, right) => left.id - right.id);
-    const blockers = ordered.flatMap((unit) => {
-        const facts = readBlockingFacts(unit);
 
-        return facts.blocker === undefined ? [] : [{ unit, facts, blocker: facts.blocker }];
-    });
-
-    for (const blocker of blockers) {
-        used.set(blocker.unit.id, blockingUsedCapacity(units, retained, blocker.unit.id));
+    for (const relation of retained) {
+        used.set(
+            relation.blockerUnitId,
+            (used.get(relation.blockerUnitId) ?? 0) +
+                readBlockableFacts(units.get(relation.blockedUnitId)!)!.weight,
+        );
     }
 
-    for (const blocked of ordered) {
-        const blockable = readBlockableFacts(blocked);
-
-        if (blockable === undefined || blockedIds.has(blocked.id)) {
-            continue;
+    const blockers = [...units.values()].flatMap((unit) => {
+        if (!hasBlocker(unit)) {
+            return [];
         }
 
-        const blockedFacts = readBlockingFacts(blocked);
-        let nearest: (typeof blockers)[number] | undefined;
-        let nearestDistance = Infinity;
+        const facts = readBlockingFacts(unit);
+        const remaining = facts.blocker!.capacity - (used.get(unit.id) ?? 0);
 
-        for (const blocker of blockers) {
+        return remaining > 0 && canBlockFrom(map, unit.id, facts, units, supports)
+            ? [{ unit, facts, radius: facts.blocker!.radius, remaining }]
+            : [];
+    });
+
+    if (blockers.length === 0) {
+        return retained;
+    }
+
+    const candidates = new Map<
+        UnitId,
+        { weight: number; blockers: { blocker: (typeof blockers)[number]; distance: number }[] }
+    >();
+
+    const addCandidate = (blocker: (typeof blockers)[number], unitId: UnitId): void => {
+        if (blockedIds.has(unitId)) {
+            return;
+        }
+
+        const blocked = units.get(unitId)!;
+        const blockable = readBlockableFacts(blocked);
+
+        if (
+            blockable === undefined ||
+            blockable.weight > blocker.remaining ||
+            !canBlockTarget(blocker.facts, readBlockingFacts(blocked))
+        ) {
+            return;
+        }
+
+        const distance = World.distanceSquared(blocker.unit.position, blocked.position);
+
+        if (distance > blocker.radius * blocker.radius) {
+            return;
+        }
+
+        let candidate = candidates.get(unitId);
+
+        if (candidate === undefined) {
+            candidate = { weight: blockable.weight, blockers: [] };
+            candidates.set(unitId, candidate);
+        }
+
+        candidate.blockers.push({ blocker, distance });
+    };
+
+    const edgeBlockers: typeof blockers = [];
+
+    for (const blocker of blockers) {
+        const [x, y] = blocker.unit.position;
+        const radius = blocker.radius;
+        const firstRow = Math.ceil(y - radius - 0.5);
+        const lastRow = Math.floor(y + radius + 0.5);
+        const firstColumn = Math.ceil(x - radius - 0.5);
+        const lastColumn = Math.floor(x + radius + 0.5);
+
+        for (let row = Math.max(0, firstRow); row <= Math.min(map.rows - 1, lastRow); row++) {
+            for (
+                let column = Math.max(0, firstColumn);
+                column <= Math.min(map.columns - 1, lastColumn);
+                column++
+            ) {
+                for (const id of unitsByTile.get(row * map.columns + column) ?? []) {
+                    addCandidate(blocker, id);
+                }
+            }
+        }
+
+        if (firstRow < 0 || lastRow >= map.rows || firstColumn < 0 || lastColumn >= map.columns) {
+            edgeBlockers.push(blocker);
+        }
+    }
+
+    if (edgeBlockers.length > 0) {
+        for (const unit of units.values()) {
+            const facts = readBlockingFacts(unit);
+
             if (
-                !canBlock(map, blocker.unit.id, blocker.facts, blockedFacts, units, supports) ||
-                (used.get(blocker.unit.id) ?? 0) + blockable.weight > blocker.blocker.capacity
+                facts.blockable === undefined ||
+                !facts.active ||
+                BattlefieldMap.contains(map, World.toTile(unit.position))
             ) {
                 continue;
             }
 
-            const distance = World.distanceSquared(blocker.unit.position, blocked.position);
-            const radius = blocker.blocker.radius;
-
-            if (distance <= radius * radius && distance < nearestDistance) {
-                nearest = blocker;
-                nearestDistance = distance;
+            for (const blocker of edgeBlockers) {
+                addCandidate(blocker, unit.id);
             }
         }
+    }
 
-        if (nearest === undefined) {
+    let available = blockers.length;
+
+    for (const [unitId, candidate] of [...candidates].sort(([left], [right]) => left - right)) {
+        candidate.blockers.sort(
+            (left, right) =>
+                left.distance - right.distance || left.blocker.unit.id - right.blocker.unit.id,
+        );
+        const chosen = candidate.blockers.find(
+            ({ blocker }) => blocker.remaining >= candidate.weight,
+        )?.blocker;
+
+        if (chosen === undefined) {
             continue;
         }
 
-        additions.push({ blockerUnitId: nearest.unit.id, blockedUnitId: blocked.id });
-        blockedIds.add(blocked.id);
-        used.set(nearest.unit.id, (used.get(nearest.unit.id) ?? 0) + blockable.weight);
+        additions.push({ blockerUnitId: chosen.unit.id, blockedUnitId: unitId });
+        chosen.remaining -= candidate.weight;
+
+        if (chosen.remaining === 0 && --available === 0) {
+            break;
+        }
     }
 
     return additions.length === 0 ? retained : [...retained, ...additions];
