@@ -30,7 +30,6 @@ function fixture(count) {
     const program = resources.registerEffect(createEffectProgram({
         id: "indexed-effect",
         initialize: () => ({}),
-        ownState: state => state,
     }));
     const battlefield = createBattlefieldRuntime({ map: createBattlefieldMap(1, 1, [createTile({
         heightType: "LOWLAND", buildableType: "ALL", passableMask: "ALL",

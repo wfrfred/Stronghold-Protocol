@@ -137,13 +137,12 @@ class ProjectileSettlement {
             }
 
             const contacted = updateProjectileInstance(current, {
-                hitUnitIds: Object.freeze([...current.hitUnitIds, targetUnitId]),
+                hitUnitIds: [...current.hitUnitIds, targetUnitId],
             });
             this.#update(contacted);
 
             withProjectileContext(
                 contacted,
-                program,
                 this.#services,
                 this.#contextAccess(),
                 this.#tick,
@@ -181,7 +180,7 @@ class ProjectileSettlement {
         }
 
         const stopped = updateProjectileInstance(current, {
-            progress: Object.freeze({ type: "STOPPED", reason }),
+            progress: { type: "STOPPED", reason },
         });
         this.#update(stopped);
         this.#signal(stopped, {
@@ -194,7 +193,6 @@ class ProjectileSettlement {
             if (program.stop !== undefined) {
                 withProjectileContext(
                     instance,
-                    program,
                     this.#services,
                     this.#contextAccess(),
                     this.#tick,
@@ -265,9 +263,7 @@ class ProjectileSettlement {
                     position,
                     destination,
                     lastAdvancedTick: this.#tick,
-                    ...(reached
-                        ? { progress: Object.freeze({ type: "WAITING_TO_STOP", targetTick }) }
-                        : {}),
+                    ...(reached ? { progress: { type: "WAITING_TO_STOP", targetTick } } : {}),
                 });
                 this.#update(advanced);
 

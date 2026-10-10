@@ -27,7 +27,7 @@ import { createBlockerDefinition, hasBlockable, hasBlocker, resolveBlockingCapac
 import * as contribution from '../../dist/core/tactical/modifier/contribution.js';
 import * as modifier from '../../dist/core/tactical/modifier/value.js';
 import { createHitDefinition, createSpatialDefinition, hasHit, hasSpatial } from '../../dist/core/tactical/unit/capability/spatial.js';
-import { addStatusContribution, copyStatusState, createStatusDefinition, deriveEffectiveStatusFlags, hasStatus, initializeStatusState, removeStatusContribution } from '../../dist/core/tactical/unit/capability/status/capability.js';
+import { addStatusContribution, createStatusDefinition, deriveEffectiveStatusFlags, hasStatus, initializeStatusState, removeStatusContribution, setStatusContributionParticipation } from '../../dist/core/tactical/unit/capability/status/capability.js';
 import { createBlockGeometry, createRangeGeometry, createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { geometryContainsPosition, rangeContainsPosition, rangeOverlapsHit } from '../../dist/core/tactical/geometry/intersection.js';
 import { updateBlockingRelations } from '../../dist/core/tactical/battlefield/blocking/relations.js';
@@ -259,7 +259,7 @@ const presenceNavigationModifier = (id, source, region, costFloor = 1000) => cre
   active: true, expiresAtTick: null,
 });
 
-test('core spatial presence keeps unit identity and isolates state while removing only spatial membership', () => {
+test('core spatial presence preserves earlier unit values while removing only spatial membership', () => {
   const runtime = presenceBattlefield();
   const unit = presenceUnit(1, [2, 0]);
   const bare = { id: 2, definition: Object.freeze({ id: 'bare' }), position: Object.freeze([2, 0]) };
@@ -268,8 +268,7 @@ test('core spatial presence keeps unit identity and isolates state while removin
   assert.equal(isSpatiallyPresent(bare), true);
   runtime.advance([{ type: 'REGISTER_UNIT', unit }, { type: 'REGISTER_UNIT', unit: bare }]);
   const baseline = runtime.snapshot('draft').navigationMaps;
-  const hidden = copyUnitSnapshot(runtime.snapshot('draft').getUnit(1));
-  hidden.spatialPresence.present = false;
+  const hidden = { ...runtime.snapshot('draft').getUnit(1), spatialPresence: { present: false } };
   assert.equal(runtime.snapshot('draft').getUnit(1).spatialPresence.present, true);
   const result = runtime.advance([{ type: 'UPDATE_UNIT', unit: hidden }]);
   assert.deepEqual(result.removedUnits, []);
@@ -278,8 +277,7 @@ test('core spatial presence keeps unit identity and isolates state while removin
   assert.equal(runtime.snapshot('draft').getUnit(1).definition, hidden.definition);
   assert.equal(runtime.snapshot('draft').getUnit(1).vitality.hp, 100);
   assert.equal(runtime.snapshot('draft').navigationMaps, baseline);
-  const restored = copyUnitSnapshot(runtime.snapshot('draft').getUnit(1));
-  restored.spatialPresence.present = true;
+  const restored = { ...runtime.snapshot('draft').getUnit(1), spatialPresence: { present: true } };
   assert.equal(runtime.snapshot('draft').getUnit(1).spatialPresence.present, false);
   runtime.advance([{ type: 'UPDATE_UNIT', unit: restored }]);
   assert.deepEqual(runtime.snapshot('draft').unitsAt([0, 2]).map(unit => unit.id), [1, 2]);
@@ -291,8 +289,8 @@ test('core removal facts share the latest unit while updates preserve retained b
   runtime.advance([{ type: 'REGISTER_UNIT', unit }]);
   const retained = runtime.snapshot('draft');
   const snapshot = copyUnitSnapshot(runtime.snapshot('draft').getUnit(1));
-  snapshot.vitality.hp = 0;
-  snapshot.spatialPresence.present = false;
+  assert.equal(snapshot.vitality, unit.vitality);
+  assert.equal(snapshot.spatialPresence, unit.spatialPresence);
   assert.deepEqual(retained.getUnit(1), unit);
   assert.equal(unit.vitality.hp, 100);
   assert.equal(unit.spatialPresence.present, true);
@@ -343,8 +341,7 @@ test('core hidden navigation modifier sources and anchors suspend contributions 
   runtime.advance([{ type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 2, position: Object.freeze([3, 0]) }]);
   assert.equal(runtime.snapshot('draft').navigationMaps, dormant);
   assert.deepEqual(runtime.snapshot('draft').unitsAt([0, 3]), []);
-  const movedAnchor = copyUnitSnapshot(runtime.snapshot('draft').getUnit(2));
-  movedAnchor.spatialPresence.present = true;
+  const movedAnchor = { ...runtime.snapshot('draft').getUnit(2), spatialPresence: { present: true } };
   runtime.advance([{ type: 'UPDATE_UNIT', unit: source }, { type: 'UPDATE_UNIT', unit: movedAnchor }]);
   assert.deepEqual(runtime.snapshot('draft').navigationModifiersAt([0, 3]), [2]);
   assert.deepEqual(runtime.snapshot('draft').unitsAt([0, 3]).map(unit => unit.id), [2]);
@@ -370,8 +367,7 @@ test('core failed presence updates restore spatial membership and projected maps
   const maps = runtime.snapshot('draft').navigationMaps;
   assert.throws(() => {
     try {
-      const hidden = copyUnitSnapshot(runtime.snapshot('draft').getUnit(1));
-      hidden.spatialPresence.present = false;
+      const hidden = { ...runtime.snapshot('draft').getUnit(1), spatialPresence: { present: false } };
       runtime.advance([{ type: 'UPDATE_UNIT', unit: hidden }]);
       assert.deepEqual(runtime.snapshot('draft').unitsAt([0, 2]), []);
       assert.deepEqual(runtime.snapshot('draft').navigationModifiersAt([0, 2]), []);
@@ -387,15 +383,23 @@ test('core failed presence updates restore spatial membership and projected maps
   assert.deepEqual(runtime.snapshot('draft').navigationModifiersAt([0, 2]), [1]);
 });
 
-test('core placement owns and initializes occupancy through capability states', () => {
+test('core placement shares immutable prepared capability states', () => {
   const states = { occupancy: { claims: [{ position: [0, 1], slot: 'DEPLOYMENT', type: 'RESERVATION' }] } };
   const placement = { definition: { id: 'placement' }, position: [0, 0], states };
   const execution = { rngState: 1, nextUnitId: 0, nextNavigationRequestId: 0, nextMechanismId: 0, nextNavigationModifierId: 0, nextProjectileId: 0 };
   const direct = instantiateUnitPlacement(placement, execution, 0).unit;
   const normalized = createUnitPlacementDefinition(placement);
-  states.occupancy.claims[0].position[1] = 2;
-  assert.equal(direct.occupancy.claims[0].position[1], 1);
-  assert.equal(instantiateUnitPlacement(normalized, execution, 0).unit.occupancy.claims[0].position[1], 1);
+  const placed = instantiateUnitPlacement(normalized, execution, 0).unit;
+  assert.equal(direct.occupancy, states.occupancy);
+  assert.equal(normalized.states.occupancy, states.occupancy);
+  assert.equal(placed.occupancy, states.occupancy);
+  assert.equal(placed.definition, placement.definition);
+  assert.equal(placed.position, placement.position);
+
+  const nextOccupancy = { claims: [{ ...states.occupancy.claims[0], position: [0, 2] }] };
+  const next = instantiateUnitPlacement({ ...normalized, states: { occupancy: nextOccupancy } }, execution, 0).unit;
+  assert.equal(next.occupancy, nextOccupancy);
+  assert.deepEqual(placed.occupancy.claims[0].position, [0, 1]);
 });
 
 const catalogDefinition = () => Object.freeze({
@@ -451,8 +455,9 @@ test('core unit initialization uses prepared states and separates configuration 
     states: { vitality, action, locomotion, spatialPresence: { present: false } } });
 
   assert.equal(unit.definition, definition);
-  assert.deepEqual(unit.vitality, vitality);
-  assert.deepEqual(unit.action, action);
+  assert.equal(unit.vitality, vitality);
+  assert.equal(unit.action, action);
+  assert.equal(unit.locomotion, locomotion);
   assert.equal(hasRoutedLocomotion(unit), true);
   assert.equal(unit.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 9);
   assert.equal(unit.spatialPresence.present, false);
@@ -461,9 +466,10 @@ test('core unit initialization uses prepared states and separates configuration 
   assert.equal(resolveBlockingCapacity(unit.definition.blocker, unit.blocker), 2);
   assert.deepEqual(unit.blockable, { weight: 1, enabled: true });
 
-  vitality.hp = 0;
-  action.readyAtTick = 99;
-  locomotion.mainRoute.route.progress.checkpoint.remainingTicks = 0;
+  const updated = { ...unit, vitality: { ...unit.vitality, hp: 0 }, action: { ...unit.action, readyAtTick: 99 } };
+  assert.equal(updated.vitality.hp, 0);
+  assert.equal(updated.action.readyAtTick, 99);
+  assert.equal(updated.locomotion, unit.locomotion);
   assert.equal(unit.vitality.hp, 25);
   assert.equal(unit.action.readyAtTick, 9);
   assert.equal(unit.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 9);
@@ -477,48 +483,34 @@ test('core unit initialization uses prepared states and separates configuration 
     states: { locomotion: createLocomotionState() } }));
 });
 
-test('core definitions acquire immutable ownership once and snapshots share it', () => {
-  for (const shallowFrozen of [false, true]) {
-    const definition = { id: 'owned-definition', vitality: { maxHp: 100 }, metadata: { labels: ['a'] } };
-    if (shallowFrozen) Object.freeze(definition);
-    const unit = initializeUnit({ id: 1, definition, position: [0, 0] });
-    definition.vitality.maxHp = 999;
-    definition.metadata.labels.push('changed');
-    assert.equal(unit.definition.vitality.maxHp, 100);
-    assert.deepEqual(unit.definition.metadata.labels, ['a']);
-    const snapshot = copyUnitSnapshot(unit);
-    assert.equal(snapshot.definition, unit.definition);
-    assert.throws(() => { snapshot.definition.vitality.maxHp = 0; }, TypeError);
-    assert.throws(() => snapshot.definition.metadata.labels.push('x'), TypeError);
-    const another = initializeUnit({ id: 2, definition, position: [0, 0] });
-    assert.equal(another.definition.vitality.maxHp, 999);
-  }
-  const definition = Object.freeze({ id: 'already-owned', metadata: Object.freeze({ labels: Object.freeze(['a']) }) });
-  assert.equal(initializeUnit({ id: 1, definition, position: [0, 0] }).definition, definition);
-  assert.throws(() => initializeUnit({ id: 1, definition: { id: 'behavior', run: () => {} }, position: [0, 0] }), /data-only/);
-  let reads = 0;
-  const accessor = Object.freeze({ id: 'accessor', get payload() { reads++; return 1; } });
-  assert.throws(() => initializeUnit({ id: 1, definition: accessor, position: [0, 0] }), /accessors/);
-  assert.equal(reads, 0);
-  const sparse = Object.freeze({ id: 'sparse', labels: Object.freeze(new Array(2)) });
-  assert.throws(() => initializeUnit({ id: 1, definition: sparse, position: [0, 0] }), /dense/);
+test('core initialization and snapshots share immutable definitions', () => {
+  const definition = { id: 'shared-definition', vitality: { maxHp: 100 }, metadata: { labels: ['a'] } };
+  const first = initializeUnit({ id: 1, definition, position: [0, 0] });
+  const second = initializeUnit({ id: 2, definition, position: [1, 0] });
+  const snapshot = copyUnitSnapshot(first);
+  assert.equal(first.definition, definition);
+  assert.equal(second.definition, definition);
+  assert.equal(snapshot.definition, definition);
+  assert.equal(snapshot.definition.metadata.labels, definition.metadata.labels);
 
-  const mutable = { id: 'manual', vitality: { maxHp: 50 } };
-  const manual = { id: 1, definition: mutable, position: [0, 0], vitality: initializeVitalityState(mutable.vitality) };
-  const copied = copyUnitSnapshot(manual);
-  mutable.vitality.maxHp = 99;
-  assert.equal(copied.definition.vitality.maxHp, 50);
+  const revisedDefinition = { ...definition, vitality: { maxHp: 200 }, metadata: { labels: ['b'] } };
+  const revised = initializeUnit({ id: 3, definition: revisedDefinition, position: [0, 0] });
+  assert.equal(revised.definition, revisedDefinition);
+  assert.equal(revised.vitality.hp, 200);
+  assert.equal(first.definition.vitality.maxHp, 100);
+  assert.deepEqual(snapshot.definition.metadata.labels, ['a']);
 });
 
-test('core prepared states preserve supported state shapes', () => {
+test('core prepared states retain capability values without rebuilding their fields', () => {
   const definition = { id: 'state-shapes', offense: { attack: 10 } };
-  const unit = initializeUnit({ id: 1, definition, position: [0, 0], states: {
-    offense: { ...initializeOffenseState(), marker: 'discarded' },
-  } });
-  assert.equal(Object.hasOwn(unit.offense, 'marker'), false);
+  const offense = { ...initializeOffenseState(), marker: 'retained' };
+  const unit = initializeUnit({ id: 1, definition, position: [0, 0], states: { offense } });
+  assert.equal(unit.offense, offense);
+  assert.equal(unit.offense.marker, 'retained');
+  assert.equal(copyUnitSnapshot(unit).offense, offense);
 });
 
-test('core capability guards inspect composition while explicit unit snapshots isolate state', () => {
+test('core capability guards inspect composition independently of shared snapshot values', () => {
   const unit = initializeUnit({ id: 1, definition: catalogDefinition(), position: [0, 0],
     states: { locomotion: catalogRoutedState() } });
   for (const [key, guard] of [
@@ -546,60 +538,45 @@ test('core capability guards inspect composition while explicit unit snapshots i
 
 });
 
-test('core snapshots isolate capability state and both routed contexts while sharing immutable definitions', () => {
-  const unit = initializeUnit({ id: 1, definition: catalogDefinition(), position: Object.freeze([2, 0]),
+test('core snapshots share capabilities and retain earlier values across immutable updates', () => {
+  const unit = initializeUnit({ id: 1, definition: catalogDefinition(), position: [2, 0],
     states: { locomotion: catalogRoutedState(), spatialPresence: { present: true } } });
-  const snapshot = copyUnitSnapshot(unit);
+  const snapshot = copyUnitSnapshot({ ...unit, extension: 'outside-unit-state' });
+  assert.equal(Object.hasOwn(snapshot, 'extension'), false);
   assert.equal(snapshot.definition, unit.definition);
   assert.equal(snapshot.position, unit.position);
-
-  snapshot.vitality.hp = 0;
-  snapshot.allegiance.side = 'ENEMY';
-  snapshot.action.readyAtTick = 7;
-  assert.equal(snapshot.hit.geometry, unit.hit.geometry);
-  assert.equal(snapshot.blocker.geometry, unit.blocker.geometry);
-  assert.equal(snapshot.blocker.capacity.entries, unit.blocker.capacity.entries);
-  assert.equal(snapshot.status.contributions, unit.status.contributions);
-  snapshot.spatial.layer = 'AIR';
-  snapshot.hit.geometry = createShapeGeometry({ shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 2 }] });
-  snapshot.status.contributions = [];
-  snapshot.blocker.capacity = contribution.create([{ id: 'snapshot-only-capacity', sequence: 0,
-    kind: "SAMPLED",
-    participating: true, values: [modifier.create({ finalScaler: 0 })] }]);
-  snapshot.blocker.geometry = createBlockGeometry({ radius: 2 });
-  snapshot.blockable.weight = 2;
-  snapshot.spatialPresence.present = false;
-  snapshot.locomotion.moving = true;
-  snapshot.locomotion.steering.lastVelocity = [1, 0];
-  snapshot.locomotion.mainRoute.route.progress.checkpoint.remainingTicks = 1;
-  snapshot.locomotion.mainRoute.navigation.execution.visits.visitedCenters.push([0, 1]);
-  assert.notEqual(snapshot.locomotion.mainRoute.navigation.execution.activity,
-    unit.locomotion.mainRoute.navigation.execution.activity);
-  snapshot.locomotion.mainRoute.navigation.execution.activity = { type: 'IDLE' };
-  assert.equal(snapshot.locomotion.alternativeRoute.route.progress.checkpoint.remainingTicks, 9);
-  assert.deepEqual(snapshot.locomotion.alternativeRoute.navigation.execution.visits.visitedCenters, []);
-  snapshot.locomotion.alternativeRoute.route.progress.checkpoint.remainingTicks = 2;
-  snapshot.locomotion.alternativeRoute.navigation.execution.locatorOffset = [0.5, 0];
-
-  assert.equal(unit.vitality.hp, 100);
-  assert.equal(unit.allegiance.side, 'ALLY');
-  assert.equal(unit.action.readyAtTick, 0);
-  assert.equal(unit.spatial.layer, 'GROUND');
-  assert.equal(unit.hit.geometry.shapes[0].radius, 0.25);
-  assert.deepEqual([...deriveEffectiveStatusFlags(unit.status)], ['HEAL_FREE']);
-  assert.deepEqual(unit.blocker.capacity.entries, []);
-  assert.equal(resolveBlockingCapacity(unit.definition.blocker, unit.blocker), 2);
-  assert.equal(unit.blocker.geometry.radius, 0.7);
-  assert.equal(unit.blockable.weight, 1);
-  assert.equal(unit.spatialPresence.present, true);
-  assert.equal(unit.locomotion.moving, false);
-  assert.deepEqual(unit.locomotion.steering.lastVelocity, [0, 0]);
-  for (const control of [unit.locomotion.mainRoute, unit.locomotion.alternativeRoute]) {
-    assert.equal(control.route.progress.checkpoint.remainingTicks, 9);
-    assert.deepEqual(control.navigation.execution.visits.visitedCenters, []);
-    assert.deepEqual(control.navigation.execution.locatorOffset, [0, 0]);
-    assert.equal(control.navigation.execution.activity.type, 'IDLE');
+  for (const key of ['vitality', 'allegiance', 'action', 'spatial', 'hit', 'status',
+    'blocker', 'blockable', 'spatialPresence', 'locomotion']) {
+    assert.equal(snapshot[key], unit[key], key);
   }
+  assert.equal(snapshot.locomotion.alternativeRoute, snapshot.locomotion.mainRoute);
+
+  const runtime = presenceBattlefield();
+  runtime.advance([{ type: 'REGISTER_UNIT', unit }]);
+  const previous = runtime.snapshot('draft');
+  const mainRoute = snapshot.locomotion.mainRoute;
+  const updated = { ...snapshot,
+    vitality: { ...snapshot.vitality, hp: 25 },
+    locomotion: { ...snapshot.locomotion, moving: true,
+      mainRoute: { ...mainRoute, route: { ...mainRoute.route,
+        progress: { ...mainRoute.route.progress,
+          checkpoint: { ...mainRoute.route.progress.checkpoint, remainingTicks: 1 } },
+      } },
+    },
+  };
+  runtime.advance([{ type: 'UPDATE_UNIT', unit: updated }]);
+
+  assert.equal(runtime.snapshot('draft').getUnit(1), updated);
+  assert.equal(previous.getUnit(1), unit);
+  assert.equal(snapshot.vitality.hp, 100);
+  assert.equal(snapshot.locomotion.moving, false);
+  assert.equal(snapshot.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 9);
+  assert.equal(updated.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 1);
+  assert.equal(updated.locomotion.alternativeRoute, snapshot.locomotion.alternativeRoute);
+  assert.equal(updated.locomotion.alternativeRoute.route.progress.checkpoint.remainingTicks, 9);
+  assert.equal(updated.locomotion.mainRoute.navigation, snapshot.locomotion.mainRoute.navigation);
+  assert.equal(updated.hit, snapshot.hit);
+  assert.equal(updated.status, snapshot.status);
 });
 
 test('core geometry boundaries own shape values and share them across snapshots', () => {
@@ -628,7 +605,7 @@ test('core geometry boundaries own shape values and share them across snapshots'
   assert.equal(snapshot.hit.geometry, geometry);
   assert.equal(second.hit.geometry, geometry);
   assert.notEqual(first.hit, second.hit);
-  assert.notEqual(snapshot.hit, first.hit);
+  assert.equal(snapshot.hit, first.hit);
 });
 
 test('core range geometry includes tangent contacts and excludes circle-box corner gaps', () => {
@@ -669,25 +646,32 @@ test('core grid ranges rotate all four directions around continuous source posit
   assert.equal(rangeContainsPosition(originCell, [0, 0], [0.75, 0.25]), false);
 });
 
-test('core status contributions retain overlapping flags and isolate sources and unit snapshots', () => {
-  assert.throws(() => createStatusDefinition({ initialFlags: new Array(1) }), /missing status flag/);
+test('core status contributions share immutable flags and preserve earlier states', () => {
   const initialFlags = ['INVINCIBLE'];
   const definition = createStatusDefinition({ initialFlags });
-  initialFlags.push('HEAL_FREE');
-  let state = initializeStatusState(definition);
+  assert.equal(definition.initialFlags, initialFlags);
+  const initial = initializeStatusState(definition);
+  let state = initial;
   const baseline = state.contributions[0];
   const flags = ['HEAL_FREE'];
   state = addStatusContribution(state, { id: 'source-a', flags });
-  flags.push('INVISIBLE');
+  const first = state;
   state = addStatusContribution(state, { id: 'source-b', flags: ['HEAL_FREE'] });
   assert.equal(state.contributions[0], baseline);
+  assert.equal(state.contributions[1].flags, flags);
+  assert.equal(state.contributions[1], first.contributions[1]);
   assert.equal(deriveEffectiveStatusFlags(state).has('INVISIBLE'), false);
+  assert.deepEqual([...deriveEffectiveStatusFlags(initial)], ['INVINCIBLE']);
   assert.throws(() => addStatusContribution(state, { id: 'source-a', flags: [] }), /duplicate/);
-  const copy = copyStatusState(state);
-  assert.notEqual(copy, state);
-  assert.equal(copy.contributions, state.contributions);
-  copy.contributions = [];
-  assert.equal(deriveEffectiveStatusFlags(state).has('HEAL_FREE'), true);
+  assert.throws(() => addStatusContribution(state, { id: '', flags: [] }), /nonempty/);
+  assert.throws(() => addStatusContribution(state, { id: baseline.id, flags: [] }), /reserved/);
+  const disabled = setStatusContributionParticipation(state, 'source-a', false);
+  assert.equal(disabled.contributions[0], baseline);
+  assert.equal(disabled.contributions[1].flags, flags);
+  assert.equal(disabled.contributions[2], state.contributions[2]);
+  assert.equal(state.contributions[1].participating, true);
+  assert.equal(disabled.contributions[1].participating, false);
+  assert.equal(setStatusContributionParticipation(disabled, 'source-a', false), disabled);
   state = removeStatusContribution(state, 'source-a');
   assert.equal(deriveEffectiveStatusFlags(state).has('HEAL_FREE'), true);
   state = removeStatusContribution(state, 'source-b');
@@ -695,11 +679,12 @@ test('core status contributions retain overlapping flags and isolate sources and
   assert.throws(() => removeStatusContribution(state, baseline.id), /cannot be removed/);
 
   const unitDefinition = Object.freeze({ id: 'shared_status_definition', status: definition });
-  const first = initializeUnit({ id: 1, definition: unitDefinition, position: [0, 0] });
+  const firstUnit = initializeUnit({ id: 1, definition: unitDefinition, position: [0, 0] });
   const second = initializeUnit({ id: 2, definition: unitDefinition, position: [0, 0] });
-  first.status = addStatusContribution(first.status, { id: 'source-a', flags: ['HEAL_FREE'] });
+  const updated = { ...firstUnit, status: addStatusContribution(firstUnit.status, { id: 'source-a', flags: ['HEAL_FREE'] }) };
   assert.equal(deriveEffectiveStatusFlags(second.status).has('HEAL_FREE'), false);
-  assert.equal(deriveEffectiveStatusFlags(first.status).has('HEAL_FREE'), true);
+  assert.equal(deriveEffectiveStatusFlags(firstUnit.status).has('HEAL_FREE'), false);
+  assert.equal(deriveEffectiveStatusFlags(updated.status).has('HEAL_FREE'), true);
 });
 
 test('core blocking uses current state radius and includes center-distance equality', () => {
@@ -965,15 +950,21 @@ test('core occupancy separates present claims, reservations and geometric member
   assert.deepEqual(evaluateDeployment(runtime.snapshot('draft'), { profile, tile: [0, 2], playerSide: 'SIDE_A' }),
     { type: 'DENIED', reason: 'OCCUPIED' });
 
-  const restored = copyUnitSnapshot(runtime.snapshot('draft').getUnit(1));
-  restored.spatialPresence.present = true;
+  const restored = { ...runtime.snapshot('draft').getUnit(1), spatialPresence: { present: true } };
   runtime.advance([{ type: 'UPDATE_UNIT', unit: restored }]);
   assert.deepEqual(runtime.snapshot('draft').occupancyAt([0, 1], 'DEPLOYMENT'), [1]);
   assert.deepEqual(runtime.snapshot('draft').unitsAt([0, 1]).map(unit => unit.id), [1, 3]);
-  const snapshot = copyUnitSnapshot(runtime.snapshot('draft').getUnit(1));
-  snapshot.occupancy.claims[0].slot = 'SUPPORT';
-  snapshot.occupancy.claims.push({ position: [0, 3], slot: 'DEPLOYMENT', type: 'RESERVATION' });
-  assert.deepEqual(runtime.snapshot('draft').getUnit(1).occupancy.claims,
+  const original = runtime.snapshot('draft');
+  const previousUnit = original.getUnit(1);
+  const updated = { ...previousUnit, occupancy: createOccupancyState({ claims: [
+    { ...previousUnit.occupancy.claims[0], slot: 'SUPPORT' },
+    { position: [0, 3], slot: 'DEPLOYMENT', type: 'RESERVATION' },
+  ] }) };
+  runtime.advance([{ type: 'UPDATE_UNIT', unit: updated }]);
+  assert.deepEqual(runtime.snapshot('draft').occupancyAt([0, 1], 'SUPPORT'), [1]);
+  assert.deepEqual(runtime.snapshot('draft').occupancyAt([0, 3], 'DEPLOYMENT'), [1]);
+  assert.equal(original.getUnit(1), previousUnit);
+  assert.deepEqual(previousUnit.occupancy.claims,
     [{ position: [0, 1], slot: 'DEPLOYMENT', type: 'PRESENT' }]);
 });
 
@@ -1015,26 +1006,35 @@ test('core support allows a platform and occupant to coexist without treating th
   assert.deepEqual(runtime.snapshot('draft').occupancyAt([0, 1], 'DEPLOYMENT'), [2]);
 });
 
-test('core navigation definitions are owned once and shared across copied observations', () => {
-  const definition = { id: 'owned-navigation', WALK: { denyPassage: false, deniedDepartures: ['LEFT'], costFloor: 1000 }, FLY: null };
+test('core navigation definitions are shared while modifier updates retain earlier views', () => {
+  const definition = createNavigationModifierDefinition({
+    id: 'shared-navigation', WALK: { denyPassage: false, deniedDepartures: ['LEFT'], costFloor: 1000 }, FLY: null,
+  });
   const placement = createUnitPlacementDefinition({ definition: { id: 'source' }, position: [0, 0],
     navigationModifiers: [{ definition, range: [[0, 1]], direction: 'RIGHT' }] });
   const runtime = presenceBattlefield();
-  const ownedDefinition = createNavigationModifierDefinition(definition);
   const modifier = { ...presenceNavigationModifier(1, { type: 'UNIT', unitId: 1 },
-    { type: 'FIXED', position: [0, 1], range: [[0, 0]], direction: 'RIGHT' }), definition: ownedDefinition };
+    { type: 'FIXED', position: [0, 1], range: [[0, 0]], direction: 'RIGHT' }), definition };
   runtime.advance([{ type: 'REGISTER_UNIT', unit: presenceUnit(1, [0, 0]) },
     { type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: modifier }]);
-  const maps = runtime.snapshot('draft').navigationMaps;
-  const owned = runtime.snapshot('draft').getNavigationModifier(1).definition;
-  assert.equal(owned, ownedDefinition);
-  definition.WALK.costFloor = 1;
-  definition.WALK.denyPassage = true;
-  definition.WALK.deniedDepartures.push('RIGHT');
-  assert.equal(owned.WALK.costFloor, 1000);
-  assert.deepEqual(owned.WALK.deniedDepartures, ['LEFT']);
-  assert.equal(placement.navigationModifiers[0].definition.WALK.costFloor, 1000);
-  assert.equal(runtime.snapshot('draft').getNavigationModifier(1).definition, owned);
-  assert.equal(runtime.snapshot('draft').navigationMaps, maps);
+  const original = runtime.snapshot('draft');
+  const maps = original.navigationMaps;
+  assert.equal(placement.navigationModifiers[0].definition, definition);
+  assert.equal(original.getNavigationModifier(1), modifier);
+  assert.equal(original.getNavigationModifier(1).definition, definition);
   assert.equal(maps.WALK.cells[1].passable, true);
+  assert.equal(maps.WALK.cells[1].moveCost, 1000);
+
+  const restricted = createNavigationModifierDefinition({ ...definition,
+    WALK: { ...definition.WALK, denyPassage: true, deniedDepartures: ['LEFT', 'RIGHT'] },
+  });
+  const replacement = { ...modifier, definition: restricted };
+  runtime.advance([{ type: 'REMOVE_NAVIGATION_MODIFIER', navigationModifierId: 1 },
+    { type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: replacement }]);
+  assert.equal(runtime.snapshot('draft').getNavigationModifier(1), replacement);
+  assert.equal(runtime.snapshot('draft').navigationMaps.WALK.cells[1].passable, false);
+  assert.equal(original.getNavigationModifier(1), modifier);
+  assert.equal(original.navigationMaps, maps);
+  assert.equal(maps.WALK.cells[1].passable, true);
+  assert.deepEqual(definition.WALK.deniedDepartures, ['LEFT']);
 });

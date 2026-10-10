@@ -9,7 +9,7 @@ import {
     cancelActionExecutionInWork,
     resumeActionExecutionInWork,
 } from "../../unit/capability/action/internal/process.js";
-import { ownCompiledAction, type CompiledAction } from "../../unit/capability/action/program.js";
+import type { CompiledAction } from "../../unit/capability/action/program.js";
 import {
     actionExecutionPermissions,
     type ActionExecution,
@@ -52,7 +52,7 @@ export function createCombat(
                 throw new TypeError("compiled action must retain its definition association");
             }
 
-            compiled = ownCompiledAction(candidate);
+            compiled = candidate;
             compiledActions.set(definition, compiled);
         }
 

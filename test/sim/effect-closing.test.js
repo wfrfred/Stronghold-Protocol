@@ -44,7 +44,7 @@ function workOf(units, actions) {
 
 function program(resources, id, lifecycle = {}, facets = {}) {
     return resources.registerEffect(createEffectProgram({
-        id, initialize: () => ({}), ownState: state => state,
+        id, initialize: () => ({}),
     }), { ...facets, lifecycle });
 }
 

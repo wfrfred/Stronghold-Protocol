@@ -1,7 +1,6 @@
 import { EffectDispatchScope } from "../../effects/dispatch.js";
 import type { ActionExecutionWork } from "./executions.js";
 import { assertFiniteNumber, assertNonnegativeSafeInteger } from "../../../../../common/assert.js";
-import { ownDataRecord } from "../../../../../common/immutable-data.js";
 import { appendEvents, getUnit, type BattleState } from "../../../../battle/execution/context.js";
 import type { UnitId } from "../../../unit.js";
 import { isSpatiallyPresent } from "../../presence.js";
@@ -28,18 +27,18 @@ import type {
     CompiledActionSegment,
 } from "../process.js";
 
-function ownBindings(
+function targetBindings(
     bindings: ReadonlyMap<TargetBindingId, readonly UnitId[]>,
 ): ActionExecutionBindings {
-    return ownDataRecord(Object.fromEntries(bindings), "action target bindings");
+    return Object.fromEntries(bindings);
 }
 
-function ownSamples(samples: ActionExecutionSamples): ActionExecutionSamples {
+function validateSamples(samples: ActionExecutionSamples): ActionExecutionSamples {
     for (const [name, value] of Object.entries(samples)) {
         assertFiniteNumber(value, `action sample ${name}`);
     }
 
-    return ownDataRecord(samples, "action samples");
+    return samples;
 }
 
 export function acceptActionExecutionInWork(
@@ -54,17 +53,17 @@ export function acceptActionExecutionInWork(
 
     assertNonnegativeSafeInteger(input.tick, "action acceptance tick");
 
-    const execution: ActionExecution = Object.freeze({
+    const execution: ActionExecution = {
         id: executions.nextExecutionId,
         sourceUnitId: input.sourceUnitId,
         definition: input.definition,
         acceptedAtTick: input.tick,
         inputTargetUnitId: input.inputTargetUnitId,
         cursor: 0,
-        bindings: ownBindings(input.bindings),
-        samples: ownSamples(input.samples ?? {}),
+        bindings: targetBindings(input.bindings),
+        samples: validateSamples(input.samples ?? {}),
         wait: null,
-    });
+    };
     executions.add(execution);
 
     return execution;
@@ -175,16 +174,16 @@ function enterWait(request: ActionExecutionWaitRequest, tick: number): ActionExe
         case "FOR_TICKS":
             assertNonnegativeSafeInteger(request.ticks, "action wait duration");
 
-            return Object.freeze({
+            return {
                 type: "COUNT",
                 remainingTicks: request.ticks,
                 lastConsumedTick: tick,
-            });
+            };
 
         case "UNTIL_TICK":
             assertNonnegativeSafeInteger(request.targetTick, "action wait target tick");
 
-            return Object.freeze({ type: "UNTIL", targetTick: request.targetTick });
+            return { type: "UNTIL", targetTick: request.targetTick };
     }
 }
 
@@ -193,11 +192,11 @@ function advanceWait(wait: ActionExecutionWait, tick: number): ActionExecutionWa
         return wait;
     }
 
-    return Object.freeze({
+    return {
         ...wait,
         remainingTicks: wait.remainingTicks - 1,
         lastConsumedTick: tick,
-    });
+    };
 }
 
 function waitComplete(wait: ActionExecutionWait, tick: number): boolean {
@@ -308,18 +307,18 @@ export function resumeActionExecutionInWork(
                     }
                 }
 
-                execution = Object.freeze({
+                execution = {
                     ...execution,
                     cursor: execution.cursor + 1,
                     bindings:
                         result?.bindings === undefined
                             ? execution.bindings
-                            : ownBindings(result.bindings),
+                            : targetBindings(result.bindings),
                     samples:
                         result?.samples === undefined
                             ? execution.samples
-                            : ownSamples(result.samples),
-                });
+                            : validateSamples(result.samples),
+                };
 
                 if (result?.continuation === "FINISH") {
                     return finishExecution(
@@ -361,7 +360,7 @@ export function resumeActionExecutionInWork(
 
                 if (!waitComplete(wait, tick)) {
                     if (wait !== execution.wait) {
-                        execution = Object.freeze({ ...execution, wait });
+                        execution = { ...execution, wait };
                         executions.replace(execution);
                     }
 
@@ -371,11 +370,11 @@ export function resumeActionExecutionInWork(
                     };
                 }
 
-                execution = Object.freeze({
+                execution = {
                     ...execution,
                     cursor: execution.cursor + 1,
                     wait: null,
-                });
+                };
                 break;
             }
 
@@ -389,7 +388,7 @@ export function resumeActionExecutionInWork(
                 };
                 signals.push(signal);
                 appendEvents(work, [signal]);
-                execution = Object.freeze({ ...execution, cursor: execution.cursor + 1 });
+                execution = { ...execution, cursor: execution.cursor + 1 };
                 break;
             }
         }

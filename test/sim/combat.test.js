@@ -23,6 +23,7 @@ import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { compileTargeting } from "../../dist/core/tactical/unit/targeting/compile.js";
 import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { selectTargets } from '../../dist/core/tactical/unit/targeting/select.js';
+import { addStatusContribution, hasStatusFlag } from '../../dist/core/tactical/unit/capability/status/capability.js';
 import * as contribution from '../../dist/core/tactical/modifier/contribution.js';
 import * as modifier from '../../dist/core/tactical/modifier/value.js';
 
@@ -368,29 +369,71 @@ test('core combat: damage formulas retain the 5% floor and immutable vitality tr
   assert.equal(unit.vitality.hp, 7);
 });
 
-test('core combat: copied action, allegiance, spatial, hit, status and blocking snapshots stay isolated', () => {
-  const battle = createLegacyCombatBattle({
+test('core combat: snapshots share capabilities while immutable battlefield updates preserve earlier facts', () => {
+  const input = createLegacyCombatSpec({
     rows: 3, columns: 10,
     operators: [{ definition: guard({ stats: { atk: 0, maxHp: 1e6, blockCnt: 1 } }), position: [1, 5] }],
     enemies: [{ definition: walker({ speed: 0 }), route: coreCombatRoute([1, 6], { spawnOffset: [-0.6, 0] }) }],
   });
-  battle.step();
-  const expected = battle.snapshot();
+  const battle = new BattleRuntime(input);
+  const replay = new BattleRuntime(input);
+  assert.deepEqual(battle.step(), replay.step());
   const snapshot = battle.snapshot();
+  const repeated = battle.snapshot();
   const operator = snapshot.units.find(unit => unit.id === 0);
+  const sharedOperator = repeated.units.find(unit => unit.id === 0);
+  const readyAtTick = operator.action.readyAtTick;
+  const hp = operator.vitality.hp;
+  for (const key of ['action', 'allegiance', 'spatial', 'hit', 'status', 'blocker', 'vitality']) {
+    assert.equal(sharedOperator[key], operator[key], key);
+  }
+  assert.equal(repeated.blockingRelations, snapshot.blockingRelations);
+  assert.deepEqual(snapshot.blockingRelations, [{ blockerUnitId: 0, blockedUnitId: 1 }]);
 
-  operator.action.readyAtTick = 999999;
-  operator.allegiance.side = 'ENEMY';
-  operator.spatial.layer = 'AIR';
-  operator.hit.geometry = { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 100 }] };
-  operator.status.contributions = [{ id: 'snapshot_only', flags: ['TARGET_FREE'] }];
-  operator.blocker.capacity = contribution.create([{ id: 'snapshot-only-capacity', sequence: 0,
-    kind: "SAMPLED",
-    participating: true, values: [modifier.create({ finalScaler: 0 })] }]);
-  operator.vitality.hp = 0;
-  snapshot.blockingRelations[0].blockerUnitId = 999999;
-  snapshot.blockingRelations.length = 0;
-  assert.deepEqual(battle.snapshot(), expected);
+  const units = new Map(snapshot.units.map(unit => [unit.id, unit]));
+  const battlefield = fixtureBattlefield({ map: input.map,
+    unitIds: [...units.keys()], getUnit: id => units.get(id),
+    blockingRelations: snapshot.blockingRelations,
+  });
+  const previous = battlefield.snapshot('state');
+  const changed = {
+    ...operator,
+    action: { ...operator.action, readyAtTick: 999999 },
+    allegiance: { ...operator.allegiance, side: 'ENEMY' },
+    spatial: { ...operator.spatial, layer: 'AIR' },
+    hit: { ...operator.hit, geometry: createShapeGeometry({ shapes: [
+      { type: 'CIRCLE', offset: [0, 0], radius: 100 },
+    ] }) },
+    status: addStatusContribution(operator.status, { id: 'changed-targeting', flags: ['TARGET_FREE'] }),
+    blocker: { ...operator.blocker, capacity: contribution.create([{ id: 'disabled-capacity', sequence: 0,
+      kind: 'SAMPLED', participating: true, values: [modifier.create({ finalScaler: 0 })],
+    }]) },
+    vitality: { ...operator.vitality, hp: 0 },
+  };
+  battlefield.advance([{ type: 'UPDATE_UNIT', unit: changed }]);
+  const draft = battlefield.snapshot('draft');
+  assert.equal(draft.getUnit(0), changed);
+  assert.deepEqual(draft.blockingRelations, []);
+  assert.equal(draft.getUnit(0).action.readyAtTick, 999999);
+  assert.equal(hasStatusFlag(draft.getUnit(0), 'TARGET_FREE'), true);
+  assert.equal(battlefield.snapshot('state'), previous);
+  battlefield.apply();
+  assert.equal(battlefield.snapshot('state'), draft);
+
+  assert.equal(previous.getUnit(0), operator);
+  assert.deepEqual(previous.blockingRelations, [{ blockerUnitId: 0, blockedUnitId: 1 }]);
+  assert.equal(operator.action.readyAtTick, readyAtTick);
+  assert.equal(operator.allegiance.side, 'ALLY');
+  assert.equal(operator.spatial.layer, 'GROUND');
+  assert.equal(operator.hit.geometry.shapes[0].radius, 0.25);
+  assert.equal(hasStatusFlag(operator, 'TARGET_FREE'), false);
+  assert.deepEqual(operator.blocker.capacity.entries, []);
+  assert.equal(operator.vitality.hp, hp);
+  assert.deepEqual(battle.snapshot(), snapshot);
+  assert.deepEqual(battle.step(), replay.step());
+  assert.deepEqual(battle.snapshot(), replay.snapshot());
+  assert.deepEqual(snapshot.blockingRelations, [{ blockerUnitId: 0, blockedUnitId: 1 }]);
+  assert.equal(operator.vitality.hp, hp);
 });
 
 test('core combat: a rejected tick preserves spawn identities, action state, HP and blocking', () => {

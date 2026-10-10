@@ -3,16 +3,16 @@ import type {
     NavigationModifierDefinition,
     NavigationModifierSource,
 } from "../../battlefield/navigation/modifier.js";
-import { createWorldPosition, type WorldPosition } from "../../geometry/coordinate.js";
+import type { WorldPosition } from "../../geometry/coordinate.js";
 import { Direction } from "../../geometry/direction.js";
 import { RangeGrid } from "../../geometry/range.js";
 import { initializeUnit, type InitializedUnit } from "../../unit/initialize.js";
-import { ownUnitDefinition, type Unit, type UnitDefinition } from "../../unit/unit.js";
-import { ownDataRecord, type ImmutableData } from "../../../common/immutable-data.js";
+import type { Unit, UnitDefinition } from "../../unit/unit.js";
+import type { ImmutableData } from "../../../common/immutable-data.js";
 import {
-    copyPreparedCapabilityStates,
+    selectCapabilityStates,
     type CapabilityStates,
-    type CopiedCapabilityStates,
+    type SelectedCapabilityStates,
     type PreparedCapabilityStates,
 } from "../../unit/capability/catalog.js";
 import type { BattleExecutionState } from "../execution/state.js";
@@ -49,7 +49,7 @@ type NormalizedUnitPlacement<P extends UnitPlacementDefinition> = P extends unkn
           readonly position: WorldPosition;
           readonly navigationModifiers: readonly UnitNavigationModifierPlacement[];
       } & (P extends { readonly states: infer S extends object }
-          ? { readonly states: CopiedCapabilityStates<S> }
+          ? { readonly states: SelectedCapabilityStates<S> }
           : "states" extends keyof P
             ? Pick<UnitPlacementDefinition, "states">
             : object)
@@ -73,10 +73,7 @@ export function createUnitPlacementDefinition(
 
         navigationModifiers.push(
             Object.freeze({
-                definition: ownDataRecord(
-                    navigationModifier.definition,
-                    "navigation modifier definition",
-                ),
+                definition: navigationModifier.definition,
                 range: RangeGrid.create(navigationModifier.range),
                 direction: navigationModifier.direction,
             }),
@@ -84,13 +81,13 @@ export function createUnitPlacementDefinition(
     }
 
     return Object.freeze({
-        definition: ownUnitDefinition(placement.definition),
+        definition: placement.definition,
         ...(placement.states === undefined
             ? {}
             : {
-                  states: Object.freeze(copyPreparedCapabilityStates(placement.states)),
+                  states: Object.freeze(selectCapabilityStates(placement.states)),
               }),
-        position: createWorldPosition(...placement.position),
+        position: placement.position,
         navigationModifiers: Object.freeze(navigationModifiers),
     });
 }

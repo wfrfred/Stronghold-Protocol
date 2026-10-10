@@ -9,7 +9,7 @@ import { installNewEffect } from '../../dist/core/tactical/unit/capability/effec
 import { effectFixtureWork } from './effects.js';
 
 export const effectProgram = (id, initialize = () => ({})) => createEffectProgram({
-    id, initialize, ownState: value => value,
+    id, initialize,
 });
 
 export function auraUnit(id, position = [0, 0], extra = {}) {

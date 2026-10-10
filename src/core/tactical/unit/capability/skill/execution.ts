@@ -17,7 +17,6 @@ import { hasVitality } from "../vitality/capability.js";
 import type { DamageOperation } from "../vitality/damage/contract.js";
 import type { HealingOperation } from "../vitality/healing/contract.js";
 import {
-    copySkillState,
     hasSkill,
     skillSpCapacity,
     type SkillActivation,
@@ -86,7 +85,7 @@ function saveState(work: BattleState, unitId: UnitId, state: SkillState): void {
     const unit = getUnit(work, unitId);
 
     if (unit !== undefined && hasSkill(unit) && unit.skill !== state) {
-        updateUnit(work, { ...unit, skill: copySkillState(state) });
+        updateUnit(work, { ...unit, skill: state });
     }
 }
 

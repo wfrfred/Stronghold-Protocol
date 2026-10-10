@@ -3,7 +3,6 @@ import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import {
   ELEMENT_TYPES,
-  copyElementalState,
   createElementalDefinition,
   elementValues,
   hasElemental,
@@ -62,10 +61,10 @@ test('Elemental is optional and has its own definition, progress and ownership',
   const original = holder();
   assert.equal('vitality' in original, false);
   assert.equal(damage(original, 'BURN', 50).unit.elemental.ep.BURN, 950);
-  const copy = copyElementalState(state);
-  assert.notEqual(copy.ep, state.ep);
-  assert.ok(Object.isFrozen(copy.ep));
-  assert.equal(copy.lastRecoveryTick, state.lastRecoveryTick);
+  const updated = damage(original, 'BURN', 50).unit;
+  assert.equal(original.elemental.ep.BURN, 1000);
+  assert.equal(updated.definition, original.definition);
+  assert.equal(updated.elemental.ep.NEURAL, original.elemental.ep.NEURAL);
 });
 
 test('four elemental bars are independent and the current element uses lowest EP then the native element order', () => {

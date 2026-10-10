@@ -38,7 +38,6 @@ function program(id, state = {}) {
   return createEffectProgram({
     id,
     initialize: () => state,
-    ownState: (value) => ({ ...value }),
   });
 }
 
@@ -494,7 +493,7 @@ test("effect dispatch: Damage and Healing borrowed facts and operations close af
         () => escaped.operations.effects.setEnabled(escaped.ref, false),
         () => escaped.operations.effects.finish([escaped.ref]),
         () =>
-          escaped.operations.effects.bind(escaped.ref, { type: "EFFECT", unitId: 2, effectId: 99, }),
+          escaped.operations.effects.bind(escaped.ref, { type: "EFFECT", unitId: 2, effectId: 99 }),
         () => escaped.operations.damage(request()),
         () => escaped.operations.heal(healRequest),
       ]) {

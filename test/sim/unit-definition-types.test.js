@@ -17,7 +17,7 @@ import { createEnemyDefinition, createCombatEnemyDefinition, type EnemyDefinitio
 import { initializeUnit, type InitializedUnit } from ${sourceModule('unit/initialize')};
 import { copyUnitSnapshot } from ${sourceModule('unit/snapshot')};
 import { widenUnit, type Unit, type StableUnit } from ${sourceModule('unit/unit')};
-import { copyPreparedCapabilityStates, type CopiedCapabilityStates } from ${sourceModule('unit/capability/catalog')};
+import { selectCapabilityStates, type SelectedCapabilityStates } from ${sourceModule('unit/capability/catalog')};
 import type { OffenseDefinition, OffenseState } from ${sourceModule('unit/capability/offense/capability')};
 import type { SkillDefinition, SkillState } from ${sourceModule('unit/capability/skill/capability')};
 import type { ElementalDefinition, ElementalState } from ${sourceModule('unit/capability/elemental/capability')};
@@ -64,9 +64,9 @@ declare const unionEnemyInput: (CombatEnemyBase & { readonly offense: OffenseDef
 const unionEnemyDefinition = createCombatEnemyDefinition(unionEnemyInput);
 const unionEnemyUnit = initializeUnit({ id: 6, definition: unionEnemyDefinition, position: [0, 0] });
 declare const optionalPrepared: { readonly locomotion?: RoutedLocomotionState & { readonly moving: false }; readonly vitality: VitalityState & { readonly hp: 100 }; readonly extra: 'discarded' };
-const copiedOptional = copyPreparedCapabilityStates(optionalPrepared);
+const copiedOptional = selectCapabilityStates(optionalPrepared);
 declare const unionPrepared: { readonly locomotion: RoutedLocomotionState & { readonly moving: false } } | { readonly offense: OffenseState };
-const copiedUnion = copyPreparedCapabilityStates(unionPrepared);
+const copiedUnion = selectCapabilityStates(unionPrepared);
 declare const routed: RoutedLocomotionState & { readonly moving: false };
 const preparedUnit = initializeUnit({ id: 7, definition: combatEnemy, position: [0, 0], states: { locomotion: routed } });
 type Narrow = Unit<{ readonly id: 'retained' }> & { readonly id: 8; readonly tag: 'retained'; readonly locomotion?: RoutedLocomotionState & { readonly moving: false }; readonly vitality: VitalityState & { readonly hp: 100 } };
@@ -100,7 +100,7 @@ if (copiedOptional.locomotion !== undefined) { const route: RouteControlState = 
 if (widened.locomotion !== undefined) { const route: RouteControlState = widened.locomotion.mainRoute; }
 if (snapshot.locomotion !== undefined) { const route: RouteControlState = snapshot.locomotion.mainRoute; }
 type PreparedA = { readonly locomotion?: RoutedLocomotionState };
-const optionalCopiedType: CopiedCapabilityStates<PreparedA> = copiedOptional;
+const optionalCopiedType: SelectedCapabilityStates<PreparedA> = copiedOptional;
 `;
   const negatives = [
     "const droppedOperator = operator.extra;",

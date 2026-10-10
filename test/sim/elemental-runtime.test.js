@@ -166,7 +166,7 @@ test('elemental HP damage ignores physical defense, magic resistance, source att
   for (const [damageResistance, expected] of [[0, 100], [50, 50], [100, 5], [1000, 5], [-50, 100]]) {
     const supplied = resources();
     const source = initializeUnit({ id: 0, position: [0, 0], definition: { id: 'element-source', offense: { attack: 10000 } } });
-    const attackBuff = supplied.registerEffect(createEffectProgram({ id: `source-attack-${damageResistance}`, initialize: () => ({}), ownState: value => ({ ...value }) }),
+    const attackBuff = supplied.registerEffect(createEffectProgram({ id: `source-attack-${damageResistance}`, initialize: () => ({}) }),
       { contributions: [attack(() => [modifier({ multiplier: 100 })])] });
     let input = effectFixtureWork(source, unit('ENEMY', { defense: { defense: 100000, resistance: 99 } }, { damageResistance, elementResistance: 100 }));
     installNewEffect(input, 0, attackBuff.ref, { source: 0, scopes: [{ type: "UNIT", unitId: 0 }] }, supplied, 0);
@@ -305,7 +305,7 @@ test('elemental runtime: nested burst damage failure publishes neither EP progre
   let faultRef;
   const { runtime } = battle('CHARACTER', 'BURN', {
     prepare: supplied => {
-      faultRef = supplied.registerEffect(createEffectProgram({ id: 'elemental-fault', initialize: () => ({}), ownState: state => ({ ...state }) }),
+      faultRef = supplied.registerEffect(createEffectProgram({ id: 'elemental-fault', initialize: () => ({}) }),
         { damage: { reception: { priority: 100, apply: () => { throw new Error('nested burst failed'); } } } }).ref;
     },
     targetStates: (supplied, selected) => {

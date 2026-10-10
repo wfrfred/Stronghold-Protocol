@@ -14,7 +14,6 @@ import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js"
 import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
 import { compileAction } from "../../dist/core/tactical/unit/capability/action/compile.js";
 import {
-  copyActionExecutionState,
   resumeActionExecution,
 } from "../../dist/core/tactical/unit/capability/action/process.js";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
@@ -223,7 +222,7 @@ test("action runtime: delayed progress keeps ordinary same-tick order and copied
 
   const id = snapshot.actionExecution.executions[0].id;
   const copiedState = workFrom(snapshot);
-  let copied = { state: copyActionExecutionState(snapshot.actionExecution) };
+  let copied = { state: snapshot.actionExecution };
   const copySignals = [];
   for (const tick of [1, 2]) {
     copied = resumeActionExecution(
@@ -358,7 +357,6 @@ test("action runtime: failed continuation publishes no progress, sample, settlem
       createEffectProgram({
         id: "action-sample",
         initialize: () => ({ count: 0 }),
-        ownState: (value) => ({ ...value }),
       }),
     );
     const actor = actorDefinition("continuation");
@@ -437,7 +435,6 @@ test("action runtime: a throwing Effect finish after nested host death does not 
   const terminal = resources.registerEffect(createEffectProgram({
     id: "throwing-action-terminal",
     initialize: () => ({}),
-    ownState: value => value,
   }), { lifecycle: { finish: context => {
     reasons.push(context.end.reason);
     context.damage({ sourceUnitId: null, targetUnitId: 0, damageType: "TRUE", operands: createDamageOperands(100) });

@@ -148,7 +148,6 @@ function registerProjectile(resources, { id = "shell", cachedOnly = false, accep
     createProjectileProgram({
       id,
       initialize: () => ({ contacts: 0 }),
-      ownState: (state) => ({ ...state }),
       acceptsContact:
         acceptsContact ?? ((_context, unit) => unit.allegiance?.side === "ENEMY"),
       contact:
@@ -392,7 +391,6 @@ test("projectile runtime: current ATK and cached-only ATK stay distinct, while a
       createEffectProgram({
         id: "post-launch-attack",
         initialize: () => ({}),
-        ownState: (state) => ({ ...state }),
       }),
       { contributions: [liveAttack(() => [modifier.create({ addition: 10 })])] },
     );
@@ -496,7 +494,6 @@ test("projectile runtime: contact history prevents stop fallback damage while sy
     createEffectProgram({
       id: "contact-before-damage",
       initialize: () => ({}),
-      ownState: (state) => ({ ...state }),
     }),
     {
       damage: {
@@ -776,7 +773,7 @@ test("projectile runtime: a failed stop propagates without publishing launch, sa
   });
 });
 
-test("projectile runtime: bulk launch returns changes and exposes each latest instance within its scope", () => {
+test("projectile runtime: bulk launch shares immutable payloads and preserves earlier snapshots", () => {
   const resources = new CombatResources();
   const program = registerProjectile(resources);
   const previous = projectileBattlefield();
@@ -804,16 +801,14 @@ test("projectile runtime: bulk launch returns changes and exposes each latest in
     return operations.get(0);
   });
 
-  input.position[0] = 999;
-  input.destination[0] = 999;
-  input.initialState.history.push(2);
   assert.deepEqual(previous.snapshot("draft").projectileIds, []);
   assert.equal(previousExecution.nextProjectileId, 0);
   assert.equal(launched.nextProjectileId, 32);
   assert.equal(launched.result, observed[0]);
-  assert.deepEqual(observed[0].position, [0, 0]);
-  assert.deepEqual(observed[0].destination, [100, 0]);
-  assert.deepEqual(observed[0].state.history, [1]);
+  assert.equal(observed[0].position, input.position);
+  assert.equal(observed[0].destination, input.destination);
+  assert.equal(observed[0].contactRange, input.contactRange);
+  assert.equal(observed[0].state, input.initialState);
   assert.throws(() => borrowed.get(0), /no longer active/);
   assert.throws(() => borrowed.launch(program.ref, input), /no longer active/);
 
@@ -831,6 +826,9 @@ test("projectile runtime: bulk launch returns changes and exposes each latest in
   assert.equal(released.snapshot("draft").projectileIds.length, 32);
   assert.equal(projectileInstances(released.snapshot("draft")).every((instance) => instance.position[0] === 1), true);
   assert.equal(projectileInstances(launchedSnapshot).every((instance) => instance.position[0] === 0), true);
+  assert.equal(released.snapshot("draft").getProjectile(0).state, input.initialState);
+  assert.equal(released.snapshot("draft").getProjectile(0).destination, input.destination);
+  assert.equal(released.snapshot("draft").getProjectile(0).hitUnitIds, observed[0].hitUnitIds);
   const unchanged = projectileInstances(released.snapshot("draft"));
   advanceProjectiles(work, resources, 1);
   assert.deepEqual(projectileInstances(released.snapshot("draft")), unchanged);

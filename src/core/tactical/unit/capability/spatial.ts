@@ -51,18 +51,10 @@ export function createHitDefinition(definition: HitDefinition): HitDefinition {
     return Object.freeze({ geometry: createShapeGeometry(definition.geometry) });
 }
 
-export function copySpatialState(state: SpatialState): SpatialState {
-    return { ...state };
-}
-
-export function copyHitState(state: HitState): HitState {
-    return { geometry: createShapeGeometry(state.geometry) };
-}
-
 export function initializeSpatialState(definition: SpatialDefinition): SpatialState {
-    return copySpatialState(definition);
+    return { layer: definition.layer };
 }
 
 export function initializeHitState(definition: HitDefinition): HitState {
-    return copyHitState(definition);
+    return { geometry: definition.geometry };
 }

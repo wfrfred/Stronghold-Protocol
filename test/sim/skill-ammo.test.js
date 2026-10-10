@@ -9,7 +9,7 @@ import { createEffectProgram } from "../../dist/core/tactical/unit/capability/ef
 import { attack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import * as modifier from "../../dist/core/tactical/modifier/value.js";
-import { copySkillState, createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
+import { createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { activateSkill, advanceSkill, consumeSkillAmmo } from "../../dist/core/tactical/unit/capability/skill/execution.js";
 import { spendSkillAmmo } from "../../dist/core/tactical/unit/capability/skill/ammo.js";
 import { gainSkillSp } from "../../dist/core/tactical/unit/capability/skill/sp.js";
@@ -30,7 +30,7 @@ const ash = {
 function ammoFixture(ammo = 31, ammoPerAttack = 1) {
   const resources = new CombatResources();
   const definition = parseArknightsSkillLevel(ash, 1, ammo, ammoPerAttack).definition;
-  const buff = resources.registerEffect(createEffectProgram({ id: "ammo-fixture-attack", initialize: () => ({}), ownState: (state) => state }), {
+  const buff = resources.registerEffect(createEffectProgram({ id: "ammo-fixture-attack", initialize: () => ({}) }), {
     contributions: [attack(() => [modifier.create({ multiplier: 1 })])],
   });
   resources.skills.register({ definition, activate: (context) => {
@@ -65,11 +65,9 @@ test("native AMMO duration values require explicit content counts and never beco
 test("pure ammunition spending preserves snapshots and clamps the final consumption to what remains", () => {
   const f = ammoFixture(3);
   const initial = getUnit(f.work, 1).skill;
-  const copied = copySkillState(initial);
-  const first = spendSkillAmmo(copied, 2);
+  const first = spendSkillAmmo(initial, 2);
   assert.deepEqual(first.result, { type: "APPLIED", amount: 2, remainingAmmo: 1 });
   assert.equal(initial.active.remainingAmmo, 3);
-  assert.equal(copied.active.remainingAmmo, 3);
   const final = spendSkillAmmo(first.state, 2);
   assert.deepEqual(final.result, { type: "APPLIED", amount: 1, remainingAmmo: 0 });
   assert.throws(() => spendSkillAmmo(initial, 0), /positive safe integer/);
@@ -111,7 +109,7 @@ test("explicit two-round attack consumption ends a 32-round profile after sixtee
 test("the final shot is sampled with its buff before consumption and its projectile keeps that released sample", () => {
   const f = ammoFixture(1);
   const shell = f.resources.projectiles.register(createProjectileProgram({
-    id: "ammo-cached-shell", initialize: () => ({}), ownState: (state) => state,
+    id: "ammo-cached-shell", initialize: () => ({}),
     acceptsContact: (_context, target) => target.id === 2,
     contact: (context) => { context.operations.damage({ sourceUnitId: 1, targetUnitId: 2, tick: context.tick, damageType: "TRUE", operands: createDamageOperands(context.projectile.cachedAtk) }); },
   }));

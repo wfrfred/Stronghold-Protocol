@@ -70,22 +70,10 @@ export function createBlockableDefinition(definition: BlockableDefinition): Bloc
     return Object.freeze({ ...definition });
 }
 
-export function copyBlockerState(state: BlockerState): BlockerState {
-    return {
-        ...state,
-        capacity: contribution.copy(state.capacity),
-        geometry: createBlockGeometry(state.geometry),
-    };
-}
-
-export function copyBlockableState(state: BlockableState): BlockableState {
-    return { ...state };
-}
-
 export function initializeBlockerState(definition: BlockerDefinition): BlockerState {
     return {
         capacity: contribution.create<"SAMPLED">(),
-        geometry: createBlockGeometry(definition.geometry),
+        geometry: definition.geometry,
         enabled: true,
     };
 }

@@ -1,10 +1,5 @@
-import { ownDataRecord } from "../../../common/immutable-data.js";
 import { assertNonnegativeSafeInteger, assertPositiveSafeInteger } from "../../../common/assert.js";
-import {
-    createTileOffset,
-    createTilePosition,
-    type TilePosition,
-} from "../../geometry/coordinate.js";
+import { createTilePosition, type TilePosition } from "../../geometry/coordinate.js";
 import type { Direction } from "../../geometry/direction.js";
 import { RangeGrid } from "../../geometry/range.js";
 import type { MechanismId } from "../mechanism.js";
@@ -56,73 +51,21 @@ export interface NavigationModifier {
     readonly expiresAtTick: number | null;
 }
 
-export function copyNavigationModifier(navigationModifier: NavigationModifier): NavigationModifier {
-    const range = navigationModifier.region.range.map((offset) =>
-        Object.isFrozen(offset) ? offset : createTileOffset(...offset),
-    );
-    let region: NavigationModifierRegion;
-
-    if (navigationModifier.region.type === "FIXED") {
-        region = {
-            ...navigationModifier.region,
-            range,
-            position: Object.isFrozen(navigationModifier.region.position)
-                ? navigationModifier.region.position
-                : createTilePosition(...navigationModifier.region.position),
-        };
-    } else {
-        region = { ...navigationModifier.region, range };
-    }
-
-    return {
-        ...navigationModifier,
-        definition: ownDataRecord(navigationModifier.definition, "navigation modifier definition"),
-        source: { ...navigationModifier.source },
-        region,
-    };
-}
-
 function identity(value: number, name: string): number {
     assertNonnegativeSafeInteger(value, name);
 
     return value === 0 ? 0 : value;
 }
 
-function restriction(value: FlyNavigationRestriction): FlyNavigationRestriction {
+function validateRestriction(value: FlyNavigationRestriction): void {
     const seen = new Set<Direction>();
-    const deniedDepartures: Direction[] = [];
 
-    for (let index = 0; index < value.deniedDepartures.length; index++) {
-        if (!Object.hasOwn(value.deniedDepartures, index)) {
-            throw new RangeError(`missing denied departure at index ${index}`);
-        }
-
-        const direction = value.deniedDepartures[index]!;
-
+    for (const direction of value.deniedDepartures) {
         if (seen.has(direction)) {
-            throw new RangeError(`duplicate denied departure at index ${index}`);
+            throw new RangeError(`duplicate denied departure ${direction}`);
         }
 
         seen.add(direction);
-        deniedDepartures.push(direction);
-    }
-
-    return Object.freeze({
-        denyPassage: value.denyPassage,
-        deniedDepartures: Object.freeze(deniedDepartures),
-    });
-}
-
-function source(value: NavigationModifierSource): NavigationModifierSource {
-    switch (value.type) {
-        case "UNIT":
-            return Object.freeze({ type: "UNIT", unitId: identity(value.unitId, "unit id") });
-
-        case "MECHANISM":
-            return Object.freeze({
-                type: "MECHANISM",
-                mechanismId: identity(value.mechanismId, "mechanism id"),
-            });
     }
 }
 
@@ -132,26 +75,15 @@ export function createNavigationModifierDefinition(
     if (definition.id.length === 0) {
         throw new TypeError("navigation modifier definition id must be nonempty");
     }
-
-    let WALK: WalkNavigationRestriction | null = null;
-
     if (definition.WALK !== null) {
-        const walk = restriction(definition.WALK);
-        const costFloor = definition.WALK.costFloor;
-
-        assertPositiveSafeInteger(costFloor, "WALK cost floor");
-
-        WALK = Object.freeze({ ...walk, costFloor });
+        validateRestriction(definition.WALK);
+        assertPositiveSafeInteger(definition.WALK.costFloor, "WALK cost floor");
+    }
+    if (definition.FLY !== null) {
+        validateRestriction(definition.FLY);
     }
 
-    return ownDataRecord(
-        {
-            id: definition.id,
-            WALK,
-            FLY: definition.FLY === null ? null : restriction(definition.FLY),
-        },
-        "navigation modifier definition",
-    );
+    return definition;
 }
 
 export function createNavigationModifierRegion(
@@ -181,17 +113,25 @@ export function createNavigationModifierRegion(
 export function createNavigationModifier(
     navigationModifier: NavigationModifier,
 ): NavigationModifier {
-    const expiresAtTick =
-        navigationModifier.expiresAtTick === null
-            ? null
-            : identity(navigationModifier.expiresAtTick, "navigation modifier expiry tick");
+    assertNonnegativeSafeInteger(navigationModifier.id, "navigation modifier id");
+
+    if (navigationModifier.expiresAtTick !== null) {
+        assertNonnegativeSafeInteger(
+            navigationModifier.expiresAtTick,
+            "navigation modifier expiry tick",
+        );
+    }
+
+    const source = navigationModifier.source;
+
+    if (source.type === "UNIT") {
+        assertNonnegativeSafeInteger(source.unitId, "unit id");
+    } else {
+        assertNonnegativeSafeInteger(source.mechanismId, "mechanism id");
+    }
 
     return {
-        id: identity(navigationModifier.id, "navigation modifier id"),
-        definition: ownDataRecord(navigationModifier.definition, "navigation modifier definition"),
-        source: source(navigationModifier.source),
-        active: navigationModifier.active,
+        ...navigationModifier,
         region: createNavigationModifierRegion(navigationModifier.region),
-        expiresAtTick,
     };
 }

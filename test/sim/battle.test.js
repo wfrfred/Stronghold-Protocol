@@ -17,7 +17,7 @@ import { createNavigationModifierDefinition, createNavigationModifier, createNav
 import { createRng } from '../../dist/core/common/rng.js';
 import { BattleRuntime, simulateBattle } from '../../dist/core/tactical/battle/runtime.js';
 import { advanceSpawnSchedule, getSpawnedCount, getUnspawnedCount, isSpawnScheduleCompleted, recordScheduleSpawns, resolveScheduleUnits } from "../../dist/core/tactical/battle/schedule/runtime.js";
-import { cloneScheduleState, createSpawnScheduleExecution } from "../../dist/core/tactical/battle/schedule/state.js";
+import { snapshotSchedule, createSpawnScheduleExecution } from "../../dist/core/tactical/battle/schedule/state.js";
 import { createSpawnScheduleDefinition } from "../../dist/core/tactical/battle/schedule/definition.js";
 import { createSteeringParameters } from '../../dist/core/tactical/unit/capability/locomotion/steering.js';
 import { createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
@@ -737,41 +737,44 @@ test('core raw 01 movement fragment replays every tick and completes routes with
   assert.deepEqual(first.snapshot(), finished);
 });
 
-test('core battle snapshots isolate vitality, locomotion, route progress, navigation and counters', () => {
+test('core battle snapshots share immutable values and retain the published tick after later steps', () => {
   const { spec } = slimeMovementFragment();
-  const inputTiming = { ...spec.schedule.spawns[0].timing };
-  const isolated = new BattleRuntime(withTimelineSpawns(spec, [{ ...spec.schedule.spawns[0], timing: inputTiming }]));
-  inputTiming.fragmentStartedAtTick = 99;
-  while (isolated.snapshot().units.length === 0) isolated.step();
-  assert.equal(isolated.snapshot().units[0].locomotion.mainRoute.route.timing.fragmentStartedAtTick, 0);
   const runtime = new BattleRuntime(spec);
-  while (runtime.snapshot().tickIndex < 91) runtime.step();
-  const before = runtime.snapshot();
-  const snapshot = runtime.snapshot();
-  const unit = snapshot.units[0];
-  unit.vitality.hp = 1;
-  unit.locomotion.moving = false;
-  unit.locomotion.steering.lastVelocity = [100, 100];
-  unit.locomotion.mainRoute.route.progress.move.goal = { position: [99, 99], reachDistance: 99 };
-  unit.locomotion.mainRoute.navigation.pathMotionMode = 'FLY';
-  unit.locomotion.mainRoute.navigation.execution.visits.visitedCenters.push([99, 99]);
-  unit.locomotion.mainRoute.navigation.execution.activity.cursor = { type: 'GOAL' };
-  snapshot.spawning.cursor = 99;
-  snapshot.spawning.managedFinalUnitIds.push(99);
-  snapshot.execution.rngState = 99;
-  snapshot.execution.nextUnitId = 99;
-  snapshot.execution.nextNavigationRequestId = 99;
-  snapshot.units.push(unit);
-  snapshot.completedRouteCount = 99;
-  snapshot.tickIndex = 99;
-  assert.throws(() => { unit.position[0] = 99; }, TypeError);
-  assert.throws(() => { unit.definition.vitality.maxHp = 99; }, TypeError);
-  assert.throws(() => { unit.locomotion.mainRoute.route.timing.fragmentStartedAtTick = 99; }, TypeError);
-  assert.deepEqual(runtime.snapshot(), before);
   const replica = new BattleRuntime(spec);
-  while (replica.snapshot().tickIndex < 91) replica.step();
+  while (runtime.snapshot().tickIndex < 91) {
+    assert.deepEqual(runtime.step(), replica.step());
+  }
+  const before = runtime.snapshot();
+  const repeated = runtime.snapshot();
+  const unit = before.units[0];
+  const position = unit.position;
+  const routeProgress = unit.locomotion.mainRoute.route.progress;
+  const navigation = unit.locomotion.mainRoute.navigation;
+  const x = position[0];
+  assert.equal(repeated.units[0].definition, unit.definition);
+  assert.equal(repeated.units[0].position, position);
+  assert.equal(repeated.units[0].vitality, unit.vitality);
+  assert.equal(repeated.units[0].locomotion, unit.locomotion);
+  assert.equal(repeated.execution, before.execution);
+  assert.equal(repeated.predefinedPresence, before.predefinedPresence);
+  assert.equal(repeated.blockingRelations, before.blockingRelations);
+  assert.equal(repeated.supportRelations, before.supportRelations);
+  assert.equal(repeated.spawning.managedFinalUnitIds, before.spawning.managedFinalUnitIds);
+  assert.equal(unit.locomotion.mainRoute.route.timing.fragmentStartedAtTick, 0);
+
   assert.deepEqual(runtime.step(), replica.step());
-  assert.deepEqual(runtime.snapshot(), replica.snapshot());
+  const current = runtime.snapshot();
+  assert.deepEqual(current, replica.snapshot());
+  assert.equal(current.tickIndex, 92);
+  assert.equal(before.tickIndex, 91);
+  assert.equal(before.units[0].position, position);
+  assert.equal(position[0], x);
+  assert.ok(current.units[0].position[0] < x);
+  assert.equal(before.units[0].locomotion.mainRoute.route.progress, routeProgress);
+  assert.equal(before.units[0].locomotion.mainRoute.navigation, navigation);
+  assert.equal(before.execution.nextUnitId, 1);
+  assert.deepEqual(before.spawning.managedFinalUnitIds, [0]);
+  assert.equal(before.completedRouteCount, 0);
 });
 
 test('core battle initializes all route waits at the birth tick and replays their exact completion edges', () => {
@@ -967,7 +970,7 @@ test('core birth and same-tick route signals record each instruction position ra
   assert.deepEqual(runtime.step().events.filter(event => event.type === 'ROUTE'), []);
 });
 
-test('core alternative route commands preserve resolved main targets, continue main waits and isolate snapshots', () => {
+test('core alternative route commands preserve resolved main targets, continue main waits and retain earlier snapshots', () => {
   const waiting = new BattleRuntime(routeCommandBattle([{ type: 'WAIT_FOR_TICKS', durationTicks: 12 }]));
   waiting.step();
   const waitRoute = createRouteDefinition({ ...waiting.snapshot().units[0].locomotion.mainRoute.route.definition,
@@ -977,14 +980,16 @@ test('core alternative route commands preserve resolved main targets, continue m
   assert.equal(active.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 10);
   assert.equal(active.locomotion.alternativeRoute.route.progress.checkpoint.remainingTicks, 29);
   const snapshot = waiting.snapshot();
-  snapshot.units[0].locomotion.alternativeRoute.route.progress.checkpoint.remainingTicks = 999;
-  snapshot.units[0].spatialPresence.present = false;
-  assert.deepEqual(waiting.snapshot().units[0], active);
+  assert.equal(snapshot.units[0].locomotion, active.locomotion);
+  assert.equal(snapshot.units[0].spatialPresence, active.spatialPresence);
   waiting.step();
   assert.equal(waiting.snapshot().units[0].locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 9);
+  assert.equal(snapshot.units[0].locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 10);
+  assert.equal(snapshot.units[0].locomotion.alternativeRoute.route.progress.checkpoint.remainingTicks, 29);
   waiting.step([{ type: 'CLEAR_ALTERNATIVE_ROUTE', unitId: 0 }]);
   assert.equal(waiting.snapshot().units[0].locomotion.alternativeRoute, null);
   assert.equal(waiting.snapshot().units[0].locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 8);
+  assert.equal(snapshot.units[0].locomotion.alternativeRoute.route.progress.checkpoint.remainingTicks, 29);
 
   const input = routeCommandBattle([{ type: 'MOVE', target: {
     position: [9, 8], reachOffset: [0.25, 0], randomizeReachOffset: true, reachDistance: 0,
@@ -1173,7 +1178,7 @@ test('core battle propagates nested settlement errors without publishing battlef
   let observations = 0;
   const resources = new CombatResources();
   const effect = resources.registerEffect(createEffectProgram({
-    id: 'nested-failure-effect', initialize: () => ({}), ownState: state => state,
+    id: 'nested-failure-effect', initialize: () => ({}),
   }), {
     lifecycle: { start: context => {
       context.damage({ sourceUnitId: 0, targetUnitId: 1, damageType: 'TRUE', operands: createDamageOperands(7) });
@@ -1317,9 +1322,9 @@ test('core battle deadline keeps live units separate from spawns due at the excl
   assert.deepEqual(simulateBattle(limited), runtime.result);
   const result = runtime.result;
   const snapshot = runtime.snapshot();
-  result.remainingUnitIds.push(99);
-  snapshot.result.remainingUnitIds[0] = 99;
-  assert.deepEqual(runtime.result.remainingUnitIds, [0]);
+  assert.equal(snapshot.result, result);
+  assert.equal(snapshot.result.remainingUnitIds, result.remainingUnitIds);
+  assert.deepEqual(result.remainingUnitIds, [0]);
   const finished = runtime.snapshot();
   assert.deepEqual(runtime.step(), { events: [], result: runtime.result });
   assert.deepEqual(runtime.snapshot(), finished);
@@ -1601,10 +1606,10 @@ test('raw levels preserve predefined configuration and keep unsupported inputs o
   }
 });
 
-test('schedule execution keeps the definition internally and exposes isolated progress snapshots', () => {
+test('schedule execution keeps its definition internally and shares immutable progress values', () => {
   const timelineDefinition = createSpawnScheduleDefinition({ type: 'TIMELINE', spawns: [] });
   const timeline = createSpawnScheduleExecution(timelineDefinition);
-  const timelineSnapshot = cloneScheduleState(timeline);
+  const timelineSnapshot = snapshotSchedule(timeline);
   assert.equal(timeline.definition, timelineDefinition);
   assert.equal(Object.hasOwn(timelineSnapshot, 'definition'), false);
   assert.equal(timelineSnapshot.type, 'TIMELINE');
@@ -1614,15 +1619,21 @@ test('schedule execution keeps the definition internally and exposes isolated pr
   const recorded = recordScheduleSpawns(advanced.state, advanced.spawns, []);
   assert.equal(recorded.definition, timelineDefinition);
   assert.equal(resolveScheduleUnits(recorded, []).definition, timelineDefinition);
-  timelineSnapshot.managedFinalUnitIds.push(99);
-  assert.deepEqual(timeline.managedFinalUnitIds, []);
+  assert.equal(timelineSnapshot.managedFinalUnitIds, timeline.managedFinalUnitIds);
+  assert.equal(timelineSnapshot.managedWaveUnitIds, timeline.managedWaveUnitIds);
+  assert.equal(timelineSnapshot.lastTick, null);
+  assert.equal(advanced.state.lastTick, 0);
+  assert.deepEqual(timelineSnapshot.managedFinalUnitIds, []);
 
   const { schedule } = syntheticSpawnSchedule([nativeWave([nativeFragment([nativeSpawn()])])]);
   const waves = createSpawnScheduleExecution(schedule);
-  const wavesSnapshot = cloneScheduleState(waves);
+  const wavesSnapshot = snapshotSchedule(waves);
   assert.equal(waves.definition, schedule);
   assert.equal(Object.hasOwn(wavesSnapshot, 'definition'), false);
   assert.equal(wavesSnapshot.type, 'WAVES');
+  assert.equal(wavesSnapshot.main, waves.main);
+  assert.equal(wavesSnapshot.branchCursors, waves.branchCursors);
+  assert.equal(wavesSnapshot.activeBranches, waves.activeBranches);
   const { spec } = slimeMovementFragment();
   for (const definition of [timelineDefinition, schedule]) {
     const runtime = new BattleRuntime({ ...spec, schedule: definition });
@@ -1804,21 +1815,25 @@ test('branches require explicit triggers, consume one phase each, support loops 
   assert.equal(step.spawns.length, 1);
   assert.equal(step.state.branchCursors.extra, 2);
   assert.equal(step.state.activeBranches.length, 1);
-  const snapshot = cloneScheduleState(step.state);
-  snapshot.branchCursors.extra = 99;
-  snapshot.activeBranches[0].spawns.length = 0;
-  snapshot.main.queue.spawns.length = 0;
-  snapshot.managedFinalUnitIds.push(99);
+  const snapshot = snapshotSchedule(step.state);
+  assert.equal(snapshot.branchCursors, step.state.branchCursors);
+  assert.equal(snapshot.activeBranches, step.state.activeBranches);
+  assert.equal(snapshot.main, step.state.main);
+  assert.equal(snapshot.managedFinalUnitIds, step.state.managedFinalUnitIds);
   assert.equal(step.state.branchCursors.extra, 2);
   assert.equal(step.state.activeBranches[0].spawns.length, 1);
   assert.equal(step.state.main.queue.spawns.length, 1);
   assert.deepEqual(step.state.managedFinalUnitIds, [0, 1, 2]);
   step = dispatchSchedule(step.state, 8, [3]);
+  assert.equal(snapshot.branchCursors.extra, 2);
+  assert.equal(snapshot.activeBranches[0].spawns.length, 1);
+  assert.equal(snapshot.main.queue.spawns.length, 1);
+  assert.deepEqual(snapshot.managedFinalUnitIds, [0, 1, 2]);
   assert.equal(getSpawnedCount(step.state), 4);
   assert.equal(getUnspawnedCount(step.state), 1);
-  const before = cloneScheduleState(step.state);
+  const before = snapshotSchedule(step.state);
   assert.throws(() => advanceSpawnSchedule(step.state, { tick: 9, triggers: [{ branchId: 'missing', isLoop: false }] }), /unknown scheduler branch/);
-  assert.deepEqual(cloneScheduleState(step.state), before);
+  assert.deepEqual(snapshotSchedule(step.state), before);
 });
 
 test('WAVES projection rounds absolute action times, including fractional fragment delays, without periodic drift', () => {
@@ -2097,7 +2112,7 @@ const deployableDefinition = (id = 'test_deployable') => Object.freeze({
   blocker: Object.freeze({ capacity: 1, geometry: Object.freeze({ radius: 0.7 }) }),
 });
 
-test('core battle deploys, relocates and retreats units with owned occupancy and attached navigation effects', () => {
+test('core battle deploys, relocates and retreats units with immutable occupancy and attached navigation effects', () => {
   const definition = deployableDefinition();
   const runtime = new BattleRuntime(deploymentBattleInput());
   const maps = runtime.navigationMaps;
@@ -2140,11 +2155,10 @@ test('core battle deploys, relocates and retreats units with owned occupancy and
       navigationModifiers: initialNavigationModifiers }],
   });
   const reserved = new BattleRuntime(initialInput);
-  occupancy.claims[0].position = [0, 4];
-  initialNavigationModifiers[0].range[0][1] = 1;
+  assert.equal(reserved.snapshot().units[0].occupancy, occupancy);
   assert.deepEqual(reserved.snapshot().units[0].occupancy.claims,
     [{ position: [0, 5], slot: 'DEPLOYMENT', type: 'RESERVATION' }]);
-  assert.deepEqual(initialInput.initialUnits[0].navigationModifiers[0].range, [[0, 1]]);
+  assert.deepEqual(initialInput.initialUnits[0].navigationModifiers[0].range, [[0, 0]]);
   assert.deepEqual(reserved.snapshot().navigationModifiers[0].region.range, [[0, 0]]);
   assert.deepEqual(reserved.navigationMaps.WALK.cells.map(cell => cell.moveCost), [1, 1, 1, 1, 1, 1000]);
   const before = reserved.snapshot();
@@ -2158,9 +2172,7 @@ test('core battle deploys, relocates and retreats units with owned occupancy and
     level.predefines.tokenInsts.find(instance => instance.inst.characterKey === 'trap_1105_accrate'),
     parsePredefinedPrefab(arknightsFixture('prefab_trap_1105_accrate')), arknightsFixture('character_trap_1105_accrate'));
   const crate = recipe.creation.definition;
-  const navigationModifiers = recipe.creation.navigationModifiers.map(contribution => ({
-    ...contribution, range: contribution.range.map(offset => [...offset]),
-  }));
+  const navigationModifiers = recipe.creation.navigationModifiers;
   const crates = new BattleRuntime(deploymentBattleInput());
   const baseline = crates.navigationMaps;
   crates.step([{ type: 'DEPLOY_UNIT', definition: crate, tilePosition: [0, 1], playerSide: 'SIDE_A', navigationModifiers }]);
@@ -2172,10 +2184,11 @@ test('core battle deploys, relocates and retreats units with owned occupancy and
   assert.equal(effect.region.type, 'FOLLOW_UNIT');
   assert.equal(effect.region.unitId, 0);
   assert.equal(crates.snapshot().units[0].definition, crate);
-  navigationModifiers[0].range[0][1] = 1;
-  navigationModifiers.push({ ...navigationModifiers[0], range: [[0, 2]] });
+  const initialCrate = crates.snapshot();
   crates.step([{ type: 'RELOCATE_UNIT', unitId: 0, tilePosition: [0, 3], playerSide: 'SIDE_A' }]);
   assert.deepEqual(crates.navigationMaps.WALK.cells.map(cell => cell.moveCost), [1, 1, 1, 1000, 1, 1]);
+  assert.deepEqual(initialCrate.units[0].position, [1, 0]);
+  assert.deepEqual(initialCrate.units[0].occupancy.claims, [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }]);
   assert.equal(crates.navigationMaps.FLY, baseline.FLY);
   assert.equal(crates.snapshot().navigationModifiers[0].id, effect.id);
   assert.equal(crates.snapshot().navigationModifiers.length, 1);
@@ -2300,8 +2313,7 @@ test('core elevated support disables blocking without changing target layer and 
   const recipe = createPredefinedInstanceDefinition({ id: 50, alias: 'test_platform', initiallyPresent: true, creation: {
     type: 'UNIT', definition: provider, position: [1, 0], navigationModifiers: [], states: { occupancy },
   } });
-  occupancy.claims[0].position = [0, 4];
-  occupancy.claims.push({ position: [0, 5], slot: 'SUPPORT', type: 'PRESENT' });
+  assert.equal(recipe.creation.states.occupancy, occupancy);
   assert.deepEqual(recipe.creation.states.occupancy.claims, [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }]);
   const claims = [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }];
   const navigationModifiers = [{
@@ -2315,15 +2327,13 @@ test('core elevated support disables blocking without changing target layer and 
     initialUnits: [{ definition: enemyDefinition, position: [1, 0] }],
     predefines: [hiddenRecipe],
   }));
-  claims[0].position[1] = 4;
-  claims.push({ position: [0, 5], slot: 'SUPPORT', type: 'PRESENT' });
-  navigationModifiers[0].range[0][1] = 1;
-  navigationModifiers[0].direction = 'UP';
-  navigationModifiers.push({ ...navigationModifiers[0], range: [[0, 2]] });
+  assert.equal(hiddenRecipe.creation.states.occupancy.claims, claims);
+  assert.equal(hiddenRecipe.creation.navigationModifiers[0].definition, navigationModifiers[0].definition);
   assert.deepEqual(runtime.snapshot().predefinedPresence, []);
   runtime.step([{ type: 'APPEAR_PREDEFINED', definitionId: 50 }]);
   const platformId = runtime.snapshot().predefinedPresence[0].source.unitId;
   const platform = runtime.snapshot().units.find(unit => unit.id === platformId);
+  assert.equal(platform.occupancy, hiddenRecipe.creation.states.occupancy);
   assert.deepEqual(platform.occupancy.claims, [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }]);
   assert.deepEqual(runtime.navigationMaps.WALK.cells.map(cell => cell.moveCost), [1, 1000, 1, 1, 1, 1]);
   assert.equal(runtime.snapshot().navigationModifiers.length, 1);

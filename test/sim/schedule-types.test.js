@@ -13,7 +13,7 @@ test('schedule execution carries its definition through spawning and queries and
   try {
     writeFileSync(path, `
 import type { SpawnScheduleDefinition, TimelineScheduleDefinition, WavesScheduleDefinition } from ${sourceModule('schedule/definition')};
-import { createSpawnScheduleExecution, cloneScheduleState, type SpawnScheduleExecution, type SpawnScheduleState, type TimelineScheduleState, type WavesScheduleState } from ${sourceModule('schedule/state')};
+import { createSpawnScheduleExecution, snapshotSchedule, type SpawnScheduleExecution, type SpawnScheduleState, type TimelineScheduleState, type WavesScheduleState } from ${sourceModule('schedule/state')};
 import { advanceSpawnSchedule, recordScheduleSpawns, resolveScheduleUnits, isSpawnScheduleCompleted, getUnspawnedCount, getSpawnScheduleCounts } from ${sourceModule('schedule/runtime')};
 import { advanceSpawning } from ${sourceModule('steps/spawning')};
 declare const definition: SpawnScheduleDefinition;
@@ -59,9 +59,13 @@ getUnspawnedCount(progress);
 getSpawnScheduleCounts(progress);
 // @ts-expect-error Spawning requires progress paired with its definition.
 advanceSpawning(input, progress, [], 0);
-const snapshot = cloneScheduleState(execution);
+const snapshot = snapshotSchedule(execution);
 // @ts-expect-error Public progress snapshots do not carry runtime definitions.
 snapshot.definition;
+// @ts-expect-error Snapshot progress remains readonly.
+snapshot.managedFinalUnitIds.push(1);
+// @ts-expect-error Snapshot fields remain readonly.
+snapshot.type = 'WAVES';
 `);
     const program = ts.createProgram([path], {
       noEmit: true,

@@ -4,10 +4,9 @@ import {
     assertPositiveNumber,
     assertPositiveSafeInteger,
 } from "../../../../common/assert.js";
-import { ownDataRecord } from "../../../../common/immutable-data.js";
 import { TICKS_PER_SECOND } from "../../../tick.js";
 import type { Unit, UnitDefinition } from "../../unit.js";
-import { createActionDefinition, type ActionDefinition } from "../action/capability.js";
+import type { ActionDefinition } from "../action/capability.js";
 
 export type SkillActivationMode = "MANUAL" | "AUTO" | "PASSIVE";
 
@@ -50,8 +49,6 @@ export interface SkilledUnitDefinition extends UnitDefinition {
     readonly skill: SkillDefinition;
 }
 
-const ownedDefinitions = new WeakSet<SkillDefinition>();
-
 export function hasSkill<U extends Unit>(
     unit: U,
 ): unit is U & Skill & Unit<U["definition"] & SkilledUnitDefinition> {
@@ -69,9 +66,6 @@ export function skillSpCapacity(definition: SkillDefinition): number {
 }
 
 export function createSkillDefinition(definition: SkillDefinition): SkillDefinition {
-    if (ownedDefinitions.has(definition)) {
-        return definition;
-    }
     if (definition.id.length === 0) {
         throw new TypeError("skill identity must be nonempty");
     }
@@ -109,23 +103,23 @@ export function createSkillDefinition(definition: SkillDefinition): SkillDefinit
         throw new TypeError("passive skill must not require SP");
     }
 
-    const owned = ownDataRecord(
-        {
-            ...definition,
-            maxCharges,
-            spRecoveryIntervalTicks,
-            ...(definition.ammo === undefined
-                ? {}
-                : { ammoPerAttack: definition.ammoPerAttack ?? 1 }),
-            ...(definition.activeAction === undefined
-                ? {}
-                : { activeAction: createActionDefinition(definition.activeAction) }),
-        },
-        "skill definition",
-    );
-    ownedDefinitions.add(owned);
+    const ammoPerAttack =
+        definition.ammo === undefined ? undefined : (definition.ammoPerAttack ?? 1);
 
-    return owned;
+    if (
+        definition.maxCharges === maxCharges &&
+        definition.spRecoveryIntervalTicks === spRecoveryIntervalTicks &&
+        definition.ammoPerAttack === ammoPerAttack
+    ) {
+        return definition;
+    }
+
+    return {
+        ...definition,
+        maxCharges,
+        spRecoveryIntervalTicks,
+        ...(ammoPerAttack === undefined ? {} : { ammoPerAttack }),
+    };
 }
 
 export function initializeSkillState(
@@ -168,9 +162,5 @@ export function createSkillState(state: SkillState): SkillState {
         }
     }
 
-    return ownDataRecord(state, "skill state");
-}
-
-export function copySkillState(state: SkillState): SkillState {
-    return ownDataRecord(state, "skill state");
+    return state;
 }

@@ -1,4 +1,5 @@
-import { createTilePosition, type TilePosition } from "../../geometry/coordinate.js";
+import { assertSafeInteger } from "../../../common/assert.js";
+import type { TilePosition } from "../../geometry/coordinate.js";
 import type { Unit } from "../unit.js";
 import { isSpatiallyPresent } from "./presence.js";
 
@@ -26,44 +27,17 @@ export function isOccupancyClaimActive(unit: Unit, claim: OccupancyClaim): boole
     return claim.type === "RESERVATION" || isSpatiallyPresent(unit);
 }
 
-function cloneOccupancyState(
-    state: Readonly<OccupancyState>,
-    reuseFrozenPositions: boolean,
-): OccupancyState {
-    const claims: OccupancyClaim[] = [];
-
-    for (let index = 0; index < state.claims.length; index++) {
-        if (!Object.hasOwn(state.claims, index)) {
-            throw new TypeError(`missing occupancy claim at index ${index}`);
-        }
-
-        const claim = state.claims[index]!;
-
-        claims.push({
-            position:
-                reuseFrozenPositions && Object.isFrozen(claim.position)
-                    ? claim.position
-                    : createTilePosition(...claim.position),
-            slot: claim.slot,
-            type: claim.type,
-        });
+export function createOccupancyState(state: Readonly<OccupancyState>): OccupancyState {
+    for (const claim of state.claims) {
+        assertSafeInteger(claim.position[0], "occupancy row");
+        assertSafeInteger(claim.position[1], "occupancy column");
     }
 
-    return { claims };
-}
-
-export function createOccupancyState(state: Readonly<OccupancyState>): OccupancyState {
-    return cloneOccupancyState(state, false);
+    return state;
 }
 
 export function createOccupancyClaims(
     claims: readonly OccupancyClaim[],
 ): readonly OccupancyClaim[] {
-    return Object.freeze(
-        createOccupancyState({ claims }).claims.map((claim) => Object.freeze(claim)),
-    );
-}
-
-export function copyOccupancyState(state: Readonly<OccupancyState>): OccupancyState {
-    return cloneOccupancyState(state, true);
+    return createOccupancyState({ claims }).claims;
 }

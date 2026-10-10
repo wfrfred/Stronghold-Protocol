@@ -29,7 +29,7 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, program } = {}) {
     spCost: 1, initialSp: 1, durationTicks: null, ammo,
   });
   const buff = resources.registerEffect(createEffectProgram({
-    id: "runtime-ammo-attack", initialize: () => ({}), ownState: (value) => ({ ...value }),
+    id: "runtime-ammo-attack", initialize: () => ({}),
   }), {
     contributions: [attack(() => [modifier({ multiplier: 1 })])],
     ...(interrupt ? { action: { beforeRelease: () => ({ type: "INTERRUPT", recoveryTicks: 15 }) } } : {}),
@@ -62,7 +62,7 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, program } = {}) {
     status: { initialFlags: [] },
   };
   const shell = resources.projectiles.register(createProjectileProgram({
-    id: "runtime-ammo-shell", initialize: () => ({}), ownState: (value) => ({ ...value }),
+    id: "runtime-ammo-shell", initialize: () => ({}),
     acceptsContact: (_context, unit) => unit.allegiance?.side === "ENEMY",
     contact: (context) => {
       context.operations.damage({

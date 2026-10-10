@@ -141,14 +141,6 @@ export function initializeActionState(
     return createActionState(context.tick);
 }
 
-export function copyActionState(state: Readonly<ActionState>): ActionState {
-    return {
-        ...state,
-        attackSpeed: contribution.copy(state.attackSpeed),
-        baseAttackTime: contribution.copy(state.baseAttackTime),
-    };
-}
-
 function updateContributions<U extends Unit>(
     input: U | StableUnit<U>,
     key: "attackSpeed" | "baseAttackTime",

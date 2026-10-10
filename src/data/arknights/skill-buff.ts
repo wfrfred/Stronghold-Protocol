@@ -27,7 +27,6 @@ export function compileArknightsAttackBuffSkill(
         createEffectProgram({
             id: `skill/${parsed.definition.id}/${level}/attack`,
             initialize: () => ({ attackIncrease }),
-            ownState: (state) => ({ ...state }),
         }),
         {
             contributions: [

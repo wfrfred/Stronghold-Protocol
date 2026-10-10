@@ -125,7 +125,7 @@ test("attribute modifiers: native Mire percentages affect existing ASPD and norm
     const compiled = compileAttributeModifiers(parseAttributeModifiers(raw.node._buff.attributes.attributeModifiers));
     const sampled = new Map(compiled.map((entry) => [entry.attributeType, entry.sample(context({ blackboard }))]));
     const resources = new CombatResources();
-    const program = resources.registerEffect(createEffectProgram({ id: "compiled-mire", initialize: () => ({ layers: 1 }), ownState: (state) => ({ ...state }) }), {
+    const program = resources.registerEffect(createEffectProgram({ id: "compiled-mire", initialize: () => ({ layers: 1 }) }), {
         contributions: [
             attackSpeed(() => [sampled.get("ATTACK_SPEED")]),
             moveSpeed(() => [sampled.get("MOVE_SPEED")]),
@@ -151,11 +151,11 @@ test("attribute modifiers: inspiration samples belong to the Effect input and re
     const raw = fixture("buff_encourage_atk");
     const [compiled] = compileAttributeModifiers(parseAttributeModifiers(raw.node._buff.attributes.attributeModifiers));
     const resources = new CombatResources();
-    const amplify = resources.registerEffect(createEffectProgram({ id: "source-amplification", initialize: () => ({}), ownState: (state) => state }), {
+    const amplify = resources.registerEffect(createEffectProgram({ id: "source-amplification", initialize: () => ({}) }), {
         contributions: [attack(() => [modifier.create({ multiplier: 1 })])],
     });
     const program = resources.registerEffect(createEffectProgram({
-        id: "compiled-inspiration", initialize: () => ({ sourceAttack: 0, ratio: 0.6 }), ownState: (state) => ({ ...state }),
+        id: "compiled-inspiration", initialize: () => ({ sourceAttack: 0, ratio: 0.6 }),
     }), { contributions: [attack((instance) => [compiled.sample(context({
         blackboard: new Map([["atk", instance.state.ratio]]),
         readSourceAttribute: () => instance.state.sourceAttack,

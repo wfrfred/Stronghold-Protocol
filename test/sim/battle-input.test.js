@@ -11,7 +11,6 @@ import { createEffectProgram } from '../../dist/core/tactical/unit/capability/ef
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { seededPlacement } from '../helpers/aura.js';
 import { createEnemyDefinition } from '../../dist/core/tactical/unit/archetype/enemy.js';
-import { ownUnitDefinition } from '../../dist/core/tactical/unit/unit.js';
 import { createNavigationModifierDefinition } from '../../dist/core/tactical/battlefield/navigation/modifier.js';
 import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
 
@@ -75,7 +74,7 @@ const restriction = (id, costFloor) => createNavigationModifierDefinition({
 const fixed = column => ({ type: 'FIXED', position: [0, column], range: [[0, 0]], direction: 'RIGHT' });
 const attached = (id, costFloor) => ({ definition: restriction(id, costFloor), range: [[0, 0]], direction: 'RIGHT' });
 const placement = (id, column, navigationModifiers = []) => ({
-  definition: ownUnitDefinition({ id, vitality: { maxHp: 100 } }), position: [column, 0], navigationModifiers,
+  definition: { id, vitality: { maxHp: 100 } }, position: [column, 0], navigationModifiers,
 });
 
 function fixture({ spawnTick = 100 } = {}) {
@@ -88,7 +87,6 @@ function fixture({ spawnTick = 100 } = {}) {
   const initial = resources.registerEffect(createEffectProgram({
     id: 'initial-state',
     initialize: () => ({ quota: { remaining: 3 }, marks: [1, 2] }),
-    ownState: state => state,
   }));
   const enemy = createEnemyDefinition({
     id: 'scheduled-enemy', vitality: { maxHp: 100 },

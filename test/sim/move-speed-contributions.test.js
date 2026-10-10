@@ -81,7 +81,7 @@ function harness({ speed = 0.25, minimum = 0, definition = route(), maps } = {})
 
 function register(resources, value = modifier.create({ multiplier: -0.5 })) {
     return resources.registerEffect(createEffectProgram({
-        id: "movement-buff", initialize: () => ({ value }), ownState: (state) => ({ ...state }),
+        id: "movement-buff", initialize: () => ({ value }),
     }), { contributions: [moveSpeed((instance) => [instance.state.value])] });
 }
 
@@ -110,7 +110,7 @@ test("move speed: normalized minimum, arithmetic and movement permission are sep
     close(speed(h.work, resources), 8 / 30);
 });
 
-test("move speed: lifecycle and copies retain route samples, identities and visits", () => {
+test("move speed: lifecycle updates preserve shared snapshots, route samples and visits", () => {
     const resources = new CombatResources();
     const program = register(resources);
     const h = harness({ definition: route({ checkpoints: [{ type: "MOVE", target: {
@@ -119,6 +119,7 @@ test("move speed: lifecycle and copies retain route samples, identities and visi
     h.step(resources, 0);
     const before = h.unit;
     const copied = copyUnitSnapshot(before);
+    assert.equal(copied.locomotion, before.locomotion);
     const sample = before.locomotion.mainRoute.route.progress.checkpoint.goal;
     const cursor = before.locomotion.mainRoute.navigation.execution;
     const randomState = h.execution.rngState;
@@ -130,13 +131,14 @@ test("move speed: lifecycle and copies retain route samples, identities and visi
     close(speed(h.work, resources), 0.25);
     setEffectEnabled(h.work, address, true, resources, 2);
     const participating = copyUnitSnapshot(h.unit);
+    assert.equal(participating.locomotion, h.unit.locomotion);
     finishEffects(h.work, [address], resources, 3);
     finalizeEffect(h.work, address, resources, 3);
     assert.equal(h.unit.locomotion.mainRoute.navigation.execution, cursor);
     assert.equal(h.unit.locomotion.moveSpeed.entries.length, 0);
     assert.equal(h.execution.rngState, randomState);
     assert.equal(copied.locomotion.moveSpeed.entries.length, 0);
-    assert.ok(Object.isFrozen(participating.locomotion.moveSpeed.entries));
+    assert.notEqual(h.unit.locomotion.moveSpeed, participating.locomotion.moveSpeed);
     assert.equal(participating.locomotion.moveSpeed.entries[0].participating, true);
 });
 
@@ -204,7 +206,7 @@ test("move speed: route WAIT consumes ticks independently of a speed contributio
 
 test("move speed: live contributions read phase facts without storing final speed", () => {
     const resources = new CombatResources();
-    const program = resources.registerEffect(createEffectProgram({ id: "live-move", initialize: () => ({}), ownState: (state) => state }), {
+    const program = resources.registerEffect(createEffectProgram({ id: "live-move", initialize: () => ({}) }), {
         contributions: [liveMoveSpeed(({ unit, battlefield }) => {
             assert.equal(battlefield.getUnit(unit.id).vitality.hp, unit.vitality.hp);
             return [modifier.create({ finalScaler: unit.vitality.hp / 100 })];

@@ -36,7 +36,6 @@ const value = (amount) => modifier.create({ finalAddition: amount });
 const program = (id) => createEffectProgram({
   id,
   initialize: () => ({ coefficient: 0, amount: 0, defense: 0, grouped: true }),
-  ownState: (state) => ({ ...state }),
 });
 const install = (work, resources, program, id, state, source = null) => {
   const result = installEffect(work, 1, resources.effects.create(program.ref, {
@@ -162,10 +161,10 @@ test("contribution groups: live values stay current without reranking, and expli
   assert.equal(attackPower(work, resources), 220);
 });
 
-test("contribution groups: static declarations and dynamic results have immutable ownership", () => {
+test("contribution groups: static groups are shared and dynamic updates retain previous snapshots", () => {
   for (const useLive of [false, true]) {
     const resources = new CombatResources();
-    const effect = program(`owned-groups-${useLive}`);
+    const effect = program(`shared-groups-${useLive}`);
     const fixed = { id: "fixed", strength: 1 };
     let returned;
     const factory = useLive
@@ -178,28 +177,23 @@ test("contribution groups: static declarations and dynamic results have immutabl
         return returned;
       } }),
     ] });
-    fixed.id = "caller-edit";
-    fixed.strength = 99;
     const work = effectFixtureWork(unit(1));
     install(work, resources, effect, 0,
       { coefficient: 2, grouped: true });
+    const original = work.battlefield.snapshot("draft");
     const initialGroup = entries(work)[1].group;
-    assert.deepEqual(entries(work)[0].group, { id: "fixed", strength: 1 });
-    assert.deepEqual(initialGroup, { id: "dynamic", strength: 2 });
-    assert.notEqual(initialGroup, returned);
-    assert.equal(Object.isFrozen(initialGroup), true);
-    returned.id = "caller-edit";
-    returned.strength = 99;
+    assert.equal(entries(work)[0].group, fixed);
+    assert.equal(initialGroup, returned);
     assert.deepEqual(initialGroup, { id: "dynamic", strength: 2 });
 
     updateEffectState(work, 1, 0, effect.ref,
       (state) => ({ ...state, coefficient: 3 }), resources, 0);
     const updatedGroup = entries(work)[1].group;
-    returned.strength = 999;
-    assert.deepEqual(entries(work)[0].group, { id: "fixed", strength: 1 });
+    assert.equal(entries(work)[0].group, fixed);
+    assert.equal(updatedGroup, returned);
+    assert.notEqual(updatedGroup, initialGroup);
     assert.deepEqual(updatedGroup, { id: "dynamic", strength: 3 });
+    assert.equal(original.getUnit(1).offense.attack.entries[1].group, initialGroup);
     assert.deepEqual(initialGroup, { id: "dynamic", strength: 2 });
-    assert.notEqual(updatedGroup, returned);
-    assert.equal(Object.isFrozen(updatedGroup), true);
   }
 });

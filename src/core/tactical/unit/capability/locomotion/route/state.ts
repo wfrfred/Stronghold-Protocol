@@ -48,27 +48,6 @@ export interface RouteState {
     readonly progress: RouteProgress;
 }
 
-export function copyRouteState(state: Readonly<RouteState>): RouteState {
-    const progress = state.progress;
-    let copiedProgress: RouteProgress;
-
-    switch (progress.phase) {
-        case "CHECKPOINTS":
-            copiedProgress = { ...progress, checkpoint: { ...progress.checkpoint } };
-            break;
-
-        case "END":
-            copiedProgress = { ...progress, move: { ...progress.move } };
-            break;
-
-        case "COMPLETED":
-            copiedProgress = { ...progress };
-            break;
-    }
-
-    return { ...state, progress: copiedProgress };
-}
-
 export function createRouteTiming(timing: RouteTiming): RouteTiming {
     assertNonnegativeSafeInteger(timing.waveStartedAtTick, "waveStartedAtTick");
     assertNonnegativeSafeInteger(timing.fragmentStartedAtTick, "fragmentStartedAtTick");

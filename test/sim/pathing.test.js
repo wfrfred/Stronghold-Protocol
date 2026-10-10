@@ -1891,19 +1891,37 @@ test('core battlefield snapshots retain unit, map, field and path facts across d
   assert.equal(path.field.map, maps.WALK);
   const cached = runtime.snapshot('draft').fieldCache.get(maps.WALK, path.request);
   assert.equal(retained.fieldCache.get(maps.WALK, path.request), cached);
-  const updated = copyUnitSnapshot(runtime.snapshot('draft').getUnit(1));
-  updated.vitality.hp = 50;
-  updated.spatialPresence.present = false;
-  updated.locomotion.steering.lastVelocity = Object.freeze([1, 0]);
-  updated.locomotion.mainRoute.route.progress.checkpointIndex = 1;
-  updated.locomotion.mainRoute.navigation.execution.visits.visitedCenters.push(Object.freeze([0, 1]));
-  updated.locomotion.mainRoute.navigation.execution.activity.cursor = { type: 'GOAL' };
+  const previousFacts = structuredClone(before);
+  const mainRoute = before.locomotion.mainRoute;
+  const execution = mainRoute.navigation.execution;
+  const updated = {
+    ...before,
+    vitality: { ...before.vitality, hp: 50 },
+    spatialPresence: { ...before.spatialPresence, present: false },
+    locomotion: {
+      ...before.locomotion,
+      steering: { ...before.locomotion.steering, lastVelocity: [1, 0] },
+      mainRoute: {
+        ...mainRoute,
+        route: { ...mainRoute.route, progress: { ...mainRoute.route.progress, checkpointIndex: 1 } },
+        navigation: {
+          ...mainRoute.navigation,
+          execution: {
+            ...execution,
+            visits: { ...execution.visits, visitedCenters: [...execution.visits.visitedCenters, [0, 1]] },
+            activity: { ...execution.activity, cursor: { type: 'GOAL' } },
+          },
+        },
+      },
+    },
+  };
   runtime.advance([
     { type: 'UPDATE_UNIT', unit: updated },
     { type: 'SET_MECHANISM_ACTIVE', mechanismId: 1, active: false },
     { type: 'SET_NAVIGATION_MODIFIER_ACTIVE', navigationModifierId: 1, active: true },
   ]);
-  assert.deepEqual(retained.getUnit(1), before);
+  assert.equal(retained.getUnit(1), before);
+  assert.deepEqual(before, previousFacts);
   assert.equal(retained.getMechanism(1).active, true);
   assert.equal(retained.getNavigationModifier(1).active, false);
   assert.deepEqual(retained.unitsAt([0, 0]).map(unit => unit.id), [1]);
@@ -2234,15 +2252,16 @@ test('core battlefield retains paths on commit and consumers rebind changed navi
   }
   assert.equal(oldPath.field.map, oldMaps.WALK);
   assert.equal(oldMaps.WALK.cells[2].moveCost, 1);
-  pending.locomotion.alternativeRoute = null;
+  const mainOnly = { ...pending, locomotion: { ...pending.locomotion, alternativeRoute: null } };
   const context = {
     tick: h.tick,
     maps: runtime.snapshot('draft').navigationMaps, fieldCache: runtime.snapshot('draft').fieldCache,
     moveMultiplier: 0, movementAllowed: true, waitTickAllowed: true, routeAdvanceAllowed: true,
     rngState: h.rngState, nextNavigationRequestId: h.nextNavigationRequestId,
   };
-  const stepped = stepRoutedEnemy(pending, context);
+  const stepped = stepRoutedEnemy(mainOnly, context);
   runtime.advance([{ type: 'UPDATE_UNIT', unit: stepped.enemy }]);
+  assert.equal(pending.locomotion.alternativeRoute, alternativeRoute);
   const rebound = runtime.snapshot('draft').getUnit(1);
   assert.equal(rebound.locomotion.mainRoute.navigation.execution.activity.path.field.map, runtime.snapshot('draft').navigationMaps.WALK);
   assert.equal(routedEnemyRequest(rebound), request);
@@ -2514,7 +2533,6 @@ test('compiled range grids are shared while mutable and frozen raw inputs keep t
   assert.equal(Object.is(compiled[0][1], -0), false);
   assert.throws(() => RangeGrid.create(Object.freeze([[0, 0], [0, -0]])), /duplicate/);
   assert.throws(() => RangeGrid.create(Object.freeze(Array(1))), /missing range offset/);
-  assert.throws(() => createNavigationModifierDefinition({ id: 'sparse', WALK: { ...walkRestriction(), deniedDepartures: [,] }, FLY: null }), /missing denied departure/);
   assert.throws(() => createNavigationModifierDefinition({ id: 'duplicate', WALK: { ...walkRestriction(), deniedDepartures: ['RIGHT', 'RIGHT'] }, FLY: null }), /duplicate denied departure/);
 });
 
@@ -2917,9 +2935,12 @@ test('core waits keep navigation idle without consuming visits, samples or reque
   assert.equal(h.enemy.locomotion.mainRoute.navigation.execution.activity.type, 'IDLE');
   assert.deepEqual(h.enemy.locomotion.mainRoute.navigation.execution.visits.visitedCenters, []);
   const snapshot = copyUnitSnapshot(h.enemy);
-  snapshot.locomotion.mainRoute.navigation.execution.visits.visitedCenters.push([0, 4]);
-  assert.deepEqual(h.enemy.locomotion.mainRoute.navigation.execution.visits.visitedCenters, []);
+  assert.equal(snapshot.locomotion, h.enemy.locomotion);
+  const remainingTicks = snapshot.locomotion.mainRoute.route.progress.checkpoint.remainingTicks;
   h.step();
+  assert.deepEqual(snapshot.locomotion.mainRoute.navigation.execution.visits.visitedCenters, []);
+  assert.equal(snapshot.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, remainingTicks);
+  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, remainingTicks - 1);
   h.setMotionMode('FLY');
   h.step();
   assert.equal(h.enemy.locomotion.mainRoute.navigation.execution.activity.type, 'IDLE');

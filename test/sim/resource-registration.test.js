@@ -27,7 +27,6 @@ import { effectFixtureWork, installFixtureEffect } from "../helpers/effects.js";
 const program = (id) => createEffectProgram({
   id,
   initialize: () => ({ value: 1 }),
-  ownState: (state) => ({ ...state }),
 });
 const metadata = {
   id: 0,
@@ -49,69 +48,63 @@ const spec = () => createLegacyCombatSpec({
   seed: 17,
 });
 
-test("resources: direct binding registration owns its array and operation descriptors", () => {
+test("resources: direct binding registration shares immutable descriptors and arrays", () => {
   const resources = new CombatResources();
   const descriptor = resources.effects.register(program("direct-binding"));
-  const binding = { ...compileStatusBinding(["INVINCIBLE"]) };
+  const binding = compileStatusBinding(["INVINCIBLE"]);
   const bindings = [binding];
   resources.effectBindings.register(descriptor.ref, bindings);
   const instance = resources.effects.create(descriptor.ref, metadata);
   const registered = resources.effectBindings.get(instance);
 
-  bindings.length = 0;
-  binding.install = (owner) => owner;
-
-  assert.equal(registered.length, 1);
-  assert.notEqual(registered[0], binding);
-  assert.equal(Object.isFrozen(registered), true);
-  assert.equal(Object.isFrozen(registered[0]), true);
-  assert.throws(() => registered.pop(), TypeError);
-  const installed = installFixtureEffect(unit(), instance, resources);
+  assert.equal(registered, bindings);
+  assert.equal(registered[0], binding);
+  const owner = unit();
+  const installed = installFixtureEffect(owner, instance, resources);
   assert.equal(hasStatusFlag(installed, "INVINCIBLE"), true);
+  assert.equal(hasStatusFlag(owner, "INVINCIBLE"), false);
 });
 
-test("resources: caller edits cannot change binding participation or removal after installation", () => {
+test("resources: binding participation and removal leave earlier unit values unchanged", () => {
   const resources = new CombatResources();
-  const binding = { ...compileStatusBinding(["INVINCIBLE"]) };
-  const descriptor = resources.registerEffect(program("owned-binding"), { bindings: [binding] });
+  const binding = compileStatusBinding(["INVINCIBLE"]);
+  const descriptor = resources.registerEffect(program("shared-binding"), { bindings: [binding] });
   const installed = installFixtureEffect(
     unit(), resources.effects.create(descriptor.ref, metadata), resources,
   );
-  assert.equal(hasStatusFlag(installed, "INVINCIBLE"), true);
+  const current = effectFixtureWork(installed);
+  const address = { type: "EFFECT", unitId: 2, effectId: 0 };
 
-  binding.setParticipation = (owner) => owner;
-  binding.remove = (owner) => owner;
-  const removed = effectFixtureWork(installed);
-  removeEffect(
-    removed, { type: "EFFECT", unitId: 2, effectId: 0 }, resources, 0,
-  );
-  assert.equal(hasStatusFlag(getUnit(removed, 2), "INVINCIBLE"), false);
-  assert.deepEqual(getUnit(removed, 2).effects.instances, []);
+  setEffectEnabled(current, address, false, resources, 0);
+  assert.equal(hasStatusFlag(getUnit(current, 2), "INVINCIBLE"), false);
+  assert.equal(hasStatusFlag(installed, "INVINCIBLE"), true);
+  setEffectEnabled(current, address, true, resources, 0);
+  assert.equal(hasStatusFlag(getUnit(current, 2), "INVINCIBLE"), true);
+  removeEffect(current, address, resources, 0);
+  assert.equal(hasStatusFlag(getUnit(current, 2), "INVINCIBLE"), false);
+  assert.deepEqual(getUnit(current, 2).effects.instances, []);
+  assert.equal(installed.effects.instances.length, 1);
 });
 
-test("resources: binding factories capture configuration values rather than caller-owned objects", () => {
+test("resources: binding factories share declared groups and sampled modifier values", () => {
   for (const kind of ["live", "sampled"]) {
     const resources = new CombatResources();
-    const sample = () => [modifier.create({ finalAddition: 20 })];
+    const values = [modifier.create({ finalAddition: 20 })];
+    const sample = () => values;
+    const group = { id: "original-group", strength: 1 };
     const configuration = {
       id: "sample",
       target: updateAttackContributions,
-      group: { id: "original-group", strength: 1 },
+      group,
       evaluator: "sample/attack",
       computations: resources.computations,
       evaluate: sample,
-      sample: sample,
+      sample,
     };
     const compiled = kind === "live"
       ? live(configuration)
       : sampled(configuration);
-    const descriptor = resources.registerEffect(program(`owned-${kind}`), { bindings: [compiled] });
-    configuration.id = "changed";
-    configuration.target = (owner) => owner;
-    configuration.group.strength = 99;
-    configuration.evaluator = "missing-evaluator";
-    configuration.sample = () => [modifier.create({ finalAddition: 99 })];
-
+    const descriptor = resources.registerEffect(program(`shared-${kind}`), { bindings: [compiled] });
     const owner = initializeUnit({
       id: 2,
       position: [0, 0],
@@ -122,32 +115,29 @@ test("resources: binding factories capture configuration values rather than call
     );
     const contribution = installed.offense.attack.entries[0];
     assert.equal(contribution.id, "@effect/0/sample");
-    assert.deepEqual(contribution.group, { id: "original-group", strength: 1 });
+    assert.equal(contribution.group, group);
+    if (kind === "sampled") {
+      assert.equal(contribution.values, values);
+    }
     assert.equal(resolveAttackPower(2, battlefieldView(effectFixtureWork(installed)), resources.computations), 120);
+    assert.equal(resolveAttackPower(2, battlefieldView(effectFixtureWork(owner)), resources.computations), 100);
     const removed = effectFixtureWork(installed);
     removeEffect(
       removed, { type: "EFFECT", unitId: 2, effectId: 0 }, resources, 0,
     );
     assert.deepEqual(getUnit(removed, 2).offense.attack.entries, []);
+    assert.equal(installed.offense.attack.entries[0], contribution);
   }
 });
 
-test("resources: registered authored contributions retain their behavior after caller edits", () => {
+test("resources: authored contributions retain prior snapshots across lifecycle updates", () => {
   for (const useLive of [false, true]) {
     const resources = new CombatResources();
     const group = { id: "original-group", strength: 1 };
     const declaration = useLive
       ? liveAttack(({ instance }) => [modifier.create({ finalAddition: instance.state.value * 20 })], { group })
       : attack((instance) => [modifier.create({ finalAddition: instance.state.value * 20 })], { group });
-    const contributions = [declaration];
-    const descriptor = resources.registerEffect(program(`authored-${useLive}`), { contributions });
-    contributions.length = 0;
-    declaration.id = "changed";
-    declaration.target = (owner) => owner;
-    group.strength = 99;
-    declaration.sample = () => [modifier.create({ finalAddition: 999 })];
-    declaration.evaluate = () => [modifier.create({ finalAddition: 999 })];
-
+    const descriptor = resources.registerEffect(program(`authored-${useLive}`), { contributions: [declaration] });
     const owner = initializeUnit({
       id: 2,
       position: [0, 0],
@@ -155,18 +145,22 @@ test("resources: registered authored contributions retain their behavior after c
     });
     const installed = installFixtureEffect(owner, resources.effects.create(descriptor.ref, metadata), resources);
     const currentAttack = (work) => resolveAttackPower(2, battlefieldView(work), resources.computations);
-    const initial = effectFixtureWork(installed);
-    assert.equal(currentAttack(initial), 120);
-    assert.deepEqual(installed.offense.attack.entries[0].group, { id: "original-group", strength: 1 });
-    updateEffectState(initial, 2, 0, descriptor.ref, () => ({ value: 2 }), resources, 0);
-    assert.equal(currentAttack(initial), 140);
+    const current = effectFixtureWork(installed);
+    const original = current.battlefield.snapshot("draft");
+    assert.equal(currentAttack(current), 120);
+    assert.equal(installed.offense.attack.entries[0].group, group);
+    updateEffectState(current, 2, 0, descriptor.ref, () => ({ value: 2 }), resources, 0);
+    assert.equal(currentAttack(current), 140);
+    assert.equal(resolveAttackPower(2, original, resources.computations), 120);
     const address = { type: "EFFECT", unitId: 2, effectId: 0 };
-    setEffectEnabled(initial, address, false, resources, 0);
-    assert.equal(currentAttack(initial), 100);
-    setEffectEnabled(initial, address, true, resources, 0);
-    assert.equal(currentAttack(initial), 140);
-    removeEffect(initial, address, resources, 0);
-    assert.deepEqual(getUnit(initial, 2).offense.attack.entries, []);
+    setEffectEnabled(current, address, false, resources, 0);
+    assert.equal(currentAttack(current), 100);
+    setEffectEnabled(current, address, true, resources, 0);
+    assert.equal(currentAttack(current), 140);
+    removeEffect(current, address, resources, 0);
+    assert.deepEqual(getUnit(current, 2).offense.attack.entries, []);
+    assert.equal(installed.offense.attack.entries.length, 1);
+    assert.equal(resolveAttackPower(2, original, resources.computations), 120);
   }
 });
 
@@ -195,20 +189,19 @@ test("resources: a shared reference cannot replace an existing program descripto
   assert.equal(resources.create(original.ref, metadata).state.value, 1);
 });
 
-test("resources: publishing owns program behavior even when the caller's descriptor is mutable", () => {
+test("resources: registration shares the authored program and state updates retain previous values", () => {
   const resources = new CombatResources();
-  const descriptor = { ...program("mutable-program") };
+  const descriptor = program("shared-program");
   const registered = resources.registerEffect(descriptor);
   new BattleRuntime(spec(), { combat: resources });
-  descriptor.initialize = () => ({ value: 99 });
-  descriptor.ownState = () => ({ value: 99 });
-  descriptor.ref = program("replaced-reference").ref;
 
-  assert.equal(Object.isFrozen(registered), true);
-  assert.equal(resources.effects.get(registered.ref), registered);
+  assert.equal(registered, descriptor);
+  assert.equal(resources.effects.get(registered.ref), descriptor);
   const instance = resources.effects.create(registered.ref, metadata);
+  const nextState = { value: 2 };
+  const updated = resources.effects.update(instance, nextState);
   assert.equal(instance.state.value, 1);
-  assert.equal(resources.effects.update(instance, { value: 2 }).state.value, 2);
+  assert.equal(updated.state, nextState);
 });
 
 test("resources: failed composite registration invalidates the entire unpublished resource graph", () => {

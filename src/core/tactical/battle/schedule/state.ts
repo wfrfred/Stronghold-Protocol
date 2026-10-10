@@ -98,24 +98,12 @@ export function createSpawnScheduleExecution(
     };
 }
 
-function copyQueue(queue: SpawnQueueState): SpawnQueueState {
-    return { ...queue, spawns: [...queue.spawns] };
-}
-
-function copyMainWaveProgress(main: MainWaveProgress): MainWaveProgress {
-    if (main.phase === "FRAGMENTS") {
-        return { ...main, queue: main.queue === null ? null : copyQueue(main.queue) };
-    }
-
-    return { ...main };
-}
-
-export function cloneScheduleState(state: SpawnScheduleState): SpawnScheduleState {
+export function snapshotSchedule(state: SpawnScheduleState): SpawnScheduleState {
     const ledger: ScheduleLedger = {
         spawnedCount: state.spawnedCount,
         pendingSpawnCount: state.pendingSpawnCount,
-        managedWaveUnitIds: [...state.managedWaveUnitIds],
-        managedFinalUnitIds: [...state.managedFinalUnitIds],
+        managedWaveUnitIds: state.managedWaveUnitIds,
+        managedFinalUnitIds: state.managedFinalUnitIds,
         lastTick: state.lastTick,
     };
 
@@ -129,8 +117,8 @@ export function cloneScheduleState(state: SpawnScheduleState): SpawnScheduleStat
         waveIndex: state.waveIndex,
         waveStartedAtTick: state.waveStartedAtTick,
         fragmentStartedAtTick: state.fragmentStartedAtTick,
-        main: copyMainWaveProgress(state.main),
-        branchCursors: { ...state.branchCursors },
-        activeBranches: state.activeBranches.map(copyQueue),
+        main: state.main,
+        branchCursors: state.branchCursors,
+        activeBranches: state.activeBranches,
     };
 }

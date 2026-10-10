@@ -24,7 +24,7 @@ const address = instanceId => ({ type: "EFFECT", unitId: 0, effectId: instanceId
 const instances = work => getUnit(work, 0).effects.instances;
 const power = work => resolveAttackPower(0, battlefieldView(work));
 const program = (id, initial = {}) => createEffectProgram({
-  id, initialize: () => initial, ownState: state => ({ ...state }),
+  id, initialize: () => initial,
 });
 const owner = () => initializeUnit({
   id: 0, position: [0, 0], definition: { id: 'expiry-owner', offense: { attack: 100 } },
@@ -192,7 +192,7 @@ test('effect expiry: clearing a deadline and nested terminal removal are normal 
           context.effects.setTick(context.ref, null);
         } else {
           context.effects.finish([context.ref]);
-          context.effects.install(0, replacement.ref, { source: null, scopes: [], });
+          context.effects.install(0, replacement.ref, { source: null, scopes: [] });
           assert.equal(context.facts.getEffect(context.ref), undefined);
           assert.equal(context.instance.finished, true);
           assert.equal(context.instance.state.count, 1);
@@ -339,7 +339,7 @@ function runtimeScenario(failure) {
     lifecycle: { expire: context => {
       context.effects.update(context.ref, effect.ref, state => ({ layers: state.layers - 1 }));
       if (context.ref.unitId === 0) {
-        context.effects.install(0, marker.ref, { source: null, scopes: [], });
+        context.effects.install(0, marker.ref, { source: null, scopes: [] });
       }
       if (fault.enabled && context.ref.unitId === 1) {
         if (failure === 'exception') {

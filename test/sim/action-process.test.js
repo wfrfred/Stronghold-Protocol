@@ -7,7 +7,6 @@ import {
   acceptActionExecution,
   actionExecutionPermissions,
   cancelActionExecution,
-  copyActionExecutionState,
   createActionExecutionState,
   resumeActionExecution,
 } from "../../dist/core/tactical/unit/capability/action/process.js";
@@ -101,7 +100,7 @@ function accept(state = createActionExecutionState(), options = {}) {
 }
 
 function effectProgram(id) {
-  return createEffectProgram({ id, initialize: () => ({}), ownState: (value) => ({ ...value }) });
+  return createEffectProgram({ id, initialize: () => ({}) });
 }
 
 function installOwned(resources, ref, context, unitId = 1) {
@@ -133,8 +132,8 @@ test("action process: copying preserves samples and deterministic consumed/absol
   const bindings = new Map([["primary", [1]]]);
   const samples = { power: 10 };
   const accepted = accept(undefined, { bindings, samples });
-  bindings.get("primary").push(2);
-  samples.power = 900;
+  assert.equal(accepted.execution.bindings.primary, bindings.get("primary"));
+  assert.equal(accepted.execution.samples, samples);
   const segments = [
     {
       type: "EXECUTE",
@@ -158,7 +157,7 @@ test("action process: copying preserves samples and deterministic consumed/absol
     resources,
   );
   const execution = waiting.state.executions[0];
-  const copied = copyActionExecutionState(waiting.state);
+  const copied = waiting.state;
 
   assert.deepEqual(execution.bindings, { primary: [1] });
   assert.deepEqual(execution.samples, { power: 11 });
@@ -168,7 +167,7 @@ test("action process: copying preserves samples and deterministic consumed/absol
     allowNewAction: false,
   });
   assert.equal(copied.executions[0].definition, accepted.execution.definition);
-  assert.notEqual(copied.executions, waiting.state.executions);
+  assert.equal(copied.executions, waiting.state.executions);
   assertData(copied);
 
   const run = (initialState) => {
@@ -335,7 +334,7 @@ test("action process: install then query binds current targets and the next segm
   assert.deepEqual(accepted.state.executions[0].bindings, { primary: [1] });
   const completed = resumeActionExecution(
     original,
-    copyActionExecutionState(waiting.state),
+    waiting.state,
     { executionId: 0, segments, tick: 1 },
     resources,
   );
@@ -416,7 +415,6 @@ test("action process: content cancellation and normal finish retain completed pr
       createEffectProgram({
         id: "sampled-prefix",
         initialize: () => ({ power: 0 }),
-        ownState: (value) => ({ ...value }),
       }),
       {
         contributions: [liveAttack(({ instance }) => [

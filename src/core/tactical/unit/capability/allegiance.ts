@@ -22,12 +22,8 @@ export function createAllegianceState(state: Readonly<AllegianceState>): Allegia
     return Object.freeze({ side: state.side });
 }
 
-export function copyAllegianceState(state: Readonly<AllegianceState>): AllegianceState {
-    return { ...state };
-}
-
 export function initializeAllegianceState(definition: AllegianceState): AllegianceState {
-    return copyAllegianceState(definition);
+    return { side: definition.side };
 }
 
 export function areHostile(left: Unit, right: Unit): boolean {

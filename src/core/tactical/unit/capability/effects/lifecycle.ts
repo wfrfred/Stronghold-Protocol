@@ -28,7 +28,7 @@ import {
     type EffectInstanceValue,
     type Scope,
 } from "./instance.js";
-import { ownLifetime, ownScopes, withEffectLifecycle } from "./internal/instance.js";
+import { validateLifetime, withEffectLifecycle } from "./internal/instance.js";
 import {
     registerEffectInstance,
     replaceEffectInstance,
@@ -263,7 +263,7 @@ export function setEffectTick(state: BattleState, ref: EffectRef, tick: number |
             scopes.push({ type: "TICK", tick });
         }
 
-        return Object.freeze({ ...instance, scopes: ownScopes(scopes) });
+        return { ...instance, scopes };
     });
 }
 
@@ -561,11 +561,11 @@ export function closeEffectLifetimes(
     reason: EffectEndReason = "SCOPE_CLOSED",
     dispatch = new EffectDispatchScope(),
 ): void {
-    const owned = lifetimes.map(ownLifetime);
-    dispatch.markClosing(owned);
+    lifetimes.forEach(validateLifetime);
+    dispatch.markClosing(lifetimes);
     const roots: Ending[] = [];
 
-    for (const root of owned) {
+    for (const root of lifetimes) {
         for (const ref of effectDependents(state, root)) {
             roots.push({ ref, end: { root, reason } });
         }
@@ -742,7 +742,7 @@ export function bindEffectLifetime(
     lifetime: LifetimeRef,
     dispatch = new EffectDispatchScope(),
 ): EffectBindingResult {
-    lifetime = ownLifetime(lifetime);
+    validateLifetime(lifetime);
     const instance = getEffect(state, ref);
 
     if (instance === undefined) {
@@ -758,9 +758,10 @@ export function bindEffectLifetime(
         throw new TypeError("effect scopes cannot form a cycle");
     }
     if (!instance.scopes.some((scope) => sameLifetime(scope, lifetime))) {
-        changeInstance(state, ref, (instance) =>
-            Object.freeze({ ...instance, scopes: ownScopes([...instance.scopes, lifetime]) }),
-        );
+        changeInstance(state, ref, (instance) => ({
+            ...instance,
+            scopes: [...instance.scopes, lifetime],
+        }));
     }
 
     return { type: "BOUND" };
@@ -778,9 +779,9 @@ export function installEffect<S extends object>(
         return { type: "REJECTED", reason: "TARGET_ABSENT" };
     }
 
-    const prepared = resources.effects.restore(instance.programRef, instance);
+    resources.effects.get(instance.programRef);
 
-    return installPrepared(state, unitId, prepared, resources, tick, dispatch);
+    return installPrepared(state, unitId, instance, resources, tick, dispatch);
 }
 
 export function installNewEffect<S extends object>(
@@ -792,7 +793,7 @@ export function installNewEffect<S extends object>(
     tick: number,
     dispatch = new EffectDispatchScope(),
 ): EffectInstallationResult {
-    const scopes = ownScopes(input.scopes);
+    const scopes = input.scopes;
     const host = getUnit(state, unitId);
 
     if (host === undefined) {
@@ -829,7 +830,7 @@ function installPrepared<S extends object>(
     tick: number,
     dispatch: EffectDispatchScope,
 ): EffectInstallationResult {
-    const ref: EffectRef = Object.freeze({ type: "EFFECT", unitId, effectId: instance.id });
+    const ref: EffectRef = { type: "EFFECT", unitId, effectId: instance.id };
 
     if (getUnit(state, unitId) === undefined) {
         return { type: "REJECTED", reason: "TARGET_ABSENT" };

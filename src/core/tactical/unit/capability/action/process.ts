@@ -144,14 +144,7 @@ export interface ActionExecutionCancelRequest {
 export function createActionExecutionState(nextExecutionId = 0): ActionExecutionState {
     assertNonnegativeSafeInteger(nextExecutionId, "action execution identity");
 
-    return Object.freeze({ nextExecutionId, executions: Object.freeze([]) });
-}
-
-export function copyActionExecutionState(state: ActionExecutionState): ActionExecutionState {
-    return Object.freeze({
-        nextExecutionId: state.nextExecutionId,
-        executions: Object.freeze([...state.executions]),
-    });
+    return { nextExecutionId, executions: [] };
 }
 
 export function acceptActionExecution(

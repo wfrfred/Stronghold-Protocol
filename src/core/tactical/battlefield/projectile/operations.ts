@@ -1,4 +1,4 @@
-import { ownProjectileInstance, ProjectileWork } from "./internal/state.js";
+import { ProjectileWork } from "./internal/state.js";
 import { assertNonnegativeNumber, assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import type { SynchronousResult } from "../../../common/synchronous.js";
 import type { WorldPosition } from "../../geometry/coordinate.js";
@@ -33,7 +33,7 @@ export interface ProjectileOperations {
 export function withProjectileOperations(
     battlefield: ProjectileView,
     nextProjectileId: ProjectileId,
-    resources: Pick<ProjectileResources, "get" | "ownState">,
+    resources: ProjectileResources,
     tick: number,
     run: (operations: ProjectileOperations) => undefined,
 ): {
@@ -44,7 +44,7 @@ export function withProjectileOperations(
 export function withProjectileOperations<T>(
     battlefield: ProjectileView,
     nextProjectileId: ProjectileId,
-    resources: Pick<ProjectileResources, "get" | "ownState">,
+    resources: ProjectileResources,
     tick: number,
     run: (operations: ProjectileOperations) => SynchronousResult<T>,
 ): {
@@ -55,7 +55,7 @@ export function withProjectileOperations<T>(
 export function withProjectileOperations<T>(
     battlefield: ProjectileView,
     nextProjectileId: ProjectileId,
-    resources: Pick<ProjectileResources, "get" | "ownState">,
+    resources: ProjectileResources,
     tick: number,
     run: (operations: ProjectileOperations) => SynchronousResult<T>,
 ): {
@@ -101,7 +101,7 @@ export function withProjectileOperations<T>(
             }
 
             const program = resources.get(ref);
-            const instance = ownProjectileInstance({
+            const instance: ProjectileInstance = {
                 id: nextProjectileId,
                 programRef: ref,
                 source: input.source,
@@ -117,8 +117,8 @@ export function withProjectileOperations<T>(
                 expiresAtTick: input.expiresAtTick ?? null,
                 progress: { type: "FLYING" },
                 hitUnitIds: [],
-                state: resources.ownState(ref, input.initialState ?? program.initialize()),
-            });
+                state: input.initialState ?? program.initialize(),
+            };
             previous.add(instance);
             nextProjectileId = allocatedNextId;
 

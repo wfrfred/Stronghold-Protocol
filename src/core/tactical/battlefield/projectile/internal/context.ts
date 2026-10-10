@@ -8,7 +8,6 @@ import type {
     ProjectileQueryContext,
     ProjectileServices,
 } from "../context.js";
-import type { ProjectileProgram } from "../program.js";
 import type { ProjectileId, ProjectileInstance, ProjectileStopReason } from "../state.js";
 import { updateProjectileInstance } from "./state.js";
 
@@ -72,7 +71,6 @@ export function withProjectileQuery<S extends object, R>(
 
 export function withProjectileContext<S extends object>(
     instance: ProjectileInstance<S>,
-    program: ProjectileProgram<S>,
     services: ProjectileServices,
     access: ProjectileContextAccess,
     tick: number,
@@ -121,7 +119,7 @@ export function withProjectileContext<S extends object>(
             heal: (request) => services.settleHealing(readWork(), { ...request, tick }, dispatch),
             updateState: (transition) => {
                 const current = readProjectile();
-                const state = services.projectiles.ownState(program.ref, transition(current.state));
+                const state = transition(current.state);
                 const latest = readProjectile();
                 access.save(updateProjectileInstance(latest, { state }));
             },

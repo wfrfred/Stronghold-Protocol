@@ -84,27 +84,21 @@ test('action execution work: combat batching preserves execution order, samples,
   const expected = reference(initial, segments, resources, 0);
   const expectedOrder = [...observed];
   observed.length = 0;
-  const freeze = Object.freeze;
-  let executionArrays = 0;
-  Object.freeze = value => {
-    if (Array.isArray(value) && value.length === 256 && value[0]?.acceptedAtTick !== undefined) executionArrays++;
-    return freeze(value);
-  };
   const working = workingState(initial);
-  let actual;
-  try {
-    combat.advance(working, 0);
-    actual = working.actionExecutions.result();
-  }
-  finally { Object.freeze = freeze; }
+  assert.equal(working.actionExecutions.result(), initial.state);
+  combat.advance(working, 0);
+  const actual = working.actionExecutions.result();
+  assert.equal(working.actionExecutions.result(), actual);
+  assert.notEqual(actual, initial.state);
 
-  assert.equal(executionArrays, 1);
   assert.deepEqual(observed, expectedOrder);
   assert.deepEqual(actual, expected.state);
   assert.deepEqual(initial.state, before);
-  assert.equal(Object.isFrozen(actual), true);
-  assert.equal(Object.isFrozen(actual.executions), true);
-  assert.equal(actual.executions.every(execution => Object.isFrozen(execution)), true);
+  const originals = new Map(initial.state.executions.map(execution => [execution.id, execution]));
+  for (const execution of actual.executions) {
+    assert.equal(execution.definition, originals.get(execution.id).definition);
+    assert.equal(execution.bindings, originals.get(execution.id).bindings);
+  }
   assert.deepEqual(working.removedUnits, []);
   assert.deepEqual(working.events, []);
   assert.equal(combat.allowsMovement(actual, 0), false);
@@ -114,8 +108,15 @@ test('action execution work: combat batching preserves execution order, samples,
   assert.deepEqual(repeated.actionExecutions.result(), actual);
   const advanced = workingState(initial, actual, 1);
   combat.advance(advanced, 1);
-  assert.equal(advanced.actionExecutions.result().executions.every(execution => execution.wait.remainingTicks === 2), true);
+  const next = advanced.actionExecutions.result();
+  assert.equal(advanced.actionExecutions.result(), next);
+  assert.equal(next.executions.every(execution => execution.wait.remainingTicks === 2), true);
   assert.equal(actual.executions.every(execution => execution.wait.remainingTicks === 3), true);
+  const prior = new Map(actual.executions.map(execution => [execution.id, execution]));
+  for (const execution of next.executions) {
+    assert.equal(execution.bindings, prior.get(execution.id).bindings);
+    assert.equal(execution.samples, prior.get(execution.id).samples);
+  }
 });
 
 test('action execution work: absolute and same-tick consumed waits preserve unchanged state identities', () => {

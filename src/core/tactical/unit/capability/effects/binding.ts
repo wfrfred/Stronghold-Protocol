@@ -39,30 +39,12 @@ interface Fields<T extends SampledTarget = SampledTarget> {
     readonly reconcile?: Binding["reconcile"];
 }
 
-interface Compiled<T extends SampledTarget = SampledTarget> {
-    readonly id: string;
-    readonly target: T;
-    readonly group: (instance: EffectInstanceValue) => contribution.Group | undefined;
-    readonly reconcile?: Binding["reconcile"];
+function groupOf(binding: Fields, instance: EffectInstanceValue): contribution.Group | undefined {
+    return typeof binding.group === "function" ? binding.group(instance) : binding.group;
 }
 
-function ownBinding<T extends SampledTarget>(binding: Fields<T>): Compiled<T> {
-    const declaredGroup = binding.group;
-    const fixedGroup =
-        declaredGroup === undefined || typeof declaredGroup === "function"
-            ? undefined
-            : Object.freeze({ id: declaredGroup.id, strength: declaredGroup.strength });
-
-    return Object.freeze({
-        id: binding.id,
-        target: binding.target,
-        group: typeof declaredGroup === "function" ? declaredGroup : () => fixedGroup,
-        ...(binding.reconcile === undefined ? {} : { reconcile: binding.reconcile }),
-    });
-}
-
-function contributionBinding(unit: Unit, instance: EffectInstanceValue, binding: Compiled) {
-    const group = binding.group(instance);
+function contributionBinding(unit: Unit, instance: EffectInstanceValue, binding: Fields) {
+    const group = groupOf(binding, instance);
 
     return {
         id: `@effect/${instance.id}/${binding.id}`,
@@ -73,7 +55,7 @@ function contributionBinding(unit: Unit, instance: EffectInstanceValue, binding:
     };
 }
 
-function participationBinding(binding: Compiled): Binding["setParticipation"] {
+function participationBinding(binding: Fields): Binding["setParticipation"] {
     return (unit, instance, participating) =>
         binding.target(unit, (state) =>
             contribution.setParticipation(
@@ -84,7 +66,7 @@ function participationBinding(binding: Compiled): Binding["setParticipation"] {
         );
 }
 
-function removeBinding(binding: Compiled): Binding["remove"] {
+function removeBinding(binding: Fields): Binding["remove"] {
     return (unit, instance) =>
         binding.target(unit, (state) =>
             contribution.removeOwnedBy(state, {
@@ -101,24 +83,23 @@ export function live(
         readonly evaluate: computation.Compute<Context>;
     },
 ): Binding {
-    const owned = ownBinding(binding);
     const { evaluator, computations, evaluate } = binding;
     computations.register(evaluator, evaluate);
 
     return {
         install: (unit, instance) =>
-            owned.target(unit, (state) =>
+            binding.target(unit, (state) =>
                 contribution.register(state, {
                     kind: "LIVE",
-                    ...contributionBinding(unit, instance, owned),
+                    ...contributionBinding(unit, instance, binding),
                     evaluator,
                 }),
             ),
         update: (unit, instance) => {
-            const group = owned.group(instance);
+            const group = groupOf(binding, instance);
 
-            return owned.target(unit, (state) =>
-                contribution.update(state, `@effect/${instance.id}/${owned.id}`, (entry) => {
+            return binding.target(unit, (state) =>
+                contribution.update(state, `@effect/${instance.id}/${binding.id}`, (entry) => {
                     const { group: previousGroup, ...unchanged } = entry;
 
                     return previousGroup === group
@@ -127,9 +108,9 @@ export function live(
                 }),
             );
         },
-        setParticipation: participationBinding(owned),
-        remove: removeBinding(owned),
-        ...(owned.reconcile === undefined ? {} : { reconcile: owned.reconcile }),
+        setParticipation: participationBinding(binding),
+        remove: removeBinding(binding),
+        ...(binding.reconcile === undefined ? {} : { reconcile: binding.reconcile }),
     };
 }
 
@@ -138,29 +119,30 @@ export function sampled(
         readonly sample: (instance: EffectInstanceValue) => readonly modifier.Value[];
     },
 ): Binding {
-    const owned = ownBinding(binding);
     const { sample } = binding;
     const projected = (unit: Unit, instance: EffectInstanceValue): contribution.Sampled => ({
         kind: "SAMPLED",
-        ...contributionBinding(unit, instance, owned),
+        ...contributionBinding(unit, instance, binding),
         values: sample(instance),
     });
 
     return {
         install: (unit, instance) =>
-            owned.target(unit, (state) => contribution.register(state, projected(unit, instance))),
+            binding.target(unit, (state) =>
+                contribution.register(state, projected(unit, instance)),
+            ),
         update: (unit, instance) => {
             const updated = projected(unit, instance);
 
-            return owned.target(unit, (state) =>
+            return binding.target(unit, (state) =>
                 contribution.update(state, updated.id, (entry) => ({
                     ...updated,
                     participating: entry.participating,
                 })),
             );
         },
-        setParticipation: participationBinding(owned),
-        remove: removeBinding(owned),
-        ...(owned.reconcile === undefined ? {} : { reconcile: owned.reconcile }),
+        setParticipation: participationBinding(binding),
+        remove: removeBinding(binding),
+        ...(binding.reconcile === undefined ? {} : { reconcile: binding.reconcile }),
     };
 }

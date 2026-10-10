@@ -209,12 +209,6 @@ export function changePredefinedInstances(
     };
 }
 
-export function copyPredefinedPresence(
-    presence: readonly PredefinedPresence[],
-): readonly PredefinedPresence[] {
-    return presence.map((binding) => ({ ...binding, source: { ...binding.source } }));
-}
-
 export function reconcilePredefinedPresence(
     presence: readonly PredefinedPresence[],
     battlefield: BattlefieldView,

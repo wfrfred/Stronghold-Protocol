@@ -54,7 +54,7 @@ export interface ProjectileContactContext<
 }
 
 export interface ProjectileServices extends EffectTransitionResources {
-    readonly projectiles: Pick<ProjectileResources, "ownState" | "withProgram">;
+    readonly projectiles: ProjectileResources;
     readonly computations: computation.Computations<Context>;
     readonly settleDamage: DamageOperation;
     readonly settleHealing: HealingOperation;

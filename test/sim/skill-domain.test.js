@@ -144,7 +144,7 @@ test("content refusal retains effect prefix and allocated identities while refun
       return { type: "REJECTED", reason: "later prerequisite unavailable" };
     },
   });
-  ref = f.resources.registerEffect(createEffectProgram({ id: "skill-rejected-prefix", initialize: () => ({}), ownState: (value) => value })).ref;
+  ref = f.resources.registerEffect(createEffectProgram({ id: "skill-rejected-prefix", initialize: () => ({}) })).ref;
   const rejected = activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources);
   assert.equal(rejected.result.reason, "CONTENT_REJECTED");
   const unit = getUnit(f.work, 1);
@@ -169,7 +169,7 @@ test("content refusal closes activation scopes while independent effects survive
     },
   });
   ref = f.resources.registerEffect(createEffectProgram({
-    id: "activation-refusal-scopes", initialize: () => ({}), ownState: (state) => state,
+    id: "activation-refusal-scopes", initialize: () => ({}),
   })).ref;
   const refused = activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources);
   const unit = getUnit(f.work, 1);
@@ -203,7 +203,7 @@ test("zero-duration activation closes its scope before skill finish content", ()
     },
   });
   ref = f.resources.registerEffect(createEffectProgram({
-    id: "zero-duration-scope", initialize: () => ({}), ownState: (state) => state,
+    id: "zero-duration-scope", initialize: () => ({}),
   })).ref;
   const activated = activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources);
   assert.deepEqual(activated.signals.map(({ type }) => type), ["SKILL_ACTIVATED", "SKILL_FINISHED"]);
@@ -228,7 +228,7 @@ test("skill finish rejects binding a surviving independent effect to its closed 
     },
   });
   program = f.resources.registerEffect(createEffectProgram({
-    id: "independent-skill-binding", initialize: () => ({}), ownState: (state) => state,
+    id: "independent-skill-binding", initialize: () => ({}),
   })).ref;
   activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources);
   finishSkill(f.work, 1, 30, f.resources);
@@ -265,10 +265,10 @@ for (const trigger of ["SKILL", "EFFECT", "TICK"]) {
       },
     });
     parent = f.resources.registerEffect(createEffectProgram({
-      id: `combined-parent-${trigger}`, initialize: () => ({}), ownState: (state) => state,
+      id: `combined-parent-${trigger}`, initialize: () => ({}),
     })).ref;
     dependent = f.resources.registerEffect(createEffectProgram({
-      id: `combined-dependent-${trigger}`, initialize: () => ({}), ownState: (state) => state,
+      id: `combined-dependent-${trigger}`, initialize: () => ({}),
     }), {
       lifecycle: {
         expire: (context) => {

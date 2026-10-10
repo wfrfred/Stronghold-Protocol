@@ -34,7 +34,6 @@ function program(id) {
   return createEffectProgram({
     id,
     initialize: () => ({ uses: 0 }),
-    ownState: (value) => ({ ...value }),
   });
 }
 

@@ -32,7 +32,6 @@ const unit = id => initializeUnit({ id, definition: { id: `receiver-${id}` }, po
 const program = id => createEffectProgram({
     id,
     initialize: () => ({}),
-    ownState: value => value,
 });
 
 function actionDefinition() {

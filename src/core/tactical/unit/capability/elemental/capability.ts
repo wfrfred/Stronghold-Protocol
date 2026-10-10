@@ -120,15 +120,6 @@ export function initializeElementalState(
     };
 }
 
-export function copyElementalState(state: Readonly<ElementalState>): ElementalState {
-    return {
-        ep: Object.freeze({ ...state.ep }),
-        immune: state.immune,
-        recovery: state.recovery === null ? null : Object.freeze({ ...state.recovery }),
-        lastRecoveryTick: state.lastRecoveryTick,
-    };
-}
-
 export function setElementalImmunity<U extends Unit>(
     input: U | StableUnit<U>,
     immune: boolean,

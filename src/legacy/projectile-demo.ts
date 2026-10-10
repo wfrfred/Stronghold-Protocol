@@ -20,7 +20,6 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
         createEffectProgram({
             id: "contact-mark",
             initialize: () => ({}),
-            ownState: () => ({}),
         }),
         { bindings: [compileStatusBinding(["HEAL_FREE"])] },
     );
@@ -28,7 +27,6 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
         createEffectProgram({
             id: "post-launch-attack-boost",
             initialize: () => ({}),
-            ownState: () => ({}),
         }),
         {
             contributions: [
@@ -48,7 +46,6 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
         createProjectileProgram({
             id: cachedOnly ? "cached-atk-shell" : "live-atk-shell",
             initialize: () => ({}),
-            ownState: () => ({}),
             acceptsContact: (context, target) =>
                 target.id === context.projectile.traceTarget &&
                 hasAllegiance(target) &&

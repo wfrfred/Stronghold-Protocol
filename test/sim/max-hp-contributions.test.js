@@ -48,7 +48,6 @@ const program = (id, amount) =>
     createEffectProgram({
         id,
         initialize: () => ({ amount, revision: 0 }),
-        ownState: (state) => ({ ...state }),
     });
 const install = (work, ref, resources, patch = {}) => {
     installNewEffect(
@@ -464,7 +463,7 @@ const invalid: VitalityState = { hp: 100, maxHp: contribution.create([{ id: 'hp'
 // @ts-expect-error Blocking cannot hold a live contribution.
 const invalidBlocker: BlockerState = { capacity: contribution.create([{ id: 'capacity', sequence: 0, kind: "LIVE", participating: true, evaluator: 'capacity' }]), enabled: true, geometry: { radius: 1 } };
 const combat = new CombatResources();
-const effect = createEffectProgram({ id: 'hp', initialize: () => ({ bonus: 100 }), ownState: state => ({ ...state }) });
+const effect = createEffectProgram({ id: 'hp', initialize: () => ({ bonus: 100 }) });
 const bonus = (amount: number) => [{ addition: 0, multiplier: 0, finalAddition: amount, finalScaler: 1 }];
 combat.registerEffect(effect, { contributions: [
     maxHp(instance => bonus(instance.state.bonus)),

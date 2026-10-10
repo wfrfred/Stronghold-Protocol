@@ -1,62 +1,7 @@
 import { assertNonnegativeSafeInteger } from "../../../../../common/assert.js";
-import { copyEffectInstance } from "./instance.js";
 import type { EffectInstanceValue } from "../instance.js";
-import type { Effects, EffectsState } from "../capability.js";
+import type { Effects } from "../capability.js";
 import { widenUnit, type StableUnit, type Unit } from "../../../unit.js";
-
-const ownedArrays = new WeakSet<readonly EffectInstanceValue[]>();
-const ownedStates = new WeakSet<EffectsState>();
-
-function effectsState(state: EffectsState): EffectsState {
-    const owned = Object.freeze(state);
-    ownedStates.add(owned);
-
-    return owned;
-}
-
-function ownInstanceArray(instances: EffectInstanceValue[]): readonly EffectInstanceValue[] {
-    Object.freeze(instances);
-    ownedArrays.add(instances);
-
-    return instances;
-}
-
-export function ownEffectsState(state: EffectsState): EffectsState {
-    const { instances, nextInstanceId, nextAcquiredSequence } = state;
-
-    if (ownedStates.has(state)) {
-        return state;
-    }
-
-    assertNonnegativeSafeInteger(nextInstanceId, "effect instance allocation progress", TypeError);
-    assertNonnegativeSafeInteger(
-        nextAcquiredSequence,
-        "effect acquired sequence allocation progress",
-        TypeError,
-    );
-
-    const ids = new Set<number>();
-    const owned: EffectInstanceValue[] = [];
-
-    for (const instance of instances) {
-        if (ids.has(instance.id)) {
-            throw new TypeError(`duplicate effect instance ${instance.id}`);
-        }
-        if (instance.id >= nextInstanceId || instance.acquiredSequence >= nextAcquiredSequence) {
-            throw new TypeError("effect allocation progress must exceed registered identities");
-        }
-
-        ids.add(instance.id);
-
-        owned.push(copyEffectInstance(instance));
-    }
-
-    return effectsState({
-        instances: ownedArrays.has(instances) ? instances : ownInstanceArray(owned),
-        nextInstanceId,
-        nextAcquiredSequence,
-    });
-}
 
 export function replaceEffectInstances<U extends Unit>(
     input: U | StableUnit<U>,
@@ -68,7 +13,7 @@ export function replaceEffectInstances<U extends Unit>(
         nextAcquiredSequence: 0,
     };
 
-    return { ...unit, effects: ownEffectsState({ ...progress, instances }) };
+    return { ...unit, effects: { ...progress, instances } };
 }
 
 export function replaceEffectInstance<U extends Unit & Effects>(
@@ -77,7 +22,7 @@ export function replaceEffectInstance<U extends Unit & Effects>(
     updated: EffectInstanceValue,
 ): StableUnit<U> {
     const unit = widenUnit<U>(input);
-    const previous = ownEffectsState(unit.effects);
+    const previous = unit.effects;
     const index = previous.instances.indexOf(instance);
 
     if (index === -1 || updated === instance) {
@@ -89,15 +34,9 @@ export function replaceEffectInstance<U extends Unit & Effects>(
     }
 
     const instances = [...previous.instances];
-    instances[index] = copyEffectInstance(updated);
+    instances[index] = updated;
 
-    return {
-        ...unit,
-        effects: effectsState({
-            ...previous,
-            instances: ownInstanceArray(instances),
-        }),
-    };
+    return { ...unit, effects: { ...previous, instances } };
 }
 
 export function removeEffectInstance<U extends Unit & Effects>(
@@ -105,26 +44,14 @@ export function removeEffectInstance<U extends Unit & Effects>(
     instanceId: number,
 ): StableUnit<U> {
     const unit = widenUnit<U>(input);
-    const previous = ownEffectsState(unit.effects);
-    const instances: EffectInstanceValue[] = [];
-
-    for (const instance of previous.instances) {
-        if (instance.id !== instanceId) {
-            instances.push(instance);
-        }
-    }
+    const previous = unit.effects;
+    const instances = previous.instances.filter((instance) => instance.id !== instanceId);
 
     if (instances.length === previous.instances.length) {
         return unit;
     }
 
-    return {
-        ...unit,
-        effects: effectsState({
-            ...previous,
-            instances: ownInstanceArray(instances),
-        }),
-    };
+    return { ...unit, effects: { ...previous, instances } };
 }
 
 export function registerEffectInstance<U extends Unit>(
@@ -132,13 +59,11 @@ export function registerEffectInstance<U extends Unit>(
     instance: EffectInstanceValue,
 ): StableUnit<U> & Effects {
     const unit = widenUnit<U>(input);
-    const previous = ownEffectsState(
-        unit.effects ?? {
-            instances: [],
-            nextInstanceId: 0,
-            nextAcquiredSequence: 0,
-        },
-    );
+    const previous = unit.effects ?? {
+        instances: [],
+        nextInstanceId: 0,
+        nextAcquiredSequence: 0,
+    };
 
     if (
         instance.id < previous.nextInstanceId ||
@@ -161,10 +86,10 @@ export function registerEffectInstance<U extends Unit>(
 
     return {
         ...unit,
-        effects: effectsState({
-            instances: ownInstanceArray([...previous.instances, copyEffectInstance(instance)]),
+        effects: {
+            instances: [...previous.instances, instance],
             nextInstanceId,
             nextAcquiredSequence,
-        }),
+        },
     };
 }

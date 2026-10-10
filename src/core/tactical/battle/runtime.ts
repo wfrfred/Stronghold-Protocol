@@ -3,20 +3,16 @@ import { advanceEffects, validateEffectLifetimes } from "../unit/capability/effe
 import { ActionExecutionWork } from "../unit/capability/action/internal/executions.js";
 import { assert, assertNonnegativeNumber, assertPositiveSafeInteger } from "../../common/assert.js";
 import { BattlefieldRuntime } from "../battlefield/runtime.js";
-import { copyNavigationModifier } from "../battlefield/navigation/modifier.js";
 import type { NavigationMaps } from "../battlefield/navigation/map.js";
-import { copyProjectileState } from "../battlefield/projectile/state.js";
 import { copyUnitSnapshot } from "../unit/snapshot.js";
 import type { compileAction } from "../unit/capability/action/compile.js";
 import {
-    copyActionExecutionState,
     createActionExecutionState,
     type ActionExecutionState,
 } from "../unit/capability/action/process.js";
 import type { BattleExecutionState } from "./execution/state.js";
 import {
     predefinedIdsForAlias,
-    copyPredefinedPresence,
     reconcilePredefinedPresence,
     advancePredefined,
     type PredefinedPresence,
@@ -38,7 +34,7 @@ import {
 } from "./schedule/runtime.js";
 import { createSpawnScheduleDefinition } from "./schedule/definition.js";
 import {
-    cloneScheduleState,
+    snapshotSchedule,
     createSpawnScheduleExecution,
     type SpawnScheduleExecution,
 } from "./schedule/state.js";
@@ -60,10 +56,6 @@ interface BattleRuntimeState {
     readonly execution: BattleExecutionState;
     readonly completedRouteCount: number;
     readonly result: Result | null;
-}
-
-function copyResult(result: Result | null): Result | null {
-    return result === null ? null : { ...result, remainingUnitIds: [...result.remainingUnitIds] };
 }
 
 export class BattleRuntime {
@@ -135,7 +127,7 @@ export class BattleRuntime {
     }
 
     get result(): Result | null {
-        return copyResult(this.#state.result);
+        return this.#state.result;
     }
 
     get spawnCounts(): { readonly spawnedCount: number; readonly unspawnedCount: number } {
@@ -158,23 +150,23 @@ export class BattleRuntime {
 
         return {
             tickIndex,
-            spawning: cloneScheduleState(schedule),
-            predefinedPresence: copyPredefinedPresence(predefinedPresence),
-            actionExecution: copyActionExecutionState(actionExecution),
-            projectiles: copyProjectileState({
+            spawning: snapshotSchedule(schedule),
+            predefinedPresence,
+            actionExecution,
+            projectiles: {
                 nextProjectileId: execution.nextProjectileId,
                 instances: view.projectileIds.map((id) => view.getProjectile(id)!),
-            }),
-            execution: { ...execution },
+            },
+            execution,
             units: view.unitIds.map((id) => copyUnitSnapshot(view.getUnit(id)!)),
-            blockingRelations: view.blockingRelations.map((relation) => ({ ...relation })),
-            supportRelations: view.supportRelations.map((relation) => ({ ...relation })),
-            mechanisms: view.mechanismIds.map((id) => ({ ...view.getMechanism(id)! })),
+            blockingRelations: view.blockingRelations,
+            supportRelations: view.supportRelations,
+            mechanisms: view.mechanismIds.map((id) => view.getMechanism(id)!),
             navigationModifiers: view.navigationModifierIds.map((id) =>
-                copyNavigationModifier(view.getNavigationModifier(id)!),
+                view.getNavigationModifier(id)!,
             ),
             completedRouteCount,
-            result: copyResult(result),
+            result,
         };
     }
 
@@ -254,7 +246,7 @@ export class BattleRuntime {
                   }
                 : null;
 
-        const output: Step = { events: finishedEvents.events, result: copyResult(result) };
+        const output: Step = { events: finishedEvents.events, result };
 
         const nextState: BattleRuntimeState = {
             ...previous,

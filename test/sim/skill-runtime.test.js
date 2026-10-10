@@ -43,7 +43,7 @@ function target() {
 function scenario(skill, { targets = 1, content, compile } = {}) {
   const resources = new CombatResources();
   const buff = resources.registerEffect(createEffectProgram({
-    id: 'skill/attack', initialize: () => ({}), ownState: (value) => ({ ...value }),
+    id: 'skill/attack', initialize: () => ({}),
   }), { contributions: [attack(() => [modifier({ multiplier: 1 })])] });
   const fault = { enabled: false };
   resources.skills.register({ definition: skill, activate: content ?? ((context) => {

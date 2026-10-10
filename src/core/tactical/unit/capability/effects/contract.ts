@@ -100,7 +100,7 @@ export interface EffectCompetition {
 }
 
 export interface EffectTransitionResources {
-    readonly effects: Pick<EffectResources, "create" | "restore" | "typedInstance" | "update">;
+    readonly effects: Pick<EffectResources, "create" | "get" | "typedInstance" | "update">;
     readonly effectBindings: EffectBindings;
     readonly effectLifecycle: Pick<EffectLifecycleResources, "get">;
     readonly settleDamage?: DamageOperation;

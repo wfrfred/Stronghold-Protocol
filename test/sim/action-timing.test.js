@@ -57,7 +57,7 @@ function target() {
 
 function register(resources, speed = 100, time = modifier.create()) {
     return resources.registerEffect(createEffectProgram({
-        id: "timing-buff", initialize: () => ({ speed, time }), ownState: (state) => ({ ...state }),
+        id: "timing-buff", initialize: () => ({ speed, time }),
     }), { contributions: [
         attackSpeed((instance) => [modifier.create({ addition: instance.state.speed })]),
         baseAttackTime((instance) => [instance.state.time]),
@@ -134,7 +134,7 @@ test("action timing: ASPD attribute floor, interval cap and BAT algebra remain d
     assert.deepEqual(valuesAt(original, resources), [100, 30, 30]);
 });
 
-test("action timing: lifecycle updates both slots and snapshots share only owned contributions", () => {
+test("action timing: lifecycle updates both slots and snapshots retain shared immutable contributions", () => {
     const resources = new CombatResources();
     const program = register(resources, 100, modifier.create({ finalScaler: 0.5 }));
     const initial = effectFixtureWork(actor(), target());
@@ -143,7 +143,8 @@ test("action timing: lifecycle updates both slots and snapshots share only owned
     assert.deepEqual(values(installed, resources), [200, 15, 7.5]);
     const copied = copyUnitSnapshot(getUnit(installed, 0));
     assert.equal(copied.action.attackSpeed.entries, getUnit(installed, 0).action.attackSpeed.entries);
-    assert.ok(Object.isFrozen(copied.action.attackSpeed.entries));
+    assert.equal(copied.action, getUnit(installed, 0).action);
+    assert.equal(copied.action.baseAttackTime.entries, getUnit(installed, 0).action.baseAttackTime.entries);
     setEffectEnabled(installed, address, false, resources, 1);
     assert.deepEqual(values(installed, resources), [100, 30, 30]);
     setEffectEnabled(installed, address, true, resources, 2);
@@ -192,7 +193,7 @@ test("action timing: BAT changes adjust cooldown without rescaling recovery", ()
 
 test("action timing: live values read current facts rather than installation samples", () => {
     const resources = new CombatResources();
-    const program = resources.registerEffect(createEffectProgram({ id: "live-timing", initialize: () => ({}), ownState: (state) => state }), {
+    const program = resources.registerEffect(createEffectProgram({ id: "live-timing", initialize: () => ({}) }), {
         contributions: [
             liveAttackSpeed(({ unit }) => [modifier.create({ addition: unit.vitality.hp })]),
             liveBaseAttackTime(({ unit }) => [modifier.create({ addition: unit.vitality.hp / 10 })]),

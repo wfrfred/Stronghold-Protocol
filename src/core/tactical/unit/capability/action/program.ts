@@ -10,11 +10,3 @@ export interface CompiledAction {
     ) => ReadonlyMap<TargetBindingId, readonly UnitId[]>;
     readonly program: readonly CompiledActionSegment[];
 }
-
-export function ownCompiledAction(compiled: CompiledAction): CompiledAction {
-    return Object.freeze({
-        definition: compiled.definition,
-        bind: compiled.bind,
-        program: Object.freeze(compiled.program.map((segment) => Object.freeze({ ...segment }))),
-    });
-}

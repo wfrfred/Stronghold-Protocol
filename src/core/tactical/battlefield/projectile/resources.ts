@@ -1,15 +1,9 @@
-import { ownDataRecord } from "../../../common/immutable-data.js";
 import { ResourceRegistration } from "../../../common/resource-registration.js";
 import type { ProjectileProgram, ProjectileProgramRef } from "./program.js";
 import type { ProjectileInstance } from "./state.js";
 
-interface RegisteredProjectileProgram {
-    readonly source: object;
-    readonly program: ProjectileProgram<object>;
-}
-
 export class ProjectileResources {
-    readonly #programs = new Map<string, RegisteredProjectileProgram>();
+    readonly #programs = new Map<string, ProjectileProgram<object>>();
     readonly #registration: ResourceRegistration;
 
     constructor(registration = new ResourceRegistration()) {
@@ -21,42 +15,27 @@ export class ProjectileResources {
         const existing = this.#programs.get(program.ref.id);
 
         if (existing !== undefined) {
-            if (existing.source !== program && existing.program !== (program as unknown)) {
+            if (existing !== (program as unknown)) {
                 throw new TypeError(`duplicate projectile program ${program.ref.id}`);
             }
 
-            return existing.program as unknown as ProjectileProgram<S>;
+            return existing as unknown as ProjectileProgram<S>;
         }
 
-        const owned = Object.freeze({
-            ref: program.ref,
-            initialize: program.initialize,
-            ownState: program.ownState,
-            acceptsContact: program.acceptsContact,
-            ...(program.contact === undefined ? {} : { contact: program.contact }),
-            ...(program.stop === undefined ? {} : { stop: program.stop }),
-        });
-        this.#programs.set(program.ref.id, {
-            source: program,
-            program: owned as unknown as ProjectileProgram<object>,
-        });
+        this.#programs.set(program.ref.id, program as unknown as ProjectileProgram<object>);
 
-        return owned;
+        return program;
     }
 
     get<S extends object>(ref: ProjectileProgramRef<S>): ProjectileProgram<S> {
         this.#registration.assertUsable();
-        const program = this.#programs.get(ref.id)?.program;
+        const program = this.#programs.get(ref.id);
 
         if (program?.ref !== (ref as unknown)) {
             throw new TypeError(`unregistered projectile program ${ref.id}`);
         }
 
         return program as unknown as ProjectileProgram<S>;
-    }
-
-    ownState<S extends object>(ref: ProjectileProgramRef<S>, value: NoInfer<S>): S {
-        return ownDataRecord(this.get(ref).ownState(value), "projectile state");
     }
 
     withProgram<R>(

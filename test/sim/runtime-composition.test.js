@@ -113,7 +113,6 @@ function scenario({ failure = null, cancelled = false } = {}) {
     program = resources.registerEffect(createEffectProgram({
       id,
       initialize: () => ({ starts: 0, enables: 0 }),
-      ownState: (state) => ({ ...state }),
     }), {
       contributions: [liveAttack(() => [modifier.create({ finalAddition: addition })])],
       bindings: flags.length === 0 ? [] : [compileStatusBinding(flags)],
@@ -138,7 +137,6 @@ function scenario({ failure = null, cancelled = false } = {}) {
   const refused = resources.registerEffect(createEffectProgram({
     id: "refused-installation",
     initialize: () => ({}),
-    ownState: (state) => ({ ...state }),
   }), {
     lifecycle: {
       start: (context) => {
@@ -154,7 +152,6 @@ function scenario({ failure = null, cancelled = false } = {}) {
   receiver = resources.registerEffect(createEffectProgram({
     id: "aura-receiver",
     initialize: () => ({ starts: 0, enables: 0, uses: 0 }),
-    ownState: (state) => ({ ...state }),
   }), {
     contributions: [liveAttack(() => [modifier.create({ finalAddition: 5 })])],
     lifecycle: {
@@ -213,7 +210,6 @@ function scenario({ failure = null, cancelled = false } = {}) {
   aura = resources.registerEffect(createEffectProgram({
     id: "combined-aura",
     initialize: () => ({ remaining: 3, consumed: 0, receivers: [] }),
-    ownState: (state) => ({ ...state }),
   }), { lifecycle: {
     advance: context => {
       if (context.tick >= 3) {
@@ -240,7 +236,6 @@ function scenario({ failure = null, cancelled = false } = {}) {
   const shell = resources.projectiles.register(createProjectileProgram({
     id: "combined-shell",
     initialize: () => ({ contacts: 0 }),
-    ownState: (state) => ({ ...state }),
     acceptsContact: (context, unit) =>
       unit.id === context.projectile.traceTarget && !hasStatusFlag(unit, "INVISIBLE"),
     contact: (context) => {

@@ -6,7 +6,7 @@ import { createEffectProgram } from '../../dist/core/tactical/unit/capability/ef
 import { finishEffects, closeEffectLifetimes, installNewEffect, bindEffectLifetime } from '../../dist/core/tactical/unit/capability/effects/lifecycle.js';
 import { effectFixtureWork } from '../helpers/effects.js';
 const host = id => ({ id, definition: { id: `host-${id}` }, position: [0, 0] });
-const program = id => createEffectProgram({ id, initialize: () => ({}), ownState: state => state });
+const program = id => createEffectProgram({ id, initialize: () => ({}) });
 const input = { source: null, scopes: [] };
 
 test('effect batching: overlapping roots and diamond dependencies mark the complete set before deterministic callbacks', () => {

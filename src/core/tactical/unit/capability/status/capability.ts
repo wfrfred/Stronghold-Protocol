@@ -49,79 +49,6 @@ export interface StatusUnitDefinition extends UnitDefinition {
 
 export type EffectiveStatusFlags = ReadonlySet<StatusFlag>;
 
-const ownedFlags = new WeakSet<readonly StatusFlag[]>();
-const ownedContributionValues = new WeakSet<StatusContribution>();
-const ownedContributions = new WeakSet<readonly StatusContribution[]>();
-
-function createFlags(flags: readonly StatusFlag[]): readonly StatusFlag[] {
-    if (ownedFlags.has(flags)) {
-        return flags;
-    }
-
-    const snapshot = new Set<StatusFlag>();
-
-    for (let index = 0; index < flags.length; index++) {
-        if (!Object.hasOwn(flags, index)) {
-            throw new TypeError(`missing status flag at index ${index}`);
-        }
-
-        snapshot.add(flags[index]!);
-    }
-
-    const owned = Object.freeze([...snapshot]);
-
-    ownedFlags.add(owned);
-
-    return owned;
-}
-
-function createContribution(contribution: StatusContribution): StatusContribution {
-    if (ownedContributionValues.has(contribution)) {
-        return contribution;
-    }
-    if (contribution.id.length === 0) {
-        throw new TypeError("status contribution id must be nonempty");
-    }
-
-    const owned = Object.freeze({
-        id: contribution.id,
-        flags: createFlags(contribution.flags),
-        participating: contribution.participating,
-    });
-
-    ownedContributionValues.add(owned);
-
-    return owned;
-}
-
-function ownContributions(
-    contributions: readonly StatusContribution[],
-): readonly StatusContribution[] {
-    if (ownedContributions.has(contributions)) {
-        return contributions;
-    }
-
-    const ids = new Set<StatusContributionId>();
-    const snapshot: StatusContribution[] = [];
-
-    for (const contribution of contributions) {
-        const owned = createContribution(contribution);
-
-        if (ids.has(owned.id)) {
-            throw new TypeError(`duplicate status contribution ${owned.id}`);
-        }
-
-        ids.add(owned.id);
-        snapshot.push(owned);
-    }
-
-    const owned = Object.freeze(snapshot);
-
-    ownedContributions.add(owned);
-
-    return owned;
-}
-
 export function hasStatus<U extends Unit>(
     unit: U,
 ): unit is U & Status & Unit<U["definition"] & StatusUnitDefinition> {
@@ -138,22 +65,18 @@ export function hasStatusFlag(unit: Unit, flag: StatusFlag): boolean {
 }
 
 export function createStatusDefinition(definition: StatusDefinition): StatusDefinition {
-    return Object.freeze({ initialFlags: createFlags(definition.initialFlags) });
-}
-
-export function copyStatusState(state: StatusState): StatusState {
-    return { contributions: ownContributions(state.contributions) };
+    return definition;
 }
 
 export function initializeStatusState(definition: StatusDefinition): StatusState {
     return {
-        contributions: ownContributions([
+        contributions: [
             {
                 id: BASELINE_STATUS_CONTRIBUTION_ID,
                 flags: definition.initialFlags,
                 participating: true,
             },
-        ]),
+        ],
     };
 }
 
@@ -161,19 +84,25 @@ export function addStatusContribution(
     state: StatusState,
     contribution: StatusContributionInput,
 ): StatusState {
+    if (contribution.id.length === 0) {
+        throw new TypeError("status contribution id must be nonempty");
+    }
     if (contribution.id === BASELINE_STATUS_CONTRIBUTION_ID) {
         throw new TypeError("baseline status contribution is reserved");
     }
+    if (state.contributions.some(({ id }) => id === contribution.id)) {
+        throw new TypeError(`duplicate status contribution ${contribution.id}`);
+    }
 
     return {
-        contributions: ownContributions([
+        contributions: [
             ...state.contributions,
             {
                 id: contribution.id,
                 flags: contribution.flags,
                 participating: contribution.participating ?? true,
             },
-        ]),
+        ],
     };
 }
 
@@ -193,10 +122,8 @@ export function setStatusContributionParticipation(
     }
 
     return {
-        contributions: ownContributions(
-            state.contributions.map((contribution) =>
-                contribution === current ? { ...contribution, participating } : contribution,
-            ),
+        contributions: state.contributions.map((contribution) =>
+            contribution === current ? { ...contribution, participating } : contribution,
         ),
     };
 }
@@ -215,7 +142,7 @@ export function removeStatusContribution(
         return state;
     }
 
-    return { contributions: ownContributions(contributions) };
+    return { contributions };
 }
 
 export function deriveEffectiveStatusFlags(state: StatusState): EffectiveStatusFlags {

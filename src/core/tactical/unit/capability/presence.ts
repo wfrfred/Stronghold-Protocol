@@ -15,9 +15,3 @@ export function hasSpatialPresence(unit: Unit): unit is Unit & SpatialPresence {
 export function isSpatiallyPresent(unit: Unit): boolean {
     return !hasSpatialPresence(unit) || unit.spatialPresence.present;
 }
-
-export function copySpatialPresenceState(
-    state: Readonly<SpatialPresenceState>,
-): SpatialPresenceState {
-    return { ...state };
-}

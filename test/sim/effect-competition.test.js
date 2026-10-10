@@ -38,7 +38,6 @@ function definition(resources, id = 'inspiration', lifecycle = {}, onSample = ()
   return resources.registerEffect(createEffectProgram({
     id,
     initialize: () => ({ ratio: 0.5, sourceAttack: 100, hpBonus: 1000 }),
-    ownState: state => ({ ...state }),
   }), {
     contributions: [
       attack(instance => { onSample(instance); return [modifier.create({ finalAddition: instance.state.ratio * instance.state.sourceAttack })]; }),
@@ -149,7 +148,7 @@ test('effect competition: overridden instances continue expiring and cannot be r
 
 test('effect competition: parent finish restores the surviving independent source', () => {
   const h = harness();
-  const parent = h.resources.registerEffect(createEffectProgram({ id: 'parent', initialize: () => ({}), ownState: state => state }));
+  const parent = h.resources.registerEffect(createEffectProgram({ id: 'parent', initialize: () => ({}) }));
   const parentAddress = install(h, parent, {});
   const program = definition(h.resources);
   install(h, program, { ratio: 0.5, sourceAttack: 100, hpBonus: 1000 }, null, 1);

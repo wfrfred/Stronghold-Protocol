@@ -1,5 +1,5 @@
 import type { WorldPosition } from "../geometry/coordinate.js";
-import { ownDataRecord, type ImmutableData } from "../../common/immutable-data.js";
+import type { ImmutableData } from "../../common/immutable-data.js";
 import type { CapabilityStates, WidenedCapabilityState } from "./capability/catalog.js";
 
 export type UnitId = number;
@@ -41,10 +41,4 @@ export type StableUnit<U extends Unit> = {
 
 export function widenUnit<U extends Unit>(unit: U | StableUnit<U>): StableUnit<U> {
     return unit as StableUnit<U>;
-}
-
-export function ownUnitDefinition<D extends UnitDefinition>(
-    definition: D | ImmutableData<D>,
-): ImmutableData<D> {
-    return ownDataRecord(definition, "unit definition") as ImmutableData<D>;
 }

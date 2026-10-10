@@ -1,5 +1,4 @@
 import {
-    createTilePosition,
     createWorldOffset,
     createWorldPosition,
     type WorldOffset,
@@ -97,57 +96,6 @@ export function getNavigationRequest(state: Readonly<NavigationState>): Navigati
     return activity.type === "FOLLOWING" || activity.type === "UNREACHABLE"
         ? activity.path.request
         : activity.request;
-}
-
-function copyCursor(cursor: NavigationPathCursor): NavigationPathCursor {
-    if (cursor.type !== "FIELD") {
-        return { ...cursor };
-    }
-
-    return {
-        ...cursor,
-        nextNode: Object.isFrozen(cursor.nextNode)
-            ? cursor.nextNode
-            : createTilePosition(...cursor.nextNode),
-    };
-}
-
-function copyActivity(activity: NavigationActivity): NavigationActivity {
-    if (activity.type === "UNREACHABLE") {
-        return {
-            ...activity,
-            cursor: copyCursor(activity.cursor),
-            position: Object.isFrozen(activity.position)
-                ? activity.position
-                : createWorldPosition(...activity.position),
-        };
-    }
-    if (activity.type === "FOLLOWING") {
-        return { ...activity, cursor: copyCursor(activity.cursor) };
-    }
-
-    return { ...activity };
-}
-
-export function copyNavigationState(state: Readonly<NavigationState>): NavigationState {
-    const activity = copyActivity(state.execution.activity);
-
-    return {
-        ...state,
-        execution: {
-            ...state.execution,
-            locatorOffset: Object.isFrozen(state.execution.locatorOffset)
-                ? state.execution.locatorOffset
-                : createWorldOffset(...state.execution.locatorOffset),
-            visits: {
-                ...state.execution.visits,
-                visitedCenters: state.execution.visits.visitedCenters.map((position) =>
-                    Object.isFrozen(position) ? position : createTilePosition(...position),
-                ),
-            },
-            activity,
-        },
-    };
 }
 
 function updateExecution(

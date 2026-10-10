@@ -5,7 +5,6 @@ import { installFixtureEffect } from "../helpers/effects.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
-import { copyEffectsState } from "../../dist/core/tactical/unit/capability/effects/capability.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import * as modifier from "../../dist/core/tactical/modifier/value.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
@@ -62,17 +61,6 @@ function program(id, initialState = {}) {
   return createEffectProgram({
     id,
     initialize: () => initialState,
-    ownState: (value) => {
-      if (!value || typeof value !== "object" || Array.isArray(value)) {
-        throw new TypeError(`invalid ${id} state`);
-      }
-      for (const key of Object.keys(initialState)) {
-        if (typeof value[key] !== "number" || !Number.isFinite(value[key]) || value[key] < 0) {
-          throw new TypeError(`invalid ${id} ${key}`);
-        }
-      }
-      return value;
-    },
   });
 }
 
@@ -467,14 +455,14 @@ test("damage pipeline: priority, acquisition sequence and stable instance order 
       }
       target = {
         ...target,
-        effects: copyEffectsState({
+        effects: {
           ...target.effects,
           instances: insertion.map((index) =>
             target.effects.instances.find(
               (instance) => instance.programRef === entries[index][0].ref,
             ),
           ),
-        }),
+        },
       };
 
       assert.equal(

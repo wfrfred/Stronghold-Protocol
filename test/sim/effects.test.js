@@ -30,7 +30,6 @@ import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/off
 import { compileStatusBinding } from "../../dist/core/tactical/unit/capability/status/binding.js";
 import { uniqueEffectAdmission } from "../../dist/core/tactical/unit/capability/effects/lifecycle-resources.js";
 import { effectFixtureWork, installFixtureEffect } from "../helpers/effects.js";
-import { copyEffectsState } from "../../dist/core/tactical/unit/capability/effects/capability.js";
 import {
   registerEffectInstance,
   removeEffectInstance,
@@ -47,17 +46,7 @@ function barrierProgram(id = "barrier") {
   return createEffectProgram({
     id,
     initialize: () => ({ remainingAmount: 500 }),
-    ownState: (value) => {
-      if (
-        !value ||
-        typeof value !== "object" ||
-        !Number.isFinite(value.remainingAmount) ||
-        value.remainingAmount < 0
-      ) {
-        throw new TypeError("invalid barrier state");
-      }
-      return value;
-    },
+
   });
 }
 
@@ -82,56 +71,51 @@ function unit(flags = []) {
   };
 }
 
-test("effects: direct installation normalizes typed state before lifecycle behavior and isolates it", () => {
+test("effects: installation shares typed state and lifecycle updates preserve the input", () => {
   const resources = new CombatResources();
   const observed = [];
-  let normalizationCount = 0;
   const program = resources.registerEffect(createEffectProgram({
-    id: "normalized-direct",
+    id: "shared-direct",
     initialize: () => ({ remainingAmount: 10 }),
-    ownState: state => {
-      normalizationCount++;
-      return { remainingAmount: Math.max(0, state.remainingAmount) };
-    },
-  }), { lifecycle: { start: context => { observed.push(context.instance.state.remainingAmount); } } });
+  }), { lifecycle: { start: context => { observed.push(context.instance.state); } } });
   const original = effectFixtureWork(unit());
-  const instance = resources.effects.create(program.ref, metadata());
-  const input = { ...instance, state: { remainingAmount: -5 } };
-  const copied = copyEffectsState({ instances: [input], nextInstanceId: 2, nextAcquiredSequence: 2 });
-  normalizationCount = 0;
-  const installed = installEffect(original, 2, copied.instances[0], resources, 0);
-  input.state.remainingAmount = 999;
-  assert.equal(normalizationCount, 1);
-  assert.deepEqual(observed, [0]);
-  assert.equal(getUnit(original, 2).effects.instances[0].state.remainingAmount, 0);
+  const state = { remainingAmount: 5 };
+  const scopes = [];
+  const instance = resources.effects.create(program.ref, metadata(1, { scopes }), state);
+  assert.equal(instance.state, state);
+  assert.equal(instance.scopes, scopes);
+  const installed = installEffect(original, 2, instance, resources, 0);
+  const current = getUnit(original, 2).effects.instances[0];
+
+  assert.equal(installed.type, "INSTALLED");
+  assert.equal(observed[0], state);
+  assert.equal(current.state, state);
+  assert.equal(current.scopes, scopes);
+  assert.equal(current.started, true);
+  assert.equal(instance.started, false);
   assert.equal(original.battlefield.snapshot("state").getUnit(2).effects, undefined);
 
-  normalizationCount = 0;
+  const nextState = { remainingAmount: 7 };
   const newInstallation = installNewEffect(original, 2, program.ref, {
-    source: null, scopes: [],  initialState: { remainingAmount: -7 },
+    source: null, scopes: [], initialState: nextState,
   }, resources, 0);
-  assert.equal(normalizationCount, 1);
-  assert.equal(getUnit(original, 2).effects.instances[0].state.remainingAmount, 0);
-  assert.deepEqual(observed, [0, 0]);
+  assert.equal(newInstallation.type, "INSTALLED");
+  assert.equal(getUnit(original, 2).effects.instances[1].state, nextState);
+  assert.deepEqual(observed, [state, nextState]);
 });
 
-test("effects: direct installation rejects program-invalid numeric facts even after ordinary ownership", () => {
+test("effects: direct installation accepts only a fresh lifecycle instance", () => {
   const resources = new CombatResources();
   const program = resources.registerEffect(barrierProgram());
   const instance = resources.effects.create(program.ref, metadata());
-  const copied = copyEffectsState({
-    instances: [{ ...instance, state: { remainingAmount: -1 } }],
-    nextInstanceId: 2, nextAcquiredSequence: 2,
-  });
   const original = effectFixtureWork(unit());
-  assert.throws(() => installEffect(original, 2, copied.instances[0], resources, 0), /invalid barrier state/);
-  assert.equal(original.battlefield.snapshot("state").getUnit(2).effects, undefined);
   assert.throws(() => installEffect(original, 2, { ...instance, started: true }, resources, 0), /only a fresh effect/);
+  assert.equal(original.battlefield.snapshot("state").getUnit(2).effects, undefined);
   const installed = installEffect(original, 2, instance, resources, 0);
   assert.equal(installed.type, "INSTALLED");
 });
 
-test("effects: missing direct-install receivers return absence before program normalization", () => {
+test("effects: missing direct-install receivers return absence before program lookup", () => {
   const resources = new CombatResources();
   const foreign = new EffectResources();
   const program = foreign.register(barrierProgram());
@@ -146,7 +130,7 @@ test("effects: missing direct-install receivers return absence before program no
   });
 });
 
-test("effects: instance resources are separate from snapshot facts and restoration validates the program state", () => {
+test("effects: instance restoration validates lifecycle facts and shares typed state", () => {
   const resources = new EffectResources();
   const program = resources.register(barrierProgram());
   const instance = resources.create(program.ref, metadata());
@@ -158,8 +142,10 @@ test("effects: instance resources are separate from snapshot facts and restorati
   assert.deepEqual(restored, instance);
   assert.equal(restored.programRef, program.ref);
   assert.equal(resources.typedState(restored, program.ref).remainingAmount, 500);
-  serialized.state.remainingAmount = -1;
-  assert.throws(() => resources.restore(program.ref, serialized), /invalid barrier/);
+  assert.equal(restored.state, serialized.state);
+  assert.equal(restored.scopes, serialized.scopes);
+  assert.throws(() => resources.restore(program.ref, { ...serialized, participating: true }), /invalid effect lifecycle/);
+  assert.throws(() => resources.restore(program.ref, { ...serialized, id: -1 }), /identity/);
   assert.throws(
     () => resources.restore(barrierProgram().ref, serialized),
     /unregistered/,
@@ -181,7 +167,6 @@ test("effects: reference and descriptor binding cannot be replaced by a second s
     createEffectProgram({
       id: program.ref.id,
       initialize: () => ({ remainingCharges: 2 }),
-      ownState: (value) => value,
     }),
   );
   assert.throws(
@@ -197,7 +182,7 @@ test("effects: reference and descriptor binding cannot be replaced by a second s
   );
 });
 
-test("effects: typed updates isolate external facts, retain unchanged instances and copy shares owned state", () => {
+test("effects: typed updates share new state and preserve the previous instance", () => {
   const lifecycleResources = new CombatResources();
   const resources = lifecycleResources.effects;
   const program = lifecycleResources.registerEffect(barrierProgram());
@@ -205,29 +190,16 @@ test("effects: typed updates isolate external facts, retain unchanged instances 
   const input = { remainingAmount: 200, details: { applications: [1, 2] } };
   const updated = resources.update(instance, input);
   const installed = installFixtureEffect(unit(), updated, lifecycleResources);
-  const copy = copyEffectsState(installed.effects);
 
-  input.remainingAmount = 1;
-  input.details.applications.push(3);
   assert.equal(instance.state.remainingAmount, 500);
-  assert.equal(updated.state.remainingAmount, 200);
-  assert.deepEqual(updated.state.details.applications, [1, 2]);
-  assert.ok(Object.isFrozen(updated.state.details.applications));
+  assert.equal(updated.state, input);
+  assert.equal(updated.scopes, instance.scopes);
   assert.equal(resources.update(updated, updated.state), updated);
-  assert.equal(copy.instances, installed.effects.instances);
-  assert.equal(copy.instances[0], installed.effects.instances[0]);
-  assert.equal(copy.instances[0].state, updated.state);
-  assert.throws(
-    () => copyEffectsState({ ...installed.effects, nextInstanceId: 1 }),
-    /allocation progress/,
-  );
-  assert.throws(
-    () => copyEffectsState({ ...installed.effects, nextAcquiredSequence: 1 }),
-    /allocation progress/,
-  );
+  assert.equal(installed.effects.instances[0].state, input);
+  assert.equal(installed.effects.instances[0].state.details, input.details);
 });
 
-test("effects: derived arrays stay frozen and preserve unchanged instances across branches and cleanup", () => {
+test("effects: immutable updates preserve unchanged instances across branches and cleanup", () => {
   const resources = new CombatResources();
   const program = resources.registerEffect(barrierProgram());
   const first = installFixtureEffect(
@@ -281,91 +253,47 @@ updateEffectState(branch, 2, 2, program.ref, { remainingAmount: 200 }, resources
   assert.equal(disabledUnit.effects.instances[1].finished, false);
   const changedUnits = [updatedUnit, getUnit(branch, 2), disabledUnit, finishedUnit, getUnit(cleaned, 2)];
   for (const current of [first, second, ...changedUnits]) {
-    assert.ok(Object.isFrozen(current.effects));
-    assert.ok(Object.isFrozen(current.effects.instances));
     assert.equal(current.effects.instances[0], first.effects.instances[0]);
-    assert.equal(copyEffectsState(current.effects).instances, current.effects.instances);
   }
   assert.deepEqual(retained.instances.map((instance) => instance.id), [1]);
-  assert.equal(
-    copyEffectsState({ ...retained, nextInstanceId: 2, nextAcquiredSequence: 2 }).instances,
-    retained.instances,
-  );
-  assert.throws(() => retained.instances.push(second.effects.instances[1]), TypeError);
+  assert.equal(retained.nextInstanceId, 3);
+  assert.equal(retained.nextAcquiredSequence, 3);
+  assert.equal(finishedUnit.effects.instances.length, 2);
   const empty = cleaned;
 removeEffect(empty, { type: "EFFECT", unitId: 2, effectId: 1 }, resources, 1);
   const emptyState = getUnit(empty, 2).effects;
-  assert.ok(Object.isFrozen(emptyState.instances));
-  assert.equal(
-    copyEffectsState({ ...emptyState, nextInstanceId: 0, nextAcquiredSequence: 0 }).instances,
-    emptyState.instances,
-  );
+  assert.deepEqual(emptyState.instances, []);
+  assert.equal(emptyState.nextInstanceId, retained.nextInstanceId);
+  assert.equal(emptyState.nextAcquiredSequence, retained.nextAcquiredSequence);
 });
 
-test("effects: array ownership isolates mutable instances and preserves allocation invariants", () => {
+test("effects: creation validates scope identities and deduplicates lifetime dependencies", () => {
   const resources = new EffectResources();
   const program = resources.register(barrierProgram());
-  const instance = resources.create(program.ref, metadata(1));
-  const input = [instance];
-  const effects = copyEffectsState({ instances: input, nextInstanceId: 2, nextAcquiredSequence: 2 });
-  const original = { ...unit(), effects };
-  const mutable = { ...instance, state: { remainingAmount: 123 } };
+  const lifetime = { type: "UNIT", unitId: 2 };
+  const scopes = [lifetime];
+  const first = resources.create(program.ref, metadata(1, { scopes }));
+  assert.equal(first.scopes, scopes);
+  assert.equal(first.scopes[0], lifetime);
+  const deduplicated = resources.create(program.ref, metadata(2, { scopes: [lifetime, lifetime] }));
+  assert.deepEqual(deduplicated.scopes, [lifetime]);
+  assert.equal(deduplicated.scopes[0], lifetime);
+  assert.throws(() => resources.create(program.ref, metadata(3, { scopes: [
+    { type: "TICK", tick: 2 }, { type: "TICK", tick: 3 },
+  ] })), /only one TICK/);
+  assert.throws(() => resources.create(program.ref, metadata(3, { scopes: [
+    { type: "EFFECT", unitId: NaN, effectId: -1 },
+  ] })), /scope unit identity/);
+  for (const invalid of [-1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => resources.create(program.ref, metadata(invalid)), /identity/);
+    assert.throws(() => resources.create(program.ref, metadata(3, { acquiredSequence: invalid })), /acquired sequence/);
+  }
 
-  assert.notEqual(effects.instances, input);
-  assert.equal(Object.isFrozen(input), false);
-  assert.ok(Object.isFrozen(effects.instances));
-  input.length = 0;
-  assert.deepEqual(effects.instances, [instance]);
-  const copied = copyEffectsState({ ...effects, instances: [mutable] });
-  mutable.state.remainingAmount = 999;
-  assert.equal(copied.instances[0].state.remainingAmount, 123);
-  assert.equal(Object.isFrozen(copied.instances[0]), true);
-  assert.equal(Object.isFrozen(copied.instances[0].state), true);
-  assert.equal(copyEffectsState(copied), copied);
-  const mutableBound = {
-    ...instance, state: { remainingAmount: 100 },
-    scopes: [{type: "UNIT",unitId: 2}, { type: "EFFECT", unitId: 2, effectId: 1 }],
-  };
-  const unchanged = resources.update(mutableBound, mutableBound.state);
-  const changed = resources.update(mutableBound, { remainingAmount: 200 });
-  mutableBound.scopes[1].effectId = 99;
-  mutableBound.scopes[0].unitId = 99;
-  mutableBound.state.remainingAmount = 999;
-  for (const owned of [unchanged, changed]) {
-    assert.equal(owned.scopes[1].effectId, 1);
-    assert.equal(owned.scopes[0].unitId, 2);
-    assert.ok(Object.isFrozen(owned.scopes[1]));
-    assert.ok(Object.isFrozen(owned.scopes[0]));
-  }
-  assert.equal(unchanged.state.remainingAmount, 100);
-  assert.equal(changed.state.remainingAmount, 200);
-  assert.throws(
-    () => copyEffectsState({ ...effects, instances: [{ ...instance, participating: true }] }),
-    /invalid effect lifecycle/,
-  );
-  assert.throws(
-    () => copyEffectsState({ ...effects, instances: [{ ...instance, scopes: [{ type: "EFFECT", unitId: NaN, effectId: -1 }] }] }),
-    /scope unit identity/,
-  );
-  assert.throws(
-    () => copyEffectsState({ ...effects, instances: [instance, instance] }),
-    /duplicate effect/,
-  );
-  assert.throws(
-    () => replaceEffectInstance(original, instance, resources.create(program.ref, metadata(2))),
-    /cannot be changed/,
-  );
-  for (const invalid of [-1, 1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
-    assert.throws(
-      () => copyEffectsState({ ...effects, nextInstanceId: invalid }),
-      /allocation progress/,
-    );
-    assert.throws(
-      () => copyEffectsState({ ...effects, nextAcquiredSequence: invalid }),
-      /allocation progress/,
-    );
-  }
-  assert.equal(copyEffectsState(effects).instances, effects.instances);
+  const original = registerEffectInstance(unit(), first);
+  assert.equal(original.effects.instances[0], first);
+  assert.throws(() => registerEffectInstance(original, first), /cannot be reused/);
+  assert.throws(() => replaceEffectInstance(original, first, deduplicated), /cannot be changed/);
+  assert.throws(() => registerEffectInstance(original, resources.create(program.ref, metadata(Number.MAX_SAFE_INTEGER))), /allocation progress/);
 });
 
 test("effects: heterogeneous dispatch remains paired and an unrelated typed program cannot update an instance", () => {
@@ -375,7 +303,6 @@ test("effects: heterogeneous dispatch remains paired and an unrelated typed prog
     createEffectProgram({
       id: "shield",
       initialize: () => ({ remainingCharges: 2 }),
-      ownState: (value) => value,
     }),
   );
   const instance = resources.create(barrier.ref, metadata());
@@ -391,23 +318,18 @@ test("effects: heterogeneous dispatch remains paired and an unrelated typed prog
   );
 });
 
-test("effects: program ownership excludes behavior, accessors, cycles and sparse state arrays", () => {
+test("effects: state updates share unchanged nested values", () => {
   const resources = new EffectResources();
   const program = resources.register(barrierProgram());
-  const instance = resources.create(program.ref, metadata());
-  const cycle = {};
-  cycle.self = cycle;
-  const sparse = new Array(2);
-  const accessor = Object.defineProperty({}, "value", {
-    get: () => assert.fail("accessor executed"),
-  });
+  const sample = { applications: [1, 2] };
+  const original = resources.create(program.ref, metadata(), { remainingAmount: 500, sample });
+  const nextState = { ...original.state, remainingAmount: 250 };
+  const updated = resources.update(original, nextState);
 
-  for (const invalid of [() => 1, cycle, sparse, accessor, new Map()]) {
-    assert.throws(
-      () => resources.update(instance, { remainingAmount: 500, invalid }),
-      TypeError,
-    );
-  }
+  assert.equal(updated.state, nextState);
+  assert.equal(updated.state.sample, original.state.sample);
+  assert.equal(original.state.remainingAmount, 500);
+  assert.equal(updated.state.remainingAmount, 250);
 });
 
 test("effects: installation and removal keep effect identity and status contributions atomic", () => {
@@ -484,7 +406,7 @@ test("effects: expiration is independent of source and lifetime scope cleanup do
   })) });
   let work = { ...effectFixtureWork(unit(), owner7, owner9), actionExecutions: actions };
   const values = [
-    metadata(1, { source: 9, scopes: [{type: "UNIT",unitId: 7}, { type: "TICK", tick: 5 }], }),
+    metadata(1, { source: 9, scopes: [{type: "UNIT",unitId: 7}, { type: "TICK", tick: 5 }] }),
     metadata(2, {
       source: 7,
       scopes: [{type: "ACTION",executionId: 10}],
@@ -573,7 +495,6 @@ test("effects: start termination preserves its prefix without initializing or re
     createEffectProgram({
       id: "keeper",
       initialize: () => ({ attempts: 0 }),
-      ownState: (value) => ({ ...value }),
     }),
   );
   const binding = compileStatusBinding(["INVINCIBLE"]);
@@ -701,7 +622,6 @@ test("effects: rejected unique installation runs no start and consumes no identi
     createEffectProgram({
       id: "keeper",
       initialize: () => ({ attempts: 0 }),
-      ownState: (value) => ({ ...value }),
     }),
   );
   const candidate = resources.registerEffect(barrierProgram("unique"), {
@@ -1163,15 +1083,9 @@ type Assert<T extends true> = T;
 interface BarrierState { readonly remainingAmount: number; }
 interface ShieldState { readonly remainingCharges: number; }
 interface SpecializedBarrierState extends BarrierState { readonly category: 'arts'; }
-function ownBarrierState(value: unknown): BarrierState {
-  if (value === null || typeof value !== 'object' || !('remainingAmount' in value)
-      || typeof value.remainingAmount !== 'number' || !Number.isFinite(value.remainingAmount)) {
-    throw new TypeError('invalid barrier state');
-  }
-  return Object.freeze({ remainingAmount: value.remainingAmount });
-}
+
 const barrier = createEffectProgram({
-  id: 'barrier', initialize: (): BarrierState => ({ remainingAmount: 500 }), ownState: ownBarrierState,
+  id: 'barrier', initialize: (): BarrierState => ({ remainingAmount: 500 }),
 });
 const resources = new EffectResources();
 declare const installationResources: CombatResources;
@@ -1221,7 +1135,7 @@ const current = resources.typedState(updated, barrier.ref);
 type OptionalState = Assert<Equal<typeof current, BarrierState | undefined>>;
 const projectile = createProjectileProgram({
   id: 'typed-projectile', initialize: (): BarrierState => ({ remainingAmount: 1 }),
-  ownState: state => ({ remainingAmount: state.remainingAmount }), acceptsContact: () => true,
+  acceptsContact: () => true,
 });
 type ProjectileReference = Assert<Equal<typeof projectile.ref, ProjectileProgramRef<BarrierState>>>;
 const installed = lifecycle.effects.install(2, barrier.ref, { source: null, scopes: [], initialState: instance.state });

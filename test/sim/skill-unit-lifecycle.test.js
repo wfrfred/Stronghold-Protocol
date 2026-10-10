@@ -20,7 +20,7 @@ import { createLegacyCombatSpec } from '../../dist/legacy/combat.js';
 import { effectFixtureWork } from '../helpers/effects.js';
 
 function effectProgram(id) {
-  return createEffectProgram({ id, initialize: () => ({}), ownState: state => ({ ...state }) });
+  return createEffectProgram({ id, initialize: () => ({}) });
 }
 
 function fixture(content = {}) {

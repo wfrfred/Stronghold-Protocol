@@ -33,7 +33,7 @@ function fixture() {
     },
   });
   const counter = resources.registerEffect(createEffectProgram({
-    id: 'consume-on-damage', initialize: () => ({ consumed: 0 }), ownState: state => state,
+    id: 'consume-on-damage', initialize: () => ({ consumed: 0 }),
   }), {
     damage: { reception: { priority: 0, apply: (context, value) => {
       context.operations.effects.update(context.ref, counter.ref,
@@ -165,10 +165,10 @@ test('effect finish: nested host death stops Action and Skill before their depen
   });
   const executions = new ActionExecutionWork(accepted.state);
   const independent = resources.registerEffect(createEffectProgram({
-    id: 'independent-in-skill-finish', initialize: () => ({}), ownState: state => state,
+    id: 'independent-in-skill-finish', initialize: () => ({}),
   }));
   const forbidden = resources.registerEffect(createEffectProgram({
-    id: 'forbidden-on-departing-host', initialize: () => ({}), ownState: state => state,
+    id: 'forbidden-on-departing-host', initialize: () => ({}),
   }), { lifecycle: { start: () => { throw new Error('closed host ran start'); } } });
   resources.skills.register({
     definition: skill,
@@ -181,7 +181,7 @@ test('effect finish: nested host death stops Action and Skill before their depen
     },
   });
   const first = resources.registerEffect(createEffectProgram({
-    id: 'first-host-notice', initialize: () => ({}), ownState: state => state,
+    id: 'first-host-notice', initialize: () => ({}),
   }), { lifecycle: { finish: context => {
     order.push('first');
     context.damage({ sourceUnitId: null, targetUnitId: 0, damageType: 'TRUE', operands: createDamageOperands(100) });
@@ -194,7 +194,7 @@ test('effect finish: nested host death stops Action and Skill before their depen
     assert.equal(order.includes('skill'), false);
   } } });
   const second = resources.registerEffect(createEffectProgram({
-    id: 'second-host-notice', initialize: () => ({}), ownState: state => state,
+    id: 'second-host-notice', initialize: () => ({}),
   }), { lifecycle: { finish: context => {
     order.push('second');
     assert.equal(context.facts.getUnit(0).skill.active, null);
@@ -203,7 +203,7 @@ test('effect finish: nested host death stops Action and Skill before their depen
     context.effects.finish([context.ref]);
   } } });
   const dependent = resources.registerEffect(createEffectProgram({
-    id: 'nested-action-dependent', initialize: () => ({}), ownState: state => state,
+    id: 'nested-action-dependent', initialize: () => ({}),
   }), { lifecycle: { finish: context => {
     order.push('action dependent');
     assert.deepEqual(context.end, { root: { type: 'ACTION', executionId: 0 }, reason: 'DEATH' });
@@ -256,19 +256,19 @@ test('effect finish: remote dependent notices delay Skill notification and host 
     },
   });
   const transient = resources.registerEffect(createEffectProgram({
-    id: 'nested-transient-notice', initialize: () => ({}), ownState: state => state,
+    id: 'nested-transient-notice', initialize: () => ({}),
   }), { lifecycle: {
     start: context => { context.effects.finish([context.ref]); },
     finish: () => { order.push('transient'); },
   } });
   const parent = resources.registerEffect(createEffectProgram({
-    id: 'remote-pending-parent', initialize: () => ({}), ownState: state => state,
+    id: 'remote-pending-parent', initialize: () => ({}),
   }), { lifecycle: { finish: context => {
     order.push('parent');
     context.damage({ sourceUnitId: null, targetUnitId: 0, damageType: 'TRUE', operands: createDamageOperands(100) });
   } } });
   const child = resources.registerEffect(createEffectProgram({
-    id: 'remote-pending-child', initialize: () => ({}), ownState: state => state,
+    id: 'remote-pending-child', initialize: () => ({}),
   }), { lifecycle: { finish: context => {
     order.push('child');
     assert.equal(context.facts.getUnit(0).skill.active, null);

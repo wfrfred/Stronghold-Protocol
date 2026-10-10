@@ -1,5 +1,4 @@
 import type { EffectInstanceValue } from "./instance.js";
-import { ownEffectsState } from "./internal/state.js";
 import type { Unit } from "../../unit.js";
 
 export interface EffectsState {
@@ -14,8 +13,4 @@ export interface Effects {
 
 export function hasEffects<U extends Unit>(unit: U): unit is U & Effects {
     return "effects" in unit;
-}
-
-export function copyEffectsState(state: EffectsState): EffectsState {
-    return ownEffectsState(state);
 }

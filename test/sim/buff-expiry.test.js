@@ -104,7 +104,6 @@ function harness({ descriptor = description(), stackCount = 3, lifetimeTicks = 3
     const resources = new CombatResources();
     const effect = resources.registerEffect(createEffectProgram({
         id: "buff-expiry-sample", initialize: () => initial,
-        ownState: state => ({ ...state, blackboard: { ...state.blackboard }, sample: { ...state.sample } }),
     }), {
         contributions: [attack(current => {
             const value = modifier.sample({
@@ -156,7 +155,7 @@ function harness({ descriptor = description(), stackCount = 3, lifetimeTicks = 3
         },
         override: tick => {
             const winner = resources.registerEffect(createEffectProgram({
-                id: "buff-expiry-winner", initialize: () => ({}), ownState: state => ({ ...state }),
+                id: "buff-expiry-winner", initialize: () => ({}),
             }), { lifecycle: { competition: () => ({ group: "buff-expiry", priority: 2 }) } });
             installNewEffect(work, 0, winner.ref, { source: 20, scopes: [] }, resources, tick);
         },
@@ -182,7 +181,7 @@ function harness({ descriptor = description(), stackCount = 3, lifetimeTicks = 3
     };
 }
 
-test("buff expiry integration: 30 tick renewals preserve identity, retain terminal history, and isolate old snapshots", () => {
+test("buff expiry integration: 30 tick renewals preserve identity, retain terminal history, and preserve old snapshots", () => {
     const buff = harness();
     const original = buff.work.battlefield.snapshot("draft");
     const first = instance(original);
@@ -197,7 +196,7 @@ test("buff expiry integration: 30 tick renewals preserve identity, retain termin
     for (const key of ["id", "source", "programRef", "acquiredSequence"]) {
         assert.deepEqual(instance(renewed)[key], first[key]);
     }
-    assert.notEqual(instance(renewed).state.blackboard, first.state.blackboard);
+    assert.equal(instance(renewed).state.blackboard, first.state.blackboard);
     assert.notEqual(instance(renewed).state.sample, first.state.sample);
     buff.expire(60);
     assert.equal(instance(battlefieldView(buff.work)).state.stackCount, 1);
@@ -207,7 +206,7 @@ test("buff expiry integration: 30 tick renewals preserve identity, retain termin
     assert.equal(instance(battlefieldView(buff.work)).finished, true);
     assert.equal(instance(battlefieldView(buff.work)).participating, false);
     assert.equal(instance(battlefieldView(buff.work)).state.stackCount, 1);
-    assert.deepEqual(instance(battlefieldView(buff.work)).state.sample, last.state.sample);
+    assert.equal(instance(battlefieldView(buff.work)).state.sample, last.state.sample);
     assert.equal(power(battlefieldView(buff.work)), 100);
     const finished = buff.work.battlefield.snapshot("draft");
     buff.expire(120);
@@ -259,6 +258,8 @@ test("buff expiry integration: exact effective cap reloads only the retained sou
     buff.expire(30);
     const aboveCap = buff.work.battlefield.snapshot("draft");
     assert.equal(instance(aboveCap).state.stackCount, 3);
+    assert.equal(instance(aboveCap).state.blackboard, instance(original).state.blackboard);
+    assert.equal(instance(aboveCap).state.sample, instance(original).state.sample);
     assert.deepEqual(buff.reads, [[10, 100]]);
     assert.equal(power(aboveCap), 200);
     buff.sourceAttack(10, 400);

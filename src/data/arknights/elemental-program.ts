@@ -22,7 +22,6 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
         createEffectProgram({
             id: "elemental/paralysis-stun",
             initialize: () => ({}),
-            ownState: (state) => ({ ...state }),
         }),
         { bindings: [compileStatusBinding(["STUNNED"])] },
     );
@@ -38,7 +37,6 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                         defense: profile.defReduction,
                         resistance: profile.resReduction,
                     }),
-                    ownState: (state) => ({ ...state }),
                 }),
                 {
                     contributions: [
@@ -77,7 +75,6 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                 createEffectProgram({
                     id: `${prefix}/status`,
                     initialize: () => ({}),
-                    ownState: (state) => ({ ...state }),
                 }),
                 { bindings: flags.length === 0 ? [] : [compileStatusBinding(flags)] },
             );
@@ -85,7 +82,6 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                 createEffectProgram({
                     id: `${prefix}/weakness`,
                     initialize: () => ({ scaler: 1 - profile.attackReductionRatio }),
-                    ownState: (state) => ({ ...state }),
                 }),
                 {
                     contributions:
@@ -102,7 +98,6 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                 createEffectProgram({
                     id: `${prefix}/paralysis`,
                     initialize: () => ({ remaining: profile.paralysisStacks }),
-                    ownState: (state) => ({ ...state }),
                 }),
                 {
                     action: {

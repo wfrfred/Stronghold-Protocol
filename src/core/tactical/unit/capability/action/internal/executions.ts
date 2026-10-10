@@ -104,10 +104,10 @@ export class ActionExecutionWork {
     }
 
     result(): ActionExecutionState {
-        this.#result ??= Object.freeze({
+        this.#result ??= {
             nextExecutionId: this.#nextExecutionId,
-            executions: Object.freeze([...this.#executions.values()]),
-        });
+            executions: [...this.#executions.values()],
+        };
 
         return this.#result;
     }

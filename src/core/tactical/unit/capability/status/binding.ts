@@ -3,7 +3,6 @@ import type { Binding } from "../effects/binding.js";
 import type { EffectInstanceValue } from "../effects/instance.js";
 import {
     addStatusContribution,
-    createStatusDefinition,
     hasStatus,
     removeStatusContribution,
     setStatusContributionParticipation,
@@ -31,14 +30,12 @@ function updateStatus<U extends Unit>(
 }
 
 export function compileStatusBinding(flags: readonly StatusFlag[]): Binding {
-    const owned = createStatusDefinition({ initialFlags: flags }).initialFlags;
-
     return {
         install: (unit, instance) =>
             updateStatus(unit, (state) =>
                 addStatusContribution(state, {
                     id: contributionId(instance),
-                    flags: owned,
+                    flags,
                     participating: instance.participating,
                 }),
             ),

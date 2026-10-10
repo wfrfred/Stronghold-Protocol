@@ -33,10 +33,6 @@ export function hasVitalityDefinition(
     return "vitality" in definition;
 }
 
-export function copyVitalityState(state: Readonly<VitalityState>): VitalityState {
-    return { ...state, maxHp: contribution.copy(state.maxHp) };
-}
-
 export function initializeVitalityState(definition: VitalityDefinition): VitalityState {
     return { hp: definition.maxHp, maxHp: contribution.create<"SAMPLED">() };
 }

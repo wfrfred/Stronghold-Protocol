@@ -14,7 +14,6 @@ import { createBattlefieldState, settleBattlefieldState, settleBattlefieldStateF
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { copyUnitSnapshot } from '../../dist/core/tactical/unit/snapshot.js';
 import {
-  copyBlockerState,
   createBlockerDefinition,
   initializeBlockerState,
   resolveBlockingCapacity,
@@ -37,7 +36,7 @@ import { effectFixtureWork } from '../helpers/effects.js';
 const fixtures = JSON.parse(readFileSync(new URL('../fixtures/arknights/blocking_buffs.json', import.meta.url), 'utf8'));
 const fixture = key => fixtures.find(entry => entry.node._buff.buffKey === key);
 const effectAddress = { type: "EFFECT", unitId: 0, effectId: 0 };
-const program = (id, state = {}) => createEffectProgram({ id, initialize: () => state, ownState: value => ({ ...value }) });
+const program = (id, state = {}) => createEffectProgram({ id, initialize: () => state });
 const blocker = (capacity = 3) => initializeUnit({
   id: 0, position: [0, 0], definition: {
     id: 'capacity-holder', allegiance: { side: 'ALLY' }, vitality: { maxHp: 100 },
@@ -58,7 +57,7 @@ const install = (work, effect, resources, expiresAtTick = null) => {
 };
 const entry = (id, value, participating = true) => ({ id, sequence: 0, kind: "SAMPLED", participating, values: [value] });
 
-test('blocking capacity: initialization and copying retain sampled contributions and resolve ties to even after clamping', () => {
+test('blocking capacity: immutable updates retain sampled contributions and resolve ties to even after clamping', () => {
   const definition = createBlockerDefinition({ capacity: 3, geometry: { radius: 1 } });
   const state = initializeBlockerState(definition);
   assert.equal(definition.capacity, 3);
@@ -68,13 +67,9 @@ test('blocking capacity: initialization and copying retain sampled contributions
     addition: 1, multiplier: 0.5, finalAddition: 1, finalScaler: 2,
   }))]) };
   assert.equal(resolveBlockingCapacity(definition, modified), 14);
-  const copy = copyBlockerState(modified);
-  assert.notEqual(copy, modified);
-  assert.equal(copy.capacity.entries, modified.capacity.entries);
-  assert.ok(Object.isFrozen(copy.capacity.entries));
-  assert.ok(Object.isFrozen(copy.capacity.entries[0]));
-  copy.capacity = contribution.setParticipation(copy.capacity, 'arithmetic', false);
-  assert.equal(resolveBlockingCapacity(definition, copy), 3);
+  const disabled = { ...modified, capacity: contribution.setParticipation(modified.capacity, 'arithmetic', false) };
+  assert.equal(disabled.capacity.entries[0].values, modified.capacity.entries[0].values);
+  assert.equal(resolveBlockingCapacity(definition, disabled), 3);
   assert.equal(resolveBlockingCapacity(definition, modified), 14);
   for (const [value, expected] of [[-3, 0], [-0.5, 0], [0.49, 0], [0.5, 0], [0.51, 1], [1.5, 2], [2.5, 2], [3.5, 4]]) {
     const result = { ...state, capacity: contribution.create([entry('rounding', modifier.create({ finalAddition: value - 3 }))]) };

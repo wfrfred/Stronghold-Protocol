@@ -11,7 +11,7 @@ import { effectFixtureWork } from '../helpers/effects.js';
 
 const owner = (id = 2) => ({ id, definition: { id: 'receiver' }, position: [0, 0] });
 const input = { source: null, scopes: [] };
-const program = id => createEffectProgram({ id, initialize: () => ({}), ownState: value => value });
+const program = id => createEffectProgram({ id, initialize: () => ({}) });
 
 function hostWork(unit) {
     return createBattleState(fixtureBattlefield([unit]));

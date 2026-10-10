@@ -28,7 +28,6 @@ test('Buff contribution integration: the native Astesia DEF facet merges layers,
   const program = resources.registerEffect(createEffectProgram({
     id: raw.buffKey,
     initialize: () => ({ stackCount: 1, defenseRatio: 0.2 }),
-    ownState: state => ({ ...state }),
   }), {
     contributions: [defense(instance => {
       const value = compiled.sample({
@@ -117,7 +116,7 @@ test('Buff contribution integration: only effective layer growth resamples the r
   }]));
   const resources = new CombatResources();
   const program = resources.registerEffect(createEffectProgram({
-    id: 'source-layer-sample', initialize: () => ({ stackCount: 1, sourceAttack: 100 }), ownState: state => ({ ...state }),
+    id: 'source-layer-sample', initialize: () => ({ stackCount: 1, sourceAttack: 100 }),
   }), { contributions: [attack(instance => [compiled.sample({
     blackboard: new Map(), stackCount: policy.validStackCount(instance.state.stackCount),
     readSourceAttribute: () => instance.state.sourceAttack,

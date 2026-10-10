@@ -1,4 +1,3 @@
-import { ownProjectileState } from "./internal/state.js";
 import type { WorldPosition } from "../../geometry/coordinate.js";
 import type { RangeGeometry } from "../../geometry/shape.js";
 import type { UnitId } from "../../unit/unit.js";
@@ -40,8 +39,4 @@ export interface ProjectileView {
 export interface ProjectileState {
     readonly nextProjectileId: ProjectileId;
     readonly instances: readonly ProjectileInstance[];
-}
-
-export function copyProjectileState(state: ProjectileState): ProjectileState {
-    return ownProjectileState(state);
 }

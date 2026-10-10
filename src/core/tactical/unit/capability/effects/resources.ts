@@ -22,18 +22,7 @@ export class EffectBindingResources implements EffectBindings {
             throw new TypeError(`duplicate effect bindings ${ref.id}`);
         }
 
-        const owned = Object.freeze(
-            bindings.map(({ install, update, setParticipation, remove, reconcile }) =>
-                Object.freeze({
-                    install,
-                    update,
-                    setParticipation,
-                    remove,
-                    ...(reconcile === undefined ? {} : { reconcile }),
-                }),
-            ),
-        );
-        this.#bindings.set(ref.id, owned);
+        this.#bindings.set(ref.id, bindings);
     }
 
     get(instance: EffectInstanceValue): readonly Binding[] {

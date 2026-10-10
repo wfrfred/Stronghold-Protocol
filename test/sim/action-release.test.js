@@ -25,7 +25,7 @@ function actor() {
   }, position: [0, 0] });
 }
 function program(id, initialState = {}) {
-  return createEffectProgram({ id, initialize: () => ({ ...initialState }), ownState: value => ({ ...value }) });
+  return createEffectProgram({ id, initialize: () => ({ ...initialState }) });
 }
 function services(resources) {
   return { effects: resources.effects, effectBindings: resources.effectBindings,
