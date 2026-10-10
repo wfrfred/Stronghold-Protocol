@@ -9,7 +9,7 @@ import { createEffectOperations } from "../effects/operations.js";
 import { EffectDispatchScope } from "../effects/dispatch.js";
 import { effectView, getEffect } from "../effects/query.js";
 import { resolveMaxHp } from "./query.js";
-import { combatWorkView, type CombatWork } from "../../../battle/execution/work.js";
+import { battlefieldView, type BattleState } from "../../../battle/execution/context.js";
 import type { DamageReport, DamageRequest, DamageOperation } from "./damage/contract.js";
 import type { HealingReport, HealingRequest, HealingOperation } from "./healing/contract.js";
 import {
@@ -37,10 +37,10 @@ export interface VitalityHookOperations {
     heal(request: Omit<HealingRequest, "tick">): HealingReport;
 }
 
-export function vitalityHookFacts(work: () => CombatWork): VitalityHookFacts {
+export function vitalityHookFacts(work: () => BattleState): VitalityHookFacts {
     return {
         ...effectView(work),
-        maxHp: (unitId) => resolveMaxHp(unitId, combatWorkView(work())),
+        maxHp: (unitId) => resolveMaxHp(unitId, battlefieldView(work())),
     };
 }
 
@@ -62,8 +62,7 @@ export type VitalityHookInvocation<R> = Omit<VitalityHookContext<object>, "insta
 };
 
 export function withVitalityHookContext<R, T>(
-    getWork: () => CombatWork,
-    setWork: (work: CombatWork) => void,
+    getWork: () => BattleState,
     ref: EffectRef,
     instance: EffectInstanceValue,
     request: R,
@@ -75,7 +74,7 @@ export function withVitalityHookContext<R, T>(
     return dispatch.withInstance(ref, instance, (lastKnown) => {
         let active = true;
 
-        const readWork = (): CombatWork => {
+        const readWork = (): BattleState => {
             if (!active) {
                 throw new TypeError("vitality hook context is no longer active");
             }
@@ -93,11 +92,10 @@ export function withVitalityHookContext<R, T>(
             tick,
             facts: vitalityHookFacts(readWork),
             operations: {
-                effects: createEffectOperations(readWork, setWork, resources, tick, dispatch),
-                sources: createEffectSourceOperations(readWork, setWork, resources),
+                effects: createEffectOperations(readWork, resources, tick, dispatch),
+                sources: createEffectSourceOperations(readWork, resources),
                 damage: (input) => {
                     const result = resources.settleDamage(readWork(), { ...input, tick }, dispatch);
-                    setWork(result.work);
 
                     return result.report;
                 },
@@ -107,7 +105,6 @@ export function withVitalityHookContext<R, T>(
                         { ...input, tick },
                         dispatch,
                     );
-                    setWork(result.work);
 
                     return result.report;
                 },

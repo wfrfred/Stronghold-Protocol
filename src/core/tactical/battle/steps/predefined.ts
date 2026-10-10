@@ -1,4 +1,3 @@
-import type { ActionExecutionWork } from "../../unit/capability/action/internal/executions.js";
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import type {
     BattlefieldChange,
@@ -18,15 +17,14 @@ import {
     type UnitPlacementDefinition,
 } from "../creation/placement.js";
 import type { BattleExecutionState } from "../execution/state.js";
-import type { Command, Event } from "../contract.js";
+import type { Command } from "../contract.js";
 import { removeUnitWithEffects, type UnitLifecycleResources } from "../execution/unit-lifecycle.js";
 import {
-    combatWorkEvents,
-    combatWorkChanges,
-    createCombatWork,
-    updateCombatUnit,
-    updateCombatMechanism,
-} from "../execution/work.js";
+    advanceBattlefield,
+    battlefieldView,
+    withExecution,
+    type BattleState,
+} from "../execution/context.js";
 
 export interface PredefinedUnitCreation extends UnitPlacementDefinition {
     readonly type: "UNIT";
@@ -234,73 +232,32 @@ export function reconcilePredefinedPresence(
 }
 
 export function advancePredefined(
+    state: BattleState,
     definitions: readonly PredefinedInstanceDefinition[],
     presence: readonly PredefinedPresence[],
-    input: {
-        readonly battlefield: BattlefieldView;
-        readonly commands: readonly Command[];
-        readonly execution: BattleExecutionState;
-        readonly tick: number;
-        readonly actionExecutions?: ActionExecutionWork;
-    },
+    commands: readonly Command[],
+    tick: number,
     resources: UnitLifecycleResources,
-): PredefinedTransition & { readonly events: readonly Event[] } {
-    const { battlefield, commands, execution, tick } = input;
+): readonly PredefinedPresence[] {
     const transition = changePredefinedInstances(
         definitions,
-        reconcilePredefinedPresence(presence, battlefield),
+        reconcilePredefinedPresence(presence, battlefieldView(state)),
         commands.filter(
             (command) =>
                 command.type === "APPEAR_PREDEFINED" || command.type === "REMOVE_PREDEFINED",
         ),
-        execution,
+        state.execution,
         tick,
     );
-
-    return settlePredefinedChanges(
-        battlefield,
-        transition,
-        resources,
-        tick,
-        input.actionExecutions,
-    );
-}
-
-/** Settle removals against the pending unit facts before committing predefined changes. */
-function settlePredefinedChanges(
-    battlefield: BattlefieldView,
-    transition: PredefinedTransition,
-    resources: UnitLifecycleResources,
-    tick: number,
-    actionExecutions?: ActionExecutionWork,
-): PredefinedTransition & { readonly events: readonly Event[] } {
-    if (transition.changes.length === 0) {
-        return { ...transition, events: [] };
-    }
-
-    const changes: BattlefieldChange[] = [];
-    let work = createCombatWork(battlefield, transition.execution, battlefield, actionExecutions);
+    withExecution(state, transition.execution);
 
     for (const change of transition.changes) {
-        if (change.type === "REGISTER_UNIT" || change.type === "UPDATE_UNIT") {
-            work = updateCombatUnit(work, change.unit);
-            changes.push(change);
-        } else if (change.type === "REGISTER_MECHANISM" || change.type === "UPDATE_MECHANISM") {
-            work = updateCombatMechanism(work, change.mechanism);
-            changes.push(change);
-        } else if (change.type === "REMOVE_UNIT") {
-            const previous = work;
-            work = removeUnitWithEffects(work, change.unitId, change.reason, resources, tick);
-            changes.push(...combatWorkChanges(work, previous));
+        if (change.type === "REMOVE_UNIT") {
+            removeUnitWithEffects(state, change.unitId, change.reason, resources, tick);
         } else {
-            changes.push(change);
+            advanceBattlefield(state, [change]);
         }
     }
 
-    return {
-        presence: transition.presence,
-        changes,
-        events: combatWorkEvents(work),
-        execution: work.execution,
-    };
+    return transition.presence;
 }

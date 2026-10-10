@@ -1,5 +1,6 @@
+import { fixtureBattlefield } from "../helpers/battlefield.js";
 import { computedAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
-import { combatWorkEvents } from "../../dist/core/tactical/battle/execution/work.js";
+import { eventsOf } from "../../dist/core/tactical/battle/execution/context.js";
 import { installFixtureEffect } from "../helpers/effects.js";
 import { installEffect, installNewEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
@@ -17,12 +18,12 @@ import {
   removeUnitWithEffects,
 } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
 import {
-  combatWorkView,
-  createCombatWork,
-  getCombatUnit,
-  updateCombatUnit,
-  removeCombatUnit,
-} from "../../dist/core/tactical/battle/execution/work.js";
+  battlefieldView,
+  createBattleState,
+  getUnit,
+  updateUnit,
+  removeUnit,
+} from "../../dist/core/tactical/battle/execution/context.js";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
 import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
 import * as modifier from "../../dist/core/tactical/modifier/value.js";
@@ -105,12 +106,12 @@ function battleSpec(initialUnits) {
 function workWith(...units) {
   const byId = new Map(units.map((unit) => [unit.id, unit]));
 
-  return createCombatWork({
+  return createBattleState(fixtureBattlefield({
     unitIds: [...byId.keys()],
     getUnit: (id) => byId.get(id),
     blockerOf: () => undefined,
     blockedBy: () => [],
-  });
+  }));
 }
 
 function effectInstance(resources, program, overrides = {}) {
@@ -142,19 +143,19 @@ test("combat program: action compilation uses only injected query and settlement
     vitality: queries,
     settleDamage: (work, request, scope) => {
       calls.push({ request, scope });
-      const current = getCombatUnit(work, request.targetUnitId);
-      return { work: updateCombatUnit(work, {
+      const current = getUnit(work, request.targetUnitId);
+      return { work: updateUnit(work, {
         ...current, vitality: { ...current.vitality, hp: current.vitality.hp - request.operands.power },
       }) };
     },
     settleHealing: (work, request, scope) => {
-      calls.push({ request, scope, targetHp: getCombatUnit(work, 1).vitality.hp });
+      calls.push({ request, scope, targetHp: getUnit(work, 1).vitality.hp });
       return { work };
     },
   };
   const compiled = compileAction(action, resources);
   const initial = workWith(source, target);
-  const bindings = compiled.bind({ source, battlefield: combatWorkView(initial) });
+  const bindings = compiled.bind({ source, battlefield: battlefieldView(initial) });
   let work = initial;
 
   for (const segment of compiled.program) {
@@ -173,8 +174,8 @@ test("combat program: action compilation uses only injected query and settlement
   assert.equal(calls[1].targetHp, 90);
   assert.equal(calls.every(call => call.scope instanceof EffectDispatchScope), true);
   assert.notEqual(calls[0].scope, calls[1].scope);
-  assert.equal(getCombatUnit(initial, 1).vitality.hp, 100);
-  assert.equal(getCombatUnit(work, 1).vitality.hp, 90);
+  assert.equal(initial.battlefield.snapshot("state").getUnit(1).vitality.hp, 100);
+  assert.equal(getUnit(work, 1).vitality.hp, 90);
 });
 
 test("combat program: a custom compiled effect may act on a target without Vitality", () => {
@@ -185,9 +186,9 @@ test("combat program: a custom compiled effect may act on a target without Vital
   let calls = 0;
   const compiled = compileAction(definition.action.normalAction, resources, () => (context) => {
     calls++;
-    const current = getCombatUnit(context.work, context.targetUnitId);
+    const current = getUnit(context.work, context.targetUnitId);
 
-    return updateCombatUnit(context.work, { ...current, position: [2, 0] });
+    return updateUnit(context.work, { ...current, position: [2, 0] });
   });
   const prepared = {
     ...compiled,
@@ -202,11 +203,11 @@ test("combat program: a custom compiled effect may act on a target without Vital
   ).work;
 
   assert.equal(calls, 1);
-  assert.deepEqual(getCombatUnit(result, 1).position, [2, 0]);
-  assert.deepEqual(getCombatUnit(initial, 1).position, [1, 0]);
-  assert.equal("vitality" in getCombatUnit(result, 1), false);
+  assert.deepEqual(getUnit(result, 1).position, [2, 0]);
+  assert.deepEqual(initial.battlefield.snapshot("state").getUnit(1).position, [1, 0]);
+  assert.equal("vitality" in getUnit(result, 1), false);
   assert.deepEqual(
-    combatWorkEvents(result).map((event) => event.type),
+    eventsOf(result).map((event) => event.type),
     ["ACTION", "ACTION_FINISHED"],
   );
 });
@@ -233,16 +234,16 @@ test("combat program: ordered steps can rebind after a prior hit removes a targe
       compiled.program[0],
       { type: "EXECUTE", run: (context) => {
         observed = {
-          first: getCombatUnit(context.work, 1),
-          secondHp: getCombatUnit(context.work, 2).vitality.hp,
-          candidates: combatWorkView(context.work).unitIds,
+          first: getUnit(context.work, 1),
+          secondHp: getUnit(context.work, 2).vitality.hp,
+          candidates: battlefieldView(context.work).unitIds,
         };
 
         return {
           work: context.work,
           bindings: compiled.bind({
-            source: getCombatUnit(context.work, context.sourceUnitId),
-            battlefield: combatWorkView(context.work),
+            source: getUnit(context.work, context.sourceUnitId),
+            battlefield: battlefieldView(context.work),
           }),
         };
       } },
@@ -257,10 +258,10 @@ test("combat program: ordered steps can rebind after a prior hit removes a targe
   ).work;
 
   assert.deepEqual(observed, { first: undefined, secondHp: 30, candidates: [0, 2] });
-  assert.equal(getCombatUnit(result, 1), undefined);
-  assert.equal(getCombatUnit(result, 2).vitality.hp, 10);
+  assert.equal(getUnit(result, 1), undefined);
+  assert.equal(getUnit(result, 2).vitality.hp, 10);
   assert.deepEqual(
-    combatWorkEvents(result)
+    eventsOf(result)
       .filter((event) => event.type === "DAMAGE")
       .map((event) => [event.targetUnitId, event.amount]),
     [
@@ -296,13 +297,14 @@ test("combat program: a compiled source-attack effect reads current contribution
     targetUnitId: 1,
     tick: 0,
   });
+  const firstSnapshot = first.battlefield.snapshot("draft");
   const changed = updateEffectState(first, 0, 0, program.ref, { bonus: 30 }, resources, 0);
   const second = effect({ work: changed, sourceUnitId: 0, targetUnitId: 1, tick: 0 });
 
-  assert.equal(getCombatUnit(first, 1).vitality.hp, 75);
-  assert.equal(getCombatUnit(second, 1).vitality.hp, 35);
+  assert.equal(firstSnapshot.getUnit(1).vitality.hp, 75);
+  assert.equal(getUnit(second, 1).vitality.hp, 35);
   assert.deepEqual(
-    combatWorkEvents(second).filter((event) => event.type === "DAMAGE").map((event) => event.amount),
+    eventsOf(second).filter((event) => event.type === "DAMAGE").map((event) => event.amount),
     [25, 40],
   );
 });
@@ -317,13 +319,13 @@ test("combat program: unavailable source skips live ATK damage without affecting
   );
   const fixed = compileOperation({ type: "DAMAGE", power: 7, damageType: "PHYSICAL" }, resources);
 
-  for (const work of [workWith(target), removeCombatUnit(workWith(source, target), 0, "RETREAT")]) {
+  for (const work of [workWith(target), removeUnit(workWith(source, target), 0, "RETREAT")]) {
     const context = { work, sourceUnitId: 0, targetUnitId: 1, tick: 0 };
 
     assert.equal(live(context), work);
-    assert.equal(getCombatUnit(work, 1).vitality.hp, 100);
-    assert.deepEqual(combatWorkEvents(work), []);
-    assert.equal(getCombatUnit(fixed(context), 1).vitality.hp, 93);
+    assert.equal(getUnit(work, 1).vitality.hp, 100);
+    assert.deepEqual(eventsOf(work), []);
+    assert.equal(getUnit(fixed(context), 1).vitality.hp, 93);
   }
 });
 
@@ -331,7 +333,7 @@ test("combat program: zero HP alone does not make a live ATK source unavailable"
   const resources = new CombatResources();
   const source = initializeUnit({ id: 0, definition: sourceDefinition(), position: [0, 0] });
   const target = initializeUnit({ id: 1, definition: targetDefinition(), position: [1, 0] });
-  const work = updateCombatUnit(workWith(source, target), {
+  const work = updateUnit(workWith(source, target), {
     ...source,
     vitality: { ...source.vitality, hp: 0 },
   });
@@ -341,8 +343,8 @@ test("combat program: zero HP alone does not make a live ATK source unavailable"
   );
   const result = live({ work, sourceUnitId: 0, targetUnitId: 1, tick: 0 });
 
-  assert.equal(getCombatUnit(result, 1).vitality.hp, 90);
-  assert.equal(getCombatUnit(work, 0).vitality.hp, 0);
+  assert.equal(getUnit(result, 1).vitality.hp, 90);
+  assert.equal(getUnit(work, 0).vitality.hp, 0);
 });
 
 test("combat program: lethal retaliation skips later unsampled damage and completes the entered segment", () => {
@@ -452,9 +454,9 @@ test("combat program: runtime resources compile shared definitions once while sn
       compilations++;
       assert.equal(suppliedResources, resources);
       const compiled = compileAction(action, suppliedResources, () => (context) => {
-        const target = getCombatUnit(context.work, context.targetUnitId);
+        const target = getUnit(context.work, context.targetUnitId);
 
-        return updateCombatUnit(context.work, {
+        return updateUnit(context.work, {
           ...target,
           position: [context.sourceUnitId + 1, 0],
         });
@@ -639,7 +641,7 @@ test("combat program: retreat cleans lifetime-owned effects without treating pro
     resources,
     0,
   ).work;
-  seeded = getCombatUnit(installing, seeded.id);
+  seeded = getUnit(installing, seeded.id);
   const removed = removeUnitWithEffects(
     workWith(owner, seeded, otherOwner),
     0,
@@ -647,7 +649,7 @@ test("combat program: retreat cleans lifetime-owned effects without treating pro
     resources,
     0,
   );
-  const pending = getCombatUnit(removed, 1);
+  const pending = getUnit(removed, 1);
   assert.deepEqual(
     pending.effects.instances.map((instance) => instance.id),
     [0, 1, 2],
@@ -657,7 +659,7 @@ test("combat program: retreat cleans lifetime-owned effects without treating pro
   assert.equal(hasStatusFlag(pending, "HEAL_FREE"), false);
   const prepared = prepareCombatEffects(removed, 0, resources);
   assert.deepEqual(
-    getCombatUnit(prepared, 1).effects.instances.map((instance) => instance.id),
+    getUnit(prepared, 1).effects.instances.map((instance) => instance.id),
     [1, 2],
   );
   const runtime = new BattleRuntime(
@@ -713,10 +715,10 @@ test("combat program: readiness skips binding and target ownership stays in even
       resources,
     );
 
-    assert.equal(getCombatUnit(result.work, 0), getCombatUnit(initial, 0));
-    assert.equal(getCombatUnit(result.work, 1), getCombatUnit(initial, 1));
+    assert.equal(getUnit(result.work, 0), getUnit(initial, 0));
+    assert.equal(getUnit(result.work, 1), getUnit(initial, 1));
     assert.equal(result.state, state);
-    assert.deepEqual(Object.keys(getCombatUnit(result.work, 0).action).sort(), ['attackSpeed', 'baseAttackTime', 'cooldownIntervalTicks', 'readyAtTick', 'recoveryUntilTick']);
+    assert.deepEqual(Object.keys(getUnit(result.work, 0).action).sort(), ['attackSpeed', 'baseAttackTime', 'cooldownIntervalTicks', 'readyAtTick', 'recoveryUntilTick']);
   }
   assert.equal(bindings, 0);
 
@@ -727,11 +729,11 @@ test("combat program: readiness skips binding and target ownership stays in even
     resources,
   );
   assert.equal(bindings, 1);
-  assert.equal(combatWorkEvents(started.work).find(event => event.type === 'ACTION').targetUnitId, 1);
+  assert.equal(eventsOf(started.work).find(event => event.type === 'ACTION').targetUnitId, 1);
   assert.deepEqual(started.state, { nextExecutionId: 1, executions: [] });
-  assert.equal(combatWorkEvents(started.work).at(-1).type, "ACTION_FINISHED");
+  assert.equal(eventsOf(started.work).at(-1).type, "ACTION_FINISHED");
 
-  const disappeared = removeCombatUnit(started.work, 1, 'RETREAT');
+  const disappeared = removeUnit(started.work, 1, 'RETREAT');
   const cooling = startAction(
     disappeared,
     started.state,
@@ -740,7 +742,7 @@ test("combat program: readiness skips binding and target ownership stays in even
   );
   assert.equal(cooling.work, disappeared);
   assert.equal(bindings, 1);
-  assert.deepEqual(Object.keys(getCombatUnit(cooling.work, 0).action).sort(), ['attackSpeed', 'baseAttackTime', 'cooldownIntervalTicks', 'readyAtTick', 'recoveryUntilTick']);
+  assert.deepEqual(Object.keys(getUnit(cooling.work, 0).action).sort(), ['attackSpeed', 'baseAttackTime', 'cooldownIntervalTicks', 'readyAtTick', 'recoveryUntilTick']);
 
   const ready = startAction(
     cooling.work,
@@ -779,11 +781,11 @@ test("combat program: immediate execution cleans owned Effects and cancels succe
           scopes: [{ type: "ACTION", executionId: context.executionId }],
         }, resources, context.tick).work };
       } },
-      { type: "EXECUTE", run: (context) => ({ work: removeCombatUnit(context.work, 0, "RETREAT") }) },
+      { type: "EXECUTE", run: (context) => ({ work: removeUnit(context.work, 0, "RETREAT") }) },
       { type: "EXECUTE", run: (context) => {
-        observed.push(["successor", getCombatUnit(context.work, 0)]);
-        assert.equal(hasStatusFlag(getCombatUnit(context.work, 1), "INVINCIBLE"), true);
-        return { work: updateCombatUnit(context.work, { ...getCombatUnit(context.work, 1), position: [2, 0] }) };
+        observed.push(["successor", getUnit(context.work, 0)]);
+        assert.equal(hasStatusFlag(getUnit(context.work, 1), "INVINCIBLE"), true);
+        return { work: updateUnit(context.work, { ...getUnit(context.work, 1), position: [2, 0] }) };
       } },
     ],
   };
@@ -793,13 +795,13 @@ test("combat program: immediate execution cleans owned Effects and cancels succe
     { sourceUnitId: 0, compiled, tick: 0, mayStart: true },
     resources,
   );
-  const receiver = getCombatUnit(started.work, 1);
+  const receiver = getUnit(started.work, 1);
 
   assert.deepEqual(observed, [["install", 0]]);
   assert.deepEqual(receiver.position, [1, 0]);
   assert.equal(receiver.effects.instances[0].finished, true);
   assert.equal(hasStatusFlag(receiver, "INVINCIBLE"), false);
   assert.deepEqual(started.state, { nextExecutionId: 1, executions: [] });
-  assert.equal(combatWorkEvents(started.work).at(-1).type, "ACTION_CANCELLED");
-  assert.equal(combatWorkEvents(started.work).at(-1).reason, 'SOURCE_ABSENT');
+  assert.equal(eventsOf(started.work).at(-1).type, "ACTION_CANCELLED");
+  assert.equal(eventsOf(started.work).at(-1).reason, 'SOURCE_ABSENT');
 });

@@ -1,5 +1,5 @@
 import { maxHp } from "../../dist/core/tactical/unit/capability/vitality/contributions.js";
-import { combatWorkEvents } from "../../dist/core/tactical/battle/execution/work.js";
+import { eventsOf } from "../../dist/core/tactical/battle/execution/context.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { effectFixtureWork, installFixtureEffect } from "../helpers/effects.js";
@@ -7,7 +7,7 @@ import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import * as modifier from "../../dist/core/tactical/modifier/value.js";
 import { resolveMaxHp } from "../../dist/core/tactical/unit/capability/vitality/query.js";
-import { combatWorkView, getCombatUnit } from "../../dist/core/tactical/battle/execution/work.js";
+import { createBattleState, battlefieldView, getUnit } from "../../dist/core/tactical/battle/execution/context.js";
 import { compileStatusBinding } from "../../dist/core/tactical/unit/capability/status/binding.js";
 import { hasStatusFlag } from "../../dist/core/tactical/unit/capability/status/capability.js";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
@@ -109,8 +109,8 @@ test("effect dispatch: synchronous damage and healing inherit the active settlem
   );
 
   assert.deepEqual(seen, [["damage", 37, 37], ["damage", 37, 37], ["healing", 37, 37]]);
-  assert.equal(getCombatUnit(result.work, 2).vitality.hp, 492);
-  assert.ok(combatWorkEvents(result.work).every(event => event.tick === 37));
+  assert.equal(getUnit(result.work, 2).vitality.hp, 492);
+  assert.ok(eventsOf(result.work).every(event => event.tick === 37));
 });
 
 test("effect dispatch: registered candidate identities freeze while current participation is rechecked", () => {
@@ -209,8 +209,8 @@ test("effect dispatch: nested finalization preserves the entered callback contin
 
   assert.deepEqual(observed, [[true, false, 1, 0, 20]]);
   assert.equal(result.report.hpLoss, 50);
-  assert.equal(getCombatUnit(result.work, 2).vitality.hp, 470);
-  assert.deepEqual(getCombatUnit(result.work, 2).effects.instances, []);
+  assert.equal(getUnit(result.work, 2).vitality.hp, 470);
+  assert.deepEqual(getUnit(result.work, 2).effects.instances, []);
 });
 
 test("effect dispatch: healing retains selected rules while nested candidates and current eligibility stay consistent", () => {
@@ -290,7 +290,7 @@ test("effect dispatch: healing retains selected rules while nested candidates an
       : [["first", 10], ["first", 1]]);
     assert.deepEqual(lookups, operation === "enable" ? [0, 1, 0, 1, 2] : [0, 1, 0, 2]);
     assert.equal(healed.amount, operation === "enable" ? 20 : 10);
-    assert.equal(getCombatUnit(healed.work, 2).vitality.hp, operation === "enable" ? 522 : 511);
+    assert.equal(getUnit(healed.work, 2).vitality.hp, operation === "enable" ? 522 : 511);
     calls.length = 0;
     const subsequent = resolveHealing(
       healed.work,
@@ -302,7 +302,7 @@ test("effect dispatch: healing retains selected rules while nested candidates an
       ? [["first", 1], ["follower", 1, 2], ["added", 1]]
       : [["first", 1], ["added", 1]]);
     assert.equal(subsequent.amount, operation === "enable" ? 7 : 6);
-    assert.equal(getCombatUnit(work, 2).vitality.hp, 500);
+    assert.equal(work.battlefield.snapshot("state").getUnit(2).vitality.hp, 500);
   }
 });
 
@@ -369,8 +369,8 @@ test("effect dispatch: ordinary facts see new participating UIDs while current a
   const result = resolveDamage(initial, request(10), resources);
 
   assert.deepEqual(calls, ["D-reception"]);
-  assert.equal(getCombatUnit(result.work, 2).vitality.hp, 989);
-  assert.equal(getCombatUnit(result.work, 3).vitality.hp, 999);
+  assert.equal(getUnit(result.work, 2).vitality.hp, 989);
+  assert.equal(getUnit(result.work, 3).vitality.hp, 999);
   resolveDamage(result.work, request(1), resources);
   assert.deepEqual(calls, ["D-reception", "C-reception"]);
 });
@@ -400,7 +400,7 @@ test("effect dispatch: exceptional exits release candidates before retry on the 
   const owner = attach(resources, unit(2), descriptor);
   const original = effectFixtureWork(owner);
   assert.throws(() => resolveDamage(original, request(), resources, scope), /dispatch failed/);
-  assert.equal(getCombatUnit(original, 2).effects.instances[0].state.attempts, 0);
+  assert.equal(original.battlefield.snapshot("state").getUnit(2).effects.instances[0].state.attempts, 0);
   fail = false;
   const later = resources.registerEffect(program("after-exception"), {
     damage: {
@@ -420,7 +420,7 @@ test("effect dispatch: exceptional exits release candidates before retry on the 
   );
 
   assert.equal(retry.report.hpLoss, 200);
-  assert.equal(getCombatUnit(retry.work, 2).effects.instances[0].state.attempts, 1);
+  assert.equal(getUnit(retry.work, 2).effects.instances[0].state.attempts, 1);
   const address = { type: "EFFECT", unitId: 2, effectId: 0 };
   const initialInstance = owner.effects.instances[0];
   let exitedReader;
@@ -496,11 +496,11 @@ test("effect dispatch: Damage and Healing borrowed facts and operations close af
       ]) {
         assert.throws(call, /no longer active/);
       }
-      assert.equal(getCombatUnit(original, 2).vitality.hp, 500);
-      assert.equal(getCombatUnit(original, 2).effects.instances[0].state.calls, 0);
+      assert.equal(original.battlefield.snapshot("state").getUnit(2).vitality.hp, 500);
+      assert.equal(original.battlefield.snapshot("state").getUnit(2).effects.instances[0].state.calls, 0);
       if (result !== undefined) {
-        assert.equal(getCombatUnit(result.work, 2).vitality.hp, domain === "damage" ? 400 : 600);
-        assert.equal(getCombatUnit(result.work, 2).effects.instances[0].state.calls, 1);
+        assert.equal(getUnit(result.work, 2).vitality.hp, domain === "damage" ? 400 : 600);
+        assert.equal(getUnit(result.work, 2).effects.instances[0].state.calls, 1);
       }
     }
   }
@@ -547,7 +547,7 @@ test("effect dispatch: domain cancellation retains prefix transitions and stops 
 
     assert.equal(result.report.hpLoss, 0);
     assert.equal(result.report.cancellation.reason, "SHIELD");
-    assert.equal(getCombatUnit(result.work, 2).effects.instances[0].state.used, true);
+    assert.equal(getUnit(result.work, 2).effects.instances[0].state.used, true);
     assert.equal(followups, stopDispatch ? 0 : 1);
   }
 });
@@ -604,19 +604,19 @@ test("effect dispatch: shield cancellation notifies terminal business before ret
 
   assert.deepEqual(observed, [{ amount: 20, hp: 520, finished: true, recharge: true }]);
   assert.equal(result.report.hpLoss, 0);
-  assert.equal(getCombatUnit(result.work, 2).vitality.hp, 520);
+  assert.equal(getUnit(result.work, 2).vitality.hp, 520);
   assert.deepEqual(
-    getCombatUnit(result.work, 2).effects.instances.map((instance) => instance.programRef.id),
+    getUnit(result.work, 2).effects.instances.map((instance) => instance.programRef.id),
     ["recharge"],
   );
   assert.deepEqual(
-    combatWorkEvents(result.work).map((event) => [event.type, event.amount]),
+    eventsOf(result.work).map((event) => [event.type, event.amount]),
     [
       ["HEAL", 20],
       ["DAMAGE", 0],
     ],
   );
-  assert.equal(getCombatUnit(original, 2).vitality.hp, 500);
+  assert.equal(original.battlefield.snapshot("state").getUnit(2).vitality.hp, 500);
 });
 
 test("effect dispatch: true damage, skipped modifier reception and invincibility are independent protocol facts", () => {
@@ -723,18 +723,19 @@ test("effect dispatch: healing observes reception rejection without retrospectiv
   });
 
   const original = effectFixtureWork(attach(resources, unit(2, 500, ["HEAL_FREE"]), descriptor));
+  const branch = () => createBattleState(original.battlefield.fork());
   const rejected = resolveHealing(
-    original,
+    branch(),
     { sourceUnitId: null, targetUnitId: 2, power: 20, ignoreHealFree: false, tick: 1 },
     resources,
   );
   const received = resolveHealing(
-    original,
+    branch(),
     { sourceUnitId: null, targetUnitId: 2, power: 20, ignoreHealFree: true, tick: 1 },
     resources,
   );
   const skipped = resolveHealing(
-    original,
+    branch(),
     {
       sourceUnitId: null,
       targetUnitId: 2,
@@ -751,7 +752,7 @@ test("effect dispatch: healing observes reception rejection without retrospectiv
   assert.equal(skipped.amount, 0);
   assert.equal(skipped.report.cancellation.reason, "HEAL_FREE");
   const permittedSkip = resolveHealing(
-    original,
+    branch(),
     {
       sourceUnitId: null,
       targetUnitId: 2,
@@ -765,11 +766,11 @@ test("effect dispatch: healing observes reception rejection without retrospectiv
   assert.equal(permittedSkip.amount, 20);
   assert.equal(permittedSkip.report.cancellation, null);
   assert.equal(calls, 2);
-  assert.deepEqual(getCombatUnit(rejected.work, 2).effects.instances[0].state, {
+  assert.deepEqual(getUnit(rejected.work, 2).effects.instances[0].state, {
     receipts: 1,
     rejected: 1,
   });
-  assert.deepEqual(getCombatUnit(original, 2).effects.instances[0].state, {
+  assert.deepEqual(getUnit(original, 2).effects.instances[0].state, {
     receipts: 0,
     rejected: 0,
   });
@@ -791,10 +792,10 @@ test("effect dispatch: healing observes reception rejection without retrospectiv
     resources,
   );
 
-  assert.equal(hasStatusFlag(getCombatUnit(admitted.work, 2), "HEAL_FREE"), true);
+  assert.equal(hasStatusFlag(getUnit(admitted.work, 2), "HEAL_FREE"), true);
   assert.equal(admitted.amount, 60);
   assert.equal(next.amount, 0);
-  assert.equal(getCombatUnit(next.work, 2).vitality.hp, 560);
+  assert.equal(getUnit(next.work, 2).vitality.hp, 560);
   assert.equal(calls, 4);
   reactions.length = 0;
   resolveHealing(
@@ -903,9 +904,9 @@ test("effect registration: domain facets coexist and expose the complete healing
     },
   );
   const initial = effectFixtureWork(attach(resources, unit(2, 500), descriptor));
-  assert.equal(hasStatusFlag(getCombatUnit(initial, 2), "INVISIBLE"), true);
-  assert.equal(resolveMaxHp(2, combatWorkView(initial)), 1050);
-  assert.equal(getCombatUnit(initial, 2).vitality.hp, 525);
+  assert.equal(hasStatusFlag(getUnit(initial, 2), "INVISIBLE"), true);
+  assert.equal(resolveMaxHp(2, battlefieldView(initial)), 1050);
+  assert.equal(getUnit(initial, 2).vitality.hp, 525);
   const damaged = resolveDamage(initial, request(100, { sourceUnitId: 2 }), resources);
   const healed = resolveHealing(
     damaged.work,
@@ -928,8 +929,8 @@ test("effect registration: domain facets coexist and expose the complete healing
   assert.equal(damaged.report.hpLoss, 200);
   assert.equal(healed.amount, 30);
   assert.equal(skipped.amount, 11);
-  assert.equal(getCombatUnit(skipped.work, 2).vitality.hp, 366);
-  assert.deepEqual(getCombatUnit(skipped.work, 2).effects.instances[0].state, {
+  assert.equal(getUnit(skipped.work, 2).vitality.hp, 366);
+  assert.deepEqual(getUnit(skipped.work, 2).effects.instances[0].state, {
     damage: 1,
     output: 1,
     reception: 1,

@@ -1,7 +1,7 @@
 import { computedAttack } from "../core/tactical/unit/capability/offense/contributions.js";
 import { CombatResources } from "../core/tactical/battle/resources.js";
 import type { BattleResources } from "../core/tactical/battle/runtime.js";
-import { combatWorkView, getCombatUnit } from "../core/tactical/battle/execution/work.js";
+import { battlefieldView, getUnit } from "../core/tactical/battle/execution/context.js";
 import { createProjectileProgram } from "../core/tactical/battlefield/projectile/program.js";
 import { createShapeGeometry, type RangeGeometry } from "../core/tactical/geometry/shape.js";
 import * as modifier from "../core/tactical/modifier/value.js";
@@ -86,12 +86,10 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
                 {
                     type: "EXECUTE",
                     run: (context) => {
-                        const source = getCombatUnit(context.work, context.sourceUnitId);
+                        const source = getUnit(context.work, context.sourceUnitId);
                         const targetId = context.bindings.get(definition.triggerBindingId)?.[0];
                         const target =
-                            targetId === undefined
-                                ? undefined
-                                : getCombatUnit(context.work, targetId);
+                            targetId === undefined ? undefined : getUnit(context.work, targetId);
 
                         if (source === undefined || target === undefined) {
                             return { work: context.work, continuation: "CANCEL" };
@@ -102,7 +100,7 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
 
                         const cachedAtk = resolveAttackPower(
                             source.id,
-                            combatWorkView(context.work),
+                            battlefieldView(context.work),
                             resources.computations,
                         );
 

@@ -1,10 +1,11 @@
+import { fixtureBattlefield } from "../helpers/battlefield.js";
 import { effectTick } from "../../dist/core/tactical/unit/capability/effects/instance.js";
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { advanceBlocking } from '../../dist/core/tactical/battle/steps/blocking.js';
-import { combatWorkChanges, combatWorkView, getCombatUnit } from '../../dist/core/tactical/battle/execution/work.js';
+import { createBattleState, battlefieldView, getUnit } from '../../dist/core/tactical/battle/execution/context.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
 import { projectStaticNavigationMap } from '../../dist/core/tactical/battlefield/navigation/projection.js';
@@ -50,7 +51,7 @@ const enemy = (id, weight = 1) => initializeUnit({
   },
 });
 const capacityOf = unit => resolveBlockingCapacity(unit.definition.blocker, unit.blocker);
-const capacity = work => capacityOf(getCombatUnit(work, 0));
+const capacity = work => capacityOf(getUnit(work, 0));
 const install = (work, effect, resources, expiresAtTick = null) => installNewEffect(
   work, 0, effect.ref, { source: 7, scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }] }, resources, 0,
 ).work;
@@ -92,10 +93,10 @@ test('blocking capacity: effect updates, participation and terminal cleanup pres
   const owner = { ...initialized, vitality: { ...initialized.vitality, hp: 50 } };
   const original = effectFixtureWork(owner);
   let work = install(original, effect, resources);
-  const installed = copyUnitSnapshot(getCombatUnit(work, 0));
+  const installed = copyUnitSnapshot(getUnit(work, 0));
   assert.equal(capacity(work), 2);
-  assert.equal(getCombatUnit(work, 0).vitality.hp, 50);
-  assert.equal(resolveMaxHp(0, combatWorkView(work)), 100);
+  assert.equal(getUnit(work, 0).vitality.hp, 50);
+  assert.equal(resolveMaxHp(0, battlefieldView(work)), 100);
   work = updateEffectState(work, 0, 0, effect.ref, () => ({ amount: -2 }), resources, 0);
   assert.equal(capacity(work), 1);
   work = setEffectEnabled(work, effectAddress, false, resources, 1);
@@ -106,17 +107,17 @@ test('blocking capacity: effect updates, participation and terminal cleanup pres
   assert.equal(capacity(work), 0);
   work = install(work, hpEffect, resources);
   assert.equal(capacity(work), 0);
-  assert.equal(getCombatUnit(work, 0).vitality.hp, 100);
-  assert.equal(resolveMaxHp(0, combatWorkView(work)), 200);
+  assert.equal(getUnit(work, 0).vitality.hp, 100);
+  assert.equal(resolveMaxHp(0, battlefieldView(work)), 200);
   work = finishEffects(work, [effectAddress], resources, 3);
   assert.equal(capacity(work), 3);
-  assert.equal(getCombatUnit(work, 0).vitality.hp, 100);
-  assert.equal(resolveMaxHp(0, combatWorkView(work)), 200);
-  assert.equal(getCombatUnit(work, 0).definition.blocker.capacity, 3);
-  const current = getCombatUnit(work, 0);
+  assert.equal(getUnit(work, 0).vitality.hp, 100);
+  assert.equal(resolveMaxHp(0, battlefieldView(work)), 200);
+  assert.equal(getUnit(work, 0).definition.blocker.capacity, 3);
+  const current = getUnit(work, 0);
   assert.equal(updateBlockingCapacityContributions(current, state => state), current);
   work = finalizeEffect(work, effectAddress, resources, 3);
-  assert.deepEqual(getCombatUnit(work, 0).blocker.capacity.entries, []);
+  assert.deepEqual(getUnit(work, 0).blocker.capacity.entries, []);
   assert.equal(installed.blocker.capacity.entries[0].participating, true);
   assert.equal(capacityOf(installed), 2);
   assert.equal(capacity(original), 3);
@@ -147,8 +148,13 @@ function battlefield(units) {
   const h = {
     branches, commit,
     get state() { return branches[0].state; },
-    work() { return effectFixtureWork(...h.state.units.values()); },
-    publish(work) { return commit(combatWorkChanges(work)); },
+    work() { return createBattleState(fixtureBattlefield({ map,
+      unitIds: [...h.state.units.keys()], getUnit: id => h.state.units.get(id),
+      blockingRelations: h.state.blockingRelations, supportRelations: h.state.supportRelations,
+    })); },
+    publish(work) {
+      return commit(work.battlefield.unitIds.map(id => ({ type: 'UPDATE_UNIT', unit: getUnit(work, id) })));
+    },
     blocked() { return h.state.blockingRelations.map(relation => relation.blockedUnitId); },
     blockingPhase(tick) {
       const state = h.state;
@@ -199,7 +205,7 @@ test('blocking capacity: native STACK layers release enemies and expiry restores
   const original = h.state;
   const apply = () => {
     let work = h.work();
-    const current = getCombatUnit(work, 0).effects?.instances.find(instance => instance.programRef === effect.ref);
+    const current = getUnit(work, 0).effects?.instances.find(instance => instance.programRef === effect.ref);
     const plan = rule.plan(current === undefined ? undefined : {
       stackCount: current.state.stackCount, expiresAtTick: effectTick(current),
     }, { stackCount: 1, expiresAtTick: 2 }, 0);

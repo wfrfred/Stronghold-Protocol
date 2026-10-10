@@ -1,15 +1,16 @@
+import { fixtureBattlefield } from "../helpers/battlefield.js";
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import {
-    appendCombatEvents,
-    createCombatWork,
-    getCombatUnit,
-    removeCombatUnit,
-    updateCombatUnit,
-    updateCombatUnits,
-    withCombatExecution,
-} from '../../dist/core/tactical/battle/execution/work.js';
+    appendEvents,
+    createBattleState,
+    getUnit,
+    removeUnit,
+    updateUnit,
+    updateUnits,
+    withExecution,
+} from '../../dist/core/tactical/battle/execution/context.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
 import {
@@ -71,23 +72,18 @@ function actionWork() {
 }
 
 function host(...units) {
-    const byId = new Map(units.map(value => [value.id, value]));
+    const battlefield = fixtureBattlefield(units);
     let membershipReads = 0;
+    const readIds = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(battlefield), "unitIds").get;
     let rejectMembership = false;
-    const battlefield = {
-        get unitIds() {
-            membershipReads++;
-            assert.equal(rejectMembership, false, 'cached cleanup must not rescan battlefield');
-            return [...byId.keys()];
-        },
-        getUnit: id => byId.get(id),
-        blockerOf: () => undefined,
-        blockedBy: () => [],
-    };
+    Object.defineProperty(battlefield, 'unitIds', { get() {
+        membershipReads++;
+        assert.equal(rejectMembership, false, 'indexed cleanup must not enumerate units');
+        return readIds.call(battlefield);
+    } });
     return {
         battlefield,
-        byId,
-        work: createCombatWork(battlefield, undefined, undefined, actionWork()),
+        work: createBattleState(battlefield, undefined, actionWork()),
         reads: () => membershipReads,
         forbidMembership: () => { rejectMembership = true; },
     };
@@ -135,10 +131,10 @@ test('effect lifetime index: ordinary Unit and event updates reuse the projectio
     fixture.forbidMembership();
 
     for (let tick = 0; tick < 30; tick++) {
-        work = updateCombatUnit(work, { ...getCombatUnit(work, 2), position: [tick, 0] });
-        work = updateCombatUnit(work, { ...getCombatUnit(work, 9), position: [tick, 1] });
-        work = appendCombatEvents(work, [{ type: 'ACTION', sourceUnitId: 0, targetUnitId: 9, tick }]);
-        work = withCombatExecution(work, { ...work.execution, nextUnitId: tick + 10 });
+        work = updateUnit(work, { ...getUnit(work, 2), position: [tick, 0] });
+        work = updateUnit(work, { ...getUnit(work, 9), position: [tick, 1] });
+        work = appendEvents(work, [{ type: 'ACTION', sourceUnitId: 0, targetUnitId: 9, tick }]);
+        work = withExecution(work, { ...work.execution, nextUnitId: tick + 10 });
         assert.deepEqual(effectDependents(work, scope(3)), [address]);
         assert.equal(closeEffectLifetimes(work, [scope(tick + 10)], resources, tick), work);
     }
@@ -146,43 +142,42 @@ test('effect lifetime index: ordinary Unit and event updates reuse the projectio
     assert.equal(fixture.reads(), reads);
 });
 
-test('effect lifetime index: lazy construction sees earlier overlay installs and removals', () => {
+test('effect lifetime index: Battlefield projections observe earlier draft installs and removals', () => {
     const resources = new CombatResources();
     const effect = resources.registerEffect(program('lazy'));
     const first = install(host(unit(0), unit(2), unit(9)).work, resources, effect.ref, 2, scope(3));
     const second = install(first.work, resources, effect.ref, 9, scope(3));
-    const work = removeCombatUnit(second.work, 2);
+    const work = removeUnit(second.work, 2);
 
     assert.deepEqual(effectDependents(work, scope(3)), [second.address]);
 });
 
-test('effect lifetime index: immutable branches and removal preserve previous candidates', () => {
+test('effect lifetime index: snapshots and forks retain their previous candidates during draft removal', () => {
     const resources = new CombatResources();
     const effect = resources.registerEffect(program('branch'));
     const installed = install(host(unit(0), unit(2), unit(9)).work, resources, effect.ref, 2, scope(3));
     const original = installed.work;
     const captured = effectDependents(original, scope(3));
+    const originalReceiver = getUnit(original, 2);
+    const fork = createBattleState(original.battlefield.fork(), original.execution, actionWork());
     const other = install(original, resources, effect.ref, 9, scope(3));
-    const removed = removeCombatUnit(other.work, 2);
-    const restored = updateCombatUnit(removed, getCombatUnit(original, 2));
-
+    removeUnit(original, 2);
     assert.deepEqual(captured, [installed.address]);
     assert.ok(Object.isFrozen(captured));
     assert.ok(Object.isFrozen(captured[0]));
-    assert.deepEqual(effectDependents(original, scope(3)), captured);
-    assert.deepEqual(effectDependents(other.work, scope(3)), [installed.address, other.address]);
-    assert.deepEqual(effectDependents(removed, scope(3)), [other.address]);
-    assert.deepEqual(effectDependents(restored, scope(3)), [installed.address, other.address]);
+    assert.deepEqual(effectDependents(fork, scope(3)), captured);
+    assert.deepEqual(effectDependents(original, scope(3)), [other.address]);
+    updateUnit(original, originalReceiver);
+    assert.deepEqual(effectDependents(original, scope(3)), [installed.address, other.address]);
 });
 
-test('effect lifetime index: a fresh Work sees changes behind the same mutable battlefield view', () => {
+test('effect lifetime index: a new domain context reads the same current battlefield draft', () => {
     const resources = new CombatResources();
     const effect = resources.registerEffect(program('phase'));
     const fixture = host(unit(0), unit(2));
     assert.deepEqual(effectDependents(fixture.work, scope(3)), []);
     const installed = install(fixture.work, resources, effect.ref, 2, scope(3));
-    fixture.byId.set(2, getCombatUnit(installed.work, 2));
-    const nextPhase = createCombatWork(fixture.battlefield, undefined, undefined, fixture.work.actionExecutions);
+    const nextPhase = createBattleState(fixture.battlefield, undefined, fixture.work.actionExecutions);
 
     assert.deepEqual(effectDependents(nextPhase, scope(3)), [installed.address]);
 });
@@ -199,6 +194,7 @@ test('effect lifetime index: parent attachment, finish and finalization track ot
     const attached = bindEffectLifetime(child.work, child.address, parent.address);
     assert.equal(attached.result.type, 'BOUND');
     assert.deepEqual(effectDependents(attached.work, parent.address), [child.address]);
+    const capturedDependents = effectDependents(attached.work, parent.address);
     const finished = closeEffectLifetimes(attached.work, [scope(3)], resources, 1);
 
     assert.deepEqual(disabled, [parent.address, child.address]);
@@ -206,7 +202,7 @@ test('effect lifetime index: parent attachment, finish and finalization track ot
     assert.equal(getEffect(finished, child.address).finished, true);
     const finalized = finalizeEffect(finished, child.address, resources, 1);
     assert.deepEqual(effectDependents(finalized, parent.address), []);
-    assert.deepEqual(effectDependents(attached.work, parent.address), [child.address]);
+    assert.deepEqual(capturedDependents, [child.address]);
 });
 
 test('effect lifetime index: nested ending protects pending notices and exposes new independent identities to later queries', () => {
@@ -278,16 +274,18 @@ test('effect lifetime index: Action cancellation finishes execution-owned effect
     assert.equal(getEffect(cancelled.work, installed.address).finished, true);
 });
 
-test('effect lifetime index: a failed working branch leaves the previous scope and parent projection intact', () => {
+test('effect lifetime index: failed settlement can be discarded without changing published scopes', () => {
     const resources = new CombatResources();
     const leader = resources.registerEffect(program('throws'), {
         lifecycle: { disable: () => { throw new Error('abort'); } },
     });
     const installed = install(host(unit(0), unit(2)).work, resources, leader.ref, 2, scope(3));
     const original = installed.work;
+    original.battlefield.apply();
     const before = effectDependents(original, scope(3));
 
     assert.throws(() => finishEffects(original, [installed.address], resources, 1), /abort/);
+    original.battlefield.drop();
     assert.deepEqual(effectDependents(original, scope(3)), before);
     assert.equal(getEffect(original, installed.address).finished, false);
 });
@@ -300,16 +298,17 @@ test('effect lifetime index: batch updates share unchanged relations without res
     const installed = install(fixture.work, resources, effect.ref, 9, scope(3));
     const before = installed.work;
     const addresses = effectDependents(before, scope(3));
+    const snapshot = before.battlefield.snapshot("draft");
     fixture.forbidMembership();
-    const next = updateCombatUnits(before, [
-        { ...getCombatUnit(before, 2), position: [4, 5] },
-        { ...getCombatUnit(before, 9), position: [6, 7] },
+    const next = updateUnits(before, [
+        { ...getUnit(before, 2), position: [4, 5] },
+        { ...getUnit(before, 9), position: [6, 7] },
     ]);
 
     assert.deepEqual(effectDependents(next, scope(3)), addresses);
     assert.deepEqual(effectDependents(before, scope(3)), addresses);
-    assert.deepEqual(getCombatUnit(before, 2).position, [2, 0]);
-    assert.deepEqual(getCombatUnit(next, 2).position, [4, 5]);
+    assert.deepEqual(snapshot.getUnit(2).position, [2, 0]);
+    assert.deepEqual(getUnit(next, 2).position, [4, 5]);
 });
 
 test('effect lifetime index: batch relation edits and repeated receiver IDs preserve independent projections', () => {
@@ -336,19 +335,18 @@ test('effect lifetime index: batch relation edits and repeated receiver IDs pres
             })),
         },
     });
-    const firstReceiver = getCombatUnit(before, 2);
-    const secondReceiver = getCombatUnit(before, 9);
+    const oldProjection = before.battlefield.snapshot("draft").effectLifetimes;
+    const firstReceiver = getUnit(before, 2);
+    const secondReceiver = getUnit(before, 9);
     const firstMoved = change(firstReceiver, scope(4), otherParent.address);
     const secondMoved = change(secondReceiver, scope(4), otherParent.address);
     const firstRestored = change(firstReceiver, scope(3), null);
-    const next = updateCombatUnits(before, [firstMoved, secondMoved, firstRestored]);
+    const next = updateUnits(before, [firstMoved, secondMoved, firstRestored]);
 
     assert.deepEqual(effectDependents(next, scope(3)), [first.address]);
     assert.deepEqual(effectDependents(next, scope(4)), [second.address]);
     assert.deepEqual(effectDependents(next, parent.address), []);
     assert.deepEqual(effectDependents(next, otherParent.address), [second.address]);
-    assert.deepEqual(effectDependents(before, scope(3)), [first.address, second.address]);
-    assert.deepEqual(effectDependents(before, scope(4)), []);
-    assert.deepEqual(effectDependents(before, parent.address), [first.address, second.address]);
-    assert.deepEqual(effectDependents(before, otherParent.address), []);
+    assert.equal(oldProjection.dependents.get("ACTION:3").size, 2);
+    assert.equal(oldProjection.dependents.has("ACTION:4"), false);
 });

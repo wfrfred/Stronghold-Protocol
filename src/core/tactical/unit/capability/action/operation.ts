@@ -5,7 +5,7 @@ import { resolveAttackPower } from "../offense/query.js";
 import { createDamageOperands, type DamageType } from "../vitality/damage/contract.js";
 import { EffectDispatchScope } from "../effects/dispatch.js";
 import type { ActionResources } from "./resources.js";
-import { combatWorkView, type CombatWork } from "../../../battle/execution/work.js";
+import { battlefieldView, type BattleState } from "../../../battle/execution/context.js";
 import type { UnitId } from "../../unit.js";
 
 export type Definition =
@@ -46,13 +46,13 @@ export function purposes(definition: Definition): readonly QueryPurpose[] {
 }
 
 export interface Context {
-    readonly work: CombatWork;
+    readonly work: BattleState;
     readonly sourceUnitId: UnitId;
     readonly targetUnitId: UnitId;
     readonly tick: number;
 }
 
-export type Program = (context: Context) => CombatWork;
+export type Program = (context: Context) => BattleState;
 
 export function compile(definition: Definition, resources: ActionResources): Program {
     switch (definition.type) {
@@ -62,7 +62,7 @@ export function compile(definition: Definition, resources: ActionResources): Pro
                     ? ({ work, sourceUnitId }: Context): number | undefined =>
                           resolveAttackPower(
                               sourceUnitId,
-                              combatWorkView(work),
+                              battlefieldView(work),
                               resources.computations,
                           )
                     : (): number => definition.power;

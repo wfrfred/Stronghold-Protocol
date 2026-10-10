@@ -165,7 +165,7 @@ test('core visibility: a freed front operator takes over after movement and hold
   const first = battle.step();
   const position = coreBlockingUnit(battle, 3).position;
 
-  assert.deepEqual(first.events.filter(event => event.type === 'UNIT_REMOVED').map(event => event.unitId), [1, 2]);
+  assert.deepEqual(first.events.filter(event => event.type === 'UNIT_REMOVED').map(event => event.unitId), [2, 1]);
   assert.ok(position[0] < 5.4);
   assert.ok(position[0] > 5.4 - 1 / 30);
   assert.deepEqual(coreBlockedBy(battle, 0), [3]);

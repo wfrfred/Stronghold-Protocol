@@ -1,8 +1,10 @@
+import { fixtureBattlefield } from "../helpers/battlefield.js";
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createCombat } from '../../dist/core/tactical/battle/steps/combat.js';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
-import { createCombatWork } from '../../dist/core/tactical/battle/execution/work.js';
+import { createBattleState } from '../../dist/core/tactical/battle/execution/context.js';
+import { ActionExecutionWork } from '../../dist/core/tactical/unit/capability/action/internal/executions.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { createActionDefinition } from '../../dist/core/tactical/unit/capability/action/capability.js';
 import {
@@ -41,15 +43,16 @@ function fixture(count = 8, perSource = 2) {
     }
   }
   state = Object.freeze({ ...state, executions: Object.freeze([...state.executions].reverse()) });
-  return {
-    state, battlefield,
-    input: { battlefield, tick: 0, execution: createCombatWork(battlefield).execution },
-  };
+  return { state, battlefield };
+}
+
+function workingState(initial, actions = initial.state, tick = 0) {
+  return createBattleState(fixtureBattlefield(initial.battlefield), undefined, new ActionExecutionWork(actions), tick);
 }
 
 function reference(initial, segments, resources, tick) {
   let state = initial.state;
-  let work = createCombatWork(initial.battlefield);
+  let work = createBattleState(fixtureBattlefield(initial.battlefield));
   for (const id of initial.battlefield.unitIds) {
     for (const execution of state.executions.filter(execution => execution.sourceUnitId === id)) {
       const advanced = resumeActionExecution(
@@ -88,26 +91,32 @@ test('action execution work: combat batching preserves execution order, samples,
     if (Array.isArray(value) && value.length === 256 && value[0]?.acceptedAtTick !== undefined) executionArrays++;
     return freeze(value);
   };
+  const working = workingState(initial);
   let actual;
-  try { actual = combat.advance(initial.input, initial.state); }
+  try {
+    combat.advance(working, 0);
+    actual = working.actionExecutions.result();
+  }
   finally { Object.freeze = freeze; }
 
   assert.equal(executionArrays, 1);
   assert.deepEqual(observed, expectedOrder);
-  assert.deepEqual(actual.actionExecution, expected.state);
+  assert.deepEqual(actual, expected.state);
   assert.deepEqual(initial.state, before);
-  assert.equal(Object.isFrozen(actual.actionExecution), true);
-  assert.equal(Object.isFrozen(actual.actionExecution.executions), true);
-  assert.equal(actual.actionExecution.executions.every(execution => Object.isFrozen(execution)), true);
-  assert.deepEqual(actual.changes, []);
-  assert.deepEqual(actual.events, []);
-  assert.equal(combat.allowsMovement(actual.actionExecution, 0), false);
-  assert.equal(combat.allowsMovement(actual.actionExecution, 128), true);
-  const repeated = combat.advance(initial.input, initial.state);
-  assert.deepEqual(repeated, actual);
-  const advanced = combat.advance({ ...initial.input, tick: 1 }, actual.actionExecution);
-  assert.equal(advanced.actionExecution.executions.every(execution => execution.wait.remainingTicks === 2), true);
-  assert.equal(actual.actionExecution.executions.every(execution => execution.wait.remainingTicks === 3), true);
+  assert.equal(Object.isFrozen(actual), true);
+  assert.equal(Object.isFrozen(actual.executions), true);
+  assert.equal(actual.executions.every(execution => Object.isFrozen(execution)), true);
+  assert.deepEqual(working.removedUnits, []);
+  assert.deepEqual(working.events, []);
+  assert.equal(combat.allowsMovement(actual, 0), false);
+  assert.equal(combat.allowsMovement(actual, 128), true);
+  const repeated = workingState(initial);
+  combat.advance(repeated, 0);
+  assert.deepEqual(repeated.actionExecutions.result(), actual);
+  const advanced = workingState(initial, actual, 1);
+  combat.advance(advanced, 1);
+  assert.equal(advanced.actionExecutions.result().executions.every(execution => execution.wait.remainingTicks === 2), true);
+  assert.equal(actual.executions.every(execution => execution.wait.remainingTicks === 3), true);
 });
 
 test('action execution work: absolute and same-tick consumed waits preserve unchanged state identities', () => {
@@ -119,18 +128,21 @@ test('action execution work: absolute and same-tick consumed waits preserve unch
     const resources = new CombatResources();
     const segments = [{ type: 'WAIT', resolve, allowNewAction: false }];
     const combat = createCombat(resources, action => ({ definition: action, bind: () => new Map(), program: segments }));
-    const entered = combat.advance(initial.input, initial.state);
-    const unchanged = combat.advance(initial.input, entered.actionExecution);
-    assert.equal(unchanged.actionExecution, entered.actionExecution);
+    const entered = workingState(initial);
+    combat.advance(entered, 0);
+    const enteredActions = entered.actionExecutions.result();
+    const unchanged = workingState(initial, enteredActions);
+    combat.advance(unchanged, 0);
+    assert.equal(unchanged.actionExecutions.result(), enteredActions);
     const single = resumeActionExecution(
-      createCombatWork(initial.battlefield),
-      entered.actionExecution,
-      { executionId: entered.actionExecution.executions[0].id, segments, tick: 0 },
+      createBattleState(fixtureBattlefield(initial.battlefield)),
+      enteredActions,
+      { executionId: enteredActions.executions[0].id, segments, tick: 0 },
       resources,
     );
-    assert.equal(single.state, entered.actionExecution);
+    assert.equal(single.state, enteredActions);
     assert.deepEqual(unchanged.events, []);
-    assert.deepEqual(unchanged.changes, []);
+    assert.deepEqual(unchanged.removedUnits, []);
   }
 });
 
@@ -147,10 +159,11 @@ test('action execution work: a later callback exception leaves the input executi
   ];
   const combat = createCombat(resources, action => ({ definition: action, bind: () => new Map(), program: segments }));
   const before = structuredClone(initial.state);
-  assert.throws(() => combat.advance(initial.input, initial.state), /late action failure/);
+  assert.throws(() => combat.advance(workingState(initial), 0), /late action failure/);
   assert.deepEqual(initial.state, before);
   fail = false;
-  const retried = combat.advance(initial.input, initial.state);
-  assert.deepEqual(retried.actionExecution, reference(initial, segments, resources, 0).state);
+  const retried = workingState(initial);
+  combat.advance(retried, 0);
+  assert.deepEqual(retried.actionExecutions.result(), reference(initial, segments, resources, 0).state);
   assert.deepEqual(initial.state, before);
 });

@@ -1,4 +1,4 @@
-import type { CombatWork } from "../../../battle/execution/work.js";
+import type { BattleState } from "../../../battle/execution/context.js";
 import type { Unit, UnitId } from "../../unit.js";
 import { hasEffects } from "./capability.js";
 import {
@@ -20,11 +20,6 @@ export interface EffectUnitTransition {
     readonly previousUnit: Unit | undefined;
     readonly nextUnit: Unit | undefined;
 }
-
-const projections = new WeakMap<
-    CombatWork["unitUpdates"],
-    WeakMap<CombatWork["removals"], EffectLifetimeProjection>
->();
 
 function instancesOf(unit: Unit | undefined): readonly EffectInstanceValue[] | undefined {
     return unit !== undefined && hasEffects(unit) ? unit.effects.instances : undefined;
@@ -52,28 +47,6 @@ function isTimed(instance: EffectInstanceValue | undefined): boolean {
 
 function effectRef(unitId: UnitId, effectId: number): EffectRef {
     return Object.freeze({ type: "EFFECT", unitId, effectId });
-}
-
-function storedProjection(work: CombatWork): EffectLifetimeProjection | undefined {
-    return projections.get(work.unitUpdates)?.get(work.removals);
-}
-
-function storeProjection(work: CombatWork, projection: EffectLifetimeProjection): void {
-    let byRemovals = projections.get(work.unitUpdates);
-
-    if (byRemovals === undefined) {
-        byRemovals = new WeakMap();
-        projections.set(work.unitUpdates, byRemovals);
-    }
-
-    byRemovals.set(work.removals, projection);
-}
-
-/** Captures the immutable projection belonging to this Work's Battlefield baseline. */
-export function captureEffectLifetimeProjection(work: CombatWork): void {
-    if ("effectLifetimes" in work.battlefield && work.battlefield.effectLifetimes !== undefined) {
-        storeProjection(work, work.battlefield.effectLifetimes as EffectLifetimeProjection);
-    }
 }
 
 export function projectEffectLifetimes(units: Iterable<Unit>): EffectLifetimeProjection {
@@ -104,31 +77,8 @@ export function projectEffectLifetimes(units: Iterable<Unit>): EffectLifetimePro
     return { dependents, timed };
 }
 
-function projectionOf(work: CombatWork): EffectLifetimeProjection {
-    const stored = storedProjection(work);
-
-    if (stored !== undefined) {
-        return stored;
-    }
-
-    const ids = new Set([...work.battlefield.unitIds, ...work.unitUpdates.keys()]);
-
-    const units = function* () {
-        for (const unitId of ids) {
-            if (!work.removals.has(unitId)) {
-                const unit = work.unitUpdates.get(unitId) ?? work.battlefield.getUnit(unitId);
-
-                if (unit !== undefined) {
-                    yield unit;
-                }
-            }
-        }
-    };
-
-    const projection = projectEffectLifetimes(units());
-    storeProjection(work, projection);
-
-    return projection;
+function projectionOf(state: BattleState): EffectLifetimeProjection {
+    return state.battlefield.effectLifetimes;
 }
 
 export function deriveEffectLifetimes(
@@ -225,18 +175,6 @@ export function deriveEffectLifetimes(
         : { dependents: dependents ?? projection.dependents, timed: timed ?? projection.timed };
 }
 
-export function deriveEffectLifetimeProjection(
-    previous: CombatWork,
-    next: CombatWork,
-    transitions: readonly EffectUnitTransition[],
-): void {
-    const projection = storedProjection(previous);
-
-    if (projection !== undefined) {
-        storeProjection(next, deriveEffectLifetimes(projection, transitions));
-    }
-}
-
 function sortedRefs(refs: Iterable<EffectRef>): readonly EffectRef[] {
     return Object.freeze(
         [...refs].sort(
@@ -245,10 +183,10 @@ function sortedRefs(refs: Iterable<EffectRef>): readonly EffectRef[] {
     );
 }
 
-export function effectDependents(work: CombatWork, lifetime: LifetimeRef): readonly EffectRef[] {
+export function effectDependents(work: BattleState, lifetime: LifetimeRef): readonly EffectRef[] {
     return sortedRefs(projectionOf(work).dependents.get(lifetimeKey(lifetime))?.values() ?? []);
 }
 
-export function effectTickCandidates(work: CombatWork): readonly EffectRef[] {
+export function effectTickCandidates(work: BattleState): readonly EffectRef[] {
     return sortedRefs(projectionOf(work).timed.values());
 }

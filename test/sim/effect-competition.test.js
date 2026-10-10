@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
-import { combatWorkView, getCombatUnit } from '../../dist/core/tactical/battle/execution/work.js';
+import { battlefieldView, getUnit } from '../../dist/core/tactical/battle/execution/context.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { copyUnitSnapshot } from '../../dist/core/tactical/unit/snapshot.js';
 import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
@@ -29,9 +29,9 @@ function harness() {
 }
 function values(work, resources) {
   return {
-    attack: resolveAttackPower(0, combatWorkView(work), resources.computations),
-    maxHp: resolveMaxHp(0, combatWorkView(work)),
-    hp: getCombatUnit(work, 0).vitality.hp,
+    attack: resolveAttackPower(0, battlefieldView(work), resources.computations),
+    maxHp: resolveMaxHp(0, battlefieldView(work)),
+    hp: getUnit(work, 0).vitality.hp,
   };
 }
 function definition(resources, id = 'inspiration', lifecycle = {}, onSample = () => {}) {
@@ -68,18 +68,18 @@ test('effect competition: coefficient wins independently of sampled value; recov
   const weak = install(h, program, { ratio: 0.5, sourceAttack: 500, hpBonus: 1000 }, null, 10);
   const first = h.work;
   const strong = install(h, program, { ratio: 0.6, sourceAttack: 100, hpBonus: 3000 }, null, 20);
-  const instances = getCombatUnit(h.work, 0).effects.instances;
+  const instances = getUnit(h.work, 0).effects.instances;
   assert.equal(instances[0].enabled, true);
   assert.equal(instances[0].participating, false);
   assert.equal(instances[0].source, 10);
   assert.deepEqual(values(h.work, h.resources), { attack: 160, maxHp: 4000, hp: 2000 });
   h.work = finishEffects(h.work, [strong], h.resources, 1);
   assert.deepEqual(values(h.work, h.resources), { attack: 350, maxHp: 2000, hp: 1000 });
-  assert.equal(getCombatUnit(h.work, 0).effects.instances[0].state.sourceAttack, 500);
+  assert.equal(getUnit(h.work, 0).effects.instances[0].state.sourceAttack, 500);
   assert.equal(starts, 2);
   assert.deepEqual(samples, [0, 1]);
   h.work = finalizeEffect(h.work, strong, h.resources, 1);
-  assert.equal(getCombatUnit(h.work, 0).effects.instances[0].id, weak.effectId);
+  assert.equal(getUnit(h.work, 0).effects.instances[0].id, weak.effectId);
   assert.deepEqual(values(first, h.resources), { attack: 350, maxHp: 2000, hp: 1000 });
 });
 
@@ -91,14 +91,14 @@ test('effect competition: explicit enable is independent of override participati
   h.work = setEffectEnabled(h.work, weak, false, h.resources, 1);
   h.work = setEffectEnabled(h.work, strong, false, h.resources, 2);
   assert.deepEqual(values(h.work, h.resources), { attack: 100, maxHp: 1000, hp: 500 });
-  assert.equal(hasStatusFlag(getCombatUnit(h.work, 0), 'INVINCIBLE'), false);
-  const snapshot = copyUnitSnapshot(getCombatUnit(h.work, 0));
+  assert.equal(hasStatusFlag(getUnit(h.work, 0), 'INVINCIBLE'), false);
+  const snapshot = copyUnitSnapshot(getUnit(h.work, 0));
   h.work = setEffectEnabled(h.work, weak, true, h.resources, 3);
-  assert.equal(getCombatUnit(h.work, 0).effects.instances[0].participating, false);
+  assert.equal(getUnit(h.work, 0).effects.instances[0].participating, false);
   assert.equal(values(h.work, h.resources).attack, 100);
   h.work = setEffectEnabled(h.work, strong, true, h.resources, 4);
-  assert.equal(getCombatUnit(h.work, 0).effects.instances[0].enabled, true);
-  assert.equal(getCombatUnit(h.work, 0).effects.instances[0].participating, false);
+  assert.equal(getUnit(h.work, 0).effects.instances[0].enabled, true);
+  assert.equal(getUnit(h.work, 0).effects.instances[0].participating, false);
   assert.equal(snapshot.effects.instances[0].enabled, false);
   assert.equal(snapshot.effects.instances[1].enabled, false);
 });
@@ -140,7 +140,7 @@ test('effect competition: overridden instances continue expiring and cannot be r
   const weak = install(h, program, { ratio: 0.5, sourceAttack: 100, hpBonus: 1000 }, 2);
   const strong = install(h, program, { ratio: 0.9, sourceAttack: 100, hpBonus: 3000 }, 4);
   h.work = expireEffects(h.work, 2, h.resources);
-  assert.equal(getCombatUnit(h.work, 0).effects.instances[0].finished, true);
+  assert.equal(getUnit(h.work, 0).effects.instances[0].finished, true);
   assert.equal(values(h.work, h.resources).attack, 190);
   h.work = finishEffects(h.work, [strong], h.resources, 3);
   assert.equal(values(h.work, h.resources).attack, 100);
@@ -156,7 +156,7 @@ test('effect competition: parent finish restores the surviving independent sourc
   const child = install(h, program, { ratio: 0.9, sourceAttack: 100, hpBonus: 3000 }, null, 2);
   h.work = bindEffectLifetime(h.work, child, parentAddress).work;
   h.work = finishEffects(h.work, [parentAddress], h.resources, 1);
-  assert.equal(getCombatUnit(h.work, 0).effects.instances[2].finished, true);
+  assert.equal(getUnit(h.work, 0).effects.instances[2].finished, true);
   assert.equal(values(h.work, h.resources).attack, 150);
 });
 
@@ -194,8 +194,10 @@ test('effect competition: callback exception leaves input facts and contribution
   install(h, program, { ratio: 0.5, sourceAttack: 100, hpBonus: 1000 });
   install(h, program, { ratio: 0.6, sourceAttack: 100, hpBonus: 3000 });
   const original = h.work;
+  original.battlefield.apply();
   assert.throws(() => updateEffectState(original, 0, 0, program.ref, state => ({ ...state, ratio: 0.9 }), h.resources, 1), /content bug/);
-  assert.equal(getCombatUnit(original, 0).effects.instances[0].state.ratio, 0.5);
+  assert.equal(original.battlefield.snapshot("state").getUnit(0).effects.instances[0].state.ratio, 0.5);
+  original.battlefield.drop();
   assert.deepEqual(values(original, h.resources), { attack: 160, maxHp: 4000, hp: 2000 });
 });
 
@@ -237,7 +239,7 @@ test('effect competition: ending a strong parent never enables its weaker child'
   events.length = 0;
   h.work = finishEffects(h.work, [parent], h.resources, 1);
   assert.deepEqual(events, [['disable', 0]]);
-  assert.equal(getCombatUnit(h.work, 0).effects.instances[1].finished, true);
+  assert.equal(getUnit(h.work, 0).effects.instances[1].finished, true);
   assert.deepEqual(values(h.work, h.resources), { attack: 100, maxHp: 1000, hp: 500 });
 });
 
@@ -247,7 +249,8 @@ test('effect competition: empty identity and nonfinite priority fail without pub
     const program = definition(h.resources, 'invalid', { competition: () => competition });
     const original = h.work;
     assert.throws(() => install(h, program, { ratio: 1, sourceAttack: 100, hpBonus: 1000 }), /competition/);
-    assert.equal(getCombatUnit(original, 0).effects, undefined);
+    assert.equal(original.battlefield.snapshot("state").getUnit(0).effects, undefined);
+    original.battlefield.drop();
   }
 });
 
@@ -256,7 +259,7 @@ test('effect competition: cross-unit parent completion publishes child recovery 
   const second = initializeUnit({ id: 1, position: [1, 0], definition: {
     id: 'second', offense: { attack: 100 }, vitality: { maxHp: 1000 }, status: { initialFlags: [] },
   } });
-  h.work = effectFixtureWork(getCombatUnit(h.work, 0), { ...second, vitality: { ...second.vitality, hp: 500 } });
+  h.work = effectFixtureWork(getUnit(h.work, 0), { ...second, vitality: { ...second.vitality, hp: 500 } });
   const observations = [];
   const program = definition(h.resources, 'cross-unit', {
     disable: context => {

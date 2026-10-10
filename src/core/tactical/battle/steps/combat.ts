@@ -1,5 +1,5 @@
 import {
-    ActionExecutionWork,
+    type ActionExecutionWork,
     actionExecutionsBySource,
 } from "../../unit/capability/action/internal/executions.js";
 import { compileAction } from "../../unit/capability/action/compile.js";
@@ -19,46 +19,23 @@ import {
 import { prepareCombatEffects, retireCombatUnit } from "../execution/unit-lifecycle.js";
 import { CombatResources } from "../resources.js";
 import {
-    combatWorkEvents,
-    combatWorkChanges,
-    createCombatWork,
-    getCombatUnit,
-} from "../execution/work.js";
+    advanceBattlefield,
+    battlefieldView,
+    getUnit,
+    withExecution,
+    type BattleState,
+} from "../execution/context.js";
 import { hasAction, type ActionDefinition } from "../../unit/capability/action/capability.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
 import { hasVitality } from "../../unit/capability/vitality/capability.js";
 import type { UnitId } from "../../unit/unit.js";
-import type { BattlefieldChange, BattlefieldView } from "../../battlefield/contract.js";
-import type { Command, Event } from "../contract.js";
-import type { BattleExecutionState } from "../execution/state.js";
+import type { Command } from "../contract.js";
 import {
     withProjectileOperations,
     type ProjectileOperations,
 } from "../../battlefield/projectile/operations.js";
 import { hasSkill } from "../../unit/capability/skill/capability.js";
 import { hasStatusFlag } from "../../unit/capability/status/capability.js";
-
-interface CombatPreparationInput {
-    readonly battlefield: BattlefieldView;
-    readonly tick: number;
-    readonly commands: readonly Command[];
-    readonly execution: BattleExecutionState;
-    readonly actionExecutions?: ActionExecutionWork;
-}
-
-interface CombatAdvanceInput {
-    readonly battlefield: BattlefieldView;
-    readonly tick: number;
-    readonly execution: BattleExecutionState;
-    readonly actionExecutions?: ActionExecutionWork;
-}
-
-interface CombatAdvanceResult {
-    readonly actionExecution: ActionExecutionState;
-    readonly changes: readonly BattlefieldChange[];
-    readonly events: readonly Event[];
-    readonly execution: BattleExecutionState;
-}
 
 export function createCombat(
     resources = new CombatResources(),
@@ -94,46 +71,39 @@ export function createCombat(
                     actionExecutionPermissions(execution, segmentsOf(execution)).allowNewAction,
             );
 
-    const prepare = (
-        input: CombatPreparationInput,
-        state: ActionExecutionState,
-    ): CombatAdvanceResult => {
-        const executions = input.actionExecutions ?? new ActionExecutionWork(state);
-        let work = prepareCombatEffects(
-            createCombatWork(input.battlefield, input.execution, input.battlefield, executions),
-            input.tick,
-            resources,
-        );
+    const executionsOf = (state: BattleState): ActionExecutionWork => {
+        if (state.actionExecutions === undefined) {
+            throw new TypeError("combat requires action execution state");
+        }
 
-        for (const command of input.commands) {
+        return state.actionExecutions;
+    };
+
+    const prepare = (state: BattleState, commands: readonly Command[], tick: number): void => {
+        const executions = executionsOf(state);
+        prepareCombatEffects(state, tick, resources);
+
+        for (const command of commands) {
             if (command.type !== "CANCEL_ACTION_EXECUTION") {
                 continue;
             }
 
-            const cancelled = cancelActionExecutionInWork(
-                work,
+            cancelActionExecutionInWork(
+                state,
                 executions,
-                { executionId: command.executionId, tick: input.tick },
+                { executionId: command.executionId, tick },
                 resources,
             );
-            work = cancelled.work;
         }
-
-        return {
-            actionExecution: executions.result(),
-            changes: combatWorkChanges(work),
-            events: combatWorkEvents(work),
-            execution: work.execution,
-        };
     };
 
     const advanceActions = (
-        input: CombatAdvanceInput,
-        state: ActionExecutionState,
+        state: BattleState,
+        tick: number,
         projectiles: ProjectileOperations,
-    ): CombatAdvanceResult => {
-        const { battlefield, tick } = input;
-        const executions = input.actionExecutions ?? new ActionExecutionWork(state);
+    ): void => {
+        const battlefield = battlefieldView(state);
+        const executions = executionsOf(state);
         const actionResources: ActionStartResources = {
             computations: resources.computations,
             effects: resources.effects,
@@ -149,32 +119,27 @@ export function createCombat(
                 ...executions.result().executions.map(({ sourceUnitId }) => sourceUnitId),
             ]),
         ].sort((left, right) => left - right);
-        let work = prepareCombatEffects(
-            createCombatWork(battlefield, input.execution, battlefield, executions),
-            tick,
-            resources,
-        );
+        prepareCombatEffects(state, tick, resources);
 
         for (const id of ids) {
-            const unit = getCombatUnit(work, id);
+            const unit = getUnit(state, id);
 
             if (unit !== undefined && hasVitality(unit) && unit.vitality.hp <= 0) {
-                work = retireCombatUnit(work, id, resources, tick);
+                retireCombatUnit(state, id, resources, tick);
             }
         }
 
         for (const id of ids) {
             for (const execution of executions.forSource(id)) {
-                const resumed = resumeActionExecutionInWork(
-                    work,
+                resumeActionExecutionInWork(
+                    state,
                     executions,
                     { executionId: execution.id, segments: segmentsOf(execution), tick },
                     actionResources,
                 );
-                work = resumed.work;
             }
 
-            const unit = getCombatUnit(work, id);
+            const unit = getUnit(state, id);
 
             if (
                 unit === undefined ||
@@ -185,8 +150,8 @@ export function createCombat(
                 continue;
             }
 
-            work = startActionInWork(
-                work,
+            startActionInWork(
+                state,
                 executions,
                 {
                     sourceUnitId: id,
@@ -202,35 +167,22 @@ export function createCombat(
                 actionResources,
             );
         }
-
-        return {
-            actionExecution: executions.result(),
-            changes: combatWorkChanges(work),
-            events: combatWorkEvents(work),
-            execution: work.execution,
-        };
     };
 
-    const advance = (
-        input: CombatAdvanceInput,
-        state: ActionExecutionState,
-    ): CombatAdvanceResult => {
+    const advance = (state: BattleState, tick: number): void => {
         const launched = withProjectileOperations(
-            input.battlefield,
-            input.execution.nextProjectileId,
+            battlefieldView(state),
+            state.execution.nextProjectileId,
             resources.projectiles,
-            input.tick,
-            (projectiles) => advanceActions(input, state, projectiles),
-        );
+            tick,
+            (projectiles) => {
+                advanceActions(state, tick, projectiles);
 
-        return {
-            ...launched.result,
-            changes: [...launched.result.changes, ...launched.changes],
-            execution: {
-                ...launched.result.execution,
-                nextProjectileId: launched.nextProjectileId,
+                return undefined;
             },
-        };
+        );
+        advanceBattlefield(state, launched.changes);
+        withExecution(state, { ...state.execution, nextProjectileId: launched.nextProjectileId });
     };
 
     return {

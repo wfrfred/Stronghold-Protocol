@@ -18,7 +18,7 @@ import * as modifier from "../../dist/core/tactical/modifier/value.js";
 import { initializeVitalityState } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
-import { combatWorkView, getCombatUnit } from "../../dist/core/tactical/battle/execution/work.js";
+import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/execution/context.js";
 import { createProjectileProgram } from "../../dist/core/tactical/battlefield/projectile/program.js";
 import {
   createMechanismDefinition,
@@ -283,12 +283,12 @@ function scenario({ failure = null, cancelled = false } = {}) {
     }, services, context.tick,
   ).work;
   const launch = (context, services, targetUnitId) => {
-    const source = getCombatUnit(context.work, context.sourceUnitId);
-    const target = getCombatUnit(context.work, targetUnitId);
+    const source = getUnit(context.work, context.sourceUnitId);
+    const target = getUnit(context.work, targetUnitId);
     const id = context.projectiles.launch(shell.ref, {
       source: source.id, traceTarget: targetUnitId,
       position: source.position, destination: target.position,
-      cachedAtk: resolveAttackPower(source.id, combatWorkView(context.work), services.computations),
+      cachedAtk: resolveAttackPower(source.id, battlefieldView(context.work), services.computations),
       speedPerTick: 1, contactRange, stopDelayTicks: 0, expiresAtTick: null,
     });
     launches.push({ id, executionId: context.executionId, targetUnitId });

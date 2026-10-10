@@ -7,11 +7,11 @@ import { ProjectileWork, updateProjectileInstance } from "./internal/state.js";
 import { World, type WorldPosition } from "../../geometry/coordinate.js";
 import { rangeOverlapsHit } from "../../geometry/intersection.js";
 import {
-    appendCombatEvents,
-    combatWorkView,
-    getCombatUnit,
-    type CombatWork,
-} from "../../battle/execution/work.js";
+    appendEvents,
+    battlefieldView,
+    getUnit,
+    type BattleState,
+} from "../../battle/execution/context.js";
 import type { Unit, UnitId } from "../../unit/unit.js";
 import { hasHit } from "../../unit/capability/spatial.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
@@ -37,19 +37,19 @@ export type ProjectileSignal = {
 );
 
 export interface ProjectileTransition {
-    readonly work: CombatWork;
+    readonly work: BattleState;
     readonly changes: readonly BattlefieldChange[];
 }
 
 class ProjectileSettlement {
-    work: CombatWork;
+    work: BattleState;
     readonly #projectiles: ProjectileWork;
     readonly #services: ProjectileServices;
     readonly #tick: number;
     readonly #lastKnown = new Map<ProjectileId, ProjectileInstance>();
 
     constructor(
-        work: CombatWork,
+        work: BattleState,
         battlefield: ProjectileView,
         services: ProjectileServices,
         tick: number,
@@ -71,7 +71,7 @@ class ProjectileSettlement {
 
     #signal(instance: ProjectileInstance, signal: ProjectileSignal): void {
         this.#lastKnown.set(instance.id, instance);
-        this.work = appendCombatEvents(this.work, [signal]);
+        this.work = appendEvents(this.work, [signal]);
     }
 
     #signalFacts(instance: ProjectileInstance): Omit<ProjectileSignal, "type"> {
@@ -139,13 +139,13 @@ class ProjectileSettlement {
             return;
         }
 
-        const candidates = [...combatWorkView(this.work).unitIds].sort(
+        const candidates = [...battlefieldView(this.work).unitIds].sort(
             (left, right) => left - right,
         );
 
         for (const targetUnitId of candidates) {
             const current = this.#get(instance.id) as ProjectileInstance<S> | undefined;
-            const target = getCombatUnit(this.work, targetUnitId);
+            const target = getUnit(this.work, targetUnitId);
 
             if (current === undefined || current.progress.type === "STOPPED") {
                 return;
@@ -254,7 +254,7 @@ class ProjectileSettlement {
                 const target =
                     current.traceTarget === null
                         ? undefined
-                        : getCombatUnit(this.work, current.traceTarget);
+                        : getUnit(this.work, current.traceTarget);
                 const destination =
                     target !== undefined && isSpatiallyPresent(target)
                         ? target.position
@@ -322,7 +322,7 @@ class ProjectileSettlement {
 }
 
 export function advanceProjectiles(
-    work: CombatWork,
+    work: BattleState,
     battlefield: ProjectileView,
     services: ProjectileServices,
     tick: number,
@@ -340,7 +340,7 @@ export function advanceProjectiles(
 }
 
 export function stopProjectile(
-    work: CombatWork,
+    work: BattleState,
     battlefield: ProjectileView,
     id: ProjectileId,
     services: ProjectileServices,

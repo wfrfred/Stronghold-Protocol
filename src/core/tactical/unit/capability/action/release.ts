@@ -1,10 +1,6 @@
 import { assertNonnegativeSafeInteger } from "../../../../common/assert.js";
 import { ResourceRegistration } from "../../../../common/resource-registration.js";
-import {
-    getCombatUnit,
-    transitionCombatUnit,
-    type CombatWork,
-} from "../../../battle/execution/work.js";
+import { getUnit, transitionUnit, type BattleState } from "../../../battle/execution/context.js";
 import type { UnitId } from "../../unit.js";
 import type {
     EffectLifecycleOperations,
@@ -98,16 +94,16 @@ export class ActionReleaseResources {
 }
 
 export function beforeActionRelease(
-    input: CombatWork,
+    input: BattleState,
     unitId: UnitId,
     tick: number,
     resources: EffectTransitionResources & { readonly actionRelease?: ActionReleaseResources },
     dispatch?: EffectDispatchScope,
-): { readonly work: CombatWork; readonly interrupted: boolean } {
+): { readonly work: BattleState; readonly interrupted: boolean } {
     assertNonnegativeSafeInteger(unitId, "action release unit identity");
     assertNonnegativeSafeInteger(tick, "action release tick");
 
-    const unit = getCombatUnit(input, unitId);
+    const unit = getUnit(input, unitId);
     const release = resources.actionRelease;
 
     if (unit === undefined || !hasAction(unit) || release === undefined) {
@@ -117,10 +113,6 @@ export function beforeActionRelease(
     let work = input;
     const scope = dispatch ?? new EffectDispatchScope();
     const getWork = () => work;
-
-    const setWork = (current: CombatWork) => {
-        work = current;
-    };
 
     const facts = effectView(getWork);
 
@@ -138,7 +130,7 @@ export function beforeActionRelease(
             latest = scope.withInstance(ref, instance, (lastKnown) => {
                 let active = true;
 
-                const readWork = (): CombatWork => {
+                const readWork = (): BattleState => {
                     if (!active) {
                         throw new TypeError("action release context is no longer active");
                     }
@@ -155,7 +147,7 @@ export function beforeActionRelease(
                             return getEffect(readWork(), ref) ?? lastKnown();
                         },
                         facts: effectView(readWork),
-                        effects: createEffectOperations(readWork, setWork, resources, tick, scope),
+                        effects: createEffectOperations(readWork, resources, tick, scope),
                     });
                 } finally {
                     active = false;
@@ -184,7 +176,7 @@ export function beforeActionRelease(
 
     const recoveryUntilTick = tick + directive.recoveryTicks;
     assertNonnegativeSafeInteger(recoveryUntilTick, "action release recovery deadline");
-    work = transitionCombatUnit(work, unitId, (current) => {
+    work = transitionUnit(work, unitId, (current) => {
         if (!hasAction(current) || current.action.recoveryUntilTick >= recoveryUntilTick) {
             return current;
         }

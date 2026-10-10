@@ -111,7 +111,9 @@ export interface BattlefieldView<U extends Unit = Unit> extends MechanismView, P
 }
 
 export interface Battlefield<U extends Unit = Unit> extends BattlefieldView<U> {
+    readonly view: BattlefieldView<U>;
     readonly fieldCache: NavigationFieldCache;
+    readonly effectLifetimes: EffectLifetimeProjection;
     readonly mechanismIds: readonly MechanismId[];
     readonly navigationModifierIds: readonly NavigationModifierId[];
     getMechanism(id: MechanismId): MechanismRuntime | undefined;
@@ -119,9 +121,15 @@ export interface Battlefield<U extends Unit = Unit> extends BattlefieldView<U> {
     navigationModifiersAt(position: TilePosition): readonly NavigationModifierId[];
     navigationModifiersFrom(source: NavigationModifierSource): readonly NavigationModifierId[];
     navigationModifiersFollowing(unitId: UnitId): readonly NavigationModifierId[];
+    /** Captures a fixed view of the published state or current draft. */
+    snapshot(version?: "state" | "draft"): BattlefieldView<U>;
     fork(): Battlefield<U>;
     transact(operation: (battlefield: Battlefield<U>) => undefined): undefined;
     transact<T>(operation: (battlefield: Battlefield<U>) => SynchronousResult<T>): T;
-    /** Applies values directly; callers must not mutate submitted state or returned facts. */
-    apply(changes: readonly BattlefieldChange<U>[]): BattlefieldChangeResult<U>;
+    /** Advances the draft directly; callers must not mutate submitted state or returned facts. */
+    advance(changes: readonly BattlefieldChange<U>[]): BattlefieldChangeResult<U>;
+    /** Publishes the current draft without executing its changes again. */
+    apply(): void;
+    /** Restores the draft to the last published state. */
+    drop(): void;
 }

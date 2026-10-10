@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { compileBuffStacking, parseBuffStacking } from '../../dist/data/arknights/buff-stacking.js';
 import { compileAttributeModifiers, parseAttributeModifiers } from '../../dist/data/arknights/modifier.js';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
-import { combatWorkView, getCombatUnit } from '../../dist/core/tactical/battle/execution/work.js';
+import { battlefieldView, getUnit } from '../../dist/core/tactical/battle/execution/context.js';
 import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { attack } from '../../dist/core/tactical/unit/capability/offense/contributions.js';
@@ -41,9 +41,9 @@ test('Buff contribution integration: the native Astesia DEF facet merges layers,
     lifecycle: { start: () => { starts++; } },
   });
   let work = effectFixtureWork(initializeUnit({ id: 0, position: [0, 0], definition: { id: 'receiver', defense: { defense: 100, resistance: 0 } } }));
-  const original = work;
+  const original = work.battlefield.snapshot("draft");
   const apply = (source, defenseRatio, expiresAtTick, tick) => {
-    const current = getCombatUnit(work, 0).effects?.instances.find(instance => instance.programRef === program.ref && !instance.finished);
+    const current = getUnit(work, 0).effects?.instances.find(instance => instance.programRef === program.ref && !instance.finished);
     const plan = policy.plan(current === undefined ? undefined : { stackCount: current.state.stackCount, expiresAtTick: effectTick(current) }, { stackCount: 1, expiresAtTick }, tick);
     if (plan.type === 'INSTALL') {
       work = installNewEffect(work, 0, program.ref, { source, scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }], initialState: { stackCount: 1, defenseRatio } }, resources, tick).work;
@@ -54,19 +54,19 @@ test('Buff contribution integration: the native Astesia DEF facet merges layers,
     }
     return plan;
   };
-  const effective = () => resolveDefense(0, combatWorkView(work)).defense;
+  const effective = () => resolveDefense(0, battlefieldView(work)).defense;
   apply(10, 0.2, 10, 0);
   close(effective(), 120);
-  const first = work;
+  const first = work.battlefield.snapshot("draft");
   apply(20, 0.9, 15, 1);
   close(effective(), 140);
-  let instance = getCombatUnit(work, 0).effects.instances[0];
+  let instance = getUnit(work, 0).effects.instances[0];
   assert.equal(instance.source, 10);
   assert.equal(instance.state.defenseRatio, 0.2);
   assert.equal(instance.state.stackCount, 2);
   assert.equal(effectTick(instance), 15);
-  assert.equal(getCombatUnit(work, 0).effects.instances.length, 1);
-  assert.equal(getCombatUnit(first, 0).effects.instances[0].state.stackCount, 1);
+  assert.equal(getUnit(work, 0).effects.instances.length, 1);
+  assert.equal(first.getUnit(0).effects.instances[0].state.stackCount, 1);
   assert.equal(starts, 1);
   const address = { type: "EFFECT", unitId: 0, effectId: instance.id };
   work = setEffectEnabled(work, address, false, resources, 2);
@@ -77,16 +77,16 @@ test('Buff contribution integration: the native Astesia DEF facet merges layers,
   apply(30, 0.8, 20, 5);
   apply(30, 0.8, 20, 6);
   close(effective(), 200);
-  const capped = work;
+  const capped = work.battlefield.snapshot("draft");
   assert.equal(apply(40, 0.8, 100, 7).type, 'REJECT');
-  assert.equal(work, capped);
+  assert.equal(getUnit(work, 0), capped.getUnit(0));
   work = expireEffects(work, 19, resources);
   close(effective(), 200);
   work = finishEffects(work, [address], resources, 20);
   assert.equal(effective(), 100);
-  assert.equal(resolveDefense(0, combatWorkView(original)).defense, 100);
+  assert.equal(resolveDefense(0, original).defense, 100);
   assert.equal(starts, 1);
-  instance = getCombatUnit(work, 0).effects.instances[0];
+  instance = getUnit(work, 0).effects.instances[0];
   assert.equal(instance.finished, true);
 });
 
@@ -124,10 +124,10 @@ test('Buff contribution integration: only effective layer growth resamples the r
   })])] });
   let work = effectFixtureWork(initializeUnit({ id: 0, position: [0, 0], definition: { id: 'receiver', offense: { attack: 100 } } }));
   work = installNewEffect(work, 0, program.ref, { source: 10, scopes: [{ type: "TICK", tick: 10 }]}, resources, 0).work;
-  const power = () => resolveAttackPower(0, combatWorkView(work));
+  const power = () => resolveAttackPower(0, battlefieldView(work));
   assert.equal(power(), 150);
   const apply = (currentSourceAttack, tick, expiresAtTick) => {
-    const current = getCombatUnit(work, 0).effects.instances[0];
+    const current = getUnit(work, 0).effects.instances[0];
     const plan = policy.plan({ stackCount: current.state.stackCount, expiresAtTick: effectTick(current) }, { stackCount: 1, expiresAtTick }, tick);
     assert.equal(plan.type, 'REFRESH');
     work = setEffectTick(work, { type: "EFFECT", unitId: 0, effectId: 0 }, plan.expiresAtTick);
@@ -142,7 +142,7 @@ test('Buff contribution integration: only effective layer growth resamples the r
   assert.equal(power(), 300);
   assert.equal(apply(800, 3, 40).reloadModifiers, false);
   assert.equal(power(), 300);
-  const current = getCombatUnit(work, 0).effects.instances[0];
+  const current = getUnit(work, 0).effects.instances[0];
   assert.equal(current.state.stackCount, 3);
   assert.equal(current.state.sourceAttack, 200);
   assert.equal(effectTick(current), 40);

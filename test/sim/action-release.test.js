@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ResourceRegistration } from '../../dist/core/common/resource-registration.js';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
-import { getCombatUnit } from '../../dist/core/tactical/battle/execution/work.js';
+import { getUnit } from '../../dist/core/tactical/battle/execution/context.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { createActionDefinition } from '../../dist/core/tactical/unit/capability/action/capability.js';
 import { ActionReleaseResources, beforeActionRelease } from '../../dist/core/tactical/unit/capability/action/release.js';
@@ -99,18 +99,18 @@ test('action release: a content rule consumes charges and only requests interrup
   const initialState = structuredClone(unit);
   let result = beforeActionRelease(input, 0, 7, supplied);
   assert.equal(result.interrupted, true);
-  assert.equal(getCombatUnit(result.work, 0).action.recoveryUntilTick, 40);
-  assert.equal(getCombatUnit(result.work, 0).effects.instances[0].state.remaining, 2);
+  assert.equal(getUnit(result.work, 0).action.recoveryUntilTick, 40);
+  assert.equal(getUnit(result.work, 0).effects.instances[0].state.remaining, 2);
   assert.equal(result.work.execution, input.execution);
-  assert.equal(result.work.eventLog, input.eventLog);
+  assert.deepEqual(result.work.events, []);
   assert.deepEqual(unit, initialState);
   result = beforeActionRelease(result.work, 0, 7, supplied);
   result = beforeActionRelease(result.work, 0, 7, supplied);
   assert.equal(result.interrupted, true);
-  assert.deepEqual(getCombatUnit(result.work, 0).effects.instances, []);
+  assert.deepEqual(getUnit(result.work, 0).effects.instances, []);
   assert.equal(beforeActionRelease(result.work, 0, 7, supplied).interrupted, false);
   const shorter = { ...unit, action: { ...unit.action, recoveryUntilTick: 0 } };
-  assert.equal(getCombatUnit(beforeActionRelease(effectFixtureWork(shorter), 0, 7, supplied).work, 0).action.recoveryUntilTick, 22);
+  assert.equal(getUnit(beforeActionRelease(effectFixtureWork(shorter), 0, 7, supplied).work, 0).action.recoveryUntilTick, 22);
 });
 
 test('action release: the first interruption stops subsequent content rules', () => {
@@ -180,7 +180,7 @@ test('action release: the live typed instance tracks updates and all borrowed op
   } });
   const result = beforeActionRelease(effectFixtureWork(attach(resources, actor(), registered)), 0, 0, supplied);
   assert.equal(result.interrupted, false);
-  assert.deepEqual(getCombatUnit(result.work, 0).effects.instances, []);
+  assert.deepEqual(getUnit(result.work, 0).effects.instances, []);
   assert.throws(() => borrowed.instance, /no longer active/);
   assert.throws(() => borrowed.facts.getUnit(0), /no longer active/);
   assert.throws(() => borrowed.facts.getEffect(borrowed.ref), /no longer active/);
@@ -203,10 +203,11 @@ test('action release: content exceptions propagate and release borrowed state wi
   const input = effectFixtureWork(attach(resources, actor(), registered));
   assert.throws(() => beforeActionRelease(input, 0, 0, supplied), /release content failed/);
   assert.throws(() => borrowed.instance, /no longer active/);
-  assert.equal(getCombatUnit(input, 0).effects.instances[0].state.attempts, 0);
+  assert.equal(input.battlefield.snapshot("state").getUnit(0).effects.instances[0].state.attempts, 0);
+  input.battlefield.drop();
   fail = false;
   const result = beforeActionRelease(input, 0, 0, supplied);
-  assert.equal(getCombatUnit(result.work, 0).effects.instances[0].state.attempts, 1);
+  assert.equal(getUnit(result.work, 0).effects.instances[0].state.attempts, 1);
 });
 
 test('action release: malformed recovery deadlines are programming errors', () => {

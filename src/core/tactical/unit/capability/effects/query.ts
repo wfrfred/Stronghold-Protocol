@@ -1,4 +1,4 @@
-import { getCombatUnit, type CombatWork } from "../../../battle/execution/work.js";
+import { getUnit, type BattleState } from "../../../battle/execution/context.js";
 import { hasEffects } from "./capability.js";
 import type { EffectRef, EffectInstanceValue } from "./instance.js";
 import type { EffectView } from "./contract.js";
@@ -12,8 +12,8 @@ export function isParticipatingEffect(instance: EffectInstanceValue): boolean {
     return instance.started && instance.participating && !instance.finished;
 }
 
-export function getEffect(work: CombatWork, address: EffectRef): EffectInstanceValue | undefined {
-    const unit = getCombatUnit(work, address.unitId);
+export function getEffect(work: BattleState, address: EffectRef): EffectInstanceValue | undefined {
+    const unit = getUnit(work, address.unitId);
 
     if (unit === undefined || !hasEffects(unit)) {
         return undefined;
@@ -30,12 +30,12 @@ export function getEffect(work: CombatWork, address: EffectRef): EffectInstanceV
     return index.get(address.effectId);
 }
 
-export function effectView(work: () => CombatWork): EffectView {
+export function effectView(work: () => BattleState): EffectView {
     return {
-        getUnit: (id) => getCombatUnit(work(), id),
+        getUnit: (id) => getUnit(work(), id),
         getEffect: (address) => getEffect(work(), address),
         participating: (id) => {
-            const unit = getCombatUnit(work(), id);
+            const unit = getUnit(work(), id);
 
             return unit !== undefined && hasEffects(unit)
                 ? unit.effects.instances.filter(isParticipatingEffect)

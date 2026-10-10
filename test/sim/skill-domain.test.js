@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
-import { getCombatUnit, updateCombatUnit } from "../../dist/core/tactical/battle/execution/work.js";
+import { getUnit, updateUnit } from "../../dist/core/tactical/battle/execution/context.js";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
 import { effectTick } from "../../dist/core/tactical/unit/capability/effects/instance.js";
 import { expireEffects, finishEffects } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
@@ -28,9 +28,9 @@ function fixture(options = {}, content = {}) {
 }
 
 function setSp(work, definition, amount) {
-  const unit = getCombatUnit(work, 1);
+  const unit = getUnit(work, 1);
   const gained = gainSkillSp(unit.skill, definition, "EXTERNAL", amount);
-  return updateCombatUnit(work, { ...unit, skill: gained.state });
+  return updateUnit(work, { ...unit, skill: gained.state });
 }
 
 test("skill definitions retain owned identity through unit initialization and initial SP is deployment-only", () => {
@@ -65,18 +65,18 @@ for (const source of ["TIME", "ATTACK", "HIT"]) {
 test("automatic SP is integer-valued and its partial clock pauses while full", () => {
   const f = fixture({ initialSp: 0 });
   let work = advanceSkill(f.work, 1, 15, f.resources).work;
-  assert.equal(getCombatUnit(work, 1).skill.sp, 0);
-  assert.equal(getCombatUnit(work, 1).skill.spRecoveryProgressTicks, 15);
+  assert.equal(getUnit(work, 1).skill.sp, 0);
+  assert.equal(getUnit(work, 1).skill.spRecoveryProgressTicks, 15);
   work = setSp(work, f.definition, 2);
   work = advanceSkill(work, 1, 100, f.resources).work;
-  assert.equal(getCombatUnit(work, 1).skill.spRecoveryProgressTicks, 15);
-  const full = getCombatUnit(work, 1);
-  work = updateCombatUnit(work, { ...full, skill: spendSkillSp(full.skill, f.definition).state });
+  assert.equal(getUnit(work, 1).skill.spRecoveryProgressTicks, 15);
+  const full = getUnit(work, 1);
+  work = updateUnit(work, { ...full, skill: spendSkillSp(full.skill, f.definition).state });
   work = advanceSkill(work, 1, 114, f.resources).work;
-  assert.equal(getCombatUnit(work, 1).skill.sp, 0);
+  assert.equal(getUnit(work, 1).skill.sp, 0);
   work = advanceSkill(work, 1, 115, f.resources).work;
-  assert.equal(getCombatUnit(work, 1).skill.sp, 1);
-  assert.equal(getCombatUnit(work, 1).skill.spRecoveryProgressTicks, 0);
+  assert.equal(getUnit(work, 1).skill.sp, 1);
+  assert.equal(getUnit(work, 1).skill.spRecoveryProgressTicks, 0);
 });
 
 test("active duration locks all SP sources and resumes the preserved clock after ending", () => {
@@ -85,17 +85,17 @@ test("active duration locks all SP sources and resumes the preserved clock after
   work = setSp(work, f.definition, 1);
   const started = activateSkill(work, { unitId: 1, tick: 15 }, f.resources);
   assert.equal(started.result.type, "ACTIVATED");
-  const active = getCombatUnit(started.work, 1).skill;
+  const active = getUnit(started.work, 1).skill;
   for (const source of ["TIME", "ATTACK", "HIT", "EXTERNAL"]) {
     assert.equal(gainSkillSp(active, f.definition, source).result.reason, "LOCKED");
   }
   work = advanceSkill(started.work, 1, 44, f.resources).work;
-  assert.equal(getCombatUnit(work, 1).skill.spRecoveryProgressTicks, 15);
+  assert.equal(getUnit(work, 1).skill.spRecoveryProgressTicks, 15);
   const ended = advanceSkill(work, 1, 45, f.resources);
   assert.equal(ended.signals[0].type, "SKILL_FINISHED");
-  assert.equal(getCombatUnit(ended.work, 1).skill.active, null);
+  assert.equal(getUnit(ended.work, 1).skill.active, null);
   work = advanceSkill(ended.work, 1, 60, f.resources).work;
-  assert.equal(getCombatUnit(work, 1).skill.sp, 1);
+  assert.equal(getUnit(work, 1).skill.sp, 1);
 });
 
 test("manual activation returns normal refusal for insufficient SP, wrong trigger and content conditions", () => {
@@ -106,20 +106,20 @@ test("manual activation returns normal refusal for insufficient SP, wrong trigge
   const result = activateSkill(refused.work, { unitId: 1, tick: 0 }, refused.resources);
   assert.equal(result.result.reason, "CONDITION");
   assert.equal(result.work, refused.work);
-  assert.equal(getCombatUnit(result.work, 1).skill.nextActivationId, 0);
+  assert.equal(getUnit(result.work, 1).skill.nextActivationId, 0);
 });
 
 test("instant AUTO activation happens once per advancement tick and spends one stored charge", () => {
   const f = fixture({ activation: "AUTO", durationTicks: 0, spCost: 1, initialSp: 2, maxCharges: 2 });
   const first = advanceSkill(f.work, 1, 0, f.resources);
   assert.deepEqual(first.signals.map((signal) => signal.type), ["SKILL_ACTIVATED", "SKILL_FINISHED"]);
-  assert.equal(getCombatUnit(first.work, 1).skill.sp, 1);
+  assert.equal(getUnit(first.work, 1).skill.sp, 1);
   const repeated = advanceSkill(first.work, 1, 0, f.resources);
   assert.equal(repeated.signals.length, 0);
-  assert.equal(getCombatUnit(repeated.work, 1).skill.nextActivationId, 1);
+  assert.equal(getUnit(repeated.work, 1).skill.nextActivationId, 1);
   const next = advanceSkill(repeated.work, 1, 1, f.resources);
   assert.equal(next.result.type, "ACTIVATED");
-  assert.equal(getCombatUnit(next.work, 1).skill.sp, 0);
+  assert.equal(getUnit(next.work, 1).skill.sp, 0);
 });
 
 test("a passive skill activates once and an unlimited skill ends only explicitly", () => {
@@ -127,11 +127,11 @@ test("a passive skill activates once and an unlimited skill ends only explicitly
   const started = advanceSkill(passive.work, 1, 0, passive.resources);
   const later = advanceSkill(started.work, 1, 30, passive.resources);
   assert.equal(later.signals.length, 0);
-  assert.equal(getCombatUnit(later.work, 1).skill.nextActivationId, 1);
+  assert.equal(getUnit(later.work, 1).skill.nextActivationId, 1);
   const unlimited = fixture({ durationTicks: null });
   const infinite = activateSkill(unlimited.work, { unitId: 1, tick: 0 }, unlimited.resources);
   const advanced = advanceSkill(infinite.work, 1, 1000, unlimited.resources);
-  assert.equal(getCombatUnit(advanced.work, 1).skill.active.endsAtTick, null);
+  assert.equal(getUnit(advanced.work, 1).skill.active.endsAtTick, null);
   assert.equal(finishSkill(advanced.work, 1, 1000, unlimited.resources).result.type, "FINISHED");
 });
 
@@ -146,7 +146,7 @@ test("content refusal retains effect prefix and allocated identities while refun
   ref = f.resources.registerEffect(createEffectProgram({ id: "skill-rejected-prefix", initialize: () => ({}), ownState: (value) => value })).ref;
   const rejected = activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources);
   assert.equal(rejected.result.reason, "CONTENT_REJECTED");
-  const unit = getCombatUnit(rejected.work, 1);
+  const unit = getUnit(rejected.work, 1);
   assert.equal(unit.effects.instances.length, 1);
   assert.equal(unit.effects.nextInstanceId, 1);
   assert.equal(unit.skill.sp, 2);
@@ -171,7 +171,7 @@ test("content refusal closes activation scopes while independent effects survive
     id: "activation-refusal-scopes", initialize: () => ({}), ownState: (state) => state,
   })).ref;
   const refused = activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources);
-  const unit = getCombatUnit(refused.work, 1);
+  const unit = getUnit(refused.work, 1);
   assert.equal(refused.result.type, "REJECTED");
   assert.equal(unit.skill.active, null);
   assert.equal(unit.skill.sp, 2);
@@ -207,7 +207,7 @@ test("zero-duration activation closes its scope before skill finish content", ()
   const activated = activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources);
   assert.deepEqual(activated.signals.map(({ type }) => type), ["SKILL_ACTIVATED", "SKILL_FINISHED"]);
   assert.deepEqual(observed, [{ active: null, finished: true }]);
-  assert.equal(getCombatUnit(activated.work, 1).effects.nextInstanceId, 1);
+  assert.equal(getUnit(activated.work, 1).effects.nextInstanceId, 1);
 });
 
 test("skill finish rejects binding a surviving independent effect to its closed activation", () => {
@@ -231,7 +231,7 @@ test("skill finish rejects binding a surviving independent effect to its closed 
   })).ref;
   const activated = activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources);
   const ended = finishSkill(activated.work, 1, 30, f.resources);
-  const instance = getCombatUnit(ended.work, 1).effects.instances[0];
+  const instance = getUnit(ended.work, 1).effects.instances[0];
   assert.deepEqual(instance.scopes, []);
   assert.equal(instance.finished, false);
   assert.equal(instance.participating, true);
@@ -280,7 +280,7 @@ for (const trigger of ["SKILL", "EFFECT", "TICK"]) {
     }).ref;
     let work = activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources).work;
     work = expireEffects(work, 5, f.resources);
-    const renewed = getCombatUnit(work, 1).effects.instances.find(({ id }) => id === dependentRef.effectId);
+    const renewed = getUnit(work, 1).effects.instances.find(({ id }) => id === dependentRef.effectId);
     assert.equal(renewed.finished, false);
     assert.equal(effectTick(renewed), 10);
     assert.deepEqual(renewed.scopes.filter(({ type }) => type !== "TICK"), [
@@ -291,7 +291,7 @@ for (const trigger of ["SKILL", "EFFECT", "TICK"]) {
     else if (trigger === "EFFECT") work = finishEffects(work, [parentRef], f.resources, 6, "DISPELLED");
     else work = expireEffects(work, 10, f.resources);
 
-    const unit = getCombatUnit(work, 1);
+    const unit = getUnit(work, 1);
     assert.equal(unit.effects.instances.find(({ id }) => id === dependentRef.effectId).finished, true);
     assert.equal(unit.skill.active === null, trigger === "SKILL");
     assert.equal(unit.effects.instances.find(({ id }) => id === parentRef.effectId).finished, trigger === "EFFECT");
@@ -314,8 +314,9 @@ test("callback errors propagate and escaped skill ports are closed even after er
   assert.throws(() => captured.effects.finish([{ type: "EFFECT", unitId: 1, effectId: 0 }]), /no longer active/);
   assert.throws(() => captured.damage({ sourceUnitId: 1, targetUnitId: 1, damageType: "TRUE", operands: { power: 1 } }), /no longer active/);
   assert.throws(() => captured.heal({ sourceUnitId: 1, targetUnitId: 1, power: 1, ignoreHealFree: false }), /no longer active/);
-  assert.equal(getCombatUnit(f.work, 1).skill.sp, 2);
-  assert.equal(getCombatUnit(f.work, 1).skill.active, null);
+  assert.equal(f.work.battlefield.snapshot("state").getUnit(1).skill.sp, 2);
+  assert.equal(f.work.battlefield.snapshot("state").getUnit(1).skill.active, null);
+  f.work.battlefield.drop();
 });
 
 test("a dead unit cannot activate or accumulate time SP before retirement", () => {
@@ -324,13 +325,13 @@ test("a dead unit cannot activate or accumulate time SP before retirement", () =
   const dead = { ...unit, vitality: { ...unit.vitality, hp: 0 } };
   const work = effectFixtureWork(dead);
   assert.equal(activateSkill(work, { unitId: 1, tick: 0 }, f.resources).result.reason, "UNAVAILABLE");
-  assert.equal(getCombatUnit(advanceSkill(work, 1, 300, f.resources).work, 1).skill.sp, 0);
+  assert.equal(getUnit(advanceSkill(work, 1, 300, f.resources).work, 1).skill.sp, 0);
 });
 
 test("external SP drain can remove retained charges during a skill while activation spending remains locked", () => {
   const f = fixture({ spCost: 2, initialSp: 4, maxCharges: 2 });
   const active = activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources);
-  const state = getCombatUnit(active.work, 1).skill;
+  const state = getUnit(active.work, 1).skill;
   assert.equal(state.sp, 2);
   assert.equal(spendSkillSp(state, f.definition, 1).result.reason, "LOCKED");
   const drained = drainSkillSp(state, 5);
@@ -359,14 +360,14 @@ test("SP recovery blockade pauses the clock without saving blocked time and stun
     definition: { id: "sp-blocked", skill: f.definition, status: { initialFlags: ["SP_RECOVERY_BLOCKED"] } },
   });
   let work = advanceSkill(effectFixtureWork(blocked), 1, 60, f.resources).work;
-  assert.equal(getCombatUnit(work, 1).skill.sp, 0);
-  assert.equal(getCombatUnit(work, 1).skill.spRecoveryProgressTicks, 0);
-  const current = getCombatUnit(work, 1);
-  work = updateCombatUnit(work, { ...current, status: { contributions: [] } });
+  assert.equal(getUnit(work, 1).skill.sp, 0);
+  assert.equal(getUnit(work, 1).skill.spRecoveryProgressTicks, 0);
+  const current = getUnit(work, 1);
+  work = updateUnit(work, { ...current, status: { contributions: [] } });
   work = advanceSkill(work, 1, 89, f.resources).work;
-  assert.equal(getCombatUnit(work, 1).skill.sp, 0);
+  assert.equal(getUnit(work, 1).skill.sp, 0);
   work = advanceSkill(work, 1, 90, f.resources).work;
-  assert.equal(getCombatUnit(work, 1).skill.sp, 1);
+  assert.equal(getUnit(work, 1).skill.sp, 1);
   for (const flag of ["STUNNED", "SILENCED"]) {
     const controlled = initializeUnit({ id: 1, position: [0, 0], definition: { id: flag, skill: f.definition, status: { initialFlags: [flag] } } });
     assert.equal(activateSkill(effectFixtureWork(controlled), { unitId: 1, tick: 0 }, f.resources).result.reason, "UNAVAILABLE");

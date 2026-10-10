@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
-import { combatWorkView, getCombatUnit, updateCombatUnit } from "../../dist/core/tactical/battle/execution/work.js";
+import { battlefieldView, getUnit, updateUnit } from "../../dist/core/tactical/battle/execution/context.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { activateSkill, advanceSkill } from "../../dist/core/tactical/unit/capability/skill/execution.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
@@ -37,19 +37,19 @@ test("native Attack Enhancement Alpha level 1 charges, buffs attack for 20 secon
   let work = effectFixtureWork(unit);
   assert.equal(activateSkill(work, { unitId: 1, tick: 0 }, resources).result.reason, "INSUFFICIENT_SP");
   work = advanceSkill(work, 1, 1500, resources).work;
-  assert.equal(getCombatUnit(work, 1).skill.sp, 50);
+  assert.equal(getUnit(work, 1).skill.sp, 50);
   const active = activateSkill(work, { unitId: 1, tick: 1500 }, resources);
   assert.equal(active.result.type, "ACTIVATED");
   work = active.work;
-  assert.equal(getCombatUnit(work, 1).skill.active.endsAtTick, 2100);
-  assert.equal(Math.round(resolveAttackPower(1, combatWorkView(work), resources.computations)), 110);
+  assert.equal(getUnit(work, 1).skill.active.endsAtTick, 2100);
+  assert.equal(Math.round(resolveAttackPower(1, battlefieldView(work), resources.computations)), 110);
   work = advanceSkill(work, 1, 2099, resources).work;
-  assert.equal(getCombatUnit(work, 1).skill.sp, 0);
+  assert.equal(getUnit(work, 1).skill.sp, 0);
   work = advanceSkill(work, 1, 2100, resources).work;
-  assert.equal(resolveAttackPower(1, combatWorkView(work), resources.computations), 100);
-  assert.equal(getCombatUnit(work, 1).skill.active, null);
+  assert.equal(resolveAttackPower(1, battlefieldView(work), resources.computations), 100);
+  assert.equal(getUnit(work, 1).skill.active, null);
   work = advanceSkill(work, 1, 2130, resources).work;
-  assert.equal(getCombatUnit(work, 1).skill.sp, 1);
+  assert.equal(getUnit(work, 1).skill.sp, 1);
 });
 
 test("native attack buff data compiles, registers and changes ordinary attacks through BattleRuntime", () => {
@@ -155,7 +155,7 @@ function instantDamageFixture(automatic = false, withTarget = true) {
   const unit = initializeUnit({ id: 1, position: [0, 0], definition: { id: "instant-caster", skill: definition } });
   const enemy = initializeUnit({ id: 2, position: [1, 0], definition: { id: "instant-target", vitality: { maxHp: 1000 } } });
   let work = effectFixtureWork(unit, ...(withTarget ? [enemy] : []));
-  work = updateCombatUnit(work, { ...unit, skill: gainSkillSp(unit.skill, definition, "EXTERNAL", 17).state });
+  work = updateUnit(work, { ...unit, skill: gainSkillSp(unit.skill, definition, "EXTERNAL", 17).state });
   return { resources, work, reports };
 }
 
@@ -163,8 +163,8 @@ test("native Unsheathe level 1 metadata supports synchronous physical and arts d
   const f = instantDamageFixture();
   const activated = activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources);
   assert.equal(activated.result.type, "ACTIVATED");
-  assert.equal(getCombatUnit(activated.work, 2).vitality.hp, 340);
-  assert.equal(getCombatUnit(activated.work, 1).skill.active, null);
+  assert.equal(getUnit(activated.work, 2).vitality.hp, 340);
+  assert.equal(getUnit(activated.work, 1).skill.active, null);
   assert.equal(f.reports.length, 2);
   assert.ok(f.reports.every((report) => report.request.tick === 0));
 });
@@ -173,7 +173,7 @@ test("AUTO instant content keeps full SP when its required target is absent", ()
   const f = instantDamageFixture(true, false);
   const advanced = advanceSkill(f.work, 1, 1, f.resources);
   assert.equal(advanced.signals.length, 0);
-  assert.equal(getCombatUnit(advanced.work, 1).skill.sp, 27);
+  assert.equal(getUnit(advanced.work, 1).skill.sp, 27);
   assert.equal(f.reports.length, 0);
 });
 
@@ -187,6 +187,6 @@ test("instant healing uses the current activation tick and returns the settled h
   } });
   const unit = initializeUnit({ id: 1, position: [0, 0], definition: { id: "heal-caster", skill: definition, vitality: { maxHp: 100 } }, states: { vitality: { hp: 50, maxHp: { entries: [] } } } });
   const activated = activateSkill(effectFixtureWork(unit), { unitId: 1, tick: 3 }, resources);
-  assert.equal(getCombatUnit(activated.work, 1).vitality.hp, 80);
+  assert.equal(getUnit(activated.work, 1).vitality.hp, 80);
   assert.equal(report.amount, 30);
 });

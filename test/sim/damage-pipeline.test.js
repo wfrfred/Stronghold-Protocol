@@ -1,6 +1,7 @@
+import { fixtureBattlefield } from "../helpers/battlefield.js";
 import { computedAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import { computedResistance } from "../../dist/core/tactical/unit/capability/defense/contributions.js";
-import { combatWorkEvents } from "../../dist/core/tactical/battle/execution/work.js";
+import { eventsOf } from "../../dist/core/tactical/battle/execution/context.js";
 import { installFixtureEffect } from "../helpers/effects.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -22,11 +23,10 @@ import {
   replaceAttackScale,
 } from "../../dist/core/tactical/unit/capability/vitality/damage/rules.js";
 import {
-  combatWorkChanges,
-  combatWorkView,
-  createCombatWork,
-  getCombatUnit,
-} from "../../dist/core/tactical/battle/execution/work.js";
+  battlefieldView,
+  createBattleState,
+  getUnit,
+} from "../../dist/core/tactical/battle/execution/context.js";
 import { createDefenseDefinition } from "../../dist/core/tactical/unit/capability/defense/capability.js";
 import { createOffenseDefinition } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { createStatusDefinition } from "../../dist/core/tactical/unit/capability/status/capability.js";
@@ -51,12 +51,12 @@ function unit(
 function workFor(...units) {
   const values = new Map(units.map((value) => [value.id, value]));
 
-  return createCombatWork({
+  return createBattleState(fixtureBattlefield({
     unitIds: [...values.keys()],
     getUnit: (id) => values.get(id),
     blockerOf: () => undefined,
     blockedBy: () => [],
-  });
+  }));
 }
 
 function program(id, initialState = {}) {
@@ -89,7 +89,7 @@ function attach(resources, owner, descriptor, id, acquiredSequence = id) {
 }
 
 function stateOf(work, resources, ownerId, descriptor, instanceId) {
-  const instance = getCombatUnit(work, ownerId).effects.instances.find(
+  const instance = getUnit(work, ownerId).effects.instances.find(
     (value) => value.id === instanceId,
   );
 
@@ -144,18 +144,19 @@ test("damage pipeline: low HP attack contributions read current work after damag
     request(500, { sourceUnitId: 2, targetUnitId: 1 }),
     resources,
   );
+  const damagedView = damaged.work.battlefield.snapshot("draft");
   const healed = resolveHealing(
     damaged.work,
     { sourceUnitId: 2, targetUnitId: 1, power: 400, ignoreHealFree: false, tick: 12 },
     resources,
   );
 
-  assert.equal(resolveAttackPower(source.id, combatWorkView(original), resources.computations), 100);
-  assert.equal(getCombatUnit(damaged.work, 1).vitality.hp, 250);
-  assert.equal(resolveAttackPower(1, combatWorkView(damaged.work), resources.computations), 200);
-  assert.equal(getCombatUnit(healed.work, 1).vitality.hp, 650);
-  assert.equal(resolveAttackPower(1, combatWorkView(healed.work), resources.computations), 100);
-  assert.equal(getCombatUnit(original, 1).vitality.hp, 750);
+  assert.equal(resolveAttackPower(source.id, battlefieldView(original), resources.computations), 100);
+  assert.equal(damagedView.getUnit(1).vitality.hp, 250);
+  assert.equal(resolveAttackPower(1, damagedView, resources.computations), 200);
+  assert.equal(getUnit(healed.work, 1).vitality.hp, 650);
+  assert.equal(resolveAttackPower(1, battlefieldView(healed.work), resources.computations), 100);
+  assert.equal(original.battlefield.snapshot("state").getUnit(1).vitality.hp, 750);
 });
 
 test("damage pipeline: attack scale multiplication and replacement preserve their execution order", () => {
@@ -226,9 +227,9 @@ test("damage pipeline: resistance contributions are clamped before fixed and pro
 
   assert.equal(result.report.formulaDamage, 550);
   assert.equal(result.report.hpLoss, 550);
-  assert.equal(getCombatUnit(result.work, 2).vitality.hp, 4450);
-  assert.equal(getCombatUnit(result.work, 2).definition.defense.resistance, 80);
-  assert.equal(getCombatUnit(result.work, 2).defense.resistance, target.defense.resistance);
+  assert.equal(getUnit(result.work, 2).vitality.hp, 4450);
+  assert.equal(getUnit(result.work, 2).definition.defense.resistance, 80);
+  assert.equal(getUnit(result.work, 2).defense.resistance, target.defense.resistance);
 });
 
 test("damage pipeline: a 500 barrier before doubling takes 400 HP, while doubling before the barrier takes 900", () => {
@@ -255,7 +256,7 @@ test("damage pipeline: a 500 barrier before doubling takes 400 HP, while doublin
     assert.equal(result.report.outputDamage, 700);
     assert.equal(result.report.hpDamage, expected);
     assert.equal(result.report.hpLoss, expected);
-    assert.equal(getCombatUnit(result.work, 2).vitality.hp, 5000 - expected);
+    assert.equal(getUnit(result.work, 2).vitality.hp, 5000 - expected);
     assert.equal(stateOf(result.work, resources, 2, barrier, 21).remainingAmount, 0);
     assert.deepEqual(result.report.resourceConsumptions, [
       { ownerUnitId: 2, instanceId: 21, resource: "barrier", amount: 500 },
@@ -285,12 +286,9 @@ test("damage pipeline: fixed reduction and complete barrier absorption consume r
   assert.equal(result.report.cancellation, null);
   assert.equal(result.report.resourceConsumptions[0].amount, 600);
   assert.equal(stateOf(result.work, resources, 2, barrier, 21).remainingAmount, 200);
-  assert.equal(getCombatUnit(result.work, 2).vitality.hp, 5000);
-  assert.ok(
-    combatWorkChanges(result.work).some(
-      (change) => change.type === "UPDATE_UNIT" && change.unit.id === 2,
-    ),
-  );
+  assert.equal(getUnit(result.work, 2).vitality.hp, 5000);
+  assert.notEqual(getUnit(result.work, 2), target);
+  assert.equal(result.work.battlefield.snapshot("state").getUnit(2), target);
 });
 
 test("damage pipeline: consecutive reception rules read the same instance after its previous consumption", () => {
@@ -329,7 +327,7 @@ test("damage pipeline: strongest grouped instance wins without multiplying or de
   const result = resolveDamage(workFor(unit(1), target), request(100), resources);
 
   assert.equal(result.report.hpLoss, 300);
-  assert.equal(getCombatUnit(result.work, 2).effects.instances.length, 2);
+  assert.equal(getUnit(result.work, 2).effects.instances.length, 2);
 });
 
 test("damage pipeline: grouped effects compete only with participants in the current parameter or reception stage", () => {
@@ -355,9 +353,9 @@ test("damage pipeline: grouped effects compete only with participants in the cur
   const original = workFor(unit(1), target);
   const result = resolveDamage(original, request(100), resources);
 
-  assert.equal(resolveAttackPower(target.id, combatWorkView(original), resources.computations), 200);
+  assert.equal(resolveAttackPower(target.id, battlefieldView(original), resources.computations), 200);
   assert.equal(result.report.hpLoss, 300);
-  assert.equal(getCombatUnit(result.work, 2).effects.instances.length, 3);
+  assert.equal(getUnit(result.work, 2).effects.instances.length, 3);
 });
 
 test("damage pipeline: one group can independently provide source formula, output and report reaction", () => {
@@ -485,15 +483,12 @@ test("damage pipeline: lethal protection confirms HP 1 and reports protection wi
   const target = unit(2, { hp: 1000, flags: ["UNDEADABLE"] });
   const result = resolveDamage(workFor(unit(1), target), request(5000), resources);
 
-  assert.equal(getCombatUnit(result.work, 2).vitality.hp, 1);
+  assert.equal(getUnit(result.work, 2).vitality.hp, 1);
   assert.equal(result.report.hpLoss, 999);
   assert.equal(result.report.fatalProtection, true);
   assert.equal(result.report.deathOccurred, false);
-  assert.equal(result.work.removals.size, 0);
-  assert.equal(
-    combatWorkChanges(result.work).some((change) => change.type === "REMOVE_UNIT"),
-    false,
-  );
+  assert.equal(result.work.removedUnits.length, 0);
+  assert.deepEqual(result.work.removedUnits, []);
 });
 
 test("damage pipeline: absent target reports unexecuted numerical stages rather than fabricated zero calculations", () => {
@@ -505,8 +500,8 @@ test("damage pipeline: absent target reports unexecuted numerical stages rather 
   assert.equal(result.report.hpDamage, null);
   assert.equal(result.report.hpLoss, 0);
   assert.deepEqual(result.report.cancellation, { stage: "INPUT", reason: "TARGET_ABSENT" });
-  assert.equal(combatWorkEvents(result.work).length, 0);
-  assert.equal(result.work.removals.size, 0);
+  assert.equal(eventsOf(result.work).length, 0);
+  assert.equal(result.work.removedUnits.length, 0);
 });
 
 test("damage pipeline: invincibility skips reception resources and still gives reactions a frozen cancellation report", () => {
@@ -574,7 +569,7 @@ test("damage pipeline: invincibility skips reception resources and still gives r
   assert.equal(result.report.hpLoss, 0);
   assert.deepEqual(result.report.resourceConsumptions, []);
   assert.deepEqual(result.report.cancellation, { stage: "RECEPTION", reason: "INVINCIBLE" });
-  assert.equal(getCombatUnit(result.work, 2).vitality.hp, 5000);
+  assert.equal(getUnit(result.work, 2).vitality.hp, 5000);
   assert.equal(stateOf(result.work, resources, 2, barrier, 21).remainingAmount, 500);
   assert.equal(stateOf(result.work, resources, 2, barrier, 21).rejected, 1);
   assert.deepEqual(stateOf(result.work, resources, 1, observer, 11), {
@@ -654,8 +649,8 @@ test("damage pipeline: nested reaction damage and healing preserve latest HP and
   const result = resolveDamage(original, request(100), resources);
 
   assert.equal(result.report.hpLoss, 100);
-  assert.equal(getCombatUnit(result.work, 1).vitality.hp, 790);
-  assert.equal(getCombatUnit(result.work, 2).vitality.hp, 910);
+  assert.equal(getUnit(result.work, 1).vitality.hp, 790);
+  assert.equal(getUnit(result.work, 2).vitality.hp, 910);
   assert.equal(stateOf(result.work, resources, 1, barrier, 11).remainingAmount, 0);
   assert.deepEqual(stateOf(result.work, resources, 1, reaction, 12), {
     remainingCharges: 0,
@@ -663,7 +658,7 @@ test("damage pipeline: nested reaction damage and healing preserve latest HP and
     observedTargetHp: 910,
   });
   assert.deepEqual(
-    combatWorkEvents(result.work).map((event) => [
+    eventsOf(result.work).map((event) => [
       event.type,
       event.sourceUnitId,
       event.targetUnitId,
@@ -675,6 +670,6 @@ test("damage pipeline: nested reaction damage and healing preserve latest HP and
       ["HEAL", 1, 2, 10],
     ],
   );
-  assert.equal(getCombatUnit(original, 1).vitality.hp, 800);
-  assert.equal(stateOf(original, resources, 1, reaction, 12).remainingCharges, 1);
+  assert.equal(original.battlefield.snapshot("state").getUnit(1).vitality.hp, 800);
+  assert.equal(original.battlefield.snapshot("state").getUnit(1).effects.instances.find(instance => instance.id === 12).state.remainingCharges, 1);
 });

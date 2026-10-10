@@ -5,7 +5,7 @@ import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { advanceMovement } from "../../dist/core/tactical/battle/steps/movement.js";
 import { changeAlternativeRoutes } from "../../dist/core/tactical/battle/steps/route-control.js";
-import { combatWorkView, getCombatUnit, updateCombatUnit } from "../../dist/core/tactical/battle/execution/work.js";
+import { battlefieldView, createBattleState, getUnit, updateUnit } from "../../dist/core/tactical/battle/execution/context.js";
 import { initializeRoutedEnemy } from "../../dist/core/tactical/battle/creation/enemy.js";
 import { BattlefieldRuntime } from "../../dist/core/tactical/battlefield/runtime.js";
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
@@ -57,25 +57,25 @@ function harness({ speed = 0.25, minimum = 0, definition = route(), maps } = {})
         battlefield,
         get work() { return work; },
         set work(value) { work = value; },
-        get unit() { return getCombatUnit(work, 0); },
+        get unit() { return getUnit(work, 0); },
         get execution() { return execution; },
         step(resources, tick, controls = {}) {
-            const unit = getCombatUnit(work, 0);
+            const unit = getUnit(work, 0);
             const moved = stepRoutedUnit(unit, {
                 tick, maps: maps ?? battlefield.navigationMaps, fieldCache, moveMultiplier: 1,
                 movementAllowed: true, routeAdvanceAllowed: true, waitTickAllowed: true,
                 rngState: execution.rngState, nextNavigationRequestId: execution.nextNavigationRequestId,
-                evaluateContributions: resources.computations.bind({ unit, battlefield: combatWorkView(work) }),
+                evaluateContributions: resources.computations.bind({ unit, battlefield: battlefieldView(work) }),
                 ...controls,
             });
             execution = { ...execution, rngState: moved.rngState, nextNavigationRequestId: moved.nextNavigationRequestId };
-            work = updateCombatUnit(work, moved.unit);
+            work = updateUnit(work, moved.unit);
             return moved;
         },
         reroute(command, tick) {
-            const changed = changeAlternativeRoutes((id) => getCombatUnit(work, id), [command], execution, tick);
+            const changed = changeAlternativeRoutes((id) => getUnit(work, id), [command], execution, tick);
             execution = changed.execution;
-            for (const change of changed.changes) { if (change.type === "UPDATE_UNIT") { work = updateCombatUnit(work, change.unit); } }
+            for (const change of changed.changes) { if (change.type === "UPDATE_UNIT") { work = updateUnit(work, change.unit); } }
         },
     };
 }
@@ -91,8 +91,8 @@ const install = (work, program, resources, expiresAtTick = null) => installNewEf
 }, resources, 0).work;
 
 function speed(work, resources) {
-    const unit = getCombatUnit(work, 0);
-    return resolveMoveSpeedPerTick(unit.definition.locomotion, unit.locomotion, resources.computations.bind({ unit, battlefield: combatWorkView(work) }));
+    const unit = getUnit(work, 0);
+    return resolveMoveSpeedPerTick(unit.definition.locomotion, unit.locomotion, resources.computations.bind({ unit, battlefield: battlefieldView(work) }));
 }
 
 test("move speed: normalized minimum, arithmetic and movement permission are separate", () => {
@@ -214,12 +214,10 @@ test("move speed: computed providers read phase facts without becoming stored fi
     const h = harness({ speed: 0.5 });
     h.work = install(h.work, program, resources);
     const fullHp = h.unit;
-    h.work = updateCombatUnit(h.work, { ...fullHp, vitality: { ...fullHp.vitality, hp: 50 } });
-    h.battlefield.apply([{ type: "REGISTER_UNIT", unit: h.unit }]);
-    const moved = advanceMovement({
-        battlefield: h.battlefield.view, tick: 0, execution: h.execution,
-    }, { routeMoveMultiplier: 0.5 }, resources);
-    h.battlefield.apply(moved.changes);
+    h.work = updateUnit(h.work, { ...fullHp, vitality: { ...fullHp.vitality, hp: 50 } });
+    h.battlefield.advance([{ type: "REGISTER_UNIT", unit: h.unit }]);
+    const moved = createBattleState(h.battlefield, h.execution);
+    advanceMovement(moved, 0, { routeMoveMultiplier: 0.5 }, resources);
     close(h.battlefield.getUnit(0).position[0], 0.125);
     assert.equal(h.battlefield.getUnit(0).definition.locomotion.moveSpeedPerTick, 0.5);
     assert.equal(fullHp.vitality.hp, 100);

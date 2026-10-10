@@ -1,11 +1,12 @@
+import { fixtureBattlefield } from "../helpers/battlefield.js";
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import {
-    combatWorkEvents,
-    createCombatWork,
-    getCombatUnit,
-} from '../../dist/core/tactical/battle/execution/work.js';
+    eventsOf,
+    createBattleState,
+    getUnit,
+} from '../../dist/core/tactical/battle/execution/context.js';
 import { removeUnitWithEffects } from '../../dist/core/tactical/battle/execution/unit-lifecycle.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
@@ -37,12 +38,12 @@ function unit(id, definition = {}) {
 
 function workOf(units, actions) {
     const byId = new Map(units.map(current => [current.id, current]));
-    return createCombatWork({
+    return createBattleState(fixtureBattlefield({
         unitIds: [...byId.keys()],
         getUnit: id => byId.get(id),
         blockerOf: () => undefined,
         blockedBy: () => [],
-    }, undefined, undefined, actions);
+    }), undefined, actions);
 }
 
 function program(resources, id, lifecycle = {}, facets = {}) {
@@ -100,6 +101,7 @@ test('Effect close: overlapping roots and a cross-Unit diamond finish once in st
     const right = add('right', 0, [a]);
     const diamond = add('diamond', 1, [left, right, b]);
     add('leaf', 2, [diamond]);
+    const initialParent = getEffect(work, a);
     const finished = finishEffects(work, [a, b, a], resources, 1, 'DISPELLED');
 
     assert.deepEqual(notices.map(notice => notice.name), ['B', 'A', 'right', 'left', 'diamond', 'leaf']);
@@ -113,7 +115,7 @@ test('Effect close: overlapping roots and a cross-Unit diamond finish once in st
     ]);
     assert.equal(finishEffects(finished, refs, resources, 2, 'OTHER'), finished);
     assert.equal(notices.length, refs.length);
-    assert.equal(getEffect(work, a).finished, false);
+    assert.equal(initialParent.finished, false);
 });
 
 test('Effect close: the first termination retains its root and reason across later overlapping closures', () => {
@@ -188,8 +190,8 @@ test('Effect admission: an accepted instance blocks duplicate admission while it
 
     assert.deepEqual(nested, { type: 'REJECTED', reason: 'ADMISSION_REJECTED' });
     assert.equal(starts, 1);
-    assert.equal(getCombatUnit(accepted.work, 0).effects.instances.length, 1);
-    assert.equal(getCombatUnit(accepted.work, 0).effects.nextInstanceId, 1);
+    assert.equal(getUnit(accepted.work, 0).effects.instances.length, 1);
+    assert.equal(getUnit(accepted.work, 0).effects.nextInstanceId, 1);
     assert.equal(accepted.work.execution.rngState, original.execution.rngState);
 });
 
@@ -206,7 +208,7 @@ test('Effect admission: a start that ends its accepted instance returns ENDED an
 
     assert.equal(accepted.result.type, 'ENDED');
     assert.deepEqual(notices, [{ root: accepted.result.ref, reason: 'SELF_ENDED' }]);
-    assert.equal(getCombatUnit(accepted.work, 0).effects.nextInstanceId, 1);
+    assert.equal(getUnit(accepted.work, 0).effects.nextInstanceId, 1);
     assert.equal(getEffect(accepted.work, accepted.result.ref).finished, true);
 });
 
@@ -223,7 +225,7 @@ test('Effect lifetimes: provenance survives source departure and the implicit ho
     assert.deepEqual(notices, []);
     work = removeUnitWithEffects(work, 1, 'DEATH', resources, 2);
 
-    assert.equal(getCombatUnit(work, 1), undefined);
+    assert.equal(getUnit(work, 1), undefined);
     assert.deepEqual(notices, [{ root: { type: 'UNIT', unitId: 1 }, reason: 'DEATH' }]);
 });
 
@@ -244,7 +246,7 @@ test('Effect closing: departing Unit, Skill, Action and Effect scopes reject bef
     const installedRemote = install(workOf([unit(0, { skill }), unit(1)], actions), resources, remote, 1);
     let survivor = installedRemote.ref;
     let work = activateSkill(installedRemote.work, { unitId: 0, tick: 0 }, resources).work;
-    const activationId = getCombatUnit(work, 0).skill.active.id;
+    const activationId = getUnit(work, 0).skill.active.id;
     let independent;
     const checks = [];
     const trigger = program(resources, 'closing-trigger', {
@@ -279,12 +281,12 @@ test('Effect closing: departing Unit, Skill, Action and Effect scopes reject bef
         ...Array.from({ length: 4 }, () => ({ type: 'REJECTED', reason: 'LIFETIME_UNAVAILABLE' })),
     ]);
     assert.equal(starts, 1);
-    assert.equal(getCombatUnit(work, 0), undefined);
-    assert.equal(getCombatUnit(work, 1).effects.nextInstanceId, 2);
+    assert.equal(getUnit(work, 0), undefined);
+    assert.equal(getUnit(work, 1).effects.nextInstanceId, 2);
     assert.deepEqual(getEffect(work, survivor).scopes, []);
     assert.equal(getEffect(work, independent.ref).finished, false);
-    assert.equal(combatWorkEvents(work).filter(event => event.type === 'SKILL_FINISHED').length, 1);
-    assert.equal(combatWorkEvents(work).filter(event => event.type === 'ACTION_CANCELLED').length, 1);
+    assert.equal(eventsOf(work).filter(event => event.type === 'SKILL_FINISHED').length, 1);
+    assert.equal(eventsOf(work).filter(event => event.type === 'ACTION_CANCELLED').length, 1);
     const late = bindEffectLifetime(work, survivor, installedTrigger.ref);
     assert.deepEqual(late.result, { type: 'LIFETIME_UNAVAILABLE' });
     assert.equal(late.work, work);
@@ -334,7 +336,7 @@ test('Effect closing: nested self-host death waits for pending terminal notices 
         ['C', { root: { type: 'UNIT', unitId: 0 }, reason: 'DEATH' }],
         ['A-after', { root: a, reason: 'DISPELLED' }],
     ]);
-    assert.equal(getCombatUnit(finished, 0), undefined);
+    assert.equal(getUnit(finished, 0), undefined);
     assert.equal(getEffect(finished, c).finished, true);
     assert.equal(finishEffects(finished, [a, b, c], resources, 2), finished);
 });
@@ -368,6 +370,6 @@ test('Effect closing: an inner finish cannot drain host removal while a remote d
     const finished = finishEffects(second.work, [first.ref], resources, 1, 'DISPELLED');
 
     assert.deepEqual(trace, ['parent', 'dependent-start', 'nested', 'dependent-end']);
-    assert.equal(getCombatUnit(finished, 0), undefined);
+    assert.equal(getUnit(finished, 0), undefined);
     assert.equal(getEffect(finished, second.ref).finished, true);
 });

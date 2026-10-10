@@ -1,6 +1,7 @@
+import { fixtureBattlefield } from "../helpers/battlefield.js";
 import { removeUnitWithEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
 import { computedAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
-import { combatWorkEvents } from "../../dist/core/tactical/battle/execution/work.js";
+import { eventsOf } from "../../dist/core/tactical/battle/execution/context.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
@@ -17,11 +18,11 @@ import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js"
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import {
-  createCombatWork,
-  getCombatUnit,
-  removeCombatUnit,
-  updateCombatUnit,
-} from "../../dist/core/tactical/battle/execution/work.js";
+  createBattleState,
+  getUnit,
+  removeUnit,
+  updateUnit,
+} from "../../dist/core/tactical/battle/execution/context.js";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
 import { installNewEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
@@ -29,7 +30,7 @@ import { compileStatusBinding } from "../../dist/core/tactical/unit/capability/s
 import { hasStatusFlag } from "../../dist/core/tactical/unit/capability/status/capability.js";
 import * as modifier from "../../dist/core/tactical/modifier/value.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
-import { combatWorkView } from "../../dist/core/tactical/battle/execution/work.js";
+import { battlefieldView } from "../../dist/core/tactical/battle/execution/context.js";
 import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 
@@ -81,12 +82,12 @@ function unit(id) {
 
 function workWith(...units) {
   const byId = new Map(units.map((value) => [value.id, value]));
-  return createCombatWork({
+  return createBattleState(fixtureBattlefield({
     unitIds: [...byId.keys()],
     getUnit: (id) => byId.get(id),
     blockerOf: () => undefined,
     blockedBy: () => [],
-  });
+  }));
 }
 
 function accept(state = createActionExecutionState(), options = {}) {
@@ -225,13 +226,13 @@ test("action process: cancellation and source exit keep installed prefixes but p
       { executionId: 0, segments, tick: 0 },
       resources,
     );
-    assert.equal(hasStatusFlag(getCombatUnit(waiting.work, 1), "INVINCIBLE"), true);
+    assert.equal(hasStatusFlag(getUnit(waiting.work, 1), "INVINCIBLE"), true);
     let work = waiting.work;
     if (reason === "removed") {
-      work = removeCombatUnit(work, 0, "RETREAT");
+      work = removeUnit(work, 0, "RETREAT");
     } else if (reason === "absent") {
-      work = updateCombatUnit(work, {
-        ...getCombatUnit(work, 0),
+      work = updateUnit(work, {
+        ...getUnit(work, 0),
         spatialPresence: { present: false },
       });
     }
@@ -249,9 +250,9 @@ test("action process: cancellation and source exit keep installed prefixes but p
       type: "CANCELLED",
       reason: reason === "cancel" ? "CANCELLED" : "SOURCE_ABSENT",
     });
-    assert.equal(hasStatusFlag(getCombatUnit(cancelled.work, 1), "INVINCIBLE"), false);
-    assert.equal(getCombatUnit(cancelled.work, 1).effects.instances[0].finished, true);
-    assert.equal(getCombatUnit(cancelled.work, 1).vitality.hp, 100);
+    assert.equal(hasStatusFlag(getUnit(cancelled.work, 1), "INVINCIBLE"), false);
+    assert.equal(getUnit(cancelled.work, 1).effects.instances[0].finished, true);
+    assert.equal(getUnit(cancelled.work, 1).vitality.hp, 100);
     assert.equal(
       cancelled.signals.some((signal) => signal.type === "ACTION_RELEASED"),
       false,
@@ -305,8 +306,8 @@ test("action process: install then query binds current targets and the next segm
       run: (context) => ({
         work: context.work,
         bindings: compiled.bind({
-          source: getCombatUnit(context.work, context.sourceUnitId),
-          battlefield: combatWorkView(context.work),
+          source: getUnit(context.work, context.sourceUnitId),
+          battlefield: battlefieldView(context.work),
         }),
       }),
     },
@@ -316,7 +317,7 @@ test("action process: install then query binds current targets and the next segm
       run: (context) => ({
         work: context.work,
         samples: {
-          observedHp: getCombatUnit(context.work, context.bindings.get("primary")[0]).vitality.hp,
+          observedHp: getUnit(context.work, context.bindings.get("primary")[0]).vitality.hp,
         },
       }),
     },
@@ -334,10 +335,10 @@ test("action process: install then query binds current targets and the next segm
   assert.deepEqual(waiting.state.executions[0].bindings, { primary: [2] });
   assert.equal(waiting.state.executions[0].inputTargetUnitId, 1);
   assert.deepEqual(waiting.state.executions[0].samples, { observedHp: 93 });
-  assert.equal(hasStatusFlag(getCombatUnit(waiting.work, 1), "INVISIBLE"), true);
-  assert.equal(getCombatUnit(waiting.work, 1).vitality.hp, 100);
-  assert.equal(getCombatUnit(waiting.work, 2).vitality.hp, 93);
-  assert.equal(getCombatUnit(original, 2).vitality.hp, 100);
+  assert.equal(hasStatusFlag(getUnit(waiting.work, 1), "INVISIBLE"), true);
+  assert.equal(getUnit(waiting.work, 1).vitality.hp, 100);
+  assert.equal(getUnit(waiting.work, 2).vitality.hp, 93);
+  assert.equal(original.battlefield.snapshot("state").getUnit(2).vitality.hp, 100);
   assert.deepEqual(accepted.state.executions[0].bindings, { primary: [1] });
   const completed = resumeActionExecution(
     waiting.work,
@@ -346,7 +347,7 @@ test("action process: install then query binds current targets and the next segm
     resources,
   );
   assert.equal(completed.result.type, "FINISHED");
-  assert.equal(getCombatUnit(completed.work, 2).vitality.hp, 93);
+  assert.equal(getUnit(completed.work, 2).vitality.hp, 93);
 });
 
 test("action process: concurrent executions from one source own independent contributions and cleanup", () => {
@@ -373,7 +374,7 @@ test("action process: concurrent executions from one source own independent cont
     { executionId: 1, segments, tick: 0 },
     resources,
   );
-  const attack = (work) => resolveAttackPower(1, combatWorkView(work), resources.computations);
+  const attack = (work) => resolveAttackPower(1, battlefieldView(work), resources.computations);
   assert.equal(attack(current.work), 50);
   current = cancelActionExecution(
     current.work,
@@ -387,7 +388,7 @@ test("action process: concurrent executions from one source own independent cont
     [1],
   );
   assert.deepEqual(
-    getCombatUnit(current.work, 1).effects.instances.map((instance) => [
+    getUnit(current.work, 1).effects.instances.map((instance) => [
       instance.scopes.find(scope => scope.type === "ACTION").executionId,
       instance.finished,
     ]),
@@ -451,7 +452,7 @@ test("action process: content cancellation and normal finish retain completed pr
                 resources,
                 0,
               );
-              assert.equal(resolveAttackPower(1, combatWorkView(work), resources.computations), 33);
+              assert.equal(resolveAttackPower(1, battlefieldView(work), resources.computations), 33);
               return { work, continuation };
             },
           },
@@ -486,13 +487,13 @@ test("action process: content cancellation and normal finish retain completed pr
     );
     assert.equal(result.state.executions.length, 0);
     assert.equal(result.state.nextExecutionId, 1);
-    assert.equal(getCombatUnit(result.work, 1).vitality.hp, 100);
-    assert.equal(getCombatUnit(result.work, 1).effects.instances[0].state.power, 23);
-    assert.equal(getCombatUnit(result.work, 1).effects.instances[0].finished, true);
-    assert.equal(resolveAttackPower(1, combatWorkView(result.work), resources.computations), 10);
-    assert.equal(getCombatUnit(original, 1).effects, undefined);
+    assert.equal(getUnit(result.work, 1).vitality.hp, 100);
+    assert.equal(getUnit(result.work, 1).effects.instances[0].state.power, 23);
+    assert.equal(getUnit(result.work, 1).effects.instances[0].finished, true);
+    assert.equal(resolveAttackPower(1, battlefieldView(result.work), resources.computations), 10);
+    assert.equal(original.battlefield.snapshot("state").getUnit(1).effects, undefined);
     assert.deepEqual(
-      combatWorkEvents(result.work).map((event) => event.type),
+      eventsOf(result.work).map((event) => event.type),
       [continuation === "CANCEL" ? "ACTION_CANCELLED" : "ACTION_FINISHED"],
     );
     const duplicate = resumeActionExecution(
@@ -549,7 +550,9 @@ test("action process: a throwing successor exposes neither a partial settlement 
       ),
     /successor failed/,
   );
-  assert.equal(getCombatUnit(original, 1).vitality.hp, 100);
+  assert.equal(original.battlefield.snapshot("state").getUnit(1).vitality.hp, 100);
+  original.battlefield.drop();
+  original.events.length = 0;
   assert.equal(accepted.state.executions[0].cursor, 0);
   const retried = resumeActionExecution(
     original,
@@ -557,7 +560,7 @@ test("action process: a throwing successor exposes neither a partial settlement 
     { executionId: 0, segments: [damage, { type: "RELEASE", markerId: "retry" }], tick: 0 },
     resources,
   );
-  assert.equal(getCombatUnit(retried.work, 1).vitality.hp, 80);
+  assert.equal(getUnit(retried.work, 1).vitality.hp, 80);
   assert.deepEqual(
     retried.signals.map((signal) => signal.type),
     ["ACTION_RELEASED", "ACTION_FINISHED"],
@@ -574,10 +577,10 @@ test("action process: source departure completes the entered segment and cancels
   const segments = [
     { type: "EXECUTE", run: (context) => ({ work: installOwned(resources, marker.ref, context) }) },
     { type: "EXECUTE", run: (context) => {
-      let work = removeCombatUnit(context.work, 0, "RETREAT");
+      let work = removeUnit(context.work, 0, "RETREAT");
       observed.push("synchronous");
-      work = updateCombatUnit(work, { ...getCombatUnit(work, 1), position: [3, 0] });
-      assert.equal(hasStatusFlag(getCombatUnit(work, 1), "INVINCIBLE"), true);
+      work = updateUnit(work, { ...getUnit(work, 1), position: [3, 0] });
+      assert.equal(hasStatusFlag(getUnit(work, 1), "INVINCIBLE"), true);
       return { work };
     } },
     { type: "WAIT", resolve: () => ({ type: "FOR_TICKS", ticks: 1 }) },
@@ -595,9 +598,9 @@ test("action process: source departure completes the entered segment and cancels
   );
   assert.deepEqual(cancelled.result, { type: "CANCELLED", reason: "SOURCE_ABSENT" });
   assert.deepEqual(observed, ["synchronous"]);
-  assert.deepEqual(getCombatUnit(cancelled.work, 1).position, [3, 0]);
-  assert.equal(hasStatusFlag(getCombatUnit(cancelled.work, 1), "INVINCIBLE"), false);
-  assert.equal(combatWorkEvents(cancelled.work).some(event => event.type === "ACTION_RELEASED"), false);
+  assert.deepEqual(getUnit(cancelled.work, 1).position, [3, 0]);
+  assert.equal(hasStatusFlag(getUnit(cancelled.work, 1), "INVINCIBLE"), false);
+  assert.equal(eventsOf(cancelled.work).some(event => event.type === "ACTION_RELEASED"), false);
   assert.deepEqual(cancelled.state.executions, []);
 });
 
@@ -615,7 +618,7 @@ test("action process: source absence cancels before release while retaining prio
           ...first,
           {
             type: "EXECUTE",
-            run: (context) => ({ work: removeCombatUnit(context.work, 0, "RETREAT") }),
+            run: (context) => ({ work: removeUnit(context.work, 0, "RETREAT") }),
           },
           { type: "RELEASE", markerId: "after" },
           {
@@ -635,7 +638,7 @@ test("action process: source absence cancels before release while retaining prio
     assert.deepEqual(result.signals.map(signal => signal.type), [
       ...first.map(() => 'ACTION_RELEASED'), 'ACTION_CANCELLED',
     ]);
-    assert.deepEqual(combatWorkEvents(result.work).map(event => event.type), result.signals.map(signal => signal.type));
+    assert.deepEqual(eventsOf(result.work).map(event => event.type), result.signals.map(signal => signal.type));
   }
 });
 
@@ -650,7 +653,7 @@ test("action process: a completed final segment can finish after removing its ow
       segments: [
         {
           type: "EXECUTE",
-          run: (context) => ({ work: removeCombatUnit(context.work, 0, "RETREAT") }),
+          run: (context) => ({ work: removeUnit(context.work, 0, "RETREAT") }),
         },
       ],
       tick: 0,
@@ -659,7 +662,7 @@ test("action process: a completed final segment can finish after removing its ow
   );
   assert.equal(result.result.type, 'FINISHED');
   assert.deepEqual(result.signals.map(signal => signal.type), ['ACTION_FINISHED']);
-  assert.equal(getCombatUnit(result.work, 0), undefined);
+  assert.equal(getUnit(result.work, 0), undefined);
 });
 
 test("action process: nested source departure cancels the current execution without resuming later segments", () => {
@@ -693,9 +696,9 @@ test("action process: nested source departure cancels the current execution with
 
   assert.deepEqual(visited, ["remove"]);
   assert.deepEqual(advanced.state.executions, []);
-  assert.equal(getCombatUnit(advanced.work, 0), undefined);
-  assert.equal(getCombatUnit(advanced.work, 1).effects.instances.every(instance => instance.finished), true);
-  assert.deepEqual(combatWorkEvents(advanced.work).filter(event => event.type.startsWith("ACTION_")), [
+  assert.equal(getUnit(advanced.work, 0), undefined);
+  assert.equal(getUnit(advanced.work, 1).effects.instances.every(instance => instance.finished), true);
+  assert.deepEqual(eventsOf(advanced.work).filter(event => event.type.startsWith("ACTION_")), [
     { type: "ACTION_CANCELLED", executionId: 0, sourceUnitId: 0, tick: 0, reason: "SOURCE_ABSENT" },
   ]);
 });
@@ -727,6 +730,6 @@ test("action process: source removal in attack completion cannot revive the exec
 
   assert.equal(continued, false);
   assert.deepEqual(advanced.state.executions, []);
-  assert.equal(combatWorkEvents(advanced.work).filter(event => event.type === "ACTION_CANCELLED").length, 1);
-  assert.equal(combatWorkEvents(advanced.work).some(event => event.type === "ACTION_FINISHED"), false);
+  assert.equal(eventsOf(advanced.work).filter(event => event.type === "ACTION_CANCELLED").length, 1);
+  assert.equal(eventsOf(advanced.work).some(event => event.type === "ACTION_FINISHED"), false);
 });

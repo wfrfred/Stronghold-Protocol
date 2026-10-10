@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
-import { combatWorkView, getCombatUnit } from '../../dist/core/tactical/battle/execution/work.js';
+import { battlefieldView, getUnit } from '../../dist/core/tactical/battle/execution/context.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
 import { createMechanismDefinition } from '../../dist/core/tactical/battlefield/mechanism.js';
@@ -23,8 +23,8 @@ import * as modifier from '../../dist/core/tactical/modifier/value.js';
 import { effectFixtureWork } from '../helpers/effects.js';
 
 const address = instanceId => ({ type: "EFFECT", unitId: 0, effectId: instanceId });
-const instances = work => getCombatUnit(work, 0).effects.instances;
-const power = work => resolveAttackPower(0, combatWorkView(work));
+const instances = work => getUnit(work, 0).effects.instances;
+const power = work => resolveAttackPower(0, battlefieldView(work));
 const program = (id, initial = {}) => createEffectProgram({
   id, initialize: () => initial, ownState: state => ({ ...state }),
 });
@@ -48,6 +48,7 @@ test('effect expiry: the default notifies finish at the deadline and defers phys
     },
   });
   const original = install(effectFixtureWork(owner()), effect, resources, 5);
+  const before = original.battlefield.snapshot("draft");
   assert.equal(expireEffects(original, 4, resources), original);
   const finished = expireEffects(original, 5, resources);
   assert.equal(power(finished), 100);
@@ -57,8 +58,8 @@ test('effect expiry: the default notifies finish at the deadline and defers phys
   const cleared = finalizeFinishedEffects(finished, 0, resources, 6);
   assert.deepEqual(instances(cleared), []);
   assert.deepEqual(events, [['disable', true], ['finish']]);
-  assert.equal(instances(original)[0].finished, false);
-  assert.equal(power(original), 120);
+  assert.equal(before.getUnit(0).effects.instances[0].finished, false);
+  assert.equal(resolveAttackPower(0, before), 120);
   for (const deadline of [null, 10]) {
     const untouched = install(effectFixtureWork(owner()), effect, resources, deadline);
     assert.equal(expireEffects(untouched, 5, resources), untouched);
@@ -153,6 +154,7 @@ test('effect expiry: content can remove one layer, renew the same identity, and 
   });
   const original = install(effectFixtureWork(owner()), effect, resources, 2);
   const initial = instances(original)[0];
+  const initialView = original.battlefield.snapshot("draft");
   let work = expireEffects(original, 2, resources);
   assert.equal(power(work), 120);
   assert.equal(effectTick(instances(work)[0]), 6);
@@ -172,8 +174,8 @@ test('effect expiry: content can remove one layer, renew the same identity, and 
   assert.equal(instances(work)[0].finished, true);
   assert.equal(power(work), 100);
   assert.equal(expires, 3);
-  assert.equal(instances(original)[0].state.layers, 3);
-  assert.equal(power(original), 130);
+  assert.equal(initial.state.layers, 3);
+  assert.equal(resolveAttackPower(0, initialView), 130);
 });
 
 test('effect expiry: clearing a deadline and nested terminal removal are normal outcomes', () => {
@@ -264,8 +266,10 @@ test('effect expiry: unresolved deadlines fail without publishing state and rele
       } },
     });
     const original = install(effectFixtureWork(owner()), effect, resources, 5);
+    original.battlefield.apply();
     assert.throws(() => expireEffects(original, 10, resources, scope),
       failure === 'exception' ? /expiration failed/ : /must resolve its expired deadline/);
+    original.battlefield.drop();
     assert.equal(instances(original)[0].state.layers, 3);
     assert.equal(effectTick(instances(original)[0]), 5);
     assert.equal(power(original), 130);

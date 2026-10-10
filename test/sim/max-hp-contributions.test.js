@@ -8,10 +8,10 @@ import { fileURLToPath } from "node:url";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import {
-    combatWorkView,
-    getCombatUnit,
-    combatWorkEvents,
-} from "../../dist/core/tactical/battle/execution/work.js";
+    battlefieldView,
+    getUnit,
+    eventsOf,
+} from "../../dist/core/tactical/battle/execution/context.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { copyUnitSnapshot } from "../../dist/core/tactical/unit/snapshot.js";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
@@ -46,7 +46,7 @@ const receiver = (hp = 50) => {
     });
     return { ...unit, vitality: { ...unit.vitality, hp } };
 };
-const pair = (work) => [getCombatUnit(work, 1).vitality.hp, resolveMaxHp(1, combatWorkView(work))];
+const pair = (work) => [getUnit(work, 1).vitality.hp, resolveMaxHp(1, battlefieldView(work))];
 const program = (id, amount) =>
     createEffectProgram({
         id,
@@ -102,9 +102,9 @@ test("MaxHP: install, payload, participation, finish and cleanup retain HP perce
         assert.deepEqual(pair(finished), [hp, 100]);
         const cleared = finalizeEffect(finished, address(), resources, 3);
         assert.deepEqual(pair(cleared), [hp, 100]);
-        assert.deepEqual(getCombatUnit(cleared, 1).vitality.maxHp.entries, []);
+        assert.deepEqual(getUnit(cleared, 1).vitality.maxHp.entries, []);
         assert.deepEqual(pair(initial), [hp, 100]);
-        assert.deepEqual(combatWorkEvents(cleared), []);
+        assert.deepEqual(eventsOf(cleared), []);
     }
 });
 
@@ -165,7 +165,7 @@ test("MaxHP: callbacks and synchronous nested successors see coordinated facts",
     const notices = observed.length;
     const removed = finalizeEffect(finished, address(), resources, 1);
     assert.equal(observed.length, notices);
-    assert.equal(getCombatUnit(removed, 1).effects.instances.some(({ id }) => id === address().effectId), false);
+    assert.equal(getUnit(removed, 1).effects.instances.some(({ id }) => id === address().effectId), false);
     assert.deepEqual(pair(removed), [50, 100]);
 });
 
@@ -197,9 +197,10 @@ test("MaxHP: one binding batch coordinates once after every slot has changed", (
         ],
     });
     const installed = install(effectFixtureWork(receiver()), effect.ref, resources);
+    const installedPair = pair(installed);
     const disabled = setEffectEnabled(installed, address(), false, resources, 1);
     assert.deepEqual(observed, [50, 150]);
-    assert.deepEqual(pair(installed), [150, 300]);
+    assert.deepEqual(installedPair, [150, 300]);
     assert.deepEqual(pair(disabled), [50, 100]);
 });
 
@@ -209,7 +210,7 @@ test("MaxHP: ordinary healing consumes the current upper bound and prohibition d
         contributions: [maxHp((instance) => [bonus(instance.state.amount)])],
     });
     const installed = install(effectFixtureWork(receiver()), effect.ref, resources);
-    const unit = getCombatUnit(installed, 1);
+    const unit = getUnit(installed, 1);
     const healed = healUnit(unit, 500);
     assert.equal(healed.amount, 100);
     assert.equal(healed.unit.vitality.hp, 200);
@@ -228,8 +229,8 @@ test("MaxHP: ordinary healing consumes the current upper bound and prohibition d
         resources,
     );
     assert.deepEqual(pair(coordinated), [100, 200]);
-    assert.equal(healUnit(getCombatUnit(coordinated, 1), 50).amount, 0);
-    assert.deepEqual(combatWorkEvents(coordinated), []);
+    assert.equal(healUnit(getUnit(coordinated, 1), 50).amount, 0);
+    assert.deepEqual(eventsOf(coordinated), []);
 });
 
 test("MaxHP: group winner replacement and fallback preserve the current HP ratio", () => {
@@ -242,8 +243,9 @@ test("MaxHP: group winner replacement and fallback preserve the current HP ratio
     const strong = register("strong", 200, 2);
     const initial = effectFixtureWork(receiver());
     const first = install(initial, weak.ref, resources);
+    const firstPair = pair(first);
     const second = install(first, strong.ref, resources);
-    assert.deepEqual(pair(first), [75, 150]);
+    assert.deepEqual(firstPair, [75, 150]);
     assert.deepEqual(pair(second), [150, 300]);
     const weakerUpdated = updateEffectState(
         second,
@@ -270,8 +272,8 @@ test("MaxHP: unchanged effective values, inactive cleanup and snapshots do not r
     });
     const initial = effectFixtureWork(receiver(Math.PI));
     const installed = install(initial, effect.ref, resources, { scopes: [{ type: "TICK", tick: 5 }] });
-    const copied = copyUnitSnapshot(getCombatUnit(installed, 1));
-    assert.equal(copied.vitality.maxHp.entries, getCombatUnit(installed, 1).vitality.maxHp.entries);
+    const copied = copyUnitSnapshot(getUnit(installed, 1));
+    assert.equal(copied.vitality.maxHp.entries, getUnit(installed, 1).vitality.maxHp.entries);
     assert.deepEqual(pair(effectFixtureWork(copied)), pair(installed));
     assert.equal(setEffectEnabled(installed, address(), true, resources, 1), installed);
     const updated = updateEffectState(
@@ -282,8 +284,8 @@ test("MaxHP: unchanged effective values, inactive cleanup and snapshots do not r
         (state) => ({ ...state, amount: -600 }),
         resources, 0,
     );
-    assert.equal(getCombatUnit(updated, 1).vitality.hp, getCombatUnit(installed, 1).vitality.hp);
-    assert.equal(resolveMaxHp(1, combatWorkView(updated)), 1);
+    assert.equal(getUnit(updated, 1).vitality.hp, getUnit(installed, 1).vitality.hp);
+    assert.equal(resolveMaxHp(1, battlefieldView(updated)), 1);
     const noChange = updateEffectState(
         updated,
         1,
@@ -292,14 +294,15 @@ test("MaxHP: unchanged effective values, inactive cleanup and snapshots do not r
         (state) => ({ ...state, revision: 1 }),
         resources, 0,
     );
-    assert.equal(getCombatUnit(noChange, 1).vitality.hp, getCombatUnit(updated, 1).vitality.hp);
+    assert.equal(getUnit(noChange, 1).vitality.hp, getUnit(updated, 1).vitality.hp);
     const expired = expireEffects(noChange, 5, resources);
-    const hp = getCombatUnit(expired, 1).vitality.hp;
+    const hp = getUnit(expired, 1).vitality.hp;
     const cleared = finalizeEffect(expired, address(), resources, 5);
-    assert.equal(getCombatUnit(cleared, 1).vitality.hp, hp);
+    assert.equal(getUnit(cleared, 1).vitality.hp, hp);
     assert.equal(finishEffects(cleared, [address()], resources, 5), cleared);
     assert.equal(copied.vitality.hp, Math.PI / 100);
-    assert.deepEqual(pair(initial), [Math.PI, 100]);
+    assert.deepEqual([initial.battlefield.snapshot("state").getUnit(1).vitality.hp,
+      resolveMaxHp(1, initial.battlefield.snapshot("state"))], [Math.PI, 100]);
 });
 
 test("MaxHP: a tick failure does not publish contributions or the HP response", () => {

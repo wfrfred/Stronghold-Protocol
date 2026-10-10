@@ -1,7 +1,7 @@
 import type { EffectDispatchScope } from "../../effects/dispatch.js";
 import type { EffectId } from "../../effects/instance.js";
 import type { UnitId } from "../../../unit.js";
-import type { CombatWork } from "../../../../battle/execution/work.js";
+import type { BattleState } from "../../../../battle/execution/context.js";
 
 export type DamageType = "PHYSICAL" | "ARTS" | "TRUE" | "ELEMENTAL";
 
@@ -69,7 +69,7 @@ export interface DamageReport {
 }
 
 export interface DamageResolution {
-    readonly work: CombatWork;
+    readonly work: BattleState;
     readonly report: DamageReport;
 }
 
@@ -84,7 +84,7 @@ export function createDamageOperands(power: number): DamageOperands {
 }
 
 export type DamageOperation = (
-    work: CombatWork,
+    work: BattleState,
     request: DamageRequest,
     dispatch: EffectDispatchScope,
 ) => DamageResolution;

@@ -1,6 +1,6 @@
 import { ActionExecutionWork } from "./internal/executions.js";
 import { startActionInWork } from "./internal/execution.js";
-import type { CombatWork } from "../../../battle/execution/work.js";
+import type { BattleState } from "../../../battle/execution/context.js";
 import type { UnitId } from "../../unit.js";
 import type { CompiledAction } from "./program.js";
 import type { ActionExecutionState, ActionExecutionResources } from "./process.js";
@@ -16,11 +16,11 @@ export interface ActionStartRequest {
 export type ActionStartResources = ActionExecutionResources & Pick<ActionResources, "computations">;
 
 export function startAction(
-    work: CombatWork,
+    work: BattleState,
     state: ActionExecutionState,
     request: ActionStartRequest,
     resources: ActionStartResources,
-): { readonly work: CombatWork; readonly state: ActionExecutionState } {
+): { readonly work: BattleState; readonly state: ActionExecutionState } {
     const executions = new ActionExecutionWork(state);
     const next = startActionInWork(work, executions, request, resources);
 

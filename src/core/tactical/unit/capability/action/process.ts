@@ -6,7 +6,7 @@ import {
     resumeActionExecutionInWork,
 } from "./internal/process.js";
 import { assertNonnegativeSafeInteger } from "../../../../common/assert.js";
-import type { CombatWork } from "../../../battle/execution/work.js";
+import type { BattleState } from "../../../battle/execution/context.js";
 import type { UnitId } from "../../unit.js";
 import type { EffectTransitionResources } from "../effects/contract.js";
 import type { ActionDefinition, TargetBindingId } from "./capability.js";
@@ -17,11 +17,11 @@ export interface ActionExecutionResources extends EffectTransitionResources {
     readonly actionRelease?: ActionReleaseResources;
     readonly projectileOperations?: ProjectileOperations;
     readonly completeAttack?: (
-        work: CombatWork,
+        work: BattleState,
         unitId: UnitId,
         tick: number,
         dispatch?: EffectDispatchScope,
-    ) => CombatWork;
+    ) => BattleState;
 }
 
 export type ActionExecutionId = number;
@@ -65,7 +65,7 @@ export interface ActionExecutionInput {
 }
 
 export interface ActionExecutionContext {
-    readonly work: CombatWork;
+    readonly work: BattleState;
     readonly sourceUnitId: UnitId;
     readonly executionId: ActionExecutionId;
     readonly acceptedAtTick: number;
@@ -77,7 +77,7 @@ export interface ActionExecutionContext {
 }
 
 export interface ActionExecutionStepResult {
-    readonly work: CombatWork;
+    readonly work: BattleState;
     readonly bindings?: ReadonlyMap<TargetBindingId, readonly UnitId[]>;
     readonly samples?: ActionExecutionSamples;
     readonly continuation?: "NEXT" | "FINISH" | "CANCEL";
@@ -125,7 +125,7 @@ export type ActionExecutionResult =
     | { readonly type: "CANCELLED"; readonly reason: ActionExecutionCancellationReason };
 
 export interface ActionExecutionTransition {
-    readonly work: CombatWork;
+    readonly work: BattleState;
     readonly state: ActionExecutionState;
     readonly result: ActionExecutionResult;
     readonly signals: readonly ActionExecutionSignal[];
@@ -179,7 +179,7 @@ export function actionExecutionPermissions(
 }
 
 export function cancelActionExecution(
-    work: CombatWork,
+    work: BattleState,
     state: ActionExecutionState,
     request: ActionExecutionCancelRequest,
     resources: EffectTransitionResources,
@@ -191,7 +191,7 @@ export function cancelActionExecution(
 }
 
 export function resumeActionExecution(
-    work: CombatWork,
+    work: BattleState,
     state: ActionExecutionState,
     request: ActionExecutionResumeRequest,
     resources: ActionExecutionResources,

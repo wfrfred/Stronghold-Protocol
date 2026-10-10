@@ -22,7 +22,7 @@ import { EffectSourceResources } from "../battlefield/effect-source/resources.js
 import { ProjectileResources } from "../battlefield/projectile/resources.js";
 import { resolveDamage } from "../unit/capability/vitality/damage/settlement.js";
 import { resolveHealing } from "../unit/capability/vitality/healing/settlement.js";
-import { appendCombatEvents, type CombatWork } from "./execution/work.js";
+import { appendEvents, type BattleState } from "./execution/context.js";
 import type { UnitId } from "../unit/unit.js";
 import {
     consumeSkillAmmo,
@@ -80,39 +80,39 @@ export class CombatResources {
 
     readonly actionRelease = new ActionReleaseResources(this.effects, this.#registration);
     readonly completeAttack = (
-        work: CombatWork,
+        work: BattleState,
         unitId: UnitId,
         tick: number,
         dispatch?: EffectDispatchScope,
-    ): CombatWork => {
+    ): BattleState => {
         const consumed = consumeSkillAmmo(work, unitId, tick, this, dispatch);
 
-        return appendCombatEvents(consumed.work, consumed.signals);
+        return appendEvents(consumed.work, consumed.signals);
     };
 
-    readonly stopSkillActivation = (work: CombatWork, unitId: UnitId, tick: number) =>
+    readonly stopSkillActivation = (work: BattleState, unitId: UnitId, tick: number) =>
         stopSkillActivation(work, unitId, tick, this);
 
     readonly notifySkillFinished = (
-        work: CombatWork,
+        work: BattleState,
         activation: StoppedSkillActivation,
         tick: number,
         dispatch: EffectDispatchScope,
-    ): CombatWork => {
+    ): BattleState => {
         const finished = notifySkillFinished(work, activation, tick, this, dispatch);
 
-        return appendCombatEvents(finished.work, finished.signals);
+        return appendEvents(finished.work, finished.signals);
     };
 
     readonly finishSkill = (
-        work: CombatWork,
+        work: BattleState,
         unitId: UnitId,
         tick: number,
         dispatch?: EffectDispatchScope,
-    ): CombatWork => {
+    ): BattleState => {
         const finished = finishSkill(work, unitId, tick, this, dispatch);
 
-        return appendCombatEvents(finished.work, finished.signals);
+        return appendEvents(finished.work, finished.signals);
     };
 
     readonly settleDamage: DamageOperation = (work, request, dispatch) => {

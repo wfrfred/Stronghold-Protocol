@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
-import { combatWorkView, getCombatUnit } from "../../dist/core/tactical/battle/execution/work.js";
+import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/execution/context.js";
 import { createProjectileProgram } from "../../dist/core/tactical/battlefield/projectile/program.js";
 import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
 import { create as modifier } from "../../dist/core/tactical/modifier/value.js";
@@ -184,12 +184,12 @@ test("ammo runtime: the last released projectile survives skill completion and r
   const runtime = scenario({ program: (_compiled, services, shell) => [
     { type: "RELEASE", markerId: "shell" },
     { type: "EXECUTE", run: (context) => {
-      const actor = getCombatUnit(context.work, context.sourceUnitId);
+      const actor = getUnit(context.work, context.sourceUnitId);
       const targetUnitId = context.bindings.get("main")[0];
-      const target = getCombatUnit(context.work, targetUnitId);
+      const target = getUnit(context.work, targetUnitId);
       context.projectiles.launch(shell.ref, {
         source: actor.id, traceTarget: targetUnitId, position: actor.position, destination: target.position,
-        cachedAtk: resolveAttackPower(actor.id, combatWorkView(context.work), services.computations),
+        cachedAtk: resolveAttackPower(actor.id, battlefieldView(context.work), services.computations),
         speedPerTick: 1, contactRange: { type: "SHAPES", geometry: hit }, stopDelayTicks: 0,
       });
       return { work: context.work };

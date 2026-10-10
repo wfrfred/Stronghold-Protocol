@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import {
-  combatWorkView,
-  getCombatUnit,
-  transitionCombatUnit,
-} from "../../dist/core/tactical/battle/execution/work.js";
+  battlefieldView,
+  getUnit,
+  transitionUnit,
+} from "../../dist/core/tactical/battle/execution/context.js";
 import * as contribution from "../../dist/core/tactical/modifier/contribution.js";
 import * as modifier from "../../dist/core/tactical/modifier/value.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
@@ -47,8 +47,8 @@ const install = (work, resources, program, id, state, source = null) => {
   return result.work;
 };
 const attackPower = (work, resources) =>
-  resolveAttackPower(1, combatWorkView(work), resources.computations);
-const entries = (work) => getCombatUnit(work, 1).offense.attack.entries;
+  resolveAttackPower(1, battlefieldView(work), resources.computations);
+const entries = (work) => getUnit(work, 1).offense.attack.entries;
 const slot = (instance) => instance.state.grouped
   ? { id: "inspiration/attack", strength: instance.state.coefficient }
   : undefined;
@@ -70,15 +70,15 @@ test("contribution groups: the ATK coefficient wins, while other facets particip
     { coefficient: 0.6, amount: 60, defense: 20, grouped: true });
 
   assert.equal(attackPower(work, resources), 160);
-  assert.equal(resolveDefense(1, combatWorkView(work)).defense, 30);
+  assert.equal(resolveDefense(1, battlefieldView(work)).defense, 30);
   assert.equal(samples, 2);
   assert.deepEqual(entries(work).map((entry) => entry.participating), [true, true]);
-  assert.deepEqual(getCombatUnit(work, 1).effects.instances.map((instance) => instance.participating), [true, true]);
+  assert.deepEqual(getUnit(work, 1).effects.instances.map((instance) => instance.participating), [true, true]);
   const loserValues = entries(work)[0].values;
 
   work = removeEffect(work, { type: "EFFECT", unitId: 1, effectId: 1 }, resources, 0);
   assert.equal(attackPower(work, resources), 400);
-  assert.equal(resolveDefense(1, combatWorkView(work)).defense, 10);
+  assert.equal(resolveDefense(1, battlefieldView(work)).defense, 10);
   assert.equal(entries(work)[0].values, loserValues);
   assert.equal(samples, 2);
 });
@@ -95,13 +95,13 @@ test("contribution groups: explicit stored state updates refresh strength, sampl
     { coefficient: 0.3, amount: 300, grouped: true });
   work = install(work, resources, effect, 1,
     { coefficient: 0.6, amount: 60, grouped: true });
-  const original = work;
+  const original = work.battlefield.snapshot("draft");
 
   work = updateEffectState(work, 1, 0, effect.ref,
     (state) => ({ ...state, coefficient: 0.7, amount: 70 }), resources, 0);
   assert.equal(entries(work)[0].group.strength, 0.7);
   assert.equal(attackPower(work, resources), 170);
-  assert.equal(attackPower(original, resources), 160);
+  assert.equal(resolveAttackPower(1, original, resources.computations), 160);
   assert.equal(samples, 3);
 
   work = updateEffectState(work, 1, 0, effect.ref,
@@ -133,7 +133,7 @@ test("contribution groups: computed values stay live without reranking, and expl
   assert.equal(computes, 1);
   const originalEntries = entries(work);
 
-  work = transitionCombatUnit(work, 3, (provider) => updateAttackContributions(provider, (state) =>
+  work = transitionUnit(work, 3, (provider) => updateAttackContributions(provider, (state) =>
     contribution.register(state, { id: "provider-buff", sequence: 0, participating: true, values: [value(100)] })));
   assert.equal(attackPower(work, resources), 220);
   assert.equal(entries(work), originalEntries);

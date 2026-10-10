@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
-import { getCombatUnit } from '../../dist/core/tactical/battle/execution/work.js';
+import { getUnit } from '../../dist/core/tactical/battle/execution/context.js';
 import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
 import { finishEffects, closeEffectLifetimes, installNewEffect, bindEffectLifetime } from '../../dist/core/tactical/unit/capability/effects/lifecycle.js';
 import { effectFixtureWork } from '../helpers/effects.js';
-const host = id => ({ id, definition: { id: `host-${id}` } });
+const host = id => ({ id, definition: { id: `host-${id}` }, position: [0, 0] });
 const program = id => createEffectProgram({ id, initialize: () => ({}), ownState: state => state });
 const input = { source: null, scopes: [] };
 
@@ -29,12 +29,12 @@ test('effect batching: overlapping roots and diamond dependencies mark the compl
   for (const [child, parent] of [[refs[1], refs[0]], [refs[2], refs[0]], [refs[3], refs[1]], [refs[3], refs[2]]]) {
     work = bindEffectLifetime(work, child, parent).work;
   }
-  const before = work;
+  const before = work.battlefield.snapshot("draft");
   work = finishEffects(work, [refs[3], refs[0], refs[0]], resources, 1);
   assert.deepEqual(notices, [[0, 0], [1, 0], [1, 1], [0, 1]]);
-  assert.ok([0, 1].every(id => getCombatUnit(work, id).effects.instances.every(instance => instance.finished)));
+  assert.ok([0, 1].every(id => getUnit(work, id).effects.instances.every(instance => instance.finished)));
   assert.equal(finishEffects(work, refs, resources, 1), work);
-  assert.ok([0, 1].every(id => getCombatUnit(before, id).effects.instances.every(instance => !instance.finished)));
+  assert.ok([0, 1].every(id => before.getUnit(id).effects.instances.every(instance => !instance.finished)));
 });
 
 test('effect batching: a departing host never temporarily enables suppressed competitors', () => {
@@ -51,7 +51,7 @@ test('effect batching: a departing host never temporarily enables suppressed com
   calls.length = 0;
   work = closeEffectLifetimes(work, [{ type: 'UNIT', unitId: 0 }], resources, 1);
   assert.deepEqual(calls, []);
-  assert.ok(getCombatUnit(work, 0).effects.instances.every(instance => instance.finished));
+  assert.ok(getUnit(work, 0).effects.instances.every(instance => instance.finished));
 });
 
 test('effect batching: closing many roots reconciles a surviving competitor once per host', () => {
@@ -77,7 +77,7 @@ test('effect batching: closing many roots reconciles a surviving competitor once
     work = finishEffects(work, roots, resources, 1);
     assert.equal(checks, 1, `${count} roots`);
     assert.equal(enables, 1);
-    assert.equal(getCombatUnit(work, 0).effects.instances[0].participating, true);
+    assert.equal(getUnit(work, 0).effects.instances[0].participating, true);
   }
 });
 
@@ -100,5 +100,5 @@ test('effect batching: finish business can supersede a surviving competitor befo
   calls.length = 0;
   const ended = finishEffects(installed.work, [installed.result.ref], resources, 1);
   assert.deepEqual(calls, ['finish']);
-  assert.ok(getCombatUnit(ended, 0).effects.instances.every(instance => instance.finished));
+  assert.ok(getUnit(ended, 0).effects.instances.every(instance => instance.finished));
 });

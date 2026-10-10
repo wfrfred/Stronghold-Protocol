@@ -1,10 +1,10 @@
 import {
-    combatWorkView,
-    getCombatMechanism,
-    getCombatUnit,
-    updateCombatMechanism,
-    type CombatWork,
-} from "../../battle/execution/work.js";
+    battlefieldView,
+    getMechanism,
+    getUnit,
+    updateMechanism,
+    type BattleState,
+} from "../../battle/execution/context.js";
 import type { MechanismId } from "../mechanism.js";
 import type { UnitId } from "../../unit/unit.js";
 import { EffectDispatchScope } from "../../unit/capability/effects/dispatch.js";
@@ -36,14 +36,12 @@ import {
 
 export type { EffectSourceServices } from "./resources.js";
 
-function sourceIds(work: CombatWork): readonly MechanismId[] {
-    const ids = new Set([...work.mechanismView.mechanismIds, ...work.mechanismUpdates.keys()]);
-
-    return [...ids].sort((left, right) => left - right);
+function sourceIds(work: BattleState): readonly MechanismId[] {
+    return [...work.battlefield.mechanismIds].sort((left, right) => left - right);
 }
 
 function settleSource<S extends object>(
-    initialWork: CombatWork,
+    initialWork: BattleState,
     initialSource: TypedEffectSourceMechanism<S>,
     program: EffectSourceProgram<S>,
     resources: EffectSourceServices,
@@ -51,7 +49,7 @@ function settleSource<S extends object>(
     dispatch: EffectDispatchScope | undefined,
     operation: "RECONCILE" | "REGISTER" | "FINISH",
     registrations: readonly UnitId[] = [],
-): CombatWork {
+): BattleState {
     if (initialSource.effectSource.finished) {
         return initialWork;
     }
@@ -63,7 +61,7 @@ function settleSource<S extends object>(
     let receiversChanged = false;
 
     const current = () => {
-        const source = pendingSource ?? getCombatMechanism(work, sourceId);
+        const source = pendingSource ?? getMechanism(work, sourceId);
 
         if (source === undefined || !hasEffectSource(source)) {
             throw new TypeError("effect source settlement lost its mechanism");
@@ -74,14 +72,14 @@ function settleSource<S extends object>(
 
     const flush = () => {
         if (pendingSource !== undefined) {
-            work = updateCombatMechanism(work, pendingSource);
+            work = updateMechanism(work, pendingSource);
             pendingSource = undefined;
         }
     };
 
     const context = (): EffectSourceContext<S> => ({
         source: current(),
-        battlefield: combatWorkView(work),
+        battlefield: battlefieldView(work),
         tick,
     });
 
@@ -126,12 +124,12 @@ function settleSource<S extends object>(
     const receiverContext = (
         binding: EffectSourceReceiver,
     ): EffectSourceReceiverContext<S> | undefined => {
-        const receiver = getCombatUnit(work, binding.unitId);
+        const receiver = getUnit(work, binding.unitId);
 
         return receiver === undefined ? undefined : { ...context(), receiver, binding };
     };
     const retainReceiver = (unitId: UnitId) => {
-        if (bindingOf(unitId) === undefined && getCombatUnit(work, unitId) !== undefined) {
+        if (bindingOf(unitId) === undefined && getUnit(work, unitId) !== undefined) {
             bind({ unitId, address: null, installationAttempts: 0 });
         }
     };
@@ -298,15 +296,15 @@ function settleSource<S extends object>(
 }
 
 function applyToSource(
-    work: CombatWork,
+    work: BattleState,
     sourceId: MechanismId,
     resources: EffectSourceServices,
     tick: number,
     dispatch: EffectDispatchScope | undefined,
     operation: "RECONCILE" | "REGISTER" | "FINISH",
     registrations?: readonly UnitId[],
-): CombatWork {
-    const source = getCombatMechanism(work, sourceId);
+): BattleState {
+    const source = getMechanism(work, sourceId);
 
     if (source === undefined || !hasEffectSource(source)) {
         return work;
@@ -318,11 +316,11 @@ function applyToSource(
 }
 
 export function reconcileEffectSources(
-    work: CombatWork,
+    work: BattleState,
     resources: EffectSourceServices,
     tick: number,
     dispatch?: EffectDispatchScope,
-): CombatWork {
+): BattleState {
     const scope = dispatch ?? new EffectDispatchScope();
 
     for (const id of sourceIds(work)) {
@@ -333,12 +331,12 @@ export function reconcileEffectSources(
 }
 
 export function registerEffectSourceUnits(
-    work: CombatWork,
+    work: BattleState,
     unitIds: readonly UnitId[],
     resources: EffectSourceServices,
     tick: number,
     dispatch?: EffectDispatchScope,
-): CombatWork {
+): BattleState {
     if (unitIds.length === 0) {
         return work;
     }
@@ -353,20 +351,20 @@ export function registerEffectSourceUnits(
 }
 
 export function setEffectSourceActive(
-    work: CombatWork,
+    work: BattleState,
     sourceId: MechanismId,
     active: boolean,
     resources: EffectSourceServices,
     tick: number,
     dispatch?: EffectDispatchScope,
-): CombatWork {
-    const source = getCombatMechanism(work, sourceId);
+): BattleState {
+    const source = getMechanism(work, sourceId);
 
     if (source === undefined || !hasEffectSource(source) || source.effectSource.finished) {
         return work;
     }
 
-    work = updateCombatMechanism(work, { ...source, active });
+    work = updateMechanism(work, { ...source, active });
 
     return applyToSource(
         work,
@@ -379,12 +377,12 @@ export function setEffectSourceActive(
 }
 
 export function finishEffectSource(
-    work: CombatWork,
+    work: BattleState,
     sourceId: MechanismId,
     resources: EffectSourceServices,
     tick: number,
     dispatch?: EffectDispatchScope,
-): CombatWork {
+): BattleState {
     return applyToSource(
         work,
         sourceId,

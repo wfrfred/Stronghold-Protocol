@@ -1,5 +1,6 @@
+import { fixtureBattlefield } from "../helpers/battlefield.js";
 import { computedAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
-import { combatWorkEvents } from "../../dist/core/tactical/battle/execution/work.js";
+import { eventsOf } from "../../dist/core/tactical/battle/execution/context.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createRng } from "../../dist/core/common/rng.js";
@@ -22,11 +23,11 @@ import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/off
 import * as modifier from "../../dist/core/tactical/modifier/value.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import {
-  combatWorkView,
-  createCombatWork,
-  getCombatUnit,
-  withCombatExecution,
-} from "../../dist/core/tactical/battle/execution/work.js";
+  battlefieldView,
+  createBattleState,
+  getUnit,
+  withExecution,
+} from "../../dist/core/tactical/battle/execution/context.js";
 
 const hit = createShapeGeometry({
   shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.1 }],
@@ -171,15 +172,15 @@ function registerProjectile(resources, { id = "shell", cachedOnly = false, accep
 }
 
 function launch(context, services, program, overrides = {}) {
-  const source = getCombatUnit(context.work, context.sourceUnitId);
+  const source = getUnit(context.work, context.sourceUnitId);
   const targetId = context.bindings.get("primary")[0];
-  const target = getCombatUnit(context.work, targetId);
+  const target = getUnit(context.work, targetId);
   const id = context.projectiles.launch(program.ref, {
     source: source.id,
     traceTarget: targetId,
     position: source.position,
     destination: target.position,
-    cachedAtk: resolveAttackPower(source.id, combatWorkView(context.work), services.computations),
+    cachedAtk: resolveAttackPower(source.id, battlefieldView(context.work), services.computations),
     speedPerTick: 1,
     contactRange,
     stopDelayTicks: 1,
@@ -195,7 +196,7 @@ function launch(context, services, program, overrides = {}) {
 
 function projectileBattlefield(instances = []) {
   const battlefield = createBattlefieldRuntime({ map: spec([]).map });
-  battlefield.apply(instances.map((projectile) => ({ type: "REGISTER_PROJECTILE", projectile })));
+  battlefield.advance(instances.map((projectile) => ({ type: "REGISTER_PROJECTILE", projectile })));
   return battlefield;
 }
 
@@ -215,15 +216,12 @@ function damageEvents(step) {
 function workFrom(snapshot) {
   const units = new Map(snapshot.units.map((unit) => [unit.id, unit]));
 
-  return createCombatWork(
-    {
+  return createBattleState(fixtureBattlefield({
       unitIds: [...units.keys()],
       getUnit: (id) => units.get(id),
       blockerOf: () => undefined,
       blockedBy: () => [],
-    },
-    snapshot.execution,
-  );
+    }), snapshot.execution);
 }
 
 test("projectile runtime: immediate and resumable Actions launch independent facts without moving on the release tick", () => {
@@ -642,12 +640,12 @@ test("projectile runtime: a same-process immutable copy replays arrival and stop
 
   for (const tick of [1, 2, 3]) {
     const advanced = advanceProjectiles(copied.work, copied.battlefield, resources, tick);
-    copied.battlefield.apply(advanced.changes);
+    copied.battlefield.advance(advanced.changes);
     copied = { ...copied, work: advanced.work };
     const actual = runtime.step();
     actualEvents.push(...actual.events);
   }
-  replayEvents.push(...combatWorkEvents(copied.work));
+  replayEvents.push(...eventsOf(copied.work));
   assert.deepEqual(actualEvents, replayEvents);
   assert.deepEqual(runtime.snapshot().projectiles, {
     nextProjectileId: copied.work.execution.nextProjectileId,
@@ -655,7 +653,7 @@ test("projectile runtime: a same-process immutable copy replays arrival and stop
   });
   assert.equal(
     runtime.snapshot().units.find((unit) => unit.id === 1).vitality.hp,
-    getCombatUnit(copied.work, 1).vitality.hp,
+    getUnit(copied.work, 1).vitality.hp,
   );
   assert.equal(original.projectiles.instances[0].position[0], 0);
   assert.equal(original.projectiles.instances[0].hitUnitIds.length, 0);
@@ -721,7 +719,7 @@ test("projectile runtime: a failed stop rolls back launch, samples, receiver tra
                 const rng = createRng(context.work.execution.rngState);
                 const sample = rng.next();
                 return {
-                  work: withCombatExecution(context.work, {
+                  work: withExecution(context.work, {
                     ...context.work.execution,
                     rngState: rng.state(),
                   }),
@@ -828,15 +826,15 @@ test("projectile runtime: bulk launch returns changes and exposes each latest in
   assert.throws(() => borrowed.launch(program.ref, input), /no longer active/);
 
   const released = previous.fork();
-  released.apply(launched.changes);
+  released.advance(launched.changes);
   assert.deepEqual(projectileInstances(released), observed);
   assert.deepEqual(previous.projectileIds, []);
-  const work = createCombatWork(released, { ...previousExecution, nextProjectileId: launched.nextProjectileId });
+  const work = createBattleState(fixtureBattlefield(released), { ...previousExecution, nextProjectileId: launched.nextProjectileId });
   const advanced = advanceProjectiles(work, released, resources, 1);
   const sibling = advanceProjectiles(work, released, resources, 1);
   assert.deepEqual(advanced, sibling);
   const progressed = released.fork();
-  progressed.apply(advanced.changes);
+  progressed.advance(advanced.changes);
   assert.equal(progressed.projectileIds.length, 32);
   assert.equal(projectileInstances(progressed).every((instance) => instance.position[0] === 1), true);
   assert.equal(projectileInstances(released).every((instance) => instance.position[0] === 0), true);
@@ -912,11 +910,11 @@ test("projectile runtime: stop callbacks see latest peer progress while removals
     launchAt(operations, [100, 0]);
   });
   const battlefield = empty.fork();
-  battlefield.apply([...launched.changes].reverse());
-  const work = createCombatWork(battlefield, execution(launched.nextProjectileId));
+  battlefield.advance([...launched.changes].reverse());
+  const work = createBattleState(fixtureBattlefield(battlefield), execution(launched.nextProjectileId));
   const advanced = advanceProjectiles(work, battlefield, resources, 1);
   const progressed = battlefield.fork();
-  progressed.apply(advanced.changes);
+  progressed.advance(advanced.changes);
   assert.deepEqual(observations, [{ id: 0, first: "STOPPED", second: "FLYING" }]);
   assert.deepEqual(progressed.projectileIds, [1]);
   assert.deepEqual(progressed.getProjectile(1).position, [1, 0]);
@@ -925,7 +923,7 @@ test("projectile runtime: stop callbacks see latest peer progress while removals
 
   const stopped = stopProjectile(work, progressed, 1, resources, 1);
   const finished = progressed.fork();
-  finished.apply(stopped.changes);
+  finished.advance(stopped.changes);
   assert.deepEqual(observations[1], { id: 1, first: undefined, second: "STOPPED" });
   assert.deepEqual(finished.projectileIds, []);
   assert.equal(progressed.getProjectile(1).progress.type, "FLYING");
@@ -955,7 +953,7 @@ test("projectile runtime: command stops share one container before advancing sur
       });
     }
   });
-  battlefield.apply(launched.changes);
+  battlefield.advance(launched.changes);
   const ids = Array.from({ length: 16 }, (_, index) => 30 - index * 2);
   const stopIds = ids.flatMap((projectileId) => [projectileId, projectileId]);
   stopIds.push(999);
@@ -971,10 +969,11 @@ test("projectile runtime: command stops share one container before advancing sur
       }
     }
   }
-  let advanced;
+  const before = battlefield.snapshot("draft");
+  const state = createBattleState(battlefield, execution(launched.nextProjectileId));
   try {
     globalThis.Map = ObservedMap;
-    advanced = advanceBattleProjectiles(battlefield, execution(launched.nextProjectileId), 1,
+    advanceBattleProjectiles(state, 1,
       stopIds.map(projectileId => ({ type: "STOP_PROJECTILE", projectileId })), resources);
   } finally {
     globalThis.Map = NativeMap;
@@ -982,13 +981,12 @@ test("projectile runtime: command stops share one container before advancing sur
 
   assert.equal(containers, 1);
   assert.deepEqual(observed, ids);
-  assert.deepEqual(advanced.events.map((event) => event.projectileId), ids);
+  assert.deepEqual(state.events.map((event) => event.projectileId), ids);
   const progressed = battlefield.fork();
-  progressed.apply(advanced.changes);
   assert.deepEqual(progressed.projectileIds, Array.from({ length: 16 }, (_, index) => index * 2 + 1));
   assert.equal(projectileInstances(progressed).every((instance) => instance.position[0] === 1), true);
-  assert.equal(projectileInstances(battlefield).every((instance) => instance.position[0] === 0), true);
-  assert.equal(projectileInstances(battlefield).every((instance) => instance.progress.type === "FLYING"), true);
+  assert.equal(projectileInstances(before).every((instance) => instance.position[0] === 0), true);
+  assert.equal(projectileInstances(before).every((instance) => instance.progress.type === "FLYING"), true);
 });
 
 test("projectile Battlefield changes: rejected batches and transactions preserve projectile instances", () => {
@@ -1000,17 +998,17 @@ test("projectile Battlefield changes: rejected batches and transactions preserve
       source: null, traceTarget: null, position: [0, 0], destination: [3, 0],
       cachedAtk: 0, speedPerTick: 1, contactRange, stopDelayTicks: 1,
     }));
-  battlefield.apply(launched.changes);
+  battlefield.advance(launched.changes);
   const original = battlefield.getProjectile(0);
   const maps = battlefield.navigationMaps;
-  assert.throws(() => battlefield.apply([
+  assert.throws(() => battlefield.advance([
     { type: "UPDATE_PROJECTILE", projectile: { ...original, position: [1, 0] } },
     { type: "REMOVE_PROJECTILE", projectileId: 999 },
   ]), /unknown projectile/);
   assert.equal(battlefield.getProjectile(0), original);
   assert.equal(battlefield.navigationMaps, maps);
   assert.throws(() => battlefield.transact((working) => {
-    working.apply([{ type: "REMOVE_PROJECTILE", projectileId: 0 }]);
+    working.advance([{ type: "REMOVE_PROJECTILE", projectileId: 0 }]);
     assert.deepEqual(working.projectileIds, []);
     throw new Error("transaction failed");
   }), /transaction failed/);

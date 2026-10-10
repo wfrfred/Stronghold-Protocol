@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
-import { combatWorkView, getCombatUnit } from "../../dist/core/tactical/battle/execution/work.js";
+import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/execution/context.js";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
 import { EffectResources } from "../../dist/core/tactical/unit/capability/effects/registry.js";
 import { EffectDispatchScope } from "../../dist/core/tactical/unit/capability/effects/dispatch.js";
@@ -84,8 +84,8 @@ test("resources: caller edits cannot change binding participation or removal aft
   const removed = removeEffect(
     effectFixtureWork(installed), { type: "EFFECT", unitId: 2, effectId: 0 }, resources, 0,
   );
-  assert.equal(hasStatusFlag(getCombatUnit(removed, 2), "INVINCIBLE"), false);
-  assert.deepEqual(getCombatUnit(removed, 2).effects.instances, []);
+  assert.equal(hasStatusFlag(getUnit(removed, 2), "INVINCIBLE"), false);
+  assert.deepEqual(getUnit(removed, 2).effects.instances, []);
 });
 
 test("resources: binding compilers capture configuration values rather than caller-owned objects", () => {
@@ -122,11 +122,11 @@ test("resources: binding compilers capture configuration values rather than call
     const contribution = installed.offense.attack.entries[0];
     assert.equal(contribution.id, "@effect/0/sample");
     assert.deepEqual(contribution.group, { id: "original-group", strength: 1 });
-    assert.equal(resolveAttackPower(2, combatWorkView(effectFixtureWork(installed)), resources.computations), 120);
+    assert.equal(resolveAttackPower(2, battlefieldView(effectFixtureWork(installed)), resources.computations), 120);
     const removed = removeEffect(
       effectFixtureWork(installed), { type: "EFFECT", unitId: 2, effectId: 0 }, resources, 0,
     );
-    assert.deepEqual(getCombatUnit(removed, 2).offense.attack.entries, []);
+    assert.deepEqual(getUnit(removed, 2).offense.attack.entries, []);
   }
 });
 
@@ -152,7 +152,7 @@ test("resources: registered authored contributions retain their behavior after c
       definition: { id: "authored-owner", offense: { attack: 100 } },
     });
     const installed = installFixtureEffect(owner, resources.effects.create(descriptor.ref, metadata), resources);
-    const currentAttack = (work) => resolveAttackPower(2, combatWorkView(work), resources.computations);
+    const currentAttack = (work) => resolveAttackPower(2, battlefieldView(work), resources.computations);
     const initial = effectFixtureWork(installed);
     assert.equal(currentAttack(initial), 120);
     assert.deepEqual(installed.offense.attack.entries[0].group, { id: "original-group", strength: 1 });
@@ -163,7 +163,7 @@ test("resources: registered authored contributions retain their behavior after c
     assert.equal(currentAttack(disabled), 100);
     assert.equal(currentAttack(setEffectEnabled(disabled, address, true, resources, 0)), 140);
     const removed = removeEffect(updated, address, resources, 0);
-    assert.deepEqual(getCombatUnit(removed, 2).offense.attack.entries, []);
+    assert.deepEqual(getUnit(removed, 2).offense.attack.entries, []);
   }
 });
 
@@ -301,5 +301,5 @@ test("resources: computed contributions distinguish program and binding identiti
   const both = installFixtureEffect(installed,
     resources.effects.create(second.ref, { ...metadata, id: 1, acquiredSequence: 1 }), resources);
   assert.notEqual(both.offense.attack.entries[0].computeRef, both.offense.attack.entries[1].computeRef);
-  assert.equal(resolveAttackPower(2, combatWorkView(effectFixtureWork(both)), resources.computations), 130);
+  assert.equal(resolveAttackPower(2, battlefieldView(effectFixtureWork(both)), resources.computations), 130);
 });

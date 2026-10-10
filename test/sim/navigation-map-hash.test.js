@@ -136,11 +136,11 @@ test('modifier identity, source, order and intermediate revisions do not affect 
       region: { type: 'FIXED', position: projected.positions[0], range: [[0, 0]], direction: 'RIGHT' },
     },
   });
-  first.apply(registerSources([1, 2]));
-  second.apply(registerSources([7, 8]));
-  first.apply([addition(1, 1, modifier('cost-first', [[0, 1]], { costFloor: 17 }))]);
-  first.apply([addition(2, 2, modifier('block-second', [[0, 1]], { denyPassage: true }))]);
-  second.apply([
+  first.advance(registerSources([1, 2]));
+  second.advance(registerSources([7, 8]));
+  first.advance([addition(1, 1, modifier('cost-first', [[0, 1]], { costFloor: 17 }))]);
+  first.advance([addition(2, 2, modifier('block-second', [[0, 1]], { denyPassage: true }))]);
+  second.advance([
     addition(90, 8, modifier('another-block', [[0, 1]], { denyPassage: true })),
     addition(91, 7, modifier('another-cost', [[0, 1]], { costFloor: 17 })),
   ]);

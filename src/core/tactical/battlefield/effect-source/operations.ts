@@ -1,8 +1,4 @@
-import {
-    getCombatMechanism,
-    updateCombatMechanism,
-    type CombatWork,
-} from "../../battle/execution/work.js";
+import { getMechanism, updateMechanism, type BattleState } from "../../battle/execution/context.js";
 import type { MechanismId } from "../mechanism.js";
 import type { EffectSourceProgramRef } from "./program.js";
 import type { EffectSourceResources } from "./resources.js";
@@ -26,12 +22,11 @@ export interface EffectSourceOperations {
 }
 
 export function createEffectSourceOperations(
-    getWork: () => CombatWork,
-    setWork: (work: CombatWork) => void,
+    getWork: () => BattleState,
     resources: { readonly effectSources: EffectSourceResources },
 ): EffectSourceOperations {
     const get = <S extends object>(id: MechanismId, ref: EffectSourceProgramRef<S>) => {
-        const source = getCombatMechanism(getWork(), id);
+        const source = getMechanism(getWork(), id);
 
         return source !== undefined && hasEffectSource(source)
             ? resources.effectSources.typedSource(source, ref)
@@ -44,14 +39,12 @@ export function createEffectSourceOperations(
             const source = get(id, ref);
 
             if (source !== undefined) {
-                setWork(
-                    updateCombatMechanism(
-                        getWork(),
-                        resources.effectSources.update(
-                            source,
-                            ref,
-                            transition(source.effectSource.state),
-                        ),
+                updateMechanism(
+                    getWork(),
+                    resources.effectSources.update(
+                        source,
+                        ref,
+                        transition(source.effectSource.state),
                     ),
                 );
             }
@@ -69,9 +62,7 @@ export function createEffectSourceOperations(
                 return false;
             }
 
-            setWork(
-                updateCombatMechanism(getWork(), resources.effectSources.update(source, ref, next)),
-            );
+            updateMechanism(getWork(), resources.effectSources.update(source, ref, next));
 
             return true;
         },

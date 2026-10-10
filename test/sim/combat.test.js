@@ -1,3 +1,4 @@
+import { fixtureBattlefield } from "../helpers/battlefield.js";
 // Combat rules: statuses & immunities, cold→freeze, element bursts, blocking, melee vs FLY, stealth, priorities, healers.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -25,17 +26,19 @@ import { selectTargets } from '../../dist/core/tactical/unit/targeting/select.js
 import * as contribution from '../../dist/core/tactical/modifier/contribution.js';
 import * as modifier from '../../dist/core/tactical/modifier/value.js';
 
-import { combatWorkResult, createCombatWork, updateCombatUnit } from '../../dist/core/tactical/battle/execution/work.js';
+import { createBattleState, getUnit, updateUnit } from '../../dist/core/tactical/battle/execution/context.js';
 import { createActionExecutionState } from '../../dist/core/tactical/unit/capability/action/process.js';
 
 const startSingleAction = (source, compiled, context) => {
   const result = startAction(
-    updateCombatUnit(createCombatWork(context.battlefield), source),
+    updateUnit(createBattleState(fixtureBattlefield(context.battlefield)), source),
     createActionExecutionState(),
     { sourceUnitId: source.id, compiled, tick: context.tick, mayStart: true },
     new CombatResources(),
   );
-  return { ...combatWorkResult(result.work), state: result.state };
+  return { units: result.work.battlefield.unitIds.map(id => getUnit(result.work, id)),
+    removedUnitIds: result.work.removedUnits.map(value => value.unitId),
+    events: result.work.events, execution: result.work.execution, state: result.state };
 };
 
 const approx = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
@@ -317,7 +320,7 @@ test('core visibility: later enemies cannot attack a new blocker before the post
   });
   const { events } = battle.step();
 
-  assert.deepEqual(events.filter(event => event.type === 'UNIT_REMOVED').map(event => event.unitId), [1, 2]);
+  assert.deepEqual(events.filter(event => event.type === 'UNIT_REMOVED').map(event => event.unitId), [2, 1]);
   assert.deepEqual(events.filter(event => event.type === 'ACTION').map(event => [event.sourceUnitId, event.targetUnitId]),
     [[0, 2], [1, 3], [3, 1]]);
   assert.equal(battle.snapshot().units.find(unit => unit.id === 0).vitality.hp, 1000);
@@ -1183,7 +1186,7 @@ test('core action: secondary target groups cannot trigger the action and use ind
   const friend = actionUnit(2, 'ALLY', [2, 0], { hp: 40 });
   const compiled = compileAction(source.definition.action.normalAction, new CombatResources());
   const noEnemy = startSingleAction(source, compiled, { battlefield: actionView([source, friend]), tick: 0 });
-  assert.deepEqual(noEnemy.units, []);
+  assert.deepEqual(noEnemy.units.map(unit => unit.id), [source.id, friend.id]);
   assert.deepEqual(noEnemy.removedUnitIds, []);
   assert.deepEqual(noEnemy.events, []);
   assert.deepEqual(noEnemy.state, { nextExecutionId: 0, executions: [] });
@@ -1237,7 +1240,7 @@ test('core action: binding follow-ups retain the selected target and read preced
   assert.deepEqual(result.events.filter(event => event.type === 'HEAL')
     .map(event => [event.targetUnitId, event.amount, event.hp]), [[1, 20, 50], [1, 5, 55]]);
   assert.equal(result.units.find(unit => unit.id === 1).vitality.hp, 55);
-  assert.equal(result.units.some(unit => unit.id === 2), false);
+  assert.equal(result.units.find(unit => unit.id === 2).vitality.hp, 40);
   assert.equal(first.vitality.hp, 30);
   assert.equal(second.vitality.hp, 40);
 });

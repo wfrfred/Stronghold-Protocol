@@ -38,6 +38,12 @@ import { createOccupancyState } from '../../dist/core/tactical/unit/capability/o
 import { createPredefinedInstanceDefinition } from '../../dist/core/tactical/battle/steps/predefined.js';
 import { advanceMovement } from '../../dist/core/tactical/battle/steps/movement.js';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
+import { createBattleState, appendEvents, getUnit, registerUnit, withExecution } from '../../dist/core/tactical/battle/execution/context.js';
+import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
+import { createActionDefinition } from '../../dist/core/tactical/unit/capability/action/capability.js';
+import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
+import { installNewEffect } from '../../dist/core/tactical/unit/capability/effects/lifecycle.js';
+import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
 
 const approx = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
 const guard = (o = {}) => chessRec({ id: 't_guard', profession: 'WARRIOR', stats: { atk: 300, blockCnt: 2 }, skill: null, ...o });
@@ -1160,6 +1166,67 @@ test('core battle publishes every tick once and retries a final-stage failure wi
   }
 });
 
+test('core battle propagates nested settlement errors and discards battlefield, identities, events and Action progress', () => {
+  const sentinel = new Error('nested settlement failure');
+  let fail = true;
+  let activeState;
+  const resources = new CombatResources();
+  const effect = resources.registerEffect(createEffectProgram({
+    id: 'nested-failure-effect', initialize: () => ({}), ownState: state => state,
+  }), {
+    lifecycle: { start: context => {
+      context.damage({ sourceUnitId: 0, targetUnitId: 1, damageType: 'TRUE', operands: createDamageOperands(7) });
+      assert.equal(getUnit(activeState, 1).vitality.hp, 93);
+      assert.equal(getUnit(activeState, 2).definition.id, 'nested-created');
+      assert.equal(activeState.execution.nextUnitId, 3);
+      assert.equal(activeState.actionExecutions.result().executions.length, 1);
+      assert.ok(activeState.events.some(event => event.type === 'DAMAGE'));
+      if (fail) throw sentinel;
+    } },
+  });
+  const action = createActionDefinition({
+    triggerBindingId: 'primary', baseAttackTimeTicks: 10, recoveryTicks: 0,
+    targetGroups: [{ id: 'primary', targeting: {
+      type: 'DAMAGE', scope: { type: 'BLOCKER' }, canTargetAir: true,
+      includeBlockingRelations: false, preferBlockingRelations: false,
+      ignoreTargetFree: false, ignoreInvisible: false, maxTargets: 1,
+    }, operations: [{ type: 'DAMAGE', power: 1, damageType: 'TRUE' }] }], followUps: [],
+  });
+  const input = deploymentBattleInput({ initialUnits: [
+    { definition: { id: 'nested-action-source', vitality: { maxHp: 100 }, action: { normalAction: action } }, position: [0, 0] },
+    { definition: { id: 'nested-target', vitality: { maxHp: 100 } }, position: [1, 0] },
+  ] });
+  const compileAction = definition => ({
+    definition, bind: () => new Map([['primary', [1]]]), program: [
+      { type: 'EXECUTE', run: context => {
+        activeState = context.work;
+        const unit = initializeUnit({ id: context.work.execution.nextUnitId, position: [2, 0], definition: {
+          id: 'nested-created', vitality: { maxHp: 10 },
+        } });
+        registerUnit(context.work, unit);
+        withExecution(context.work, { ...context.work.execution, nextUnitId: unit.id + 1 });
+        appendEvents(context.work, [{ type: 'UNIT_DEPLOYED', unitId: unit.id, position: unit.position, tick: context.tick }]);
+        installNewEffect(context.work, 1, effect.ref, { source: 0, scopes: [] }, resources, context.tick);
+        return { work: context.work };
+      } },
+      { type: 'WAIT', resolve: () => ({ type: 'FOR_TICKS', ticks: 2 }), allowNewAction: false },
+    ],
+  });
+  const runtime = new BattleRuntime(input, { combat: resources, compileAction });
+  const before = runtime.snapshot();
+  assert.throws(() => runtime.step(), error => error === sentinel);
+  assert.deepEqual(runtime.snapshot(), before);
+  assert.equal(runtime.result, null);
+
+  fail = false;
+  const expected = new BattleRuntime(input, { combat: resources, compileAction });
+  assert.deepEqual(runtime.step(), expected.step());
+  assert.deepEqual(runtime.snapshot(), expected.snapshot());
+  assert.equal(runtime.snapshot().execution.nextUnitId, 3);
+  assert.equal(runtime.snapshot().actionExecution.executions.length, 1);
+  assert.equal(runtime.snapshot().units.find(unit => unit.id === 1).vitality.hp, 93);
+});
+
 test('core schedule removal feedback advances the next wave only on the next tick', () => {
   const base = routeCommandBattle([]);
   const source = base.schedule.spawns[0];
@@ -2187,10 +2254,10 @@ test('core visibility: movement reads one navigation projection before following
       alwaysCheckCurrentPoint: true, rngState: execution.rngState, nextNavigationRequestId: execution.nextNavigationRequestId,
     });
     execution = { ...execution, rngState: spawned.rngState, nextNavigationRequestId: spawned.nextNavigationRequestId };
-    battlefield.apply([{ type: 'REGISTER_UNIT', unit: spawned.enemy }]);
+    battlefield.advance([{ type: 'REGISTER_UNIT', unit: spawned.enemy }]);
   }
 
-  battlefield.apply([{ type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: createNavigationModifier({
+  battlefield.advance([{ type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: createNavigationModifier({
     id: 0, definition: createNavigationModifierDefinition({ id: 'moving_denied_tile',
       WALK: { denyPassage: true, deniedDepartures: [], costFloor: 1 }, FLY: null }),
     source: { type: 'UNIT', unitId: 0 }, active: true,
@@ -2198,10 +2265,8 @@ test('core visibility: movement reads one navigation projection before following
   }) }]);
   assert.deepEqual(battlefield.navigationMaps.WALK.cells.map(cell => cell.passable), [true, false, true, true, true]);
 
-  const moved = advanceMovement({
-    battlefield, tick: 0, execution,
-  }, { routeMoveMultiplier: 1 }, new CombatResources());
-  battlefield.apply(moved.changes);
+  const moved = createBattleState(battlefield, execution);
+  advanceMovement(moved, 0, { routeMoveMultiplier: 1 }, new CombatResources());
 
   assert.deepEqual(battlefield.unitIds.map(id => battlefield.getUnit(id).position), [[2, 0], [2, 0]]);
   assert.deepEqual(moved.events.filter(event => event.type === 'NAVIGATION').map(event => [event.unitId, event.outcome.type]),

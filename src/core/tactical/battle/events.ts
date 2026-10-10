@@ -2,14 +2,6 @@ import type { BattlefieldChangeResult } from "../battlefield/contract.js";
 import type { Event } from "./contract.js";
 import { copyUnitSnapshot } from "../unit/snapshot.js";
 
-export function battlefieldCommitEvents(committed: BattlefieldChangeResult, tick: number): Event[] {
-    return committed.lostSupports.map((relation) => ({
-        type: "SUPPORT_LOST",
-        ...relation,
-        tick,
-    }));
-}
-
 export function finishBattleEvents(
     phaseEvents: readonly Event[],
     removedUnits: BattlefieldChangeResult["removedUnits"],

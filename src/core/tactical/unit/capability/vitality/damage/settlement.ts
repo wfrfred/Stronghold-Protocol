@@ -24,12 +24,12 @@ import { retireCombatUnit } from "../../../../battle/execution/unit-lifecycle.js
 import type { DamageResourceServices } from "./resources.js";
 import { gainUnitSkillSp } from "../../../../battle/execution/skill-sp.js";
 import {
-    combatWorkView,
-    appendCombatEvents,
-    getCombatUnit,
-    updateCombatUnit,
-    type CombatWork,
-} from "../../../../battle/execution/work.js";
+    battlefieldView,
+    appendEvents,
+    getUnit,
+    updateUnit,
+    type BattleState,
+} from "../../../../battle/execution/context.js";
 
 const NO_DEFENSE: DefenseDefinition = Object.freeze({ defense: 0, resistance: 0 });
 
@@ -102,7 +102,7 @@ function formulaPower(operands: DamageOperands): number {
 }
 
 function confirmDamage(
-    work: CombatWork,
+    work: BattleState,
     report: DamageReport,
     resources: DamageResourceServices,
     dispatch: EffectDispatchScope,
@@ -126,13 +126,13 @@ function confirmDamage(
 }
 
 export function resolveDamage(
-    work: CombatWork,
+    work: BattleState,
     request: DamageRequest,
     resources: DamageResourceServices,
     dispatch = new EffectDispatchScope(),
 ): DamageResolution {
     const policy = request.receptionPolicy ?? NORMAL_DAMAGE_RECEPTION;
-    const target = getCombatUnit(work, request.targetUnitId);
+    const target = getUnit(work, request.targetUnitId);
     const report: DamageReport = {
         request,
         formulaDamage: null,
@@ -185,7 +185,7 @@ export function resolveDamage(
         operands = result.value;
     }
 
-    const current = getCombatUnit(work, request.targetUnitId);
+    const current = getUnit(work, request.targetUnitId);
 
     if (current === undefined || !hasVitality(current) || current.vitality.hp <= 0) {
         return confirmDamage(
@@ -196,7 +196,7 @@ export function resolveDamage(
         );
     }
 
-    const defense = resolveDefense(current.id, combatWorkView(work), resources.computations)!;
+    const defense = resolveDefense(current.id, battlefieldView(work), resources.computations)!;
     const effectiveDefense = {
         defense:
             Math.max(0, defense.defense - operands.fixedPenetration) *
@@ -234,7 +234,7 @@ export function resolveDamage(
 
     assertFiniteNumber(outputDamage, "output damage");
 
-    const receiver = getCombatUnit(work, request.targetUnitId);
+    const receiver = getUnit(work, request.targetUnitId);
 
     if (receiver === undefined || !hasVitality(receiver) || receiver.vitality.hp <= 0) {
         pending = {
@@ -276,7 +276,7 @@ export function resolveDamage(
 
     assertNonnegativeNumber(hpDamage, "received damage");
 
-    const finalTarget = getCombatUnit(work, request.targetUnitId);
+    const finalTarget = getUnit(work, request.targetUnitId);
 
     if (
         pending.cancellation !== null ||
@@ -290,7 +290,7 @@ export function resolveDamage(
         };
 
         if (finalTarget !== undefined && hasVitality(finalTarget)) {
-            work = appendCombatEvents(work, [
+            work = appendEvents(work, [
                 {
                     type: "DAMAGE",
                     sourceUnitId: request.sourceUnitId,
@@ -328,10 +328,10 @@ export function resolveDamage(
             vitality: { ...finalTarget.vitality, hp },
         };
 
-        work = updateCombatUnit(work, updated);
+        work = updateUnit(work, updated);
     }
 
-    work = appendCombatEvents(work, [
+    work = appendEvents(work, [
         {
             type: "DAMAGE",
             sourceUnitId: request.sourceUnitId,

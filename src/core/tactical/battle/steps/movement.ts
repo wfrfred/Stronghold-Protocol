@@ -1,50 +1,28 @@
-import type { ActionExecutionWork } from "../../unit/capability/action/internal/executions.js";
-import type { BattlefieldChange, BattlefieldView } from "../../battlefield/contract.js";
+import type { BattlefieldChange } from "../../battlefield/contract.js";
 import type * as computation from "../../modifier/computation.js";
 import type { ContributionFacts } from "../../unit/capability/contribution.js";
 import { hasRoutedLocomotion } from "../../unit/capability/locomotion/capability.js";
 import { hasAction } from "../../unit/capability/action/capability.js";
 import { hasStatusFlag } from "../../unit/capability/status/capability.js";
 import { stepRoutedUnit } from "../../unit/capability/locomotion/step.js";
-import type { Unit, UnitId } from "../../unit/unit.js";
+import type { UnitId } from "../../unit/unit.js";
 import { changeAlternativeRoutes } from "./route-control.js";
 import type { Command, Event } from "../contract.js";
-import type { BattleExecutionState } from "../execution/state.js";
 import { removeUnitWithEffects, type UnitLifecycleResources } from "../execution/unit-lifecycle.js";
 import {
-    combatWorkChanges,
-    combatWorkEvents,
-    createCombatWork,
-    updateCombatUnits,
-} from "../execution/work.js";
-
-interface MovementInput {
-    readonly battlefield: BattlefieldView;
-    readonly actionExecutions?: ActionExecutionWork;
-    readonly tick: number;
-    readonly execution: BattleExecutionState;
-    readonly movementAllowed?: (unitId: UnitId) => boolean;
-}
-
-interface RouteCommandResult {
-    readonly changes: readonly BattlefieldChange[];
-    readonly events: readonly Event[];
-    readonly execution: BattleExecutionState;
-    readonly actionExecutions?: ActionExecutionWork;
-}
-
-interface MovementResult {
-    readonly changes: readonly BattlefieldChange[];
-    readonly events: readonly Event[];
-    readonly execution: BattleExecutionState;
-}
+    advanceBattlefield,
+    appendEvents,
+    battlefieldView,
+    withExecution,
+    type BattleState,
+} from "../execution/context.js";
 
 export function advanceRouteCommands(
-    battlefield: BattlefieldView,
+    state: BattleState,
     commands: readonly Command[],
-    execution: BattleExecutionState,
     tick: number,
-): RouteCommandResult {
+): void {
+    const battlefield = battlefieldView(state);
     const changed = changeAlternativeRoutes(
         (id) => battlefield.getUnit(id),
         commands.filter(
@@ -52,33 +30,35 @@ export function advanceRouteCommands(
                 command.type === "SET_ALTERNATIVE_ROUTE" ||
                 command.type === "CLEAR_ALTERNATIVE_ROUTE",
         ),
-        execution,
+        state.execution,
         tick,
     );
-
-    return {
-        changes: changed.changes,
-        events: changed.signals.map((signal) => ({
-            type: "ROUTE",
-            ...signal,
-            tick,
-        })),
-        execution: changed.execution,
-    };
+    withExecution(state, changed.execution);
+    appendEvents(
+        state,
+        changed.signals.map((signal) => ({ type: "ROUTE", ...signal, tick })),
+    );
+    advanceBattlefield(state, changed.changes);
 }
 
 export function advanceMovement(
-    input: MovementInput,
-    { routeMoveMultiplier }: { readonly routeMoveMultiplier: number },
+    state: BattleState,
+    tick: number,
+    {
+        routeMoveMultiplier,
+        movementAllowed,
+    }: {
+        readonly routeMoveMultiplier: number;
+        readonly movementAllowed?: (unitId: UnitId) => boolean;
+    },
     resources: UnitLifecycleResources & {
         readonly computations: computation.Computations<ContributionFacts>;
     },
-): MovementResult {
-    const { battlefield, tick } = input;
-    let execution = input.execution;
+): void {
+    const battlefield = state.battlefield.snapshot("draft");
+    let execution = state.execution;
     const changes: BattlefieldChange[] = [];
     const events: Event[] = [];
-    const movedUnits: Unit[] = [];
     const completed: UnitId[] = [];
 
     for (const unitId of [...battlefield.unitIds].sort((left, right) => left - right)) {
@@ -95,7 +75,7 @@ export function advanceMovement(
             moveMultiplier: routeMoveMultiplier,
             evaluateContributions: resources.computations.bind({ unit, battlefield }),
             movementAllowed:
-                (input.movementAllowed?.(unitId) ?? true) &&
+                (movementAllowed?.(unitId) ?? true) &&
                 !hasStatusFlag(unit, "STUNNED") &&
                 battlefield.blockerOf(unitId) === undefined &&
                 (!hasAction(unit) || tick >= unit.action.recoveryUntilTick),
@@ -133,21 +113,14 @@ export function advanceMovement(
             events.push({ type: "ROUTE_COMPLETED", unitId, tick });
         }
 
-        movedUnits.push(moved.unit);
+        changes.push({ type: "UPDATE_UNIT", unit: moved.unit });
     }
 
-    let work = updateCombatUnits(
-        createCombatWork(battlefield, execution, battlefield, input.actionExecutions),
-        movedUnits,
-    );
+    withExecution(state, execution);
+    appendEvents(state, events);
+    advanceBattlefield(state, changes);
 
     for (const unitId of completed) {
-        work = removeUnitWithEffects(work, unitId, "SCRIPT", resources, tick);
+        removeUnitWithEffects(state, unitId, "SCRIPT", resources, tick);
     }
-
-    return {
-        changes: [...changes, ...combatWorkChanges(work)],
-        events: [...events, ...combatWorkEvents(work)],
-        execution: work.execution,
-    };
 }

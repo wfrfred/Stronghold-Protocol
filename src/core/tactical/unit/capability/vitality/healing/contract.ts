@@ -1,6 +1,6 @@
 import type { EffectDispatchScope } from "../../effects/dispatch.js";
 import type { StableUnit, UnitId } from "../../../unit.js";
-import type { CombatWork } from "../../../../battle/execution/work.js";
+import type { BattleState } from "../../../../battle/execution/context.js";
 import type { VitalUnit } from "../capability.js";
 
 export interface HealingRequest {
@@ -28,7 +28,7 @@ export interface HealingReport {
 }
 
 export interface HealingResolution {
-    readonly work: CombatWork;
+    readonly work: BattleState;
     readonly amount: number;
     readonly report: HealingReport;
 }
@@ -39,7 +39,7 @@ export interface HealingResult<U extends VitalUnit> {
 }
 
 export type HealingOperation = (
-    work: CombatWork,
+    work: BattleState,
     request: HealingRequest,
     dispatch: EffectDispatchScope,
 ) => HealingResolution;

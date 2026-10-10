@@ -1,11 +1,11 @@
 import {
-    combatWorkView,
-    getCombatUnit,
-    transitionCombatUnit,
-    updateCombatUnit,
-    updateCombatUnits,
-    type CombatWork,
-} from "../../../battle/execution/work.js";
+    battlefieldView,
+    getUnit,
+    transitionUnit,
+    updateUnit,
+    updateUnits,
+    type BattleState,
+} from "../../../battle/execution/context.js";
 import type { Unit, UnitId } from "../../unit.js";
 import { hasEffects } from "./capability.js";
 import { assertNonnegativeSafeInteger } from "../../../../common/assert.js";
@@ -43,11 +43,11 @@ import { reconcileEffectBindings, transitionEffectBindings } from "./transition.
 import { effectDependents, effectTickCandidates } from "./lifetime-index.js";
 
 function changeInstance(
-    work: CombatWork,
+    work: BattleState,
     address: EffectRef,
     transition: (instance: EffectInstanceValue) => EffectInstanceValue,
-): CombatWork {
-    return transitionCombatUnit(work, address.unitId, (unit) => {
+): BattleState {
+    return transitionUnit(work, address.unitId, (unit) => {
         if (!hasEffects(unit)) {
             return unit;
         }
@@ -65,22 +65,22 @@ function changeInstance(
 }
 
 function reconcileInScope(
-    work: CombatWork,
+    work: BattleState,
     ownerUnitId: UnitId,
     before: Unit,
     resources: EffectTransitionResources,
     tick: number,
     scope: EffectDispatchScope,
     updatedId?: number,
-): CombatWork {
-    const owner = getCombatUnit(work, ownerUnitId);
+): BattleState {
+    const owner = getUnit(work, ownerUnitId);
 
     if (owner === undefined || !hasEffects(owner)) {
         return work;
     }
 
     const { unit, changes } = reconcileEffectBindings(before, owner, resources, updatedId);
-    work = updateCombatUnit(work, unit);
+    work = updateUnit(work, unit);
 
     return runParticipationActions(
         work,
@@ -95,13 +95,13 @@ function reconcileInScope(
 }
 
 function runParticipationActions(
-    work: CombatWork,
+    work: BattleState,
     changes: readonly { address: EffectRef; participating: boolean }[],
     resources: EffectTransitionResources,
     tick: number,
     scope: EffectDispatchScope,
-    beforeEnables?: (work: CombatWork) => CombatWork,
-): CombatWork {
+    beforeEnables?: (work: BattleState) => BattleState,
+): BattleState {
     return scope.withParticipationChanges(changes, (isPending) => {
         for (const participating of [false, true]) {
             if (participating) {
@@ -141,14 +141,14 @@ function runParticipationActions(
 }
 
 function runLifecycleAction(
-    work: CombatWork,
+    work: BattleState,
     address: EffectRef,
     instance: EffectInstanceValue,
     action: CompiledEffectLifecycle["start"],
     resources: EffectTransitionResources,
     tick: number,
     scope: EffectDispatchScope,
-): CombatWork {
+): BattleState {
     if (action === undefined) {
         return work;
     }
@@ -157,7 +157,7 @@ function runLifecycleAction(
         let currentWork = work;
         let active = true;
 
-        const readWork = (): CombatWork => {
+        const readWork = (): BattleState => {
             if (!active) {
                 throw new TypeError("effect lifecycle context is no longer active");
             }
@@ -172,15 +172,7 @@ function runLifecycleAction(
             },
             tick,
             facts: effectView(readWork),
-            effects: createEffectOperations(
-                readWork,
-                (next) => {
-                    currentWork = next;
-                },
-                resources,
-                tick,
-                scope,
-            ),
+            effects: createEffectOperations(readWork, resources, tick, scope),
             damage: (input) => {
                 const work = readWork();
 
@@ -218,7 +210,7 @@ function runLifecycleAction(
 }
 
 export function updateEffectState<S extends object>(
-    work: CombatWork,
+    work: BattleState,
     ownerUnitId: UnitId,
     instanceId: number,
     ref: EffectProgramRef<S>,
@@ -226,7 +218,7 @@ export function updateEffectState<S extends object>(
     resources: EffectTransitionResources,
     tick: number,
     dispatch?: EffectDispatchScope,
-): CombatWork {
+): BattleState {
     const address: EffectRef = { type: "EFFECT", unitId: ownerUnitId, effectId: instanceId };
     const instance = getEffect(work, address);
 
@@ -249,7 +241,7 @@ export function updateEffectState<S extends object>(
         return work;
     }
 
-    const before = getCombatUnit(work, ownerUnitId)!;
+    const before = getUnit(work, ownerUnitId)!;
     work = changeInstance(work, address, () => updated);
 
     return reconcileInScope(
@@ -263,7 +255,7 @@ export function updateEffectState<S extends object>(
     );
 }
 
-export function setEffectTick(work: CombatWork, ref: EffectRef, tick: number | null): CombatWork {
+export function setEffectTick(work: BattleState, ref: EffectRef, tick: number | null): BattleState {
     if (tick !== null) {
         assertNonnegativeSafeInteger(tick, "effect expiration tick");
     }
@@ -284,13 +276,13 @@ export function setEffectTick(work: CombatWork, ref: EffectRef, tick: number | n
 }
 
 export function setEffectEnabled(
-    work: CombatWork,
+    work: BattleState,
     address: EffectRef,
     enabled: boolean,
     resources: EffectTransitionResources,
     tick: number,
     dispatch?: EffectDispatchScope,
-): CombatWork {
+): BattleState {
     return setEnabledInScope(
         work,
         address,
@@ -302,20 +294,20 @@ export function setEffectEnabled(
 }
 
 function setEnabledInScope(
-    work: CombatWork,
+    work: BattleState,
     address: EffectRef,
     enabled: boolean,
     resources: EffectTransitionResources,
     tick: number,
     scope: EffectDispatchScope,
-): CombatWork {
+): BattleState {
     const instance = getEffect(work, address);
 
     if (instance === undefined || instance.finished || instance.enabled === enabled) {
         return work;
     }
 
-    const before = getCombatUnit(work, address.unitId)!;
+    const before = getUnit(work, address.unitId)!;
     work = changeInstance(work, address, (value) => withEffectLifecycle(value, { enabled }));
 
     return reconcileInScope(work, address.unitId, before, resources, tick, scope);
@@ -331,12 +323,12 @@ interface Ending {
 }
 
 function finishBatch(
-    work: CombatWork,
+    work: BattleState,
     roots: readonly Ending[],
     resources: EffectTransitionResources,
     tick: number,
     dispatch: EffectDispatchScope,
-): CombatWork {
+): BattleState {
     const ending = new Map<string, Ending>();
     const pending = [...roots].sort((a, b) => compareRefs(a.ref, b.ref));
 
@@ -465,8 +457,8 @@ function finishBatch(
     }
 
     dispatch.beginEnds(ordered.map(({ ref }) => ref));
-    const owners = [...byHost.keys()].sort((a, b) => a - b).map((id) => getCombatUnit(work, id)!);
-    work = updateCombatUnits(
+    const owners = [...byHost.keys()].sort((a, b) => a - b).map((id) => getUnit(work, id)!);
+    work = updateUnits(
         work,
         owners.map((owner) => {
             if (!hasEffects(owner)) {
@@ -486,14 +478,10 @@ function finishBatch(
         }),
     );
     const changes: { address: EffectRef; participating: boolean }[] = [];
-    work = updateCombatUnits(
+    work = updateUnits(
         work,
         owners.map((before) => {
-            const result = reconcileEffectBindings(
-                before,
-                getCombatUnit(work, before.id)!,
-                resources,
-            );
+            const result = reconcileEffectBindings(before, getUnit(work, before.id)!, resources);
             changes.push(
                 ...result.changes.map(({ instanceId, participating }) => ({
                     address: { type: "EFFECT" as const, unitId: before.id, effectId: instanceId },
@@ -548,13 +536,13 @@ function finishBatch(
 }
 
 export function finishEffects(
-    work: CombatWork,
+    work: BattleState,
     refs: readonly EffectRef[],
     resources: EffectTransitionResources,
     tick: number,
     reason: EffectEndReason = "EXPLICIT",
     dispatch = new EffectDispatchScope(),
-): CombatWork {
+): BattleState {
     return finishBatch(
         work,
         refs.map((ref) => ({ ref, end: { root: ref, reason } })),
@@ -565,23 +553,23 @@ export function finishEffects(
 }
 
 export function finishEffect(
-    work: CombatWork,
+    work: BattleState,
     ref: EffectRef,
     resources: EffectTransitionResources,
     tick: number,
     dispatch?: EffectDispatchScope,
-): CombatWork {
+): BattleState {
     return finishEffects(work, [ref], resources, tick, "EXPLICIT", dispatch);
 }
 
 export function closeEffectLifetimes(
-    work: CombatWork,
+    work: BattleState,
     lifetimes: readonly LifetimeRef[],
     resources: EffectTransitionResources,
     tick: number,
     reason: EffectEndReason = "SCOPE_CLOSED",
     dispatch = new EffectDispatchScope(),
-): CombatWork {
+): BattleState {
     const owned = lifetimes.map(ownLifetime);
     dispatch.markClosing(owned);
     const roots: Ending[] = [];
@@ -591,7 +579,7 @@ export function closeEffectLifetimes(
             roots.push({ ref, end: { root, reason } });
         }
         if (root.type === "UNIT") {
-            const host = getCombatUnit(work, root.unitId);
+            const host = getUnit(work, root.unitId);
 
             if (host !== undefined && hasEffects(host)) {
                 for (const instance of host.effects.instances) {
@@ -608,13 +596,13 @@ export function closeEffectLifetimes(
 }
 
 function cleanupEffects(
-    work: CombatWork,
+    work: BattleState,
     unitId: UnitId,
     refs: readonly EffectRef[],
     resources: EffectTransitionResources,
     dispatch: EffectDispatchScope,
-): CombatWork {
-    const host = getCombatUnit(work, unitId);
+): BattleState {
+    const host = getUnit(work, unitId);
 
     if (host === undefined || !hasEffects(host)) {
         return work;
@@ -654,27 +642,27 @@ function cleanupEffects(
         }
     }
 
-    return updateCombatUnit(work, unit);
+    return updateUnit(work, unit);
 }
 
 export function finalizeEffect(
-    work: CombatWork,
+    work: BattleState,
     ref: EffectRef,
     resources: EffectTransitionResources,
     _tick: number,
     dispatch = new EffectDispatchScope(),
-): CombatWork {
+): BattleState {
     return cleanupEffects(work, ref.unitId, [ref], resources, dispatch);
 }
 
 export function finalizeFinishedEffects(
-    work: CombatWork,
+    work: BattleState,
     unitId: UnitId,
     resources: EffectTransitionResources,
     _tick: number,
     dispatch = new EffectDispatchScope(),
-): CombatWork {
-    const unit = getCombatUnit(work, unitId);
+): BattleState {
+    const unit = getUnit(work, unitId);
 
     if (unit === undefined || !hasEffects(unit)) {
         return work;
@@ -688,12 +676,12 @@ export function finalizeFinishedEffects(
 }
 
 export function removeEffect(
-    work: CombatWork,
+    work: BattleState,
     ref: EffectRef,
     resources: EffectTransitionResources,
     tick: number,
     dispatch = new EffectDispatchScope(),
-): CombatWork {
+): BattleState {
     return finalizeEffect(
         finishEffects(work, [ref], resources, tick, "EXPLICIT", dispatch),
         ref,
@@ -704,7 +692,7 @@ export function removeEffect(
 }
 
 function lifetimeAvailable(
-    work: CombatWork,
+    work: BattleState,
     lifetime: LifetimeRef,
     dispatch: EffectDispatchScope,
 ): boolean {
@@ -713,15 +701,13 @@ function lifetimeAvailable(
     }
     switch (lifetime.type) {
         case "UNIT":
-            return getCombatUnit(work, lifetime.unitId) !== undefined;
+            return getUnit(work, lifetime.unitId) !== undefined;
 
         case "ACTION":
             return work.actionExecutions?.get(lifetime.executionId) !== undefined;
 
         case "SKILL":
-            return (
-                getCombatUnit(work, lifetime.unitId)?.skill?.active?.id === lifetime.activationId
-            );
+            return getUnit(work, lifetime.unitId)?.skill?.active?.id === lifetime.activationId;
 
         case "EFFECT": {
             const effect = getEffect(work, lifetime);
@@ -731,7 +717,7 @@ function lifetimeAvailable(
     }
 }
 
-function wouldCycle(work: CombatWork, ref: EffectRef, lifetime: LifetimeRef): boolean {
+function wouldCycle(work: BattleState, ref: EffectRef, lifetime: LifetimeRef): boolean {
     if (lifetime.type !== "EFFECT") {
         return false;
     }
@@ -765,7 +751,7 @@ function wouldCycle(work: CombatWork, ref: EffectRef, lifetime: LifetimeRef): bo
 }
 
 export function bindEffectLifetime(
-    work: CombatWork,
+    work: BattleState,
     ref: EffectRef,
     lifetime: LifetimeRef,
     dispatch = new EffectDispatchScope(),
@@ -795,14 +781,14 @@ export function bindEffectLifetime(
 }
 
 export function installEffect<S extends object>(
-    work: CombatWork,
+    work: BattleState,
     unitId: UnitId,
     instance: EffectInstance<S>,
     resources: EffectTransitionResources,
     tick: number,
     dispatch = new EffectDispatchScope(),
 ): EffectInstallation {
-    if (getCombatUnit(work, unitId) === undefined) {
+    if (getUnit(work, unitId) === undefined) {
         return { work, result: { type: "REJECTED", reason: "TARGET_ABSENT" } };
     }
 
@@ -812,7 +798,7 @@ export function installEffect<S extends object>(
 }
 
 export function installNewEffect<S extends object>(
-    work: CombatWork,
+    work: BattleState,
     unitId: UnitId,
     program: EffectProgramRef<S>,
     input: EffectInstallationInput<NoInfer<S>>,
@@ -821,7 +807,7 @@ export function installNewEffect<S extends object>(
     dispatch = new EffectDispatchScope(),
 ): EffectInstallation {
     const scopes = ownScopes(input.scopes);
-    const host = getCombatUnit(work, unitId);
+    const host = getUnit(work, unitId);
 
     if (host === undefined) {
         return { work, result: { type: "REJECTED", reason: "TARGET_ABSENT" } };
@@ -850,7 +836,7 @@ export function installNewEffect<S extends object>(
 }
 
 function installPrepared<S extends object>(
-    work: CombatWork,
+    work: BattleState,
     unitId: UnitId,
     instance: EffectInstance<S>,
     resources: EffectTransitionResources,
@@ -859,7 +845,7 @@ function installPrepared<S extends object>(
 ): EffectInstallation {
     const ref: EffectRef = Object.freeze({ type: "EFFECT", unitId, effectId: instance.id });
 
-    if (getCombatUnit(work, unitId) === undefined) {
+    if (getUnit(work, unitId) === undefined) {
         return { work, result: { type: "REJECTED", reason: "TARGET_ABSENT" } };
     }
     if (dispatch.isClosing({ type: "UNIT", unitId })) {
@@ -887,7 +873,7 @@ function installPrepared<S extends object>(
     work = finalizeFinishedEffects(work, unitId, resources, tick, dispatch);
 
     // Cleanup callbacks may have retired the host or closed a dependency.
-    if (getCombatUnit(work, unitId) === undefined || dispatch.isClosing({ type: "UNIT", unitId })) {
+    if (getUnit(work, unitId) === undefined || dispatch.isClosing({ type: "UNIT", unitId })) {
         return { work, result: { type: "REJECTED", reason: "TARGET_CLOSING" } };
     }
     if (
@@ -898,7 +884,7 @@ function installPrepared<S extends object>(
         return { work, result: { type: "REJECTED", reason: "LIFETIME_UNAVAILABLE" } };
     }
 
-    work = transitionCombatUnit(work, unitId, (unit) => registerEffectInstance(unit, instance));
+    work = transitionUnit(work, unitId, (unit) => registerEffectInstance(unit, instance));
     work = runLifecycleAction(work, ref, instance, lifecycle.start, resources, tick, dispatch);
     let current = getEffect(work, ref);
 
@@ -909,12 +895,12 @@ function installPrepared<S extends object>(
     work = changeInstance(work, ref, (value) => withEffectLifecycle(value, { started: true }));
     current = getEffect(work, ref)!;
     const started = current;
-    work = transitionCombatUnit(work, unitId, (unit) =>
+    work = transitionUnit(work, unitId, (unit) =>
         transitionEffectBindings(unit, started, resources.effectBindings, (binding, current) =>
             binding.install(current, started),
         ),
     );
-    work = reconcileInScope(work, unitId, getCombatUnit(work, unitId)!, resources, tick, dispatch);
+    work = reconcileInScope(work, unitId, getUnit(work, unitId)!, resources, tick, dispatch);
     current = getEffect(work, ref);
 
     return {
@@ -924,11 +910,11 @@ function installPrepared<S extends object>(
 }
 
 export function expireEffects(
-    work: CombatWork,
+    work: BattleState,
     tick: number,
     resources: EffectTransitionResources,
     dispatch = new EffectDispatchScope(),
-): CombatWork {
+): BattleState {
     const candidates = effectTickCandidates(work).filter((ref) => {
         const instance = getEffect(work, ref);
         const deadline = instance === undefined ? null : effectTick(instance);
@@ -963,11 +949,11 @@ export function expireEffects(
 }
 
 /** Validate references once after a complete world has been initialized or restored. */
-export function validateEffectLifetimes(work: CombatWork): void {
+export function validateEffectLifetimes(work: BattleState): void {
     const dispatch = new EffectDispatchScope();
 
-    for (const unitId of combatWorkView(work).unitIds) {
-        const host = getCombatUnit(work, unitId)!;
+    for (const unitId of battlefieldView(work).unitIds) {
+        const host = getUnit(work, unitId)!;
 
         if (!hasEffects(host)) {
             continue;

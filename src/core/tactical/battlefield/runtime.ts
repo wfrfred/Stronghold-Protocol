@@ -48,6 +48,7 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
     readonly #resources: BattlefieldResources<U>;
     readonly #view: BattlefieldView<StableUnit<U>>;
     #state: BattlefieldState<StableUnit<U>>;
+    #draft: BattlefieldState<StableUnit<U>>;
     #transactionActive = false;
 
     private constructor(
@@ -56,46 +57,71 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
     ) {
         this.#resources = resources;
         this.#state = state;
+        this.#draft = state;
+        this.#view = this.#createView(() => this.#draft);
+    }
 
+    #createView(readState: () => BattlefieldState<StableUnit<U>>): BattlefieldView<StableUnit<U>> {
         const runtime = this;
-        this.#view = {
+
+        return {
             get map() {
                 return runtime.map;
             },
             get navigationMaps() {
-                return runtime.navigationMaps;
+                return readState().navigationMaps;
             },
             get fieldCache() {
                 return runtime.fieldCache;
             },
             get unitIds() {
-                return runtime.unitIds;
+                return [...readState().units.keys()];
             },
             get effectLifetimes() {
-                return runtime.#state.effectLifetimes;
+                return readState().effectLifetimes;
             },
             get projectileIds() {
-                return runtime.projectileIds;
+                return [...readState().projectiles.keys()];
             },
-            getProjectile: (id) => runtime.#state.projectiles.get(id),
+            getProjectile: (id) => readState().projectiles.get(id),
             get mechanismIds() {
-                return runtime.mechanismIds;
+                return [...readState().mechanisms.keys()];
             },
-            getMechanism: (id) => runtime.#state.mechanisms.get(id),
+            getMechanism: (id) => readState().mechanisms.get(id),
             get blockingRelations() {
-                return runtime.#state.blockingRelations;
+                return readState().blockingRelations;
             },
             get supportRelations() {
-                return runtime.#state.supportRelations;
+                return readState().supportRelations;
             },
-            getUnit: (id) => runtime.#state.units.get(id),
-            unitsAt: (position) => runtime.#unitsAt(position),
-            blockerOf: (id) => runtime.blockerOf(id),
-            blockedBy: (id) => runtime.blockedBy(id),
-            blockingUsedCapacity: (id) => runtime.blockingUsedCapacity(id),
-            occupancyAt: (position, slot) => runtime.occupancyAt(position, slot),
-            supportOf: (id) => runtime.supportOf(id),
-            supportedBy: (id) => runtime.supportedBy(id),
+            getUnit: (id) => readState().units.get(id),
+            unitsAt: (position) => runtime.#unitsAt(position, readState()),
+            blockerOf: (id) =>
+                readState().blockingRelations.find((relation) => relation.blockedUnitId === id)
+                    ?.blockerUnitId,
+            blockedBy: (id) =>
+                readState()
+                    .blockingRelations.filter((relation) => relation.blockerUnitId === id)
+                    .map((relation) => relation.blockedUnitId),
+            blockingUsedCapacity: (id) => {
+                const state = readState();
+
+                return blockingUsedCapacity(state.units, state.blockingRelations, id);
+            },
+            occupancyAt: (position, slot) => {
+                const key = battlefieldOccupancyKey(runtime.map, position, slot);
+
+                return key === undefined
+                    ? []
+                    : [...(readState().spatial.occupancyBySlot.get(key) ?? [])];
+            },
+            supportOf: (id) =>
+                readState().supportRelations.find((relation) => relation.supportedUnitId === id)
+                    ?.supportUnitId,
+            supportedBy: (id) =>
+                readState()
+                    .supportRelations.filter((relation) => relation.supportUnitId === id)
+                    .map((relation) => relation.supportedUnitId),
         };
     }
 
@@ -115,7 +141,13 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
     }
 
     fork(): BattlefieldRuntime<U> {
-        return new BattlefieldRuntime(this.#resources, this.#state);
+        return new BattlefieldRuntime(this.#resources, this.#draft);
+    }
+
+    snapshot(version: "state" | "draft" = "state"): BattlefieldView<StableUnit<U>> {
+        const state = version === "state" ? this.#state : this.#draft;
+
+        return this.#createView(() => state);
     }
 
     get map(): BattlefieldMap {
@@ -127,11 +159,11 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
     }
 
     get navigationMaps(): NavigationMaps {
-        return this.#state.navigationMaps;
+        return this.#draft.navigationMaps;
     }
 
     get effectLifetimes(): EffectLifetimeProjection {
-        return this.#state.effectLifetimes;
+        return this.#draft.effectLifetimes;
     }
 
     get fieldCache(): NavigationFieldCache {
@@ -139,79 +171,79 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
     }
 
     get unitIds(): readonly UnitId[] {
-        return [...this.#state.units.keys()];
+        return [...this.#draft.units.keys()];
     }
 
     get blockingRelations(): readonly BlockingRelation[] {
-        return this.#state.blockingRelations.map((relation) => ({ ...relation }));
+        return this.#draft.blockingRelations.map((relation) => ({ ...relation }));
     }
 
     get supportRelations(): readonly SupportRelation[] {
-        return this.#state.supportRelations.map((relation) => ({ ...relation }));
+        return this.#draft.supportRelations.map((relation) => ({ ...relation }));
     }
 
     occupancyAt(position: TilePosition, slot: OccupancySlot): readonly UnitId[] {
         const key = battlefieldOccupancyKey(this.map, position, slot);
 
-        return key === undefined ? [] : [...(this.#state.spatial.occupancyBySlot.get(key) ?? [])];
+        return key === undefined ? [] : [...(this.#draft.spatial.occupancyBySlot.get(key) ?? [])];
     }
 
     supportOf(unitId: UnitId): UnitId | undefined {
-        return this.#state.supportRelations.find((relation) => relation.supportedUnitId === unitId)
+        return this.#draft.supportRelations.find((relation) => relation.supportedUnitId === unitId)
             ?.supportUnitId;
     }
 
     supportedBy(unitId: UnitId): readonly UnitId[] {
-        return this.#state.supportRelations
+        return this.#draft.supportRelations
             .filter((relation) => relation.supportUnitId === unitId)
             .map((relation) => relation.supportedUnitId);
     }
 
     blockerOf(unitId: UnitId): UnitId | undefined {
-        return this.#state.blockingRelations.find((relation) => relation.blockedUnitId === unitId)
+        return this.#draft.blockingRelations.find((relation) => relation.blockedUnitId === unitId)
             ?.blockerUnitId;
     }
 
     blockedBy(unitId: UnitId): readonly UnitId[] {
-        return this.#state.blockingRelations
+        return this.#draft.blockingRelations
             .filter((relation) => relation.blockerUnitId === unitId)
             .map((relation) => relation.blockedUnitId);
     }
 
     blockingUsedCapacity(unitId: UnitId): number {
-        return blockingUsedCapacity(this.#state.units, this.#state.blockingRelations, unitId);
+        return blockingUsedCapacity(this.#draft.units, this.#draft.blockingRelations, unitId);
     }
 
     get projectileIds(): readonly ProjectileId[] {
-        return [...this.#state.projectiles.keys()];
+        return [...this.#draft.projectiles.keys()];
     }
 
     getProjectile(id: ProjectileId): ProjectileInstance | undefined {
-        return this.#state.projectiles.get(id);
+        return this.#draft.projectiles.get(id);
     }
 
     get mechanismIds(): readonly MechanismId[] {
-        return [...this.#state.mechanisms.keys()];
+        return [...this.#draft.mechanisms.keys()];
     }
 
     get navigationModifierIds(): readonly NavigationModifierId[] {
-        return [...this.#state.navigationModifiers.keys()];
+        return [...this.#draft.navigationModifiers.keys()];
     }
 
     getUnit(id: UnitId): StableUnit<U> | undefined {
-        const unit = this.#state.units.get(id);
+        const unit = this.#draft.units.get(id);
 
         return unit === undefined ? undefined : this.#resources.copyUnit(unit);
     }
 
     getMechanism(id: MechanismId): MechanismRuntime | undefined {
-        const mechanism = this.#state.mechanisms.get(id);
+        const mechanism = this.#draft.mechanisms.get(id);
 
         return mechanism === undefined ? undefined : { ...mechanism };
     }
 
     getNavigationModifier(id: NavigationModifierId): NavigationModifier | undefined {
-        const navigationModifier = this.#state.navigationModifiers.get(id);
+        const navigationModifier = this.#draft.navigationModifiers.get(id);
 
         return navigationModifier === undefined
             ? undefined
@@ -222,11 +254,11 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
         return this.#unitsAt(position).map((unit) => this.#resources.copyUnit(unit));
     }
 
-    #unitsAt(position: TilePosition): readonly StableUnit<U>[] {
+    #unitsAt(position: TilePosition, state = this.#draft): readonly StableUnit<U>[] {
         const key = battlefieldTileKey(this.map, position);
-        const ids = key === undefined ? undefined : this.#state.spatial.unitsByTile.get(key);
+        const ids = key === undefined ? undefined : state.spatial.unitsByTile.get(key);
 
-        return ids === undefined ? [] : [...ids].map((id) => this.#state.units.get(id)!);
+        return ids === undefined ? [] : [...ids].map((id) => state.units.get(id)!);
     }
 
     navigationModifiersAt(position: TilePosition): readonly NavigationModifierId[] {
@@ -234,19 +266,19 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
 
         return key === undefined
             ? []
-            : [...(this.#state.spatial.navigationModifiersByTile.get(key) ?? [])];
+            : [...(this.#draft.spatial.navigationModifiersByTile.get(key) ?? [])];
     }
 
     navigationModifiersFrom(source: NavigationModifierSource): readonly NavigationModifierId[] {
         return [
-            ...(this.#state.spatial.navigationModifiersBySource.get(
+            ...(this.#draft.spatial.navigationModifiersBySource.get(
                 navigationModifierSourceKey(source),
             ) ?? []),
         ];
     }
 
     navigationModifiersFollowing(unitId: UnitId): readonly NavigationModifierId[] {
-        return [...(this.#state.spatial.navigationModifiersByAnchor.get(unitId) ?? [])];
+        return [...(this.#draft.spatial.navigationModifiersByAnchor.get(unitId) ?? [])];
     }
 
     transact(operation: (battlefield: BattlefieldRuntime<U>) => undefined): undefined;
@@ -256,35 +288,45 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
             throw new Error("battlefield transaction is already active");
         }
 
-        const previous = this.#state;
+        const previousState = this.#state;
+        const previousDraft = this.#draft;
         this.#transactionActive = true;
 
         try {
             return operation(this);
         } catch (error) {
-            this.#state = previous;
+            this.#state = previousState;
+            this.#draft = previousDraft;
             throw error;
         } finally {
             this.#transactionActive = false;
         }
     }
 
-    apply(
+    advance(
         changes: readonly BattlefieldChange<StableUnit<U>>[],
     ): BattlefieldChangeResult<StableUnit<U>> {
-        const applied = applyBattlefieldChanges<U>(this.#state, changes);
+        const applied = applyBattlefieldChanges<U>(this.#draft, changes);
         const settled = settleBattlefieldState<U>(
             this.map,
             this.#resources.baseline,
-            this.#state,
+            this.#draft,
             applied.content,
             applied.dependencies,
         );
 
         const result = { ...applied.facts, ...settled.facts };
-        this.#state = settled.state;
+        this.#draft = settled.state;
 
         return result;
+    }
+
+    apply(): void {
+        this.#state = this.#draft;
+    }
+
+    drop(): void {
+        this.#draft = this.#state;
     }
 }
 

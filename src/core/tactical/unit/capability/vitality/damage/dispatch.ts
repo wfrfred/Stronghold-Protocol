@@ -2,7 +2,7 @@ import type { UnitId } from "../../../unit.js";
 import type { EffectRef, EffectInstanceValue } from "../../effects/instance.js";
 import { EffectDispatchScope, participatingEffect } from "../../effects/dispatch.js";
 import { finalizeFinishedEffects } from "../../effects/lifecycle.js";
-import type { CombatWork } from "../../../../battle/execution/work.js";
+import type { BattleState } from "../../../../battle/execution/context.js";
 import { withVitalityHookContext, vitalityHookFacts, type DispatchResult } from "../hook.js";
 import type { DamageOperands, DamageReport, DamageRequest, PendingDamage } from "./contract.js";
 import type {
@@ -20,7 +20,7 @@ interface CompiledStage<V> {
 }
 
 function dispatchStage<V>(
-    work: CombatWork,
+    work: BattleState,
     request: DamageRequest,
     ownerUnitId: UnitId | null,
     stage: DamageHookStage,
@@ -28,7 +28,7 @@ function dispatchStage<V>(
     resources: DamageResourceServices,
     dispatch: EffectDispatchScope,
     select: (rules: CompiledDamageRules) => CompiledStage<V> | undefined,
-): { readonly work: CombatWork; readonly value: V } {
+): { readonly work: BattleState; readonly value: V } {
     if (ownerUnitId === null) {
         return { work, value };
     }
@@ -90,9 +90,6 @@ function dispatchStage<V>(
 
             const result = withVitalityHookContext(
                 () => work,
-                (next) => {
-                    work = next;
-                },
                 ref,
                 instance,
                 request,
@@ -114,7 +111,7 @@ function dispatchStage<V>(
 }
 
 export function dispatchDamageFormula(
-    work: CombatWork,
+    work: BattleState,
     request: DamageRequest,
     owner: UnitId | null,
     stage: FormulaStage,
@@ -135,7 +132,7 @@ export function dispatchDamageFormula(
 }
 
 export function dispatchDamageAmount(
-    work: CombatWork,
+    work: BattleState,
     request: DamageRequest,
     owner: UnitId | null,
     stage: AmountStage,
@@ -156,11 +153,11 @@ export function dispatchDamageAmount(
 }
 
 export function dispatchDamageReactions(
-    work: CombatWork,
+    work: BattleState,
     report: DamageReport,
     resources: DamageResourceServices,
     dispatch: EffectDispatchScope,
-): CombatWork {
+): BattleState {
     const owners = new Set([report.request.sourceUnitId, report.request.targetUnitId]);
 
     for (const owner of owners) {

@@ -2,11 +2,7 @@ import { EffectDispatchScope } from "../../effects/dispatch.js";
 import type { ActionExecutionWork } from "./executions.js";
 import { assertFiniteNumber, assertNonnegativeSafeInteger } from "../../../../../common/assert.js";
 import { ownDataRecord } from "../../../../../common/immutable-data.js";
-import {
-    appendCombatEvents,
-    getCombatUnit,
-    type CombatWork,
-} from "../../../../battle/execution/work.js";
+import { appendEvents, getUnit, type BattleState } from "../../../../battle/execution/context.js";
 import type { UnitId } from "../../../unit.js";
 import { isSpatiallyPresent } from "../../presence.js";
 import type { EffectTransitionResources } from "../../effects/contract.js";
@@ -76,7 +72,7 @@ export function acceptActionExecutionInWork(
 }
 
 function contextFor(
-    work: CombatWork,
+    work: BattleState,
     execution: ActionExecution,
     tick: number,
     projectiles?: ProjectileOperations,
@@ -97,14 +93,14 @@ function contextFor(
 type ActionExecutionWorkTransition = Omit<ActionExecutionTransition, "state">;
 
 function endExecution(
-    work: CombatWork,
+    work: BattleState,
     executions: ActionExecutionWork,
     execution: ActionExecution,
     resources: EffectTransitionResources,
     tick: number,
     reason: string,
     dispatch: EffectDispatchScope,
-): CombatWork {
+): BattleState {
     executions.remove(execution);
 
     return closeEffectLifetimes(
@@ -118,7 +114,7 @@ function endExecution(
 }
 
 function finishExecution(
-    work: CombatWork,
+    work: BattleState,
     executions: ActionExecutionWork,
     execution: ActionExecution,
     resources: EffectTransitionResources,
@@ -143,14 +139,14 @@ function finishExecution(
     );
 
     return {
-        work: appendCombatEvents(ended, [signal]),
+        work: appendEvents(ended, [signal]),
         result: { type: "FINISHED" },
         signals: [...signals, signal],
     };
 }
 
 export function cancelActionExecutionInWork(
-    work: CombatWork,
+    work: BattleState,
     executions: ActionExecutionWork,
     request: ActionExecutionCancelRequest,
     resources: EffectTransitionResources,
@@ -164,7 +160,7 @@ export function cancelActionExecutionInWork(
     }
 
     if (work.actionExecutions !== executions) {
-        work = { ...work, actionExecutions: executions };
+        work.actionExecutions = executions;
     }
 
     const signal: ActionExecutionSignal = {
@@ -177,7 +173,7 @@ export function cancelActionExecutionInWork(
     const ended = endExecution(work, executions, execution, resources, tick, reason, dispatch);
 
     return {
-        work: appendCombatEvents(ended, [signal]),
+        work: appendEvents(ended, [signal]),
         result: { type: "CANCELLED", reason },
         signals: [signal],
     };
@@ -218,7 +214,7 @@ function waitComplete(wait: ActionExecutionWait, tick: number): boolean {
 }
 
 export function resumeActionExecutionInWork(
-    work: CombatWork,
+    work: BattleState,
     executions: ActionExecutionWork,
     request: ActionExecutionResumeRequest,
     resources: ActionExecutionResources,
@@ -231,7 +227,7 @@ export function resumeActionExecutionInWork(
     }
 
     if (work.actionExecutions !== executions) {
-        work = { ...work, actionExecutions: executions };
+        work.actionExecutions = executions;
     }
 
     const dispatch = new EffectDispatchScope();
@@ -245,7 +241,7 @@ export function resumeActionExecutionInWork(
             return finishExecution(work, executions, execution, resources, tick, signals, dispatch);
         }
 
-        const source = getCombatUnit(work, execution.sourceUnitId);
+        const source = getUnit(work, execution.sourceUnitId);
 
         if (source === undefined || !isSpatiallyPresent(source)) {
             const cancelled = cancelActionExecutionInWork(
@@ -404,7 +400,7 @@ export function resumeActionExecutionInWork(
                     markerId: segment.markerId,
                 };
                 signals.push(signal);
-                work = appendCombatEvents(work, [signal]);
+                work = appendEvents(work, [signal]);
                 execution = Object.freeze({ ...execution, cursor: execution.cursor + 1 });
                 break;
             }

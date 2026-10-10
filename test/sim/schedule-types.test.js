@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-test('schedule execution carries its definition through phases and queries and rejects independent unions', async () => {
+test('schedule execution carries its definition through spawning and queries and rejects independent unions', async () => {
   const { default: ts } = await import('typescript');
   const directory = mkdtempSync(join(tmpdir(), 'stronghold-schedule-types-'));
   const sourceModule = name => JSON.stringify(fileURLToPath(new URL(`../../src/core/tactical/battle/${name}.js`, import.meta.url)));
@@ -47,8 +47,8 @@ if (resolved.type === 'TIMELINE') {
     resolved.waveIndex;
 }
 getSpawnScheduleCounts(execution);
-const spawned = advanceSpawning(input, execution);
-resolveScheduleUnits(spawned.schedule, []);
+const spawned = advanceSpawning(input, execution, [], 0);
+resolveScheduleUnits(spawned, []);
 const blocked = advanceBlocking(battlefield);
 // @ts-expect-error A bare snapshot cannot advance an execution.
 advanceSpawnSchedule(progress, { tick: 0 });
@@ -61,7 +61,7 @@ getUnspawnedCount(progress);
 // @ts-expect-error Schedule queries cannot accept bare progress for their counts.
 getSpawnScheduleCounts(progress);
 // @ts-expect-error Spawning requires progress paired with its definition.
-advanceSpawning(input, progress);
+advanceSpawning(input, progress, [], 0);
 // @ts-expect-error Blocking produces only battlefield changes.
 blocked.state;
 const snapshot = cloneScheduleState(execution);

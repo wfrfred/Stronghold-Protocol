@@ -1,4 +1,4 @@
-import { combatWorkView, getCombatUnit, type CombatWork } from "../../../battle/execution/work.js";
+import { battlefieldView, getUnit, type BattleState } from "../../../battle/execution/context.js";
 import { resolveAttackPower } from "../../../unit/capability/offense/query.js";
 import { EffectDispatchScope } from "../../../unit/capability/effects/dispatch.js";
 import { createEffectOperations } from "../../../unit/capability/effects/operations.js";
@@ -13,8 +13,8 @@ import type { ProjectileId, ProjectileInstance, ProjectileStopReason } from "../
 import { updateProjectileInstance } from "./state.js";
 
 export interface ProjectileContextAccess {
-    getWork(): CombatWork;
-    setWork(work: CombatWork): void;
+    getWork(): BattleState;
+    setWork(work: BattleState): void;
     getProjectile(id: ProjectileId): ProjectileInstance | undefined;
     lastKnown(id: ProjectileId): ProjectileInstance | undefined;
     save(instance: ProjectileInstance): void;
@@ -22,14 +22,14 @@ export interface ProjectileContextAccess {
 }
 
 function projectileFacts(
-    readWork: () => CombatWork,
+    readWork: () => BattleState,
     getProjectile: (id: ProjectileId) => ProjectileInstance | undefined,
 ): ProjectileFacts {
     return {
         get unitIds() {
-            return combatWorkView(readWork()).unitIds;
+            return battlefieldView(readWork()).unitIds;
         },
-        getUnit: (id) => getCombatUnit(readWork(), id),
+        getUnit: (id) => getUnit(readWork(), id),
         getProjectile: (id) => {
             readWork();
 
@@ -46,7 +46,7 @@ export function withProjectileQuery<S extends object, R>(
 ): R {
     let active = true;
 
-    const readWork = (): CombatWork => {
+    const readWork = (): BattleState => {
         if (!active) {
             throw new TypeError("projectile query context is no longer active");
         }
@@ -82,7 +82,7 @@ export function withProjectileContext<S extends object>(
     let active = true;
     const dispatch = new EffectDispatchScope();
 
-    const readWork = (): CombatWork => {
+    const readWork = (): BattleState => {
         if (!active) {
             throw new TypeError("projectile context is no longer active");
         }
@@ -110,22 +110,14 @@ export function withProjectileContext<S extends object>(
                     ? undefined
                     : resolveAttackPower(
                           projectile.source,
-                          combatWorkView(readWork()),
+                          battlefieldView(readWork()),
                           services.computations,
                       );
 
             return attack ?? projectile.cachedAtk;
         },
         operations: {
-            effects: createEffectOperations(
-                readWork,
-                (work) => {
-                    access.setWork(work);
-                },
-                services,
-                tick,
-                dispatch,
-            ),
+            effects: createEffectOperations(readWork, services, tick, dispatch),
             damage: (request) => {
                 const result = services.settleDamage(readWork(), { ...request, tick }, dispatch);
                 access.setWork(result.work);

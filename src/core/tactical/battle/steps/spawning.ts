@@ -3,8 +3,13 @@ import { type RoutedEnemy } from "../../unit/archetype/enemy.js";
 import type { BattleExecutionState } from "../execution/state.js";
 import type { UnitRouteSignal } from "./route-control.js";
 import type { UnitId } from "../../unit/unit.js";
-import type { BattlefieldChange } from "../../battlefield/contract.js";
 import type { Command, Event } from "../contract.js";
+import {
+    advanceBattlefield,
+    appendEvents,
+    withExecution,
+    type BattleState,
+} from "../execution/context.js";
 import { advanceSpawnSchedule, recordScheduleSpawns } from "../schedule/runtime.js";
 import type { SpawnScheduleExecution } from "../schedule/state.js";
 import type { ScheduledEnemySpawn } from "../schedule/definition.js";
@@ -13,19 +18,6 @@ interface SpawnedEnemies {
     readonly execution: BattleExecutionState;
     readonly enemies: readonly RoutedEnemy[];
     readonly signals: readonly UnitRouteSignal[];
-}
-
-interface SpawningInput {
-    readonly tick: number;
-    readonly commands: readonly Command[];
-    readonly execution: BattleExecutionState;
-}
-
-interface SpawningResult {
-    readonly schedule: SpawnScheduleExecution;
-    readonly changes: readonly BattlefieldChange[];
-    readonly events: readonly Event[];
-    readonly execution: BattleExecutionState;
 }
 
 function spawnEnemies(
@@ -98,23 +90,26 @@ function enemySpawnEvents(spawned: SpawnedEnemies, tick: number): Event[] {
 }
 
 export function advanceSpawning(
-    input: SpawningInput,
+    state: BattleState,
     schedule: SpawnScheduleExecution,
-): SpawningResult {
+    commands: readonly Command[],
+    tick: number,
+): SpawnScheduleExecution {
     const scheduled = advanceSpawnSchedule(schedule, {
-        tick: input.tick,
-        triggers: input.commands.filter((command) => command.type === "TRIGGER_BRANCH"),
+        tick,
+        triggers: commands.filter((command) => command.type === "TRIGGER_BRANCH"),
     });
-    const spawned = spawnEnemies(scheduled.spawns, input.execution, input.tick);
+    const spawned = spawnEnemies(scheduled.spawns, state.execution, tick);
+    withExecution(state, spawned.execution);
+    appendEvents(state, enemySpawnEvents(spawned, tick));
+    advanceBattlefield(
+        state,
+        spawned.enemies.map((unit) => ({ type: "REGISTER_UNIT", unit })),
+    );
 
-    return {
-        schedule: recordScheduleSpawns(
-            scheduled.state,
-            scheduled.spawns,
-            spawned.enemies.map((enemy) => enemy.id),
-        ),
-        changes: spawned.enemies.map((unit) => ({ type: "REGISTER_UNIT", unit })),
-        events: enemySpawnEvents(spawned, input.tick),
-        execution: spawned.execution,
-    };
+    return recordScheduleSpawns(
+        scheduled.state,
+        scheduled.spawns,
+        spawned.enemies.map((enemy) => enemy.id),
+    );
 }

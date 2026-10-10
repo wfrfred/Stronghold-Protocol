@@ -1,3 +1,4 @@
+import { fixtureBattlefield } from "../helpers/battlefield.js";
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
@@ -11,7 +12,7 @@ import { attack } from '../../dist/core/tactical/unit/capability/offense/contrib
 import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { compileAction } from '../../dist/core/tactical/unit/capability/action/compile.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
-import { createCombatWork, getCombatUnit } from '../../dist/core/tactical/battle/execution/work.js';
+import { createBattleState, getUnit } from '../../dist/core/tactical/battle/execution/context.js';
 import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
 
 const geometry = createShapeGeometry({ shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 5 }] });
@@ -145,11 +146,11 @@ test('skill runtime: HIT SP counts zero damage but respects cancellation and ign
     const resources = new CombatResources();
     const definition = actor(skill({ spRecovery: 'HIT', initialSp: 0 }));
     const receiver = initializeUnit({ id: 0, definition: { ...definition, status: { initialFlags: flags } }, position: [0, 0] });
-    const work = createCombatWork({ unitIds: [0], getUnit: () => receiver, blockerOf: () => undefined, blockedBy: () => [] });
+    const work = createBattleState(fixtureBattlefield({ unitIds: [0], getUnit: () => receiver, blockerOf: () => undefined, blockedBy: () => [] }));
     const resolved = resources.settleDamage(work, { sourceUnitId: null, targetUnitId: 0,
       damageType: 'TRUE', operands: createDamageOperands(0), tick: 0, ignoreForSp });
-    assert.equal(getCombatUnit(resolved.work, 0).skill.sp, expected);
-    assert.equal(getCombatUnit(resolved.work, 0).vitality.hp, 100000);
+    assert.equal(getUnit(resolved.work, 0).skill.sp, expected);
+    assert.equal(getUnit(resolved.work, 0).vitality.hp, 100000);
   }
 });
 

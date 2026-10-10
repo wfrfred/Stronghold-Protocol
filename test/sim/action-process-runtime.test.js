@@ -1,3 +1,4 @@
+import { fixtureBattlefield } from "../helpers/battlefield.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -19,7 +20,7 @@ import {
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
 import { installNewEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
-import { createCombatWork, getCombatUnit } from "../../dist/core/tactical/battle/execution/work.js";
+import { createBattleState, getUnit } from "../../dist/core/tactical/battle/execution/context.js";
 
 const hit = createShapeGeometry({
   shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.1 }],
@@ -157,15 +158,12 @@ function delayed(compiled, ticks, { allowNewAction = false, blockingMovement = f
 
 function workFrom(snapshot) {
   const units = new Map(snapshot.units.map((unit) => [unit.id, unit]));
-  return createCombatWork(
-    {
+  return createBattleState(fixtureBattlefield({
       unitIds: [...units.keys()],
       getUnit: (id) => units.get(id),
       blockerOf: () => undefined,
       blockedBy: () => [],
-    },
-    snapshot.execution,
-  );
+    }), snapshot.execution);
 }
 
 function assertData(value) {
@@ -257,9 +255,9 @@ test("action runtime: delayed progress keeps ordinary same-tick order and copied
   assert.deepEqual(runtime.snapshot().actionExecution, copied.state);
   assert.equal(
     runtime.snapshot().units.find((unit) => unit.id === 2).vitality.hp,
-    getCombatUnit(copied.work, 2).vitality.hp,
+    getUnit(copied.work, 2).vitality.hp,
   );
-  assert.equal(getCombatUnit(copied.work, 2).vitality.hp, 90);
+  assert.equal(getUnit(copied.work, 2).vitality.hp, 90);
   assert.equal(snapshot.actionExecution.executions[0].wait.remainingTicks, 2);
 });
 

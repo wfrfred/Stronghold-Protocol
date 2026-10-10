@@ -62,7 +62,7 @@ for (const [name, create] of modes) {
       delete missingDefinition[key];
       const missingConfiguration = { ...unit, definition: missingDefinition };
       for (const invalid of [missingState, missingConfiguration, { ...unit, [key]: undefined }]) {
-        assert.throws(() => runtime.apply([
+        assert.throws(() => runtime.advance([
           { type: 'REGISTER_UNIT', unit: { ...unit, id: 2 } },
           { type: 'REGISTER_UNIT', unit: invalid },
         ]), new RegExp(`capability ${key} configuration and state must be paired`));
@@ -71,7 +71,7 @@ for (const [name, create] of modes) {
         assert.deepEqual(runtime.unitsAt([0, 0]), []);
       }
     }
-    runtime.apply([{ type: 'REGISTER_UNIT', unit }]);
+    runtime.advance([{ type: 'REGISTER_UNIT', unit }]);
     assert.equal(runtime.getUnit(1).definition, unit.definition);
     assert.deepEqual(runtime.unitsAt([0, 0]).map(value => value.id), [1]);
   });
@@ -80,13 +80,13 @@ for (const [name, create] of modes) {
     const runtime = create();
     const unit = initializeUnit({ id: 1, definition: definition(), position: [0, 0] });
     const bare = initializeUnit({ id: 2, definition: { id: 'bare' }, position: [2, 0] });
-    runtime.apply([{ type: 'REGISTER_UNIT', unit }, { type: 'REGISTER_UNIT', unit: bare }]);
+    runtime.advance([{ type: 'REGISTER_UNIT', unit }, { type: 'REGISTER_UNIT', unit: bare }]);
     const maps = runtime.navigationMaps;
     for (const key of Object.keys(configuredCapabilities)) {
       const missingState = { ...unit };
       delete missingState[key];
       for (const invalid of [missingState, { ...unit, [key]: undefined }, { ...bare, [key]: unit[key] }]) {
-        assert.throws(() => runtime.apply([
+        assert.throws(() => runtime.advance([
           { type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 1, position: [1, 0] },
           { type: 'UPDATE_UNIT', unit: invalid },
         ]), new RegExp(`capability ${key} state cannot be added or removed during update`));
@@ -97,13 +97,13 @@ for (const [name, create] of modes) {
     }
     const updated = { ...unit, action: { ...unit.action, readyAtTick: 7, recoveryUntilTick: 8 },
       spatialPresence: { present: false }, occupancy: { claims: [] } };
-    runtime.apply([{ type: 'UPDATE_UNIT', unit: updated }]);
+    runtime.advance([{ type: 'UPDATE_UNIT', unit: updated }]);
     assert.deepEqual(runtime.getUnit(1).action, updated.action);
     assert.deepEqual(runtime.unitsAt([0, 0]), []);
     const restored = { ...updated };
     delete restored.spatialPresence;
     delete restored.occupancy;
-    runtime.apply([{ type: 'UPDATE_UNIT', unit: restored }]);
+    runtime.advance([{ type: 'UPDATE_UNIT', unit: restored }]);
     assert.deepEqual(runtime.unitsAt([0, 0]).map(value => value.id), [1]);
   });
 }
@@ -130,9 +130,9 @@ declare const definition: ImmutableData<ActingUnitDefinition>;
 declare const map: BattlefieldMap;
 const unit: Unit<ActingUnitDefinition> = { id: 1, definition, position: [0, 0] };
 const battlefield = createBattlefieldRuntime({ map });
-battlefield.apply([{ type: 'REGISTER_UNIT', unit }]);
+battlefield.advance([{ type: 'REGISTER_UNIT', unit }]);
 const custom = createBattlefieldRuntime({ map }, (unit: Unit<ActingUnitDefinition>) => ({ ...unit }));
-custom.apply([{ type: 'REGISTER_UNIT', unit }]);
+custom.advance([{ type: 'REGISTER_UNIT', unit }]);
 `);
     const program = ts.createProgram([path], {
       noEmit: true, target: ts.ScriptTarget.ES2022,

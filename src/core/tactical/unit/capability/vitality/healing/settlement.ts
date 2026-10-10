@@ -23,12 +23,12 @@ import type {
     PendingHealing,
 } from "./contract.js";
 import {
-    combatWorkView,
-    appendCombatEvents,
-    getCombatUnit,
-    updateCombatUnit,
-    type CombatWork,
-} from "../../../../battle/execution/work.js";
+    battlefieldView,
+    appendEvents,
+    getUnit,
+    updateUnit,
+    type BattleState,
+} from "../../../../battle/execution/context.js";
 
 interface CompiledHealingStage<V> {
     readonly priority: number;
@@ -50,7 +50,7 @@ function orderCandidates<V>(left: HealingCandidate<V>, right: HealingCandidate<V
 }
 
 function dispatchHealing<V>(
-    work: CombatWork,
+    work: BattleState,
     request: HealingRequest,
     ownerUnitId: UnitId | null,
     value: V,
@@ -58,16 +58,12 @@ function dispatchHealing<V>(
     tick: number,
     scope: EffectDispatchScope,
     select: (rules: CompiledHealingRules) => CompiledHealingStage<V> | undefined,
-): { readonly work: CombatWork; readonly value: V } {
+): { readonly work: BattleState; readonly value: V } {
     if (ownerUnitId === null) {
         return { work, value };
     }
 
     const getWork = () => work;
-
-    const setWork = (current: CombatWork) => {
-        work = current;
-    };
 
     scope.withCandidates(effectView(getWork), ownerUnitId, (addresses) => {
         const candidates: HealingCandidate<V>[] = [];
@@ -97,7 +93,6 @@ function dispatchHealing<V>(
 
             const result = withVitalityHookContext(
                 getWork,
-                setWork,
                 candidate.ref,
                 instance,
                 request,
@@ -119,7 +114,7 @@ function dispatchHealing<V>(
 }
 
 function applyHealingRules(
-    work: CombatWork,
+    work: BattleState,
     request: HealingRequest,
     ownerUnitId: UnitId | null,
     stage: HealingStage,
@@ -141,7 +136,7 @@ function applyHealingRules(
 }
 
 function confirmHealing(
-    work: CombatWork,
+    work: BattleState,
     report: HealingReport,
     resources: HealingResourceServices,
     tick: number,
@@ -185,8 +180,8 @@ function confirmHealing(
     return { work, amount: report.amount, report };
 }
 
-function targetCancellation(work: CombatWork, targetUnitId: UnitId): HealingCancellation | null {
-    const receiver = getCombatUnit(work, targetUnitId);
+function targetCancellation(work: BattleState, targetUnitId: UnitId): HealingCancellation | null {
+    const receiver = getUnit(work, targetUnitId);
 
     if (receiver === undefined) {
         return { reason: "TARGET_ABSENT" };
@@ -235,7 +230,7 @@ export function healUnit<U extends VitalUnit>(
 }
 
 export function resolveHealing(
-    work: CombatWork,
+    work: BattleState,
     request: HealingRequest,
     resources: HealingResourceServices,
     dispatch = new EffectDispatchScope(),
@@ -245,7 +240,7 @@ export function resolveHealing(
         amount: Math.max(0, request.power),
         cancellation: null,
     };
-    const target = getCombatUnit(work, request.targetUnitId);
+    const target = getUnit(work, request.targetUnitId);
 
     if (target === undefined || !hasVitality(target) || target.vitality.hp <= 0) {
         return confirmHealing(
@@ -277,7 +272,7 @@ export function resolveHealing(
     if (cancellation !== null) {
         pending = { ...pending, cancellation: pending.cancellation ?? cancellation };
     } else {
-        const receiver = getCombatUnit(work, request.targetUnitId)!;
+        const receiver = getUnit(work, request.targetUnitId)!;
 
         if (!request.ignoreHealFree && hasStatusFlag(receiver, "HEAL_FREE")) {
             pending = {
@@ -304,7 +299,7 @@ export function resolveHealing(
 
     assertNonnegativeNumber(healingAmount, "received healing");
 
-    const current = getCombatUnit(work, request.targetUnitId);
+    const current = getUnit(work, request.targetUnitId);
     const finalCancellation =
         pending.cancellation ?? targetCancellation(work, request.targetUnitId);
     let amount = 0;
@@ -313,14 +308,14 @@ export function resolveHealing(
         let hp = current.vitality.hp;
 
         if (finalCancellation === null) {
-            const maxHp = resolveMaxHp(current.id, combatWorkView(work))!;
+            const maxHp = resolveMaxHp(current.id, battlefieldView(work))!;
             const healed = applyHealingValue(current, healingAmount, maxHp);
-            work = updateCombatUnit(work, healed.unit);
+            work = updateUnit(work, healed.unit);
             amount = healed.amount;
             hp = healed.unit.vitality.hp;
         }
 
-        work = appendCombatEvents(work, [
+        work = appendEvents(work, [
             {
                 type: "HEAL",
                 sourceUnitId: request.sourceUnitId,

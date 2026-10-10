@@ -1,18 +1,16 @@
 import type { BattlefieldChange } from "../battlefield/contract.js";
-import type { BattlefieldRuntime } from "../battlefield/runtime.js";
 import { instantiateUnitPlacement } from "./creation/placement.js";
 import { instantiateMechanismPlacement } from "./creation/mechanism.js";
 import { instantiateNavigationModifierPlacement } from "./creation/navigation-modifier.js";
 import { changePredefinedInstances } from "./steps/predefined.js";
 import type { Input } from "./contract.js";
-import type { BattleExecutionState } from "./execution/state.js";
+import { advanceBattlefield, withExecution, type BattleState } from "./execution/context.js";
 import type { CombatResources } from "./resources.js";
 import { advanceEffectSources } from "./steps/effect-sources.js";
 
 export function initializeBattlefield(
     input: Input,
-    battlefield: BattlefieldRuntime,
-    execution: BattleExecutionState,
+    state: BattleState,
     combatResources: CombatResources,
 ) {
     const initialChanges: BattlefieldChange[] = [];
@@ -20,28 +18,32 @@ export function initializeBattlefield(
     const initialMechanismIds: number[] = [];
 
     for (const placement of input.initialUnits) {
-        const instantiated = instantiateUnitPlacement(placement, execution, 0);
+        const instantiated = instantiateUnitPlacement(placement, state.execution, 0);
 
         initialChanges.push(...instantiated.changes);
         initialUnitIds.push(instantiated.unit.id);
-        execution = instantiated.execution;
+        withExecution(state, instantiated.execution);
     }
 
     for (const placement of input.initialMechanisms) {
-        const instantiated = instantiateMechanismPlacement(placement, execution, initialUnitIds);
+        const instantiated = instantiateMechanismPlacement(
+            placement,
+            state.execution,
+            initialUnitIds,
+        );
         initialChanges.push(...instantiated.changes);
         initialMechanismIds.push(instantiated.mechanism.id);
-        execution = instantiated.execution;
+        withExecution(state, instantiated.execution);
     }
     for (const placement of input.initialNavigationModifiers) {
         const instantiated = instantiateNavigationModifierPlacement(
             placement,
-            execution,
+            state.execution,
             initialUnitIds,
             initialMechanismIds,
         );
         initialChanges.push(...instantiated.changes);
-        execution = instantiated.execution;
+        withExecution(state, instantiated.execution);
     }
 
     const initialized = changePredefinedInstances(
@@ -53,20 +55,12 @@ export function initializeBattlefield(
                 type: "APPEAR_PREDEFINED",
                 definitionId: definition.id,
             })),
-        execution,
+        state.execution,
     );
 
-    battlefield.apply([...initialChanges, ...initialized.changes]);
+    withExecution(state, initialized.execution);
+    advanceBattlefield(state, [...initialChanges, ...initialized.changes]);
+    advanceEffectSources(state, 0, combatResources);
 
-    const preparedSources = advanceEffectSources(
-        {
-            battlefield: battlefield.view,
-            tick: 0,
-            execution: initialized.execution,
-        },
-        combatResources,
-    );
-    battlefield.apply(preparedSources.changes);
-
-    return { predefinedPresence: initialized.presence, execution: preparedSources.execution };
+    return initialized.presence;
 }

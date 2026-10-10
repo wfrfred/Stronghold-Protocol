@@ -1,11 +1,11 @@
 import type { ActionExecutionWork } from "./executions.js";
 import {
-    appendCombatEvents,
-    combatWorkView,
-    getCombatUnit,
-    updateCombatUnit,
-    type CombatWork,
-} from "../../../../battle/execution/work.js";
+    appendEvents,
+    battlefieldView,
+    getUnit,
+    updateUnit,
+    type BattleState,
+} from "../../../../battle/execution/context.js";
 import { hasAction } from "../capability.js";
 import { acceptActionExecutionInWork, resumeActionExecutionInWork } from "./process.js";
 import { isSpatiallyPresent } from "../../presence.js";
@@ -18,13 +18,13 @@ import { hasStatusFlag } from "../../status/capability.js";
 import type { ActionStartRequest, ActionStartResources } from "../execution.js";
 
 export function startActionInWork(
-    work: CombatWork,
+    work: BattleState,
     executions: ActionExecutionWork,
     request: ActionStartRequest,
     resources: ActionStartResources,
-): CombatWork {
+): BattleState {
     const { sourceUnitId, compiled, tick, mayStart } = request;
-    const source = getCombatUnit(work, sourceUnitId);
+    const source = getUnit(work, sourceUnitId);
 
     if (
         source === undefined ||
@@ -39,17 +39,17 @@ export function startActionInWork(
         compiled.definition,
         source.definition.action,
         source.action,
-        resources.computations.bind({ unit: source, battlefield: combatWorkView(work) }),
+        resources.computations.bind({ unit: source, battlefield: battlefieldView(work) }),
     );
     const action = reconcileActionCooldown(source.action, intervalTicks, tick);
     const ready = action === source.action ? source : { ...source, action };
-    work = updateCombatUnit(work, ready);
+    work = updateUnit(work, ready);
 
     if (!mayStart || tick < action.readyAtTick || tick < action.recoveryUntilTick) {
         return work;
     }
 
-    const bindings = compiled.bind({ source: ready, battlefield: combatWorkView(work) });
+    const bindings = compiled.bind({ source: ready, battlefield: battlefieldView(work) });
     const targetUnitId = bindings.get(compiled.definition.triggerBindingId)![0] ?? null;
 
     if (targetUnitId === null) {
@@ -61,11 +61,11 @@ export function startActionInWork(
         ...ready,
         action: beginActionCooldown(action, definition, intervalTicks, tick),
     };
-    work = updateCombatUnit(work, executing);
-    work = appendCombatEvents(work, [{ type: "ACTION", sourceUnitId, targetUnitId, tick }]);
+    work = updateUnit(work, executing);
+    work = appendEvents(work, [{ type: "ACTION", sourceUnitId, targetUnitId, tick }]);
 
     if (work.actionExecutions !== executions) {
-        work = { ...work, actionExecutions: executions };
+        work.actionExecutions = executions;
     }
 
     const initialized = acceptActionExecutionInWork(executions, {

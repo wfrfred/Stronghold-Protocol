@@ -9,7 +9,7 @@ import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js"
 import { createActionDefinition } from "../../dist/core/tactical/unit/capability/action/capability.js";
 import { compileAction } from "../../dist/core/tactical/unit/capability/action/compile.js";
 
-test("action event order: release and damage precede support loss produced by the phase commit", (t) => {
+test("action event order: lethal damage settles support loss before the action finishes", (t) => {
     const geometry = createShapeGeometry({
         shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 5 }],
     });
@@ -81,7 +81,7 @@ test("action event order: release and damage precede support loss produced by th
         rows: 1, columns: 4, operators: [], enemies: [], maxTicks: 10, seed: 17,
     });
     const battlefield = BattlefieldRuntime.create({ map: spec.map }, copyUnitSnapshot);
-    battlefield.apply([
+    battlefield.advance([
         ...[attacker, support, recipient].map(unit => ({ type: "REGISTER_UNIT", unit })),
         { type: "SET_SUPPORT_RELATIONS", relations: [{ supportedUnitId: 2, supportUnitId: 1 }] },
     ]);
@@ -104,7 +104,7 @@ test("action event order: release and damage precede support loss produced by th
     const snapshot = runtime.snapshot();
 
     assert.deepEqual(output.events.map(event => event.type), [
-        "ACTION", "ACTION_RELEASED", "DAMAGE", "ACTION_FINISHED", "SUPPORT_LOST", "UNIT_REMOVED",
+        "ACTION", "ACTION_RELEASED", "DAMAGE", "SUPPORT_LOST", "ACTION_FINISHED", "UNIT_REMOVED",
     ]);
     const lost = output.events.find(event => event.type === "SUPPORT_LOST");
     assert.equal(lost.supportedUnitId, 2);
