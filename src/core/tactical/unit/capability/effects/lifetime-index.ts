@@ -78,7 +78,7 @@ export function projectEffectLifetimes(units: Iterable<Unit>): EffectLifetimePro
 }
 
 function projectionOf(state: BattleState): EffectLifetimeProjection {
-    return state.battlefield.effectLifetimes;
+    return state.battlefield.snapshot("draft").effectLifetimes;
 }
 
 export function deriveEffectLifetimes(

@@ -20,39 +20,39 @@ const unit = (id, column = 0, definition = {}, states = {}) => initializeUnit({
 const registration = unit => ({ type: 'REGISTER_UNIT', unit });
 const updateHp = (battlefield, id, hp) => ({
   type: 'UPDATE_UNIT', unit: {
-    ...battlefield.view.getUnit(id), vitality: { ...battlefield.view.getUnit(id).vitality, hp },
+    ...battlefield.snapshot('draft').getUnit(id), vitality: { ...battlefield.snapshot('draft').getUnit(id).vitality, hp },
   },
 });
 
 test('draft advances are immediately readable while fixed snapshots retain their captured version', () => {
   const battlefield = create();
-  const live = battlefield.view;
-  const empty = battlefield.snapshot();
+  const empty = battlefield.snapshot('state');
   const registered = battlefield.advance([registration(unit(1))]);
   const first = battlefield.snapshot('draft');
 
   assert.deepEqual(registered.registeredUnitIds, [1]);
   assert.deepEqual(empty.unitIds, []);
-  assert.deepEqual(battlefield.snapshot().unitIds, []);
-  assert.deepEqual(live.unitIds, [1]);
-  assert.equal(live.getUnit(1).vitality.hp, 100);
-  assert.equal(battlefield.getUnit(1).vitality.hp, 100);
+  assert.deepEqual(battlefield.snapshot('state').unitIds, []);
+  assert.deepEqual(first.unitIds, [1]);
+  assert.equal(first.getUnit(1).vitality.hp, 100);
 
   battlefield.advance([updateHp(battlefield, 1, 40)]);
+  const second = battlefield.snapshot('draft');
   assert.equal(first.getUnit(1).vitality.hp, 100);
-  assert.equal(live.getUnit(1).vitality.hp, 40);
-  assert.equal(battlefield.snapshot('draft').getUnit(1).vitality.hp, 40);
+  assert.equal(second.getUnit(1).vitality.hp, 40);
 
-  const current = live.getUnit(1);
+  const current = second.getUnit(1);
   battlefield.apply();
-  assert.equal(battlefield.snapshot().getUnit(1), current, 'publication retains the already computed version');
+  assert.equal(battlefield.snapshot('state').getUnit(1), current, 'publication retains the already computed version');
   assert.equal(first.getUnit(1).vitality.hp, 100);
   assert.deepEqual(empty.unitIds, []);
 
   battlefield.advance([updateHp(battlefield, 1, 20)]);
+  const pending = battlefield.snapshot('draft');
   battlefield.drop();
-  assert.equal(live.getUnit(1), current);
-  assert.equal(battlefield.snapshot().getUnit(1), current);
+  assert.equal(battlefield.snapshot('draft').getUnit(1), current);
+  assert.equal(battlefield.snapshot('state').getUnit(1), current);
+  assert.equal(pending.getUnit(1).vitality.hp, 20);
 });
 
 test('draft spatial and navigation projections follow updated unit facts and drop restores all projections', () => {
@@ -73,7 +73,7 @@ test('draft spatial and navigation projections follow updated unit facts and dro
     } },
   ]);
   battlefield.apply();
-  const published = battlefield.snapshot();
+  const published = battlefield.snapshot('state');
   const changed = battlefield.advance([{ type: 'UPDATE_UNIT', unit: {
     ...owner, position: [1, 0], occupancy: { claims: [
       { position: [0, 1], slot: 'DEPLOYMENT', type: 'PRESENT' },
@@ -82,23 +82,23 @@ test('draft spatial and navigation projections follow updated unit facts and dro
   const moved = battlefield.snapshot('draft');
 
   assert.deepEqual(changed.changedNavigationModes, ['WALK']);
-  assert.deepEqual(battlefield.unitsAt([0, 0]), []);
-  assert.deepEqual(battlefield.view.unitsAt([0, 1]).map(unit => unit.id), [1]);
-  assert.deepEqual(battlefield.occupancyAt([0, 1], 'DEPLOYMENT'), [1]);
+  assert.deepEqual(battlefield.snapshot('draft').unitsAt([0, 0]), []);
+  assert.deepEqual(battlefield.snapshot('draft').unitsAt([0, 1]).map(unit => unit.id), [1]);
+  assert.deepEqual(battlefield.snapshot('draft').occupancyAt([0, 1], 'DEPLOYMENT'), [1]);
   assert.deepEqual(moved.occupancyAt([0, 0], 'DEPLOYMENT'), []);
-  assert.deepEqual(battlefield.navigationModifiersAt([0, 1]), [7]);
-  assert.deepEqual(battlefield.navigationModifiersFollowing(1), [7]);
-  assert.deepEqual(battlefield.navigationModifiersFrom({ type: 'UNIT', unitId: 1 }), [7]);
-  assert.equal(battlefield.navigationMaps.WALK.cells[0].passable, true);
-  assert.equal(battlefield.navigationMaps.WALK.cells[1].passable, false);
+  assert.deepEqual(battlefield.snapshot('draft').navigationModifiersAt([0, 1]), [7]);
+  assert.deepEqual(battlefield.snapshot('draft').navigationModifiersFollowing(1), [7]);
+  assert.deepEqual(battlefield.snapshot('draft').navigationModifiersFrom({ type: 'UNIT', unitId: 1 }), [7]);
+  assert.equal(battlefield.snapshot('draft').navigationMaps.WALK.cells[0].passable, true);
+  assert.equal(battlefield.snapshot('draft').navigationMaps.WALK.cells[1].passable, false);
   assert.equal(published.navigationMaps.WALK.cells[0].passable, false);
   assert.deepEqual(published.unitsAt([0, 0]).map(unit => unit.id), [1]);
 
   battlefield.drop();
-  assert.equal(battlefield.navigationMaps, published.navigationMaps);
-  assert.deepEqual(battlefield.view.unitsAt([0, 0]).map(unit => unit.id), [1]);
-  assert.deepEqual(battlefield.occupancyAt([0, 0], 'DEPLOYMENT'), [1]);
-  assert.deepEqual(battlefield.navigationModifiersAt([0, 0]), [7]);
+  assert.equal(battlefield.snapshot('draft').navigationMaps, published.navigationMaps);
+  assert.deepEqual(battlefield.snapshot('draft').unitsAt([0, 0]).map(unit => unit.id), [1]);
+  assert.deepEqual(battlefield.snapshot('draft').occupancyAt([0, 0], 'DEPLOYMENT'), [1]);
+  assert.deepEqual(battlefield.snapshot('draft').navigationModifiersAt([0, 0]), [7]);
   assert.deepEqual(moved.unitsAt([0, 1]).map(unit => unit.id), [1]);
   assert.equal(moved.navigationMaps.WALK.cells[1].passable, false);
 });
@@ -127,7 +127,7 @@ test('draft removal maintains support, blocking and lifetime projections before 
     { type: 'SET_BLOCKING_RELATIONS', relations: [{ blockerUnitId: 1, blockedUnitId: 3 }] },
   ]);
   battlefield.apply();
-  const published = battlefield.snapshot();
+  const published = battlefield.snapshot('state');
   const finished = { ...effect, finished: true, participating: false };
   const facts = battlefield.advance([
     { type: 'UPDATE_UNIT', unit: { ...blocked, effects: { ...blocked.effects, instances: [finished] } } },
@@ -138,43 +138,20 @@ test('draft removal maintains support, blocking and lifetime projections before 
     { unitId: 1, reason: 'RETREAT' },
   ]);
   assert.deepEqual(facts.lostSupports, [support]);
-  assert.equal(battlefield.view.supportOf(2), undefined);
-  assert.equal(battlefield.view.blockerOf(3), undefined);
-  assert.deepEqual(battlefield.view.blockedBy(1), []);
-  assert.equal(battlefield.effectLifetimes.timed.size, 0);
-  assert.equal(battlefield.effectLifetimes.dependents.get('UNIT:1')?.size ?? 0, 0);
+  assert.equal(battlefield.snapshot('draft').supportOf(2), undefined);
+  assert.equal(battlefield.snapshot('draft').blockerOf(3), undefined);
+  assert.deepEqual(battlefield.snapshot('draft').blockedBy(1), []);
+  assert.equal(battlefield.snapshot('draft').effectLifetimes.timed.size, 0);
+  assert.equal(battlefield.snapshot('draft').effectLifetimes.dependents.get('UNIT:1')?.size ?? 0, 0);
   assert.equal(published.supportOf(2), 1);
   assert.equal(published.blockerOf(3), 1);
   assert.equal(published.blockingUsedCapacity(1), 1);
   assert.equal(published.effectLifetimes.timed.size, 1);
 
   battlefield.drop();
-  assert.equal(battlefield.view.supportOf(2), 1);
-  assert.equal(battlefield.view.blockerOf(3), 1);
-  assert.equal(battlefield.effectLifetimes, published.effectLifetimes);
-});
-
-test('fork starts from the current draft and remains independent of publication and later advances', () => {
-  const battlefield = create();
-  battlefield.advance([registration(unit(1))]);
-  const fork = battlefield.fork();
-  const initial = fork.snapshot();
-  assert.equal(initial.getUnit(1), battlefield.view.getUnit(1));
-  assert.deepEqual(battlefield.snapshot().unitIds, []);
-
-  battlefield.drop();
-  assert.deepEqual(battlefield.unitIds, []);
-  assert.deepEqual(fork.unitIds, [1]);
-  fork.advance([updateHp(fork, 1, 30)]);
-  assert.equal(fork.view.getUnit(1).vitality.hp, 30);
-  assert.equal(initial.getUnit(1).vitality.hp, 100);
-  fork.drop();
-  assert.equal(fork.view.getUnit(1).vitality.hp, 100);
-
-  battlefield.advance([registration(unit(2, 2))]);
-  battlefield.apply();
-  assert.deepEqual(fork.unitIds, [1]);
-  assert.deepEqual(battlefield.unitIds, [2]);
+  assert.equal(battlefield.snapshot('draft').supportOf(2), 1);
+  assert.equal(battlefield.snapshot('draft').blockerOf(3), 1);
+  assert.equal(battlefield.snapshot('draft').effectLifetimes, published.effectLifetimes);
 });
 
 test('failed advances preserve both versions when applying changes or building derived indexes fails', () => {
@@ -186,46 +163,48 @@ test('failed advances preserve both versions when applying changes or building d
   assert.throws(() => battlefield.advance([
     registration(unit(2)), registration(unit(1)),
   ]), /duplicate unit/);
-  assert.equal(battlefield.view.getUnit(1), before.getUnit(1));
-  assert.deepEqual(battlefield.unitIds, [1]);
+  assert.equal(battlefield.snapshot('draft').getUnit(1), before.getUnit(1));
+  assert.deepEqual(battlefield.snapshot('draft').unitIds, [1]);
 
   const claim = { position: [0, 1], slot: 'DEPLOYMENT', type: 'PRESENT' };
   assert.throws(() => battlefield.advance([
     registration(unit(2, 1, {}, { occupancy: { claims: [claim] } })),
     registration(unit(3, 1, {}, { occupancy: { claims: [claim] } })),
   ]), /occupancy slot is already claimed/);
-  assert.deepEqual(battlefield.unitIds, [1]);
-  assert.deepEqual(battlefield.occupancyAt([0, 1], 'DEPLOYMENT'), []);
-  assert.equal(battlefield.navigationMaps, before.navigationMaps);
-  assert.equal(battlefield.snapshot().getUnit(1).vitality.hp, 100);
-  assert.equal(battlefield.view.getUnit(1).vitality.hp, 80);
+  assert.deepEqual(battlefield.snapshot('draft').unitIds, [1]);
+  assert.deepEqual(battlefield.snapshot('draft').occupancyAt([0, 1], 'DEPLOYMENT'), []);
+  assert.equal(battlefield.snapshot('draft').navigationMaps, before.navigationMaps);
+  assert.equal(battlefield.snapshot('state').getUnit(1).vitality.hp, 100);
+  assert.equal(battlefield.snapshot('draft').getUnit(1).vitality.hp, 80);
 });
 
-test('transact restores the exact published and draft versions even after apply and drop', () => {
+test('drop rolls back a failed settlement to the published version and permits retry', () => {
   const battlefield = create();
   battlefield.advance([registration(unit(1))]);
   battlefield.apply();
-  battlefield.advance([updateHp(battlefield, 1, 80)]);
-  const published = battlefield.snapshot();
-  const draft = battlefield.snapshot('draft');
+  const published = battlefield.snapshot('state');
+  const failure = new Error('abort settlement');
 
-  assert.throws(() => battlefield.transact(current => {
-    current.advance([updateHp(current, 1, 50)]);
-    current.apply();
-    current.advance([updateHp(current, 1, 20)]);
-    current.drop();
-    throw new Error('abort both versions');
-  }), /abort both versions/);
-  assert.equal(battlefield.snapshot().getUnit(1), published.getUnit(1));
-  assert.equal(battlefield.view.getUnit(1), draft.getUnit(1));
+  assert.throws(() => {
+    try {
+      battlefield.advance([updateHp(battlefield, 1, 80)]);
+      battlefield.advance([registration(unit(2, 1))]);
+      assert.equal(battlefield.snapshot('draft').getUnit(1).vitality.hp, 80);
+      assert.deepEqual(battlefield.snapshot('state').unitIds, [1]);
+      throw failure;
+    } finally {
+      battlefield.drop();
+    }
+  }, error => error === failure);
+  assert.equal(battlefield.snapshot('state').getUnit(1), published.getUnit(1));
+  assert.equal(battlefield.snapshot('draft').getUnit(1), published.getUnit(1));
+  assert.deepEqual(battlefield.snapshot('draft').unitIds, [1]);
 
-  const hp = battlefield.transact(current => {
-    current.advance([updateHp(current, 1, 70)]);
-    return current.view.getUnit(1).vitality.hp;
-  });
-  assert.equal(hp, 70);
-  assert.equal(battlefield.snapshot().getUnit(1).vitality.hp, 100);
-  assert.equal(battlefield.view.getUnit(1).vitality.hp, 70);
+  battlefield.advance([updateHp(battlefield, 1, 70)]);
+  assert.equal(battlefield.snapshot('state').getUnit(1).vitality.hp, 100);
+  assert.equal(battlefield.snapshot('draft').getUnit(1).vitality.hp, 70);
+  battlefield.apply();
+  assert.equal(battlefield.snapshot('state').getUnit(1).vitality.hp, 70);
 });
 
 test('advance reports actual transient registration and removal while apply performs no replay', () => {
@@ -236,10 +215,10 @@ test('advance reports actual transient registration and removal while apply perf
   ]);
   assert.deepEqual(facts.registeredUnitIds, [1]);
   assert.equal(facts.removedUnits[0].unit, registered);
-  assert.deepEqual(battlefield.unitIds, []);
-  const maps = battlefield.navigationMaps;
+  assert.deepEqual(battlefield.snapshot('draft').unitIds, []);
+  const maps = battlefield.snapshot('draft').navigationMaps;
   battlefield.apply();
   battlefield.apply();
-  assert.deepEqual(battlefield.snapshot().unitIds, []);
-  assert.equal(battlefield.navigationMaps, maps);
+  assert.deepEqual(battlefield.snapshot('state').unitIds, []);
+  assert.equal(battlefield.snapshot('draft').navigationMaps, maps);
 });

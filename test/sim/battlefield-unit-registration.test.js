@@ -45,16 +45,15 @@ const definition = () => ({
 });
 
 const modes = [
-  ['public apply', () => createBattlefieldRuntime({ map: map() })],
-  ['custom copier apply', () => createBattlefieldRuntime({ map: map() }, unit => ({ ...unit }))],
-  ['runtime apply', () => BattlefieldRuntime.create({ map: map() }, copyUnitSnapshot)],
+  ['public advance', () => createBattlefieldRuntime({ map: map() })],
+  ['runtime advance', () => BattlefieldRuntime.create({ map: map() })],
 ];
 
 for (const [name, create] of modes) {
   test(`battlefield ${name} rejects unpaired configured capabilities atomically at registration`, () => {
     const runtime = create();
     const unit = initializeUnit({ id: 1, definition: definition(), position: [0, 0] });
-    const maps = runtime.navigationMaps;
+    const maps = runtime.snapshot('draft').navigationMaps;
     for (const key of Object.keys(configuredCapabilities)) {
       const missingState = { ...unit };
       delete missingState[key];
@@ -66,14 +65,14 @@ for (const [name, create] of modes) {
           { type: 'REGISTER_UNIT', unit: { ...unit, id: 2 } },
           { type: 'REGISTER_UNIT', unit: invalid },
         ]), new RegExp(`capability ${key} configuration and state must be paired`));
-        assert.deepEqual(runtime.unitIds, []);
-        assert.equal(runtime.navigationMaps, maps);
-        assert.deepEqual(runtime.unitsAt([0, 0]), []);
+        assert.deepEqual(runtime.snapshot('draft').unitIds, []);
+        assert.equal(runtime.snapshot('draft').navigationMaps, maps);
+        assert.deepEqual(runtime.snapshot('draft').unitsAt([0, 0]), []);
       }
     }
     runtime.advance([{ type: 'REGISTER_UNIT', unit }]);
-    assert.equal(runtime.getUnit(1).definition, unit.definition);
-    assert.deepEqual(runtime.unitsAt([0, 0]).map(value => value.id), [1]);
+    assert.equal(runtime.snapshot('draft').getUnit(1).definition, unit.definition);
+    assert.deepEqual(runtime.snapshot('draft').unitsAt([0, 0]).map(value => value.id), [1]);
   });
 
   test(`battlefield ${name} preserves configured capability composition on update`, () => {
@@ -81,7 +80,7 @@ for (const [name, create] of modes) {
     const unit = initializeUnit({ id: 1, definition: definition(), position: [0, 0] });
     const bare = initializeUnit({ id: 2, definition: { id: 'bare' }, position: [2, 0] });
     runtime.advance([{ type: 'REGISTER_UNIT', unit }, { type: 'REGISTER_UNIT', unit: bare }]);
-    const maps = runtime.navigationMaps;
+    const maps = runtime.snapshot('draft').navigationMaps;
     for (const key of Object.keys(configuredCapabilities)) {
       const missingState = { ...unit };
       delete missingState[key];
@@ -90,21 +89,21 @@ for (const [name, create] of modes) {
           { type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 1, position: [1, 0] },
           { type: 'UPDATE_UNIT', unit: invalid },
         ]), new RegExp(`capability ${key} state cannot be added or removed during update`));
-        assert.deepEqual(runtime.getUnit(1).position, [0, 0]);
-        assert.deepEqual(runtime.unitIds, [1, 2]);
-        assert.equal(runtime.navigationMaps, maps);
+        assert.deepEqual(runtime.snapshot('draft').getUnit(1).position, [0, 0]);
+        assert.deepEqual(runtime.snapshot('draft').unitIds, [1, 2]);
+        assert.equal(runtime.snapshot('draft').navigationMaps, maps);
       }
     }
     const updated = { ...unit, action: { ...unit.action, readyAtTick: 7, recoveryUntilTick: 8 },
       spatialPresence: { present: false }, occupancy: { claims: [] } };
     runtime.advance([{ type: 'UPDATE_UNIT', unit: updated }]);
-    assert.deepEqual(runtime.getUnit(1).action, updated.action);
-    assert.deepEqual(runtime.unitsAt([0, 0]), []);
+    assert.deepEqual(runtime.snapshot('draft').getUnit(1).action, updated.action);
+    assert.deepEqual(runtime.snapshot('draft').unitsAt([0, 0]), []);
     const restored = { ...updated };
     delete restored.spatialPresence;
     delete restored.occupancy;
     runtime.advance([{ type: 'UPDATE_UNIT', unit: restored }]);
-    assert.deepEqual(runtime.unitsAt([0, 0]).map(value => value.id), [1]);
+    assert.deepEqual(runtime.snapshot('draft').unitsAt([0, 0]).map(value => value.id), [1]);
   });
 }
 
@@ -131,7 +130,7 @@ declare const map: BattlefieldMap;
 const unit: Unit<ActingUnitDefinition> = { id: 1, definition, position: [0, 0] };
 const battlefield = createBattlefieldRuntime({ map });
 battlefield.advance([{ type: 'REGISTER_UNIT', unit }]);
-const custom = createBattlefieldRuntime({ map }, (unit: Unit<ActingUnitDefinition>) => ({ ...unit }));
+const custom = createBattlefieldRuntime<Unit<ActingUnitDefinition>>({ map });
 custom.advance([{ type: 'REGISTER_UNIT', unit }]);
 `);
     const program = ts.createProgram([path], {

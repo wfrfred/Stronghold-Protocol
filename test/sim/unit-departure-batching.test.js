@@ -80,7 +80,8 @@ function fixture() {
 for (const domain of ['deployment', 'predefined']) {
   test(`${domain}: successive departures share mechanism updates from skill finish damage`, () => {
     const { battlefield, resources, execution } = fixture();
-    const state = createBattleState(battlefield.fork(), execution, undefined, 1);
+    const before = battlefield.snapshot('state');
+    const state = createBattleState(battlefield, execution, undefined, 1);
     if (domain === 'deployment') {
       resolveDeploymentCommands(state, [
         { type: 'RETREAT_UNIT', unitId: 0 },
@@ -103,8 +104,8 @@ for (const domain of ['deployment', 'predefined']) {
       );
     }
 
-    assert.equal(state.battlefield.view.getMechanism(20).effectSource.state.consumed, 2);
-    assert.equal(battlefield.getMechanism(20).effectSource.state.consumed, 0);
+    assert.equal(state.battlefield.snapshot("draft").getMechanism(20).effectSource.state.consumed, 2);
+    assert.equal(before.getMechanism(20).effectSource.state.consumed, 0);
     assert.deepEqual(state.removedUnits.map(unit => unit.unitId), [0, 1]);
     assert.equal(state.events.filter(event => event.type === 'SKILL_FINISHED').length, 2);
     assert.equal(getUnit(state, 2).vitality.hp, 98);
@@ -155,8 +156,8 @@ for (const domain of ['deployment', 'predefined']) {
     }
 
     assert.deepEqual(state.removedUnits.map(unit => unit.unitId), [0]);
-    assert.deepEqual(battlefield.navigationModifierIds, []);
-    assert.deepEqual(battlefield.unitIds, domain === 'deployment' ? [1] : []);
+    assert.deepEqual(battlefield.snapshot("draft").navigationModifierIds, []);
+    assert.deepEqual(battlefield.snapshot("draft").unitIds, domain === 'deployment' ? [1] : []);
   });
 }
 

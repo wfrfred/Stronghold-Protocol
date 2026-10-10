@@ -1201,7 +1201,7 @@ test('core act1 m01 initializes all 12 raw crates without changing passage or FL
   const rawLevel = arknightsFixture('level_act1autochess_m01');
   const scenario = predefinedMovementScenario(rawLevel);
   const runtime = new BattleRuntime(scenario.spec);
-  const baseline = createBattlefieldRuntime({ map: scenario.spec.map }).navigationMaps;
+  const baseline = createBattlefieldRuntime({ map: scenario.spec.map }).snapshot('state').navigationMaps;
   const initial = runtime.snapshot();
   const crates = rawLevel.predefines.tokenInsts.filter(instance => instance.inst.characterKey === 'trap_1105_accrate');
   assert.equal(crates.length, 12);
@@ -1546,17 +1546,17 @@ test('core real hidden platforms grant ranged deployment support while retaining
   assert.equal(runtime.navigationMaps.FLY, originalMaps.FLY);
 
   const field = createBattlefieldRuntime({ map: scenario.spec.map });
-  field.apply(appeared.units.map(unit => ({ type: 'REGISTER_UNIT', unit })));
-  assert.deepEqual(field.occupancyAt(tile, 'SUPPORT'), [platform.id]);
-  assert.deepEqual(evaluateDeployment(field, { profile: createDeploymentProfile({ buildableType: 'RANGED' }),
+  field.advance(appeared.units.map(unit => ({ type: 'REGISTER_UNIT', unit })));
+  assert.deepEqual(field.snapshot('draft').occupancyAt(tile, 'SUPPORT'), [platform.id]);
+  assert.deepEqual(evaluateDeployment(field.snapshot('draft'), { profile: createDeploymentProfile({ buildableType: 'RANGED' }),
     tile, playerSide: 'SIDE_A' }), { type: 'ALLOWED', supportUnitId: platform.id });
-  assert.deepEqual(evaluateDeployment(field, { profile: createDeploymentProfile({ buildableType: 'MELEE' }),
+  assert.deepEqual(evaluateDeployment(field.snapshot('draft'), { profile: createDeploymentProfile({ buildableType: 'MELEE' }),
     tile, playerSide: 'SIDE_A' }), { type: 'DENIED', reason: 'BUILDABLE_TYPE' });
 
   runtime.step([{ type: 'REMOVE_PREDEFINED', definitionId, reason: 'SCRIPT' }]);
   assert.equal(runtime.snapshot().units.some(unit => unit.id === platform.id), false);
   assert.deepEqual(NavigationMap.get(runtime.navigationMaps.WALK, tile), originalCell);
   assert.equal(runtime.navigationMaps.FLY, originalMaps.FLY);
-  field.apply([{ type: 'REMOVE_UNIT', unitId: platform.id, reason: 'SCRIPT' }]);
-  assert.deepEqual(field.occupancyAt(tile, 'SUPPORT'), []);
+  field.advance([{ type: 'REMOVE_UNIT', unitId: platform.id, reason: 'SCRIPT' }]);
+  assert.deepEqual(field.snapshot('draft').occupancyAt(tile, 'SUPPORT'), []);
 });

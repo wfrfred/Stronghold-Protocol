@@ -145,11 +145,13 @@ test('modifier identity, source, order and intermediate revisions do not affect 
     addition(91, 7, modifier('another-cost', [[0, 1]], { costFloor: 17 })),
   ]);
 
-  assert.notEqual(first.navigationMaps.WALK.revision, second.navigationMaps.WALK.revision);
-  assert.deepEqual(first.navigationMaps.WALK.cells, second.navigationMaps.WALK.cells);
-  assert.equal(first.navigationMaps.WALK.contentHash, second.navigationMaps.WALK.contentHash);
-  assert.equal(NavigationMap.sameContent(first.navigationMaps.WALK, second.navigationMaps.WALK), true);
-  assert.equal(first.navigationMaps.FLY.contentHash, second.navigationMaps.FLY.contentHash);
+  const firstView = first.snapshot('draft');
+  const secondView = second.snapshot('draft');
+  assert.notEqual(firstView.navigationMaps.WALK.revision, secondView.navigationMaps.WALK.revision);
+  assert.deepEqual(firstView.navigationMaps.WALK.cells, secondView.navigationMaps.WALK.cells);
+  assert.equal(firstView.navigationMaps.WALK.contentHash, secondView.navigationMaps.WALK.contentHash);
+  assert.equal(NavigationMap.sameContent(firstView.navigationMaps.WALK, secondView.navigationMaps.WALK), true);
+  assert.equal(firstView.navigationMaps.FLY.contentHash, secondView.navigationMaps.FLY.contentHash);
 });
 
 test('dynamic projection hashes final restrictions and restores content after A to B to A prime', () => {

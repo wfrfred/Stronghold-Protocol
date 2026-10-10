@@ -38,7 +38,7 @@ const startSingleAction = (source, compiled, context) => {
     { sourceUnitId: source.id, compiled, tick: context.tick, mayStart: true },
     new CombatResources(),
   );
-  return { units: battleState.battlefield.unitIds.map(id => getUnit(battleState, id)),
+  return { units: battleState.battlefield.snapshot("draft").unitIds.map(id => getUnit(battleState, id)),
     removedUnitIds: battleState.removedUnits.map(value => value.unitId),
     events: battleState.events, execution: battleState.execution, state: actionState };
 };

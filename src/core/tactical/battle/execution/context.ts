@@ -69,7 +69,7 @@ export function advanceBattlefield(
 }
 
 export function battlefieldView(state: BattleState): BattlefieldView {
-    return state.battlefield.view;
+    return state.battlefield.snapshot("draft");
 }
 
 export function getUnit(state: BattleState, id: UnitId): Unit | undefined {

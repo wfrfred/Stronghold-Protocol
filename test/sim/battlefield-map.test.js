@@ -47,7 +47,7 @@ map.markers[0]!.position[0] = 1;
   }
 });
 
-test('battlefield forks share a map whose nested data is isolated from caller mutations', () => {
+test('battlefield versions share a map whose nested data is isolated from caller mutations', () => {
   const tile = {
     heightType: 'LOWLAND', buildableType: 'ALL', passableMask: 'ALL',
     playerSideMask: 'ALL', terrain: 'NORMAL',
@@ -60,7 +60,8 @@ test('battlefield forks share a map whose nested data is isolated from caller mu
   const blockEdges = [{ position: [0, 0], direction: 'RIGHT', blockMask: 'WALK_ONLY' }];
   const map = createBattlefieldMap(1, 1, tiles, markers, blockEdges);
   const field = createBattlefieldRuntime({ map });
-  const fork = field.fork();
+  const published = field.snapshot('state');
+  const draft = field.snapshot('draft');
 
   tile.passableMask = 'NONE';
   tile.mechanism.params.damagePerTick = 999;
@@ -68,9 +69,8 @@ test('battlefield forks share a map whose nested data is isolated from caller mu
   markers[0].position[0] = 1;
   blockEdges[0].blockMask = 'ALL';
 
-  for (const branch of [field, fork]) {
+  for (const branch of [field.snapshot('draft'), published, draft]) {
     assert.equal(branch.map, map);
-    assert.equal(branch.view.map, map);
     assert.equal(branch.map.tiles[0].passableMask, 'ALL');
     assert.equal(branch.map.tiles[0].mechanism.params.damagePerTick, 10);
     assert.deepEqual(branch.map.markers[0].position, [0, 0]);

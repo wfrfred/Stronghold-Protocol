@@ -94,7 +94,7 @@ test('blocking capacity: effect updates, participation and terminal cleanup pres
   const initialized = blocker();
   const owner = { ...initialized, vitality: { ...initialized.vitality, hp: 50 } };
   const original = effectFixtureWork(owner);
-  const work = createBattleState(original.battlefield.fork());
+  const work = createBattleState(fixtureBattlefield(original.battlefield.snapshot('draft')));
   install(work, effect, resources);
   const installed = copyUnitSnapshot(getUnit(work, 0));
   assert.equal(capacity(work), 2);
@@ -156,7 +156,7 @@ function battlefield(units) {
       blockingRelations: h.state.blockingRelations, supportRelations: h.state.supportRelations,
     })); },
     publish(work) {
-      return commit(work.battlefield.unitIds.map(id => ({ type: 'UPDATE_UNIT', unit: getUnit(work, id) })));
+      return commit(work.battlefield.snapshot("draft").unitIds.map(id => ({ type: 'UPDATE_UNIT', unit: getUnit(work, id) })));
     },
     blocked() { return h.state.blockingRelations.map(relation => relation.blockedUnitId); },
     blockingPhase(tick) {

@@ -40,7 +40,7 @@ class ProjectileSettlement {
 
     constructor(work: BattleState, services: ProjectileServices, tick: number) {
         this.#state = work;
-        this.#projectiles = new ProjectileWork(work.battlefield);
+        this.#projectiles = new ProjectileWork(battlefieldView(work));
         this.#services = services;
         this.#tick = tick;
     }

@@ -198,8 +198,8 @@ function projectileBattlefield(instances = []) {
   return battlefield;
 }
 
-function projectileInstances(battlefield) {
-  return battlefield.projectileIds.map((id) => battlefield.getProjectile(id));
+function projectileInstances(view) {
+  return view.projectileIds.map((id) => view.getProjectile(id));
 }
 
 function execution(nextProjectileId = 0) {
@@ -648,7 +648,7 @@ test("projectile runtime: a same-process immutable copy replays arrival and stop
   assert.deepEqual(actualEvents, replayEvents);
   assert.deepEqual(runtime.snapshot().projectiles, {
     nextProjectileId: copied.execution.nextProjectileId,
-    instances: projectileInstances(copied.battlefield),
+    instances: projectileInstances(copied.battlefield.snapshot("draft")),
   });
   assert.equal(
     runtime.snapshot().units.find((unit) => unit.id === 1).vitality.hp,
@@ -798,7 +798,7 @@ test("projectile runtime: bulk launch returns changes and exposes each latest in
   };
   let borrowed;
   const observed = [];
-  const launched = withProjectileOperations(previous, previousExecution.nextProjectileId, resources.projectiles, 0, (operations) => {
+  const launched = withProjectileOperations(previous.snapshot("draft"), previousExecution.nextProjectileId, resources.projectiles, 0, (operations) => {
     borrowed = operations;
     for (let index = 0; index < 32; index++) {
       assert.equal(operations.launch(program.ref, input), index);
@@ -811,7 +811,7 @@ test("projectile runtime: bulk launch returns changes and exposes each latest in
   input.position[0] = 999;
   input.destination[0] = 999;
   input.initialState.history.push(2);
-  assert.deepEqual(previous.projectileIds, []);
+  assert.deepEqual(previous.snapshot("draft").projectileIds, []);
   assert.equal(previousExecution.nextProjectileId, 0);
   assert.equal(launched.nextProjectileId, 32);
   assert.equal(launched.result, observed[0]);
@@ -821,22 +821,23 @@ test("projectile runtime: bulk launch returns changes and exposes each latest in
   assert.throws(() => borrowed.get(0), /no longer active/);
   assert.throws(() => borrowed.launch(program.ref, input), /no longer active/);
 
-  const released = previous.fork();
+  const original = previous.snapshot("draft");
+  const released = previous;
   released.advance(launched.changes);
-  assert.deepEqual(projectileInstances(released), observed);
-  assert.deepEqual(previous.projectileIds, []);
-  const progressed = released.fork();
-  const work = createBattleState(progressed, { ...previousExecution, nextProjectileId: launched.nextProjectileId });
-  const sibling = createBattleState(released.fork(), work.execution);
+  assert.deepEqual(projectileInstances(released.snapshot("draft")), observed);
+  assert.deepEqual(original.projectileIds, []);
+  const launchedSnapshot = released.snapshot("draft");
+  const work = createBattleState(released, { ...previousExecution, nextProjectileId: launched.nextProjectileId });
+  const sibling = createBattleState(fixtureBattlefield(launchedSnapshot), work.execution);
   advanceProjectiles(work, resources, 1);
   advanceProjectiles(sibling, resources, 1);
-  assert.deepEqual(projectileInstances(progressed), projectileInstances(sibling.battlefield));
-  assert.equal(progressed.projectileIds.length, 32);
-  assert.equal(projectileInstances(progressed).every((instance) => instance.position[0] === 1), true);
-  assert.equal(projectileInstances(released).every((instance) => instance.position[0] === 0), true);
-  const unchanged = projectileInstances(progressed);
+  assert.deepEqual(projectileInstances(released.snapshot("draft")), projectileInstances(sibling.battlefield.snapshot("draft")));
+  assert.equal(released.snapshot("draft").projectileIds.length, 32);
+  assert.equal(projectileInstances(released.snapshot("draft")).every((instance) => instance.position[0] === 1), true);
+  assert.equal(projectileInstances(launchedSnapshot).every((instance) => instance.position[0] === 0), true);
+  const unchanged = projectileInstances(released.snapshot("draft"));
   advanceProjectiles(work, resources, 1);
-  assert.deepEqual(projectileInstances(progressed), unchanged);
+  assert.deepEqual(projectileInstances(released.snapshot("draft")), unchanged);
 });
 
 test("projectile runtime: failed launch scopes discard allocation and close borrowed operations", () => {
@@ -855,26 +856,26 @@ test("projectile runtime: failed launch scopes discard allocation and close borr
     stopDelayTicks: 1,
   };
   let borrowed;
-  assert.throws(() => withProjectileOperations(previous, previousExecution.nextProjectileId, resources.projectiles, 0, (operations) => {
+  assert.throws(() => withProjectileOperations(previous.snapshot("draft"), previousExecution.nextProjectileId, resources.projectiles, 0, (operations) => {
     borrowed = operations;
     assert.equal(operations.launch(program.ref, input), 0);
     assert.equal(operations.get(0).id, 0);
     throw new Error("launch scope failed");
   }), /launch scope failed/);
-  assert.deepEqual(previous.projectileIds, []);
+  assert.deepEqual(previous.snapshot("draft").projectileIds, []);
   assert.equal(previousExecution.nextProjectileId, 0);
   assert.throws(() => borrowed.get(0), /no longer active/);
   assert.throws(() => borrowed.launch(program.ref, input), /no longer active/);
 
-  const retried = withProjectileOperations(previous, previousExecution.nextProjectileId, resources.projectiles, 0,
+  const retried = withProjectileOperations(previous.snapshot("draft"), previousExecution.nextProjectileId, resources.projectiles, 0,
     (operations) => operations.launch(program.ref, input));
   assert.equal(retried.result, 0);
   assert.equal(retried.nextProjectileId, 1);
-  assert.deepEqual(previous.projectileIds, []);
+  assert.deepEqual(previous.snapshot("draft").projectileIds, []);
   assert.equal(previousExecution.nextProjectileId, 0);
 });
 
-test("projectile runtime: stop callbacks see latest peer progress while removals leave Battlefield forks isolated", () => {
+test("projectile runtime: stop callbacks see latest peer progress while snapshots retain earlier instances", () => {
   const resources = new CombatResources();
   const observations = [];
   let borrowed;
@@ -903,25 +904,25 @@ test("projectile runtime: stop callbacks see latest peer progress while removals
     stopDelayTicks: 0,
   });
   const empty = projectileBattlefield();
-  const launched = withProjectileOperations(empty, 0, resources.projectiles, 0, (operations) => {
+  const launched = withProjectileOperations(empty.snapshot("draft"), 0, resources.projectiles, 0, (operations) => {
     launchAt(operations, [1, 0]);
     launchAt(operations, [100, 0]);
   });
-  const battlefield = empty.fork();
+  const battlefield = empty;
   battlefield.advance([...launched.changes].reverse());
-  const progressed = battlefield.fork();
-  const work = createBattleState(progressed, execution(launched.nextProjectileId));
+  const launchedSnapshot = battlefield.snapshot("draft");
+  const work = createBattleState(battlefield, execution(launched.nextProjectileId));
   advanceProjectiles(work, resources, 1);
   assert.deepEqual(observations, [{ id: 0, first: "STOPPED", second: "FLYING" }]);
-  assert.deepEqual(progressed.projectileIds, [1]);
-  assert.deepEqual(progressed.getProjectile(1).position, [1, 0]);
-  assert.deepEqual(projectileInstances(battlefield).map((instance) => instance.progress.type), ["FLYING", "FLYING"]);
+  assert.deepEqual(battlefield.snapshot("draft").projectileIds, [1]);
+  assert.deepEqual(battlefield.snapshot("draft").getProjectile(1).position, [1, 0]);
+  assert.deepEqual(projectileInstances(launchedSnapshot).map((instance) => instance.progress.type), ["FLYING", "FLYING"]);
   assert.throws(() => borrowed.facts.getProjectile(1), /no longer active/);
 
-  const finished = progressed.fork();
-  stopProjectile(createBattleState(finished, work.execution), 1, resources, 1);
+  const progressed = battlefield.snapshot("draft");
+  stopProjectile(work, 1, resources, 1);
   assert.deepEqual(observations[1], { id: 1, first: undefined, second: "STOPPED" });
-  assert.deepEqual(finished.projectileIds, []);
+  assert.deepEqual(battlefield.snapshot("draft").projectileIds, []);
   assert.equal(progressed.getProjectile(1).progress.type, "FLYING");
   assert.equal(progressed.getProjectile(1).state.contacts, 0);
 });
@@ -935,7 +936,7 @@ test("projectile runtime: command stops share one container before advancing sur
     },
   });
   const battlefield = projectileBattlefield();
-  const launched = withProjectileOperations(battlefield, 0, resources.projectiles, 0, (operations) => {
+  const launched = withProjectileOperations(battlefield.snapshot("draft"), 0, resources.projectiles, 0, (operations) => {
     for (let index = 0; index < 32; index++) {
       operations.launch(program.ref, {
         source: null,
@@ -978,38 +979,45 @@ test("projectile runtime: command stops share one container before advancing sur
   assert.equal(containers, 1);
   assert.deepEqual(observed, ids);
   assert.deepEqual(state.events.map((event) => event.projectileId), ids);
-  const progressed = battlefield.fork();
+  const progressed = battlefield.snapshot("draft");
   assert.deepEqual(progressed.projectileIds, Array.from({ length: 16 }, (_, index) => index * 2 + 1));
   assert.equal(projectileInstances(progressed).every((instance) => instance.position[0] === 1), true);
   assert.equal(projectileInstances(before).every((instance) => instance.position[0] === 0), true);
   assert.equal(projectileInstances(before).every((instance) => instance.progress.type === "FLYING"), true);
 });
 
-test("projectile Battlefield changes: rejected batches and transactions preserve projectile instances", () => {
+test("projectile Battlefield changes: rejected batches and dropped drafts preserve published projectile instances", () => {
   const resources = new CombatResources();
   const program = registerProjectile(resources);
   const battlefield = projectileBattlefield();
-  const launched = withProjectileOperations(battlefield, 0, resources.projectiles, 0,
+  const launched = withProjectileOperations(battlefield.snapshot("draft"), 0, resources.projectiles, 0,
     (operations) => operations.launch(program.ref, {
       source: null, traceTarget: null, position: [0, 0], destination: [3, 0],
       cachedAtk: 0, speedPerTick: 1, contactRange, stopDelayTicks: 1,
     }));
   battlefield.advance(launched.changes);
-  const original = battlefield.getProjectile(0);
-  const maps = battlefield.navigationMaps;
+  battlefield.apply();
+  const original = battlefield.snapshot("draft").getProjectile(0);
+  const maps = battlefield.snapshot("draft").navigationMaps;
   assert.throws(() => battlefield.advance([
     { type: "UPDATE_PROJECTILE", projectile: { ...original, position: [1, 0] } },
     { type: "REMOVE_PROJECTILE", projectileId: 999 },
   ]), /unknown projectile/);
-  assert.equal(battlefield.getProjectile(0), original);
-  assert.equal(battlefield.navigationMaps, maps);
-  assert.throws(() => battlefield.transact((working) => {
-    working.advance([{ type: "REMOVE_PROJECTILE", projectileId: 0 }]);
-    assert.deepEqual(working.projectileIds, []);
-    throw new Error("transaction failed");
-  }), /transaction failed/);
-  assert.equal(battlefield.getProjectile(0), original);
-  assert.deepEqual(battlefield.projectileIds, [0]);
+  assert.equal(battlefield.snapshot("draft").getProjectile(0), original);
+  assert.equal(battlefield.snapshot("draft").navigationMaps, maps);
+  const failure = new Error("projectile settlement failed");
+  assert.throws(() => {
+    try {
+      battlefield.advance([{ type: "REMOVE_PROJECTILE", projectileId: 0 }]);
+      assert.deepEqual(battlefield.snapshot("draft").projectileIds, []);
+      assert.equal(battlefield.snapshot("state").getProjectile(0), original);
+      throw failure;
+    } finally {
+      battlefield.drop();
+    }
+  }, error => error === failure);
+  assert.equal(battlefield.snapshot("draft").getProjectile(0), original);
+  assert.deepEqual(battlefield.snapshot("draft").projectileIds, [0]);
 });
 
 test("projectile runtime: ordered command stops see same-tick launches and roll back together on failure", () => {

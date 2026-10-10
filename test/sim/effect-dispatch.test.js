@@ -1,4 +1,5 @@
 import { maxHp } from "../../dist/core/tactical/unit/capability/vitality/contributions.js";
+import { fixtureBattlefield } from "../helpers/battlefield.js";
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -728,7 +729,7 @@ test("effect dispatch: healing observes reception rejection without retrospectiv
   });
 
   const original = effectFixtureWork(attach(resources, unit(2, 500, ["HEAL_FREE"]), descriptor));
-  const branch = () => createBattleState(original.battlefield.fork());
+  const branch = () => createBattleState(fixtureBattlefield(original.battlefield.snapshot('draft')));
   const rejectedState = branch();
 const rejected = resolveHealing(
     rejectedState,

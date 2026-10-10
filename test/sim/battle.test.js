@@ -1132,33 +1132,39 @@ test('core battle publishes every tick once and retries a final-stage failure wi
     assert.ok(expectedSnapshot.execution.nextUnitId > before.execution.nextUnitId);
     assert.ok(expectedSnapshot.execution.nextMechanismId > before.execution.nextMechanismId);
     assert.ok(expectedSnapshot.execution.nextNavigationModifierId > before.execution.nextNavigationModifierId);
-    const fork = BattlefieldRuntime.prototype.fork;
-    const unitIds = Object.getOwnPropertyDescriptor(BattlefieldRuntime.prototype, 'unitIds').get;
+    const snapshot = BattlefieldRuntime.prototype.snapshot;
+    const spawnedId = expectedSnapshot.execution.nextUnitId - 1;
     let failures = 0;
+    let spawned = false;
     try {
-      BattlefieldRuntime.prototype.fork = function() {
-        const field = fork.call(this);
-        Object.defineProperty(field, 'unitIds', { get() {
-          const ids = unitIds.call(field);
-          if (JSON.stringify(ids) === JSON.stringify(expectedSnapshot.units.map(unit => unit.id))) {
-            assert.deepEqual(field.mechanismIds, expectedSnapshot.mechanisms.map(mechanism => mechanism.id));
-            assert.deepEqual(field.navigationModifierIds, [1]);
-            assert.deepEqual(runtime.snapshot(), before);
-            assert.equal(runtime.navigationMaps, maps);
-            failures++;
-            throw new Error('late-stage failure');
-          }
-          return ids;
-        } });
-        return field;
+      BattlefieldRuntime.prototype.snapshot = function(version) {
+        const view = snapshot.call(this, version);
+        if (version !== 'draft') return view;
+        spawned ||= view.unitIds.includes(spawnedId);
+        return new Proxy(view, {
+          get(target, property, receiver) {
+            const value = Reflect.get(target, property, receiver);
+            if (property === 'unitIds' && spawned &&
+                JSON.stringify(value) === JSON.stringify(expectedSnapshot.units.map(unit => unit.id))) {
+              assert.deepEqual(view.mechanismIds, expectedSnapshot.mechanisms.map(mechanism => mechanism.id));
+              assert.deepEqual(view.navigationModifierIds, [1]);
+              assert.deepEqual(runtime.snapshot(), before);
+              assert.equal(runtime.navigationMaps, maps);
+              failures++;
+              throw new Error('late-stage failure');
+            }
+            return value;
+          },
+        });
       };
       for (let retry = 0; retry < 2; retry++) {
+        spawned = false;
         assert.throws(() => runtime.step(commands), /late-stage failure/);
         assert.deepEqual(runtime.snapshot(), before);
         assert.equal(runtime.navigationMaps, maps);
       }
     } finally {
-      BattlefieldRuntime.prototype.fork = fork;
+      BattlefieldRuntime.prototype.snapshot = snapshot;
     }
     assert.equal(failures, 2);
     assert.deepEqual(runtime.step(commands), expected);
@@ -1170,6 +1176,10 @@ test('core battle propagates nested settlement errors and discards battlefield, 
   const sentinel = new Error('nested settlement failure');
   let fail = true;
   let activeState;
+  let observedRuntime;
+  let observedSnapshot;
+  let observedMaps;
+  let observations = 0;
   const resources = new CombatResources();
   const effect = resources.registerEffect(createEffectProgram({
     id: 'nested-failure-effect', initialize: () => ({}), ownState: state => state,
@@ -1181,6 +1191,9 @@ test('core battle propagates nested settlement errors and discards battlefield, 
       assert.equal(activeState.execution.nextUnitId, 3);
       assert.equal(activeState.actionExecutions.result().executions.length, 1);
       assert.ok(activeState.events.some(event => event.type === 'DAMAGE'));
+      assert.deepEqual(observedRuntime.snapshot(), observedSnapshot);
+      assert.equal(observedRuntime.navigationMaps, observedMaps);
+      observations++;
       if (fail) throw sentinel;
     } },
   });
@@ -1213,13 +1226,24 @@ test('core battle propagates nested settlement errors and discards battlefield, 
   });
   const runtime = new BattleRuntime(input, { combat: resources, compileAction });
   const before = runtime.snapshot();
+  observedRuntime = runtime;
+  observedSnapshot = before;
+  observedMaps = runtime.navigationMaps;
   assert.throws(() => runtime.step(), error => error === sentinel);
   assert.deepEqual(runtime.snapshot(), before);
   assert.equal(runtime.result, null);
 
   fail = false;
   const expected = new BattleRuntime(input, { combat: resources, compileAction });
-  assert.deepEqual(runtime.step(), expected.step());
+  observedRuntime = expected;
+  observedSnapshot = expected.snapshot();
+  observedMaps = expected.navigationMaps;
+  const expectedStep = expected.step();
+  observedRuntime = runtime;
+  observedSnapshot = before;
+  observedMaps = runtime.navigationMaps;
+  assert.deepEqual(runtime.step(), expectedStep);
+  assert.equal(observations, 3);
   assert.deepEqual(runtime.snapshot(), expected.snapshot());
   assert.equal(runtime.snapshot().execution.nextUnitId, 3);
   assert.equal(runtime.snapshot().actionExecution.executions.length, 1);
@@ -1265,20 +1289,23 @@ test('core clearing derived navigation fields preserves every tick, event and RN
     { type: 'MOVE', target: { position: [9, 6], reachOffset: [0.25, 0.25], randomizeReachOffset: true, reachDistance: 0.05 } },
   ], { speed: 1 / 5, maxTicks: 100 });
   const runtime = new BattleRuntime(input), replay = new BattleRuntime(input);
-  const fork = BattlefieldRuntime.prototype.fork;
+  const snapshot = BattlefieldRuntime.prototype.snapshot;
   let clearCount = 0;
   for (let tick = 0; runtime.result === null; tick++) {
     const expected = replay.step();
     let actual;
     try {
-      BattlefieldRuntime.prototype.fork = function() {
-        this.fieldCache.clear();
-        clearCount++;
-        return fork.call(this);
+      BattlefieldRuntime.prototype.snapshot = function(version) {
+        const view = snapshot.call(this, version);
+        if (version === 'draft') {
+          view.fieldCache.clear();
+          clearCount++;
+        }
+        return view;
       };
       actual = runtime.step();
     } finally {
-      BattlefieldRuntime.prototype.fork = fork;
+      BattlefieldRuntime.prototype.snapshot = snapshot;
     }
     assert.deepEqual(actual, expected);
     assert.deepEqual(runtime.snapshot(), replay.snapshot());
@@ -2262,16 +2289,17 @@ test('core visibility: movement reads one navigation projection before following
     source: { type: 'UNIT', unitId: 0 }, active: true,
     region: { type: 'FOLLOW_UNIT', unitId: 0, range: [[0, 0]], direction: 'RIGHT' }, expiresAtTick: null,
   }) }]);
-  assert.deepEqual(battlefield.navigationMaps.WALK.cells.map(cell => cell.passable), [true, false, true, true, true]);
+  assert.deepEqual(battlefield.snapshot('draft').navigationMaps.WALK.cells.map(cell => cell.passable), [true, false, true, true, true]);
 
   const moved = createBattleState(battlefield, execution);
   advanceMovement(moved, 0, { routeMoveMultiplier: 1 }, new CombatResources());
 
-  assert.deepEqual(battlefield.unitIds.map(id => battlefield.getUnit(id).position), [[2, 0], [2, 0]]);
+  const view = battlefield.snapshot('draft');
+  assert.deepEqual(view.unitIds.map(id => view.getUnit(id).position), [[2, 0], [2, 0]]);
   assert.deepEqual(moved.events.filter(event => event.type === 'NAVIGATION').map(event => [event.unitId, event.outcome.type]),
     [[0, 'ARRIVED'], [1, 'ARRIVED']]);
-  assert.deepEqual(battlefield.navigationMaps.WALK.cells.map(cell => cell.passable), [true, true, false, true, true]);
-  assert.deepEqual(battlefield.navigationModifiersAt([0, 2]), [0]);
+  assert.deepEqual(view.navigationMaps.WALK.cells.map(cell => cell.passable), [true, true, false, true, true]);
+  assert.deepEqual(view.navigationModifiersAt([0, 2]), [0]);
   assert.deepEqual(moved.execution, execution);
 });
 

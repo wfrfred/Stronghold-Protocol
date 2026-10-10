@@ -122,6 +122,40 @@ test("effect sources: inactive registration is retained and participation keeps 
     assert.deepEqual([1, 2, 3].map(id => getUnit(work, id).effects.nextInstanceId), [1, 1, 1]);
 });
 
+test("effect sources: one installation reads nested damage before configuring its next effect", () => {
+    const resources = new CombatResources();
+    const trigger = receiverEffect(resources, "installation-damage", {
+        lifecycle: {
+            start: context => {
+                context.damage({ sourceUnitId: 1, targetUnitId: 2, damageType: "TRUE", operands: createDamageOperands(30) });
+            },
+        },
+    });
+    const marker = receiverEffect(resources, "installation-hp-marker");
+    let before;
+    const { source } = sourceProgram(resources, marker, {
+        selectInitial: () => [1],
+        install: input => install => {
+            before = input.battlefield;
+            const triggered = install(trigger.ref, { scopes: [] });
+            assert.equal(triggered.type, "INSTALLED");
+            const target = input.battlefield.getUnit(2);
+            assert.equal(target.vitality.hp, 70);
+            return install(marker.ref, {
+                scopes: [],
+                initialState: { addition: 100 - target.vitality.hp },
+            });
+        },
+    });
+    const work = fixtureWork(source);
+    reconcileEffectSources(work, resources, 0);
+
+    assert.equal(getUnit(work, 2).vitality.hp, 70);
+    assert.equal(before.getUnit(2).vitality.hp, 100);
+    assert.equal(getUnit(work, 1).effects.instances.find(instance => instance.programRef === marker.ref).state.addition, 30);
+    assert.equal(attack(work, resources, 1), 140);
+});
+
 test("effect sources: rejected installation is a committed attempt and repeated notifications do not retry it", () => {
     const resources = new CombatResources();
     let admissions = 0;

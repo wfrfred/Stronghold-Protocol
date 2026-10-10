@@ -48,8 +48,6 @@ export function resolveDeploymentCommands(
     tick: number,
     resources: UnitLifecycleResources,
 ): void {
-    const battlefield = battlefieldView(state);
-
     for (const command of commands) {
         if (
             command.type !== "DEPLOY_UNIT" &&
@@ -68,6 +66,7 @@ export function resolveDeploymentCommands(
             continue;
         }
 
+        const battlefield = battlefieldView(state);
         let existing: (Unit & Occupancy) | undefined;
         let definition: DeployableUnitDefinition;
 

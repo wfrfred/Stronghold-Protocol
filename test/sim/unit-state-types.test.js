@@ -77,15 +77,15 @@ declare const fresh: EffectInstance<{ readonly strength: 5 }> & { readonly id: 1
 const reconciled = reconcileUnitNavigation(narrow, maps);
 const moved = stepRoutedUnit(narrow, movementContext).unit;
 const copied = copyUnitSnapshot(narrow);
-const custom = BattlefieldRuntime.create<Narrow>({ map }, value => ({ ...value }));
+const custom = BattlefieldRuntime.create<Narrow>({ map });
 custom.advance([{ type: 'REGISTER_UNIT', unit: narrow }]);
 custom.advance([{ type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 1, position: [1, 1] }]);
-const stored = custom.getUnit(1)!;
-const viewed = custom.view.getUnit(1)!;
-const forked = custom.fork().getUnit(1)!;
+const stored = custom.snapshot('draft').getUnit(1)!;
+custom.apply();
+const captured = custom.snapshot('state').getUnit(1)!;
 const removed = custom.advance([{ type: 'REMOVE_UNIT', unitId: 1, reason: 'SCRIPT' }]).removedUnits[0]!.unit;
-const publicRuntime = createBattlefieldRuntime<Narrow>({ map }, value => ({ ...value }));
-const publicStored = publicRuntime.getUnit(1)!;
+const publicRuntime = createBattlefieldRuntime<Narrow>({ map });
+const publicStored = publicRuntime.snapshot('draft').getUnit(1)!;
 const applied = applyBattlefieldChanges<Narrow>(previous, [{ type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 1, position: [1, 1] }]).content.units.get(1)!;
 const settled = settleBattlefieldState<Narrow>(map, maps, previous, previous, dependencies).state.units.get(1)!;
 const fullySettled = settleBattlefieldStateFully<Narrow>(map, maps, previous, previous).state.units.get(1)!;
@@ -108,8 +108,8 @@ const changed = withEffectLifecycle(fresh, { started: true });
   const positive = `
 const definitionId: 'stable-definition' = stored.definition.id;
 const identity: 1 = stored.id;
-const tags: 'kept'[] = [reconciled.tag, moved.tag, stored.tag, viewed.tag, forked.tag, removed.tag, publicStored.tag, applied.tag, settled.tag, fullySettled.tag, attacked.tag, defended.tag, resisted.tag, maxHp.tag, coordinated.tag, damaged.tag, healed.tag, status.tag, projected.tag, bound.tag, registered.tag, replaced.tag, emptied.tag];
-const routes: RoutedLocomotionState[] = [reconciled.locomotion, copied.locomotion, stored.locomotion, viewed.locomotion, forked.locomotion, applied.locomotion, settled.locomotion, fullySettled.locomotion];
+const tags: 'kept'[] = [reconciled.tag, moved.tag, stored.tag, captured.tag, removed.tag, publicStored.tag, applied.tag, settled.tag, fullySettled.tag, attacked.tag, defended.tag, resisted.tag, maxHp.tag, coordinated.tag, damaged.tag, healed.tag, status.tag, projected.tag, bound.tag, registered.tag, replaced.tag, emptied.tag];
+const routes: RoutedLocomotionState[] = [reconciled.locomotion, copied.locomotion, stored.locomotion, captured.locomotion, applied.locomotion, settled.locomotion, fullySettled.locomotion];
 const vitality: VitalityState = copied.vitality;
 const initialized = initializeUnit({ id: 2, definition: { id: 'hp', vitality: { maxHp: 100 } }, position: [0, 0] });
 const initializedHp: number = copyUnitSnapshot(initialized).vitality.hp;
@@ -132,8 +132,6 @@ declare const member: EffectInstance<StateA> | EffectInstance<StateB>;
 const memberwise: (Omit<EffectInstance<StateA>, keyof EffectLifecycleFacts> & EffectLifecycleFacts) | (Omit<EffectInstance<StateB>, keyof EffectLifecycleFacts> & EffectLifecycleFacts) = withEffectLifecycle(member, { started: true });
 const target: ContributionTarget = updateAttackContributions;
 const throughTarget: 'kept' = target(narrow, transition).tag;
-const inferred = createBattlefieldRuntime({ map }, (value: StableUnit<Narrow>) => ({ ...value }));
-const inferredTag: 'kept' = inferred.getUnit(1)!.tag;
 type OptionalRouted = Unit<Definition> & { readonly locomotion?: RoutedLocomotionState; readonly tag: 'optional' };
 declare const optional: OptionalRouted;
 const optionalResult = reconcileUnitNavigation(optional, maps);
@@ -148,16 +146,13 @@ if (optionalResult.locomotion !== undefined) {
     "const staleMovedPosition: 0 = moved.position[0];",
     "const staleMovedFollowing: Following = moved.locomotion.mainRoute.navigation.execution.activity;",
     "const stalePosition: 0 = stored.position[0];",
-    "const staleViewedPosition: 0 = viewed.position[0];",
-    "const staleForkPosition: 0 = forked.position[0];",
+    "const staleSnapshotPosition: 0 = captured.position[0];",
     "const staleRemovedPosition: 0 = removed.position[0];",
     "const stalePublicPosition: 0 = publicStored.position[0];",
     "const staleAppliedPosition: 0 = applied.position[0];",
     "const staleSettledFollowing: Following = settled.locomotion.mainRoute.navigation.execution.activity;",
     "const staleFullySettledFollowing: Following = fullySettled.locomotion.mainRoute.navigation.execution.activity;",
     "const erasedExtra = copied.tag;",
-    "const badCopier = BattlefieldRuntime.create<Narrow>({ map }, (value: Narrow) => ({ ...value }));",
-    "const lossyCopier = BattlefieldRuntime.create<Narrow>({ map }, copyUnitSnapshot);",
     "const staleAttack: readonly [] = attacked.offense.attack.entries;",
     "const staleStatus: readonly [] = status.status.contributions;",
     "const staleBoundHp: 100 = bound.vitality.hp;",

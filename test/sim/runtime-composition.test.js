@@ -228,6 +228,9 @@ function scenario({ failure = null, cancelled = false } = {}) {
         assert.equal(battlefield.getUnit(2).action.readyAtTick, 101);
         throw new Error("late composition failure");
       }
+      if (fault.enabled && failure === "reentrant" && source.effectSource.state.consumed > 0) {
+        runtime.step();
+      }
       return tick >= 3;
     },
   });
@@ -339,7 +342,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
 }
 
 test("runtime composition: late exceptions and invalid settlement discard every domain, then retry the same identities and terminal trace", () => {
-  for (const failure of ["late-source", "invalid-damage"]) {
+  for (const failure of ["late-source", "invalid-damage", "reentrant"]) {
     const failed = scenario({ failure });
     const clean = scenario();
     const events = [...failed.runtime.step().events];
@@ -353,7 +356,11 @@ test("runtime composition: late exceptions and invalid settlement discard every 
     assert.equal(effect(before, 0, failed.scoped).state.starts, 1);
     assert.equal(resolveAttackPower(0, view(before), failed.resources.computations), 17);
 
-    assert.throws(() => failed.runtime.step(), failure === "late-source" ? /late composition failure/ : RangeError);
+    assert.throws(() => failed.runtime.step(), {
+      "late-source": /late composition failure/,
+      "invalid-damage": RangeError,
+      "reentrant": /battle step is already active/,
+    }[failure]);
     assert.deepEqual(failed.runtime.snapshot(), before);
     assert.equal(failed.runtime.navigationMaps, maps);
     assert.deepEqual(failed.launches.map((launch) => [launch.id, launch.executionId]), [[0, 0], [1, 0], [2, 1]]);

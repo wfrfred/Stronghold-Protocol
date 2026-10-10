@@ -40,7 +40,7 @@ test('battle state: publishing accepts the already advanced state and drop disca
   const spawned = unit(8);
   registerUnit(state, spawned);
   removeUnit(state, 1, 'DEATH');
-  assert.deepEqual(state.battlefield.unitIds, [8]);
+  assert.deepEqual(state.battlefield.snapshot("draft").unitIds, [8]);
   state.battlefield.drop();
   assert.equal(getUnit(state, 1), moved);
   assert.equal(getUnit(state, 8), undefined);
@@ -61,12 +61,11 @@ test('battle state: no-op updates and missing removals do not create registratio
   assert.deepEqual(state.removedUnits, []);
 });
 
-test('battle state: a batch updates the common draft while snapshots and forks remain isolated', () => {
+test('battle state: a batch updates the common draft while fixed snapshots retain earlier units', () => {
   const first = unit(1);
   const second = unit(2);
   const state = fixture(first, second);
   const snapshot = state.battlefield.snapshot('draft');
-  const fork = state.battlefield.fork();
   const moved = { ...first, position: [3, 0] };
   const spawned = unit(8);
   updateUnits(state, [moved, second, spawned]);
@@ -74,8 +73,6 @@ test('battle state: a batch updates the common draft while snapshots and forks r
   assert.equal(getUnit(state, 8), spawned);
   assert.equal(snapshot.getUnit(1), first);
   assert.equal(snapshot.getUnit(8), undefined);
-  assert.equal(fork.getUnit(1), first);
-  assert.equal(fork.getUnit(8), undefined);
   assert.deepEqual(state.registeredUnitIds, [8]);
 });
 

@@ -1,3 +1,4 @@
+import { fixtureBattlefield } from "../helpers/battlefield.js";
 import { ActionExecutionWork } from "../../dist/core/tactical/unit/capability/action/internal/executions.js";
 import { attack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import { test } from "node:test";
@@ -254,7 +255,7 @@ updateEffectState(
     },
     resources, 0,
   );
-  const branchState = createBattleState(work.battlefield.fork());
+  const branchState = createBattleState(fixtureBattlefield(work.battlefield.snapshot('draft')));
   const updated = work;
 updateEffectState(updated, 2, 2, program.ref, { remainingAmount: 100 }, resources, 0);
   const updatedUnit = getUnit(updated, 2);
@@ -504,7 +505,7 @@ test("effects: expiration is independent of source and lifetime scope cleanup do
       .effects.instances.filter((effect) => effect.participating)
       .map((effect) => effect.id);
   expireEffects(work, 4, resources);
-  const originalState = createBattleState(work.battlefield.fork(), work.execution, work.actionExecutions);
+  const originalState = createBattleState(fixtureBattlefield(work.battlefield.snapshot('draft')), work.execution, work.actionExecutions);
   const expired = work;
   expireEffects(expired, 5, resources);
   assert.deepEqual(activeIds(expired), [2, 3, 4]);
@@ -514,7 +515,7 @@ test("effects: expiration is independent of source and lifetime scope cleanup do
     getUnit(expired, 2).effects.instances.map((effect) => effect.id),
     [2, 3, 4],
   );
-  const singleAction = createBattleState(originalState.battlefield.fork(), originalState.execution, actions);
+  const singleAction = createBattleState(fixtureBattlefield(originalState.battlefield.snapshot('draft')), originalState.execution, actions);
   closeEffectLifetimes(singleAction, [{ type: "ACTION", executionId: 10 }], resources, 0);
   assert.deepEqual(activeIds(singleAction), [1, 3, 4]);
   closeEffectLifetimes(originalState, [{ type: "ACTION", executionId: 10 }, { type: "ACTION", executionId: 11 }], resources, 0);

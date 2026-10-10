@@ -55,10 +55,10 @@ function fixture(count) {
 test("effect lifetime index: successive domain states reuse the Battlefield projection", () => {
     const count = 128;
     const battlefield = fixture(count);
-    const projection = battlefield.view.effectLifetimes;
+    const projection = battlefield.snapshot("draft").effectLifetimes;
     for (let phase = 0; phase < 12; phase++) {
         const state = createBattleState(battlefield);
-        assert.equal(state.battlefield.view.effectLifetimes, projection);
+        assert.equal(state.battlefield.snapshot("draft").effectLifetimes, projection);
         assert.equal(effectDependents(state, { type: "UNIT", unitId: 0 }).length, count);
         assert.equal(effectTickCandidates(state).length, count);
     }
@@ -66,7 +66,7 @@ test("effect lifetime index: successive domain states reuse the Battlefield proj
 
 test("effect lifetime index: draft transitions maintain changed Unit relations and retain published projections", () => {
     const battlefield = fixture(128);
-    const baseline = battlefield.view.effectLifetimes;
+    const baseline = battlefield.snapshot("draft").effectLifetimes;
     const initial = createBattleState(battlefield);
     const snapshot = battlefield.snapshot("state");
     const current = getUnit(initial, 7);
@@ -112,29 +112,33 @@ test("effect lifetime index: finished instances leave entity and time indexes wi
     assert.equal(battlefield.snapshot("state").getUnit(2).effects.instances[0].finished, false);
 });
 
-test("effect lifetime index: Battlefield forks and failed transactions retain their own committed projections", () => {
+test("effect lifetime index: dropping a failed draft retains the published projection and fixed snapshots", () => {
     const battlefield = fixture(4);
-    const fork = battlefield.fork();
-    const baseline = battlefield.view.effectLifetimes;
-    assert.equal(fork.view.effectLifetimes, baseline);
+    const snapshot = battlefield.snapshot("state");
+    const baseline = battlefield.snapshot("draft").effectLifetimes;
+    assert.equal(snapshot.effectLifetimes, baseline);
     const moved = {
-        ...fork.view.getUnit(2),
+        ...battlefield.snapshot("draft").getUnit(2),
         effects: {
-            ...fork.view.getUnit(2).effects,
-            instances: fork.view.getUnit(2).effects.instances.map(instance => ({
+            ...battlefield.snapshot("draft").getUnit(2).effects,
+            instances: battlefield.snapshot("draft").getUnit(2).effects.instances.map(instance => ({
                 ...instance,
                 scopes: [{ type: "UNIT", unitId: 1 }],
             })),
         },
     };
-    fork.advance([{ type: "UPDATE_UNIT", unit: moved }]);
-    assert.deepEqual(effectDependents(createBattleState(fork), { type: "UNIT", unitId: 0 }).map(ref => ref.unitId), [0, 1, 3]);
-    assert.equal(effectDependents(createBattleState(battlefield), { type: "UNIT", unitId: 0 }).length, 4);
-    assert.throws(() => battlefield.transact(current => {
-        current.advance([{ type: "UPDATE_UNIT", unit: moved }]);
-        assert.equal(effectDependents(createBattleState(current), { type: "UNIT", unitId: 1 }).length, 1);
-        throw new Error("abort projection");
-    }), /abort projection/);
-    assert.equal(battlefield.view.effectLifetimes, baseline);
+    const failure = new Error("abort projection");
+    assert.throws(() => {
+        try {
+            battlefield.advance([{ type: "UPDATE_UNIT", unit: moved }]);
+            assert.deepEqual(effectDependents(createBattleState(battlefield), { type: "UNIT", unitId: 0 }).map(ref => ref.unitId), [0, 1, 3]);
+            assert.equal(effectDependents(createBattleState(battlefield), { type: "UNIT", unitId: 1 }).length, 1);
+            assert.equal(snapshot.effectLifetimes.dependents.get("UNIT:0").size, 4);
+            throw failure;
+        } finally {
+            battlefield.drop();
+        }
+    }, error => error === failure);
+    assert.equal(battlefield.snapshot("draft").effectLifetimes, baseline);
     assert.equal(effectDependents(createBattleState(battlefield), { type: "UNIT", unitId: 0 }).length, 4);
 });

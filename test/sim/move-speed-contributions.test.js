@@ -42,7 +42,7 @@ function route(overrides = {}) {
 function harness({ speed = 0.25, minimum = 0, definition = route(), maps } = {}) {
     const battlefield = BattlefieldRuntime.create({ map: createBattlefieldMap(1, 8, Array.from({ length: 8 }, () => createTile({
         heightType: "LOWLAND", buildableType: "ALL", passableMask: "ALL", playerSideMask: "ALL", terrain: "NORMAL", mechanism: null,
-    }))) }, copyUnitSnapshot);
+    }))) });
     const initialized = initializeRoutedEnemy({
         id: 0, tick: 0, definition: createEnemyDefinition({ id: "dynamic-mover", vitality: { maxHp: 100 }, locomotion: {
             moveSpeedPerTick: speed, minimumMoveSpeedPerTick: minimum,
@@ -61,7 +61,7 @@ function harness({ speed = 0.25, minimum = 0, definition = route(), maps } = {})
         step(resources, tick, controls = {}) {
             const unit = getUnit(work, 0);
             const moved = stepRoutedUnit(unit, {
-                tick, maps: maps ?? battlefield.navigationMaps, fieldCache, moveMultiplier: 1,
+                tick, maps: maps ?? battlefield.snapshot("draft").navigationMaps, fieldCache, moveMultiplier: 1,
                 movementAllowed: true, routeAdvanceAllowed: true, waitTickAllowed: true,
                 rngState: execution.rngState, nextNavigationRequestId: execution.nextNavigationRequestId,
                 evaluateContributions: resources.computations.bind({ unit, battlefield: battlefieldView(work) }),
@@ -217,8 +217,8 @@ test("move speed: computed providers read phase facts without becoming stored fi
     h.battlefield.advance([{ type: "REGISTER_UNIT", unit: h.unit }]);
     const moved = createBattleState(h.battlefield, h.execution);
     advanceMovement(moved, 0, { routeMoveMultiplier: 0.5 }, resources);
-    close(h.battlefield.getUnit(0).position[0], 0.125);
-    assert.equal(h.battlefield.getUnit(0).definition.locomotion.moveSpeedPerTick, 0.5);
+    close(h.battlefield.snapshot("draft").getUnit(0).position[0], 0.125);
+    assert.equal(h.battlefield.snapshot("draft").getUnit(0).definition.locomotion.moveSpeedPerTick, 0.5);
     assert.equal(fullHp.vitality.hp, 100);
 });
 

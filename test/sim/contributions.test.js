@@ -464,7 +464,7 @@ test("battle state: registration and removal facts survive a draft with no final
   transitionUnit(initial, 1, (current) => ({ ...current, position: [1, 0] }));
 
   removeUnit(initial, 1, "SCRIPT");
-  assert.deepEqual(initial.battlefield.unitIds, []);
+  assert.deepEqual(initial.battlefield.snapshot("draft").unitIds, []);
   assert.deepEqual(initial.registeredUnitIds, [1]);
   assert.deepEqual(initial.removedUnits.map(result => [result.unitId, result.unit.position, result.reason]),
     [[1, [1, 0], "SCRIPT"]]);

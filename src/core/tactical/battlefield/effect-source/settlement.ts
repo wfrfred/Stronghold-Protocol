@@ -37,7 +37,7 @@ import {
 export type { EffectSourceServices } from "./resources.js";
 
 function sourceIds(state: BattleState): readonly MechanismId[] {
-    return [...state.battlefield.mechanismIds].sort((left, right) => left - right);
+    return [...battlefieldView(state).mechanismIds].sort((left, right) => left - right);
 }
 
 function settleSource<S extends object>(
@@ -78,7 +78,9 @@ function settleSource<S extends object>(
 
     const context = (): EffectSourceContext<S> => ({
         source: current(),
-        battlefield: battlefieldView(state),
+        get battlefield() {
+            return battlefieldView(state);
+        },
         tick,
     });
 
@@ -123,7 +125,7 @@ function settleSource<S extends object>(
     ): EffectSourceReceiverContext<S> | undefined => {
         const receiver = getUnit(state, binding.unitId);
 
-        return receiver === undefined ? undefined : { ...context(), receiver, binding };
+        return receiver === undefined ? undefined : Object.assign(context(), { receiver, binding });
     };
     const retainReceiver = (unitId: UnitId) => {
         if (bindingOf(unitId) === undefined && getUnit(state, unitId) !== undefined) {

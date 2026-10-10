@@ -66,12 +66,19 @@ function actionWork() {
 function host(...units) {
     const battlefield = fixtureBattlefield(units);
     let membershipReads = 0;
-    const readIds = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(battlefield), "unitIds").get;
+    const snapshot = battlefield.snapshot.bind(battlefield);
     let rejectMembership = false;
-    Object.defineProperty(battlefield, 'unitIds', { get() {
-        membershipReads++;
-        assert.equal(rejectMembership, false, 'indexed cleanup must not enumerate units');
-        return readIds.call(battlefield);
+    Object.defineProperty(battlefield, 'snapshot', { value(version) {
+        const view = snapshot(version);
+        return new Proxy(view, {
+            get(target, property, receiver) {
+                if (property === 'unitIds') {
+                    membershipReads++;
+                    assert.equal(rejectMembership, false, 'indexed cleanup must not enumerate units');
+                }
+                return Reflect.get(target, property, receiver);
+            },
+        });
     } });
     return {
         battlefield,
@@ -145,20 +152,20 @@ removeUnit(work, 2);
     assert.deepEqual(effectDependents(work, scope(3)), [second.address]);
 });
 
-test('effect lifetime index: snapshots and forks retain their previous candidates during draft removal', () => {
+test('effect lifetime index: fixed snapshots retain their previous candidates during draft removal', () => {
     const resources = new CombatResources();
     const effect = resources.registerEffect(program('branch'));
     const installed = install(host(unit(0), unit(2), unit(9)).work, resources, effect.ref, 2, scope(3));
     const original = installed.work;
     const captured = effectDependents(original, scope(3));
     const originalReceiver = getUnit(original, 2);
-    const fork = createBattleState(original.battlefield.fork(), original.execution, actionWork());
+    const snapshot = original.battlefield.snapshot("draft");
     const other = install(original, resources, effect.ref, 9, scope(3));
     removeUnit(original, 2);
     assert.deepEqual(captured, [installed.address]);
     assert.ok(Object.isFrozen(captured));
     assert.ok(Object.isFrozen(captured[0]));
-    assert.deepEqual(effectDependents(fork, scope(3)), captured);
+    assert.deepEqual([...snapshot.effectLifetimes.dependents.get("ACTION:3").values()], captured);
     assert.deepEqual(effectDependents(original, scope(3)), [other.address]);
     updateUnit(original, originalReceiver);
     assert.deepEqual(effectDependents(original, scope(3)), [installed.address, other.address]);

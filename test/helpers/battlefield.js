@@ -10,10 +10,16 @@ const defaultMap = createBattlefieldMap(1, 32, Array(32).fill(tile));
 export function fixtureBattlefield(view, mechanisms = view) {
   if (typeof view.advance === 'function') return view;
   const units = Array.isArray(view) ? view : view.unitIds.map(id => view.getUnit(id));
-  const field = createBattlefieldRuntime({ map: Array.isArray(view) ? defaultMap : (view.map ?? defaultMap) }, unit => unit);
+  const field = createBattlefieldRuntime({ map: Array.isArray(view) ? defaultMap : (view.map ?? defaultMap) });
   const changes = units.map(unit => ({ type: 'REGISTER_UNIT', unit }));
   for (const id of mechanisms?.mechanismIds ?? []) {
     changes.push({ type: 'REGISTER_MECHANISM', mechanism: mechanisms.getMechanism(id) });
+  }
+  for (const id of view.projectileIds ?? []) {
+    changes.push({ type: 'REGISTER_PROJECTILE', projectile: view.getProjectile(id) });
+  }
+  for (const id of view.navigationModifierIds ?? []) {
+    changes.push({ type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: view.getNavigationModifier(id) });
   }
   const relations = view.blockingRelations ?? units.flatMap(unit => {
     const blockerUnitId = view.blockerOf?.(unit.id);
