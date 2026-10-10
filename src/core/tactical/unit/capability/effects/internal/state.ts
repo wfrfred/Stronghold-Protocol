@@ -1,11 +1,11 @@
 import { assertNonnegativeSafeInteger } from "../../../../../common/assert.js";
-import type { EffectInstanceValue } from "../instance.js";
+import type { EffectValue } from "../effect.js";
 import type { Effects } from "../capability.js";
 import { widenUnit, type StableUnit, type Unit } from "../../../unit.js";
 
-export function replaceEffectInstances<U extends Unit>(
+export function replaceEffects<U extends Unit>(
     input: U | StableUnit<U>,
-    instances: readonly EffectInstanceValue[],
+    instances: readonly EffectValue[],
 ): StableUnit<U> & Effects {
     const unit = widenUnit<U>(input);
     const progress = unit.effects ?? {
@@ -16,10 +16,10 @@ export function replaceEffectInstances<U extends Unit>(
     return { ...unit, effects: { ...progress, instances } };
 }
 
-export function replaceEffectInstance<U extends Unit & Effects>(
+export function replaceEffect<U extends Unit & Effects>(
     input: U | StableUnit<U>,
-    instance: EffectInstanceValue,
-    updated: EffectInstanceValue,
+    instance: EffectValue,
+    updated: EffectValue,
 ): StableUnit<U> {
     const unit = widenUnit<U>(input);
     const previous = unit.effects;
@@ -39,7 +39,7 @@ export function replaceEffectInstance<U extends Unit & Effects>(
     return { ...unit, effects: { ...previous, instances } };
 }
 
-export function removeEffectInstance<U extends Unit & Effects>(
+export function removeEffect<U extends Unit & Effects>(
     input: U | StableUnit<U>,
     instanceId: number,
 ): StableUnit<U> {
@@ -54,9 +54,9 @@ export function removeEffectInstance<U extends Unit & Effects>(
     return { ...unit, effects: { ...previous, instances } };
 }
 
-export function registerEffectInstance<U extends Unit>(
+export function registerEffect<U extends Unit>(
     input: U | StableUnit<U>,
-    instance: EffectInstanceValue,
+    instance: EffectValue,
 ): StableUnit<U> & Effects {
     const unit = widenUnit<U>(input);
     const previous = unit.effects ?? {
@@ -72,12 +72,12 @@ export function registerEffectInstance<U extends Unit>(
         throw new TypeError("effect identity and acquisition sequence cannot be reused");
     }
     if (instance.started || instance.participating || instance.finished) {
-        throw new TypeError("only a fresh effect instance can be installed");
+        throw new TypeError("only a fresh effect can be installed");
     }
 
     const nextInstanceId = instance.id + 1;
     const nextAcquiredSequence = instance.acquiredSequence + 1;
-    assertNonnegativeSafeInteger(nextInstanceId, "effect instance allocation progress", TypeError);
+    assertNonnegativeSafeInteger(nextInstanceId, "effect allocation progress", TypeError);
     assertNonnegativeSafeInteger(
         nextAcquiredSequence,
         "effect acquired sequence allocation progress",

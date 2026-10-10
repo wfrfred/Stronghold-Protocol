@@ -6,7 +6,7 @@ import { getUnit } from '../../dist/core/tactical/battle/execution/context.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { createActionDefinition } from '../../dist/core/tactical/unit/capability/action/capability.js';
 import { ActionReleaseResources, beforeActionRelease } from '../../dist/core/tactical/unit/capability/action/release.js';
-import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
+import { createEffectDefinition } from '../../dist/core/tactical/unit/capability/effects/definition.js';
 import { setEffectEnabled } from '../../dist/core/tactical/unit/capability/effects/lifecycle.js';
 import { effectFixtureWork, installFixtureEffect } from '../helpers/effects.js';
 
@@ -25,7 +25,7 @@ function actor() {
   }, position: [0, 0] });
 }
 function program(id, initialState = {}) {
-  return createEffectProgram({ id, initialize: () => ({ ...initialState }) });
+  return createEffectDefinition({ id, initialize: () => ({ ...initialState }) });
 }
 function services(resources) {
   return { effects: resources.effects, effectBindings: resources.effectBindings,
@@ -49,7 +49,7 @@ test('action release: resources validate registered references, own the callback
   assert.throws(() => release.register(program('unregistered').ref, { beforeRelease: () => ({ type: 'CONTINUE' }) }), /unregistered/);
   assert.throws(() => release.register({ id: registered.ref.id }, { beforeRelease: () => ({ type: 'CONTINUE' }) }), /unregistered/);
   const rules = { beforeRelease: context => {
-    assert.equal(context.instance.programRef, registered.ref);
+    assert.equal(context.instance.definitionRef, registered.ref);
     return { type: 'CONTINUE' };
   } };
   release.register(registered.ref, rules);
@@ -59,7 +59,7 @@ test('action release: resources validate registered references, own the callback
   const instance = unit.effects.instances[0];
   assert.equal(Object.isFrozen(release.get(instance)), true);
   assert.deepEqual(release.get(instance).beforeRelease({ instance }), { type: 'CONTINUE' });
-  assert.throws(() => release.get(instance).beforeRelease({ instance: { ...instance, programRef: { id: registered.ref.id } } }), /matching/);
+  assert.throws(() => release.get(instance).beforeRelease({ instance: { ...instance, definitionRef: { id: registered.ref.id } } }), /matching/);
   registration.seal();
   assert.throws(() => release.register(registered.ref, rules), /sealed/);
 });
@@ -150,8 +150,8 @@ test('action release: candidate identities freeze, participation is rechecked an
         else { context.effects.finish([{ type: "EFFECT", unitId: 0, effectId: 1 }]); }
         const installed = context.effects.install(0, c.ref, installation(0));
         assert.equal(installed.type, 'INSTALLED');
-        assert.equal(context.facts.getEffect(installed.ref).programRef, c.ref);
-        assert.equal(context.facts.participating(0).some(instance => instance.programRef === c.ref), true);
+        assert.equal(context.facts.getEffect(installed.ref).definitionRef, c.ref);
+        assert.equal(context.facts.participating(0).some(instance => instance.definitionRef === c.ref), true);
       }
       return { type: 'CONTINUE' };
     } });

@@ -4,9 +4,9 @@ import { liveResistance } from "../../dist/core/tactical/unit/capability/defense
 import { installFixtureEffect } from "../helpers/effects.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
+import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
-import * as modifier from "../../dist/core/tactical/modifier/value.js";
+import * as modifier from "../../dist/core/tactical/contribution/value.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
@@ -58,7 +58,7 @@ function workFor(...units) {
 }
 
 function program(id, initialState = {}) {
-  return createEffectProgram({
+  return createEffectDefinition({
     id,
     initialize: () => initialState,
   });
@@ -375,7 +375,7 @@ test("damage pipeline: one group can independently provide source formula, outpu
         apply: (context) => {
           context.operations.effects.update(
             context.ref,
-            context.instance.programRef,
+            context.instance.definitionRef,
             (state) => ({ reports: state.reports + 1 }),
           );
           reactions.push("source");
@@ -459,7 +459,7 @@ test("damage pipeline: priority, acquisition sequence and stable instance order 
           ...target.effects,
           instances: insertion.map((index) =>
             target.effects.instances.find(
-              (instance) => instance.programRef === entries[index][0].ref,
+              (instance) => instance.definitionRef === entries[index][0].ref,
             ),
           ),
         },
@@ -512,7 +512,7 @@ test("damage pipeline: invincibility skips reception resources and still gives r
           apply: (context, pending) => {
             context.operations.effects.update(
               context.ref,
-              context.instance.programRef,
+              context.instance.definitionRef,
               (state) => ({
                 ...state,
                 rejected: state.rejected + Number(pending.cancellation?.reason === "INVINCIBLE"),
@@ -541,7 +541,7 @@ test("damage pipeline: invincibility skips reception resources and still gives r
           apply: (context, report) => {
             context.operations.effects.update(
               context.ref,
-              context.instance.programRef,
+              context.instance.definitionRef,
               (state) => ({
                 reports: state.reports + 1,
                 formula: report.formulaDamage,
@@ -608,7 +608,7 @@ test("damage pipeline: nested reaction damage and healing preserve latest HP and
             if (context.instance.state.remainingCharges > 0) {
               context.operations.effects.update(
                 context.ref,
-                context.instance.programRef,
+                context.instance.definitionRef,
                 (state) => ({
                   ...state,
                   remainingCharges: 0,
@@ -629,7 +629,7 @@ test("damage pipeline: nested reaction damage and healing preserve latest HP and
             }
             context.operations.effects.update(
               context.ref,
-              context.instance.programRef,
+              context.instance.definitionRef,
               (state) => ({
                 ...state,
                 observedSourceHp: context.facts.getUnit(context.ownerUnitId).vitality.hp,

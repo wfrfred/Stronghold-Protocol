@@ -1,4 +1,4 @@
-import { effectTick } from "../../dist/core/tactical/unit/capability/effects/instance.js";
+import { effectTick } from "../../dist/core/tactical/unit/capability/effects/effect.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -6,7 +6,7 @@ import { compileBuffStacking, parseBuffStacking } from "../../dist/data/arknight
 import { compileAttributeModifiers, parseAttributeModifiers } from "../../dist/data/arknights/modifier.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/execution/context.js";
-import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
+import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
 import {
     expireEffects, installNewEffect, setEffectEnabled, setEffectTick, updateEffectState,
 } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
@@ -102,7 +102,7 @@ function harness({ descriptor = description(), stackCount = 3, lifetimeTicks = 3
         blackboard: { atk: 0.5 }, sample: sample(10, stackCount),
     };
     const resources = new CombatResources();
-    const effect = resources.registerEffect(createEffectProgram({
+    const effect = resources.registerEffect(createEffectDefinition({
         id: "buff-expiry-sample", initialize: () => initial,
     }), {
         contributions: [attack(current => {
@@ -154,7 +154,7 @@ function harness({ descriptor = description(), stackCount = 3, lifetimeTicks = 3
             updateEffectState(work, 0, 0, effect.ref, state => ({ ...state, maxStackCount }), resources, tick);
         },
         override: tick => {
-            const winner = resources.registerEffect(createEffectProgram({
+            const winner = resources.registerEffect(createEffectDefinition({
                 id: "buff-expiry-winner", initialize: () => ({}),
             }), { lifecycle: { competition: () => ({ group: "buff-expiry", priority: 2 }) } });
             installNewEffect(work, 0, winner.ref, { source: 20, scopes: [] }, resources, tick);
@@ -193,7 +193,7 @@ test("buff expiry integration: 30 tick renewals preserve identity, retain termin
     assert.equal(instance(renewed).state.stackCount, 2);
     assert.equal(effectTick(instance(renewed)), 60);
     assert.equal(power(renewed), 200);
-    for (const key of ["id", "source", "programRef", "acquiredSequence"]) {
+    for (const key of ["id", "source", "definitionRef", "acquiredSequence"]) {
         assert.deepEqual(instance(renewed)[key], first[key]);
     }
     assert.equal(instance(renewed).state.blackboard, first.state.blackboard);

@@ -1,10 +1,13 @@
 import { ResourceRegistration } from "../../../../common/resource-registration.js";
 import type { ElementalReceiver, ElementType } from "./capability.js";
-import type { CompiledElementalBurst } from "./program.js";
+import type { ElementalBurstDefinition } from "./definition.js";
 
 export class ElementalResources {
     readonly #registration: ResourceRegistration;
-    readonly #programs = new Map<ElementalReceiver, Map<ElementType, CompiledElementalBurst>>();
+    readonly #definitions = new Map<
+        ElementalReceiver,
+        Map<ElementType, ElementalBurstDefinition>
+    >();
 
     constructor(registration = new ResourceRegistration()) {
         this.#registration = registration;
@@ -13,30 +16,30 @@ export class ElementalResources {
     register(
         receiver: ElementalReceiver,
         type: ElementType,
-        program: CompiledElementalBurst,
+        definition: ElementalBurstDefinition,
     ): void {
         this.#registration.assertWritable();
-        let programs = this.#programs.get(receiver);
+        let definitions = this.#definitions.get(receiver);
 
-        if (programs === undefined) {
-            programs = new Map();
-            this.#programs.set(receiver, programs);
+        if (definitions === undefined) {
+            definitions = new Map();
+            this.#definitions.set(receiver, definitions);
         }
-        if (programs.has(type)) {
+        if (definitions.has(type)) {
             throw new TypeError(`duplicate elemental burst ${receiver}/${type}`);
         }
 
-        programs.set(type, Object.freeze({ ...program }));
+        definitions.set(type, Object.freeze({ ...definition }));
     }
 
-    get(receiver: ElementalReceiver, type: ElementType): CompiledElementalBurst {
+    get(receiver: ElementalReceiver, type: ElementType): ElementalBurstDefinition {
         this.#registration.assertUsable();
-        const program = this.#programs.get(receiver)?.get(type);
+        const definition = this.#definitions.get(receiver)?.get(type);
 
-        if (program === undefined) {
+        if (definition === undefined) {
             throw new TypeError(`unregistered elemental burst ${receiver}/${type}`);
         }
 
-        return program;
+        return definition;
     }
 }

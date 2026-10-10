@@ -20,12 +20,12 @@ export function createEffectOperations(
         install: (unitId, ref, input) => {
             return installNewEffect(readState(), unitId, ref, input, resources, tick, dispatch);
         },
-        update: (ref, program, transition) => {
+        update: (ref, definition, transition) => {
             updateEffectState(
                 readState(),
                 ref.unitId,
                 ref.effectId,
-                program,
+                definition,
                 transition,
                 resources,
                 tick,

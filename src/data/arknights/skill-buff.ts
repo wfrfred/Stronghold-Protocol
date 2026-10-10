@@ -1,8 +1,8 @@
 import type { CombatResources } from "../../core/tactical/battle/resources.js";
-import * as modifier from "../../core/tactical/modifier/value.js";
-import { createEffectProgram } from "../../core/tactical/unit/capability/effects/program.js";
+import * as modifier from "../../core/tactical/contribution/value.js";
+import { createEffectDefinition } from "../../core/tactical/unit/capability/effects/definition.js";
 import { attack } from "../../core/tactical/unit/capability/offense/contributions.js";
-import type { CompiledSkill } from "../../core/tactical/unit/capability/skill/program.js";
+import type { CompiledSkill } from "../../core/tactical/unit/capability/skill/compiled.js";
 import { parseArknightsSkillLevel } from "./skill-definition.js";
 
 export function compileArknightsAttackBuffSkill(
@@ -24,7 +24,7 @@ export function compileArknightsAttackBuffSkill(
 
     const attackIncrease = entries[0]!.value;
     const buff = resources.registerEffect(
-        createEffectProgram({
+        createEffectDefinition({
             id: `skill/${parsed.definition.id}/${level}/attack`,
             initialize: () => ({ attackIncrease }),
         }),

@@ -1,5 +1,5 @@
 import type { UnitId } from "../../../unit.js";
-import type { EffectRef, EffectInstanceValue } from "../../effects/instance.js";
+import type { EffectRef, EffectValue } from "../../effects/effect.js";
 import { EffectDispatchScope, participatingEffect } from "../../effects/dispatch.js";
 import { finalizeFinishedEffects } from "../../effects/lifecycle.js";
 import type { BattleState } from "../../../../battle/execution/context.js";
@@ -52,7 +52,7 @@ function dispatchStage<V>(
                     left.ref.effectId - right.ref.effectId,
             );
 
-        const isGroupWinner = (instance: EffectInstanceValue, ref: EffectRef): boolean => {
+        const isGroupWinner = (instance: EffectValue, ref: EffectRef): boolean => {
             const group = resources.damage.get(instance).group;
 
             if (group === undefined) {

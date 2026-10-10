@@ -134,9 +134,9 @@ test('aura effects: ordinary finish preserves sequential receiver decisions base
             finish: context => {
                 for (const binding of context.instance.state.bindings) {
                     const keep = context.facts.participating(binding.unitId)
-                        .some(instance => instance.programRef === marker.ref);
+                        .some(instance => instance.definitionRef === marker.ref);
                     assert.equal(context.battlefield.getUnit(binding.unitId).effects.instances
-                        .some(instance => instance.programRef === marker.ref && instance.participating), keep);
+                        .some(instance => instance.definitionRef === marker.ref && instance.participating), keep);
                     trace.push(['decide', binding.unitId, keep]);
                     if (!keep) context.effects.finish([binding.ref], 'AURA_FINISHED');
                 }
@@ -156,7 +156,7 @@ test('aura effects: ordinary finish preserves sequential receiver decisions base
     assert.equal(getEffect(state, second).participating, true);
     assert.equal(power(state, 1, resources), 100);
     assert.equal(power(state, 2, resources), 120);
-    assert.equal(before.getUnit(2).effects.instances.some(instance => instance.programRef === marker.ref), false);
+    assert.equal(before.getUnit(2).effects.instances.some(instance => instance.definitionRef === marker.ref), false);
 });
 
 test('aura effects: skill content installs an aura and skill completion closes its descendants', () => {

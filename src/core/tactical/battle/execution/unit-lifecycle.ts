@@ -4,7 +4,7 @@ import {
     finalizeFinishedEffects,
 } from "../../unit/capability/effects/lifecycle.js";
 import { EffectDispatchScope } from "../../unit/capability/effects/dispatch.js";
-import type { LifetimeRef } from "../../unit/capability/effects/instance.js";
+import type { LifetimeRef } from "../../unit/capability/effects/effect.js";
 import type { UnitId } from "../../unit/unit.js";
 import type { BattlefieldRemovalReason } from "../../battlefield/contract.js";
 import type { EffectTransitionResources } from "../../unit/capability/effects/contract.js";

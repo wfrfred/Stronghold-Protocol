@@ -8,7 +8,7 @@ import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
 import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
 import { advanceEffects, expireEffects, installNewEffect, setEffectEnabled } from '../../dist/core/tactical/unit/capability/effects/lifecycle.js';
 import { getEffect } from '../../dist/core/tactical/unit/capability/effects/query.js';
-import { effectTick } from '../../dist/core/tactical/unit/capability/effects/instance.js';
+import { effectTick } from '../../dist/core/tactical/unit/capability/effects/effect.js';
 import { createSkillDefinition } from '../../dist/core/tactical/unit/capability/skill/capability.js';
 import { effectFixtureWork } from '../helpers/effects.js';
 import { auraUnit, effectProgram, seededPlacement } from '../helpers/aura.js';

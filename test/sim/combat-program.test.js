@@ -23,9 +23,9 @@ import {
   updateUnit,
   removeUnit,
 } from "../../dist/core/tactical/battle/execution/context.js";
-import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
+import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
 import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
-import * as modifier from "../../dist/core/tactical/modifier/value.js";
+import * as modifier from "../../dist/core/tactical/contribution/value.js";
 import { compileStatusBinding } from "../../dist/core/tactical/unit/capability/status/binding.js";
 import { hasStatusFlag } from "../../dist/core/tactical/unit/capability/status/capability.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
@@ -262,7 +262,7 @@ test("combat program: ordered steps can rebind after a prior hit removes a targe
 
 test("combat program: a compiled source-attack effect reads current contributions at execution", () => {
   const resources = new CombatResources();
-  const program = createEffectProgram({
+  const program = createEffectDefinition({
     id: "attack-bonus",
     initialize: () => ({ bonus: 15 }),
   });
@@ -343,7 +343,7 @@ test("combat program: zero HP alone does not make a live ATK source unavailable"
 test("combat program: lethal retaliation skips later unsampled damage and completes the entered segment", () => {
   const resources = new CombatResources();
   const retaliation = resources.registerEffect(
-    createEffectProgram({
+    createEffectDefinition({
       id: "lethal-retaliation",
       initialize: () => ({}),
     }),
@@ -421,7 +421,7 @@ test("combat program: lethal retaliation skips later unsampled damage and comple
 
 test("combat program: runtime resources compile shared definitions once while snapshots remain data-only", () => {
   const resources = new CombatResources();
-  const markerProgram = createEffectProgram({
+  const markerProgram = createEffectDefinition({
     id: "marker",
     initialize: () => ({ value: 7 }),
   });
@@ -462,7 +462,7 @@ test("combat program: runtime resources compile shared definitions once while sn
   const before = runtime.snapshot();
 
   assert.deepEqual(structuredClone(before), before);
-  assert.deepEqual(before.units[0].effects.instances[0].programRef, { id: "marker" });
+  assert.deepEqual(before.units[0].effects.instances[0].definitionRef, { id: "marker" });
   assert.equal(before.units[0].definition, definition);
 
   const step = runtime.step();
@@ -478,7 +478,7 @@ test("combat program: runtime resources compile shared definitions once while sn
 test("combat program: a failed receiver does not publish shield consumption or damage", () => {
   function scenario(failing) {
     const resources = new CombatResources();
-    const program = createEffectProgram({
+    const program = createEffectDefinition({
       id: "shield",
       initialize: () => ({ remaining: 10 }),
     });
@@ -541,7 +541,7 @@ test("combat program: a failed receiver does not publish shield consumption or d
 
 test("combat program: expiration removes its status contribution and preserves baseline flags", () => {
   const resources = new CombatResources();
-  const program = createEffectProgram({
+  const program = createEffectDefinition({
     id: "expiring-marker",
     initialize: () => ({}),
   });
@@ -575,7 +575,7 @@ test("combat program: expiration removes its status contribution and preserves b
 
 test("combat program: retreat cleans lifetime-owned effects without treating provenance as ownership", () => {
   const resources = new CombatResources();
-  const program = createEffectProgram({
+  const program = createEffectDefinition({
     id: "owned-marker",
     initialize: () => ({}),
   });
@@ -583,10 +583,10 @@ test("combat program: retreat cleans lifetime-owned effects without treating pro
     bindings: [compileStatusBinding(["HEAL_FREE"])],
   });
   const neutral = resources.registerEffect(
-    createEffectProgram({ id: "neutral-marker", initialize: () => ({}) }),
+    createEffectDefinition({ id: "neutral-marker", initialize: () => ({}) }),
   );
   const invisible = resources.registerEffect(
-    createEffectProgram({ id: "invisible-marker", initialize: () => ({}) }),
+    createEffectDefinition({ id: "invisible-marker", initialize: () => ({}) }),
     {
       bindings: [compileStatusBinding(["INVISIBLE"])],
     },
@@ -741,7 +741,7 @@ test("combat program: readiness skips binding and target ownership stays in even
 
 test("combat program: immediate execution cleans owned Effects and cancels successors after source departure", () => {
   const resources = new CombatResources();
-  const marker = resources.registerEffect(createEffectProgram({
+  const marker = resources.registerEffect(createEffectDefinition({
     id: "instant-scoped-marker",
     initialize: () => ({}),
   }), { bindings: [compileStatusBinding(["INVINCIBLE"])] });

@@ -1,21 +1,21 @@
 import type { BattlefieldChange } from "../../contract.js";
-import type { ProjectileId, ProjectileInstance, ProjectileView } from "../state.js";
+import type { ProjectileId, Projectile, ProjectileView } from "../projectile.js";
 
-export function updateProjectileInstance<S extends object>(
-    instance: ProjectileInstance<S>,
+export function updateProjectile<S extends object>(
+    instance: Projectile<S>,
     change: Partial<
         Pick<
-            ProjectileInstance<S>,
+            Projectile<S>,
             "position" | "destination" | "lastAdvancedTick" | "progress" | "hitUnitIds" | "state"
         >
     >,
-): ProjectileInstance<S> {
+): Projectile<S> {
     return { ...instance, ...change };
 }
 
 export class ProjectileWork {
     readonly #baseline: ProjectileView;
-    readonly #instances: Map<ProjectileId, ProjectileInstance>;
+    readonly #instances: Map<ProjectileId, Projectile>;
     readonly #updated = new Set<ProjectileId>();
 
     constructor(battlefield: ProjectileView) {
@@ -29,11 +29,11 @@ export class ProjectileWork {
         return this.#instances.keys();
     }
 
-    get(id: ProjectileId): ProjectileInstance | undefined {
+    get(id: ProjectileId): Projectile | undefined {
         return this.#instances.get(id);
     }
 
-    add(instance: ProjectileInstance): void {
+    add(instance: Projectile): void {
         if (this.#instances.has(instance.id)) {
             throw new RangeError(`duplicate projectile: ${instance.id}`);
         }
@@ -42,7 +42,7 @@ export class ProjectileWork {
         this.#updated.add(instance.id);
     }
 
-    update(instance: ProjectileInstance): void {
+    update(instance: Projectile): void {
         const current = this.#instances.get(instance.id);
 
         if (current !== undefined && current !== instance) {

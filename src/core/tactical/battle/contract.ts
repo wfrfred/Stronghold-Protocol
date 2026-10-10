@@ -7,14 +7,14 @@ import type { SpawnScheduleDefinition } from "./schedule/definition.js";
 import type { BattlefieldChangeResult } from "../battlefield/contract.js";
 import type { BlockingRelation } from "../battlefield/blocking/relations.js";
 import type { CombatEvent } from "./execution/event.js";
-import type { MechanismRuntime } from "../battlefield/mechanism.js";
+import type { Mechanism } from "../battlefield/mechanism.js";
 import type { NavigationModifier } from "../battlefield/navigation/modifier.js";
 import type { NavigationOutcome } from "../battlefield/navigation/state.js";
 import type { WorldPosition } from "../geometry/coordinate.js";
 import type { RouteSignal } from "../unit/capability/locomotion/route/execution.js";
 import type { Unit, UnitId } from "../unit/unit.js";
 import type {
-    PredefinedInstanceDefinition,
+    PredefinedDefinition,
     PredefinedCommand,
     PredefinedPresence,
 } from "./steps/predefined.js";
@@ -28,7 +28,7 @@ import type {
     ActionExecutionSignal,
     ActionExecutionState,
 } from "../unit/capability/action/process.js";
-import type { ProjectileId, ProjectileState } from "../battlefield/projectile/state.js";
+import type { ProjectileId, ProjectileState } from "../battlefield/projectile/projectile.js";
 import type { ProjectileSignal } from "../battlefield/projectile/settlement.js";
 import type { ElementalSignal } from "../unit/capability/elemental/execution.js";
 import type { SkillSignal } from "../unit/capability/skill/execution.js";
@@ -37,7 +37,7 @@ import type { SkillSignal } from "../unit/capability/skill/execution.js";
 export interface Input {
     readonly map: BattlefieldMap;
     readonly schedule: SpawnScheduleDefinition;
-    readonly predefines: readonly PredefinedInstanceDefinition[];
+    readonly predefines: readonly PredefinedDefinition[];
     readonly initialUnits: readonly UnitPlacementDefinition[];
     readonly initialMechanisms: readonly MechanismPlacementDefinition[];
     readonly initialNavigationModifiers: readonly NavigationModifierPlacementDefinition[];
@@ -108,7 +108,7 @@ export interface Snapshot {
     readonly units: readonly Unit[];
     readonly blockingRelations: readonly BlockingRelation[];
     readonly supportRelations: readonly SupportRelation[];
-    readonly mechanisms: readonly MechanismRuntime[];
+    readonly mechanisms: readonly Mechanism[];
     readonly navigationModifiers: readonly NavigationModifier[];
     readonly completedRouteCount: number;
     readonly result: Result | null;

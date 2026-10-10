@@ -5,7 +5,7 @@ import type {
     BattlefieldRemovalReason,
     BattlefieldView,
 } from "../../battlefield/contract.js";
-import type { MechanismId, MechanismRuntime } from "../../battlefield/mechanism.js";
+import type { MechanismId, Mechanism } from "../../battlefield/mechanism.js";
 import type { Unit, UnitId } from "../../unit/unit.js";
 import type { ActionExecutionWork } from "../../unit/capability/action/internal/executions.js";
 import type { Event } from "../contract.js";
@@ -76,11 +76,11 @@ export function getUnit(state: BattleState, id: UnitId): Unit | undefined {
     return battlefieldView(state).getUnit(id);
 }
 
-export function getMechanism(state: BattleState, id: MechanismId): MechanismRuntime | undefined {
+export function getMechanism(state: BattleState, id: MechanismId): Mechanism | undefined {
     return battlefieldView(state).getMechanism(id);
 }
 
-export function updateMechanism(state: BattleState, mechanism: MechanismRuntime): void {
+export function updateMechanism(state: BattleState, mechanism: Mechanism): void {
     const current = getMechanism(state, mechanism.id);
 
     if (current !== mechanism) {

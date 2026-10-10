@@ -10,7 +10,7 @@ import {
     type RouteDefinition,
 } from "../core/tactical/unit/capability/locomotion/route/definition.js";
 import { createArknightsElementalDefinition } from "../data/arknights/elemental.js";
-import { registerArknightsElementalBursts } from "../data/arknights/elemental-program.js";
+import { registerArknightsElementalBursts } from "../data/arknights/elemental-burst.js";
 import { compileArknightsAttackBuffSkill } from "../data/arknights/skill-buff.js";
 import { createTacticalCombatDemoSpec } from "./tactical-demo-combat.js";
 import type { LegacyData } from "./tactical-demo-presentation.js";

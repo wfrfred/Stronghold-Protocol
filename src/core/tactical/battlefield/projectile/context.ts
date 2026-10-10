@@ -1,5 +1,5 @@
-import type * as computation from "../../modifier/computation.js";
-import type { Context } from "../../unit/capability/contribution.js";
+import type * as computation from "../../contribution/computation.js";
+import type { QueryContext } from "../../contribution/definition.js";
 import type {
     EffectLifecycleOperations,
     EffectTransitionResources,
@@ -16,16 +16,16 @@ import type {
 } from "../../unit/capability/vitality/healing/contract.js";
 import type { Unit, UnitId } from "../../unit/unit.js";
 import type { ProjectileResources } from "./resources.js";
-import type { ProjectileId, ProjectileInstance, ProjectileStopReason } from "./state.js";
+import type { ProjectileId, Projectile, ProjectileStopReason } from "./projectile.js";
 
 export interface ProjectileFacts {
     readonly unitIds: readonly UnitId[];
     getUnit(id: UnitId): Unit | undefined;
-    getProjectile(id: ProjectileId): ProjectileInstance | undefined;
+    getProjectile(id: ProjectileId): Projectile | undefined;
 }
 
 export interface ProjectileQueryContext<S extends object = object> {
-    readonly projectile: ProjectileInstance<S>;
+    readonly projectile: Projectile<S>;
     readonly tick: number;
     readonly facts: ProjectileFacts;
 }
@@ -55,7 +55,7 @@ export interface ProjectileContactContext<
 
 export interface ProjectileServices extends EffectTransitionResources {
     readonly projectiles: ProjectileResources;
-    readonly computations: computation.Computations<Context>;
+    readonly computations: computation.Computations<QueryContext>;
     readonly settleDamage: DamageOperation;
     readonly settleHealing: HealingOperation;
 }

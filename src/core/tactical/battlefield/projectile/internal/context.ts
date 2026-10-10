@@ -8,20 +8,20 @@ import type {
     ProjectileQueryContext,
     ProjectileServices,
 } from "../context.js";
-import type { ProjectileId, ProjectileInstance, ProjectileStopReason } from "../state.js";
-import { updateProjectileInstance } from "./state.js";
+import type { ProjectileId, Projectile, ProjectileStopReason } from "../projectile.js";
+import { updateProjectile } from "./state.js";
 
 export interface ProjectileContextAccess {
     readonly state: BattleState;
-    getProjectile(id: ProjectileId): ProjectileInstance | undefined;
-    lastKnown(id: ProjectileId): ProjectileInstance | undefined;
-    save(instance: ProjectileInstance): void;
+    getProjectile(id: ProjectileId): Projectile | undefined;
+    lastKnown(id: ProjectileId): Projectile | undefined;
+    save(instance: Projectile): void;
     stop(id: ProjectileId, reason: ProjectileStopReason): void;
 }
 
 function projectileFacts(
     readWork: () => BattleState,
-    getProjectile: (id: ProjectileId) => ProjectileInstance | undefined,
+    getProjectile: (id: ProjectileId) => Projectile | undefined,
 ): ProjectileFacts {
     return {
         get unitIds() {
@@ -37,7 +37,7 @@ function projectileFacts(
 }
 
 export function withProjectileQuery<S extends object, R>(
-    instance: ProjectileInstance<S>,
+    instance: Projectile<S>,
     access: ProjectileContextAccess,
     tick: number,
     run: (context: ProjectileQueryContext<S>) => R,
@@ -70,7 +70,7 @@ export function withProjectileQuery<S extends object, R>(
 }
 
 export function withProjectileContext<S extends object>(
-    instance: ProjectileInstance<S>,
+    instance: Projectile<S>,
     services: ProjectileServices,
     access: ProjectileContextAccess,
     tick: number,
@@ -86,12 +86,12 @@ export function withProjectileContext<S extends object>(
 
         return access.state;
     };
-    const readProjectile = (): ProjectileInstance<S> => {
+    const readProjectile = (): Projectile<S> => {
         readWork();
 
         return (access.getProjectile(instance.id) ??
             access.lastKnown(instance.id) ??
-            instance) as ProjectileInstance<S>;
+            instance) as Projectile<S>;
     };
 
     const context: ProjectileCallbackContext<S> = {
@@ -121,7 +121,7 @@ export function withProjectileContext<S extends object>(
                 const current = readProjectile();
                 const state = transition(current.state);
                 const latest = readProjectile();
-                access.save(updateProjectileInstance(latest, { state }));
+                access.save(updateProjectile(latest, { state }));
             },
             stopSelf: (reason) => {
                 readWork();

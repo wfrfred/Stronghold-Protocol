@@ -1,6 +1,6 @@
 import type { BattlefieldChange } from "../../battlefield/contract.js";
-import type * as computation from "../../modifier/computation.js";
-import type { Context } from "../../unit/capability/contribution.js";
+import type * as computation from "../../contribution/computation.js";
+import type { QueryContext } from "../../contribution/definition.js";
 import { hasRoutedLocomotion } from "../../unit/capability/locomotion/capability.js";
 import { hasAction } from "../../unit/capability/action/capability.js";
 import { hasStatusFlag } from "../../unit/capability/status/capability.js";
@@ -51,7 +51,7 @@ export function advanceMovement(
         readonly movementAllowed?: (unitId: UnitId) => boolean;
     },
     resources: UnitLifecycleResources & {
-        readonly computations: computation.Computations<Context>;
+        readonly computations: computation.Computations<QueryContext>;
     },
 ): void {
     const battlefield = state.battlefield.snapshot("draft");

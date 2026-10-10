@@ -10,12 +10,12 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { resolveDeploymentCommands } from '../../dist/core/tactical/battle/steps/deployment.js';
-import { advancePredefined, createPredefinedInstanceDefinition } from '../../dist/core/tactical/battle/steps/predefined.js';
+import { advancePredefined, createPredefinedDefinition } from '../../dist/core/tactical/battle/steps/predefined.js';
 import { createBattleState, getUnit, } from '../../dist/core/tactical/battle/execution/context.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { createSkillDefinition } from '../../dist/core/tactical/unit/capability/skill/capability.js';
 import { activateSkill } from '../../dist/core/tactical/unit/capability/skill/execution.js';
-import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
+import { createEffectDefinition } from '../../dist/core/tactical/unit/capability/effects/definition.js';
 import { installNewEffect, finishEffects } from '../../dist/core/tactical/unit/capability/effects/lifecycle.js';
 import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
 
@@ -32,7 +32,7 @@ function fixture() {
       context.damage({ sourceUnitId: null, targetUnitId: 2, damageType: 'TRUE', operands: createDamageOperands(1) });
     },
   });
-  const counter = resources.registerEffect(createEffectProgram({
+  const counter = resources.registerEffect(createEffectDefinition({
     id: 'consume-on-damage', initialize: () => ({ consumed: 0 }),
   }), {
     damage: { reception: { priority: 0, apply: (context, value) => {
@@ -124,7 +124,7 @@ for (const domain of ['deployment', 'predefined']) {
     } else {
       advancePredefined(
         state,
-        [createPredefinedInstanceDefinition({
+        [createPredefinedDefinition({
           id: 10, alias: null, initiallyPresent: false,
           creation: { type: 'UNIT', definition, position: [0, 0], navigationModifiers },
         })],
@@ -164,10 +164,10 @@ test('effect finish: nested host death stops Action and Skill before their depen
     bindings: new Map([['primary', [1]]]), tick: 0,
   });
   const executions = new ActionExecutionWork(accepted.state);
-  const independent = resources.registerEffect(createEffectProgram({
+  const independent = resources.registerEffect(createEffectDefinition({
     id: 'independent-in-skill-finish', initialize: () => ({}),
   }));
-  const forbidden = resources.registerEffect(createEffectProgram({
+  const forbidden = resources.registerEffect(createEffectDefinition({
     id: 'forbidden-on-departing-host', initialize: () => ({}),
   }), { lifecycle: { start: () => { throw new Error('closed host ran start'); } } });
   resources.skills.register({
@@ -180,7 +180,7 @@ test('effect finish: nested host death stops Action and Skill before their depen
       assert.equal(context.effects.install(1, independent.ref, { source: 0, scopes: [] }).type, 'INSTALLED');
     },
   });
-  const first = resources.registerEffect(createEffectProgram({
+  const first = resources.registerEffect(createEffectDefinition({
     id: 'first-host-notice', initialize: () => ({}),
   }), { lifecycle: { finish: context => {
     order.push('first');
@@ -193,7 +193,7 @@ test('effect finish: nested host death stops Action and Skill before their depen
     assert.equal(context.instance.finished, true);
     assert.equal(order.includes('skill'), false);
   } } });
-  const second = resources.registerEffect(createEffectProgram({
+  const second = resources.registerEffect(createEffectDefinition({
     id: 'second-host-notice', initialize: () => ({}),
   }), { lifecycle: { finish: context => {
     order.push('second');
@@ -202,7 +202,7 @@ test('effect finish: nested host death stops Action and Skill before their depen
     assert.equal(order.includes('skill'), false);
     context.effects.finish([context.ref]);
   } } });
-  const dependent = resources.registerEffect(createEffectProgram({
+  const dependent = resources.registerEffect(createEffectDefinition({
     id: 'nested-action-dependent', initialize: () => ({}),
   }), { lifecycle: { finish: context => {
     order.push('action dependent');
@@ -236,7 +236,7 @@ test('effect finish: nested host death stops Action and Skill before their depen
   assert.deepEqual(executions.result().executions, []);
   assert.equal(work.events.filter(event => event.type === 'ACTION_CANCELLED').length, 1);
   assert.equal(work.events.filter(event => event.type === 'SKILL_FINISHED').length, 1);
-  assert.equal(getUnit(work, 1).effects.instances.find(instance => instance.programRef === independent.ref).participating, true);
+  assert.equal(getUnit(work, 1).effects.instances.find(instance => instance.definitionRef === independent.ref).participating, true);
   assert.equal(hostBefore.effects.nextInstanceId, 2);
 });
 
@@ -255,19 +255,19 @@ test('effect finish: remote dependent notices delay Skill notification and host 
       assert.equal(context.facts.getUnit(0).skill.active, null);
     },
   });
-  const transient = resources.registerEffect(createEffectProgram({
+  const transient = resources.registerEffect(createEffectDefinition({
     id: 'nested-transient-notice', initialize: () => ({}),
   }), { lifecycle: {
     start: context => { context.effects.finish([context.ref]); },
     finish: () => { order.push('transient'); },
   } });
-  const parent = resources.registerEffect(createEffectProgram({
+  const parent = resources.registerEffect(createEffectDefinition({
     id: 'remote-pending-parent', initialize: () => ({}),
   }), { lifecycle: { finish: context => {
     order.push('parent');
     context.damage({ sourceUnitId: null, targetUnitId: 0, damageType: 'TRUE', operands: createDamageOperands(100) });
   } } });
-  const child = resources.registerEffect(createEffectProgram({
+  const child = resources.registerEffect(createEffectDefinition({
     id: 'remote-pending-child', initialize: () => ({}),
   }), { lifecycle: { finish: context => {
     order.push('child');

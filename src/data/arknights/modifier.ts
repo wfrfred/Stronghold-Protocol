@@ -1,5 +1,5 @@
 import { assertFiniteNumber, assertNonnegativeSafeInteger } from "../../core/common/assert.js";
-import * as modifier from "../../core/tactical/modifier/value.js";
+import * as modifier from "../../core/tactical/contribution/value.js";
 import { TICKS_PER_SECOND } from "../../core/tactical/tick.js";
 
 const attributes = {

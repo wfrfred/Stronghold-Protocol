@@ -1,9 +1,9 @@
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import type { BattlefieldChange } from "../../battlefield/contract.js";
 import {
-    createMechanismRuntime,
+    createMechanism,
     type MechanismDefinition,
-    type MechanismRuntime,
+    type Mechanism,
 } from "../../battlefield/mechanism.js";
 import type { BattleExecutionState } from "../execution/state.js";
 
@@ -13,7 +13,7 @@ export interface MechanismPlacementDefinition<D extends MechanismDefinition = Me
 }
 
 export interface MechanismPlacementInstantiation {
-    readonly mechanism: MechanismRuntime;
+    readonly mechanism: Mechanism;
     readonly execution: BattleExecutionState;
     readonly changes: readonly BattlefieldChange[];
 }
@@ -30,7 +30,7 @@ export function instantiateMechanismPlacement(
         throw new RangeError("mechanism identity overflow");
     }
 
-    const mechanism = createMechanismRuntime({
+    const mechanism = createMechanism({
         id: execution.nextMechanismId,
         definition: placement.definition,
         active: placement.active ?? true,

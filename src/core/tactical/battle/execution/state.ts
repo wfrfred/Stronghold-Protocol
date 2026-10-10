@@ -1,4 +1,4 @@
-import type { ProjectileId } from "../../battlefield/projectile/state.js";
+import type { ProjectileId } from "../../battlefield/projectile/projectile.js";
 import type { Seed } from "../../../common/rng.js";
 import type { NavigationRequestId } from "../../battlefield/navigation/request.js";
 import type { UnitId } from "../../unit/unit.js";

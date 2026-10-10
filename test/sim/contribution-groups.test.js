@@ -6,15 +6,15 @@ import {
   getUnit,
   transitionUnit,
 } from "../../dist/core/tactical/battle/execution/context.js";
-import * as contribution from "../../dist/core/tactical/modifier/contribution.js";
-import * as modifier from "../../dist/core/tactical/modifier/value.js";
+import * as contribution from "../../dist/core/tactical/contribution/state.js";
+import * as modifier from "../../dist/core/tactical/contribution/value.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { attack, liveAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import { defense } from "../../dist/core/tactical/unit/capability/defense/contributions.js";
 import { resolveDefense } from "../../dist/core/tactical/unit/capability/defense/query.js";
 import { updateAttackContributions } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
-import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
+import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
 import {
   installEffect,
   removeEffect,
@@ -33,7 +33,7 @@ const unit = (id, attack = 100) => initializeUnit({
   position: [0, 0],
 });
 const value = (amount) => modifier.create({ finalAddition: amount });
-const program = (id) => createEffectProgram({
+const program = (id) => createEffectDefinition({
   id,
   initialize: () => ({ coefficient: 0, amount: 0, defense: 0, grouped: true }),
 });

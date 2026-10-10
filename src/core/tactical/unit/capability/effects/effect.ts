@@ -1,4 +1,4 @@
-import type { EffectProgramRef } from "./program.js";
+import type { EffectDefinitionRef } from "./definition.js";
 import type { UnitId } from "../../unit.js";
 import type { ActionExecutionId } from "../action/process.js";
 
@@ -39,7 +39,7 @@ export function sameLifetime(left: Scope, right: Scope): boolean {
     return lifetimeKey(left) === lifetimeKey(right);
 }
 
-export function effectTick(instance: EffectInstanceValue): number | null {
+export function effectTick(instance: EffectValue): number | null {
     const scope = instance.scopes.find((scope) => scope.type === "TICK");
 
     return scope?.type === "TICK" ? scope.tick : null;
@@ -52,24 +52,23 @@ export interface EffectLifecycleFacts {
     readonly finished: boolean;
 }
 
-export interface EffectInstanceMetadata {
+export interface EffectMetadata {
     readonly id: EffectId;
     readonly source: UnitId | null;
     readonly scopes: readonly Scope[];
     readonly acquiredSequence: number;
 }
 
-export interface EffectInstanceValue extends EffectInstanceMetadata, EffectLifecycleFacts {
-    readonly programRef: { readonly id: string };
+export interface EffectValue extends EffectMetadata, EffectLifecycleFacts {
+    readonly definitionRef: { readonly id: string };
     readonly state: object;
 }
 
-export interface EffectInstance<S extends object> extends EffectInstanceValue {
-    readonly programRef: EffectProgramRef<S>;
+export interface Effect<S extends object> extends EffectValue {
+    readonly definitionRef: EffectDefinitionRef<S>;
     readonly state: S;
 }
 
-export interface EffectSnapshot<S extends object>
-    extends EffectInstanceMetadata, EffectLifecycleFacts {
+export interface EffectSnapshot<S extends object> extends EffectMetadata, EffectLifecycleFacts {
     readonly state: S;
 }

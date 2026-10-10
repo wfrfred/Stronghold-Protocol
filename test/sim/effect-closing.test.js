@@ -5,7 +5,7 @@ import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { createBattleState, getUnit } from '../../dist/core/tactical/battle/execution/context.js';
 import { removeUnitWithEffects } from '../../dist/core/tactical/battle/execution/unit-lifecycle.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
-import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
+import { createEffectDefinition } from '../../dist/core/tactical/unit/capability/effects/definition.js';
 import {
     bindEffectLifetime,
     closeEffectLifetimes,
@@ -24,7 +24,7 @@ import { createSkillDefinition } from '../../dist/core/tactical/unit/capability/
 import { activateSkill } from '../../dist/core/tactical/unit/capability/skill/execution.js';
 import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
 import { attack } from '../../dist/core/tactical/unit/capability/offense/contributions.js';
-import { create as createModifier } from '../../dist/core/tactical/modifier/value.js';
+import { create as createModifier } from '../../dist/core/tactical/contribution/value.js';
 
 function unit(id, definition = {}) {
     return initializeUnit({ id, position: [id, 0], definition: {
@@ -43,7 +43,7 @@ function workOf(units, actions) {
 }
 
 function program(resources, id, lifecycle = {}, facets = {}) {
-    return resources.registerEffect(createEffectProgram({
+    return resources.registerEffect(createEffectDefinition({
         id, initialize: () => ({}),
     }), { ...facets, lifecycle });
 }

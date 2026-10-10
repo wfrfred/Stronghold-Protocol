@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { getUnit } from '../../dist/core/tactical/battle/execution/context.js';
-import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
+import { createEffectDefinition } from '../../dist/core/tactical/unit/capability/effects/definition.js';
 import { finishEffects, closeEffectLifetimes, installNewEffect, bindEffectLifetime } from '../../dist/core/tactical/unit/capability/effects/lifecycle.js';
 import { effectFixtureWork } from '../helpers/effects.js';
 const host = id => ({ id, definition: { id: `host-${id}` }, position: [0, 0] });
-const program = id => createEffectProgram({ id, initialize: () => ({}) });
+const program = id => createEffectDefinition({ id, initialize: () => ({}) });
 const input = { source: null, scopes: [] };
 
 test('effect batching: overlapping roots and diamond dependencies mark the complete set before deterministic callbacks', () => {

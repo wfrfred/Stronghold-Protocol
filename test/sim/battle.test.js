@@ -12,7 +12,7 @@ import { getDefaultSource, spawnsFromTemplate, hasGeneratedData } from '../../se
 import { LocalBossPool } from '../../server/sim/spec.js';
 import { BattlefieldRuntime, createBattlefieldRuntime } from '../../dist/core/tactical/battlefield/runtime.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
-import { createMechanismDefinition, createMechanismRuntime } from '../../dist/core/tactical/battlefield/mechanism.js';
+import { createMechanismDefinition, createMechanism } from '../../dist/core/tactical/battlefield/mechanism.js';
 import { createNavigationModifierDefinition, createNavigationModifier, createNavigationModifierRegion } from '../../dist/core/tactical/battlefield/navigation/modifier.js';
 import { createRng } from '../../dist/core/common/rng.js';
 import { BattleRuntime, simulateBattle } from '../../dist/core/tactical/battle/runtime.js';
@@ -28,20 +28,20 @@ import { secondsToTicks } from '../../dist/data/arknights/tick.js';
 import { parseLevelContent, parseLevelDefinition } from '../../dist/data/arknights/level.js';
 import { parseEnemyMovementContent, parseEnemyMovementDefinition } from '../../dist/data/arknights/enemy.js';
 import { parseEnemyMovementPrefab, parsePredefinedPrefab } from '../../dist/data/arknights/prefab.js';
-import { parsePredefinedInstanceDefinition } from '../../dist/data/arknights/predefined.js';
+import { parsePredefinedDefinition } from '../../dist/data/arknights/predefined.js';
 import { compileSpawnSchedule } from '../../dist/data/arknights/schedule.js';
 import { compileLevelMovementFragment } from '../../dist/data/arknights/movement-fragment.js';
 import { loadMovementScenario } from '../../dist/data/arknights/movement-scenario.js';
 import { createLegacyCombatBattle } from '../../dist/legacy/combat.js';
 import { createDeploymentProfile, createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/deployment.js';
 import { createOccupancyState } from '../../dist/core/tactical/unit/capability/occupancy.js';
-import { createPredefinedInstanceDefinition } from '../../dist/core/tactical/battle/steps/predefined.js';
+import { createPredefinedDefinition } from '../../dist/core/tactical/battle/steps/predefined.js';
 import { advanceMovement } from '../../dist/core/tactical/battle/steps/movement.js';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { createBattleState, appendEvents, getUnit, registerUnit } from '../../dist/core/tactical/battle/execution/context.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { createActionDefinition } from '../../dist/core/tactical/unit/capability/action/capability.js';
-import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
+import { createEffectDefinition } from '../../dist/core/tactical/unit/capability/effects/definition.js';
 import { installNewEffect } from '../../dist/core/tactical/unit/capability/effects/lifecycle.js';
 import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
 
@@ -895,7 +895,7 @@ test('core absolute wait overflow does not publish same-tick spawns, expiry, ide
     { type: 'WAIT_FOR_TICKS', durationTicks: 1 },
     { type: 'WAIT_CURRENT_WAVE_TICKS', targetElapsedTicks: Number.MAX_SAFE_INTEGER },
   ] });
-  const mechanism = createMechanismRuntime({ id: 0, definition: createMechanismDefinition({ id: 'wait-expiry' }), active: true });
+  const mechanism = createMechanism({ id: 0, definition: createMechanismDefinition({ id: 'wait-expiry' }), active: true });
   const effect = createNavigationModifier({
     id: 0, definition: createNavigationModifierDefinition({ id: 'wait-expiry',
       WALK: { denyPassage: false, deniedDepartures: [], costFloor: 2 }, FLY: null,
@@ -1050,7 +1050,7 @@ test('core alternative route commands preserve hidden presence and emit ordered 
 test('core failed alternative route commands do not publish same-tick expiry, births, RNG or navigation identities', () => {
   const initial = routeCommandBattle([{ type: 'WAIT_FOR_TICKS', durationTicks: 30 }]);
   const spawn = initial.schedule.spawns[0];
-  const mechanism = createMechanismRuntime({ id: 0, definition: createMechanismDefinition({ id: 'alternative-expiry' }), active: true });
+  const mechanism = createMechanism({ id: 0, definition: createMechanismDefinition({ id: 'alternative-expiry' }), active: true });
   const effect = createNavigationModifier({
     id: 0, definition: createNavigationModifierDefinition({ id: 'alternative-expiry',
       WALK: { denyPassage: false, deniedDepartures: [], costFloor: 2 }, FLY: null,
@@ -1082,7 +1082,7 @@ test('core battle publishes a completed tick only after all operations succeed',
     const base = routeCommandBattle([{ type: 'WAIT_FOR_TICKS', durationTicks: 30 }], { speed: 1 / 30, maxTicks: 2 });
     const source = base.schedule.spawns[0];
     const completedRoute = createRouteDefinition({ ...source.route, endPosition: source.route.startPosition, checkpoints: [] });
-    const initialMechanism = createMechanismRuntime({
+    const initialMechanism = createMechanism({
       id: 0, definition: createMechanismDefinition({ id: 'late-failure-initial' }), active: true,
     });
     const restriction = createNavigationModifierDefinition({
@@ -1177,7 +1177,7 @@ test('core battle propagates nested settlement errors without publishing battlef
   let observedMaps;
   let observations = 0;
   const resources = new CombatResources();
-  const effect = resources.registerEffect(createEffectProgram({
+  const effect = resources.registerEffect(createEffectDefinition({
     id: 'nested-failure-effect', initialize: () => ({}),
   }), {
     lifecycle: { start: context => {
@@ -1425,7 +1425,7 @@ test('core fragment projects periodic spawns from absolute source times without 
 
 test('core battle uses integer tick boundaries for spawning, effect expiry and deadlines', () => {
   const { spec } = slimeMovementFragment();
-  const mechanism = createMechanismRuntime({ id: 0, definition: createMechanismDefinition({ id: 'expiry' }), active: true });
+  const mechanism = createMechanism({ id: 0, definition: createMechanismDefinition({ id: 'expiry' }), active: true });
   const effect = createNavigationModifier({
     id: 0,
     definition: createNavigationModifierDefinition({ id: 'expiry', WALK: { denyPassage: false, deniedDepartures: [], costFloor: 2 }, FLY: null }),
@@ -1478,7 +1478,7 @@ test('core battle uses integer tick boundaries for spawning, effect expiry and d
 
 test('core battle does not publish spawning, expiry, RNG or tick progress when movement cannot be computed', () => {
   const { spec } = slimeMovementFragment();
-  const mechanism = createMechanismRuntime({ id: 0, definition: createMechanismDefinition({ id: 'overflow' }), active: true });
+  const mechanism = createMechanism({ id: 0, definition: createMechanismDefinition({ id: 'overflow' }), active: true });
   const region = createNavigationModifierRegion({ type: 'FIXED', position: [0, 0], direction: 'RIGHT',
     range: Array.from({ length: spec.map.rows }, (_, row) => Array.from({ length: spec.map.columns }, (_, col) => [row, col])).flat(),
   });
@@ -1490,7 +1490,7 @@ test('core battle does not publish spawning, expiry, RNG or tick progress when m
   const predefinedLevel = parseLevelDefinition(arknightsFixture('level_act1autochess_m02'), {
     consumeTileBlackboard: (_, entry) => ['isValidHand', 'previewNotAlloed'].includes(entry.key),
   });
-  const hiddenCrate = parsePredefinedInstanceDefinition(0, predefinedLevel.predefines.tokenInsts[13],
+  const hiddenCrate = parsePredefinedDefinition(0, predefinedLevel.predefines.tokenInsts[13],
     parsePredefinedPrefab(arknightsFixture('prefab_trap_1105_accrate')), arknightsFixture('character_trap_1105_accrate'));
   const runtime = new BattleRuntime({ ...withTimelineSpawns(spec, [{ ...spec.schedule.spawns[0], tick: 0 }]),
     predefines: [hiddenCrate], initialMechanisms: [{ definition: mechanism.definition, active: mechanism.active }], initialNavigationModifiers: [{ definition: effect.definition, source: { type: 'MECHANISM', mechanismIndex: 0 }, region: effect.region, active: effect.active, expiresAtTick: effect.expiresAtTick }, { definition: expired.definition, source: { type: 'MECHANISM', mechanismIndex: 0 }, region: expired.region, active: expired.active, expiresAtTick: expired.expiresAtTick }],
@@ -2168,7 +2168,7 @@ test('core battle deploys, relocates and retreats units with immutable occupancy
   const level = parseLevelDefinition(arknightsFixture('level_act1autochess_m02'), {
     consumeTileBlackboard: (_, entry) => ['isValidHand', 'previewNotAlloed'].includes(entry.key),
   });
-  const recipe = parsePredefinedInstanceDefinition(50,
+  const recipe = parsePredefinedDefinition(50,
     level.predefines.tokenInsts.find(instance => instance.inst.characterKey === 'trap_1105_accrate'),
     parsePredefinedPrefab(arknightsFixture('prefab_trap_1105_accrate')), arknightsFixture('character_trap_1105_accrate'));
   const crate = recipe.creation.definition;
@@ -2310,7 +2310,7 @@ test('core elevated support disables blocking without changing target layer and 
     spatial: Object.freeze({ layer: 'GROUND' }), blockable: Object.freeze({ weight: 1 }),
   });
   const occupancy = createOccupancyState({ claims: [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }] });
-  const recipe = createPredefinedInstanceDefinition({ id: 50, alias: 'test_platform', initiallyPresent: true, creation: {
+  const recipe = createPredefinedDefinition({ id: 50, alias: 'test_platform', initiallyPresent: true, creation: {
     type: 'UNIT', definition: provider, position: [1, 0], navigationModifiers: [], states: { occupancy },
   } });
   assert.equal(recipe.creation.states.occupancy, occupancy);
@@ -2321,7 +2321,7 @@ test('core elevated support disables blocking without changing target layer and 
       WALK: { denyPassage: false, deniedDepartures: [], costFloor: 1000 }, FLY: null }),
     range: [[0, 0]], direction: 'RIGHT',
   }];
-  const hiddenRecipe = createPredefinedInstanceDefinition({ ...recipe, initiallyPresent: false,
+  const hiddenRecipe = createPredefinedDefinition({ ...recipe, initiallyPresent: false,
     creation: { ...recipe.creation, states: { occupancy: { claims } }, navigationModifiers } });
   const runtime = new BattleRuntime(deploymentBattleInput({
     initialUnits: [{ definition: enemyDefinition, position: [1, 0] }],

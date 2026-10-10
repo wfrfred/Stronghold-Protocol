@@ -9,7 +9,7 @@ import {
     cancelActionExecutionInWork,
     resumeActionExecutionInWork,
 } from "../../unit/capability/action/internal/process.js";
-import type { CompiledAction } from "../../unit/capability/action/program.js";
+import type { CompiledAction } from "../../unit/capability/action/compiled.js";
 import {
     actionExecutionPermissions,
     type ActionExecution,

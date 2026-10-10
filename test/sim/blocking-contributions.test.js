@@ -1,5 +1,5 @@
 import { fixtureBattlefield } from "../helpers/battlefield.js";
-import { effectTick } from "../../dist/core/tactical/unit/capability/effects/instance.js";
+import { effectTick } from "../../dist/core/tactical/unit/capability/effects/effect.js";
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
@@ -20,15 +20,15 @@ import {
   updateBlockingCapacityContributions,
 } from '../../dist/core/tactical/unit/capability/blocking/capability.js';
 import { capacity as capacityContribution } from '../../dist/core/tactical/unit/capability/blocking/contributions.js';
-import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
+import { createEffectDefinition } from '../../dist/core/tactical/unit/capability/effects/definition.js';
 import {
   expireEffects, finalizeEffect, finishEffects, installNewEffect,
   setEffectEnabled, setEffectTick, updateEffectState,
 } from '../../dist/core/tactical/unit/capability/effects/lifecycle.js';
 import { maxHp } from '../../dist/core/tactical/unit/capability/vitality/contributions.js';
 import { resolveMaxHp } from '../../dist/core/tactical/unit/capability/vitality/query.js';
-import * as contribution from '../../dist/core/tactical/modifier/contribution.js';
-import * as modifier from '../../dist/core/tactical/modifier/value.js';
+import * as contribution from '../../dist/core/tactical/contribution/state.js';
+import * as modifier from '../../dist/core/tactical/contribution/value.js';
 import { compileAttributeModifiers, parseAttributeModifiers } from '../../dist/data/arknights/modifier.js';
 import { compileBuffStacking, parseBuffStacking } from '../../dist/data/arknights/buff-stacking.js';
 import { effectFixtureWork } from '../helpers/effects.js';
@@ -36,7 +36,7 @@ import { effectFixtureWork } from '../helpers/effects.js';
 const fixtures = JSON.parse(readFileSync(new URL('../fixtures/arknights/blocking_buffs.json', import.meta.url), 'utf8'));
 const fixture = key => fixtures.find(entry => entry.node._buff.buffKey === key);
 const effectAddress = { type: "EFFECT", unitId: 0, effectId: 0 };
-const program = (id, state = {}) => createEffectProgram({ id, initialize: () => state });
+const program = (id, state = {}) => createEffectDefinition({ id, initialize: () => state });
 const blocker = (capacity = 3) => initializeUnit({
   id: 0, position: [0, 0], definition: {
     id: 'capacity-holder', allegiance: { side: 'ALLY' }, vitality: { maxHp: 100 },
@@ -193,7 +193,7 @@ test('blocking capacity: native STACK layers release enemies and expiry immediat
   const original = h.state;
   const apply = () => {
     const work = h.work();
-    const current = getUnit(work, 0).effects?.instances.find(instance => instance.programRef === effect.ref);
+    const current = getUnit(work, 0).effects?.instances.find(instance => instance.definitionRef === effect.ref);
     const plan = rule.plan(current === undefined ? undefined : {
       stackCount: current.state.stackCount, expiresAtTick: effectTick(current),
     }, { stackCount: 1, expiresAtTick: 2 }, 0);

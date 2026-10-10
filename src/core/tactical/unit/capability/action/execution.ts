@@ -2,7 +2,7 @@ import { ActionExecutionWork } from "./internal/executions.js";
 import { startActionInWork } from "./internal/execution.js";
 import type { BattleState } from "../../../battle/execution/context.js";
 import type { UnitId } from "../../unit.js";
-import type { CompiledAction } from "./program.js";
+import type { CompiledAction } from "./compiled.js";
 import type { ActionExecutionState, ActionExecutionResources } from "./process.js";
 import type { ActionResources } from "./resources.js";
 

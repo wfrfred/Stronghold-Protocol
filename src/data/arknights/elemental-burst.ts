@@ -1,12 +1,12 @@
 import type { CombatResources } from "../../core/tactical/battle/resources.js";
-import * as modifier from "../../core/tactical/modifier/value.js";
+import * as modifier from "../../core/tactical/contribution/value.js";
 import { TICKS_PER_SECOND } from "../../core/tactical/tick.js";
 import { hasEffects } from "../../core/tactical/unit/capability/effects/capability.js";
-import { createEffectProgram } from "../../core/tactical/unit/capability/effects/program.js";
+import { createEffectDefinition } from "../../core/tactical/unit/capability/effects/definition.js";
 import { defense, resistance } from "../../core/tactical/unit/capability/defense/contributions.js";
 import { hasDefense } from "../../core/tactical/unit/capability/defense/capability.js";
 import { ELEMENT_TYPES } from "../../core/tactical/unit/capability/elemental/capability.js";
-import type { ElementalBurstContext } from "../../core/tactical/unit/capability/elemental/program.js";
+import type { ElementalBurstContext } from "../../core/tactical/unit/capability/elemental/definition.js";
 import { attack } from "../../core/tactical/unit/capability/offense/contributions.js";
 import { hasOffense } from "../../core/tactical/unit/capability/offense/capability.js";
 import {
@@ -19,7 +19,7 @@ import { getArknightsElementalBurstProfile } from "./elemental.js";
 
 export function registerArknightsElementalBursts(resources: CombatResources): void {
     const paralysisStun = resources.registerEffect(
-        createEffectProgram({
+        createEffectDefinition({
             id: "elemental/paralysis-stun",
             initialize: () => ({}),
         }),
@@ -31,7 +31,7 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
             const profile = getArknightsElementalBurstProfile(receiver, type);
             const prefix = `elemental/${receiver}/${type}`;
             const reduction = resources.registerEffect(
-                createEffectProgram({
+                createEffectDefinition({
                     id: `${prefix}/defense`,
                     initialize: () => ({
                         defense: profile.defReduction,
@@ -72,14 +72,14 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
             }
 
             const status = resources.registerEffect(
-                createEffectProgram({
+                createEffectDefinition({
                     id: `${prefix}/status`,
                     initialize: () => ({}),
                 }),
                 { bindings: flags.length === 0 ? [] : [compileStatusBinding(flags)] },
             );
             const weakness = resources.registerEffect(
-                createEffectProgram({
+                createEffectDefinition({
                     id: `${prefix}/weakness`,
                     initialize: () => ({ scaler: 1 - profile.attackReductionRatio }),
                 }),
@@ -95,7 +95,7 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                 },
             );
             const paralysis = resources.registerEffect(
-                createEffectProgram({
+                createEffectDefinition({
                     id: `${prefix}/paralysis`,
                     initialize: () => ({ remaining: profile.paralysisStacks }),
                 }),
@@ -211,7 +211,7 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                         ) {
                             const instance = unit.effects.instances.find(
                                 (candidate) =>
-                                    candidate.programRef.id === weakness.ref.id &&
+                                    candidate.definitionRef.id === weakness.ref.id &&
                                     !candidate.finished &&
                                     candidate.scopes.some(
                                         (scope) =>

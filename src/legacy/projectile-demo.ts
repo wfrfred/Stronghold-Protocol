@@ -2,13 +2,13 @@ import { attack } from "../core/tactical/unit/capability/offense/contributions.j
 import { CombatResources } from "../core/tactical/battle/resources.js";
 import type { BattleResources } from "../core/tactical/battle/runtime.js";
 import { battlefieldView, getUnit } from "../core/tactical/battle/execution/context.js";
-import { createProjectileProgram } from "../core/tactical/battlefield/projectile/program.js";
+import { createProjectileDefinition } from "../core/tactical/battlefield/projectile/definition.js";
 import { createShapeGeometry, type RangeGeometry } from "../core/tactical/geometry/shape.js";
-import * as modifier from "../core/tactical/modifier/value.js";
+import * as modifier from "../core/tactical/contribution/value.js";
 import { compileAction } from "../core/tactical/unit/capability/action/compile.js";
 import { hasAllegiance } from "../core/tactical/unit/capability/allegiance.js";
 import { installNewEffect } from "../core/tactical/unit/capability/effects/lifecycle.js";
-import { createEffectProgram } from "../core/tactical/unit/capability/effects/program.js";
+import { createEffectDefinition } from "../core/tactical/unit/capability/effects/definition.js";
 import { resolveAttackPower } from "../core/tactical/unit/capability/offense/query.js";
 import { compileStatusBinding } from "../core/tactical/unit/capability/status/binding.js";
 import { hasVitality } from "../core/tactical/unit/capability/vitality/capability.js";
@@ -17,14 +17,14 @@ import { createDamageOperands } from "../core/tactical/unit/capability/vitality/
 export function createTacticalProjectileResources(cachedOnly = false): BattleResources {
     const resources = new CombatResources();
     const marker = resources.registerEffect(
-        createEffectProgram({
+        createEffectDefinition({
             id: "contact-mark",
             initialize: () => ({}),
         }),
         { bindings: [compileStatusBinding(["HEAL_FREE"])] },
     );
     const boost = resources.registerEffect(
-        createEffectProgram({
+        createEffectDefinition({
             id: "post-launch-attack-boost",
             initialize: () => ({}),
         }),
@@ -43,7 +43,7 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
         }),
     });
     const shell = resources.projectiles.register(
-        createProjectileProgram({
+        createProjectileDefinition({
             id: cachedOnly ? "cached-atk-shell" : "live-atk-shell",
             initialize: () => ({}),
             acceptsContact: (context, target) =>

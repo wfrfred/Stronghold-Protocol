@@ -1,7 +1,7 @@
 import { assertPositiveNumber, assertPositiveSafeInteger } from "../../core/common/assert.js";
 import {
-    createPredefinedInstanceDefinition,
-    type PredefinedInstanceDefinition,
+    createPredefinedDefinition,
+    type PredefinedDefinition,
 } from "../../core/tactical/battle/steps/predefined.js";
 import { createMechanismDefinition } from "../../core/tactical/battlefield/mechanism.js";
 import { createNavigationModifierDefinition } from "../../core/tactical/battlefield/navigation/modifier.js";
@@ -131,16 +131,16 @@ function unitDefinition(
     });
 }
 
-export function parsePredefinedInstanceDefinition(
+export function parsePredefinedDefinition(
     id: number,
     instance: ArknightsPredefinedInstance,
     profile: PredefinedPrefab,
     characterValue: unknown,
-): PredefinedInstanceDefinition {
+): PredefinedDefinition {
     const phase = predefinedCharacter(instance, profile, characterValue);
 
     if (profile.type === "MECHANISM") {
-        return createPredefinedInstanceDefinition({
+        return createPredefinedDefinition({
             id,
             alias: instance.alias,
             initiallyPresent: !instance.hidden,
@@ -158,7 +158,7 @@ export function parsePredefinedInstanceDefinition(
         FLY: null,
     });
 
-    return createPredefinedInstanceDefinition({
+    return createPredefinedDefinition({
         id,
         alias: instance.alias,
         initiallyPresent: !instance.hidden,

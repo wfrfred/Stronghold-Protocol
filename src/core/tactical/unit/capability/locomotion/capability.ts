@@ -2,8 +2,8 @@ import type { NavigationState } from "../../../battlefield/navigation/state.js";
 import type { RouteState } from "./route/state.js";
 import { widenUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
 import { createSteeringState, type SteeringParameters, type SteeringState } from "./steering.js";
-import * as contribution from "../../../modifier/contribution.js";
-import * as modifier from "../../../modifier/value.js";
+import * as contribution from "../../../contribution/state.js";
+import * as modifier from "../../../contribution/value.js";
 
 export interface LocomotionDefinition {
     readonly moveSpeedPerTick: number;

@@ -10,7 +10,7 @@ import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/execution/context.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { copyUnitSnapshot } from "../../dist/core/tactical/unit/snapshot.js";
-import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
+import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
 import {
     installNewEffect,
     setEffectEnabled,
@@ -20,8 +20,8 @@ import {
     expireEffects,
 } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
-import * as modifier from "../../dist/core/tactical/modifier/value.js";
-import { sampled } from "../../dist/core/tactical/unit/capability/effects/binding.js";
+import * as modifier from "../../dist/core/tactical/contribution/value.js";
+import { compile } from "../../dist/core/tactical/contribution/definition.js";
 import { preserveHpRatio } from "../../dist/core/tactical/unit/capability/vitality/max-hp.js";
 import {
     updateMaxHpContributions,
@@ -44,8 +44,8 @@ const receiver = (hp = 50) => {
     return { ...unit, vitality: { ...unit.vitality, hp } };
 };
 const pair = (work) => [getUnit(work, 1).vitality.hp, resolveMaxHp(1, battlefieldView(work))];
-const program = (id, amount) =>
-    createEffectProgram({
+const createDefinition = (id, amount) =>
+    createEffectDefinition({
         id,
         initialize: () => ({ amount, revision: 0 }),
     });
@@ -67,7 +67,7 @@ const install = (work, ref, resources, patch = {}) => {
 test("MaxHP: install, payload, participation, finish and cleanup retain HP percentage", () => {
     for (const hp of [100, 50, 0]) {
         const resources = new CombatResources();
-        const effect = resources.registerEffect(program("max-hp", 100), {
+        const effect = resources.registerEffect(createDefinition("max-hp", 100), {
             contributions: [maxHp((instance) => [bonus(instance.state.amount)])],
         });
         const work = effectFixtureWork(receiver(hp));
@@ -126,10 +126,10 @@ test("MaxHP: callbacks and synchronous nested successors see coordinated facts",
             resolveMaxHp(1, { getUnit: context.facts.getUnit }),
         ]);
     };
-    const child = resources.registerEffect(program("child-hp", 50), {
+    const child = resources.registerEffect(createDefinition("child-hp", 50), {
         contributions: [maxHp((instance) => [bonus(instance.state.amount)])],
     });
-    const parent = resources.registerEffect(program("parent-hp", 100), {
+    const parent = resources.registerEffect(createDefinition("parent-hp", 100), {
         contributions: [maxHp((instance) => [bonus(instance.state.amount)])],
         lifecycle: {
             start: (context) => {
@@ -183,21 +183,19 @@ test("MaxHP: callbacks and synchronous nested successors see coordinated facts",
 test("MaxHP: one binding batch coordinates once after every slot has changed", () => {
     const resources = new CombatResources();
     const observed = [];
-    const first = sampled({
-        id: "first",
-        target: updateMaxHpContributions,
-        reconcile: preserveHpRatio,
-        group: undefined,
-        sample: () => [bonus(100)],
-    });
-    const second = sampled({
-        id: "second",
-        target: updateMaxHpContributions,
-        reconcile: preserveHpRatio,
-        group: undefined,
-        sample: () => [bonus(100)],
-    });
-    const effect = resources.registerEffect(program("two-bindings", 0), {
+    const coordinatedSlots = [];
+    const reconcile = (previous, current) => {
+        coordinatedSlots.push(current.vitality.maxHp.entries.map(entry => entry.participating));
+        return preserveHpRatio(previous, current);
+    };
+    const definition = resources.effects.register(createDefinition("two-bindings", 0));
+    const [first, second] = compile(definition, [
+        { kind: "SAMPLED", id: "first", target: updateMaxHpContributions,
+            reconcile, sample: () => [bonus(100)] },
+        { kind: "SAMPLED", id: "second", target: updateMaxHpContributions,
+            reconcile, sample: () => [bonus(100)] },
+    ], resources);
+    const effect = resources.registerEffect(definition, {
         bindings: [
             first,
             {
@@ -212,7 +210,9 @@ test("MaxHP: one binding batch coordinates once after every slot has changed", (
     const work = effectFixtureWork(receiver());
     install(work, effect.ref, resources);
     const installedPair = pair(work);
+    assert.deepEqual(coordinatedSlots, [[false, false], [true, true]]);
     setEffectEnabled(work, address(), false, resources, 1);
+    assert.deepEqual(coordinatedSlots, [[false, false], [true, true], [false, false]]);
     assert.deepEqual(observed, [50, 150]);
     assert.deepEqual(installedPair, [150, 300]);
     assert.deepEqual(pair(work), [50, 100]);
@@ -220,7 +220,7 @@ test("MaxHP: one binding batch coordinates once after every slot has changed", (
 
 test("MaxHP: ordinary healing consumes the current upper bound and prohibition does not reject coordination", () => {
     const resources = new CombatResources();
-    const effect = resources.registerEffect(program("healing-hp", 100), {
+    const effect = resources.registerEffect(createDefinition("healing-hp", 100), {
         contributions: [maxHp((instance) => [bonus(instance.state.amount)])],
     });
     const work = effectFixtureWork(receiver());
@@ -251,7 +251,7 @@ test("MaxHP: ordinary healing consumes the current upper bound and prohibition d
 test("MaxHP: group winner replacement and fallback preserve the current HP ratio", () => {
     const resources = new CombatResources();
     const register = (id, amount, strength) =>
-        resources.registerEffect(program(id, amount), {
+        resources.registerEffect(createDefinition(id, amount), {
             contributions: [
                 maxHp((instance) => [bonus(instance.state.amount)], {
                     group: { id: "hp-group", strength },
@@ -284,7 +284,7 @@ test("MaxHP: group winner replacement and fallback preserve the current HP ratio
 
 test("MaxHP: unchanged effective values, inactive cleanup and snapshots do not reapply coordination", () => {
     const resources = new CombatResources();
-    const effect = resources.registerEffect(program("clamped-hp", -500), {
+    const effect = resources.registerEffect(createDefinition("clamped-hp", -500), {
         contributions: [maxHp((instance) => [bonus(instance.state.amount)])],
     });
     const work = effectFixtureWork(receiver(Math.PI));
@@ -323,7 +323,7 @@ test("MaxHP: unchanged effective values, inactive cleanup and snapshots do not r
 
 test("MaxHP: a tick failure does not publish contributions or the HP response", () => {
     const resources = new CombatResources();
-    const effect = resources.registerEffect(program("transaction-hp", 100), {
+    const effect = resources.registerEffect(createDefinition("transaction-hp", 100), {
         contributions: [maxHp((instance) => [bonus(instance.state.amount)])],
         lifecycle: {
             enable: (context) => {
@@ -422,7 +422,7 @@ test("capabilities: TypeScript permits sampled MaxHP and blocking contributions 
     writeFileSync(
         path,
         `
-import { sampled, live } from ${module("unit/capability/effects/binding")};
+import { compile, type Target, type SampledTarget, type QueryContext } from ${module("contribution/definition")};
 import { updateMaxHpContributions, type VitalityState } from ${module("unit/capability/vitality/capability")};
 import { updateAttackContributions } from ${module("unit/capability/offense/capability")};
 import { attack, liveAttack } from ${module("unit/capability/offense/contributions")};
@@ -430,29 +430,32 @@ import { defense, liveDefense, resistance, liveResistance } from ${module("unit/
 import { maxHp } from ${module("unit/capability/vitality/contributions")};
 import { capacity } from ${module("unit/capability/blocking/contributions")};
 import { updateBlockingCapacityContributions, type BlockerState } from ${module("unit/capability/blocking/capability")};
-import type { EffectInstance } from ${module("unit/capability/effects/instance")};
-import * as contribution from ${module("modifier/contribution")};
-import * as computation from ${module("modifier/computation")};
+import type { Effect } from ${module("unit/capability/effects/effect")};
+import * as contribution from ${module("contribution/state")};
+import * as computation from ${module("contribution/computation")};
 import { CombatResources } from ${module("battle/resources")};
-import { createEffectProgram } from ${module("unit/capability/effects/program")};
-import type { Target, SampledTarget, Context } from ${module("unit/capability/contribution")};
-const computations = new computation.Resources<Context>();
-const group = undefined;
-sampled({ id: 'hp', target: updateMaxHpContributions, sample: () => [], group });
-sampled({ id: 'capacity', target: updateBlockingCapacityContributions, sample: () => [], group });
-sampled({ id: 'attack', target: updateAttackContributions, sample: () => [], group });
-live({ id: 'attack', target: updateAttackContributions, computations, evaluator: 'attack', evaluate: () => [], group });
-// @ts-expect-error MaxHP cannot install live bindings.
-live({ id: 'hp', target: updateMaxHpContributions, computations, evaluator: 'hp', evaluate: () => [], group });
-// @ts-expect-error Blocking cannot install live bindings.
-live({ id: 'capacity', target: updateBlockingCapacityContributions, computations, evaluator: 'capacity', evaluate: () => [], group });
+import { createEffectDefinition } from ${module("unit/capability/effects/definition")};
+const computations = new computation.Resources<QueryContext>();
+const combat = new CombatResources();
+const effect = createEffectDefinition({ id: 'hp', initialize: () => ({ bonus: 100 }) });
+const resources = { effects: combat.effects, computations };
+compile(effect, [
+    { kind: 'SAMPLED', id: 'hp', target: updateMaxHpContributions, sample: () => [] },
+    { kind: 'SAMPLED', id: 'capacity', target: updateBlockingCapacityContributions, sample: () => [] },
+    { kind: 'SAMPLED', id: 'attack', target: updateAttackContributions, sample: () => [] },
+    { kind: 'LIVE', id: 'live-attack', target: updateAttackContributions, evaluate: () => [] },
+], resources);
+// @ts-expect-error MaxHP cannot compile live bindings.
+compile(effect, [{ kind: 'LIVE', id: 'hp', target: updateMaxHpContributions, evaluate: () => [] }], resources);
+// @ts-expect-error Blocking cannot compile live bindings.
+compile(effect, [{ kind: 'LIVE', id: 'capacity', target: updateBlockingCapacityContributions, evaluate: () => [] }], resources);
 // @ts-expect-error A broad target alias cannot hide the MaxHP restriction.
 const broad: Target = updateMaxHpContributions;
 // @ts-expect-error A broad target alias cannot hide the blocking restriction.
 const broadCapacity: Target = updateBlockingCapacityContributions;
 const projection: SampledTarget = updateMaxHpContributions;
-// @ts-expect-error A sampled target alias still rejects a live transition.
-live({ id: 'hp', target: projection, computations, evaluator: 'hp', evaluate: () => [], group });
+// @ts-expect-error A sampled target alias still rejects a live declaration.
+compile(effect, [{ kind: 'LIVE', id: 'hp', target: projection, evaluate: () => [] }], resources);
 const fixed = contribution.empty<'SAMPLED'>();
 // @ts-expect-error Direct installation cannot insert a live contribution into sampled state.
 contribution.register(fixed, { id: 'hp', sequence: 0, kind: "LIVE", participating: true, evaluator: 'hp' });
@@ -462,8 +465,6 @@ contribution.update(fixed, 'hp', () => ({ id: 'hp', sequence: 0, kind: "LIVE", p
 const invalid: VitalityState = { hp: 100, maxHp: contribution.register(contribution.empty<'LIVE'>(), { id: 'hp', sequence: 0, kind: "LIVE", participating: true, evaluator: 'hp' }) };
 // @ts-expect-error Blocking cannot hold a live contribution.
 const invalidBlocker: BlockerState = { capacity: contribution.register(contribution.empty<'LIVE'>(), { id: 'capacity', sequence: 0, kind: "LIVE", participating: true, evaluator: 'capacity' }), enabled: true, geometry: { radius: 1 } };
-const combat = new CombatResources();
-const effect = createEffectProgram({ id: 'hp', initialize: () => ({ bonus: 100 }) });
 const bonus = (amount: number) => [{ addition: 0, multiplier: 0, finalAddition: amount, finalScaler: 1 }];
 combat.registerEffect(effect, { contributions: [
     maxHp(instance => bonus(instance.state.bonus)),
@@ -479,10 +480,10 @@ combat.registerEffect(effect, { contributions: [
 combat.registerEffect(effect, { contributions: [maxHp(instance => bonus(instance.unit.vitality.hp))] });
 // @ts-expect-error MaxHP samples cannot read unsignalled battlefield facts.
 combat.registerEffect(effect, { contributions: [maxHp(instance => bonus(instance.battlefield.getUnit(1).vitality.hp))] });
-// @ts-expect-error Live callbacks preserve the matching program state.
+// @ts-expect-error Live callbacks preserve the matching effect state.
 combat.registerEffect(effect, { contributions: [liveAttack(({ instance }) => bonus(instance.state.missing))] });
-const other = attack((instance: EffectInstance<{ other: number }>) => bonus(instance.state.other));
-// @ts-expect-error An unrelated program state cannot supply a declaration.
+const other = attack((instance: Effect<{ other: number }>) => bonus(instance.state.other));
+// @ts-expect-error An unrelated effect state cannot supply a declaration.
 combat.registerEffect(effect, { contributions: [other] });
 `,
     );

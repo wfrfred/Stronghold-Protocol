@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
-import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
+import { createEffectDefinition } from '../../dist/core/tactical/unit/capability/effects/definition.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { seededPlacement } from '../helpers/aura.js';
 import { createEnemyDefinition } from '../../dist/core/tactical/unit/archetype/enemy.js';
@@ -84,7 +84,7 @@ function fixture({ spawnTick = 100 } = {}) {
   };
   const map = createBattlefieldMap(1, 8, Array.from({ length: 8 }, () => tile));
   const resources = new CombatResources();
-  const initial = resources.registerEffect(createEffectProgram({
+  const initial = resources.registerEffect(createEffectDefinition({
     id: 'initial-state',
     initialize: () => ({ quota: { remaining: 3 }, marks: [1, 2] }),
   }));
@@ -175,7 +175,7 @@ test('runtime allocates initial IDs, resolves creation references, and never reu
     type: 'FOLLOW_UNIT', unitId: 0, range: [[0, 0]], direction: 'RIGHT',
   });
   assert.equal(initial.units[1].effects.instances[0].source, 1);
-  assert.equal(initial.units[1].effects.instances[0].programRef, ref);
+  assert.equal(initial.units[1].effects.instances[0].definitionRef, ref);
   assert.equal(initial.units[1].effects.instances[0].started, true);
   assert.deepEqual(initial.units[1].effects.instances[0].state, { quota: { remaining: 3 }, marks: [1, 2] });
 

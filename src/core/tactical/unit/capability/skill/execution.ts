@@ -23,7 +23,7 @@ import {
     type SkillActivationMode,
     type SkillState,
 } from "./capability.js";
-import type { CompiledSkill, SkillActivationContext, SkillFacts } from "./program.js";
+import type { CompiledSkill, SkillActivationContext, SkillFacts } from "./compiled.js";
 import { spendSkillSp } from "./sp.js";
 import type { SkillResources } from "./resources.js";
 import { spendSkillAmmo, type SkillAmmoResult } from "./ammo.js";

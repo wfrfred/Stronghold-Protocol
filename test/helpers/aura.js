@@ -1,14 +1,14 @@
-import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
+import { createEffectDefinition } from '../../dist/core/tactical/unit/capability/effects/definition.js';
 import { selectTargets } from '../../dist/core/tactical/unit/targeting/select.js';
 import { attack } from '../../dist/core/tactical/unit/capability/offense/contributions.js';
 import { resolveAttackPower } from '../../dist/core/tactical/unit/capability/offense/query.js';
-import { create as modifier } from '../../dist/core/tactical/modifier/value.js';
+import { create as modifier } from '../../dist/core/tactical/contribution/value.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { getUnit } from '../../dist/core/tactical/battle/execution/context.js';
 import { installNewEffect } from '../../dist/core/tactical/unit/capability/effects/lifecycle.js';
 import { effectFixtureWork } from './effects.js';
 
-export const effectProgram = (id, initialize = () => ({})) => createEffectProgram({
+export const effectProgram = (id, initialize = () => ({})) => createEffectDefinition({
     id, initialize,
 });
 

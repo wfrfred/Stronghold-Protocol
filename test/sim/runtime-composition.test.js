@@ -12,16 +12,16 @@ import { seededPlacement } from "../helpers/aura.js";
 import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
 import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
 import { compileAction } from "../../dist/core/tactical/unit/capability/action/compile.js";
-import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
+import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
 import { installNewEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { compileStatusBinding } from "../../dist/core/tactical/unit/capability/status/binding.js";
 import { hasStatusFlag } from "../../dist/core/tactical/unit/capability/status/capability.js";
-import * as modifier from "../../dist/core/tactical/modifier/value.js";
+import * as modifier from "../../dist/core/tactical/contribution/value.js";
 import { initializeVitalityState } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/execution/context.js";
-import { createProjectileProgram } from "../../dist/core/tactical/battlefield/projectile/program.js";
+import { createProjectileDefinition } from "../../dist/core/tactical/battlefield/projectile/definition.js";
 
 const hit = createShapeGeometry({
   shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.1 }],
@@ -94,7 +94,7 @@ function view(snapshot) {
 
 function effect(snapshot, unitId, ref) {
   return snapshot.units.find((unit) => unit.id === unitId).effects.instances
-    .find((instance) => instance.programRef.id === ref.id);
+    .find((instance) => instance.definitionRef.id === ref.id);
 }
 
 function scenario({ failure = null, cancelled = false } = {}) {
@@ -110,7 +110,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
 
   const registerBuff = (id, addition, flags = []) => {
     let program;
-    program = resources.registerEffect(createEffectProgram({
+    program = resources.registerEffect(createEffectDefinition({
       id,
       initialize: () => ({ starts: 0, enables: 0 }),
     }), {
@@ -134,7 +134,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
   const marker = registerBuff("receiver-mark", 3, ["INVISIBLE"]);
   const scoped = registerBuff("execution-power", 2);
   const pulse = registerBuff("release-power", 1);
-  const refused = resources.registerEffect(createEffectProgram({
+  const refused = resources.registerEffect(createEffectDefinition({
     id: "refused-installation",
     initialize: () => ({}),
   }), {
@@ -149,7 +149,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
     },
   });
   let receiver;
-  receiver = resources.registerEffect(createEffectProgram({
+  receiver = resources.registerEffect(createEffectDefinition({
     id: "aura-receiver",
     initialize: () => ({ starts: 0, enables: 0, uses: 0 }),
   }), {
@@ -207,7 +207,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
       },
     },
   });
-  aura = resources.registerEffect(createEffectProgram({
+  aura = resources.registerEffect(createEffectDefinition({
     id: "combined-aura",
     initialize: () => ({ remaining: 3, consumed: 0, receivers: [] }),
   }), { lifecycle: {
@@ -233,7 +233,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
       }
     },
   } });
-  const shell = resources.projectiles.register(createProjectileProgram({
+  const shell = resources.projectiles.register(createProjectileDefinition({
     id: "combined-shell",
     initialize: () => ({ contacts: 0 }),
     acceptsContact: (context, unit) =>
@@ -251,7 +251,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
       context.operations.stopSelf();
       if (fault.enabled && failure === "late-projectile") {
         const auraState = context.facts.getUnit(0).effects.instances
-          .find(instance => instance.programRef === aura.ref).state;
+          .find(instance => instance.definitionRef === aura.ref).state;
         assert.deepEqual(auraState.receivers.map(binding => binding.unitId), [0, 1, 2, 3]);
         assert.equal(context.facts.getUnit(1).vitality.hp, 83);
         assert.equal(hasStatusFlag(context.facts.getUnit(1), "INVISIBLE"), true);

@@ -24,8 +24,8 @@ import { compileTargeting } from "../../dist/core/tactical/unit/targeting/compil
 import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { selectTargets } from '../../dist/core/tactical/unit/targeting/select.js';
 import { addStatusContribution, hasStatusFlag } from '../../dist/core/tactical/unit/capability/status/capability.js';
-import * as contribution from '../../dist/core/tactical/modifier/contribution.js';
-import * as modifier from '../../dist/core/tactical/modifier/value.js';
+import * as contribution from '../../dist/core/tactical/contribution/state.js';
+import * as modifier from '../../dist/core/tactical/contribution/value.js';
 
 import { createBattleState, getUnit, updateUnit } from '../../dist/core/tactical/battle/execution/context.js';
 import { createActionExecutionState } from '../../dist/core/tactical/unit/capability/action/process.js';

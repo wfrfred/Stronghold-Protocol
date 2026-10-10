@@ -2,7 +2,7 @@ import { hasStatusFlag } from "../../status/capability.js";
 import { EffectDispatchScope, participatingEffect } from "../../effects/dispatch.js";
 import { effectView, getEffect } from "../../effects/query.js";
 import { finalizeFinishedEffects } from "../../effects/lifecycle.js";
-import type { EffectRef } from "../../effects/instance.js";
+import type { EffectRef } from "../../effects/effect.js";
 import { hasVitality, resolveVitalityMaxHp, type VitalUnit } from "../capability.js";
 import { widenUnit, type StableUnit, type UnitId } from "../../../unit.js";
 import { resolveMaxHp } from "../query.js";

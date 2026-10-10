@@ -49,7 +49,7 @@ test('aura runtime: a restored aura refreshes on its first tick without creating
     const runtime = new BattleRuntime(input(host), { combat: resources });
     const initial = runtime.snapshot();
     assert.deepEqual(initial.mechanisms, []);
-    assert.equal(initial.units[0].effects.instances[0].programRef, aura.ref);
+    assert.equal(initial.units[0].effects.instances[0].definitionRef, aura.ref);
     assert.deepEqual(initial.units[0].effects.instances[0].state.bindings, []);
     assert.equal(snapshotAttack(initial, 1, resources), 100);
     assert.deepEqual(host.states.effects.instances[0].state.bindings, []);
@@ -72,7 +72,7 @@ test('aura runtime: predefined, deployment and spawning join before the same tic
     const observer = resources.registerEffect(effectProgram('registration-observer'), {
         lifecycle: { advance: context => {
             seen.push(context.battlefield.unitIds.map(id => [id,
-                context.battlefield.getUnit(id).effects?.instances.some(effect => effect.programRef === receiver.ref) ?? false]));
+                context.battlefield.getUnit(id).effects?.instances.some(effect => effect.definitionRef === receiver.ref) ?? false]));
         } },
     });
     const hostState = effectFixtureWork(auraUnit(0));
@@ -93,7 +93,7 @@ test('aura runtime: predefined, deployment and spawning join before the same tic
     assert.deepEqual(starts, [[1, 0], [2, 0], [3, 0], [4, 0]]);
     assert.deepEqual(seen, [[[0, false], [1, false], [2, false], [3, false], [4, false]]]);
     const after = runtime.snapshot();
-    const auraInstance = after.units[0].effects.instances.find(effect => effect.programRef === aura.ref);
+    const auraInstance = after.units[0].effects.instances.find(effect => effect.definitionRef === aura.ref);
     assert.deepEqual(auraInstance.state.bindings.map(binding => binding.unitId), [1, 2, 3, 4]);
     assert.deepEqual([1, 2, 3, 4].map(id => snapshotAttack(after, id, resources)), [120, 120, 120, 120]);
 });

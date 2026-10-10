@@ -8,7 +8,7 @@ import {
     type OccupancySlot,
 } from "../../unit/capability/occupancy.js";
 import { BattlefieldMap } from "../map/map.js";
-import type { MechanismId, MechanismRuntime } from "../mechanism.js";
+import type { MechanismId, Mechanism } from "../mechanism.js";
 import type {
     NavigationModifier,
     NavigationModifierId,
@@ -127,7 +127,7 @@ export function projectOccupancyBySlot(
 
 export function projectNavigationModifierRelations(
     units: ReadonlyMap<UnitId, Unit>,
-    mechanisms: ReadonlyMap<MechanismId, MechanismRuntime>,
+    mechanisms: ReadonlyMap<MechanismId, Mechanism>,
     navigationModifiers: ReadonlyMap<NavigationModifierId, NavigationModifier>,
 ): Pick<BattlefieldSpatialView, "navigationModifiersBySource" | "navigationModifiersByAnchor"> {
     const navigationModifiersBySource = new Map<string, Set<NavigationModifierId>>();
@@ -174,7 +174,7 @@ export function projectNavigationModifierRelations(
 export function projectNavigationModifierCoverage(
     map: BattlefieldMap,
     units: ReadonlyMap<UnitId, Unit>,
-    mechanisms: ReadonlyMap<MechanismId, MechanismRuntime>,
+    mechanisms: ReadonlyMap<MechanismId, Mechanism>,
     navigationModifiers: ReadonlyMap<NavigationModifierId, NavigationModifier>,
 ): Pick<BattlefieldSpatialView, "navigationModifiersByTile" | "navigationModifiers"> {
     const navigationModifiersByTile = new Map<number, Set<NavigationModifierId>>();
@@ -223,7 +223,7 @@ export function projectNavigationModifierCoverage(
 export function projectBattlefieldSpatial(
     map: BattlefieldMap,
     units: ReadonlyMap<UnitId, Unit>,
-    mechanisms: ReadonlyMap<MechanismId, MechanismRuntime>,
+    mechanisms: ReadonlyMap<MechanismId, Mechanism>,
     navigationModifiers: ReadonlyMap<NavigationModifierId, NavigationModifier>,
 ): BattlefieldSpatialView {
     return {

@@ -1,23 +1,23 @@
 import { ResourceRegistration } from "../../common/resource-registration.js";
 import { EffectResources } from "../unit/capability/effects/registry.js";
-import { type EffectProgram } from "../unit/capability/effects/program.js";
+import { type EffectDefinition } from "../unit/capability/effects/definition.js";
 import { EffectBindingResources } from "../unit/capability/effects/resources.js";
-import * as contributions from "../unit/capability/effects/contributions.js";
+import * as contributions from "../contribution/definition.js";
 import {
     DamageResources,
     type DamageEffectRules,
 } from "../unit/capability/vitality/damage/resources.js";
 import type { Binding } from "../unit/capability/effects/binding.js";
 import { EffectLifecycleResources } from "../unit/capability/effects/lifecycle-resources.js";
-import type { EffectLifecycleProgram } from "../unit/capability/effects/contract.js";
+import type { EffectLifecycleDefinition } from "../unit/capability/effects/contract.js";
 import {
     HealingResources,
     type HealingEffectRules,
 } from "../unit/capability/vitality/healing/resources.js";
 import type { DamageOperation } from "../unit/capability/vitality/damage/contract.js";
 import type { HealingOperation } from "../unit/capability/vitality/healing/contract.js";
-import * as computation from "../modifier/computation.js";
-import type { Context } from "../unit/capability/contribution.js";
+import * as computation from "../contribution/computation.js";
+import type { QueryContext } from "../contribution/definition.js";
 import { ProjectileResources } from "../battlefield/projectile/resources.js";
 import { resolveDamage } from "../unit/capability/vitality/damage/settlement.js";
 import { resolveHealing } from "../unit/capability/vitality/healing/settlement.js";
@@ -49,14 +49,14 @@ export interface CombatEffectFacets<S extends object> {
     readonly bindings?: readonly Binding[];
     readonly damage?: DamageEffectRules<S>;
     readonly healing?: HealingEffectRules<S>;
-    readonly lifecycle?: EffectLifecycleProgram<S>;
+    readonly lifecycle?: EffectLifecycleDefinition<S>;
     readonly action?: ActionReleaseRules<S>;
 }
 
 export class CombatResources {
     readonly #registration = new ResourceRegistration();
     readonly effects = new EffectResources(this.#registration);
-    readonly computations = new computation.Resources<Context>(this.#registration);
+    readonly computations = new computation.Resources<QueryContext>(this.#registration);
     readonly effectBindings = new EffectBindingResources(this.#registration);
     readonly damage = new DamageResources(this.effects, this.#registration);
     readonly effectLifecycle = new EffectLifecycleResources(this.effects, this.#registration);
@@ -132,13 +132,13 @@ export class CombatResources {
     }
 
     registerEffect<S extends object>(
-        program: EffectProgram<S>,
+        definition: EffectDefinition<S>,
         facets: NoInfer<CombatEffectFacets<S>> = {},
-    ): EffectProgram<S> {
+    ): EffectDefinition<S> {
         this.#registration.assertWritable();
 
         try {
-            const registered = this.effects.register(program);
+            const registered = this.effects.register(definition);
             this.effectBindings.register(registered.ref, [
                 ...(facets.contributions === undefined
                     ? []

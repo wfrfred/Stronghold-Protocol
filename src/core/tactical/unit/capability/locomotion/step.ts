@@ -49,7 +49,7 @@ import {
 } from "./capability.js";
 import { integrateSteeringDirection } from "./steering.js";
 import { widenUnit, type StableUnit } from "../../unit.js";
-import type * as contribution from "../../../modifier/contribution.js";
+import type * as contribution from "../../../contribution/state.js";
 
 export interface RoutedLocomotionStepContext {
     readonly tick: number;

@@ -1,9 +1,9 @@
 import { ResourceRegistration } from "../../../../common/resource-registration.js";
 import type { SkillDefinition } from "./capability.js";
-import type { CompiledSkill } from "./program.js";
+import type { CompiledSkill } from "./compiled.js";
 
 export class SkillResources {
-    readonly #programs = new Map<SkillDefinition, CompiledSkill>();
+    readonly #compiledSkills = new Map<SkillDefinition, CompiledSkill>();
     readonly #registration: ResourceRegistration;
 
     constructor(registration = new ResourceRegistration()) {
@@ -15,18 +15,18 @@ export class SkillResources {
 
         const { definition } = compiled;
 
-        if (this.#programs.has(definition)) {
+        if (this.#compiledSkills.has(definition)) {
             throw new TypeError(`duplicate compiled skill ${compiled.definition.id}`);
         }
 
-        this.#programs.set(definition, compiled);
+        this.#compiledSkills.set(definition, compiled);
 
         return compiled;
     }
 
     get(definition: SkillDefinition): CompiledSkill {
         this.#registration.assertUsable();
-        const compiled = this.#programs.get(definition);
+        const compiled = this.#compiledSkills.get(definition);
 
         if (compiled === undefined) {
             throw new TypeError(`unregistered skill ${definition.id}`);

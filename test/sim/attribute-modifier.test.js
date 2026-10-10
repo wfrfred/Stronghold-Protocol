@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { parseAttributeModifiers, compileAttributeModifiers } from "../../dist/data/arknights/modifier.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { battlefieldView, getUnit, removeUnit } from "../../dist/core/tactical/battle/execution/context.js";
-import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
+import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
 import { installNewEffect, setEffectEnabled, finishEffects } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { attack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
@@ -14,7 +14,7 @@ import { resolveAttackSpeed } from "../../dist/core/tactical/unit/capability/act
 import { moveSpeed } from "../../dist/core/tactical/unit/capability/locomotion/contributions.js";
 import { resolveMoveSpeedPerTick } from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
-import * as modifier from "../../dist/core/tactical/modifier/value.js";
+import * as modifier from "../../dist/core/tactical/contribution/value.js";
 import { effectFixtureWork } from "../helpers/effects.js";
 
 const fixture = (name) => JSON.parse(readFileSync(new URL(`../fixtures/arknights/${name}.json`, import.meta.url), "utf8"));
@@ -125,7 +125,7 @@ test("attribute modifiers: native Mire percentages affect existing ASPD and norm
     const compiled = compileAttributeModifiers(parseAttributeModifiers(raw.node._buff.attributes.attributeModifiers));
     const sampled = new Map(compiled.map((entry) => [entry.attributeType, entry.sample(context({ blackboard }))]));
     const resources = new CombatResources();
-    const program = resources.registerEffect(createEffectProgram({ id: "compiled-mire", initialize: () => ({ layers: 1 }) }), {
+    const program = resources.registerEffect(createEffectDefinition({ id: "compiled-mire", initialize: () => ({ layers: 1 }) }), {
         contributions: [
             attackSpeed(() => [sampled.get("ATTACK_SPEED")]),
             moveSpeed(() => [sampled.get("MOVE_SPEED")]),
@@ -151,10 +151,10 @@ test("attribute modifiers: inspiration samples belong to the Effect input and re
     const raw = fixture("buff_encourage_atk");
     const [compiled] = compileAttributeModifiers(parseAttributeModifiers(raw.node._buff.attributes.attributeModifiers));
     const resources = new CombatResources();
-    const amplify = resources.registerEffect(createEffectProgram({ id: "source-amplification", initialize: () => ({}) }), {
+    const amplify = resources.registerEffect(createEffectDefinition({ id: "source-amplification", initialize: () => ({}) }), {
         contributions: [attack(() => [modifier.create({ multiplier: 1 })])],
     });
-    const program = resources.registerEffect(createEffectProgram({
+    const program = resources.registerEffect(createEffectDefinition({
         id: "compiled-inspiration", initialize: () => ({ sourceAttack: 0, ratio: 0.6 }),
     }), { contributions: [attack((instance) => [compiled.sample(context({
         blackboard: new Map([["atk", instance.state.ratio]]),

@@ -1,4 +1,4 @@
-import { effectTick } from "../../dist/core/tactical/unit/capability/effects/instance.js";
+import { effectTick } from "../../dist/core/tactical/unit/capability/effects/effect.js";
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -6,7 +6,7 @@ import { compileBuffStacking, parseBuffStacking } from '../../dist/data/arknight
 import { compileAttributeModifiers, parseAttributeModifiers } from '../../dist/data/arknights/modifier.js';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { battlefieldView, getUnit } from '../../dist/core/tactical/battle/execution/context.js';
-import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
+import { createEffectDefinition } from '../../dist/core/tactical/unit/capability/effects/definition.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { attack } from '../../dist/core/tactical/unit/capability/offense/contributions.js';
 import { resolveAttackPower } from '../../dist/core/tactical/unit/capability/offense/query.js';
@@ -25,7 +25,7 @@ test('Buff contribution integration: the native Astesia DEF facet merges layers,
   const [compiled] = compileAttributeModifiers(parseAttributeModifiers(raw.attributes.attributeModifiers).filter(entry => entry.attributeType === 'DEF'));
   const resources = new CombatResources();
   let starts = 0;
-  const program = resources.registerEffect(createEffectProgram({
+  const program = resources.registerEffect(createEffectDefinition({
     id: raw.buffKey,
     initialize: () => ({ stackCount: 1, defenseRatio: 0.2 }),
   }), {
@@ -42,7 +42,7 @@ test('Buff contribution integration: the native Astesia DEF facet merges layers,
   const work = effectFixtureWork(initializeUnit({ id: 0, position: [0, 0], definition: { id: 'receiver', defense: { defense: 100, resistance: 0 } } }));
   const original = work.battlefield.snapshot("draft");
   const apply = (source, defenseRatio, expiresAtTick, tick) => {
-    const current = getUnit(work, 0).effects?.instances.find(instance => instance.programRef === program.ref && !instance.finished);
+    const current = getUnit(work, 0).effects?.instances.find(instance => instance.definitionRef === program.ref && !instance.finished);
     const plan = policy.plan(current === undefined ? undefined : { stackCount: current.state.stackCount, expiresAtTick: effectTick(current) }, { stackCount: 1, expiresAtTick }, tick);
     if (plan.type === 'INSTALL') {
       installNewEffect(work, 0, program.ref, { source, scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }], initialState: { stackCount: 1, defenseRatio } }, resources, tick);
@@ -115,7 +115,7 @@ test('Buff contribution integration: only effective layer growth resamples the r
     loadFromBlackboard: false, fetchBaseValueFromSourceEntity: true,
   }]));
   const resources = new CombatResources();
-  const program = resources.registerEffect(createEffectProgram({
+  const program = resources.registerEffect(createEffectDefinition({
     id: 'source-layer-sample', initialize: () => ({ stackCount: 1, sourceAttack: 100 }),
   }), { contributions: [attack(instance => [compiled.sample({
     blackboard: new Map(), stackCount: policy.validStackCount(instance.state.stackCount),

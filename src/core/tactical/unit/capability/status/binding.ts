@@ -1,6 +1,6 @@
 import { widenUnit, type StableUnit, type Unit } from "../../unit.js";
 import type { Binding } from "../effects/binding.js";
-import type { EffectInstanceValue } from "../effects/instance.js";
+import type { EffectValue } from "../effects/effect.js";
 import {
     addStatusContribution,
     hasStatus,
@@ -10,7 +10,7 @@ import {
     type StatusState,
 } from "./capability.js";
 
-function contributionId(instance: EffectInstanceValue): string {
+function contributionId(instance: EffectValue): string {
     return `@effect/${instance.id}/status`;
 }
 

@@ -12,7 +12,7 @@ export interface ElementalBurstContext {
     drainSp(amount: number): number;
 }
 
-export interface CompiledElementalBurst {
+export interface ElementalBurstDefinition {
     readonly begin: (context: ElementalBurstContext) => undefined;
     readonly advance?: (context: ElementalBurstContext) => undefined;
 }

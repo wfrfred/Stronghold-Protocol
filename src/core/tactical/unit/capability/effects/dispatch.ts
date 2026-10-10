@@ -1,16 +1,11 @@
 import type { UnitId } from "../../unit.js";
 import { hasEffects } from "./capability.js";
 import type { EffectView } from "./contract.js";
-import {
-    lifetimeKey,
-    type LifetimeRef,
-    type EffectRef,
-    type EffectInstanceValue,
-} from "./instance.js";
+import { lifetimeKey, type LifetimeRef, type EffectRef, type EffectValue } from "./effect.js";
 import { isParticipatingEffect } from "./query.js";
 
-interface ActiveInstance {
-    instance: EffectInstanceValue;
+interface ActiveEffect {
+    instance: EffectValue;
 }
 
 export class EffectDispatchScope {
@@ -66,7 +61,7 @@ export class EffectDispatchScope {
     }
 
     readonly #candidates = new Map<UnitId, readonly EffectRef[]>();
-    readonly #activeInstances = new Map<UnitId, Map<number, Set<ActiveInstance>>>();
+    readonly #activeEffects = new Map<UnitId, Map<number, Set<ActiveEffect>>>();
     readonly #participationChanges = new Map<
         UnitId,
         Map<number, { pending: boolean; participating: boolean }>
@@ -126,16 +121,16 @@ export class EffectDispatchScope {
         return true;
     }
 
-    withInstance<T>(
+    withEffect<T>(
         address: EffectRef,
-        instance: EffectInstanceValue,
-        run: (lastKnown: () => EffectInstanceValue) => T,
+        instance: EffectValue,
+        run: (lastKnown: () => EffectValue) => T,
     ): T {
-        let instances = this.#activeInstances.get(address.unitId);
+        let instances = this.#activeEffects.get(address.unitId);
 
         if (instances === undefined) {
             instances = new Map();
-            this.#activeInstances.set(address.unitId, instances);
+            this.#activeEffects.set(address.unitId, instances);
         }
 
         let active = instances.get(address.effectId);
@@ -157,13 +152,13 @@ export class EffectDispatchScope {
                 instances.delete(address.effectId);
             }
             if (instances.size === 0) {
-                this.#activeInstances.delete(address.unitId);
+                this.#activeEffects.delete(address.unitId);
             }
         }
     }
 
-    retainFinalizedInstance(address: EffectRef, instance: EffectInstanceValue): void {
-        const active = this.#activeInstances.get(address.unitId)?.get(address.effectId);
+    retainFinalizedEffect(address: EffectRef, instance: EffectValue): void {
+        const active = this.#activeEffects.get(address.unitId)?.get(address.effectId);
 
         if (active === undefined) {
             return;
@@ -207,7 +202,7 @@ export class EffectDispatchScope {
 export function participatingEffect(
     facts: EffectView,
     address: EffectRef,
-): EffectInstanceValue | undefined {
+): EffectValue | undefined {
     const instance = facts.getEffect(address);
 
     return instance !== undefined && isParticipatingEffect(instance) ? instance : undefined;

@@ -5,7 +5,7 @@ import { createBattlefieldRuntime } from "../../dist/core/tactical/battlefield/r
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
 import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
-import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
+import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
 import { installNewEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import {
     effectDependents,
@@ -27,7 +27,7 @@ function unit(id) {
 
 function fixture(count) {
     const resources = new CombatResources();
-    const program = resources.registerEffect(createEffectProgram({
+    const program = resources.registerEffect(createEffectDefinition({
         id: "indexed-effect",
         initialize: () => ({}),
     }));

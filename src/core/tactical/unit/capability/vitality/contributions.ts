@@ -1,4 +1,4 @@
-import type * as contributions from "../effects/contributions.js";
+import type * as contributions from "../../../contribution/definition.js";
 import { updateMaxHpContributions } from "./capability.js";
 import { preserveHpRatio } from "./max-hp.js";
 

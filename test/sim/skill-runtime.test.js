@@ -6,8 +6,8 @@ import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { createLegacyCombatSpec } from '../../dist/legacy/combat.js';
 import { createOperatorDefinition } from '../../dist/core/tactical/unit/archetype/operator.js';
 import { createSkillDefinition } from '../../dist/core/tactical/unit/capability/skill/capability.js';
-import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
-import { create as modifier } from '../../dist/core/tactical/modifier/value.js';
+import { createEffectDefinition } from '../../dist/core/tactical/unit/capability/effects/definition.js';
+import { create as modifier } from '../../dist/core/tactical/contribution/value.js';
 import { attack } from '../../dist/core/tactical/unit/capability/offense/contributions.js';
 import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { compileAction } from '../../dist/core/tactical/unit/capability/action/compile.js';
@@ -42,7 +42,7 @@ function target() {
 }
 function scenario(skill, { targets = 1, content, compile } = {}) {
   const resources = new CombatResources();
-  const buff = resources.registerEffect(createEffectProgram({
+  const buff = resources.registerEffect(createEffectDefinition({
     id: 'skill/attack', initialize: () => ({}),
   }), { contributions: [attack(() => [modifier({ multiplier: 1 })])] });
   const fault = { enabled: false };

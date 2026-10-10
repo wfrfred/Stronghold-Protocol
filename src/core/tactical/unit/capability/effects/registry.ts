@@ -1,84 +1,79 @@
 import { ResourceRegistration } from "../../../../common/resource-registration.js";
-import type { EffectProgram, EffectProgramRef } from "./program.js";
-import { createEffectInstance, restoreEffectInstance } from "./internal/instance.js";
-import type {
-    EffectInstance,
-    EffectInstanceMetadata,
-    EffectInstanceValue,
-    EffectSnapshot,
-} from "./instance.js";
+import type { EffectDefinition, EffectDefinitionRef } from "./definition.js";
+import { createEffect, restoreEffect } from "./internal/effect.js";
+import type { Effect, EffectMetadata, EffectValue, EffectSnapshot } from "./effect.js";
 
 export class EffectResources {
-    readonly #programs = new Map<string, EffectProgram<object>>();
+    readonly #definitions = new Map<string, EffectDefinition<object>>();
     readonly #registration: ResourceRegistration;
 
     constructor(registration = new ResourceRegistration()) {
         this.#registration = registration;
     }
 
-    register<S extends object>(program: EffectProgram<S>): EffectProgram<S> {
+    register<S extends object>(definition: EffectDefinition<S>): EffectDefinition<S> {
         this.#registration.assertWritable();
-        const { ref } = program;
-        const existing = this.#programs.get(ref.id);
+        const { ref } = definition;
+        const existing = this.#definitions.get(ref.id);
 
         if (existing !== undefined) {
-            if (!Object.is(existing, program)) {
-                throw new TypeError(`duplicate effect program ${ref.id}`);
+            if (!Object.is(existing, definition)) {
+                throw new TypeError(`duplicate effect definition ${ref.id}`);
             }
 
-            return existing as unknown as EffectProgram<S>;
+            return existing as unknown as EffectDefinition<S>;
         }
 
-        this.#programs.set(ref.id, program as unknown as EffectProgram<object>);
+        this.#definitions.set(ref.id, definition as unknown as EffectDefinition<object>);
 
-        return program;
+        return definition;
     }
 
-    get<S extends object>(ref: EffectProgramRef<S>): EffectProgram<S> {
+    get<S extends object>(ref: EffectDefinitionRef<S>): EffectDefinition<S> {
         this.#registration.assertUsable();
-        const program = this.#programs.get(ref.id);
+        const definition = this.#definitions.get(ref.id);
 
-        if (!Object.is(program?.ref, ref)) {
-            throw new TypeError(`unregistered effect program ${ref.id}`);
+        if (!Object.is(definition?.ref, ref)) {
+            throw new TypeError(`unregistered effect definition ${ref.id}`);
         }
 
-        return program as unknown as EffectProgram<S>;
+        return definition as unknown as EffectDefinition<S>;
     }
 
     create<S extends object>(
-        ref: EffectProgramRef<S>,
-        metadata: EffectInstanceMetadata,
+        ref: EffectDefinitionRef<S>,
+        metadata: EffectMetadata,
         initialState?: NoInfer<S>,
-    ): EffectInstance<S> {
-        const program = this.get(ref);
+    ): Effect<S> {
+        const definition = this.get(ref);
 
-        return createEffectInstance(program, metadata, initialState ?? program.initialize());
+        return createEffect(definition, metadata, initialState ?? definition.initialize());
     }
 
     restore<S extends object>(
-        ref: EffectProgramRef<S>,
+        ref: EffectDefinitionRef<S>,
         snapshot: EffectSnapshot<NoInfer<S>>,
-    ): EffectInstance<S> {
-        return restoreEffectInstance(this.get(ref), snapshot);
+    ): Effect<S> {
+        return restoreEffect(this.get(ref), snapshot);
     }
 
     typedState<S extends object>(
-        instance: EffectInstanceValue,
-        ref: EffectProgramRef<S>,
+        instance: EffectValue,
+        ref: EffectDefinitionRef<S>,
     ): S | undefined {
-        return this.typedInstance(instance, ref)?.state;
+        return this.typedEffect(instance, ref)?.state;
     }
 
-    typedInstance<S extends object>(
-        instance: EffectInstanceValue,
-        ref: EffectProgramRef<S>,
-    ): EffectInstance<S> | undefined {
+    typedEffect<S extends object>(
+        instance: EffectValue,
+        ref: EffectDefinitionRef<S>,
+    ): Effect<S> | undefined {
         this.get(ref);
 
-        return instance.programRef === ref ? (instance as EffectInstance<S>) : undefined;
+        return instance.definitionRef === ref ? (instance as Effect<S>) : undefined;
     }
 
-    update<S extends object>(instance: EffectInstance<S>, state: NoInfer<S>): EffectInstance<S> {
+    update<S extends object>(instance: Effect<S>, state: NoInfer<S>): Effect<S> {
         this.#registration.assertUsable();
 
         if (state === instance.state) {
@@ -88,21 +83,21 @@ export class EffectResources {
         return { ...instance, state };
     }
 
-    #instanceProgram(instance: EffectInstanceValue): EffectProgram<object> {
+    #effectDefinition(instance: EffectValue): EffectDefinition<object> {
         this.#registration.assertUsable();
-        const program = this.#programs.get(instance.programRef.id);
+        const definition = this.#definitions.get(instance.definitionRef.id);
 
-        if (program?.ref !== instance.programRef) {
-            throw new TypeError(`unregistered effect program ${instance.programRef.id}`);
+        if (definition?.ref !== instance.definitionRef) {
+            throw new TypeError(`unregistered effect definition ${instance.definitionRef.id}`);
         }
 
-        return program;
+        return definition;
     }
 
-    withProgram<R>(
-        instance: EffectInstanceValue,
-        visitor: <S extends object>(instance: EffectInstance<S>, program: EffectProgram<S>) => R,
+    withDefinition<R>(
+        instance: EffectValue,
+        visitor: <S extends object>(instance: Effect<S>, definition: EffectDefinition<S>) => R,
     ): R {
-        return visitor(instance as EffectInstance<object>, this.#instanceProgram(instance));
+        return visitor(instance as Effect<object>, this.#effectDefinition(instance));
     }
 }

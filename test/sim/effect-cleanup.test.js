@@ -5,13 +5,13 @@ import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { createBattleState, getUnit } from '../../dist/core/tactical/battle/execution/context.js';
 import { finalizeFinishedEffects, finishEffects, installNewEffect, closeEffectLifetimes } from '../../dist/core/tactical/unit/capability/effects/lifecycle.js';
 import { projectEffectLifetimes } from '../../dist/core/tactical/unit/capability/effects/lifetime-index.js';
-import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
+import { createEffectDefinition } from '../../dist/core/tactical/unit/capability/effects/definition.js';
 import { EffectDispatchScope } from '../../dist/core/tactical/unit/capability/effects/dispatch.js';
 import { effectFixtureWork } from '../helpers/effects.js';
 
 const owner = (id = 2) => ({ id, definition: { id: 'receiver' }, position: [0, 0] });
 const input = { source: null, scopes: [] };
-const program = id => createEffectProgram({ id, initialize: () => ({}) });
+const program = id => createEffectDefinition({ id, initialize: () => ({}) });
 
 function hostWork(unit) {
     return createBattleState(fixtureBattlefield([unit]));
@@ -69,7 +69,7 @@ const installed = installNewEffect(installedState, 2, leader.ref, input, resourc
     assert.deepEqual(getUnit(finished, 2).effects.instances.map(instance => instance.finished), [true, false]);
     const cleaned = hostWork(getUnit(finished, 2));
     finalizeFinishedEffects(cleaned, 2, resources, 1);
-    assert.deepEqual(getUnit(cleaned, 2).effects.instances.map(instance => instance.programRef), [replacement.ref]);
+    assert.deepEqual(getUnit(cleaned, 2).effects.instances.map(instance => instance.definitionRef), [replacement.ref]);
 });
 
 test('effect cleanup: a pending end notification prevents physical removal', () => {

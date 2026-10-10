@@ -1,16 +1,16 @@
 import { hasEffects } from "./capability.js";
 import type { EffectTransitionResources } from "./contract.js";
 import { selectParticipatingEffects } from "./competition.js";
-import { replaceEffectInstances } from "./internal/state.js";
-import { withEffectLifecycle } from "./internal/instance.js";
+import { replaceEffects } from "./internal/state.js";
+import { withEffectLifecycle } from "./internal/effect.js";
 import { widenUnit, type StableUnit, type Unit } from "../../unit.js";
-import type { EffectInstanceValue } from "./instance.js";
+import type { EffectValue } from "./effect.js";
 import type { Binding } from "./binding.js";
 import type { EffectBindings } from "./resources.js";
 
 export function transitionEffectBindings<U extends Unit>(
     unit: U | StableUnit<U>,
-    instance: EffectInstanceValue,
+    instance: EffectValue,
     resources: EffectBindings,
     apply: (binding: Binding, current: StableUnit<U>) => StableUnit<U>,
 ): StableUnit<U> {
@@ -73,7 +73,7 @@ export function reconcileEffectBindings<U extends Unit>(
     let next: StableUnit<U> = instances.some(
         (instance, index) => instance !== owner.effects.instances[index],
     )
-        ? replaceEffectInstances<U>(owner, instances)
+        ? replaceEffects<U>(owner, instances)
         : owner;
     const reconciles = new Set<NonNullable<Binding["reconcile"]>>();
 

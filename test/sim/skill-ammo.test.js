@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { advanceBattlefield, battlefieldView, getUnit, updateUnit } from "../../dist/core/tactical/battle/execution/context.js";
-import { createProjectileProgram } from "../../dist/core/tactical/battlefield/projectile/program.js";
+import { createProjectileDefinition } from "../../dist/core/tactical/battlefield/projectile/definition.js";
 import { withProjectileOperations } from "../../dist/core/tactical/battlefield/projectile/operations.js";
 import { advanceProjectiles } from "../../dist/core/tactical/battlefield/projectile/settlement.js";
-import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
+import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
 import { attack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
-import * as modifier from "../../dist/core/tactical/modifier/value.js";
+import * as modifier from "../../dist/core/tactical/contribution/value.js";
 import { createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { activateSkill, advanceSkill, consumeSkillAmmo } from "../../dist/core/tactical/unit/capability/skill/execution.js";
 import { spendSkillAmmo } from "../../dist/core/tactical/unit/capability/skill/ammo.js";
@@ -30,7 +30,7 @@ const ash = {
 function ammoFixture(ammo = 31, ammoPerAttack = 1) {
   const resources = new CombatResources();
   const definition = parseArknightsSkillLevel(ash, 1, ammo, ammoPerAttack).definition;
-  const buff = resources.registerEffect(createEffectProgram({ id: "ammo-fixture-attack", initialize: () => ({}) }), {
+  const buff = resources.registerEffect(createEffectDefinition({ id: "ammo-fixture-attack", initialize: () => ({}) }), {
     contributions: [attack(() => [modifier.create({ multiplier: 1 })])],
   });
   resources.skills.register({ definition, activate: (context) => {
@@ -108,7 +108,7 @@ test("explicit two-round attack consumption ends a 32-round profile after sixtee
 
 test("the final shot is sampled with its buff before consumption and its projectile keeps that released sample", () => {
   const f = ammoFixture(1);
-  const shell = f.resources.projectiles.register(createProjectileProgram({
+  const shell = f.resources.projectiles.register(createProjectileDefinition({
     id: "ammo-cached-shell", initialize: () => ({}),
     acceptsContact: (_context, target) => target.id === 2,
     contact: (context) => { context.operations.damage({ sourceUnitId: 1, targetUnitId: 2, tick: context.tick, damageType: "TRUE", operands: createDamageOperands(context.projectile.cachedAtk) }); },

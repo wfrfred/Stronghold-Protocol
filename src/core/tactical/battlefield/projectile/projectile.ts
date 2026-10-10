@@ -11,9 +11,9 @@ export type ProjectileProgress =
     | { readonly type: "WAITING_TO_STOP"; readonly targetTick: number }
     | { readonly type: "STOPPED"; readonly reason: ProjectileStopReason };
 
-export interface ProjectileInstance<S extends object = object> {
+export interface Projectile<S extends object = object> {
     readonly id: ProjectileId;
-    readonly programRef: { readonly id: string };
+    readonly definitionRef: { readonly id: string };
     readonly source: UnitId | null;
     readonly traceTarget: UnitId | null;
     readonly position: WorldPosition;
@@ -32,11 +32,11 @@ export interface ProjectileInstance<S extends object = object> {
 
 export interface ProjectileView {
     readonly projectileIds: readonly ProjectileId[];
-    getProjectile(id: ProjectileId): ProjectileInstance | undefined;
+    getProjectile(id: ProjectileId): Projectile | undefined;
 }
 
 /** Snapshot projection; live instances belong to Battlefield. */
 export interface ProjectileState {
     readonly nextProjectileId: ProjectileId;
-    readonly instances: readonly ProjectileInstance[];
+    readonly instances: readonly Projectile[];
 }

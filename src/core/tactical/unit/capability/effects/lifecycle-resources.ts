@@ -3,11 +3,11 @@ import type {
     EffectAdmissionContext,
     EffectFinishContext,
     EffectLifecycleContext,
-    EffectLifecycleProgram,
+    EffectLifecycleDefinition,
     EffectCompetition,
 } from "./contract.js";
-import type { EffectInstanceValue } from "./instance.js";
-import type { EffectProgramRef } from "./program.js";
+import type { EffectValue } from "./effect.js";
+import type { EffectDefinitionRef } from "./definition.js";
 import type { EffectResources } from "./registry.js";
 import { hasEffects } from "./capability.js";
 
@@ -19,14 +19,14 @@ export interface CompiledEffectLifecycle {
     readonly expire?: (context: EffectLifecycleContext) => undefined;
     readonly finish?: (context: EffectFinishContext) => undefined;
     readonly accepts?: (context: EffectAdmissionContext) => boolean;
-    readonly competition?: (instance: EffectInstanceValue) => EffectCompetition | undefined;
+    readonly competition?: (instance: EffectValue) => EffectCompetition | undefined;
 }
 
 const emptyLifecycle: CompiledEffectLifecycle = Object.freeze({});
 
 export class EffectLifecycleResources {
     readonly #effects: EffectResources;
-    readonly #programs = new Map<string, CompiledEffectLifecycle>();
+    readonly #definitions = new Map<string, CompiledEffectLifecycle>();
     readonly #registration: ResourceRegistration;
 
     constructor(effects: EffectResources, registration = new ResourceRegistration()) {
@@ -35,27 +35,27 @@ export class EffectLifecycleResources {
     }
 
     register<S extends object>(
-        ref: EffectProgramRef<S>,
-        program: NoInfer<EffectLifecycleProgram<S>>,
+        ref: EffectDefinitionRef<S>,
+        definition: NoInfer<EffectLifecycleDefinition<S>>,
     ): void {
         this.#registration.assertWritable();
         this.#effects.get(ref);
 
-        if (this.#programs.has(ref.id)) {
+        if (this.#definitions.has(ref.id)) {
             throw new TypeError(`duplicate effect lifecycle ${ref.id}`);
         }
 
-        const typed = (instance: EffectInstanceValue) => {
-            const value = this.#effects.typedInstance(instance, ref);
+        const typed = (instance: EffectValue) => {
+            const value = this.#effects.typedEffect(instance, ref);
 
             if (value === undefined) {
-                throw new TypeError("effect lifecycle requires its matching program");
+                throw new TypeError("effect lifecycle requires its matching definition");
             }
 
             return value;
         };
 
-        const compile = (action: EffectLifecycleProgram<S>["start"]) =>
+        const compile = (action: EffectLifecycleDefinition<S>["start"]) =>
             action === undefined
                 ? {}
                 : {
@@ -71,12 +71,12 @@ export class EffectLifecycleResources {
                           });
                       },
                   };
-        const start = compile(program.start).run;
-        const enable = compile(program.enable).run;
-        const disable = compile(program.disable).run;
-        const advance = compile(program.advance).run;
-        const expire = compile(program.expire).run;
-        const finishAction = program.finish;
+        const start = compile(definition.start).run;
+        const enable = compile(definition.enable).run;
+        const disable = compile(definition.disable).run;
+        const advance = compile(definition.advance).run;
+        const expire = compile(definition.expire).run;
+        const finishAction = definition.finish;
 
         const finish =
             finishAction === undefined
@@ -93,10 +93,10 @@ export class EffectLifecycleResources {
                       });
                   };
 
-        const accepts = program.accepts;
-        const competition = program.competition;
+        const accepts = definition.accepts;
+        const competition = definition.competition;
 
-        this.#programs.set(
+        this.#definitions.set(
             ref.id,
             Object.freeze({
                 ...(start === undefined ? {} : { start }),
@@ -114,23 +114,22 @@ export class EffectLifecycleResources {
                 ...(competition === undefined
                     ? {}
                     : {
-                          competition: (instance: EffectInstanceValue) =>
-                              competition(typed(instance)),
+                          competition: (instance: EffectValue) => competition(typed(instance)),
                       }),
             }),
         );
     }
 
-    get(instance: EffectInstanceValue): CompiledEffectLifecycle {
+    get(instance: EffectValue): CompiledEffectLifecycle {
         this.#registration.assertUsable();
 
-        return this.#programs.get(instance.programRef.id) ?? emptyLifecycle;
+        return this.#definitions.get(instance.definitionRef.id) ?? emptyLifecycle;
     }
 }
 
 export function uniqueEffectAdmission(
     key: string,
-): NonNullable<EffectLifecycleProgram<object>["accepts"]> {
+): NonNullable<EffectLifecycleDefinition<object>["accepts"]> {
     return ({ unitId, facts }) => {
         const unit = facts.getUnit(unitId);
 
@@ -138,7 +137,7 @@ export function uniqueEffectAdmission(
             unit === undefined ||
             !hasEffects(unit) ||
             !unit.effects.instances.some(
-                (instance) => !instance.finished && instance.programRef.id === key,
+                (instance) => !instance.finished && instance.definitionRef.id === key,
             )
         );
     };

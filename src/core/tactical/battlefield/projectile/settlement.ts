@@ -3,7 +3,7 @@ import {
     withProjectileQuery,
     type ProjectileContextAccess,
 } from "./internal/context.js";
-import { ProjectileWork, updateProjectileInstance } from "./internal/state.js";
+import { ProjectileWork, updateProjectile } from "./internal/state.js";
 import { World, type WorldPosition } from "../../geometry/coordinate.js";
 import { rangeOverlapsHit } from "../../geometry/intersection.js";
 import {
@@ -17,8 +17,8 @@ import type { Unit, UnitId } from "../../unit/unit.js";
 import { hasHit } from "../../unit/capability/spatial.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
 import type { ProjectileContactContext, ProjectileServices } from "./context.js";
-import type { ProjectileProgram } from "./program.js";
-import { type ProjectileId, type ProjectileInstance, type ProjectileStopReason } from "./state.js";
+import type { ProjectileDefinition } from "./definition.js";
+import { type ProjectileId, type Projectile, type ProjectileStopReason } from "./projectile.js";
 
 export type ProjectileSignal = {
     readonly projectileId: ProjectileId;
@@ -36,7 +36,7 @@ class ProjectileSettlement {
     readonly #projectiles: ProjectileWork;
     readonly #services: ProjectileServices;
     readonly #tick: number;
-    readonly #lastKnown = new Map<ProjectileId, ProjectileInstance>();
+    readonly #lastKnown = new Map<ProjectileId, Projectile>();
 
     constructor(work: BattleState, services: ProjectileServices, tick: number) {
         this.#state = work;
@@ -45,21 +45,21 @@ class ProjectileSettlement {
         this.#tick = tick;
     }
 
-    #get(id: ProjectileId): ProjectileInstance | undefined {
+    #get(id: ProjectileId): Projectile | undefined {
         return this.#projectiles.get(id);
     }
 
-    #update(instance: ProjectileInstance): void {
+    #update(instance: Projectile): void {
         this.#lastKnown.set(instance.id, instance);
         this.#projectiles.update(instance);
     }
 
-    #signal(instance: ProjectileInstance, signal: ProjectileSignal): void {
+    #signal(instance: Projectile, signal: ProjectileSignal): void {
         this.#lastKnown.set(instance.id, instance);
         appendEvents(this.#state, [signal]);
     }
 
-    #signalFacts(instance: ProjectileInstance): Omit<ProjectileSignal, "type"> {
+    #signalFacts(instance: Projectile): Omit<ProjectileSignal, "type"> {
         return {
             projectileId: instance.id,
             source: instance.source,
@@ -86,7 +86,7 @@ class ProjectileSettlement {
         };
     }
 
-    #inContactArea(instance: ProjectileInstance, target: Unit): boolean {
+    #inContactArea(instance: Projectile, target: Unit): boolean {
         return (
             isSpatiallyPresent(target) &&
             hasHit(target) &&
@@ -100,24 +100,21 @@ class ProjectileSettlement {
     }
 
     #accepts<S extends object>(
-        instance: ProjectileInstance<S>,
-        program: ProjectileProgram<S>,
+        instance: Projectile<S>,
+        definition: ProjectileDefinition<S>,
         target: Unit,
     ): boolean {
         return (
             this.#inContactArea(instance, target) &&
             !instance.hitUnitIds.includes(target.id) &&
             withProjectileQuery(instance, this.#contextAccess(), this.#tick, (context) =>
-                program.acceptsContact(context, target),
+                definition.acceptsContact(context, target),
             )
         );
     }
 
-    #contact<S extends object>(
-        instance: ProjectileInstance<S>,
-        program: ProjectileProgram<S>,
-    ): void {
-        if (program.contact === undefined) {
+    #contact<S extends object>(instance: Projectile<S>, definition: ProjectileDefinition<S>): void {
+        if (definition.contact === undefined) {
             return;
         }
 
@@ -126,17 +123,17 @@ class ProjectileSettlement {
         );
 
         for (const targetUnitId of candidates) {
-            const current = this.#get(instance.id) as ProjectileInstance<S> | undefined;
+            const current = this.#get(instance.id) as Projectile<S> | undefined;
             const target = getUnit(this.#state, targetUnitId);
 
             if (current === undefined || current.progress.type === "STOPPED") {
                 return;
             }
-            if (target === undefined || !this.#accepts(current, program, target)) {
+            if (target === undefined || !this.#accepts(current, definition, target)) {
                 continue;
             }
 
-            const contacted = updateProjectileInstance(current, {
+            const contacted = updateProjectile(current, {
                 hitUnitIds: [...current.hitUnitIds, targetUnitId],
             });
             this.#update(contacted);
@@ -158,7 +155,7 @@ class ProjectileSettlement {
                         targetUnitId,
                     };
 
-                    program.contact!(contact);
+                    definition.contact!(contact);
                 },
             );
 
@@ -179,7 +176,7 @@ class ProjectileSettlement {
             return;
         }
 
-        const stopped = updateProjectileInstance(current, {
+        const stopped = updateProjectile(current, {
             progress: { type: "STOPPED", reason },
         });
         this.#update(stopped);
@@ -189,14 +186,14 @@ class ProjectileSettlement {
             reason,
         });
 
-        this.#services.projectiles.withProgram(stopped, (instance, program) => {
-            if (program.stop !== undefined) {
+        this.#services.projectiles.withDefinition(stopped, (instance, definition) => {
+            if (definition.stop !== undefined) {
                 withProjectileContext(
                     instance,
                     this.#services,
                     this.#contextAccess(),
                     this.#tick,
-                    program.stop,
+                    definition.stop,
                 );
             }
         });
@@ -223,9 +220,7 @@ class ProjectileSettlement {
                 if (this.#tick >= current.progress.targetTick) {
                     this.stop(id, "ARRIVED");
                 } else {
-                    this.#update(
-                        updateProjectileInstance(current, { lastAdvancedTick: this.#tick }),
-                    );
+                    this.#update(updateProjectile(current, { lastAdvancedTick: this.#tick }));
                 }
 
                 return;
@@ -259,7 +254,7 @@ class ProjectileSettlement {
                     throw new RangeError("projectile stop deadline overflow");
                 }
 
-                const advanced = updateProjectileInstance(current, {
+                const advanced = updateProjectile(current, {
                     position,
                     destination,
                     lastAdvancedTick: this.#tick,
@@ -272,8 +267,8 @@ class ProjectileSettlement {
                         ...this.#signalFacts(advanced),
                         type: "PROJECTILE_REACHED",
                     });
-                    this.#services.projectiles.withProgram(advanced, (instance, program) => {
-                        this.#contact(instance, program);
+                    this.#services.projectiles.withDefinition(advanced, (instance, definition) => {
+                        this.#contact(instance, definition);
                     });
 
                     if (current.stopDelayTicks === 0) {

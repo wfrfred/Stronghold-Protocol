@@ -4,14 +4,14 @@ export type MechanismId = number;
 
 export interface MechanismView {
     readonly mechanismIds: readonly MechanismId[];
-    getMechanism(id: MechanismId): MechanismRuntime | undefined;
+    getMechanism(id: MechanismId): Mechanism | undefined;
 }
 
 export interface MechanismDefinition {
     readonly id: string;
 }
 
-export interface MechanismRuntime<D extends MechanismDefinition = MechanismDefinition> {
+export interface Mechanism<D extends MechanismDefinition = MechanismDefinition> {
     readonly id: MechanismId;
     readonly definition: D;
     readonly active: boolean;
@@ -25,14 +25,14 @@ export function createMechanismDefinition(definition: MechanismDefinition): Mech
     return Object.freeze({ id: definition.id });
 }
 
-export function createMechanismRuntime<D extends MechanismDefinition>(
-    runtime: MechanismRuntime<D>,
-): MechanismRuntime<D> {
-    assertNonnegativeSafeInteger(runtime.id, "mechanism id");
+export function createMechanism<D extends MechanismDefinition>(
+    mechanism: Mechanism<D>,
+): Mechanism<D> {
+    assertNonnegativeSafeInteger(mechanism.id, "mechanism id");
 
     return {
-        id: runtime.id,
-        definition: runtime.definition,
-        active: runtime.active,
+        id: mechanism.id,
+        definition: mechanism.definition,
+        active: mechanism.active,
     };
 }

@@ -4,10 +4,10 @@ import type { SynchronousResult } from "../../../common/synchronous.js";
 import type { WorldPosition } from "../../geometry/coordinate.js";
 import type { RangeGeometry } from "../../geometry/shape.js";
 import type { UnitId } from "../../unit/unit.js";
-import type { ProjectileProgramRef } from "./program.js";
+import type { ProjectileDefinitionRef } from "./definition.js";
 import type { ProjectileResources } from "./resources.js";
 import type { BattlefieldChange } from "../contract.js";
-import type { ProjectileId, ProjectileInstance, ProjectileView } from "./state.js";
+import type { ProjectileId, Projectile, ProjectileView } from "./projectile.js";
 
 export interface ProjectileLaunchInput<S extends object = object> {
     readonly source: UnitId | null;
@@ -24,10 +24,10 @@ export interface ProjectileLaunchInput<S extends object = object> {
 
 export interface ProjectileOperations {
     launch<S extends object>(
-        ref: ProjectileProgramRef<S>,
+        ref: ProjectileDefinitionRef<S>,
         input: ProjectileLaunchInput<NoInfer<S>>,
     ): ProjectileId;
-    get(id: ProjectileId): ProjectileInstance | undefined;
+    get(id: ProjectileId): Projectile | undefined;
 }
 
 export function withProjectileOperations(
@@ -100,10 +100,10 @@ export function withProjectileOperations<T>(
                 assertNonnegativeSafeInteger(input.expiresAtTick, "projectile expiration tick");
             }
 
-            const program = resources.get(ref);
-            const instance: ProjectileInstance = {
+            const definition = resources.get(ref);
+            const instance: Projectile = {
                 id: nextProjectileId,
-                programRef: ref,
+                definitionRef: ref,
                 source: input.source,
                 traceTarget: input.traceTarget,
                 position: input.position,
@@ -117,7 +117,7 @@ export function withProjectileOperations<T>(
                 expiresAtTick: input.expiresAtTick ?? null,
                 progress: { type: "FLYING" },
                 hitUnitIds: [],
-                state: input.initialState ?? program.initialize(),
+                state: input.initialState ?? definition.initialize(),
             };
             previous.add(instance);
             nextProjectileId = allocatedNextId;

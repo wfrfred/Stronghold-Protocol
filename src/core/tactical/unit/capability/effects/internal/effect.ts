@@ -1,15 +1,15 @@
 import { assertNonnegativeSafeInteger } from "../../../../../common/assert.js";
-import type { EffectProgram } from "../program.js";
+import type { EffectDefinition } from "../definition.js";
 import {
-    type EffectInstance,
-    type EffectInstanceMetadata,
-    type EffectInstanceValue,
+    type Effect,
+    type EffectMetadata,
+    type EffectValue,
     type EffectLifecycleFacts,
     type Scope,
     type LifetimeRef,
     type EffectSnapshot,
     lifetimeKey,
-} from "../instance.js";
+} from "../effect.js";
 
 function nonnegativeInteger(value: number, name: string): void {
     assertNonnegativeSafeInteger(value, `effect ${name}`, TypeError);
@@ -65,7 +65,7 @@ export function normalizeScopes(scopes: readonly Scope[]): readonly Scope[] {
     return result.length === scopes.length ? scopes : result;
 }
 
-function validateMetadata(value: EffectInstanceMetadata): readonly Scope[] {
+function validateMetadata(value: EffectMetadata): readonly Scope[] {
     nonnegativeInteger(value.id, "identity");
 
     if (value.source !== null) {
@@ -83,15 +83,15 @@ function assertLifecycleFacts(instance: EffectLifecycleFacts): void {
     }
 }
 
-export function createEffectInstance<S extends object>(
-    program: EffectProgram<S>,
-    metadata: EffectInstanceMetadata,
+export function createEffect<S extends object>(
+    definition: EffectDefinition<S>,
+    metadata: EffectMetadata,
     state: S,
-): EffectInstance<S> {
+): Effect<S> {
     return {
         ...metadata,
         scopes: validateMetadata(metadata),
-        programRef: program.ref,
+        definitionRef: definition.ref,
         state,
         started: false,
         enabled: true,
@@ -100,26 +100,26 @@ export function createEffectInstance<S extends object>(
     };
 }
 
-export function withEffectLifecycle<I extends EffectInstanceValue>(
+export function withEffectLifecycle<I extends EffectValue>(
     instance: I,
     facts: Partial<EffectLifecycleFacts>,
 ): I extends unknown ? Omit<I, keyof EffectLifecycleFacts> & EffectLifecycleFacts : never;
 export function withEffectLifecycle(
-    instance: EffectInstanceValue,
+    instance: EffectValue,
     facts: Partial<EffectLifecycleFacts>,
-): EffectInstanceValue {
+): EffectValue {
     return { ...instance, ...facts };
 }
 
-export function restoreEffectInstance<S extends object>(
-    program: EffectProgram<S>,
+export function restoreEffect<S extends object>(
+    definition: EffectDefinition<S>,
     snapshot: EffectSnapshot<S>,
-): EffectInstance<S> {
+): Effect<S> {
     assertLifecycleFacts(snapshot);
 
     return {
         ...snapshot,
         scopes: validateMetadata(snapshot),
-        programRef: program.ref,
+        definitionRef: definition.ref,
     };
 }

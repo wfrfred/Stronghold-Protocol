@@ -5,7 +5,7 @@ import { resolveMaxHp } from "../vitality/query.js";
 import type { ActionDefinition, TargetBindingId } from "./capability.js";
 import * as operation from "./operation.js";
 import type { ActionResources } from "./resources.js";
-import type { CompiledAction } from "./program.js";
+import type { CompiledAction } from "./compiled.js";
 import type { ActionExecutionContext, CompiledActionSegment } from "./process.js";
 
 export function compileAction(

@@ -1,13 +1,7 @@
 import type { Unit, UnitId } from "../../unit.js";
 import type { BattlefieldView } from "../../../battlefield/contract.js";
-import type {
-    EffectRef,
-    EffectInstanceValue,
-    Scope,
-    EffectInstanceMetadata,
-    LifetimeRef,
-} from "./instance.js";
-import type { EffectProgramRef } from "./program.js";
+import type { EffectRef, EffectValue, Scope, EffectMetadata, LifetimeRef } from "./effect.js";
+import type { EffectDefinitionRef } from "./definition.js";
 import type { EffectResources } from "./registry.js";
 import type { EffectBindings } from "./resources.js";
 import type { EffectLifecycleResources } from "./lifecycle-resources.js";
@@ -20,19 +14,19 @@ import type {
 
 export interface EffectView {
     getUnit(id: UnitId): Unit | undefined;
-    getEffect(address: EffectRef): EffectInstanceValue | undefined;
-    participating(unitId: UnitId): readonly EffectInstanceValue[];
+    getEffect(address: EffectRef): EffectValue | undefined;
+    participating(unitId: UnitId): readonly EffectValue[];
 }
 
 export interface EffectLifecycleOperations {
     install<S extends object>(
         unitId: UnitId,
-        ref: EffectProgramRef<S>,
+        ref: EffectDefinitionRef<S>,
         input: EffectInstallationInput<NoInfer<S>>,
     ): EffectInstallationResult;
     update<S extends object>(
         address: EffectRef,
-        ref: EffectProgramRef<S>,
+        ref: EffectDefinitionRef<S>,
         transition: (current: NoInfer<S>) => NoInfer<S>,
     ): void;
     setEnabled(address: EffectRef, enabled: boolean): void;
@@ -43,7 +37,7 @@ export interface EffectLifecycleOperations {
 
 export interface EffectLifecycleContext<S extends object = object> {
     readonly ref: EffectRef;
-    readonly instance: EffectInstanceValue & { readonly state: S };
+    readonly instance: EffectValue & { readonly state: S };
     readonly tick: number;
     readonly facts: EffectView;
     /** Each access reads the current draft; a saved view remains fixed. */
@@ -55,7 +49,7 @@ export interface EffectLifecycleContext<S extends object = object> {
 
 export interface EffectAdmissionContext<S extends object = object> {
     readonly unitId: UnitId;
-    readonly instance: EffectInstanceValue & { readonly state: S };
+    readonly instance: EffectValue & { readonly state: S };
     readonly facts: EffectView;
 }
 
@@ -74,7 +68,7 @@ export type EffectLifecycleAction<S extends object> = (
     context: EffectLifecycleContext<S>,
 ) => undefined;
 
-export interface EffectLifecycleProgram<S extends object> {
+export interface EffectLifecycleDefinition<S extends object> {
     readonly start?: EffectLifecycleAction<S>;
     readonly enable?: EffectLifecycleAction<S>;
     readonly disable?: EffectLifecycleAction<S>;
@@ -87,10 +81,10 @@ export interface EffectLifecycleProgram<S extends object> {
 }
 
 export interface EffectCompetitionInput<S extends object> extends Pick<
-    EffectInstanceMetadata,
+    EffectMetadata,
     "id" | "source" | "acquiredSequence"
 > {
-    readonly programRef: { readonly id: string };
+    readonly definitionRef: { readonly id: string };
     readonly state: S;
 }
 
@@ -100,7 +94,7 @@ export interface EffectCompetition {
 }
 
 export interface EffectTransitionResources {
-    readonly effects: Pick<EffectResources, "create" | "get" | "typedInstance" | "update">;
+    readonly effects: Pick<EffectResources, "create" | "get" | "typedEffect" | "update">;
     readonly effectBindings: EffectBindings;
     readonly effectLifecycle: Pick<EffectLifecycleResources, "get">;
     readonly settleDamage?: DamageOperation;

@@ -5,9 +5,9 @@ import {
     lifetimeKey,
     refKey,
     type EffectRef,
-    type EffectInstanceValue,
+    type EffectValue,
     type LifetimeRef,
-} from "./instance.js";
+} from "./effect.js";
 
 type RefBucket = ReadonlyMap<string, EffectRef>;
 
@@ -21,11 +21,11 @@ export interface EffectUnitTransition {
     readonly nextUnit: Unit | undefined;
 }
 
-function instancesOf(unit: Unit | undefined): readonly EffectInstanceValue[] | undefined {
+function instancesOf(unit: Unit | undefined): readonly EffectValue[] | undefined {
     return unit !== undefined && hasEffects(unit) ? unit.effects.instances : undefined;
 }
 
-function relationKeys(instance: EffectInstanceValue | undefined): readonly string[] {
+function relationKeys(instance: EffectValue | undefined): readonly string[] {
     return instance === undefined || instance.finished
         ? []
         : [
@@ -37,7 +37,7 @@ function relationKeys(instance: EffectInstanceValue | undefined): readonly strin
           ];
 }
 
-function isTimed(instance: EffectInstanceValue | undefined): boolean {
+function isTimed(instance: EffectValue | undefined): boolean {
     return (
         instance !== undefined &&
         !instance.finished &&
@@ -102,8 +102,8 @@ export function deriveEffectLifetimes(
     };
     const changeRelations = (
         unitId: UnitId,
-        before: EffectInstanceValue | undefined,
-        after: EffectInstanceValue | undefined,
+        before: EffectValue | undefined,
+        after: EffectValue | undefined,
     ): void => {
         if (
             before === after ||

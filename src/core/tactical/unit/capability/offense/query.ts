@@ -1,13 +1,13 @@
 import { hasOffense, resolveOffenseAttack } from "./capability.js";
 import type { UnitId } from "../../unit.js";
 import type { BattlefieldView } from "../../../battlefield/contract.js";
-import type * as computation from "../../../modifier/computation.js";
-import type { Context } from "../contribution.js";
+import type * as computation from "../../../contribution/computation.js";
+import type { QueryContext } from "../../../contribution/definition.js";
 
 export function resolveAttackPower(
     unitId: UnitId,
     battlefield: BattlefieldView,
-    computations?: computation.Computations<Context>,
+    computations?: computation.Computations<QueryContext>,
 ): number | undefined {
     const unit = battlefield.getUnit(unitId);
 

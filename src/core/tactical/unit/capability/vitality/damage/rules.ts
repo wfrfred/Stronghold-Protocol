@@ -88,7 +88,7 @@ export function absorbBarrier<S extends { readonly remainingAmount: number }>():
             return { value: pending };
         }
 
-        context.operations.effects.update(context.ref, instance.programRef, (current) => ({
+        context.operations.effects.update(context.ref, instance.definitionRef, (current) => ({
             ...current,
             remainingAmount: current.remainingAmount - absorbed,
         }));

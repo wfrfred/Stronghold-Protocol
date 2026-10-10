@@ -4,7 +4,7 @@ import type {
     EffectLifecycleOperations,
     EffectTransitionResources,
 } from "../effects/contract.js";
-import type { EffectRef, EffectInstance, EffectInstanceValue } from "../effects/instance.js";
+import type { EffectRef, Effect, EffectValue } from "../effects/effect.js";
 import { createEffectOperations } from "../effects/operations.js";
 import { EffectDispatchScope } from "../effects/dispatch.js";
 import { effectView, getEffect } from "../effects/query.js";
@@ -20,7 +20,7 @@ export interface VitalityHookFacts extends EffectView {
 export interface VitalityHookContext<S extends object> {
     readonly ref: EffectRef;
     readonly ownerUnitId: UnitId;
-    readonly instance: EffectInstance<S>;
+    readonly instance: Effect<S>;
     readonly tick: number;
     readonly facts: VitalityHookFacts;
 }
@@ -49,7 +49,7 @@ export interface VitalityHookServices extends EffectTransitionResources {
 }
 
 export type VitalityHookInvocation<R> = Omit<VitalityHookContext<object>, "instance"> & {
-    readonly instance: EffectInstanceValue;
+    readonly instance: EffectValue;
     readonly request: R;
     readonly operations: VitalityHookOperations;
 };
@@ -57,14 +57,14 @@ export type VitalityHookInvocation<R> = Omit<VitalityHookContext<object>, "insta
 export function withVitalityHookContext<R, T>(
     getWork: () => BattleState,
     ref: EffectRef,
-    instance: EffectInstanceValue,
+    instance: EffectValue,
     request: R,
     resources: VitalityHookServices,
     tick: number,
     dispatch: EffectDispatchScope,
     run: (context: VitalityHookInvocation<R>) => T,
 ): T {
-    return dispatch.withInstance(ref, instance, (lastKnown) => {
+    return dispatch.withEffect(ref, instance, (lastKnown) => {
         let active = true;
 
         const readWork = (): BattleState => {

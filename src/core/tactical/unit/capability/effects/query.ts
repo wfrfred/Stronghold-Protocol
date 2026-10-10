@@ -1,18 +1,15 @@
 import { getUnit, type BattleState } from "../../../battle/execution/context.js";
 import { hasEffects } from "./capability.js";
-import type { EffectRef, EffectInstanceValue } from "./instance.js";
+import type { EffectRef, EffectValue } from "./effect.js";
 import type { EffectView } from "./contract.js";
 
-const indexes = new WeakMap<
-    readonly EffectInstanceValue[],
-    ReadonlyMap<number, EffectInstanceValue>
->();
+const indexes = new WeakMap<readonly EffectValue[], ReadonlyMap<number, EffectValue>>();
 
-export function isParticipatingEffect(instance: EffectInstanceValue): boolean {
+export function isParticipatingEffect(instance: EffectValue): boolean {
     return instance.started && instance.participating && !instance.finished;
 }
 
-export function getEffect(state: BattleState, address: EffectRef): EffectInstanceValue | undefined {
+export function getEffect(state: BattleState, address: EffectRef): EffectValue | undefined {
     const unit = getUnit(state, address.unitId);
 
     if (unit === undefined || !hasEffects(unit)) {

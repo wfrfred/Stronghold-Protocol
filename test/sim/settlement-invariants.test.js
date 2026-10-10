@@ -4,7 +4,7 @@ import { effectFixtureWork, installFixtureEffect } from "../helpers/effects.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { createBattleState, getUnit } from "../../dist/core/tactical/battle/execution/context.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
-import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
+import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import {
   damageUnit,
@@ -31,7 +31,7 @@ function unit(id, flags = []) {
 }
 
 function program(id) {
-  return createEffectProgram({
+  return createEffectDefinition({
     id,
     initialize: () => ({ uses: 0 }),
   });

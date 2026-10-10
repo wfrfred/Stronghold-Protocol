@@ -1,8 +1,8 @@
-import type { EffectInstanceValue } from "./instance.js";
+import type { EffectValue } from "./effect.js";
 import type { Unit } from "../../unit.js";
 
 export interface EffectsState {
-    readonly instances: readonly EffectInstanceValue[];
+    readonly instances: readonly EffectValue[];
     readonly nextInstanceId: number;
     readonly nextAcquiredSequence: number;
 }

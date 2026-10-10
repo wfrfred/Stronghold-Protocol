@@ -10,7 +10,7 @@ import {
   createBattlefieldState, settleBattlefieldState, settleBattlefieldStateFully,
 } from '../../dist/core/tactical/battlefield/storage/state.js';
 import { finishBattleEvents } from '../../dist/core/tactical/battle/events.js';
-import { createMechanismDefinition, createMechanismRuntime } from '../../dist/core/tactical/battlefield/mechanism.js';
+import { createMechanismDefinition, createMechanism } from '../../dist/core/tactical/battlefield/mechanism.js';
 import {
   createNavigationModifierDefinition, createNavigationModifier, createNavigationModifierRegion,
 } from '../../dist/core/tactical/battlefield/navigation/modifier.js';
@@ -55,8 +55,8 @@ import { canTraverseNavigationSegment, navigationSegmentCost } from '../../dist/
 import { getDefaultSource, hasGeneratedData } from '../../server/sim/simdata.js';
 import { makeBattle, flatStage, enemyRec } from '../helpers/battleHarness.js';
 import { remainingDistance } from '../../server/sim/ai.js';
-import * as contribution from '../../dist/core/tactical/modifier/contribution.js';
-import * as modifier from '../../dist/core/tactical/modifier/value.js';
+import * as contribution from '../../dist/core/tactical/contribution/state.js';
+import * as modifier from '../../dist/core/tactical/contribution/value.js';
 
 const REAL = { skip: !hasGeneratedData() && 'no generated data' };
 const NORMAL = { r0: 9, r1: 12, c0: 0, c1: 10 };
@@ -1249,7 +1249,7 @@ test('core routed enemy supports full checkpoint flag combinations and rejects i
 const battlefieldUnit = (id, position) => ({
   id, definition: Object.freeze({ id: `battlefield_unit_${id}` }), position: Object.freeze([...position]),
 });
-const battlefieldMechanism = (id, active = true) => createMechanismRuntime({
+const battlefieldMechanism = (id, active = true) => createMechanism({
   id, definition: createMechanismDefinition({ id: `battlefield_mechanism_${id}` }), active,
 });
 const walkRestriction = (overrides = {}) => ({ denyPassage: false, deniedDepartures: [], costFloor: 1, ...overrides });

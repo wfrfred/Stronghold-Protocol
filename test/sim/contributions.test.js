@@ -5,9 +5,9 @@ import { installFixtureEffect } from "../helpers/effects.js";
 import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
-import * as modifier from "../../dist/core/tactical/modifier/value.js";
-import * as contribution from "../../dist/core/tactical/modifier/contribution.js";
+import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
+import * as modifier from "../../dist/core/tactical/contribution/value.js";
+import * as contribution from "../../dist/core/tactical/contribution/state.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { copyUnitSnapshot } from "../../dist/core/tactical/unit/snapshot.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
@@ -220,7 +220,7 @@ test("contributions: samples survive participation changes and snapshot projecti
 
 test("contributions: private stack transitions publish maintained projections immediately", () => {
   const resources = new CombatResources();
-  const program = createEffectProgram({
+  const program = createEffectDefinition({
     id: "stacks",
     initialize: () => ({ layers: 2, remaining: 20 }),
   });
@@ -265,7 +265,7 @@ test("contributions: private stack transitions publish maintained projections im
 
 test("contributions: live evaluation reads latest working facts without changing contribution entries", () => {
   const resources = new CombatResources();
-  const program = createEffectProgram({ id: "live", initialize: () => ({}) });
+  const program = createEffectDefinition({ id: "live", initialize: () => ({}) });
   resources.registerEffect(program, {
     contributions: [liveAttack(({ unit }) => [value(unit.vitality.hp < 50 ? 100 : 0)])],
   });
@@ -314,7 +314,7 @@ test("contributions: defense queries clamp resistance after sampled and live con
         );
       } else {
         const program = resources.registerEffect(
-          createEffectProgram({
+          createEffectDefinition({
             id: "resistance-provider",
             initialize: () => ({}),
           }),
@@ -350,10 +350,10 @@ test("contributions: defense queries clamp resistance after sampled and live con
 test("contributions: a sampled child retains its input until an explicit parent refresh", () => {
   const resources = new CombatResources();
   const parentProgram = resources.registerEffect(
-    createEffectProgram({ id: "refresh-parent", initialize: () => ({}) }),
+    createEffectDefinition({ id: "refresh-parent", initialize: () => ({}) }),
   );
   const childProgram = resources.registerEffect(
-    createEffectProgram({
+    createEffectDefinition({
       id: "sampled-child",
       initialize: () => ({ sample: 0 }),
     }),

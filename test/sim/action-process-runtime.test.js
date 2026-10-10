@@ -16,7 +16,7 @@ import { compileAction } from "../../dist/core/tactical/unit/capability/action/c
 import {
   resumeActionExecution,
 } from "../../dist/core/tactical/unit/capability/action/process.js";
-import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
+import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
 import { installNewEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { createBattleState, getUnit } from "../../dist/core/tactical/battle/execution/context.js";
@@ -354,7 +354,7 @@ test("action runtime: failed continuation publishes no progress, sample, settlem
     const attemptedIds = [];
     const resources = new CombatResources();
     const marker = resources.registerEffect(
-      createEffectProgram({
+      createEffectDefinition({
         id: "action-sample",
         initialize: () => ({ count: 0 }),
       }),
@@ -432,7 +432,7 @@ test("action runtime: failed continuation publishes no progress, sample, settlem
 test("action runtime: a throwing Effect finish after nested host death does not publish execution or battlefield changes", () => {
   const reasons = [];
   const resources = new CombatResources();
-  const terminal = resources.registerEffect(createEffectProgram({
+  const terminal = resources.registerEffect(createEffectDefinition({
     id: "throwing-action-terminal",
     initialize: () => ({}),
   }), { lifecycle: { finish: context => {

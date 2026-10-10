@@ -1,5 +1,5 @@
 import type { EffectDispatchScope } from "../../effects/dispatch.js";
-import type { EffectId } from "../../effects/instance.js";
+import type { EffectId } from "../../effects/effect.js";
 import type { UnitId } from "../../../unit.js";
 import type { BattleState } from "../../../../battle/execution/context.js";
 

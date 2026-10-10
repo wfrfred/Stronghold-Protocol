@@ -90,8 +90,8 @@ export function applyBattlefieldChanges<U extends Unit>(
                     "projectile",
                 );
 
-                if (previous.programRef.id !== change.projectile.programRef.id) {
-                    throw new RangeError("projectile program cannot change during update");
+                if (previous.definitionRef.id !== change.projectile.definitionRef.id) {
+                    throw new RangeError("projectile definition cannot change during update");
                 }
 
                 projectiles.edit().set(change.projectile.id, change.projectile);

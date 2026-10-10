@@ -1,7 +1,7 @@
 import { ResourceRegistration } from "../../../../../common/resource-registration.js";
 import type { EffectTransitionResources } from "../../effects/contract.js";
-import type { EffectInstanceValue } from "../../effects/instance.js";
-import type { EffectProgramRef } from "../../effects/program.js";
+import type { EffectValue } from "../../effects/effect.js";
+import type { EffectDefinitionRef } from "../../effects/definition.js";
 import type { EffectResources } from "../../effects/registry.js";
 import type {
     DispatchResult,
@@ -84,7 +84,7 @@ export class HealingResources {
     }
 
     register<S extends object>(
-        ref: EffectProgramRef<S>,
+        ref: EffectDefinitionRef<S>,
         rules: NoInfer<HealingEffectRules<S>>,
     ): void {
         this.#registration.assertWritable();
@@ -98,7 +98,7 @@ export class HealingResources {
         const contextFor = (context: CompiledHealingContext): HealingRuleContext<S> => ({
             ...context,
             get instance() {
-                const instance = effects.typedInstance(context.instance, ref);
+                const instance = effects.typedEffect(context.instance, ref);
 
                 if (instance === undefined) {
                     throw new TypeError("healing hook requires its matching program");
@@ -146,9 +146,9 @@ export class HealingResources {
         );
     }
 
-    get(instance: EffectInstanceValue): CompiledHealingRules {
+    get(instance: EffectValue): CompiledHealingRules {
         this.#registration.assertUsable();
 
-        return this.#rules.get(instance.programRef.id) ?? emptyRules;
+        return this.#rules.get(instance.definitionRef.id) ?? emptyRules;
     }
 }

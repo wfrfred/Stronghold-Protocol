@@ -9,7 +9,7 @@ import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js'
 import { createActionDefinition } from '../../dist/core/tactical/unit/capability/action/capability.js';
 import { compileAction } from '../../dist/core/tactical/unit/capability/action/compile.js';
 import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
-import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
+import { createEffectDefinition } from '../../dist/core/tactical/unit/capability/effects/definition.js';
 import { installNewEffect, expireEffects, finalizeFinishedEffects } from '../../dist/core/tactical/unit/capability/effects/lifecycle.js';
 import { createSkillDefinition } from '../../dist/core/tactical/unit/capability/skill/capability.js';
 import { activateSkill, advanceSkill } from '../../dist/core/tactical/unit/capability/skill/execution.js';
@@ -18,14 +18,14 @@ import { hasStatusFlag } from '../../dist/core/tactical/unit/capability/status/c
 import { resolveDefense } from '../../dist/core/tactical/unit/capability/defense/query.js';
 import { resolveAttackPower } from '../../dist/core/tactical/unit/capability/offense/query.js';
 import { attack } from '../../dist/core/tactical/unit/capability/offense/contributions.js';
-import { create as modifier } from '../../dist/core/tactical/modifier/value.js';
+import { create as modifier } from '../../dist/core/tactical/contribution/value.js';
 import { calculateDamage, resolveDamage } from '../../dist/core/tactical/unit/capability/vitality/damage/settlement.js';
 import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
 import { resolveHealing } from '../../dist/core/tactical/unit/capability/vitality/healing/settlement.js';
 import { resolveElementDamage, resolveElementHeal, advanceElementalState } from '../../dist/core/tactical/unit/capability/elemental/execution.js';
 import { elementValues } from '../../dist/core/tactical/unit/capability/elemental/capability.js';
 import { createArknightsElementalDefinition } from '../../dist/data/arknights/elemental.js';
-import { registerArknightsElementalBursts } from '../../dist/data/arknights/elemental-program.js';
+import { registerArknightsElementalBursts } from '../../dist/data/arknights/elemental-burst.js';
 import { effectFixtureWork } from '../helpers/effects.js';
 
 const range = createShapeGeometry({ shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 20 }] });
@@ -166,7 +166,7 @@ test('elemental HP damage ignores physical defense, magic resistance, source att
   for (const [damageResistance, expected] of [[0, 100], [50, 50], [100, 5], [1000, 5], [-50, 100]]) {
     const supplied = resources();
     const source = initializeUnit({ id: 0, position: [0, 0], definition: { id: 'element-source', offense: { attack: 10000 } } });
-    const attackBuff = supplied.registerEffect(createEffectProgram({ id: `source-attack-${damageResistance}`, initialize: () => ({}) }),
+    const attackBuff = supplied.registerEffect(createEffectDefinition({ id: `source-attack-${damageResistance}`, initialize: () => ({}) }),
       { contributions: [attack(() => [modifier({ multiplier: 100 })])] });
     let input = effectFixtureWork(source, unit('ENEMY', { defense: { defense: 100000, resistance: 99 } }, { damageResistance, elementResistance: 100 }));
     installNewEffect(input, 0, attackBuff.ref, { source: 0, scopes: [{ type: "UNIT", unitId: 0 }] }, supplied, 0);
@@ -305,7 +305,7 @@ test('elemental runtime: nested burst damage failure publishes neither EP progre
   let faultRef;
   const { runtime } = battle('CHARACTER', 'BURN', {
     prepare: supplied => {
-      faultRef = supplied.registerEffect(createEffectProgram({ id: 'elemental-fault', initialize: () => ({}) }),
+      faultRef = supplied.registerEffect(createEffectDefinition({ id: 'elemental-fault', initialize: () => ({}) }),
         { damage: { reception: { priority: 100, apply: () => { throw new Error('nested burst failed'); } } } }).ref;
     },
     targetStates: (supplied, selected) => {

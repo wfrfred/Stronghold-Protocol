@@ -5,15 +5,11 @@ import { test } from "node:test";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/execution/context.js";
-import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
+import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
 import { EffectResources } from "../../dist/core/tactical/unit/capability/effects/registry.js";
 import { EffectDispatchScope } from "../../dist/core/tactical/unit/capability/effects/dispatch.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
-import {
-  sampled,
-  live,
-} from "../../dist/core/tactical/unit/capability/effects/binding.js";
-import * as modifier from "../../dist/core/tactical/modifier/value.js";
+import * as modifier from "../../dist/core/tactical/contribution/value.js";
 import { updateAttackContributions } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { removeEffect, setEffectEnabled } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
@@ -24,7 +20,7 @@ import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
 import { effectFixtureWork, installFixtureEffect } from "../helpers/effects.js";
 
-const program = (id) => createEffectProgram({
+const definition = (id) => createEffectDefinition({
   id,
   initialize: () => ({ value: 1 }),
 });
@@ -50,7 +46,7 @@ const spec = () => createLegacyCombatSpec({
 
 test("resources: direct binding registration shares immutable descriptors and arrays", () => {
   const resources = new CombatResources();
-  const descriptor = resources.effects.register(program("direct-binding"));
+  const descriptor = resources.effects.register(definition("direct-binding"));
   const binding = compileStatusBinding(["INVINCIBLE"]);
   const bindings = [binding];
   resources.effectBindings.register(descriptor.ref, bindings);
@@ -68,7 +64,7 @@ test("resources: direct binding registration shares immutable descriptors and ar
 test("resources: binding participation and removal leave earlier unit values unchanged", () => {
   const resources = new CombatResources();
   const binding = compileStatusBinding(["INVINCIBLE"]);
-  const descriptor = resources.registerEffect(program("shared-binding"), { bindings: [binding] });
+  const descriptor = resources.registerEffect(definition("shared-binding"), { bindings: [binding] });
   const installed = installFixtureEffect(
     unit(), resources.effects.create(descriptor.ref, metadata), resources,
   );
@@ -86,25 +82,16 @@ test("resources: binding participation and removal leave earlier unit values unc
   assert.equal(installed.effects.instances.length, 1);
 });
 
-test("resources: binding factories share declared groups and sampled modifier values", () => {
+test("resources: contribution compilation shares declared groups and sampled modifier values", () => {
   for (const kind of ["live", "sampled"]) {
     const resources = new CombatResources();
     const values = [modifier.create({ finalAddition: 20 })];
     const sample = () => values;
     const group = { id: "original-group", strength: 1 };
-    const configuration = {
-      id: "sample",
-      target: updateAttackContributions,
-      group,
-      evaluator: "sample/attack",
-      computations: resources.computations,
-      evaluate: sample,
-      sample,
-    };
-    const compiled = kind === "live"
-      ? live(configuration)
-      : sampled(configuration);
-    const descriptor = resources.registerEffect(program(`shared-${kind}`), { bindings: [compiled] });
+    const declaration = kind === "live"
+      ? { id: "sample", kind: "LIVE", target: updateAttackContributions, group, evaluate: sample }
+      : { id: "sample", kind: "SAMPLED", target: updateAttackContributions, group, sample };
+    const descriptor = resources.registerEffect(definition(`shared-${kind}`), { contributions: [declaration] });
     const owner = initializeUnit({
       id: 2,
       position: [0, 0],
@@ -114,7 +101,7 @@ test("resources: binding factories share declared groups and sampled modifier va
       owner, resources.effects.create(descriptor.ref, metadata), resources,
     );
     const contribution = installed.offense.attack.entries[0];
-    assert.equal(contribution.id, "@effect/0/sample");
+    assert.equal(contribution.id, `@effect/0/${kind === "live" ? "parameter" : "projection"}/sample`);
     assert.equal(contribution.group, group);
     if (kind === "sampled") {
       assert.equal(contribution.values, values);
@@ -137,7 +124,7 @@ test("resources: authored contributions retain prior snapshots across lifecycle 
     const declaration = useLive
       ? liveAttack(({ instance }) => [modifier.create({ finalAddition: instance.state.value * 20 })], { group })
       : attack((instance) => [modifier.create({ finalAddition: instance.state.value * 20 })], { group });
-    const descriptor = resources.registerEffect(program(`authored-${useLive}`), { contributions: [declaration] });
+    const descriptor = resources.registerEffect(definition(`authored-${useLive}`), { contributions: [declaration] });
     const owner = initializeUnit({
       id: 2,
       position: [0, 0],
@@ -171,27 +158,27 @@ test("resources: authored identities are nonempty and unique across sampled and 
     [[attack(() => [], { id: "" })], /identity must be nonempty/],
   ]) {
     const resources = new CombatResources();
-    assert.throws(() => resources.registerEffect(program("invalid-authored"), { contributions }), error);
+    assert.throws(() => resources.registerEffect(definition("invalid-authored"), { contributions }), error);
     assert.throws(() => resources.computations.bind({}), /failed resource construction/);
   }
 });
 
-test("resources: a shared reference cannot replace an existing program descriptor", () => {
+test("resources: a shared reference cannot replace an existing definition descriptor", () => {
   const resources = new EffectResources();
-  const original = program("stable-program");
+  const original = definition("stable-definition");
   const registered = resources.register(original);
   const replacement = { ...original, initialize: () => ({ value: 99 }) };
 
-  assert.throws(() => resources.register(replacement), /duplicate effect program/);
+  assert.throws(() => resources.register(replacement), /duplicate effect definition/);
   assert.equal(resources.get(original.ref), registered);
   assert.equal(resources.register(original), registered);
   assert.equal(resources.register(registered), registered);
   assert.equal(resources.create(original.ref, metadata).state.value, 1);
 });
 
-test("resources: registration shares the authored program and state updates retain previous values", () => {
+test("resources: registration shares the authored definition and state updates retain previous values", () => {
   const resources = new CombatResources();
-  const descriptor = program("shared-program");
+  const descriptor = definition("shared-definition");
   const registered = resources.registerEffect(descriptor);
   new BattleRuntime(spec(), { combat: resources });
 
@@ -207,7 +194,7 @@ test("resources: registration shares the authored program and state updates reta
 test("resources: failed composite registration invalidates the entire unpublished resource graph", () => {
   for (const stage of ["numeric", "damage", "healing", "lifecycle"]) {
     const resources = new CombatResources();
-    const descriptor = resources.effects.register(program(`partial-${stage}`));
+    const descriptor = resources.effects.register(definition(`partial-${stage}`));
     const instance = resources.effects.create(descriptor.ref, metadata);
     const evaluator = resources.computations.bind({});
     let facets;
@@ -250,20 +237,20 @@ test("resources: failed composite registration invalidates the entire unpublishe
     assert.throws(() => resources.computations.register("retry", () => []), /failed resource construction/);
 
     const rebuilt = new CombatResources();
-    const rebuiltProgram = rebuilt.registerEffect(program(descriptor.ref.id), facets);
+    const rebuiltDefinition = rebuilt.registerEffect(definition(descriptor.ref.id), facets);
     rebuilt.seal();
-    assert.equal(rebuilt.effects.create(rebuiltProgram.ref, metadata).state.value, 1);
+    assert.equal(rebuilt.effects.create(rebuiltDefinition.ref, metadata).state.value, 1);
   }
 });
 
 test("resources: publishing to BattleRuntime closes every registry while preserving execution", () => {
   const resources = new CombatResources();
-  const descriptor = resources.registerEffect(program("published"));
+  const descriptor = resources.registerEffect(definition("published"));
   const runtime = new BattleRuntime(spec(), { combat: resources });
 
   for (const write of [
-    () => resources.registerEffect(program("late")),
-    () => resources.effects.register(program("late-program")),
+    () => resources.registerEffect(definition("late")),
+    () => resources.effects.register(definition("late-definition")),
     () => resources.effectBindings.register(descriptor.ref, []),
     () => resources.computations.register("late-attack", () => []),
     () => resources.computations.register("late-defense", () => []),
@@ -281,12 +268,12 @@ test("resources: publishing to BattleRuntime closes every registry while preserv
 });
 
 
-test("resources: live contributions distinguish program and binding identities containing separators", () => {
+test("resources: live contributions distinguish definition and binding identities containing separators", () => {
   const resources = new CombatResources();
-  const first = resources.registerEffect(program("a/b"), {
+  const first = resources.registerEffect(definition("a/b"), {
     contributions: [liveAttack(() => [modifier.create({ finalAddition: 10 })], { id: "c" })],
   });
-  const second = resources.registerEffect(program("a"), {
+  const second = resources.registerEffect(definition("a"), {
     contributions: [liveAttack(() => [modifier.create({ finalAddition: 20 })], { id: "b/c" })],
   });
   resources.seal();

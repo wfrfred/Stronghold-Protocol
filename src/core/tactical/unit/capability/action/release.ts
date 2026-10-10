@@ -8,10 +8,10 @@ import type {
     EffectView,
 } from "../effects/contract.js";
 import { EffectDispatchScope, participatingEffect } from "../effects/dispatch.js";
-import type { EffectRef, EffectInstance, EffectInstanceValue } from "../effects/instance.js";
+import type { EffectRef, Effect, EffectValue } from "../effects/effect.js";
 import { finalizeFinishedEffects } from "../effects/lifecycle.js";
 import { createEffectOperations } from "../effects/operations.js";
-import type { EffectProgramRef } from "../effects/program.js";
+import type { EffectDefinitionRef } from "../effects/definition.js";
 import { effectView, getEffect } from "../effects/query.js";
 import type { EffectResources } from "../effects/registry.js";
 import { hasAction } from "./capability.js";
@@ -23,7 +23,7 @@ export interface ActionReleaseContext<S extends object> {
     readonly unitId: UnitId;
     readonly tick: number;
     readonly ref: EffectRef;
-    readonly instance: EffectInstance<S>;
+    readonly instance: Effect<S>;
     readonly facts: EffectView;
     readonly effects: EffectLifecycleOperations;
 }
@@ -33,7 +33,7 @@ export interface ActionReleaseRules<S extends object> {
 }
 
 type ActionReleaseInvocation = Omit<ActionReleaseContext<object>, "instance"> & {
-    readonly instance: EffectInstanceValue;
+    readonly instance: EffectValue;
 };
 
 export interface CompiledActionReleaseRules {
@@ -51,7 +51,7 @@ export class ActionReleaseResources {
     }
 
     register<S extends object>(
-        ref: EffectProgramRef<S>,
+        ref: EffectDefinitionRef<S>,
         rules: NoInfer<ActionReleaseRules<S>>,
     ): void {
         this.#registration.assertWritable();
@@ -71,11 +71,11 @@ export class ActionReleaseResources {
                     beforeRelease({
                         ...context,
                         get instance() {
-                            const instance = effects.typedInstance(context.instance, ref);
+                            const instance = effects.typedEffect(context.instance, ref);
 
                             if (instance === undefined) {
                                 throw new TypeError(
-                                    "action release requires its matching effect program",
+                                    "action release requires its matching effect definition",
                                 );
                             }
 
@@ -86,10 +86,10 @@ export class ActionReleaseResources {
         );
     }
 
-    get(instance: EffectInstanceValue): CompiledActionReleaseRules | undefined {
+    get(instance: EffectValue): CompiledActionReleaseRules | undefined {
         this.#registration.assertUsable();
 
-        return this.#rules.get(instance.programRef.id);
+        return this.#rules.get(instance.definitionRef.id);
     }
 }
 
@@ -124,7 +124,7 @@ export function beforeActionRelease(
                 continue;
             }
 
-            latest = scope.withInstance(ref, instance, (lastKnown) => {
+            latest = scope.withEffect(ref, instance, (lastKnown) => {
                 let active = true;
 
                 const readState = (): BattleState => {

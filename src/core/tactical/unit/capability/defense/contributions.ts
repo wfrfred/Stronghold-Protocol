@@ -1,4 +1,4 @@
-import type * as contributions from "../effects/contributions.js";
+import type * as contributions from "../../../contribution/definition.js";
 import { updateDefenseContributions, updateResistanceContributions } from "./capability.js";
 
 export function defense<S extends object>(

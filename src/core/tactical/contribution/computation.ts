@@ -1,5 +1,5 @@
 import { ResourceRegistration } from "../../common/resource-registration.js";
-import type * as contribution from "./contribution.js";
+import type * as contribution from "./state.js";
 import type * as modifier from "./value.js";
 
 export type Compute<C> = (context: C, entry: contribution.Live) => readonly modifier.Value[];

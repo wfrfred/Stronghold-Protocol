@@ -11,7 +11,7 @@ import {
 import { EffectDispatchScope } from '../../dist/core/tactical/unit/capability/effects/dispatch.js';
 import { prepareCombatEffects } from '../../dist/core/tactical/battle/execution/unit-lifecycle.js';
 import { effectView } from '../../dist/core/tactical/unit/capability/effects/query.js';
-import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
+import { createEffectDefinition } from '../../dist/core/tactical/unit/capability/effects/definition.js';
 import { createSkillDefinition } from '../../dist/core/tactical/unit/capability/skill/capability.js';
 import { activateSkill } from '../../dist/core/tactical/unit/capability/skill/execution.js';
 import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
@@ -20,7 +20,7 @@ import { createLegacyCombatSpec } from '../../dist/legacy/combat.js';
 import { effectFixtureWork } from '../helpers/effects.js';
 
 function effectProgram(id) {
-  return createEffectProgram({ id, initialize: () => ({}) });
+  return createEffectDefinition({ id, initialize: () => ({}) });
 }
 
 function fixture(content = {}) {
@@ -113,7 +113,7 @@ test('skill ownership: finish content retains the caller dispatch candidates thr
       source: 0, scopes: [],
     });
     assert.equal(installed.type, 'INSTALLED');
-    assert.equal(context.facts.getUnit(1).effects.instances.some(instance => instance.programRef === observer.ref && instance.participating), true);
+    assert.equal(context.facts.getUnit(1).effects.instances.some(instance => instance.definitionRef === observer.ref && instance.participating), true);
     context.damage({ sourceUnitId: 0, targetUnitId: 1, damageType: 'TRUE', operands: createDamageOperands(1) });
   } });
   observer = f.resources.registerEffect(effectProgram('finish-installed-observer'), {

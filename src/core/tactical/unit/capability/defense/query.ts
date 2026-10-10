@@ -1,13 +1,13 @@
 import { hasDefense, resolveDefenseParameters, type DefenseDefinition } from "./capability.js";
 import type { UnitId } from "../../unit.js";
 import type { BattlefieldView } from "../../../battlefield/contract.js";
-import type * as computation from "../../../modifier/computation.js";
-import type { Context } from "../contribution.js";
+import type * as computation from "../../../contribution/computation.js";
+import type { QueryContext } from "../../../contribution/definition.js";
 
 export function resolveDefense(
     unitId: UnitId,
     battlefield: BattlefieldView,
-    computations?: computation.Computations<Context>,
+    computations?: computation.Computations<QueryContext>,
 ): DefenseDefinition | undefined {
     const unit = battlefield.getUnit(unitId);
 

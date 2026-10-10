@@ -1,4 +1,4 @@
-import type * as contributions from "../effects/contributions.js";
+import type * as contributions from "../../../contribution/definition.js";
 import { updateAttackSpeedContributions, updateBaseAttackTimeContributions } from "./capability.js";
 
 export function attackSpeed<S extends object>(

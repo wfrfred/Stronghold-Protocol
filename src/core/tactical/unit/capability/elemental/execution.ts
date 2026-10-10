@@ -13,7 +13,7 @@ import { effectView } from "../effects/query.js";
 import type { DamageOperation } from "../vitality/damage/contract.js";
 import { hasElemental, type ElementType, type ElementValues } from "./capability.js";
 import type { ElementalRejection } from "./query.js";
-import type { CompiledElementalBurst, ElementalBurstContext } from "./program.js";
+import type { ElementalBurstDefinition, ElementalBurstContext } from "./definition.js";
 import type { ElementalResources } from "./resources.js";
 import {
     advanceElemental,
@@ -83,7 +83,7 @@ function runBurst(
     tick: number,
     previousTick: number,
     resources: ElementalExecutionResources,
-    run: CompiledElementalBurst["begin"],
+    run: ElementalBurstDefinition["begin"],
 ): void {
     let active = true;
     const dispatch = new EffectDispatchScope();
@@ -214,16 +214,16 @@ export function advanceElementalState(
     updateUnit(work, advanced.unit);
 
     if (advanced.burst !== null) {
-        const program = resources.elemental.get(advanced.burst.receiver, advanced.burst.type);
+        const definition = resources.elemental.get(advanced.burst.receiver, advanced.burst.type);
 
-        if (program.advance !== undefined) {
+        if (definition.advance !== undefined) {
             runBurst(
                 work,
                 advanced.burst,
                 tick,
                 unit.elemental.lastRecoveryTick,
                 resources,
-                program.advance,
+                definition.advance,
             );
         }
     }

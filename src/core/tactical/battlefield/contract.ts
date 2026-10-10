@@ -4,7 +4,7 @@ import type { NavigationMaps, PathMotionMode } from "./navigation/map.js";
 import type { Unit, UnitId } from "../unit/unit.js";
 import type { OccupancySlot } from "../unit/capability/occupancy.js";
 import type { BattlefieldMap } from "./map/map.js";
-import type { MechanismId, MechanismRuntime, MechanismView } from "./mechanism.js";
+import type { MechanismId, Mechanism, MechanismView } from "./mechanism.js";
 import type {
     NavigationModifier,
     NavigationModifierId,
@@ -13,14 +13,14 @@ import type {
 } from "./navigation/modifier.js";
 import type { BlockingRelation } from "./blocking/relations.js";
 import type { SupportRelation } from "./support/relations.js";
-import type { ProjectileId, ProjectileInstance, ProjectileView } from "./projectile/state.js";
+import type { ProjectileId, Projectile, ProjectileView } from "./projectile/projectile.js";
 import type { EffectLifetimeProjection } from "../unit/capability/effects/lifetime-index.js";
 
 export type BattlefieldRemovalReason = "DEATH" | "RETREAT" | "EXPIRED" | "SCRIPT";
 
 export type BattlefieldChange<U extends Unit = Unit> =
-    | { readonly type: "REGISTER_PROJECTILE"; readonly projectile: ProjectileInstance }
-    | { readonly type: "UPDATE_PROJECTILE"; readonly projectile: ProjectileInstance }
+    | { readonly type: "REGISTER_PROJECTILE"; readonly projectile: Projectile }
+    | { readonly type: "UPDATE_PROJECTILE"; readonly projectile: Projectile }
     | { readonly type: "REMOVE_PROJECTILE"; readonly projectileId: ProjectileId }
     | { readonly type: "REGISTER_UNIT"; readonly unit: U }
     | { readonly type: "UPDATE_UNIT"; readonly unit: U }
@@ -40,8 +40,8 @@ export type BattlefieldChange<U extends Unit = Unit> =
           readonly unitId: UnitId;
           readonly reason: BattlefieldRemovalReason;
       }
-    | { readonly type: "REGISTER_MECHANISM"; readonly mechanism: MechanismRuntime }
-    | { readonly type: "UPDATE_MECHANISM"; readonly mechanism: MechanismRuntime }
+    | { readonly type: "REGISTER_MECHANISM"; readonly mechanism: Mechanism }
+    | { readonly type: "UPDATE_MECHANISM"; readonly mechanism: Mechanism }
     | {
           readonly type: "SET_MECHANISM_ACTIVE";
           readonly mechanismId: MechanismId;

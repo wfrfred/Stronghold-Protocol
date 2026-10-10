@@ -1,4 +1,4 @@
-import type * as contributions from "../effects/contributions.js";
+import type * as contributions from "../../../contribution/definition.js";
 import { updateBlockingCapacityContributions } from "./capability.js";
 
 export function capacity<S extends object>(

@@ -1,51 +1,54 @@
 import { ResourceRegistration } from "../../../common/resource-registration.js";
-import type { ProjectileProgram, ProjectileProgramRef } from "./program.js";
-import type { ProjectileInstance } from "./state.js";
+import type { ProjectileDefinition, ProjectileDefinitionRef } from "./definition.js";
+import type { Projectile } from "./projectile.js";
 
 export class ProjectileResources {
-    readonly #programs = new Map<string, ProjectileProgram<object>>();
+    readonly #definitions = new Map<string, ProjectileDefinition<object>>();
     readonly #registration: ResourceRegistration;
 
     constructor(registration = new ResourceRegistration()) {
         this.#registration = registration;
     }
 
-    register<S extends object>(program: ProjectileProgram<S>): ProjectileProgram<S> {
+    register<S extends object>(definition: ProjectileDefinition<S>): ProjectileDefinition<S> {
         this.#registration.assertWritable();
-        const existing = this.#programs.get(program.ref.id);
+        const existing = this.#definitions.get(definition.ref.id);
 
         if (existing !== undefined) {
-            if (existing !== (program as unknown)) {
-                throw new TypeError(`duplicate projectile program ${program.ref.id}`);
+            if (existing !== (definition as unknown)) {
+                throw new TypeError(`duplicate projectile definition ${definition.ref.id}`);
             }
 
-            return existing as unknown as ProjectileProgram<S>;
+            return existing as unknown as ProjectileDefinition<S>;
         }
 
-        this.#programs.set(program.ref.id, program as unknown as ProjectileProgram<object>);
+        this.#definitions.set(
+            definition.ref.id,
+            definition as unknown as ProjectileDefinition<object>,
+        );
 
-        return program;
+        return definition;
     }
 
-    get<S extends object>(ref: ProjectileProgramRef<S>): ProjectileProgram<S> {
+    get<S extends object>(ref: ProjectileDefinitionRef<S>): ProjectileDefinition<S> {
         this.#registration.assertUsable();
-        const program = this.#programs.get(ref.id);
+        const definition = this.#definitions.get(ref.id);
 
-        if (program?.ref !== (ref as unknown)) {
-            throw new TypeError(`unregistered projectile program ${ref.id}`);
+        if (definition?.ref !== (ref as unknown)) {
+            throw new TypeError(`unregistered projectile definition ${ref.id}`);
         }
 
-        return program as unknown as ProjectileProgram<S>;
+        return definition as unknown as ProjectileDefinition<S>;
     }
 
-    withProgram<R>(
-        instance: ProjectileInstance,
+    withDefinition<R>(
+        instance: Projectile,
         visitor: <S extends object>(
-            instance: ProjectileInstance<S>,
-            program: ProjectileProgram<S>,
+            instance: Projectile<S>,
+            definition: ProjectileDefinition<S>,
         ) => R,
     ): R {
-        const ref = instance.programRef as ProjectileProgramRef<object>;
+        const ref = instance.definitionRef as ProjectileDefinitionRef<object>;
 
         return visitor(instance, this.get(ref));
     }

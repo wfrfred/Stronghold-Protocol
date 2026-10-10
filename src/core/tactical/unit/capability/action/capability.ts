@@ -3,7 +3,7 @@ import {
     assertNonnegativeNumber,
     assertPositiveNumber,
 } from "../../../../common/assert.js";
-import * as contribution from "../../../modifier/contribution.js";
+import * as contribution from "../../../contribution/state.js";
 import * as operation from "./operation.js";
 import { createTargetingDefinition, type TargetingDefinition } from "../../targeting/definition.js";
 import { widenUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";

@@ -3,12 +3,12 @@ import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/execution/context.js";
-import { createProjectileProgram } from "../../dist/core/tactical/battlefield/projectile/program.js";
+import { createProjectileDefinition } from "../../dist/core/tactical/battlefield/projectile/definition.js";
 import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
-import { create as modifier } from "../../dist/core/tactical/modifier/value.js";
+import { create as modifier } from "../../dist/core/tactical/contribution/value.js";
 import { createOperatorDefinition } from "../../dist/core/tactical/unit/archetype/operator.js";
 import { compileAction } from "../../dist/core/tactical/unit/capability/action/compile.js";
-import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
+import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
 import { attack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
@@ -28,7 +28,7 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, program } = {}) {
     id: "runtime-ammo-skill", activation: "MANUAL", spRecovery: "TIME",
     spCost: 1, initialSp: 1, durationTicks: null, ammo,
   });
-  const buff = resources.registerEffect(createEffectProgram({
+  const buff = resources.registerEffect(createEffectDefinition({
     id: "runtime-ammo-attack", initialize: () => ({}),
   }), {
     contributions: [attack(() => [modifier({ multiplier: 1 })])],
@@ -61,7 +61,7 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, program } = {}) {
     allegiance: { side: "ENEMY" }, spatial: { layer: "GROUND" }, hit: { geometry: hit },
     status: { initialFlags: [] },
   };
-  const shell = resources.projectiles.register(createProjectileProgram({
+  const shell = resources.projectiles.register(createProjectileDefinition({
     id: "runtime-ammo-shell", initialize: () => ({}),
     acceptsContact: (_context, unit) => unit.allegiance?.side === "ENEMY",
     contact: (context) => {

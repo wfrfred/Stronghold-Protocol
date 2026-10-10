@@ -24,28 +24,24 @@ import {
     sameLifetime,
     type EffectRef,
     type LifetimeRef,
-    type EffectInstance,
-    type EffectInstanceValue,
+    type Effect,
+    type EffectValue,
     type Scope,
-} from "./instance.js";
-import { validateLifetime, withEffectLifecycle } from "./internal/instance.js";
-import {
-    registerEffectInstance,
-    replaceEffectInstance,
-    replaceEffectInstances,
-} from "./internal/state.js";
+} from "./effect.js";
+import { validateLifetime, withEffectLifecycle } from "./internal/effect.js";
+import { registerEffect, replaceEffect, replaceEffects } from "./internal/state.js";
 import type { CompiledEffectLifecycle } from "./lifecycle-resources.js";
 import { effectView, getEffect } from "./query.js";
 import { EffectDispatchScope } from "./dispatch.js";
 import { createEffectOperations } from "./operations.js";
-import type { EffectProgramRef } from "./program.js";
+import type { EffectDefinitionRef } from "./definition.js";
 import { reconcileEffectBindings, transitionEffectBindings } from "./transition.js";
 import { effectDependents, effectTickCandidates } from "./lifetime-index.js";
 
-function changeInstance(
+function changeEffect(
     state: BattleState,
     address: EffectRef,
-    transition: (instance: EffectInstanceValue) => EffectInstanceValue,
+    transition: (instance: EffectValue) => EffectValue,
 ): void {
     transitionUnit(state, address.unitId, (unit) => {
         if (!hasEffects(unit)) {
@@ -60,7 +56,7 @@ function changeInstance(
 
         const updated = transition(instance);
 
-        return updated === instance ? unit : replaceEffectInstance(unit, instance, updated);
+        return updated === instance ? unit : replaceEffect(unit, instance, updated);
     });
 }
 
@@ -141,7 +137,7 @@ function runParticipationActions(
 function runLifecycleAction(
     state: BattleState,
     address: EffectRef,
-    instance: EffectInstanceValue,
+    instance: EffectValue,
     action: CompiledEffectLifecycle["start"],
     resources: EffectTransitionResources,
     tick: number,
@@ -151,7 +147,7 @@ function runLifecycleAction(
         return;
     }
 
-    scope.withInstance(address, instance, (lastKnown) => {
+    scope.withEffect(address, instance, (lastKnown) => {
         let active = true;
 
         const readState = (): BattleState => {
@@ -205,7 +201,7 @@ export function updateEffectState<S extends object>(
     state: BattleState,
     ownerUnitId: UnitId,
     instanceId: number,
-    ref: EffectProgramRef<S>,
+    ref: EffectDefinitionRef<S>,
     value: NoInfer<S> | ((current: NoInfer<S>) => NoInfer<S>),
     resources: EffectTransitionResources,
     tick: number,
@@ -218,10 +214,10 @@ export function updateEffectState<S extends object>(
         return;
     }
 
-    const typed = resources.effects.typedInstance(instance, ref);
+    const typed = resources.effects.typedEffect(instance, ref);
 
     if (typed === undefined) {
-        throw new TypeError("effect state update must use its matching program");
+        throw new TypeError("effect state update must use its matching definition");
     }
 
     const updated = resources.effects.update(
@@ -234,7 +230,7 @@ export function updateEffectState<S extends object>(
     }
 
     const before = getUnit(state, ownerUnitId)!;
-    changeInstance(state, address, () => updated);
+    changeEffect(state, address, () => updated);
 
     reconcileInScope(
         state,
@@ -252,7 +248,7 @@ export function setEffectTick(state: BattleState, ref: EffectRef, tick: number |
         assertNonnegativeSafeInteger(tick, "effect expiration tick");
     }
 
-    changeInstance(state, ref, (instance) => {
+    changeEffect(state, ref, (instance) => {
         if (instance.finished || effectTick(instance) === tick) {
             return instance;
         }
@@ -300,7 +296,7 @@ function setEnabledInScope(
     }
 
     const before = getUnit(state, address.unitId)!;
-    changeInstance(state, address, (value) => withEffectLifecycle(value, { enabled }));
+    changeEffect(state, address, (value) => withEffectLifecycle(value, { enabled }));
 
     reconcileInScope(state, address.unitId, before, resources, tick, scope);
 }
@@ -459,7 +455,7 @@ function finishBatch(
 
             const ids = byHost.get(owner.id)!;
 
-            return replaceEffectInstances(
+            return replaceEffects(
                 owner,
                 owner.effects.instances.map((instance) =>
                     ids.has(instance.id)
@@ -612,16 +608,13 @@ function cleanupEffects(
     }
 
     const removed = new Set(instances.map((instance) => instance.id));
-    let unit = replaceEffectInstances(
+    let unit = replaceEffects(
         host,
         host.effects.instances.filter((instance) => !removed.has(instance.id)),
     );
 
     for (const instance of instances) {
-        dispatch.retainFinalizedInstance(
-            { type: "EFFECT", unitId, effectId: instance.id },
-            instance,
-        );
+        dispatch.retainFinalizedEffect({ type: "EFFECT", unitId, effectId: instance.id }, instance);
 
         if (instance.started) {
             unit = transitionEffectBindings(
@@ -758,7 +751,7 @@ export function bindEffectLifetime(
         throw new TypeError("effect scopes cannot form a cycle");
     }
     if (!instance.scopes.some((scope) => sameLifetime(scope, lifetime))) {
-        changeInstance(state, ref, (instance) => ({
+        changeEffect(state, ref, (instance) => ({
             ...instance,
             scopes: [...instance.scopes, lifetime],
         }));
@@ -770,7 +763,7 @@ export function bindEffectLifetime(
 export function installEffect<S extends object>(
     state: BattleState,
     unitId: UnitId,
-    instance: EffectInstance<S>,
+    instance: Effect<S>,
     resources: EffectTransitionResources,
     tick: number,
     dispatch = new EffectDispatchScope(),
@@ -779,7 +772,7 @@ export function installEffect<S extends object>(
         return { type: "REJECTED", reason: "TARGET_ABSENT" };
     }
 
-    resources.effects.get(instance.programRef);
+    resources.effects.get(instance.definitionRef);
 
     return installPrepared(state, unitId, instance, resources, tick, dispatch);
 }
@@ -787,7 +780,7 @@ export function installEffect<S extends object>(
 export function installNewEffect<S extends object>(
     state: BattleState,
     unitId: UnitId,
-    program: EffectProgramRef<S>,
+    definition: EffectDefinitionRef<S>,
     input: EffectInstallationInput<NoInfer<S>>,
     resources: EffectTransitionResources,
     tick: number,
@@ -809,7 +802,7 @@ export function installNewEffect<S extends object>(
     }
 
     const instance = resources.effects.create(
-        program,
+        definition,
         {
             source: input.source,
             scopes,
@@ -825,7 +818,7 @@ export function installNewEffect<S extends object>(
 function installPrepared<S extends object>(
     state: BattleState,
     unitId: UnitId,
-    instance: EffectInstance<S>,
+    instance: Effect<S>,
     resources: EffectTransitionResources,
     tick: number,
     dispatch: EffectDispatchScope,
@@ -871,7 +864,7 @@ function installPrepared<S extends object>(
         return { type: "REJECTED", reason: "LIFETIME_UNAVAILABLE" };
     }
 
-    transitionUnit(state, unitId, (unit) => registerEffectInstance(unit, instance));
+    transitionUnit(state, unitId, (unit) => registerEffect(unit, instance));
     runLifecycleAction(state, ref, instance, lifecycle.start, resources, tick, dispatch);
     let current = getEffect(state, ref);
 
@@ -879,7 +872,7 @@ function installPrepared<S extends object>(
         return { type: "ENDED", ref };
     }
 
-    changeInstance(state, ref, (value) => withEffectLifecycle(value, { started: true }));
+    changeEffect(state, ref, (value) => withEffectLifecycle(value, { started: true }));
     current = getEffect(state, ref)!;
     const started = current;
     transitionUnit(state, unitId, (unit) =>

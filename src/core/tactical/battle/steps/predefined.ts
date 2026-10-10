@@ -34,7 +34,7 @@ export interface PredefinedMechanismCreation {
     }[];
 }
 
-export interface PredefinedInstanceDefinition {
+export interface PredefinedDefinition {
     readonly id: number;
     readonly alias: string | null;
     readonly initiallyPresent: boolean;
@@ -60,9 +60,7 @@ interface PredefinedTransition {
     readonly changes: readonly BattlefieldChange[];
 }
 
-export function createPredefinedInstanceDefinition(
-    definition: PredefinedInstanceDefinition,
-): PredefinedInstanceDefinition {
+export function createPredefinedDefinition(definition: PredefinedDefinition): PredefinedDefinition {
     assertNonnegativeSafeInteger(definition.id, "predefined definition id");
 
     const creation = definition.creation;
@@ -96,7 +94,7 @@ export function createPredefinedInstanceDefinition(
 }
 
 export function predefinedIdsForAlias(
-    definitions: readonly PredefinedInstanceDefinition[],
+    definitions: readonly PredefinedDefinition[],
     alias: string,
 ): readonly number[] {
     return definitions
@@ -115,7 +113,7 @@ function nextIdentity(value: number): number {
 }
 
 export function changePredefinedInstances(
-    definitions: readonly PredefinedInstanceDefinition[],
+    definitions: readonly PredefinedDefinition[],
     initialPresence: readonly PredefinedPresence[],
     commands: readonly PredefinedCommand[],
     initialExecution: BattleExecutionState,
@@ -222,7 +220,7 @@ export function reconcilePredefinedPresence(
 
 export function advancePredefined(
     state: BattleState,
-    definitions: readonly PredefinedInstanceDefinition[],
+    definitions: readonly PredefinedDefinition[],
     presence: readonly PredefinedPresence[],
     commands: readonly Command[],
     tick: number,

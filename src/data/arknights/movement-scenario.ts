@@ -1,6 +1,6 @@
 import type { Seed } from "../../core/common/rng.js";
 import type { Input } from "../../core/tactical/battle/contract.js";
-import type { PredefinedInstanceDefinition } from "../../core/tactical/battle/steps/predefined.js";
+import type { PredefinedDefinition } from "../../core/tactical/battle/steps/predefined.js";
 import type { ArknightsBlackboardEntry } from "./blackboard.js";
 import type { ArknightsMapOptions, ArknightsTileContext } from "./map.js";
 import {
@@ -17,7 +17,7 @@ import {
     type ArknightsLevelDefinition,
     type ArknightsPredefinedInstance,
 } from "./level.js";
-import { parsePredefinedInstanceDefinition, resolvePredefinedPrefabKey } from "./predefined.js";
+import { parsePredefinedDefinition, resolvePredefinedPrefabKey } from "./predefined.js";
 import {
     parseEnemyMovementPrefab,
     parsePredefinedPrefab,
@@ -118,7 +118,7 @@ function selectPredefines(
 }
 
 function loadPredefines(selected: readonly LocatedPredefined[], catalog: ArknightsMovementCatalog) {
-    const predefines: PredefinedInstanceDefinition[] = [];
+    const predefines: PredefinedDefinition[] = [];
     const controllers: (ArknightsTerrainController & { readonly path: string })[] = [];
     const unsupportedRules: ArknightsContentIssue[] = [];
 
@@ -151,7 +151,7 @@ function loadPredefines(selected: readonly LocatedPredefined[], catalog: Arknigh
             }
         }
 
-        predefines.push(parsePredefinedInstanceDefinition(id, instance, profile, character));
+        predefines.push(parsePredefinedDefinition(id, instance, profile, character));
     }
 
     return { predefines, controllers, unsupportedRules };

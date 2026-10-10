@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { appendEvents, createBattleState, getUnit, removeUnit, updateUnit, updateUnits } from '../../dist/core/tactical/battle/execution/context.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
-import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
+import { createEffectDefinition } from '../../dist/core/tactical/unit/capability/effects/definition.js';
 import {
     bindEffectLifetime,
     finalizeEffect,
@@ -29,7 +29,7 @@ const scope = executionId => ({ type: 'ACTION', executionId });
 
 const input = lifetime => ({ source: 0, scopes: lifetime === null ? [] : [lifetime] });
 const unit = id => initializeUnit({ id, definition: { id: `receiver-${id}` }, position: [id, 0] });
-const program = id => createEffectProgram({
+const program = id => createEffectDefinition({
     id,
     initialize: () => ({}),
 });

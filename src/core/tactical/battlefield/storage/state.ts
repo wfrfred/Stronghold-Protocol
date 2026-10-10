@@ -1,4 +1,4 @@
-import type { ProjectileId, ProjectileInstance } from "../projectile/state.js";
+import type { ProjectileId, Projectile } from "../projectile/projectile.js";
 import type { NavigationMaps } from "../navigation/map.js";
 import type { StableUnit, Unit, UnitId } from "../../unit/unit.js";
 import { updateBlockingRelations, type BlockingRelation } from "../blocking/relations.js";
@@ -8,7 +8,7 @@ import {
     type BattlefieldDependencyChanges,
 } from "./dependencies.js";
 import type { BattlefieldMap } from "../map/map.js";
-import type { MechanismId, MechanismRuntime } from "../mechanism.js";
+import type { MechanismId, Mechanism } from "../mechanism.js";
 import type { NavigationModifier, NavigationModifierId } from "../navigation/modifier.js";
 import { projectNavigationMaps, type NavigationProjection } from "../navigation/projection.js";
 import {
@@ -31,11 +31,11 @@ import {
 } from "../../unit/capability/effects/lifetime-index.js";
 
 export interface BattlefieldContent<U extends Unit> {
-    readonly projectiles: ReadonlyMap<ProjectileId, ProjectileInstance>;
+    readonly projectiles: ReadonlyMap<ProjectileId, Projectile>;
     readonly units: ReadonlyMap<UnitId, U>;
     readonly blockingRelations: readonly BlockingRelation[];
     readonly supportRelations: readonly SupportRelation[];
-    readonly mechanisms: ReadonlyMap<MechanismId, MechanismRuntime>;
+    readonly mechanisms: ReadonlyMap<MechanismId, Mechanism>;
     readonly navigationModifiers: ReadonlyMap<NavigationModifierId, NavigationModifier>;
 }
 
@@ -50,7 +50,7 @@ export function createBattlefieldState<U extends Unit>(
     baseline: NavigationMaps,
 ): BattlefieldState<U> {
     const units = new Map<UnitId, U>();
-    const mechanisms = new Map<MechanismId, MechanismRuntime>();
+    const mechanisms = new Map<MechanismId, Mechanism>();
     const navigationModifiers = new Map<NavigationModifierId, NavigationModifier>();
 
     return {

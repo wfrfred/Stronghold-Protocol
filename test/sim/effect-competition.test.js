@@ -4,7 +4,7 @@ import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { battlefieldView, getUnit } from '../../dist/core/tactical/battle/execution/context.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { copyUnitSnapshot } from '../../dist/core/tactical/unit/snapshot.js';
-import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
+import { createEffectDefinition } from '../../dist/core/tactical/unit/capability/effects/definition.js';
 import { attack } from '../../dist/core/tactical/unit/capability/offense/contributions.js';
 import { maxHp } from '../../dist/core/tactical/unit/capability/vitality/contributions.js';
 import { resolveAttackPower } from '../../dist/core/tactical/unit/capability/offense/query.js';
@@ -15,7 +15,7 @@ import {
   installNewEffect, setEffectEnabled, updateEffectState, finishEffects,
   expireEffects, bindEffectLifetime, finalizeEffect,
 } from '../../dist/core/tactical/unit/capability/effects/lifecycle.js';
-import * as modifier from '../../dist/core/tactical/modifier/value.js';
+import * as modifier from '../../dist/core/tactical/contribution/value.js';
 import { effectFixtureWork } from '../helpers/effects.js';
 
 const address = instanceId => ({ type: "EFFECT", unitId: 0, effectId: instanceId });
@@ -35,7 +35,7 @@ function values(work, resources) {
   };
 }
 function definition(resources, id = 'inspiration', lifecycle = {}, onSample = () => {}) {
-  return resources.registerEffect(createEffectProgram({
+  return resources.registerEffect(createEffectDefinition({
     id,
     initialize: () => ({ ratio: 0.5, sourceAttack: 100, hpBonus: 1000 }),
   }), {
@@ -148,7 +148,7 @@ test('effect competition: overridden instances continue expiring and cannot be r
 
 test('effect competition: parent finish restores the surviving independent source', () => {
   const h = harness();
-  const parent = h.resources.registerEffect(createEffectProgram({ id: 'parent', initialize: () => ({}) }));
+  const parent = h.resources.registerEffect(createEffectDefinition({ id: 'parent', initialize: () => ({}) }));
   const parentAddress = install(h, parent, {});
   const program = definition(h.resources);
   install(h, program, { ratio: 0.5, sourceAttack: 100, hpBonus: 1000 }, null, 1);

@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { getUnit, updateUnit } from "../../dist/core/tactical/battle/execution/context.js";
-import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
-import { effectTick } from "../../dist/core/tactical/unit/capability/effects/instance.js";
+import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
+import { effectTick } from "../../dist/core/tactical/unit/capability/effects/effect.js";
 import { expireEffects, finishEffects } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { createSkillDefinition, createSkillState, initializeSkillState } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { activateSkill, advanceSkill, finishSkill } from "../../dist/core/tactical/unit/capability/skill/execution.js";
@@ -144,7 +144,7 @@ test("content refusal retains effect prefix and allocated identities while refun
       return { type: "REJECTED", reason: "later prerequisite unavailable" };
     },
   });
-  ref = f.resources.registerEffect(createEffectProgram({ id: "skill-rejected-prefix", initialize: () => ({}) })).ref;
+  ref = f.resources.registerEffect(createEffectDefinition({ id: "skill-rejected-prefix", initialize: () => ({}) })).ref;
   const rejected = activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources);
   assert.equal(rejected.result.reason, "CONTENT_REJECTED");
   const unit = getUnit(f.work, 1);
@@ -168,7 +168,7 @@ test("content refusal closes activation scopes while independent effects survive
       return { type: "REJECTED", reason: "content prerequisite" };
     },
   });
-  ref = f.resources.registerEffect(createEffectProgram({
+  ref = f.resources.registerEffect(createEffectDefinition({
     id: "activation-refusal-scopes", initialize: () => ({}),
   })).ref;
   const refused = activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources);
@@ -202,7 +202,7 @@ test("zero-duration activation closes its scope before skill finish content", ()
       }).type, "REJECTED");
     },
   });
-  ref = f.resources.registerEffect(createEffectProgram({
+  ref = f.resources.registerEffect(createEffectDefinition({
     id: "zero-duration-scope", initialize: () => ({}),
   })).ref;
   const activated = activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources);
@@ -227,7 +227,7 @@ test("skill finish rejects binding a surviving independent effect to its closed 
       }).type, "LIFETIME_UNAVAILABLE");
     },
   });
-  program = f.resources.registerEffect(createEffectProgram({
+  program = f.resources.registerEffect(createEffectDefinition({
     id: "independent-skill-binding", initialize: () => ({}),
   })).ref;
   activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources);
@@ -264,10 +264,10 @@ for (const trigger of ["SKILL", "EFFECT", "TICK"]) {
         return { type: "ACTIVATED" };
       },
     });
-    parent = f.resources.registerEffect(createEffectProgram({
+    parent = f.resources.registerEffect(createEffectDefinition({
       id: `combined-parent-${trigger}`, initialize: () => ({}),
     })).ref;
-    dependent = f.resources.registerEffect(createEffectProgram({
+    dependent = f.resources.registerEffect(createEffectDefinition({
       id: `combined-dependent-${trigger}`, initialize: () => ({}),
     }), {
       lifecycle: {

@@ -21,12 +21,12 @@ import {
   removeUnit,
   updateUnit,
 } from "../../dist/core/tactical/battle/execution/context.js";
-import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
+import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
 import { installNewEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { compileStatusBinding } from "../../dist/core/tactical/unit/capability/status/binding.js";
 import { hasStatusFlag } from "../../dist/core/tactical/unit/capability/status/capability.js";
-import * as modifier from "../../dist/core/tactical/modifier/value.js";
+import * as modifier from "../../dist/core/tactical/contribution/value.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { battlefieldView } from "../../dist/core/tactical/battle/execution/context.js";
 import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
@@ -100,7 +100,7 @@ function accept(state = createActionExecutionState(), options = {}) {
 }
 
 function effectProgram(id) {
-  return createEffectProgram({ id, initialize: () => ({}) });
+  return createEffectDefinition({ id, initialize: () => ({}) });
 }
 
 function installOwned(resources, ref, context, unitId = 1) {
@@ -412,7 +412,7 @@ test("action process: content cancellation and normal finish retain completed pr
   for (const continuation of ["CANCEL", "FINISH"]) {
     const resources = new CombatResources();
     const sampled = resources.registerEffect(
-      createEffectProgram({
+      createEffectDefinition({
         id: "sampled-prefix",
         initialize: () => ({ power: 0 }),
       }),

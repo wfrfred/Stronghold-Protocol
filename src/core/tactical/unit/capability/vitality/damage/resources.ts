@@ -1,11 +1,11 @@
 import { ResourceRegistration } from "../../../../../common/resource-registration.js";
-import type { EffectInstanceValue } from "../../effects/instance.js";
-import type { EffectProgramRef } from "../../effects/program.js";
+import type { EffectValue } from "../../effects/effect.js";
+import type { EffectDefinitionRef } from "../../effects/definition.js";
 import type { EffectResources } from "../../effects/registry.js";
 import type { EffectLifecycleOperations } from "../../effects/contract.js";
 import type { UnitLifecycleResources } from "../../../../battle/execution/unit-lifecycle.js";
-import type { Context } from "../../contribution.js";
-import type * as computation from "../../../../modifier/computation.js";
+import type { QueryContext } from "../../../../contribution/definition.js";
+import type * as computation from "../../../../contribution/computation.js";
 import type {
     VitalityHookContext,
     VitalityHookOperations,
@@ -23,7 +23,7 @@ import type {
 
 export interface DamageResourceServices extends UnitLifecycleResources {
     readonly damage: DamageResources;
-    readonly computations: computation.Computations<Context>;
+    readonly computations: computation.Computations<QueryContext>;
     readonly settleDamage: DamageOperation;
     readonly settleHealing: HealingOperation;
 }
@@ -110,7 +110,7 @@ export class DamageResources {
     }
 
     register<S extends object>(
-        ref: EffectProgramRef<S>,
+        ref: EffectDefinitionRef<S>,
         rules: NoInfer<DamageEffectRules<S>>,
     ): void {
         this.#registration.assertWritable();
@@ -125,7 +125,7 @@ export class DamageResources {
             ref: invocation.ref,
             ownerUnitId: invocation.ref.unitId,
             get instance() {
-                return effects.typedInstance(invocation.instance, ref)!;
+                return effects.typedEffect(invocation.instance, ref)!;
             },
             request: invocation.request,
             tick: invocation.tick,
@@ -201,9 +201,9 @@ export class DamageResources {
         );
     }
 
-    get(instance: EffectInstanceValue): CompiledDamageRules {
+    get(instance: EffectValue): CompiledDamageRules {
         this.#registration.assertUsable();
 
-        return this.#rules.get(instance.programRef.id) ?? emptyRules;
+        return this.#rules.get(instance.definitionRef.id) ?? emptyRules;
     }
 }

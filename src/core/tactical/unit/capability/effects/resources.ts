@@ -1,10 +1,10 @@
 import { ResourceRegistration } from "../../../../common/resource-registration.js";
 import type { Binding } from "./binding.js";
-import type { EffectInstanceValue } from "./instance.js";
-import type { EffectProgramRef } from "./program.js";
+import type { EffectValue } from "./effect.js";
+import type { EffectDefinitionRef } from "./definition.js";
 
 export interface EffectBindings {
-    get(instance: EffectInstanceValue): readonly Binding[];
+    get(instance: EffectValue): readonly Binding[];
 }
 
 export class EffectBindingResources implements EffectBindings {
@@ -15,7 +15,7 @@ export class EffectBindingResources implements EffectBindings {
         this.#registration = registration;
     }
 
-    register<S extends object>(ref: EffectProgramRef<S>, bindings: readonly Binding[]): void {
+    register<S extends object>(ref: EffectDefinitionRef<S>, bindings: readonly Binding[]): void {
         this.#registration.assertWritable();
 
         if (this.#bindings.has(ref.id)) {
@@ -25,12 +25,12 @@ export class EffectBindingResources implements EffectBindings {
         this.#bindings.set(ref.id, bindings);
     }
 
-    get(instance: EffectInstanceValue): readonly Binding[] {
+    get(instance: EffectValue): readonly Binding[] {
         this.#registration.assertUsable();
-        const bindings = this.#bindings.get(instance.programRef.id);
+        const bindings = this.#bindings.get(instance.definitionRef.id);
 
         if (bindings === undefined) {
-            throw new TypeError(`unregistered effect bindings ${instance.programRef.id}`);
+            throw new TypeError(`unregistered effect bindings ${instance.definitionRef.id}`);
         }
 
         return bindings;

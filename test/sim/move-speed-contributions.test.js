@@ -19,12 +19,12 @@ import { resolveMoveSpeedPerTick } from "../../dist/core/tactical/unit/capabilit
 import { moveSpeed, liveMoveSpeed } from "../../dist/core/tactical/unit/capability/locomotion/contributions.js";
 import { stepRoutedUnit } from "../../dist/core/tactical/unit/capability/locomotion/step.js";
 import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
-import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
+import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
 import { installNewEffect, setEffectEnabled, finishEffects, finalizeEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { copyUnitSnapshot } from "../../dist/core/tactical/unit/snapshot.js";
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
-import * as modifier from "../../dist/core/tactical/modifier/value.js";
+import * as modifier from "../../dist/core/tactical/contribution/value.js";
 import { effectFixtureWork } from "../helpers/effects.js";
 
 const address = { type: "EFFECT", unitId: 0, effectId: 0 };
@@ -80,7 +80,7 @@ function harness({ speed = 0.25, minimum = 0, definition = route(), maps } = {})
 }
 
 function register(resources, value = modifier.create({ multiplier: -0.5 })) {
-    return resources.registerEffect(createEffectProgram({
+    return resources.registerEffect(createEffectDefinition({
         id: "movement-buff", initialize: () => ({ value }),
     }), { contributions: [moveSpeed((instance) => [instance.state.value])] });
 }
@@ -206,7 +206,7 @@ test("move speed: route WAIT consumes ticks independently of a speed contributio
 
 test("move speed: live contributions read phase facts without storing final speed", () => {
     const resources = new CombatResources();
-    const program = resources.registerEffect(createEffectProgram({ id: "live-move", initialize: () => ({}) }), {
+    const program = resources.registerEffect(createEffectDefinition({ id: "live-move", initialize: () => ({}) }), {
         contributions: [liveMoveSpeed(({ unit, battlefield }) => {
             assert.equal(battlefield.getUnit(unit.id).vitality.hp, unit.vitality.hp);
             return [modifier.create({ finalScaler: unit.vitality.hp / 100 })];

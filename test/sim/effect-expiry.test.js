@@ -1,4 +1,4 @@
-import { effectTick } from "../../dist/core/tactical/unit/capability/effects/instance.js";
+import { effectTick } from "../../dist/core/tactical/unit/capability/effects/effect.js";
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
@@ -7,7 +7,7 @@ import { battlefieldView, getUnit } from '../../dist/core/tactical/battle/execut
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
-import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
+import { createEffectDefinition } from '../../dist/core/tactical/unit/capability/effects/definition.js';
 import { EffectDispatchScope } from '../../dist/core/tactical/unit/capability/effects/dispatch.js';
 import {
   expireEffects,
@@ -17,13 +17,13 @@ import {
 } from '../../dist/core/tactical/unit/capability/effects/lifecycle.js';
 import { attack } from '../../dist/core/tactical/unit/capability/offense/contributions.js';
 import { resolveAttackPower } from '../../dist/core/tactical/unit/capability/offense/query.js';
-import * as modifier from '../../dist/core/tactical/modifier/value.js';
+import * as modifier from '../../dist/core/tactical/contribution/value.js';
 import { effectFixtureWork } from '../helpers/effects.js';
 
 const address = instanceId => ({ type: "EFFECT", unitId: 0, effectId: instanceId });
 const instances = work => getUnit(work, 0).effects.instances;
 const power = work => resolveAttackPower(0, battlefieldView(work));
-const program = (id, initial = {}) => createEffectProgram({
+const program = (id, initial = {}) => createEffectDefinition({
   id, initialize: () => initial,
 });
 const owner = () => initializeUnit({
@@ -167,7 +167,7 @@ test('effect expiry: content can remove one layer, renew the same identity, and 
   assert.equal(power(work), 110);
   assert.equal(effectTick(instances(work)[0]), 11);
   const remaining = instances(work)[0];
-  for (const key of ['id', 'source', 'acquiredSequence', 'programRef']) {
+  for (const key of ['id', 'source', 'acquiredSequence', 'definitionRef']) {
     assert.deepEqual(remaining[key], initial[key]);
   }
   assert.equal(instances(work).length, 1);
@@ -205,7 +205,7 @@ test('effect expiry: clearing a deadline and nested terminal removal are normal 
     assert.equal(instances(expired).length, 1);
     assert.equal(effectTick(instances(expired)[0]), null);
     assert.equal(instances(expired)[0].finished, false);
-    assert.equal(instances(expired)[0].programRef, settlement === 'clear' ? effect.ref : replacement.ref);
+    assert.equal(instances(expired)[0].definitionRef, settlement === 'clear' ? effect.ref : replacement.ref);
   }
 });
 

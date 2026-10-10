@@ -9,13 +9,13 @@ import { compileAction } from "../../dist/core/tactical/unit/capability/action/c
 import { startAction } from "../../dist/core/tactical/unit/capability/action/execution.js";
 import { createActionExecutionState } from "../../dist/core/tactical/unit/capability/action/process.js";
 import { resolveAttackSpeed, resolveBaseAttackTime, resolveActionIntervalTicks } from "../../dist/core/tactical/unit/capability/action/timing.js";
-import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
+import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
 import { installNewEffect, setEffectEnabled, finishEffect, finalizeEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { copyUnitSnapshot } from "../../dist/core/tactical/unit/snapshot.js";
 import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
-import * as modifier from "../../dist/core/tactical/modifier/value.js";
+import * as modifier from "../../dist/core/tactical/contribution/value.js";
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
 import { createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
 import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
@@ -56,7 +56,7 @@ function target() {
 }
 
 function register(resources, speed = 100, time = modifier.create()) {
-    return resources.registerEffect(createEffectProgram({
+    return resources.registerEffect(createEffectDefinition({
         id: "timing-buff", initialize: () => ({ speed, time }),
     }), { contributions: [
         attackSpeed((instance) => [modifier.create({ addition: instance.state.speed })]),
@@ -193,7 +193,7 @@ test("action timing: BAT changes adjust cooldown without rescaling recovery", ()
 
 test("action timing: live values read current facts rather than installation samples", () => {
     const resources = new CombatResources();
-    const program = resources.registerEffect(createEffectProgram({ id: "live-timing", initialize: () => ({}) }), {
+    const program = resources.registerEffect(createEffectDefinition({ id: "live-timing", initialize: () => ({}) }), {
         contributions: [
             liveAttackSpeed(({ unit }) => [modifier.create({ addition: unit.vitality.hp })]),
             liveBaseAttackTime(({ unit }) => [modifier.create({ addition: unit.vitality.hp / 10 })]),

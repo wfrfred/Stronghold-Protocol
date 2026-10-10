@@ -1,13 +1,13 @@
 import { assertFiniteNumber } from "../../../../common/assert.js";
-import type { EffectInstanceValue } from "./instance.js";
+import type { EffectValue } from "./effect.js";
 import type { EffectLifecycleResources } from "./lifecycle-resources.js";
 
 export function selectParticipatingEffects(
-    instances: readonly EffectInstanceValue[],
+    instances: readonly EffectValue[],
     resources: Pick<EffectLifecycleResources, "get">,
 ): ReadonlySet<number> {
     const selected = new Set<number>();
-    const groups = new Map<string, { priority: number; instance: EffectInstanceValue }>();
+    const groups = new Map<string, { priority: number; instance: EffectValue }>();
 
     for (const instance of instances) {
         if (!instance.started || instance.finished) {

@@ -12,14 +12,14 @@ import { createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/e
 import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
 import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
 import { compileAction } from "../../dist/core/tactical/unit/capability/action/compile.js";
-import { createProjectileProgram } from "../../dist/core/tactical/battlefield/projectile/program.js";
+import { createProjectileDefinition } from "../../dist/core/tactical/battlefield/projectile/definition.js";
 import { createBattlefieldRuntime } from "../../dist/core/tactical/battlefield/runtime.js";
 import { advanceProjectiles, stopProjectile } from "../../dist/core/tactical/battlefield/projectile/settlement.js";
 import { withProjectileOperations } from "../../dist/core/tactical/battlefield/projectile/operations.js";
-import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
+import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
 import { installNewEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
-import * as modifier from "../../dist/core/tactical/modifier/value.js";
+import * as modifier from "../../dist/core/tactical/contribution/value.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import {
   battlefieldView,
@@ -145,7 +145,7 @@ function spec(initialUnits, { maxTicks = 20, terminal = false } = {}) {
 
 function registerProjectile(resources, { id = "shell", cachedOnly = false, acceptsContact, contact, stop } = {}) {
   return resources.projectiles.register(
-    createProjectileProgram({
+    createProjectileDefinition({
       id,
       initialize: () => ({ contacts: 0 }),
       acceptsContact:
@@ -388,7 +388,7 @@ test("projectile runtime: current ATK and cached-only ATK stay distinct, while a
     const normal = registerProjectile(resources, { id: "ordinary" });
     const cached = registerProjectile(resources, { id: "cached", cachedOnly: true });
     const bonus = resources.registerEffect(
-      createEffectProgram({
+      createEffectDefinition({
         id: "post-launch-attack",
         initialize: () => ({}),
       }),
@@ -491,7 +491,7 @@ test("projectile runtime: Schedule completion and time limits freeze outstanding
 test("projectile runtime: contact history prevents stop fallback damage while synchronous successors remain visible", () => {
   const resources = new CombatResources();
   const attached = resources.registerEffect(
-    createEffectProgram({
+    createEffectDefinition({
       id: "contact-before-damage",
       initialize: () => ({}),
     }),
@@ -519,7 +519,7 @@ test("projectile runtime: contact history prevents stop fallback damage while sy
       assert.equal(installed.type, "INSTALLED");
       assert.equal(
         context.facts.getUnit(context.targetUnitId).effects.instances.some(
-          (effect) => effect.programRef.id === attached.ref.id,
+          (effect) => effect.definitionRef.id === attached.ref.id,
         ),
         true,
       );
