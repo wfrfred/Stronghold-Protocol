@@ -140,7 +140,8 @@ test("attribute modifiers: native Mire percentages affect existing ASPD and norm
             operations: [{ type: "DAMAGE", power: 0, damageType: "TRUE" }],
         }], followUps: [] } },
     } });
-    const installed = installNewEffect(effectFixtureWork(unit), 0, program.ref, { source: null, scopes: [] }, resources, 0).work;
+    const installed = effectFixtureWork(unit);
+    installNewEffect(installed, 0, program.ref, { source: null, scopes: [] }, resources, 0);
     const receiver = getUnit(installed, 0);
     assert.equal(resolveAttackSpeed(receiver.definition.action, receiver.action), 190);
     close(resolveMoveSpeedPerTick(receiver.definition.locomotion, receiver.locomotion), 0.95 / 30);
@@ -160,24 +161,24 @@ test("attribute modifiers: inspiration samples belong to the Effect input and re
         readSourceAttribute: () => instance.state.sourceAttack,
     }))])] });
     const unit = (id, power) => initializeUnit({ id, position: [id, 0], definition: { id: `inspiration-${id}`, offense: { attack: power } } });
-    let work = effectFixtureWork(unit(0, 100), unit(1, 20));
+    const work = effectFixtureWork(unit(0, 100), unit(1, 20));
     const resolve = (work, id) => resolveAttackPower(id, battlefieldView(work), resources.computations);
     const sampleInput = (work) => ({ sourceAttack: resolve(work, 0), ratio: 0.6 });
-    work = installNewEffect(work, 1, program.ref, { source: 0, scopes: [], initialState: sampleInput(work) }, resources, 0).work;
+    installNewEffect(work, 1, program.ref, { source: 0, scopes: [], initialState: sampleInput(work) }, resources, 0);
     assert.equal(resolve(work, 1), 80);
     const copied = getUnit(work, 1);
-    work = installNewEffect(work, 0, amplify.ref, { source: null, scopes: [] }, resources, 1).work;
+    installNewEffect(work, 0, amplify.ref, { source: null, scopes: [] }, resources, 1);
     assert.equal(resolve(work, 0), 200);
     assert.equal(resolve(work, 1), 80);
-    work = setEffectEnabled(work, { type: "EFFECT", unitId: 1, effectId: 0 }, false, resources, 1);
+    setEffectEnabled(work, { type: "EFFECT", unitId: 1, effectId: 0 }, false, resources, 1);
     assert.equal(resolve(work, 1), 20);
-    work = setEffectEnabled(work, { type: "EFFECT", unitId: 1, effectId: 0 }, true, resources, 2);
+    setEffectEnabled(work, { type: "EFFECT", unitId: 1, effectId: 0 }, true, resources, 2);
     assert.equal(resolve(work, 1), 80);
-    work = updateEffectState(work, 1, 0, program.ref, () => sampleInput(work), resources, 0);
+    updateEffectState(work, 1, 0, program.ref, () => sampleInput(work), resources, 0);
     assert.equal(resolve(work, 1), 140);
-    work = removeUnit(work, 0, "RETREAT");
+    removeUnit(work, 0, "RETREAT");
     assert.equal(resolve(work, 1), 140);
     assert.equal(copied.effects.instances[0].state.sourceAttack, 100);
-    work = finishEffects(work, [{ type: "EFFECT", unitId: 1, effectId: 0 }], resources, 3);
+    finishEffects(work, [{ type: "EFFECT", unitId: 1, effectId: 0 }], resources, 3);
     assert.equal(resolve(work, 1), 20);
 });

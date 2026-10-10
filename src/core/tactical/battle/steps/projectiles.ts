@@ -1,6 +1,6 @@
 import { advanceProjectiles as advanceProjectileInstances } from "../../battlefield/projectile/settlement.js";
 import type { ProjectileServices } from "../../battlefield/projectile/context.js";
-import { advanceBattlefield, battlefieldView, type BattleState } from "../execution/context.js";
+import type { BattleState } from "../execution/context.js";
 import type { Command } from "../contract.js";
 
 export function advanceProjectiles(
@@ -12,12 +12,5 @@ export function advanceProjectiles(
     const stopIds = commands
         .filter((command) => command.type === "STOP_PROJECTILE")
         .map((command) => command.projectileId);
-    const advanced = advanceProjectileInstances(
-        state,
-        battlefieldView(state),
-        resources,
-        tick,
-        stopIds,
-    );
-    advanceBattlefield(state, advanced.changes);
+    advanceProjectileInstances(state, resources, tick, stopIds);
 }

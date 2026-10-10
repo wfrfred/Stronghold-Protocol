@@ -7,6 +7,7 @@ import { ProjectileWork, updateProjectileInstance } from "./internal/state.js";
 import { World, type WorldPosition } from "../../geometry/coordinate.js";
 import { rangeOverlapsHit } from "../../geometry/intersection.js";
 import {
+    advanceBattlefield,
     appendEvents,
     battlefieldView,
     getUnit,
@@ -15,15 +16,9 @@ import {
 import type { Unit, UnitId } from "../../unit/unit.js";
 import { hasHit } from "../../unit/capability/spatial.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
-import type { BattlefieldChange } from "../contract.js";
 import type { ProjectileContactContext, ProjectileServices } from "./context.js";
 import type { ProjectileProgram } from "./program.js";
-import {
-    type ProjectileId,
-    type ProjectileInstance,
-    type ProjectileView,
-    type ProjectileStopReason,
-} from "./state.js";
+import { type ProjectileId, type ProjectileInstance, type ProjectileStopReason } from "./state.js";
 
 export type ProjectileSignal = {
     readonly projectileId: ProjectileId;
@@ -36,26 +31,16 @@ export type ProjectileSignal = {
     | { readonly type: "PROJECTILE_STOPPED"; readonly reason: ProjectileStopReason }
 );
 
-export interface ProjectileTransition {
-    readonly work: BattleState;
-    readonly changes: readonly BattlefieldChange[];
-}
-
 class ProjectileSettlement {
-    work: BattleState;
+    readonly #state: BattleState;
     readonly #projectiles: ProjectileWork;
     readonly #services: ProjectileServices;
     readonly #tick: number;
     readonly #lastKnown = new Map<ProjectileId, ProjectileInstance>();
 
-    constructor(
-        work: BattleState,
-        battlefield: ProjectileView,
-        services: ProjectileServices,
-        tick: number,
-    ) {
-        this.work = work;
-        this.#projectiles = new ProjectileWork(battlefield);
+    constructor(work: BattleState, services: ProjectileServices, tick: number) {
+        this.#state = work;
+        this.#projectiles = new ProjectileWork(work.battlefield);
         this.#services = services;
         this.#tick = tick;
     }
@@ -71,7 +56,7 @@ class ProjectileSettlement {
 
     #signal(instance: ProjectileInstance, signal: ProjectileSignal): void {
         this.#lastKnown.set(instance.id, instance);
-        this.work = appendEvents(this.work, [signal]);
+        appendEvents(this.#state, [signal]);
     }
 
     #signalFacts(instance: ProjectileInstance): Omit<ProjectileSignal, "type"> {
@@ -85,10 +70,7 @@ class ProjectileSettlement {
 
     #contextAccess(): ProjectileContextAccess {
         return {
-            getWork: () => this.work,
-            setWork: (work) => {
-                this.work = work;
-            },
+            state: this.#state,
             getProjectile: (id) => this.#get(id),
             lastKnown: (id) => this.#lastKnown.get(id),
             save: (instance) => {
@@ -139,13 +121,13 @@ class ProjectileSettlement {
             return;
         }
 
-        const candidates = [...battlefieldView(this.work).unitIds].sort(
+        const candidates = [...battlefieldView(this.#state).unitIds].sort(
             (left, right) => left - right,
         );
 
         for (const targetUnitId of candidates) {
             const current = this.#get(instance.id) as ProjectileInstance<S> | undefined;
-            const target = getUnit(this.work, targetUnitId);
+            const target = getUnit(this.#state, targetUnitId);
 
             if (current === undefined || current.progress.type === "STOPPED") {
                 return;
@@ -254,7 +236,7 @@ class ProjectileSettlement {
                 const target =
                     current.traceTarget === null
                         ? undefined
-                        : getUnit(this.work, current.traceTarget);
+                        : getUnit(this.#state, current.traceTarget);
                 const destination =
                     target !== undefined && isSpatiallyPresent(target)
                         ? target.position
@@ -308,8 +290,8 @@ class ProjectileSettlement {
         }
     }
 
-    result(): ProjectileTransition {
-        return { work: this.work, changes: this.#projectiles.changes() };
+    commit(): void {
+        advanceBattlefield(this.#state, this.#projectiles.changes());
     }
 
     advanceAll(): void {
@@ -323,12 +305,11 @@ class ProjectileSettlement {
 
 export function advanceProjectiles(
     work: BattleState,
-    battlefield: ProjectileView,
     services: ProjectileServices,
     tick: number,
     stopIds: readonly ProjectileId[] = [],
-): ProjectileTransition {
-    const settlement = new ProjectileSettlement(work, battlefield, services, tick);
+): void {
+    const settlement = new ProjectileSettlement(work, services, tick);
 
     for (const id of stopIds) {
         settlement.stop(id, "EXPLICIT");
@@ -336,19 +317,18 @@ export function advanceProjectiles(
 
     settlement.advanceAll();
 
-    return settlement.result();
+    settlement.commit();
 }
 
 export function stopProjectile(
     work: BattleState,
-    battlefield: ProjectileView,
     id: ProjectileId,
     services: ProjectileServices,
     tick: number,
     reason: ProjectileStopReason = "EXPLICIT",
-): ProjectileTransition {
-    const settlement = new ProjectileSettlement(work, battlefield, services, tick);
+): void {
+    const settlement = new ProjectileSettlement(work, services, tick);
     settlement.stop(id, reason);
 
-    return settlement.result();
+    settlement.commit();
 }

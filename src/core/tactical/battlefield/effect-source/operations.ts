@@ -22,11 +22,11 @@ export interface EffectSourceOperations {
 }
 
 export function createEffectSourceOperations(
-    getWork: () => BattleState,
+    readState: () => BattleState,
     resources: { readonly effectSources: EffectSourceResources },
 ): EffectSourceOperations {
     const get = <S extends object>(id: MechanismId, ref: EffectSourceProgramRef<S>) => {
-        const source = getMechanism(getWork(), id);
+        const source = getMechanism(readState(), id);
 
         return source !== undefined && hasEffectSource(source)
             ? resources.effectSources.typedSource(source, ref)
@@ -40,7 +40,7 @@ export function createEffectSourceOperations(
 
             if (source !== undefined) {
                 updateMechanism(
-                    getWork(),
+                    readState(),
                     resources.effectSources.update(
                         source,
                         ref,
@@ -62,7 +62,7 @@ export function createEffectSourceOperations(
                 return false;
             }
 
-            updateMechanism(getWork(), resources.effectSources.update(source, ref, next));
+            updateMechanism(readState(), resources.effectSources.update(source, ref, next));
 
             return true;
         },

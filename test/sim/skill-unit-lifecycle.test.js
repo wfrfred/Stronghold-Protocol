@@ -3,7 +3,6 @@ import { test } from 'node:test';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import {
-  eventsOf,
   getUnit,
 } from '../../dist/core/tactical/battle/execution/context.js';
 import {
@@ -74,35 +73,35 @@ function sourceDamage(power = 100, tick = 1) {
 }
 
 function skillsFinished(work) {
-  return eventsOf(work).filter(event => event.type === 'SKILL_FINISHED');
+  return work.events.filter(event => event.type === 'SKILL_FINISHED');
 }
 
 for (const reason of ['DEATH', 'RETREAT', 'SCRIPT']) {
   test(`skill scope: ${reason} finishes activation-dependent and additionally receiver-scoped effects before deleting the source`, () => {
     const f = fixture();
-    const active = activateSkill(f.work, { unitId: 0, tick: 0 }, f.resources).work;
-    const before = active.battlefield.snapshot("draft");
+    const state = f.work;
+    activateSkill(state, { unitId: 0, tick: 0 }, f.resources);
+    const before = state.battlefield.snapshot("draft");
     const lifecycle = f.resources;
-    const removed = reason === 'DEATH'
-      ? f.resources.settleDamage(active, sourceDamage()).work
-      : removeUnitWithEffects(active, 0, reason, lifecycle, 1);
-    const effects = getUnit(removed, 1).effects.instances;
+    if (reason === 'DEATH') f.resources.settleDamage(state, sourceDamage());
+    else removeUnitWithEffects(state, 0, reason, lifecycle, 1);
+    const effects = getUnit(state, 1).effects.instances;
 
-    assert.equal(getUnit(removed, 0), undefined);
-    assert.equal(removed.removedUnits.find(value => value.unitId === 0).reason, reason);
+    assert.equal(getUnit(state, 0), undefined);
+    assert.equal(state.removedUnits.find(value => value.unitId === 0).reason, reason);
     assert.equal(effects.length, 2);
     assert.equal(effects.every(instance => instance.finished && !instance.participating), true);
     assert.deepEqual(f.disabled, [0, 1]);
     assert.deepEqual(f.finished, [{ sourcePresent: true, active: null, tick: 1 }]);
-    assert.equal(skillsFinished(removed).length, 1);
+    assert.equal(skillsFinished(state).length, 1);
     assert.equal(before.getUnit(0).skill.active.id, 0);
     assert.equal(before.getUnit(1).effects.instances.every(instance => instance.participating), true);
 
-    const duplicate = removeUnitWithEffects(removed, 0, reason, lifecycle, 1);
-    assert.equal(skillsFinished(duplicate).length, 1);
+    removeUnitWithEffects(state, 0, reason, lifecycle, 1);
+    assert.equal(skillsFinished(state).length, 1);
     assert.equal(f.finished.length, 1);
-    const cleaned = prepareCombatEffects(duplicate, 2, f.resources);
-    assert.deepEqual(getUnit(cleaned, 1).effects.instances, []);
+    prepareCombatEffects(state, 2, f.resources);
+    assert.deepEqual(getUnit(state, 1).effects.instances, []);
   });
 }
 
@@ -123,17 +122,18 @@ test('skill ownership: finish content retains the caller dispatch candidates thr
       return { value };
     } } },
   });
-  let work = activateSkill(f.work, { unitId: 0, tick: 0 }, f.resources).work;
+  const work = f.work;
+  activateSkill(work, { unitId: 0, tick: 0 }, f.resources);
   const dispatch = new EffectDispatchScope();
   dispatch.withCandidates(effectView(() => work), 1, () => {
-    work = removeUnitWithEffects(work, 0, 'SCRIPT', f.resources, 1, dispatch);
+    removeUnitWithEffects(work, 0, 'SCRIPT', f.resources, 1, dispatch);
   });
   assert.deepEqual(hits, []);
   assert.equal(getUnit(work, 1).vitality.hp, 99);
-  work = f.resources.settleDamage(work, {
+  f.resources.settleDamage(work, {
     sourceUnitId: null, targetUnitId: 1, damageType: 'TRUE',
     operands: createDamageOperands(1), tick: 2,
-  }, dispatch).work;
+  }, dispatch);
   assert.deepEqual(hits, ['observer']);
   assert.equal(getUnit(work, 1).vitality.hp, 98);
 });
@@ -155,11 +155,11 @@ test('skill scope: activation continues after synchronous self-death but rejects
   assert.equal(activated.result.type, 'FINISHED');
   assert.deepEqual(activated.signals, []);
   assert.deepEqual(observed, ['continued']);
-  assert.equal(getUnit(activated.work, 0), undefined);
+  assert.equal(getUnit(f.work, 0), undefined);
   assert.deepEqual(f.finished, [{ sourcePresent: true, active: null, tick: 0 }]);
   assert.deepEqual(f.disabled, [0, 1]);
-  assert.equal(skillsFinished(activated.work).length, 1);
-  assert.equal(getUnit(activated.work, 1).effects.instances.every(instance => instance.finished && !instance.participating), true);
+  assert.equal(skillsFinished(f.work).length, 1);
+  assert.equal(getUnit(f.work, 1).effects.instances.every(instance => instance.finished && !instance.participating), true);
   assert.equal(f.work.battlefield.snapshot("state").getUnit(0).skill.active, null);
   assert.equal(f.work.battlefield.snapshot("state").getUnit(0).vitality.hp, 100);
   assert.equal(f.work.battlefield.snapshot("state").getUnit(1).effects, undefined);
@@ -177,9 +177,9 @@ test('skill scope: refusal after self-death keeps independent remote effects but
   independent = f.resources.registerEffect(effectProgram('independent-after-refusal'));
   const rejected = activateSkill(f.work, { unitId: 0, tick: 0 }, f.resources);
   assert.deepEqual(rejected.result, { type: 'REJECTED', reason: 'CONTENT_REJECTED', detail: 'late prerequisite' });
-  assert.equal(getUnit(rejected.work, 0), undefined);
-  assert.equal(getUnit(rejected.work, 1).effects.instances.every(instance => instance.participating), true);
-  assert.equal(skillsFinished(rejected.work).length, 1);
+  assert.equal(getUnit(f.work, 0), undefined);
+  assert.equal(getUnit(f.work, 1).effects.instances.every(instance => instance.participating), true);
+  assert.equal(skillsFinished(f.work).length, 1);
   assert.equal(f.finished.length, 1);
 });
 

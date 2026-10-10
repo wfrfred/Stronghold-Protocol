@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { fixtureBattlefield } from '../helpers/battlefield.js';
 import {
-  appendEvents, eventsOf, battlefieldView, createBattleState, getUnit,
-  registerUnit, removeUnit, updateUnit, updateUnits, withExecution,
+  appendEvents, battlefieldView, createBattleState, getUnit,
+  registerUnit, removeUnit, updateUnit, updateUnits,
 } from '../../dist/core/tactical/battle/execution/context.js';
 
 const unit = (id, position = [0, 0]) => ({ id, definition: { id: `unit-${id}` }, position });
@@ -50,10 +50,9 @@ test('battle state: publishing accepts the already advanced state and drop disca
 test('battle state: no-op updates and missing removals do not create registration or removal facts', () => {
   const first = initializeUnit({ id: 1, position: [0, 0], definition: { id: "vitality", vitality: { maxHp: 100 } } });
   const state = fixture(first);
-  assert.equal(updateUnit(state, first), state);
-  assert.equal(removeUnit(state, 99), state);
-  assert.equal(appendEvents(state, []), state);
-  assert.equal(withExecution(state, state.execution), state);
+  updateUnit(state, first);
+  removeUnit(state, 99);
+  appendEvents(state, []);
   assert.deepEqual(state.registeredUnitIds, []);
   assert.deepEqual(state.removedUnits, []);
   const zeroHp = { ...first, vitality: { hp: 0 } };
@@ -88,9 +87,9 @@ test('battle state: nested operations share event accumulation and the latest ex
   appendEvents(state, supplied);
   supplied.push(second);
   const execution = { ...state.execution, rngState: 123, nextUnitId: 4 };
-  withExecution(state, execution);
+  state.execution = execution;
   appendEvents(state, [second]);
-  assert.deepEqual(eventsOf(state), [first, second]);
+  assert.deepEqual(state.events, [first, second]);
   assert.equal(state.execution, execution);
 });
 

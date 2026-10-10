@@ -4,7 +4,7 @@ import { instantiateMechanismPlacement } from "./creation/mechanism.js";
 import { instantiateNavigationModifierPlacement } from "./creation/navigation-modifier.js";
 import { changePredefinedInstances } from "./steps/predefined.js";
 import type { Input } from "./contract.js";
-import { advanceBattlefield, withExecution, type BattleState } from "./execution/context.js";
+import { advanceBattlefield, type BattleState } from "./execution/context.js";
 import type { CombatResources } from "./resources.js";
 import { advanceEffectSources } from "./steps/effect-sources.js";
 
@@ -22,7 +22,7 @@ export function initializeBattlefield(
 
         initialChanges.push(...instantiated.changes);
         initialUnitIds.push(instantiated.unit.id);
-        withExecution(state, instantiated.execution);
+        state.execution = instantiated.execution;
     }
 
     for (const placement of input.initialMechanisms) {
@@ -33,7 +33,7 @@ export function initializeBattlefield(
         );
         initialChanges.push(...instantiated.changes);
         initialMechanismIds.push(instantiated.mechanism.id);
-        withExecution(state, instantiated.execution);
+        state.execution = instantiated.execution;
     }
     for (const placement of input.initialNavigationModifiers) {
         const instantiated = instantiateNavigationModifierPlacement(
@@ -43,7 +43,7 @@ export function initializeBattlefield(
             initialMechanismIds,
         );
         initialChanges.push(...instantiated.changes);
-        withExecution(state, instantiated.execution);
+        state.execution = instantiated.execution;
     }
 
     const initialized = changePredefinedInstances(
@@ -58,7 +58,7 @@ export function initializeBattlefield(
         state.execution,
     );
 
-    withExecution(state, initialized.execution);
+    state.execution = initialized.execution;
     advanceBattlefield(state, [...initialChanges, ...initialized.changes]);
     advanceEffectSources(state, 0, combatResources);
 

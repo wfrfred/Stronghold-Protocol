@@ -38,7 +38,7 @@ import { createOccupancyState } from '../../dist/core/tactical/unit/capability/o
 import { createPredefinedInstanceDefinition } from '../../dist/core/tactical/battle/steps/predefined.js';
 import { advanceMovement } from '../../dist/core/tactical/battle/steps/movement.js';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
-import { createBattleState, appendEvents, getUnit, registerUnit, withExecution } from '../../dist/core/tactical/battle/execution/context.js';
+import { createBattleState, appendEvents, getUnit, registerUnit } from '../../dist/core/tactical/battle/execution/context.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { createActionDefinition } from '../../dist/core/tactical/unit/capability/action/capability.js';
 import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
@@ -1204,10 +1204,9 @@ test('core battle propagates nested settlement errors and discards battlefield, 
           id: 'nested-created', vitality: { maxHp: 10 },
         } });
         registerUnit(context.work, unit);
-        withExecution(context.work, { ...context.work.execution, nextUnitId: unit.id + 1 });
+        context.work.execution = { ...context.work.execution, nextUnitId: unit.id + 1 };
         appendEvents(context.work, [{ type: 'UNIT_DEPLOYED', unitId: unit.id, position: unit.position, tick: context.tick }]);
         installNewEffect(context.work, 1, effect.ref, { source: 0, scopes: [] }, resources, context.tick);
-        return { work: context.work };
       } },
       { type: 'WAIT', resolve: () => ({ type: 'FOR_TICKS', ticks: 2 }), allowNewAction: false },
     ],

@@ -192,7 +192,7 @@ test("ammo runtime: the last released projectile survives skill completion and r
         cachedAtk: resolveAttackPower(actor.id, battlefieldView(context.work), services.computations),
         speedPerTick: 1, contactRange: { type: "SHAPES", geometry: hit }, stopDelayTicks: 0,
       });
-      return { work: context.work };
+
     } },
   ] });
   const launched = runtime.step([{ type: "ACTIVATE_SKILL", unitId: 0 }]);

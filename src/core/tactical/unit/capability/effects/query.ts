@@ -12,8 +12,8 @@ export function isParticipatingEffect(instance: EffectInstanceValue): boolean {
     return instance.started && instance.participating && !instance.finished;
 }
 
-export function getEffect(work: BattleState, address: EffectRef): EffectInstanceValue | undefined {
-    const unit = getUnit(work, address.unitId);
+export function getEffect(state: BattleState, address: EffectRef): EffectInstanceValue | undefined {
+    const unit = getUnit(state, address.unitId);
 
     if (unit === undefined || !hasEffects(unit)) {
         return undefined;
@@ -30,12 +30,12 @@ export function getEffect(work: BattleState, address: EffectRef): EffectInstance
     return index.get(address.effectId);
 }
 
-export function effectView(work: () => BattleState): EffectView {
+export function effectView(readState: () => BattleState): EffectView {
     return {
-        getUnit: (id) => getUnit(work(), id),
-        getEffect: (address) => getEffect(work(), address),
+        getUnit: (id) => getUnit(readState(), id),
+        getEffect: (address) => getEffect(readState(), address),
         participating: (id) => {
-            const unit = getUnit(work(), id);
+            const unit = getUnit(readState(), id);
 
             return unit !== undefined && hasEffects(unit)
                 ? unit.effects.instances.filter(isParticipatingEffect)

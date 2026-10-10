@@ -1,7 +1,6 @@
 import { fixtureBattlefield } from "../helpers/battlefield.js";
 import { removeUnitWithEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
 import { computedAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
-import { eventsOf } from "../../dist/core/tactical/battle/execution/context.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
@@ -116,7 +115,7 @@ function installOwned(resources, ref, context, unitId = 1) {
     },
     resources,
     context.tick,
-  ).work;
+  );
 }
 
 function assertData(value) {
@@ -139,7 +138,7 @@ test("action process: copying preserves samples and deterministic consumed/absol
   const segments = [
     {
       type: "EXECUTE",
-      run: (context) => ({ work: context.work, samples: { power: context.samples.power + 1 } }),
+      run: (context) => {return {samples: { power: context.samples.power + 1 }};},
     },
     {
       type: "WAIT",
@@ -151,8 +150,9 @@ test("action process: copying preserves samples and deterministic consumed/absol
     { type: "WAIT", resolve: (context) => ({ type: "UNTIL_TICK", targetTick: context.tick + 2 }) },
     { type: "RELEASE", markerId: "second" },
   ];
+  const battle = workWith(unit(0), unit(1));
   const waiting = resumeActionExecution(
-    workWith(unit(0), unit(1)),
+    battle,
     accepted.state,
     { executionId: accepted.execution.id, segments, tick: 0 },
     resources,
@@ -172,11 +172,11 @@ test("action process: copying preserves samples and deterministic consumed/absol
   assertData(copied);
 
   const run = (initialState) => {
-    let current = { work: waiting.work, state: initialState };
+    let current = { state: initialState };
     const trace = [];
     for (const tick of [5, 5, 8, 8, 10, 10]) {
       current = resumeActionExecution(
-        current.work,
+        battle,
         current.state,
         { executionId: accepted.execution.id, segments, tick },
         resources,
@@ -215,23 +215,24 @@ test("action process: cancellation and source exit keep installed prefixes but p
     const segments = [
       {
         type: "EXECUTE",
-        run: (context) => ({ work: installOwned(resources, effect.ref, context) }),
+        run: (context) => {installOwned(resources, effect.ref, context);},
       },
       { type: "WAIT", resolve: () => ({ type: "FOR_TICKS", ticks: 5 }) },
       { type: "RELEASE", markerId: "late" },
     ];
+    const battle = workWith(unit(0), unit(1));
     const waiting = resumeActionExecution(
-      workWith(unit(0), unit(1)),
+      battle,
       accepted.state,
       { executionId: 0, segments, tick: 0 },
       resources,
     );
-    assert.equal(hasStatusFlag(getUnit(waiting.work, 1), "INVINCIBLE"), true);
-    let work = waiting.work;
+    assert.equal(hasStatusFlag(getUnit(battle, 1), "INVINCIBLE"), true);
+    let work = battle;
     if (reason === "removed") {
-      work = removeUnit(work, 0, "RETREAT");
+      removeUnit(work, 0, "RETREAT");
     } else if (reason === "absent") {
-      work = updateUnit(work, {
+      updateUnit(work, {
         ...getUnit(work, 0),
         spatialPresence: { present: false },
       });
@@ -250,26 +251,26 @@ test("action process: cancellation and source exit keep installed prefixes but p
       type: "CANCELLED",
       reason: reason === "cancel" ? "CANCELLED" : "SOURCE_ABSENT",
     });
-    assert.equal(hasStatusFlag(getUnit(cancelled.work, 1), "INVINCIBLE"), false);
-    assert.equal(getUnit(cancelled.work, 1).effects.instances[0].finished, true);
-    assert.equal(getUnit(cancelled.work, 1).vitality.hp, 100);
+    assert.equal(hasStatusFlag(getUnit(battle, 1), "INVINCIBLE"), false);
+    assert.equal(getUnit(battle, 1).effects.instances[0].finished, true);
+    assert.equal(getUnit(battle, 1).vitality.hp, 100);
     assert.equal(
       cancelled.signals.some((signal) => signal.type === "ACTION_RELEASED"),
       false,
     );
     const duplicate = cancelActionExecution(
-      cancelled.work,
+      battle,
       cancelled.state,
       { executionId: 0, tick: 6 },
       resources,
     );
     const late = resumeActionExecution(
-      duplicate.work,
+      battle,
       duplicate.state,
       { executionId: 0, segments, tick: 6 },
       resources,
     );
-    assert.equal(duplicate.work, cancelled.work);
+
     assert.equal(late.state, cancelled.state);
     assert.deepEqual(duplicate.signals, []);
     assert.deepEqual(late.signals, []);
@@ -287,8 +288,7 @@ test("action process: install then query binds current targets and the next segm
   const segments = [
     {
       type: "EXECUTE",
-      run: (context) => ({
-        work: installNewEffect(
+      run: (context) => {installNewEffect(
           context.work,
           1,
           invisible.ref,
@@ -298,28 +298,21 @@ test("action process: install then query binds current targets and the next segm
           },
           resources,
           context.tick,
-        ).work,
-      }),
+        );},
     },
     {
       type: "EXECUTE",
-      run: (context) => ({
-        work: context.work,
-        bindings: compiled.bind({
+      run: (context) => {return {bindings: compiled.bind({
           source: getUnit(context.work, context.sourceUnitId),
           battlefield: battlefieldView(context.work),
-        }),
-      }),
+        })};},
     },
     compiled.program[0],
     {
       type: "EXECUTE",
-      run: (context) => ({
-        work: context.work,
-        samples: {
+      run: (context) => {return {samples: {
           observedHp: getUnit(context.work, context.bindings.get("primary")[0]).vitality.hp,
-        },
-      }),
+        }};},
     },
     { type: "WAIT", resolve: () => ({ type: "UNTIL_TICK", targetTick: 1 }) },
     { type: "RELEASE", markerId: "follow-up" },
@@ -335,19 +328,19 @@ test("action process: install then query binds current targets and the next segm
   assert.deepEqual(waiting.state.executions[0].bindings, { primary: [2] });
   assert.equal(waiting.state.executions[0].inputTargetUnitId, 1);
   assert.deepEqual(waiting.state.executions[0].samples, { observedHp: 93 });
-  assert.equal(hasStatusFlag(getUnit(waiting.work, 1), "INVISIBLE"), true);
-  assert.equal(getUnit(waiting.work, 1).vitality.hp, 100);
-  assert.equal(getUnit(waiting.work, 2).vitality.hp, 93);
+  assert.equal(hasStatusFlag(getUnit(original, 1), "INVISIBLE"), true);
+  assert.equal(getUnit(original, 1).vitality.hp, 100);
+  assert.equal(getUnit(original, 2).vitality.hp, 93);
   assert.equal(original.battlefield.snapshot("state").getUnit(2).vitality.hp, 100);
   assert.deepEqual(accepted.state.executions[0].bindings, { primary: [1] });
   const completed = resumeActionExecution(
-    waiting.work,
+    original,
     copyActionExecutionState(waiting.state),
     { executionId: 0, segments, tick: 1 },
     resources,
   );
   assert.equal(completed.result.type, "FINISHED");
-  assert.equal(getUnit(completed.work, 2).vitality.hp, 93);
+  assert.equal(getUnit(original, 2).vitality.hp, 93);
 });
 
 test("action process: concurrent executions from one source own independent contributions and cleanup", () => {
@@ -358,37 +351,38 @@ test("action process: concurrent executions from one source own independent cont
   const first = accept();
   const second = accept(first.state, { definition: first.execution.definition });
   const segments = [
-    { type: "EXECUTE", run: (context) => ({ work: installOwned(resources, bonus.ref, context) }) },
+    { type: "EXECUTE", run: (context) => {installOwned(resources, bonus.ref, context);} },
     { type: "WAIT", resolve: () => ({ type: "UNTIL_TICK", targetTick: 5 }) },
     { type: "RELEASE", markerId: "release" },
   ];
+  const battle = workWith(unit(0), unit(1));
   let current = resumeActionExecution(
-    workWith(unit(0), unit(1)),
+    battle,
     second.state,
     { executionId: 0, segments, tick: 0 },
     resources,
   );
   current = resumeActionExecution(
-    current.work,
+    battle,
     current.state,
     { executionId: 1, segments, tick: 0 },
     resources,
   );
   const attack = (work) => resolveAttackPower(1, battlefieldView(work), resources.computations);
-  assert.equal(attack(current.work), 50);
+  assert.equal(attack(battle), 50);
   current = cancelActionExecution(
-    current.work,
+    battle,
     current.state,
     { executionId: 0, tick: 1 },
     resources,
   );
-  assert.equal(attack(current.work), 30);
+  assert.equal(attack(battle), 30);
   assert.deepEqual(
     current.state.executions.map((execution) => execution.id),
     [1],
   );
   assert.deepEqual(
-    getUnit(current.work, 1).effects.instances.map((instance) => [
+    getUnit(battle, 1).effects.instances.map((instance) => [
       instance.scopes.find(scope => scope.type === "ACTION").executionId,
       instance.finished,
     ]),
@@ -398,12 +392,12 @@ test("action process: concurrent executions from one source own independent cont
     ],
   );
   const completed = resumeActionExecution(
-    current.work,
+    battle,
     current.state,
     { executionId: 1, segments, tick: 5 },
     resources,
   );
-  assert.equal(attack(completed.work), 10);
+  assert.equal(attack(battle), 10);
   assert.deepEqual(
     completed.signals.map((signal) => [signal.type, signal.executionId]),
     [
@@ -438,12 +432,13 @@ test("action process: content cancellation and normal finish retain completed pr
       {
         executionId: 0,
         segments: [
-          { type: "EXECUTE", run: (context) => ({ work: context.work, samples: { power: 23 } }) },
+          { type: "EXECUTE", run: (context) => {return {samples: { power: 23 }};} },
           {
             type: "EXECUTE",
             run: (context) => {
-              let work = installOwned(resources, sampled.ref, context);
-              work = updateEffectState(
+              installOwned(resources, sampled.ref, context);
+              const work = context.work;
+              updateEffectState(
                 work,
                 1,
                 0,
@@ -453,14 +448,13 @@ test("action process: content cancellation and normal finish retain completed pr
                 0,
               );
               assert.equal(resolveAttackPower(1, battlefieldView(work), resources.computations), 33);
-              return { work, continuation };
+              return {continuation};
             },
           },
           { type: "RELEASE", markerId: "unreached" },
           {
             type: "EXECUTE",
-            run: (context) => ({
-              work: resolveDamage(
+            run: (context) => {resolveDamage(
                 context.work,
                 {
                   sourceUnitId: 0,
@@ -470,8 +464,7 @@ test("action process: content cancellation and normal finish retain completed pr
                   operands: createDamageOperands(100),
                 },
                 resources,
-              ).work,
-            }),
+              );},
           },
         ],
         tick: 0,
@@ -487,23 +480,23 @@ test("action process: content cancellation and normal finish retain completed pr
     );
     assert.equal(result.state.executions.length, 0);
     assert.equal(result.state.nextExecutionId, 1);
-    assert.equal(getUnit(result.work, 1).vitality.hp, 100);
-    assert.equal(getUnit(result.work, 1).effects.instances[0].state.power, 23);
-    assert.equal(getUnit(result.work, 1).effects.instances[0].finished, true);
-    assert.equal(resolveAttackPower(1, battlefieldView(result.work), resources.computations), 10);
+    assert.equal(getUnit(original, 1).vitality.hp, 100);
+    assert.equal(getUnit(original, 1).effects.instances[0].state.power, 23);
+    assert.equal(getUnit(original, 1).effects.instances[0].finished, true);
+    assert.equal(resolveAttackPower(1, battlefieldView(original), resources.computations), 10);
     assert.equal(original.battlefield.snapshot("state").getUnit(1).effects, undefined);
     assert.deepEqual(
-      eventsOf(result.work).map((event) => event.type),
+      original.events.map((event) => event.type),
       [continuation === "CANCEL" ? "ACTION_CANCELLED" : "ACTION_FINISHED"],
     );
     const duplicate = resumeActionExecution(
-      result.work,
+      original,
       result.state,
       { executionId: 0, segments: [], tick: 0 },
       resources,
     );
     assert.equal(duplicate.result.type, "ABSENT");
-    assert.equal(duplicate.work, result.work);
+
     assert.deepEqual(duplicate.signals, []);
   }
 });
@@ -514,8 +507,7 @@ test("action process: a throwing successor exposes neither a partial settlement 
   const original = workWith(unit(0), unit(1));
   const damage = {
     type: "EXECUTE",
-    run: (context) => ({
-      work: resolveDamage(
+    run: (context) => {resolveDamage(
         context.work,
         {
           sourceUnitId: context.sourceUnitId,
@@ -525,8 +517,7 @@ test("action process: a throwing successor exposes neither a partial settlement 
           operands: createDamageOperands(20),
         },
         resources,
-      ).work,
-    }),
+      );},
   };
   assert.throws(
     () =>
@@ -560,7 +551,7 @@ test("action process: a throwing successor exposes neither a partial settlement 
     { executionId: 0, segments: [damage, { type: "RELEASE", markerId: "retry" }], tick: 0 },
     resources,
   );
-  assert.equal(getUnit(retried.work, 1).vitality.hp, 80);
+  assert.equal(getUnit(original, 1).vitality.hp, 80);
   assert.deepEqual(
     retried.signals.map((signal) => signal.type),
     ["ACTION_RELEASED", "ACTION_FINISHED"],
@@ -575,32 +566,34 @@ test("action process: source departure completes the entered segment and cancels
   const accepted = accept();
   const observed = [];
   const segments = [
-    { type: "EXECUTE", run: (context) => ({ work: installOwned(resources, marker.ref, context) }) },
+    { type: "EXECUTE", run: (context) => {installOwned(resources, marker.ref, context);} },
     { type: "EXECUTE", run: (context) => {
-      let work = removeUnit(context.work, 0, "RETREAT");
+      const work = context.work;
+      removeUnit(work, 0, "RETREAT");
       observed.push("synchronous");
-      work = updateUnit(work, { ...getUnit(work, 1), position: [3, 0] });
+      updateUnit(work, { ...getUnit(work, 1), position: [3, 0] });
       assert.equal(hasStatusFlag(getUnit(work, 1), "INVINCIBLE"), true);
-      return { work };
+      return;
     } },
     { type: "WAIT", resolve: () => ({ type: "FOR_TICKS", ticks: 1 }) },
     { type: "RELEASE", markerId: "unreached" },
     { type: "EXECUTE", run: (context) => {
       observed.push("delayed");
-      return { work: context.work };
+      return;
     } },
   ];
+  const battle = workWith(unit(0), unit(1));
   const cancelled = resumeActionExecution(
-    workWith(unit(0), unit(1)),
+    battle,
     accepted.state,
     { executionId: 0, segments, tick: 0 },
     resources,
   );
   assert.deepEqual(cancelled.result, { type: "CANCELLED", reason: "SOURCE_ABSENT" });
   assert.deepEqual(observed, ["synchronous"]);
-  assert.deepEqual(getUnit(cancelled.work, 1).position, [3, 0]);
-  assert.equal(hasStatusFlag(getUnit(cancelled.work, 1), "INVINCIBLE"), false);
-  assert.equal(eventsOf(cancelled.work).some(event => event.type === "ACTION_RELEASED"), false);
+  assert.deepEqual(getUnit(battle, 1).position, [3, 0]);
+  assert.equal(hasStatusFlag(getUnit(battle, 1), "INVINCIBLE"), false);
+  assert.equal(battle.events.some(event => event.type === "ACTION_RELEASED"), false);
   assert.deepEqual(cancelled.state.executions, []);
 });
 
@@ -609,8 +602,9 @@ test("action process: source absence cancels before release while retaining prio
     const resources = new CombatResources();
     const accepted = accept();
     let attempted = 0;
+    const battle = workWith(unit(0), unit(1));
     const result = resumeActionExecution(
-      workWith(unit(0), unit(1)),
+      battle,
       accepted.state,
       {
         executionId: 0,
@@ -618,14 +612,14 @@ test("action process: source absence cancels before release while retaining prio
           ...first,
           {
             type: "EXECUTE",
-            run: (context) => ({ work: removeUnit(context.work, 0, "RETREAT") }),
+            run: (context) => {removeUnit(context.work, 0, "RETREAT");},
           },
           { type: "RELEASE", markerId: "after" },
           {
             type: "EXECUTE",
             run: (context) => {
               attempted++;
-              return { work: context.work };
+              return;
             },
           },
         ],
@@ -638,22 +632,23 @@ test("action process: source absence cancels before release while retaining prio
     assert.deepEqual(result.signals.map(signal => signal.type), [
       ...first.map(() => 'ACTION_RELEASED'), 'ACTION_CANCELLED',
     ]);
-    assert.deepEqual(eventsOf(result.work).map(event => event.type), result.signals.map(signal => signal.type));
+    assert.deepEqual(battle.events.map(event => event.type), result.signals.map(signal => signal.type));
   }
 });
 
 test("action process: a completed final segment can finish after removing its own source", () => {
   const resources = new CombatResources();
   const accepted = accept();
+  const battle = workWith(unit(0), unit(1));
   const result = resumeActionExecution(
-    workWith(unit(0), unit(1)),
+    battle,
     accepted.state,
     {
       executionId: 0,
       segments: [
         {
           type: "EXECUTE",
-          run: (context) => ({ work: removeUnit(context.work, 0, "RETREAT") }),
+          run: (context) => {removeUnit(context.work, 0, "RETREAT");},
         },
       ],
       tick: 0,
@@ -662,7 +657,7 @@ test("action process: a completed final segment can finish after removing its ow
   );
   assert.equal(result.result.type, 'FINISHED');
   assert.deepEqual(result.signals.map(signal => signal.type), ['ACTION_FINISHED']);
-  assert.equal(getUnit(result.work, 0), undefined);
+  assert.equal(getUnit(battle, 0), undefined);
 });
 
 test("action process: nested source departure cancels the current execution without resuming later segments", () => {
@@ -675,20 +670,21 @@ test("action process: nested source departure cancels the current execution with
       type: "EXECUTE",
       run: context => {
         visited.push("remove");
-        const attached = installOwned(resources, dependent.ref, context);
-        return { work: removeUnitWithEffects(attached, 0, "SCRIPT", resources, context.tick) };
+        installOwned(resources, dependent.ref, context);
+        removeUnitWithEffects(context.work, 0, "SCRIPT", resources, context.tick);return;
       },
     },
     {
       type: "EXECUTE",
       run: context => {
         visited.push("after removal");
-        return { work: context.work };
+        return;
       },
     },
   ];
+  const battle = workWith(unit(0), unit(1));
   const advanced = resumeActionExecution(
-    workWith(unit(0), unit(1)),
+    battle,
     accepted.state,
     { executionId: accepted.execution.id, segments, tick: 0 },
     resources,
@@ -696,9 +692,9 @@ test("action process: nested source departure cancels the current execution with
 
   assert.deepEqual(visited, ["remove"]);
   assert.deepEqual(advanced.state.executions, []);
-  assert.equal(getUnit(advanced.work, 0), undefined);
-  assert.equal(getUnit(advanced.work, 1).effects.instances.every(instance => instance.finished), true);
-  assert.deepEqual(eventsOf(advanced.work).filter(event => event.type.startsWith("ACTION_")), [
+  assert.equal(getUnit(battle, 0), undefined);
+  assert.equal(getUnit(battle, 1).effects.instances.every(instance => instance.finished), true);
+  assert.deepEqual(battle.events.filter(event => event.type.startsWith("ACTION_")), [
     { type: "ACTION_CANCELLED", executionId: 0, sourceUnitId: 0, tick: 0, reason: "SOURCE_ABSENT" },
   ]);
 });
@@ -707,17 +703,18 @@ test("action process: source removal in attack completion cannot revive the exec
   const resources = new CombatResources();
   const accepted = accept();
   let continued = false;
+  const battle = workWith(unit(0), unit(1));
   const advanced = resumeActionExecution(
-    workWith(unit(0), unit(1)),
+    battle,
     accepted.state,
     {
       executionId: 0,
       tick: 2,
       segments: [
-        { type: "EXECUTE", run: context => ({ work: context.work }) },
+        { type: "EXECUTE", run: context => {} },
         { type: "EXECUTE", run: context => {
           continued = true;
-          return { work: context.work };
+          return;
         } },
       ],
     },
@@ -730,6 +727,6 @@ test("action process: source removal in attack completion cannot revive the exec
 
   assert.equal(continued, false);
   assert.deepEqual(advanced.state.executions, []);
-  assert.equal(eventsOf(advanced.work).filter(event => event.type === "ACTION_CANCELLED").length, 1);
-  assert.equal(eventsOf(advanced.work).some(event => event.type === "ACTION_FINISHED"), false);
+  assert.equal(battle.events.filter(event => event.type === "ACTION_CANCELLED").length, 1);
+  assert.equal(battle.events.some(event => event.type === "ACTION_FINISHED"), false);
 });

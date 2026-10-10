@@ -30,18 +30,16 @@ export function compileAction(
     ): CompiledActionSegment => ({
         type: "EXECUTE",
         run: (context) => {
-            let { work } = context;
+            const { work } = context;
 
             for (const targetUnitId of ids(context)) {
-                work = run({
+                run({
                     work,
                     sourceUnitId: context.sourceUnitId,
                     targetUnitId,
                     tick: context.tick,
                 });
             }
-
-            return { work };
         },
     });
 

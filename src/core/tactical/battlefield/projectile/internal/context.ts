@@ -13,8 +13,7 @@ import type { ProjectileId, ProjectileInstance, ProjectileStopReason } from "../
 import { updateProjectileInstance } from "./state.js";
 
 export interface ProjectileContextAccess {
-    getWork(): BattleState;
-    setWork(work: BattleState): void;
+    readonly state: BattleState;
     getProjectile(id: ProjectileId): ProjectileInstance | undefined;
     lastKnown(id: ProjectileId): ProjectileInstance | undefined;
     save(instance: ProjectileInstance): void;
@@ -51,7 +50,7 @@ export function withProjectileQuery<S extends object, R>(
             throw new TypeError("projectile query context is no longer active");
         }
 
-        return access.getWork();
+        return access.state;
     };
 
     const context: ProjectileQueryContext<S> = {
@@ -87,7 +86,7 @@ export function withProjectileContext<S extends object>(
             throw new TypeError("projectile context is no longer active");
         }
 
-        return access.getWork();
+        return access.state;
     };
     const readProjectile = (): ProjectileInstance<S> => {
         readWork();
@@ -118,18 +117,8 @@ export function withProjectileContext<S extends object>(
         },
         operations: {
             effects: createEffectOperations(readWork, services, tick, dispatch),
-            damage: (request) => {
-                const result = services.settleDamage(readWork(), { ...request, tick }, dispatch);
-                access.setWork(result.work);
-
-                return result.report;
-            },
-            heal: (request) => {
-                const result = services.settleHealing(readWork(), { ...request, tick }, dispatch);
-                access.setWork(result.work);
-
-                return result.report;
-            },
+            damage: (request) => services.settleDamage(readWork(), { ...request, tick }, dispatch),
+            heal: (request) => services.settleHealing(readWork(), { ...request, tick }, dispatch),
             updateState: (transition) => {
                 const current = readProjectile();
                 const state = services.projectiles.ownState(program.ref, transition(current.state));

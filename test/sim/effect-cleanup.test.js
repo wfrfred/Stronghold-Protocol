@@ -20,12 +20,13 @@ function hostWork(unit) {
 test('effect cleanup: absent hosts and hosts without finished instances retain their work', () => {
     const resources = new CombatResources();
     const work = hostWork(owner());
-    assert.equal(finalizeFinishedEffects(work, 2, resources, 1), work);
-    assert.equal(finalizeFinishedEffects(work, 99, resources, 1), work);
+    finalizeFinishedEffects(work, 2, resources, 1);
+    finalizeFinishedEffects(work, 99, resources, 1);
     const effect = resources.registerEffect(program('active'));
-    const installed = installNewEffect(effectFixtureWork(owner()), 2, effect.ref, input, resources, 0);
-    const local = hostWork(getUnit(installed.work, 2));
-    assert.equal(finalizeFinishedEffects(local, 2, resources, 1), local);
+    const installedState = effectFixtureWork(owner());
+const installed = installNewEffect(installedState, 2, effect.ref, input, resources, 0);
+    const local = hostWork(getUnit(installedState, 2));
+    finalizeFinishedEffects(local, 2, resources, 1);
 });
 
 test('effect cleanup: closing a host rejects reentrant installation before start', () => {
@@ -41,10 +42,12 @@ test('effect cleanup: closing a host rejects reentrant installation before start
         } },
     });
     const follower = resources.registerEffect(program('follower'));
-    let work = installNewEffect(effectFixtureWork(owner()), 2, leader.ref, input, resources, 0).work;
-    work = installNewEffect(work, 2, follower.ref, input, resources, 0).work;
+    let work = effectFixtureWork(owner());
+    installNewEffect(work, 2, leader.ref, input, resources, 0);
+    installNewEffect(work, 2, follower.ref, input, resources, 0);
     const previous = getUnit(work, 2);
-    const finished = closeEffectLifetimes(hostWork(previous), [{ type: 'UNIT', unitId: 2 }], resources, 1);
+    const finished = hostWork(previous);
+    closeEffectLifetimes(finished, [{ type: 'UNIT', unitId: 2 }], resources, 1);
     assert.equal(starts, 0);
     assert.ok(getUnit(finished, 2).effects.instances.every(instance => instance.finished));
     assert.ok(previous.effects.instances.every(instance => !instance.finished));
@@ -59,24 +62,30 @@ test('effect cleanup: explicit ending permits independent replacement while pend
             assert.equal(context.facts.getEffect(context.ref).finished, true);
         } },
     });
-    const installed = installNewEffect(effectFixtureWork(owner()), 2, leader.ref, input, resources, 0);
-    const finished = finishEffects(installed.work, [installed.result.ref], resources, 1);
+    const installedState = effectFixtureWork(owner());
+const installed = installNewEffect(installedState, 2, leader.ref, input, resources, 0);
+    const finished = installedState;
+    finishEffects(finished, [installed.ref], resources, 1);
     assert.deepEqual(getUnit(finished, 2).effects.instances.map(instance => instance.finished), [true, false]);
-    const cleaned = finalizeFinishedEffects(hostWork(getUnit(finished, 2)), 2, resources, 1);
+    const cleaned = hostWork(getUnit(finished, 2));
+    finalizeFinishedEffects(cleaned, 2, resources, 1);
     assert.deepEqual(getUnit(cleaned, 2).effects.instances.map(instance => instance.programRef), [replacement.ref]);
 });
 
 test('effect cleanup: a pending end notification prevents physical removal', () => {
     const resources = new CombatResources();
     const effect = resources.registerEffect(program('local'));
-    const installed = installNewEffect(effectFixtureWork(owner()), 2, effect.ref, input, resources, 0);
-    const finished = finishEffects(installed.work, [installed.result.ref], resources, 1);
+    const installedState = effectFixtureWork(owner());
+const installed = installNewEffect(installedState, 2, effect.ref, input, resources, 0);
+    const finished = installedState;
+    finishEffects(finished, [installed.ref], resources, 1);
     const local = hostWork(getUnit(finished, 2));
     const dispatch = new EffectDispatchScope();
-    dispatch.beginEnds([installed.result.ref]);
-    assert.equal(finalizeFinishedEffects(local, 2, resources, 1, dispatch), local);
-    dispatch.completeEnd(installed.result.ref);
-    const cleaned = finalizeFinishedEffects(local, 2, resources, 1, dispatch);
+    dispatch.beginEnds([installed.ref]);
+    finalizeFinishedEffects(local, 2, resources, 1, dispatch);
+    dispatch.completeEnd(installed.ref);
+    const cleaned = local;
+    finalizeFinishedEffects(cleaned, 2, resources, 1, dispatch);
     assert.deepEqual(getUnit(cleaned, 2).effects.instances, []);
 });
 
@@ -93,15 +102,16 @@ test('effect cleanup: a host removes terminal instances as one array before bind
     const roots = [];
     for (let index = 0; index < 64; index++) {
         const installed = installNewEffect(work, 2, effect.ref, input, resources, 0);
-        work = installed.work;
-        roots.push(installed.result.ref);
+
+        roots.push(installed.ref);
     }
-    work = finishEffects(work, roots, resources, 1);
+    finishEffects(work, roots, resources, 1);
     const services = {
         effectBindings: resources.effectBindings,
         effectLifecycle: { get: () => { assert.fail('physical cleanup cannot dispatch lifecycle business'); } },
     };
-    const cleaned = finalizeFinishedEffects(work, 2, services, 1);
+    const cleaned = work;
+    finalizeFinishedEffects(cleaned, 2, services, 1);
     assert.equal(arrays.length, 64);
     assert.equal(new Set(arrays).size, 1);
     assert.deepEqual(arrays[0], []);

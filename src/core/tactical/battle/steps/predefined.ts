@@ -19,12 +19,7 @@ import {
 import type { BattleExecutionState } from "../execution/state.js";
 import type { Command } from "../contract.js";
 import { removeUnitWithEffects, type UnitLifecycleResources } from "../execution/unit-lifecycle.js";
-import {
-    advanceBattlefield,
-    battlefieldView,
-    withExecution,
-    type BattleState,
-} from "../execution/context.js";
+import { advanceBattlefield, battlefieldView, type BattleState } from "../execution/context.js";
 
 export interface PredefinedUnitCreation extends UnitPlacementDefinition {
     readonly type: "UNIT";
@@ -249,7 +244,7 @@ export function advancePredefined(
         state.execution,
         tick,
     );
-    withExecution(state, transition.execution);
+    state.execution = transition.execution;
 
     for (const change of transition.changes) {
         if (change.type === "REMOVE_UNIT") {

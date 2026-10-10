@@ -214,25 +214,25 @@ test("contributions: samples retain one owner and survive participation changes 
       values: [value(150)],
     }),
   );
-  let work = workFor(sampled);
+  const work = workFor(sampled);
   assert.equal(resolveAttackPower(1, battlefieldView(work)), 250);
-  const paused = transitionUnit(work, 1, (current) =>
+
+  transitionUnit(work, 1, (current) =>
     updateAttackContributions(current, (state) =>
       contribution.setParticipation(state, "inspiration", false),
-    ),
-  );
-  assert.equal(resolveAttackPower(1, battlefieldView(paused), resources.computations), 100);
-  const resumed = transitionUnit(paused, 1, (current) =>
+    ));
+  assert.equal(resolveAttackPower(1, battlefieldView(work), resources.computations), 100);
+
+  transitionUnit(work, 1, (current) =>
     updateAttackContributions(current, (state) =>
       contribution.setParticipation(state, "inspiration", true),
-    ),
-  );
-  assert.equal(resolveAttackPower(1, battlefieldView(resumed), resources.computations), 250);
-  const copied = copyUnitSnapshot(getUnit(resumed, 1));
-  assert.equal(copied.offense.attack.entries, getUnit(resumed, 1).offense.attack.entries);
+    ));
+  assert.equal(resolveAttackPower(1, battlefieldView(work), resources.computations), 250);
+  const copied = copyUnitSnapshot(getUnit(work, 1));
+  assert.equal(copied.offense.attack.entries, getUnit(work, 1).offense.attack.entries);
   assert.equal(resolveAttackPower(1, battlefieldView(workFor(copied)), resources.computations), 250);
-  const resumedSnapshot = resumed.battlefield.snapshot("draft");
-  work = transitionUnit(resumed, 1, (current) =>
+  const resumedSnapshot = work.battlefield.snapshot("draft");
+  transitionUnit(work, 1, (current) =>
     updateAttackContributions(current, (state) =>
       contribution.update(state, "inspiration", (entry) => ({
         ...entry,
@@ -261,43 +261,33 @@ test("contributions: private stack transitions publish maintained projections im
   );
   const initial = workFor(installed);
   const original = initial.battlefield.snapshot("draft");
-  const consumed = updateEffectState(
-    initial,
-    1,
-    0,
-    program.ref,
-    (current) => ({ ...current, remaining: 10 }),
-    resources, 0,
-  );
-  const updated = updateEffectState(
-    consumed,
-    1,
-    0,
-    program.ref,
-    (current) => ({ ...current, layers: current.layers + 1 }),
-    resources, 0,
-  );
-  assert.equal(resolveAttackPower(1, battlefieldView(updated)), 130);
-  assert.deepEqual(getUnit(updated, 1).effects.instances[0].state, {
+
+  updateEffectState(initial, 1, 0, program.ref, (current) => ({ ...current, remaining: 10 }), resources, 0);
+
+  updateEffectState(initial, 1, 0, program.ref, (current) => ({ ...current, layers: current.layers + 1 }), resources, 0);
+  assert.equal(resolveAttackPower(1, battlefieldView(initial)), 130);
+  assert.deepEqual(getUnit(initial, 1).effects.instances[0].state, {
     layers: 3,
     remaining: 10,
   });
   assert.equal(resolveAttackPower(1, original), 120);
   const expiring = {
-    ...getUnit(updated, 1),
+    ...getUnit(initial, 1),
     effects: {
-      ...getUnit(updated, 1).effects,
+      ...getUnit(initial, 1).effects,
       instances: [
         resources.effects.restore(program.ref, {
-          ...getUnit(updated, 1).effects.instances[0],
+          ...getUnit(initial, 1).effects.instances[0],
           scopes: [{ type: "TICK", tick: 1 }],
         }),
       ],
     },
   };
-  const expired = prepareCombatEffects(workFor(expiring), 1, resources);
-  assert.equal(resolveAttackPower(1, battlefieldView(expired), resources.computations), 100);
-  assert.deepEqual(getUnit(expired, 1).offense.attack.entries, []);
+  const expiredState = workFor(expiring);
+
+  prepareCombatEffects(expiredState, 1, resources);
+  assert.equal(resolveAttackPower(1, battlefieldView(expiredState), resources.computations), 100);
+  assert.deepEqual(getUnit(expiredState, 1).offense.attack.entries, []);
 });
 
 test("contributions: live provider reads latest working facts without changing stored payloads", () => {
@@ -313,13 +303,14 @@ test("contributions: live provider reads latest working facts without changing s
   );
   const initial = workFor(installed);
   const original = initial.battlefield.snapshot("draft");
-  const changed = transitionUnit(initial, 1, (current) => ({
+
+  transitionUnit(initial, 1, (current) => ({
     ...current,
     vitality: { ...current.vitality, hp: 30 },
   }));
-  assert.equal(resolveAttackPower(1, battlefieldView(changed), resources.computations), 200);
+  assert.equal(resolveAttackPower(1, battlefieldView(initial), resources.computations), 200);
   assert.equal(resolveAttackPower(1, original, resources.computations), 100);
-  assert.equal(getUnit(changed, 1).offense.attack.entries, installed.offense.attack.entries);
+  assert.equal(getUnit(initial, 1).offense.attack.entries, installed.offense.attack.entries);
 });
 
 test("contributions: defense queries clamp resistance after sampled and live contributions without clipping numeric state", () => {
@@ -404,26 +395,26 @@ test("contributions: a sampled child retains its input until an explicit parent 
     },
   );
 
-  let work = workFor(unit(1, 300), unit(2, 500));
+  const work = workFor(unit(1, 300), unit(2, 500));
   const parent = { type: "EFFECT", unitId: 2, effectId: 0 };
   const first = { type: "EFFECT", unitId: 2, effectId: 1 };
-  work = installEffect(
+  installEffect(
     work,
     2,
     resources.effects.create(parentProgram.ref, metadata(0)),
     resources,
     0,
-  ).work;
-  work = installEffect(
+  );
+  installEffect(
     work,
     2,
     resources.effects.create(childProgram.ref, metadata(1)),
     resources,
     0,
-  ).work;
-  work = bindEffectLifetime(work, first, parent).work;
+  );
+  bindEffectLifetime(work, first, parent);
   assert.equal(resolveAttackPower(2, battlefieldView(work)), 650);
-  work = transitionUnit(work, 1, (current) =>
+  transitionUnit(work, 1, (current) =>
     updateAttackContributions(current, (state) =>
       contribution.register(state, {
         id: "source-change",
@@ -434,22 +425,23 @@ test("contributions: a sampled child retains its input until an explicit parent 
     ),
   );
   assert.equal(resolveAttackPower(2, battlefieldView(work)), 650);
-  const paused = setEffectEnabled(work, first, false, resources, 1);
-  assert.equal(resolveAttackPower(2, battlefieldView(paused)), 500);
-  assert.deepEqual(getUnit(paused, 2).effects.instances[1].state, { sample: 150 });
-  work = setEffectEnabled(paused, first, true, resources, 1);
+
+  setEffectEnabled(work, first, false, resources, 1);
+  assert.equal(resolveAttackPower(2, battlefieldView(work)), 500);
+  assert.deepEqual(getUnit(work, 2).effects.instances[1].state, { sample: 150 });
+  setEffectEnabled(work, first, true, resources, 1);
   assert.equal(resolveAttackPower(2, battlefieldView(work)), 650);
-  work = finishEffects(work, [first], resources, 2);
+  finishEffects(work, [first], resources, 2);
   assert.equal(resolveAttackPower(2, battlefieldView(work)), 500);
   const second = { type: "EFFECT", unitId: 2, effectId: 2 };
-  work = installEffect(
+  installEffect(
     work,
     2,
     resources.effects.create(childProgram.ref, metadata(2)),
     resources,
     2,
-  ).work;
-  work = bindEffectLifetime(work, second, parent).work;
+  );
+  bindEffectLifetime(work, second, parent);
   assert.deepEqual(
     getUnit(work, 2).effects.instances.map((instance) => instance.id),
     [0, 2],
@@ -458,28 +450,28 @@ test("contributions: a sampled child retains its input until an explicit parent 
   assert.deepEqual(getUnit(work, 2).effects.instances[1].state, { sample: 200 });
   const copied = copyUnitSnapshot(getUnit(work, 2));
   assert.equal(resolveAttackPower(2, battlefieldView(workFor(copied))), 700);
-  work = finishEffects(work, [parent], resources, 3);
+  finishEffects(work, [parent], resources, 3);
   assert.equal(resolveAttackPower(2, battlefieldView(work)), 500);
-  work = finalizeEffect(work, second, resources, 3);
+  finalizeEffect(work, second, resources, 3);
   assert.deepEqual(getUnit(work, 2).offense.attack.entries, []);
 });
 
 test("battle state: registration and removal facts survive a draft with no final entities", () => {
   const initial = workFor();
-  const born = registerUnit(initial, unit(1));
-  const moved = transitionUnit(born, 1, (current) => ({ ...current, position: [1, 0] }));
-  const ended = removeUnit(moved, 1, "SCRIPT");
-  assert.deepEqual(ended.battlefield.unitIds, []);
-  assert.deepEqual(ended.registeredUnitIds, [1]);
-  assert.deepEqual(ended.removedUnits.map(result => [result.unitId, result.unit.position, result.reason]),
+
+  registerUnit(initial, unit(1));
+
+  transitionUnit(initial, 1, (current) => ({ ...current, position: [1, 0] }));
+
+  removeUnit(initial, 1, "SCRIPT");
+  assert.deepEqual(initial.battlefield.unitIds, []);
+  assert.deepEqual(initial.registeredUnitIds, [1]);
+  assert.deepEqual(initial.removedUnits.map(result => [result.unitId, result.unit.position, result.reason]),
     [[1, [1, 0], "SCRIPT"]]);
   let called = false;
-  assert.equal(
-    transitionUnit(ended, 1, (current) => {
-      called = true;
-      return current;
-    }),
-    ended,
-  );
+  transitionUnit(initial, 1, (current) => {
+    called = true;
+    return current;
+  });
   assert.equal(called, false);
 });

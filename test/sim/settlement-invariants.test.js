@@ -1,4 +1,3 @@
-import { eventsOf } from "../../dist/core/tactical/battle/execution/context.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { effectFixtureWork, installFixtureEffect } from "../helpers/effects.js";
@@ -102,10 +101,11 @@ test("settlement invariants: invalid final damage leaves the published battlefie
     assert.equal(reactions, 0);
 
     malformed = false;
-    const valid = resolveDamage(createBattleState(original.battlefield), damageRequest(), resources);
-    assert.equal(getUnit(valid.work, 2).vitality.hp, 180);
-    assert.equal(getUnit(valid.work, 2).effects.instances[0].state.uses, 1);
-    assert.equal(valid.report.hpLoss, 30);
+    const validState = createBattleState(original.battlefield);
+    const valid = resolveDamage(validState, damageRequest(), resources);
+    assert.equal(getUnit(validState, 2).vitality.hp, 180);
+    assert.equal(getUnit(validState, 2).effects.instances[0].state.uses, 1);
+    assert.equal(valid.hpLoss, 30);
     assert.equal(reactions, 1);
   }
 });
@@ -148,10 +148,11 @@ test("settlement invariants: invalid final healing rejects after synchronous dam
     assert.equal(reactions, 0);
 
     malformed = false;
-    const valid = resolveHealing(createBattleState(original.battlefield), { ...healingRequest(), tick: 1 }, resources);
-    assert.equal(getUnit(valid.work, 2).vitality.hp, 220);
-    assert.equal(getUnit(valid.work, 2).effects.instances[0].state.uses, 1);
-    assert.equal(valid.report.amount, 30);
+    const validState = createBattleState(original.battlefield);
+    const valid = resolveHealing(validState, { ...healingRequest(), tick: 1 }, resources);
+    assert.equal(getUnit(validState, 2).vitality.hp, 220);
+    assert.equal(getUnit(validState, 2).effects.instances[0].state.uses, 1);
+    assert.equal(valid.amount, 30);
     assert.equal(reactions, 1);
   }
 });
@@ -210,7 +211,7 @@ test("settlement invariants: cancelled damage cannot publish nonfinite formula o
       const original = effectFixtureWork(source, target);
       assert.throws(() => resolveDamage(original, damageRequest(), resources), RangeError);
       assert.equal(getUnit(original, 2).vitality.hp, 200);
-      assert.deepEqual(eventsOf(original), []);
+      assert.deepEqual(original.events, []);
       assert.equal(reactions, 0);
       assert.equal(repaired, false);
     }
@@ -260,13 +261,14 @@ test("settlement invariants: signed intermediate modifiers can resolve to valid 
   target = attach(resources, target, restored);
   const original = effectFixtureWork(source, target);
   const damaged = resolveDamage(original, damageRequest(), resources);
-  const healed = resolveHealing(effectFixtureWork(source, target), { ...healingRequest(), tick: 1 }, resources);
+  const healedState = effectFixtureWork(source, target);
+  const healed = resolveHealing(healedState, { ...healingRequest(), tick: 1 }, resources);
 
-  assert.equal(damaged.report.outputDamage, -40);
-  assert.equal(damaged.report.hpDamage, 30);
-  assert.equal(getUnit(damaged.work, 2).vitality.hp, 170);
-  assert.equal(healed.report.amount, 30);
-  assert.equal(getUnit(healed.work, 2).vitality.hp, 230);
+  assert.equal(damaged.outputDamage, -40);
+  assert.equal(damaged.hpDamage, 30);
+  assert.equal(getUnit(original, 2).vitality.hp, 170);
+  assert.equal(healed.amount, 30);
+  assert.equal(getUnit(healedState, 2).vitality.hp, 230);
 });
 
 test("settlement invariants: zero amounts stay valid and source healing normalization is preserved", () => {
@@ -276,12 +278,11 @@ test("settlement invariants: zero amounts stay valid and source healing normaliz
   const healed = resolveHealing(original, { ...healingRequest(0), tick: 1 }, resources);
   const normalized = resolveHealing(original, { ...healingRequest(-10), tick: 1 }, resources);
 
-  assert.equal(damaged.report.hpDamage, 0);
-  assert.equal(damaged.report.hpLoss, 0);
-  assert.equal(healed.report.amount, 0);
-  assert.equal(normalized.report.amount, 0);
-  assert.equal(getUnit(damaged.work, 2).vitality.hp, 200);
-  assert.equal(getUnit(healed.work, 2).vitality.hp, 200);
+  assert.equal(damaged.hpDamage, 0);
+  assert.equal(damaged.hpLoss, 0);
+  assert.equal(healed.amount, 0);
+  assert.equal(normalized.amount, 0);
+  assert.equal(getUnit(original, 2).vitality.hp, 200);
   assert.equal(damageUnit(unit(2), 0, "TRUE").amount, 0);
   assert.equal(healUnit(unit(2), 0).amount, 0);
 
@@ -309,7 +310,7 @@ test("settlement invariants: cancelled healing still rejects a nonfinite final h
 
   assert.throws(() => resolveHealing(original, { ...healingRequest(), tick: 1 }, resources), RangeError);
   assert.equal(getUnit(original, 2).vitality.hp, 200);
-  assert.deepEqual(eventsOf(original), []);
+  assert.deepEqual(original.events, []);
 });
 
 test("settlement invariants: public vitality transitions cannot bypass amount validation", () => {

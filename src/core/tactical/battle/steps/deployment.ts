@@ -23,7 +23,6 @@ import {
     appendEvents,
     battlefieldView,
     getUnit,
-    withExecution,
     type BattleState,
 } from "../execution/context.js";
 
@@ -128,7 +127,7 @@ export function resolveDeploymentCommands(
                 tick,
             );
             unit = placed.unit;
-            withExecution(state, placed.execution);
+            state.execution = placed.execution;
             changes.push(...placed.changes);
             appendEvents(state, [{ type: "UNIT_DEPLOYED", unitId: unit.id, position, tick }]);
         } else {

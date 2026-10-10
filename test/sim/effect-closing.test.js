@@ -2,11 +2,7 @@ import { fixtureBattlefield } from "../helpers/battlefield.js";
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
-import {
-    eventsOf,
-    createBattleState,
-    getUnit,
-} from '../../dist/core/tactical/battle/execution/context.js';
+import { createBattleState, getUnit } from '../../dist/core/tactical/battle/execution/context.js';
 import { removeUnitWithEffects } from '../../dist/core/tactical/battle/execution/unit-lifecycle.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { createEffectProgram } from '../../dist/core/tactical/unit/capability/effects/program.js';
@@ -56,8 +52,8 @@ function install(work, resources, effect, unitId, scopes = [], initialState = {}
     const installed = installNewEffect(work, unitId, effect.ref, {
         source, scopes, initialState,
     }, resources, 0);
-    assert.equal(installed.result.type, 'INSTALLED');
-    return { work: installed.work, ref: installed.result.ref };
+    assert.equal(installed.type, 'INSTALLED');
+    return { work: work, ref: installed.ref };
 }
 
 function actionDefinition() {
@@ -102,7 +98,8 @@ test('Effect close: overlapping roots and a cross-Unit diamond finish once in st
     const diamond = add('diamond', 1, [left, right, b]);
     add('leaf', 2, [diamond]);
     const initialParent = getEffect(work, a);
-    const finished = finishEffects(work, [a, b, a], resources, 1, 'DISPELLED');
+    const finished = work;
+    finishEffects(finished, [a, b, a], resources, 1, 'DISPELLED');
 
     assert.deepEqual(notices.map(notice => notice.name), ['B', 'A', 'right', 'left', 'diamond', 'leaf']);
     assert.deepEqual(notices.map(notice => notice.end), [
@@ -113,7 +110,7 @@ test('Effect close: overlapping roots and a cross-Unit diamond finish once in st
         { root: b, reason: 'DISPELLED' },
         { root: b, reason: 'DISPELLED' },
     ]);
-    assert.equal(finishEffects(finished, refs, resources, 2, 'OTHER'), finished);
+    finishEffects(finished, refs, resources, 2, 'OTHER');
     assert.equal(notices.length, refs.length);
     assert.equal(initialParent.finished, false);
 });
@@ -127,8 +124,8 @@ test('Effect close: the first termination retains its root and reason across lat
     let work = workOf([unit(0), unit(1)]);
     const first = install(work, resources, effect, 0, [], { name: 'parent' });
     const child = install(first.work, resources, effect, 1, [first.ref, { type: 'UNIT', unitId: 0 }], { name: 'child' });
-    work = finishEffects(child.work, [first.ref], resources, 1, 'DISPELLED');
-    work = closeEffectLifetimes(work, [{ type: 'UNIT', unitId: 0 }], resources, 2, 'RETREAT');
+    finishEffects(child.work, [first.ref], resources, 1, 'DISPELLED');
+    closeEffectLifetimes(work, [{ type: 'UNIT', unitId: 0 }], resources, 2, 'RETREAT');
 
     assert.deepEqual(notices, [
         ['parent', { root: first.ref, reason: 'DISPELLED' }],
@@ -162,7 +159,8 @@ test('Effect close: one host competition pass recovers an independent survivor w
     competitions = 0;
     enabled.length = 0;
     disabled.length = 0;
-    const finished = finishEffects(work, roots, resources, 1, 'DISPELLED');
+    const finished = work;
+    finishEffects(finished, roots, resources, 1, 'DISPELLED');
 
     assert.equal(competitions, 1);
     assert.deepEqual(enabled, [0]);
@@ -204,12 +202,13 @@ test('Effect admission: a start that ends its accepted instance returns ENDED an
         disable: () => { notices.push('disable'); },
         finish: context => { notices.push(context.end); },
     });
-    const accepted = installNewEffect(workOf([unit(0)]), 0, effect.ref, { source: null, scopes: [] }, resources, 0);
+    const acceptedState = workOf([unit(0)]);
+const accepted = installNewEffect(acceptedState, 0, effect.ref, { source: null, scopes: [] }, resources, 0);
 
-    assert.equal(accepted.result.type, 'ENDED');
-    assert.deepEqual(notices, [{ root: accepted.result.ref, reason: 'SELF_ENDED' }]);
-    assert.equal(getUnit(accepted.work, 0).effects.nextInstanceId, 1);
-    assert.equal(getEffect(accepted.work, accepted.result.ref).finished, true);
+    assert.equal(accepted.type, 'ENDED');
+    assert.deepEqual(notices, [{ root: accepted.ref, reason: 'SELF_ENDED' }]);
+    assert.equal(getUnit(acceptedState, 0).effects.nextInstanceId, 1);
+    assert.equal(getEffect(acceptedState, accepted.ref).finished, true);
 });
 
 test('Effect lifetimes: provenance survives source departure and the implicit host lifetime ends the Effect', () => {
@@ -219,11 +218,12 @@ test('Effect lifetimes: provenance survives source departure and the implicit ho
         finish: context => { notices.push(context.end); },
     });
     const installed = install(workOf([unit(0), unit(1)]), resources, effect, 1, [], {}, 0);
-    let work = removeUnitWithEffects(installed.work, 0, 'RETREAT', resources, 1);
+    let work = installed.work;
+removeUnitWithEffects(work, 0, 'RETREAT', resources, 1);
     assert.equal(getEffect(work, installed.ref).finished, false);
     assert.equal(getEffect(work, installed.ref).source, 0);
     assert.deepEqual(notices, []);
-    work = removeUnitWithEffects(work, 1, 'DEATH', resources, 2);
+    removeUnitWithEffects(work, 1, 'DEATH', resources, 2);
 
     assert.equal(getUnit(work, 1), undefined);
     assert.deepEqual(notices, [{ root: { type: 'UNIT', unitId: 1 }, reason: 'DEATH' }]);
@@ -245,7 +245,8 @@ test('Effect closing: departing Unit, Skill, Action and Effect scopes reject bef
     const remote = program(resources, 'closing-remote', { start: () => { starts++; } });
     const installedRemote = install(workOf([unit(0, { skill }), unit(1)], actions), resources, remote, 1);
     let survivor = installedRemote.ref;
-    let work = activateSkill(installedRemote.work, { unitId: 0, tick: 0 }, resources).work;
+    let work = installedRemote.work;
+activateSkill(work, { unitId: 0, tick: 0 }, resources);
     const activationId = getUnit(work, 0).skill.active.id;
     let independent;
     const checks = [];
@@ -274,7 +275,7 @@ test('Effect closing: departing Unit, Skill, Action and Effect scopes reject bef
     });
     const installedTrigger = install(work, resources, trigger, 0);
     starts = 0;
-    work = removeUnitWithEffects(installedTrigger.work, 0, 'RETREAT', resources, 1);
+    removeUnitWithEffects(installedTrigger.work, 0, 'RETREAT', resources, 1);
 
     assert.deepEqual(checks, [
         { type: 'REJECTED', reason: 'TARGET_CLOSING' },
@@ -285,11 +286,11 @@ test('Effect closing: departing Unit, Skill, Action and Effect scopes reject bef
     assert.equal(getUnit(work, 1).effects.nextInstanceId, 2);
     assert.deepEqual(getEffect(work, survivor).scopes, []);
     assert.equal(getEffect(work, independent.ref).finished, false);
-    assert.equal(eventsOf(work).filter(event => event.type === 'SKILL_FINISHED').length, 1);
-    assert.equal(eventsOf(work).filter(event => event.type === 'ACTION_CANCELLED').length, 1);
+    assert.equal(work.events.filter(event => event.type === 'SKILL_FINISHED').length, 1);
+    assert.equal(work.events.filter(event => event.type === 'ACTION_CANCELLED').length, 1);
     const late = bindEffectLifetime(work, survivor, installedTrigger.ref);
-    assert.deepEqual(late.result, { type: 'LIFETIME_UNAVAILABLE' });
-    assert.equal(late.work, work);
+    assert.deepEqual(late, { type: 'LIFETIME_UNAVAILABLE' });
+
 });
 
 test('Effect closing: nested self-host death waits for pending terminal notices before physically removing the host', () => {
@@ -328,7 +329,8 @@ test('Effect closing: nested self-host death waits for pending terminal notices 
     b = second.ref;
     const third = install(second.work, resources, child, 1, [b]);
     c = third.ref;
-    const finished = finishEffects(third.work, [a], resources, 1, 'DISPELLED');
+    const finished = third.work;
+    finishEffects(finished, [a], resources, 1, 'DISPELLED');
 
     assert.deepEqual(trace, [
         ['A-start', { root: a, reason: 'DISPELLED' }],
@@ -338,7 +340,7 @@ test('Effect closing: nested self-host death waits for pending terminal notices 
     ]);
     assert.equal(getUnit(finished, 0), undefined);
     assert.equal(getEffect(finished, c).finished, true);
-    assert.equal(finishEffects(finished, [a, b, c], resources, 2), finished);
+    finishEffects(finished, [a, b, c], resources, 2);
 });
 
 test('Effect closing: an inner finish cannot drain host removal while a remote dependent terminal callback is still active', () => {
@@ -367,7 +369,8 @@ test('Effect closing: an inner finish cannot drain host removal while a remote d
     });
     const first = install(workOf([unit(0), unit(1)]), resources, parent, 0);
     const second = install(first.work, resources, dependent, 1, [first.ref]);
-    const finished = finishEffects(second.work, [first.ref], resources, 1, 'DISPELLED');
+    const finished = second.work;
+    finishEffects(finished, [first.ref], resources, 1, 'DISPELLED');
 
     assert.deepEqual(trace, ['parent', 'dependent-start', 'nested', 'dependent-end']);
     assert.equal(getUnit(finished, 0), undefined);

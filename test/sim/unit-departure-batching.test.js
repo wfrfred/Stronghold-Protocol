@@ -11,7 +11,7 @@ import { test } from 'node:test';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { resolveDeploymentCommands } from '../../dist/core/tactical/battle/steps/deployment.js';
 import { advancePredefined, createPredefinedInstanceDefinition } from '../../dist/core/tactical/battle/steps/predefined.js';
-import { createBattleState, getUnit, eventsOf } from '../../dist/core/tactical/battle/execution/context.js';
+import { createBattleState, getUnit, } from '../../dist/core/tactical/battle/execution/context.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { createSkillDefinition } from '../../dist/core/tactical/unit/capability/skill/capability.js';
 import { activateSkill } from '../../dist/core/tactical/unit/capability/skill/execution.js';
@@ -70,9 +70,9 @@ function fixture() {
     mechanismIds: [20], getMechanism: id => id === 20 ? mechanism : undefined,
     supportRelations: [],
   };
-  let work = createBattleState(fixtureBattlefield(battlefield, battlefield), undefined);
-  for (const id of [0, 1]) work = activateSkill(work, { unitId: id, tick: 0 }, resources).work;
-  work = installNewEffect(work, 2, counter.ref, { source: null, scopes: [] }, resources, 0).work;
+  const work = createBattleState(fixtureBattlefield(battlefield, battlefield), undefined);
+  for (const id of [0, 1]) activateSkill(work, { unitId: id, tick: 0 }, resources);
+  installNewEffect(work, 2, counter.ref, { source: null, scopes: [] }, resources, 0);
   work.battlefield.apply();
   return { battlefield: work.battlefield, resources, execution: work.execution };
 }
@@ -231,28 +231,28 @@ test('effect finish: nested host death stops Action and Skill before their depen
     initializeUnit({ id: 1, position: [1, 0], definition: { id: 'nested-receiver', vitality: { maxHp: 100 } } }),
   ];
   const byId = new Map(units.map(unit => [unit.id, unit]));
-  let work = createBattleState(fixtureBattlefield({
+  const work = createBattleState(fixtureBattlefield({
     unitIds: [0, 1], getUnit: id => byId.get(id), blockerOf: () => undefined, blockedBy: () => [],
   }), undefined, executions);
-  work = activateSkill(work, { unitId: 0, tick: 0 }, resources).work;
+  activateSkill(work, { unitId: 0, tick: 0 }, resources);
   const refs = [];
   for (const program of [first, second]) {
     const installed = installNewEffect(work, 0, program.ref, { source: null, scopes: [] }, resources, 0);
-    work = installed.work;
-    refs.push(installed.result.ref);
+    refs.push(installed.ref);
   }
-  work = installNewEffect(work, 1, dependent.ref, {
+  installNewEffect(work, 1, dependent.ref, {
     source: 0, scopes: [{ type: 'ACTION', executionId: 0 }],
-  }, resources, 0).work;
+  }, resources, 0);
   const hostBefore = getUnit(work, 0);
-  const ended = finishEffects(work, refs, resources, 1, 'EXPLICIT');
+
+  finishEffects(work, refs, resources, 1, 'EXPLICIT');
 
   assert.deepEqual(order, ['first', 'action dependent', 'first after damage', 'second', 'skill']);
-  assert.equal(getUnit(ended, 0), undefined);
+  assert.equal(getUnit(work, 0), undefined);
   assert.deepEqual(executions.result().executions, []);
-  assert.equal(eventsOf(ended).filter(event => event.type === 'ACTION_CANCELLED').length, 1);
-  assert.equal(eventsOf(ended).filter(event => event.type === 'SKILL_FINISHED').length, 1);
-  assert.equal(getUnit(ended, 1).effects.instances.find(instance => instance.programRef === independent.ref).participating, true);
+  assert.equal(work.events.filter(event => event.type === 'ACTION_CANCELLED').length, 1);
+  assert.equal(work.events.filter(event => event.type === 'SKILL_FINISHED').length, 1);
+  assert.equal(getUnit(work, 1).effects.instances.find(instance => instance.programRef === independent.ref).participating, true);
   assert.equal(hostBefore.effects.nextInstanceId, 2);
 });
 
@@ -298,15 +298,16 @@ test('effect finish: remote dependent notices delay Skill notification and host 
     initializeUnit({ id: 1, position: [1, 0], definition: { id: 'remote-child-host', vitality: { maxHp: 100 } } }),
   ];
   const byId = new Map(units.map(unit => [unit.id, unit]));
-  let work = createBattleState(fixtureBattlefield({
+  const work = createBattleState(fixtureBattlefield({
     unitIds: [0, 1], getUnit: id => byId.get(id), blockerOf: () => undefined, blockedBy: () => [],
   }));
-  work = activateSkill(work, { unitId: 0, tick: 0 }, resources).work;
+  activateSkill(work, { unitId: 0, tick: 0 }, resources);
   const installed = installNewEffect(work, 0, parent.ref, { source: null, scopes: [] }, resources, 0);
-  work = installNewEffect(installed.work, 1, child.ref, { source: 0, scopes: [installed.result.ref] }, resources, 0).work;
-  const ended = finishEffects(work, [installed.result.ref], resources, 1);
+  installNewEffect(work, 1, child.ref, { source: 0, scopes: [installed.ref] }, resources, 0);
+
+  finishEffects(work, [installed.ref], resources, 1);
 
   assert.deepEqual(order, ['parent', 'child', 'transient', 'child after nested ending', 'skill']);
-  assert.equal(getUnit(ended, 0), undefined);
-  assert.equal(eventsOf(ended).filter(event => event.type === 'SKILL_FINISHED').length, 1);
+  assert.equal(getUnit(work, 0), undefined);
+  assert.equal(work.events.filter(event => event.type === 'SKILL_FINISHED').length, 1);
 });

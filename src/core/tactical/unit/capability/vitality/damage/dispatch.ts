@@ -28,9 +28,9 @@ function dispatchStage<V>(
     resources: DamageResourceServices,
     dispatch: EffectDispatchScope,
     select: (rules: CompiledDamageRules) => CompiledStage<V> | undefined,
-): { readonly work: BattleState; readonly value: V } {
+): V {
     if (ownerUnitId === null) {
-        return { work, value };
+        return value;
     }
 
     const facts = vitalityHookFacts(() => work);
@@ -105,9 +105,9 @@ function dispatchStage<V>(
             }
         }
     });
-    work = finalizeFinishedEffects(work, ownerUnitId, resources, request.tick, dispatch);
+    finalizeFinishedEffects(work, ownerUnitId, resources, request.tick, dispatch);
 
-    return { work, value };
+    return value;
 }
 
 export function dispatchDamageFormula(
@@ -157,11 +157,11 @@ export function dispatchDamageReactions(
     report: DamageReport,
     resources: DamageResourceServices,
     dispatch: EffectDispatchScope,
-): BattleState {
+): void {
     const owners = new Set([report.request.sourceUnitId, report.request.targetUnitId]);
 
     for (const owner of owners) {
-        const result = dispatchStage(
+        dispatchStage(
             work,
             report.request,
             owner,
@@ -187,8 +187,5 @@ export function dispatchDamageReactions(
                       };
             },
         );
-        work = result.work;
     }
-
-    return work;
 }

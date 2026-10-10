@@ -95,18 +95,10 @@ export function withVitalityHookContext<R, T>(
                 effects: createEffectOperations(readWork, resources, tick, dispatch),
                 sources: createEffectSourceOperations(readWork, resources),
                 damage: (input) => {
-                    const result = resources.settleDamage(readWork(), { ...input, tick }, dispatch);
-
-                    return result.report;
+                    return resources.settleDamage(readWork(), { ...input, tick }, dispatch);
                 },
                 heal: (input) => {
-                    const result = resources.settleHealing(
-                        readWork(),
-                        { ...input, tick },
-                        dispatch,
-                    );
-
-                    return result.report;
+                    return resources.settleHealing(readWork(), { ...input, tick }, dispatch);
                 },
             },
         };

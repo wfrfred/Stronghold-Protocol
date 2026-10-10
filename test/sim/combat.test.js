@@ -30,15 +30,17 @@ import { createBattleState, getUnit, updateUnit } from '../../dist/core/tactical
 import { createActionExecutionState } from '../../dist/core/tactical/unit/capability/action/process.js';
 
 const startSingleAction = (source, compiled, context) => {
-  const result = startAction(
-    updateUnit(createBattleState(fixtureBattlefield(context.battlefield)), source),
+  const battleState = createBattleState(fixtureBattlefield(context.battlefield));
+  updateUnit(battleState, source);
+  const actionState = startAction(
+    battleState,
     createActionExecutionState(),
     { sourceUnitId: source.id, compiled, tick: context.tick, mayStart: true },
     new CombatResources(),
   );
-  return { units: result.work.battlefield.unitIds.map(id => getUnit(result.work, id)),
-    removedUnitIds: result.work.removedUnits.map(value => value.unitId),
-    events: result.work.events, execution: result.work.execution, state: result.state };
+  return { units: battleState.battlefield.unitIds.map(id => getUnit(battleState, id)),
+    removedUnitIds: battleState.removedUnits.map(value => value.unitId),
+    events: battleState.events, execution: battleState.execution, state: actionState };
 };
 
 const approx = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);

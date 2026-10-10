@@ -81,8 +81,9 @@ test("resources: caller edits cannot change binding participation or removal aft
 
   binding.setParticipation = (owner) => owner;
   binding.remove = (owner) => owner;
-  const removed = removeEffect(
-    effectFixtureWork(installed), { type: "EFFECT", unitId: 2, effectId: 0 }, resources, 0,
+  const removed = effectFixtureWork(installed);
+  removeEffect(
+    removed, { type: "EFFECT", unitId: 2, effectId: 0 }, resources, 0,
   );
   assert.equal(hasStatusFlag(getUnit(removed, 2), "INVINCIBLE"), false);
   assert.deepEqual(getUnit(removed, 2).effects.instances, []);
@@ -123,8 +124,9 @@ test("resources: binding compilers capture configuration values rather than call
     assert.equal(contribution.id, "@effect/0/sample");
     assert.deepEqual(contribution.group, { id: "original-group", strength: 1 });
     assert.equal(resolveAttackPower(2, battlefieldView(effectFixtureWork(installed)), resources.computations), 120);
-    const removed = removeEffect(
-      effectFixtureWork(installed), { type: "EFFECT", unitId: 2, effectId: 0 }, resources, 0,
+    const removed = effectFixtureWork(installed);
+    removeEffect(
+      removed, { type: "EFFECT", unitId: 2, effectId: 0 }, resources, 0,
     );
     assert.deepEqual(getUnit(removed, 2).offense.attack.entries, []);
   }
@@ -156,14 +158,15 @@ test("resources: registered authored contributions retain their behavior after c
     const initial = effectFixtureWork(installed);
     assert.equal(currentAttack(initial), 120);
     assert.deepEqual(installed.offense.attack.entries[0].group, { id: "original-group", strength: 1 });
-    const updated = updateEffectState(initial, 2, 0, descriptor.ref, () => ({ value: 2 }), resources, 0);
-    assert.equal(currentAttack(updated), 140);
+    updateEffectState(initial, 2, 0, descriptor.ref, () => ({ value: 2 }), resources, 0);
+    assert.equal(currentAttack(initial), 140);
     const address = { type: "EFFECT", unitId: 2, effectId: 0 };
-    const disabled = setEffectEnabled(updated, address, false, resources, 0);
-    assert.equal(currentAttack(disabled), 100);
-    assert.equal(currentAttack(setEffectEnabled(disabled, address, true, resources, 0)), 140);
-    const removed = removeEffect(updated, address, resources, 0);
-    assert.deepEqual(getUnit(removed, 2).offense.attack.entries, []);
+    setEffectEnabled(initial, address, false, resources, 0);
+    assert.equal(currentAttack(initial), 100);
+    setEffectEnabled(initial, address, true, resources, 0);
+    assert.equal(currentAttack(initial), 140);
+    removeEffect(initial, address, resources, 0);
+    assert.deepEqual(getUnit(initial, 2).offense.attack.entries, []);
   }
 });
 

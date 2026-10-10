@@ -52,7 +52,7 @@ export interface Context {
     readonly tick: number;
 }
 
-export type Program = (context: Context) => BattleState;
+export type Program = (context: Context) => void;
 
 export function compile(definition: Definition, resources: ActionResources): Program {
     switch (definition.type) {
@@ -72,10 +72,10 @@ export function compile(definition: Definition, resources: ActionResources): Pro
                 const power = readPower(context);
 
                 if (power === undefined) {
-                    return work;
+                    return;
                 }
 
-                return resources.settleDamage(
+                resources.settleDamage(
                     work,
                     {
                         sourceUnitId,
@@ -85,31 +85,33 @@ export function compile(definition: Definition, resources: ActionResources): Pro
                         operands: createDamageOperands(power),
                     },
                     new EffectDispatchScope(),
-                ).work;
+                );
             };
         }
 
         case "ELEMENT_DAMAGE":
-            return ({ work, sourceUnitId, targetUnitId, tick }) =>
+            return ({ work, sourceUnitId, targetUnitId, tick }) => {
                 resources.settleElementDamage(work, {
                     sourceUnitId,
                     targetUnitId,
                     tick,
                     type: definition.elementType,
                     power: definition.power,
-                }).work;
+                });
+            };
 
         case "ELEMENT_HEAL":
-            return ({ work, sourceUnitId, targetUnitId, tick }) =>
+            return ({ work, sourceUnitId, targetUnitId, tick }) => {
                 resources.settleElementHeal(work, {
                     sourceUnitId,
                     targetUnitId,
                     tick,
                     power: definition.power,
-                }).work;
+                });
+            };
 
         case "HEAL":
-            return ({ work, sourceUnitId, targetUnitId, tick }) =>
+            return ({ work, sourceUnitId, targetUnitId, tick }) => {
                 resources.settleHealing(
                     work,
                     {
@@ -120,6 +122,7 @@ export function compile(definition: Definition, resources: ActionResources): Pro
                         tick,
                     },
                     new EffectDispatchScope(),
-                ).work;
+                );
+            };
     }
 }

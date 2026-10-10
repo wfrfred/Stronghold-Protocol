@@ -1,6 +1,5 @@
 import { fixtureBattlefield } from "../helpers/battlefield.js";
 import { computedAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
-import { eventsOf } from "../../dist/core/tactical/battle/execution/context.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createRng } from "../../dist/core/common/rng.js";
@@ -26,7 +25,6 @@ import {
   battlefieldView,
   createBattleState,
   getUnit,
-  withExecution,
 } from "../../dist/core/tactical/battle/execution/context.js";
 
 const hit = createShapeGeometry({
@@ -216,12 +214,15 @@ function damageEvents(step) {
 function workFrom(snapshot) {
   const units = new Map(snapshot.units.map((unit) => [unit.id, unit]));
 
-  return createBattleState(fixtureBattlefield({
+  const battlefield = fixtureBattlefield({
       unitIds: [...units.keys()],
       getUnit: (id) => units.get(id),
       blockerOf: () => undefined,
       blockedBy: () => [],
-    }), snapshot.execution);
+    });
+  battlefield.advance(snapshot.projectiles.instances.map(projectile => ({ type: "REGISTER_PROJECTILE", projectile })));
+  battlefield.apply();
+  return createBattleState(battlefield, snapshot.execution);
 }
 
 test("projectile runtime: immediate and resumable Actions launch independent facts without moving on the release tick", () => {
@@ -244,7 +245,7 @@ test("projectile runtime: immediate and resumable Actions launch independent fac
         const release = (context) => {
           borrowed.push(context.projectiles);
           launched.push(launch(context, services, program));
-          return context;
+          return;
         };
 
         return definition === instant.action.normalAction
@@ -305,7 +306,7 @@ test("projectile runtime: contact re-queries current receivers after its origina
         program: [
           { type: "EXECUTE", run: (context) => {
             launch(context, services, program);
-            return context;
+            return;
           } },
         ],
       }),
@@ -361,7 +362,7 @@ test("projectile runtime: contact freezes candidate identities and reads eligibi
         program: [
           { type: "EXECUTE", run: (context) => {
             launch(context, services, program);
-            return context;
+            return;
           } },
         ],
       }),
@@ -408,16 +409,16 @@ test("projectile runtime: current ATK and cached-only ATK stay distinct, while a
             { type: "EXECUTE", run: (context) => {
               launch(context, services, normal);
               launch(context, services, cached);
-              const work = installNewEffect(
+              installNewEffect(
                 context.work,
                 context.sourceUnitId,
                 bonus.ref,
                 { source: context.sourceUnitId, scopes: [] },
                 services,
                 context.tick,
-              ).work;
+              );
 
-              return { ...context, work };
+
             } },
           ],
         }),
@@ -465,7 +466,7 @@ test("projectile runtime: Schedule completion and time limits freeze outstanding
               type: "EXECUTE",
               run: (context) => {
                 launch(context, services, program);
-                return { work: context.work };
+                return;
               },
             },
             { type: "WAIT", resolve: () => ({ type: "FOR_TICKS", ticks: 10 }) },
@@ -577,7 +578,7 @@ test("projectile runtime: contact history prevents stop fallback damage while sy
         program: [
           { type: "EXECUTE", run: (context) => {
             launch(context, services, program);
-            return context;
+            return;
           } },
         ],
       }),
@@ -623,7 +624,7 @@ test("projectile runtime: a same-process immutable copy replays arrival and stop
         program: [
           { type: "EXECUTE", run: (context) => {
             launch(context, services, program);
-            return context;
+            return;
           } },
         ],
       }),
@@ -634,26 +635,24 @@ test("projectile runtime: a same-process immutable copy replays arrival and stop
   const original = runtime.snapshot();
   const clone = structuredClone(original);
   assert.deepEqual(clone, original);
-  let copied = { work: workFrom(original), battlefield: projectileBattlefield(original.projectiles.instances) };
+  const copied = workFrom(original);
   const replayEvents = [];
   const actualEvents = [];
 
   for (const tick of [1, 2, 3]) {
-    const advanced = advanceProjectiles(copied.work, copied.battlefield, resources, tick);
-    copied.battlefield.advance(advanced.changes);
-    copied = { ...copied, work: advanced.work };
+    advanceProjectiles(copied, resources, tick);
     const actual = runtime.step();
     actualEvents.push(...actual.events);
   }
-  replayEvents.push(...eventsOf(copied.work));
+  replayEvents.push(...copied.events);
   assert.deepEqual(actualEvents, replayEvents);
   assert.deepEqual(runtime.snapshot().projectiles, {
-    nextProjectileId: copied.work.execution.nextProjectileId,
+    nextProjectileId: copied.execution.nextProjectileId,
     instances: projectileInstances(copied.battlefield),
   });
   assert.equal(
     runtime.snapshot().units.find((unit) => unit.id === 1).vitality.hp,
-    getUnit(copied.work, 1).vitality.hp,
+    getUnit(copied, 1).vitality.hp,
   );
   assert.equal(original.projectiles.instances[0].position[0], 0);
   assert.equal(original.projectiles.instances[0].hitUnitIds.length, 0);
@@ -707,7 +706,7 @@ test("projectile runtime: a failed stop rolls back launch, samples, receiver tra
               run: (context) => {
                 borrowed.push(context.projectiles);
                 attempted.push(launch(context, services, program, { stopDelayTicks: 0 }));
-                return { work: context.work, samples: { emitted: 1 } };
+                return {samples: { emitted: 1 }};
               },
             },
             { type: "WAIT", resolve: () => ({ type: "FOR_TICKS", ticks: 1 }) },
@@ -718,13 +717,10 @@ test("projectile runtime: a failed stop rolls back launch, samples, receiver tra
                 attempted.push(launch(context, services, child));
                 const rng = createRng(context.work.execution.rngState);
                 const sample = rng.next();
-                return {
-                  work: withExecution(context.work, {
+                context.work.execution = {
                     ...context.work.execution,
                     rngState: rng.state(),
-                  }),
-                  samples: { emitted: 2, sample },
-                };
+                  };return {samples: { emitted: 2, sample }};
               },
             },
             { type: "WAIT", resolve: () => ({ type: "FOR_TICKS", ticks: 4 }) },
@@ -829,16 +825,18 @@ test("projectile runtime: bulk launch returns changes and exposes each latest in
   released.advance(launched.changes);
   assert.deepEqual(projectileInstances(released), observed);
   assert.deepEqual(previous.projectileIds, []);
-  const work = createBattleState(fixtureBattlefield(released), { ...previousExecution, nextProjectileId: launched.nextProjectileId });
-  const advanced = advanceProjectiles(work, released, resources, 1);
-  const sibling = advanceProjectiles(work, released, resources, 1);
-  assert.deepEqual(advanced, sibling);
   const progressed = released.fork();
-  progressed.advance(advanced.changes);
+  const work = createBattleState(progressed, { ...previousExecution, nextProjectileId: launched.nextProjectileId });
+  const sibling = createBattleState(released.fork(), work.execution);
+  advanceProjectiles(work, resources, 1);
+  advanceProjectiles(sibling, resources, 1);
+  assert.deepEqual(projectileInstances(progressed), projectileInstances(sibling.battlefield));
   assert.equal(progressed.projectileIds.length, 32);
   assert.equal(projectileInstances(progressed).every((instance) => instance.position[0] === 1), true);
   assert.equal(projectileInstances(released).every((instance) => instance.position[0] === 0), true);
-  assert.deepEqual(advanceProjectiles(work, progressed, resources, 1).changes, []);
+  const unchanged = projectileInstances(progressed);
+  advanceProjectiles(work, resources, 1);
+  assert.deepEqual(projectileInstances(progressed), unchanged);
 });
 
 test("projectile runtime: failed launch scopes discard allocation and close borrowed operations", () => {
@@ -911,19 +909,17 @@ test("projectile runtime: stop callbacks see latest peer progress while removals
   });
   const battlefield = empty.fork();
   battlefield.advance([...launched.changes].reverse());
-  const work = createBattleState(fixtureBattlefield(battlefield), execution(launched.nextProjectileId));
-  const advanced = advanceProjectiles(work, battlefield, resources, 1);
   const progressed = battlefield.fork();
-  progressed.advance(advanced.changes);
+  const work = createBattleState(progressed, execution(launched.nextProjectileId));
+  advanceProjectiles(work, resources, 1);
   assert.deepEqual(observations, [{ id: 0, first: "STOPPED", second: "FLYING" }]);
   assert.deepEqual(progressed.projectileIds, [1]);
   assert.deepEqual(progressed.getProjectile(1).position, [1, 0]);
   assert.deepEqual(projectileInstances(battlefield).map((instance) => instance.progress.type), ["FLYING", "FLYING"]);
   assert.throws(() => borrowed.facts.getProjectile(1), /no longer active/);
 
-  const stopped = stopProjectile(work, progressed, 1, resources, 1);
   const finished = progressed.fork();
-  finished.advance(stopped.changes);
+  stopProjectile(createBattleState(finished, work.execution), 1, resources, 1);
   assert.deepEqual(observations[1], { id: 1, first: undefined, second: "STOPPED" });
   assert.deepEqual(finished.projectileIds, []);
   assert.equal(progressed.getProjectile(1).progress.type, "FLYING");
@@ -1066,12 +1062,12 @@ test("projectile runtime: ordered command stops see same-tick launches and roll 
               for (let index = 0; index < 3; index++) {
                 attempted.push(launch(context, services, program));
               }
-              return context;
+              return;
             } },
             { type: "WAIT", resolve: () => ({ type: "FOR_TICKS", ticks: 1 }) },
             { type: "EXECUTE", run: (context) => {
               attempted.push(launch(context, services, program));
-              return context;
+              return;
             } },
           ],
         }),

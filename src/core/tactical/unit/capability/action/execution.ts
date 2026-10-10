@@ -20,9 +20,9 @@ export function startAction(
     state: ActionExecutionState,
     request: ActionStartRequest,
     resources: ActionStartResources,
-): { readonly work: BattleState; readonly state: ActionExecutionState } {
+): ActionExecutionState {
     const executions = new ActionExecutionWork(state);
-    const next = startActionInWork(work, executions, request, resources);
+    startActionInWork(work, executions, request, resources);
 
-    return { work: next, state: executions.result() };
+    return executions.result();
 }

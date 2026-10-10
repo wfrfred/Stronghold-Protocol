@@ -136,24 +136,29 @@ function harness({ descriptor = description(), stackCount = 3, lifetimeTicks = 3
             },
         },
     });
-    let work = installNewEffect(effectFixtureWork(initializeUnit({
+    const work = effectFixtureWork(initializeUnit({
         id: 0, position: [0, 0], definition: { id: "buff-owner", offense: { attack: 100 } },
-    })), 0, effect.ref, { source: 10, scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }], initialState: initial }, resources, 0).work;
+    }));
+    installNewEffect(work, 0, effect.ref, {
+        source: 10,
+        scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }],
+        initialState: initial,
+    }, resources, 0);
     return {
-        get work() { return work; },
+        work,
         get starts() { return starts; },
         reads, expirations,
         sourceAttack: (source, value) => { sources.set(source, value); },
-        expire: tick => { work = expireEffects(work, tick, resources); },
-        disable: tick => { work = setEffectEnabled(work, address, false, resources, tick); },
+        expire: tick => { expireEffects(work, tick, resources); },
+        disable: tick => { setEffectEnabled(work, address, false, resources, tick); },
         setCap: (maxStackCount, tick) => {
-            work = updateEffectState(work, 0, 0, effect.ref, state => ({ ...state, maxStackCount }), resources, tick);
+            updateEffectState(work, 0, 0, effect.ref, state => ({ ...state, maxStackCount }), resources, tick);
         },
         override: tick => {
             const winner = resources.registerEffect(createEffectProgram({
                 id: "buff-expiry-winner", initialize: () => ({}), ownState: state => ({ ...state }),
             }), { lifecycle: { competition: () => ({ group: "buff-expiry", priority: 2 }) } });
-            work = installNewEffect(work, 0, winner.ref, { source: 20, scopes: [] }, resources, tick).work;
+            installNewEffect(work, 0, winner.ref, { source: 20, scopes: [] }, resources, tick);
         },
         apply: (expiresAtTick, tick, maxStackCount = undefined) => {
             const current = instance(battlefieldView(work));
@@ -166,8 +171,8 @@ function harness({ descriptor = description(), stackCount = 3, lifetimeTicks = 3
                 maxStackCount: current.state.maxStackCount,
             }, incoming, tick);
             if (plan.type === "REFRESH") {
-                work = setEffectTick(work, address, plan.expiresAtTick);
-                work = updateEffectState(work, 0, 0, effect.ref, state => ({
+                setEffectTick(work, address, plan.expiresAtTick);
+                updateEffectState(work, 0, 0, effect.ref, state => ({
                     ...state, stackCount: plan.stackCount,
                     sample: plan.reloadModifiers ? sample(current.source, plan.stackCount) : state.sample,
                 }), resources, tick);

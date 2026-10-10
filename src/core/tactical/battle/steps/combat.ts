@@ -22,7 +22,6 @@ import {
     advanceBattlefield,
     battlefieldView,
     getUnit,
-    withExecution,
     type BattleState,
 } from "../execution/context.js";
 import { hasAction, type ActionDefinition } from "../../unit/capability/action/capability.js";
@@ -182,7 +181,7 @@ export function createCombat(
             },
         );
         advanceBattlefield(state, launched.changes);
-        withExecution(state, { ...state.execution, nextProjectileId: launched.nextProjectileId });
+        state.execution = { ...state.execution, nextProjectileId: launched.nextProjectileId };
     };
 
     return {

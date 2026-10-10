@@ -94,27 +94,24 @@ export class ActionReleaseResources {
 }
 
 export function beforeActionRelease(
-    input: BattleState,
+    state: BattleState,
     unitId: UnitId,
     tick: number,
     resources: EffectTransitionResources & { readonly actionRelease?: ActionReleaseResources },
     dispatch?: EffectDispatchScope,
-): { readonly work: BattleState; readonly interrupted: boolean } {
+): boolean {
     assertNonnegativeSafeInteger(unitId, "action release unit identity");
     assertNonnegativeSafeInteger(tick, "action release tick");
 
-    const unit = getUnit(input, unitId);
+    const unit = getUnit(state, unitId);
     const release = resources.actionRelease;
 
     if (unit === undefined || !hasAction(unit) || release === undefined) {
-        return { work: input, interrupted: false };
+        return false;
     }
 
-    let work = input;
     const scope = dispatch ?? new EffectDispatchScope();
-    const getWork = () => work;
-
-    const facts = effectView(getWork);
+    const facts = effectView(() => state);
 
     const directive = scope.withCandidates(facts, unitId, (addresses) => {
         let latest: ActionReleaseDirective | undefined;
@@ -130,12 +127,12 @@ export function beforeActionRelease(
             latest = scope.withInstance(ref, instance, (lastKnown) => {
                 let active = true;
 
-                const readWork = (): BattleState => {
+                const readState = (): BattleState => {
                     if (!active) {
                         throw new TypeError("action release context is no longer active");
                     }
 
-                    return work;
+                    return state;
                 };
 
                 try {
@@ -144,10 +141,10 @@ export function beforeActionRelease(
                         tick,
                         ref,
                         get instance() {
-                            return getEffect(readWork(), ref) ?? lastKnown();
+                            return getEffect(readState(), ref) ?? lastKnown();
                         },
-                        facts: effectView(readWork),
-                        effects: createEffectOperations(readWork, resources, tick, scope),
+                        facts: effectView(readState),
+                        effects: createEffectOperations(readState, resources, tick, scope),
                     });
                 } finally {
                     active = false;
@@ -165,18 +162,18 @@ export function beforeActionRelease(
     });
 
     if (directive === undefined) {
-        return { work, interrupted: false };
+        return false;
     }
 
-    work = finalizeFinishedEffects(work, unitId, resources, tick, scope);
+    finalizeFinishedEffects(state, unitId, resources, tick, scope);
 
     if (directive.type === "CONTINUE") {
-        return { work, interrupted: false };
+        return false;
     }
 
     const recoveryUntilTick = tick + directive.recoveryTicks;
     assertNonnegativeSafeInteger(recoveryUntilTick, "action release recovery deadline");
-    work = transitionUnit(work, unitId, (current) => {
+    transitionUnit(state, unitId, (current) => {
         if (!hasAction(current) || current.action.recoveryUntilTick >= recoveryUntilTick) {
             return current;
         }
@@ -187,5 +184,5 @@ export function beforeActionRelease(
         };
     });
 
-    return { work, interrupted: true };
+    return true;
 }

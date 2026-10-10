@@ -7,7 +7,6 @@ import {
     type EffectRef,
     type EffectInstanceValue,
 } from "./instance.js";
-import type { BattleState } from "../../../battle/execution/context.js";
 import { isParticipatingEffect } from "./query.js";
 
 interface ActiveInstance {
@@ -17,7 +16,7 @@ interface ActiveInstance {
 export class EffectDispatchScope {
     readonly #closing = new Set<string>();
     readonly #pendingEnds = new Set<string>();
-    readonly #deferredRemovals = new Map<UnitId, (work: BattleState) => BattleState>();
+    readonly #deferredRemovals = new Map<UnitId, () => void>();
 
     markClosing(lifetimes: readonly LifetimeRef[]): void {
         for (const lifetime of lifetimes) {
@@ -49,23 +48,21 @@ export class EffectDispatchScope {
         return this.#pendingEnds.size > 0;
     }
 
-    deferUnitRemoval(unitId: UnitId, finish: (work: BattleState) => BattleState): void {
+    deferUnitRemoval(unitId: UnitId, finish: () => void): void {
         if (!this.#deferredRemovals.has(unitId)) {
             this.#deferredRemovals.set(unitId, finish);
         }
     }
 
-    drainDeferred(work: BattleState): BattleState {
+    drainDeferred(): void {
         // Remote dependents can still be notifying even after their host's notices finish.
         if (this.hasPendingEnds()) {
-            return work;
+            return;
         }
         for (const [unitId, finish] of this.#deferredRemovals) {
             this.#deferredRemovals.delete(unitId);
-            work = finish(work);
+            finish();
         }
-
-        return work;
     }
 
     readonly #candidates = new Map<UnitId, readonly EffectRef[]>();

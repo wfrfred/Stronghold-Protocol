@@ -67,18 +67,18 @@ test('action release: resources validate registered references, own the callback
 test('action release: absent resources, action, owner or participating rules preserve the original work', () => {
   const resources = new CombatResources();
   const input = effectFixtureWork(actor());
-  assert.deepEqual(beforeActionRelease(input, 0, 0, resources), { work: input, interrupted: false });
+  assert.equal(beforeActionRelease(input, 0, 0, resources), false);
   const supplied = services(resources);
-  assert.equal(beforeActionRelease(input, 0, 0, supplied).work, input);
-  assert.equal(beforeActionRelease(input, 99, 0, supplied).work, input);
+  assert.equal(beforeActionRelease(input, 0, 0, supplied), false);
+  assert.equal(beforeActionRelease(input, 99, 0, supplied), false);
   const ordinary = initializeUnit({ id: 0, definition: { id: 'ordinary' }, position: [0, 0] });
   const ordinaryWork = effectFixtureWork(ordinary);
-  assert.equal(beforeActionRelease(ordinaryWork, 0, 0, supplied).work, ordinaryWork);
+  assert.equal(beforeActionRelease(ordinaryWork, 0, 0, supplied), false);
   const registered = resources.registerEffect(program('disabled-release'));
   supplied.actionRelease.register(registered.ref, { beforeRelease: () => { throw new Error('disabled ran'); } });
   const attached = effectFixtureWork(attach(resources, actor(), registered));
-  const disabled = setEffectEnabled(attached, { type: "EFFECT", unitId: 0, effectId: 0 }, false, resources, 0);
-  assert.equal(beforeActionRelease(disabled, 0, 0, supplied).work, disabled);
+  setEffectEnabled(attached, { type: "EFFECT", unitId: 0, effectId: 0 }, false, resources, 0);
+  assert.equal(beforeActionRelease(attached, 0, 0, supplied), false);
 });
 
 test('action release: a content rule consumes charges and only requests interruption and maximum recovery', () => {
@@ -97,20 +97,23 @@ test('action release: a content rule consumes charges and only requests interrup
   unit = { ...unit, action: { ...unit.action, recoveryUntilTick: 40 } };
   const input = effectFixtureWork(unit);
   const initialState = structuredClone(unit);
+  const execution = input.execution;
   let result = beforeActionRelease(input, 0, 7, supplied);
-  assert.equal(result.interrupted, true);
-  assert.equal(getUnit(result.work, 0).action.recoveryUntilTick, 40);
-  assert.equal(getUnit(result.work, 0).effects.instances[0].state.remaining, 2);
-  assert.equal(result.work.execution, input.execution);
-  assert.deepEqual(result.work.events, []);
+  assert.equal(result, true);
+  assert.equal(getUnit(input, 0).action.recoveryUntilTick, 40);
+  assert.equal(getUnit(input, 0).effects.instances[0].state.remaining, 2);
+  assert.equal(input.execution, execution);
+  assert.deepEqual(input.events, []);
   assert.deepEqual(unit, initialState);
-  result = beforeActionRelease(result.work, 0, 7, supplied);
-  result = beforeActionRelease(result.work, 0, 7, supplied);
-  assert.equal(result.interrupted, true);
-  assert.deepEqual(getUnit(result.work, 0).effects.instances, []);
-  assert.equal(beforeActionRelease(result.work, 0, 7, supplied).interrupted, false);
+  result = beforeActionRelease(input, 0, 7, supplied);
+  result = beforeActionRelease(input, 0, 7, supplied);
+  assert.equal(result, true);
+  assert.deepEqual(getUnit(input, 0).effects.instances, []);
+  assert.equal(beforeActionRelease(input, 0, 7, supplied), false);
   const shorter = { ...unit, action: { ...unit.action, recoveryUntilTick: 0 } };
-  assert.equal(getUnit(beforeActionRelease(effectFixtureWork(shorter), 0, 7, supplied).work, 0).action.recoveryUntilTick, 22);
+  const shorterState = effectFixtureWork(shorter);
+  beforeActionRelease(shorterState, 0, 7, supplied);
+  assert.equal(getUnit(shorterState, 0).action.recoveryUntilTick, 22);
 });
 
 test('action release: the first interruption stops subsequent content rules', () => {
@@ -128,7 +131,7 @@ test('action release: the first interruption stops subsequent content rules', ()
   }
   const result = beforeActionRelease(effectFixtureWork(unit), 0, 0, supplied);
   assert.deepEqual(calls, ['continue', 'interrupt']);
-  assert.equal(result.interrupted, true);
+  assert.equal(result, true);
 });
 
 test('action release: candidate identities freeze, participation is rechecked and ordinary facts see new effects', () => {
@@ -154,12 +157,12 @@ test('action release: candidate identities freeze, participation is rechecked an
     } });
     const b = resources.registerEffect(program(`second-${operation}`));
     supplied.actionRelease.register(b.ref, { beforeRelease: () => { calls.push('B'); return { type: 'CONTINUE' }; } });
-    let work = effectFixtureWork(attach(resources, attach(resources, actor(), a), b));
-    if (operation === 'enable') { work = setEffectEnabled(work, { type: "EFFECT", unitId: 0, effectId: 1 }, false, resources, 0); }
-    const first = beforeActionRelease(work, 0, 0, supplied);
+    const work = effectFixtureWork(attach(resources, attach(resources, actor(), a), b));
+    if (operation === 'enable') { setEffectEnabled(work, { type: "EFFECT", unitId: 0, effectId: 1 }, false, resources, 0); }
+    beforeActionRelease(work, 0, 0, supplied);
     assert.deepEqual(calls, operation === 'enable' ? ['A', 'B'] : ['A']);
     calls.length = 0;
-    beforeActionRelease(first.work, 0, 1, supplied);
+    beforeActionRelease(work, 0, 1, supplied);
     assert.deepEqual(calls, operation === 'enable' ? ['A', 'B', 'C'] : ['A', 'C']);
   }
 });
@@ -178,9 +181,10 @@ test('action release: the live typed instance tracks updates and all borrowed op
     assert.equal(context.instance.state.value, 1);
     return { type: 'CONTINUE' };
   } });
-  const result = beforeActionRelease(effectFixtureWork(attach(resources, actor(), registered)), 0, 0, supplied);
-  assert.equal(result.interrupted, false);
-  assert.deepEqual(getUnit(result.work, 0).effects.instances, []);
+  const input = effectFixtureWork(attach(resources, actor(), registered));
+  const result = beforeActionRelease(input, 0, 0, supplied);
+  assert.equal(result, false);
+  assert.deepEqual(getUnit(input, 0).effects.instances, []);
   assert.throws(() => borrowed.instance, /no longer active/);
   assert.throws(() => borrowed.facts.getUnit(0), /no longer active/);
   assert.throws(() => borrowed.facts.getEffect(borrowed.ref), /no longer active/);
@@ -206,8 +210,8 @@ test('action release: content exceptions propagate and release borrowed state wi
   assert.equal(input.battlefield.snapshot("state").getUnit(0).effects.instances[0].state.attempts, 0);
   input.battlefield.drop();
   fail = false;
-  const result = beforeActionRelease(input, 0, 0, supplied);
-  assert.equal(getUnit(result.work, 0).effects.instances[0].state.attempts, 1);
+  beforeActionRelease(input, 0, 0, supplied);
+  assert.equal(getUnit(input, 0).effects.instances[0].state.attempts, 1);
 });
 
 test('action release: malformed recovery deadlines are programming errors', () => {

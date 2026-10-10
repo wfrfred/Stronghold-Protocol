@@ -9,36 +9,32 @@ export function gainUnitSkillSp(
     unitId: UnitId,
     source: SkillSpSource,
     amount = 1,
-): BattleState {
+): void {
     const unit = getUnit(work, unitId);
 
     if (unit === undefined || !hasSkill(unit) || hasStatusFlag(unit, "SP_RECOVERY_BLOCKED")) {
-        return work;
+        return;
     }
 
     const gained = gainSkillSp(unit.skill, unit.definition.skill, source, amount);
 
-    return gained.state === unit.skill ? work : updateUnit(work, { ...unit, skill: gained.state });
+    if (gained.state !== unit.skill) {
+        updateUnit(work, { ...unit, skill: gained.state });
+    }
 }
 
-export function drainUnitSkillSp(
-    work: BattleState,
-    unitId: UnitId,
-    amount: number,
-): { readonly work: BattleState; readonly amount: number } {
+export function drainUnitSkillSp(work: BattleState, unitId: UnitId, amount: number): number {
     const unit = getUnit(work, unitId);
 
     if (unit === undefined || !hasSkill(unit)) {
-        return { work, amount: 0 };
+        return 0;
     }
 
     const drained = drainSkillSp(unit.skill, amount);
 
-    return {
-        work:
-            drained.state === unit.skill
-                ? work
-                : updateUnit(work, { ...unit, skill: drained.state }),
-        amount: drained.result.amount,
-    };
+    if (drained.state !== unit.skill) {
+        updateUnit(work, { ...unit, skill: drained.state });
+    }
+
+    return drained.result.amount;
 }

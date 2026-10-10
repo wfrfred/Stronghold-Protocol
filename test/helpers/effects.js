@@ -14,11 +14,12 @@ export function effectFixtureWork(...units) {
 }
 
 export function installFixtureEffect(unit, instance, resources, tick = 0) {
-  const installation = installEffect(effectFixtureWork(unit), unit.id, instance, resources, tick);
+  const state = effectFixtureWork(unit);
+  const installation = installEffect(state, unit.id, instance, resources, tick);
 
-  if (installation.result.type !== "INSTALLED") {
-    throw new TypeError(`fixture effect installation rejected: ${installation.result.reason}`);
+  if (installation.type !== "INSTALLED") {
+    throw new TypeError(`fixture effect installation rejected: ${installation.reason}`);
   }
 
-  return getUnit(installation.work, unit.id);
+  return getUnit(state, unit.id);
 }

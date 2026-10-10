@@ -11,28 +11,18 @@ import {
 } from "./lifecycle.js";
 
 export function createEffectOperations(
-    getWork: () => BattleState,
+    readState: () => BattleState,
     resources: EffectTransitionResources,
     tick: number,
     dispatch: EffectDispatchScope,
 ): EffectLifecycleOperations {
     return {
         install: (unitId, ref, input) => {
-            const installation = installNewEffect(
-                getWork(),
-                unitId,
-                ref,
-                input,
-                resources,
-                tick,
-                dispatch,
-            );
-
-            return installation.result;
+            return installNewEffect(readState(), unitId, ref, input, resources, tick, dispatch);
         },
         update: (ref, program, transition) => {
             updateEffectState(
-                getWork(),
+                readState(),
                 ref.unitId,
                 ref.effectId,
                 program,
@@ -43,18 +33,16 @@ export function createEffectOperations(
             );
         },
         setEnabled: (ref, enabled) => {
-            setEffectEnabled(getWork(), ref, enabled, resources, tick, dispatch);
+            setEffectEnabled(readState(), ref, enabled, resources, tick, dispatch);
         },
         setTick: (ref, expires) => {
-            setEffectTick(getWork(), ref, expires);
+            setEffectTick(readState(), ref, expires);
         },
         finish: (refs, reason) => {
-            finishEffects(getWork(), refs, resources, tick, reason, dispatch);
+            finishEffects(readState(), refs, resources, tick, reason, dispatch);
         },
         bind: (ref, lifetime) => {
-            const binding = bindEffectLifetime(getWork(), ref, lifetime, dispatch);
-
-            return binding.result;
+            return bindEffectLifetime(readState(), ref, lifetime, dispatch);
         },
     };
 }

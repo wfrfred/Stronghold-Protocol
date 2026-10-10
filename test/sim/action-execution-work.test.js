@@ -61,7 +61,6 @@ function reference(initial, segments, resources, tick) {
         { executionId: execution.id, segments, tick },
         resources,
       );
-      work = advanced.work;
       state = advanced.state;
     }
   }
@@ -75,7 +74,7 @@ test('action execution work: combat batching preserves execution order, samples,
   const segments = [
     { type: 'EXECUTE', run: context => {
       observed.push(context.executionId);
-      return { work: context.work, samples: { identity: context.executionId } };
+      return { samples: { identity: context.executionId } };
     } },
     { type: 'WAIT', allowNewAction: false, blockingMovement: true,
       resolve: () => ({ type: 'FOR_TICKS', ticks: 3 }) },
@@ -153,7 +152,7 @@ test('action execution work: a later callback exception leaves the input executi
   const segments = [
     { type: 'EXECUTE', run: context => {
       if (fail && context.sourceUnitId === 1) throw new Error('late action failure');
-      return { work: context.work, samples: { source: context.sourceUnitId } };
+      return { samples: { source: context.sourceUnitId } };
     } },
     { type: 'WAIT', resolve: () => ({ type: 'FOR_TICKS', ticks: 2 }) },
   ];

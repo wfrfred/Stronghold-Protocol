@@ -27,12 +27,6 @@ export interface HealingReport {
     readonly cancellation: HealingCancellation | null;
 }
 
-export interface HealingResolution {
-    readonly work: BattleState;
-    readonly amount: number;
-    readonly report: HealingReport;
-}
-
 export interface HealingResult<U extends VitalUnit> {
     readonly unit: StableUnit<U>;
     readonly amount: number;
@@ -42,4 +36,4 @@ export type HealingOperation = (
     work: BattleState,
     request: HealingRequest,
     dispatch: EffectDispatchScope,
-) => HealingResolution;
+) => HealingReport;

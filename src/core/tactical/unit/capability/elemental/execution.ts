@@ -64,7 +64,7 @@ export interface ElementDamageReport {
 export type ElementDamageOperation = (
     work: BattleState,
     request: ElementDamageRequest & { readonly targetUnitId: UnitId },
-) => { readonly work: BattleState; readonly report: ElementDamageReport };
+) => ElementDamageReport;
 
 export type ElementHealOperation = (
     work: BattleState,
@@ -73,7 +73,6 @@ export type ElementHealOperation = (
         readonly sourceUnitId: UnitId | null;
     },
 ) => {
-    readonly work: BattleState;
     readonly amount: number;
     readonly outcome: "REJECTED" | "APPLIED";
 };
@@ -85,8 +84,7 @@ function runBurst(
     previousTick: number,
     resources: ElementalExecutionResources,
     run: CompiledElementalBurst["begin"],
-): BattleState {
-    let current = work;
+): void {
     let active = true;
     const dispatch = new EffectDispatchScope();
 
@@ -95,7 +93,7 @@ function runBurst(
             throw new TypeError("elemental context is no longer active");
         }
 
-        return current;
+        return work;
     };
 
     const context: ElementalBurstContext = {
@@ -105,23 +103,15 @@ function runBurst(
         facts: effectView(readWork),
         effects: createEffectOperations(readWork, resources, tick, dispatch),
         damage: (request) => {
-            const settled = resources.settleDamage(readWork(), { ...request, tick }, dispatch);
-            current = settled.work;
-
-            return settled.report;
+            return resources.settleDamage(readWork(), { ...request, tick }, dispatch);
         },
         drainSp: (amount) => {
-            const drained = drainUnitSkillSp(readWork(), burst.targetUnitId, amount);
-            current = drained.work;
-
-            return drained.amount;
+            return drainUnitSkillSp(readWork(), burst.targetUnitId, amount);
         },
     };
 
     try {
         run(context);
-
-        return current;
     } finally {
         active = false;
     }
@@ -131,25 +121,22 @@ export function resolveElementDamage(
     work: BattleState,
     request: ElementDamageRequest & { readonly targetUnitId: UnitId },
     resources: ElementalExecutionResources,
-): { readonly work: BattleState; readonly report: ElementDamageReport } {
+): ElementDamageReport {
     const unit = getUnit(work, request.targetUnitId);
 
     if (unit === undefined) {
-        return {
-            work,
-            report: { outcome: "REJECTED", reason: "TARGET_ABSENT", amount: 0, burst: null },
-        };
+        return { outcome: "REJECTED", reason: "TARGET_ABSENT", amount: 0, burst: null };
     }
 
     const received = receiveElementDamage(unit, request);
     const { unit: next, ...report } = received;
-    work = updateUnit(work, next);
+    updateUnit(work, next);
 
     if (received.outcome === "REJECTED") {
-        return { work, report };
+        return report;
     }
 
-    work = appendEvents(work, [
+    appendEvents(work, [
         {
             type: "ELEMENT_DAMAGE",
             sourceUnitId: request.sourceUnitId,
@@ -163,8 +150,8 @@ export function resolveElementDamage(
 
     if (received.burst !== null) {
         const burst = received.burst;
-        work = appendEvents(work, [{ type: "ELEMENT_BURST", burst, tick: request.tick }]);
-        work = runBurst(
+        appendEvents(work, [{ type: "ELEMENT_BURST", burst, tick: request.tick }]);
+        runBurst(
             work,
             burst,
             request.tick,
@@ -174,7 +161,7 @@ export function resolveElementDamage(
         );
     }
 
-    return { work, report };
+    return report;
 }
 
 export function resolveElementHeal(
@@ -184,21 +171,20 @@ export function resolveElementHeal(
         readonly sourceUnitId: UnitId | null;
     },
 ): {
-    readonly work: BattleState;
     readonly amount: number;
     readonly outcome: "REJECTED" | "APPLIED";
 } {
     const unit = getUnit(work, request.targetUnitId);
 
     if (unit === undefined) {
-        return { work, amount: 0, outcome: "REJECTED" };
+        return { amount: 0, outcome: "REJECTED" };
     }
 
     const received = receiveElementHeal(unit, request);
-    work = updateUnit(work, received.unit);
+    updateUnit(work, received.unit);
 
     if (received.outcome === "APPLIED") {
-        work = appendEvents(work, [
+        appendEvents(work, [
             {
                 type: "ELEMENT_HEAL",
                 sourceUnitId: request.sourceUnitId,
@@ -209,29 +195,29 @@ export function resolveElementHeal(
         ]);
     }
 
-    return { work, amount: received.amount, outcome: received.outcome };
+    return { amount: received.amount, outcome: received.outcome };
 }
 
-export function advanceElementalInWork(
+export function advanceElementalState(
     work: BattleState,
     unitId: UnitId,
     tick: number,
     resources: ElementalExecutionResources,
-): BattleState {
+): void {
     const unit = getUnit(work, unitId);
 
     if (unit === undefined || !hasElemental(unit)) {
-        return work;
+        return;
     }
 
     const advanced = advanceElemental(unit, tick);
-    work = updateUnit(work, advanced.unit);
+    updateUnit(work, advanced.unit);
 
     if (advanced.burst !== null) {
         const program = resources.elemental.get(advanced.burst.receiver, advanced.burst.type);
 
         if (program.advance !== undefined) {
-            work = runBurst(
+            runBurst(
                 work,
                 advanced.burst,
                 tick,
@@ -242,10 +228,8 @@ export function advanceElementalInWork(
         }
     }
     if (advanced.recovered) {
-        work = appendEvents(work, [
+        appendEvents(work, [
             { type: "ELEMENT_RECOVERED", unitId, elementType: advanced.burst!.type, tick },
         ]);
     }
-
-    return work;
 }

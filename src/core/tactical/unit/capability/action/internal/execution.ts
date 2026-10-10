@@ -22,7 +22,7 @@ export function startActionInWork(
     executions: ActionExecutionWork,
     request: ActionStartRequest,
     resources: ActionStartResources,
-): BattleState {
+): void {
     const { sourceUnitId, compiled, tick, mayStart } = request;
     const source = getUnit(work, sourceUnitId);
 
@@ -32,7 +32,7 @@ export function startActionInWork(
         !isSpatiallyPresent(source) ||
         hasStatusFlag(source, "STUNNED")
     ) {
-        return work;
+        return;
     }
 
     const intervalTicks = resolveActionIntervalTicks(
@@ -43,17 +43,17 @@ export function startActionInWork(
     );
     const action = reconcileActionCooldown(source.action, intervalTicks, tick);
     const ready = action === source.action ? source : { ...source, action };
-    work = updateUnit(work, ready);
+    updateUnit(work, ready);
 
     if (!mayStart || tick < action.readyAtTick || tick < action.recoveryUntilTick) {
-        return work;
+        return;
     }
 
     const bindings = compiled.bind({ source: ready, battlefield: battlefieldView(work) });
     const targetUnitId = bindings.get(compiled.definition.triggerBindingId)![0] ?? null;
 
     if (targetUnitId === null) {
-        return work;
+        return;
     }
 
     const { definition } = compiled;
@@ -61,8 +61,8 @@ export function startActionInWork(
         ...ready,
         action: beginActionCooldown(action, definition, intervalTicks, tick),
     };
-    work = updateUnit(work, executing);
-    work = appendEvents(work, [{ type: "ACTION", sourceUnitId, targetUnitId, tick }]);
+    updateUnit(work, executing);
+    appendEvents(work, [{ type: "ACTION", sourceUnitId, targetUnitId, tick }]);
 
     if (work.actionExecutions !== executions) {
         work.actionExecutions = executions;
@@ -75,12 +75,10 @@ export function startActionInWork(
         bindings,
         tick,
     });
-    const advanced = resumeActionExecutionInWork(
+    resumeActionExecutionInWork(
         work,
         executions,
         { executionId: initialized.id, segments: compiled.program, tick },
         resources,
     );
-
-    return advanced.work;
 }

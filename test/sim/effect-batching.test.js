@@ -23,17 +23,17 @@ test('effect batching: overlapping roots and diamond dependencies mark the compl
   const refs = [];
   for (const id of [0, 1, 1, 0]) {
     const installed = installNewEffect(work, id, effect.ref, input, resources, 0);
-    work = installed.work; refs.push(installed.result.ref);
+     refs.push(installed.ref);
   }
   // Root → left/right → leaf; the leaf has a lower host ID than both parents.
   for (const [child, parent] of [[refs[1], refs[0]], [refs[2], refs[0]], [refs[3], refs[1]], [refs[3], refs[2]]]) {
-    work = bindEffectLifetime(work, child, parent).work;
+    bindEffectLifetime(work, child, parent);
   }
   const before = work.battlefield.snapshot("draft");
-  work = finishEffects(work, [refs[3], refs[0], refs[0]], resources, 1);
+  finishEffects(work, [refs[3], refs[0], refs[0]], resources, 1);
   assert.deepEqual(notices, [[0, 0], [1, 0], [1, 1], [0, 1]]);
   assert.ok([0, 1].every(id => getUnit(work, id).effects.instances.every(instance => instance.finished)));
-  assert.equal(finishEffects(work, refs, resources, 1), work);
+  finishEffects(work, refs, resources, 1);
   assert.ok([0, 1].every(id => before.getUnit(id).effects.instances.every(instance => !instance.finished)));
 });
 
@@ -46,10 +46,10 @@ test('effect batching: a departing host never temporarily enables suppressed com
       competition: () => ({ group: 'rank', priority }),
       enable: () => { calls.push(priority); },
     } });
-    work = installNewEffect(work, 0, effect.ref, input, resources, 0).work;
+    installNewEffect(work, 0, effect.ref, input, resources, 0);
   }
   calls.length = 0;
-  work = closeEffectLifetimes(work, [{ type: 'UNIT', unitId: 0 }], resources, 1);
+  closeEffectLifetimes(work, [{ type: 'UNIT', unitId: 0 }], resources, 1);
   assert.deepEqual(calls, []);
   assert.ok(getUnit(work, 0).effects.instances.every(instance => instance.finished));
 });
@@ -66,15 +66,16 @@ test('effect batching: closing many roots reconciles a surviving competitor once
     const ending = resources.registerEffect(program('ending'), { lifecycle: {
       competition: () => ({ group: 'rank', priority: 1 }),
     } });
-    let installed = installNewEffect(effectFixtureWork(host(0)), 0, survivor.ref, input, resources, 0);
-    let work = installed.work;
+    const installedState = effectFixtureWork(host(0));
+    let installed = installNewEffect(installedState, 0, survivor.ref, input, resources, 0);
+    let work = installedState;
     const roots = [];
     for (let index = 0; index < count; index++) {
       installed = installNewEffect(work, 0, ending.ref, input, resources, 0);
-      work = installed.work; roots.push(installed.result.ref);
+      roots.push(installed.ref);
     }
     checks = 0; enables = 0;
-    work = finishEffects(work, roots, resources, 1);
+    finishEffects(work, roots, resources, 1);
     assert.equal(checks, 1, `${count} roots`);
     assert.equal(enables, 1);
     assert.equal(getUnit(work, 0).effects.instances[0].participating, true);
@@ -94,11 +95,13 @@ test('effect batching: finish business can supersede a surviving competitor befo
     competition: () => ({ group: 'rank', priority: 1 }),
     finish: context => { context.effects.finish([followerRef]); },
   } });
-  const initial = installNewEffect(effectFixtureWork(host(0)), 0, follower.ref, input, resources, 0);
-  followerRef = initial.result.ref;
-  const installed = installNewEffect(initial.work, 0, leader.ref, input, resources, 0);
+  const initialState = effectFixtureWork(host(0));
+  const initial = installNewEffect(initialState, 0, follower.ref, input, resources, 0);
+  followerRef = initial.ref;
+  const installed = installNewEffect(initialState, 0, leader.ref, input, resources, 0);
   calls.length = 0;
-  const ended = finishEffects(installed.work, [installed.result.ref], resources, 1);
+  const ended = initialState;
+  finishEffects(ended, [installed.ref], resources, 1);
   assert.deepEqual(calls, ['finish']);
   assert.ok(getUnit(ended, 0).effects.instances.every(instance => instance.finished));
 });

@@ -44,8 +44,8 @@ function fixture(count) {
             source: null,
             scopes: [{ type: "UNIT", unitId: 0 }, { type: "TICK", tick: 10 }],
         }, resources, 0);
-        assert.equal(installed.result.type, "INSTALLED");
-        work = installed.work;
+        assert.equal(installed.type, "INSTALLED");
+
     }
     battlefield.apply();
 
@@ -80,7 +80,8 @@ test("effect lifetime index: draft transitions maintain changed Unit relations a
             })),
         },
     };
-    const work = updateUnit(initial, changed);
+    const work = initial;
+    updateUnit(work, changed);
 
     assert.equal(snapshot.effectLifetimes.dependents.get("UNIT:0").size, 128);
     assert.equal(effectDependents(work, { type: "UNIT", unitId: 0 }).length, 127);
@@ -97,7 +98,8 @@ test("effect lifetime index: finished instances leave entity and time indexes wi
     const battlefield = fixture(4);
     const initial = createBattleState(battlefield);
     const current = getUnit(initial, 2);
-    const work = updateUnit(initial, {
+    const work = initial;
+    updateUnit(work, {
         ...current,
         effects: {
             ...current.effects,

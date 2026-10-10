@@ -101,21 +101,21 @@ test("effect sources: inactive registration is retained and participation keeps 
     const receiver = receiverEffect(resources, "paused-receivers");
     const { source } = sourceProgram(resources, receiver);
     let work = fixtureWork({ ...source, active: false });
-    work = reconcileEffectSources(work, resources, 0);
-    work = registerUnit(work, unit(3));
-    work = registerEffectSourceUnits(work, [3, 3], resources, 0);
+    reconcileEffectSources(work, resources, 0);
+    registerUnit(work, unit(3));
+    registerEffectSourceUnits(work, [3, 3], resources, 0);
 
     assert.deepEqual(getMechanism(work, 20).effectSource.receivers.map(binding => binding.unitId), [1, 2, 3]);
     assert.equal(getUnit(work, 3).effects, undefined);
 
-    work = setEffectSourceActive(work, 20, true, resources, 1);
+    setEffectSourceActive(work, 20, true, resources, 1);
     const beforePause = getMechanism(work, 20);
     const receiverInstances = [1, 2, 3].map(id => getUnit(work, id).effects.instances[0]);
     assert.deepEqual([1, 2, 3].map(id => attack(work, resources, id)), [110, 120, 130]);
 
-    work = setEffectSourceActive(work, 20, false, resources, 2);
+    setEffectSourceActive(work, 20, false, resources, 2);
     assert.deepEqual([1, 2, 3].map(id => attack(work, resources, id)), [100, 100, 100]);
-    work = setEffectSourceActive(work, 20, true, resources, 3);
+    setEffectSourceActive(work, 20, true, resources, 3);
 
     assert.deepEqual(getMechanism(work, 20).effectSource.receivers, beforePause.effectSource.receivers);
     assert.deepEqual([1, 2, 3].map(id => getUnit(work, id).effects.instances[0].state), receiverInstances.map(instance => instance.state));
@@ -132,10 +132,11 @@ test("effect sources: rejected installation is a committed attempt and repeated 
     const { source } = sourceProgram(resources, receiver, {
         selectInitial: ({ battlefield }) => { selections++; return battlefield.unitIds; },
     });
-    let work = reconcileEffectSources(fixtureWork(source), resources, 0);
-    work = registerEffectSourceUnits(work, [1, 2, 1], resources, 1);
-    work = registerEffectSourceUnits(work, [], resources, 1);
-    work = reconcileEffectSources(work, resources, 2);
+    let work = fixtureWork(source);
+    reconcileEffectSources(work, resources, 0);
+    registerEffectSourceUnits(work, [1, 2, 1], resources, 1);
+    registerEffectSourceUnits(work, [], resources, 1);
+    reconcileEffectSources(work, resources, 2);
 
     assert.equal(selections, 1);
     assert.equal(admissions, 2);
@@ -156,24 +157,25 @@ test("effect sources: receiver enablement follows source activity independently 
     const { source } = sourceProgram(resources, receiver, {
         followsSourceActive: ({ receiver: target }) => target.id === 1,
     });
-    let work = reconcileEffectSources(fixtureWork(source), resources, 0);
+    let work = fixtureWork(source);
+    reconcileEffectSources(work, resources, 0);
     const bindings = getMechanism(work, 20).effectSource.receivers;
     const competing = installNewEffect(work, 1, competitor.ref, {
         source: null,
                 scopes: [],
     }, resources, 0);
-    work = competing.work;
+
 
     assert.equal(getUnit(work, 1).effects.instances[0].enabled, true);
     assert.equal(getUnit(work, 1).effects.instances[0].participating, false);
-    work = setEffectSourceActive(work, 20, false, resources, 1);
+    setEffectSourceActive(work, 20, false, resources, 1);
     assert.equal(getUnit(work, 1).effects.instances[0].enabled, false);
     assert.equal(getUnit(work, 2).effects.instances[0].enabled, true);
     assert.equal(getUnit(work, 2).effects.instances[0].participating, true);
-    work = setEffectSourceActive(work, 20, true, resources, 2);
+    setEffectSourceActive(work, 20, true, resources, 2);
     assert.equal(getUnit(work, 1).effects.instances[0].enabled, true);
     assert.equal(getUnit(work, 1).effects.instances[0].participating, false);
-    work = finishEffects(work, [competing.result.ref], resources, 2);
+    finishEffects(work, [competing.ref], resources, 2);
 
     assert.equal(getUnit(work, 1).effects.instances[0].participating, true);
     assert.deepEqual(getMechanism(work, 20).effectSource.receivers, bindings);
@@ -189,26 +191,27 @@ test("effect sources: explicit aura reconciliation tracks receiver identity inde
         selectCurrent: select,
         shouldReinstall: () => true,
     });
-    let work = reconcileEffectSources(fixtureWork(source, [unit(1), unit(2, [2, 0])]), resources, 0);
+    let work = fixtureWork(source, [unit(1), unit(2, [2, 0])]);
+    reconcileEffectSources(work, resources, 0);
     const firstAddress = getMechanism(work, 20).effectSource.receivers[0].address;
 
     assert.equal(attack(work, resources, 1), 110);
     assert.equal(attack(work, resources, 2), 100);
-    work = updateUnit(work, { ...getUnit(work, 1), position: [2, 0] });
-    work = updateUnit(work, { ...getUnit(work, 2), position: [0, 0] });
-    work = reconcileEffectSources(work, resources, 1);
+    updateUnit(work, { ...getUnit(work, 1), position: [2, 0] });
+    updateUnit(work, { ...getUnit(work, 2), position: [0, 0] });
+    reconcileEffectSources(work, resources, 1);
 
     assert.equal(attack(work, resources, 1), 100);
     assert.equal(attack(work, resources, 2), 120);
     assert.equal(getMechanism(work, 20).effectSource.receivers[0].address, null);
-    work = updateUnit(work, { ...getUnit(work, 1), position: [0, 0] });
-    work = reconcileEffectSources(work, resources, 2);
+    updateUnit(work, { ...getUnit(work, 1), position: [0, 0] });
+    reconcileEffectSources(work, resources, 2);
     const returned = getMechanism(work, 20).effectSource.receivers[0];
 
     assert.equal(returned.installationAttempts, 2);
     assert.notDeepEqual(returned.address, firstAddress);
     assert.equal(attack(work, resources, 1), 110);
-    work = finishEffectSource(work, 20, resources, 3);
+    finishEffectSource(work, 20, resources, 3);
 
     assert.equal(getMechanism(work, 20).effectSource.finished, true);
     assert.equal(getMechanism(work, 20).active, false);
@@ -219,7 +222,8 @@ test("effect sources: shared state operations own data and share the receiver gr
     const resources = new CombatResources();
     const receiver = receiverEffect(resources, "quota-receivers");
     const { source, program } = sourceProgram(resources, receiver);
-    let work = reconcileEffectSources(fixtureWork(source), resources, 0);
+    let work = fixtureWork(source);
+    reconcileEffectSources(work, resources, 0);
     const baseline = work.battlefield.snapshot("draft");
     const graph = getMechanism(work, 20).effectSource.receivers;
     const operations = createEffectSourceOperations(() => work, resources);
@@ -240,9 +244,9 @@ test("effect sources: shared state operations own data and share the receiver gr
     const copied = copyEffectSourceState(getMechanism(work, 20).effectSource);
     assert.equal(copied.programRef, program.ref);
     assert.equal(copied.receivers, graph);
-    work = reconcileEffectSources(work, resources, 1);
+    reconcileEffectSources(work, resources, 1);
     assert.deepEqual([1, 2].map(id => getUnit(work, id).effects.nextInstanceId), [1, 1]);
-    work = setEffectSourceActive(work, 20, false, resources, 2);
+    setEffectSourceActive(work, 20, false, resources, 2);
     assert.equal(operations.tryConsume(20, program.ref, state => ({ ...state, remaining: state.remaining - 1 })), false);
 });
 
@@ -264,7 +268,8 @@ test("effect sources: nested damage hooks share current source quota and source 
     });
     const { source, program } = sourceProgram(resources, receiver);
     sourceRef = program.ref;
-    let work = reconcileEffectSources(fixtureWork(source), resources, 0);
+    let work = fixtureWork(source);
+    reconcileEffectSources(work, resources, 0);
 
     for (const targetUnitId of [1, 2, 1, 2]) {
         const result = resolveDamage(work, {
@@ -274,8 +279,8 @@ test("effect sources: nested damage hooks share current source quota and source 
             operands: createDamageOperands(10),
             tick: 1,
         }, resources);
-        work = result.work;
-        assert.equal(result.report.hpLoss, targetUnitId === 2 && getMechanism(work, 20).effectSource.state.remaining === 0 ? 10 : 0);
+
+        assert.equal(result.hpLoss, targetUnitId === 2 && getMechanism(work, 20).effectSource.state.remaining === 0 ? 10 : 0);
     }
 
     assert.equal(getUnit(work, 1).vitality.hp, 100);
@@ -308,7 +313,8 @@ test("effect sources: receiver callbacks see completed bindings while retained s
         },
     });
     const initial = fixtureWork(source, [unit(3), unit(1), unit(2)]);
-    const work = reconcileEffectSources(initial, resources, 0);
+    const work = initial;
+    reconcileEffectSources(work, resources, 0);
     const completed = getMechanism(work, 20);
 
     assert.deepEqual(completed.effectSource.receivers.map(binding => binding.unitId), [1, 2, 3]);
@@ -339,9 +345,11 @@ test("effect sources: finish callbacks observe the current cleared prefix and ou
     const { source } = sourceProgram(resources, receiver, {
         keepOnFinish: ({ source: current }) => { snapshots.push(current); return false; },
     });
-    const installed = reconcileEffectSources(fixtureWork(source), resources, 0);
+    const installed = fixtureWork(source);
+    reconcileEffectSources(installed, resources, 0);
     const before = installed.battlefield.snapshot("draft");
-    const work = finishEffectSource(installed, 20, resources, 1);
+    const work = installed;
+    finishEffectSource(work, 20, resources, 1);
     const completed = getMechanism(work, 20);
 
     assert.deepEqual(snapshots.map(current => current.effectSource.receivers.map(binding => binding.address)), [
@@ -374,14 +382,15 @@ test("effect sources: clearing many absent receivers preserves the input branch 
     };
     const initial = fixtureWork(registered, []);
     const before = initial.battlefield.snapshot("draft");
-    const work = reconcileEffectSources(initial, resources, 0);
+    const work = initial;
+    reconcileEffectSources(work, resources, 0);
     const completed = getMechanism(work, 20);
 
     assert.equal(completed.effectSource.receivers.length, 512);
     assert.equal(completed.effectSource.receivers.every(binding => binding.address === null && binding.installationAttempts === 2), true);
     assert.deepEqual(before.getMechanism(20).effectSource.receivers, registered.effectSource.receivers);
     assert.equal(registered.effectSource.receivers.every(binding => binding.address !== null), true);
-    assert.equal(reconcileEffectSources(work, resources, 1), work);
+    reconcileEffectSources(work, resources, 1);
 });
 
 test("effect sources: preserved binding order is unchanged until a new receiver joins", () => {
@@ -402,12 +411,13 @@ test("effect sources: preserved binding order is unchanged until a new receiver 
             receivers: [3, 1, 2].map(unitId => ({ unitId, address: null, installationAttempts: 0 })),
         }),
     };
-    let work = reconcileEffectSources(fixtureWork(registered, [unit(3), unit(1), unit(2)]), resources, 0);
+    let work = fixtureWork(registered, [unit(3), unit(1), unit(2)]);
+    reconcileEffectSources(work, resources, 0);
 
     assert.deepEqual(installedOrder, [3, 1, 2]);
     assert.deepEqual(getMechanism(work, 20).effectSource.receivers.map(binding => binding.unitId), [3, 1, 2]);
-    work = registerUnit(work, unit(0));
-    work = registerEffectSourceUnits(work, [0], resources, 1);
+    registerUnit(work, unit(0));
+    registerEffectSourceUnits(work, [0], resources, 1);
 
     assert.deepEqual(getMechanism(work, 20).effectSource.receivers.map(binding => binding.unitId), [0, 1, 2, 3]);
     assert.deepEqual(installedOrder, [3, 1, 2, 0]);
@@ -487,9 +497,11 @@ test("effect sources: flushes publish attempts before lifecycle work and preserv
     }
 
     fault.enabled = false;
-    const retry = reconcileEffectSources(initial, services, 0);
+    const retry = initial;
+    reconcileEffectSources(retry, services, 0);
     initial = fixtureWork(source, [unit(1), unit(2), unit(3)]);
-    const ordinary = reconcileEffectSources(initial, services, 0);
+    const ordinary = initial;
+    reconcileEffectSources(ordinary, services, 0);
     assert.deepEqual(retry.battlefield.snapshot("draft").unitIds.map(id => getUnit(retry, id)),
         ordinary.battlefield.snapshot("draft").unitIds.map(id => getUnit(ordinary, id)));
     assert.deepEqual(getUnit(retry, 3).effects.instances.map(instance => [instance.id, instance.state.addition]), [[0, 77], [1, 77]]);
@@ -534,13 +546,17 @@ for (const operation of ["FINISH", "LEAVE"]) {
             keepOnFinish: retain,
             keepOnLeave: retain,
         });
-        const installed = reconcileEffectSources(fixtureWork(source), resources, 0);
+        const installed = fixtureWork(source);
+        reconcileEffectSources(installed, resources, 0);
         const originalBinding = getMechanism(installed, 20).effectSource.receivers[1].address;
         const before = installed.battlefield.snapshot("draft");
         selected = [];
-        const work = operation === "FINISH"
-            ? finishEffectSource(installed, 20, resources, 1)
-            : reconcileEffectSources(installed, resources, 1);
+        const work = installed;
+        if (operation === "FINISH") {
+            finishEffectSource(work, 20, resources, 1);
+        } else {
+            reconcileEffectSources(work, resources, 1);
+        }
 
         assert.deepEqual(decisions, [[1, false], [2, true]]);
         assert.deepEqual(getMechanism(work, 20).effectSource.receivers.map(binding => binding.address), [null, originalBinding]);

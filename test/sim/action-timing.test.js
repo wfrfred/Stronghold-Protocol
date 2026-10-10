@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
-import { eventsOf, battlefieldView, getUnit, updateUnit } from "../../dist/core/tactical/battle/execution/context.js";
+import { battlefieldView, getUnit, updateUnit } from "../../dist/core/tactical/battle/execution/context.js";
 import { createActionCapabilityDefinition, createActionState } from "../../dist/core/tactical/unit/capability/action/capability.js";
 import { attackSpeed, baseAttackTime, computedAttackSpeed, computedBaseAttackTime } from "../../dist/core/tactical/unit/capability/action/contributions.js";
 import { compileAction } from "../../dist/core/tactical/unit/capability/action/compile.js";
@@ -65,9 +65,10 @@ function register(resources, speed = 100, time = modifier.create()) {
 }
 
 function install(work, program, resources, tick = 0, expiresAtTick = null) {
-    return installNewEffect(work, 0, program.ref, {
+    installNewEffect(work, 0, program.ref, {
         source: null, scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }],
-    }, resources, tick).work;
+    }, resources, tick);
+    return work;
 }
 
 function values(work, resources) {
@@ -126,9 +127,9 @@ test("action timing: ASPD attribute floor, interval cap and BAT algebra remain d
     const original = initial.battlefield.snapshot("draft");
     let work = install(initial, program, resources);
     assert.deepEqual(values(work, resources), [20, 19.5, 97.5]);
-    work = updateEffectState(work, 0, 0, program.ref, (state) => ({ ...state, speed: 900 }), resources, 0);
+    updateEffectState(work, 0, 0, program.ref, (state) => ({ ...state, speed: 900 }), resources, 0);
     assert.deepEqual(values(work, resources), [1000, 19.5, 3.25]);
-    work = updateEffectState(work, 0, 0, program.ref, (state) => ({ ...state, time: modifier.create({ addition: -100 }) }), resources, 0);
+    updateEffectState(work, 0, 0, program.ref, (state) => ({ ...state, time: modifier.create({ addition: -100 }) }), resources, 0);
     assert.deepEqual(values(work, resources), [1000, 0, 1]);
     assert.deepEqual(valuesAt(original, resources), [100, 30, 30]);
 });
@@ -143,15 +144,15 @@ test("action timing: lifecycle updates both slots and snapshots share only owned
     const copied = copyUnitSnapshot(getUnit(installed, 0));
     assert.equal(copied.action.attackSpeed.entries, getUnit(installed, 0).action.attackSpeed.entries);
     assert.ok(Object.isFrozen(copied.action.attackSpeed.entries));
-    const disabled = setEffectEnabled(installed, address, false, resources, 1);
-    assert.deepEqual(values(disabled, resources), [100, 30, 30]);
-    const enabled = setEffectEnabled(disabled, address, true, resources, 2);
-    assert.deepEqual(values(enabled, resources), [200, 15, 7.5]);
-    const finished = finishEffect(enabled, address, resources, 3);
-    assert.deepEqual(values(finished, resources), [100, 30, 30]);
-    const finalized = finalizeEffect(finished, address, resources, 3);
-    assert.equal(getUnit(finalized, 0).action.attackSpeed.entries.length, 0);
-    assert.equal(getUnit(finalized, 0).action.baseAttackTime.entries.length, 0);
+    setEffectEnabled(installed, address, false, resources, 1);
+    assert.deepEqual(values(installed, resources), [100, 30, 30]);
+    setEffectEnabled(installed, address, true, resources, 2);
+    assert.deepEqual(values(installed, resources), [200, 15, 7.5]);
+    finishEffect(installed, address, resources, 3);
+    assert.deepEqual(values(installed, resources), [100, 30, 30]);
+    finalizeEffect(installed, address, resources, 3);
+    assert.equal(getUnit(installed, 0).action.attackSpeed.entries.length, 0);
+    assert.equal(getUnit(installed, 0).action.baseAttackTime.entries.length, 0);
     assert.equal(copied.action.attackSpeed.entries[0].participating, true);
     assert.deepEqual(valuesAt(installedSnapshot, resources), [200, 15, 7.5]);
 });
@@ -159,32 +160,34 @@ test("action timing: lifecycle updates both slots and snapshots share only owned
 test("action timing: speed-up and slow-down preserve completed cooldown percentage", () => {
     const resources = new CombatResources();
     const program = register(resources);
-    const initial = advance(effectFixtureWork(actor(), target()), resources, 0);
-    const initialSnapshot = initial.work.battlefield.snapshot("draft");
-    assert.equal(getUnit(initial.work, 0).action.readyAtTick, 30);
-    const installed = install(initial.work, program, resources, 15);
-    const spedUp = advance(installed, resources, 15, initial.state);
-    close(getUnit(spedUp.work, 0).action.readyAtTick, 22.5);
-    assert.equal(eventsOf(spedUp.work).filter((event) => event.type === "ACTION").length, 1);
-    const disabled = setEffectEnabled(spedUp.work, address, false, resources, 18);
-    const slowed = advance(disabled, resources, 18, spedUp.state);
-    close(getUnit(slowed.work, 0).action.readyAtTick, 27);
-    const beforeReady = advance(slowed.work, resources, 26, slowed.state);
-    assert.equal(eventsOf(beforeReady.work).filter((event) => event.type === "ACTION").length, 1);
-    const due = advance(beforeReady.work, resources, 27, beforeReady.state);
-    assert.equal(eventsOf(due.work).filter((event) => event.type === "ACTION").length, 2);
+    const work = effectFixtureWork(actor(), target());
+    const initial = advance(work, resources, 0);
+    const initialSnapshot = work.battlefield.snapshot("draft");
+    assert.equal(getUnit(work, 0).action.readyAtTick, 30);
+    const installed = install(work, program, resources, 15);
+    const spedUp = advance(installed, resources, 15, initial);
+    close(getUnit(work, 0).action.readyAtTick, 22.5);
+    assert.equal(work.events.filter((event) => event.type === "ACTION").length, 1);
+    setEffectEnabled(work, address, false, resources, 18);
+    const slowed = advance(work, resources, 18, spedUp);
+    close(getUnit(work, 0).action.readyAtTick, 27);
+    const beforeReady = advance(work, resources, 26, slowed);
+    assert.equal(work.events.filter((event) => event.type === "ACTION").length, 1);
+    const due = advance(work, resources, 27, beforeReady);
+    assert.equal(work.events.filter((event) => event.type === "ACTION").length, 2);
     assert.equal(initialSnapshot.getUnit(0).action.readyAtTick, 30);
 });
 
 test("action timing: BAT changes adjust cooldown without rescaling recovery", () => {
     const resources = new CombatResources();
     const program = register(resources, 0, modifier.create({ finalScaler: 0.5 }));
-    const initial = advance(effectFixtureWork(actor(30, 20), target()), resources, 0);
-    const changed = advance(install(initial.work, program, resources, 10), resources, 10, initial.state);
-    assert.equal(getUnit(changed.work, 0).action.readyAtTick, 20);
-    assert.equal(getUnit(changed.work, 0).action.recoveryUntilTick, 20);
-    const due = advance(changed.work, resources, 20, changed.state);
-    assert.equal(getUnit(due.work, 0).action.readyAtTick, 35);
+    const work = effectFixtureWork(actor(30, 20), target());
+    const initial = advance(work, resources, 0);
+    const changed = advance(install(work, program, resources, 10), resources, 10, initial);
+    assert.equal(getUnit(work, 0).action.readyAtTick, 20);
+    assert.equal(getUnit(work, 0).action.recoveryUntilTick, 20);
+    const due = advance(work, resources, 20, changed);
+    assert.equal(getUnit(work, 0).action.readyAtTick, 35);
 });
 
 test("action timing: computed values read current facts rather than installation samples", () => {
@@ -198,19 +201,21 @@ test("action timing: computed values read current facts rather than installation
     const installed = install(effectFixtureWork(actor(), target()), program, resources);
     assert.deepEqual(values(installed, resources), [200, 40, 20]);
     const unit = getUnit(installed, 0);
-    const changed = updateUnit(installed, { ...unit, vitality: { ...unit.vitality, hp: 50 } });
-    assert.deepEqual(values(changed, resources), [150, 35, 35 / 1.5]);
+    updateUnit(installed, { ...unit, vitality: { ...unit.vitality, hp: 50 } });
+    assert.deepEqual(values(installed, resources), [150, 35, 35 / 1.5]);
 });
 
 test("action timing: delayed targeting resumes without accumulating missed attacks", () => {
     const resources = new CombatResources();
     const source = actor(4.5);
-    const initial = advance(effectFixtureWork(source), resources, 0);
-    assert.equal(getUnit(initial.work, 0), source);
-    const resumed = advance(updateUnit(initial.work, target()), resources, 101, initial.state);
-    assert.equal(getUnit(resumed.work, 0).action.readyAtTick, 105.5);
-    const once = advance(resumed.work, resources, 101, resumed.state);
-    assert.equal(eventsOf(once.work).filter((event) => event.type === "ACTION").length, 1);
+    const work = effectFixtureWork(source);
+    const initial = advance(work, resources, 0);
+    assert.equal(getUnit(work, 0), source);
+    updateUnit(work, target());
+    const resumed = advance(work, resources, 101, initial);
+    assert.equal(getUnit(work, 0).action.readyAtTick, 105.5);
+    const once = advance(work, resources, 101, resumed);
+    assert.equal(work.events.filter((event) => event.type === "ACTION").length, 1);
 });
 
 test("action timing: a real 600 ASPD contribution preserves long-run fractional cadence at 30 Hz", () => {

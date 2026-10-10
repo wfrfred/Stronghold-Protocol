@@ -7,11 +7,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
-import {
-    battlefieldView,
-    getUnit,
-    eventsOf,
-} from "../../dist/core/tactical/battle/execution/context.js";
+import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/execution/context.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { copyUnitSnapshot } from "../../dist/core/tactical/unit/snapshot.js";
 import { createEffectProgram } from "../../dist/core/tactical/unit/capability/effects/program.js";
@@ -53,7 +49,7 @@ const program = (id, amount) =>
         initialize: () => ({ amount, revision: 0 }),
         ownState: (state) => ({ ...state }),
     });
-const install = (work, ref, resources, patch = {}) =>
+const install = (work, ref, resources, patch = {}) => {
     installNewEffect(
         work,
         1,
@@ -65,7 +61,8 @@ const install = (work, ref, resources, patch = {}) =>
         },
         resources,
         0,
-    ).work;
+    );
+};
 
 test("MaxHP: install, payload, participation, finish and cleanup retain HP percentage", () => {
     for (const hp of [100, 50, 0]) {
@@ -73,38 +70,48 @@ test("MaxHP: install, payload, participation, finish and cleanup retain HP perce
         const effect = resources.registerEffect(program("max-hp", 100), {
             contributions: [maxHp((instance) => [bonus(instance.state.amount)])],
         });
-        const initial = effectFixtureWork(receiver(hp));
-        const installed = install(initial, effect.ref, resources);
-        assert.deepEqual(pair(installed), [hp * 2, 200]);
-        const updated = updateEffectState(
-            installed,
+        const work = effectFixtureWork(receiver(hp));
+        const before = work.battlefield.snapshot("draft");
+        install(work, effect.ref, resources);
+        assert.deepEqual(pair(work), [hp * 2, 200]);
+
+        updateEffectState(
+            work,
             1,
             0,
             effect.ref,
             (state) => ({ ...state, amount: 200 }),
-            resources, 0,
+            resources,
+            0,
         );
-        assert.deepEqual(pair(updated), [hp * 3, 300]);
-        const disabled = setEffectEnabled(updated, address(), false, resources, 1);
-        assert.deepEqual(pair(disabled), [hp, 100]);
-        const refreshed = updateEffectState(
-            disabled,
+        assert.deepEqual(pair(work), [hp * 3, 300]);
+
+        setEffectEnabled(work, address(), false, resources, 1);
+        assert.deepEqual(pair(work), [hp, 100]);
+
+        updateEffectState(
+            work,
             1,
             0,
             effect.ref,
             (state) => ({ ...state, amount: 300 }),
-            resources, 0,
+            resources,
+            0,
         );
-        assert.deepEqual(pair(refreshed), [hp, 100]);
-        const enabled = setEffectEnabled(refreshed, address(), true, resources, 2);
-        assert.deepEqual(pair(enabled), [hp * 4, 400]);
-        const finished = finishEffects(enabled, [address()], resources, 3);
-        assert.deepEqual(pair(finished), [hp, 100]);
-        const cleared = finalizeEffect(finished, address(), resources, 3);
-        assert.deepEqual(pair(cleared), [hp, 100]);
-        assert.deepEqual(getUnit(cleared, 1).vitality.maxHp.entries, []);
-        assert.deepEqual(pair(initial), [hp, 100]);
-        assert.deepEqual(eventsOf(cleared), []);
+        assert.deepEqual(pair(work), [hp, 100]);
+
+        setEffectEnabled(work, address(), true, resources, 2);
+        assert.deepEqual(pair(work), [hp * 4, 400]);
+
+        finishEffects(work, [address()], resources, 3);
+        assert.deepEqual(pair(work), [hp, 100]);
+
+        finalizeEffect(work, address(), resources, 3);
+        assert.deepEqual(pair(work), [hp, 100]);
+        assert.deepEqual(getUnit(work, 1).vitality.maxHp.entries, []);
+        assert.equal(before.getUnit(1).vitality.hp, hp);
+        assert.equal(resolveMaxHp(1, before), 100);
+        assert.deepEqual(work.events, []);
     }
 });
 
@@ -152,8 +159,9 @@ test("MaxHP: callbacks and synchronous nested successors see coordinated facts",
             },
         },
     });
-    const installed = install(effectFixtureWork(receiver()), parent.ref, resources);
-    const finished = finishEffects(installed, [address()], resources, 1);
+    const work = effectFixtureWork(receiver());
+    install(work, parent.ref, resources);
+    finishEffects(work, [address()], resources, 1);
     assert.deepEqual(observed, [
         ["start", 50, 100],
         ["enable", 100, 200],
@@ -163,10 +171,13 @@ test("MaxHP: callbacks and synchronous nested successors see coordinated facts",
         ["finish", 50, 100],
     ]);
     const notices = observed.length;
-    const removed = finalizeEffect(finished, address(), resources, 1);
+    finalizeEffect(work, address(), resources, 1);
     assert.equal(observed.length, notices);
-    assert.equal(getUnit(removed, 1).effects.instances.some(({ id }) => id === address().effectId), false);
-    assert.deepEqual(pair(removed), [50, 100]);
+    assert.equal(
+        getUnit(work, 1).effects.instances.some(({ id }) => id === address().effectId),
+        false,
+    );
+    assert.deepEqual(pair(work), [50, 100]);
 });
 
 test("MaxHP: one binding batch coordinates once after every slot has changed", () => {
@@ -196,12 +207,13 @@ test("MaxHP: one binding batch coordinates once after every slot has changed", (
             },
         ],
     });
-    const installed = install(effectFixtureWork(receiver()), effect.ref, resources);
-    const installedPair = pair(installed);
-    const disabled = setEffectEnabled(installed, address(), false, resources, 1);
+    const work = effectFixtureWork(receiver());
+    install(work, effect.ref, resources);
+    const installedPair = pair(work);
+    setEffectEnabled(work, address(), false, resources, 1);
     assert.deepEqual(observed, [50, 150]);
     assert.deepEqual(installedPair, [150, 300]);
-    assert.deepEqual(pair(disabled), [50, 100]);
+    assert.deepEqual(pair(work), [50, 100]);
 });
 
 test("MaxHP: ordinary healing consumes the current upper bound and prohibition does not reject coordination", () => {
@@ -209,8 +221,9 @@ test("MaxHP: ordinary healing consumes the current upper bound and prohibition d
     const effect = resources.registerEffect(program("healing-hp", 100), {
         contributions: [maxHp((instance) => [bonus(instance.state.amount)])],
     });
-    const installed = install(effectFixtureWork(receiver()), effect.ref, resources);
-    const unit = getUnit(installed, 1);
+    const work = effectFixtureWork(receiver());
+    install(work, effect.ref, resources);
+    const unit = getUnit(work, 1);
     const healed = healUnit(unit, 500);
     assert.equal(healed.amount, 100);
     assert.equal(healed.unit.vitality.hp, 200);
@@ -223,46 +236,48 @@ test("MaxHP: ordinary healing consumes the current upper bound and prohibition d
             status: { initialFlags: ["HEAL_FREE"] },
         },
     });
-    const coordinated = install(
-        effectFixtureWork({ ...blocked, vitality: { ...blocked.vitality, hp: 50 } }),
-        effect.ref,
-        resources,
-    );
+    const coordinated = effectFixtureWork({
+        ...blocked,
+        vitality: { ...blocked.vitality, hp: 50 },
+    });
+    install(coordinated, effect.ref, resources);
     assert.deepEqual(pair(coordinated), [100, 200]);
     assert.equal(healUnit(getUnit(coordinated, 1), 50).amount, 0);
-    assert.deepEqual(eventsOf(coordinated), []);
+    assert.deepEqual(coordinated.events, []);
 });
 
 test("MaxHP: group winner replacement and fallback preserve the current HP ratio", () => {
     const resources = new CombatResources();
     const register = (id, amount, strength) =>
         resources.registerEffect(program(id, amount), {
-            contributions: [maxHp((instance) => [bonus(instance.state.amount)], { group: { id: "hp-group", strength } })],
+            contributions: [
+                maxHp((instance) => [bonus(instance.state.amount)], {
+                    group: { id: "hp-group", strength },
+                }),
+            ],
         });
     const weak = register("weak", 50, 1);
     const strong = register("strong", 200, 2);
-    const initial = effectFixtureWork(receiver());
-    const first = install(initial, weak.ref, resources);
-    const firstPair = pair(first);
-    const second = install(first, strong.ref, resources);
+    const work = effectFixtureWork(receiver());
+    install(work, weak.ref, resources);
+    const firstPair = pair(work);
+    install(work, strong.ref, resources);
     assert.deepEqual(firstPair, [75, 150]);
-    assert.deepEqual(pair(second), [150, 300]);
-    const weakerUpdated = updateEffectState(
-        second,
-        1,
-        0,
-        weak.ref,
-        (state) => ({ ...state, amount: 100 }),
-        resources, 0,
-    );
-    assert.deepEqual(pair(weakerUpdated), [150, 300]);
-    const disabled = setEffectEnabled(weakerUpdated, address(1), false, resources, 1);
-    assert.deepEqual(pair(disabled), [100, 200]);
-    const enabled = setEffectEnabled(disabled, address(1), true, resources, 2);
-    assert.deepEqual(pair(enabled), [150, 300]);
-    const ended = removeEffect(enabled, address(1), resources, 3);
-    assert.deepEqual(pair(ended), [100, 200]);
-    assert.deepEqual(pair(removeEffect(ended, address(), resources, 3)), [50, 100]);
+    assert.deepEqual(pair(work), [150, 300]);
+
+    updateEffectState(work, 1, 0, weak.ref, (state) => ({ ...state, amount: 100 }), resources, 0);
+    assert.deepEqual(pair(work), [150, 300]);
+
+    setEffectEnabled(work, address(1), false, resources, 1);
+    assert.deepEqual(pair(work), [100, 200]);
+
+    setEffectEnabled(work, address(1), true, resources, 2);
+    assert.deepEqual(pair(work), [150, 300]);
+
+    removeEffect(work, address(1), resources, 3);
+    assert.deepEqual(pair(work), [100, 200]);
+    removeEffect(work, address(), resources, 3);
+    assert.deepEqual(pair(work), [50, 100]);
 });
 
 test("MaxHP: unchanged effective values, inactive cleanup and snapshots do not reapply coordination", () => {
@@ -270,39 +285,38 @@ test("MaxHP: unchanged effective values, inactive cleanup and snapshots do not r
     const effect = resources.registerEffect(program("clamped-hp", -500), {
         contributions: [maxHp((instance) => [bonus(instance.state.amount)])],
     });
-    const initial = effectFixtureWork(receiver(Math.PI));
-    const installed = install(initial, effect.ref, resources, { scopes: [{ type: "TICK", tick: 5 }] });
-    const copied = copyUnitSnapshot(getUnit(installed, 1));
-    assert.equal(copied.vitality.maxHp.entries, getUnit(installed, 1).vitality.maxHp.entries);
-    assert.deepEqual(pair(effectFixtureWork(copied)), pair(installed));
-    assert.equal(setEffectEnabled(installed, address(), true, resources, 1), installed);
-    const updated = updateEffectState(
-        installed,
+    const work = effectFixtureWork(receiver(Math.PI));
+    const before = work.battlefield.snapshot("draft");
+    install(work, effect.ref, resources, { scopes: [{ type: "TICK", tick: 5 }] });
+    const installedUnit = getUnit(work, 1);
+    const copied = copyUnitSnapshot(installedUnit);
+    assert.equal(copied.vitality.maxHp.entries, installedUnit.vitality.maxHp.entries);
+    assert.deepEqual(pair(effectFixtureWork(copied)), pair(work));
+    setEffectEnabled(work, address(), true, resources, 1);
+    assert.equal(getUnit(work, 1), installedUnit);
+    updateEffectState(
+        work,
         1,
         0,
         effect.ref,
         (state) => ({ ...state, amount: -600 }),
-        resources, 0,
-    );
-    assert.equal(getUnit(updated, 1).vitality.hp, getUnit(installed, 1).vitality.hp);
-    assert.equal(resolveMaxHp(1, battlefieldView(updated)), 1);
-    const noChange = updateEffectState(
-        updated,
-        1,
+        resources,
         0,
-        effect.ref,
-        (state) => ({ ...state, revision: 1 }),
-        resources, 0,
     );
-    assert.equal(getUnit(noChange, 1).vitality.hp, getUnit(updated, 1).vitality.hp);
-    const expired = expireEffects(noChange, 5, resources);
-    const hp = getUnit(expired, 1).vitality.hp;
-    const cleared = finalizeEffect(expired, address(), resources, 5);
-    assert.equal(getUnit(cleared, 1).vitality.hp, hp);
-    assert.equal(finishEffects(cleared, [address()], resources, 5), cleared);
+    assert.equal(getUnit(work, 1).vitality.hp, installedUnit.vitality.hp);
+    assert.equal(resolveMaxHp(1, battlefieldView(work)), 1);
+    const beforeRevision = getUnit(work, 1);
+    updateEffectState(work, 1, 0, effect.ref, (state) => ({ ...state, revision: 1 }), resources, 0);
+    assert.equal(getUnit(work, 1).vitality.hp, beforeRevision.vitality.hp);
+    expireEffects(work, 5, resources);
+    const beforeCleanup = getUnit(work, 1);
+    finalizeEffect(work, address(), resources, 5);
+    assert.equal(getUnit(work, 1).vitality.hp, beforeCleanup.vitality.hp);
+    const cleanedUnit = getUnit(work, 1);
+    finishEffects(work, [address()], resources, 5);
+    assert.equal(getUnit(work, 1), cleanedUnit);
     assert.equal(copied.vitality.hp, Math.PI / 100);
-    assert.deepEqual([initial.battlefield.snapshot("state").getUnit(1).vitality.hp,
-      resolveMaxHp(1, initial.battlefield.snapshot("state"))], [Math.PI, 100]);
+    assert.deepEqual([before.getUnit(1).vitality.hp, resolveMaxHp(1, before)], [Math.PI, 100]);
 });
 
 test("MaxHP: a tick failure does not publish contributions or the HP response", () => {
@@ -384,7 +398,9 @@ test("MaxHP: a tick failure does not publish contributions or the HP response", 
                 program: [
                     {
                         type: "EXECUTE",
-                        run: (context) => ({ work: install(context.work, effect.ref, resources) }),
+                        run: (context) => {
+                            install(context.work, effect.ref, resources);
+                        },
                     },
                 ],
             }),

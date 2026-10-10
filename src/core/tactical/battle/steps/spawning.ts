@@ -4,12 +4,7 @@ import type { BattleExecutionState } from "../execution/state.js";
 import type { UnitRouteSignal } from "./route-control.js";
 import type { UnitId } from "../../unit/unit.js";
 import type { Command, Event } from "../contract.js";
-import {
-    advanceBattlefield,
-    appendEvents,
-    withExecution,
-    type BattleState,
-} from "../execution/context.js";
+import { advanceBattlefield, appendEvents, type BattleState } from "../execution/context.js";
 import { advanceSpawnSchedule, recordScheduleSpawns } from "../schedule/runtime.js";
 import type { SpawnScheduleExecution } from "../schedule/state.js";
 import type { ScheduledEnemySpawn } from "../schedule/definition.js";
@@ -100,7 +95,7 @@ export function advanceSpawning(
         triggers: commands.filter((command) => command.type === "TRIGGER_BRANCH"),
     });
     const spawned = spawnEnemies(scheduled.spawns, state.execution, tick);
-    withExecution(state, spawned.execution);
+    state.execution = spawned.execution;
     appendEvents(state, enemySpawnEvents(spawned, tick));
     advanceBattlefield(
         state,

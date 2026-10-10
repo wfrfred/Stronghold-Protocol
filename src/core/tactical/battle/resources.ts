@@ -84,10 +84,10 @@ export class CombatResources {
         unitId: UnitId,
         tick: number,
         dispatch?: EffectDispatchScope,
-    ): BattleState => {
+    ): void => {
         const consumed = consumeSkillAmmo(work, unitId, tick, this, dispatch);
 
-        return appendEvents(consumed.work, consumed.signals);
+        appendEvents(work, consumed.signals);
     };
 
     readonly stopSkillActivation = (work: BattleState, unitId: UnitId, tick: number) =>
@@ -98,10 +98,10 @@ export class CombatResources {
         activation: StoppedSkillActivation,
         tick: number,
         dispatch: EffectDispatchScope,
-    ): BattleState => {
+    ): void => {
         const finished = notifySkillFinished(work, activation, tick, this, dispatch);
 
-        return appendEvents(finished.work, finished.signals);
+        appendEvents(work, finished.signals);
     };
 
     readonly finishSkill = (
@@ -109,10 +109,10 @@ export class CombatResources {
         unitId: UnitId,
         tick: number,
         dispatch?: EffectDispatchScope,
-    ): BattleState => {
+    ): void => {
         const finished = finishSkill(work, unitId, tick, this, dispatch);
 
-        return appendEvents(finished.work, finished.signals);
+        appendEvents(work, finished.signals);
     };
 
     readonly settleDamage: DamageOperation = (work, request, dispatch) => {

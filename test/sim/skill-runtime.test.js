@@ -147,10 +147,10 @@ test('skill runtime: HIT SP counts zero damage but respects cancellation and ign
     const definition = actor(skill({ spRecovery: 'HIT', initialSp: 0 }));
     const receiver = initializeUnit({ id: 0, definition: { ...definition, status: { initialFlags: flags } }, position: [0, 0] });
     const work = createBattleState(fixtureBattlefield({ unitIds: [0], getUnit: () => receiver, blockerOf: () => undefined, blockedBy: () => [] }));
-    const resolved = resources.settleDamage(work, { sourceUnitId: null, targetUnitId: 0,
+    resources.settleDamage(work, { sourceUnitId: null, targetUnitId: 0,
       damageType: 'TRUE', operands: createDamageOperands(0), tick: 0, ignoreForSp });
-    assert.equal(getUnit(resolved.work, 0).skill.sp, expected);
-    assert.equal(getUnit(resolved.work, 0).vitality.hp, 100000);
+    assert.equal(getUnit(work, 0).skill.sp, expected);
+    assert.equal(getUnit(work, 0).vitality.hp, 100000);
   }
 });
 

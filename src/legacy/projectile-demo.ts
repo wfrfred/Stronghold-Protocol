@@ -92,7 +92,7 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
                             targetId === undefined ? undefined : getUnit(context.work, targetId);
 
                         if (source === undefined || target === undefined) {
-                            return { work: context.work, continuation: "CANCEL" };
+                            return { continuation: "CANCEL" };
                         }
                         if (context.projectiles === undefined) {
                             throw new Error("projectile demo requires a launch operation");
@@ -118,7 +118,7 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
                             contactRange,
                             stopDelayTicks: 6,
                         });
-                        const work = installNewEffect(
+                        installNewEffect(
                             context.work,
                             source.id,
                             boost.ref,
@@ -128,9 +128,9 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
                             },
                             resources,
                             context.tick,
-                        ).work;
+                        );
 
-                        return { work, samples: { cachedAtk, projectileId } };
+                        return { samples: { cachedAtk, projectileId } };
                     },
                 },
                 {

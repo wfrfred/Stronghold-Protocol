@@ -1,5 +1,5 @@
 import { maxHp } from "../../dist/core/tactical/unit/capability/vitality/contributions.js";
-import { eventsOf } from "../../dist/core/tactical/battle/execution/context.js";
+
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { effectFixtureWork, installFixtureEffect } from "../helpers/effects.js";
@@ -102,15 +102,16 @@ test("effect dispatch: synchronous damage and healing inherit the active settlem
       },
     },
   });
+  const resultState = effectFixtureWork(attach(resources, unit(2, 500), descriptor));
   const result = resolveDamage(
-    effectFixtureWork(attach(resources, unit(2, 500), descriptor)),
+    resultState,
     request(10, { tick: 37 }),
     resources,
   );
 
   assert.deepEqual(seen, [["damage", 37, 37], ["damage", 37, 37], ["healing", 37, 37]]);
-  assert.equal(getUnit(result.work, 2).vitality.hp, 492);
-  assert.ok(eventsOf(result.work).every(event => event.tick === 37));
+  assert.equal(getUnit(resultState, 2).vitality.hp, 492);
+  assert.ok(resultState.events.every(event => event.tick === 37));
 });
 
 test("effect dispatch: registered candidate identities freeze while current participation is rechecked", () => {
@@ -149,12 +150,12 @@ test("effect dispatch: registered candidate identities freeze while current part
     target = attach(resources, target, b);
     let work = effectFixtureWork(target);
     if (operation === "enable") {
-      work = setEffectEnabled(work, { type: "EFFECT", unitId: 2, effectId: 1 }, false, resources, 0);
+      setEffectEnabled(work, { type: "EFFECT", unitId: 2, effectId: 1 }, false, resources, 0);
     }
     const result = resolveDamage(work, request(), resources);
 
     assert.deepEqual(seen, operation === "enable" ? ["A", "B"] : ["A"]);
-    assert.equal(result.report.hpLoss, operation === "enable" ? 200 : 100);
+    assert.equal(result.hpLoss, operation === "enable" ? 200 : 100);
   }
 });
 
@@ -201,16 +202,17 @@ test("effect dispatch: nested finalization preserves the entered callback contin
       },
     },
   });
+  const resultState = effectFixtureWork(attach(resources, unit(2, 500), descriptor));
   const result = resolveDamage(
-    effectFixtureWork(attach(resources, unit(2, 500), descriptor)),
+    resultState,
     request(),
     resources,
   );
 
   assert.deepEqual(observed, [[true, false, 1, 0, 20]]);
-  assert.equal(result.report.hpLoss, 50);
-  assert.equal(getUnit(result.work, 2).vitality.hp, 470);
-  assert.deepEqual(getUnit(result.work, 2).effects.instances, []);
+  assert.equal(result.hpLoss, 50);
+  assert.equal(getUnit(resultState, 2).vitality.hp, 470);
+  assert.deepEqual(getUnit(resultState, 2).effects.instances, []);
 });
 
 test("effect dispatch: healing retains selected rules while nested candidates and current eligibility stay consistent", () => {
@@ -267,7 +269,7 @@ test("effect dispatch: healing retains selected rules while nested candidates an
     target = attach(resources, target, follower);
     let work = effectFixtureWork(target);
     if (operation === "enable") {
-      work = setEffectEnabled(work, { type: "EFFECT", unitId: 2, effectId: 1 }, false, resources, 0);
+      setEffectEnabled(work, { type: "EFFECT", unitId: 2, effectId: 1 }, false, resources, 0);
     }
     const lookups = [];
     const services = {
@@ -290,10 +292,10 @@ test("effect dispatch: healing retains selected rules while nested candidates an
       : [["first", 10], ["first", 1]]);
     assert.deepEqual(lookups, operation === "enable" ? [0, 1, 0, 1, 2] : [0, 1, 0, 2]);
     assert.equal(healed.amount, operation === "enable" ? 20 : 10);
-    assert.equal(getUnit(healed.work, 2).vitality.hp, operation === "enable" ? 522 : 511);
+    assert.equal(getUnit(work, 2).vitality.hp, operation === "enable" ? 522 : 511);
     calls.length = 0;
     const subsequent = resolveHealing(
-      healed.work,
+      work,
       { sourceUnitId: null, targetUnitId: 2, power: 1, tick: 2 },
       resources,
     );
@@ -369,9 +371,9 @@ test("effect dispatch: ordinary facts see new participating UIDs while current a
   const result = resolveDamage(initial, request(10), resources);
 
   assert.deepEqual(calls, ["D-reception"]);
-  assert.equal(getUnit(result.work, 2).vitality.hp, 989);
-  assert.equal(getUnit(result.work, 3).vitality.hp, 999);
-  resolveDamage(result.work, request(1), resources);
+  assert.equal(getUnit(initial, 2).vitality.hp, 989);
+  assert.equal(getUnit(initial, 3).vitality.hp, 999);
+  resolveDamage(initial, request(1), resources);
   assert.deepEqual(calls, ["D-reception", "C-reception"]);
 });
 
@@ -412,15 +414,16 @@ test("effect dispatch: exceptional exits release candidates before retry on the 
       },
     },
   });
-  const retry = resolveDamage(
-    effectFixtureWork(attach(resources, owner, later)),
+  const retryState = effectFixtureWork(attach(resources, owner, later));
+const retry = resolveDamage(
+    retryState,
     request(),
     resources,
     scope,
   );
 
-  assert.equal(retry.report.hpLoss, 200);
-  assert.equal(getUnit(retry.work, 2).effects.instances[0].state.attempts, 1);
+  assert.equal(retry.hpLoss, 200);
+  assert.equal(getUnit(retryState, 2).effects.instances[0].state.attempts, 1);
   const address = { type: "EFFECT", unitId: 2, effectId: 0 };
   const initialInstance = owner.effects.instances[0];
   let exitedReader;
@@ -499,8 +502,8 @@ test("effect dispatch: Damage and Healing borrowed facts and operations close af
       assert.equal(original.battlefield.snapshot("state").getUnit(2).vitality.hp, 500);
       assert.equal(original.battlefield.snapshot("state").getUnit(2).effects.instances[0].state.calls, 0);
       if (result !== undefined) {
-        assert.equal(getUnit(result.work, 2).vitality.hp, domain === "damage" ? 400 : 600);
-        assert.equal(getUnit(result.work, 2).effects.instances[0].state.calls, 1);
+        assert.equal(getUnit(original, 2).vitality.hp, domain === "damage" ? 400 : 600);
+        assert.equal(getUnit(original, 2).effects.instances[0].state.calls, 1);
       }
     }
   }
@@ -543,11 +546,12 @@ test("effect dispatch: domain cancellation retains prefix transitions and stops 
     });
     let owner = attach(resources, unit(2), cancel);
     owner = attach(resources, owner, follower);
-    const result = resolveDamage(effectFixtureWork(owner), request(), resources);
+    const resultState = effectFixtureWork(owner);
+    const result = resolveDamage(resultState, request(), resources);
 
-    assert.equal(result.report.hpLoss, 0);
-    assert.equal(result.report.cancellation.reason, "SHIELD");
-    assert.equal(getUnit(result.work, 2).effects.instances[0].state.used, true);
+    assert.equal(result.hpLoss, 0);
+    assert.equal(result.cancellation.reason, "SHIELD");
+    assert.equal(getUnit(resultState, 2).effects.instances[0].state.used, true);
     assert.equal(followups, stopDispatch ? 0 : 1);
   }
 });
@@ -603,14 +607,14 @@ test("effect dispatch: shield cancellation notifies terminal business before ret
   const result = resolveDamage(original, request(), resources);
 
   assert.deepEqual(observed, [{ amount: 20, hp: 520, finished: true, recharge: true }]);
-  assert.equal(result.report.hpLoss, 0);
-  assert.equal(getUnit(result.work, 2).vitality.hp, 520);
+  assert.equal(result.hpLoss, 0);
+  assert.equal(getUnit(original, 2).vitality.hp, 520);
   assert.deepEqual(
-    getUnit(result.work, 2).effects.instances.map((instance) => instance.programRef.id),
+    getUnit(original, 2).effects.instances.map((instance) => instance.programRef.id),
     ["recharge"],
   );
   assert.deepEqual(
-    eventsOf(result.work).map((event) => [event.type, event.amount]),
+    original.events.map((event) => [event.type, event.amount]),
     [
       ["HEAL", 20],
       ["DAMAGE", 0],
@@ -659,14 +663,15 @@ test("effect dispatch: true damage, skipped modifier reception and invincibility
       },
     });
     const target = attach(resources, unit(2, 1000, ["INVINCIBLE"]), targetRules);
+    const resultState = effectFixtureWork(target);
     const result = resolveDamage(
-      effectFixtureWork(target),
+      resultState,
       request(100, { receptionPolicy: { skipModifierEvents, considerInvincibility } }),
       resources,
     );
 
-    assert.equal(result.report.formulaDamage, 300);
-    assert.equal(result.report.hpLoss, considerInvincibility ? 0 : 301);
+    assert.equal(result.formulaDamage, 300);
+    assert.equal(result.hpLoss, considerInvincibility ? 0 : 301);
     assert.equal(seen.includes("normal"), !skipModifierEvents);
     assert.equal(seen.includes("reaction"), !skipModifierEvents);
     assert.equal(seen.includes("skipped"), skipModifierEvents);
@@ -724,18 +729,21 @@ test("effect dispatch: healing observes reception rejection without retrospectiv
 
   const original = effectFixtureWork(attach(resources, unit(2, 500, ["HEAL_FREE"]), descriptor));
   const branch = () => createBattleState(original.battlefield.fork());
-  const rejected = resolveHealing(
-    branch(),
+  const rejectedState = branch();
+const rejected = resolveHealing(
+    rejectedState,
     { sourceUnitId: null, targetUnitId: 2, power: 20, ignoreHealFree: false, tick: 1 },
     resources,
   );
-  const received = resolveHealing(
-    branch(),
+  const receivedState = branch();
+const received = resolveHealing(
+    receivedState,
     { sourceUnitId: null, targetUnitId: 2, power: 20, ignoreHealFree: true, tick: 1 },
     resources,
   );
-  const skipped = resolveHealing(
-    branch(),
+  const skippedState = branch();
+const skipped = resolveHealing(
+    skippedState,
     {
       sourceUnitId: null,
       targetUnitId: 2,
@@ -750,9 +758,10 @@ test("effect dispatch: healing observes reception rejection without retrospectiv
   assert.equal(rejected.amount, 0);
   assert.equal(received.amount, 40);
   assert.equal(skipped.amount, 0);
-  assert.equal(skipped.report.cancellation.reason, "HEAL_FREE");
-  const permittedSkip = resolveHealing(
-    branch(),
+  assert.equal(skipped.cancellation.reason, "HEAL_FREE");
+  const permittedSkipState = branch();
+const permittedSkip = resolveHealing(
+    permittedSkipState,
     {
       sourceUnitId: null,
       targetUnitId: 2,
@@ -764,9 +773,9 @@ test("effect dispatch: healing observes reception rejection without retrospectiv
     resources,
   );
   assert.equal(permittedSkip.amount, 20);
-  assert.equal(permittedSkip.report.cancellation, null);
+  assert.equal(permittedSkip.cancellation, null);
   assert.equal(calls, 2);
-  assert.deepEqual(getUnit(rejected.work, 2).effects.instances[0].state, {
+  assert.deepEqual(getUnit(rejectedState, 2).effects.instances[0].state, {
     receipts: 1,
     rejected: 1,
   });
@@ -787,19 +796,19 @@ test("effect dispatch: healing observes reception rejection without retrospectiv
   );
   assert.deepEqual(reactions, ["target", "source"]);
   const next = resolveHealing(
-    admitted.work,
+    initiallyAllowed,
     { sourceUnitId: 1, targetUnitId: 2, power: 30, ignoreHealFree: false, tick: 2 },
     resources,
   );
 
-  assert.equal(hasStatusFlag(getUnit(admitted.work, 2), "HEAL_FREE"), true);
+  assert.equal(hasStatusFlag(getUnit(initiallyAllowed, 2), "HEAL_FREE"), true);
   assert.equal(admitted.amount, 60);
   assert.equal(next.amount, 0);
-  assert.equal(getUnit(next.work, 2).vitality.hp, 560);
+  assert.equal(getUnit(initiallyAllowed, 2).vitality.hp, 560);
   assert.equal(calls, 4);
   reactions.length = 0;
   resolveHealing(
-    admitted.work,
+    initiallyAllowed,
     { sourceUnitId: 2, targetUnitId: 2, power: 1, ignoreHealFree: true, tick: 3 },
     resources,
   );
@@ -909,12 +918,12 @@ test("effect registration: domain facets coexist and expose the complete healing
   assert.equal(getUnit(initial, 2).vitality.hp, 525);
   const damaged = resolveDamage(initial, request(100, { sourceUnitId: 2 }), resources);
   const healed = resolveHealing(
-    damaged.work,
+    initial,
     { sourceUnitId: 2, targetUnitId: 2, power: 10, ignoreHealFree: false, tick: 1 },
     resources,
   );
   const skipped = resolveHealing(
-    healed.work,
+    initial,
     {
       sourceUnitId: 2,
       targetUnitId: 2,
@@ -926,11 +935,11 @@ test("effect registration: domain facets coexist and expose the complete healing
     resources,
   );
 
-  assert.equal(damaged.report.hpLoss, 200);
+  assert.equal(damaged.hpLoss, 200);
   assert.equal(healed.amount, 30);
   assert.equal(skipped.amount, 11);
-  assert.equal(getUnit(skipped.work, 2).vitality.hp, 366);
-  assert.deepEqual(getUnit(skipped.work, 2).effects.instances[0].state, {
+  assert.equal(getUnit(initial, 2).vitality.hp, 366);
+  assert.deepEqual(getUnit(initial, 2).effects.instances[0].state, {
     damage: 1,
     output: 1,
     reception: 1,

@@ -31,11 +31,11 @@ const program = (id, initial = {}) => createEffectProgram({
 const owner = () => initializeUnit({
   id: 0, position: [0, 0], definition: { id: 'expiry-owner', offense: { attack: 100 } },
 });
-const install = (work, effect, resources, expiresAtTick, initialState) => installNewEffect(
+const install = (work, effect, resources, expiresAtTick, initialState) => { installNewEffect(
   work, 0, effect.ref,
   { source: 7, scopes: [{type: 'UNIT',unitId: 0}, ...(expiresAtTick === null ? [] : [{ type: 'TICK', tick: expiresAtTick }])], ...(initialState === undefined ? {} : { initialState }) },
   resources, 0,
-).work;
+); return work; };
 
 test('effect expiry: the default notifies finish at the deadline and defers physical cleanup', () => {
   const resources = new CombatResources();
@@ -49,20 +49,22 @@ test('effect expiry: the default notifies finish at the deadline and defers phys
   });
   const original = install(effectFixtureWork(owner()), effect, resources, 5);
   const before = original.battlefield.snapshot("draft");
-  assert.equal(expireEffects(original, 4, resources), original);
-  const finished = expireEffects(original, 5, resources);
+  expireEffects(original, 4, resources);
+  const finished = original;
+  expireEffects(finished, 5, resources);
   assert.equal(power(finished), 100);
   assert.equal(instances(finished)[0].finished, true);
   assert.deepEqual(events, [['disable', true], ['finish']]);
-  assert.equal(expireEffects(finished, 6, resources), finished);
-  const cleared = finalizeFinishedEffects(finished, 0, resources, 6);
+  expireEffects(finished, 6, resources);
+  const cleared = finished;
+  finalizeFinishedEffects(cleared, 0, resources, 6);
   assert.deepEqual(instances(cleared), []);
   assert.deepEqual(events, [['disable', true], ['finish']]);
   assert.equal(before.getUnit(0).effects.instances[0].finished, false);
   assert.equal(resolveAttackPower(0, before), 120);
   for (const deadline of [null, 10]) {
     const untouched = install(effectFixtureWork(owner()), effect, resources, deadline);
-    assert.equal(expireEffects(untouched, 5, resources), untouched);
+    expireEffects(untouched, 5, resources);
   }
 });
 
@@ -83,7 +85,7 @@ test('effect expiry: disabled and overridden instances retain their expiration b
       });
       let work = install(effectFixtureWork(owner()), effect, resources, 5);
       if (inactive === 'disabled') {
-        work = setEffectEnabled(work, address(0), false, resources, 1);
+        setEffectEnabled(work, address(0), false, resources, 1);
       } else {
         const winner = resources.registerEffect(program('winner'), {
           lifecycle: { competition: () => ({ group: 'expiry', priority: 2 }) },
@@ -91,11 +93,12 @@ test('effect expiry: disabled and overridden instances retain their expiration b
         work = install(work, winner, resources, null);
       }
       assert.equal(instances(work)[0].participating, false);
-      const expired = expireEffects(work, 5, resources);
+      const expired = work;
+      expireEffects(expired, 5, resources);
       assert.equal(instances(expired)[0].finished, true);
       assert.deepEqual(calls, custom ? [[inactive !== 'disabled', false]] : []);
       assert.equal(power(expired), 100);
-      assert.equal(setEffectEnabled(expired, address(0), true, resources, 6), expired);
+      setEffectEnabled(expired, address(0), true, resources, 6);
     }
   }
 });
@@ -121,7 +124,8 @@ test('effect expiry: an earlier callback can renew or finish a later expired can
     });
     let work = install(effectFixtureWork(owner()), first, resources, 5);
     work = install(work, later, resources, 5);
-    const expired = expireEffects(work, 5, resources);
+    const expired = work;
+    expireEffects(expired, 5, resources);
     assert.deepEqual(calls, []);
     assert.equal(instances(expired)[0].finished, true);
     assert.equal(instances(expired)[1].finished, change === 'finish');
@@ -155,11 +159,12 @@ test('effect expiry: content can remove one layer, renew the same identity, and 
   const original = install(effectFixtureWork(owner()), effect, resources, 2);
   const initial = instances(original)[0];
   const initialView = original.battlefield.snapshot("draft");
-  let work = expireEffects(original, 2, resources);
+  let work = original;
+  expireEffects(work, 2, resources);
   assert.equal(power(work), 120);
   assert.equal(effectTick(instances(work)[0]), 6);
-  assert.equal(expireEffects(work, 2, resources), work);
-  work = expireEffects(work, 7, resources);
+  expireEffects(work, 2, resources);
+  expireEffects(work, 7, resources);
   assert.equal(expires, 2, 'an overdue deadline enters the callback once per pass');
   assert.equal(power(work), 110);
   assert.equal(effectTick(instances(work)[0]), 11);
@@ -170,7 +175,7 @@ test('effect expiry: content can remove one layer, renew the same identity, and 
   assert.equal(instances(work).length, 1);
   assert.equal(starts, 1);
   assert.equal(enables, 1);
-  work = expireEffects(work, 11, resources);
+  expireEffects(work, 11, resources);
   assert.equal(instances(work)[0].finished, true);
   assert.equal(power(work), 100);
   assert.equal(expires, 3);
@@ -197,7 +202,8 @@ test('effect expiry: clearing a deadline and nested terminal removal are normal 
       } },
     });
     const original = install(effectFixtureWork(owner()), effect, resources, 5);
-    const expired = expireEffects(original, 5, resources);
+    const expired = original;
+    expireEffects(expired, 5, resources);
     assert.equal(instances(expired).length, 1);
     assert.equal(effectTick(instances(expired)[0]), null);
     assert.equal(instances(expired)[0].finished, false);
@@ -235,7 +241,8 @@ test('effect expiry: renewed deadlines and updated bindings are visible to parti
   });
   let work = install(effectFixtureWork(owner()), layered, resources, 5);
   work = install(work, rival, resources, null);
-  const expired = expireEffects(work, 5, resources);
+  const expired = work;
+  expireEffects(expired, 5, resources);
   assert.deepEqual(observed, ['disable', 'enable'].map(kind => ({
     kind, layers: 2, deadline: 10, active: [1], retainedAddition: 20, attack: 125,
   })));
@@ -283,7 +290,8 @@ test('effect expiry: unresolved deadlines fail without publishing state and rele
       assert.throws(read, /no longer active/);
     }
     fail = false;
-    const retry = expireEffects(original, 10, resources, scope);
+    const retry = original;
+    expireEffects(retry, 10, resources, scope);
     assert.equal(instances(retry)[0].state.layers, 2);
     assert.equal(effectTick(instances(retry)[0]), 11);
     assert.equal(power(retry), 120);
@@ -314,10 +322,12 @@ test('effect expiry: a newly installed expired effect is visible to facts and wa
     } },
   });
   const original = install(effectFixtureWork(owner()), first, resources, 5);
-  const firstPass = expireEffects(original, 5, resources);
+  const firstPass = original;
+  expireEffects(firstPass, 5, resources);
   assert.deepEqual(calls, ['installer']);
   assert.equal(instances(firstPass).find(instance => instance.id === newbornAddress.effectId).finished, false);
-  const secondPass = expireEffects(firstPass, 5, resources);
+  const secondPass = firstPass;
+  expireEffects(secondPass, 5, resources);
   assert.deepEqual(calls, ['installer', 'newborn']);
   assert.equal(instances(secondPass).find(instance => instance.id === newbornAddress.effectId).finished, true);
 });
@@ -411,10 +421,10 @@ test('effect expiry: shortening an initially future deadline waits for the next 
   });
   let work = install(effectFixtureWork(owner()), first, resources, 5);
   work = install(work, future, resources, 10);
-  work = expireEffects(work, 5, resources);
+  expireEffects(work, 5, resources);
   assert.deepEqual(calls, ['first']);
   assert.equal(instances(work)[1].finished, false);
-  work = expireEffects(work, 5, resources);
+  expireEffects(work, 5, resources);
   assert.deepEqual(calls, ['first', 'future']);
   assert.equal(instances(work)[1].finished, true);
 });

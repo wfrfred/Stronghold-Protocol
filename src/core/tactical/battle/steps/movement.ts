@@ -13,7 +13,6 @@ import {
     advanceBattlefield,
     appendEvents,
     battlefieldView,
-    withExecution,
     type BattleState,
 } from "../execution/context.js";
 
@@ -33,7 +32,7 @@ export function advanceRouteCommands(
         state.execution,
         tick,
     );
-    withExecution(state, changed.execution);
+    state.execution = changed.execution;
     appendEvents(
         state,
         changed.signals.map((signal) => ({ type: "ROUTE", ...signal, tick })),
@@ -116,7 +115,7 @@ export function advanceMovement(
         changes.push({ type: "UPDATE_UNIT", unit: moved.unit });
     }
 
-    withExecution(state, execution);
+    state.execution = execution;
     appendEvents(state, events);
     advanceBattlefield(state, changes);
 

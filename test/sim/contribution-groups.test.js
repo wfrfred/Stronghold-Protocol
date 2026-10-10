@@ -43,8 +43,7 @@ const install = (work, resources, program, id, state, source = null) => {
     id, source, scopes: [],
   acquiredSequence: id,
   }, state), resources, 0);
-  assert.equal(result.result.type, "INSTALLED");
-  return result.work;
+  assert.equal(result.type, "INSTALLED");
 };
 const attackPower = (work, resources) =>
   resolveAttackPower(1, battlefieldView(work), resources.computations);
@@ -64,9 +63,10 @@ test("contribution groups: the ATK coefficient wins, while other facets particip
     }, { group: slot }),
     defense((instance) => [value(instance.state.defense)]),
   ] });
-  let work = install(effectFixtureWork(unit(1)), resources, effect, 0,
+  const work = effectFixtureWork(unit(1));
+  install(work, resources, effect, 0,
     { coefficient: 0.3, amount: 300, defense: 10, grouped: true });
-  work = install(work, resources, effect, 1,
+  install(work, resources, effect, 1,
     { coefficient: 0.6, amount: 60, defense: 20, grouped: true });
 
   assert.equal(attackPower(work, resources), 160);
@@ -76,7 +76,7 @@ test("contribution groups: the ATK coefficient wins, while other facets particip
   assert.deepEqual(getUnit(work, 1).effects.instances.map((instance) => instance.participating), [true, true]);
   const loserValues = entries(work)[0].values;
 
-  work = removeEffect(work, { type: "EFFECT", unitId: 1, effectId: 1 }, resources, 0);
+  removeEffect(work, { type: "EFFECT", unitId: 1, effectId: 1 }, resources, 0);
   assert.equal(attackPower(work, resources), 400);
   assert.equal(resolveDefense(1, battlefieldView(work)).defense, 10);
   assert.equal(entries(work)[0].values, loserValues);
@@ -91,20 +91,21 @@ test("contribution groups: explicit stored state updates refresh strength, sampl
     samples += 1;
     return [value(instance.state.amount)];
   }, { group: slot })] });
-  let work = install(effectFixtureWork(unit(1)), resources, effect, 0,
+  const work = effectFixtureWork(unit(1));
+  install(work, resources, effect, 0,
     { coefficient: 0.3, amount: 300, grouped: true });
-  work = install(work, resources, effect, 1,
+  install(work, resources, effect, 1,
     { coefficient: 0.6, amount: 60, grouped: true });
   const original = work.battlefield.snapshot("draft");
 
-  work = updateEffectState(work, 1, 0, effect.ref,
+  updateEffectState(work, 1, 0, effect.ref,
     (state) => ({ ...state, coefficient: 0.7, amount: 70 }), resources, 0);
   assert.equal(entries(work)[0].group.strength, 0.7);
   assert.equal(attackPower(work, resources), 170);
   assert.equal(resolveAttackPower(1, original, resources.computations), 160);
   assert.equal(samples, 3);
 
-  work = updateEffectState(work, 1, 0, effect.ref,
+  updateEffectState(work, 1, 0, effect.ref,
     (state) => ({ ...state, grouped: false }), resources, 0);
   assert.equal(Object.hasOwn(entries(work)[0], "group"), false);
   assert.equal(attackPower(work, resources), 230);
@@ -123,9 +124,10 @@ test("contribution groups: computed values stay live without reranking, and expl
     groupReads += 1;
     return slot(instance);
   } })] });
-  let work = install(effectFixtureWork(unit(1), unit(2, 1000), unit(3)), resources, effect, 0,
+  const work = effectFixtureWork(unit(1), unit(2, 1000), unit(3));
+  install(work, resources, effect, 0,
     { coefficient: 0.3, grouped: true }, 2);
-  work = install(work, resources, effect, 1,
+  install(work, resources, effect, 1,
     { coefficient: 0.6, grouped: true }, 3);
   assert.equal(computes, 0);
   assert.equal(groupReads, 2);
@@ -133,7 +135,7 @@ test("contribution groups: computed values stay live without reranking, and expl
   assert.equal(computes, 1);
   const originalEntries = entries(work);
 
-  work = transitionUnit(work, 3, (provider) => updateAttackContributions(provider, (state) =>
+  transitionUnit(work, 3, (provider) => updateAttackContributions(provider, (state) =>
     contribution.register(state, { id: "provider-buff", sequence: 0, participating: true, values: [value(100)] })));
   assert.equal(attackPower(work, resources), 220);
   assert.equal(entries(work), originalEntries);
@@ -141,7 +143,7 @@ test("contribution groups: computed values stay live without reranking, and expl
   assert.equal(computes, 2);
 
   const originalRef = entries(work)[0].computeRef;
-  work = updateEffectState(work, 1, 0, effect.ref,
+  updateEffectState(work, 1, 0, effect.ref,
     (state) => ({ ...state, coefficient: 0.7 }), resources, 0);
   assert.equal(computes, 2);
   assert.equal(groupReads, 3);
@@ -149,9 +151,9 @@ test("contribution groups: computed values stay live without reranking, and expl
   assert.equal(entries(work)[0].computeRef, originalRef);
   assert.equal(attackPower(work, resources), 800);
 
-  work = setEffectEnabled(work, { type: "EFFECT", unitId: 1, effectId: 0 }, false, resources, 0);
+  setEffectEnabled(work, { type: "EFFECT", unitId: 1, effectId: 0 }, false, resources, 0);
   const beforeUpdate = computes;
-  work = updateEffectState(work, 1, 0, effect.ref,
+  updateEffectState(work, 1, 0, effect.ref,
     (state) => ({ ...state, grouped: false }), resources, 0);
   assert.equal(computes, beforeUpdate);
   assert.equal(entries(work)[0].participating, false);
@@ -178,7 +180,8 @@ test("contribution groups: static declarations and dynamic results have immutabl
     ] });
     fixed.id = "caller-edit";
     fixed.strength = 99;
-    let work = install(effectFixtureWork(unit(1)), resources, effect, 0,
+    const work = effectFixtureWork(unit(1));
+    install(work, resources, effect, 0,
       { coefficient: 2, grouped: true });
     const initialGroup = entries(work)[1].group;
     assert.deepEqual(entries(work)[0].group, { id: "fixed", strength: 1 });
@@ -189,7 +192,7 @@ test("contribution groups: static declarations and dynamic results have immutabl
     returned.strength = 99;
     assert.deepEqual(initialGroup, { id: "dynamic", strength: 2 });
 
-    work = updateEffectState(work, 1, 0, effect.ref,
+    updateEffectState(work, 1, 0, effect.ref,
       (state) => ({ ...state, coefficient: 3 }), resources, 0);
     const updatedGroup = entries(work)[1].group;
     returned.strength = 999;

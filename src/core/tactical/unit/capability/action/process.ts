@@ -21,7 +21,7 @@ export interface ActionExecutionResources extends EffectTransitionResources {
         unitId: UnitId,
         tick: number,
         dispatch?: EffectDispatchScope,
-    ) => BattleState;
+    ) => void;
 }
 
 export type ActionExecutionId = number;
@@ -77,7 +77,6 @@ export interface ActionExecutionContext {
 }
 
 export interface ActionExecutionStepResult {
-    readonly work: BattleState;
     readonly bindings?: ReadonlyMap<TargetBindingId, readonly UnitId[]>;
     readonly samples?: ActionExecutionSamples;
     readonly continuation?: "NEXT" | "FINISH" | "CANCEL";
@@ -93,7 +92,7 @@ export type CompiledActionSegment = {
 } & (
     | {
           readonly type: "EXECUTE";
-          readonly run: (context: ActionExecutionContext) => ActionExecutionStepResult;
+          readonly run: (context: ActionExecutionContext) => ActionExecutionStepResult | undefined;
       }
     | {
           readonly type: "WAIT";
@@ -125,7 +124,6 @@ export type ActionExecutionResult =
     | { readonly type: "CANCELLED"; readonly reason: ActionExecutionCancellationReason };
 
 export interface ActionExecutionTransition {
-    readonly work: BattleState;
     readonly state: ActionExecutionState;
     readonly result: ActionExecutionResult;
     readonly signals: readonly ActionExecutionSignal[];

@@ -10,7 +10,6 @@ import {
     type DamageOperands,
     type DamageReport,
     type DamageRequest,
-    type DamageResolution,
     type PendingDamage,
     NORMAL_DAMAGE_RECEPTION,
 } from "./contract.js";
@@ -106,14 +105,14 @@ function confirmDamage(
     report: DamageReport,
     resources: DamageResourceServices,
     dispatch: EffectDispatchScope,
-): DamageResolution {
+): DamageReport {
     report = Object.freeze(report);
 
     if (!(report.request.receptionPolicy ?? NORMAL_DAMAGE_RECEPTION).skipModifierEvents) {
-        work = dispatchDamageReactions(work, report, resources, dispatch);
+        dispatchDamageReactions(work, report, resources, dispatch);
     }
     if (report.deathOccurred) {
-        work = retireCombatUnit(
+        retireCombatUnit(
             work,
             report.request.targetUnitId,
             resources,
@@ -122,7 +121,7 @@ function confirmDamage(
         );
     }
 
-    return { work, report };
+    return report;
 }
 
 export function resolveDamage(
@@ -130,7 +129,7 @@ export function resolveDamage(
     request: DamageRequest,
     resources: DamageResourceServices,
     dispatch = new EffectDispatchScope(),
-): DamageResolution {
+): DamageReport {
     const policy = request.receptionPolicy ?? NORMAL_DAMAGE_RECEPTION;
     const target = getUnit(work, request.targetUnitId);
     const report: DamageReport = {
@@ -172,7 +171,7 @@ export function resolveDamage(
         [request.sourceUnitId, "sourceFormula"],
         [request.targetUnitId, "targetFormula"],
     ] as const) {
-        const result = dispatchDamageFormula(
+        operands = dispatchDamageFormula(
             work,
             request,
             owner,
@@ -181,8 +180,6 @@ export function resolveDamage(
             resources,
             dispatch,
         );
-        work = result.work;
-        operands = result.value;
     }
 
     const current = getUnit(work, request.targetUnitId);
@@ -217,7 +214,7 @@ export function resolveDamage(
     let pending: PendingDamage = { amount: formulaDamage, cancellation: null, consumptions: [] };
 
     if (!policy.skipModifierEvents) {
-        const result = dispatchDamageAmount(
+        pending = dispatchDamageAmount(
             work,
             request,
             request.sourceUnitId,
@@ -226,8 +223,6 @@ export function resolveDamage(
             resources,
             dispatch,
         );
-        work = result.work;
-        pending = result.value;
     }
 
     const outputDamage = pending.amount;
@@ -256,10 +251,10 @@ export function resolveDamage(
         }
 
         if (pending.cancellation === null && request.ignoreForSp !== true) {
-            work = gainUnitSkillSp(work, request.targetUnitId, "HIT");
+            gainUnitSkillSp(work, request.targetUnitId, "HIT");
         }
 
-        const result = dispatchDamageAmount(
+        pending = dispatchDamageAmount(
             work,
             request,
             request.targetUnitId,
@@ -268,8 +263,6 @@ export function resolveDamage(
             resources,
             dispatch,
         );
-        work = result.work;
-        pending = result.value;
     }
 
     const hpDamage = pending.amount;
@@ -290,7 +283,7 @@ export function resolveDamage(
         };
 
         if (finalTarget !== undefined && hasVitality(finalTarget)) {
-            work = appendEvents(work, [
+            appendEvents(work, [
                 {
                     type: "DAMAGE",
                     sourceUnitId: request.sourceUnitId,
@@ -328,10 +321,10 @@ export function resolveDamage(
             vitality: { ...finalTarget.vitality, hp },
         };
 
-        work = updateUnit(work, updated);
+        updateUnit(work, updated);
     }
 
-    work = appendEvents(work, [
+    appendEvents(work, [
         {
             type: "DAMAGE",
             sourceUnitId: request.sourceUnitId,

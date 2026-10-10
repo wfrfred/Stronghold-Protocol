@@ -281,7 +281,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
       source: context.sourceUnitId,
       scopes: [{ type: "ACTION", executionId: context.executionId }],
     }, services, context.tick,
-  ).work;
+  );
   const launch = (context, services, targetUnitId) => {
     const source = getUnit(context.work, context.sourceUnitId);
     const target = getUnit(context.work, targetUnitId);
@@ -317,18 +317,18 @@ function scenario({ failure = null, cancelled = false } = {}) {
     compileAction: (definition, services) => {
       const compiled = compileAction(definition, services);
       const first = { type: "EXECUTE", run: (context) => {
-        const work = installation(context, services, scoped);
-        launch({ ...context, work }, services, definition === primary.action.normalAction ? 1 : 3);
-        return { work, samples: { emitted: 1 } };
+        installation(context, services, scoped);
+        launch(context, services, definition === primary.action.normalAction ? 1 : 3);
+        return { samples: { emitted: 1 } };
       } };
       return { ...compiled, program: definition === primary.action.normalAction ? [
         first,
         { type: "WAIT", resolve: () => ({ type: "FOR_TICKS", ticks: 1 }) },
         { type: "RELEASE", markerId: "secondary" },
         { type: "EXECUTE", run: (context) => {
-          const work = installation(context, services, pulse);
-          launch({ ...context, work }, services, 3);
-          return { work, samples: { emitted: 2 } };
+          installation(context, services, pulse);
+          launch(context, services, 3);
+          return { samples: { emitted: 2 } };
         } },
         { type: "WAIT", resolve: () => ({ type: "FOR_TICKS", ticks: 2 }) },
       ] : [first, { type: "WAIT", resolve: () => ({ type: "FOR_TICKS", ticks: 4 }) }] };

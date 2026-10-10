@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { createLegacyCombatSpec } from '../../dist/legacy/combat.js';
-import { createBattleState, eventsOf, battlefieldView, getUnit } from '../../dist/core/tactical/battle/execution/context.js';
+import { createBattleState, battlefieldView, getUnit } from '../../dist/core/tactical/battle/execution/context.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { createActionDefinition } from '../../dist/core/tactical/unit/capability/action/capability.js';
@@ -22,7 +22,7 @@ import { create as modifier } from '../../dist/core/tactical/modifier/value.js';
 import { calculateDamage, resolveDamage } from '../../dist/core/tactical/unit/capability/vitality/damage/settlement.js';
 import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
 import { resolveHealing } from '../../dist/core/tactical/unit/capability/vitality/healing/settlement.js';
-import { resolveElementDamage, resolveElementHeal, advanceElementalInWork } from '../../dist/core/tactical/unit/capability/elemental/execution.js';
+import { resolveElementDamage, resolveElementHeal, advanceElementalState } from '../../dist/core/tactical/unit/capability/elemental/execution.js';
 import { elementValues } from '../../dist/core/tactical/unit/capability/elemental/capability.js';
 import { createArknightsElementalDefinition } from '../../dist/data/arknights/elemental.js';
 import { registerArknightsElementalBursts } from '../../dist/data/arknights/elemental-program.js';
@@ -58,9 +58,9 @@ function element(work, type, supplied, tick = 0, power = 1000) {
   return resolveElementDamage(work, { type, power, sourceUnitId: 9, targetUnitId: 1, tick }, supplied);
 }
 function advance(work, tick, supplied) {
-  work = advanceElementalInWork(work, 1, tick, supplied);
-  work = expireEffects(work, tick, supplied);
-  return finalizeFinishedEffects(work, 1, supplied, tick);
+  advanceElementalState(work, 1, tick, supplied);
+  expireEffects(work, tick, supplied);
+  finalizeFinishedEffects(work, 1, supplied, tick);
 }
 function defense(work, supplied) {
   return resolveDefense(1, battlefieldView(work), supplied.computations);
@@ -79,42 +79,44 @@ test('elemental execution: standard immediate bursts apply class-specific damage
     const supplied = resources();
     const input = effectFixtureWork(unit(receiver));
     const result = element(input, type, supplied);
-    assert.equal(result.report.outcome, 'BURST');
-    assert.equal(result.report.burst.sourceUnitId, 9);
-    assert.equal(getUnit(result.work, 1).vitality.hp, 100000 - expectedHpLoss);
-    assert.deepEqual(defense(result.work, supplied), { defense: expectedDefense, resistance: expectedResistance });
-    const hits = eventsOf(result.work).filter(event => event.type === 'DAMAGE');
+    assert.equal(result.outcome, 'BURST');
+    assert.equal(result.burst.sourceUnitId, 9);
+    assert.equal(getUnit(input, 1).vitality.hp, 100000 - expectedHpLoss);
+    assert.deepEqual(defense(input, supplied), { defense: expectedDefense, resistance: expectedResistance });
+    const hits = input.events.filter(event => event.type === 'DAMAGE');
     assert.equal(hits.length, 1);
     assert.equal(hits[0].sourceUnitId, null);
     assert.equal(hits[0].amount, expectedHpLoss);
     assert.equal(input.battlefield.snapshot("state").getUnit(1).vitality.hp, 100000);
-    assert.deepEqual(getUnit(result.work, 1).elemental.ep, elementValues(0));
+    assert.deepEqual(getUnit(input, 1).elemental.ep, elementValues(0));
   }
 });
 
 test('elemental execution: erosion defense loss survives recovery and stacks on the next burst for both receiver classes', () => {
   for (const [receiver, duration, reduction, secondHpLoss] of [['CHARACTER', 300, 100, 500], ['ENEMY', 240, 120, 5000]]) {
     const supplied = resources();
-    const first = element(effectFixtureWork(unit(receiver)), 'EROSION', supplied);
-    const recovered = advance(first.work, duration, supplied);
-    assert.equal(defense(recovered, supplied).defense, 500 - reduction);
-    assert.equal(getUnit(recovered, 1).elemental.recovery, null);
-    const recoveredHp = getUnit(recovered, 1).vitality.hp;
-    const second = element(recovered, 'EROSION', supplied, duration);
-    assert.equal(defense(second.work, supplied).defense, 500 - 2 * reduction);
-    assert.equal(recoveredHp - getUnit(second.work, 1).vitality.hp, secondHpLoss);
+    const firstState = effectFixtureWork(unit(receiver));
+    element(firstState, 'EROSION', supplied);
+    advance(firstState, duration, supplied);
+    assert.equal(defense(firstState, supplied).defense, 500 - reduction);
+    assert.equal(getUnit(firstState, 1).elemental.recovery, null);
+    const recoveredHp = getUnit(firstState, 1).vitality.hp;
+    element(firstState, 'EROSION', supplied, duration);
+    assert.equal(defense(firstState, supplied).defense, 500 - 2 * reduction);
+    assert.equal(recoveredHp - getUnit(firstState, 1).vitality.hp, secondHpLoss);
   }
 });
 
 test('elemental execution: burn resistance loss remains during recovery and expires at its deadline', () => {
   for (const receiver of ['CHARACTER', 'ENEMY']) {
     const supplied = resources();
-    const broken = element(effectFixtureWork(unit(receiver)), 'BURN', supplied).work;
-    const ongoing = advance(broken, 299, supplied);
-    assert.equal(defense(ongoing, supplied).resistance, 30);
-    const restored = advance(ongoing, 300, supplied);
-    assert.equal(defense(restored, supplied).resistance, 50);
-    assert.deepEqual(getUnit(restored, 1).elemental.ep, elementValues(1000));
+    const broken = effectFixtureWork(unit(receiver));
+    element(broken, 'BURN', supplied);
+    advance(broken, 299, supplied);
+    assert.equal(defense(broken, supplied).resistance, 30);
+    advance(broken, 300, supplied);
+    assert.equal(defense(broken, supplied).resistance, 50);
+    assert.deepEqual(getUnit(broken, 1).elemental.ep, elementValues(1000));
   }
 });
 
@@ -122,37 +124,40 @@ test('elemental execution: character necrosis settles fifteen magical pulses, dr
   const supplied = resources();
   const skill = createSkillDefinition({ id: 'necrosis-sp', activation: 'MANUAL', spRecovery: 'TIME', spCost: 30, initialSp: 20, durationTicks: 30 });
   supplied.skills.register({ definition: skill, activate: () => ({ type: 'ACTIVATED' }) });
-  let work = element(effectFixtureWork(unit('CHARACTER', { skill })), 'NECROSIS', supplied).work;
+  const work = effectFixtureWork(unit('CHARACTER', { skill }));
+  element(work, 'NECROSIS', supplied);
   assert.equal(getUnit(work, 1).vitality.hp, 100000);
   assert.equal(activateSkill(work, { unitId: 1, tick: 0 }, supplied).result.type, 'REJECTED');
-  assert.equal(gainUnitSkillSp(work, 1, 'TIME', 3), work);
-  work = advance(work, 30, supplied);
+  gainUnitSkillSp(work, 1, 'TIME', 3);
+  assert.equal(getUnit(work, 1).skill.sp, 20);
+  advance(work, 30, supplied);
   assert.equal(getUnit(work, 1).vitality.hp, 99950);
   assert.equal(getUnit(work, 1).skill.sp, 19);
-  work = advanceSkill(work, 1, 30, supplied).work;
+  advanceSkill(work, 1, 30, supplied);
   assert.equal(getUnit(work, 1).skill.sp, 19);
-  work = advance(work, 450, supplied);
+  advance(work, 450, supplied);
   assert.equal(getUnit(work, 1).vitality.hp, 99250);
   assert.equal(getUnit(work, 1).skill.sp, 5);
-  assert.equal(eventsOf(work).filter(event => event.type === 'DAMAGE').length, 15);
+  assert.equal(work.events.filter(event => event.type === 'DAMAGE').length, 15);
   assert.equal(hasStatusFlag(getUnit(work, 1), 'SP_RECOVERY_BLOCKED'), false);
-  const renewed = gainUnitSkillSp(work, 1, 'TIME', 3);
-  assert.equal(getUnit(renewed, 1).skill.sp, 8);
+  gainUnitSkillSp(work, 1, 'TIME', 3);
+  assert.equal(getUnit(work, 1).skill.sp, 8);
 });
 
 test('elemental execution: enemy necrosis damage is elemental and its attack reduction fades before full recovery', () => {
   const supplied = resources();
-  let work = element(effectFixtureWork(unit('ENEMY')), 'NECROSIS', supplied).work;
+  const work = effectFixtureWork(unit('ENEMY'));
+  element(work, 'NECROSIS', supplied);
   assert.equal(power(work, supplied), 50);
-  work = advance(work, 150, supplied);
+  advance(work, 150, supplied);
   near(power(work, supplied), 100 * (1 - 0.5 * 10 / 15));
   assert.equal(getUnit(work, 1).vitality.hp, 96000);
-  work = advance(work, 300, supplied);
+  advance(work, 300, supplied);
   near(power(work, supplied), 100 * (1 - 0.5 * 5 / 15));
-  work = advance(work, 450, supplied);
+  advance(work, 450, supplied);
   assert.equal(power(work, supplied), 100);
   assert.equal(getUnit(work, 1).vitality.hp, 88000);
-  const damage = eventsOf(work).filter(event => event.type === 'DAMAGE');
+  const damage = work.events.filter(event => event.type === 'DAMAGE');
   assert.equal(damage.length, 15);
   assert.equal(damage.every(event => event.amount === 800 && event.damageType === 'ELEMENTAL'), true);
 });
@@ -164,12 +169,12 @@ test('elemental HP damage ignores physical defense, magic resistance, source att
     const attackBuff = supplied.registerEffect(createEffectProgram({ id: `source-attack-${damageResistance}`, initialize: () => ({}), ownState: value => ({ ...value }) }),
       { contributions: [attack(() => [modifier({ multiplier: 100 })])] });
     let input = effectFixtureWork(source, unit('ENEMY', { defense: { defense: 100000, resistance: 99 } }, { damageResistance, elementResistance: 100 }));
-    input = installNewEffect(input, 0, attackBuff.ref, { source: 0, scopes: [{ type: "UNIT", unitId: 0 }] }, supplied, 0).work;
+    installNewEffect(input, 0, attackBuff.ref, { source: 0, scopes: [{ type: "UNIT", unitId: 0 }] }, supplied, 0);
     const result = resolveDamage(input, { sourceUnitId: 0, targetUnitId: 1, damageType: 'ELEMENTAL', operands: createDamageOperands(100), tick: 0 }, supplied);
-    assert.equal(result.report.hpLoss, expected);
-    assert.equal(result.report.formulaDamage, expected);
+    assert.equal(result.hpLoss, expected);
+    assert.equal(result.formulaDamage, expected);
     assert.equal(calculateDamage(100, 'ELEMENTAL', { defense: 100000, resistance: 99 }, damageResistance), expected);
-    assert.deepEqual(getUnit(result.work, 1).elemental.ep, elementValues(1000));
+    assert.deepEqual(getUnit(input, 1).elemental.ep, elementValues(1000));
   }
 });
 
@@ -177,8 +182,9 @@ test('elemental healing receives every EP bar independently from HP healing and 
   const supplied = resources();
   let receiver = unit('CHARACTER', { status: { initialFlags: ['HEAL_FREE'] } });
   receiver = { ...receiver, vitality: { ...receiver.vitality, hp: 99000 } };
-  let work = element(effectFixtureWork(receiver), 'BURN', supplied, 0, 200).work;
-  work = element(work, 'NEURAL', supplied, 0, 80).work;
+  const work = effectFixtureWork(receiver);
+  element(work, 'BURN', supplied, 0, 200);
+  element(work, 'NEURAL', supplied, 0, 80);
   const hp = resolveHealing(
     work,
     { sourceUnitId: null, targetUnitId: 1, power: 100, tick: 0 },
@@ -188,10 +194,11 @@ test('elemental healing receives every EP bar independently from HP healing and 
   const healed = resolveElementHeal(work, { power: 100, sourceUnitId: null, targetUnitId: 1, tick: 0 });
   assert.equal(healed.outcome, 'APPLIED');
   assert.equal(healed.amount, 180);
-  assert.equal(getUnit(healed.work, 1).vitality.hp, 99000);
-  assert.deepEqual(getUnit(healed.work, 1).elemental.ep, { NEURAL: 1000, EROSION: 1000, BURN: 900, NECROSIS: 1000 });
-  const broken = element(healed.work, 'BURN', supplied).work;
-  assert.deepEqual(resolveElementHeal(broken, { power: 1000, sourceUnitId: null, targetUnitId: 1, tick: 0 }), { work: broken, amount: 0, outcome: 'REJECTED' });
+  assert.equal(getUnit(work, 1).vitality.hp, 99000);
+  assert.deepEqual(getUnit(work, 1).elemental.ep, { NEURAL: 1000, EROSION: 1000, BURN: 900, NECROSIS: 1000 });
+  const broken = work;
+  element(broken, 'BURN', supplied);
+  assert.deepEqual(resolveElementHeal(broken, { power: 1000, sourceUnitId: null, targetUnitId: 1, tick: 0 }), { amount: 0, outcome: 'REJECTED' });
   const immune = effectFixtureWork(unit('CHARACTER', {}, { immune: true }));
   assert.equal(resolveElementHeal(immune, { power: 100, sourceUnitId: null, targetUnitId: 1, tick: 0 }).outcome, 'REJECTED');
 });
@@ -205,16 +212,17 @@ test('elemental compiled actions select EP receivers without Vitality and keep e
   const healer = initializeUnit({ id: 0, position: [0, 0], definition: definition('CHARACTER', { action: { normalAction: healingAction } }) });
   const { vitality: omitted, ...receiverDefinition } = definition('CHARACTER', { status: { initialFlags: ['HEAL_FREE'] } });
   let receiver = initializeUnit({ id: 1, position: [1, 0], definition: receiverDefinition });
-  let work = element(effectFixtureWork(healer, receiver), 'BURN', supplied, 0, 200).work;
+  let work = effectFixtureWork(healer, receiver);
+  element(work, 'BURN', supplied, 0, 200);
   const compiled = compileAction(healingAction, supplied);
   const bindings = compiled.bind({ source: healer, battlefield: battlefieldView(work) });
   assert.deepEqual(bindings.get('primary'), [1]);
-  work = compiled.program[0].run({ work, sourceUnitId: 0, executionId: 0, acceptedAtTick: 0,
-    inputTargetUnitId: 1, tick: 0, bindings, samples: {} }).work;
+  compiled.program[0].run({ work, sourceUnitId: 0, executionId: 0, acceptedAtTick: 0,
+    inputTargetUnitId: 1, tick: 0, bindings, samples: {} });
   receiver = getUnit(work, 1);
   assert.equal('vitality' in receiver, false);
   assert.equal(receiver.elemental.ep.BURN, 900);
-  assert.equal(eventsOf(work).filter(event => event.type === 'ELEMENT_HEAL').length, 1);
+  assert.equal(work.events.filter(event => event.type === 'ELEMENT_HEAL').length, 1);
 
   const damageAction = createActionDefinition({ ...action(), targetGroups: [{ ...action().targetGroups[0],
     operations: [{ type: 'ELEMENT_DAMAGE', elementType: 'NEURAL', power: 100 }] }] });
@@ -223,8 +231,8 @@ test('elemental compiled actions select EP receivers without Vitality and keep e
   const damaging = compileAction(damageAction, supplied);
   const damageBindings = damaging.bind({ source: healer, battlefield: battlefieldView(work) });
   assert.deepEqual(damageBindings.get('primary'), [1]);
-  work = damaging.program[0].run({ work, sourceUnitId: 0, executionId: 1, acceptedAtTick: 0,
-    inputTargetUnitId: 1, tick: 0, bindings: damageBindings, samples: {} }).work;
+  damaging.program[0].run({ work, sourceUnitId: 0, executionId: 1, acceptedAtTick: 0,
+    inputTargetUnitId: 1, tick: 0, bindings: damageBindings, samples: {} });
   assert.equal(getUnit(work, 1).elemental.ep.NEURAL, 900);
 });
 
@@ -250,9 +258,13 @@ function battle(receiver, type, { moving = false, content, targetStates, prepare
   }, { combat: supplied, compileAction: (selected, services) => {
     const compiled = compileAction(selected, services);
     if (selected === caster.action.normalAction) {
-      return { ...compiled, program: [{ type: 'EXECUTE', run: context => ({ work: content === undefined
-        ? resolveElementDamage(context.work, { type, power: 1000, sourceUnitId: context.sourceUnitId, targetUnitId: 1, tick: context.tick }, supplied).work
-        : content(context, supplied) }) }, ...compiled.program] };
+      return { ...compiled, program: [{ type: 'EXECUTE', run: context => {
+        if (content === undefined) {
+          resolveElementDamage(context.work, { type, power: 1000, sourceUnitId: context.sourceUnitId, targetUnitId: 1, tick: context.tick }, supplied);
+        } else {
+          content(context, supplied);
+        }
+      } }, ...compiled.program] };
     }
     return { ...compiled, program: [{ type: 'RELEASE', markerId: 'normal' }, ...compiled.program] };
   } });
@@ -299,8 +311,9 @@ test('elemental runtime: nested burst damage failure publishes neither EP progre
     },
     targetStates: (supplied, selected) => {
       const target = initializeUnit({ id: 1, position: [1, 0], definition: selected });
-      const installed = installNewEffect(effectFixtureWork(target), 1, faultRef, { source: null, scopes: [{ type: "UNIT", unitId: 1 }] }, supplied, 0);
-      return { effects: getUnit(installed.work, 1).effects };
+      const installedState = effectFixtureWork(target);
+      installNewEffect(installedState, 1, faultRef, { source: null, scopes: [{ type: "UNIT", unitId: 1 }] }, supplied, 0);
+      return { effects: getUnit(installedState, 1).effects };
     },
   });
   const initial = runtime.snapshot();

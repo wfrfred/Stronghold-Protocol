@@ -68,11 +68,6 @@ export interface DamageReport {
     readonly fatalProtection: boolean;
 }
 
-export interface DamageResolution {
-    readonly work: BattleState;
-    readonly report: DamageReport;
-}
-
 export function createDamageOperands(power: number): DamageOperands {
     return {
         power,
@@ -87,4 +82,4 @@ export type DamageOperation = (
     work: BattleState,
     request: DamageRequest,
     dispatch: EffectDispatchScope,
-) => DamageResolution;
+) => DamageReport;

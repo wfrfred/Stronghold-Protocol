@@ -18,7 +18,6 @@ import type {
     HealingCancellation,
     HealingReport,
     HealingRequest,
-    HealingResolution,
     HealingResult,
     PendingHealing,
 } from "./contract.js";
@@ -58,9 +57,9 @@ function dispatchHealing<V>(
     tick: number,
     scope: EffectDispatchScope,
     select: (rules: CompiledHealingRules) => CompiledHealingStage<V> | undefined,
-): { readonly work: BattleState; readonly value: V } {
+): V {
     if (ownerUnitId === null) {
-        return { work, value };
+        return value;
     }
 
     const getWork = () => work;
@@ -108,9 +107,9 @@ function dispatchHealing<V>(
             }
         }
     });
-    work = finalizeFinishedEffects(work, ownerUnitId, resources, tick, scope);
+    finalizeFinishedEffects(work, ownerUnitId, resources, tick, scope);
 
-    return { work, value };
+    return value;
 }
 
 function applyHealingRules(
@@ -141,14 +140,14 @@ function confirmHealing(
     resources: HealingResourceServices,
     tick: number,
     scope: EffectDispatchScope,
-): HealingResolution {
+): HealingReport {
     report = Object.freeze(report);
 
     if (report.request.skipModifierEvents !== true) {
         const ownerUnitIds = new Set([report.request.targetUnitId, report.request.sourceUnitId]);
 
         for (const ownerUnitId of ownerUnitIds) {
-            const result = dispatchHealing(
+            dispatchHealing(
                 work,
                 report.request,
                 ownerUnitId,
@@ -173,11 +172,10 @@ function confirmHealing(
                           };
                 },
             );
-            work = result.work;
         }
     }
 
-    return { work, amount: report.amount, report };
+    return report;
 }
 
 function targetCancellation(work: BattleState, targetUnitId: UnitId): HealingCancellation | null {
@@ -234,7 +232,7 @@ export function resolveHealing(
     request: HealingRequest,
     resources: HealingResourceServices,
     dispatch = new EffectDispatchScope(),
-): HealingResolution {
+): HealingReport {
     const { tick } = request;
     let pending: PendingHealing = {
         amount: Math.max(0, request.power),
@@ -253,7 +251,7 @@ export function resolveHealing(
     }
 
     if (request.skipModifierEvents !== true) {
-        const output = applyHealingRules(
+        pending = applyHealingRules(
             work,
             request,
             request.sourceUnitId,
@@ -263,8 +261,6 @@ export function resolveHealing(
             tick,
             dispatch,
         );
-        work = output.work;
-        pending = output.value;
     }
 
     const cancellation = targetCancellation(work, request.targetUnitId);
@@ -281,7 +277,7 @@ export function resolveHealing(
             };
         }
 
-        const reception = applyHealingRules(
+        pending = applyHealingRules(
             work,
             request,
             request.targetUnitId,
@@ -291,8 +287,6 @@ export function resolveHealing(
             tick,
             dispatch,
         );
-        work = reception.work;
-        pending = reception.value;
     }
 
     const healingAmount = pending.amount;
@@ -310,12 +304,12 @@ export function resolveHealing(
         if (finalCancellation === null) {
             const maxHp = resolveMaxHp(current.id, battlefieldView(work))!;
             const healed = applyHealingValue(current, healingAmount, maxHp);
-            work = updateUnit(work, healed.unit);
+            updateUnit(work, healed.unit);
             amount = healed.amount;
             hp = healed.unit.vitality.hp;
         }
 
-        work = appendEvents(work, [
+        appendEvents(work, [
             {
                 type: "HEAL",
                 sourceUnitId: request.sourceUnitId,

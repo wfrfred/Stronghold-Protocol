@@ -1,5 +1,4 @@
 import type { Unit, UnitId } from "../../unit.js";
-import type { BattleState } from "../../../battle/execution/context.js";
 import type {
     EffectRef,
     EffectInstanceValue,
@@ -117,18 +116,8 @@ export type EffectInstallationResult =
               "TARGET_ABSENT" | "TARGET_CLOSING" | "LIFETIME_UNAVAILABLE" | "ADMISSION_REJECTED";
       };
 
-export interface EffectInstallation {
-    readonly work: BattleState;
-    readonly result: EffectInstallationResult;
-}
-
 export type EffectBindingResult =
     | { readonly type: "BOUND" }
     | { readonly type: "EFFECT_ABSENT" }
     | { readonly type: "EFFECT_FINISHED" }
     | { readonly type: "LIFETIME_UNAVAILABLE" };
-
-export interface EffectLifetimeBinding {
-    readonly work: BattleState;
-    readonly result: EffectBindingResult;
-}

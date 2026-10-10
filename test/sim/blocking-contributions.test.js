@@ -52,9 +52,11 @@ const enemy = (id, weight = 1) => initializeUnit({
 });
 const capacityOf = unit => resolveBlockingCapacity(unit.definition.blocker, unit.blocker);
 const capacity = work => capacityOf(getUnit(work, 0));
-const install = (work, effect, resources, expiresAtTick = null) => installNewEffect(
-  work, 0, effect.ref, { source: 7, scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }] }, resources, 0,
-).work;
+const install = (work, effect, resources, expiresAtTick = null) => {
+  installNewEffect(
+    work, 0, effect.ref, { source: 7, scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }] }, resources, 0,
+  );
+};
 const entry = (id, value, participating = true) => ({ id, sequence: 0, participating, values: [value] });
 
 test('blocking capacity: initialization and copying retain stored contributions and resolve ties to even after clamping', () => {
@@ -92,31 +94,32 @@ test('blocking capacity: effect updates, participation and terminal cleanup pres
   const initialized = blocker();
   const owner = { ...initialized, vitality: { ...initialized.vitality, hp: 50 } };
   const original = effectFixtureWork(owner);
-  let work = install(original, effect, resources);
+  const work = createBattleState(original.battlefield.fork());
+  install(work, effect, resources);
   const installed = copyUnitSnapshot(getUnit(work, 0));
   assert.equal(capacity(work), 2);
   assert.equal(getUnit(work, 0).vitality.hp, 50);
   assert.equal(resolveMaxHp(0, battlefieldView(work)), 100);
-  work = updateEffectState(work, 0, 0, effect.ref, () => ({ amount: -2 }), resources, 0);
+  updateEffectState(work, 0, 0, effect.ref, () => ({ amount: -2 }), resources, 0);
   assert.equal(capacity(work), 1);
-  work = setEffectEnabled(work, effectAddress, false, resources, 1);
+  setEffectEnabled(work, effectAddress, false, resources, 1);
   assert.equal(capacity(work), 3);
-  work = updateEffectState(work, 0, 0, effect.ref, () => ({ amount: -9 }), resources, 1);
+  updateEffectState(work, 0, 0, effect.ref, () => ({ amount: -9 }), resources, 1);
   assert.equal(capacity(work), 3);
-  work = setEffectEnabled(work, effectAddress, true, resources, 2);
+  setEffectEnabled(work, effectAddress, true, resources, 2);
   assert.equal(capacity(work), 0);
-  work = install(work, hpEffect, resources);
+  install(work, hpEffect, resources);
   assert.equal(capacity(work), 0);
   assert.equal(getUnit(work, 0).vitality.hp, 100);
   assert.equal(resolveMaxHp(0, battlefieldView(work)), 200);
-  work = finishEffects(work, [effectAddress], resources, 3);
+  finishEffects(work, [effectAddress], resources, 3);
   assert.equal(capacity(work), 3);
   assert.equal(getUnit(work, 0).vitality.hp, 100);
   assert.equal(resolveMaxHp(0, battlefieldView(work)), 200);
   assert.equal(getUnit(work, 0).definition.blocker.capacity, 3);
   const current = getUnit(work, 0);
   assert.equal(updateBlockingCapacityContributions(current, state => state), current);
-  work = finalizeEffect(work, effectAddress, resources, 3);
+  finalizeEffect(work, effectAddress, resources, 3);
   assert.deepEqual(getUnit(work, 0).blocker.capacity.entries, []);
   assert.equal(installed.blocker.capacity.entries[0].participating, true);
   assert.equal(capacityOf(installed), 2);
@@ -204,17 +207,17 @@ test('blocking capacity: native STACK layers release enemies and expiry restores
   assert.deepEqual(h.blocked(), [1, 2, 3]);
   const original = h.state;
   const apply = () => {
-    let work = h.work();
+    const work = h.work();
     const current = getUnit(work, 0).effects?.instances.find(instance => instance.programRef === effect.ref);
     const plan = rule.plan(current === undefined ? undefined : {
       stackCount: current.state.stackCount, expiresAtTick: effectTick(current),
     }, { stackCount: 1, expiresAtTick: 2 }, 0);
     if (plan.type === 'INSTALL') {
-      work = install(work, effect, resources, 2);
+      install(work, effect, resources, 2);
     } else {
       assert.equal(plan.type, 'REFRESH');
-      work = setEffectTick(work, effectAddress, plan.expiresAtTick);
-      work = updateEffectState(work, 0, 0, effect.ref, state => ({ ...state, stackCount: plan.stackCount }), resources, 0);
+      setEffectTick(work, effectAddress, plan.expiresAtTick);
+      updateEffectState(work, 0, 0, effect.ref, state => ({ ...state, stackCount: plan.stackCount }), resources, 0);
     }
     assert.equal(h.publish(work).dependencies.blocking, true);
   };
@@ -225,7 +228,9 @@ test('blocking capacity: native STACK layers release enemies and expiry restores
   }
   for (const [tick, restored] of [[2, 1], [4, 2], [6, 3]]) {
     const beforePhase = h.blocked();
-    h.publish(expireEffects(h.work(), tick, resources));
+    const work = h.work();
+    expireEffects(work, tick, resources);
+    h.publish(work);
     assert.equal(capacityOf(h.state.units.get(0)), restored);
     assert.deepEqual(h.blocked(), beforePhase, 'restoring capacity does not acquire relations during settlement');
     h.blockingPhase(tick);
@@ -253,19 +258,27 @@ test('blocking capacity: the native zero scaler releases weighted enemies and pa
   const h = battlefield([blocker(), enemy(1, 2), enemy(2), enemy(3, 4)]);
   h.blockingPhase(0);
   assert.deepEqual(h.blocked(), [1, 2]);
-  h.publish(install(h.work(), effect, resources));
+  const installedWork = h.work();
+  install(installedWork, effect, resources);
+  h.publish(installedWork);
   assert.equal(capacityOf(h.state.units.get(0)), 0);
   assert.deepEqual(h.blocked(), []);
   h.blockingPhase(0);
   assert.deepEqual(h.blocked(), []);
-  h.publish(setEffectEnabled(h.work(), effectAddress, false, resources, 1));
+  const pausedWork = h.work();
+  setEffectEnabled(pausedWork, effectAddress, false, resources, 1);
+  h.publish(pausedWork);
   assert.equal(capacityOf(h.state.units.get(0)), 3);
   assert.deepEqual(h.blocked(), []);
   h.blockingPhase(1);
   assert.deepEqual(h.blocked(), [1, 2]);
-  h.publish(setEffectEnabled(h.work(), effectAddress, true, resources, 2));
+  const resumedWork = h.work();
+  setEffectEnabled(resumedWork, effectAddress, true, resources, 2);
+  h.publish(resumedWork);
   assert.deepEqual(h.blocked(), []);
-  h.publish(finishEffects(h.work(), [effectAddress], resources, 3));
+  const finishedWork = h.work();
+  finishEffects(finishedWork, [effectAddress], resources, 3);
+  h.publish(finishedWork);
   assert.equal(capacityOf(h.state.units.get(0)), 3);
   h.blockingPhase(3);
   assert.deepEqual(h.blocked(), [1, 2]);

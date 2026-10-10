@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
-import { battlefieldView, getUnit, updateUnit, withExecution } from "../../dist/core/tactical/battle/execution/context.js";
+import { advanceBattlefield, battlefieldView, getUnit, updateUnit } from "../../dist/core/tactical/battle/execution/context.js";
 import { createProjectileProgram } from "../../dist/core/tactical/battlefield/projectile/program.js";
 import { withProjectileOperations } from "../../dist/core/tactical/battlefield/projectile/operations.js";
 import { advanceProjectiles } from "../../dist/core/tactical/battlefield/projectile/settlement.js";
@@ -41,8 +41,8 @@ function ammoFixture(ammo = 31, ammoPerAttack = 1) {
   const unit = initializeUnit({ id: 1, position: [0, 0], definition: { id: "ammo-caster", skill: definition, offense: { attack: 100 } } });
   const enemy = initializeUnit({ id: 2, position: [1, 0], definition: { id: "ammo-target", vitality: { maxHp: 1000 }, hit: { geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.2 }] } } } });
   let work = effectFixtureWork(unit, enemy);
-  work = updateUnit(work, { ...unit, skill: gainSkillSp(unit.skill, definition, "EXTERNAL", 30).state });
-  work = activateSkill(work, { unitId: 1, tick: 0 }, resources).work;
+  updateUnit(work, { ...unit, skill: gainSkillSp(unit.skill, definition, "EXTERNAL", 30).state });
+  activateSkill(work, { unitId: 1, tick: 0 }, resources);
   return { resources, definition, work };
 }
 
@@ -81,21 +81,21 @@ test("pure ammunition spending preserves snapshots and clamps the final consumpt
 
 test("Ash's 31-round profile remains active indefinitely without attacks and ends on its 31st consumption", () => {
   const f = ammoFixture();
-  let work = advanceSkill(f.work, 1, 10000, f.resources).work;
+  let work = f.work;
+  advanceSkill(work, 1, 10000, f.resources);
   assert.equal(getUnit(work, 1).skill.active.remainingAmmo, 31);
   assert.equal(getUnit(work, 1).skill.sp, 0);
   for (let i = 1; i <= 30; i++) {
     const consumed = consumeSkillAmmo(work, 1, 10000 + i, f.resources);
     assert.equal(consumed.signals.length, 0);
-    work = consumed.work;
   }
   assert.equal(getUnit(work, 1).skill.active.remainingAmmo, 1);
   const final = consumeSkillAmmo(work, 1, 10031, f.resources);
   assert.equal(final.result.amount, 1);
   assert.deepEqual(final.signals.map((signal) => signal.type), ["SKILL_FINISHED"]);
-  assert.equal(getUnit(final.work, 1).skill.active, null);
-  assert.equal(resolveAttackPower(1, battlefieldView(final.work), f.resources.computations), 100);
-  assert.equal(consumeSkillAmmo(final.work, 1, 10031, f.resources).result.reason, "INACTIVE");
+  assert.equal(getUnit(work, 1).skill.active, null);
+  assert.equal(resolveAttackPower(1, battlefieldView(work), f.resources.computations), 100);
+  assert.equal(consumeSkillAmmo(work, 1, 10031, f.resources).result.reason, "INACTIVE");
 });
 
 test("explicit two-round attack consumption ends a 32-round profile after sixteen attacks", () => {
@@ -104,7 +104,6 @@ test("explicit two-round attack consumption ends a 32-round profile after sixtee
   for (let i = 1; i <= 16; i++) {
     const consumed = consumeSkillAmmo(work, 1, i, f.resources);
     assert.equal(consumed.result.amount, 2);
-    work = consumed.work;
   }
   assert.equal(getUnit(work, 1).skill.active, null);
 });
@@ -122,13 +121,12 @@ test("the final shot is sampled with its buff before consumption and its project
     source: 1, traceTarget: 2, position: [0, 0], destination: [1, 0], cachedAtk: attackPower,
     speedPerTick: 1, contactRange: { type: "SHAPES", geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.2 }] } }, stopDelayTicks: 0,
   }));
-  const consumed = consumeSkillAmmo(withExecution(f.work, { ...f.work.execution, nextProjectileId: launched.nextProjectileId }), 1, 0, f.resources);
-  assert.equal(resolveAttackPower(1, battlefieldView(consumed.work), f.resources.computations), 100);
+  f.work.execution = { ...f.work.execution, nextProjectileId: launched.nextProjectileId };
+  consumeSkillAmmo(f.work, 1, 0, f.resources);
+  assert.equal(resolveAttackPower(1, battlefieldView(f.work), f.resources.computations), 100);
   const projectile = launched.changes.find((change) => change.type === "REGISTER_PROJECTILE").projectile;
   assert.equal(projectile.cachedAtk, 200);
-  const hit = advanceProjectiles(consumed.work, {
-    projectileIds: [projectile.id],
-    getProjectile: (id) => id === projectile.id ? projectile : undefined,
-  }, f.resources, 1);
-  assert.equal(getUnit(hit.work, 2).vitality.hp, 800);
+  advanceBattlefield(f.work, launched.changes);
+  advanceProjectiles(f.work, f.resources, 1);
+  assert.equal(getUnit(f.work, 2).vitality.hp, 800);
 });

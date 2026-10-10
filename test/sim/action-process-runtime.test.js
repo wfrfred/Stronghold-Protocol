@@ -222,14 +222,12 @@ test("action runtime: delayed progress keeps ordinary same-tick order and copied
   assert.deepEqual(structuredClone(snapshot), snapshot);
 
   const id = snapshot.actionExecution.executions[0].id;
-  let copied = {
-    work: workFrom(snapshot),
-    state: copyActionExecutionState(snapshot.actionExecution),
-  };
+  const copiedState = workFrom(snapshot);
+  let copied = { state: copyActionExecutionState(snapshot.actionExecution) };
   const copySignals = [];
   for (const tick of [1, 2]) {
     copied = resumeActionExecution(
-      copied.work,
+      copiedState,
       copied.state,
       { executionId: id, segments: process, tick },
       resources,
@@ -255,9 +253,9 @@ test("action runtime: delayed progress keeps ordinary same-tick order and copied
   assert.deepEqual(runtime.snapshot().actionExecution, copied.state);
   assert.equal(
     runtime.snapshot().units.find((unit) => unit.id === 2).vitality.hp,
-    getUnit(copied.work, 2).vitality.hp,
+    getUnit(copiedState, 2).vitality.hp,
   );
-  assert.equal(getUnit(copied.work, 2).vitality.hp, 90);
+  assert.equal(getUnit(copiedState, 2).vitality.hp, 90);
   assert.equal(snapshot.actionExecution.executions[0].wait.remainingTicks, 2);
 });
 
@@ -378,8 +376,7 @@ test("action runtime: failed continuation publishes no progress, sample, settlem
             program: [
               {
                 type: "EXECUTE",
-                run: (context) => ({
-                  work: installNewEffect(
+                run: (context) => {installNewEffect(
                     context.work,
                     0,
                     marker.ref,
@@ -389,15 +386,14 @@ test("action runtime: failed continuation publishes no progress, sample, settlem
                     },
                     services,
                     context.tick,
-                  ).work,
-                }),
+                  );},
               },
               ...compiled.program,
               {
                 type: "EXECUTE",
                 run: (context) => {
                   attemptedIds.push(context.executionId);
-                  const work = updateEffectState(
+                  updateEffectState(
                     context.work,
                     0,
                     0,
@@ -408,7 +404,7 @@ test("action runtime: failed continuation publishes no progress, sample, settlem
                   if (fault.enabled) {
                     throw new Error("continuation failed");
                   }
-                  return { work };
+                  return;
                 },
               },
             ],
@@ -462,11 +458,9 @@ test("action runtime: a throwing Effect finish after nested host death leaves ex
       return {
         ...compiled,
         program: [
-          { type: "EXECUTE", run: context => ({
-            work: installNewEffect(context.work, 0, terminal.ref, {
+          { type: "EXECUTE", run: context => {installNewEffect(context.work, 0, terminal.ref, {
               source: 0, scopes: [{ type: "ACTION", executionId: context.executionId }],
-            }, services, context.tick).work,
-          }) },
+            }, services, context.tick);} },
           { type: "WAIT", allowNewAction: false, resolve: () => ({ type: "FOR_TICKS", ticks: 10 }) },
           ...compiled.program,
         ],

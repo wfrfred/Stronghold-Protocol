@@ -22,7 +22,6 @@ import type {
     ActionExecutionResumeRequest,
     ActionExecutionSamples,
     ActionExecutionSignal,
-    ActionExecutionStepResult,
     ActionExecutionTransition,
     ActionExecutionWait,
     ActionExecutionWaitRequest,
@@ -100,10 +99,10 @@ function endExecution(
     tick: number,
     reason: string,
     dispatch: EffectDispatchScope,
-): BattleState {
+): void {
     executions.remove(execution);
 
-    return closeEffectLifetimes(
+    closeEffectLifetimes(
         work,
         [{ type: "ACTION", executionId: execution.id }],
         resources,
@@ -128,18 +127,10 @@ function finishExecution(
         sourceUnitId: execution.sourceUnitId,
         tick,
     };
-    const ended = endExecution(
-        work,
-        executions,
-        execution,
-        resources,
-        tick,
-        "ACTION_FINISHED",
-        dispatch,
-    );
+    endExecution(work, executions, execution, resources, tick, "ACTION_FINISHED", dispatch);
+    appendEvents(work, [signal]);
 
     return {
-        work: appendEvents(ended, [signal]),
         result: { type: "FINISHED" },
         signals: [...signals, signal],
     };
@@ -156,7 +147,7 @@ export function cancelActionExecutionInWork(
     const execution = executions.get(executionId);
 
     if (execution === undefined) {
-        return { work, result: { type: "ABSENT" }, signals: [] };
+        return { result: { type: "ABSENT" }, signals: [] };
     }
 
     if (work.actionExecutions !== executions) {
@@ -170,10 +161,10 @@ export function cancelActionExecutionInWork(
         tick,
         reason,
     };
-    const ended = endExecution(work, executions, execution, resources, tick, reason, dispatch);
+    endExecution(work, executions, execution, resources, tick, reason, dispatch);
+    appendEvents(work, [signal]);
 
     return {
-        work: appendEvents(ended, [signal]),
         result: { type: "CANCELLED", reason },
         signals: [signal],
     };
@@ -223,7 +214,7 @@ export function resumeActionExecutionInWork(
     let execution = executions.get(executionId);
 
     if (execution === undefined) {
-        return { work, result: { type: "ABSENT" }, signals: [] };
+        return { result: { type: "ABSENT" }, signals: [] };
     }
 
     if (work.actionExecutions !== executions) {
@@ -271,14 +262,13 @@ export function resumeActionExecutionInWork(
             segment.type === releaseType &&
             !segments.slice(0, execution.cursor).some(({ type }) => type === releaseType)
         ) {
-            const releasing = beforeActionRelease(work, source.id, tick, resources, dispatch);
-            work = releasing.work;
+            const interrupted = beforeActionRelease(work, source.id, tick, resources, dispatch);
 
             if (executions.get(executionId) === undefined) {
-                return { work, result: { type: "ABSENT" }, signals };
+                return { result: { type: "ABSENT" }, signals };
             }
 
-            if (releasing.interrupted) {
+            if (interrupted) {
                 const cancelled = cancelActionExecutionInWork(
                     work,
                     executions,
@@ -290,18 +280,17 @@ export function resumeActionExecutionInWork(
                 return { ...cancelled, signals: [...signals, ...cancelled.signals] };
             }
 
-            work = gainUnitSkillSp(work, source.id, "ATTACK");
+            gainUnitSkillSp(work, source.id, "ATTACK");
         }
 
         switch (segment.type) {
             case "EXECUTE": {
-                const result: ActionExecutionStepResult = segment.run(
+                const result = segment.run(
                     contextFor(work, execution, tick, resources.projectileOperations),
                 );
-                work = result.work;
 
                 if (executions.get(executionId) === undefined) {
-                    return { work, result: { type: "ABSENT" }, signals };
+                    return { result: { type: "ABSENT" }, signals };
                 }
 
                 const preceding = segments.slice(0, execution.cursor);
@@ -312,10 +301,10 @@ export function resumeActionExecutionInWork(
                     .some(({ type }) => type === "EXECUTE");
 
                 if (outputStarted && !previousOutput && resources.completeAttack !== undefined) {
-                    work = resources.completeAttack(work, execution.sourceUnitId, tick, dispatch);
+                    resources.completeAttack(work, execution.sourceUnitId, tick, dispatch);
 
                     if (executions.get(executionId) === undefined) {
-                        return { work, result: { type: "ABSENT" }, signals };
+                        return { result: { type: "ABSENT" }, signals };
                     }
                 }
 
@@ -323,16 +312,16 @@ export function resumeActionExecutionInWork(
                     ...execution,
                     cursor: execution.cursor + 1,
                     bindings:
-                        result.bindings === undefined
+                        result?.bindings === undefined
                             ? execution.bindings
                             : ownBindings(result.bindings),
                     samples:
-                        result.samples === undefined
+                        result?.samples === undefined
                             ? execution.samples
                             : ownSamples(result.samples),
                 });
 
-                if (result.continuation === "FINISH") {
+                if (result?.continuation === "FINISH") {
                     return finishExecution(
                         work,
                         executions,
@@ -343,7 +332,7 @@ export function resumeActionExecutionInWork(
                         dispatch,
                     );
                 }
-                if (result.continuation === "CANCEL") {
+                if (result?.continuation === "CANCEL") {
                     executions.replace(execution);
                     const cancelled = cancelActionExecutionInWork(
                         work,
@@ -377,7 +366,6 @@ export function resumeActionExecutionInWork(
                     }
 
                     return {
-                        work,
                         result: { type: "WAITING" },
                         signals,
                     };
@@ -400,7 +388,7 @@ export function resumeActionExecutionInWork(
                     markerId: segment.markerId,
                 };
                 signals.push(signal);
-                work = appendEvents(work, [signal]);
+                appendEvents(work, [signal]);
                 execution = Object.freeze({ ...execution, cursor: execution.cursor + 1 });
                 break;
             }

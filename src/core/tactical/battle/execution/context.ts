@@ -80,7 +80,7 @@ export function getMechanism(state: BattleState, id: MechanismId): MechanismRunt
     return battlefieldView(state).getMechanism(id);
 }
 
-export function updateMechanism(state: BattleState, mechanism: MechanismRuntime): BattleState {
+export function updateMechanism(state: BattleState, mechanism: MechanismRuntime): void {
     const current = getMechanism(state, mechanism.id);
 
     if (current !== mechanism) {
@@ -88,15 +88,13 @@ export function updateMechanism(state: BattleState, mechanism: MechanismRuntime)
             { type: current === undefined ? "REGISTER_MECHANISM" : "UPDATE_MECHANISM", mechanism },
         ]);
     }
-
-    return state;
 }
 
-export function updateUnit(state: BattleState, unit: Unit): BattleState {
-    return updateUnits(state, [unit]);
+export function updateUnit(state: BattleState, unit: Unit): void {
+    updateUnits(state, [unit]);
 }
 
-export function updateUnits(state: BattleState, units: readonly Unit[]): BattleState {
+export function updateUnits(state: BattleState, units: readonly Unit[]): void {
     const changes: BattlefieldChange[] = [];
 
     for (const unit of new Map(units.map((unit) => [unit.id, unit])).values()) {
@@ -108,25 +106,21 @@ export function updateUnits(state: BattleState, units: readonly Unit[]): BattleS
     }
 
     advanceBattlefield(state, changes);
-
-    return state;
 }
 
-export function registerUnit(state: BattleState, unit: Unit): BattleState {
+export function registerUnit(state: BattleState, unit: Unit): void {
     advanceBattlefield(state, [{ type: "REGISTER_UNIT", unit }]);
-
-    return state;
 }
 
 export function transitionUnit(
     state: BattleState,
     id: UnitId,
     transition: (current: Unit) => Unit,
-): BattleState {
+): void {
     const current = getUnit(state, id);
 
     if (current === undefined) {
-        return state;
+        return;
     }
 
     const next = transition(current);
@@ -135,7 +129,7 @@ export function transitionUnit(
         throw new TypeError("unit transition cannot change identity");
     }
 
-    return updateUnit(state, next);
+    updateUnit(state, next);
 }
 
 /** Physically removes a unit after the domain has settled its lifecycle. */
@@ -143,26 +137,12 @@ export function removeUnit(
     state: BattleState,
     id: UnitId,
     reason: BattlefieldRemovalReason = "DEATH",
-): BattleState {
+): void {
     if (getUnit(state, id) !== undefined) {
         advanceBattlefield(state, [{ type: "REMOVE_UNIT", unitId: id, reason }]);
     }
-
-    return state;
 }
 
-export function appendEvents(state: BattleState, events: readonly Event[]): BattleState {
+export function appendEvents(state: BattleState, events: readonly Event[]): void {
     state.events.push(...events);
-
-    return state;
-}
-
-export function eventsOf(state: BattleState): readonly Event[] {
-    return state.events;
-}
-
-export function withExecution(state: BattleState, execution: BattleExecutionState): BattleState {
-    state.execution = execution;
-
-    return state;
 }
