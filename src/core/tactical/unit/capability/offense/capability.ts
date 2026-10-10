@@ -39,7 +39,7 @@ export function createOffenseDefinition(definition: OffenseDefinition): OffenseD
 
 export function initializeOffenseState(definition?: OffenseDefinition): OffenseState;
 export function initializeOffenseState(): OffenseState {
-    return { attack: contribution.create() };
+    return { attack: contribution.empty() };
 }
 
 function updateContributions(

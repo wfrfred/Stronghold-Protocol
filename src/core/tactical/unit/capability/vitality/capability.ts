@@ -34,7 +34,7 @@ export function hasVitalityDefinition(
 }
 
 export function initializeVitalityState(definition: VitalityDefinition): VitalityState {
-    return { hp: definition.maxHp, maxHp: contribution.create<"SAMPLED">() };
+    return { hp: definition.maxHp, maxHp: contribution.empty<"SAMPLED">() };
 }
 
 function updateContributions(

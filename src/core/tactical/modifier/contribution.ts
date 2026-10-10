@@ -52,6 +52,10 @@ export type SampledTransition = <M extends Mode>(
 
 const emptyState: State<never> = { entries: [] };
 
+export function empty<M extends Mode = Mode>(): State<M> {
+    return emptyState;
+}
+
 function validateEntry(entry: Entry): void {
     if (entry.id.length === 0) {
         throw new TypeError("numeric contribution identity must be nonempty");
@@ -76,22 +80,6 @@ function validateEntry(entry: Entry): void {
     if (entry.kind === "LIVE" && entry.evaluator.length === 0) {
         throw new TypeError("numeric contribution evaluator identity must be nonempty");
     }
-}
-
-export function create<M extends Mode = Mode>(entries: readonly Entry<M>[] = []): State<M> {
-    const ids = new Set<string>();
-
-    for (const entry of entries) {
-        validateEntry(entry);
-
-        if (ids.has(entry.id)) {
-            throw new TypeError(`duplicate numeric contribution ${entry.id}`);
-        }
-
-        ids.add(entry.id);
-    }
-
-    return entries.length === 0 ? emptyState : { entries };
 }
 
 export function register<M extends Mode>(state: State<M>, entry: Entry<M>): State<M> {

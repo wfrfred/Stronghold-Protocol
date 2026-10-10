@@ -129,8 +129,8 @@ export function createActionState(tick = 0): ActionState {
         readyAtTick: tick,
         recoveryUntilTick: tick,
         cooldownIntervalTicks: null,
-        attackSpeed: contribution.create(),
-        baseAttackTime: contribution.create(),
+        attackSpeed: contribution.empty(),
+        baseAttackTime: contribution.empty(),
     };
 }
 

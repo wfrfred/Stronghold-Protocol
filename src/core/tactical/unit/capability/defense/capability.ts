@@ -47,8 +47,8 @@ export function createDefenseDefinition(definition: DefenseDefinition): DefenseD
 export function initializeDefenseState(definition?: DefenseDefinition): DefenseState;
 export function initializeDefenseState(): DefenseState {
     return {
-        defense: contribution.create(),
-        resistance: contribution.create(),
+        defense: contribution.empty(),
+        resistance: contribution.empty(),
     };
 }
 

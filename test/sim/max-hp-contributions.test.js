@@ -453,15 +453,15 @@ const broadCapacity: Target = updateBlockingCapacityContributions;
 const projection: SampledTarget = updateMaxHpContributions;
 // @ts-expect-error A sampled target alias still rejects a live transition.
 live({ id: 'hp', target: projection, computations, evaluator: 'hp', evaluate: () => [], group });
-const fixed = contribution.create<'SAMPLED'>();
+const fixed = contribution.empty<'SAMPLED'>();
 // @ts-expect-error Direct installation cannot insert a live contribution into sampled state.
 contribution.register(fixed, { id: 'hp', sequence: 0, kind: "LIVE", participating: true, evaluator: 'hp' });
 // @ts-expect-error An update cannot replace a sampled contribution with a live contribution.
 contribution.update(fixed, 'hp', () => ({ id: 'hp', sequence: 0, kind: "LIVE", participating: true, evaluator: 'hp' }));
 // @ts-expect-error Vitality cannot hold a live contribution.
-const invalid: VitalityState = { hp: 100, maxHp: contribution.create([{ id: 'hp', sequence: 0, kind: "LIVE", participating: true, evaluator: 'hp' }]) };
+const invalid: VitalityState = { hp: 100, maxHp: contribution.register(contribution.empty<'LIVE'>(), { id: 'hp', sequence: 0, kind: "LIVE", participating: true, evaluator: 'hp' }) };
 // @ts-expect-error Blocking cannot hold a live contribution.
-const invalidBlocker: BlockerState = { capacity: contribution.create([{ id: 'capacity', sequence: 0, kind: "LIVE", participating: true, evaluator: 'capacity' }]), enabled: true, geometry: { radius: 1 } };
+const invalidBlocker: BlockerState = { capacity: contribution.register(contribution.empty<'LIVE'>(), { id: 'capacity', sequence: 0, kind: "LIVE", participating: true, evaluator: 'capacity' }), enabled: true, geometry: { radius: 1 } };
 const combat = new CombatResources();
 const effect = createEffectProgram({ id: 'hp', initialize: () => ({ bonus: 100 }) });
 const bonus = (amount: number) => [{ addition: 0, multiplier: 0, finalAddition: amount, finalScaler: 1 }];

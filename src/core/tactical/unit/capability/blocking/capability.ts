@@ -72,7 +72,7 @@ export function createBlockableDefinition(definition: BlockableDefinition): Bloc
 
 export function initializeBlockerState(definition: BlockerDefinition): BlockerState {
     return {
-        capacity: contribution.create<"SAMPLED">(),
+        capacity: contribution.empty<"SAMPLED">(),
         geometry: definition.geometry,
         enabled: true,
     };

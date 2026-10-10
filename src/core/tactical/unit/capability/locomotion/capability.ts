@@ -58,7 +58,7 @@ export function hasRoutedLocomotion<U extends Unit>(
 }
 
 export function createLocomotionState(): LocomotionState {
-    return { moving: false, moveSpeed: contribution.create(), steering: createSteeringState() };
+    return { moving: false, moveSpeed: contribution.empty(), steering: createSteeringState() };
 }
 
 export function initializeLocomotionState(

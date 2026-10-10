@@ -63,16 +63,16 @@ test('blocking capacity: immutable updates retain sampled contributions and reso
   assert.equal(definition.capacity, 3);
   assert.deepEqual(state.capacity.entries, []);
   assert.equal(resolveBlockingCapacity(definition, state), 3);
-  const modified = { ...state, capacity: contribution.create([entry('arithmetic', modifier.create({
+  const modified = { ...state, capacity: contribution.register(contribution.empty(), entry('arithmetic', modifier.create({
     addition: 1, multiplier: 0.5, finalAddition: 1, finalScaler: 2,
-  }))]) };
+  }))) };
   assert.equal(resolveBlockingCapacity(definition, modified), 14);
   const disabled = { ...modified, capacity: contribution.setParticipation(modified.capacity, 'arithmetic', false) };
   assert.equal(disabled.capacity.entries[0].values, modified.capacity.entries[0].values);
   assert.equal(resolveBlockingCapacity(definition, disabled), 3);
   assert.equal(resolveBlockingCapacity(definition, modified), 14);
   for (const [value, expected] of [[-3, 0], [-0.5, 0], [0.49, 0], [0.5, 0], [0.51, 1], [1.5, 2], [2.5, 2], [3.5, 4]]) {
-    const result = { ...state, capacity: contribution.create([entry('rounding', modifier.create({ finalAddition: value - 3 }))]) };
+    const result = { ...state, capacity: contribution.register(contribution.empty(), entry('rounding', modifier.create({ finalAddition: value - 3 }))) };
     assert.equal(resolveBlockingCapacity(definition, result), expected, `resolved ${value}`);
   }
 });
@@ -265,10 +265,10 @@ test('blocking capacity: replacing contribution entries without changing the res
   const h = battlefield([blocker(), enemy(1)]);
   const before = h.state;
   const owner = before.units.get(0);
-  const changed = updateBlockingCapacityContributions(owner, () => contribution.create([
-    entry('positive', modifier.create({ addition: 1 })),
-    entry('negative', modifier.create({ addition: -1 })),
-  ]));
+  const changed = updateBlockingCapacityContributions(owner, state => {
+    const positive = contribution.register(state, entry('positive', modifier.create({ addition: 1 })));
+    return contribution.register(positive, entry('negative', modifier.create({ addition: -1 })));
+  });
   assert.notEqual(changed.blocker.capacity.entries, owner.blocker.capacity.entries);
   assert.equal(capacityOf(changed), capacityOf(owner));
   const result = h.commit([{ type: 'UPDATE_UNIT', unit: changed }]);

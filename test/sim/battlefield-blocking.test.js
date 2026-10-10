@@ -41,9 +41,9 @@ const stun = unit => ({
   ...unit, status: addStatusContribution(unit.status, { id: 'test-stun', flags: ['STUNNED'] }),
 });
 const recover = unit => ({ ...unit, status: removeStatusContribution(unit.status, 'test-stun') });
-const capacityChange = (unit, addition) => updateBlockingCapacityContributions(unit, () => contribution.create([
+const capacityChange = (unit, addition) => updateBlockingCapacityContributions(unit, () => contribution.register(contribution.empty(),
   { id: 'test-capacity', sequence: 0, kind: "SAMPLED", participating: true, values: [modifier.create({ addition })] },
-]));
+));
 
 test('advance acquires in target ID order, choosing the nearest available blocker and then blocker ID', () => {
   const tied = create([

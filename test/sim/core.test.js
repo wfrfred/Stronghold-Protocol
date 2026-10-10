@@ -462,7 +462,7 @@ test('core unit initialization uses prepared states and separates configuration 
   assert.equal(unit.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 9);
   assert.equal(unit.spatialPresence.present, false);
   assert.equal(Object.hasOwn(unit, 'defense'), true);
-  assert.deepEqual(unit.blocker, { capacity: contribution.create(), geometry: { radius: 0.7 }, enabled: true });
+  assert.deepEqual(unit.blocker, { capacity: contribution.empty(), geometry: { radius: 0.7 }, enabled: true });
   assert.equal(resolveBlockingCapacity(unit.definition.blocker, unit.blocker), 2);
   assert.deepEqual(unit.blockable, { weight: 1, enabled: true });
 

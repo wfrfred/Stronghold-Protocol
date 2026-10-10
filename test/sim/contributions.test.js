@@ -61,17 +61,19 @@ const metadata = (id = 0) => ({
   acquiredSequence: id,
 });
 
-test("contributions: creation shares immutable entries and nested values", () => {
+test("contributions: registration shares immutable entries and nested values", () => {
   const owner = { unitId: 1, instanceId: 2 };
   const group = { id: "attack", strength: 3 };
   const sample = value(10);
   const values = [sample];
   const input = { id: "sample", sequence: 0, kind: "SAMPLED", participating: true, owner, group, values };
-  const entries = [input];
-  const state = contribution.create(entries);
+  const baseline = contribution.empty();
+  const state = contribution.register(baseline, input);
   const entry = state.entries[0];
 
-  assert.equal(state.entries, entries);
+  assert.equal(contribution.empty(), baseline);
+  assert.deepEqual(contribution.remove(state, "sample").entries, []);
+  assert.deepEqual(baseline.entries, []);
   assert.equal(entry, input);
   assert.equal(entry.owner, owner);
   assert.equal(entry.group, group);
@@ -81,18 +83,13 @@ test("contributions: creation shares immutable entries and nested values", () =>
 });
 
 test("contributions: participation changes share existing owner, group, and samples", () => {
-  const state = contribution.create([
-    {
-      id: "sample",
-      sequence: 0,
-      kind: "SAMPLED",
-      participating: true,
-      owner: { unitId: 1, instanceId: 2 },
-      group: { id: "attack", strength: 3 },
-      values: [value(10)],
-    },
-    { id: "provider", sequence: 1, kind: "LIVE", participating: true, evaluator: "live" },
-  ]);
+  const sampled = contribution.register(contribution.empty(), {
+    id: "sample", sequence: 0, kind: "SAMPLED", participating: true,
+    owner: { unitId: 1, instanceId: 2 }, group: { id: "attack", strength: 3 }, values: [value(10)],
+  });
+  const state = contribution.register(sampled, {
+    id: "provider", sequence: 1, kind: "LIVE", participating: true, evaluator: "live",
+  });
   const initial = state.entries[0];
   const paused = contribution.setParticipation(state, "sample", false);
   const entry = paused.entries[0];
@@ -111,17 +108,10 @@ test("contributions: participation changes share existing owner, group, and samp
 });
 
 test("contributions: immutable updates share unchanged data and retain previous values", () => {
-  const state = contribution.create([
-    {
-      id: "sample",
-      sequence: 0,
-      kind: "SAMPLED",
-      participating: true,
-      owner: { unitId: 1, instanceId: 2 },
-      group: { id: "attack", strength: 3 },
-      values: [value(10)],
-    },
-  ]);
+  const state = contribution.register(contribution.empty(), {
+    id: "sample", sequence: 0, kind: "SAMPLED", participating: true,
+    owner: { unitId: 1, instanceId: 2 }, group: { id: "attack", strength: 3 }, values: [value(10)],
+  });
   const initial = state.entries[0];
   const reordered = contribution.update(state, "sample", (entry) => ({ ...entry, sequence: 1 }));
   assert.equal(reordered.entries[0].owner, initial.owner);
@@ -154,8 +144,7 @@ test("contributions: registration preserves unique identities and removal preser
     id: "first", sequence: 0, kind: "SAMPLED", participating: true,
     owner: { unitId: 1, instanceId: 2 }, values: [value(10)],
   };
-  const state = contribution.create([entry]);
-  assert.throws(() => contribution.create([entry, entry]), /duplicate numeric contribution/);
+  const state = contribution.register(contribution.empty(), entry);
   assert.throws(() => contribution.register(state, entry), /duplicate numeric contribution/);
   const registered = contribution.register(state, {
     id: "second", sequence: 1, kind: "SAMPLED", participating: true,
@@ -172,7 +161,7 @@ test("contributions: registration preserves unique identities and removal preser
 
 test("contributions: updates preserve identity, ordering, owner IDs, and group constraints", () => {
   const entry = { id: "sample", sequence: 0, kind: "SAMPLED", participating: true, values: [value(10)] };
-  const state = contribution.create([entry]);
+  const state = contribution.register(contribution.empty(), entry);
   for (const patch of [
     { sequence: -1 },
     { owner: { unitId: 1, instanceId: 0.5 } },

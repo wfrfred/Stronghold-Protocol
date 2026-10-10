@@ -405,9 +405,9 @@ test('core combat: snapshots share capabilities while immutable battlefield upda
       { type: 'CIRCLE', offset: [0, 0], radius: 100 },
     ] }) },
     status: addStatusContribution(operator.status, { id: 'changed-targeting', flags: ['TARGET_FREE'] }),
-    blocker: { ...operator.blocker, capacity: contribution.create([{ id: 'disabled-capacity', sequence: 0,
+    blocker: { ...operator.blocker, capacity: contribution.register(contribution.empty(), { id: 'disabled-capacity', sequence: 0,
       kind: 'SAMPLED', participating: true, values: [modifier.create({ finalScaler: 0 })],
-    }]) },
+    }) },
     vitality: { ...operator.vitality, hp: 0 },
   };
   battlefield.advance([{ type: 'UPDATE_UNIT', unit: changed }]);
