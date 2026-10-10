@@ -658,7 +658,7 @@ test("projectile runtime: a same-process immutable copy replays arrival and stop
   assert.equal(original.projectiles.instances[0].hitUnitIds.length, 0);
 });
 
-test("projectile runtime: a failed stop rolls back launch, samples, receiver transitions and events, then retries the same identities", () => {
+test("projectile runtime: a failed stop propagates without publishing launch, samples or receiver transitions", () => {
   const scenario = (failing) => {
     const fault = { enabled: failing };
     const resources = new CombatResources();
@@ -762,18 +762,14 @@ test("projectile runtime: a failed stop rolls back launch, samples, receiver tra
   const expectedRng = createRng(before.execution.rngState);
   const expectedSample = expectedRng.next();
 
-  failed.fault.enabled = false;
-  const retried = failed.runtime.step();
-  const ordinary = control.runtime.step();
-  assert.deepEqual(failed.attempted, [0, 1, 1]);
-  assert.deepEqual(failed.stoppedHistories, [[1], [1]]);
-  assert.deepEqual(retried, ordinary);
-  assert.deepEqual(failed.runtime.snapshot(), control.runtime.snapshot());
-  assert.equal(failed.runtime.snapshot().units.find((unit) => unit.id === 1).vitality.hp, 92);
-  assert.equal(failed.runtime.snapshot().projectiles.nextProjectileId, 2);
-  assert.equal(failed.runtime.snapshot().actionExecution.executions[0].samples.emitted, 2);
-  assert.equal(failed.runtime.snapshot().actionExecution.executions[0].samples.sample, expectedSample);
-  assert.deepEqual(failed.runtime.snapshot().execution, {
+  control.runtime.step();
+  assert.deepEqual(control.attempted, [0, 1]);
+  assert.deepEqual(control.stoppedHistories, [[1]]);
+  assert.equal(control.runtime.snapshot().units.find((unit) => unit.id === 1).vitality.hp, 92);
+  assert.equal(control.runtime.snapshot().projectiles.nextProjectileId, 2);
+  assert.equal(control.runtime.snapshot().actionExecution.executions[0].samples.emitted, 2);
+  assert.equal(control.runtime.snapshot().actionExecution.executions[0].samples.sample, expectedSample);
+  assert.deepEqual(control.runtime.snapshot().execution, {
     ...before.execution,
     rngState: expectedRng.state(),
     nextProjectileId: 2,
@@ -1020,7 +1016,7 @@ test("projectile Battlefield changes: rejected batches and dropped drafts preser
   assert.deepEqual(battlefield.snapshot("draft").projectileIds, [0]);
 });
 
-test("projectile runtime: ordered command stops see same-tick launches and roll back together on failure", () => {
+test("projectile runtime: ordered command stops see same-tick launches and publish only on success", () => {
   const scenario = (failing) => {
     const resources = new CombatResources();
     const fault = { enabled: failing };
@@ -1098,12 +1094,8 @@ test("projectile runtime: ordered command stops see same-tick launches and roll 
     assert.throws(() => context.operations.updateState((state) => state), /no longer active/);
   }
 
-  failed.fault.enabled = false;
-  const retried = failed.runtime.step(commands);
   const ordinary = control.runtime.step(commands);
-  assert.deepEqual(retried, ordinary);
-  assert.deepEqual(failed.runtime.snapshot(), control.runtime.snapshot());
-  assert.deepEqual(failed.attempted, [0, 1, 2, 3, 3]);
+  assert.deepEqual(control.attempted, [0, 1, 2, 3]);
   assert.deepEqual(control.observed, [
     { id: 3, hp: 100, survivorPosition: [0, 0], newPeer: "STOPPED" },
     { id: 1, hp: 99, survivorPosition: [0, 0], newPeer: undefined },

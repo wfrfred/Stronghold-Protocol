@@ -349,7 +349,7 @@ test("action runtime: a waiting segment blocks routed movement until its own tra
   assert.equal(runtime.snapshot().units.find((unit) => unit.id === 1).action.recoveryUntilTick, 0);
 });
 
-test("action runtime: failed continuation publishes no progress, sample, settlement or identity and retries the same execution", () => {
+test("action runtime: failed continuation publishes no progress, sample, settlement or identity", () => {
   const scenario = (failing) => {
     const fault = { enabled: failing };
     const attemptedIds = [];
@@ -361,7 +361,7 @@ test("action runtime: failed continuation publishes no progress, sample, settlem
         ownState: (value) => ({ ...value }),
       }),
     );
-    const actor = actorDefinition("retry");
+    const actor = actorDefinition("continuation");
     const runtime = new BattleRuntime(
       spec([
         { definition: actor, position: [0, 0] },
@@ -414,29 +414,24 @@ test("action runtime: failed continuation publishes no progress, sample, settlem
     );
     return { runtime, fault, attemptedIds };
   };
-  const retried = scenario(true);
-  retried.runtime.step();
-  const before = retried.runtime.snapshot();
-  assert.throws(() => retried.runtime.step(), /continuation failed/);
-  assert.deepEqual(retried.runtime.snapshot(), before);
+  const failed = scenario(true);
+  failed.runtime.step();
+  const before = failed.runtime.snapshot();
+  assert.throws(() => failed.runtime.step(), /continuation failed/);
+  assert.deepEqual(failed.runtime.snapshot(), before);
   assert.equal(before.actionExecution.executions[0].id, 0);
   assert.equal(before.units[0].effects.instances[0].state.count, 0);
   assert.equal(before.units[1].vitality.hp, 100);
-  retried.fault.enabled = false;
-  const recovered = retried.runtime.step();
+  assert.deepEqual(failed.attemptedIds, [0]);
   const clean = scenario(false);
   clean.runtime.step();
-  const normal = clean.runtime.step();
-
-  assert.deepEqual(recovered, normal);
-  assert.deepEqual(retried.runtime.snapshot(), clean.runtime.snapshot());
-  assert.deepEqual(retried.attemptedIds, [0, 0]);
-  assert.equal(retried.runtime.snapshot().actionExecution.nextExecutionId, 1);
-  assert.equal(retried.runtime.snapshot().units[1].vitality.hp, 93);
+  clean.runtime.step();
+  assert.deepEqual(clean.attemptedIds, [0]);
+  assert.equal(clean.runtime.snapshot().actionExecution.nextExecutionId, 1);
+  assert.equal(clean.runtime.snapshot().units[1].vitality.hp, 93);
 });
 
-test("action runtime: a throwing Effect finish after nested host death leaves execution and battlefield retryable", () => {
-  let fail = true;
+test("action runtime: a throwing Effect finish after nested host death does not publish execution or battlefield changes", () => {
   const reasons = [];
   const resources = new CombatResources();
   const terminal = resources.registerEffect(createEffectProgram({
@@ -446,10 +441,10 @@ test("action runtime: a throwing Effect finish after nested host death leaves ex
   }), { lifecycle: { finish: context => {
     reasons.push(context.end.reason);
     context.damage({ sourceUnitId: null, targetUnitId: 0, damageType: "TRUE", operands: createDamageOperands(100) });
-    if (fail) throw new Error("terminal failure");
+    throw new Error("terminal failure");
   } } });
   const runtime = new BattleRuntime(spec([
-    { definition: actorDefinition("terminal-retry"), position: [0, 0] },
+    { definition: actorDefinition("terminal-failure"), position: [0, 0] },
     { definition: passiveDefinition(), position: [3, 0] },
   ]), {
     combat: resources,
@@ -476,11 +471,5 @@ test("action runtime: a throwing Effect finish after nested host death leaves ex
   assert.equal(before.actionExecution.executions[0].id, 0);
   assert.equal(before.units[0].vitality.hp, 100);
 
-  fail = false;
-  const recovered = runtime.step(cancel);
-  assert.deepEqual(runtime.snapshot().actionExecution.executions, []);
-  assert.deepEqual(runtime.snapshot().units.map(unit => unit.id), [1]);
-  assert.deepEqual(reasons, ["CANCELLED", "CANCELLED"]);
-  assert.equal(recovered.events.filter(event => event.type === "ACTION_CANCELLED").length, 1);
-  assert.equal(recovered.events.filter(event => event.type === "UNIT_REMOVED").length, 1);
+  assert.deepEqual(reasons, ["CANCELLED"]);
 });

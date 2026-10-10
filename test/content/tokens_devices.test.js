@@ -1464,24 +1464,24 @@ test('core omitted predefined customization stays unresolved in raw data while s
       reason: 'predefined unit skill blackboard is not applied by movement scenarios' }]);
 });
 
-test('core failed command batches preserve hidden recipes, battlefield projections and execution counters for retry', () => {
+test('core failed command batches do not publish hidden recipes, battlefield projections or execution counters', () => {
   const scenario = predefinedMovementScenario(arknightsFixture('level_act1autochess_m02'));
+  for (const [command, error] of [
+    [{ type: 'APPEAR_PREDEFINED', definitionId: 9999 }, /unknown predefined definition/],
+    [{ type: 'TRIGGER_BRANCH', branchId: 'missing', isLoop: false }, /unknown scheduler branch/],
+  ]) {
+    const failed = new BattleRuntime(scenario.spec);
+    const [definitionId] = failed.predefinedIdsForAlias('trap_1105_accrate#001');
+    const before = failed.snapshot();
+    const maps = failed.navigationMaps;
+    assert.throws(() => failed.step([
+      { type: 'APPEAR_PREDEFINED', definitionId }, command,
+    ]), error);
+    assert.deepEqual(failed.snapshot(), before);
+    assert.strictEqual(failed.navigationMaps, maps);
+  }
   const runtime = new BattleRuntime(scenario.spec);
   const [definitionId] = runtime.predefinedIdsForAlias('trap_1105_accrate#001');
-  const before = runtime.snapshot();
-  const maps = runtime.navigationMaps;
-  assert.throws(() => runtime.step([
-    { type: 'APPEAR_PREDEFINED', definitionId },
-    { type: 'APPEAR_PREDEFINED', definitionId: 9999 },
-  ]), /unknown predefined definition/);
-  assert.deepEqual(runtime.snapshot(), before);
-  assert.strictEqual(runtime.navigationMaps, maps);
-  assert.throws(() => runtime.step([
-    { type: 'APPEAR_PREDEFINED', definitionId },
-    { type: 'TRIGGER_BRANCH', branchId: 'missing', isLoop: false },
-  ]), /unknown scheduler branch/);
-  assert.deepEqual(runtime.snapshot(), before);
-  assert.strictEqual(runtime.navigationMaps, maps);
   runtime.step([{ type: 'APPEAR_PREDEFINED', definitionId }]);
   assert.equal(runtime.snapshot().tickIndex, 1);
   assert.equal(runtime.snapshot().units[0].id, 0);

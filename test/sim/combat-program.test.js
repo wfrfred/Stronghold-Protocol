@@ -478,7 +478,7 @@ test("combat program: runtime resources compile shared definitions once while sn
   assert.deepEqual(before.units.find((unit) => unit.id === 2).position, [1, 0]);
 });
 
-test("combat program: a failed receiver rolls back shield facts and retries identically", () => {
+test("combat program: a failed receiver does not publish shield consumption or damage", () => {
   function scenario(failing) {
     const resources = new CombatResources();
     const program = createEffectProgram({
@@ -525,24 +525,20 @@ test("combat program: a failed receiver rolls back shield facts and retries iden
     return { runtime, fault, attempts };
   }
 
-  const { runtime, fault, attempts } = scenario(true);
+  const { runtime, attempts } = scenario(true);
   const before = runtime.snapshot();
 
   assert.throws(() => runtime.step(), /receiver failed after consuming shield/);
   assert.deepEqual(runtime.snapshot(), before);
   assert.equal(attempts[0], 0);
 
-  fault.enabled = false;
-  const retry = runtime.step();
   const reference = scenario(false);
-  const expected = reference.runtime.step();
+  reference.runtime.step();
 
-  assert.equal(attempts[1], attempts[0]);
-  assert.deepEqual(retry, expected);
-  assert.deepEqual(runtime.snapshot(), reference.runtime.snapshot());
-  assert.equal(runtime.snapshot().units.find((unit) => unit.id === 1).vitality.hp, 90);
+  assert.equal(reference.attempts[0], attempts[0]);
+  assert.equal(reference.runtime.snapshot().units.find((unit) => unit.id === 1).vitality.hp, 90);
   assert.equal(
-    runtime.snapshot().units.find((unit) => unit.id === 1).effects.instances[0].state.remaining,
+    reference.runtime.snapshot().units.find((unit) => unit.id === 1).effects.instances[0].state.remaining,
     0,
   );
 });

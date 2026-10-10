@@ -286,6 +286,4 @@ test("action timing: tick failure does not publish cooldown changes", () => {
     fault.enabled = true;
     assert.throws(() => battle.step(), /abort timing tick/);
     assert.deepEqual(battle.snapshot(), before);
-    fault.enabled = false;
-    assert.ok(battle.step().events.some((event) => event.type === "ACTION"));
 });

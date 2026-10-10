@@ -301,13 +301,12 @@ test('elemental runtime: enemy neural paralysis consumes exactly three ordinary 
   assert.equal(cancelled.every(event => event.tick < hits[0].tick), true);
 });
 
-test('elemental runtime: nested burst damage failure publishes neither EP progress, HP, effects, events nor tick and can retry', () => {
-  let fail = true;
+test('elemental runtime: nested burst damage failure publishes neither EP progress, HP, effects nor tick', () => {
   let faultRef;
   const { runtime } = battle('CHARACTER', 'BURN', {
     prepare: supplied => {
       faultRef = supplied.registerEffect(createEffectProgram({ id: 'elemental-fault', initialize: () => ({}), ownState: state => ({ ...state }) }),
-        { damage: { reception: { priority: 100, apply: (_, pending) => { if (fail) { throw new Error('nested burst failed'); } return { value: pending }; } } } }).ref;
+        { damage: { reception: { priority: 100, apply: () => { throw new Error('nested burst failed'); } } } }).ref;
     },
     targetStates: (supplied, selected) => {
       const target = initializeUnit({ id: 1, position: [1, 0], definition: selected });
@@ -319,10 +318,4 @@ test('elemental runtime: nested burst damage failure publishes neither EP progre
   const initial = runtime.snapshot();
   assert.throws(() => runtime.step(), /nested burst failed/);
   assert.deepEqual(runtime.snapshot(), initial);
-  fail = false;
-  const step = runtime.step();
-  assert.equal(runtime.snapshot().tickIndex, 1);
-  assert.equal(step.events.filter(event => event.type === 'ELEMENT_BURST').length, 1);
-  assert.equal(victim(runtime).elemental.recovery.type, 'BURN');
-  assert.equal(victim(runtime).vitality.hp, 99159);
 });

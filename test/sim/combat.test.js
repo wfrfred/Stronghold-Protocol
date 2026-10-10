@@ -401,13 +401,10 @@ test('core combat: a rejected tick preserves spawn identities, action state, HP 
     enemies: [{ definition: walker({ hp: 1000, speed: 0 }), route: coreCombatRoute([1, 6], { spawnOffset: [-0.6, 0] }) }],
   };
   const battle = createLegacyCombatBattle(options);
-  const reference = createLegacyCombatBattle(options);
   const before = battle.snapshot();
 
   assert.throws(() => battle.step([{ type: 'CLEAR_ALTERNATIVE_ROUTE', unitId: 999999 }]), /unknown alternative route unit/);
   assert.deepEqual(battle.snapshot(), before);
-  assert.deepEqual(battle.step(), reference.step());
-  assert.deepEqual(battle.snapshot(), reference.snapshot());
 });
 
 test('core combat: the limited legacy adapter rejects unsupported content and preserves interval conversion', () => {

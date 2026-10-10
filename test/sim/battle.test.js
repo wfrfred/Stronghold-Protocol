@@ -885,7 +885,7 @@ test('core patrol stays registered and pending in the spawn schedule through det
   assert.ok(runtime.snapshot().execution.nextNavigationRequestId > 4);
 });
 
-test('core absolute wait overflow rolls back same-tick spawns, expiry, identities and RNG', () => {
+test('core absolute wait overflow does not publish same-tick spawns, expiry, identities or RNG', () => {
   const { spec } = slimeMovementFragment();
   const spawn = spec.schedule.spawns[0];
   const route = createRouteDefinition({ ...spawn.route, visitEveryCheckPoint: true, checkpoints: [
@@ -906,11 +906,9 @@ test('core absolute wait overflow rolls back same-tick spawns, expiry, identitie
   ]), initialMechanisms: [{ definition: mechanism.definition, active: mechanism.active }], initialNavigationModifiers: [{ definition: effect.definition, source: { type: 'MECHANISM', mechanismIndex: 0 }, region: effect.region, active: effect.active, expiresAtTick: effect.expiresAtTick }] });
   while (runtime.snapshot().tickIndex < 5) runtime.step();
   const before = runtime.snapshot(), maps = runtime.navigationMaps;
-  for (let retry = 0; retry < 2; retry++) {
-    assert.throws(() => runtime.step(), /route wait target tick overflow/);
-    assert.deepEqual(runtime.snapshot(), before);
-    assert.equal(runtime.navigationMaps, maps);
-  }
+  assert.throws(() => runtime.step(), /route wait target tick overflow/);
+  assert.deepEqual(runtime.snapshot(), before);
+  assert.equal(runtime.navigationMaps, maps);
 });
 
 test('core instant route signals retain identity and scheduler ownership through disappearance and appearance', () => {
@@ -1044,7 +1042,7 @@ test('core alternative route commands preserve hidden presence and emit ordered 
   assert.deepEqual(runtime.step().events.filter(event => event.type === 'ROUTE'), []);
 });
 
-test('core failed alternative route commands roll back same-tick expiry, births, RNG and navigation identities', () => {
+test('core failed alternative route commands do not publish same-tick expiry, births, RNG or navigation identities', () => {
   const initial = routeCommandBattle([{ type: 'WAIT_FOR_TICKS', durationTicks: 30 }]);
   const spawn = initial.schedule.spawns[0];
   const mechanism = createMechanismRuntime({ id: 0, definition: createMechanismDefinition({ id: 'alternative-expiry' }), active: true });
@@ -1056,20 +1054,16 @@ test('core failed alternative route commands roll back same-tick expiry, births,
     expiresAtTick: 1,
   });
   const input = { ...withTimelineSpawns(initial, [spawn, { ...spawn, tick: 1 }]), initialMechanisms: [{ definition: mechanism.definition, active: mechanism.active }], initialNavigationModifiers: [{ definition: effect.definition, source: { type: 'MECHANISM', mechanismIndex: 0 }, region: effect.region, active: effect.active, expiresAtTick: effect.expiresAtTick }] };
-  const runtime = new BattleRuntime(input), replay = new BattleRuntime(input);
-  runtime.step(); replay.step();
+  const runtime = new BattleRuntime(input);
+  runtime.step();
   const before = runtime.snapshot(), maps = runtime.navigationMaps;
   const route = createRouteDefinition({ ...spawn.route, checkpoints: [{ type: 'MOVE', target: {
     position: [9, 8], reachOffset: [0.25, 0], randomizeReachOffset: true, reachDistance: 0,
   } }] });
   const command = { type: 'SET_ALTERNATIVE_ROUTE', unitId: 0, route, alwaysCheckCurrentPoint: true };
-  for (let retry = 0; retry < 2; retry++) {
-    assert.throws(() => runtime.step([command, { type: 'CLEAR_ALTERNATIVE_ROUTE', unitId: 999 }]), /unknown alternative route unit/);
-    assert.deepEqual(runtime.snapshot(), before);
-    assert.equal(runtime.navigationMaps, maps);
-  }
-  assert.deepEqual(runtime.step([command]), replay.step([command]));
-  assert.deepEqual(runtime.snapshot(), replay.snapshot());
+  assert.throws(() => runtime.step([command, { type: 'CLEAR_ALTERNATIVE_ROUTE', unitId: 999 }]), /unknown alternative route unit/);
+  assert.deepEqual(runtime.snapshot(), before);
+  assert.equal(runtime.navigationMaps, maps);
   const fixed = new BattleRuntime({ ...initial, predefines: [{ id: 0, alias: null, initiallyPresent: true,
     creation: { type: 'UNIT', definition: Object.freeze({ id: 'fixed' }), position: [10, 9], navigationModifiers: [] },
   }] });
@@ -1078,7 +1072,7 @@ test('core failed alternative route commands roll back same-tick expiry, births,
   assert.deepEqual(fixed.snapshot(), fixedBefore);
 });
 
-test('core battle publishes every tick once and retries a final-stage failure without losing state or events', () => {
+test('core battle publishes a completed tick only after all operations succeed', () => {
   for (const reason of ['TIME_LIMIT', 'SCHEDULE_COMPLETED']) {
     const base = routeCommandBattle([{ type: 'WAIT_FOR_TICKS', durationTicks: 30 }], { speed: 1 / 30, maxTicks: 2 });
     const source = base.schedule.spawns[0];
@@ -1157,22 +1151,19 @@ test('core battle publishes every tick once and retries a final-stage failure wi
           },
         });
       };
-      for (let retry = 0; retry < 2; retry++) {
-        spawned = false;
-        assert.throws(() => runtime.step(commands), /late-stage failure/);
-        assert.deepEqual(runtime.snapshot(), before);
-        assert.equal(runtime.navigationMaps, maps);
-      }
+      assert.throws(() => runtime.step(commands), /late-stage failure/);
+      assert.deepEqual(runtime.snapshot(), before);
+      assert.equal(runtime.navigationMaps, maps);
     } finally {
       BattlefieldRuntime.prototype.snapshot = snapshot;
     }
-    assert.equal(failures, 2);
-    assert.deepEqual(runtime.step(commands), expected);
-    assert.deepEqual(runtime.snapshot(), expectedSnapshot);
+    assert.equal(failures, 1);
+    assert.deepEqual(replay.step(), { events: [], result: expected.result });
+    assert.deepEqual(replay.snapshot(), expectedSnapshot);
   }
 });
 
-test('core battle propagates nested settlement errors and discards battlefield, identities, events and Action progress', () => {
+test('core battle propagates nested settlement errors without publishing battlefield, identities or Action progress', () => {
   const sentinel = new Error('nested settlement failure');
   let fail = true;
   let activeState;
@@ -1238,16 +1229,11 @@ test('core battle propagates nested settlement errors and discards battlefield, 
   observedRuntime = expected;
   observedSnapshot = expected.snapshot();
   observedMaps = expected.navigationMaps;
-  const expectedStep = expected.step();
-  observedRuntime = runtime;
-  observedSnapshot = before;
-  observedMaps = runtime.navigationMaps;
-  assert.deepEqual(runtime.step(), expectedStep);
-  assert.equal(observations, 3);
-  assert.deepEqual(runtime.snapshot(), expected.snapshot());
-  assert.equal(runtime.snapshot().execution.nextUnitId, 3);
-  assert.equal(runtime.snapshot().actionExecution.executions.length, 1);
-  assert.equal(runtime.snapshot().units.find(unit => unit.id === 1).vitality.hp, 93);
+  expected.step();
+  assert.equal(observations, 2);
+  assert.equal(expected.snapshot().execution.nextUnitId, 3);
+  assert.equal(expected.snapshot().actionExecution.executions.length, 1);
+  assert.equal(expected.snapshot().units.find(unit => unit.id === 1).vitality.hp, 93);
 });
 
 test('core schedule removal feedback advances the next wave only on the next tick', () => {
@@ -1485,7 +1471,7 @@ test('core battle uses integer tick boundaries for spawning, effect expiry and d
   }])), /fragmentStartedAtTick/);
 });
 
-test('core battle rolls back spawning, expiry, RNG and tick progress when movement cannot be computed', () => {
+test('core battle does not publish spawning, expiry, RNG or tick progress when movement cannot be computed', () => {
   const { spec } = slimeMovementFragment();
   const mechanism = createMechanismRuntime({ id: 0, definition: createMechanismDefinition({ id: 'overflow' }), active: true });
   const region = createNavigationModifierRegion({ type: 'FIXED', position: [0, 0], direction: 'RIGHT',
@@ -1506,9 +1492,6 @@ test('core battle rolls back spawning, expiry, RNG and tick progress when moveme
   });
   const before = runtime.snapshot();
   const maps = runtime.navigationMaps;
-  assert.throws(() => runtime.step([{ type: 'APPEAR_PREDEFINED', definitionId: 0 }]), /distance exceeds safe integer range/);
-  assert.deepEqual(runtime.snapshot(), before);
-  assert.equal(runtime.navigationMaps, maps);
   assert.throws(() => runtime.step([{ type: 'APPEAR_PREDEFINED', definitionId: 0 }]), /distance exceeds safe integer range/);
   assert.deepEqual(runtime.snapshot(), before);
   assert.equal(runtime.navigationMaps, maps);
@@ -1893,7 +1876,7 @@ test('same-tick branch dispatch reads the main snapshot before that tick enters 
   assert.equal(step.state.main.queue.spawns[0].tick, 30);
 });
 
-test('battle schedule completion can leave unmanaged live units, and branch command failures roll back the whole tick', () => {
+test('battle schedule completion can leave unmanaged live units, and branch command failures do not publish the tick', () => {
   const { spec } = slimeMovementFragment();
   const unmanaged = syntheticSpawnSchedule([nativeWave([nativeFragment([nativeSpawn({ managedByScheduler: false })])])]);
   const runtime = new BattleRuntime({ ...spec, schedule: unmanaged.schedule });
@@ -1914,10 +1897,12 @@ test('battle schedule completion can leave unmanaged live units, and branch comm
   ]), /unknown scheduler branch/);
   assert.deepEqual(branchRuntime.snapshot(), before);
   assert.deepEqual(branchRuntime.spawnCounts, { spawnedCount: 0, unspawnedCount: 1 });
-  const spawned = branchRuntime.step([{ type: 'TRIGGER_BRANCH', branchId: 'extra', isLoop: false }]);
-  assert.deepEqual(branchRuntime.spawnCounts, { spawnedCount: 1, unspawnedCount: 1 });
+  const triggered = new BattleRuntime({ ...spec, schedule: branches.schedule });
+  triggered.step();
+  const spawned = triggered.step([{ type: 'TRIGGER_BRANCH', branchId: 'extra', isLoop: false }]);
+  assert.deepEqual(triggered.spawnCounts, { spawnedCount: 1, unspawnedCount: 1 });
   assert.deepEqual(spawned.events.filter(event => event.type === 'ENEMY_SPAWNED'), [{ type: 'ENEMY_SPAWNED', unitId: 0, tick: 1 }]);
-  assert.equal(branchRuntime.snapshot().units[0].locomotion.mainRoute.route.definition, branches.level.extraRoutes[0]);
+  assert.equal(triggered.snapshot().units[0].locomotion.mainRoute.route.definition, branches.level.extraRoutes[0]);
 });
 
 test('raw 01 dragon branch waits for an explicit trigger and uses its own actual flying prefab and extra route', () => {
@@ -2202,7 +2187,7 @@ test('core battle deploys, relocates and retreats units with owned occupancy and
   assert.equal(crates.navigationMaps.FLY, baseline.FLY);
 });
 
-test('core battle conflicting deployment commands roll back identities, relations and tick state before deterministic retry', () => {
+test('core battle conflicting deployment commands do not publish identities, relations or tick state', () => {
   const spec = deploymentBattleInput();
   const runtime = new BattleRuntime(spec), replay = new BattleRuntime(spec);
   const definition = deployableDefinition();
@@ -2211,20 +2196,19 @@ test('core battle conflicting deployment commands roll back identities, relation
   assert.throws(() => runtime.step([deploy([0, 1]), deploy([0, 1])]));
   assert.deepEqual(runtime.snapshot(), before);
   assert.equal(runtime.navigationMaps, maps);
-  assert.deepEqual(runtime.step([deploy([0, 1]), deploy([0, 2])]), replay.step([deploy([0, 1]), deploy([0, 2])]));
-  assert.deepEqual(runtime.snapshot(), replay.snapshot());
+  const deployed = new BattleRuntime(spec);
+  assert.deepEqual(deployed.step([deploy([0, 1]), deploy([0, 2])]), replay.step([deploy([0, 1]), deploy([0, 2])]));
+  assert.deepEqual(deployed.snapshot(), replay.snapshot());
 
-  const occupied = runtime.snapshot();
-  assert.throws(() => runtime.step([
+  const occupied = deployed.snapshot(), occupiedMaps = deployed.navigationMaps;
+  assert.throws(() => deployed.step([
     { type: 'RELOCATE_UNIT', unitId: 0, tilePosition: [0, 3], playerSide: 'SIDE_A' },
     { type: 'RELOCATE_UNIT', unitId: 1, tilePosition: [0, 3], playerSide: 'SIDE_A' },
   ]));
-  assert.deepEqual(runtime.snapshot(), occupied);
-  assert.equal(runtime.navigationMaps, maps);
-  assert.deepEqual(runtime.step([{ type: 'RETREAT_UNIT', unitId: 0 }, deploy([0, 1])]),
-    replay.step([{ type: 'RETREAT_UNIT', unitId: 0 }, deploy([0, 1])]));
-  assert.deepEqual(runtime.snapshot(), replay.snapshot());
-  assert.deepEqual(runtime.snapshot().units.map(unit => unit.id), [1, 2]);
+  assert.deepEqual(deployed.snapshot(), occupied);
+  assert.equal(deployed.navigationMaps, occupiedMaps);
+  replay.step([{ type: 'RETREAT_UNIT', unitId: 0 }, deploy([0, 1])]);
+  assert.deepEqual(replay.snapshot().units.map(unit => unit.id), [1, 2]);
 });
 
 test('core visibility: commands from different domains execute in phase order before array order', () => {

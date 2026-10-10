@@ -263,7 +263,6 @@ function scenario({ failure = null, cancelled = false } = {}) {
         assert.equal(context.facts.getUnit(2).action.readyAtTick, 101);
         throw new Error("late composition failure");
       }
-      if (fault.enabled && failure === "reentrant") runtime.step();
     },
   }));
   const primary = actor("primary-launcher");
@@ -349,12 +348,10 @@ function scenario({ failure = null, cancelled = false } = {}) {
     aura: aura.ref, receiver: receiver.ref, marker: marker.ref, scoped: scoped.ref, pulse: pulse.ref };
 }
 
-test("runtime composition: late exceptions and invalid settlement discard every domain, then retry the same identities and terminal trace", () => {
-  for (const failure of ["late-projectile", "invalid-damage", "reentrant"]) {
+test("runtime composition: late exceptions and invalid settlement propagate without publishing any domain", () => {
+  for (const failure of ["late-projectile", "invalid-damage"]) {
     const failed = scenario({ failure });
-    const clean = scenario();
-    const events = [...failed.runtime.step().events];
-    assert.deepEqual(events, clean.runtime.step().events);
+    failed.runtime.step();
     const before = failed.runtime.snapshot();
     const maps = failed.runtime.navigationMaps;
     assert.equal(before.actionExecution.nextExecutionId, 1);
@@ -367,7 +364,6 @@ test("runtime composition: late exceptions and invalid settlement discard every 
     assert.throws(() => failed.runtime.step(), {
       "late-projectile": /late composition failure/,
       "invalid-damage": RangeError,
-      "reentrant": /battle step is already active/,
     }[failure]);
     assert.deepEqual(failed.runtime.snapshot(), before);
     assert.equal(failed.runtime.navigationMaps, maps);
@@ -378,81 +374,88 @@ test("runtime composition: late exceptions and invalid settlement discard every 
     }]);
     assert.throws(() => failed.scopes[0].facts.getUnit(1), /no longer active/);
     assert.throws(() => failed.scopes[0].operations.updateState((state) => state), /no longer active/);
-
-    failed.fault.enabled = false;
-    const retried = failed.runtime.step();
-    assert.deepEqual(retried, clean.runtime.step());
-    assert.deepEqual(failed.runtime.snapshot(), clean.runtime.snapshot());
-    events.push(...retried.events);
-    const after = failed.runtime.snapshot();
-    assert.notEqual(after.execution.rngState, before.execution.rngState);
-    assert.equal(after.execution.nextUnitId, 4);
-    assert.equal(after.spawning.cursor, 1);
-    assert.equal(after.spawning.spawnedCount, 1);
-    assert.deepEqual(after.spawning.managedFinalUnitIds, [3]);
-    assert.equal(after.actionExecution.nextExecutionId, 2);
-    assert.equal(after.actionExecution.executions[0].samples.emitted, 2);
-    assert.equal(after.projectiles.nextProjectileId, 3);
-    assert.deepEqual(after.projectiles.instances.map((projectile) => projectile.id), [1, 2]);
-    assert.deepEqual(after.projectiles.instances.map((projectile) => projectile.cachedAtk), [18, 17]);
-    assert.equal(resolveAttackPower(0, view(after), failed.resources.computations), 18);
-    assert.equal(effect(after, 0, failed.aura).state.remaining, 2);
-    assert.equal(effect(after, 0, failed.aura).state.consumed, 1);
-    assert.deepEqual(effect(after, 0, failed.aura).state.receivers.map(binding => binding.attempts), [1, 1, 1, 1]);
-    assert.deepEqual(effect(after, 3, failed.receiver).state, { starts: 1, enables: 1, uses: 0 });
-    assert.deepEqual(effect(after, 1, failed.receiver).state, { starts: 1, enables: 1, uses: 1 });
-    assert.equal(effect(after, 1, failed.marker).id, 1);
-    assert.deepEqual(effect(after, 1, failed.marker).scopes, [{ type: "EFFECT", unitId: 1, effectId: 0 }]);
-    assert.equal(after.units.find((unit) => unit.id === 1).effects.nextInstanceId, 2);
-    assert.equal(before.units.find((unit) => unit.id === 1).effects.nextInstanceId, 1);
-    assert.equal(hasStatusFlag(after.units.find((unit) => unit.id === 1), "INVISIBLE"), true);
-    assert.equal(after.units.find((unit) => unit.id === 1).vitality.hp, 83);
-    assert.deepEqual(failed.launches.map((launch) => launch.id), [0, 1, 2, 1, 2]);
-    assert.deepEqual(before.units.map((unit) => unit.id), [0, 1, 2]);
-    assert.equal(effect(before, 0, failed.aura).state.remaining, 3);
-    assert.equal(effect(before, 0, failed.aura).state.consumed, 0);
-    assert.deepEqual(effect(before, 0, failed.aura).state.receivers.map(binding => binding.unitId), [0, 1, 2]);
-    assert.equal(before.units[1].vitality.hp, 100);
-
-    while (failed.runtime.result === null) {
-      const actual = failed.runtime.step();
-      assert.deepEqual(actual, clean.runtime.step());
-      assert.deepEqual(failed.runtime.snapshot(), clean.runtime.snapshot());
-      events.push(...actual.events);
-      if (failed.runtime.snapshot().tickIndex === 4) {
-        const cleaned = failed.runtime.snapshot();
-        assert.equal(effect(cleaned, 0, failed.aura), undefined);
-        assert.ok(cleaned.units.every(unit => effect(cleaned, unit.id, failed.receiver) === undefined));
-        assert.equal(effect(before, 0, failed.aura).finished, false);
-        assert.equal(hasStatusFlag(cleaned.units.find((unit) => unit.id === 1), "INVISIBLE"), false);
-        assert.equal(resolveAttackPower(0, view(cleaned), failed.resources.computations), 10);
-        assert.equal(effect(cleaned, 0, failed.scoped).finished, true);
-        assert.equal(effect(cleaned, 0, failed.scoped).participating, false);
-        assert.equal(effect(cleaned, 0, failed.pulse).finished, true);
-        assert.equal(effect(cleaned, 0, failed.pulse).participating, false);
-      }
-      if (failed.runtime.snapshot().tickIndex === 5) {
-        const finalized = failed.runtime.snapshot();
-        assert.equal(effect(finalized, 0, failed.scoped), undefined);
-        assert.equal(effect(finalized, 0, failed.pulse), undefined);
-        assert.equal(effect(finalized, 1, failed.marker), undefined);
-      }
-    }
-    assert.deepEqual(events.filter((event) => event.type === "ENEMY_SPAWNED").map((event) => event.unitId), [3]);
-    assert.deepEqual(events.filter((event) => event.type === "PROJECTILE_HIT").map((event) => [event.projectileId, event.targetUnitId]), [[0, 1], [1, 3]]);
-    assert.deepEqual(events.filter((event) => event.type === "DAMAGE").map((event) => [event.targetUnitId, event.amount]), [[1, 17], [3, 17]]);
-    assert.equal(failed.reports.at(-1).formulaDamage, 18);
-    assert.equal(failed.reports.at(-1).hpLoss, 17);
-    assert.equal(failed.runtime.result.reason, "SCHEDULE_COMPLETED");
-    assert.equal(failed.runtime.result.spawnedCount, 1);
-    assert.equal(failed.runtime.result.unspawnedCount, 0);
-    assert.equal(failed.runtime.result.completedRouteCount, 0);
-    assert.deepEqual(failed.runtime.result.remainingUnitIds, [0, 1, 2]);
-    assert.ok(failed.runtime.result.elapsedTicks >= 7);
-    const final = failed.runtime.snapshot();
-    assert.deepEqual(failed.runtime.step(), { events: [], result: failed.runtime.result });
-    assert.deepEqual(failed.runtime.snapshot(), final);
   }
+});
+
+test("runtime composition: a successful battle preserves identities, snapshots and the terminal trace", () => {
+  const run = scenario();
+  const replay = scenario();
+  const first = run.runtime.step();
+  assert.deepEqual(first, replay.runtime.step());
+  const events = [...first.events];
+  const before = run.runtime.snapshot();
+  const second = run.runtime.step();
+  assert.deepEqual(second, replay.runtime.step());
+  assert.deepEqual(run.runtime.snapshot(), replay.runtime.snapshot());
+  events.push(...second.events);
+  const after = run.runtime.snapshot();
+  assert.notEqual(after.execution.rngState, before.execution.rngState);
+  assert.equal(after.execution.nextUnitId, 4);
+  assert.equal(after.spawning.cursor, 1);
+  assert.equal(after.spawning.spawnedCount, 1);
+  assert.deepEqual(after.spawning.managedFinalUnitIds, [3]);
+  assert.equal(after.actionExecution.nextExecutionId, 2);
+  assert.equal(after.actionExecution.executions[0].samples.emitted, 2);
+  assert.equal(after.projectiles.nextProjectileId, 3);
+  assert.deepEqual(after.projectiles.instances.map((projectile) => projectile.id), [1, 2]);
+  assert.deepEqual(after.projectiles.instances.map((projectile) => projectile.cachedAtk), [18, 17]);
+  assert.equal(resolveAttackPower(0, view(after), run.resources.computations), 18);
+  assert.equal(effect(after, 0, run.aura).state.remaining, 2);
+  assert.equal(effect(after, 0, run.aura).state.consumed, 1);
+  assert.deepEqual(effect(after, 0, run.aura).state.receivers.map(binding => binding.attempts), [1, 1, 1, 1]);
+  assert.deepEqual(effect(after, 3, run.receiver).state, { starts: 1, enables: 1, uses: 0 });
+  assert.deepEqual(effect(after, 1, run.receiver).state, { starts: 1, enables: 1, uses: 1 });
+  assert.equal(effect(after, 1, run.marker).id, 1);
+  assert.deepEqual(effect(after, 1, run.marker).scopes, [{ type: "EFFECT", unitId: 1, effectId: 0 }]);
+  assert.equal(after.units.find((unit) => unit.id === 1).effects.nextInstanceId, 2);
+  assert.equal(before.units.find((unit) => unit.id === 1).effects.nextInstanceId, 1);
+  assert.equal(hasStatusFlag(after.units.find((unit) => unit.id === 1), "INVISIBLE"), true);
+  assert.equal(after.units.find((unit) => unit.id === 1).vitality.hp, 83);
+  assert.deepEqual(run.launches.map((launch) => launch.id), [0, 1, 2]);
+  assert.deepEqual(before.units.map((unit) => unit.id), [0, 1, 2]);
+  assert.equal(effect(before, 0, run.aura).state.remaining, 3);
+  assert.equal(effect(before, 0, run.aura).state.consumed, 0);
+  assert.deepEqual(effect(before, 0, run.aura).state.receivers.map(binding => binding.unitId), [0, 1, 2]);
+  assert.equal(before.units[1].vitality.hp, 100);
+
+  while (run.runtime.result === null) {
+    const actual = run.runtime.step();
+    assert.deepEqual(actual, replay.runtime.step());
+    assert.deepEqual(run.runtime.snapshot(), replay.runtime.snapshot());
+    events.push(...actual.events);
+    if (run.runtime.snapshot().tickIndex === 4) {
+      const cleaned = run.runtime.snapshot();
+      assert.equal(effect(cleaned, 0, run.aura), undefined);
+      assert.ok(cleaned.units.every(unit => effect(cleaned, unit.id, run.receiver) === undefined));
+      assert.equal(effect(before, 0, run.aura).finished, false);
+      assert.equal(hasStatusFlag(cleaned.units.find((unit) => unit.id === 1), "INVISIBLE"), false);
+      assert.equal(resolveAttackPower(0, view(cleaned), run.resources.computations), 10);
+      assert.equal(effect(cleaned, 0, run.scoped).finished, true);
+      assert.equal(effect(cleaned, 0, run.scoped).participating, false);
+      assert.equal(effect(cleaned, 0, run.pulse).finished, true);
+      assert.equal(effect(cleaned, 0, run.pulse).participating, false);
+    }
+    if (run.runtime.snapshot().tickIndex === 5) {
+      const finalized = run.runtime.snapshot();
+      assert.equal(effect(finalized, 0, run.scoped), undefined);
+      assert.equal(effect(finalized, 0, run.pulse), undefined);
+      assert.equal(effect(finalized, 1, run.marker), undefined);
+    }
+  }
+  assert.deepEqual(events.filter((event) => event.type === "ENEMY_SPAWNED").map((event) => event.unitId), [3]);
+  assert.deepEqual(events.filter((event) => event.type === "PROJECTILE_HIT").map((event) => [event.projectileId, event.targetUnitId]), [[0, 1], [1, 3]]);
+  assert.deepEqual(events.filter((event) => event.type === "DAMAGE").map((event) => [event.targetUnitId, event.amount]), [[1, 17], [3, 17]]);
+  assert.equal(run.reports.at(-1).formulaDamage, 18);
+  assert.equal(run.reports.at(-1).hpLoss, 17);
+  assert.equal(run.runtime.result.reason, "SCHEDULE_COMPLETED");
+  assert.equal(run.runtime.result.spawnedCount, 1);
+  assert.equal(run.runtime.result.unspawnedCount, 0);
+  assert.equal(run.runtime.result.completedRouteCount, 0);
+  assert.deepEqual(run.runtime.result.remainingUnitIds, [0, 1, 2]);
+  assert.ok(run.runtime.result.elapsedTicks >= 7);
+  const final = run.runtime.snapshot();
+  assert.deepEqual(run.runtime.step(), { events: [], result: run.runtime.result });
+  assert.deepEqual(run.runtime.snapshot(), final);
 });
 
 test("runtime composition: admission rejection skips start while cancelled damage retains shared consumption and healing", () => {

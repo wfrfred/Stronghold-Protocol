@@ -204,12 +204,11 @@ function runtime(f) {
   }, { combat: f.resources });
 }
 
-test('skill ownership: a throwing departure callback discards the entire tick and retries one committed finish', () => {
-  let fail = true;
+test('skill ownership: a throwing departure callback propagates without publishing the tick', () => {
   let prefix;
   const f = fixture({ finish: context => {
     assert.equal(context.effects.install(1, prefix.ref, { source: 0, scopes: [] }).type, 'INSTALLED');
-    if (fail) throw new Error('skill departure failed');
+    throw new Error('skill departure failed');
   } });
   prefix = f.resources.registerEffect(effectProgram('finish-prefix'));
   const battle = runtime(f);
@@ -217,13 +216,6 @@ test('skill ownership: a throwing departure callback discards the entire tick an
   const before = battle.snapshot();
   assert.throws(() => battle.step([{ type: 'RETREAT_UNIT', unitId: 0 }]), /skill departure failed/);
   assert.deepEqual(battle.snapshot(), before);
-  fail = false;
-  const retried = battle.step([{ type: 'RETREAT_UNIT', unitId: 0 }]);
-  const receiver = battle.snapshot().units.find(unit => unit.id === 1);
-  assert.equal(battle.snapshot().units.some(unit => unit.id === 0), false);
-  assert.equal(retried.events.filter(event => event.type === 'SKILL_FINISHED').length, 1);
-  assert.equal(receiver.effects.instances.filter(instance => instance.programRef === prefix.ref).length, 1);
-  assert.deepEqual(receiver.effects.instances.map(instance => instance.id), [2]);
 });
 
 test('skill ownership: self-death during activation publishes one finish and no late start', () => {
@@ -242,8 +234,7 @@ test('skill ownership: self-death during activation publishes one finish and no 
   assert.equal(f.finished.length, 1);
 });
 
-test('skill scope: failed departure cleanup discards self-death and retries the same identities', () => {
-  let fail = true;
+test('skill scope: failed departure cleanup propagates without publishing self-death or identities', () => {
   const f = fixture({
     activate: (context, installOwned) => {
       installOwned(context);
@@ -252,18 +243,10 @@ test('skill scope: failed departure cleanup discards self-death and retries the 
       installOwned(context, 'REJECTED');
       return { type: 'ACTIVATED' };
     },
-    disable: () => { if (fail) throw new Error('late skill cleanup failed'); },
+    disable: () => { throw new Error('late skill cleanup failed'); },
   });
   const battle = runtime(f);
   const before = battle.snapshot();
   assert.throws(() => battle.step([{ type: 'ACTIVATE_SKILL', unitId: 0 }]), /late skill cleanup failed/);
   assert.deepEqual(battle.snapshot(), before);
-  fail = false;
-  const retried = battle.step([{ type: 'ACTIVATE_SKILL', unitId: 0 }]);
-  const receiver = battle.snapshot().units.find(unit => unit.id === 1);
-  assert.deepEqual(retried.events.filter(event => event.type.startsWith('SKILL_')).map(event => event.type), ['SKILL_FINISHED']);
-  assert.equal(battle.snapshot().units.some(unit => unit.id === 0), false);
-  assert.equal(receiver.effects.nextInstanceId, 2);
-  assert.deepEqual(f.disabled.slice(-2), [0, 1]);
-  assert.deepEqual(receiver.effects.instances, []);
 });

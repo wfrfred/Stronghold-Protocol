@@ -163,25 +163,20 @@ test('periodic effects: a skill installs after the effect tick and starts advanc
     assert.deepEqual(trace, [1]);
 });
 
-test('periodic effects: failed time advancement rolls back damage and progress before retry', () => {
+test('periodic effects: failed time advancement propagates without publishing damage or progress', () => {
     const resources = new CombatResources();
     const failure = new Error('periodic fault');
-    let fail = true;
     let periodic;
     periodic = resources.registerEffect(effectProgram('fallible-periodic', () => ({ advances: 0 })), {
         lifecycle: { advance: context => {
             context.damage({ sourceUnitId: null, targetUnitId: 0,
                 damageType: 'TRUE', operands: createDamageOperands(10) });
             context.effects.update(context.ref, periodic.ref, state => ({ advances: state.advances + 1 }));
-            if (fail) throw failure;
+            throw failure;
         } },
     });
     const runtime = new BattleRuntime(battleInput(seededPlacement(resources, periodic)), { combat: resources });
     const before = runtime.snapshot();
     assert.throws(() => runtime.step(), error => error === failure);
     assert.deepEqual(runtime.snapshot(), before);
-    fail = false;
-    runtime.step();
-    assert.equal(runtime.snapshot().units[0].vitality.hp, 90);
-    assert.equal(runtime.snapshot().units[0].effects.instances[0].state.advances, 1);
 });

@@ -378,7 +378,7 @@ function runtimeScenario(failure) {
   return { runtime, fault };
 }
 
-test('effect expiry: a runtime exception or invalid deadline discards the complete tick and retries cleanly', () => {
+test('effect expiry: a runtime exception or invalid deadline propagates without publishing the tick', () => {
   for (const failure of ['exception', 'deadline']) {
     const failed = runtimeScenario(failure);
     const clean = runtimeScenario();
@@ -392,10 +392,8 @@ test('effect expiry: a runtime exception or invalid deadline discards the comple
     assert.equal(before.execution.nextUnitId, 2);
     assert.deepEqual(before.units.map(unit => unit.effects.instances[0].state.layers), [3, 3]);
     assert.equal(resolveAttackPower(0, { getUnit: id => before.units.find(unit => unit.id === id) }), 130);
-    failed.fault.enabled = false;
-    assert.deepEqual(failed.runtime.step(commands), clean.runtime.step(commands));
-    const after = failed.runtime.snapshot();
-    assert.deepEqual(after, clean.runtime.snapshot());
+    clean.runtime.step(commands);
+    const after = clean.runtime.snapshot();
     assert.equal(after.tickIndex, 1);
     assert.equal(after.execution.nextUnitId, 3);
     assert.deepEqual(after.units.slice(0, 2).map(unit => unit.effects.instances[0].state.layers), [2, 2]);

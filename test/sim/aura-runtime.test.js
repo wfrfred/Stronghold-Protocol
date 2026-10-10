@@ -132,17 +132,16 @@ test('aura runtime: movement departure is observed at the next aura tick', () =>
     assert.equal(snapshotAttack(before, 2, resources), 120);
 });
 
-test('aura runtime: callback failure drops all draft changes and rethrows the original error', () => {
+test('aura runtime: callback failure propagates the original error without publishing the tick', () => {
     const resources = new CombatResources();
     const failure = new Error('aura registration failed');
-    let fail = true;
     const attempts = [];
     let receiver;
     receiver = attackEffect(resources, 'fallible-aura-receiver', { lifecycle: { start: context => {
         context.effects.update(context.ref, receiver.ref, state => ({ ...state, starts: 1 }));
         if (context.ref.unitId === 2) {
             attempts.push(context.ref);
-            if (fail) throw failure;
+            throw failure;
         }
     } } });
     const aura = registerAura(resources, receiver);
@@ -151,14 +150,7 @@ test('aura runtime: callback failure drops all draft changes and rethrows the or
     const before = runtime.snapshot();
     assert.throws(() => runtime.step(), error => error === failure);
     assert.deepEqual(runtime.snapshot(), before);
-    fail = false;
-    runtime.step();
-    const after = runtime.snapshot();
-    assert.equal(after.tickIndex, before.tickIndex + 1);
-    assert.equal(snapshotAttack(after, 2, resources), 120);
-    assert.deepEqual(attempts[0], attempts[1]);
-    assert.equal(after.units.find(unit => unit.id === 2).effects.nextInstanceId, 1);
-    assert.equal(after.units[0].effects.instances[0].state.bindings.filter(binding => binding.unitId === 2).length, 1);
+    assert.equal(attempts.length, 1);
 });
 
 test('aura runtime: source retirement ends remote bound buffs within the same step', () => {

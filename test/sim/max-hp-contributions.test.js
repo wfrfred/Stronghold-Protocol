@@ -321,15 +321,12 @@ test("MaxHP: unchanged effective values, inactive cleanup and snapshots do not r
 
 test("MaxHP: a tick failure does not publish contributions or the HP response", () => {
     const resources = new CombatResources();
-    const fault = { enabled: true };
     const effect = resources.registerEffect(program("transaction-hp", 100), {
         contributions: [maxHp((instance) => [bonus(instance.state.amount)])],
         lifecycle: {
             enable: (context) => {
                 assert.equal(context.facts.getUnit(1).vitality.hp, 100);
-                if (fault.enabled) {
-                    throw new Error("abort hp tick");
-                }
+                throw new Error("abort hp tick");
             },
         },
     });
@@ -409,11 +406,6 @@ test("MaxHP: a tick failure does not publish contributions or the HP response", 
     const before = runtime.snapshot();
     assert.throws(() => runtime.step(), /abort hp tick/);
     assert.deepEqual(runtime.snapshot(), before);
-    fault.enabled = false;
-    runtime.step();
-    const after = runtime.snapshot();
-    assert.equal(after.tickIndex, 1);
-    assert.equal(after.units.find((unit) => unit.id === 1).vitality.hp, 100);
     assert.equal(before.units.find((unit) => unit.id === 1).vitality.hp, 50);
 });
 

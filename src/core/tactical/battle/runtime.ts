@@ -72,7 +72,6 @@ export class BattleRuntime {
     readonly #combat: ReturnType<typeof createCombat>;
     readonly #combatResources: CombatResources;
     #state: BattleRuntimeState;
-    #stepping = false;
 
     constructor(input: Input, resources: BattleResources = {}) {
         assertPositiveSafeInteger(input.maxTicks, "battle tick budget");
@@ -181,10 +180,6 @@ export class BattleRuntime {
     }
 
     step(commands: readonly Command[] = []): Step {
-        if (this.#stepping) {
-            throw new Error("battle step is already active");
-        }
-
         if (this.#state.result !== null) {
             return { events: [], result: this.result };
         }
@@ -196,98 +191,90 @@ export class BattleRuntime {
         const actionExecutions = new ActionExecutionWork(previous.actionExecution);
         const state = createBattleState(battlefield, previous.execution, actionExecutions, tick);
         const resources = this.#combatResources;
-        this.#stepping = true;
 
-        try {
-            advanceBattlefield(state, [{ type: "EXPIRE_NAVIGATION_MODIFIERS", tick }]);
-            predefinedPresence = advancePredefined(
-                state,
-                this.#input.predefines,
-                predefinedPresence,
-                commands,
-                tick,
-                resources,
-            );
+        advanceBattlefield(state, [{ type: "EXPIRE_NAVIGATION_MODIFIERS", tick }]);
+        predefinedPresence = advancePredefined(
+            state,
+            this.#input.predefines,
+            predefinedPresence,
+            commands,
+            tick,
+            resources,
+        );
 
-            this.#combat.prepare(state, commands, tick);
+        this.#combat.prepare(state, commands, tick);
 
-            resolveDeploymentCommands(state, commands, tick, resources);
+        resolveDeploymentCommands(state, commands, tick, resources);
 
-            schedule = advanceSpawning(state, schedule, commands, tick);
+        schedule = advanceSpawning(state, schedule, commands, tick);
 
-            advanceEffects(state, tick, resources);
+        advanceEffects(state, tick, resources);
 
-            advanceElements(state, tick, resources);
+        advanceElements(state, tick, resources);
 
-            advanceSkills(state, commands, tick, resources);
+        advanceSkills(state, commands, tick, resources);
 
-            advanceRouteCommands(state, commands, tick);
-            advanceBattlefield(state, advanceBlocking(battlefieldView(state)));
+        advanceRouteCommands(state, commands, tick);
+        advanceBattlefield(state, advanceBlocking(battlefieldView(state)));
 
-            this.#combat.advance(state, tick);
+        this.#combat.advance(state, tick);
 
-            advanceProjectiles(state, tick, commands, resources);
+        advanceProjectiles(state, tick, commands, resources);
 
-            advanceMovement(
-                state,
-                tick,
-                {
-                    routeMoveMultiplier: this.#input.routeMoveMultiplier,
-                    movementAllowed: (unitId) =>
-                        this.#combat.allowsMovement(actionExecutions.result(), unitId),
-                },
-                resources,
-            );
+        advanceMovement(
+            state,
+            tick,
+            {
+                routeMoveMultiplier: this.#input.routeMoveMultiplier,
+                movementAllowed: (unitId) =>
+                    this.#combat.allowsMovement(actionExecutions.result(), unitId),
+            },
+            resources,
+        );
 
-            advanceBattlefield(state, advanceBlocking(battlefieldView(state)));
-            predefinedPresence = reconcilePredefinedPresence(
-                predefinedPresence,
-                battlefieldView(state),
-            );
-            schedule = resolveScheduleUnits(
-                schedule,
-                state.removedUnits.map((removed) => removed.unitId),
-            );
-            const finishedEvents = finishBattleEvents(state.events, state.removedUnits, tick);
-            const tickIndex = tick + 1;
-            const completedRouteCount =
-                previous.completedRouteCount + finishedEvents.completedRouteCount;
-            const completed = isSpawnScheduleCompleted(schedule);
-            const result: Result | null =
-                completed || tickIndex >= this.#input.maxTicks
-                    ? {
-                          reason: completed ? "SCHEDULE_COMPLETED" : "TIME_LIMIT",
-                          elapsedTicks: tickIndex,
-                          completedRouteCount,
-                          remainingUnitIds: battlefieldView(state).unitIds,
-                          ...getSpawnScheduleCounts(schedule),
-                      }
-                    : null;
+        advanceBattlefield(state, advanceBlocking(battlefieldView(state)));
+        predefinedPresence = reconcilePredefinedPresence(
+            predefinedPresence,
+            battlefieldView(state),
+        );
+        schedule = resolveScheduleUnits(
+            schedule,
+            state.removedUnits.map((removed) => removed.unitId),
+        );
+        const finishedEvents = finishBattleEvents(state.events, state.removedUnits, tick);
+        const tickIndex = tick + 1;
+        const completedRouteCount =
+            previous.completedRouteCount + finishedEvents.completedRouteCount;
+        const completed = isSpawnScheduleCompleted(schedule);
+        const result: Result | null =
+            completed || tickIndex >= this.#input.maxTicks
+                ? {
+                      reason: completed ? "SCHEDULE_COMPLETED" : "TIME_LIMIT",
+                      elapsedTicks: tickIndex,
+                      completedRouteCount,
+                      remainingUnitIds: battlefieldView(state).unitIds,
+                      ...getSpawnScheduleCounts(schedule),
+                  }
+                : null;
 
-            const output: Step = { events: finishedEvents.events, result: copyResult(result) };
+        const output: Step = { events: finishedEvents.events, result: copyResult(result) };
 
-            const nextState: BattleRuntimeState = {
-                ...previous,
-                battlefield,
-                tickIndex,
-                completedRouteCount,
-                result,
-                schedule,
-                actionExecution: actionExecutions.result(),
-                predefinedPresence,
-                execution: state.execution,
-            };
+        const nextState: BattleRuntimeState = {
+            ...previous,
+            battlefield,
+            tickIndex,
+            completedRouteCount,
+            result,
+            schedule,
+            actionExecution: actionExecutions.result(),
+            predefinedPresence,
+            execution: state.execution,
+        };
 
-            battlefield.apply();
-            this.#state = nextState;
+        battlefield.apply();
+        this.#state = nextState;
 
-            return output;
-        } catch (error) {
-            battlefield.drop();
-            throw error;
-        } finally {
-            this.#stepping = false;
-        }
+        return output;
     }
 }
 

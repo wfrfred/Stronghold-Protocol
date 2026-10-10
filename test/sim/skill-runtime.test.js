@@ -154,15 +154,10 @@ test('skill runtime: HIT SP counts zero damage but respects cancellation and ign
   }
 });
 
-test('skill runtime: failed activation publishes neither contribution, progress nor event and can retry', () => {
+test('skill runtime: failed activation propagates without publishing contribution or progress', () => {
   const { runtime, fault } = scenario(skill());
   const before = runtime.snapshot();
   fault.enabled = true;
   assert.throws(() => runtime.step([{ type: 'ACTIVATE_SKILL', unitId: 0 }]), /skill fault/);
   assert.deepEqual(runtime.snapshot(), before);
-  fault.enabled = false;
-  runtime.step([{ type: 'ACTIVATE_SKILL', unitId: 0 }]);
-  assert.equal(source(runtime).skill.active.id, 0);
-  assert.equal(source(runtime).skill.nextActivationId, 1);
-  assert.deepEqual(structuredClone(runtime.snapshot()), runtime.snapshot());
 });
