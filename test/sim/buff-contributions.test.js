@@ -87,7 +87,7 @@ test("Buff contribution integration: the native Astesia DEF facet merges layers,
             });
         } else if (plan.type === "REFRESH") {
             const address = { type: "EFFECT", unitId: 0, effectId: current.id };
-            effects.setTick(work, address, plan.expiresAtTick);
+            effects.setDeadline(work, address, plan.expiresAtTick);
             effects.setState(work, address, program, (state) => ({
                 ...state,
                 stackCount: plan.stackCount,
@@ -189,7 +189,7 @@ test("Buff contribution integration: only effective layer growth resamples the r
             tick,
         );
         assert.equal(plan.type, "REFRESH");
-        effects.setTick(work, address, plan.expiresAtTick);
+        effects.setDeadline(work, address, plan.expiresAtTick);
         effects.setState(work, address, program, (state) => ({
             ...state,
             stackCount: plan.stackCount,

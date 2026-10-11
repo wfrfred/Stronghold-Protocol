@@ -1,5 +1,4 @@
-import type { Unit } from "../unit.js";
-import type { State, Value } from "./effect.js";
+import type { Id, Instance, State } from "./effect.js";
 
 const emptyState: State = { instances: [], nextId: 0 };
 
@@ -7,7 +6,7 @@ export function empty(): State {
     return emptyState;
 }
 
-export function append(unit: Unit, instance: Value): Unit {
+export function append(state: State, instance: Instance): State {
     const nextId = instance.id + 1;
 
     if (!Number.isSafeInteger(nextId)) {
@@ -15,25 +14,22 @@ export function append(unit: Unit, instance: Value): Unit {
     }
 
     return {
-        ...unit,
-        effects: { instances: [...unit.effects.instances, instance], nextId },
+        instances: [...state.instances, instance],
+        nextId,
     };
 }
 
-export function replace(unit: Unit, instance: Value): Unit {
-    const instances = unit.effects.instances.map((current) =>
+export function replace(state: State, instance: Instance): State {
+    const instances = state.instances.map((current) =>
         current.id === instance.id ? instance : current,
     );
 
-    return { ...unit, effects: { ...unit.effects, instances } };
+    return { ...state, instances };
 }
 
-export function remove(unit: Unit, id: number): Unit {
+export function remove(state: State, id: Id): State {
     return {
-        ...unit,
-        effects: {
-            ...unit.effects,
-            instances: unit.effects.instances.filter((instance) => instance.id !== id),
-        },
+        ...state,
+        instances: state.instances.filter((instance) => instance.id !== id),
     };
 }

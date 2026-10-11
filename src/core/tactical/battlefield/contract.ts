@@ -14,7 +14,7 @@ import type {
 import type { BlockingRelation } from "./blocking/relations.js";
 import type { SupportRelation } from "./support/relations.js";
 import type { ProjectileId, Projectile, ProjectileView } from "./projectile/projectile.js";
-import type { Projection } from "../unit/effect/lifetime-index.js";
+import type { Index } from "./storage/effect-lifetimes.js";
 
 export type BattlefieldRemovalReason = "DEATH" | "RETREAT" | "EXPIRED" | "SCRIPT";
 
@@ -94,7 +94,7 @@ export interface BattlefieldView<U extends Unit = Unit> extends MechanismView, P
     readonly navigationMaps: NavigationMaps;
     readonly fieldCache: NavigationFieldProvider;
     readonly unitIds: readonly UnitId[];
-    readonly effectLifetimes: Projection;
+    readonly effectLifetimes: Index;
     readonly navigationModifierIds: readonly NavigationModifierId[];
     readonly blockingRelations: readonly BlockingRelation[];
     readonly supportRelations: readonly SupportRelation[];

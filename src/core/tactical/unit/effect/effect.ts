@@ -21,7 +21,7 @@ export interface Group {
     readonly priority: number;
 }
 
-export interface Value {
+export interface Instance {
     readonly id: Id;
     readonly definition: { readonly id: string };
     readonly state: object;
@@ -32,13 +32,13 @@ export interface Value {
     readonly status: Status;
 }
 
-export interface Effect<S extends object, H extends object = object> extends Value {
+export interface Effect<S extends object, H extends object = object> extends Instance {
     readonly definition: Definition<S, H>;
     readonly state: S;
 }
 
 export interface State {
-    readonly instances: readonly Value[];
+    readonly instances: readonly Instance[];
     readonly nextId: Id;
 }
 
@@ -61,7 +61,7 @@ export function key(scope: Scope): string {
     }
 }
 
-export function deadline(instance: Value): number | null {
+export function deadline(instance: Instance): number | null {
     const ticks = instance.scopes.flatMap((scope) => (scope.type === "TICK" ? [scope.tick] : []));
 
     return ticks.length === 0 ? null : Math.min(...ticks);

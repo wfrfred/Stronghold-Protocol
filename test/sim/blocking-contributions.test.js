@@ -277,7 +277,7 @@ test("blocking capacity: native stack renewal and terminal cleanup update real b
                 );
                 if (plan.type === "FINISH") ctx.end();
                 else {
-                    effects.setTick(ctx.battle, ctx.ref, plan.expiresAtTick);
+                    effects.setDeadline(ctx.battle, ctx.ref, plan.expiresAtTick);
                     ctx.setState((state) => ({ ...state, stackCount: plan.stackCount }));
                     refreshContribution(ctx.battle, ctx.ref, content, setting);
                 }

@@ -1,15 +1,10 @@
-import { widenUnit, type Unit, type UnitId, type StableUnit } from "../../../unit.js";
+import { widenUnit, type Unit, type StableUnit } from "../../../unit.js";
 import * as hook from "../../../hook/hook.js";
-import type { BattleState } from "../../../../battle/execution/context.js";
 import type { Vitality } from "../capability.js";
-import type { Context as VitalityContext, Result, Services as VitalityServices } from "../hook.js";
+import type { Context as VitalityContext, Result } from "../hook.js";
 import type { DamageOperands, DamageReport, DamageRequest, PendingDamage } from "./contract.js";
 
 export type Context = VitalityContext<DamageRequest>;
-
-export interface Services extends VitalityServices {
-    readonly retireUnit: (battle: BattleState, unitId: UnitId, tick: number) => void;
-}
 
 export type FormulaStage = "sourceFormula" | "targetFormula";
 

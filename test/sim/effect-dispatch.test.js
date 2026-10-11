@@ -138,7 +138,7 @@ test("removed registrations stay absent even when replaced under the same id dur
                     ),
                 );
                 nested = true;
-                resources.settleDamage(context.battle, request(10));
+                resolveDamage(context.battle, request(10), resources);
                 nested = false;
             }
             return { value: input };
@@ -210,7 +210,7 @@ test("nested damage shares a healing receiver enumeration without admitting newl
         if (!changed) {
             changed = true;
             transitionUnit(context.battle, 2, (value) => damage.setHook(value, late));
-            resources.settleDamage(context.battle, request(10));
+            resolveDamage(context.battle, request(10), resources);
         }
         return { value: pending };
     });

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
-import { battlefieldView, getUnit, updateUnit } from "../../dist/core/tactical/battle/execution/context.js";
+import { battlefieldView, getUnit, registerUnit, updateUnit } from "../../dist/core/tactical/battle/execution/context.js";
 import { createActionCapabilityDefinition, setAttackSpeedContribution, removeAttackSpeedContribution, setBaseAttackTimeContribution, removeBaseAttackTimeContribution } from "../../dist/core/tactical/unit/capability/action/capability.js";
 
 import { compileAction } from "../../dist/core/tactical/unit/capability/action/compile.js";
@@ -232,7 +232,7 @@ test("action timing: delayed targeting resumes without accumulating missed attac
     const work = effectFixtureWork(source);
     const initial = advance(work, resources, 0);
     assert.equal(getUnit(work, 0), source);
-    updateUnit(work, target());
+    registerUnit(work, target());
     const resumed = advance(work, resources, 101, initial);
     assert.equal(getUnit(work, 0).action.readyAtTick, 105.5);
     const once = advance(work, resources, 101, resumed);

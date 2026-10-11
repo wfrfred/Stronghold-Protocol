@@ -1,10 +1,9 @@
-import type { BattleState } from "../../battle/execution/context.js";
-import type { Unit, UnitId } from "../unit.js";
-import { key, type Ref, type Value, type Lifetime } from "./effect.js";
+import type { Unit, UnitId } from "../../unit/unit.js";
+import { key, type Ref, type Instance, type Lifetime } from "../../unit/effect/effect.js";
 
 type RefBucket = ReadonlyMap<string, Ref>;
 
-export interface Projection {
+export interface Index {
     readonly dependents: ReadonlyMap<string, RefBucket>;
 }
 
@@ -13,11 +12,7 @@ export interface UnitTransition {
     readonly nextUnit: Unit | undefined;
 }
 
-function instancesOf(unit: Unit | undefined): readonly Value[] | undefined {
-    return unit?.effects.instances;
-}
-
-function relationKeys(instance: Value | undefined): readonly string[] {
+function relationKeys(instance: Instance | undefined): readonly string[] {
     return instance === undefined || instance.status === "FINISHED"
         ? []
         : [
@@ -31,11 +26,11 @@ function effectRef(unitId: UnitId, effectId: number): Ref {
     return { type: "EFFECT", unitId, effectId };
 }
 
-export function project(units: Iterable<Unit>): Projection {
+export function project(units: Iterable<Unit>): Index {
     const dependents = new Map<string, Map<string, Ref>>();
 
     for (const unit of units) {
-        for (const instance of instancesOf(unit) ?? []) {
+        for (const instance of unit.effects.instances) {
             const ref = effectRef(unit.id, instance.id);
             const id = key(ref);
 
@@ -55,11 +50,7 @@ export function project(units: Iterable<Unit>): Projection {
     return { dependents };
 }
 
-function projectionOf(state: BattleState): Projection {
-    return state.battlefield.snapshot("draft").effectLifetimes;
-}
-
-export function derive(projection: Projection, transitions: readonly UnitTransition[]): Projection {
+export function derive(index: Index, transitions: readonly UnitTransition[]): Index {
     let dependents: Map<string, RefBucket> | undefined;
     const editedBuckets = new Map<string, Map<string, Ref>>();
 
@@ -67,8 +58,8 @@ export function derive(projection: Projection, transitions: readonly UnitTransit
         let bucket = editedBuckets.get(key);
 
         if (bucket === undefined) {
-            dependents ??= new Map(projection.dependents);
-            bucket = new Map(projection.dependents.get(key));
+            dependents ??= new Map(index.dependents);
+            bucket = new Map(index.dependents.get(key));
             editedBuckets.set(key, bucket);
         }
 
@@ -76,8 +67,8 @@ export function derive(projection: Projection, transitions: readonly UnitTransit
     };
     const changeRelations = (
         unitId: UnitId,
-        before: Value | undefined,
-        after: Value | undefined,
+        before: Instance | undefined,
+        after: Instance | undefined,
     ): void => {
         if (
             before === after ||
@@ -106,8 +97,8 @@ export function derive(projection: Projection, transitions: readonly UnitTransit
     };
 
     for (const { previousUnit, nextUnit } of transitions) {
-        const previousInstances = instancesOf(previousUnit);
-        const nextInstances = instancesOf(nextUnit);
+        const previousInstances = previousUnit?.effects.instances;
+        const nextInstances = nextUnit?.effects.instances;
 
         if (previousInstances === nextInstances) {
             continue;
@@ -135,11 +126,11 @@ export function derive(projection: Projection, transitions: readonly UnitTransit
         }
     }
 
-    return dependents === undefined ? projection : { dependents };
+    return dependents === undefined ? index : { dependents };
 }
 
-export function dependents(battle: BattleState, lifetime: Lifetime): readonly Ref[] {
-    return [...(projectionOf(battle).dependents.get(key(lifetime))?.values() ?? [])].sort(
+export function dependents(index: Index, lifetime: Lifetime): readonly Ref[] {
+    return [...(index.dependents.get(key(lifetime))?.values() ?? [])].sort(
         (left, right) => left.unitId - right.unitId || left.effectId - right.effectId,
     );
 }

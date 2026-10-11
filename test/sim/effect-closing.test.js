@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
-import { getUnit } from "../../dist/core/tactical/battle/execution/context.js";
+import { getUnit, updateUnit } from "../../dist/core/tactical/battle/execution/context.js";
+import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
+import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
+import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
+import {
+    removeHook,
+    setHook,
+} from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
 import * as effect from "../../dist/core/tactical/unit/effect/operations.js";
 import { get } from "../../dist/core/tactical/unit/effect/query.js";
 import { effectFixtureWork, install, definition, attackBuff } from "../helpers/effects.js";
@@ -156,4 +163,75 @@ test("effect lifetimes: ending the same instance in its disable callback remains
     assert.deepEqual(calls, ["disable", "end"]);
     assert.equal(get(battle, ref), undefined);
     assert.equal(resolveAttackPower(0, battle.battlefield.snapshot("draft")), 100);
+});
+
+test("effect lifetimes: closing a host never reenables its suppressed effects", () => {
+    const enabled = [];
+    const weak = definition("weak", {}, { onEnable: () => enabled.push("weak") });
+    const strong = definition("strong", {}, { onEnable: () => enabled.push("strong") });
+    const battle = effectFixtureWork(unit(0));
+    install(battle, weak, 0, { group: { id: "rule", priority: 1 } });
+    install(battle, strong, 0, { group: { id: "rule", priority: 2 } });
+    enabled.length = 0;
+
+    effect.endScope(battle, { type: "UNIT", unitId: 0 }, "RETREAT");
+
+    assert.deepEqual(enabled, []);
+    assert.deepEqual(getUnit(battle, 0).effects.instances, []);
+});
+
+test("effect lifetimes: terminal hook cleanup cannot recreate a host killed by a child's ending", () => {
+    const resources = new CombatResources();
+    const parent = definition(
+        "parent-hook",
+        {},
+        {
+            onApply(context) {
+                updateUnit(
+                    context.battle,
+                    setHook(context.unit, {
+                        id: "parent-hook",
+                        stage: "reaction",
+                        priority: 0,
+                        enabled: () => true,
+                        invoke() {},
+                    }),
+                );
+            },
+            onEnd(context) {
+                updateUnit(context.battle, removeHook(context.unit, "parent-hook"));
+            },
+        },
+    );
+    const child = definition(
+        "child-death",
+        {},
+        {
+            onEnd(context) {
+                resolveDamage(
+                    context.battle,
+                    {
+                        sourceUnitId: null,
+                        targetUnitId: 0,
+                        damageType: "TRUE",
+                        operands: createDamageOperands(100),
+                        tick: context.tick,
+                    },
+                    resources,
+                );
+            },
+        },
+    );
+    const battle = effectFixtureWork(unit(0), unit(1));
+    const ref = install(battle, parent, 0);
+    install(battle, child, 1, { scopes: [ref] });
+
+    effect.end(battle, ref);
+
+    assert.equal(getUnit(battle, 0), undefined);
+    assert.deepEqual(battle.registeredUnitIds, []);
+    assert.deepEqual(
+        battle.removedUnits.map(({ unitId, reason }) => [unitId, reason]),
+        [[0, "DEATH"]],
+    );
 });

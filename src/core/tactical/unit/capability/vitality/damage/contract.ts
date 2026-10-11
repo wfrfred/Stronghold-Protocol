@@ -1,4 +1,3 @@
-import type { Dispatch } from "../hook.js";
 import type { UnitId } from "../../../unit.js";
 import type { BattleState } from "../../../../battle/execution/context.js";
 
@@ -77,8 +76,4 @@ export function createDamageOperands(power: number): DamageOperands {
     };
 }
 
-export type DamageOperation = (
-    work: BattleState,
-    request: DamageRequest,
-    dispatch?: Dispatch,
-) => DamageReport;
+export type DamageOperation = (work: BattleState, request: DamageRequest) => DamageReport;

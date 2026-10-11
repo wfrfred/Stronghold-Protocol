@@ -1,7 +1,7 @@
 import { hasDefenseDefinition, type DefenseDefinition } from "../../defense/capability.js";
 import { hasElemental } from "../../elemental/capability.js";
 import { hasVitality, type Vitality } from "../capability.js";
-import { widenUnit, type StableUnit, type Unit } from "../../../unit.js";
+import { widenUnit, type StableUnit, type Unit, type UnitId } from "../../../unit.js";
 import { hasStatusFlag } from "../../status/capability.js";
 import { resolveDefense } from "../../defense/query.js";
 import { assertFiniteNumber, assertNonnegativeNumber } from "../../../../../common/assert.js";
@@ -13,13 +13,10 @@ import {
     type PendingDamage,
     NORMAL_DAMAGE_RECEPTION,
 } from "./contract.js";
-import { withDispatch, type Dispatch } from "../hook.js";
-import {
-    dispatchDamageFormula,
-    dispatchDamageAmount,
-    dispatchDamageReactions,
-} from "./dispatch.js";
-import type { Services } from "./hook.js";
+import type { Context, Hook, FormulaStage, AmountStage } from "./hook.js";
+import type { Hook as RegisteredHook } from "../../../hook/hook.js";
+import type { Result } from "../hook.js";
+import { resolveHealing } from "../healing/settlement.js";
 import { gainUnitSkillSp } from "../../../../battle/execution/skill-sp.js";
 import {
     battlefieldView,
@@ -28,6 +25,10 @@ import {
     updateUnit,
     type BattleState,
 } from "../../../../battle/execution/context.js";
+
+export interface Resources {
+    readonly retireUnit: (battle: BattleState, unitId: UnitId, tick: number) => void;
+}
 
 const NO_DEFENSE: DefenseDefinition = Object.freeze({ defense: 0, resistance: 0 });
 
@@ -91,47 +92,13 @@ export function damageUnit<U extends Unit & Vitality>(
     };
 }
 
-function formulaPower(operands: DamageOperands): number {
-    return Math.max(
-        0,
-        operands.power * operands.attackScale +
-            (operands.attackScale > 0 ? operands.attackAddition : 0),
-    );
-}
-
-function confirmDamage(
-    work: BattleState,
-    report: DamageReport,
-    resources: Services,
-    dispatch: Dispatch,
-): DamageReport {
-    if (!(report.request.receptionPolicy ?? NORMAL_DAMAGE_RECEPTION).skipModifierEvents) {
-        dispatchDamageReactions(work, report, resources, dispatch);
-    }
-    if (report.deathOccurred) {
-        resources.retireUnit(work, report.request.targetUnitId, report.request.tick);
-    }
-
-    return report;
-}
-
 export function resolveDamage(
-    work: BattleState,
+    state: BattleState,
     request: DamageRequest,
-    resources: Services,
-    dispatch?: Dispatch,
-): DamageReport {
-    return withDispatch(work, dispatch, (scope) => settleDamage(work, request, resources, scope));
-}
-
-function settleDamage(
-    work: BattleState,
-    request: DamageRequest,
-    resources: Services,
-    dispatch: Dispatch,
+    resources: Resources,
 ): DamageReport {
     const policy = request.receptionPolicy ?? NORMAL_DAMAGE_RECEPTION;
-    const target = getUnit(work, request.targetUnitId);
+    const target = getUnit(state, request.targetUnitId);
     const report: DamageReport = {
         request,
         formulaDamage: null,
@@ -151,18 +118,13 @@ function settleDamage(
             reason = hasVitality(target) ? "TARGET_DEAD" : "NO_VITALITY";
         }
 
-        return confirmDamage(
-            work,
-            {
-                ...report,
-                cancellation: {
-                    stage: "INPUT",
-                    reason,
-                },
-            },
-            resources,
-            dispatch,
-        );
+        const result: DamageReport = {
+            ...report,
+            cancellation: { stage: "INPUT", reason },
+        };
+        notifyReactions(state, result, resources);
+
+        return result;
     }
 
     let operands = request.operands;
@@ -171,29 +133,22 @@ function settleDamage(
         [request.sourceUnitId, "sourceFormula"],
         [request.targetUnitId, "targetFormula"],
     ] as const) {
-        operands = dispatchDamageFormula(
-            work,
-            request,
-            owner,
-            stage,
-            operands,
-            resources,
-            dispatch,
-        );
+        operands = applyFormulaHooks(state, request, owner, stage, operands, resources);
     }
 
-    const current = getUnit(work, request.targetUnitId);
+    const current = getUnit(state, request.targetUnitId);
 
     if (current === undefined || !hasVitality(current) || current.vitality.hp <= 0) {
-        return confirmDamage(
-            work,
-            { ...report, cancellation: { stage: "FORMULA", reason: "TARGET_UNAVAILABLE" } },
-            resources,
-            dispatch,
-        );
+        const result: DamageReport = {
+            ...report,
+            cancellation: { stage: "FORMULA", reason: "TARGET_UNAVAILABLE" },
+        };
+        notifyReactions(state, result, resources);
+
+        return result;
     }
 
-    const defense = resolveDefense(current.id, battlefieldView(work))!;
+    const defense = resolveDefense(current.id, battlefieldView(state))!;
     const effectiveDefense = {
         defense:
             Math.max(0, defense.defense - operands.fixedPenetration) *
@@ -214,14 +169,13 @@ function settleDamage(
     let pending: PendingDamage = { amount: formulaDamage, cancellation: null, consumptions: [] };
 
     if (!policy.skipModifierEvents) {
-        pending = dispatchDamageAmount(
-            work,
+        pending = applyAmountHooks(
+            state,
             request,
             request.sourceUnitId,
             "output",
             pending,
             resources,
-            dispatch,
         );
     }
 
@@ -229,7 +183,7 @@ function settleDamage(
 
     assertFiniteNumber(outputDamage, "output damage");
 
-    const receiver = getUnit(work, request.targetUnitId);
+    const receiver = getUnit(state, request.targetUnitId);
 
     if (receiver === undefined || !hasVitality(receiver) || receiver.vitality.hp <= 0) {
         pending = {
@@ -251,17 +205,16 @@ function settleDamage(
         }
 
         if (pending.cancellation === null && request.ignoreForSp !== true) {
-            gainUnitSkillSp(work, request.targetUnitId, "HIT");
+            gainUnitSkillSp(state, request.targetUnitId, "HIT");
         }
 
-        pending = dispatchDamageAmount(
-            work,
+        pending = applyAmountHooks(
+            state,
             request,
             request.targetUnitId,
             policy.skipModifierEvents ? "skippedReception" : "reception",
             pending,
             resources,
-            dispatch,
         );
     }
 
@@ -269,7 +222,7 @@ function settleDamage(
 
     assertNonnegativeNumber(hpDamage, "received damage");
 
-    const finalTarget = getUnit(work, request.targetUnitId);
+    const finalTarget = getUnit(state, request.targetUnitId);
 
     if (
         pending.cancellation !== null ||
@@ -283,7 +236,7 @@ function settleDamage(
         };
 
         if (finalTarget !== undefined && hasVitality(finalTarget)) {
-            appendEvents(work, [
+            appendEvents(state, [
                 {
                     type: "DAMAGE",
                     sourceUnitId: request.sourceUnitId,
@@ -296,18 +249,16 @@ function settleDamage(
             ]);
         }
 
-        return confirmDamage(
-            work,
-            {
-                ...report,
-                formulaDamage,
-                outputDamage,
-                resourceConsumptions: pending.consumptions,
-                cancellation,
-            },
-            resources,
-            dispatch,
-        );
+        const result: DamageReport = {
+            ...report,
+            formulaDamage,
+            outputDamage,
+            resourceConsumptions: pending.consumptions,
+            cancellation,
+        };
+        notifyReactions(state, result, resources);
+
+        return result;
     }
 
     const candidateHp = Math.max(0, finalTarget.vitality.hp - hpDamage);
@@ -321,10 +272,10 @@ function settleDamage(
             vitality: { ...finalTarget.vitality, hp },
         };
 
-        updateUnit(work, updated);
+        updateUnit(state, updated);
     }
 
-    appendEvents(work, [
+    appendEvents(state, [
         {
             type: "DAMAGE",
             sourceUnitId: request.sourceUnitId,
@@ -336,19 +287,156 @@ function settleDamage(
         },
     ]);
 
-    return confirmDamage(
-        work,
-        {
-            ...report,
-            formulaDamage,
-            outputDamage,
-            hpDamage,
-            hpLoss,
-            resourceConsumptions: pending.consumptions,
-            deathOccurred: hp === 0,
-            fatalProtection,
-        },
-        resources,
-        dispatch,
+    const result: DamageReport = {
+        ...report,
+        formulaDamage,
+        outputDamage,
+        hpDamage,
+        hpLoss,
+        resourceConsumptions: pending.consumptions,
+        deathOccurred: hp === 0,
+        fatalProtection,
+    };
+    notifyReactions(state, result, resources);
+
+    if (result.deathOccurred) {
+        resources.retireUnit(state, request.targetUnitId, request.tick);
+    }
+
+    return result;
+}
+
+function formulaPower(operands: DamageOperands): number {
+    return Math.max(
+        0,
+        operands.power * operands.attackScale +
+            (operands.attackScale > 0 ? operands.attackAddition : 0),
+    );
+}
+
+function notifyReactions(state: BattleState, report: DamageReport, resources: Resources): void {
+    if (!(report.request.receptionPolicy ?? NORMAL_DAMAGE_RECEPTION).skipModifierEvents) {
+        for (const owner of new Set([report.request.sourceUnitId, report.request.targetUnitId])) {
+            callHooks(state, report.request, owner, report, resources, (entry) =>
+                entry.stage === "reaction" ? entry : undefined,
+            );
+        }
+    }
+}
+
+interface StageHook<V> extends RegisteredHook<
+    Context,
+    V,
+    Result<V> | { readonly stopDispatch?: boolean } | undefined
+> {
+    readonly priority: number;
+}
+
+function callHooks<V>(
+    battle: BattleState,
+    request: DamageRequest,
+    ownerUnitId: UnitId | null,
+    value: V,
+    resources: Resources,
+    select: (entry: Hook) => StageHook<V> | undefined,
+): V {
+    const unit = ownerUnitId === null ? undefined : getUnit(battle, ownerUnitId);
+
+    if (unit === undefined || !hasVitality(unit)) {
+        return value;
+    }
+
+    const previous = battle.activeVitalityHookSnapshots.get(unit.id);
+    const snapshot = previous ?? {
+        damage: unit.vitality.damageHooks,
+        healing: unit.vitality.healingHooks,
+    };
+    battle.activeVitalityHookSnapshots.set(unit.id, snapshot);
+
+    try {
+        const candidates = snapshot.damage
+            .flatMap((entry) => {
+                const hook = select(entry);
+
+                return hook === undefined ? [] : [{ entry, hook }];
+            })
+            .sort((left, right) => right.hook.priority - left.hook.priority);
+
+        const context: Context = {
+            battle,
+            get unit() {
+                return getUnit(battle, unit.id)!;
+            },
+            request,
+            tick: request.tick,
+            operations: {
+                damage: (input) =>
+                    resolveDamage(battle, { ...input, tick: request.tick }, resources),
+                heal: (input) =>
+                    resolveHealing(battle, { ...input, tick: request.tick }, resources),
+            },
+        };
+
+        for (const { entry, hook } of candidates) {
+            const current = getUnit(battle, unit.id);
+
+            if (
+                current === undefined ||
+                !hasVitality(current) ||
+                !current.vitality.damageHooks.includes(entry) ||
+                !hook.enabled(context)
+            ) {
+                continue;
+            }
+
+            const result = hook.invoke(context, value);
+
+            if (result !== undefined && "value" in result) {
+                value = result.value;
+            }
+            if (result?.stopDispatch === true) {
+                break;
+            }
+        }
+
+        return value;
+    } finally {
+        if (previous === undefined) {
+            battle.activeVitalityHookSnapshots.delete(unit.id);
+        }
+    }
+}
+
+function applyFormulaHooks(
+    battle: BattleState,
+    request: DamageRequest,
+    owner: UnitId | null,
+    stage: FormulaStage,
+    operands: DamageOperands,
+    resources: Resources,
+): DamageOperands {
+    return callHooks(battle, request, owner, operands, resources, (entry) =>
+        (entry.stage === "sourceFormula" || entry.stage === "targetFormula") &&
+        entry.stage === stage
+            ? entry
+            : undefined,
+    );
+}
+
+function applyAmountHooks(
+    battle: BattleState,
+    request: DamageRequest,
+    owner: UnitId | null,
+    stage: AmountStage,
+    pending: PendingDamage,
+    resources: Resources,
+): PendingDamage {
+    return callHooks(battle, request, owner, pending, resources, (entry) =>
+        (entry.stage === "output" ||
+            entry.stage === "reception" ||
+            entry.stage === "skippedReception") &&
+        entry.stage === stage
+            ? entry
+            : undefined,
     );
 }

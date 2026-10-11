@@ -66,16 +66,16 @@ export class CombatResources {
         retireCombatUnit(battle, unitId, this, tick);
     };
 
-    readonly settleDamage: DamageOperation = (battle, request, dispatch) => {
+    readonly settleDamage: DamageOperation = (battle, request) => {
         this.#registration.assertUsable();
 
-        return resolveDamage(battle, request, this, dispatch);
+        return resolveDamage(battle, request, this);
     };
 
-    readonly settleHealing: HealingOperation = (battle, request, dispatch) => {
+    readonly settleHealing: HealingOperation = (battle, request) => {
         this.#registration.assertUsable();
 
-        return resolveHealing(battle, request, this, dispatch);
+        return resolveHealing(battle, request, this);
     };
 
     seal(): this {

@@ -8,6 +8,8 @@ import type {
 import type { MechanismId, Mechanism } from "../../battlefield/mechanism.js";
 import type { Unit, UnitId } from "../../unit/unit.js";
 import type { ActionExecutionWork } from "../../unit/capability/action/internal/executions.js";
+import type { Hook as DamageHook } from "../../unit/capability/vitality/damage/hook.js";
+import type { Hook as HealingHook } from "../../unit/capability/vitality/healing/hook.js";
 import type { Event } from "../contract.js";
 import type { BattleExecutionState } from "./state.js";
 
@@ -30,6 +32,11 @@ export interface BattleState {
     readonly registeredUnitIds: UnitId[];
     readonly removedUnits: BattlefieldChangeResult["removedUnits"][number][];
     readonly closedLifetimes: Set<string>;
+    /** Same-unit nested Damage/Healing calls share these candidate snapshots. */
+    readonly activeVitalityHookSnapshots: Map<
+        UnitId,
+        { readonly damage: readonly DamageHook[]; readonly healing: readonly HealingHook[] }
+    >;
 }
 
 export function createBattleState(
@@ -46,6 +53,7 @@ export function createBattleState(
         registeredUnitIds: [],
         removedUnits: [],
         closedLifetimes: new Set(),
+        activeVitalityHookSnapshots: new Map(),
         ...(actionExecutions === undefined ? {} : { actionExecutions }),
     };
 }
@@ -102,8 +110,8 @@ export function updateUnits(state: BattleState, units: readonly Unit[]): void {
     for (const unit of new Map(units.map((unit) => [unit.id, unit])).values()) {
         const current = getUnit(state, unit.id);
 
-        if (current !== unit) {
-            changes.push({ type: current === undefined ? "REGISTER_UNIT" : "UPDATE_UNIT", unit });
+        if (current !== undefined && current !== unit) {
+            changes.push({ type: "UPDATE_UNIT", unit });
         }
     }
 

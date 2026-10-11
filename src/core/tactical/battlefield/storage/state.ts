@@ -24,7 +24,7 @@ import {
     reconcileSupportRelations,
     type SupportRelation,
 } from "../support/relations.js";
-import { derive, project, type Projection } from "../../unit/effect/lifetime-index.js";
+import { derive, project, type Index } from "./effect-lifetimes.js";
 
 export interface BattlefieldContent<U extends Unit> {
     readonly projectiles: ReadonlyMap<ProjectileId, Projectile>;
@@ -38,7 +38,7 @@ export interface BattlefieldContent<U extends Unit> {
 export interface BattlefieldState<U extends Unit> extends BattlefieldContent<U> {
     readonly navigationMaps: NavigationMaps;
     readonly spatial: BattlefieldSpatialView;
-    readonly effectLifetimes: Projection;
+    readonly effectLifetimes: Index;
 }
 
 export function createBattlefieldState<U extends Unit>(
@@ -67,7 +67,7 @@ function finishSettlement<U extends Unit>(
     content: BattlefieldContent<U>,
     spatial: BattlefieldSpatialView,
     projection: NavigationProjection,
-    effectLifetimes: Projection,
+    effectLifetimes: Index,
 ): {
     readonly state: BattlefieldState<U>;
     readonly facts: Pick<BattlefieldChangeResult, "changedNavigationModes" | "lostSupports">;

@@ -147,7 +147,7 @@ function harness({ stackCount = 3, maxValidStackCnt = -1 } = {}) {
                 );
                 if (plan.type === "FINISH") ctx.end("EXPIRED");
                 else {
-                    effects.setTick(ctx.battle, ctx.ref, plan.expiresAtTick);
+                    effects.setDeadline(ctx.battle, ctx.ref, plan.expiresAtTick);
                     ctx.setState((state) => ({
                         ...state,
                         stackCount: plan.stackCount,

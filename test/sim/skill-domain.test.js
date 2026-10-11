@@ -239,7 +239,7 @@ for (const trigger of ["SKILL", "EFFECT", "TICK"]) {
       onTick(context) {
         if (context.tick === 5 && !context.self.state.renewed) {
           context.setState({ renewed: true });
-          effects.setTick(context.battle, context.ref, 10);
+          effects.setDeadline(context.battle, context.ref, 10);
         }
       },
       onEnd(context) { ended.push(context.reason); },

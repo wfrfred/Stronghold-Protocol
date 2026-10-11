@@ -79,7 +79,8 @@ test("battle state: a batch updates the common draft while fixed snapshots retai
     const snapshot = state.battlefield.snapshot("draft");
     const moved = { ...first, position: [3, 0] };
     const spawned = unit(8);
-    updateUnits(state, [moved, second, spawned]);
+    updateUnits(state, [moved, second]);
+    registerUnit(state, spawned);
     assert.equal(getUnit(state, 1), moved);
     assert.equal(getUnit(state, 8), spawned);
     assert.equal(snapshot.getUnit(1), first);
@@ -101,7 +102,7 @@ test("battle state: nested operations share event accumulation and the latest ex
     assert.equal(state.execution, execution);
 });
 
-test("battle state: repeated identities in a batch use the final value and register each new identity once", () => {
+test("battle state: batch updates keep the final value without implicitly registering missing units", () => {
     const first = unit(1);
     const state = fixture(first);
     const moved = { ...first, position: [2, 0] };
@@ -109,6 +110,6 @@ test("battle state: repeated identities in a batch use the final value and regis
     const changedSpawned = { ...spawned, position: [3, 0] };
     updateUnits(state, [moved, spawned, first, changedSpawned]);
     assert.equal(getUnit(state, 1), first);
-    assert.equal(getUnit(state, 8), changedSpawned);
-    assert.deepEqual(state.registeredUnitIds, [8]);
+    assert.equal(getUnit(state, 8), undefined);
+    assert.deepEqual(state.registeredUnitIds, []);
 });

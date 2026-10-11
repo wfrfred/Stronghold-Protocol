@@ -1,4 +1,3 @@
-import type { Dispatch } from "../hook.js";
 import type { StableUnit, UnitId } from "../../../unit.js";
 import type { BattleState } from "../../../../battle/execution/context.js";
 import type { VitalUnit } from "../capability.js";
@@ -32,8 +31,4 @@ export interface HealingResult<U extends VitalUnit> {
     readonly amount: number;
 }
 
-export type HealingOperation = (
-    work: BattleState,
-    request: HealingRequest,
-    dispatch?: Dispatch,
-) => HealingReport;
+export type HealingOperation = (work: BattleState, request: HealingRequest) => HealingReport;

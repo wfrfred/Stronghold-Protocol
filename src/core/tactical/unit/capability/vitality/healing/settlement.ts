@@ -3,9 +3,10 @@ import { hasVitality, resolveVitalityMaxHp, type VitalUnit } from "../capability
 import { widenUnit, type StableUnit, type UnitId } from "../../../unit.js";
 import type { Hook as RegisteredHook } from "../../../hook/hook.js";
 import { resolveMaxHp } from "../query.js";
-import { context, withDispatch, type Dispatch, type Result } from "../hook.js";
+import type { Result } from "../hook.js";
+import { resolveDamage, type Resources } from "../damage/settlement.js";
 import { assertNonnegativeNumber } from "../../../../../common/assert.js";
-import type { Context, Hook, Services, Stage } from "./hook.js";
+import type { Context, Hook, Stage } from "./hook.js";
 import type {
     HealingCancellation,
     HealingReport,
@@ -20,135 +21,6 @@ import {
     updateUnit,
     type BattleState,
 } from "../../../../battle/execution/context.js";
-
-interface StageHook<V> extends RegisteredHook<Context, V, Result<V>> {
-    readonly priority: number;
-}
-
-function dispatchHealing<V>(
-    battle: BattleState,
-    request: HealingRequest,
-    ownerUnitId: UnitId | null,
-    value: V,
-    services: Services,
-    dispatch: Dispatch,
-    select: (entry: Hook) => StageHook<V> | undefined,
-): V {
-    const unit = ownerUnitId === null ? undefined : getUnit(battle, ownerUnitId);
-
-    if (unit === undefined || !hasVitality(unit)) {
-        return value;
-    }
-
-    return dispatch.withCandidates(unit, (snapshot) => {
-        const candidates = snapshot.healing
-            .flatMap((entry) => {
-                const hook = select(entry);
-
-                return hook === undefined ? [] : [{ entry, hook }];
-            })
-            .sort((left, right) => right.hook.priority - left.hook.priority);
-
-        for (const { entry, hook } of candidates) {
-            const current = getUnit(battle, unit.id);
-
-            if (
-                current === undefined ||
-                !hasVitality(current) ||
-                !current.vitality.healingHooks.includes(entry)
-            ) {
-                continue;
-            }
-
-            const invocation = context(battle, unit.id, request, services, dispatch);
-
-            if (!hook.enabled(invocation)) {
-                continue;
-            }
-
-            const result = hook.invoke(invocation, value);
-            value = result.value;
-
-            if (result.stopDispatch === true) {
-                break;
-            }
-        }
-
-        return value;
-    });
-}
-
-function applyHealingRules(
-    work: BattleState,
-    request: HealingRequest,
-    ownerUnitId: UnitId | null,
-    stage: Stage,
-    pending: PendingHealing,
-    services: Services,
-    dispatch: Dispatch,
-): PendingHealing {
-    return dispatchHealing(work, request, ownerUnitId, pending, services, dispatch, (entry) =>
-        entry.stage !== "reaction" && entry.stage === stage ? entry : undefined,
-    );
-}
-
-function confirmHealing(
-    work: BattleState,
-    report: HealingReport,
-    services: Services,
-    dispatch: Dispatch,
-): HealingReport {
-    if (report.request.skipModifierEvents !== true) {
-        const ownerUnitIds = new Set([report.request.targetUnitId, report.request.sourceUnitId]);
-
-        for (const ownerUnitId of ownerUnitIds) {
-            dispatchHealing(
-                work,
-                report.request,
-                ownerUnitId,
-                report,
-                services,
-                dispatch,
-                (entry) => {
-                    if (entry.stage !== "reaction") {
-                        return undefined;
-                    }
-
-                    return {
-                        id: entry.id,
-                        priority: entry.priority,
-                        enabled: entry.enabled,
-                        invoke: (invocation, value) => {
-                            const outcome = entry.invoke(invocation, value);
-
-                            return outcome?.stopDispatch === true
-                                ? { value, stopDispatch: true }
-                                : { value };
-                        },
-                    };
-                },
-            );
-        }
-    }
-
-    return report;
-}
-
-function targetCancellation(work: BattleState, targetUnitId: UnitId): HealingCancellation | null {
-    const receiver = getUnit(work, targetUnitId);
-
-    if (receiver === undefined) {
-        return { reason: "TARGET_ABSENT" };
-    }
-    if (!hasVitality(receiver)) {
-        return { reason: "NO_VITALITY" };
-    }
-    if (receiver.vitality.hp <= 0) {
-        return { reason: "TARGET_DEAD" };
-    }
-
-    return null;
-}
 
 function applyHealingValue<U extends VitalUnit>(
     unit: U | StableUnit<U>,
@@ -184,54 +56,45 @@ export function healUnit<U extends VitalUnit>(
 }
 
 export function resolveHealing(
-    work: BattleState,
+    state: BattleState,
     request: HealingRequest,
-    resources: Services,
-    dispatch?: Dispatch,
-): HealingReport {
-    return withDispatch(work, dispatch, (scope) => settleHealing(work, request, resources, scope));
-}
-
-function settleHealing(
-    work: BattleState,
-    request: HealingRequest,
-    resources: Services,
-    dispatch: Dispatch,
+    resources: Resources,
 ): HealingReport {
     const { tick } = request;
     let pending: PendingHealing = {
         amount: Math.max(0, request.power),
         cancellation: null,
     };
-    const target = getUnit(work, request.targetUnitId);
+    const target = getUnit(state, request.targetUnitId);
 
     if (target === undefined || !hasVitality(target) || target.vitality.hp <= 0) {
-        return confirmHealing(
-            work,
-            { request, amount: 0, cancellation: targetCancellation(work, request.targetUnitId) },
-            resources,
-            dispatch,
-        );
+        const report = {
+            request,
+            amount: 0,
+            cancellation: targetCancellation(state, request.targetUnitId),
+        };
+        notifyReactions(state, report, resources);
+
+        return report;
     }
 
     if (request.skipModifierEvents !== true) {
         pending = applyHealingRules(
-            work,
+            state,
             request,
             request.sourceUnitId,
             "output",
             pending,
             resources,
-            dispatch,
         );
     }
 
-    const cancellation = targetCancellation(work, request.targetUnitId);
+    const cancellation = targetCancellation(state, request.targetUnitId);
 
     if (cancellation !== null) {
         pending = { ...pending, cancellation: pending.cancellation ?? cancellation };
     } else {
-        const receiver = getUnit(work, request.targetUnitId)!;
+        const receiver = getUnit(state, request.targetUnitId)!;
 
         if (!request.ignoreHealFree && hasStatusFlag(receiver, "HEAL_FREE")) {
             pending = {
@@ -241,13 +104,12 @@ function settleHealing(
         }
 
         pending = applyHealingRules(
-            work,
+            state,
             request,
             request.targetUnitId,
             request.skipModifierEvents === true ? "skippedReception" : "reception",
             pending,
             resources,
-            dispatch,
         );
     }
 
@@ -255,23 +117,23 @@ function settleHealing(
 
     assertNonnegativeNumber(healingAmount, "received healing");
 
-    const current = getUnit(work, request.targetUnitId);
+    const current = getUnit(state, request.targetUnitId);
     const finalCancellation =
-        pending.cancellation ?? targetCancellation(work, request.targetUnitId);
+        pending.cancellation ?? targetCancellation(state, request.targetUnitId);
     let amount = 0;
 
     if (current !== undefined && hasVitality(current)) {
         let hp = current.vitality.hp;
 
         if (finalCancellation === null) {
-            const maxHp = resolveMaxHp(current.id, battlefieldView(work))!;
+            const maxHp = resolveMaxHp(current.id, battlefieldView(state))!;
             const healed = applyHealingValue(current, healingAmount, maxHp);
-            updateUnit(work, healed.unit);
+            updateUnit(state, healed.unit);
             amount = healed.amount;
             hp = healed.unit.vitality.hp;
         }
 
-        appendEvents(work, [
+        appendEvents(state, [
             {
                 type: "HEAL",
                 sourceUnitId: request.sourceUnitId,
@@ -283,10 +145,136 @@ function settleHealing(
         ]);
     }
 
-    return confirmHealing(
-        work,
-        { request, amount, cancellation: finalCancellation },
-        resources,
-        dispatch,
+    const report = { request, amount, cancellation: finalCancellation };
+    notifyReactions(state, report, resources);
+
+    return report;
+}
+
+interface StageHook<V> extends RegisteredHook<
+    Context,
+    V,
+    Result<V> | { readonly stopDispatch?: boolean } | undefined
+> {
+    readonly priority: number;
+}
+
+function callHooks<V>(
+    battle: BattleState,
+    request: HealingRequest,
+    ownerUnitId: UnitId | null,
+    value: V,
+    resources: Resources,
+    select: (entry: Hook) => StageHook<V> | undefined,
+): V {
+    const unit = ownerUnitId === null ? undefined : getUnit(battle, ownerUnitId);
+
+    if (unit === undefined || !hasVitality(unit)) {
+        return value;
+    }
+
+    const previous = battle.activeVitalityHookSnapshots.get(unit.id);
+    const snapshot = previous ?? {
+        damage: unit.vitality.damageHooks,
+        healing: unit.vitality.healingHooks,
+    };
+    battle.activeVitalityHookSnapshots.set(unit.id, snapshot);
+
+    try {
+        const candidates = snapshot.healing
+            .flatMap((entry) => {
+                const hook = select(entry);
+
+                return hook === undefined ? [] : [{ entry, hook }];
+            })
+            .sort((left, right) => right.hook.priority - left.hook.priority);
+
+        const invocation: Context = {
+            battle,
+            get unit() {
+                return getUnit(battle, unit.id)!;
+            },
+            request,
+            tick: request.tick,
+            operations: {
+                damage: (input) =>
+                    resolveDamage(battle, { ...input, tick: request.tick }, resources),
+                heal: (input) =>
+                    resolveHealing(battle, { ...input, tick: request.tick }, resources),
+            },
+        };
+
+        for (const { entry, hook } of candidates) {
+            const current = getUnit(battle, unit.id);
+
+            if (
+                current === undefined ||
+                !hasVitality(current) ||
+                !current.vitality.healingHooks.includes(entry)
+            ) {
+                continue;
+            }
+
+            if (!hook.enabled(invocation)) {
+                continue;
+            }
+
+            const result = hook.invoke(invocation, value);
+
+            if (result !== undefined && "value" in result) {
+                value = result.value;
+            }
+
+            if (result?.stopDispatch === true) {
+                break;
+            }
+        }
+
+        return value;
+    } finally {
+        if (previous === undefined) {
+            battle.activeVitalityHookSnapshots.delete(unit.id);
+        }
+    }
+}
+
+function applyHealingRules(
+    state: BattleState,
+    request: HealingRequest,
+    ownerUnitId: UnitId | null,
+    stage: Stage,
+    pending: PendingHealing,
+    resources: Resources,
+): PendingHealing {
+    return callHooks(state, request, ownerUnitId, pending, resources, (entry) =>
+        entry.stage !== "reaction" && entry.stage === stage ? entry : undefined,
     );
+}
+
+function notifyReactions(state: BattleState, report: HealingReport, resources: Resources): void {
+    if (report.request.skipModifierEvents !== true) {
+        const ownerUnitIds = new Set([report.request.targetUnitId, report.request.sourceUnitId]);
+
+        for (const ownerUnitId of ownerUnitIds) {
+            callHooks(state, report.request, ownerUnitId, report, resources, (entry) =>
+                entry.stage === "reaction" ? entry : undefined,
+            );
+        }
+    }
+}
+
+function targetCancellation(state: BattleState, targetUnitId: UnitId): HealingCancellation | null {
+    const receiver = getUnit(state, targetUnitId);
+
+    if (receiver === undefined) {
+        return { reason: "TARGET_ABSENT" };
+    }
+    if (!hasVitality(receiver)) {
+        return { reason: "NO_VITALITY" };
+    }
+    if (receiver.vitality.hp <= 0) {
+        return { reason: "TARGET_DEAD" };
+    }
+
+    return null;
 }

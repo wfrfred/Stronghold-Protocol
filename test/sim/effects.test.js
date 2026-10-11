@@ -152,3 +152,24 @@ test("effects: callbacks read current Unit state after a preceding nested operat
     effect.advance(at(battle, 7));
     assert.deepEqual(get(battle, ref).state, { observedHp: 30, tick: 7 });
 });
+
+test("effects: a callback sees termination when a nested operation ends its instance", () => {
+    const seen = [];
+    const value = definition(
+        "ended-by-operation",
+        {},
+        {
+            onTick(context) {
+                effect.end(context.battle, context.ref);
+                seen.push(context.self.status);
+            },
+        },
+    );
+    const battle = effectFixtureWork(unit());
+    const ref = install(battle, value);
+
+    effect.advance(at(battle, 1));
+
+    assert.deepEqual(seen, ["FINISHED"]);
+    assert.equal(get(battle, ref), undefined);
+});

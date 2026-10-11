@@ -1,12 +1,10 @@
 import { widenUnit, type Unit, type StableUnit } from "../../../unit.js";
 import * as hook from "../../../hook/hook.js";
 import type { Vitality } from "../capability.js";
-import type { Context as VitalityContext, Result, Services as VitalityServices } from "../hook.js";
+import type { Context as VitalityContext, Result } from "../hook.js";
 import type { HealingReport, HealingRequest, PendingHealing } from "./contract.js";
 
 export type Context = VitalityContext<HealingRequest>;
-
-export type Services = VitalityServices;
 
 export type Stage = "output" | "reception" | "skippedReception";
 

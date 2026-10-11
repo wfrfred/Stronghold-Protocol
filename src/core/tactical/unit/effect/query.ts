@@ -1,9 +1,9 @@
 import { getUnit, type BattleState } from "../../battle/execution/context.js";
 import type { Unit } from "../unit.js";
 import type { Definition } from "./definition.js";
-import type { Effect, Ref, Value } from "./effect.js";
+import type { Effect, Instance, Ref } from "./effect.js";
 
-export function get(battle: BattleState, ref: Ref): Value | undefined {
+export function get(battle: BattleState, ref: Ref): Instance | undefined {
     return getUnit(battle, ref.unitId)?.effects.instances.find(
         (instance) => instance.id === ref.effectId,
     );

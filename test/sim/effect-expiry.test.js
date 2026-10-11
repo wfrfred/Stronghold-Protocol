@@ -47,7 +47,7 @@ test("effect deadlines: layered content renews the same identity and ends only a
                 }
                 const deadline = context.tick + 2;
                 context.setState({ layers, deadline });
-                effect.setTick(context.battle, context.ref, deadline);
+                effect.setDeadline(context.battle, context.ref, deadline);
             },
         },
     );
@@ -67,7 +67,7 @@ test("effect deadlines: current scopes are read after an earlier callback renews
         {},
         {
             onTick(context) {
-                effect.setTick(context.battle, later, 10);
+                effect.setDeadline(context.battle, later, 10);
             },
         },
     );
@@ -83,7 +83,7 @@ test("effect deadlines: removing a deadline keeps an otherwise active instance a
     const ref = install(battle, definition("permanent"), 0, {
         scopes: [{ type: "TICK", tick: 1 }],
     });
-    effect.setTick(battle, ref, null);
+    effect.setDeadline(battle, ref, null);
     effect.advance(at(battle, 100));
     assert.equal(get(battle, ref).status, "ACTIVE");
 });
