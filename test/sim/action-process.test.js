@@ -367,7 +367,7 @@ test("action process: concurrent executions from one source own independent cont
     { executionId: 1, segments, tick: 0 },
     resources,
   );
-  const attack = (work) => resolveAttackPower(1, battlefieldView(work), resources.computations);
+  const attack = (work) => resolveAttackPower(1, battlefieldView(work));
   assert.equal(attack(battle), 50);
   current = cancelActionExecution(
     battle,
@@ -445,7 +445,7 @@ test("action process: content cancellation and normal finish retain completed pr
                 resources,
                 0,
               );
-              assert.equal(resolveAttackPower(1, battlefieldView(work), resources.computations), 33);
+              assert.equal(resolveAttackPower(1, battlefieldView(work)), 33);
               return {continuation};
             },
           },
@@ -481,7 +481,7 @@ test("action process: content cancellation and normal finish retain completed pr
     assert.equal(getUnit(original, 1).vitality.hp, 100);
     assert.equal(getUnit(original, 1).effects.instances[0].state.power, 23);
     assert.equal(getUnit(original, 1).effects.instances[0].finished, true);
-    assert.equal(resolveAttackPower(1, battlefieldView(original), resources.computations), 10);
+    assert.equal(resolveAttackPower(1, battlefieldView(original)), 10);
     assert.equal(original.battlefield.snapshot("state").getUnit(1).effects, undefined);
     assert.deepEqual(
       original.events.map((event) => event.type),

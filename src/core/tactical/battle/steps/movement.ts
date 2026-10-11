@@ -1,6 +1,4 @@
 import type { BattlefieldChange } from "../../battlefield/contract.js";
-import type * as computation from "../../contribution/computation.js";
-import type { QueryContext } from "../../contribution/definition.js";
 import { hasRoutedLocomotion } from "../../unit/capability/locomotion/capability.js";
 import { hasAction } from "../../unit/capability/action/capability.js";
 import { hasStatusFlag } from "../../unit/capability/status/capability.js";
@@ -50,9 +48,7 @@ export function advanceMovement(
         readonly routeMoveMultiplier: number;
         readonly movementAllowed?: (unitId: UnitId) => boolean;
     },
-    resources: UnitLifecycleResources & {
-        readonly computations: computation.Computations<QueryContext>;
-    },
+    resources: UnitLifecycleResources,
 ): void {
     const battlefield = state.battlefield.snapshot("draft");
     let execution = state.execution;
@@ -72,7 +68,7 @@ export function advanceMovement(
             maps: battlefield.navigationMaps,
             fieldCache: battlefield.fieldCache,
             moveMultiplier: routeMoveMultiplier,
-            evaluateContributions: resources.computations.bind({ unit, battlefield }),
+            queryContext: { unit, battlefield },
             movementAllowed:
                 (movementAllowed?.(unitId) ?? true) &&
                 !hasStatusFlag(unit, "STUNNED") &&

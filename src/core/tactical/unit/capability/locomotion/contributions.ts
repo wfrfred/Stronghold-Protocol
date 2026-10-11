@@ -1,5 +1,5 @@
-import type * as contributions from "../../../contribution/definition.js";
-import { updateMoveSpeedContributions } from "./capability.js";
+import type * as contributions from "../effects/contributions.js";
+import { setMoveSpeedContribution, removeMoveSpeedContribution } from "./capability.js";
 
 export function moveSpeed<S extends object>(
     sample: contributions.Sampled<S>["sample"],
@@ -8,7 +8,8 @@ export function moveSpeed<S extends object>(
     return {
         kind: "SAMPLED",
         id: options.id ?? "moveSpeed",
-        target: updateMoveSpeedContributions,
+        set: setMoveSpeedContribution,
+        remove: removeMoveSpeedContribution,
         sample,
         ...(options.group === undefined ? {} : { group: options.group }),
     };
@@ -21,7 +22,8 @@ export function liveMoveSpeed<S extends object>(
     return {
         kind: "LIVE",
         id: options.id ?? "moveSpeed",
-        target: updateMoveSpeedContributions,
+        set: setMoveSpeedContribution,
+        remove: removeMoveSpeedContribution,
         evaluate,
         ...(options.group === undefined ? {} : { group: options.group }),
     };

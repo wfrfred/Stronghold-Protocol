@@ -105,11 +105,7 @@ export function withProjectileContext<S extends object>(
             const attack =
                 projectile.source === null
                     ? undefined
-                    : resolveAttackPower(
-                          projectile.source,
-                          battlefieldView(readWork()),
-                          services.computations,
-                      );
+                    : resolveAttackPower(projectile.source, battlefieldView(readWork()));
 
             return attack ?? projectile.cachedAtk;
         },

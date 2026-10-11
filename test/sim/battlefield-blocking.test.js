@@ -7,8 +7,7 @@ import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import {
   addStatusContribution, removeStatusContribution,
 } from '../../dist/core/tactical/unit/capability/status/capability.js';
-import { updateBlockingCapacityContributions } from '../../dist/core/tactical/unit/capability/blocking/capability.js';
-import * as contribution from '../../dist/core/tactical/contribution/state.js';
+import { setCapacityContribution } from '../../dist/core/tactical/unit/capability/blocking/capability.js';
 import * as modifier from '../../dist/core/tactical/contribution/value.js';
 
 const create = units => {
@@ -41,9 +40,9 @@ const stun = unit => ({
   ...unit, status: addStatusContribution(unit.status, { id: 'test-stun', flags: ['STUNNED'] }),
 });
 const recover = unit => ({ ...unit, status: removeStatusContribution(unit.status, 'test-stun') });
-const capacityChange = (unit, addition) => updateBlockingCapacityContributions(unit, () => contribution.register(contribution.empty(),
-  { id: 'test-capacity', sequence: 0, kind: "SAMPLED", participating: true, values: [modifier.create({ addition })] },
-));
+const capacityChange = (unit, addition) => setCapacityContribution(unit,
+  { id: 'test-capacity', value: [modifier.create({ addition })] },
+);
 
 test('advance acquires in target ID order, choosing the nearest available blocker and then blocker ID', () => {
   const tied = create([

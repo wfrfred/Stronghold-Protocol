@@ -3,7 +3,7 @@ import {
     assertPositiveSafeInteger,
 } from "../../../../common/assert.js";
 import { createBlockGeometry, type BlockGeometry } from "../../../geometry/shape.js";
-import * as contribution from "../../../contribution/state.js";
+import * as contribution from "../../../contribution/contribution.js";
 import * as modifier from "../../../contribution/value.js";
 import { widenUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
 
@@ -13,7 +13,7 @@ export interface BlockerDefinition {
 }
 
 export interface BlockerState {
-    readonly capacity: contribution.State<"SAMPLED">;
+    readonly capacity: readonly contribution.Contribution[];
     readonly geometry: BlockGeometry;
     readonly enabled: boolean;
 }
@@ -72,7 +72,7 @@ export function createBlockableDefinition(definition: BlockableDefinition): Bloc
 
 export function initializeBlockerState(definition: BlockerDefinition): BlockerState {
     return {
-        capacity: contribution.empty<"SAMPLED">(),
+        capacity: [],
         geometry: definition.geometry,
         enabled: true,
     };
@@ -82,9 +82,11 @@ export function initializeBlockableState(definition: BlockableDefinition): Block
     return { weight: definition.weight, enabled: true };
 }
 
-export function updateBlockingCapacityContributions<U extends Unit>(
+function changeCapacityContributions<U extends Unit>(
     input: U | StableUnit<U>,
-    transition: contribution.Transition<"SAMPLED">,
+    transition: (
+        entries: readonly contribution.Contribution[],
+    ) => readonly contribution.Contribution[],
 ): StableUnit<U> {
     const unit = widenUnit<U>(input);
 
@@ -97,6 +99,20 @@ export function updateBlockingCapacityContributions<U extends Unit>(
     return capacity === unit.blocker.capacity
         ? unit
         : { ...unit, blocker: { ...unit.blocker, capacity } };
+}
+
+export function setCapacityContribution<U extends Unit>(
+    unit: U | StableUnit<U>,
+    entry: contribution.Contribution,
+): StableUnit<U> {
+    return changeCapacityContributions<U>(unit, (entries) => contribution.set(entries, entry));
+}
+
+export function removeCapacityContribution<U extends Unit>(
+    unit: U | StableUnit<U>,
+    id: string,
+): StableUnit<U> {
+    return changeCapacityContributions<U>(unit, (entries) => contribution.remove(entries, id));
 }
 
 export function resolveBlockingCapacity(

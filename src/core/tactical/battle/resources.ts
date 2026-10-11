@@ -2,7 +2,7 @@ import { ResourceRegistration } from "../../common/resource-registration.js";
 import { EffectResources } from "../unit/capability/effects/registry.js";
 import { type EffectDefinition } from "../unit/capability/effects/definition.js";
 import { EffectBindingResources } from "../unit/capability/effects/resources.js";
-import * as contributions from "../contribution/definition.js";
+import * as contributions from "../unit/capability/effects/contributions.js";
 import {
     DamageResources,
     type DamageEffectRules,
@@ -16,8 +16,6 @@ import {
 } from "../unit/capability/vitality/healing/resources.js";
 import type { DamageOperation } from "../unit/capability/vitality/damage/contract.js";
 import type { HealingOperation } from "../unit/capability/vitality/healing/contract.js";
-import * as computation from "../contribution/computation.js";
-import type { QueryContext } from "../contribution/definition.js";
 import { ProjectileResources } from "../battlefield/projectile/resources.js";
 import { resolveDamage } from "../unit/capability/vitality/damage/settlement.js";
 import { resolveHealing } from "../unit/capability/vitality/healing/settlement.js";
@@ -56,7 +54,6 @@ export interface CombatEffectFacets<S extends object> {
 export class CombatResources {
     readonly #registration = new ResourceRegistration();
     readonly effects = new EffectResources(this.#registration);
-    readonly computations = new computation.Resources<QueryContext>(this.#registration);
     readonly effectBindings = new EffectBindingResources(this.#registration);
     readonly damage = new DamageResources(this.effects, this.#registration);
     readonly effectLifecycle = new EffectLifecycleResources(this.effects, this.#registration);

@@ -15,18 +15,9 @@ export function transitionEffectBindings<U extends Unit>(
     apply: (binding: Binding, current: StableUnit<U>) => StableUnit<U>,
 ): StableUnit<U> {
     let current = widenUnit<U>(unit);
-    const reconciles = new Set<NonNullable<Binding["reconcile"]>>();
 
     for (const binding of resources.get(instance)) {
         current = apply(binding, current);
-
-        if (binding.reconcile !== undefined) {
-            reconciles.add(binding.reconcile);
-        }
-    }
-
-    for (const reconcile of reconciles) {
-        current = reconcile<U>(unit, current);
     }
 
     return current;
@@ -75,7 +66,6 @@ export function reconcileEffectBindings<U extends Unit>(
     )
         ? replaceEffects<U>(owner, instances)
         : owner;
-    const reconciles = new Set<NonNullable<Binding["reconcile"]>>();
 
     for (const instance of instances) {
         if (!instance.started) {
@@ -91,21 +81,12 @@ export function reconcileEffectBindings<U extends Unit>(
         }
 
         for (const binding of resources.effectBindings.get(instance)) {
-            if (instance.id === updatedId) {
-                next = binding.update(next, instance);
-            }
             if (changedParticipation) {
                 next = binding.setParticipation(next, instance, instance.participating);
-            }
-
-            if (binding.reconcile !== undefined) {
-                reconciles.add(binding.reconcile);
+            } else if (instance.id === updatedId) {
+                next = binding.update(next, instance);
             }
         }
-    }
-
-    for (const reconcile of reconciles) {
-        next = reconcile<U>(before, next);
     }
 
     return { unit: next, changes };

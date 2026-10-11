@@ -104,7 +104,6 @@ export function createCombat(
         const battlefield = battlefieldView(state);
         const executions = executionsOf(state);
         const actionResources: ActionStartResources = {
-            computations: resources.computations,
             effects: resources.effects,
             effectBindings: resources.effectBindings,
             effectLifecycle: resources.effectLifecycle,

@@ -1,5 +1,6 @@
+import type { QueryContext } from "../../query.js";
 import { assertNonnegativeNumber } from "../../../../common/assert.js";
-import * as contribution from "../../../contribution/state.js";
+import * as contribution from "../../../contribution/contribution.js";
 import * as modifier from "../../../contribution/value.js";
 import { widenUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
 
@@ -9,8 +10,8 @@ export interface DefenseDefinition {
 }
 
 export interface DefenseState {
-    readonly defense: contribution.State;
-    readonly resistance: contribution.State;
+    readonly defense: readonly contribution.Contribution<contribution.Input<QueryContext>>[];
+    readonly resistance: readonly contribution.Contribution<contribution.Input<QueryContext>>[];
 }
 
 export interface Defense {
@@ -47,15 +48,15 @@ export function createDefenseDefinition(definition: DefenseDefinition): DefenseD
 export function initializeDefenseState(definition?: DefenseDefinition): DefenseState;
 export function initializeDefenseState(): DefenseState {
     return {
-        defense: contribution.empty(),
-        resistance: contribution.empty(),
+        defense: [],
+        resistance: [],
     };
 }
 
 function updateContributions(
     state: DefenseState,
     parameter: keyof DefenseState,
-    transition: contribution.Transition,
+    transition: (entries: DefenseState["defense"]) => DefenseState["defense"],
 ): DefenseState {
     const current = state[parameter];
     const updated = transition(current);
@@ -63,9 +64,10 @@ function updateContributions(
     return updated === current ? state : { ...state, [parameter]: updated };
 }
 
-export function updateDefenseContributions<U extends Unit>(
+function changeContributions<U extends Unit>(
     input: U | StableUnit<U>,
-    transition: contribution.Transition,
+    parameter: keyof DefenseState,
+    transition: (entries: DefenseState["defense"]) => DefenseState["defense"],
 ): StableUnit<U> {
     const unit = widenUnit<U>(input);
 
@@ -73,35 +75,57 @@ export function updateDefenseContributions<U extends Unit>(
         throw new TypeError("defense contributions require Defense capability");
     }
 
-    const defense = updateContributions(unit.defense, "defense", transition);
+    const defense = updateContributions(unit.defense, parameter, transition);
 
     return defense === unit.defense ? unit : { ...unit, defense };
 }
 
-export function updateResistanceContributions<U extends Unit>(
-    input: U | StableUnit<U>,
-    transition: contribution.Transition,
+export function setDefenseContribution<U extends Unit>(
+    unit: U | StableUnit<U>,
+    entry: contribution.Contribution<contribution.Input<QueryContext>>,
 ): StableUnit<U> {
-    const unit = widenUnit<U>(input);
+    return changeContributions<U>(unit, "defense", (entries) => contribution.set(entries, entry));
+}
 
-    if (!hasDefense(unit)) {
-        throw new TypeError("resistance contributions require Defense capability");
-    }
+export function removeDefenseContribution<U extends Unit>(
+    unit: U | StableUnit<U>,
+    id: string,
+): StableUnit<U> {
+    return changeContributions<U>(unit, "defense", (entries) => contribution.remove(entries, id));
+}
 
-    const defense = updateContributions(unit.defense, "resistance", transition);
+export function setResistanceContribution<U extends Unit>(
+    unit: U | StableUnit<U>,
+    entry: contribution.Contribution<contribution.Input<QueryContext>>,
+): StableUnit<U> {
+    return changeContributions<U>(unit, "resistance", (entries) =>
+        contribution.set(entries, entry),
+    );
+}
 
-    return defense === unit.defense ? unit : { ...unit, defense };
+export function removeResistanceContribution<U extends Unit>(
+    unit: U | StableUnit<U>,
+    id: string,
+): StableUnit<U> {
+    return changeContributions<U>(unit, "resistance", (entries) =>
+        contribution.remove(entries, id),
+    );
 }
 
 export function resolveDefenseParameters(
     definition: DefenseDefinition,
     state: DefenseState,
-    evaluate?: contribution.Evaluate,
+    context: QueryContext,
 ): DefenseDefinition {
     return {
         defense: Math.max(
             0,
-            modifier.apply(definition.defense, contribution.resolve(state.defense, evaluate)),
+            modifier.apply(
+                definition.defense,
+                contribution.resolve(state.defense, (value) =>
+                    contribution.evaluate(value, context),
+                ),
+            ),
         ),
         resistance: Math.min(
             100,
@@ -109,7 +133,9 @@ export function resolveDefenseParameters(
                 0,
                 modifier.apply(
                     definition.resistance,
-                    contribution.resolve(state.resistance, evaluate),
+                    contribution.resolve(state.resistance, (value) =>
+                        contribution.evaluate(value, context),
+                    ),
                 ),
             ),
         ),

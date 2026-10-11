@@ -21,10 +21,9 @@ import {
 } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import * as modifier from "../../dist/core/tactical/contribution/value.js";
-import { compile } from "../../dist/core/tactical/contribution/definition.js";
-import { preserveHpRatio } from "../../dist/core/tactical/unit/capability/vitality/max-hp.js";
 import {
-    updateMaxHpContributions,
+    setMaxHpContribution,
+    removeMaxHpContribution,
     initializeVitalityState,
 } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import { resolveMaxHp } from "../../dist/core/tactical/unit/capability/vitality/query.js";
@@ -63,6 +62,21 @@ const install = (work, ref, resources, patch = {}) => {
         0,
     );
 };
+
+test("MaxHP: direct capability changes coordinate HP independently of Effects", () => {
+    const initial = receiver();
+    const installed = setMaxHpContribution(initial, { id: "equipment", value: [bonus(100)] });
+    assert.deepEqual(pair(effectFixtureWork(installed)), [100, 200]);
+    const replaced = setMaxHpContribution(installed, { id: "equipment", value: [bonus(200)] });
+    assert.deepEqual(pair(effectFixtureWork(replaced)), [150, 300]);
+    assert.equal(replaced.vitality.maxHp.length, 1);
+    const removed = removeMaxHpContribution(replaced, "equipment");
+    assert.deepEqual(pair(effectFixtureWork(removed)), [50, 100]);
+    assert.equal(removeMaxHpContribution(removed, "missing"), removed);
+    assert.deepEqual(pair(effectFixtureWork(initial)), [50, 100]);
+    const dead = setMaxHpContribution(receiver(0), { id: "equipment", value: [bonus(100)] });
+    assert.deepEqual(pair(effectFixtureWork(dead)), [0, 200]);
+});
 
 test("MaxHP: install, payload, participation, finish and cleanup retain HP percentage", () => {
     for (const hp of [100, 50, 0]) {
@@ -108,7 +122,7 @@ test("MaxHP: install, payload, participation, finish and cleanup retain HP perce
 
         finalizeEffect(work, address(), resources, 3);
         assert.deepEqual(pair(work), [hp, 100]);
-        assert.deepEqual(getUnit(work, 1).vitality.maxHp.entries, []);
+        assert.deepEqual(getUnit(work, 1).vitality.maxHp, []);
         assert.equal(before.getUnit(1).vitality.hp, hp);
         assert.equal(resolveMaxHp(1, before), 100);
         assert.deepEqual(work.events, []);
@@ -180,42 +194,40 @@ test("MaxHP: callbacks and synchronous nested successors see coordinated facts",
     assert.deepEqual(pair(work), [50, 100]);
 });
 
-test("MaxHP: one binding batch coordinates once after every slot has changed", () => {
+test("MaxHP: each contribution change coordinates HP before the lifecycle callback", () => {
     const resources = new CombatResources();
-    const observed = [];
-    const coordinatedSlots = [];
-    const reconcile = (previous, current) => {
-        coordinatedSlots.push(current.vitality.maxHp.entries.map(entry => entry.participating));
-        return preserveHpRatio(previous, current);
+    const changes = [];
+    const callbacks = [];
+    const set = (unit, contribution) => {
+        const updated = setMaxHpContribution(unit, contribution);
+        changes.push(["set", unit.vitality.hp, updated.vitality.hp]);
+        return updated;
     };
-    const definition = resources.effects.register(createDefinition("two-bindings", 0));
-    const [first, second] = compile(definition, [
-        { kind: "SAMPLED", id: "first", target: updateMaxHpContributions,
-            reconcile, sample: () => [bonus(100)] },
-        { kind: "SAMPLED", id: "second", target: updateMaxHpContributions,
-            reconcile, sample: () => [bonus(100)] },
-    ], resources);
-    const effect = resources.registerEffect(definition, {
-        bindings: [
-            first,
-            {
-                ...second,
-                setParticipation: (unit, instance, participating) => {
-                    observed.push(unit.vitality.hp);
-                    return second.setParticipation(unit, instance, participating);
-                },
-            },
+    const remove = (unit, id) => {
+        const updated = removeMaxHpContribution(unit, id);
+        if (updated !== unit) changes.push(["remove", unit.vitality.hp, updated.vitality.hp]);
+        return updated;
+    };
+    const effect = resources.registerEffect(createDefinition("two-bindings", 0), {
+        contributions: [
+            { kind: "SAMPLED", id: "first", set, remove, sample: () => [bonus(100)] },
+            { kind: "SAMPLED", id: "second", set, remove, sample: () => [bonus(100)] },
         ],
+        lifecycle: {
+            enable: context => callbacks.push(["enable", context.facts.getUnit(1).vitality.hp]),
+            disable: context => callbacks.push(["disable", context.facts.getUnit(1).vitality.hp]),
+        },
     });
     const work = effectFixtureWork(receiver());
     install(work, effect, resources);
-    const installedPair = pair(work);
-    assert.deepEqual(coordinatedSlots, [[false, false], [true, true]]);
+    assert.deepEqual(pair(work), [150, 300]);
     setEffectEnabled(work, address(), false, resources, 1);
-    assert.deepEqual(coordinatedSlots, [[false, false], [true, true], [false, false]]);
-    assert.deepEqual(observed, [50, 150]);
-    assert.deepEqual(installedPair, [150, 300]);
     assert.deepEqual(pair(work), [50, 100]);
+    assert.deepEqual(changes, [
+        ["set", 50, 100], ["set", 100, 150],
+        ["remove", 150, 100], ["remove", 100, 50],
+    ]);
+    assert.deepEqual(callbacks, [["enable", 150], ["disable", 50]]);
 });
 
 test("MaxHP: ordinary healing consumes the current upper bound and prohibition does not reject coordination", () => {
@@ -250,11 +262,11 @@ test("MaxHP: ordinary healing consumes the current upper bound and prohibition d
 
 test("MaxHP: group winner replacement and fallback preserve the current HP ratio", () => {
     const resources = new CombatResources();
-    const register = (id, amount, strength) =>
+    const register = (id, amount, priority) =>
         resources.registerEffect(createDefinition(id, amount), {
             contributions: [
                 maxHp((instance) => [bonus(instance.state.amount)], {
-                    group: { id: "hp-group", strength },
+                    group: { id: "hp-group", priority },
                 }),
             ],
         });
@@ -292,7 +304,7 @@ test("MaxHP: unchanged effective values, inactive cleanup and snapshots do not r
     install(work, effect, resources, { scopes: [{ type: "TICK", tick: 5 }] });
     const installedUnit = getUnit(work, 1);
     const copied = copyUnitSnapshot(installedUnit);
-    assert.equal(copied.vitality.maxHp.entries, installedUnit.vitality.maxHp.entries);
+    assert.equal(copied.vitality.maxHp, installedUnit.vitality.maxHp);
     assert.deepEqual(pair(effectFixtureWork(copied)), pair(work));
     setEffectEnabled(work, address(), true, resources, 1);
     assert.equal(getUnit(work, 1), installedUnit);
@@ -422,49 +434,41 @@ test("capabilities: TypeScript permits sampled MaxHP and blocking contributions 
     writeFileSync(
         path,
         `
-import { compile, type Target, type SampledTarget, type QueryContext } from ${module("contribution/definition")};
-import { updateMaxHpContributions, type VitalityState } from ${module("unit/capability/vitality/capability")};
-import { updateAttackContributions } from ${module("unit/capability/offense/capability")};
+import { setMaxHpContribution, removeMaxHpContribution, type VitalityState } from ${module("unit/capability/vitality/capability")};
+import { setAttackContribution } from ${module("unit/capability/offense/capability")};
 import { attack, liveAttack } from ${module("unit/capability/offense/contributions")};
 import { defense, liveDefense, resistance, liveResistance } from ${module("unit/capability/defense/contributions")};
 import { maxHp } from ${module("unit/capability/vitality/contributions")};
 import { capacity } from ${module("unit/capability/blocking/contributions")};
-import { updateBlockingCapacityContributions, type BlockerState } from ${module("unit/capability/blocking/capability")};
+import { setCapacityContribution, removeCapacityContribution, type BlockerState } from ${module("unit/capability/blocking/capability")};
 import type { Effect } from ${module("unit/capability/effects/effect")};
-import * as contribution from ${module("contribution/state")};
-import * as computation from ${module("contribution/computation")};
+import type { Unit } from ${module("unit/unit")};
+import type { Contribution, Input } from ${module("contribution/contribution")};
+import type { QueryContext } from ${module("unit/query")};
+import { compile } from ${module("unit/capability/effects/contributions")};
 import { CombatResources } from ${module("battle/resources")};
 import { createEffectDefinition } from ${module("unit/capability/effects/definition")};
-const computations = new computation.Resources<QueryContext>();
 const combat = new CombatResources();
 const effect = createEffectDefinition({ id: 'hp', initialize: () => ({ bonus: 100 }) });
-const resources = { effects: combat.effects, computations };
-compile(effect, [
-    { kind: 'SAMPLED', id: 'hp', target: updateMaxHpContributions, sample: () => [] },
-    { kind: 'SAMPLED', id: 'capacity', target: updateBlockingCapacityContributions, sample: () => [] },
-    { kind: 'SAMPLED', id: 'attack', target: updateAttackContributions, sample: () => [] },
-    { kind: 'LIVE', id: 'live-attack', target: updateAttackContributions, evaluate: () => [] },
-], resources);
-// @ts-expect-error MaxHP cannot compile live bindings.
-compile(effect, [{ kind: 'LIVE', id: 'hp', target: updateMaxHpContributions, evaluate: () => [] }], resources);
-// @ts-expect-error Blocking cannot compile live bindings.
-compile(effect, [{ kind: 'LIVE', id: 'capacity', target: updateBlockingCapacityContributions, evaluate: () => [] }], resources);
-// @ts-expect-error A broad target alias cannot hide the MaxHP restriction.
-const broad: Target = updateMaxHpContributions;
-// @ts-expect-error A broad target alias cannot hide the blocking restriction.
-const broadCapacity: Target = updateBlockingCapacityContributions;
-const projection: SampledTarget = updateMaxHpContributions;
-// @ts-expect-error A sampled target alias still rejects a live declaration.
-compile(effect, [{ kind: 'LIVE', id: 'hp', target: projection, evaluate: () => [] }], resources);
-const fixed = contribution.empty<'SAMPLED'>();
-// @ts-expect-error Direct installation cannot insert a live contribution into sampled state.
-contribution.register(fixed, { id: 'hp', sequence: 0, kind: "LIVE", participating: true, evaluator: 'hp' });
-// @ts-expect-error An update cannot replace a sampled contribution with a live contribution.
-contribution.update(fixed, 'hp', () => ({ id: 'hp', sequence: 0, kind: "LIVE", participating: true, evaluator: 'hp' }));
-// @ts-expect-error Vitality cannot hold a live contribution.
-const invalid: VitalityState = { hp: 100, maxHp: contribution.register(contribution.empty<'LIVE'>(), { id: 'hp', sequence: 0, kind: "LIVE", participating: true, evaluator: 'hp' }) };
-// @ts-expect-error Blocking cannot hold a live contribution.
-const invalidBlocker: BlockerState = { capacity: contribution.register(contribution.empty<'LIVE'>(), { id: 'capacity', sequence: 0, kind: "LIVE", participating: true, evaluator: 'capacity' }), enabled: true, geometry: { radius: 1 } };
+declare const unit: Unit;
+const fixed: Contribution = { id: 'fixed', value: [] };
+const dynamic: Contribution<Input<QueryContext>> = { id: 'dynamic', value: () => [] };
+setMaxHpContribution(unit, fixed);
+setCapacityContribution(unit, fixed);
+setAttackContribution(unit, fixed);
+setAttackContribution(unit, dynamic);
+// @ts-expect-error Effect declarations cannot install live values into MaxHP.
+compile(effect, [{ kind: 'LIVE', id: 'hp', set: setMaxHpContribution, remove: removeMaxHpContribution, evaluate: () => [] }], combat);
+// @ts-expect-error Effect declarations cannot install live values into blocking capacity.
+compile(effect, [{ kind: 'LIVE', id: 'capacity', set: setCapacityContribution, remove: removeCapacityContribution, evaluate: () => [] }], combat);
+// @ts-expect-error MaxHP rejects query-time dynamic values.
+setMaxHpContribution(unit, dynamic);
+// @ts-expect-error Blocking capacity rejects query-time dynamic values.
+setCapacityContribution(unit, dynamic);
+// @ts-expect-error Vitality cannot hold a dynamic contribution.
+const invalid: VitalityState = { hp: 100, maxHp: [dynamic] };
+// @ts-expect-error Blocking cannot hold a dynamic contribution.
+const invalidBlocker: BlockerState = { capacity: [dynamic], enabled: true, geometry: { radius: 1 } };
 const bonus = (amount: number) => [{ addition: 0, multiplier: 0, finalAddition: amount, finalScaler: 1 }];
 combat.registerEffect(effect, { contributions: [
     maxHp(instance => bonus(instance.state.bonus)),

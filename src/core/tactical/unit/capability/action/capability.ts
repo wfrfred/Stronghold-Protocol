@@ -1,9 +1,10 @@
+import type { QueryContext } from "../../query.js";
 import {
     assertNonnegativeSafeInteger,
     assertNonnegativeNumber,
     assertPositiveNumber,
 } from "../../../../common/assert.js";
-import * as contribution from "../../../contribution/state.js";
+import * as contribution from "../../../contribution/contribution.js";
 import * as operation from "./operation.js";
 import { createTargetingDefinition, type TargetingDefinition } from "../../targeting/definition.js";
 import { widenUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
@@ -41,8 +42,8 @@ export interface ActionState {
     readonly readyAtTick: number;
     readonly recoveryUntilTick: number;
     readonly cooldownIntervalTicks: number | null;
-    readonly attackSpeed: contribution.State;
-    readonly baseAttackTime: contribution.State;
+    readonly attackSpeed: readonly contribution.Contribution<contribution.Input<QueryContext>>[];
+    readonly baseAttackTime: readonly contribution.Contribution<contribution.Input<QueryContext>>[];
 }
 
 export interface Action {
@@ -129,8 +130,8 @@ export function createActionState(tick = 0): ActionState {
         readyAtTick: tick,
         recoveryUntilTick: tick,
         cooldownIntervalTicks: null,
-        attackSpeed: contribution.empty(),
-        baseAttackTime: contribution.empty(),
+        attackSpeed: [],
+        baseAttackTime: [],
     };
 }
 
@@ -144,7 +145,7 @@ export function initializeActionState(
 function updateContributions<U extends Unit>(
     input: U | StableUnit<U>,
     key: "attackSpeed" | "baseAttackTime",
-    transition: contribution.Transition,
+    transition: (entries: ActionState["attackSpeed"]) => ActionState["attackSpeed"],
 ): StableUnit<U> {
     const unit = widenUnit<U>(input);
 
@@ -159,16 +160,38 @@ function updateContributions<U extends Unit>(
         : { ...unit, action: { ...unit.action, [key]: state } };
 }
 
-export function updateAttackSpeedContributions<U extends Unit>(
+export function setAttackSpeedContribution<U extends Unit>(
     unit: U | StableUnit<U>,
-    transition: contribution.Transition,
+    entry: contribution.Contribution<contribution.Input<QueryContext>>,
 ): StableUnit<U> {
-    return updateContributions<U>(unit, "attackSpeed", transition);
+    return updateContributions<U>(unit, "attackSpeed", (entries) =>
+        contribution.set(entries, entry),
+    );
 }
 
-export function updateBaseAttackTimeContributions<U extends Unit>(
+export function removeAttackSpeedContribution<U extends Unit>(
     unit: U | StableUnit<U>,
-    transition: contribution.Transition,
+    id: string,
 ): StableUnit<U> {
-    return updateContributions<U>(unit, "baseAttackTime", transition);
+    return updateContributions<U>(unit, "attackSpeed", (entries) =>
+        contribution.remove(entries, id),
+    );
+}
+
+export function setBaseAttackTimeContribution<U extends Unit>(
+    unit: U | StableUnit<U>,
+    entry: contribution.Contribution<contribution.Input<QueryContext>>,
+): StableUnit<U> {
+    return updateContributions<U>(unit, "baseAttackTime", (entries) =>
+        contribution.set(entries, entry),
+    );
+}
+
+export function removeBaseAttackTimeContribution<U extends Unit>(
+    unit: U | StableUnit<U>,
+    id: string,
+): StableUnit<U> {
+    return updateContributions<U>(unit, "baseAttackTime", (entries) =>
+        contribution.remove(entries, id),
+    );
 }

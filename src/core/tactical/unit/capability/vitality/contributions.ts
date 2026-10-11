@@ -1,6 +1,5 @@
-import type * as contributions from "../../../contribution/definition.js";
-import { updateMaxHpContributions } from "./capability.js";
-import { preserveHpRatio } from "./max-hp.js";
+import type * as contributions from "../effects/contributions.js";
+import { setMaxHpContribution, removeMaxHpContribution } from "./capability.js";
 
 export function maxHp<S extends object>(
     sample: contributions.Sampled<S>["sample"],
@@ -9,8 +8,8 @@ export function maxHp<S extends object>(
     return {
         kind: "SAMPLED",
         id: options.id ?? "maxHp",
-        target: updateMaxHpContributions,
-        reconcile: preserveHpRatio,
+        set: setMaxHpContribution,
+        remove: removeMaxHpContribution,
         sample,
         ...(options.group === undefined ? {} : { group: options.group }),
     };

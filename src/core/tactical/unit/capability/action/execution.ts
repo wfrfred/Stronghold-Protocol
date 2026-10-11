@@ -4,7 +4,6 @@ import type { BattleState } from "../../../battle/execution/context.js";
 import type { UnitId } from "../../unit.js";
 import type { CompiledAction } from "./compiled.js";
 import type { ActionExecutionState, ActionExecutionResources } from "./process.js";
-import type { ActionResources } from "./resources.js";
 
 export interface ActionStartRequest {
     readonly sourceUnitId: UnitId;
@@ -13,7 +12,7 @@ export interface ActionStartRequest {
     readonly mayStart: boolean;
 }
 
-export type ActionStartResources = ActionExecutionResources & Pick<ActionResources, "computations">;
+export type ActionStartResources = ActionExecutionResources;
 
 export function startAction(
     work: BattleState,

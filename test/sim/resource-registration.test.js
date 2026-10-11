@@ -10,7 +10,7 @@ import { EffectResources } from "../../dist/core/tactical/unit/capability/effect
 import { EffectDispatchScope } from "../../dist/core/tactical/unit/capability/effects/dispatch.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import * as modifier from "../../dist/core/tactical/contribution/value.js";
-import { updateAttackContributions } from "../../dist/core/tactical/unit/capability/offense/capability.js";
+import { setAttackContribution, removeAttackContribution } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { removeEffect, setEffectEnabled } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
@@ -87,10 +87,10 @@ test("resources: contribution compilation shares declared groups and sampled mod
     const resources = new CombatResources();
     const values = [modifier.create({ finalAddition: 20 })];
     const sample = () => values;
-    const group = { id: "original-group", strength: 1 };
+    const group = { id: "original-group", priority: 1 };
     const declaration = kind === "live"
-      ? { id: "sample", kind: "LIVE", target: updateAttackContributions, group, evaluate: sample }
-      : { id: "sample", kind: "SAMPLED", target: updateAttackContributions, group, sample };
+      ? { id: "sample", kind: "LIVE", set: setAttackContribution, remove: removeAttackContribution, group, evaluate: sample }
+      : { id: "sample", kind: "SAMPLED", set: setAttackContribution, remove: removeAttackContribution, group, sample };
     const descriptor = resources.registerEffect(definition(`shared-${kind}`), { contributions: [declaration] });
     const owner = initializeUnit({
       id: 2,
@@ -100,27 +100,27 @@ test("resources: contribution compilation shares declared groups and sampled mod
     const installed = installFixtureEffect(
       owner, resources.effects.create(descriptor, metadata), resources,
     );
-    const contribution = installed.offense.attack.entries[0];
-    assert.equal(contribution.id, `@effect/0/${kind === "live" ? "parameter" : "projection"}/sample`);
+    const contribution = installed.offense.attack[0];
+    assert.equal(contribution.id, "@effect/0/sample");
     assert.equal(contribution.group, group);
     if (kind === "sampled") {
-      assert.equal(contribution.values, values);
+      assert.equal(contribution.value, values);
     }
-    assert.equal(resolveAttackPower(2, battlefieldView(effectFixtureWork(installed)), resources.computations), 120);
-    assert.equal(resolveAttackPower(2, battlefieldView(effectFixtureWork(owner)), resources.computations), 100);
+    assert.equal(resolveAttackPower(2, battlefieldView(effectFixtureWork(installed))), 120);
+    assert.equal(resolveAttackPower(2, battlefieldView(effectFixtureWork(owner))), 100);
     const removed = effectFixtureWork(installed);
     removeEffect(
       removed, { type: "EFFECT", unitId: 2, effectId: 0 }, resources, 0,
     );
-    assert.deepEqual(getUnit(removed, 2).offense.attack.entries, []);
-    assert.equal(installed.offense.attack.entries[0], contribution);
+    assert.deepEqual(getUnit(removed, 2).offense.attack, []);
+    assert.equal(installed.offense.attack[0], contribution);
   }
 });
 
 test("resources: authored contributions retain prior snapshots across lifecycle updates", () => {
   for (const useLive of [false, true]) {
     const resources = new CombatResources();
-    const group = { id: "original-group", strength: 1 };
+    const group = { id: "original-group", priority: 1 };
     const declaration = useLive
       ? liveAttack(({ instance }) => [modifier.create({ finalAddition: instance.state.value * 20 })], { group })
       : attack((instance) => [modifier.create({ finalAddition: instance.state.value * 20 })], { group });
@@ -131,35 +131,35 @@ test("resources: authored contributions retain prior snapshots across lifecycle 
       definition: { id: "authored-owner", offense: { attack: 100 } },
     });
     const installed = installFixtureEffect(owner, resources.effects.create(descriptor, metadata), resources);
-    const currentAttack = (work) => resolveAttackPower(2, battlefieldView(work), resources.computations);
+    const currentAttack = (work) => resolveAttackPower(2, battlefieldView(work));
     const current = effectFixtureWork(installed);
     const original = current.battlefield.snapshot("draft");
     assert.equal(currentAttack(current), 120);
-    assert.equal(installed.offense.attack.entries[0].group, group);
+    assert.equal(installed.offense.attack[0].group, group);
     updateEffectState(current, 2, 0, descriptor, () => ({ value: 2 }), resources, 0);
     assert.equal(currentAttack(current), 140);
-    assert.equal(resolveAttackPower(2, original, resources.computations), 120);
+    assert.equal(resolveAttackPower(2, original), 120);
     const address = { type: "EFFECT", unitId: 2, effectId: 0 };
     setEffectEnabled(current, address, false, resources, 0);
     assert.equal(currentAttack(current), 100);
     setEffectEnabled(current, address, true, resources, 0);
     assert.equal(currentAttack(current), 140);
     removeEffect(current, address, resources, 0);
-    assert.deepEqual(getUnit(current, 2).offense.attack.entries, []);
-    assert.equal(installed.offense.attack.entries.length, 1);
-    assert.equal(resolveAttackPower(2, original, resources.computations), 120);
+    assert.deepEqual(getUnit(current, 2).offense.attack, []);
+    assert.equal(installed.offense.attack.length, 1);
+    assert.equal(resolveAttackPower(2, original), 120);
   }
 });
 
 test("resources: authored identities are nonempty and unique across sampled and live attributes", () => {
   for (const [contributions, error] of [
-    [[attack(() => []), liveAttack(() => [])], /duplicate effect contribution/],
-    [[attack(() => [], { id: "same" }), liveDefense(() => [], { id: "same" })], /duplicate effect contribution/],
-    [[attack(() => [], { id: "" })], /identity must be nonempty/],
+    [[attack(() => []), liveAttack(() => [])], /identity must be unique/],
+    [[attack(() => [], { id: "same" }), liveDefense(() => [], { id: "same" })], /identity must be unique/],
+    [[attack(() => [], { id: "" })], /identity must be unique/],
   ]) {
     const resources = new CombatResources();
     assert.throws(() => resources.registerEffect(definition("invalid-authored"), { contributions }), error);
-    assert.throws(() => resources.computations.bind({}), /failed resource construction/);
+    assert.throws(() => resources.seal(), /failed resource construction/);
   }
 });
 
@@ -192,15 +192,14 @@ test("resources: registration shares the authored definition and state updates r
 });
 
 test("resources: failed composite registration invalidates the entire unpublished resource graph", () => {
-  for (const stage of ["numeric", "damage", "healing", "lifecycle"]) {
+  for (const stage of ["bindings", "damage", "healing", "lifecycle"]) {
     const resources = new CombatResources();
     const descriptor = resources.effects.register(definition(`partial-${stage}`));
     const instance = resources.effects.create(descriptor, metadata);
-    const evaluator = resources.computations.bind({});
     let facets;
-    if (stage === "numeric") {
-      resources.computations.register(JSON.stringify([descriptor.id, "defense"]), () => []);
-      facets = { contributions: [liveAttack(() => []), liveDefense(() => [])] };
+    if (stage === "bindings") {
+      resources.effectBindings.register(descriptor, []);
+      facets = { contributions: [liveAttack(() => [])] };
     } else {
       const registry = stage === "lifecycle" ? resources.effectLifecycle : resources[stage];
       registry.register(descriptor, {});
@@ -217,8 +216,6 @@ test("resources: failed composite registration invalidates the entire unpublishe
       () => resources.damage.get(instance),
       () => resources.healing.get(instance),
       () => resources.effectLifecycle.get(instance),
-      () => resources.computations.bind({}),
-      () => evaluator({ evaluator: `${descriptor.id}/attack` }),
       () => resources.settleDamage(effectFixtureWork(), {
         sourceUnitId: null, targetUnitId: 2, damageType: "TRUE",
         operands: createDamageOperands(10), tick: 0,
@@ -234,7 +231,6 @@ test("resources: failed composite registration invalidates the entire unpublishe
       assert.throws(read, /failed resource construction/, stage);
     }
     assert.throws(() => resources.registerEffect(descriptor), /failed resource construction/);
-    assert.throws(() => resources.computations.register("retry", () => []), /failed resource construction/);
 
     const rebuilt = new CombatResources();
     const rebuiltDefinition = rebuilt.registerEffect(definition(descriptor.id), facets);
@@ -252,8 +248,6 @@ test("resources: publishing to BattleRuntime closes every registry while preserv
     () => resources.registerEffect(definition("late")),
     () => resources.effects.register(definition("late-definition")),
     () => resources.effectBindings.register(descriptor, []),
-    () => resources.computations.register("late-attack", () => []),
-    () => resources.computations.register("late-defense", () => []),
     () => resources.damage.register(descriptor, {}),
     () => resources.healing.register(descriptor, {}),
     () => resources.effectLifecycle.register(descriptor, {}),
@@ -283,6 +277,8 @@ test("resources: live contributions distinguish definition and binding identitie
   const installed = installFixtureEffect(owner, resources.effects.create(first, metadata), resources);
   const both = installFixtureEffect(installed,
     resources.effects.create(second, { ...metadata, id: 1, acquiredSequence: 1 }), resources);
-  assert.notEqual(both.offense.attack.entries[0].evaluator, both.offense.attack.entries[1].evaluator);
-  assert.equal(resolveAttackPower(2, battlefieldView(effectFixtureWork(both)), resources.computations), 130);
+  assert.notEqual(both.offense.attack[0].id, both.offense.attack[1].id);
+  assert.equal(typeof both.offense.attack[0].value, "function");
+  assert.equal(typeof both.offense.attack[1].value, "function");
+  assert.equal(resolveAttackPower(2, battlefieldView(effectFixtureWork(both))), 130);
 });

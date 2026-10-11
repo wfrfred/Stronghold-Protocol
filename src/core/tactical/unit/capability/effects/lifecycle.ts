@@ -3,7 +3,6 @@ import {
     getUnit,
     transitionUnit,
     updateUnit,
-    updateUnits,
     type BattleState,
 } from "../../../battle/execution/context.js";
 import type { Unit, UnitId } from "../../unit.js";
@@ -309,7 +308,7 @@ interface Ending {
     readonly end: EffectEnd;
 }
 
-function finishBatch(
+function finishEndingEffects(
     state: BattleState,
     roots: readonly Ending[],
     resources: EffectTransitionResources,
@@ -445,40 +444,32 @@ function finishBatch(
 
     dispatch.beginEnds(ordered.map(({ ref }) => ref));
     const owners = [...byHost.keys()].sort((a, b) => a - b).map((id) => getUnit(state, id)!);
-    updateUnits(
-        state,
-        owners.map((owner) => {
-            if (!hasEffects(owner)) {
-                return owner;
-            }
-
-            const ids = byHost.get(owner.id)!;
-
-            return replaceEffects(
-                owner,
-                owner.effects.instances.map((instance) =>
-                    ids.has(instance.id)
-                        ? withEffectLifecycle(instance, { finished: true, participating: false })
-                        : instance,
-                ),
-            );
-        }),
-    );
     const changes: { address: EffectRef; participating: boolean }[] = [];
-    updateUnits(
-        state,
-        owners.map((before) => {
-            const result = reconcileEffectBindings(before, getUnit(state, before.id)!, resources);
-            changes.push(
-                ...result.changes.map(({ instanceId, participating }) => ({
-                    address: { type: "EFFECT" as const, unitId: before.id, effectId: instanceId },
-                    participating,
-                })),
-            );
 
-            return result.unit;
-        }),
-    );
+    for (const owner of owners) {
+        if (!hasEffects(owner)) {
+            continue;
+        }
+
+        const ids = byHost.get(owner.id)!;
+        const marked = replaceEffects(
+            owner,
+            owner.effects.instances.map((instance) =>
+                ids.has(instance.id)
+                    ? withEffectLifecycle(instance, { finished: true, participating: false })
+                    : instance,
+            ),
+        );
+        const result = reconcileEffectBindings(owner, marked, resources);
+        changes.push(
+            ...result.changes.map(({ instanceId, participating }) => ({
+                address: { type: "EFFECT" as const, unitId: owner.id, effectId: instanceId },
+                participating,
+            })),
+        );
+        updateUnit(state, result.unit);
+    }
+
     const order = new Map(ordered.map(({ ref }, index) => [lifetimeKey(ref), index]));
     changes.sort(
         (a, b) =>
@@ -529,7 +520,7 @@ export function finishEffects(
     reason: EffectEndReason = "EXPLICIT",
     dispatch = new EffectDispatchScope(),
 ): void {
-    finishBatch(
+    finishEndingEffects(
         state,
         refs.map((ref) => ({ ref, end: { root: ref, reason } })),
         resources,
@@ -578,7 +569,7 @@ export function closeEffectLifetimes(
         }
     }
 
-    finishBatch(state, roots, resources, tick, dispatch);
+    finishEndingEffects(state, roots, resources, tick, dispatch);
 }
 
 function cleanupEffects(

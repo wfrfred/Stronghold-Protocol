@@ -14,7 +14,7 @@ import { attackEffect, auraUnit, effectProgram, registerAura } from '../helpers/
 
 const install = (state, resources, unitId, effect, scopes = []) => installNewEffect(state, unitId,
     effect, { source: unitId, scopes }, resources, 0).ref;
-const power = (state, id, resources) => resolveAttackPower(id, battlefieldView(state), resources.computations);
+const power = (state, id, resources) => resolveAttackPower(id, battlefieldView(state));
 
 test('aura effects: selection reuses targeting and entered members are not retried after rejection or buff ending', () => {
     const resources = new CombatResources();

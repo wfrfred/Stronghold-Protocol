@@ -31,7 +31,7 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
         {
             contributions: [
                 attack(() => [modifier.create({ addition: 60 })], {
-                    group: { id: "demo-attack-boost", strength: 1 },
+                    group: { id: "demo-attack-boost", priority: 1 },
                 }),
             ],
         },
@@ -98,7 +98,6 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
                         const cachedAtk = resolveAttackPower(
                             source.id,
                             battlefieldView(context.work),
-                            resources.computations,
                         );
 
                         if (cachedAtk === undefined) {

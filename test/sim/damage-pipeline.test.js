@@ -138,11 +138,11 @@ test("damage pipeline: low HP attack contributions read current work after damag
     resources,
   );
 
-  assert.equal(resolveAttackPower(source.id, battlefieldView(original), resources.computations), 100);
+  assert.equal(resolveAttackPower(source.id, battlefieldView(original)), 100);
   assert.equal(damagedView.getUnit(1).vitality.hp, 250);
-  assert.equal(resolveAttackPower(1, damagedView, resources.computations), 200);
+  assert.equal(resolveAttackPower(1, damagedView), 200);
   assert.equal(getUnit(original, 1).vitality.hp, 650);
-  assert.equal(resolveAttackPower(1, battlefieldView(original), resources.computations), 100);
+  assert.equal(resolveAttackPower(1, battlefieldView(original)), 100);
   assert.equal(original.battlefield.snapshot("state").getUnit(1).vitality.hp, 750);
 });
 
@@ -327,7 +327,7 @@ const result = resolveDamage(resultState, request(100), resources);
 test("damage pipeline: grouped effects compete only with participants in the current parameter or reception stage", () => {
   const resources = new CombatResources();
   const attack = resources.registerEffect(program("grouped-attack"), {
-    contributions: [liveAttack(() => [modifier.create({ multiplier: 1 })], { group: { id: "shared", strength: 100 } })],
+    contributions: [liveAttack(() => [modifier.create({ multiplier: 1 })], { group: { id: "shared", priority: 100 } })],
   });
   const weak = resources.registerEffect(program("grouped-weak-reception"), {
     damage: {
@@ -347,7 +347,7 @@ test("damage pipeline: grouped effects compete only with participants in the cur
   const original = workFor(unit(1), target);
   const result = resolveDamage(original, request(100), resources);
 
-  assert.equal(resolveAttackPower(target.id, battlefieldView(original), resources.computations), 200);
+  assert.equal(resolveAttackPower(target.id, battlefieldView(original)), 200);
   assert.equal(result.hpLoss, 300);
   assert.equal(getUnit(original, 2).effects.instances.length, 3);
 });

@@ -19,8 +19,4 @@ export interface Binding {
         unit: U | StableUnit<U>,
         instance: EffectValue,
     ) => StableUnit<U>;
-    readonly reconcile?: <U extends Unit>(
-        previous: U | StableUnit<U>,
-        current: U | StableUnit<U>,
-    ) => StableUnit<U>;
 }

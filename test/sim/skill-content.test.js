@@ -41,11 +41,11 @@ test("native Attack Enhancement Alpha level 1 charges, buffs attack for 20 secon
   const active = activateSkill(work, { unitId: 1, tick: 1500 }, resources);
   assert.equal(active.result.type, "ACTIVATED");
   assert.equal(getUnit(work, 1).skill.active.endsAtTick, 2100);
-  assert.equal(Math.round(resolveAttackPower(1, battlefieldView(work), resources.computations)), 110);
+  assert.equal(Math.round(resolveAttackPower(1, battlefieldView(work))), 110);
   advanceSkill(work, 1, 2099, resources);
   assert.equal(getUnit(work, 1).skill.sp, 0);
   advanceSkill(work, 1, 2100, resources);
-  assert.equal(resolveAttackPower(1, battlefieldView(work), resources.computations), 100);
+  assert.equal(resolveAttackPower(1, battlefieldView(work)), 100);
   assert.equal(getUnit(work, 1).skill.active, null);
   advanceSkill(work, 1, 2130, resources);
   assert.equal(getUnit(work, 1).skill.sp, 1);
@@ -184,7 +184,7 @@ test("instant healing uses the current activation tick and returns the settled h
     report = context.heal({ sourceUnitId: 1, targetUnitId: 1, power: 30, ignoreHealFree: false });
     return { type: "ACTIVATED" };
   } });
-  const unit = initializeUnit({ id: 1, position: [0, 0], definition: { id: "heal-caster", skill: definition, vitality: { maxHp: 100 } }, states: { vitality: { hp: 50, maxHp: { entries: [] } } } });
+  const unit = initializeUnit({ id: 1, position: [0, 0], definition: { id: "heal-caster", skill: definition, vitality: { maxHp: 100 } }, states: { vitality: { hp: 50, maxHp: [] } } });
   const activatedState = effectFixtureWork(unit);
   activateSkill(activatedState, { unitId: 1, tick: 3 }, resources);
   assert.equal(getUnit(activatedState, 1).vitality.hp, 80);

@@ -293,7 +293,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
     const id = context.projectiles.launch(shell.ref, {
       source: source.id, traceTarget: targetUnitId,
       position: source.position, destination: target.position,
-      cachedAtk: resolveAttackPower(source.id, battlefieldView(context.work), services.computations),
+      cachedAtk: resolveAttackPower(source.id, battlefieldView(context.work)),
       speedPerTick: 1, contactRange, stopDelayTicks: 0, expiresAtTick: null,
     });
     launches.push({ id, executionId: context.executionId, targetUnitId });
@@ -354,7 +354,7 @@ test("runtime composition: late exceptions and invalid settlement propagate with
     assert.equal(before.execution.nextUnitId, 3);
     assert.equal(before.spawning.spawnedCount, 0);
     assert.equal(effect(before, 0, failed.scoped).state.starts, 1);
-    assert.equal(resolveAttackPower(0, view(before), failed.resources.computations), 17);
+    assert.equal(resolveAttackPower(0, view(before)), 17);
 
     assert.throws(() => failed.runtime.step(), {
       "late-projectile": /late composition failure/,
@@ -398,7 +398,7 @@ test("runtime composition: a successful battle preserves identities, snapshots a
   assert.equal(after.projectiles.nextProjectileId, 3);
   assert.deepEqual(after.projectiles.instances.map((projectile) => projectile.id), [1, 2]);
   assert.deepEqual(after.projectiles.instances.map((projectile) => projectile.cachedAtk), [18, 17]);
-  assert.equal(resolveAttackPower(0, view(after), run.resources.computations), 18);
+  assert.equal(resolveAttackPower(0, view(after)), 18);
   assert.equal(effect(after, 0, run.aura).state.remaining, 2);
   assert.equal(effect(after, 0, run.aura).state.consumed, 1);
   assert.deepEqual(effect(after, 0, run.aura).state.receivers.map(binding => binding.attempts), [1, 1, 1, 1]);
@@ -428,7 +428,7 @@ test("runtime composition: a successful battle preserves identities, snapshots a
       assert.ok(cleaned.units.every(unit => effect(cleaned, unit.id, run.receiver) === undefined));
       assert.equal(effect(before, 0, run.aura).finished, false);
       assert.equal(hasStatusFlag(cleaned.units.find((unit) => unit.id === 1), "INVISIBLE"), false);
-      assert.equal(resolveAttackPower(0, view(cleaned), run.resources.computations), 10);
+      assert.equal(resolveAttackPower(0, view(cleaned)), 10);
       assert.equal(effect(cleaned, 0, run.scoped).finished, true);
       assert.equal(effect(cleaned, 0, run.scoped).participating, false);
       assert.equal(effect(cleaned, 0, run.pulse).finished, true);
@@ -481,12 +481,12 @@ test("runtime composition: admission rejection skips start while cancelled damag
   assert.equal(effect(after, 1, run.receiver).state.uses, 1);
   assert.equal(effect(after, 1, run.marker), undefined);
   assert.equal(hasStatusFlag(after.units.find((unit) => unit.id === 1), "INVISIBLE"), false);
-  assert.equal(resolveAttackPower(1, view(after), run.resources.computations), 15);
+  assert.equal(resolveAttackPower(1, view(after)), 15);
   assert.equal(after.units.find((unit) => unit.id === 1).effects.nextInstanceId, 1);
   while (run.runtime.result === null) run.runtime.step();
   const final = run.runtime.snapshot();
   assert.equal(final.result.reason, "SCHEDULE_COMPLETED");
   assert.equal(final.units.find((unit) => unit.id === 1).vitality.hp, 44);
   assert.equal(hasStatusFlag(final.units.find((unit) => unit.id === 1), "INVISIBLE"), false);
-  assert.equal(resolveAttackPower(1, view(final), run.resources.computations), 10);
+  assert.equal(resolveAttackPower(1, view(final)), 10);
 });

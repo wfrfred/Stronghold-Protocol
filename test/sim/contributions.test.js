@@ -7,18 +7,19 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
 import * as modifier from "../../dist/core/tactical/contribution/value.js";
-import * as contribution from "../../dist/core/tactical/contribution/state.js";
+import * as contribution from "../../dist/core/tactical/contribution/contribution.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { copyUnitSnapshot } from "../../dist/core/tactical/unit/snapshot.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import {
-  updateAttackContributions,
+  setAttackContribution,
+  removeAttackContribution,
   resolveOffenseAttack,
 } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import {
   createDefenseDefinition,
-  updateResistanceContributions,
+  setResistanceContribution,
 } from "../../dist/core/tactical/unit/capability/defense/capability.js";
 import { resolveDefense } from "../../dist/core/tactical/unit/capability/defense/query.js";
 import {
@@ -61,161 +62,91 @@ const metadata = (id = 0) => ({
   acquiredSequence: id,
 });
 
-test("contributions: registration shares immutable entries and nested values", () => {
-  const owner = { unitId: 1, instanceId: 2 };
-  const group = { id: "attack", strength: 3 };
-  const sample = value(10);
-  const values = [sample];
-  const input = { id: "sample", sequence: 0, kind: "SAMPLED", participating: true, owner, group, values };
-  const baseline = contribution.empty();
-  const state = contribution.register(baseline, input);
-  const entry = state.entries[0];
-
-  assert.equal(contribution.empty(), baseline);
-  assert.deepEqual(contribution.remove(state, "sample").entries, []);
-  assert.deepEqual(baseline.entries, []);
-  assert.equal(entry, input);
-  assert.equal(entry.owner, owner);
-  assert.equal(entry.group, group);
-  assert.equal(entry.values, values);
-  assert.equal(entry.values[0], sample);
-  assert.equal(Object.hasOwn(entry, "evaluator"), false);
+test("contributions: set and remove preserve immutable arrays and shared values", () => {
+  const group = { id: "attack", priority: 3 };
+  const values = [value(10)];
+  const input = { id: "sample", value: values, group };
+  const baseline = [];
+  const entries = contribution.set(baseline, input);
+  assert.deepEqual(baseline, []);
+  assert.equal(entries[0], input);
+  assert.equal(entries[0].group, group);
+  assert.equal(entries[0].value, values);
+  assert.equal(contribution.set(entries, input), entries);
+  assert.equal(contribution.remove(entries, "missing"), entries);
+  assert.deepEqual(contribution.remove(entries, "sample"), []);
+  assert.equal(entries[0], input);
 });
 
-test("contributions: participation changes share existing owner, group, and samples", () => {
-  const sampled = contribution.register(contribution.empty(), {
-    id: "sample", sequence: 0, kind: "SAMPLED", participating: true,
-    owner: { unitId: 1, instanceId: 2 }, group: { id: "attack", strength: 3 }, values: [value(10)],
-  });
-  const state = contribution.register(sampled, {
-    id: "provider", sequence: 1, kind: "LIVE", participating: true, evaluator: "live",
-  });
-  const initial = state.entries[0];
-  const paused = contribution.setParticipation(state, "sample", false);
-  const entry = paused.entries[0];
-  assert.notEqual(entry, initial);
-  assert.equal(entry.owner, initial.owner);
-  assert.equal(entry.group, initial.group);
-  assert.equal(entry.values, initial.values);
-  assert.equal(paused.entries[1], state.entries[1]);
-  assert.equal(initial.participating, true);
-  assert.equal(entry.participating, false);
-  assert.equal(contribution.setParticipation(paused, "sample", false), paused);
-  assert.equal(contribution.setParticipation(paused, "missing", false), paused);
-  const providerPaused = contribution.setParticipation(paused, "provider", false);
-  assert.equal(providerPaused.entries[1].evaluator, "live");
-  assert.equal(providerPaused.entries[0], entry);
+test("contributions: set replaces a matching identity and shares unrelated entries", () => {
+  const first = { id: "first", value: [value(10)] };
+  const second = { id: "second", value: [value(20)] };
+  const baseline = contribution.set(contribution.set([], first), second);
+  const replacement = { id: "first", value: [value(30)] };
+  const updated = contribution.set(baseline, replacement);
+  assert.equal(updated.length, 2);
+  assert.equal(updated[0], replacement);
+  assert.equal(updated[1], second);
+  assert.equal(baseline[0], first);
+  assert.equal(contribution.remove(updated, "first")[0], second);
 });
 
-test("contributions: immutable updates share unchanged data and retain previous values", () => {
-  const state = contribution.register(contribution.empty(), {
-    id: "sample", sequence: 0, kind: "SAMPLED", participating: true,
-    owner: { unitId: 1, instanceId: 2 }, group: { id: "attack", strength: 3 }, values: [value(10)],
-  });
-  const initial = state.entries[0];
-  const reordered = contribution.update(state, "sample", (entry) => ({ ...entry, sequence: 1 }));
-  assert.equal(reordered.entries[0].owner, initial.owner);
-  assert.equal(reordered.entries[0].group, initial.group);
-  assert.equal(reordered.entries[0].values, initial.values);
-  assert.equal(initial.sequence, 0);
-
-  const owner = { unitId: 3, instanceId: 4 };
-  const group = { id: "replacement", strength: 5 };
-  const values = [value(20)];
-  const replacement = { ...reordered.entries[0], owner, group, values };
-  const updated = contribution.update(reordered, "sample", () => replacement);
-
-  assert.equal(updated.entries[0], replacement);
-  assert.equal(updated.entries[0].owner, owner);
-  assert.equal(updated.entries[0].group, group);
-  assert.equal(updated.entries[0].values, values);
-  assert.deepEqual(initial.owner, { unitId: 1, instanceId: 2 });
-  assert.deepEqual(initial.group, { id: "attack", strength: 3 });
-  assert.deepEqual(initial.values, [value(10)]);
-  assert.equal(contribution.update(updated, "sample", (entry) => entry), updated);
-  assert.throws(
-    () => contribution.update(updated, "sample", (entry) => ({ ...entry, id: "replacement" })),
-    /cannot replace its identity/,
-  );
+test("contributions: group priority and ID ties are independent of insertion order", () => {
+  const entries = [
+    { id: "effect/2", group: { id: "shared", priority: 2 }, value: [value(20)] },
+    { id: "effect/10", group: { id: "shared", priority: 2 }, value: [value(10)] },
+    { id: "strong", group: { id: "shared", priority: 3 }, value: [value(30)] },
+    { id: "independent", value: [value(5)] },
+  ];
+  assert.deepEqual(contribution.resolve(entries), [value(5), value(30)]);
+  const fallback = contribution.remove(entries, "strong");
+  assert.deepEqual(contribution.resolve(fallback), [value(10), value(5)]);
+  assert.deepEqual(contribution.resolve([...fallback].reverse()), contribution.resolve(fallback));
+  assert.equal(fallback.length, 3);
 });
 
-test("contributions: registration preserves unique identities and removal preserves remaining entries", () => {
-  const entry = {
-    id: "first", sequence: 0, kind: "SAMPLED", participating: true,
-    owner: { unitId: 1, instanceId: 2 }, values: [value(10)],
-  };
-  const state = contribution.register(contribution.empty(), entry);
-  assert.throws(() => contribution.register(state, entry), /duplicate numeric contribution/);
-  const registered = contribution.register(state, {
-    id: "second", sequence: 1, kind: "SAMPLED", participating: true,
-    owner: { unitId: 3, instanceId: 4 }, values: [value(20)],
-  });
-  assert.equal(registered.entries[0], state.entries[0]);
-  for (const remaining of [contribution.remove(registered, "first"),
-    contribution.removeOwnedBy(registered, { unitId: 1, instanceId: 2 })]) {
-    assert.equal(remaining.entries[0], registered.entries[1]);
-  }
-  assert.equal(contribution.remove(registered, "missing"), registered);
-  assert.equal(contribution.removeOwnedBy(registered, { unitId: 9, instanceId: 9 }), registered);
+test("contributions: winners alone evaluate and effective modifiers follow ID order", () => {
+  const calls = [];
+  const context = { amount: 7 };
+  const entries = [
+    { id: "z", value: input => { calls.push(input); return [value(input.amount)]; } },
+    { id: "loser", group: { id: "shared", priority: 0 }, value: () => { throw new Error("loser evaluated"); } },
+    { id: "a", group: { id: "shared", priority: 1 }, value: [value(3)] },
+  ];
+  assert.deepEqual(contribution.resolve(entries, input => contribution.evaluate(input, context)), [value(3), value(7)]);
+  assert.deepEqual(calls, [context]);
+  assert.equal(contribution.evaluate(entries[2].value, context), entries[2].value);
 });
 
-test("contributions: updates preserve identity, ordering, owner IDs, and group constraints", () => {
-  const entry = { id: "sample", sequence: 0, kind: "SAMPLED", participating: true, values: [value(10)] };
-  const state = contribution.register(contribution.empty(), entry);
-  for (const patch of [
-    { sequence: -1 },
-    { owner: { unitId: 1, instanceId: 0.5 } },
-    { group: { id: "", strength: 1 } },
-    { group: { id: "group", strength: Infinity } },
-  ]) {
-    assert.throws(() => contribution.update(state, "sample", (current) => ({ ...current, ...patch })));
-  }
-  assert.throws(() => contribution.register(state, { ...entry, id: "" }), /identity must be nonempty/);
-  assert.throws(() => contribution.register(state, {
-    id: "provider", sequence: 0, kind: "LIVE", participating: true, evaluator: "",
-  }), /evaluator identity must be nonempty/);
-});
-
-test("contributions: samples survive participation changes and snapshot projection", () => {
-  const resources = new CombatResources();
+test("contributions: capability set, remove and replacement preserve prior snapshots", () => {
   const initial = unit(1);
-  const sampled = updateAttackContributions(initial, (state) =>
-    contribution.register(state, {
-      id: "inspiration",
-      sequence: 0,
-      kind: "SAMPLED",
-      participating: true,
-      values: [value(150)],
-    }),
-  );
+  const sample = { id: "inspiration", value: [value(150)] };
+  const sampled = setAttackContribution(initial, sample);
   const work = workFor(sampled);
   assert.equal(resolveAttackPower(1, battlefieldView(work)), 250);
-
-  transitionUnit(work, 1, (current) =>
-    updateAttackContributions(current, (state) =>
-      contribution.setParticipation(state, "inspiration", false),
-    ));
-  assert.equal(resolveAttackPower(1, battlefieldView(work), resources.computations), 100);
-
-  transitionUnit(work, 1, (current) =>
-    updateAttackContributions(current, (state) =>
-      contribution.setParticipation(state, "inspiration", true),
-    ));
-  assert.equal(resolveAttackPower(1, battlefieldView(work), resources.computations), 250);
+  transitionUnit(work, 1, current => removeAttackContribution(current, "inspiration"));
+  assert.equal(resolveAttackPower(1, battlefieldView(work)), 100);
+  transitionUnit(work, 1, current => setAttackContribution(current, sample));
+  assert.equal(resolveAttackPower(1, battlefieldView(work)), 250);
   const copied = copyUnitSnapshot(getUnit(work, 1));
-  assert.equal(copied.offense.attack.entries, getUnit(work, 1).offense.attack.entries);
-  assert.equal(resolveAttackPower(1, battlefieldView(workFor(copied)), resources.computations), 250);
+  assert.equal(copied.offense.attack, getUnit(work, 1).offense.attack);
   const resumedSnapshot = work.battlefield.snapshot("draft");
-  transitionUnit(work, 1, (current) =>
-    updateAttackContributions(current, (state) =>
-      contribution.update(state, "inspiration", (entry) => ({
-        ...entry,
-        values: [value(200)],
-      })),
-    ),
-  );
-  assert.equal(resolveAttackPower(1, battlefieldView(work), resources.computations), 300);
-  assert.equal(resolveAttackPower(1, resumedSnapshot, resources.computations), 250);
+  transitionUnit(work, 1, current => setAttackContribution(current, { id: "inspiration", value: [value(200)] }));
+  assert.equal(resolveAttackPower(1, battlefieldView(work)), 300);
+  assert.equal(resolveAttackPower(1, resumedSnapshot), 250);
+});
+
+test("contributions: direct capability closures read current facts and retain previous snapshots", () => {
+  const initial = setAttackContribution(unit(1), {
+    id: "dynamic", value: ({ unit }) => [value(unit.vitality.hp < 50 ? 100 : 0)],
+  });
+  const work = workFor(initial);
+  const original = work.battlefield.snapshot("draft");
+  assert.equal(resolveAttackPower(1, original), 100);
+  transitionUnit(work, 1, current => ({ ...current, vitality: { ...current.vitality, hp: 30 } }));
+  assert.equal(resolveAttackPower(1, battlefieldView(work)), 200);
+  assert.equal(resolveAttackPower(1, original), 100);
+  assert.equal(getUnit(work, 1).offense.attack, initial.offense.attack);
 });
 
 test("contributions: private stack transitions publish maintained projections immediately", () => {
@@ -259,8 +190,8 @@ test("contributions: private stack transitions publish maintained projections im
   const expiredState = workFor(expiring);
 
   prepareCombatEffects(expiredState, 1, resources);
-  assert.equal(resolveAttackPower(1, battlefieldView(expiredState), resources.computations), 100);
-  assert.deepEqual(getUnit(expiredState, 1).offense.attack.entries, []);
+  assert.equal(resolveAttackPower(1, battlefieldView(expiredState)), 100);
+  assert.deepEqual(getUnit(expiredState, 1).offense.attack, []);
 });
 
 test("contributions: live evaluation reads latest working facts without changing contribution entries", () => {
@@ -277,15 +208,14 @@ test("contributions: live evaluation reads latest working facts without changing
   const initial = workFor(installed);
   const original = initial.battlefield.snapshot("draft");
 
-  assert.equal(installed.offense.attack.entries[0].kind, "LIVE");
-  assert.equal(Object.hasOwn(installed.offense.attack.entries[0], "values"), false);
+  assert.equal(typeof installed.offense.attack[0].value, "function");
   transitionUnit(initial, 1, (current) => ({
     ...current,
     vitality: { ...current.vitality, hp: 30 },
   }));
-  assert.equal(resolveAttackPower(1, battlefieldView(initial), resources.computations), 200);
-  assert.equal(resolveAttackPower(1, original, resources.computations), 100);
-  assert.equal(getUnit(initial, 1).offense.attack.entries, installed.offense.attack.entries);
+  assert.equal(resolveAttackPower(1, battlefieldView(initial)), 200);
+  assert.equal(resolveAttackPower(1, original), 100);
+  assert.equal(getUnit(initial, 1).offense.attack, installed.offense.attack);
 });
 
 test("contributions: defense queries clamp resistance after sampled and live contributions without clipping numeric state", () => {
@@ -303,15 +233,7 @@ test("contributions: defense queries clamp resistance after sampled and live con
       let defended;
 
       if (mode === "sampled") {
-        defended = updateResistanceContributions(initial, (state) =>
-          contribution.register(state, {
-            id: "resistance",
-            sequence: 0,
-            kind: "SAMPLED",
-            participating: true,
-            values: [value(amount)],
-          }),
-        );
+        defended = setResistanceContribution(initial, { id: "resistance", value: [value(amount)] });
       } else {
         const program = resources.registerEffect(
           createEffectDefinition({
@@ -329,20 +251,20 @@ test("contributions: defense queries clamp resistance after sampled and live con
 
       const facts = battlefieldView(workFor(defended));
       const state = defended.defense.resistance;
-      const entries = state.entries;
+      const entries = state;
       const numeric = contribution.resolve(
         state,
-        resources.computations.bind({ unit: defended, battlefield: facts }),
+        input => contribution.evaluate(input, { unit: defended, battlefield: facts }),
       );
 
       assert.equal(modifier.apply(30, numeric), 30 + amount);
-      assert.deepEqual(resolveDefense(1, facts, resources.computations), {
+      assert.deepEqual(resolveDefense(1, facts), {
         defense: 200,
         resistance: expected,
       });
       assert.equal(defended.definition.defense.resistance, 30);
       assert.equal(defended.defense.resistance, state);
-      assert.equal(state.entries, entries);
+      assert.equal(state, entries);
     }
   }
 });
@@ -362,7 +284,7 @@ test("contributions: a sampled child retains its input until an explicit parent 
       lifecycle: {
         start: (context) => {
           const source = context.facts.getUnit(1);
-          const sample = resolveOffenseAttack(source.definition.offense, source.offense) * 0.5;
+          const sample = resolveOffenseAttack(source.definition.offense, source.offense, { unit: source, battlefield: context.facts }) * 0.5;
           context.effects.update(context.ref, childProgram, () => ({ sample }));
         },
       },
@@ -389,15 +311,7 @@ test("contributions: a sampled child retains its input until an explicit parent 
   bindEffectLifetime(work, first, parent);
   assert.equal(resolveAttackPower(2, battlefieldView(work)), 650);
   transitionUnit(work, 1, (current) =>
-    updateAttackContributions(current, (state) =>
-      contribution.register(state, {
-        id: "source-change",
-        sequence: 0,
-        kind: "SAMPLED",
-        participating: true,
-        values: [value(100)],
-      }),
-    ),
+    setAttackContribution(current, { id: "source-change", value: [value(100)] }),
   );
   assert.equal(resolveAttackPower(2, battlefieldView(work)), 650);
 
@@ -428,7 +342,7 @@ test("contributions: a sampled child retains its input until an explicit parent 
   finishEffects(work, [parent], resources, 3);
   assert.equal(resolveAttackPower(2, battlefieldView(work)), 500);
   finalizeEffect(work, second, resources, 3);
-  assert.deepEqual(getUnit(work, 2).offense.attack.entries, []);
+  assert.deepEqual(getUnit(work, 2).offense.attack, []);
 });
 
 test("battle state: registration and removal facts survive a draft with no final entities", () => {

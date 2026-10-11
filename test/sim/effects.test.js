@@ -25,7 +25,6 @@ import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { createBattleState, battlefieldView, getUnit } from "../../dist/core/tactical/battle/execution/context.js";
 import * as modifier from "../../dist/core/tactical/contribution/value.js";
-import { updateAttackContributions } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { compileStatusBinding } from "../../dist/core/tactical/unit/capability/status/binding.js";
 import { uniqueEffectAdmission } from "../../dist/core/tactical/unit/capability/effects/lifecycle-resources.js";
@@ -822,7 +821,7 @@ test("effects: binding an unavailable lifetime rejects without changing the inde
       assert.deepEqual(binding, { type: "LIFETIME_UNAVAILABLE" });
       assert.deepEqual(current.effects.instances[0].scopes, []);
       assert.equal(current.effects.instances[0].finished, false);
-      assert.equal(current.offense.attack.entries[0].participating, true);
+      assert.equal(current.offense.attack.length, 1);
       assert.equal(hasStatusFlag(current, "INVINCIBLE"), true);
       assert.equal(resolveAttackPower(2, battlefieldView(work)), 150);
     }
@@ -840,7 +839,7 @@ test("effects: finish remains terminal when disable tries to reenable and finish
         assert.equal(context.instance.finished, true);
         assert.equal(context.instance.participating, false);
         assert.equal(context.facts.getEffect(context.ref), context.instance);
-        assert.equal(context.facts.getUnit(2).offense.attack.entries[0].participating, false);
+        assert.deepEqual(context.facts.getUnit(2).offense.attack, []);
         assert.equal(hasStatusFlag(context.facts.getUnit(2), "INVINCIBLE"), false);
         assert.deepEqual(
           context.facts.participating(2).map((instance) => instance.id),
@@ -851,9 +850,7 @@ test("effects: finish remains terminal when disable tries to reenable and finish
       },
       finish: (context) => {
         assert.equal(context.facts.getEffect(context.ref).finished, true);
-        const contribution = context.facts.getUnit(2).offense.attack.entries[0];
-        assert.equal(contribution.participating, false);
-        finalizedSample = contribution.values[0].finalAddition;
+        assert.deepEqual(context.facts.getUnit(2).offense.attack, []);
         finalizations.push("reentrant");
         context.effects.finish([{ type: "EFFECT", unitId: 2, effectId: 2 }]);
       },
@@ -867,7 +864,6 @@ test("effects: finish remains terminal when disable tries to reenable and finish
     },
   });
   let disables = 0;
-  let finalizedSample;
   const finalizations = [];
 
   const owner = initializeUnit({
@@ -900,17 +896,16 @@ test("effects: finish remains terminal when disable tries to reenable and finish
   assert.equal(disables, 1);
   assert.equal(receiver.effects.instances[0].finished, true);
   assert.equal(receiver.effects.instances[0].participating, false);
-  assert.equal(receiver.offense.attack.entries[0].participating, false);
+  assert.deepEqual(receiver.offense.attack, []);
   assert.equal(resolveAttackPower(2, battlefieldView(finished)), 100);
   assert.equal(hasStatusFlag(receiver, "INVINCIBLE"), false);
   finishEffect(finished, address, resources, 1);
   assert.equal(receiver.effects.instances[1].finished, true);
   const finalized = finished;
   finalizeFinishedEffects(finalized, 2, resources, 1);
-  assert.equal(finalizedSample, 50);
   assert.deepEqual(finalizations, ["reentrant", "follower"]);
   assert.deepEqual(getUnit(finalized, 2).effects.instances, []);
-  assert.deepEqual(getUnit(finalized, 2).offense.attack.entries, []);
+  assert.deepEqual(getUnit(finalized, 2).offense.attack, []);
 });
 
 test("effects: disabling preserves restartable samples and finishing a disabled instance does not dispatch disable twice", () => {
@@ -924,7 +919,7 @@ test("effects: disabling preserves restartable samples and finishing a disabled 
       disable: (context) => {
         disabled.push(context.instance.finished);
         assert.equal(context.instance.participating, false);
-        assert.equal(context.facts.getUnit(2).offense.attack.entries[0].participating, false);
+        assert.deepEqual(context.facts.getUnit(2).offense.attack, []);
         assert.equal(hasStatusFlag(context.facts.getUnit(2), "INVINCIBLE"), false);
       },
       finish: () => {
@@ -949,7 +944,7 @@ test("effects: disabling preserves restartable samples and finishing a disabled 
   const inactive = installed;
   setEffectEnabled(inactive, address, false, resources, 1);
   assert.equal(getUnit(inactive, 2).effects.instances[0].finished, false);
-  assert.equal(getUnit(inactive, 2).offense.attack.entries[0].values[0].finalAddition, 50);
+  assert.deepEqual(getUnit(inactive, 2).offense.attack, []);
   const resumed = inactive;
   setEffectEnabled(resumed, address, true, resources, 2);
   assert.equal(resolveAttackPower(2, battlefieldView(resumed)), 150);
@@ -964,7 +959,7 @@ test("effects: disabling preserves restartable samples and finishing a disabled 
   const cleaned = finished;
   finalizeFinishedEffects(cleaned, 2, resources, 4);
   assert.equal(finalized, 1);
-  assert.deepEqual(getUnit(cleaned, 2).offense.attack.entries, []);
+  assert.deepEqual(getUnit(cleaned, 2).offense.attack, []);
 });
 
 test("effects: pending terminal notices survive nested cleanup during disable preserves the terminal continuation and finishes existing children", () => {

@@ -1,5 +1,3 @@
-import type * as computation from "../../contribution/computation.js";
-import type { QueryContext } from "../../contribution/definition.js";
 import type {
     EffectLifecycleOperations,
     EffectTransitionResources,
@@ -55,7 +53,6 @@ export interface ProjectileContactContext<
 
 export interface ProjectileServices extends EffectTransitionResources {
     readonly projectiles: ProjectileResources;
-    readonly computations: computation.Computations<QueryContext>;
     readonly settleDamage: DamageOperation;
     readonly settleHealing: HealingOperation;
 }

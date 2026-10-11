@@ -1,18 +1,21 @@
+import type { QueryContext } from "../../query.js";
 import { assertFiniteNumber } from "../../../../common/assert.js";
-import * as contribution from "../../../contribution/state.js";
+import * as contribution from "../../../contribution/contribution.js";
 import * as modifier from "../../../contribution/value.js";
 import type { ActionCapabilityDefinition, ActionDefinition, ActionState } from "./capability.js";
 
 export function resolveAttackSpeed(
     definition: ActionCapabilityDefinition,
     state: ActionState,
-    evaluate?: contribution.Evaluate,
+    context: QueryContext,
 ): number {
     return Math.max(
         20,
         modifier.apply(
             definition.attackSpeed ?? 100,
-            contribution.resolve(state.attackSpeed, evaluate),
+            contribution.resolve(state.attackSpeed, (value) =>
+                contribution.evaluate(value, context),
+            ),
         ),
     );
 }
@@ -20,13 +23,15 @@ export function resolveAttackSpeed(
 export function resolveBaseAttackTime(
     definition: ActionDefinition,
     state: ActionState,
-    evaluate?: contribution.Evaluate,
+    context: QueryContext,
 ): number {
     return Math.max(
         0,
         modifier.apply(
             definition.baseAttackTimeTicks,
-            contribution.resolve(state.baseAttackTime, evaluate),
+            contribution.resolve(state.baseAttackTime, (value) =>
+                contribution.evaluate(value, context),
+            ),
         ),
     );
 }
@@ -35,10 +40,10 @@ export function resolveActionIntervalTicks(
     definition: ActionDefinition,
     capability: ActionCapabilityDefinition,
     state: ActionState,
-    evaluate?: contribution.Evaluate,
+    context: QueryContext,
 ): number {
-    const attackSpeed = Math.min(600, resolveAttackSpeed(capability, state, evaluate));
-    const interval = resolveBaseAttackTime(definition, state, evaluate) * (100 / attackSpeed);
+    const attackSpeed = Math.min(600, resolveAttackSpeed(capability, state, context));
+    const interval = resolveBaseAttackTime(definition, state, context) * (100 / attackSpeed);
     assertFiniteNumber(interval, "effective action interval");
 
     return Math.max(1, interval);

@@ -29,7 +29,7 @@ function harness() {
 }
 function values(work, resources) {
   return {
-    attack: resolveAttackPower(0, battlefieldView(work), resources.computations),
+    attack: resolveAttackPower(0, battlefieldView(work)),
     maxHp: resolveMaxHp(0, battlefieldView(work)),
     hp: getUnit(work, 0).vitality.hp,
   };
@@ -76,7 +76,7 @@ test('effect competition: coefficient wins independently of sampled value; recov
   assert.deepEqual(values(h.work, h.resources), { attack: 350, maxHp: 2000, hp: 1000 });
   assert.equal(getUnit(h.work, 0).effects.instances[0].state.sourceAttack, 500);
   assert.equal(starts, 2);
-  assert.deepEqual(samples, [0, 1]);
+  assert.deepEqual(samples, [0, 1, 0]);
   finalizeEffect(h.work, strong, h.resources, 1);
   assert.equal(getUnit(h.work, 0).effects.instances[0].id, weak.effectId);
   assert.deepEqual(values(first, h.resources), { attack: 350, maxHp: 2000, hp: 1000 });
@@ -120,7 +120,7 @@ test('effect competition: state refresh publishes complete facts and all binding
     const unit = context.facts.getUnit(0);
     observations.push({ kind, id: context.ref.effectId, active: context.facts.participating(0).map(instance => instance.id),
       hp: unit.vitality.hp, maxHp: resolveMaxHp(0, { getUnit: id => context.facts.getUnit(id) }),
-      attack: resolveAttackPower(0, { getUnit: id => context.facts.getUnit(id) }, h.resources.computations) });
+      attack: resolveAttackPower(0, { getUnit: id => context.facts.getUnit(id) }) });
   };
   const program = definition(h.resources, 'coherent', { enable: observe('enable'), disable: observe('disable') });
   install(h, program, { ratio: 0.5, sourceAttack: 100, hpBonus: 1000 });

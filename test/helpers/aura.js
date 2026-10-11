@@ -121,5 +121,5 @@ export function snapshotAttack(snapshot, unitId, resources) {
         unitIds: snapshot.units.map(unit => unit.id),
         getUnit: id => snapshot.units.find(unit => unit.id === id),
         blockerOf: () => undefined, blockedBy: () => [],
-    }, resources.computations);
+    });
 }

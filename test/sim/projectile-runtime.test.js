@@ -177,7 +177,7 @@ function launch(context, services, program, overrides = {}) {
     traceTarget: targetId,
     position: source.position,
     destination: target.position,
-    cachedAtk: resolveAttackPower(source.id, battlefieldView(context.work), services.computations),
+    cachedAtk: resolveAttackPower(source.id, battlefieldView(context.work)),
     speedPerTick: 1,
     contactRange,
     stopDelayTicks: 1,

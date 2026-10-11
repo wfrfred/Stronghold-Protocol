@@ -25,16 +25,16 @@ import { BattlefieldRuntime, createBattlefieldRuntime } from ${sourceModule('bat
 import { settleBattlefieldState, settleBattlefieldStateFully, type BattlefieldState } from ${sourceModule('battlefield/storage/state')};
 import { applyBattlefieldChanges } from ${sourceModule('battlefield/storage/changes')};
 import type { BattlefieldDependencyChanges } from ${sourceModule('battlefield/storage/dependencies')};
-import { updateMaxHpContributions, type VitalityState, type VitalUnitDefinition } from ${sourceModule('unit/capability/vitality/capability')};
-import { updateAttackContributions, type OffenseState, type OffensiveUnitDefinition } from ${sourceModule('unit/capability/offense/capability')};
-import { updateDefenseContributions, updateResistanceContributions, type DefenseState, type DefendedUnitDefinition } from ${sourceModule('unit/capability/defense/capability')};
+import { setMaxHpContribution, type VitalityState, type VitalUnitDefinition } from ${sourceModule('unit/capability/vitality/capability')};
+import { setAttackContribution, removeAttackContribution, type OffenseState, type OffensiveUnitDefinition } from ${sourceModule('unit/capability/offense/capability')};
+import { setDefenseContribution, setResistanceContribution, type DefenseState, type DefendedUnitDefinition } from ${sourceModule('unit/capability/defense/capability')};
 import type { StatusState, StatusUnitDefinition } from ${sourceModule('unit/capability/status/capability')};
 import { compileStatusBinding } from ${sourceModule('unit/capability/status/binding')};
 import { preserveHpRatio } from ${sourceModule('unit/capability/vitality/max-hp')};
 import { damageUnit } from ${sourceModule('unit/capability/vitality/damage/settlement')};
 import { healUnit } from ${sourceModule('unit/capability/vitality/healing/settlement')};
-import type * as contribution from ${sourceModule('contribution/state')};
-import { compile, type Target } from ${sourceModule('contribution/definition')};
+import type * as contribution from ${sourceModule('contribution/contribution')};
+import { compile } from ${sourceModule('unit/capability/effects/contributions')};
 import { CombatResources } from ${sourceModule('battle/resources')};
 import { createEffectDefinition } from ${sourceModule('unit/capability/effects/definition')};
 import type { Effect, EffectValue, EffectLifecycleFacts } from ${sourceModule('unit/capability/effects/effect')};
@@ -50,7 +50,7 @@ type Narrow = Unit<Definition> & {
   readonly tag: 'kept';
   readonly position: readonly [0, 0];
   readonly vitality: VitalityState & { readonly hp: 100 };
-  readonly offense: OffenseState & { readonly attack: contribution.State & { readonly entries: readonly [] } };
+  readonly offense: OffenseState & { readonly attack: readonly [] };
   readonly defense: DefenseState;
   readonly status: StatusState & { readonly contributions: readonly [] };
   readonly effects: EffectsState & { readonly instances: readonly []; readonly nextInstanceId: 0 };
@@ -69,8 +69,7 @@ declare const map: BattlefieldMap;
 declare const maps: NavigationMaps;
 declare const previous: BattlefieldState<Narrow>;
 declare const dependencies: BattlefieldDependencyChanges;
-declare const transition: contribution.Transition;
-declare const maxHpTransition: contribution.Transition<'SAMPLED'>;
+declare const fixed: contribution.Contribution;
 declare const movementContext: RoutedLocomotionStepContext;
 declare const instance: EffectValue;
 declare const bindings: EffectBindings;
@@ -90,17 +89,17 @@ const publicStored = publicRuntime.snapshot('draft').getUnit(1)!;
 const applied = applyBattlefieldChanges<Narrow>(previous, [{ type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 1, position: [1, 1] }]).content.units.get(1)!;
 const settled = settleBattlefieldState<Narrow>(map, maps, previous, previous, dependencies).state.units.get(1)!;
 const fullySettled = settleBattlefieldStateFully<Narrow>(map, maps, previous, previous).state.units.get(1)!;
-const attacked = updateAttackContributions(narrow, transition);
-const defended = updateDefenseContributions(narrow, transition);
-const resisted = updateResistanceContributions(narrow, transition);
-const maxHp = updateMaxHpContributions(narrow, maxHpTransition);
+const attacked = setAttackContribution(narrow, fixed);
+const defended = setDefenseContribution(narrow, fixed);
+const resisted = setResistanceContribution(narrow, fixed);
+const maxHp = setMaxHpContribution(narrow, fixed);
 const coordinated = preserveHpRatio(narrow, maxHp);
 const damaged = damageUnit(narrow, 1, 'TRUE').unit;
 const healed = healUnit(narrow, 1).unit;
 const status = compileStatusBinding(['INVINCIBLE']).install(narrow, instance);
 const definition = createEffectDefinition({ id: 'attack', initialize: () => ({}) });
 const projection = compile(definition, [
-  { kind: 'SAMPLED', id: 'attack', target: updateAttackContributions, sample: () => [] },
+  { kind: 'SAMPLED', id: 'attack', set: setAttackContribution, remove: removeAttackContribution, sample: () => [] },
 ], new CombatResources())[0]!;
 const projected = projection.install(narrow, instance);
 const bound = transitionEffectBindings(narrow, instance, bindings, (binding, current) => binding.update<Narrow>(current, instance));
@@ -137,8 +136,7 @@ type StateB = { readonly kind: 'B'; readonly second: string };
 declare const member: Effect<StateA> | Effect<StateB>;
 const memberwise: (Omit<Effect<StateA>, keyof EffectLifecycleFacts> & EffectLifecycleFacts) | (Omit<Effect<StateB>, keyof EffectLifecycleFacts> & EffectLifecycleFacts) = withEffectLifecycle(member, { started: true });
 const memberDefinition: typeof member.definition = memberwise.definition;
-const target: Target = updateAttackContributions;
-const throughTarget: 'kept' = target(narrow, transition).tag;
+const throughTarget: 'kept' = setAttackContribution(narrow, fixed).tag;
 type OptionalRouted = Unit<Definition> & { readonly locomotion?: RoutedLocomotionState; readonly tag: 'optional' };
 declare const optional: OptionalRouted;
 const optionalResult = reconcileUnitNavigation(optional, maps);
@@ -160,10 +158,10 @@ if (optionalResult.locomotion !== undefined) {
     "const staleSettledFollowing: Following = settled.locomotion.mainRoute.navigation.execution.activity;",
     "const staleFullySettledFollowing: Following = fullySettled.locomotion.mainRoute.navigation.execution.activity;",
     "const erasedExtra = copied.tag;",
-    "const staleAttack: readonly [] = attacked.offense.attack.entries;",
+    "const staleAttack: readonly [] = attacked.offense.attack;",
     "const staleStatus: readonly [] = status.status.contributions;",
     "const staleBoundHp: 100 = bound.vitality.hp;",
-    "const staleProjectionEntries: readonly [] = projected.offense.attack.entries;",
+    "const staleProjectionEntries: readonly [] = projected.offense.attack;",
     "const staleMaxHp: 100 = maxHp.vitality.hp;",
     "const staleCoordinatedHp: 100 = coordinated.vitality.hp;",
     "const staleDamageHp: 100 = damaged.vitality.hp;",

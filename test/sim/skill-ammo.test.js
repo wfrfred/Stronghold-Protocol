@@ -92,7 +92,7 @@ test("Ash's 31-round profile remains active indefinitely without attacks and end
   assert.equal(final.result.amount, 1);
   assert.deepEqual(final.signals.map((signal) => signal.type), ["SKILL_FINISHED"]);
   assert.equal(getUnit(work, 1).skill.active, null);
-  assert.equal(resolveAttackPower(1, battlefieldView(work), f.resources.computations), 100);
+  assert.equal(resolveAttackPower(1, battlefieldView(work)), 100);
   assert.equal(consumeSkillAmmo(work, 1, 10031, f.resources).result.reason, "INACTIVE");
 });
 
@@ -113,7 +113,7 @@ test("the final shot is sampled with its buff before consumption and its project
     acceptsContact: (_context, target) => target.id === 2,
     contact: (context) => { context.operations.damage({ sourceUnitId: 1, targetUnitId: 2, tick: context.tick, damageType: "TRUE", operands: createDamageOperands(context.projectile.cachedAtk) }); },
   }));
-  const attackPower = resolveAttackPower(1, battlefieldView(f.work), f.resources.computations);
+  const attackPower = resolveAttackPower(1, battlefieldView(f.work));
   assert.equal(attackPower, 200);
   const launched = withProjectileOperations({ projectileIds: [], getProjectile: () => undefined }, f.work.execution.nextProjectileId, f.resources.projectiles, 0, (operations) => operations.launch(shell.ref, {
     source: 1, traceTarget: 2, position: [0, 0], destination: [1, 0], cachedAtk: attackPower,
@@ -121,7 +121,7 @@ test("the final shot is sampled with its buff before consumption and its project
   }));
   f.work.execution = { ...f.work.execution, nextProjectileId: launched.nextProjectileId };
   consumeSkillAmmo(f.work, 1, 0, f.resources);
-  assert.equal(resolveAttackPower(1, battlefieldView(f.work), f.resources.computations), 100);
+  assert.equal(resolveAttackPower(1, battlefieldView(f.work)), 100);
   const projectile = launched.changes.find((change) => change.type === "REGISTER_PROJECTILE").projectile;
   assert.equal(projectile.cachedAtk, 200);
   advanceBattlefield(f.work, launched.changes);

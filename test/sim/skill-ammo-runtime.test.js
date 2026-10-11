@@ -189,7 +189,7 @@ test("ammo runtime: the last released projectile survives skill completion and r
       const target = getUnit(context.work, targetUnitId);
       context.projectiles.launch(shell.ref, {
         source: actor.id, traceTarget: targetUnitId, position: actor.position, destination: target.position,
-        cachedAtk: resolveAttackPower(actor.id, battlefieldView(context.work), services.computations),
+        cachedAtk: resolveAttackPower(actor.id, battlefieldView(context.work)),
         speedPerTick: 1, contactRange: { type: "SHAPES", geometry: hit }, stopDelayTicks: 0,
       });
 

@@ -1,4 +1,5 @@
-import * as contribution from "../../../contribution/state.js";
+import { preserveHpRatio } from "./max-hp.js";
+import * as contribution from "../../../contribution/contribution.js";
 import * as modifier from "../../../contribution/value.js";
 import { widenUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
 
@@ -8,7 +9,7 @@ export interface VitalityDefinition {
 
 export interface VitalityState {
     readonly hp: number;
-    readonly maxHp: contribution.State<"SAMPLED">;
+    readonly maxHp: readonly contribution.Contribution[];
 }
 
 export interface Vitality {
@@ -34,21 +35,14 @@ export function hasVitalityDefinition(
 }
 
 export function initializeVitalityState(definition: VitalityDefinition): VitalityState {
-    return { hp: definition.maxHp, maxHp: contribution.empty<"SAMPLED">() };
+    return { hp: definition.maxHp, maxHp: [] };
 }
 
-function updateContributions(
-    state: VitalityState,
-    transition: contribution.Transition<"SAMPLED">,
-): VitalityState {
-    const maxHp = transition(state.maxHp);
-
-    return maxHp === state.maxHp ? state : { ...state, maxHp };
-}
-
-export function updateMaxHpContributions<U extends Unit>(
+function changeMaxHpContributions<U extends Unit>(
     input: U | StableUnit<U>,
-    transition: contribution.Transition<"SAMPLED">,
+    transition: (
+        entries: readonly contribution.Contribution[],
+    ) => readonly contribution.Contribution[],
 ): StableUnit<U> {
     const unit = widenUnit<U>(input);
 
@@ -56,9 +50,25 @@ export function updateMaxHpContributions<U extends Unit>(
         throw new TypeError("maximum HP contributions require Vitality capability");
     }
 
-    const vitality = updateContributions(unit.vitality, transition);
+    const maxHp = transition(unit.vitality.maxHp);
 
-    return vitality === unit.vitality ? unit : { ...unit, vitality };
+    return maxHp === unit.vitality.maxHp
+        ? unit
+        : preserveHpRatio<U>(unit, { ...unit, vitality: { ...unit.vitality, maxHp } });
+}
+
+export function setMaxHpContribution<U extends Unit>(
+    unit: U | StableUnit<U>,
+    entry: contribution.Contribution,
+): StableUnit<U> {
+    return changeMaxHpContributions<U>(unit, (entries) => contribution.set(entries, entry));
+}
+
+export function removeMaxHpContribution<U extends Unit>(
+    unit: U | StableUnit<U>,
+    id: string,
+): StableUnit<U> {
+    return changeMaxHpContributions<U>(unit, (entries) => contribution.remove(entries, id));
 }
 
 export function resolveVitalityMaxHp(definition: VitalityDefinition, state: VitalityState): number {

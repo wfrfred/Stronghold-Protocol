@@ -24,7 +24,7 @@ import { compileTargeting } from "../../dist/core/tactical/unit/targeting/compil
 import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { selectTargets } from '../../dist/core/tactical/unit/targeting/select.js';
 import { addStatusContribution, hasStatusFlag } from '../../dist/core/tactical/unit/capability/status/capability.js';
-import * as contribution from '../../dist/core/tactical/contribution/state.js';
+import * as contribution from '../../dist/core/tactical/contribution/contribution.js';
 import * as modifier from '../../dist/core/tactical/contribution/value.js';
 
 import { createBattleState, getUnit, updateUnit } from '../../dist/core/tactical/battle/execution/context.js';
@@ -405,8 +405,7 @@ test('core combat: snapshots share capabilities while immutable battlefield upda
       { type: 'CIRCLE', offset: [0, 0], radius: 100 },
     ] }) },
     status: addStatusContribution(operator.status, { id: 'changed-targeting', flags: ['TARGET_FREE'] }),
-    blocker: { ...operator.blocker, capacity: contribution.register(contribution.empty(), { id: 'disabled-capacity', sequence: 0,
-      kind: 'SAMPLED', participating: true, values: [modifier.create({ finalScaler: 0 })],
+    blocker: { ...operator.blocker, capacity: contribution.set([], { id: 'disabled-capacity', value: [modifier.create({ finalScaler: 0 })],
     }) },
     vitality: { ...operator.vitality, hp: 0 },
   };
@@ -427,7 +426,7 @@ test('core combat: snapshots share capabilities while immutable battlefield upda
   assert.equal(operator.spatial.layer, 'GROUND');
   assert.equal(operator.hit.geometry.shapes[0].radius, 0.25);
   assert.equal(hasStatusFlag(operator, 'TARGET_FREE'), false);
-  assert.deepEqual(operator.blocker.capacity.entries, []);
+  assert.deepEqual(operator.blocker.capacity, []);
   assert.equal(operator.vitality.hp, hp);
   assert.deepEqual(battle.snapshot(), snapshot);
   assert.deepEqual(battle.step(), replay.step());

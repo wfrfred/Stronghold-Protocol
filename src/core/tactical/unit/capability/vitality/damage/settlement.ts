@@ -193,7 +193,7 @@ export function resolveDamage(
         );
     }
 
-    const defense = resolveDefense(current.id, battlefieldView(work), resources.computations)!;
+    const defense = resolveDefense(current.id, battlefieldView(work))!;
     const effectiveDefense = {
         defense:
             Math.max(0, defense.defense - operands.fixedPenetration) *

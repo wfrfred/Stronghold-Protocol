@@ -161,7 +161,7 @@ test('neutral, absent and dead receivers are ordinary rejections while invalid n
   for (const unit of [
     holder({}, { allegiance: { side: 'NEUTRAL' } }),
     { ...holder(), spatialPresence: { present: false } },
-    { ...holder({}, { vitality: { maxHp: 100 } }), vitality: { hp: 0, maxHp: { entries: [] } } },
+    { ...holder({}, { vitality: { maxHp: 100 } }), vitality: { hp: 0, maxHp: [] } },
   ]) {
     const result = damage(unit, 'BURN', 100);
     assert.equal(result.outcome, 'REJECTED');

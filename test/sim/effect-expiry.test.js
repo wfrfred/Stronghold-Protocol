@@ -214,11 +214,9 @@ test('effect expiry: renewed deadlines and updated bindings are visible to parti
   const observed = [];
   const observe = kind => context => {
     const layered = context.facts.getEffect(address(0));
-    const unit = context.facts.getUnit(0);
     observed.push({
       kind, layers: layered.state.layers, deadline: effectTick(layered),
       active: context.facts.participating(0).map(instance => instance.id),
-      retainedAddition: unit.offense.attack.entries.find(entry => entry.owner?.instanceId === 0).values[0].finalAddition,
       attack: resolveAttackPower(0, { getUnit: id => context.facts.getUnit(id) }),
     });
   };
@@ -242,7 +240,7 @@ test('effect expiry: renewed deadlines and updated bindings are visible to parti
   const expired = work;
   expireEffects(expired, 5, resources);
   assert.deepEqual(observed, ['disable', 'enable'].map(kind => ({
-    kind, layers: 2, deadline: 10, active: [1], retainedAddition: 20, attack: 125,
+    kind, layers: 2, deadline: 10, active: [1], attack: 125,
   })));
   assert.equal(instances(expired)[0].finished, false);
 });

@@ -4,9 +4,9 @@ import type { QueryPurpose } from "../../targeting/query.js";
 import { resolveAttackPower } from "../offense/query.js";
 import { createDamageOperands, type DamageType } from "../vitality/damage/contract.js";
 import { EffectDispatchScope } from "../effects/dispatch.js";
-import type { ActionResources } from "./resources.js";
 import { battlefieldView, type BattleState } from "../../../battle/execution/context.js";
 import type { UnitId } from "../../unit.js";
+import type { ActionResources } from "./resources.js";
 
 export type Definition =
     | {
@@ -60,11 +60,7 @@ export function compile(definition: Definition, resources: ActionResources): Pro
             const readPower =
                 definition.powerSource === "SOURCE_ATTACK"
                     ? ({ work, sourceUnitId }: Context): number | undefined =>
-                          resolveAttackPower(
-                              sourceUnitId,
-                              battlefieldView(work),
-                              resources.computations,
-                          )
+                          resolveAttackPower(sourceUnitId, battlefieldView(work))
                     : (): number => definition.power;
 
             return (context) => {

@@ -1,8 +1,9 @@
+import type { QueryContext } from "../../query.js";
 import type { NavigationState } from "../../../battlefield/navigation/state.js";
 import type { RouteState } from "./route/state.js";
 import { widenUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
 import { createSteeringState, type SteeringParameters, type SteeringState } from "./steering.js";
-import * as contribution from "../../../contribution/state.js";
+import * as contribution from "../../../contribution/contribution.js";
 import * as modifier from "../../../contribution/value.js";
 
 export interface LocomotionDefinition {
@@ -13,7 +14,7 @@ export interface LocomotionDefinition {
 
 export interface LocomotionState {
     readonly moving: boolean;
-    readonly moveSpeed: contribution.State;
+    readonly moveSpeed: readonly contribution.Contribution<contribution.Input<QueryContext>>[];
     readonly steering: SteeringState;
 }
 
@@ -58,7 +59,7 @@ export function hasRoutedLocomotion<U extends Unit>(
 }
 
 export function createLocomotionState(): LocomotionState {
-    return { moving: false, moveSpeed: contribution.empty(), steering: createSteeringState() };
+    return { moving: false, moveSpeed: [], steering: createSteeringState() };
 }
 
 export function initializeLocomotionState(
@@ -77,9 +78,9 @@ export function createRoutedLocomotionState(mainRoute: RouteControlState): Route
     };
 }
 
-export function updateMoveSpeedContributions<U extends Unit>(
+function changeMoveSpeedContributions<U extends Unit>(
     input: U | StableUnit<U>,
-    transition: contribution.Transition,
+    transition: (entries: LocomotionState["moveSpeed"]) => LocomotionState["moveSpeed"],
 ): StableUnit<U> {
     const unit = widenUnit<U>(input);
 
@@ -94,16 +95,30 @@ export function updateMoveSpeedContributions<U extends Unit>(
         : { ...unit, locomotion: { ...unit.locomotion, moveSpeed } };
 }
 
+export function setMoveSpeedContribution<U extends Unit>(
+    unit: U | StableUnit<U>,
+    entry: contribution.Contribution<contribution.Input<QueryContext>>,
+): StableUnit<U> {
+    return changeMoveSpeedContributions<U>(unit, (entries) => contribution.set(entries, entry));
+}
+
+export function removeMoveSpeedContribution<U extends Unit>(
+    unit: U | StableUnit<U>,
+    id: string,
+): StableUnit<U> {
+    return changeMoveSpeedContributions<U>(unit, (entries) => contribution.remove(entries, id));
+}
+
 export function resolveMoveSpeedPerTick(
     definition: LocomotionDefinition,
     state: LocomotionState,
-    evaluate?: contribution.Evaluate,
+    context: QueryContext,
 ): number {
     return Math.max(
         definition.minimumMoveSpeedPerTick ?? 0,
         modifier.apply(
             definition.moveSpeedPerTick,
-            contribution.resolve(state.moveSpeed, evaluate),
+            contribution.resolve(state.moveSpeed, (value) => contribution.evaluate(value, context)),
         ),
     );
 }

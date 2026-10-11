@@ -80,7 +80,7 @@ test('Effect close: overlapping roots and a cross-Unit diamond finish once in st
         finish: context => {
             assert.equal(refs.every(ref => context.facts.getEffect(ref).finished), true);
             assert.equal(refs.every(ref => !context.facts.getEffect(ref).participating), true);
-            assert.equal([0, 1, 2].every(unitId => context.facts.getUnit(unitId).offense.attack.entries.every(entry => !entry.participating)), true);
+            assert.equal([0, 1, 2].every(unitId => context.facts.getUnit(unitId).offense.attack.length === 0), true);
             notices.push({ name: context.instance.state.name, end: context.end });
         },
     }, { contributions: [attack(() => [createModifier({ finalAddition: 10 })])] });

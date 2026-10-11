@@ -1,5 +1,5 @@
-import type * as contributions from "../../../contribution/definition.js";
-import { updateAttackContributions } from "./capability.js";
+import type * as contributions from "../effects/contributions.js";
+import { setAttackContribution, removeAttackContribution } from "./capability.js";
 
 export function attack<S extends object>(
     sample: contributions.Sampled<S>["sample"],
@@ -8,7 +8,8 @@ export function attack<S extends object>(
     return {
         kind: "SAMPLED",
         id: options.id ?? "attack",
-        target: updateAttackContributions,
+        set: setAttackContribution,
+        remove: removeAttackContribution,
         sample,
         ...(options.group === undefined ? {} : { group: options.group }),
     };
@@ -21,7 +22,8 @@ export function liveAttack<S extends object>(
     return {
         kind: "LIVE",
         id: options.id ?? "attack",
-        target: updateAttackContributions,
+        set: setAttackContribution,
+        remove: removeAttackContribution,
         evaluate,
         ...(options.group === undefined ? {} : { group: options.group }),
     };

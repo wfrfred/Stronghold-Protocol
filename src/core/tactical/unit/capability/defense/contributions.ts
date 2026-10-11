@@ -1,5 +1,10 @@
-import type * as contributions from "../../../contribution/definition.js";
-import { updateDefenseContributions, updateResistanceContributions } from "./capability.js";
+import type * as contributions from "../effects/contributions.js";
+import {
+    setDefenseContribution,
+    removeDefenseContribution,
+    setResistanceContribution,
+    removeResistanceContribution,
+} from "./capability.js";
 
 export function defense<S extends object>(
     sample: contributions.Sampled<S>["sample"],
@@ -8,7 +13,8 @@ export function defense<S extends object>(
     return {
         kind: "SAMPLED",
         id: options.id ?? "defense",
-        target: updateDefenseContributions,
+        set: setDefenseContribution,
+        remove: removeDefenseContribution,
         sample,
         ...(options.group === undefined ? {} : { group: options.group }),
     };
@@ -21,7 +27,8 @@ export function liveDefense<S extends object>(
     return {
         kind: "LIVE",
         id: options.id ?? "defense",
-        target: updateDefenseContributions,
+        set: setDefenseContribution,
+        remove: removeDefenseContribution,
         evaluate,
         ...(options.group === undefined ? {} : { group: options.group }),
     };
@@ -34,7 +41,8 @@ export function resistance<S extends object>(
     return {
         kind: "SAMPLED",
         id: options.id ?? "resistance",
-        target: updateResistanceContributions,
+        set: setResistanceContribution,
+        remove: removeResistanceContribution,
         sample,
         ...(options.group === undefined ? {} : { group: options.group }),
     };
@@ -47,7 +55,8 @@ export function liveResistance<S extends object>(
     return {
         kind: "LIVE",
         id: options.id ?? "resistance",
-        target: updateResistanceContributions,
+        set: setResistanceContribution,
+        remove: removeResistanceContribution,
         evaluate,
         ...(options.group === undefined ? {} : { group: options.group }),
     };

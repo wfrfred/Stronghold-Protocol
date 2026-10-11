@@ -39,7 +39,7 @@ export function startActionInWork(
         compiled.definition,
         source.definition.action,
         source.action,
-        resources.computations.bind({ unit: source, battlefield: battlefieldView(work) }),
+        { unit: source, battlefield: battlefieldView(work) },
     );
     const action = reconcileActionCooldown(source.action, intervalTicks, tick);
     const ready = action === source.action ? source : { ...source, action };

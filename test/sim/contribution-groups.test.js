@@ -6,13 +6,12 @@ import {
   getUnit,
   transitionUnit,
 } from "../../dist/core/tactical/battle/execution/context.js";
-import * as contribution from "../../dist/core/tactical/contribution/state.js";
 import * as modifier from "../../dist/core/tactical/contribution/value.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { attack, liveAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import { defense } from "../../dist/core/tactical/unit/capability/defense/contributions.js";
 import { resolveDefense } from "../../dist/core/tactical/unit/capability/defense/query.js";
-import { updateAttackContributions } from "../../dist/core/tactical/unit/capability/offense/capability.js";
+import { setAttackContribution } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
 import {
@@ -45,10 +44,10 @@ const install = (work, resources, program, id, state, source = null) => {
   assert.equal(result.type, "INSTALLED");
 };
 const attackPower = (work, resources) =>
-  resolveAttackPower(1, battlefieldView(work), resources.computations);
-const entries = (work) => getUnit(work, 1).offense.attack.entries;
+  resolveAttackPower(1, battlefieldView(work));
+const entries = (work) => getUnit(work, 1).offense.attack;
 const slot = (instance) => instance.state.grouped
-  ? { id: "inspiration/attack", strength: instance.state.coefficient }
+  ? { id: "inspiration/attack", priority: instance.state.coefficient }
   : undefined;
 
 test("contribution groups: the ATK coefficient wins, while other facets participate and removal restores the sampled loser", () => {
@@ -71,18 +70,18 @@ test("contribution groups: the ATK coefficient wins, while other facets particip
   assert.equal(attackPower(work, resources), 160);
   assert.equal(resolveDefense(1, battlefieldView(work)).defense, 30);
   assert.equal(samples, 2);
-  assert.deepEqual(entries(work).map((entry) => entry.participating), [true, true]);
+  assert.equal(entries(work).length, 2);
   assert.deepEqual(getUnit(work, 1).effects.instances.map((instance) => instance.participating), [true, true]);
-  const loserValues = entries(work)[0].values;
+  const loserValues = entries(work)[0].value;
 
   removeEffect(work, { type: "EFFECT", unitId: 1, effectId: 1 }, resources, 0);
   assert.equal(attackPower(work, resources), 400);
   assert.equal(resolveDefense(1, battlefieldView(work)).defense, 10);
-  assert.equal(entries(work)[0].values, loserValues);
+  assert.equal(entries(work)[0].value, loserValues);
   assert.equal(samples, 2);
 });
 
-test("contribution groups: explicit sampled state updates refresh strength, samples, and optional group membership", () => {
+test("contribution groups: explicit sampled state updates refresh priority, samples, and optional group membership", () => {
   const resources = new CombatResources();
   const effect = program("updated-inspiration");
   let samples = 0;
@@ -99,9 +98,9 @@ test("contribution groups: explicit sampled state updates refresh strength, samp
 
   updateEffectState(work, 1, 0, effect,
     (state) => ({ ...state, coefficient: 0.7, amount: 70 }), resources, 0);
-  assert.equal(entries(work)[0].group.strength, 0.7);
+  assert.equal(entries(work)[0].group.priority, 0.7);
   assert.equal(attackPower(work, resources), 170);
-  assert.equal(resolveAttackPower(1, original, resources.computations), 160);
+  assert.equal(resolveAttackPower(1, original), 160);
   assert.equal(samples, 3);
 
   updateEffectState(work, 1, 0, effect,
@@ -134,20 +133,19 @@ test("contribution groups: live values stay current without reranking, and expli
   assert.equal(computes, 1);
   const originalEntries = entries(work);
 
-  transitionUnit(work, 3, (provider) => updateAttackContributions(provider, (state) =>
-    contribution.register(state, { id: "provider-buff", sequence: 0, kind: "SAMPLED", participating: true, values: [value(100)] })));
+  transitionUnit(work, 3, (provider) => setAttackContribution(provider, { id: "provider-buff", value: [value(100)] }));
   assert.equal(attackPower(work, resources), 220);
   assert.equal(entries(work), originalEntries);
   assert.equal(groupReads, 2);
   assert.equal(computes, 2);
 
-  const originalRef = entries(work)[0].evaluator;
+  const originalRef = entries(work)[0].value;
   updateEffectState(work, 1, 0, effect,
     (state) => ({ ...state, coefficient: 0.7 }), resources, 0);
   assert.equal(computes, 2);
   assert.equal(groupReads, 3);
-  assert.equal(entries(work)[0].group.strength, 0.7);
-  assert.equal(entries(work)[0].evaluator, originalRef);
+  assert.equal(entries(work)[0].group.priority, 0.7);
+  assert.equal(typeof entries(work)[0].value, "function");
   assert.equal(attackPower(work, resources), 800);
 
   setEffectEnabled(work, { type: "EFFECT", unitId: 1, effectId: 0 }, false, resources, 0);
@@ -155,9 +153,9 @@ test("contribution groups: live values stay current without reranking, and expli
   updateEffectState(work, 1, 0, effect,
     (state) => ({ ...state, grouped: false }), resources, 0);
   assert.equal(computes, beforeUpdate);
-  assert.equal(entries(work)[0].participating, false);
-  assert.equal(entries(work)[0].evaluator, originalRef);
-  assert.equal(Object.hasOwn(entries(work)[0], "group"), false);
+  assert.equal(entries(work).length, 1);
+  assert.equal(entries(work)[0].group.priority, 0.6);
+  assert.equal(typeof originalRef, "function");
   assert.equal(attackPower(work, resources), 220);
 });
 
@@ -165,7 +163,7 @@ test("contribution groups: static groups are shared and dynamic updates retain p
   for (const useLive of [false, true]) {
     const resources = new CombatResources();
     const effect = program(`shared-groups-${useLive}`);
-    const fixed = { id: "fixed", strength: 1 };
+    const fixed = { id: "fixed", priority: 1 };
     let returned;
     const factory = useLive
       ? (options) => liveAttack(() => [value(10)], options)
@@ -173,7 +171,7 @@ test("contribution groups: static groups are shared and dynamic updates retain p
     resources.registerEffect(effect, { contributions: [
       factory({ id: "fixed", group: fixed }),
       factory({ id: "dynamic", group: (instance) => {
-        returned = { id: "dynamic", strength: instance.state.coefficient };
+        returned = { id: "dynamic", priority: instance.state.coefficient };
         return returned;
       } }),
     ] });
@@ -184,7 +182,7 @@ test("contribution groups: static groups are shared and dynamic updates retain p
     const initialGroup = entries(work)[1].group;
     assert.equal(entries(work)[0].group, fixed);
     assert.equal(initialGroup, returned);
-    assert.deepEqual(initialGroup, { id: "dynamic", strength: 2 });
+    assert.deepEqual(initialGroup, { id: "dynamic", priority: 2 });
 
     updateEffectState(work, 1, 0, effect,
       (state) => ({ ...state, coefficient: 3 }), resources, 0);
@@ -192,8 +190,8 @@ test("contribution groups: static groups are shared and dynamic updates retain p
     assert.equal(entries(work)[0].group, fixed);
     assert.equal(updatedGroup, returned);
     assert.notEqual(updatedGroup, initialGroup);
-    assert.deepEqual(updatedGroup, { id: "dynamic", strength: 3 });
-    assert.equal(original.getUnit(1).offense.attack.entries[1].group, initialGroup);
-    assert.deepEqual(initialGroup, { id: "dynamic", strength: 2 });
+    assert.deepEqual(updatedGroup, { id: "dynamic", priority: 3 });
+    assert.equal(original.getUnit(1).offense.attack[1].group, initialGroup);
+    assert.deepEqual(initialGroup, { id: "dynamic", priority: 2 });
   }
 });

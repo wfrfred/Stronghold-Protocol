@@ -64,7 +64,7 @@ function harness({ speed = 0.25, minimum = 0, definition = route(), maps } = {})
                 tick, maps: maps ?? battlefield.snapshot("draft").navigationMaps, fieldCache, moveMultiplier: 1,
                 movementAllowed: true, routeAdvanceAllowed: true, waitTickAllowed: true,
                 rngState: execution.rngState, nextNavigationRequestId: execution.nextNavigationRequestId,
-                evaluateContributions: resources.computations.bind({ unit, battlefield: battlefieldView(work) }),
+                queryContext: { unit, battlefield: battlefieldView(work) },
                 ...controls,
             });
             execution = { ...execution, rngState: moved.rngState, nextNavigationRequestId: moved.nextNavigationRequestId };
@@ -91,7 +91,7 @@ const install = (work, program, resources, expiresAtTick = null) => { installNew
 
 function speed(work, resources) {
     const unit = getUnit(work, 0);
-    return resolveMoveSpeedPerTick(unit.definition.locomotion, unit.locomotion, resources.computations.bind({ unit, battlefield: battlefieldView(work) }));
+    return resolveMoveSpeedPerTick(unit.definition.locomotion, unit.locomotion, { unit, battlefield: battlefieldView(work) });
 }
 
 test("move speed: normalized minimum, arithmetic and movement permission are separate", () => {
@@ -135,11 +135,11 @@ test("move speed: lifecycle updates preserve shared snapshots, route samples and
     finishEffects(h.work, [address], resources, 3);
     finalizeEffect(h.work, address, resources, 3);
     assert.equal(h.unit.locomotion.mainRoute.navigation.execution, cursor);
-    assert.equal(h.unit.locomotion.moveSpeed.entries.length, 0);
+    assert.equal(h.unit.locomotion.moveSpeed.length, 0);
     assert.equal(h.execution.rngState, randomState);
-    assert.equal(copied.locomotion.moveSpeed.entries.length, 0);
+    assert.equal(copied.locomotion.moveSpeed.length, 0);
     assert.notEqual(h.unit.locomotion.moveSpeed, participating.locomotion.moveSpeed);
-    assert.equal(participating.locomotion.moveSpeed.entries[0].participating, true);
+    assert.equal(participating.locomotion.moveSpeed.length, 1);
 });
 
 test("move speed: in-flight acceleration, zero budget and restoration do not reset navigation", () => {
@@ -294,6 +294,6 @@ test("move speed: the native Mire modifier slows actual movement and expiry rest
     positions.forEach((position, index) => close(position, [0.19, 0.38, 0.58, 0.78][index]));
     assert.deepEqual(runtime.snapshot(), reference.snapshot());
     assert.deepEqual(before.units[0].position, [0, 0]);
-    assert.equal(runtime.snapshot().units[0].locomotion.moveSpeed.entries.length, 0);
+    assert.equal(runtime.snapshot().units[0].locomotion.moveSpeed.length, 0);
     assert.equal(runtime.snapshot().execution.rngState, before.execution.rngState);
 });

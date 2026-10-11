@@ -63,10 +63,10 @@ function advance(work, tick, supplied) {
   finalizeFinishedEffects(work, 1, supplied, tick);
 }
 function defense(work, supplied) {
-  return resolveDefense(1, battlefieldView(work), supplied.computations);
+  return resolveDefense(1, battlefieldView(work));
 }
 function power(work, supplied) {
-  return resolveAttackPower(1, battlefieldView(work), supplied.computations);
+  return resolveAttackPower(1, battlefieldView(work));
 }
 function near(actual, expected) { assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} != ${expected}`); }
 

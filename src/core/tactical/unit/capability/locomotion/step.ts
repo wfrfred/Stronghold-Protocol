@@ -49,14 +49,14 @@ import {
 } from "./capability.js";
 import { integrateSteeringDirection } from "./steering.js";
 import { widenUnit, type StableUnit } from "../../unit.js";
-import type * as contribution from "../../../contribution/state.js";
+import type { QueryContext } from "../../query.js";
 
 export interface RoutedLocomotionStepContext {
     readonly tick: number;
     readonly maps: NavigationMaps;
     readonly fieldCache: NavigationFieldProvider;
     readonly moveMultiplier: number;
-    readonly evaluateContributions?: contribution.Evaluate;
+    readonly queryContext: QueryContext;
     readonly movementAllowed: boolean;
     readonly waitTickAllowed: boolean;
     readonly routeAdvanceAllowed: boolean;
@@ -181,8 +181,7 @@ export function stepRoutedLocomotion(
     let steering = state.steering;
     let moving = false;
     const speed =
-        resolveMoveSpeedPerTick(definition, state, context.evaluateContributions) *
-        context.moveMultiplier;
+        resolveMoveSpeedPerTick(definition, state, context.queryContext) * context.moveMultiplier;
 
     assertNonnegativeNumber(speed, "movement budget");
 

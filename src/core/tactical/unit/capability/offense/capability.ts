@@ -1,5 +1,6 @@
+import type { QueryContext } from "../../query.js";
 import { assertNonnegativeNumber } from "../../../../common/assert.js";
-import * as contribution from "../../../contribution/state.js";
+import * as contribution from "../../../contribution/contribution.js";
 import * as modifier from "../../../contribution/value.js";
 import { widenUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
 
@@ -8,7 +9,7 @@ export interface OffenseDefinition {
 }
 
 export interface OffenseState {
-    readonly attack: contribution.State;
+    readonly attack: readonly contribution.Contribution<contribution.Input<QueryContext>>[];
 }
 
 export interface Offense {
@@ -39,21 +40,12 @@ export function createOffenseDefinition(definition: OffenseDefinition): OffenseD
 
 export function initializeOffenseState(definition?: OffenseDefinition): OffenseState;
 export function initializeOffenseState(): OffenseState {
-    return { attack: contribution.empty() };
+    return { attack: [] };
 }
 
-function updateContributions(
-    state: OffenseState,
-    transition: contribution.Transition,
-): OffenseState {
-    const attack = transition(state.attack);
-
-    return attack === state.attack ? state : { ...state, attack };
-}
-
-export function updateAttackContributions<U extends Unit>(
+function changeAttackContributions<U extends Unit>(
     input: U | StableUnit<U>,
-    transition: contribution.Transition,
+    transition: (entries: OffenseState["attack"]) => OffenseState["attack"],
 ): StableUnit<U> {
     const unit = widenUnit<U>(input);
 
@@ -61,18 +53,37 @@ export function updateAttackContributions<U extends Unit>(
         throw new TypeError("attack contributions require Offense capability");
     }
 
-    const offense = updateContributions(unit.offense, transition);
+    const attack = transition(unit.offense.attack);
 
-    return offense === unit.offense ? unit : { ...unit, offense };
+    return attack === unit.offense.attack
+        ? unit
+        : { ...unit, offense: { ...unit.offense, attack } };
+}
+
+export function setAttackContribution<U extends Unit>(
+    unit: U | StableUnit<U>,
+    entry: contribution.Contribution<contribution.Input<QueryContext>>,
+): StableUnit<U> {
+    return changeAttackContributions<U>(unit, (entries) => contribution.set(entries, entry));
+}
+
+export function removeAttackContribution<U extends Unit>(
+    unit: U | StableUnit<U>,
+    id: string,
+): StableUnit<U> {
+    return changeAttackContributions<U>(unit, (entries) => contribution.remove(entries, id));
 }
 
 export function resolveOffenseAttack(
     definition: OffenseDefinition,
     state: OffenseState,
-    evaluate?: contribution.Evaluate,
+    context: QueryContext,
 ): number {
     return Math.max(
         0,
-        modifier.apply(definition.attack, contribution.resolve(state.attack, evaluate)),
+        modifier.apply(
+            definition.attack,
+            contribution.resolve(state.attack, (value) => contribution.evaluate(value, context)),
+        ),
     );
 }

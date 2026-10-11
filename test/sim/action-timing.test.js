@@ -77,7 +77,7 @@ function values(work, resources) {
 
 function valuesAt(battlefield, resources) {
     const unit = battlefield.getUnit(0);
-    const evaluate = resources.computations.bind({ unit, battlefield });
+    const evaluate = { unit, battlefield };
     return [
         resolveAttackSpeed(unit.definition.action, unit.action, evaluate),
         resolveBaseAttackTime(unit.definition.action.normalAction, unit.action, evaluate),
@@ -142,9 +142,9 @@ test("action timing: lifecycle updates both slots and snapshots retain shared im
     const installedSnapshot = installed.battlefield.snapshot("draft");
     assert.deepEqual(values(installed, resources), [200, 15, 7.5]);
     const copied = copyUnitSnapshot(getUnit(installed, 0));
-    assert.equal(copied.action.attackSpeed.entries, getUnit(installed, 0).action.attackSpeed.entries);
+    assert.equal(copied.action.attackSpeed, getUnit(installed, 0).action.attackSpeed);
     assert.equal(copied.action, getUnit(installed, 0).action);
-    assert.equal(copied.action.baseAttackTime.entries, getUnit(installed, 0).action.baseAttackTime.entries);
+    assert.equal(copied.action.baseAttackTime, getUnit(installed, 0).action.baseAttackTime);
     setEffectEnabled(installed, address, false, resources, 1);
     assert.deepEqual(values(installed, resources), [100, 30, 30]);
     setEffectEnabled(installed, address, true, resources, 2);
@@ -152,9 +152,9 @@ test("action timing: lifecycle updates both slots and snapshots retain shared im
     finishEffect(installed, address, resources, 3);
     assert.deepEqual(values(installed, resources), [100, 30, 30]);
     finalizeEffect(installed, address, resources, 3);
-    assert.equal(getUnit(installed, 0).action.attackSpeed.entries.length, 0);
-    assert.equal(getUnit(installed, 0).action.baseAttackTime.entries.length, 0);
-    assert.equal(copied.action.attackSpeed.entries[0].participating, true);
+    assert.equal(getUnit(installed, 0).action.attackSpeed.length, 0);
+    assert.equal(getUnit(installed, 0).action.baseAttackTime.length, 0);
+    assert.equal(copied.action.attackSpeed.length, 1);
     assert.deepEqual(valuesAt(installedSnapshot, resources), [200, 15, 7.5]);
 });
 
@@ -236,7 +236,7 @@ test("action timing: a real 600 ASPD contribution preserves long-run fractional 
     assert.equal(ticks.length, Math.ceil(1200 / 4.5));
     assert.deepEqual(ticks.slice(0, 8), [0, 5, 9, 14, 18, 23, 27, 32]);
     assert.deepEqual(battle.snapshot(), reference.snapshot());
-    assert.equal(battle.snapshot().units.find((unit) => unit.id === 0).action.attackSpeed.entries.length, 1);
+    assert.equal(battle.snapshot().units.find((unit) => unit.id === 0).action.attackSpeed.length, 1);
 });
 
 test("action timing: expiring a tempo Buff leaves accepted WAIT and recovery facts intact", () => {
