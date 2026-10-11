@@ -337,7 +337,6 @@ function finishEndingEffects(
         return;
     }
 
-    // A dependent may have several parents; DFS discovery order is not sufficient.
     const indegrees = new Map<string, number>();
     const children = new Map<string, string[]>();
 
@@ -359,65 +358,19 @@ function finishEndingEffects(
         indegrees.set(key, count);
     }
 
-    // A local min-heap preserves stable identity order without sorting every dequeue.
     const ready: string[] = [];
-    const before = (left: string, right: string): boolean =>
-        compareRefs(ending.get(left)!.ref, ending.get(right)!.ref) < 0;
-
-    const enqueue = (key: string): void => {
-        let index = ready.length;
-        ready.push(key);
-
-        while (index > 0) {
-            const parent = Math.floor((index - 1) / 2);
-
-            if (!before(key, ready[parent]!)) {
-                break;
-            }
-
-            ready[index] = ready[parent]!;
-            index = parent;
-        }
-
-        ready[index] = key;
-    };
-    const dequeue = (): string => {
-        const first = ready[0]!;
-        const last = ready.pop()!;
-
-        if (ready.length > 0) {
-            let index = 0;
-
-            while (index * 2 + 1 < ready.length) {
-                let child = index * 2 + 1;
-
-                if (child + 1 < ready.length && before(ready[child + 1]!, ready[child]!)) {
-                    child++;
-                }
-                if (!before(ready[child]!, last)) {
-                    break;
-                }
-
-                ready[index] = ready[child]!;
-                index = child;
-            }
-
-            ready[index] = last;
-        }
-
-        return first;
-    };
 
     for (const key of ending.keys()) {
         if (indegrees.get(key) === 0) {
-            enqueue(key);
+            ready.push(key);
         }
     }
 
     const ordered: Ending[] = [];
 
     while (ready.length > 0) {
-        const key = dequeue();
+        ready.sort((left, right) => compareRefs(ending.get(left)!.ref, ending.get(right)!.ref));
+        const key = ready.shift()!;
         ordered.push(ending.get(key)!);
 
         for (const child of children.get(key) ?? []) {
@@ -425,7 +378,7 @@ function finishEndingEffects(
             indegrees.set(child, remaining);
 
             if (remaining === 0) {
-                enqueue(child);
+                ready.push(child);
             }
         }
     }
@@ -434,80 +387,70 @@ function finishEndingEffects(
         throw new TypeError("effect scopes cannot form a cycle");
     }
 
-    const byHost = new Map<UnitId, Set<number>>();
-
-    for (const { ref } of ordered) {
-        const ids = byHost.get(ref.unitId) ?? new Set<number>();
-        ids.add(ref.effectId);
-        byHost.set(ref.unitId, ids);
-    }
-
     dispatch.beginEnds(ordered.map(({ ref }) => ref));
-    const owners = [...byHost.keys()].sort((a, b) => a - b).map((id) => getUnit(state, id)!);
-    const changes: { address: EffectRef; participating: boolean }[] = [];
 
-    for (const owner of owners) {
-        if (!hasEffects(owner)) {
+    for (const { ref, end } of ordered) {
+        const owner = getUnit(state, ref.unitId);
+
+        if (owner === undefined || !hasEffects(owner)) {
+            dispatch.completeEnd(ref);
             continue;
         }
 
-        const ids = byHost.get(owner.id)!;
-        const marked = replaceEffects(
+        const instance = owner.effects.instances.find((value) => value.id === ref.effectId);
+
+        if (instance === undefined || instance.finished) {
+            dispatch.completeEnd(ref);
+            continue;
+        }
+
+        const marked = replaceEffect(
             owner,
-            owner.effects.instances.map((instance) =>
-                ids.has(instance.id)
-                    ? withEffectLifecycle(instance, { finished: true, participating: false })
-                    : instance,
-            ),
+            instance,
+            withEffectLifecycle(instance, { finished: true, participating: false }),
         );
         const result = reconcileEffectBindings(owner, marked, resources);
-        changes.push(
-            ...result.changes.map(({ instanceId, participating }) => ({
-                address: { type: "EFFECT" as const, unitId: owner.id, effectId: instanceId },
+        updateUnit(state, result.unit);
+
+        runParticipationActions(
+            state,
+            result.changes.map(({ instanceId, participating }) => ({
+                address: { type: "EFFECT", unitId: owner.id, effectId: instanceId },
                 participating,
             })),
+            resources,
+            tick,
+            dispatch,
+            () => {
+                const current = getEffect(state, ref)!;
+                const finish = resources.effectLifecycle.get(current).finish;
+
+                if (finish !== undefined) {
+                    runLifecycleAction(
+                        state,
+                        ref,
+                        current,
+                        (context) => {
+                            finish({
+                                ...context,
+                                end,
+                                get instance() {
+                                    return context.instance;
+                                },
+                                get battlefield() {
+                                    return context.battlefield;
+                                },
+                            });
+                        },
+                        resources,
+                        tick,
+                        dispatch,
+                    );
+                }
+            },
         );
-        updateUnit(state, result.unit);
+        dispatch.completeEnd(ref);
     }
-
-    const order = new Map(ordered.map(({ ref }, index) => [lifetimeKey(ref), index]));
-    changes.sort(
-        (a, b) =>
-            (order.get(lifetimeKey(a.address)) ?? order.size) -
-                (order.get(lifetimeKey(b.address)) ?? order.size) ||
-            compareRefs(a.address, b.address),
-    );
-    runParticipationActions(state, changes, resources, tick, dispatch, () => {
-        for (const { ref, end } of ordered) {
-            const current = getEffect(state, ref)!;
-            const finish = resources.effectLifecycle.get(current).finish;
-
-            if (finish !== undefined) {
-                runLifecycleAction(
-                    state,
-                    ref,
-                    current,
-                    (context) => {
-                        finish({
-                            ...context,
-                            end,
-                            get instance() {
-                                return context.instance;
-                            },
-                            get battlefield() {
-                                return context.battlefield;
-                            },
-                        });
-                    },
-                    resources,
-                    tick,
-                    dispatch,
-                );
-            }
-
-            dispatch.completeEnd(ref);
-        }
-    });
 
     dispatch.drainDeferred();
 }

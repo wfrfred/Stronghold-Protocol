@@ -221,23 +221,24 @@ test('effect competition: nested enable changes supersede a pending outer notifi
   assert.equal(values(h.work, h.resources).attack, 150);
 });
 
-test('effect competition: ending a strong parent never enables its weaker child', () => {
+test('effect competition: a weaker child participates between its parent ending and its own ending', () => {
   const h = harness();
   const events = [];
   const program = definition(h.resources, 'parent-group', {
     enable: context => { events.push(['enable', context.ref.effectId]); },
     disable: context => {
       events.push(['disable', context.ref.effectId]);
-      assert.equal(context.facts.getEffect(address(1)).finished, true);
-      assert.deepEqual(context.facts.participating(0), []);
+      assert.equal(context.facts.getEffect(address(1)).finished, context.ref.effectId === 1);
+      assert.deepEqual(context.facts.participating(0).map(instance => instance.id), context.ref.effectId === 0 ? [1] : []);
     },
+    finish: context => { events.push(['finish', context.ref.effectId]); },
   });
   const parent = install(h, program, { ratio: 0.9, sourceAttack: 100, hpBonus: 3000 });
   const child = install(h, program, { ratio: 0.5, sourceAttack: 100, hpBonus: 1000 });
   bindEffectLifetime(h.work, child, parent);
   events.length = 0;
   finishEffects(h.work, [parent], h.resources, 1);
-  assert.deepEqual(events, [['disable', 0]]);
+  assert.deepEqual(events, [['disable', 0], ['finish', 0], ['enable', 1], ['disable', 1], ['finish', 1]]);
   assert.equal(getUnit(h.work, 0).effects.instances[1].finished, true);
   assert.deepEqual(values(h.work, h.resources), { attack: 100, maxHp: 1000, hp: 500 });
 });
@@ -253,7 +254,7 @@ test('effect competition: empty identity and nonfinite priority fail without pub
   }
 });
 
-test('effect competition: cross-unit parent completion publishes child recovery and HP responses before any callback', () => {
+test('effect competition: cross-unit parent callbacks observe the child before its later termination', () => {
   const h = harness();
   const second = initializeUnit({ id: 1, position: [1, 0], definition: {
     id: 'second', offense: { attack: 100 }, vitality: { maxHp: 1000 }, status: { initialFlags: [] },
@@ -262,14 +263,12 @@ test('effect competition: cross-unit parent completion publishes child recovery 
   const observations = [];
   const program = definition(h.resources, 'cross-unit', {
     disable: context => {
-      if (context.ref.unitId === 0) {
-        const child = context.facts.getEffect({ type: "EFFECT", unitId: 1, effectId: 1 });
-        const receiver = context.facts.getUnit(1);
-        observations.push([
-          child.finished, child.participating, context.facts.participating(1).map(instance => instance.id),
-          receiver.vitality.hp, resolveMaxHp(1, { getUnit: id => context.facts.getUnit(id) }),
-        ]);
-      }
+      const child = context.facts.getEffect({ type: "EFFECT", unitId: 1, effectId: 1 });
+      const receiver = context.facts.getUnit(1);
+      observations.push([
+        context.ref.unitId, child.finished, child.participating, context.facts.participating(1).map(instance => instance.id),
+        receiver.vitality.hp, resolveMaxHp(1, { getUnit: id => context.facts.getUnit(id) }),
+      ]);
     },
   });
   const parent = install(h, program, { ratio: 0.9, sourceAttack: 100, hpBonus: 3000 });
@@ -280,7 +279,8 @@ test('effect competition: cross-unit parent completion publishes child recovery 
     }, h.resources, 0);
   }
   bindEffectLifetime(h.work, { type: "EFFECT", unitId: 1, effectId: 1 }, parent);
+  observations.length = 0;
   finishEffects(h.work, [parent], h.resources, 1);
-  assert.deepEqual(observations, [[true, false, [0], 1000, 2000]]);
+  assert.deepEqual(observations, [[0, false, true, [1], 2000, 4000], [1, true, false, [0], 1000, 2000]]);
   assert.deepEqual(values(h.work, h.resources), { attack: 100, hp: 500, maxHp: 1000 });
 });

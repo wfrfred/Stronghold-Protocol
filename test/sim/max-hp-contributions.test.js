@@ -142,6 +142,14 @@ test("MaxHP: callbacks and synchronous nested successors see coordinated facts",
     };
     const child = resources.registerEffect(createDefinition("child-hp", 50), {
         contributions: [maxHp((instance) => [bonus(instance.state.amount)])],
+        lifecycle: {
+            disable: context => inspect("child-disable", context),
+            finish: context => {
+                inspect("child-finish", context);
+                assert.equal(context.facts.getEffect(address()).finished, true);
+                assert.equal(context.facts.getEffect(context.ref).finished, true);
+            },
+        },
     });
     const parent = resources.registerEffect(createDefinition("parent-hp", 100), {
         contributions: [maxHp((instance) => [bonus(instance.state.amount)])],
@@ -165,11 +173,13 @@ test("MaxHP: callbacks and synchronous nested successors see coordinated facts",
             },
             disable: (context) => {
                 inspect("disable", context);
+                assert.equal(context.facts.getEffect(address(1)).finished, false);
             },
             finish: (context) => {
                 inspect("finish", context);
                 assert.deepEqual(context.end, { root: address(), reason: "EXPLICIT" });
                 assert.equal(context.facts.getEffect(context.ref).finished, true);
+                assert.equal(context.facts.getEffect(address(1)).finished, false);
             },
         },
     });
@@ -181,8 +191,10 @@ test("MaxHP: callbacks and synchronous nested successors see coordinated facts",
         ["enable", 100, 200],
         ["update", 150, 300],
         ["child", 175, 350],
-        ["disable", 50, 100],
-        ["finish", 50, 100],
+        ["disable", 75, 150],
+        ["finish", 75, 150],
+        ["child-disable", 50, 100],
+        ["child-finish", 50, 100],
     ]);
     const notices = observed.length;
     finalizeEffect(work, address(), resources, 1);

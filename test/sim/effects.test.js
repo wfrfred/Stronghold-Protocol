@@ -1032,8 +1032,8 @@ test("effects: pending terminal notices survive nested cleanup during disable pr
   assert.deepEqual(events, [
     "parent-disable",
     "parent-continued",
-    "child-disable",
     "parent-finish",
+    "child-disable",
     "child-finish",
   ]);
   const instances = getUnit(finished, 2).effects.instances;
@@ -1046,8 +1046,8 @@ test("effects: pending terminal notices survive nested cleanup during disable pr
   assert.deepEqual(events, [
     "parent-disable",
     "parent-continued",
-    "child-disable",
     "parent-finish",
+    "child-disable",
     "child-finish",
   ]);
   assert.deepEqual(

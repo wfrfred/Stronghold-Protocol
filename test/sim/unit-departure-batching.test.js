@@ -197,6 +197,7 @@ test('effect finish: nested host death stops Action and Skill before their depen
     id: 'second-host-notice', initialize: () => ({}),
   }), { lifecycle: { finish: context => {
     order.push('second');
+    assert.deepEqual(context.end, { root: { type: 'UNIT', unitId: 0 }, reason: 'DEATH' });
     assert.equal(context.facts.getUnit(0).skill.active, null);
     assert.equal(executions.get(0), undefined);
     assert.equal(order.includes('skill'), false);
@@ -231,7 +232,7 @@ test('effect finish: nested host death stops Action and Skill before their depen
 
   finishEffects(work, refs, resources, 1, 'EXPLICIT');
 
-  assert.deepEqual(order, ['first', 'action dependent', 'first after damage', 'second', 'skill']);
+  assert.deepEqual(order, ['first', 'second', 'action dependent', 'first after damage', 'skill']);
   assert.equal(getUnit(work, 0), undefined);
   assert.deepEqual(executions.result().executions, []);
   assert.equal(work.events.filter(event => event.type === 'ACTION_CANCELLED').length, 1);

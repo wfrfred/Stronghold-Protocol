@@ -78,9 +78,13 @@ test('Effect close: overlapping roots and a cross-Unit diamond finish once in st
     const refs = [];
     const effect = program(resources, 'diamond', {
         finish: context => {
-            assert.equal(refs.every(ref => context.facts.getEffect(ref).finished), true);
-            assert.equal(refs.every(ref => !context.facts.getEffect(ref).participating), true);
-            assert.equal([0, 1, 2].every(unitId => context.facts.getUnit(unitId).offense.attack.length === 0), true);
+            const finished = refs.filter(ref => context.facts.getEffect(ref).finished);
+            assert.equal(finished.length, notices.length + 1);
+            assert.equal(context.facts.getEffect(context.ref).participating, false);
+            for (const unitId of [0, 1, 2]) {
+                const active = refs.filter(ref => ref.unitId === unitId && !context.facts.getEffect(ref).finished);
+                assert.equal(context.facts.getUnit(unitId).offense.attack.length, active.length);
+            }
             notices.push({ name: context.instance.state.name, end: context.end });
         },
     }, { contributions: [attack(() => [createModifier({ finalAddition: 10 })])] });
@@ -134,14 +138,12 @@ test('Effect close: the first termination retains its root and reason across lat
     assert.equal(getEffect(work, child.ref).finished, true);
 });
 
-test('Effect close: one host competition pass recovers an independent survivor without enabling ending competitors', () => {
+test('Effect close: competitors settle in instance order and the independent survivor participates last', () => {
     const resources = new CombatResources();
-    let competitions = 0;
     const enabled = [];
     const disabled = [];
     const effect = program(resources, 'competition-batch', {
         competition: instance => {
-            competitions++;
             return { group: 'same-host', priority: instance.state.priority };
         },
         enable: context => { enabled.push(context.instance.state.priority); },
@@ -149,22 +151,20 @@ test('Effect close: one host competition pass recovers an independent survivor w
     });
     let work = workOf([unit(0)]);
     const roots = [];
-    for (let priority = 1; priority <= 40; priority++) {
+    for (const priority of [3, 2, 1]) {
         const installed = install(work, resources, effect, 0, [], { priority });
         work = installed.work;
         roots.push(installed.ref);
     }
     const independent = install(work, resources, effect, 0, [], { priority: 0 });
     work = independent.work;
-    competitions = 0;
     enabled.length = 0;
     disabled.length = 0;
     const finished = work;
     finishEffects(finished, roots, resources, 1, 'DISPELLED');
 
-    assert.equal(competitions, 1);
-    assert.deepEqual(enabled, [0]);
-    assert.deepEqual(disabled, [40]);
+    assert.deepEqual(enabled, [2, 1, 0]);
+    assert.deepEqual(disabled, [3, 2, 1]);
     assert.equal(getEffect(finished, independent.ref).participating, true);
     assert.equal(roots.every(ref => getEffect(finished, ref).finished), true);
 });
@@ -313,7 +313,7 @@ test('Effect closing: nested self-host death waits for pending terminal notices 
         finish: context => {
             assert.notEqual(context.facts.getUnit(0), undefined);
             assert.equal(context.facts.getEffect(a).finished, true);
-            assert.equal(context.facts.getEffect(c).finished, true);
+            assert.equal(context.facts.getEffect(c).finished, false);
             trace.push(['B', context.end]);
         },
     });

@@ -206,7 +206,7 @@ test('effect lifetime index: parent attachment, finish and finalization track ot
     assert.deepEqual(capturedDependents, [child.address]);
 });
 
-test('effect lifetime index: nested ending protects pending notices and exposes new independent identities to later queries', () => {
+test('effect lifetime index: a nested ending completes before installation cleans up its instance', () => {
     const resources = new CombatResources();
     const trace = [];
     let followerAddress;
@@ -219,10 +219,12 @@ test('effect lifetime index: nested ending protects pending notices and exposes 
             disable: context => {
                 trace.push('leader');
                 context.effects.finish([followerAddress]);
+                assert.equal(context.facts.getEffect(followerAddress).finished, true);
                 const installed = context.effects.install(9, newborn, input(null));
                 assert.equal(installed.type, 'INSTALLED');
                 newbornAddress = installed.ref;
-                assert.equal(context.facts.getEffect(followerAddress).finished, true);
+                assert.equal(context.facts.getEffect(followerAddress), undefined);
+                assert.notEqual(newbornAddress.effectId, followerAddress.effectId);
             },
         },
     });
@@ -241,7 +243,7 @@ test('effect lifetime index: nested ending protects pending notices and exposes 
 
     assert.deepEqual(trace, ['leader', 'follower', 'follower-finished']);
     assert.deepEqual(captured, [first.address, followerAddress]);
-    assert.equal(getEffect(finished, followerAddress).finished, true);
+    assert.equal(getEffect(finished, followerAddress), undefined);
     assert.equal(getEffect(finished, newbornAddress).finished, false);
     assert.deepEqual(effectDependents(finished, scope(3)), []);
     const settled = finished;

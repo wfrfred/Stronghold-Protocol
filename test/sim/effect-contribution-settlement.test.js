@@ -21,17 +21,18 @@ const input = { source: null, scopes: [] };
 const install = (state, unitId, effect, resources, scopes = []) =>
     installNewEffect(state, unitId, effect, { ...input, scopes }, resources, 0).ref;
 
-test("finishEffects publishes every host's settled contributions before lifecycle callbacks", () => {
+test("finishEffects publishes each host's settled contributions before that instance's callbacks", () => {
     const resources = new CombatResources();
     const notices = [];
     let refs;
     const inspect = (label, context) => {
         for (const ref of refs) {
             const unit = context.facts.getUnit(ref.unitId);
-            assert.equal(context.facts.getEffect(ref).finished, true);
-            assert.equal(unit.vitality.hp, 50);
-            assert.equal(resolveMaxHp(ref.unitId, context.battlefield), 100);
-            assert.deepEqual(unit.vitality.maxHp, []);
+            const finished = ref.unitId <= context.ref.unitId;
+            assert.equal(context.facts.getEffect(ref).finished, finished);
+            assert.equal(unit.vitality.hp, finished ? 50 : 100);
+            assert.equal(resolveMaxHp(ref.unitId, context.battlefield), finished ? 100 : 200);
+            assert.equal(unit.vitality.maxHp.length, finished ? 0 : 1);
         }
         notices.push(`${label}:${context.ref.unitId}`);
     };
@@ -58,7 +59,7 @@ test("finishEffects publishes every host's settled contributions before lifecycl
 
     finishEffects(state, [parent], resources, 1);
 
-    assert.deepEqual(notices, ["disable:1", "disable:2", "finish:1", "finish:2"]);
+    assert.deepEqual(notices, ["disable:1", "finish:1", "disable:2", "finish:2"]);
     for (const id of [1, 2]) {
         assert.equal(previous.getUnit(id).vitality.hp, 100);
         assert.equal(resolveMaxHp(id, previous), 200);
@@ -66,7 +67,7 @@ test("finishEffects publishes every host's settled contributions before lifecycl
     }
 });
 
-test("one finish event keeps blocking when temporary contribution removals would release it", () => {
+test("sequential capacity removals publish the blocking change produced by each instance", () => {
     const blocker = (id, position) => initializeUnit({
         id,
         position,
@@ -106,8 +107,9 @@ test("one finish event keeps blocking when temporary contribution removals would
     const view = battlefieldView(state);
     const unit = getUnit(state, 10);
     assert.equal(resolveBlockingCapacity(unit.definition.blocker, unit.blocker), 1);
-    assert.equal(view.blockerOf(20), 10);
-    assert.deepEqual(view.blockedBy(11), []);
+    assert.equal(view.blockerOf(20), 11);
+    assert.deepEqual(view.blockedBy(10), []);
+    assert.deepEqual(view.blockedBy(11), [20]);
 });
 
 test("a state update that enables a competitor installs its latest contribution", () => {

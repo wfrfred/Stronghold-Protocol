@@ -9,13 +9,15 @@ const host = id => ({ id, definition: { id: `host-${id}` }, position: [0, 0] });
 const program = id => createEffectDefinition({ id, initialize: () => ({}) });
 const input = { source: null, scopes: [] };
 
-test('effect batching: overlapping roots and diamond dependencies mark the complete set before deterministic callbacks', () => {
+test('effect ending: overlapping roots and diamond dependencies settle one instance at a time in deterministic order', () => {
   const resources = new CombatResources();
   const notices = [];
   const effect = resources.registerEffect(program('diamond'), { lifecycle: {
     disable: context => {
-      assert.equal(context.facts.participating(0).length, 0);
-      assert.equal(context.facts.participating(1).length, 0);
+      const finished = refs.filter(ref => context.facts.getEffect(ref).finished);
+      assert.equal(finished.length, notices.length + 1);
+      assert.equal(context.facts.getEffect(context.ref).participating, false);
+      assert.equal(context.facts.participating(0).length + context.facts.participating(1).length, refs.length - finished.length);
       notices.push([context.ref.unitId, context.ref.effectId]);
     },
   } });
@@ -34,14 +36,15 @@ test('effect batching: overlapping roots and diamond dependencies mark the compl
   assert.deepEqual(notices, [[0, 0], [1, 0], [1, 1], [0, 1]]);
   assert.ok([0, 1].every(id => getUnit(work, id).effects.instances.every(instance => instance.finished)));
   finishEffects(work, refs, resources, 1);
+  assert.equal(notices.length, refs.length);
   assert.ok([0, 1].every(id => before.getUnit(id).effects.instances.every(instance => !instance.finished)));
 });
 
-test('effect batching: a departing host never temporarily enables suppressed competitors', () => {
+test('effect ending: a departing host settles competitors in instance order', () => {
   const resources = new CombatResources();
   const calls = [];
   let work = effectFixtureWork(host(0));
-  for (const priority of [1, 2, 3]) {
+  for (const priority of [3, 2, 1]) {
     const effect = resources.registerEffect(program(`rank-${priority}`), { lifecycle: {
       competition: () => ({ group: 'rank', priority }),
       enable: () => { calls.push(priority); },
@@ -50,17 +53,16 @@ test('effect batching: a departing host never temporarily enables suppressed com
   }
   calls.length = 0;
   closeEffectLifetimes(work, [{ type: 'UNIT', unitId: 0 }], resources, 1);
-  assert.deepEqual(calls, []);
+  assert.deepEqual(calls, [2, 1]);
   assert.ok(getUnit(work, 0).effects.instances.every(instance => instance.finished));
 });
 
-test('effect batching: closing many roots reconciles a surviving competitor once per host', () => {
-  for (const count of [1, 16, 128]) {
+test('effect ending: an independent competitor participates after the last stronger instance ends', () => {
+  for (const count of [1, 3]) {
     const resources = new CombatResources();
-    let checks = 0;
     let enables = 0;
     const survivor = resources.registerEffect(program('survivor'), { lifecycle: {
-      competition: () => { checks++; return { group: 'rank', priority: 0 }; },
+      competition: () => ({ group: 'rank', priority: 0 }),
       enable: () => { enables++; },
     } });
     const ending = resources.registerEffect(program('ending'), { lifecycle: {
@@ -74,15 +76,14 @@ test('effect batching: closing many roots reconciles a surviving competitor once
       installed = installNewEffect(work, 0, ending, input, resources, 0);
       roots.push(installed.ref);
     }
-    checks = 0; enables = 0;
+    enables = 0;
     finishEffects(work, roots, resources, 1);
-    assert.equal(checks, 1, `${count} roots`);
     assert.equal(enables, 1);
     assert.equal(getUnit(work, 0).effects.instances[0].participating, true);
   }
 });
 
-test('effect batching: finish business can supersede a surviving competitor before its queued enable', () => {
+test('effect ending: finish business can supersede a surviving competitor before its queued enable', () => {
   const resources = new CombatResources();
   const calls = [];
   let followerRef;
@@ -104,4 +105,54 @@ test('effect batching: finish business can supersede a surviving competitor befo
   finishEffects(ended, [installed.ref], resources, 1);
   assert.deepEqual(calls, ['finish']);
   assert.ok(getUnit(ended, 0).effects.instances.every(instance => instance.finished));
+});
+
+test('effect ending: a later root reads state changed by an earlier finish callback', () => {
+  const resources = new CombatResources();
+  const notices = [];
+  let later;
+  const effect = resources.registerEffect(createEffectDefinition({
+    id: 'sequential-root-state', initialize: () => ({ name: '', amount: 0 }),
+  }), { lifecycle: {
+    finish: context => {
+      notices.push([context.instance.state.name, context.instance.state.amount]);
+      if (context.instance.state.name === 'first') {
+        assert.equal(context.facts.getEffect(later).finished, false);
+        context.effects.update(later, effect, state => ({ ...state, amount: 7 }));
+      }
+    },
+  } });
+  const work = effectFixtureWork(host(0));
+  const first = installNewEffect(work, 0, effect, {
+    ...input, initialState: { name: 'first', amount: 1 },
+  }, resources, 0).ref;
+  later = installNewEffect(work, 0, effect, {
+    ...input, initialState: { name: 'later', amount: 2 },
+  }, resources, 0).ref;
+
+  finishEffects(work, [later, first], resources, 1);
+
+  assert.deepEqual(notices, [['first', 1], ['later', 7]]);
+});
+
+test('effect ending: a nested finish of a later root runs its callback only once', () => {
+  const resources = new CombatResources();
+  const notices = [];
+  let later;
+  const effect = resources.registerEffect(program('nested-later-root'), { lifecycle: {
+    finish: context => {
+      notices.push([context.ref.effectId, context.end.reason]);
+      if (context.ref.effectId === 0) {
+        context.effects.finish([later], 'NESTED');
+      }
+    },
+  } });
+  const work = effectFixtureWork(host(0));
+  const first = installNewEffect(work, 0, effect, input, resources, 0).ref;
+  later = installNewEffect(work, 0, effect, input, resources, 0).ref;
+
+  finishEffects(work, [first, later], resources, 1, 'OUTER');
+
+  assert.deepEqual(notices, [[0, 'OUTER'], [1, 'NESTED']]);
+  assert.ok(getUnit(work, 0).effects.instances.every(instance => instance.finished));
 });
