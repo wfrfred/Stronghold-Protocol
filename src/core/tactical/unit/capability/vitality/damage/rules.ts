@@ -1,25 +1,16 @@
-import type { PendingDamage } from "./contract.js";
-import type { DamageFormulaRule, DamageQueryContext, DamageRule } from "./resources.js";
-import type { DispatchResult } from "../hook.js";
+import type { DamageOperands, PendingDamage } from "./contract.js";
+import type { Context } from "./hook.js";
+import type { Result } from "../hook.js";
 
-export type DamageValueProvider<S extends object> = (context: DamageQueryContext<S>) => number;
+export type Value<C = Context> = (context: C) => number;
 
-function queryContext<S extends object>(context: DamageQueryContext<S>): DamageQueryContext<S> {
-    return {
-        ref: context.ref,
-        ownerUnitId: context.ownerUnitId,
-        get instance() {
-            return context.instance;
-        },
-        request: context.request,
-        tick: context.tick,
-        facts: context.facts,
-    };
-}
+export type Formula<C = Context> = (context: C, operands: DamageOperands) => Result<DamageOperands>;
 
-export function composeDamageRules<C, V>(
-    ...rules: readonly ((context: C, value: V) => DispatchResult<V>)[]
-): (context: C, value: V) => DispatchResult<V> {
+export type Rule<C = Context> = (context: C, pending: PendingDamage) => Result<PendingDamage>;
+
+export function compose<C, V>(
+    ...rules: readonly ((context: C, value: V) => Result<V>)[]
+): (context: C, value: V) => Result<V> {
     return (context, value) => {
         let stopDispatch = false;
 
@@ -33,75 +24,35 @@ export function composeDamageRules<C, V>(
     };
 }
 
-export function multiplyAttackScale<S extends object>(
-    value: DamageValueProvider<S>,
-): DamageFormulaRule<S> {
+export function multiplyAttackScale<C = Context>(value: Value<C>): Formula<C> {
     return (context, operands) => ({
-        value: { ...operands, attackScale: operands.attackScale * value(queryContext(context)) },
+        value: { ...operands, attackScale: operands.attackScale * value(context) },
     });
 }
 
-export function replaceAttackScale<S extends object>(
-    value: DamageValueProvider<S>,
-): DamageFormulaRule<S> {
+export function replaceAttackScale<C = Context>(value: Value<C>): Formula<C> {
     return (context, operands) => ({
-        value: { ...operands, attackScale: value(queryContext(context)) },
+        value: { ...operands, attackScale: value(context) },
     });
 }
 
-export function addAttackPower<S extends object>(
-    value: DamageValueProvider<S>,
-): DamageFormulaRule<S> {
+export function addAttackPower<C = Context>(value: Value<C>): Formula<C> {
     return (context, operands) => ({
         value: {
             ...operands,
-            attackAddition: operands.attackAddition + value(queryContext(context)),
+            attackAddition: operands.attackAddition + value(context),
         },
     });
 }
 
-export function multiplyDamage<S extends object>(
-    value: DamageValueProvider<S>,
-): DamageRule<S, PendingDamage> {
+export function multiplyDamage<C = Context>(value: Value<C>): Rule<C> {
     return (context, pending) => ({
-        value: { ...pending, amount: Math.max(0, pending.amount * value(queryContext(context))) },
+        value: { ...pending, amount: Math.max(0, pending.amount * value(context)) },
     });
 }
 
-export function reduceDamage<S extends object>(
-    value: DamageValueProvider<S>,
-): DamageRule<S, PendingDamage> {
+export function reduceDamage<C = Context>(value: Value<C>): Rule<C> {
     return (context, pending) => ({
-        value: { ...pending, amount: Math.max(0, pending.amount - value(queryContext(context))) },
+        value: { ...pending, amount: Math.max(0, pending.amount - value(context)) },
     });
-}
-
-export function absorbBarrier<S extends { readonly remainingAmount: number }>(): DamageRule<
-    S,
-    PendingDamage
-> {
-    return (context, pending) => {
-        const { instance, ownerUnitId } = context;
-        const absorbed = Math.min(pending.amount, instance.state.remainingAmount);
-
-        if (pending.cancellation !== null || absorbed <= 0) {
-            return { value: pending };
-        }
-
-        context.operations.effects.update(context.ref, instance.definition, (current) => ({
-            ...current,
-            remainingAmount: current.remainingAmount - absorbed,
-        }));
-
-        return {
-            value: {
-                ...pending,
-                amount: pending.amount - absorbed,
-                consumptions: [
-                    ...pending.consumptions,
-                    { ownerUnitId, instanceId: instance.id, resource: "barrier", amount: absorbed },
-                ],
-            },
-        };
-    };
 }

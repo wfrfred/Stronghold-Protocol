@@ -1,6 +1,7 @@
 import type { WorldPosition } from "../geometry/coordinate.js";
 import type { ImmutableData } from "../../common/immutable-data.js";
 import type { CapabilityStates, WidenedCapabilityState } from "./capability/catalog.js";
+import type { State as EffectState } from "./effect/effect.js";
 
 export type UnitId = number;
 
@@ -29,6 +30,7 @@ export interface Unit<D extends UnitDefinition = UnitDefinition> extends Partial
     readonly id: UnitId;
     readonly definition: ImmutableData<D>;
     readonly position: WorldPosition;
+    readonly effects: EffectState;
 }
 
 export type StableUnit<U extends Unit> = {

@@ -3,19 +3,21 @@ import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { battlefieldView, getUnit, updateUnit } from "../../dist/core/tactical/battle/execution/context.js";
-import { createActionCapabilityDefinition, createActionState } from "../../dist/core/tactical/unit/capability/action/capability.js";
-import { attackSpeed, baseAttackTime, liveAttackSpeed, liveBaseAttackTime } from "../../dist/core/tactical/unit/capability/action/contributions.js";
+import { createActionCapabilityDefinition, setAttackSpeedContribution, removeAttackSpeedContribution, setBaseAttackTimeContribution, removeBaseAttackTimeContribution } from "../../dist/core/tactical/unit/capability/action/capability.js";
+
 import { compileAction } from "../../dist/core/tactical/unit/capability/action/compile.js";
 import { startAction } from "../../dist/core/tactical/unit/capability/action/execution.js";
 import { createActionExecutionState } from "../../dist/core/tactical/unit/capability/action/process.js";
 import { resolveAttackSpeed, resolveBaseAttackTime, resolveActionIntervalTicks } from "../../dist/core/tactical/unit/capability/action/timing.js";
-import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
-import { installNewEffect, setEffectEnabled, finishEffect, finalizeEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
-import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
+import { definition } from "../helpers/effects.js";
+import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
+import { get } from "../../dist/core/tactical/unit/effect/query.js";
+
+
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { copyUnitSnapshot } from "../../dist/core/tactical/unit/snapshot.js";
 import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
-import * as modifier from "../../dist/core/tactical/contribution/value.js";
+import * as modifier from "../../dist/core/tactical/unit/contribution/value.js";
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
 import { createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
 import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
@@ -55,19 +57,32 @@ function target() {
     } });
 }
 
+function refresh(work, program) {
+    const self = get(work, address);
+    const unit = getUnit(work, 0);
+    updateUnit(work, setAttackSpeedContribution(unit, {
+        id: "timing/speed", value: [modifier.create({ addition: self.state.speed })],
+    }));
+    updateUnit(work, setBaseAttackTimeContribution(getUnit(work, 0), {
+        id: "timing/time", value: [self.state.time],
+    }));
+}
+
 function register(resources, speed = 100, time = modifier.create()) {
-    return resources.registerEffect(createEffectDefinition({
-        id: "timing-buff", initialize: () => ({ speed, time }),
-    }), { contributions: [
-        attackSpeed((instance) => [modifier.create({ addition: instance.state.speed })]),
-        baseAttackTime((instance) => [instance.state.time]),
-    ] });
+    const program = definition("timing-buff", { speed, time }, {
+        onEnable: context => refresh(context.battle, program),
+        onDisable: context => {
+            updateUnit(context.battle, removeAttackSpeedContribution(context.unit, "timing/speed"));
+            updateUnit(context.battle, removeBaseAttackTimeContribution(context.unit, "timing/time"));
+        },
+    });
+    return program;
 }
 
 function install(work, program, resources, tick = 0, expiresAtTick = null) {
-    installNewEffect(work, 0, program, {
+    effects.apply({ ...work, tick }, getUnit(work, 0), program, {
         source: null, scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }],
-    }, resources, tick);
+    });
     return work;
 }
 
@@ -108,7 +123,7 @@ function spec(source, maxTicks) {
     return {
         ...createLegacyCombatSpec({ rows: 1, columns: 3, operators: [], enemies: [], maxTicks, seed: 17 }),
         initialUnits: [
-            { definition: source.definition, position: source.position, states: { action: source.action, ...(source.effects === undefined ? {} : { effects: source.effects }) } },
+            { definition: source.definition, position: source.position, effects: source.effects, states: { action: source.action } },
             { definition: target().definition, position: [1, 0] },
         ],
         schedule: { type: "TIMELINE", spawns: [{ definition: passive, tick: maxTicks + 1,
@@ -127,9 +142,11 @@ test("action timing: ASPD attribute floor, interval cap and BAT algebra remain d
     const original = initial.battlefield.snapshot("draft");
     let work = install(initial, program, resources);
     assert.deepEqual(values(work, resources), [20, 19.5, 97.5]);
-    updateEffectState(work, 0, 0, program, (state) => ({ ...state, speed: 900 }), resources, 0);
+    effects.setState(work, address, program, state => ({ ...state, speed: 900 }));
+    refresh(work, program);
     assert.deepEqual(values(work, resources), [1000, 19.5, 3.25]);
-    updateEffectState(work, 0, 0, program, (state) => ({ ...state, time: modifier.create({ addition: -100 }) }), resources, 0);
+    effects.setState(work, address, program, state => ({ ...state, time: modifier.create({ addition: -100 }) }));
+    refresh(work, program);
     assert.deepEqual(values(work, resources), [1000, 0, 1]);
     assert.deepEqual(valuesAt(original, resources), [100, 30, 30]);
 });
@@ -145,13 +162,12 @@ test("action timing: lifecycle updates both slots and snapshots retain shared im
     assert.equal(copied.action.attackSpeed, getUnit(installed, 0).action.attackSpeed);
     assert.equal(copied.action, getUnit(installed, 0).action);
     assert.equal(copied.action.baseAttackTime, getUnit(installed, 0).action.baseAttackTime);
-    setEffectEnabled(installed, address, false, resources, 1);
+    effects.setEnabled(installed, address, false);
     assert.deepEqual(values(installed, resources), [100, 30, 30]);
-    setEffectEnabled(installed, address, true, resources, 2);
+    effects.setEnabled(installed, address, true);
     assert.deepEqual(values(installed, resources), [200, 15, 7.5]);
-    finishEffect(installed, address, resources, 3);
+    effects.end(installed, address);
     assert.deepEqual(values(installed, resources), [100, 30, 30]);
-    finalizeEffect(installed, address, resources, 3);
     assert.equal(getUnit(installed, 0).action.attackSpeed.length, 0);
     assert.equal(getUnit(installed, 0).action.baseAttackTime.length, 0);
     assert.equal(copied.action.attackSpeed.length, 1);
@@ -169,7 +185,7 @@ test("action timing: speed-up and slow-down preserve completed cooldown percenta
     const spedUp = advance(installed, resources, 15, initial);
     close(getUnit(work, 0).action.readyAtTick, 22.5);
     assert.equal(work.events.filter((event) => event.type === "ACTION").length, 1);
-    setEffectEnabled(work, address, false, resources, 18);
+    effects.setEnabled(work, address, false);
     const slowed = advance(work, resources, 18, spedUp);
     close(getUnit(work, 0).action.readyAtTick, 27);
     const beforeReady = advance(work, resources, 26, slowed);
@@ -193,11 +209,15 @@ test("action timing: BAT changes adjust cooldown without rescaling recovery", ()
 
 test("action timing: live values read current facts rather than installation samples", () => {
     const resources = new CombatResources();
-    const program = resources.registerEffect(createEffectDefinition({ id: "live-timing", initialize: () => ({}) }), {
-        contributions: [
-            liveAttackSpeed(({ unit }) => [modifier.create({ addition: unit.vitality.hp })]),
-            liveBaseAttackTime(({ unit }) => [modifier.create({ addition: unit.vitality.hp / 10 })]),
-        ],
+    const program = definition("live-timing", {}, {
+        onEnable(context) {
+            updateUnit(context.battle, setAttackSpeedContribution(context.unit, {
+                id: "live/speed", value: ({ unit }) => [modifier.create({ addition: unit.vitality.hp })],
+            }));
+            updateUnit(context.battle, setBaseAttackTimeContribution(context.unit, {
+                id: "live/time", value: ({ unit }) => [modifier.create({ addition: unit.vitality.hp / 10 })],
+            }));
+        },
     });
     const installed = install(effectFixtureWork(actor(), target()), program, resources);
     assert.deepEqual(values(installed, resources), [200, 40, 20]);

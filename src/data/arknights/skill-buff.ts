@@ -1,15 +1,17 @@
-import type { CombatResources } from "../../core/tactical/battle/resources.js";
-import * as modifier from "../../core/tactical/contribution/value.js";
-import { createEffectDefinition } from "../../core/tactical/unit/capability/effects/definition.js";
-import { attack } from "../../core/tactical/unit/capability/offense/contributions.js";
+import { getUnit, updateUnit } from "../../core/tactical/battle/execution/context.js";
+import * as modifier from "../../core/tactical/unit/contribution/value.js";
+import type { Definition } from "../../core/tactical/unit/effect/definition.js";
+import { apply } from "../../core/tactical/unit/effect/operations.js";
+import {
+    hasOffense,
+    removeAttackContribution,
+    setAttackContribution,
+    type Offense,
+} from "../../core/tactical/unit/capability/offense/capability.js";
 import type { CompiledSkill } from "../../core/tactical/unit/capability/skill/compiled.js";
 import { parseArknightsSkillLevel } from "./skill-definition.js";
 
-export function compileArknightsAttackBuffSkill(
-    value: unknown,
-    level: number,
-    resources: Pick<CombatResources, "registerEffect">,
-): CompiledSkill {
+export function compileArknightsAttackBuffSkill(value: unknown, level: number): CompiledSkill {
     const parsed = parseArknightsSkillLevel(value, level);
 
     if (!/^skcom_atk_up\[[123]\]$/.test(parsed.definition.id)) {
@@ -23,24 +25,36 @@ export function compileArknightsAttackBuffSkill(
     }
 
     const attackIncrease = entries[0]!.value;
-    const buff = resources.registerEffect(
-        createEffectDefinition({
-            id: `skill/${parsed.definition.id}/${level}/attack`,
-            initialize: () => ({ attackIncrease }),
-        }),
-        {
-            contributions: [
-                attack((instance) => [
-                    modifier.create({ multiplier: instance.state.attackIncrease }),
-                ]),
-            ],
+    const buff: Definition<{ readonly attackIncrease: number }, Offense> = {
+        id: `skill/${parsed.definition.id}/${level}/attack`,
+        initialize: () => ({ attackIncrease }),
+        onEnable: (context) => {
+            updateUnit(
+                context.battle,
+                setAttackContribution(context.unit, {
+                    id: `@effect/${context.self.id}/attack`,
+                    value: [modifier.create({ multiplier: context.self.state.attackIncrease })],
+                }),
+            );
         },
-    );
+        onDisable: (context) => {
+            updateUnit(
+                context.battle,
+                removeAttackContribution(context.unit, `@effect/${context.self.id}/attack`),
+            );
+        },
+    };
 
-    return Object.freeze({
+    return {
         definition: parsed.definition,
         activate: (context) => {
-            const installed = context.effects.install(context.unitId, buff, {
+            const unit = getUnit(context.battle, context.unitId);
+
+            if (unit === undefined || !hasOffense(unit)) {
+                return { type: "REJECTED", reason: "attack buff requires Offense capability" };
+            }
+
+            const installed = apply(context.battle, unit, buff, {
                 source: context.unitId,
                 scopes: [
                     {
@@ -51,9 +65,9 @@ export function compileArknightsAttackBuffSkill(
                 ],
             });
 
-            return installed.type === "REJECTED"
-                ? { type: "REJECTED", reason: installed.reason }
+            return installed === undefined
+                ? { type: "REJECTED", reason: "effect installation rejected" }
                 : { type: "ACTIVATED" };
         },
-    } satisfies CompiledSkill);
+    };
 }

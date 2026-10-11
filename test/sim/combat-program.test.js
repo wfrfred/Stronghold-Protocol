@@ -1,8 +1,10 @@
+import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
+import { definition as effectDefinition, contributionEffect } from "../helpers/effects.js";
+import { damageEffect, statusEffect, setSelf, current } from "../helpers/vitality.js";
+import { setAttackContribution, removeAttackContribution } from "../../dist/core/tactical/unit/capability/offense/capability.js";
+import { selectCapabilityStates } from "../../dist/core/tactical/unit/capability/catalog.js";
 import { fixtureBattlefield } from "../helpers/battlefield.js";
-import { liveAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import { installFixtureEffect } from "../helpers/effects.js";
-import { installEffect, installNewEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
-import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
@@ -11,9 +13,7 @@ import { startAction } from "../../dist/core/tactical/unit/capability/action/exe
 import { createActionExecutionState } from "../../dist/core/tactical/unit/capability/action/process.js";
 import { compile as compileOperation } from "../../dist/core/tactical/unit/capability/action/operation.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
-import { EffectDispatchScope } from "../../dist/core/tactical/unit/capability/effects/dispatch.js";
 import {
-  prepareCombatEffects,
   removeUnitWithEffects,
 } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
 import {
@@ -23,10 +23,8 @@ import {
   updateUnit,
   removeUnit,
 } from "../../dist/core/tactical/battle/execution/context.js";
-import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
 import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
-import * as modifier from "../../dist/core/tactical/contribution/value.js";
-import { compileStatusBinding } from "../../dist/core/tactical/unit/capability/status/binding.js";
+import * as modifier from "../../dist/core/tactical/unit/contribution/value.js";
 import { hasStatusFlag } from "../../dist/core/tactical/unit/capability/status/capability.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { createOperatorDefinition } from "../../dist/core/tactical/unit/archetype/operator.js";
@@ -113,17 +111,11 @@ function workWith(...units) {
   }));
 }
 
-function effectInstance(resources, program, overrides = {}) {
-  return resources.effects.create(program, {
-    id: 0,
-    source: null,
-    scopes: [],
-  acquiredSequence: 0,
-    ...overrides,
-  });
+function placementOf(unit) {
+  return { definition: unit.definition, position: unit.position, effects: unit.effects, states: selectCapabilityStates(unit) };
 }
 
-test("combat program: action compilation uses only injected query and settlement ports", () => {
+test("combat program: compiled operations use injected settlement ports and observe prior writes", () => {
   const definition = sourceDefinition();
   const action = {
     ...definition.action.normalAction,
@@ -136,19 +128,16 @@ test("combat program: action compilation uses only injected query and settlement
   const source = initializeUnit({ id: 0, definition, position: [0, 0] });
   const target = initializeUnit({ id: 1, definition: targetDefinition(), position: [1, 0] });
   const calls = [];
-  const queries = { evaluator: () => () => [] };
   const resources = {
-    offense: queries,
-    vitality: queries,
-    settleDamage: (work, request, scope) => {
-      calls.push({ request, scope });
+    settleDamage: (work, request) => {
+      calls.push({ request });
       const current = getUnit(work, request.targetUnitId);
       updateUnit(work, {
         ...current, vitality: { ...current.vitality, hp: current.vitality.hp - request.operands.power },
       });
     },
-    settleHealing: (work, request, scope) => {
-      calls.push({ request, scope, targetHp: getUnit(work, 1).vitality.hp });
+    settleHealing: (work, request) => {
+      calls.push({ request, targetHp: getUnit(work, 1).vitality.hp });
     },
   };
   const compiled = compileAction(action, resources);
@@ -170,8 +159,6 @@ test("combat program: action compilation uses only injected query and settlement
     sourceUnitId: 0, targetUnitId: 0, power: 5, ignoreHealFree: false, tick: 7,
   });
   assert.equal(calls[1].targetHp, 90);
-  assert.equal(calls.every(call => call.scope instanceof EffectDispatchScope), true);
-  assert.notEqual(calls[0].scope, calls[1].scope);
   assert.equal(initial.battlefield.snapshot("state").getUnit(1).vitality.hp, 100);
   assert.equal(getUnit(work, 1).vitality.hp, 90);
 });
@@ -262,12 +249,9 @@ test("combat program: ordered steps can rebind after a prior hit removes a targe
 
 test("combat program: a compiled source-attack effect reads current contributions at execution", () => {
   const resources = new CombatResources();
-  const program = createEffectDefinition({
-    id: "attack-bonus",
-    initialize: () => ({ bonus: 15 }),
-  });
-  resources.registerEffect(program, {
-    contributions: [liveAttack(({ instance }) => [modifier.create({ addition: instance.state.bonus })])],
+  const program = contributionEffect("attack-bonus", { bonus: 15 }, {
+    set: setAttackContribution, remove: removeAttackContribution, dynamic: true,
+    value: self => [modifier.create({ addition: self.state.bonus })],
   });
   const effect = compileOperation(
     { type: "DAMAGE", power: 1, powerSource: "SOURCE_ATTACK", damageType: "PHYSICAL" },
@@ -275,8 +259,7 @@ test("combat program: a compiled source-attack effect reads current contribution
   );
   const source = installFixtureEffect(
     initializeUnit({ id: 0, definition: sourceDefinition(), position: [0, 0] }),
-    effectInstance(resources, program),
-    resources,
+    program,
   );
   const target = initializeUnit({ id: 1, definition: targetDefinition(), position: [1, 0] });
   const first = workWith(source, target);
@@ -287,7 +270,7 @@ test("combat program: a compiled source-attack effect reads current contribution
     tick: 0,
   });
   const firstSnapshot = first.battlefield.snapshot("draft");
-  updateEffectState(first, 0, 0, program, { bonus: 30 }, resources, 0);
+  effects.setState(first, { type: "EFFECT", unitId: 0, effectId: 0 }, program, { bonus: 30 });
   effect({ work: first, sourceUnitId: 0, targetUnitId: 1, tick: 0 });
 
   assert.equal(firstSnapshot.getUnit(1).vitality.hp, 75);
@@ -342,30 +325,15 @@ test("combat program: zero HP alone does not make a live ATK source unavailable"
 
 test("combat program: lethal retaliation skips later unsampled damage and completes the entered segment", () => {
   const resources = new CombatResources();
-  const retaliation = resources.registerEffect(
-    createEffectDefinition({
-      id: "lethal-retaliation",
-      initialize: () => ({}),
-    }),
-    {
-      damage: {
-        reaction: {
-          priority: 0,
-          apply: (context) => {
-            if (context.request.targetUnitId === context.ownerUnitId) {
-              context.operations.damage({
-                sourceUnitId: context.ownerUnitId,
-                targetUnitId: context.request.sourceUnitId,
-                tick: context.tick,
-                damageType: "TRUE",
-                operands: createDamageOperands(100),
-              });
-            }
-          },
-        },
-      },
+  const retaliation = damageEffect("lethal-retaliation", {}, [{
+    stage: "reaction", priority: 0,
+    invoke(context) {
+      if (context.request.targetUnitId === context.unit.id) {
+        context.operations.damage({ sourceUnitId: context.unit.id, targetUnitId: context.request.sourceUnitId,
+          damageType: "TRUE", operands: createDamageOperands(100) });
+      }
     },
-  );
+  }]);
   const base = sourceDefinition();
   const definition = createOperatorDefinition({
     ...base,
@@ -389,13 +357,12 @@ test("combat program: lethal retaliation skips later unsampled damage and comple
   const target = targetDefinition("durable-target", 300);
   const receiver = installFixtureEffect(
     initializeUnit({ id: 1, definition: target, position: [1, 0] }),
-    effectInstance(resources, retaliation),
-    resources,
+    retaliation,
   );
   const runtime = new BattleRuntime(
     battleSpec([
       { definition, position: [0, 0] },
-      { definition: target, position: [1, 0], states: { effects: receiver.effects } },
+      placementOf(receiver),
       { definition: target, position: [2, 0] },
     ]),
     { combat: resources },
@@ -421,20 +388,11 @@ test("combat program: lethal retaliation skips later unsampled damage and comple
 
 test("combat program: runtime compiles definitions once and shares them across stable snapshots", () => {
   const resources = new CombatResources();
-  const markerProgram = createEffectDefinition({
-    id: "marker",
-    initialize: () => ({ value: 7 }),
-  });
-  resources.registerEffect(markerProgram, {});
+  const markerProgram = effectDefinition("marker", { value: 7 });
   const definition = sourceDefinition();
-  const marker = effectInstance(resources, markerProgram);
-  const seeded = installFixtureEffect(
-    initializeUnit({ id: 0, definition, position: [0, 0] }),
-    marker,
-    resources,
-  );
+  const seeded = installFixtureEffect(initializeUnit({ id: 0, definition, position: [0, 0] }), markerProgram);
   const spec = battleSpec([
-    { definition, position: [0, 0], states: { effects: seeded.effects } },
+    placementOf(seeded),
     { definition, position: [0, 1] },
     { definition: Object.freeze({ id: "non-vital-target" }), position: [1, 0] },
   ]);
@@ -480,42 +438,27 @@ test("combat program: runtime compiles definitions once and shares them across s
 test("combat program: a failed receiver does not publish shield consumption or damage", () => {
   function scenario(failing) {
     const resources = new CombatResources();
-    const program = createEffectDefinition({
-      id: "shield",
-      initialize: () => ({ remaining: 10 }),
-    });
     const attempts = [];
     const fault = { enabled: failing };
-    resources.registerEffect(program, {
-      damage: {
-        reception: {
-          priority: 1000,
-          apply: (context, damage) => {
-            const absorbed = Math.min(context.instance.state.remaining, damage.amount);
-            context.operations.effects.update(context.ref, program, (state) => ({
-              remaining: state.remaining - absorbed,
-            }));
-            attempts.push(context.instance.state.remaining);
-
-            if (fault.enabled) {
-              throw new Error("receiver failed after consuming shield");
-            }
-
-            return { value: { ...damage, amount: damage.amount - absorbed } };
-          },
-        },
+    const program = damageEffect("shield", { remaining: 10 }, [{
+      stage: "reception", priority: 1000,
+      invoke(context, self, damage) {
+        const absorbed = Math.min(self.state.remaining, damage.amount);
+        setSelf(context, self, state => ({ remaining: state.remaining - absorbed }));
+        attempts.push(current(context, self).state.remaining);
+        if (fault.enabled) throw new Error("receiver failed after consuming shield");
+        return { value: { ...damage, amount: damage.amount - absorbed } };
       },
-    });
+    }]);
     const definition = targetDefinition();
     const seeded = installFixtureEffect(
       initializeUnit({ id: 1, definition, position: [1, 0] }),
-      effectInstance(resources, program),
-      resources,
+      program,
     );
     const runtime = new BattleRuntime(
       battleSpec([
         { definition: sourceDefinition(), position: [0, 0] },
-        { definition, position: [1, 0], states: { effects: seeded.effects } },
+        placementOf(seeded),
       ]),
       { combat: resources },
     );
@@ -543,22 +486,14 @@ test("combat program: a failed receiver does not publish shield consumption or d
 
 test("combat program: expiration removes its status contribution and preserves baseline flags", () => {
   const resources = new CombatResources();
-  const program = createEffectDefinition({
-    id: "expiring-marker",
-    initialize: () => ({}),
-  });
-  resources.registerEffect(program, {
-    bindings: [compileStatusBinding(["INVISIBLE"])],
-  });
+  const program = statusEffect("expiring-marker", ["INVISIBLE"]);
   const definition = targetDefinition("marked-target", 100, ["HEAL_FREE"]);
-  const seeded = installFixtureEffect(
-    initializeUnit({ id: 0, definition, position: [1, 0] }),
-    effectInstance(resources, program, { scopes: [{ type: "TICK", tick: 0 }] }),
-    resources,
-  );
+  const seeded = installFixtureEffect(initializeUnit({ id: 0, definition, position: [1, 0] }), program, {
+    scopes: [{ type: "TICK", tick: 0 }],
+  });
   const runtime = new BattleRuntime(
     battleSpec([
-      { definition, position: [1, 0], states: { effects: seeded.effects, status: seeded.status } },
+      placementOf(seeded),
     ]),
     { combat: resources },
   );
@@ -577,76 +512,27 @@ test("combat program: expiration removes its status contribution and preserves b
 
 test("combat program: retreat cleans lifetime-owned effects without treating provenance as ownership", () => {
   const resources = new CombatResources();
-  const program = createEffectDefinition({
-    id: "owned-marker",
-    initialize: () => ({}),
-  });
-  resources.registerEffect(program, {
-    bindings: [compileStatusBinding(["HEAL_FREE"])],
-  });
-  const neutral = resources.registerEffect(
-    createEffectDefinition({ id: "neutral-marker", initialize: () => ({}) }),
-  );
-  const invisible = resources.registerEffect(
-    createEffectDefinition({ id: "invisible-marker", initialize: () => ({}) }),
-    {
-      bindings: [compileStatusBinding(["INVISIBLE"])],
-    },
-  );
+  const program = statusEffect("owned-marker", ["HEAL_FREE"]);
+  const neutral = effectDefinition("neutral-marker");
+  const invisible = statusEffect("invisible-marker", ["INVISIBLE"]);
   const definition = targetDefinition();
   const owner = initializeUnit({ id: 0, definition: { id: "owner" }, position: [0, 0] });
   const otherOwner = initializeUnit({ id: 2, definition: { id: "other-owner" }, position: [2, 0] });
   let seeded = initializeUnit({ id: 1, definition, position: [1, 0] });
   const installing = workWith(owner, seeded, otherOwner);
-  installEffect(
-    installing,
-    seeded.id,
-    effectInstance(resources, program, {
-      source: 0,
-      scopes: [{ type: "UNIT", unitId: 0 }],
-    }),
-    resources,
-    0,
-  );
-  installEffect(
-    installing,
-    seeded.id,
-    effectInstance(resources, neutral, { id: 1, acquiredSequence: 1, source: 0 }),
-    resources,
-    0,
-  );
-  installEffect(
-    installing,
-    seeded.id,
-    effectInstance(resources, invisible, {
-      id: 2,
-      acquiredSequence: 2,
-      source: 0,
-      scopes: [{ type: "UNIT", unitId: 2 }],
-    }),
-    resources,
-    0,
-  );
+  effects.apply(installing, seeded, program, { source: 0, scopes: [{ type: "UNIT", unitId: 0 }] });
+  effects.apply(installing, seeded, neutral, { source: 0 });
+  effects.apply(installing, seeded, invisible, { source: 0, scopes: [{ type: "UNIT", unitId: 2 }] });
   seeded = getUnit(installing, seeded.id);
   const removed = workWith(owner, seeded, otherOwner);
   removeUnitWithEffects(removed, 0, "RETREAT", resources, 0);
   const pending = getUnit(removed, 1);
-  assert.deepEqual(
-    pending.effects.instances.map((instance) => instance.id),
-    [0, 1, 2],
-  );
-  assert.equal(pending.effects.instances[0].finished, true);
-  assert.equal(pending.effects.instances[0].participating, false);
+  assert.deepEqual(pending.effects.instances.map(instance => instance.id), [1, 2]);
   assert.equal(hasStatusFlag(pending, "HEAL_FREE"), false);
-  prepareCombatEffects(removed, 0, resources);
-  assert.deepEqual(
-    getUnit(removed, 1).effects.instances.map((instance) => instance.id),
-    [1, 2],
-  );
   const runtime = new BattleRuntime(
     battleSpec([
       { definition: Object.freeze({ id: "owner" }), position: [0, 0] },
-      { definition, position: [1, 0], states: { effects: seeded.effects, status: seeded.status } },
+      placementOf(seeded),
       { definition: Object.freeze({ id: "other-owner" }), position: [2, 0] },
     ]),
     { combat: resources },
@@ -699,7 +585,7 @@ test("combat program: readiness skips binding and target ownership stays in even
     assert.equal(getUnit(initial, 0), waiting);
     assert.equal(getUnit(initial, 1), target);
     assert.equal(result, state);
-    assert.deepEqual(Object.keys(getUnit(initial, 0).action).sort(), ['attackSpeed', 'baseAttackTime', 'cooldownIntervalTicks', 'readyAtTick', 'recoveryUntilTick']);
+    assert.deepEqual(Object.keys(getUnit(initial, 0).action).sort(), ['attackSpeed', 'baseAttackTime', 'beforeRelease', 'cooldownIntervalTicks', 'readyAtTick', 'recoveryUntilTick']);
   }
   assert.equal(bindings, 0);
 
@@ -724,7 +610,7 @@ test("combat program: readiness skips binding and target ownership stays in even
     resources,
   );
   assert.equal(bindings, 1);
-  assert.deepEqual(Object.keys(getUnit(disappeared, 0).action).sort(), ['attackSpeed', 'baseAttackTime', 'cooldownIntervalTicks', 'readyAtTick', 'recoveryUntilTick']);
+  assert.deepEqual(Object.keys(getUnit(disappeared, 0).action).sort(), ['attackSpeed', 'baseAttackTime', 'beforeRelease', 'cooldownIntervalTicks', 'readyAtTick', 'recoveryUntilTick']);
 
   const ready = startAction(
     disappeared,
@@ -743,10 +629,7 @@ test("combat program: readiness skips binding and target ownership stays in even
 
 test("combat program: immediate execution cleans owned Effects and cancels successors after source departure", () => {
   const resources = new CombatResources();
-  const marker = resources.registerEffect(createEffectDefinition({
-    id: "instant-scoped-marker",
-    initialize: () => ({}),
-  }), { bindings: [compileStatusBinding(["INVINCIBLE"])] });
+  const marker = statusEffect("instant-scoped-marker", ["INVINCIBLE"]);
   const definition = sourceDefinition();
   const source = initializeUnit({ id: 0, definition, position: [0, 0] });
   const target = initializeUnit({ id: 1, definition: targetDefinition(), position: [1, 0] });
@@ -756,10 +639,9 @@ test("combat program: immediate execution cleans owned Effects and cancels succe
     program: [
       { type: "EXECUTE", run: (context) => {
         observed.push(["install", context.executionId]);
-        installNewEffect(context.work, 1, marker, {
-          source: 0,
-          scopes: [{ type: "ACTION", executionId: context.executionId }],
-        }, resources, context.tick);
+        effects.apply(context.work, getUnit(context.work, 1), marker, {
+          source: 0, scopes: [{ type: "ACTION", executionId: context.executionId }],
+        });
       } },
       { type: "EXECUTE", run: (context) => removeUnit(context.work, 0, "RETREAT") },
       { type: "EXECUTE", run: (context) => {
@@ -780,7 +662,7 @@ test("combat program: immediate execution cleans owned Effects and cancels succe
 
   assert.deepEqual(observed, [["install", 0]]);
   assert.deepEqual(receiver.position, [1, 0]);
-  assert.equal(receiver.effects.instances[0].finished, true);
+  assert.deepEqual(receiver.effects.instances, []);
   assert.equal(hasStatusFlag(receiver, "INVINCIBLE"), false);
   assert.deepEqual(started, { nextExecutionId: 1, executions: [] });
   assert.equal(startedState.events.at(-1).type, "ACTION_CANCELLED");

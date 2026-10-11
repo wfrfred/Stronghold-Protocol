@@ -1,4 +1,4 @@
-import { assertFiniteNumber } from "../../common/assert.js";
+import { assertFiniteNumber } from "../../../common/assert.js";
 
 export interface Value {
     readonly addition: number;

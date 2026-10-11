@@ -3,7 +3,6 @@ import type { ElementType } from "../elemental/capability.js";
 import type { QueryPurpose } from "../../targeting/query.js";
 import { resolveAttackPower } from "../offense/query.js";
 import { createDamageOperands, type DamageType } from "../vitality/damage/contract.js";
-import { EffectDispatchScope } from "../effects/dispatch.js";
 import { battlefieldView, type BattleState } from "../../../battle/execution/context.js";
 import type { UnitId } from "../../unit.js";
 import type { ActionResources } from "./resources.js";
@@ -71,17 +70,13 @@ export function compile(definition: Definition, resources: ActionResources): Pro
                     return;
                 }
 
-                resources.settleDamage(
-                    work,
-                    {
-                        sourceUnitId,
-                        targetUnitId,
-                        tick,
-                        damageType: definition.damageType,
-                        operands: createDamageOperands(power),
-                    },
-                    new EffectDispatchScope(),
-                );
+                resources.settleDamage(work, {
+                    sourceUnitId,
+                    targetUnitId,
+                    tick,
+                    damageType: definition.damageType,
+                    operands: createDamageOperands(power),
+                });
             };
         }
 
@@ -108,17 +103,13 @@ export function compile(definition: Definition, resources: ActionResources): Pro
 
         case "HEAL":
             return ({ work, sourceUnitId, targetUnitId, tick }) => {
-                resources.settleHealing(
-                    work,
-                    {
-                        sourceUnitId,
-                        targetUnitId,
-                        power: definition.power,
-                        ignoreHealFree: definition.ignoreHealFree,
-                        tick,
-                    },
-                    new EffectDispatchScope(),
-                );
+                resources.settleHealing(work, {
+                    sourceUnitId,
+                    targetUnitId,
+                    power: definition.power,
+                    ignoreHealFree: definition.ignoreHealFree,
+                    tick,
+                });
             };
     }
 }

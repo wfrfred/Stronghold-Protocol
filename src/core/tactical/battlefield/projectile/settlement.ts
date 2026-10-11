@@ -145,6 +145,7 @@ class ProjectileSettlement {
                 this.#tick,
                 (context) => {
                     const contact: ProjectileContactContext<S> = {
+                        battle: context.battle,
                         get projectile() {
                             return context.projectile;
                         },

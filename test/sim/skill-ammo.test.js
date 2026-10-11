@@ -1,3 +1,5 @@
+import { attackBuff } from "../helpers/effects.js";
+import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
@@ -5,10 +7,7 @@ import { advanceBattlefield, battlefieldView, getUnit, updateUnit } from "../../
 import { createProjectileDefinition } from "../../dist/core/tactical/battlefield/projectile/definition.js";
 import { withProjectileOperations } from "../../dist/core/tactical/battlefield/projectile/operations.js";
 import { advanceProjectiles } from "../../dist/core/tactical/battlefield/projectile/settlement.js";
-import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
-import { attack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
-import * as modifier from "../../dist/core/tactical/contribution/value.js";
 import { createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { activateSkill, advanceSkill, consumeSkillAmmo } from "../../dist/core/tactical/unit/capability/skill/execution.js";
 import { spendSkillAmmo } from "../../dist/core/tactical/unit/capability/skill/ammo.js";
@@ -30,12 +29,10 @@ const ash = {
 function ammoFixture(ammo = 31, ammoPerAttack = 1) {
   const resources = new CombatResources();
   const definition = parseArknightsSkillLevel(ash, 1, ammo, ammoPerAttack).definition;
-  const buff = resources.registerEffect(createEffectDefinition({ id: "ammo-fixture-attack", initialize: () => ({}) }), {
-    contributions: [attack(() => [modifier.create({ multiplier: 1 })])],
-  });
+  const buff = attackBuff("ammo-fixture-attack", 100);
   resources.skills.register({ definition, activate: (context) => {
-    const installed = context.effects.install(context.unitId, buff, { source: 1, scopes: [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }] });
-    assert.equal(installed.type, "INSTALLED");
+    const installed = effects.apply(context.battle, getUnit(context.battle, context.unitId), buff, { source: 1, scopes: [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }] });
+    assert.ok(installed);
     return { type: "ACTIVATED" };
   } });
   const unit = initializeUnit({ id: 1, position: [0, 0], definition: { id: "ammo-caster", skill: definition, offense: { attack: 100 } } });

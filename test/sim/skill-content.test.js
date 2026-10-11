@@ -184,7 +184,7 @@ test("instant healing uses the current activation tick and returns the settled h
     report = context.heal({ sourceUnitId: 1, targetUnitId: 1, power: 30, ignoreHealFree: false });
     return { type: "ACTIVATED" };
   } });
-  const unit = initializeUnit({ id: 1, position: [0, 0], definition: { id: "heal-caster", skill: definition, vitality: { maxHp: 100 } }, states: { vitality: { hp: 50, maxHp: [] } } });
+  const unit = initializeUnit({ id: 1, position: [0, 0], definition: { id: "heal-caster", skill: definition, vitality: { maxHp: 100 } }, states: { vitality: { hp: 50, maxHp: [], damageHooks: [], healingHooks: [] } } });
   const activatedState = effectFixtureWork(unit);
   activateSkill(activatedState, { unitId: 1, tick: 3 }, resources);
   assert.equal(getUnit(activatedState, 1).vitality.hp, 80);

@@ -8,7 +8,7 @@ import {
   addStatusContribution, removeStatusContribution,
 } from '../../dist/core/tactical/unit/capability/status/capability.js';
 import { setCapacityContribution } from '../../dist/core/tactical/unit/capability/blocking/capability.js';
-import * as modifier from '../../dist/core/tactical/contribution/value.js';
+import * as modifier from '../../dist/core/tactical/unit/contribution/value.js';
 
 const create = units => {
   const battlefield = createBattlefieldRuntime({

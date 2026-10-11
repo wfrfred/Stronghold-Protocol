@@ -16,7 +16,7 @@ import {
     type ActionExecutionState,
     type CompiledActionSegment,
 } from "../../unit/capability/action/process.js";
-import { prepareCombatEffects, retireCombatUnit } from "../execution/unit-lifecycle.js";
+import { retireCombatUnit } from "../execution/unit-lifecycle.js";
 import { CombatResources } from "../resources.js";
 import {
     advanceBattlefield,
@@ -80,19 +80,16 @@ export function createCombat(
 
     const prepare = (state: BattleState, commands: readonly Command[], tick: number): void => {
         const executions = executionsOf(state);
-        prepareCombatEffects(state, tick, resources);
 
         for (const command of commands) {
             if (command.type !== "CANCEL_ACTION_EXECUTION") {
                 continue;
             }
 
-            cancelActionExecutionInWork(
-                state,
-                executions,
-                { executionId: command.executionId, tick },
-                resources,
-            );
+            cancelActionExecutionInWork(state, executions, {
+                executionId: command.executionId,
+                tick,
+            });
         }
     };
 
@@ -104,10 +101,6 @@ export function createCombat(
         const battlefield = battlefieldView(state);
         const executions = executionsOf(state);
         const actionResources: ActionStartResources = {
-            effects: resources.effects,
-            effectBindings: resources.effectBindings,
-            effectLifecycle: resources.effectLifecycle,
-            actionRelease: resources.actionRelease,
             completeAttack: resources.completeAttack,
             projectileOperations: projectiles,
         };
@@ -117,7 +110,6 @@ export function createCombat(
                 ...executions.result().executions.map(({ sourceUnitId }) => sourceUnitId),
             ]),
         ].sort((left, right) => left - right);
-        prepareCombatEffects(state, tick, resources);
 
         for (const id of ids) {
             const unit = getUnit(state, id);

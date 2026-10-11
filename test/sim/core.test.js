@@ -1,3 +1,4 @@
+import { empty as emptyEffects } from '../../dist/core/tactical/unit/effect/state.js';
 import { createActionState } from "../../dist/core/tactical/unit/capability/action/capability.js";
 // Sim core: rng, grid/pathing, damage formulas, stat aggregation, buffs.
 import { test } from 'node:test';
@@ -24,7 +25,7 @@ import { hasVitality, initializeVitalityState } from '../../dist/core/tactical/u
 import { createActionCapabilityDefinition, hasAction } from '../../dist/core/tactical/unit/capability/action/capability.js';
 import { hasAllegiance } from '../../dist/core/tactical/unit/capability/allegiance.js';
 import { createBlockerDefinition, hasBlockable, hasBlocker, resolveBlockingCapacity } from '../../dist/core/tactical/unit/capability/blocking/capability.js';
-import * as modifier from '../../dist/core/tactical/contribution/value.js';
+import * as modifier from '../../dist/core/tactical/unit/contribution/value.js';
 import { createHitDefinition, createSpatialDefinition, hasHit, hasSpatial } from '../../dist/core/tactical/unit/capability/spatial.js';
 import { addStatusContribution, createStatusDefinition, deriveEffectiveStatusFlags, hasStatus, initializeStatusState, removeStatusContribution, setStatusContributionParticipation } from '../../dist/core/tactical/unit/capability/status/capability.js';
 import { createBlockGeometry, createRangeGeometry, createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
@@ -246,7 +247,7 @@ const presenceBattlefield = () => createBattlefieldRuntime({
 });
 
 const presenceUnit = (id, position) => ({
-  id, definition: Object.freeze({ id: `presence_${id}`, vitality: Object.freeze({ maxHp: 100 }) }), position: Object.freeze(position),
+  effects:emptyEffects(), id, definition: Object.freeze({ id: `presence_${id}`, vitality: Object.freeze({ maxHp: 100 }) }), position: Object.freeze(position),
   vitality: initializeVitalityState({maxHp:100}), spatialPresence: { present: true },
 });
 
@@ -261,7 +262,7 @@ const presenceNavigationModifier = (id, source, region, costFloor = 1000) => cre
 test('core spatial presence preserves earlier unit values while removing only spatial membership', () => {
   const runtime = presenceBattlefield();
   const unit = presenceUnit(1, [2, 0]);
-  const bare = { id: 2, definition: Object.freeze({ id: 'bare' }), position: Object.freeze([2, 0]) };
+  const bare = { effects:emptyEffects(), id: 2, definition: Object.freeze({ id: 'bare' }), position: Object.freeze([2, 0]) };
   assert.equal(hasSpatialPresence(unit), true);
   assert.equal(hasSpatialPresence(bare), false);
   assert.equal(isSpatiallyPresent(bare), true);
@@ -311,7 +312,7 @@ test('core removal facts share the latest unit while updates preserve retained b
 test('core hidden navigation modifier sources and anchors suspend contributions without removing effects', () => {
   const runtime = presenceBattlefield();
   const source = presenceUnit(1, [0, 0]), anchor = presenceUnit(2, [2, 0]);
-  const bare = { id: 3, definition: Object.freeze({ id: 'bare' }), position: Object.freeze([4, 0]) };
+  const bare = { effects:emptyEffects(), id: 3, definition: Object.freeze({ id: 'bare' }), position: Object.freeze([4, 0]) };
   const fixed = position => ({ type: 'FIXED', position, range: [[0, 0]], direction: 'RIGHT' });
   runtime.advance([
     { type: 'REGISTER_UNIT', unit: source }, { type: 'REGISTER_UNIT', unit: anchor },
@@ -792,8 +793,8 @@ declare const placement: { readonly definition: EnemyProbe; readonly position: r
   try {
     const positive = compile('positive', `
 type Distributed = Assert<Equal<InitializedUnit<EnemyProbe | DeviceProbe>, InitializedUnit<EnemyProbe> | InitializedUnit<DeviceProbe>>>;
-type OptionalHasNoRequiredCapabilities = Assert<Equal<RequiredKeys<InitializedUnit<OptionalProbe>>, 'id' | 'definition' | 'position'>>;
-type WideHasNoRequiredCapabilities = Assert<Equal<RequiredKeys<InitializedUnit<UnitDefinition>>, 'id' | 'definition' | 'position'>>;
+type OptionalHasNoRequiredCapabilities = Assert<Equal<RequiredKeys<InitializedUnit<OptionalProbe>>, 'id' | 'definition' | 'position' | 'effects'>>;
+type WideHasNoRequiredCapabilities = Assert<Equal<RequiredKeys<InitializedUnit<UnitDefinition>>, 'id' | 'definition' | 'position' | 'effects'>>;
 function initializeGeneric<D extends EnemyDefinition>(definition: D): InitializedUnit<D> {
   return initializeUnit({ id: 0, definition, position: [0, 0] });
 }
@@ -818,7 +819,7 @@ const requiredPlaced = instantiateUnitPlacement(requiredPlacement, execution, 0)
 requiredPlaced.unit.occupancy.claims;
 type RequiredPlacementCapabilities = Assert<typeof requiredPlaced.unit extends InitializedUnit<EnemyProbe | DeviceProbe> & Occupancy ? true : false>;
 type RequiredPlacementInput = Assert<InitializedUnit<EnemyProbe | DeviceProbe> & Occupancy extends typeof requiredPlaced.unit ? true : false>;
-type NormalizedPlacementFields = Assert<Equal<keyof typeof requiredPlacement, 'definition' | 'position' | 'states' | 'navigationModifiers'>>;
+type NormalizedPlacementFields = Assert<Equal<keyof typeof requiredPlacement, 'definition' | 'position' | 'states' | 'navigationModifiers' | 'effects'>>;
 if (union.definition.kind === 'enemy') { const code: 17 = union.definition.enemyCode; }
 else { const code: 29 = union.definition.deviceCode; }
 const prepared = initializeUnit({ id: 3, definition: enemyDefinition, position: [0, 0],

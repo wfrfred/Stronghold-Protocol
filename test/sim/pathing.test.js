@@ -1,3 +1,4 @@
+import { empty as emptyEffects } from '../../dist/core/tactical/unit/effect/state.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -55,8 +56,8 @@ import { canTraverseNavigationSegment, navigationSegmentCost } from '../../dist/
 import { getDefaultSource, hasGeneratedData } from '../../server/sim/simdata.js';
 import { makeBattle, flatStage, enemyRec } from '../helpers/battleHarness.js';
 import { remainingDistance } from '../../server/sim/ai.js';
-import * as contribution from '../../dist/core/tactical/contribution/contribution.js';
-import * as modifier from '../../dist/core/tactical/contribution/value.js';
+import * as contribution from '../../dist/core/tactical/unit/contribution/contribution.js';
+import * as modifier from '../../dist/core/tactical/unit/contribution/value.js';
 
 const REAL = { skip: !hasGeneratedData() && 'no generated data' };
 const NORMAL = { r0: 9, r1: 12, c0: 0, c1: 10 };
@@ -1247,7 +1248,7 @@ test('core routed enemy supports full checkpoint flag combinations and rejects i
 });
 
 const battlefieldUnit = (id, position) => ({
-  id, definition: Object.freeze({ id: `battlefield_unit_${id}` }), position: Object.freeze([...position]),
+  effects:emptyEffects(), id, definition: Object.freeze({ id: `battlefield_unit_${id}` }), position: Object.freeze([...position]),
 });
 const battlefieldMechanism = (id, active = true) => createMechanism({
   id, definition: createMechanismDefinition({ id: `battlefield_mechanism_${id}` }), active,

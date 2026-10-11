@@ -41,8 +41,7 @@ import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { createBattleState, appendEvents, getUnit, registerUnit } from '../../dist/core/tactical/battle/execution/context.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { createActionDefinition } from '../../dist/core/tactical/unit/capability/action/capability.js';
-import { createEffectDefinition } from '../../dist/core/tactical/unit/capability/effects/definition.js';
-import { installNewEffect } from '../../dist/core/tactical/unit/capability/effects/lifecycle.js';
+import { apply as applyEffect } from '../../dist/core/tactical/unit/effect/operations.js';
 import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
 
 const approx = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
@@ -1177,11 +1176,10 @@ test('core battle propagates nested settlement errors without publishing battlef
   let observedMaps;
   let observations = 0;
   const resources = new CombatResources();
-  const effect = resources.registerEffect(createEffectDefinition({
+  const effect = {
     id: 'nested-failure-effect', initialize: () => ({}),
-  }), {
-    lifecycle: { start: context => {
-      context.damage({ sourceUnitId: 0, targetUnitId: 1, damageType: 'TRUE', operands: createDamageOperands(7) });
+    onApply: context => {
+      resources.settleDamage(context.battle, { sourceUnitId: 0, targetUnitId: 1, damageType: 'TRUE', operands: createDamageOperands(7), tick: context.tick });
       assert.equal(getUnit(activeState, 1).vitality.hp, 93);
       assert.equal(getUnit(activeState, 2).definition.id, 'nested-created');
       assert.equal(activeState.execution.nextUnitId, 3);
@@ -1191,8 +1189,8 @@ test('core battle propagates nested settlement errors without publishing battlef
       assert.equal(observedRuntime.navigationMaps, observedMaps);
       observations++;
       if (fail) throw sentinel;
-    } },
-  });
+    },
+  };
   const action = createActionDefinition({
     triggerBindingId: 'primary', baseAttackTimeTicks: 10, recoveryTicks: 0,
     targetGroups: [{ id: 'primary', targeting: {
@@ -1215,7 +1213,7 @@ test('core battle propagates nested settlement errors without publishing battlef
         registerUnit(context.work, unit);
         context.work.execution = { ...context.work.execution, nextUnitId: unit.id + 1 };
         appendEvents(context.work, [{ type: 'UNIT_DEPLOYED', unitId: unit.id, position: unit.position, tick: context.tick }]);
-        installNewEffect(context.work, 1, effect, { source: 0, scopes: [] }, resources, context.tick);
+        applyEffect(context.work, getUnit(context.work, 1), effect, { source: 0 });
       } },
       { type: 'WAIT', resolve: () => ({ type: 'FOR_TICKS', ticks: 2 }), allowNewAction: false },
     ],

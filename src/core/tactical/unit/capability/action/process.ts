@@ -1,4 +1,3 @@
-import type { EffectDispatchScope } from "../effects/dispatch.js";
 import { ActionExecutionWork } from "./internal/executions.js";
 import {
     acceptActionExecutionInWork,
@@ -8,20 +7,12 @@ import {
 import { assertNonnegativeSafeInteger } from "../../../../common/assert.js";
 import type { BattleState } from "../../../battle/execution/context.js";
 import type { UnitId } from "../../unit.js";
-import type { EffectTransitionResources } from "../effects/contract.js";
 import type { ActionDefinition, TargetBindingId } from "./capability.js";
 import type { ProjectileOperations } from "../../../battlefield/projectile/operations.js";
-import type { ActionReleaseResources } from "./release.js";
 
-export interface ActionExecutionResources extends EffectTransitionResources {
-    readonly actionRelease?: ActionReleaseResources;
+export interface ActionExecutionResources {
     readonly projectileOperations?: ProjectileOperations;
-    readonly completeAttack?: (
-        work: BattleState,
-        unitId: UnitId,
-        tick: number,
-        dispatch?: EffectDispatchScope,
-    ) => void;
+    readonly completeAttack?: (work: BattleState, unitId: UnitId, tick: number) => void;
 }
 
 export type ActionExecutionId = number;
@@ -173,10 +164,9 @@ export function cancelActionExecution(
     work: BattleState,
     state: ActionExecutionState,
     request: ActionExecutionCancelRequest,
-    resources: EffectTransitionResources,
 ): ActionExecutionTransition {
     const executions = new ActionExecutionWork(state);
-    const result = cancelActionExecutionInWork(work, executions, request, resources);
+    const result = cancelActionExecutionInWork(work, executions, request);
 
     return { ...result, state: executions.result() };
 }

@@ -1,19 +1,4 @@
 import { ResourceRegistration } from "../../common/resource-registration.js";
-import { EffectResources } from "../unit/capability/effects/registry.js";
-import { type EffectDefinition } from "../unit/capability/effects/definition.js";
-import { EffectBindingResources } from "../unit/capability/effects/resources.js";
-import * as contributions from "../unit/capability/effects/contributions.js";
-import {
-    DamageResources,
-    type DamageEffectRules,
-} from "../unit/capability/vitality/damage/resources.js";
-import type { Binding } from "../unit/capability/effects/binding.js";
-import { EffectLifecycleResources } from "../unit/capability/effects/lifecycle-resources.js";
-import type { EffectLifecycleDefinition } from "../unit/capability/effects/contract.js";
-import {
-    HealingResources,
-    type HealingEffectRules,
-} from "../unit/capability/vitality/healing/resources.js";
 import type { DamageOperation } from "../unit/capability/vitality/damage/contract.js";
 import type { HealingOperation } from "../unit/capability/vitality/healing/contract.js";
 import { ProjectileResources } from "../battlefield/projectile/resources.js";
@@ -28,11 +13,7 @@ import {
     notifySkillFinished,
     type StoppedSkillActivation,
 } from "../unit/capability/skill/execution.js";
-import type { EffectDispatchScope } from "../unit/capability/effects/dispatch.js";
-import {
-    ActionReleaseResources,
-    type ActionReleaseRules,
-} from "../unit/capability/action/release.js";
+import { retireCombatUnit } from "./execution/unit-lifecycle.js";
 import { ElementalResources } from "../unit/capability/elemental/resources.js";
 import {
     resolveElementDamage,
@@ -42,124 +23,64 @@ import {
 } from "../unit/capability/elemental/execution.js";
 import { SkillResources } from "../unit/capability/skill/resources.js";
 
-export interface CombatEffectFacets<S extends object> {
-    readonly contributions?: readonly contributions.Definition<S>[];
-    readonly bindings?: readonly Binding[];
-    readonly damage?: DamageEffectRules<S>;
-    readonly healing?: HealingEffectRules<S>;
-    readonly lifecycle?: EffectLifecycleDefinition<S>;
-    readonly action?: ActionReleaseRules<S>;
-}
-
 export class CombatResources {
     readonly #registration = new ResourceRegistration();
-    readonly effects = new EffectResources(this.#registration);
-    readonly effectBindings = new EffectBindingResources(this.#registration);
-    readonly damage = new DamageResources(this.effects, this.#registration);
-    readonly effectLifecycle = new EffectLifecycleResources(this.effects, this.#registration);
-    readonly healing = new HealingResources(this.effects, this.#registration);
     readonly projectiles = new ProjectileResources(this.#registration);
     readonly skills = new SkillResources(this.#registration);
     readonly elemental = new ElementalResources(this.#registration);
-    readonly settleElementDamage: ElementDamageOperation = (work, request) => {
+    readonly settleElementDamage: ElementDamageOperation = (battle, request) => {
         this.#registration.assertUsable();
 
-        return resolveElementDamage(work, request, this);
+        return resolveElementDamage(battle, request, this);
     };
 
-    readonly settleElementHeal: ElementHealOperation = (work, request) => {
+    readonly settleElementHeal: ElementHealOperation = (battle, request) => {
         this.#registration.assertUsable();
 
-        return resolveElementHeal(work, request);
+        return resolveElementHeal(battle, request);
     };
 
-    readonly actionRelease = new ActionReleaseResources(this.effects, this.#registration);
-    readonly completeAttack = (
-        work: BattleState,
-        unitId: UnitId,
-        tick: number,
-        dispatch?: EffectDispatchScope,
-    ): void => {
-        const consumed = consumeSkillAmmo(work, unitId, tick, this, dispatch);
-
-        appendEvents(work, consumed.signals);
+    readonly completeAttack = (battle: BattleState, unitId: UnitId, tick: number): void => {
+        const consumed = consumeSkillAmmo(battle, unitId, tick, this);
+        appendEvents(battle, consumed.signals);
     };
 
-    readonly stopSkillActivation = (work: BattleState, unitId: UnitId, tick: number) =>
-        stopSkillActivation(work, unitId, tick, this);
+    readonly stopSkillActivation = (battle: BattleState, unitId: UnitId, tick: number) =>
+        stopSkillActivation(battle, unitId, tick, this);
 
     readonly notifySkillFinished = (
-        work: BattleState,
+        battle: BattleState,
         activation: StoppedSkillActivation,
         tick: number,
-        dispatch: EffectDispatchScope,
     ): void => {
-        const finished = notifySkillFinished(work, activation, tick, this, dispatch);
-
-        appendEvents(work, finished.signals);
+        const finished = notifySkillFinished(battle, activation, tick, this);
+        appendEvents(battle, finished.signals);
     };
 
-    readonly finishSkill = (
-        work: BattleState,
-        unitId: UnitId,
-        tick: number,
-        dispatch?: EffectDispatchScope,
-    ): void => {
-        const finished = finishSkill(work, unitId, tick, this, dispatch);
-
-        appendEvents(work, finished.signals);
+    readonly finishSkill = (battle: BattleState, unitId: UnitId, tick: number): void => {
+        const finished = finishSkill(battle, unitId, tick, this);
+        appendEvents(battle, finished.signals);
     };
 
-    readonly settleDamage: DamageOperation = (work, request, dispatch) => {
+    readonly retireUnit = (battle: BattleState, unitId: UnitId, tick: number): void => {
+        retireCombatUnit(battle, unitId, this, tick);
+    };
+
+    readonly settleDamage: DamageOperation = (battle, request, dispatch) => {
         this.#registration.assertUsable();
 
-        return resolveDamage(work, request, this, dispatch);
+        return resolveDamage(battle, request, this, dispatch);
     };
 
-    readonly settleHealing: HealingOperation = (work, request, dispatch) => {
+    readonly settleHealing: HealingOperation = (battle, request, dispatch) => {
         this.#registration.assertUsable();
 
-        return resolveHealing(work, request, this, dispatch);
+        return resolveHealing(battle, request, this, dispatch);
     };
 
     seal(): this {
         this.#registration.seal();
 
         return this;
-    }
-
-    registerEffect<S extends object>(
-        definition: EffectDefinition<S>,
-        facets: NoInfer<CombatEffectFacets<S>> = {},
-    ): EffectDefinition<S> {
-        this.#registration.assertWritable();
-
-        try {
-            const registered = this.effects.register(definition);
-            this.effectBindings.register(registered, [
-                ...(facets.contributions === undefined
-                    ? []
-                    : contributions.compile(registered, facets.contributions, this)),
-                ...(facets.bindings ?? []),
-            ]);
-
-            if (facets.damage !== undefined) {
-                this.damage.register(registered, facets.damage);
-            }
-            if (facets.healing !== undefined) {
-                this.healing.register(registered, facets.healing);
-            }
-            if (facets.action !== undefined) {
-                this.actionRelease.register(registered, facets.action);
-            }
-            if (facets.lifecycle !== undefined) {
-                this.effectLifecycle.register(registered, facets.lifecycle);
-            }
-
-            return registered;
-        } catch (error) {
-            this.#registration.fail();
-            throw error;
-        }
     }
 }

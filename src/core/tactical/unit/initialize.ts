@@ -7,12 +7,15 @@ import {
     type RuntimeCapabilitiesFor,
 } from "./capability/catalog.js";
 import type { Unit, UnitDefinition, UnitId } from "./unit.js";
+import type { State as EffectState } from "./effect/effect.js";
+import { empty } from "./effect/state.js";
 
 export interface UnitInitialization<D extends UnitDefinition = UnitDefinition> {
     readonly id: UnitId;
     readonly definition: D;
     readonly position: WorldPosition;
     readonly tick?: number;
+    readonly effects?: EffectState;
     readonly states?: never;
 }
 
@@ -53,6 +56,7 @@ export function initializeUnit<D extends UnitDefinition>(
         id,
         definition: definition as Unit<D>["definition"],
         position,
+        effects: input.effects ?? empty(),
         ...states,
     };
 }

@@ -1,7 +1,4 @@
-import type {
-    EffectLifecycleOperations,
-    EffectTransitionResources,
-} from "../../unit/capability/effects/contract.js";
+import type { BattleState } from "../../battle/execution/context.js";
 import type {
     DamageOperation,
     DamageReport,
@@ -23,13 +20,13 @@ export interface ProjectileFacts {
 }
 
 export interface ProjectileQueryContext<S extends object = object> {
+    readonly battle: BattleState;
     readonly projectile: Projectile<S>;
     readonly tick: number;
     readonly facts: ProjectileFacts;
 }
 
 export interface ProjectileOperationsFor<S extends object> {
-    readonly effects: EffectLifecycleOperations;
     damage(request: Omit<DamageRequest, "tick">): DamageReport;
     heal(request: Omit<HealingRequest, "tick">): HealingReport;
     updateState(transition: (current: S) => S): void;
@@ -51,7 +48,7 @@ export interface ProjectileContactContext<
     readonly targetUnitId: UnitId;
 }
 
-export interface ProjectileServices extends EffectTransitionResources {
+export interface ProjectileServices {
     readonly projectiles: ProjectileResources;
     readonly settleDamage: DamageOperation;
     readonly settleHealing: HealingOperation;

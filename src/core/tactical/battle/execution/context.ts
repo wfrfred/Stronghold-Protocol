@@ -29,6 +29,7 @@ export interface BattleState {
     readonly events: Event[];
     readonly registeredUnitIds: UnitId[];
     readonly removedUnits: BattlefieldChangeResult["removedUnits"][number][];
+    readonly closedLifetimes: Set<string>;
 }
 
 export function createBattleState(
@@ -44,6 +45,7 @@ export function createBattleState(
         events: [],
         registeredUnitIds: [],
         removedUnits: [],
+        closedLifetimes: new Set(),
         ...(actionExecutions === undefined ? {} : { actionExecutions }),
     };
 }

@@ -1,6 +1,10 @@
+import { definition as effectDefinition, attackBuff, contributionEffect } from "../helpers/effects.js";
+import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
+import { transitionUnit } from "../../dist/core/tactical/battle/execution/context.js";
+import { addStatusContribution, removeStatusContribution } from "../../dist/core/tactical/unit/capability/status/capability.js";
+import { setAttackContribution, removeAttackContribution } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { fixtureBattlefield } from "../helpers/battlefield.js";
 import { removeUnitWithEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
-import { liveAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
@@ -21,12 +25,8 @@ import {
   removeUnit,
   updateUnit,
 } from "../../dist/core/tactical/battle/execution/context.js";
-import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
-import { installNewEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
-import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
-import { compileStatusBinding } from "../../dist/core/tactical/unit/capability/status/binding.js";
 import { hasStatusFlag } from "../../dist/core/tactical/unit/capability/status/capability.js";
-import * as modifier from "../../dist/core/tactical/contribution/value.js";
+import * as modifier from "../../dist/core/tactical/unit/contribution/value.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { battlefieldView } from "../../dist/core/tactical/battle/execution/context.js";
 import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
@@ -99,22 +99,23 @@ function accept(state = createActionExecutionState(), options = {}) {
   });
 }
 
-function effectProgram(id) {
-  return createEffectDefinition({ id, initialize: () => ({}) });
+function effectProgram(id) { return effectDefinition(id); }
+
+function statusEffect(id, flags) {
+  return effectDefinition(id, {}, {
+    onEnable(context) {
+      transitionUnit(context.battle, context.unit.id, unit => ({ ...unit, status: addStatusContribution(unit.status, { id: `status/${context.self.id}`, flags }) }));
+    },
+    onDisable(context) {
+      transitionUnit(context.battle, context.unit.id, unit => ({ ...unit, status: removeStatusContribution(unit.status, `status/${context.self.id}`) }));
+    },
+  });
 }
 
-function installOwned(resources, ref, context, unitId = 1) {
-  return installNewEffect(
-    context.work,
-    unitId,
-    ref,
-    {
-      source: context.sourceUnitId,
-      scopes: [{ type: "ACTION", executionId: context.executionId }],
-    },
-    resources,
-    context.tick,
-  );
+function installOwned(resources, content, context, unitId = 1) {
+  return effects.apply(context.work, getUnit(context.work, unitId), content, {
+    source: context.sourceUnitId, scopes: [{ type: "ACTION", executionId: context.executionId }],
+  });
 }
 
 function assertData(value) {
@@ -207,9 +208,7 @@ test("action process: copying preserves samples and deterministic consumed/absol
 test("action process: cancellation and source exit keep installed prefixes but prevent delayed release", () => {
   for (const reason of ["cancel", "removed", "absent"]) {
     const resources = new CombatResources();
-    const effect = resources.registerEffect(effectProgram("owned-invincibility"), {
-      bindings: [compileStatusBinding(["INVINCIBLE"])],
-    });
+    const effect = statusEffect("owned-invincibility", ["INVINCIBLE"]);
     const accepted = accept();
     const segments = [
       {
@@ -251,7 +250,7 @@ test("action process: cancellation and source exit keep installed prefixes but p
       reason: reason === "cancel" ? "CANCELLED" : "SOURCE_ABSENT",
     });
     assert.equal(hasStatusFlag(getUnit(battle, 1), "INVINCIBLE"), false);
-    assert.equal(getUnit(battle, 1).effects.instances[0].finished, true);
+    assert.deepEqual(getUnit(battle, 1).effects.instances, []);
     assert.equal(getUnit(battle, 1).vitality.hp, 100);
     assert.equal(
       cancelled.signals.some((signal) => signal.type === "ACTION_RELEASED"),
@@ -279,25 +278,13 @@ test("action process: cancellation and source exit keep installed prefixes but p
 
 test("action process: install then query binds current targets and the next segment sees completed Damage", () => {
   const resources = new CombatResources();
-  const invisible = resources.registerEffect(effectProgram("invisible"), {
-    bindings: [compileStatusBinding(["INVISIBLE"])],
-  });
+  const invisible = statusEffect("invisible", ["INVISIBLE"]);
   const accepted = accept();
   const compiled = compileAction(accepted.execution.definition, resources);
   const segments = [
     {
       type: "EXECUTE",
-      run: (context) => {installNewEffect(
-          context.work,
-          1,
-          invisible,
-          {
-            source: 0,
-            scopes: [],
-          },
-          resources,
-          context.tick,
-        );},
+      run: (context) => {effects.apply(context.work, getUnit(context.work, 1), invisible, { source: 0, scopes: [] });},
     },
     {
       type: "EXECUTE",
@@ -344,9 +331,7 @@ test("action process: install then query binds current targets and the next segm
 
 test("action process: concurrent executions from one source own independent contributions and cleanup", () => {
   const resources = new CombatResources();
-  const bonus = resources.registerEffect(effectProgram("owned-bonus"), {
-    contributions: [liveAttack(() => [modifier.create({ finalAddition: 20 })])],
-  });
+  const bonus = attackBuff("owned-bonus", 20);
   const first = accept();
   const second = accept(first.state, { definition: first.execution.definition });
   const segments = [
@@ -383,12 +368,9 @@ test("action process: concurrent executions from one source own independent cont
   assert.deepEqual(
     getUnit(battle, 1).effects.instances.map((instance) => [
       instance.scopes.find(scope => scope.type === "ACTION").executionId,
-      instance.finished,
+      instance.status,
     ]),
-    [
-      [0, true],
-      [1, false],
-    ],
+    [[1, "ACTIVE"]],
   );
   const completed = resumeActionExecution(
     battle,
@@ -411,17 +393,11 @@ test("action process: concurrent executions from one source own independent cont
 test("action process: content cancellation and normal finish retain completed prefixes without releasing or executing successors", () => {
   for (const continuation of ["CANCEL", "FINISH"]) {
     const resources = new CombatResources();
-    const sampled = resources.registerEffect(
-      createEffectDefinition({
-        id: "sampled-prefix",
-        initialize: () => ({ power: 0 }),
-      }),
-      {
-        contributions: [liveAttack(({ instance }) => [
-            modifier.create({ finalAddition: instance.state.power }),
-          ])],
-      },
-    );
+    let finalPower;
+    const sampled = contributionEffect("sampled-prefix", { power: 0 }, {
+      set: setAttackContribution, remove: removeAttackContribution, dynamic: true,
+      value: self => [modifier.create({ finalAddition: self.state.power })],
+    }, { onEnd: context => { finalPower = context.self.state.power; } });
     const accepted = accept();
     const original = workWith(unit(0), unit(1));
     const result = resumeActionExecution(
@@ -436,15 +412,7 @@ test("action process: content cancellation and normal finish retain completed pr
             run: (context) => {
               installOwned(resources, sampled, context);
               const work = context.work;
-              updateEffectState(
-                work,
-                1,
-                0,
-                sampled,
-                () => ({ power: context.samples.power }),
-                resources,
-                0,
-              );
+              effects.setState(work, { type: "EFFECT", unitId: 1, effectId: 0 }, sampled, { power: context.samples.power });
               assert.equal(resolveAttackPower(1, battlefieldView(work)), 33);
               return {continuation};
             },
@@ -479,10 +447,10 @@ test("action process: content cancellation and normal finish retain completed pr
     assert.equal(result.state.executions.length, 0);
     assert.equal(result.state.nextExecutionId, 1);
     assert.equal(getUnit(original, 1).vitality.hp, 100);
-    assert.equal(getUnit(original, 1).effects.instances[0].state.power, 23);
-    assert.equal(getUnit(original, 1).effects.instances[0].finished, true);
+    assert.equal(finalPower, 23);
+    assert.deepEqual(getUnit(original, 1).effects.instances, []);
     assert.equal(resolveAttackPower(1, battlefieldView(original)), 10);
-    assert.equal(original.battlefield.snapshot("state").getUnit(1).effects, undefined);
+    assert.deepEqual(original.battlefield.snapshot("state").getUnit(1).effects.instances, []);
     assert.deepEqual(
       original.events.map((event) => event.type),
       [continuation === "CANCEL" ? "ACTION_CANCELLED" : "ACTION_FINISHED"],
@@ -558,9 +526,7 @@ test("action process: a throwing successor exposes neither a partial settlement 
 
 test("action process: source departure completes the entered segment and cancels unentered successors", () => {
   const resources = new CombatResources();
-  const marker = resources.registerEffect(effectProgram("source-exit-prefix"), {
-    bindings: [compileStatusBinding(["INVINCIBLE"])],
-  });
+  const marker = statusEffect("source-exit-prefix", ["INVINCIBLE"]);
   const accepted = accept();
   const observed = [];
   const segments = [
@@ -660,7 +626,7 @@ test("action process: a completed final segment can finish after removing its ow
 
 test("action process: nested source departure cancels the current execution without resuming later segments", () => {
   const resources = new CombatResources();
-  const dependent = resources.registerEffect(effectProgram("departing-action-dependent"));
+  const dependent = effectProgram("departing-action-dependent");
   const accepted = accept();
   const visited = [];
   const segments = [
@@ -691,7 +657,7 @@ test("action process: nested source departure cancels the current execution with
   assert.deepEqual(visited, ["remove"]);
   assert.deepEqual(advanced.state.executions, []);
   assert.equal(getUnit(battle, 0), undefined);
-  assert.equal(getUnit(battle, 1).effects.instances.every(instance => instance.finished), true);
+  assert.deepEqual(getUnit(battle, 1).effects.instances, []);
   assert.deepEqual(battle.events.filter(event => event.type.startsWith("ACTION_")), [
     { type: "ACTION_CANCELLED", executionId: 0, sourceUnitId: 0, tick: 0, reason: "SOURCE_ABSENT" },
   ]);

@@ -1,15 +1,12 @@
 import {
     appendEvents,
+    battlefieldView,
     getUnit,
     updateUnit,
     type BattleState,
 } from "../../../battle/execution/context.js";
 import { drainUnitSkillSp } from "../../../battle/execution/skill-sp.js";
 import type { UnitId } from "../../unit.js";
-import type { EffectTransitionResources } from "../effects/contract.js";
-import { EffectDispatchScope } from "../effects/dispatch.js";
-import { createEffectOperations } from "../effects/operations.js";
-import { effectView } from "../effects/query.js";
 import type { DamageOperation } from "../vitality/damage/contract.js";
 import { hasElemental, type ElementType, type ElementValues } from "./capability.js";
 import type { ElementalRejection } from "./query.js";
@@ -24,7 +21,7 @@ import {
     type ElementHealRequest,
 } from "./settlement.js";
 
-export interface ElementalExecutionResources extends EffectTransitionResources {
+export interface ElementalExecutionResources {
     readonly elemental: ElementalResources;
     readonly settleDamage: DamageOperation;
 }
@@ -85,36 +82,18 @@ function runBurst(
     resources: ElementalExecutionResources,
     run: ElementalBurstDefinition["begin"],
 ): void {
-    let active = true;
-    const dispatch = new EffectDispatchScope();
-
-    const readWork = () => {
-        if (!active) {
-            throw new TypeError("elemental context is no longer active");
-        }
-
-        return work;
-    };
-
     const context: ElementalBurstContext = {
+        battle: work,
         burst,
         tick,
         previousTick,
-        facts: effectView(readWork),
-        effects: createEffectOperations(readWork, resources, tick, dispatch),
-        damage: (request) => {
-            return resources.settleDamage(readWork(), { ...request, tick }, dispatch);
+        get facts() {
+            return battlefieldView(work);
         },
-        drainSp: (amount) => {
-            return drainUnitSkillSp(readWork(), burst.targetUnitId, amount);
-        },
+        damage: (request) => resources.settleDamage(work, { ...request, tick }),
+        drainSp: (amount) => drainUnitSkillSp(work, burst.targetUnitId, amount),
     };
-
-    try {
-        run(context);
-    } finally {
-        active = false;
-    }
+    run(context);
 }
 
 export function resolveElementDamage(

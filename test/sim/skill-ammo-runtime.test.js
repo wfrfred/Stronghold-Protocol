@@ -1,3 +1,7 @@
+import { transitionUnit } from "../../dist/core/tactical/battle/execution/context.js";
+import { setBeforeReleaseHook, removeBeforeReleaseHook } from "../../dist/core/tactical/unit/capability/action/capability.js";
+import { attackBuff } from "../helpers/effects.js";
+import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
@@ -5,11 +9,8 @@ import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/execution/context.js";
 import { createProjectileDefinition } from "../../dist/core/tactical/battlefield/projectile/definition.js";
 import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
-import { create as modifier } from "../../dist/core/tactical/contribution/value.js";
 import { createOperatorDefinition } from "../../dist/core/tactical/unit/archetype/operator.js";
 import { compileAction } from "../../dist/core/tactical/unit/capability/action/compile.js";
-import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
-import { attack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
@@ -28,18 +29,23 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, program } = {}) {
     id: "runtime-ammo-skill", activation: "MANUAL", spRecovery: "TIME",
     spCost: 1, initialSp: 1, durationTicks: null, ammo,
   });
-  const buff = resources.registerEffect(createEffectDefinition({
-    id: "runtime-ammo-attack", initialize: () => ({}),
-  }), {
-    contributions: [attack(() => [modifier({ multiplier: 1 })])],
-    ...(interrupt ? { action: { beforeRelease: () => ({ type: "INTERRUPT", recoveryTicks: 15 }) } } : {}),
+  const buff = attackBuff("runtime-ammo-attack", 100, {
+    onApply: (context) => {
+      if (interrupt) transitionUnit(context.battle, context.unit.id, current => setBeforeReleaseHook(current, {
+        id: "ammo-interrupt", enabled: () => true,
+        invoke: () => ({ type: "INTERRUPT", recoveryTicks: 15 }),
+      }));
+    },
+    onEnd: (context) => {
+      if (interrupt) transitionUnit(context.battle, context.unit.id, current => removeBeforeReleaseHook(current, "ammo-interrupt"));
+    },
   });
   resources.skills.register({ definition: skill, activate: (context) => {
-    const installed = context.effects.install(context.unitId, buff, {
+    const installed = effects.apply(context.battle, getUnit(context.battle, context.unitId), buff, {
       source: context.unitId, scopes: [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }],
     });
-    assert.equal(installed.type, "INSTALLED");
-    assert.equal(installed.type, "INSTALLED");
+    assert.ok(installed);
+    assert.ok(installed);
     return { type: "ACTIVATED" };
   } });
   const definition = createOperatorDefinition({
@@ -119,7 +125,7 @@ test("ammo runtime: the final EXECUTE buffs every target before ending the skill
     "DAMAGE", "DAMAGE", "DAMAGE", "SKILL_FINISHED",
   ]);
   assert.equal(source(runtime).skill.active, null);
-  assert.equal(source(runtime).effects.instances.every(({ finished, participating }) => finished && !participating), true);
+  assert.equal(source(runtime).effects.instances.length === 0, true);
   assert.equal(released.events.filter(({ type }) => type === "SKILL_FINISHED").length, 1);
 });
 
@@ -199,7 +205,7 @@ test("ammo runtime: the last released projectile survives skill completion and r
   assert.deepEqual(damageEvents(launched), []);
   assert.equal(launched.events.filter(({ type }) => type === "SKILL_FINISHED").length, 1);
   assert.equal(source(runtime).skill.active, null);
-  assert.equal(source(runtime).effects.instances.every(({ finished, participating }) => finished && !participating), true);
+  assert.equal(source(runtime).effects.instances.length === 0, true);
   assert.equal(runtime.snapshot().projectiles.instances.length, 1);
   assert.equal(runtime.snapshot().projectiles.instances[0].cachedAtk, 200);
   assert.deepEqual(runtime.snapshot().projectiles.instances[0].position, [0, 0]);

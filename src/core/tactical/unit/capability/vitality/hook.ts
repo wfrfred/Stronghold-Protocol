@@ -1,104 +1,104 @@
-import type { UnitId } from "../../unit.js";
-import type {
-    EffectView,
-    EffectLifecycleOperations,
-    EffectTransitionResources,
-} from "../effects/contract.js";
-import type { EffectRef, Effect, EffectValue } from "../effects/effect.js";
-import { createEffectOperations } from "../effects/operations.js";
-import { EffectDispatchScope } from "../effects/dispatch.js";
-import { effectView, getEffect } from "../effects/query.js";
-import { resolveMaxHp } from "./query.js";
-import { battlefieldView, type BattleState } from "../../../battle/execution/context.js";
-import type { DamageReport, DamageRequest, DamageOperation } from "./damage/contract.js";
-import type { HealingReport, HealingRequest, HealingOperation } from "./healing/contract.js";
+import type { Unit, UnitId } from "../../unit.js";
+import { getUnit, type BattleState } from "../../../battle/execution/context.js";
+import type { Vitality } from "./capability.js";
+import type { Hook as DamageHook } from "./damage/hook.js";
+import type { Hook as HealingHook } from "./healing/hook.js";
+import type { DamageOperation, DamageReport, DamageRequest } from "./damage/contract.js";
+import type { HealingOperation, HealingReport, HealingRequest } from "./healing/contract.js";
 
-export interface VitalityHookFacts extends EffectView {
-    maxHp(unitId: UnitId): number | undefined;
-}
-
-export interface VitalityHookContext<S extends object> {
-    readonly ref: EffectRef;
-    readonly ownerUnitId: UnitId;
-    readonly instance: Effect<S>;
-    readonly tick: number;
-    readonly facts: VitalityHookFacts;
-}
-
-export interface VitalityHookOperations {
-    readonly effects: EffectLifecycleOperations;
-    damage(request: Omit<DamageRequest, "tick">): DamageReport;
-    heal(request: Omit<HealingRequest, "tick">): HealingReport;
-}
-
-export function vitalityHookFacts(work: () => BattleState): VitalityHookFacts {
-    return {
-        ...effectView(work),
-        maxHp: (unitId) => resolveMaxHp(unitId, battlefieldView(work())),
-    };
-}
-
-export interface DispatchResult<V> {
+export interface Result<V> {
     readonly value: V;
     readonly stopDispatch?: boolean;
 }
 
-export interface VitalityHookServices extends EffectTransitionResources {
+export interface Operations {
+    damage(request: Omit<DamageRequest, "tick">): DamageReport;
+    heal(request: Omit<HealingRequest, "tick">): HealingReport;
+}
+
+export interface Context<R> {
+    readonly battle: BattleState;
+    readonly unit: Unit;
+    readonly request: R;
+    readonly tick: number;
+    readonly operations: Operations;
+}
+
+export interface Services {
     readonly settleDamage: DamageOperation;
     readonly settleHealing: HealingOperation;
 }
 
-export type VitalityHookInvocation<R> = Omit<VitalityHookContext<object>, "instance"> & {
-    readonly instance: EffectValue;
-    readonly request: R;
-    readonly operations: VitalityHookOperations;
-};
+interface Candidates {
+    readonly damage: readonly DamageHook[];
+    readonly healing: readonly HealingHook[];
+}
 
-export function withVitalityHookContext<R, T>(
-    getWork: () => BattleState,
-    ref: EffectRef,
-    instance: EffectValue,
-    request: R,
-    resources: VitalityHookServices,
-    tick: number,
-    dispatch: EffectDispatchScope,
-    run: (context: VitalityHookInvocation<R>) => T,
-): T {
-    return dispatch.withEffect(ref, instance, (lastKnown) => {
-        let active = true;
+export class Dispatch {
+    readonly #candidates = new Map<UnitId, Candidates>();
 
-        const readWork = (): BattleState => {
-            if (!active) {
-                throw new TypeError("vitality hook context is no longer active");
-            }
+    withCandidates<T>(unit: Unit & Vitality, run: (candidates: Candidates) => T): T {
+        const existing = this.#candidates.get(unit.id);
 
-            return getWork();
+        if (existing !== undefined) {
+            return run(existing);
+        }
+
+        const candidates = {
+            damage: unit.vitality.damageHooks,
+            healing: unit.vitality.healingHooks,
         };
-
-        const context: VitalityHookInvocation<R> = {
-            ref,
-            ownerUnitId: ref.unitId,
-            get instance() {
-                return getEffect(readWork(), ref) ?? lastKnown();
-            },
-            request,
-            tick,
-            facts: vitalityHookFacts(readWork),
-            operations: {
-                effects: createEffectOperations(readWork, resources, tick, dispatch),
-                damage: (input) => {
-                    return resources.settleDamage(readWork(), { ...input, tick }, dispatch);
-                },
-                heal: (input) => {
-                    return resources.settleHealing(readWork(), { ...input, tick }, dispatch);
-                },
-            },
-        };
+        this.#candidates.set(unit.id, candidates);
 
         try {
-            return run(context);
+            return run(candidates);
         } finally {
-            active = false;
+            this.#candidates.delete(unit.id);
         }
-    });
+    }
+}
+
+const activeDispatches = new WeakMap<BattleState, Dispatch>();
+
+export function withDispatch<T>(
+    battle: BattleState,
+    requested: Dispatch | undefined,
+    run: (dispatch: Dispatch) => T,
+): T {
+    const previous = activeDispatches.get(battle);
+    const dispatch = requested ?? previous ?? new Dispatch();
+    activeDispatches.set(battle, dispatch);
+
+    try {
+        return run(dispatch);
+    } finally {
+        if (previous === undefined) {
+            activeDispatches.delete(battle);
+        } else {
+            activeDispatches.set(battle, previous);
+        }
+    }
+}
+
+export function context<R extends { readonly tick: number }>(
+    battle: BattleState,
+    unitId: UnitId,
+    request: R,
+    services: Services,
+    dispatch: Dispatch,
+): Context<R> {
+    return {
+        battle,
+        get unit() {
+            return getUnit(battle, unitId)!;
+        },
+        request,
+        tick: request.tick,
+        operations: {
+            damage: (input) =>
+                services.settleDamage(battle, { ...input, tick: request.tick }, dispatch),
+            heal: (input) =>
+                services.settleHealing(battle, { ...input, tick: request.tick }, dispatch),
+        },
+    };
 }

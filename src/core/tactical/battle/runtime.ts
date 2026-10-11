@@ -1,5 +1,5 @@
 import { advanceBattlefield, battlefieldView, createBattleState } from "./execution/context.js";
-import { advanceEffects, validateEffectLifetimes } from "../unit/capability/effects/lifecycle.js";
+import { advance as advanceEffects, validateScopes } from "../unit/effect/operations.js";
 import { ActionExecutionWork } from "../unit/capability/action/internal/executions.js";
 import { assert, assertNonnegativeNumber, assertPositiveSafeInteger } from "../../common/assert.js";
 import { BattlefieldRuntime } from "../battlefield/runtime.js";
@@ -103,7 +103,7 @@ export class BattleRuntime {
             new ActionExecutionWork(actionExecution),
         );
         const predefinedPresence = initializeBattlefield(input, initial);
-        validateEffectLifetimes(initial);
+        validateScopes(initial);
         battlefield.apply();
 
         this.#state = {
@@ -199,7 +199,7 @@ export class BattleRuntime {
 
         schedule = advanceSpawning(state, schedule, commands, tick);
 
-        advanceEffects(state, tick, resources);
+        advanceEffects(state);
 
         advanceElements(state, tick, resources);
 

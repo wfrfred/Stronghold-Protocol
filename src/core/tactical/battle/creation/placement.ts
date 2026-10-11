@@ -16,6 +16,7 @@ import {
     type PreparedCapabilityStates,
 } from "../../unit/capability/catalog.js";
 import type { BattleExecutionState } from "../execution/state.js";
+import type { State as EffectState } from "../../unit/effect/effect.js";
 
 export interface UnitNavigationModifierPlacement {
     readonly definition: NavigationModifierDefinition;
@@ -28,6 +29,7 @@ export interface UnitPlacementDefinition<D extends UnitDefinition = UnitDefiniti
     readonly position: WorldPosition;
     readonly navigationModifiers?: readonly UnitNavigationModifierPlacement[];
     readonly states?: Partial<CapabilityStates>;
+    readonly effects?: EffectState;
 }
 
 export interface UnitPlacementInstantiation<U extends Unit = Unit> {
@@ -48,6 +50,7 @@ type NormalizedUnitPlacement<P extends UnitPlacementDefinition> = P extends unkn
           readonly definition: ImmutableData<P["definition"]>;
           readonly position: WorldPosition;
           readonly navigationModifiers: readonly UnitNavigationModifierPlacement[];
+          readonly effects?: EffectState;
       } & (P extends { readonly states: infer S extends object }
           ? { readonly states: SelectedCapabilityStates<S> }
           : "states" extends keyof P
@@ -88,6 +91,7 @@ export function createUnitPlacementDefinition(
                   states: Object.freeze(selectCapabilityStates(placement.states)),
               }),
         position: placement.position,
+        ...(placement.effects === undefined ? {} : { effects: placement.effects }),
         navigationModifiers: Object.freeze(navigationModifiers),
     });
 }
@@ -119,6 +123,7 @@ export function instantiateUnitPlacement(
         position: placement.position,
         tick,
         states: placement.states ?? {},
+        ...(placement.effects === undefined ? {} : { effects: placement.effects }),
     });
     const changes: BattlefieldChange[] = [{ type: "REGISTER_UNIT", unit }];
     const source: NavigationModifierSource = Object.freeze({ type: "UNIT", unitId: unit.id });

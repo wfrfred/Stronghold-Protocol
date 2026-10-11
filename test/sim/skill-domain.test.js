@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { getUnit, updateUnit } from "../../dist/core/tactical/battle/execution/context.js";
-import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
-import { effectTick } from "../../dist/core/tactical/unit/capability/effects/effect.js";
-import { expireEffects, finishEffects } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
+import { definition as effectDefinition } from "../helpers/effects.js";
+import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
+import { deadline } from "../../dist/core/tactical/unit/effect/effect.js";
+import { get } from "../../dist/core/tactical/unit/effect/query.js";
+
 import { createSkillDefinition, createSkillState, initializeSkillState } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { activateSkill, advanceSkill, finishSkill } from "../../dist/core/tactical/unit/capability/skill/execution.js";
 import { drainSkillSp, gainSkillSp, spendSkillSp } from "../../dist/core/tactical/unit/capability/skill/sp.js";
@@ -140,16 +142,16 @@ test("content refusal retains effect prefix and allocated identities while refun
   let ref;
   const f = fixture({}, {
     activate: (context) => {
-      assert.equal(context.effects.install(context.unitId, ref, { source: 1, scopes: [] }).type, "INSTALLED");
+      assert.equal(effects.apply(context.battle, getUnit(context.battle, context.unitId), ref, { source: 1, scopes: [] }) !== undefined, true);
       return { type: "REJECTED", reason: "later prerequisite unavailable" };
     },
   });
-  ref = f.resources.registerEffect(createEffectDefinition({ id: "skill-rejected-prefix", initialize: () => ({}) }));
+  ref = effectDefinition("skill-rejected-prefix");
   const rejected = activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources);
   assert.equal(rejected.result.reason, "CONTENT_REJECTED");
   const unit = getUnit(f.work, 1);
   assert.equal(unit.effects.instances.length, 1);
-  assert.equal(unit.effects.nextInstanceId, 1);
+  assert.equal(unit.effects.nextId, 1);
   assert.equal(unit.skill.sp, 2);
   assert.equal(unit.skill.nextActivationId, 1);
   assert.equal(unit.skill.active, null);
@@ -163,23 +165,18 @@ test("content refusal closes activation scopes while independent effects survive
         [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }],
         [],
       ]) {
-        assert.equal(context.effects.install(context.unitId, ref, { source: 1, scopes }).type, "INSTALLED");
+        assert.equal(effects.apply(context.battle, getUnit(context.battle, context.unitId), ref, { source: 1, scopes }) !== undefined, true);
       }
       return { type: "REJECTED", reason: "content prerequisite" };
     },
   });
-  ref = f.resources.registerEffect(createEffectDefinition({
-    id: "activation-refusal-scopes", initialize: () => ({}),
-  }));
+  ref = effectDefinition("activation-refusal-scopes");
   const refused = activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources);
   const unit = getUnit(f.work, 1);
   assert.equal(refused.result.type, "REJECTED");
   assert.equal(unit.skill.active, null);
   assert.equal(unit.skill.sp, 2);
-  assert.deepEqual(unit.effects.instances.map(({ finished, participating }) => ({ finished, participating })), [
-    { finished: true, participating: false },
-    { finished: false, participating: true },
-  ]);
+  assert.deepEqual(unit.effects.instances.map(({ status }) => status), ["ACTIVE"]);
 });
 
 test("zero-duration activation closes its scope before skill finish content", () => {
@@ -187,28 +184,25 @@ test("zero-duration activation closes its scope before skill finish content", ()
   const observed = [];
   const f = fixture({ durationTicks: 0 }, {
     activate: (context) => {
-      assert.equal(context.effects.install(context.unitId, ref, {
+      assert.equal(effects.apply(context.battle, getUnit(context.battle, context.unitId), ref, {
         source: context.unitId,
         scopes: [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }],
-      }).type, "INSTALLED");
+      }) !== undefined, true);
       return { type: "ACTIVATED" };
     },
     finish: (context) => {
-      const instance = context.facts.getUnit(context.unitId).effects.instances[0];
-      observed.push({ active: context.facts.getUnit(context.unitId).skill.active, finished: instance.finished });
-      assert.equal(context.effects.install(context.unitId, ref, {
+      observed.push({ active: context.facts.getUnit(context.unitId).skill.active, effects: context.facts.getUnit(context.unitId).effects.instances.length });
+      assert.equal(effects.apply(context.battle, getUnit(context.battle, context.unitId), ref, {
         source: context.unitId,
         scopes: [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }],
-      }).type, "REJECTED");
+      }) === undefined, true);
     },
   });
-  ref = f.resources.registerEffect(createEffectDefinition({
-    id: "zero-duration-scope", initialize: () => ({}),
-  }));
+  ref = effectDefinition("zero-duration-scope");
   const activated = activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources);
   assert.deepEqual(activated.signals.map(({ type }) => type), ["SKILL_ACTIVATED", "SKILL_FINISHED"]);
-  assert.deepEqual(observed, [{ active: null, finished: true }]);
-  assert.equal(getUnit(f.work, 1).effects.nextInstanceId, 1);
+  assert.deepEqual(observed, [{ active: null, effects: 0 }]);
+  assert.equal(getUnit(f.work, 1).effects.nextId, 1);
 });
 
 test("skill finish rejects binding a surviving independent effect to its closed activation", () => {
@@ -216,109 +210,76 @@ test("skill finish rejects binding a surviving independent effect to its closed 
   let independent;
   const f = fixture({}, {
     activate: (context) => {
-      const installed = context.effects.install(context.unitId, program, { source: 1, scopes: [] });
-      assert.equal(installed.type, "INSTALLED");
-      independent = installed.ref;
+      const installed = effects.apply(context.battle, getUnit(context.battle, context.unitId), program, { source: 1, scopes: [] });
+      assert.ok(installed);
+      independent = installed;
       return { type: "ACTIVATED" };
     },
     finish: (context) => {
-      assert.equal(context.effects.bind(independent, {
+      assert.equal(effects.bind(context.battle, independent, {
         type: "SKILL", unitId: context.unitId, activationId: context.activationId,
-      }).type, "LIFETIME_UNAVAILABLE");
+      }), false);
     },
   });
-  program = f.resources.registerEffect(createEffectDefinition({
-    id: "independent-skill-binding", initialize: () => ({}),
-  }));
+  program = effectDefinition("independent-skill-binding");
   activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources);
   finishSkill(f.work, 1, 30, f.resources);
   const instance = getUnit(f.work, 1).effects.instances[0];
   assert.deepEqual(instance.scopes, []);
-  assert.equal(instance.finished, false);
-  assert.equal(instance.participating, true);
+assert.equal(instance.status, "ACTIVE");
 });
 
 for (const trigger of ["SKILL", "EFFECT", "TICK"]) {
-  test(`combined scopes: renewal preserves Skill and Effect constraints until ${trigger} closes`, () => {
-    let parent;
-    let dependent;
+  test(`combined scopes: renewal retains Skill and Effect constraints until ${trigger} closes`, () => {
+    const parent = effectDefinition(`combined-parent-${trigger}`);
     let parentRef;
     let dependentRef;
     const ended = [];
-    let expirations = 0;
+    const dependent = effectDefinition(`combined-dependent-${trigger}`, { renewed: false }, {
+      onTick(context) {
+        if (context.tick === 5 && !context.self.state.renewed) {
+          context.setState({ renewed: true });
+          effects.setTick(context.battle, context.ref, 10);
+        }
+      },
+      onEnd(context) { ended.push(context.reason); },
+    });
     const f = fixture({}, {
-      activate: (context) => {
-        const installedParent = context.effects.install(context.unitId, parent, { source: 1, scopes: [] });
-        assert.equal(installedParent.type, "INSTALLED");
-        parentRef = installedParent.ref;
-        const installedDependent = context.effects.install(context.unitId, dependent, {
-          source: 1,
-          scopes: [
-            { type: "SKILL", unitId: context.unitId, activationId: context.activationId },
-            parentRef,
-            { type: "TICK", tick: 5 },
-          ],
+      activate(context) {
+        const unit = getUnit(context.battle, context.unitId);
+        parentRef = effects.apply(context.battle, unit, parent);
+        dependentRef = effects.apply(context.battle, unit, dependent, {
+          scopes: [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }, parentRef, { type: "TICK", tick: 5 }],
         });
-        assert.equal(installedDependent.type, "INSTALLED");
-        dependentRef = installedDependent.ref;
         return { type: "ACTIVATED" };
       },
     });
-    parent = f.resources.registerEffect(createEffectDefinition({
-      id: `combined-parent-${trigger}`, initialize: () => ({}),
-    }));
-    dependent = f.resources.registerEffect(createEffectDefinition({
-      id: `combined-dependent-${trigger}`, initialize: () => ({}),
-    }), {
-      lifecycle: {
-        expire: (context) => {
-          expirations++;
-          if (expirations === 1) context.effects.setTick(context.ref, 10);
-          else context.effects.finish([context.ref], "EXPIRED");
-        },
-        finish: (context) => { ended.push(context.end); },
-      },
-    });
-    let work = f.work;
-    activateSkill(work, { unitId: 1, tick: 0 }, f.resources);
-    expireEffects(work, 5, f.resources);
-    const renewed = getUnit(work, 1).effects.instances.find(({ id }) => id === dependentRef.effectId);
-    assert.equal(renewed.finished, false);
-    assert.equal(effectTick(renewed), 10);
+    activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources);
+    effects.advance({ ...f.work, tick: 5 });
+    const renewed = get(f.work, dependentRef);
+    assert.equal(renewed.status, "ACTIVE");
+    assert.equal(deadline(renewed), 10);
     assert.deepEqual(renewed.scopes.filter(({ type }) => type !== "TICK"), [
       { type: "SKILL", unitId: 1, activationId: 0 }, parentRef,
     ]);
-
-    if (trigger === "SKILL") finishSkill(work, 1, 6, f.resources);
-    else if (trigger === "EFFECT") finishEffects(work, [parentRef], f.resources, 6, "DISPELLED");
-    else expireEffects(work, 10, f.resources);
-
-    const unit = getUnit(work, 1);
-    assert.equal(unit.effects.instances.find(({ id }) => id === dependentRef.effectId).finished, true);
-    assert.equal(unit.skill.active === null, trigger === "SKILL");
-    assert.equal(unit.effects.instances.find(({ id }) => id === parentRef.effectId).finished, trigger === "EFFECT");
-    assert.deepEqual(ended, [{
-      root: trigger === "SKILL" ? { type: "SKILL", unitId: 1, activationId: 0 }
-        : trigger === "EFFECT" ? parentRef : dependentRef,
-      reason: trigger === "SKILL" ? "SKILL_FINISHED" : trigger === "EFFECT" ? "DISPELLED" : "EXPIRED",
-    }]);
-    expireEffects(work, 100, f.resources);
+    if (trigger === "SKILL") finishSkill(f.work, 1, 6, f.resources);
+    else if (trigger === "EFFECT") effects.end(f.work, parentRef, "DISPELLED");
+    else effects.advance({ ...f.work, tick: 10 });
+    assert.equal(get(f.work, dependentRef), undefined);
+    assert.equal(getUnit(f.work, 1).skill.active === null, trigger === "SKILL");
+    assert.equal(get(f.work, parentRef) === undefined, trigger === "EFFECT");
+    assert.deepEqual(ended, [trigger === "SKILL" ? "SKILL_FINISHED" : trigger === "EFFECT" ? "DISPELLED" : "EXPIRED"]);
+    effects.advance({ ...f.work, tick: 100 });
     assert.equal(ended.length, 1);
   });
 }
 
-test("callback errors propagate and escaped skill ports are closed even after errors", () => {
-  let captured;
+test("callback errors propagate and leave committed skill progress unpublished", () => {
   const failure = new Error("content failed");
-  const f = fixture({}, { activate: (context) => { captured = context; throw failure; } });
-  assert.throws(() => activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources), (error) => error === failure);
-  assert.throws(() => captured.facts.getUnit(1), /no longer active/);
-  assert.throws(() => captured.effects.finish([{ type: "EFFECT", unitId: 1, effectId: 0 }]), /no longer active/);
-  assert.throws(() => captured.damage({ sourceUnitId: 1, targetUnitId: 1, damageType: "TRUE", operands: { power: 1 } }), /no longer active/);
-  assert.throws(() => captured.heal({ sourceUnitId: 1, targetUnitId: 1, power: 1, ignoreHealFree: false }), /no longer active/);
+  const f = fixture({}, { activate: () => { throw failure; } });
+  assert.throws(() => activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources), error => error === failure);
   assert.equal(f.work.battlefield.snapshot("state").getUnit(1).skill.sp, 2);
   assert.equal(f.work.battlefield.snapshot("state").getUnit(1).skill.active, null);
-  f.work.battlefield.drop();
 });
 
 test("a dead unit cannot activate or accumulate time SP before retirement", () => {

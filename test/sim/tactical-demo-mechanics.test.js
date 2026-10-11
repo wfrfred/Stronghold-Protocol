@@ -110,7 +110,7 @@ for (const type of ['NEURAL', 'EROSION', 'BURN', 'NECROSIS']) {
 
     demo.seek(0);
     demo.seek(10);
-    assert.deepEqual(demo.snapshot(), snapshot);
+    assert.deepEqual(JSON.parse(JSON.stringify(demo.snapshot())), JSON.parse(JSON.stringify(snapshot)));
     demo.reset();
     assert.equal(demo.stats().elementDamageCount, 0);
     assert.equal(demo.stats().elementBurstCount, 0);

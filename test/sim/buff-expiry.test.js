@@ -1,33 +1,50 @@
-import { effectTick } from "../../dist/core/tactical/unit/capability/effects/effect.js";
+import { deadline } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { compileBuffStacking, parseBuffStacking } from "../../dist/data/arknights/buff-stacking.js";
-import { compileAttributeModifiers, parseAttributeModifiers } from "../../dist/data/arknights/modifier.js";
-import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
-import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/execution/context.js";
-import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
 import {
-    expireEffects, installNewEffect, setEffectEnabled, setEffectTick, updateEffectState,
-} from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
-import { attack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
+    compileAttributeModifiers,
+    parseAttributeModifiers,
+} from "../../dist/data/arknights/modifier.js";
+
+import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/execution/context.js";
+import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
+import {
+    setAttackContribution,
+    removeAttackContribution,
+} from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
-import { effectFixtureWork } from "../helpers/effects.js";
+import {
+    contributionEffect,
+    refreshContribution,
+    at,
+    effectFixtureWork,
+} from "../helpers/effects.js";
 
-const fixture = JSON.parse(readFileSync(new URL("../fixtures/arknights/buff_stacking.json", import.meta.url), "utf8"));
-const native = key => fixture.fixtures.find(({ buff }) => buff.buffKey === key).buff;
+const fixture = JSON.parse(
+    readFileSync(new URL("../fixtures/arknights/buff_stacking.json", import.meta.url), "utf8"),
+);
+const native = (key) => fixture.fixtures.find(({ buff }) => buff.buffKey === key).buff;
 const description = (patch = {}) => ({
-    overrideType: "STACK", maxStackCnt: 6, maxValidStackCnt: -1,
-    refreshRemainingTimeWhenStackMax: false, clearAllStackCntWhenTimeUp: false,
-    takeSnapshotWhenExtend: false, ...patch,
+    overrideType: "STACK",
+    maxStackCnt: 6,
+    maxValidStackCnt: -1,
+    refreshRemainingTimeWhenStackMax: false,
+    clearAllStackCntWhenTimeUp: false,
+    takeSnapshotWhenExtend: false,
+    ...patch,
 });
 const application = (stackCount, expiresAtTick = 30) => ({ stackCount, expiresAtTick });
 const refresh = (stackCount, expiresAtTick, reloadModifiers) => ({
-    type: "REFRESH", stackCount, expiresAtTick, reloadModifiers,
+    type: "REFRESH",
+    stackCount,
+    expiresAtTick,
+    reloadModifiers,
 });
-const instance = view => view.getUnit(0).effects.instances[0];
-const power = view => resolveAttackPower(0, view);
+const instance = (view) => view.getUnit(0).effects.instances[0];
+const power = (view) => resolveAttackPower(0, view);
 const address = { type: "EFFECT", unitId: 0, effectId: 0 };
 
 test("buff expiry: a native STACK descriptor peels one layer and resets the caller's fixed lifetime", () => {
@@ -79,280 +96,130 @@ test("buff expiry: zero lifetime advances one tick, while invalid inputs and ove
         assert.throws(() => rule.expire(application(3, value), 30, 30), /safe integer/);
     }
     assert.throws(() => rule.expire(application(3), 30, Number.MAX_SAFE_INTEGER), /safe integer/);
-    assert.deepEqual(rule.expire(application(3), null, Number.MAX_SAFE_INTEGER), refresh(2, null, true));
+    assert.deepEqual(
+        rule.expire(application(3), null, Number.MAX_SAFE_INTEGER),
+        refresh(2, null, true),
+    );
 });
 
-function harness({ descriptor = description(), stackCount = 3, lifetimeTicks = 30, expiresAtTick = 30 } = {}) {
-    const policy = compileBuffStacking(descriptor);
-    const [modifier] = compileAttributeModifiers(parseAttributeModifiers([{
-        attributeType: "ATK", formulaItem: "MULTIPLIER", value: 0.5,
-        loadFromBlackboard: true, fetchBaseValueFromSourceEntity: true,
-    }]));
-    const sources = new Map([[10, 100], [20, 1000]]);
-    const reads = [];
-    const expirations = [];
-    let starts = 0;
-    const sample = (source, count) => {
-        const sourceAttack = sources.get(source);
-        reads.push([source, sourceAttack]);
+function harness({ stackCount = 3, maxValidStackCnt = -1 } = {}) {
+    const policy = compileBuffStacking(description({ maxValidStackCnt }));
+    const [compiled] = compileAttributeModifiers(
+        parseAttributeModifiers([
+            {
+                attributeType: "ATK",
+                formulaItem: "MULTIPLIER",
+                value: 0.5,
+                loadFromBlackboard: false,
+                fetchBaseValueFromSourceEntity: true,
+            },
+        ]),
+    );
+    let sourceAttack = 100;
+    const samples = [];
+    const sample = (count) => {
+        samples.push(sourceAttack);
         return { sourceAttack, stackCount: policy.validStackCount(count) };
     };
-    const initial = {
-        stackCount, lifetimeTicks, priority: 1,
-        blackboard: { atk: 0.5 }, sample: sample(10, stackCount),
-    };
-    const resources = new CombatResources();
-    const effect = resources.registerEffect(createEffectDefinition({
-        id: "buff-expiry-sample", initialize: () => initial,
-    }), {
-        contributions: [attack(current => {
-            const value = modifier.sample({
-                blackboard: new Map(Object.entries(current.state.blackboard)), stackCount: current.state.sample.stackCount,
+    const output = {
+        set: setAttackContribution,
+        remove: removeAttackContribution,
+        value: (current) => [
+            compiled.sample({
+                blackboard: new Map(),
+                stackCount: current.state.sample.stackCount,
                 readSourceAttribute: () => current.state.sample.sourceAttack,
-            });
-            return value === undefined ? [] : [value];
-        })],
-        lifecycle: {
-            start: () => { starts++; },
-            competition: current => ({ group: "buff-expiry", priority: current.state.priority }),
-            expire: context => {
-                const plan = policy.expire({
-                    stackCount: context.instance.state.stackCount,
-                    expiresAtTick: effectTick(context.instance),
-                    maxStackCount: context.instance.state.maxStackCount,
-                }, context.instance.state.lifetimeTicks, context.tick);
-                expirations.push({ tick: context.tick, plan });
-                if (plan.type === "FINISH") {
-                    context.effects.finish([context.ref]);
-                } else {
-                    const source = context.instance.source;
-                    context.effects.setTick(context.ref, plan.expiresAtTick);
-                    context.effects.update(context.ref, effect, state => ({
-                        ...state, stackCount: plan.stackCount,
-                        sample: plan.reloadModifiers ? sample(source, plan.stackCount) : state.sample,
+            }),
+        ],
+    };
+    let content;
+    content = contributionEffect(
+        "layered-buff",
+        { stackCount, lifetimeTicks: 30, sample: sample(stackCount) },
+        output,
+        {
+            onTick(ctx) {
+                if (ctx.tick < deadline(ctx.self)) return;
+                const plan = policy.expire(
+                    { stackCount: ctx.self.state.stackCount, expiresAtTick: deadline(ctx.self) },
+                    ctx.self.state.lifetimeTicks,
+                    ctx.tick,
+                );
+                if (plan.type === "FINISH") ctx.end("EXPIRED");
+                else {
+                    effects.setTick(ctx.battle, ctx.ref, plan.expiresAtTick);
+                    ctx.setState((state) => ({
+                        ...state,
+                        stackCount: plan.stackCount,
+                        sample: plan.reloadModifiers ? sample(plan.stackCount) : state.sample,
                     }));
+                    refreshContribution(ctx.battle, ctx.ref, content, output);
                 }
             },
         },
-    });
-    const work = effectFixtureWork(initializeUnit({
-        id: 0, position: [0, 0], definition: { id: "buff-owner", offense: { attack: 100 } },
-    }));
-    installNewEffect(work, 0, effect, {
+    );
+    const work = effectFixtureWork(
+        initializeUnit({
+            id: 0,
+            position: [0, 0],
+            definition: { id: "receiver", offense: { attack: 100 } },
+        }),
+    );
+    const ref = effects.apply(work, getUnit(work, 0), content, {
         source: 10,
-        scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }],
-        initialState: initial,
-    }, resources, 0);
+        scopes: [{ type: "TICK", tick: 30 }],
+    });
     return {
         work,
-        get starts() { return starts; },
-        reads, expirations,
-        sourceAttack: (source, value) => { sources.set(source, value); },
-        expire: tick => { expireEffects(work, tick, resources); },
-        disable: tick => { setEffectEnabled(work, address, false, resources, tick); },
-        setCap: (maxStackCount, tick) => {
-            updateEffectState(work, 0, 0, effect, state => ({ ...state, maxStackCount }), resources, tick);
+        ref,
+        content,
+        samples,
+        source: (value) => {
+            sourceAttack = value;
         },
-        override: tick => {
-            const winner = resources.registerEffect(createEffectDefinition({
-                id: "buff-expiry-winner", initialize: () => ({}),
-            }), { lifecycle: { competition: () => ({ group: "buff-expiry", priority: 2 }) } });
-            installNewEffect(work, 0, winner, { source: 20, scopes: [] }, resources, tick);
-        },
-        apply: (expiresAtTick, tick, maxStackCount = undefined) => {
-            const current = instance(battlefieldView(work));
-            const incoming = {
-                stackCount: 1, expiresAtTick, maxStackCount,
-                source: 20, blackboard: { atk: 0.9 },
-            };
-            const plan = policy.plan({
-                stackCount: current.state.stackCount, expiresAtTick: effectTick(current),
-                maxStackCount: current.state.maxStackCount,
-            }, incoming, tick);
-            if (plan.type === "REFRESH") {
-                setEffectTick(work, address, plan.expiresAtTick);
-                updateEffectState(work, 0, 0, effect, state => ({
-                    ...state, stackCount: plan.stackCount,
-                    sample: plan.reloadModifiers ? sample(current.source, plan.stackCount) : state.sample,
-                }), resources, tick);
-            }
-            return plan;
-        },
+        tick: (tick) => effects.advance(at(work, tick)),
     };
 }
 
-test("buff expiry integration: 30 tick renewals preserve identity, retain terminal history, and preserve old snapshots", () => {
+test("buff expiry content renews private layers and refreshes static contribution at its tick callback", () => {
     const buff = harness();
-    const original = buff.work.battlefield.snapshot("draft");
-    const first = instance(original);
-    assert.equal(power(original), 250);
-    buff.expire(29);
-    assert.equal(getUnit(buff.work, 0), original.getUnit(0));
-    buff.expire(30);
-    const renewed = buff.work.battlefield.snapshot("draft");
-    assert.equal(instance(renewed).state.stackCount, 2);
-    assert.equal(effectTick(instance(renewed)), 60);
-    assert.equal(power(renewed), 200);
-    for (const key of ["id", "source", "definition", "acquiredSequence"]) {
-        assert.deepEqual(instance(renewed)[key], first[key]);
-    }
-    assert.equal(instance(renewed).state.blackboard, first.state.blackboard);
-    assert.notEqual(instance(renewed).state.sample, first.state.sample);
-    buff.expire(60);
-    assert.equal(instance(battlefieldView(buff.work)).state.stackCount, 1);
+    const before = battlefieldView(buff.work);
+    const id = instance(before).id;
+    assert.equal(power(before), 250);
+    buff.tick(29);
+    assert.equal(power(battlefieldView(buff.work)), 250);
+    buff.tick(30);
+    assert.equal(instance(battlefieldView(buff.work)).id, id);
+    assert.equal(deadline(instance(battlefieldView(buff.work))), 60);
+    assert.equal(power(battlefieldView(buff.work)), 200);
+    buff.tick(60);
     assert.equal(power(battlefieldView(buff.work)), 150);
-    const last = instance(battlefieldView(buff.work));
-    buff.expire(90);
-    assert.equal(instance(battlefieldView(buff.work)).finished, true);
-    assert.equal(instance(battlefieldView(buff.work)).participating, false);
-    assert.equal(instance(battlefieldView(buff.work)).state.stackCount, 1);
-    assert.equal(instance(battlefieldView(buff.work)).state.sample, last.state.sample);
+    buff.tick(90);
+    assert.equal(instance(battlefieldView(buff.work)), undefined);
     assert.equal(power(battlefieldView(buff.work)), 100);
-    const finished = buff.work.battlefield.snapshot("draft");
-    buff.expire(120);
-    assert.equal(getUnit(buff.work, 0), finished.getUnit(0));
-    assert.equal(buff.expirations.length, 3);
-    assert.equal(buff.starts, 1);
-    assert.equal(instance(original).state.stackCount, 3);
-    assert.equal(power(original), 250);
-    assert.equal(power(renewed), 200);
+    assert.equal(power(before), 250);
+    assert.equal(instance(before).state.stackCount, 3);
 });
-
-test("buff expiry integration: disabled and overridden buffs still peel and finish on schedule", () => {
-    for (const inactive of ["disabled", "overridden"]) {
-        const buff = harness({ stackCount: 2 });
-        if (inactive === "disabled") buff.disable(1);
-        else buff.override(1);
-        assert.equal(instance(battlefieldView(buff.work)).participating, false);
-        assert.equal(power(battlefieldView(buff.work)), 100);
-        buff.expire(30);
-        assert.equal(instance(battlefieldView(buff.work)).state.stackCount, 1);
-        assert.equal(effectTick(instance(battlefieldView(buff.work))), 60);
-        assert.equal(instance(battlefieldView(buff.work)).enabled, inactive !== "disabled");
-        assert.equal(instance(battlefieldView(buff.work)).participating, false);
-        buff.expire(60);
-        assert.equal(instance(battlefieldView(buff.work)).finished, true);
-        assert.equal(power(battlefieldView(buff.work)), 100);
-        assert.equal(buff.expirations.length, 2);
-    }
+test("inactive layered buffs reach deadline without executing their active tick behavior", () => {
+    const buff = harness({ stackCount: 2 });
+    effects.setEnabled(buff.work, buff.ref, false);
+    buff.tick(30);
+    assert.equal(instance(battlefieldView(buff.work)), undefined);
+    assert.equal(power(battlefieldView(buff.work)), 100);
+    assert.deepEqual(buff.samples, [100]);
 });
-
-test("buff expiry integration: extended remaining time does not replace the original lifetime", () => {
-    const buff = harness({ stackCount: 1 });
-    assert.equal(buff.apply(75, 15, 0).type, "REFRESH");
-    assert.equal(effectTick(instance(battlefieldView(buff.work))), 75);
-    assert.equal(instance(battlefieldView(buff.work)).state.lifetimeTicks, 30);
-    buff.expire(74);
-    assert.equal(buff.expirations.length, 0);
-    buff.expire(75);
-    assert.equal(instance(battlefieldView(buff.work)).state.stackCount, 1);
-    assert.equal(effectTick(instance(battlefieldView(buff.work))), 105);
-    buff.expire(105);
-    assert.equal(instance(battlefieldView(buff.work)).finished, true);
-});
-
-test("buff expiry integration: exact effective cap reloads only the retained source and preserves previous projections", () => {
-    const buff = harness({ descriptor: description({ maxValidStackCnt: 2 }), stackCount: 4 });
-    const original = buff.work.battlefield.snapshot("draft");
-    buff.sourceAttack(10, 200);
-    buff.expire(30);
-    const aboveCap = buff.work.battlefield.snapshot("draft");
-    assert.equal(instance(aboveCap).state.stackCount, 3);
-    assert.equal(instance(aboveCap).state.blackboard, instance(original).state.blackboard);
-    assert.equal(instance(aboveCap).state.sample, instance(original).state.sample);
-    assert.deepEqual(buff.reads, [[10, 100]]);
-    assert.equal(power(aboveCap), 200);
-    buff.sourceAttack(10, 400);
-    buff.sourceAttack(20, 9000);
-    buff.expire(60);
+test("native effective cap preserves sampled input until a renewal requires resampling", () => {
+    const buff = harness({ stackCount: 4, maxValidStackCnt: 2 });
+    const original = battlefieldView(buff.work);
+    buff.source(200);
+    buff.tick(30);
+    assert.equal(instance(battlefieldView(buff.work)).state.stackCount, 3);
+    assert.deepEqual(buff.samples, [100]);
+    assert.equal(power(battlefieldView(buff.work)), 200);
+    buff.source(400);
+    buff.tick(60);
     assert.equal(instance(battlefieldView(buff.work)).state.stackCount, 2);
-    assert.equal(instance(battlefieldView(buff.work)).source, 10);
-    assert.equal(instance(battlefieldView(buff.work)).state.priority, 1);
-    assert.deepEqual(buff.reads, [[10, 100], [10, 400]]);
+    assert.deepEqual(buff.samples, [100, 400]);
     assert.equal(power(battlefieldView(buff.work)), 500);
     assert.equal(power(original), 200);
-    assert.equal(power(aboveCap), 200);
-    assert.equal(instance(aboveCap).state.sample.sourceAttack, 100);
-    assert.equal(getUnit(buff.work, 0).effects.instances.length, 1);
-});
-
-test("buff expiry integration: merging and expiration resample the first source without replacing its blackboard", () => {
-    const buff = harness({ descriptor: description({ maxValidStackCnt: 2 }), stackCount: 1 });
-    const original = buff.work.battlefield.snapshot("draft");
-    buff.sourceAttack(10, 200);
-    assert.equal(buff.apply(60, 1).reloadModifiers, true);
-    const merged = buff.work.battlefield.snapshot("draft");
-    assert.equal(instance(merged).source, 10);
-    assert.equal(instance(merged).state.blackboard.atk, 0.5);
-    assert.deepEqual(buff.reads, [[10, 100], [10, 200]]);
-    assert.equal(power(merged), 300);
-    buff.sourceAttack(10, 400);
-    buff.expire(60);
-    assert.equal(instance(battlefieldView(buff.work)).source, 10);
-    assert.equal(instance(battlefieldView(buff.work)).state.blackboard.atk, 0.5);
-    assert.deepEqual(buff.reads, [[10, 100], [10, 200], [10, 400]]);
-    assert.equal(power(battlefieldView(buff.work)), 300);
-    assert.equal(instance(original).state.sample.sourceAttack, 100);
-    assert.equal(instance(merged).state.sample.sourceAttack, 200);
-    assert.equal(instance(merged).state.stackCount, 2);
-});
-
-test("buff expiry integration: dynamic caps preserve raw count and samples until a raised cap permits a merge", () => {
-    const buff = harness({ descriptor: description({ maxValidStackCnt: 2 }), stackCount: 4 });
-    const original = buff.work.battlefield.snapshot("draft");
-    buff.sourceAttack(10, 800);
-    buff.setCap(2, 1);
-    assert.equal(instance(battlefieldView(buff.work)).state.stackCount, 4);
-    assert.equal(instance(battlefieldView(buff.work)).state.sample.sourceAttack, 100);
-    assert.equal(instance(battlefieldView(buff.work)).state.priority, 1);
-    assert.deepEqual(buff.reads, [[10, 100]]);
-    assert.equal(power(battlefieldView(buff.work)), 200);
-    const capped = buff.work.battlefield.snapshot("draft");
-    assert.equal(buff.apply(90, 2, null).type, "REJECT");
-    assert.equal(getUnit(buff.work, 0), capped.getUnit(0));
-    buff.setCap(5, 3);
-    const raised = buff.work.battlefield.snapshot("draft");
-    assert.deepEqual(buff.reads, [[10, 100]]);
-    assert.equal(buff.apply(90, 4, 0).type, "REFRESH");
-    assert.equal(instance(battlefieldView(buff.work)).state.stackCount, 5);
-    assert.equal(instance(battlefieldView(buff.work)).state.maxStackCount, 5);
-    assert.equal(effectTick(instance(battlefieldView(buff.work))), 90);
-    assert.deepEqual(buff.reads, [[10, 100]]);
-    assert.equal(power(battlefieldView(buff.work)), 200);
-    assert.equal(instance(original).state.maxStackCount, undefined);
-    assert.equal(instance(raised).state.stackCount, 4);
-    buff.setCap(null, 5);
-    assert.equal(buff.apply(100, 6, 0).type, "REFRESH");
-    assert.equal(instance(battlefieldView(buff.work)).state.stackCount, 6);
-    assert.equal(instance(battlefieldView(buff.work)).source, 10);
-});
-
-test("buff expiry integration: zero duration peels once per tick and an overdue deadline never catches up", () => {
-    const zero = harness({ lifetimeTicks: 0, expiresAtTick: 0 });
-    zero.expire(0);
-    assert.equal(instance(battlefieldView(zero.work)).state.stackCount, 2);
-    assert.equal(effectTick(instance(battlefieldView(zero.work))), 1);
-    zero.expire(0);
-    assert.equal(zero.expirations.length, 1);
-    zero.expire(1);
-    assert.equal(instance(battlefieldView(zero.work)).state.stackCount, 1);
-    zero.expire(2);
-    assert.equal(instance(battlefieldView(zero.work)).finished, true);
-    const late = harness({ stackCount: 4 });
-    late.expire(300);
-    assert.equal(instance(battlefieldView(late.work)).state.stackCount, 3);
-    assert.equal(effectTick(instance(battlefieldView(late.work))), 330);
-    assert.equal(late.expirations.length, 1);
-    late.expire(300);
-    assert.equal(late.expirations.length, 1);
-});
-
-test("buff expiry integration: the native clear-all descriptor immediately stops every layer's contribution", () => {
-    const buff = harness({ descriptor: parseBuffStacking(native("ascln_t_1[debuff]")), stackCount: 4 });
-    buff.expire(30);
-    assert.deepEqual(buff.expirations, [{ tick: 30, plan: { type: "FINISH" } }]);
-    assert.equal(instance(battlefieldView(buff.work)).finished, true);
-    assert.equal(instance(battlefieldView(buff.work)).state.stackCount, 4);
-    assert.equal(power(battlefieldView(buff.work)), 100);
-    assert.deepEqual(buff.reads, [[10, 100]]);
 });

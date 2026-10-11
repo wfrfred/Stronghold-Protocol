@@ -4,10 +4,12 @@ import {
     assertNonnegativeNumber,
     assertPositiveNumber,
 } from "../../../../common/assert.js";
-import * as contribution from "../../../contribution/contribution.js";
+import * as contribution from "../../contribution/contribution.js";
 import * as operation from "./operation.js";
 import { createTargetingDefinition, type TargetingDefinition } from "../../targeting/definition.js";
 import { widenUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
+import * as hook from "../../hook/hook.js";
+import type { ActionReleaseHook } from "./release.js";
 
 export type TargetBindingId = string;
 
@@ -44,6 +46,7 @@ export interface ActionState {
     readonly cooldownIntervalTicks: number | null;
     readonly attackSpeed: readonly contribution.Contribution<contribution.Input<QueryContext>>[];
     readonly baseAttackTime: readonly contribution.Contribution<contribution.Input<QueryContext>>[];
+    readonly beforeRelease: readonly ActionReleaseHook[];
 }
 
 export interface Action {
@@ -132,6 +135,7 @@ export function createActionState(tick = 0): ActionState {
         cooldownIntervalTicks: null,
         attackSpeed: [],
         baseAttackTime: [],
+        beforeRelease: [],
     };
 }
 
@@ -140,6 +144,32 @@ export function initializeActionState(
     context: { readonly tick: number },
 ): ActionState {
     return createActionState(context.tick);
+}
+
+export function setBeforeReleaseHook<U extends Unit & Action>(
+    input: U | StableUnit<U>,
+    entry: ActionReleaseHook,
+): StableUnit<U> {
+    const unit = widenUnit<U>(input);
+
+    const beforeRelease = hook.set(unit.action.beforeRelease, entry);
+
+    return beforeRelease === unit.action.beforeRelease
+        ? unit
+        : widenUnit<U>({ ...unit, action: { ...unit.action, beforeRelease } });
+}
+
+export function removeBeforeReleaseHook<U extends Unit & Action>(
+    input: U | StableUnit<U>,
+    id: string,
+): StableUnit<U> {
+    const unit = widenUnit<U>(input);
+
+    const beforeRelease = hook.remove(unit.action.beforeRelease, id);
+
+    return beforeRelease === unit.action.beforeRelease
+        ? unit
+        : widenUnit<U>({ ...unit, action: { ...unit.action, beforeRelease } });
 }
 
 function updateContributions<U extends Unit>(

@@ -2,7 +2,6 @@ import type { Unit, UnitDefinition } from "../unit.js";
 import { initializeActionState } from "./action/capability.js";
 import { initializeAllegianceState } from "./allegiance.js";
 import { initializeBlockableState, initializeBlockerState } from "./blocking/capability.js";
-import type { EffectsState } from "./effects/capability.js";
 import { initializeDefenseState } from "./defense/capability.js";
 import { initializeLocomotionState, type RoutedLocomotionState } from "./locomotion/capability.js";
 import type { SpatialPresenceState } from "./presence.js";
@@ -37,7 +36,6 @@ export const configuredCapabilities = {
 interface RuntimeCapabilityStates {
     readonly spatialPresence: SpatialPresenceState;
     readonly occupancy: OccupancyState;
-    readonly effects: EffectsState;
 }
 
 export type ConfiguredCapabilityKey = keyof typeof configuredCapabilities;
@@ -83,7 +81,6 @@ const capabilityKeys: readonly CapabilityKey[] = [
     ...configuredKeys,
     "spatialPresence",
     "occupancy",
-    "effects",
 ];
 
 function hasCapabilityState(unit: Unit, key: ConfiguredCapabilityKey): boolean {

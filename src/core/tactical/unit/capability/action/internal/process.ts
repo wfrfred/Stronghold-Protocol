@@ -1,11 +1,9 @@
-import { EffectDispatchScope } from "../../effects/dispatch.js";
 import type { ActionExecutionWork } from "./executions.js";
 import { assertFiniteNumber, assertNonnegativeSafeInteger } from "../../../../../common/assert.js";
 import { appendEvents, getUnit, type BattleState } from "../../../../battle/execution/context.js";
 import type { UnitId } from "../../../unit.js";
 import { isSpatiallyPresent } from "../../presence.js";
-import type { EffectTransitionResources } from "../../effects/contract.js";
-import { closeEffectLifetimes } from "../../effects/lifecycle.js";
+import { endScope } from "../../../effect/operations.js";
 import type { TargetBindingId } from "../capability.js";
 import type { ProjectileOperations } from "../../../../battlefield/projectile/operations.js";
 import { gainUnitSkillSp } from "../../../../battle/execution/skill-sp.js";
@@ -94,31 +92,19 @@ function endExecution(
     work: BattleState,
     executions: ActionExecutionWork,
     execution: ActionExecution,
-    resources: EffectTransitionResources,
-    tick: number,
     reason: string,
-    dispatch: EffectDispatchScope,
 ): void {
     executions.remove(execution);
 
-    closeEffectLifetimes(
-        work,
-        [{ type: "ACTION", executionId: execution.id }],
-        resources,
-        tick,
-        reason,
-        dispatch,
-    );
+    endScope(work, { type: "ACTION", executionId: execution.id }, reason);
 }
 
 function finishExecution(
     work: BattleState,
     executions: ActionExecutionWork,
     execution: ActionExecution,
-    resources: EffectTransitionResources,
     tick: number,
     signals: readonly ActionExecutionSignal[],
-    dispatch: EffectDispatchScope,
 ): ActionExecutionWorkTransition {
     const signal: ActionExecutionSignal = {
         type: "ACTION_FINISHED",
@@ -126,7 +112,7 @@ function finishExecution(
         sourceUnitId: execution.sourceUnitId,
         tick,
     };
-    endExecution(work, executions, execution, resources, tick, "ACTION_FINISHED", dispatch);
+    endExecution(work, executions, execution, "ACTION_FINISHED");
     appendEvents(work, [signal]);
 
     return {
@@ -139,8 +125,6 @@ export function cancelActionExecutionInWork(
     work: BattleState,
     executions: ActionExecutionWork,
     request: ActionExecutionCancelRequest,
-    resources: EffectTransitionResources,
-    dispatch = new EffectDispatchScope(),
 ): ActionExecutionWorkTransition {
     const { executionId, tick, reason = "CANCELLED" } = request;
     const execution = executions.get(executionId);
@@ -160,7 +144,7 @@ export function cancelActionExecutionInWork(
         tick,
         reason,
     };
-    endExecution(work, executions, execution, resources, tick, reason, dispatch);
+    endExecution(work, executions, execution, reason);
     appendEvents(work, [signal]);
 
     return {
@@ -220,7 +204,6 @@ export function resumeActionExecutionInWork(
         work.actionExecutions = executions;
     }
 
-    const dispatch = new EffectDispatchScope();
     const signals: ActionExecutionSignal[] = [];
     const releaseType = segments.some(({ type }) => type === "RELEASE") ? "RELEASE" : "EXECUTE";
 
@@ -228,31 +211,27 @@ export function resumeActionExecutionInWork(
         const segment: CompiledActionSegment | undefined = segments[execution.cursor];
 
         if (segment === undefined) {
-            return finishExecution(work, executions, execution, resources, tick, signals, dispatch);
+            return finishExecution(work, executions, execution, tick, signals);
         }
 
         const source = getUnit(work, execution.sourceUnitId);
 
         if (source === undefined || !isSpatiallyPresent(source)) {
-            const cancelled = cancelActionExecutionInWork(
-                work,
-                executions,
-                { executionId, tick, reason: "SOURCE_ABSENT" },
-                resources,
-                dispatch,
-            );
+            const cancelled = cancelActionExecutionInWork(work, executions, {
+                executionId,
+                tick,
+                reason: "SOURCE_ABSENT",
+            });
 
             return { ...cancelled, signals: [...signals, ...cancelled.signals] };
         }
 
         if (hasStatusFlag(source, "STUNNED")) {
-            const cancelled = cancelActionExecutionInWork(
-                work,
-                executions,
-                { executionId, tick, reason: "INTERRUPTED" },
-                resources,
-                dispatch,
-            );
+            const cancelled = cancelActionExecutionInWork(work, executions, {
+                executionId,
+                tick,
+                reason: "INTERRUPTED",
+            });
 
             return { ...cancelled, signals: [...signals, ...cancelled.signals] };
         }
@@ -261,20 +240,18 @@ export function resumeActionExecutionInWork(
             segment.type === releaseType &&
             !segments.slice(0, execution.cursor).some(({ type }) => type === releaseType)
         ) {
-            const interrupted = beforeActionRelease(work, source.id, tick, resources, dispatch);
+            const interrupted = beforeActionRelease(work, source.id, tick);
 
             if (executions.get(executionId) === undefined) {
                 return { result: { type: "ABSENT" }, signals };
             }
 
             if (interrupted) {
-                const cancelled = cancelActionExecutionInWork(
-                    work,
-                    executions,
-                    { executionId, tick, reason: "INTERRUPTED" },
-                    resources,
-                    dispatch,
-                );
+                const cancelled = cancelActionExecutionInWork(work, executions, {
+                    executionId,
+                    tick,
+                    reason: "INTERRUPTED",
+                });
 
                 return { ...cancelled, signals: [...signals, ...cancelled.signals] };
             }
@@ -300,7 +277,7 @@ export function resumeActionExecutionInWork(
                     .some(({ type }) => type === "EXECUTE");
 
                 if (outputStarted && !previousOutput && resources.completeAttack !== undefined) {
-                    resources.completeAttack(work, execution.sourceUnitId, tick, dispatch);
+                    resources.completeAttack(work, execution.sourceUnitId, tick);
 
                     if (executions.get(executionId) === undefined) {
                         return { result: { type: "ABSENT" }, signals };
@@ -321,25 +298,15 @@ export function resumeActionExecutionInWork(
                 };
 
                 if (result?.continuation === "FINISH") {
-                    return finishExecution(
-                        work,
-                        executions,
-                        execution,
-                        resources,
-                        tick,
-                        signals,
-                        dispatch,
-                    );
+                    return finishExecution(work, executions, execution, tick, signals);
                 }
                 if (result?.continuation === "CANCEL") {
                     executions.replace(execution);
-                    const cancelled = cancelActionExecutionInWork(
-                        work,
-                        executions,
-                        { executionId, tick, reason: "CONTENT_CANCELLED" },
-                        resources,
-                        dispatch,
-                    );
+                    const cancelled = cancelActionExecutionInWork(work, executions, {
+                        executionId,
+                        tick,
+                        reason: "CONTENT_CANCELLED",
+                    });
 
                     return { ...cancelled, signals: [...signals, ...cancelled.signals] };
                 }

@@ -1,7 +1,5 @@
 import { battlefieldView, getUnit, type BattleState } from "../../../battle/execution/context.js";
 import { resolveAttackPower } from "../../../unit/capability/offense/query.js";
-import { EffectDispatchScope } from "../../../unit/capability/effects/dispatch.js";
-import { createEffectOperations } from "../../../unit/capability/effects/operations.js";
 import type {
     ProjectileCallbackContext,
     ProjectileFacts,
@@ -42,31 +40,15 @@ export function withProjectileQuery<S extends object, R>(
     tick: number,
     run: (context: ProjectileQueryContext<S>) => R,
 ): R {
-    let active = true;
-
-    const readWork = (): BattleState => {
-        if (!active) {
-            throw new TypeError("projectile query context is no longer active");
-        }
-
-        return access.state;
-    };
-
-    const context: ProjectileQueryContext<S> = {
-        get projectile() {
-            readWork();
-
-            return instance;
-        },
+    return run({
+        battle: access.state,
+        projectile: instance,
         tick,
-        facts: projectileFacts(readWork, (id) => access.getProjectile(id)),
-    };
-
-    try {
-        return run(context);
-    } finally {
-        active = false;
-    }
+        facts: projectileFacts(
+            () => access.state,
+            (id) => access.getProjectile(id),
+        ),
+    });
 }
 
 export function withProjectileContext<S extends object>(
@@ -76,16 +58,8 @@ export function withProjectileContext<S extends object>(
     tick: number,
     run: (context: ProjectileCallbackContext<S>) => undefined,
 ): void {
-    let active = true;
-    const dispatch = new EffectDispatchScope();
+    const readWork = (): BattleState => access.state;
 
-    const readWork = (): BattleState => {
-        if (!active) {
-            throw new TypeError("projectile context is no longer active");
-        }
-
-        return access.state;
-    };
     const readProjectile = (): Projectile<S> => {
         readWork();
 
@@ -95,6 +69,7 @@ export function withProjectileContext<S extends object>(
     };
 
     const context: ProjectileCallbackContext<S> = {
+        battle: access.state,
         get projectile() {
             return readProjectile();
         },
@@ -110,9 +85,8 @@ export function withProjectileContext<S extends object>(
             return attack ?? projectile.cachedAtk;
         },
         operations: {
-            effects: createEffectOperations(readWork, services, tick, dispatch),
-            damage: (request) => services.settleDamage(readWork(), { ...request, tick }, dispatch),
-            heal: (request) => services.settleHealing(readWork(), { ...request, tick }, dispatch),
+            damage: (request) => services.settleDamage(readWork(), { ...request, tick }),
+            heal: (request) => services.settleHealing(readWork(), { ...request, tick }),
             updateState: (transition) => {
                 const current = readProjectile();
                 const state = transition(current.state);
@@ -126,9 +100,5 @@ export function withProjectileContext<S extends object>(
         },
     };
 
-    try {
-        run(context);
-    } finally {
-        active = false;
-    }
+    run(context);
 }

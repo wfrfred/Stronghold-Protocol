@@ -1,7 +1,9 @@
 import { preserveHpRatio } from "./max-hp.js";
-import * as contribution from "../../../contribution/contribution.js";
-import * as modifier from "../../../contribution/value.js";
+import * as contribution from "../../contribution/contribution.js";
+import * as modifier from "../../contribution/value.js";
 import { widenUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
+import type { Hook as DamageHook } from "./damage/hook.js";
+import type { Hook as HealingHook } from "./healing/hook.js";
 
 export interface VitalityDefinition {
     readonly maxHp: number;
@@ -10,6 +12,8 @@ export interface VitalityDefinition {
 export interface VitalityState {
     readonly hp: number;
     readonly maxHp: readonly contribution.Contribution[];
+    readonly damageHooks: readonly DamageHook[];
+    readonly healingHooks: readonly HealingHook[];
 }
 
 export interface Vitality {
@@ -35,7 +39,7 @@ export function hasVitalityDefinition(
 }
 
 export function initializeVitalityState(definition: VitalityDefinition): VitalityState {
-    return { hp: definition.maxHp, maxHp: [] };
+    return { hp: definition.maxHp, maxHp: [], damageHooks: [], healingHooks: [] };
 }
 
 function changeMaxHpContributions<U extends Unit>(

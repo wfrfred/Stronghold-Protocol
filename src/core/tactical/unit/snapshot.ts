@@ -11,6 +11,7 @@ export function copyUnitSnapshot(unit: Readonly<Unit>): Unit {
         id: unit.id,
         definition: unit.definition,
         position: unit.position,
+        effects: unit.effects,
         ...selectCapabilityStates(unit),
     };
 }

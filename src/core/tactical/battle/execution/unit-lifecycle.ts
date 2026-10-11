@@ -1,75 +1,62 @@
-import {
-    closeEffectLifetimes,
-    expireEffects,
-    finalizeFinishedEffects,
-} from "../../unit/capability/effects/lifecycle.js";
-import { EffectDispatchScope } from "../../unit/capability/effects/dispatch.js";
-import type { LifetimeRef } from "../../unit/capability/effects/effect.js";
+import { endScope } from "../../unit/effect/operations.js";
+import { key } from "../../unit/effect/effect.js";
 import type { UnitId } from "../../unit/unit.js";
 import type { BattlefieldRemovalReason } from "../../battlefield/contract.js";
-import type { EffectTransitionResources } from "../../unit/capability/effects/contract.js";
 import type { StoppedSkillActivation } from "../../unit/capability/skill/execution.js";
 import type { ActionExecutionSignal } from "../../unit/capability/action/process.js";
-import { appendEvents, battlefieldView, getUnit, removeUnit, type BattleState } from "./context.js";
+import { appendEvents, getUnit, removeUnit, type BattleState } from "./context.js";
 
-export interface UnitLifecycleResources extends EffectTransitionResources {
+export interface UnitLifecycleResources {
     readonly stopSkillActivation: (
-        state: BattleState,
+        battle: BattleState,
         unitId: UnitId,
         tick: number,
     ) => StoppedSkillActivation | null;
     readonly notifySkillFinished: (
-        state: BattleState,
+        battle: BattleState,
         activation: StoppedSkillActivation,
         tick: number,
-        dispatch: EffectDispatchScope,
     ) => void;
 }
 
 export function retireCombatUnit(
-    state: BattleState,
+    battle: BattleState,
     unitId: UnitId,
     resources: UnitLifecycleResources,
     tick: number,
-    dispatch?: EffectDispatchScope,
 ): void {
-    removeUnitWithEffects(state, unitId, "DEATH", resources, tick, dispatch);
+    removeUnitWithEffects(battle, unitId, "DEATH", resources, tick);
 }
 
 export function removeUnitWithEffects(
-    state: BattleState,
+    battle: BattleState,
     unitId: UnitId,
     reason: BattlefieldRemovalReason,
     resources: UnitLifecycleResources,
     tick: number,
-    dispatch = new EffectDispatchScope(),
 ): void {
-    const unit = getUnit(state, unitId);
-    const lifetime: LifetimeRef = { type: "UNIT", unitId };
+    const lifetime = { type: "UNIT" as const, unitId };
 
-    if (unit === undefined || dispatch.isClosing(lifetime)) {
+    if (getUnit(battle, unitId) === undefined || battle.closedLifetimes.has(key(lifetime))) {
         return;
     }
 
-    const actions = state.actionExecutions?.forSource(unitId) ?? [];
-    const stopped = resources.stopSkillActivation(state, unitId, tick);
-    const lifetimes: LifetimeRef[] = [
-        lifetime,
-        ...(stopped === null
-            ? []
-            : [
-                  {
-                      type: "SKILL" as const,
-                      unitId,
-                      activationId: stopped.active.id,
-                  },
-              ]),
-        ...actions.map(({ id }) => ({ type: "ACTION" as const, executionId: id })),
-    ];
-    dispatch.markClosing(lifetimes);
+    battle.closedLifetimes.add(key(lifetime));
+    const actions = battle.actionExecutions?.forSource(unitId) ?? [];
+    const stopped = resources.stopSkillActivation(battle, unitId, tick);
 
     for (const action of actions) {
-        state.actionExecutions!.remove(action);
+        battle.actionExecutions!.remove(action);
+        endScope(battle, { type: "ACTION", executionId: action.id }, reason);
+    }
+    if (stopped !== null) {
+        endScope(battle, { type: "SKILL", unitId, activationId: stopped.active.id }, reason);
+    }
+
+    endScope(battle, lifetime, reason);
+
+    if (stopped !== null) {
+        resources.notifySkillFinished(battle, stopped, tick);
     }
 
     const signals: ActionExecutionSignal[] = actions.map(({ id }) => ({
@@ -79,36 +66,6 @@ export function removeUnitWithEffects(
         tick,
         reason: "SOURCE_ABSENT",
     }));
-    closeEffectLifetimes(state, lifetimes, resources, tick, reason, dispatch);
-
-    const finishRemoval = (): void => {
-        if (stopped !== null) {
-            resources.notifySkillFinished(state, stopped, tick, dispatch);
-        }
-
-        appendEvents(state, signals);
-        finalizeFinishedEffects(state, unitId, resources, tick, dispatch);
-
-        removeUnit(state, unitId, reason);
-    };
-
-    if (dispatch.hasPendingEnds()) {
-        dispatch.deferUnitRemoval(unitId, finishRemoval);
-
-        return;
-    }
-
-    finishRemoval();
-}
-
-export function prepareCombatEffects(
-    state: BattleState,
-    tick: number,
-    resources: EffectTransitionResources,
-): void {
-    expireEffects(state, tick, resources);
-
-    for (const id of battlefieldView(state).unitIds) {
-        finalizeFinishedEffects(state, id, resources, tick);
-    }
+    appendEvents(battle, signals);
+    removeUnit(battle, unitId, reason);
 }

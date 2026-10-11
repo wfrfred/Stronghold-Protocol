@@ -55,9 +55,8 @@ export function createTacticalMechanicsDemo(
         scenario === "SKILL"
             ? createOperatorDefinition({
                   ...sourceDefinition,
-                  skill: combat.skills.register(
-                      compileArknightsAttackBuffSkill(rawSkill, 4, combat),
-                  ).definition,
+                  skill: combat.skills.register(compileArknightsAttackBuffSkill(rawSkill, 4))
+                      .definition,
               })
             : createOperatorDefinition({
                   ...sourceDefinition,

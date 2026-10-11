@@ -1,3 +1,5 @@
+import { definition } from "../helpers/effects.js";
+import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { fixtureBattlefield } from "../helpers/battlefield.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import assert from "node:assert/strict";
@@ -16,9 +18,6 @@ import { compileAction } from "../../dist/core/tactical/unit/capability/action/c
 import {
   resumeActionExecution,
 } from "../../dist/core/tactical/unit/capability/action/process.js";
-import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
-import { installNewEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
-import { updateEffectState } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
 import { createBattleState, getUnit } from "../../dist/core/tactical/battle/execution/context.js";
 
 const hit = createShapeGeometry({
@@ -353,12 +352,7 @@ test("action runtime: failed continuation publishes no progress, sample, settlem
     const fault = { enabled: failing };
     const attemptedIds = [];
     const resources = new CombatResources();
-    const marker = resources.registerEffect(
-      createEffectDefinition({
-        id: "action-sample",
-        initialize: () => ({ count: 0 }),
-      }),
-    );
+    const marker = definition("action-sample", { count: 0 });
     const actor = actorDefinition("continuation");
     const runtime = new BattleRuntime(
       spec([
@@ -374,31 +368,16 @@ test("action runtime: failed continuation publishes no progress, sample, settlem
             program: [
               {
                 type: "EXECUTE",
-                run: (context) => {installNewEffect(
-                    context.work,
-                    0,
-                    marker,
-                    {
-                      source: 0,
-                      scopes: [{ type: "ACTION", executionId: context.executionId }],
-                    },
-                    services,
-                    context.tick,
-                  );},
+                run: (context) => {effects.apply(context.work, getUnit(context.work, 0), marker, {
+                    source: 0, scopes: [{ type: "ACTION", executionId: context.executionId }],
+                  });},
               },
               ...compiled.program,
               {
                 type: "EXECUTE",
                 run: (context) => {
                   attemptedIds.push(context.executionId);
-                  updateEffectState(
-                    context.work,
-                    0,
-                    0,
-                    marker,
-                    (state) => ({ count: state.count + 1 }),
-                    services, 0,
-                  );
+                  effects.setState(context.work, { type: "EFFECT", unitId: 0, effectId: 0 }, marker, state => ({ count: state.count + 1 }));
                   if (fault.enabled) {
                     throw new Error("continuation failed");
                   }
@@ -432,14 +411,13 @@ test("action runtime: failed continuation publishes no progress, sample, settlem
 test("action runtime: a throwing Effect finish after nested host death does not publish execution or battlefield changes", () => {
   const reasons = [];
   const resources = new CombatResources();
-  const terminal = resources.registerEffect(createEffectDefinition({
-    id: "throwing-action-terminal",
-    initialize: () => ({}),
-  }), { lifecycle: { finish: context => {
-    reasons.push(context.end.reason);
-    context.damage({ sourceUnitId: null, targetUnitId: 0, damageType: "TRUE", operands: createDamageOperands(100) });
-    throw new Error("terminal failure");
-  } } });
+  const terminal = definition("throwing-action-terminal", {}, {
+    onEnd: context => {
+      reasons.push(context.reason);
+      resources.settleDamage(context.battle, { sourceUnitId: null, targetUnitId: 0, tick: context.tick, damageType: "TRUE", operands: createDamageOperands(100) });
+      throw new Error("terminal failure");
+    },
+  });
   const runtime = new BattleRuntime(spec([
     { definition: actorDefinition("terminal-failure"), position: [0, 0] },
     { definition: passiveDefinition(), position: [3, 0] },
@@ -450,9 +428,9 @@ test("action runtime: a throwing Effect finish after nested host death does not 
       return {
         ...compiled,
         program: [
-          { type: "EXECUTE", run: context => {installNewEffect(context.work, 0, terminal, {
+          { type: "EXECUTE", run: context => {effects.apply(context.work, getUnit(context.work, 0), terminal, {
               source: 0, scopes: [{ type: "ACTION", executionId: context.executionId }],
-            }, services, context.tick);} },
+            });} },
           { type: "WAIT", allowNewAction: false, resolve: () => ({ type: "FOR_TICKS", ticks: 10 }) },
           ...compiled.program,
         ],

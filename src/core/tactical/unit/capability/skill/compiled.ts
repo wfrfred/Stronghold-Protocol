@@ -1,6 +1,6 @@
 import type { UnitId } from "../../unit.js";
 import type { CombatTargetingView } from "../../targeting/query.js";
-import type { EffectLifecycleOperations } from "../effects/contract.js";
+import type { BattleState } from "../../../battle/execution/context.js";
 import type { SkillDefinition } from "./capability.js";
 import type { DamageReport, DamageRequest } from "../vitality/damage/contract.js";
 import type { HealingReport, HealingRequest } from "../vitality/healing/contract.js";
@@ -16,7 +16,7 @@ export interface SkillQueryContext {
 export interface SkillActivationContext extends SkillQueryContext {
     readonly activationId: number;
     readonly endsAtTick: number | null;
-    readonly effects: EffectLifecycleOperations;
+    readonly battle: BattleState;
     damage(request: Omit<DamageRequest, "tick">): DamageReport;
     heal(request: Omit<HealingRequest, "tick">): HealingReport;
 }

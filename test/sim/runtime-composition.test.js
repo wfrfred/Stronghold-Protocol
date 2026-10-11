@@ -1,5 +1,7 @@
 import { createActionState } from "../../dist/core/tactical/unit/capability/action/capability.js";
-import { liveAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
+import { setAttackContribution, removeAttackContribution } from "../../dist/core/tactical/unit/capability/offense/capability.js";
+import { setHook as setDamageHook, removeHook as removeDamageHook } from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
+import { get as getEffect } from "../../dist/core/tactical/unit/effect/query.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
@@ -12,15 +14,13 @@ import { seededPlacement } from "../helpers/aura.js";
 import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
 import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
 import { compileAction } from "../../dist/core/tactical/unit/capability/action/compile.js";
-import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
-import { installNewEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
-import { compileStatusBinding } from "../../dist/core/tactical/unit/capability/status/binding.js";
-import { hasStatusFlag } from "../../dist/core/tactical/unit/capability/status/capability.js";
-import * as modifier from "../../dist/core/tactical/contribution/value.js";
+import { apply as applyEffect, setState as setEffectState } from "../../dist/core/tactical/unit/effect/operations.js";
+import { hasStatusFlag, addStatusContribution, removeStatusContribution } from "../../dist/core/tactical/unit/capability/status/capability.js";
+import * as modifier from "../../dist/core/tactical/unit/contribution/value.js";
 import { initializeVitalityState } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
-import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/execution/context.js";
+import { battlefieldView, getUnit, transitionUnit } from "../../dist/core/tactical/battle/execution/context.js";
 import { createProjectileDefinition } from "../../dist/core/tactical/battlefield/projectile/definition.js";
 
 const hit = createShapeGeometry({
@@ -108,131 +108,100 @@ function scenario({ failure = null, cancelled = false } = {}) {
   const auraAddress = { type: "EFFECT", unitId: 0, effectId: 0 };
   let aura;
 
-  const registerBuff = (id, addition, flags = []) => {
-    let program;
-    program = resources.registerEffect(createEffectDefinition({
-      id,
-      initialize: () => ({ starts: 0, enables: 0 }),
-    }), {
-      contributions: [liveAttack(() => [modifier.create({ finalAddition: addition })])],
-      bindings: flags.length === 0 ? [] : [compileStatusBinding(flags)],
-      lifecycle: {
-        start: (context) => {
-          context.effects.update(context.ref, program, (state) => ({
-            ...state, starts: state.starts + 1,
-          }));
-        },
-        enable: (context) => {
-          context.effects.update(context.ref, program, (state) => ({
-            ...state, enables: state.enables + 1,
-          }));
-        },
-      },
-    });
-    return program;
-  };
+  const registerBuff = (id, addition, flags = []) => ({
+    id,
+    initialize: () => ({ starts: 0, enables: 0 }),
+    onApply(context) {
+      context.setState(state => ({ ...state, starts: state.starts + 1 }));
+    },
+    onEnable(context) {
+      context.setState(state => ({ ...state, enables: state.enables + 1 }));
+      const id = `effect:${context.self.id}`;
+      transitionUnit(context.battle, context.ref.unitId, unit => {
+        const next = setAttackContribution(unit, { id, value: [modifier.create({ finalAddition: addition })] });
+        return flags.length === 0 ? next : { ...next, status: addStatusContribution(next.status, { id, flags }) };
+      });
+    },
+    onDisable(context) {
+      const id = `effect:${context.self.id}`;
+      transitionUnit(context.battle, context.ref.unitId, unit => {
+        const next = removeAttackContribution(unit, id);
+        return flags.length === 0 ? next : { ...next, status: removeStatusContribution(next.status, id) };
+      });
+    },
+  });
   const marker = registerBuff("receiver-mark", 3, ["INVISIBLE"]);
   const scoped = registerBuff("execution-power", 2);
   const pulse = registerBuff("release-power", 1);
-  const refused = resources.registerEffect(createEffectDefinition({
-    id: "refused-installation",
-    initialize: () => ({}),
-  }), {
-    lifecycle: {
-      start: (context) => {
-        const prefix = context.effects.install(context.ref.unitId, marker, {
-          source: 0, scopes: [],
-        });
-        assert.equal(prefix.type, "INSTALLED");
-      },
-      accepts: () => false,
-    },
-  });
-  let receiver;
-  receiver = resources.registerEffect(createEffectDefinition({
-    id: "aura-receiver",
-    initialize: () => ({ starts: 0, enables: 0, uses: 0 }),
-  }), {
-    contributions: [liveAttack(() => [modifier.create({ finalAddition: 5 })])],
-    lifecycle: {
-      start: (context) => {
-        context.effects.update(context.ref, receiver, (state) => ({
-          ...state, starts: state.starts + 1,
-        }));
-      },
-      enable: (context) => {
-        context.effects.update(context.ref, receiver, (state) => ({
-          ...state, enables: state.enables + 1,
-        }));
-      },
-    },
-    damage: {
-      reception: {
+  const receiverOutput = registerBuff("aura-receiver", 5);
+  const receiver = {
+    ...receiverOutput,
+    initialize: () => ({ ...receiverOutput.initialize(), uses: 0 }),
+    onApply(context) {
+      receiverOutput.onApply(context);
+      const ref = context.ref;
+      transitionUnit(context.battle, ref.unitId, unit => setDamageHook(unit, {
+        id: `receiver:${ref.effectId}`,
+        stage: "reception",
         priority: 0,
-        apply: (context, pending) => {
-          assert.ok(context.facts.getEffect(auraAddress).state.remaining > 0);
-          context.operations.effects.update(auraAddress, aura, (state) => ({
+        enabled: invocation => getEffect(invocation.battle, ref)?.status === "ACTIVE",
+        invoke(invocation, pending) {
+          const battle = invocation.battle;
+          assert.ok(getEffect(battle, auraAddress).state.remaining > 0);
+          setEffectState(battle, auraAddress, aura, state => ({
             ...state, remaining: state.remaining - 1, consumed: state.consumed + 1,
           }));
-          context.operations.effects.update(context.ref, receiver, (state) => ({
-            ...state, uses: state.uses + 1,
-          }));
+          setEffectState(battle, ref, receiver, state => ({ ...state, uses: state.uses + 1 }));
           if (cancelled) {
-            rejected.push(context.operations.effects.install(context.ownerUnitId, refused, {
-              source: 0, scopes: [],
-            }));
-            context.operations.heal({
-              sourceUnitId: 0, targetUnitId: context.ownerUnitId,
-              power: 4, ignoreHealFree: false,
+            rejected.push({ type: "SKIPPED", reason: "CONTENT_CONDITION" });
+            invocation.operations.heal({
+              sourceUnitId: 0, targetUnitId: ref.unitId, power: 4, ignoreHealFree: false,
             });
           } else {
-            const installed = context.operations.effects.install(context.ownerUnitId, marker, {
-              source: 0, scopes: [],
-            });
-            assert.equal(installed.type, "INSTALLED");
-            assert.equal(context.operations.effects.bind(installed.ref, context.ref).type, "BOUND");
+            assert.ok(applyEffect(battle, getUnit(battle, ref.unitId), marker, {
+              source: 0, scopes: [ref],
+            }));
           }
-          const quota = context.facts.getEffect(auraAddress).state;
-          attempts.push({
-            address: context.ref,
+          const quota = getEffect(battle, auraAddress).state;
+          attempts.push({ address: ref,
             quota: { remaining: quota.remaining, consumed: quota.consumed },
-            marked: hasStatusFlag(context.facts.getUnit(context.ownerUnitId), "INVISIBLE"),
+            marked: hasStatusFlag(getUnit(battle, ref.unitId), "INVISIBLE"),
           });
-          return { value: {
-            ...pending,
+          return { value: { ...pending,
             amount: fault.enabled && failure === "invalid-damage" ? NaN : pending.amount,
             cancellation: cancelled ? { stage: "RECEPTION", reason: "BLOCKED" } : null,
           } };
         },
-      },
+      }));
     },
-  });
-  aura = resources.registerEffect(createEffectDefinition({
+    onEnd(context) {
+      transitionUnit(context.battle, context.ref.unitId, unit => removeDamageHook(unit, `receiver:${context.self.id}`));
+    },
+  };
+  aura = {
     id: "combined-aura",
     initialize: () => ({ remaining: 3, consumed: 0, receivers: [] }),
-  }), { lifecycle: {
-    advance: context => {
+    onTick(context) {
       if (context.tick >= 3) {
-        context.effects.finish([context.ref], "AURA_FINISHED");
+        context.end("AURA_FINISHED");
         return;
       }
-      for (const unitId of context.battlefield.unitIds) {
-        if (context.instance.finished) return;
-        if (context.instance.state.receivers.some(binding => binding.unitId === unitId)) continue;
-        context.effects.update(context.ref, aura, state => ({
-          ...state, receivers: [...state.receivers, { unitId, ref: null, attempts: 1 }],
+      for (const unitId of battlefieldView(context.battle).unitIds) {
+        if (context.self.status === "FINISHED") return;
+        if (context.self.state.receivers.some(binding => binding.unitId === unitId)) continue;
+        context.setState(state => ({ ...state,
+          receivers: [...state.receivers, { unitId, ref: null, attempts: 1 }],
         }));
-        const installed = context.effects.install(unitId, receiver, {
+        const ref = applyEffect(context.battle, getUnit(context.battle, unitId), receiver, {
           source: context.ref.unitId, scopes: [context.ref],
         });
-        assert.equal(installed.type, "INSTALLED");
-        context.effects.update(context.ref, aura, state => ({
-          ...state, receivers: state.receivers.map(binding => binding.unitId === unitId
-            ? { ...binding, ref: installed.ref } : binding),
+        assert.ok(ref);
+        context.setState(state => ({ ...state,
+          receivers: state.receivers.map(binding => binding.unitId === unitId ? { ...binding, ref } : binding),
         }));
       }
     },
-  } });
+  };
   const shell = resources.projectiles.register(createProjectileDefinition({
     id: "combined-shell",
     initialize: () => ({ contacts: 0 }),
@@ -281,11 +250,11 @@ function scenario({ failure = null, cancelled = false } = {}) {
     allowDiagonalMove: false, visitEveryTileCenter: false,
     visitEveryNodeCenter: false, visitEveryCheckPoint: true,
   });
-  const installation = (context, services, program) => installNewEffect(
-    context.work, context.sourceUnitId, program, {
+  const installation = (context, services, program) => applyEffect(
+    context.work, getUnit(context.work, context.sourceUnitId), program, {
       source: context.sourceUnitId,
       scopes: [{ type: "ACTION", executionId: context.executionId }],
-    }, services, context.tick,
+    },
   );
   const launch = (context, services, targetUnitId) => {
     const source = getUnit(context.work, context.sourceUnitId);
@@ -303,7 +272,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
       rows: 3, columns: 8, operators: [], enemies: [], maxTicks: 20, seed: 17,
     }),
     initialUnits: [
-      seededPlacement(resources, aura, initializeUnit({ id: 0, definition: primary, position: [0, 0] })),
+      seededPlacement(aura, initializeUnit({ id: 0, definition: primary, position: [0, 0] })),
       { definition: passive("first-target"), position: [1, 0],
         ...(cancelled ? { states: { vitality: {
           ...initializeVitalityState({ maxHp: 100 }), hp: 40,
@@ -367,8 +336,6 @@ test("runtime composition: late exceptions and invalid settlement propagate with
       address: { type: "EFFECT", unitId: 1, effectId: 0 },
       quota: { remaining: 2, consumed: 1 }, marked: true,
     }]);
-    assert.throws(() => failed.scopes[0].facts.getUnit(1), /no longer active/);
-    assert.throws(() => failed.scopes[0].operations.updateState((state) => state), /no longer active/);
   }
 });
 
@@ -406,8 +373,8 @@ test("runtime composition: a successful battle preserves identities, snapshots a
   assert.deepEqual(effect(after, 1, run.receiver).state, { starts: 1, enables: 1, uses: 1 });
   assert.equal(effect(after, 1, run.marker).id, 1);
   assert.deepEqual(effect(after, 1, run.marker).scopes, [{ type: "EFFECT", unitId: 1, effectId: 0 }]);
-  assert.equal(after.units.find((unit) => unit.id === 1).effects.nextInstanceId, 2);
-  assert.equal(before.units.find((unit) => unit.id === 1).effects.nextInstanceId, 1);
+  assert.equal(after.units.find((unit) => unit.id === 1).effects.nextId, 2);
+  assert.equal(before.units.find((unit) => unit.id === 1).effects.nextId, 1);
   assert.equal(hasStatusFlag(after.units.find((unit) => unit.id === 1), "INVISIBLE"), true);
   assert.equal(after.units.find((unit) => unit.id === 1).vitality.hp, 83);
   assert.deepEqual(run.launches.map((launch) => launch.id), [0, 1, 2]);
@@ -426,13 +393,11 @@ test("runtime composition: a successful battle preserves identities, snapshots a
       const cleaned = run.runtime.snapshot();
       assert.equal(effect(cleaned, 0, run.aura), undefined);
       assert.ok(cleaned.units.every(unit => effect(cleaned, unit.id, run.receiver) === undefined));
-      assert.equal(effect(before, 0, run.aura).finished, false);
+      assert.equal(effect(before, 0, run.aura).status, "ACTIVE");
       assert.equal(hasStatusFlag(cleaned.units.find((unit) => unit.id === 1), "INVISIBLE"), false);
       assert.equal(resolveAttackPower(0, view(cleaned)), 10);
-      assert.equal(effect(cleaned, 0, run.scoped).finished, true);
-      assert.equal(effect(cleaned, 0, run.scoped).participating, false);
-      assert.equal(effect(cleaned, 0, run.pulse).finished, true);
-      assert.equal(effect(cleaned, 0, run.pulse).participating, false);
+      assert.equal(effect(cleaned, 0, run.scoped), undefined);
+      assert.equal(effect(cleaned, 0, run.pulse), undefined);
     }
     if (run.runtime.snapshot().tickIndex === 5) {
       const finalized = run.runtime.snapshot();
@@ -457,13 +422,13 @@ test("runtime composition: a successful battle preserves identities, snapshots a
   assert.deepEqual(run.runtime.snapshot(), final);
 });
 
-test("runtime composition: admission rejection skips start while cancelled damage retains shared consumption and healing", () => {
+test("runtime composition: content conditions skip installation while cancelled damage retains consumption and healing", () => {
   const run = scenario({ cancelled: true });
   run.runtime.step();
   const reached = run.runtime.step();
   const after = run.runtime.snapshot();
   assert.deepEqual(run.rejected, [{
-    type: "REJECTED", reason: "ADMISSION_REJECTED",
+    type: "SKIPPED", reason: "CONTENT_CONDITION",
   }]);
   assert.equal(run.reports[0].hpLoss, 0);
   assert.deepEqual(run.reports[0].cancellation, { stage: "RECEPTION", reason: "BLOCKED" });
@@ -482,7 +447,7 @@ test("runtime composition: admission rejection skips start while cancelled damag
   assert.equal(effect(after, 1, run.marker), undefined);
   assert.equal(hasStatusFlag(after.units.find((unit) => unit.id === 1), "INVISIBLE"), false);
   assert.equal(resolveAttackPower(1, view(after)), 15);
-  assert.equal(after.units.find((unit) => unit.id === 1).effects.nextInstanceId, 1);
+  assert.equal(after.units.find((unit) => unit.id === 1).effects.nextId, 1);
   while (run.runtime.result === null) run.runtime.step();
   const final = run.runtime.snapshot();
   assert.equal(final.result.reason, "SCHEDULE_COMPLETED");

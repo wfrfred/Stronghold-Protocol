@@ -1,7 +1,7 @@
 import type { QueryContext } from "../../query.js";
 import { assertFiniteNumber } from "../../../../common/assert.js";
-import * as contribution from "../../../contribution/contribution.js";
-import * as modifier from "../../../contribution/value.js";
+import * as contribution from "../../contribution/contribution.js";
+import * as modifier from "../../contribution/value.js";
 import type { ActionCapabilityDefinition, ActionDefinition, ActionState } from "./capability.js";
 
 export function resolveAttackSpeed(

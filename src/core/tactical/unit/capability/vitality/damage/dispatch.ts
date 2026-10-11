@@ -1,191 +1,130 @@
 import type { UnitId } from "../../../unit.js";
-import type { EffectRef, EffectValue } from "../../effects/effect.js";
-import { EffectDispatchScope, participatingEffect } from "../../effects/dispatch.js";
-import { finalizeFinishedEffects } from "../../effects/lifecycle.js";
-import type { BattleState } from "../../../../battle/execution/context.js";
-import { withVitalityHookContext, vitalityHookFacts, type DispatchResult } from "../hook.js";
+import type { Hook as RegisteredHook } from "../../../hook/hook.js";
+import { hasVitality } from "../capability.js";
+import { getUnit, type BattleState } from "../../../../battle/execution/context.js";
+import { context, type Dispatch, type Result } from "../hook.js";
 import type { DamageOperands, DamageReport, DamageRequest, PendingDamage } from "./contract.js";
-import type {
-    AmountStage,
-    CompiledDamageRules,
-    DamageHookInvocation,
-    DamageHookStage,
-    DamageResourceServices,
-    FormulaStage,
-} from "./resources.js";
+import type { AmountStage, Context, FormulaStage, Hook, Services } from "./hook.js";
 
-interface CompiledStage<V> {
+interface StageHook<V> extends RegisteredHook<Context, V, Result<V>> {
     readonly priority: number;
-    readonly apply: (context: DamageHookInvocation, value: V) => DispatchResult<V>;
 }
 
 function dispatchStage<V>(
-    work: BattleState,
+    battle: BattleState,
     request: DamageRequest,
     ownerUnitId: UnitId | null,
-    stage: DamageHookStage,
     value: V,
-    resources: DamageResourceServices,
-    dispatch: EffectDispatchScope,
-    select: (rules: CompiledDamageRules) => CompiledStage<V> | undefined,
+    services: Services,
+    dispatch: Dispatch,
+    select: (entry: Hook) => StageHook<V> | undefined,
 ): V {
-    if (ownerUnitId === null) {
+    const unit = ownerUnitId === null ? undefined : getUnit(battle, ownerUnitId);
+
+    if (unit === undefined || !hasVitality(unit)) {
         return value;
     }
 
-    const facts = vitalityHookFacts(() => work);
-    dispatch.withCandidates(facts, ownerUnitId, (identities) => {
-        const candidates = identities
-            .flatMap((ref) => {
-                const instance = facts.getEffect(ref);
-                const hook =
-                    instance === undefined ? undefined : select(resources.damage.get(instance));
+    return dispatch.withCandidates(unit, (snapshot) => {
+        const candidates = snapshot.damage
+            .flatMap((entry) => {
+                const hook = select(entry);
 
-                return instance === undefined || hook === undefined
-                    ? []
-                    : [{ ref, sequence: instance.acquiredSequence, hook }];
+                return hook === undefined ? [] : [{ entry, hook }];
             })
-            .sort(
-                (left, right) =>
-                    right.hook.priority - left.hook.priority ||
-                    left.sequence - right.sequence ||
-                    left.ref.effectId - right.ref.effectId,
-            );
+            .sort((left, right) => right.hook.priority - left.hook.priority);
 
-        const isGroupWinner = (instance: EffectValue, ref: EffectRef): boolean => {
-            const group = resources.damage.get(instance).group;
+        for (const { entry, hook } of candidates) {
+            const current = getUnit(battle, unit.id);
 
-            if (group === undefined) {
-                return true;
-            }
-
-            return !identities.some((otherAddress) => {
-                const other = participatingEffect(facts, otherAddress);
-
-                if (other === undefined || other.id === ref.effectId) {
-                    return false;
-                }
-
-                const rules = resources.damage.get(other);
-                const otherGroup = rules.group;
-
-                return (
-                    rules[stage] !== undefined &&
-                    otherGroup?.id === group.id &&
-                    (otherGroup.strength > group.strength ||
-                        (otherGroup.strength === group.strength &&
-                            (other.acquiredSequence < instance.acquiredSequence ||
-                                (other.acquiredSequence === instance.acquiredSequence &&
-                                    other.id < instance.id))))
-                );
-            });
-        };
-
-        for (const { ref, hook } of candidates) {
-            const instance = participatingEffect(facts, ref);
-
-            if (instance === undefined || !isGroupWinner(instance, ref)) {
+            if (
+                current === undefined ||
+                !hasVitality(current) ||
+                !current.vitality.damageHooks.includes(entry)
+            ) {
                 continue;
             }
 
-            const result = withVitalityHookContext(
-                () => work,
-                ref,
-                instance,
-                request,
-                resources,
-                request.tick,
-                dispatch,
-                (context) => hook.apply(context, value),
-            );
+            const invocation = context(battle, unit.id, request, services, dispatch);
+
+            if (!hook.enabled(invocation)) {
+                continue;
+            }
+
+            const result = hook.invoke(invocation, value);
             value = result.value;
 
             if (result.stopDispatch === true) {
                 break;
             }
         }
-    });
-    finalizeFinishedEffects(work, ownerUnitId, resources, request.tick, dispatch);
 
-    return value;
+        return value;
+    });
 }
 
 export function dispatchDamageFormula(
-    work: BattleState,
+    battle: BattleState,
     request: DamageRequest,
     owner: UnitId | null,
     stage: FormulaStage,
     operands: DamageOperands,
-    resources: DamageResourceServices,
-    dispatch: EffectDispatchScope,
-) {
-    return dispatchStage(
-        work,
-        request,
-        owner,
-        stage,
-        operands,
-        resources,
-        dispatch,
-        (rules) => rules[stage],
+    services: Services,
+    dispatch: Dispatch,
+): DamageOperands {
+    return dispatchStage(battle, request, owner, operands, services, dispatch, (entry) =>
+        (entry.stage === "sourceFormula" || entry.stage === "targetFormula") &&
+        entry.stage === stage
+            ? entry
+            : undefined,
     );
 }
 
 export function dispatchDamageAmount(
-    work: BattleState,
+    battle: BattleState,
     request: DamageRequest,
     owner: UnitId | null,
     stage: AmountStage,
     pending: PendingDamage,
-    resources: DamageResourceServices,
-    dispatch: EffectDispatchScope,
-) {
-    return dispatchStage(
-        work,
-        request,
-        owner,
-        stage,
-        pending,
-        resources,
-        dispatch,
-        (rules) => rules[stage],
+    services: Services,
+    dispatch: Dispatch,
+): PendingDamage {
+    return dispatchStage(battle, request, owner, pending, services, dispatch, (entry) =>
+        (entry.stage === "output" ||
+            entry.stage === "reception" ||
+            entry.stage === "skippedReception") &&
+        entry.stage === stage
+            ? entry
+            : undefined,
     );
 }
 
 export function dispatchDamageReactions(
-    work: BattleState,
+    battle: BattleState,
     report: DamageReport,
-    resources: DamageResourceServices,
-    dispatch: EffectDispatchScope,
+    services: Services,
+    dispatch: Dispatch,
 ): void {
     const owners = new Set([report.request.sourceUnitId, report.request.targetUnitId]);
 
     for (const owner of owners) {
-        dispatchStage(
-            work,
-            report.request,
-            owner,
-            "reaction",
-            report,
-            resources,
-            dispatch,
-            (rules) => {
-                const reaction = rules.reaction;
+        dispatchStage(battle, report.request, owner, report, services, dispatch, (entry) => {
+            if (entry.stage !== "reaction") {
+                return undefined;
+            }
 
-                return reaction === undefined
-                    ? undefined
-                    : {
-                          priority: reaction.priority,
-                          apply: (context, value) => {
-                              const outcome = reaction.apply(context, value);
+            return {
+                id: entry.id,
+                priority: entry.priority,
+                enabled: entry.enabled,
+                invoke: (invocation, value) => {
+                    const outcome = entry.invoke(invocation, value);
 
-                              return {
-                                  value,
-                                  ...(outcome?.stopDispatch === true ? { stopDispatch: true } : {}),
-                              };
-                          },
-                      };
-            },
-        );
+                    return outcome?.stopDispatch === true
+                        ? { value, stopDispatch: true }
+                        : { value };
+                },
+            };
+        });
     }
 }

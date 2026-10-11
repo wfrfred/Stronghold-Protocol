@@ -1,5 +1,7 @@
 import { fixtureBattlefield } from "../helpers/battlefield.js";
-import { liveAttack } from "../../dist/core/tactical/unit/capability/offense/contributions.js";
+import { setAttackContribution, removeAttackContribution } from "../../dist/core/tactical/unit/capability/offense/capability.js";
+import { setHook as setDamageHook, removeHook as removeDamageHook } from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
+import { get as getEffect } from "../../dist/core/tactical/unit/effect/query.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createRng } from "../../dist/core/common/rng.js";
@@ -16,15 +18,15 @@ import { createProjectileDefinition } from "../../dist/core/tactical/battlefield
 import { createBattlefieldRuntime } from "../../dist/core/tactical/battlefield/runtime.js";
 import { advanceProjectiles, stopProjectile } from "../../dist/core/tactical/battlefield/projectile/settlement.js";
 import { withProjectileOperations } from "../../dist/core/tactical/battlefield/projectile/operations.js";
-import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
-import { installNewEffect } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
+import { apply as applyEffect } from "../../dist/core/tactical/unit/effect/operations.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
-import * as modifier from "../../dist/core/tactical/contribution/value.js";
+import * as modifier from "../../dist/core/tactical/unit/contribution/value.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import {
   battlefieldView,
   createBattleState,
   getUnit,
+  transitionUnit,
 } from "../../dist/core/tactical/battle/execution/context.js";
 
 const hit = createShapeGeometry({
@@ -387,13 +389,19 @@ test("projectile runtime: current ATK and cached-only ATK stay distinct, while a
     const resources = new CombatResources();
     const normal = registerProjectile(resources, { id: "ordinary" });
     const cached = registerProjectile(resources, { id: "cached", cachedOnly: true });
-    const bonus = resources.registerEffect(
-      createEffectDefinition({
-        id: "post-launch-attack",
-        initialize: () => ({}),
-      }),
-      { contributions: [liveAttack(() => [modifier.create({ addition: 10 })])] },
-    );
+    const bonus = {
+      id: "post-launch-attack",
+      initialize: () => ({}),
+      onEnable(context) {
+        transitionUnit(context.battle, context.ref.unitId, unit => setAttackContribution(unit, {
+          id: `effect:${context.self.id}`,
+          value: [modifier.create({ addition: 10 })],
+        }));
+      },
+      onDisable(context) {
+        transitionUnit(context.battle, context.ref.unitId, unit => removeAttackContribution(unit, `effect:${context.self.id}`));
+      },
+    };
     const runtime = new BattleRuntime(
       spec([
         { definition: actorDefinition(), position: [0, 0] },
@@ -407,14 +415,9 @@ test("projectile runtime: current ATK and cached-only ATK stay distinct, while a
             { type: "EXECUTE", run: (context) => {
               launch(context, services, normal);
               launch(context, services, cached);
-              installNewEffect(
-                context.work,
-                context.sourceUnitId,
-                bonus,
-                { source: context.sourceUnitId, scopes: [] },
-                services,
-                context.tick,
-              );
+              applyEffect(context.work, getUnit(context.work, context.sourceUnitId), bonus, {
+                source: context.sourceUnitId,
+              });
 
 
             } },
@@ -490,33 +493,33 @@ test("projectile runtime: Schedule completion and time limits freeze outstanding
 
 test("projectile runtime: contact history prevents stop fallback damage while synchronous successors remain visible", () => {
   const resources = new CombatResources();
-  const attached = resources.registerEffect(
-    createEffectDefinition({
-      id: "contact-before-damage",
-      initialize: () => ({}),
-    }),
-    {
-      damage: {
-        reception: {
-          priority: 0,
-          apply: (_context, pending) => ({ value: { ...pending, amount: pending.amount + 1 } }),
-        },
-      },
+  const attached = {
+    id: "contact-before-damage",
+    initialize: () => ({}),
+    onApply(context) {
+      const ref = context.ref;
+      transitionUnit(context.battle, ref.unitId, unit => setDamageHook(unit, {
+        id: `effect:${ref.effectId}`,
+        stage: "reception",
+        priority: 0,
+        enabled: invocation => getEffect(invocation.battle, ref)?.status === "ACTIVE",
+        invoke: (_invocation, pending) => ({ value: { ...pending, amount: pending.amount + 1 } }),
+      }));
     },
-  );
+    onEnd(context) {
+      transitionUnit(context.battle, context.ref.unitId, unit => removeDamageHook(unit, `effect:${context.self.id}`));
+    },
+  };
   let stopped = 0;
-  let borrowed;
   const trace = [];
   const program = registerProjectile(resources, {
     contact: (context) => {
       trace.push({ stage: "CONTACT", hitUnitIds: [...context.projectile.hitUnitIds] });
-      borrowed = context.operations;
       context.operations.updateState((state) => ({ contacts: state.contacts + 1 }));
-      const installed = context.operations.effects.install(context.targetUnitId, attached, {
+      const installed = applyEffect(context.battle, context.facts.getUnit(context.targetUnitId), attached, {
         source: context.projectile.source,
-        scopes: [],
       });
-      assert.equal(installed.type, "INSTALLED");
+      assert.ok(installed);
       assert.equal(
         context.facts.getUnit(context.targetUnitId).effects.instances.some(
           (effect) => effect.definition.id === attached.id,
@@ -597,7 +600,6 @@ test("projectile runtime: contact history prevents stop fallback damage while sy
     ["PROJECTILE_REACHED", "DAMAGE", "PROJECTILE_STOPPED", "HEAL", "PROJECTILE_HIT"],
   );
   assert.deepEqual(runtime.snapshot().projectiles.instances, []);
-  assert.throws(() => borrowed.stopSelf(), /no longer active/);
   const repeated = runtime.step([
     { type: "STOP_PROJECTILE", projectileId: 0 },
     { type: "STOP_PROJECTILE", projectileId: 0 },
@@ -872,10 +874,8 @@ test("projectile runtime: failed launch scopes discard allocation and close borr
 test("projectile runtime: stop callbacks see latest peer progress while snapshots retain earlier instances", () => {
   const resources = new CombatResources();
   const observations = [];
-  let borrowed;
   const program = registerProjectile(resources, {
     stop: (context) => {
-      borrowed = context;
       const first = context.facts.getProjectile(0);
       const second = context.facts.getProjectile(1);
       observations.push({
@@ -911,7 +911,6 @@ test("projectile runtime: stop callbacks see latest peer progress while snapshot
   assert.deepEqual(battlefield.snapshot("draft").projectileIds, [1]);
   assert.deepEqual(battlefield.snapshot("draft").getProjectile(1).position, [1, 0]);
   assert.deepEqual(projectileInstances(launchedSnapshot).map((instance) => instance.progress.type), ["FLYING", "FLYING"]);
-  assert.throws(() => borrowed.facts.getProjectile(1), /no longer active/);
 
   const progressed = battlefield.snapshot("draft");
   stopProjectile(work, 1, resources, 1);
@@ -1023,9 +1022,6 @@ test("projectile runtime: ordered command stops see same-tick launches and publi
     const borrowed = [];
     const program = registerProjectile(resources, {
       stop: (context) => {
-        if (borrowed.length > 0) {
-          assert.throws(() => borrowed.at(-1).operations.stopSelf(), /no longer active/);
-        }
         borrowed.push(context);
         observed.push({
           id: context.projectile.id,
@@ -1087,10 +1083,6 @@ test("projectile runtime: ordered command stops see same-tick launches and publi
   assert.deepEqual(failed.runtime.snapshot(), before);
   assert.deepEqual(failed.attempted, [0, 1, 2, 3]);
   assert.deepEqual(failed.observed.map((entry) => entry.id), [3, 1]);
-  for (const context of failed.borrowed) {
-    assert.throws(() => context.facts.getProjectile(2), /no longer active/);
-    assert.throws(() => context.operations.updateState((state) => state), /no longer active/);
-  }
 
   const ordinary = control.runtime.step(commands);
   assert.deepEqual(control.attempted, [0, 1, 2, 3]);

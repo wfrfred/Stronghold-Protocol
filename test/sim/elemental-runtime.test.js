@@ -1,3 +1,6 @@
+import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
+import { setAttackContribution } from "../../dist/core/tactical/unit/capability/offense/capability.js";
+import { setHook } from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
@@ -9,16 +12,13 @@ import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js'
 import { createActionDefinition } from '../../dist/core/tactical/unit/capability/action/capability.js';
 import { compileAction } from '../../dist/core/tactical/unit/capability/action/compile.js';
 import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
-import { createEffectDefinition } from '../../dist/core/tactical/unit/capability/effects/definition.js';
-import { installNewEffect, expireEffects, finalizeFinishedEffects } from '../../dist/core/tactical/unit/capability/effects/lifecycle.js';
 import { createSkillDefinition } from '../../dist/core/tactical/unit/capability/skill/capability.js';
 import { activateSkill, advanceSkill } from '../../dist/core/tactical/unit/capability/skill/execution.js';
 import { gainUnitSkillSp } from '../../dist/core/tactical/battle/execution/skill-sp.js';
 import { hasStatusFlag } from '../../dist/core/tactical/unit/capability/status/capability.js';
 import { resolveDefense } from '../../dist/core/tactical/unit/capability/defense/query.js';
 import { resolveAttackPower } from '../../dist/core/tactical/unit/capability/offense/query.js';
-import { attack } from '../../dist/core/tactical/unit/capability/offense/contributions.js';
-import { create as modifier } from '../../dist/core/tactical/contribution/value.js';
+import { create as modifier } from '../../dist/core/tactical/unit/contribution/value.js';
 import { calculateDamage, resolveDamage } from '../../dist/core/tactical/unit/capability/vitality/damage/settlement.js';
 import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
 import { resolveHealing } from '../../dist/core/tactical/unit/capability/vitality/healing/settlement.js';
@@ -59,8 +59,7 @@ function element(work, type, supplied, tick = 0, power = 1000) {
 }
 function advance(work, tick, supplied) {
   advanceElementalState(work, 1, tick, supplied);
-  expireEffects(work, tick, supplied);
-  finalizeFinishedEffects(work, 1, supplied, tick);
+  effects.advance({ ...work, tick });
 }
 function defense(work, supplied) {
   return resolveDefense(1, battlefieldView(work));
@@ -166,10 +165,8 @@ test('elemental HP damage ignores physical defense, magic resistance, source att
   for (const [damageResistance, expected] of [[0, 100], [50, 50], [100, 5], [1000, 5], [-50, 100]]) {
     const supplied = resources();
     const source = initializeUnit({ id: 0, position: [0, 0], definition: { id: 'element-source', offense: { attack: 10000 } } });
-    const attackBuff = supplied.registerEffect(createEffectDefinition({ id: `source-attack-${damageResistance}`, initialize: () => ({}) }),
-      { contributions: [attack(() => [modifier({ multiplier: 100 })])] });
-    let input = effectFixtureWork(source, unit('ENEMY', { defense: { defense: 100000, resistance: 99 } }, { damageResistance, elementResistance: 100 }));
-    installNewEffect(input, 0, attackBuff, { source: 0, scopes: [{ type: "UNIT", unitId: 0 }] }, supplied, 0);
+    const boosted = setAttackContribution(source, { id: 'attack-buff', value: [modifier({ multiplier: 100 })] });
+    const input = effectFixtureWork(boosted, unit('ENEMY', { defense: { defense: 100000, resistance: 99 } }, { damageResistance, elementResistance: 100 }));
     const result = resolveDamage(input, { sourceUnitId: 0, targetUnitId: 1, damageType: 'ELEMENTAL', operands: createDamageOperands(100), tick: 0 }, supplied);
     assert.equal(result.hpLoss, expected);
     assert.equal(result.formulaDamage, expected);
@@ -302,17 +299,15 @@ test('elemental runtime: enemy neural paralysis consumes exactly three ordinary 
 });
 
 test('elemental runtime: nested burst damage failure publishes neither EP progress, HP, effects nor tick', () => {
-  let faultRef;
   const { runtime } = battle('CHARACTER', 'BURN', {
-    prepare: supplied => {
-      faultRef = supplied.registerEffect(createEffectDefinition({ id: 'elemental-fault', initialize: () => ({}) }),
-        { damage: { reception: { priority: 100, apply: () => { throw new Error('nested burst failed'); } } } });
-    },
-    targetStates: (supplied, selected) => {
+    targetStates: (_supplied, selected) => {
       const target = initializeUnit({ id: 1, position: [1, 0], definition: selected });
-      const installedState = effectFixtureWork(target);
-      installNewEffect(installedState, 1, faultRef, { source: null, scopes: [{ type: "UNIT", unitId: 1 }] }, supplied, 0);
-      return { effects: getUnit(installedState, 1).effects };
+      const changed = setHook(target, {
+        id: 'elemental-fault', stage: 'reception', priority: 100,
+        enabled: () => true,
+        invoke: () => { throw new Error('nested burst failed'); },
+      });
+      return { vitality: changed.vitality };
     },
   });
   const initial = runtime.snapshot();

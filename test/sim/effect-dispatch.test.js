@@ -1,950 +1,475 @@
-import { maxHp } from "../../dist/core/tactical/unit/capability/vitality/contributions.js";
-import { fixtureBattlefield } from "../helpers/battlefield.js";
-
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { effectFixtureWork, installFixtureEffect } from "../helpers/effects.js";
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import {
+    unit,
+    workFor,
+    attach,
+    request,
+    damageEffect,
+    healingEffect,
+    setSelf,
+    stateOf,
+    statusEffect,
+} from "../helpers/vitality.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
-import * as modifier from "../../dist/core/tactical/contribution/value.js";
-import { resolveMaxHp } from "../../dist/core/tactical/unit/capability/vitality/query.js";
-import { createBattleState, battlefieldView, getUnit } from "../../dist/core/tactical/battle/execution/context.js";
-import { compileStatusBinding } from "../../dist/core/tactical/unit/capability/status/binding.js";
-import { hasStatusFlag } from "../../dist/core/tactical/unit/capability/status/capability.js";
-import { createEffectDefinition } from "../../dist/core/tactical/unit/capability/effects/definition.js";
-import { EffectDispatchScope } from "../../dist/core/tactical/unit/capability/effects/dispatch.js";
-import { setEffectEnabled } from "../../dist/core/tactical/unit/capability/effects/lifecycle.js";
-import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
+import { getUnit, transitionUnit } from "../../dist/core/tactical/battle/execution/context.js";
+import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
+import * as damage from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
+import * as healing from "../../dist/core/tactical/unit/capability/vitality/healing/hook.js";
 import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
-import { readArknightsHealingInput } from "../../dist/data/arknights/healing.js";
 import { resolveHealing } from "../../dist/core/tactical/unit/capability/vitality/healing/settlement.js";
 
-function unit(id, hp = 1000, flags = []) {
-  const initialized = initializeUnit({
-    id,
-    position: [0, 0],
-    definition: {
-      id: `dispatch-unit-${id}`,
-      vitality: { maxHp: 1000 },
-      defense: { defense: 0, resistance: 0 },
-      status: { initialFlags: flags },
-    },
-  });
-
-  return { ...initialized, vitality: { ...initialized.vitality, hp } };
+function damageHook(id, stage, invoke, priority = 0, enabled = () => true) {
+    return { id, stage, priority, enabled, invoke };
 }
 
-function program(id, state = {}) {
-  return createEffectDefinition({
-    id,
-    initialize: () => state,
-  });
+function healingHook(id, stage, invoke, priority = 0, enabled = () => true) {
+    return { id, stage, priority, enabled, invoke };
 }
 
-function attach(resources, owner, descriptor) {
-  const id = owner.effects?.nextInstanceId ?? 0;
-  const acquiredSequence = owner.effects?.nextAcquiredSequence ?? 0;
-  const instance = resources.effects.create(descriptor, {
-    id,
-    acquiredSequence,
-    source: null,
-    scopes: [{type: "UNIT",unitId: owner.id}],
-
-  });
-
-  return installFixtureEffect(owner, instance, resources);
-}
-
-function request(power = 100, overrides = {}) {
-  return {
-    sourceUnitId: null,
+const healRequest = (power = 10, overrides = {}) => ({
+    sourceUnitId: 1,
     targetUnitId: 2,
-    damageType: "TRUE",
-    operands: createDamageOperands(power),
-    tick: 1,
+    power,
+    tick: 12,
     ...overrides,
-  };
-}
-
-function installation(unitId) {
-  return { source: null, scopes: [{type: "UNIT",unitId}], };
-}
-
-test("effect dispatch: synchronous damage and healing inherit the active settlement tick", () => {
-  const resources = new CombatResources();
-  const seen = [];
-  const descriptor = resources.registerEffect(program("nested-time"), {
-    damage: {
-      reception: {
-        priority: 0,
-        apply: (context, pending) => {
-          seen.push(["damage", context.tick, context.request.tick]);
-          if (context.request.operands.power === 10) {
-            context.operations.damage({
-              sourceUnitId: null,
-              targetUnitId: 2,
-              damageType: "TRUE",
-              operands: createDamageOperands(1),
-            });
-            context.operations.heal({ sourceUnitId: null, targetUnitId: 2, power: 3 });
-          }
-          return { value: pending };
-        },
-      },
-    },
-    healing: {
-      reception: {
-        priority: 0,
-        apply: (context, pending) => {
-          seen.push(["healing", context.tick, context.request.tick]);
-          return { value: pending };
-        },
-      },
-    },
-  });
-  const resultState = effectFixtureWork(attach(resources, unit(2, 500), descriptor));
-  const result = resolveDamage(
-    resultState,
-    request(10, { tick: 37 }),
-    resources,
-  );
-
-  assert.deepEqual(seen, [["damage", 37, 37], ["damage", 37, 37], ["healing", 37, 37]]);
-  assert.equal(getUnit(resultState, 2).vitality.hp, 492);
-  assert.ok(resultState.events.every(event => event.tick === 37));
 });
 
-test("effect dispatch: registered candidate identities freeze while current participation is rechecked", () => {
-  for (const operation of ["enable", "finish"]) {
-    const resources = new CombatResources();
-    const seen = [];
-    const b = resources.registerEffect(program("B"), {
-      damage: {
-        reception: {
-          priority: 0,
-          apply: (context, pending) => {
-            seen.push("B");
-            return { value: { ...pending, amount: pending.amount * 2 } };
-          },
-        },
-      },
-    });
-    const a = resources.registerEffect(program("A"), {
-      damage: {
-        reception: {
-          priority: 100,
-          apply: (context, pending) => {
-            seen.push("A");
-            const address = { type: "EFFECT", unitId: 2, effectId: 1 };
-            if (operation === "enable") {
-              context.operations.effects.setEnabled(address, true);
-            } else {
-              context.operations.effects.finish([address]);
-            }
-            return { value: pending };
-          },
-        },
-      },
-    });
-    let target = attach(resources, unit(2), a);
-    target = attach(resources, target, b);
-    let work = effectFixtureWork(target);
-    if (operation === "enable") {
-      setEffectEnabled(work, { type: "EFFECT", unitId: 2, effectId: 1 }, false, resources, 0);
-    }
-    const result = resolveDamage(work, request(), resources);
-
-    assert.deepEqual(seen, operation === "enable" ? ["A", "B"] : ["A"]);
-    assert.equal(result.hpLoss, operation === "enable" ? 200 : 100);
-  }
-});
-
-test("effect dispatch: nested finalization preserves the entered callback continuation and its latest samples", () => {
-  const resources = new CombatResources();
-  const observed = [];
-  const descriptor = resources.registerEffect(program("self-ending", { count: 0 }), {
-    damage: {
-      reception: {
-        priority: 0,
-        apply: (context, pending) => {
-          if (context.request.operands.power === 1) {
-            context.operations.effects.update(
-              context.ref,
-              context.instance.definition,
-              (state) => ({ count: state.count + 1 }),
-            );
-            context.operations.effects.finish([context.ref]);
-            return {
-              value: {
-                ...pending,
-                amount: 0,
-                cancellation: { stage: "RECEPTION", reason: "NESTED_FINISH" },
-              },
-            };
-          }
-          const nested = context.operations.damage(request(1));
-          assert.equal(context.facts.getEffect(context.ref), undefined);
-          const healing = context.operations.heal({
-            sourceUnitId: null,
-            targetUnitId: 2,
-            power: 20,
-            ignoreHealFree: true,
-          });
-          observed.push([
-            context.instance.finished,
-            context.instance.participating,
-            context.instance.state.count,
-            nested.hpLoss,
-            healing.amount,
-          ]);
-          return { value: { ...pending, amount: pending.amount / 2 } };
-        },
-      },
-    },
-  });
-  const resultState = effectFixtureWork(attach(resources, unit(2, 500), descriptor));
-  const result = resolveDamage(
-    resultState,
-    request(),
-    resources,
-  );
-
-  assert.deepEqual(observed, [[true, false, 1, 0, 20]]);
-  assert.equal(result.hpLoss, 50);
-  assert.equal(getUnit(resultState, 2).vitality.hp, 470);
-  assert.deepEqual(getUnit(resultState, 2).effects.instances, []);
-});
-
-test("effect dispatch: healing retains selected rules while nested candidates and current eligibility stay consistent", () => {
-  for (const operation of ["enable", "finish"]) {
-    const resources = new CombatResources();
+test("hook dispatch checks each Effect against its current status immediately before invocation", () => {
     const calls = [];
-    const added = resources.registerEffect(program("added-healing"), {
-      healing: {
-        reception: {
-          priority: -1,
-          apply: (context, pending) => {
-            calls.push(["added", context.request.power]);
-            return { value: { ...pending, amount: pending.amount + 5 } };
-          },
-        },
-      },
-    });
-    const follower = resources.registerEffect(program("following-healing", { calls: 0 }), {
-      healing: {
-        reception: {
-          priority: 0,
-          apply: (context, pending) => {
-            calls.push(["follower", context.request.power, context.instance.state.calls]);
-            context.operations.effects.update(context.ref, follower, (state) => ({
-              calls: state.calls + 1,
-            }));
-            return { value: { ...pending, amount: pending.amount * 2 } };
-          },
-        },
-      },
-    });
-    const first = resources.registerEffect(program("first-healing"), {
-      healing: {
-        reception: {
-          priority: 100,
-          apply: (context, pending) => {
-            calls.push(["first", context.request.power]);
-            if (context.request.power === 10) {
-              const address = { type: "EFFECT", unitId: 2, effectId: 1 };
-              if (operation === "enable") {
-                context.operations.effects.setEnabled(address, true);
-              } else {
-                context.operations.effects.finish([address]);
-              }
-              context.operations.effects.install(2, added, installation(2));
-              context.operations.heal({ sourceUnitId: null, targetUnitId: 2, power: 1 });
-            }
-            return { value: pending };
-          },
-        },
-      },
-    });
-    let target = attach(resources, unit(2, 500), first);
-    target = attach(resources, target, follower);
-    let work = effectFixtureWork(target);
-    if (operation === "enable") {
-      setEffectEnabled(work, { type: "EFFECT", unitId: 2, effectId: 1 }, false, resources, 0);
-    }
-    const lookups = [];
-    const services = {
-      ...resources,
-      healing: {
-        get: instance => {
-          lookups.push(instance.id);
-          return resources.healing.get(instance);
-        },
-      },
-    };
-    const healed = resolveHealing(
-      work,
-      { sourceUnitId: null, targetUnitId: 2, power: 10, tick: 1 },
-      services,
-    );
-
-    assert.deepEqual(calls, operation === "enable"
-      ? [["first", 10], ["first", 1], ["follower", 1, 0], ["follower", 10, 1]]
-      : [["first", 10], ["first", 1]]);
-    assert.deepEqual(lookups, operation === "enable" ? [0, 1, 0, 1, 2] : [0, 1, 0, 2]);
-    assert.equal(healed.amount, operation === "enable" ? 20 : 10);
-    assert.equal(getUnit(work, 2).vitality.hp, operation === "enable" ? 522 : 511);
-    calls.length = 0;
-    const subsequent = resolveHealing(
-      work,
-      { sourceUnitId: null, targetUnitId: 2, power: 1, tick: 2 },
-      resources,
-    );
-
-    assert.deepEqual(calls, operation === "enable"
-      ? [["first", 1], ["follower", 1, 2], ["added", 1]]
-      : [["first", 1], ["added", 1]]);
-    assert.equal(subsequent.amount, operation === "enable" ? 7 : 6);
-    assert.equal(work.battlefield.snapshot("state").getUnit(2).vitality.hp, 500);
-  }
-});
-
-test("effect dispatch: ordinary facts see new participating UIDs while current and nested dispatch candidates stay frozen", () => {
-  const resources = new CombatResources();
-  const calls = [];
-  const c = resources.registerEffect(program("new-C"), {
-    damage: {
-      output: {
-        priority: 0,
-        apply: (context, pending) => {
-          calls.push("C-output");
-          return { value: pending };
-        },
-      },
-      reception: {
-        priority: 0,
-        apply: (context, pending) => {
-          calls.push("C-reception");
-          return { value: pending };
-        },
-      },
-    },
-  });
-  const d = resources.registerEffect(program("new-D"), {
-    damage: {
-      reception: {
-        priority: 0,
-        apply: (context, pending) => {
-          calls.push("D-reception");
-          return { value: pending };
-        },
-      },
-    },
-  });
-  const a = resources.registerEffect(program("A", { entered: false }), {
-    damage: {
-      reception: {
-        priority: 100,
-        apply: (context, pending) => {
-          if (context.instance.state.entered) {
-            return { value: pending };
-          }
-          context.operations.effects.update(context.ref, context.instance.definition, () => ({
-            entered: true,
-          }));
-          const installed = context.operations.effects.install(2, c, installation(2));
-          context.operations.effects.install(3, d, installation(3));
-          assert.equal(installed.type, "INSTALLED");
-          assert.equal(context.facts.getEffect(installed.ref).definition.id, "new-C");
-          assert.equal(context.facts.getUnit(2).effects.instances.length, 2);
-          assert.equal(
-            context.facts.participating(2).some((instance) => instance.definition.id === "new-C"),
-            true,
-          );
-          context.operations.damage(request(1, { sourceUnitId: 2, targetUnitId: 3 }));
-          context.operations.damage(request(1));
-          return { value: pending };
-        },
-      },
-    },
-  });
-  const initial = effectFixtureWork(attach(resources, unit(2), a), unit(3));
-  const result = resolveDamage(initial, request(10), resources);
-
-  assert.deepEqual(calls, ["D-reception"]);
-  assert.equal(getUnit(initial, 2).vitality.hp, 989);
-  assert.equal(getUnit(initial, 3).vitality.hp, 999);
-  resolveDamage(initial, request(1), resources);
-  assert.deepEqual(calls, ["D-reception", "C-reception"]);
-});
-
-test("effect dispatch: exceptional exits release candidates before retry on the same execution scope", () => {
-  const resources = new CombatResources();
-  const scope = new EffectDispatchScope();
-  let fail = true;
-  const descriptor = resources.registerEffect(program("fails-once", { attempts: 0 }), {
-    damage: {
-      reception: {
-        priority: 0,
-        apply: (context, pending) => {
-          context.operations.effects.update(
-            context.ref,
-            context.instance.definition,
-            (state) => ({ attempts: state.attempts + 1 }),
-          );
-          if (fail) {
-            throw new Error("dispatch failed");
-          }
-          return { value: pending };
-        },
-      },
-    },
-  });
-  const owner = attach(resources, unit(2), descriptor);
-  const original = effectFixtureWork(owner);
-  assert.throws(() => resolveDamage(original, request(), resources, scope), /dispatch failed/);
-  assert.equal(original.battlefield.snapshot("state").getUnit(2).effects.instances[0].state.attempts, 0);
-  fail = false;
-  const later = resources.registerEffect(program("after-exception"), {
-    damage: {
-      reception: {
-        priority: 0,
-        apply: (context, pending) => ({
-          value: { ...pending, amount: pending.amount * 2 },
-        }),
-      },
-    },
-  });
-  const retryState = effectFixtureWork(attach(resources, owner, later));
-const retry = resolveDamage(
-    retryState,
-    request(),
-    resources,
-    scope,
-  );
-
-  assert.equal(retry.hpLoss, 200);
-  assert.equal(getUnit(retryState, 2).effects.instances[0].state.attempts, 1);
-  const address = { type: "EFFECT", unitId: 2, effectId: 0 };
-  const initialInstance = owner.effects.instances[0];
-  let exitedReader;
-  assert.throws(
-    () =>
-      scope.withEffect(address, initialInstance, (reader) => {
-        exitedReader = reader;
-        throw new Error("instance frame failed");
-      }),
-    /instance frame failed/,
-  );
-  const finalized = resources.effects.restore(initialInstance.definition, {
-    ...initialInstance,
-    state: { attempts: 99 },
-    participating: false,
-    finished: true,
-  });
-  scope.retainFinalizedEffect(address, finalized);
-  assert.equal(exitedReader(), initialInstance);
-});
-
-test("effect dispatch: Damage and Healing borrowed facts and operations close after every callback exit", () => {
-  for (const domain of ["damage", "healing"]) {
-    for (const fails of [false, true]) {
-      const resources = new CombatResources();
-      let escaped;
-      const descriptor = resources.registerEffect(program("borrowed", { calls: 0 }), {
-        [domain]: {
-          reception: {
-            priority: 0,
-            apply: (context, pending) => {
-              escaped = context;
-              context.operations.effects.update(
-                context.ref,
-                context.instance.definition,
-                (state) => ({ calls: state.calls + 1 }),
-              );
-              if (fails) {
-                throw new Error("hook failed");
-              }
-              return { value: pending };
-            },
-          },
-        },
-      });
-      const original = effectFixtureWork(attach(resources, unit(2, 500), descriptor));
-      const healRequest = { sourceUnitId: null, targetUnitId: 2, power: 100 };
-      const settle = () =>
-        domain === "damage"
-          ? resolveDamage(original, request(), resources)
-          : resolveHealing(original, { ...healRequest, tick: 1 }, resources);
-      let result;
-      if (fails) {
-        assert.throws(settle, /hook failed/);
-      } else {
-        result = settle();
-      }
-
-      for (const call of [
-        () => escaped.instance,
-        () => escaped.facts.getUnit(2),
-        () => escaped.facts.getEffect(escaped.ref),
-        () => escaped.facts.participating(2),
-        () => escaped.facts.maxHp(2),
-        () => escaped.operations.effects.install(2, descriptor, installation(2)),
-        () => escaped.operations.effects.update(escaped.ref, descriptor, (state) => state),
-        () => escaped.operations.effects.setEnabled(escaped.ref, false),
-        () => escaped.operations.effects.finish([escaped.ref]),
-        () =>
-          escaped.operations.effects.bind(escaped.ref, { type: "EFFECT", unitId: 2, effectId: 99 }),
-        () => escaped.operations.damage(request()),
-        () => escaped.operations.heal(healRequest),
-      ]) {
-        assert.throws(call, /no longer active/);
-      }
-      assert.equal(original.battlefield.snapshot("state").getUnit(2).vitality.hp, 500);
-      assert.equal(original.battlefield.snapshot("state").getUnit(2).effects.instances[0].state.calls, 0);
-      if (result !== undefined) {
-        assert.equal(getUnit(original, 2).vitality.hp, domain === "damage" ? 400 : 600);
-        assert.equal(getUnit(original, 2).effects.instances[0].state.calls, 1);
-      }
-    }
-  }
-});
-
-test("effect dispatch: domain cancellation retains prefix transitions and stops candidates only when explicitly requested", () => {
-  for (const stopDispatch of [false, true]) {
-    const resources = new CombatResources();
-    let followups = 0;
-    const cancel = resources.registerEffect(program("cancel", { used: false }), {
-      damage: {
-        reception: {
-          priority: 100,
-          apply: (context, pending) => {
-            context.operations.effects.update(context.ref, context.instance.definition, () => ({
-              used: true,
-            }));
-            return {
-              value: {
-                ...pending,
-                amount: 0,
-                cancellation: { stage: "RECEPTION", reason: "SHIELD" },
-              },
-              stopDispatch,
-            };
-          },
-        },
-      },
-    });
-    const follower = resources.registerEffect(program("follower"), {
-      damage: {
-        reception: {
-          priority: 0,
-          apply: (context, pending) => {
-            followups++;
-            return { value: pending };
-          },
-        },
-      },
-    });
-    let owner = attach(resources, unit(2), cancel);
-    owner = attach(resources, owner, follower);
-    const resultState = effectFixtureWork(owner);
-    const result = resolveDamage(resultState, request(), resources);
-
-    assert.equal(result.hpLoss, 0);
-    assert.equal(result.cancellation.reason, "SHIELD");
-    assert.equal(getUnit(resultState, 2).effects.instances[0].state.used, true);
-    assert.equal(followups, stopDispatch ? 0 : 1);
-  }
-});
-
-test("effect dispatch: shield cancellation notifies terminal business before return and cleans up after the entered callback", () => {
-  const resources = new CombatResources();
-  const observed = [];
-  const recharge = resources.registerEffect(program("recharge"));
-  const shield = resources.registerEffect(program("shield", { charges: 1 }), {
-    damage: {
-      reception: {
-        priority: 0,
-        apply: (context, pending) => {
-          context.operations.effects.update(
-            context.ref,
-            context.instance.definition,
-            (state) => ({ charges: state.charges - 1 }),
-          );
-          const healing = context.operations.heal({
-            sourceUnitId: 2,
-            targetUnitId: 2,
-            power: 20,
-            ignoreHealFree: true,
-          });
-          context.operations.effects.finish([context.ref]);
-          observed.push({
-            amount: healing.amount,
-            hp: context.facts.getUnit(2).vitality.hp,
-            finished: context.facts.getEffect(context.ref).finished,
-            recharge: context.facts
-              .getUnit(2)
-              .effects.instances.some((instance) => instance.definition.id === "recharge"),
-          });
-          return {
-            value: {
-              ...pending,
-              amount: 0,
-              cancellation: { stage: "RECEPTION", reason: "SHIELD" },
-            },
-          };
-        },
-      },
-    },
-    lifecycle: {
-      finish: (context) => {
-        assert.equal(context.facts.getEffect(context.ref).finished, true);
-        context.effects.install(2, recharge, installation(2));
-      },
-    },
-  });
-
-  const original = effectFixtureWork(attach(resources, unit(2, 500, ["HEAL_FREE"]), shield));
-  const result = resolveDamage(original, request(), resources);
-
-  assert.deepEqual(observed, [{ amount: 20, hp: 520, finished: true, recharge: true }]);
-  assert.equal(result.hpLoss, 0);
-  assert.equal(getUnit(original, 2).vitality.hp, 520);
-  assert.deepEqual(
-    getUnit(original, 2).effects.instances.map((instance) => instance.definition.id),
-    ["recharge"],
-  );
-  assert.deepEqual(
-    original.events.map((event) => [event.type, event.amount]),
-    [
-      ["HEAL", 20],
-      ["DAMAGE", 0],
-    ],
-  );
-  assert.equal(original.battlefield.snapshot("state").getUnit(2).vitality.hp, 500);
-});
-
-test("effect dispatch: true damage, skipped modifier reception and invincibility are independent protocol facts", () => {
-  for (const [skipModifierEvents, considerInvincibility] of [
-    [false, true],
-    [true, true],
-    [true, false],
-  ]) {
-    const resources = new CombatResources();
-    const seen = [];
-    const targetRules = resources.registerEffect(program("target-rules"), {
-      damage: {
-        targetFormula: {
-          priority: 0,
-          apply: (context, operands) => {
-            seen.push("formula");
-            return { value: { ...operands, attackScale: 3 } };
-          },
-        },
-        reception: {
-          priority: 0,
-          apply: (context, pending) => {
-            seen.push("normal");
-            return { value: pending };
-          },
-        },
-        skippedReception: {
-          priority: 0,
-          apply: (context, pending) => {
-            seen.push("skipped");
-            return { value: { ...pending, amount: pending.amount + 1 } };
-          },
-        },
-        reaction: {
-          priority: 0,
-          apply: () => {
-            seen.push("reaction");
-          },
-        },
-      },
-    });
-    const target = attach(resources, unit(2, 1000, ["INVINCIBLE"]), targetRules);
-    const resultState = effectFixtureWork(target);
-    const result = resolveDamage(
-      resultState,
-      request(100, { receptionPolicy: { skipModifierEvents, considerInvincibility } }),
-      resources,
-    );
-
-    assert.equal(result.formulaDamage, 300);
-    assert.equal(result.hpLoss, considerInvincibility ? 0 : 301);
-    assert.equal(seen.includes("normal"), !skipModifierEvents);
-    assert.equal(seen.includes("reaction"), !skipModifierEvents);
-    assert.equal(seen.includes("skipped"), skipModifierEvents);
-  }
-});
-
-test("effect dispatch: healing observes reception rejection without retrospectively revoking an admitted heal", () => {
-  const resources = new CombatResources();
-  let calls = 0;
-  const reactions = [];
-  const blockHealing = resources.registerEffect(program("added-heal-free"), {
-    bindings: [compileStatusBinding(["HEAL_FREE"])],
-  });
-  const descriptor = resources.registerEffect(
-    program("healing-rule", { receipts: 0, rejected: 0 }),
-    {
-      healing: {
-        reaction: {
-          priority: 0,
-          apply: () => {
-            reactions.push("target");
-          },
-        },
-        reception: {
-          priority: 0,
-          apply: (context, pending) => {
-            calls++;
-            context.operations.effects.update(
-              context.ref,
-              context.instance.definition,
-              (state) => ({
-                receipts: state.receipts + 1,
-                rejected: state.rejected + Number(pending.cancellation !== null),
-              }),
-            );
-            if (context.request.power === 30 && pending.cancellation === null) {
-              context.operations.effects.install(2, blockHealing, installation(2));
-            }
-            return { value: { ...pending, amount: pending.amount * 2 } };
-          },
-        },
-      },
-    },
-  );
-  const sourceObserver = resources.registerEffect(program("healing-source-observer"), {
-    healing: {
-      reaction: {
-        priority: 1000,
-        apply: () => {
-          reactions.push("source");
-        },
-      },
-    },
-  });
-
-  const original = effectFixtureWork(attach(resources, unit(2, 500, ["HEAL_FREE"]), descriptor));
-  const branch = () => createBattleState(fixtureBattlefield(original.battlefield.snapshot('draft')));
-  const rejectedState = branch();
-const rejected = resolveHealing(
-    rejectedState,
-    { sourceUnitId: null, targetUnitId: 2, power: 20, ignoreHealFree: false, tick: 1 },
-    resources,
-  );
-  const receivedState = branch();
-const received = resolveHealing(
-    receivedState,
-    { sourceUnitId: null, targetUnitId: 2, power: 20, ignoreHealFree: true, tick: 1 },
-    resources,
-  );
-  const skippedState = branch();
-const skipped = resolveHealing(
-    skippedState,
-    {
-      sourceUnitId: null,
-      targetUnitId: 2,
-      power: 20,
-      ignoreHealFree: false,
-      skipModifierEvents: true,
-      tick: 1,
-    },
-    resources,
-  );
-
-  assert.equal(rejected.amount, 0);
-  assert.equal(received.amount, 40);
-  assert.equal(skipped.amount, 0);
-  assert.equal(skipped.cancellation.reason, "HEAL_FREE");
-  const permittedSkipState = branch();
-const permittedSkip = resolveHealing(
-    permittedSkipState,
-    {
-      sourceUnitId: null,
-      targetUnitId: 2,
-      power: 20,
-      ignoreHealFree: true,
-      skipModifierEvents: true,
-      tick: 1,
-    },
-    resources,
-  );
-  assert.equal(permittedSkip.amount, 20);
-  assert.equal(permittedSkip.cancellation, null);
-  assert.equal(calls, 2);
-  assert.deepEqual(getUnit(rejectedState, 2).effects.instances[0].state, {
-    receipts: 1,
-    rejected: 1,
-  });
-  assert.deepEqual(getUnit(original, 2).effects.instances[0].state, {
-    receipts: 0,
-    rejected: 0,
-  });
-
-  reactions.length = 0;
-  const initiallyAllowed = effectFixtureWork(
-    attach(resources, unit(1), sourceObserver),
-    attach(resources, unit(2, 500), descriptor),
-  );
-  const admitted = resolveHealing(
-    initiallyAllowed,
-    { sourceUnitId: 1, targetUnitId: 2, power: 30, ignoreHealFree: false, tick: 1 },
-    resources,
-  );
-  assert.deepEqual(reactions, ["target", "source"]);
-  const next = resolveHealing(
-    initiallyAllowed,
-    { sourceUnitId: 1, targetUnitId: 2, power: 30, ignoreHealFree: false, tick: 2 },
-    resources,
-  );
-
-  assert.equal(hasStatusFlag(getUnit(initiallyAllowed, 2), "HEAL_FREE"), true);
-  assert.equal(admitted.amount, 60);
-  assert.equal(next.amount, 0);
-  assert.equal(getUnit(initiallyAllowed, 2).vitality.hp, 560);
-  assert.equal(calls, 4);
-  reactions.length = 0;
-  resolveHealing(
-    initiallyAllowed,
-    { sourceUnitId: 2, targetUnitId: 2, power: 1, ignoreHealFree: true, tick: 3 },
-    resources,
-  );
-  assert.deepEqual(reactions, ["target"]);
-  for (const _ignoreHealFree of [false, true]) {
-    for (const _skipModifierEvent of [false, true]) {
-      const mapped = readArknightsHealingInput(
+    let enableSecond = false;
+    const first = damageEffect("first", {}, [
         {
-          $type: "Torappu.Battle.Action.Nodes+HealViaMaxHpRatio",
-          _ignoreHealFree,
-          _skipModifierEvent,
+            stage: "reception",
+            priority: 10,
+            invoke(context, _self, pending) {
+                calls.push("first");
+                effects.setEnabled(
+                    context.battle,
+                    { type: "EFFECT", unitId: 2, effectId: 1 },
+                    enableSecond,
+                );
+                return { value: pending };
+            },
         },
-        { sourceUnitId: null, targetUnitId: 2, power: 20 },
-      );
-      const resolution = resolveHealing(original, { ...mapped, tick: 1 }, resources);
-      assert.equal(mapped.ignoreHealFree, _ignoreHealFree || _skipModifierEvent);
-      assert.equal(mapped.skipModifierEvents, _skipModifierEvent);
-      assert.equal(resolution.amount, _skipModifierEvent ? 20 : _ignoreHealFree ? 40 : 0);
-    }
-  }
+    ]);
+    const second = damageEffect("second", {}, [
+        {
+            stage: "reception",
+            invoke(_context, _self, pending) {
+                calls.push("second");
+                return { value: pending };
+            },
+        },
+    ]);
+    const target = attach(attach(unit(2), first), second);
+    const battle = workFor(unit(1), target);
+    const resources = new CombatResources();
+    resolveDamage(battle, request(), resources);
+    assert.deepEqual(calls, ["first"]);
+    enableSecond = true;
+    resolveDamage(battle, request(), resources);
+    assert.deepEqual(calls, ["first", "first", "second"]);
+    assert.equal(target.effects.instances[1].status, "ACTIVE");
 });
 
-test("effect registration: domain facets coexist and expose the complete healing protocol", () => {
-  const resources = new CombatResources();
-  const descriptor = resources.registerEffect(
-    program("dual-receiver", {
-      damage: 0,
-      output: 0,
-      reception: 0,
-      skipped: 0,
-      reactions: 0,
-      initialized: false,
-    }),
-    {
-      contributions: [maxHp(() => [modifier.create({ finalAddition: 50 })])],
-      bindings: [compileStatusBinding(["INVISIBLE"])],
-      lifecycle: {
-        start: (context) =>
-          context.effects.update(context.ref, context.instance.definition, (state) => ({
-            ...state,
-            initialized: true,
-          })),
-      },
-      damage: {
-        reception: {
-          priority: 0,
-          apply: (context, pending) => {
-            context.operations.effects.update(
-              context.ref,
-              context.instance.definition,
-              (state) => ({ ...state, damage: state.damage + 1 }),
-            );
-            return { value: { ...pending, amount: pending.amount * 2 } };
-          },
+test("finishing a pending Effect removes its Hook before that candidate can execute", () => {
+    const calls = [];
+    const first = damageEffect("end-second", {}, [
+        {
+            stage: "reception",
+            priority: 10,
+            invoke(context, _self, pending) {
+                calls.push("first");
+                effects.end(context.battle, { type: "EFFECT", unitId: 2, effectId: 1 });
+                return { value: pending };
+            },
         },
-      },
-      healing: {
-        output: {
-          priority: 0,
-          apply: (context, pending) => {
-            context.operations.effects.update(
-              context.ref,
-              context.instance.definition,
-              (state) => ({ ...state, output: state.output + 1 }),
-            );
-            return { value: { ...pending, amount: pending.amount + 5 } };
-          },
+    ]);
+    const second = damageEffect(
+        "ended",
+        {},
+        [
+            {
+                stage: "reception",
+                invoke(_context, _self, pending) {
+                    calls.push("second");
+                    return { value: pending };
+                },
+            },
+        ],
+        {
+            onEnd() {
+                calls.push("end");
+            },
         },
-        reception: {
-          priority: 0,
-          apply: (context, pending) => {
-            context.operations.effects.update(
-              context.ref,
-              context.instance.definition,
-              (state) => ({ ...state, reception: state.reception + 1 }),
-            );
-            return { value: { ...pending, amount: pending.amount * 2 } };
-          },
-        },
-        skippedReception: {
-          priority: 0,
-          apply: (context, pending) => {
-            context.operations.effects.update(
-              context.ref,
-              context.instance.definition,
-              (state) => ({ ...state, skipped: state.skipped + 1 }),
-            );
-            return { value: { ...pending, amount: pending.amount + 1 } };
-          },
-        },
-        reaction: {
-          priority: 0,
-          apply: (context) => {
-            context.operations.effects.update(
-              context.ref,
-              context.instance.definition,
-              (state) => ({ ...state, reactions: state.reactions + 1 }),
-            );
-          },
-        },
-      },
-    },
-  );
-  const initial = effectFixtureWork(attach(resources, unit(2, 500), descriptor));
-  assert.equal(hasStatusFlag(getUnit(initial, 2), "INVISIBLE"), true);
-  assert.equal(resolveMaxHp(2, battlefieldView(initial)), 1050);
-  assert.equal(getUnit(initial, 2).vitality.hp, 525);
-  const damaged = resolveDamage(initial, request(100, { sourceUnitId: 2 }), resources);
-  const healed = resolveHealing(
-    initial,
-    { sourceUnitId: 2, targetUnitId: 2, power: 10, ignoreHealFree: false, tick: 1 },
-    resources,
-  );
-  const skipped = resolveHealing(
-    initial,
-    {
-      sourceUnitId: 2,
-      targetUnitId: 2,
-      power: 10,
-      ignoreHealFree: false,
-      skipModifierEvents: true,
-      tick: 2,
-    },
-    resources,
-  );
+    );
+    const battle = workFor(unit(1), attach(attach(unit(2), first), second));
+    resolveDamage(battle, request(), new CombatResources());
+    assert.deepEqual(calls, ["first", "end"]);
+    assert.equal(getUnit(battle, 2).effects.instances.length, 1);
+    assert.equal(getUnit(battle, 2).vitality.damageHooks.length, 1);
+});
 
-  assert.equal(damaged.hpLoss, 200);
-  assert.equal(healed.amount, 30);
-  assert.equal(skipped.amount, 11);
-  assert.equal(getUnit(initial, 2).vitality.hp, 366);
-  assert.deepEqual(getUnit(initial, 2).effects.instances[0].state, {
-    damage: 1,
-    output: 1,
-    reception: 1,
-    skipped: 1,
-    reactions: 1,
-    initialized: true,
-  });
+test("removed registrations stay absent even when replaced under the same id during nested damage", () => {
+    const calls = [];
+    const resources = new CombatResources();
+    let nested = false;
+    let changed = false;
+    const replacement = damageHook("second", "sourceFormula", (_context, input) => {
+        calls.push("replacement");
+        return { value: { ...input, power: input.power * 2 } };
+    });
+    const added = damageHook("third", "sourceFormula", (_context, input) => {
+        calls.push("added");
+        return { value: { ...input, power: input.power * 3 } };
+    });
+    const first = damageHook(
+        "first",
+        "sourceFormula",
+        (context, input) => {
+            calls.push(nested ? "nested-first" : "first");
+            if (!changed) {
+                changed = true;
+                transitionUnit(context.battle, 1, (value) =>
+                    damage.setHook(
+                        damage.setHook(damage.removeHook(value, "second"), replacement),
+                        added,
+                    ),
+                );
+                nested = true;
+                resources.settleDamage(context.battle, request(10));
+                nested = false;
+            }
+            return { value: input };
+        },
+        10,
+    );
+    const old = damageHook("second", "sourceFormula", (_context, input) => {
+        calls.push("removed");
+        return { value: input };
+    });
+    const source = damage.setHook(damage.setHook(unit(1, { hp: 1000 }), first), old);
+    const battle = workFor(source, unit(2, { hp: 1000 }));
+    const initial = resolveDamage(battle, request(100), resources);
+    assert.deepEqual(calls, ["first", "nested-first"]);
+    assert.equal(initial.hpLoss, 100);
+    assert.equal(getUnit(battle, 2).vitality.hp, 890);
+    assert.deepEqual(source.vitality.damageHooks, [first, old]);
+    calls.length = 0;
+    assert.equal(resolveDamage(battle, request(100), resources).hpLoss, 600);
+    assert.deepEqual(calls, ["first", "replacement", "added"]);
+});
+
+test("damage and healing share the active receiver candidates across direct nested operations", () => {
+    const calls = [];
+    const resources = new CombatResources();
+    let changed = false;
+    const originalHealing = healingHook("original", "reception", (_context, pending) => {
+        calls.push("original-healing");
+        return { value: pending };
+    });
+    const newHealing = healingHook("new", "reception", (_context, pending) => {
+        calls.push("new-healing");
+        return { value: pending };
+    });
+    const first = damageHook("damage", "reception", (context, pending) => {
+        calls.push("damage");
+        if (!changed) {
+            changed = true;
+            transitionUnit(context.battle, 2, (value) =>
+                healing.setHook(healing.removeHook(value, "original"), newHealing),
+            );
+            resolveHealing(context.battle, healRequest(), resources);
+        }
+        return { value: pending };
+    });
+    const receiver = healing.setHook(
+        damage.setHook(unit(2, { hp: 500, maxHp: 1000 }), first),
+        originalHealing,
+    );
+    const battle = workFor(unit(1), receiver);
+    resolveDamage(battle, request(100), resources);
+    assert.deepEqual(calls, ["damage"]);
+    assert.equal(getUnit(battle, 2).vitality.hp, 410);
+    resolveHealing(battle, healRequest(), resources);
+    assert.deepEqual(calls, ["damage", "new-healing"]);
+    assert.equal(getUnit(battle, 2).vitality.hp, 420);
+});
+
+test("nested damage shares a healing receiver enumeration without admitting newly registered damage hooks", () => {
+    const calls = [];
+    const resources = new CombatResources();
+    let changed = false;
+    const late = damageHook("late", "reception", (_context, pending) => {
+        calls.push("late-damage");
+        return { value: pending };
+    });
+    const first = healingHook("healing", "reception", (context, pending) => {
+        calls.push("healing");
+        if (!changed) {
+            changed = true;
+            transitionUnit(context.battle, 2, (value) => damage.setHook(value, late));
+            resources.settleDamage(context.battle, request(10));
+        }
+        return { value: pending };
+    });
+    const battle = workFor(unit(1), healing.setHook(unit(2, { hp: 500, maxHp: 1000 }), first));
+    resolveHealing(battle, healRequest(20), resources);
+    assert.deepEqual(calls, ["healing"]);
+    assert.equal(getUnit(battle, 2).vitality.hp, 510);
+    resolveDamage(battle, request(10), resources);
+    assert.deepEqual(calls, ["healing", "late-damage"]);
+});
+
+test("cancellation and stopping this Hook stage are separate decisions", () => {
+    for (const stopDispatch of [false, true]) {
+        const calls = [];
+        const cancel = damageHook(
+            "cancel",
+            "reception",
+            (_context, pending) => {
+                calls.push("cancel");
+                return {
+                    value: { ...pending, cancellation: { stage: "RECEPTION", reason: "BLOCKED" } },
+                    stopDispatch,
+                };
+            },
+            10,
+        );
+        const after = damageHook("after", "reception", (_context, pending) => {
+            calls.push(pending.cancellation.reason);
+            return { value: pending };
+        });
+        const react = damageHook("reaction", "reaction", (_context, report) => {
+            calls.push(`reaction:${report.hpLoss}`);
+        });
+        let target = damage.setHook(unit(2), cancel);
+        target = damage.setHook(damage.setHook(target, after), react);
+        const battle = workFor(unit(1), target);
+        const report = resolveDamage(battle, request(), new CombatResources());
+        assert.equal(report.hpLoss, 0);
+        assert.deepEqual(
+            calls,
+            stopDispatch ? ["cancel", "reaction:0"] : ["cancel", "BLOCKED", "reaction:0"],
+        );
+    }
+});
+
+test("reaction stages run once per participant and can stop their own receiver enumeration", () => {
+    const calls = [];
+    const first = damageHook(
+        "first",
+        "reaction",
+        () => {
+            calls.push("first");
+            return { stopDispatch: true };
+        },
+        10,
+    );
+    const second = damageHook("second", "reaction", () => {
+        calls.push("second");
+    });
+    const self = damage.setHook(damage.setHook(unit(1), first), second);
+    const battle = workFor(self);
+    resolveDamage(battle, request(10, { targetUnitId: 1 }), new CombatResources());
+    assert.deepEqual(calls, ["first"]);
+});
+
+test("nested operations read already changed Effect state and inherit the enclosing event tick", () => {
+    const uses = [];
+    const content = damageEffect("once", { ready: true }, [
+        {
+            stage: "reception",
+            invoke(context, self, pending) {
+                uses.push(self.state.ready);
+                if (self.state.ready) {
+                    setSelf(context, self, { ready: false });
+                    context.operations.heal({ sourceUnitId: 1, targetUnitId: 2, power: 10 });
+                    context.operations.damage({ ...request(5), tick: 999 });
+                }
+                return { value: pending };
+            },
+        },
+    ]);
+    const battle = workFor(unit(1), attach(unit(2, { hp: 500, maxHp: 1000 }), content));
+    resolveDamage(battle, request(100, { tick: 42 }), new CombatResources());
+    assert.deepEqual(uses, [true, false]);
+    assert.deepEqual(stateOf(battle, 2, content), { ready: false });
+    assert.equal(getUnit(battle, 2).vitality.hp, 405);
+    assert.deepEqual(
+        battle.events.map((event) => [event.type, event.amount, event.tick]),
+        [
+            ["HEAL", 10, 42],
+            ["DAMAGE", 5, 42],
+            ["DAMAGE", 100, 42],
+        ],
+    );
+});
+
+test("invincibility cancels reception while allowing ordinary observation and reaction hooks", () => {
+    const calls = [];
+    const content = damageEffect("observe", {}, [
+        {
+            stage: "reception",
+            invoke(_context, _self, pending) {
+                calls.push(pending.cancellation.reason);
+                return { value: pending };
+            },
+        },
+        {
+            stage: "reaction",
+            invoke(_context, _self, report) {
+                calls.push(`reaction:${report.hpLoss}`);
+            },
+        },
+    ]);
+    const target = attach(attach(unit(2), statusEffect("invincible", ["INVINCIBLE"])), content);
+    const battle = workFor(unit(1), target);
+    const result = resolveDamage(battle, request(), new CombatResources());
+    assert.equal(result.hpLoss, 0);
+    assert.deepEqual(calls, ["INVINCIBLE", "reaction:0"]);
+});
+
+test("skipping modifier events selects the dedicated reception stage and suppresses reactions", () => {
+    const calls = [];
+    let target = damage.setHook(
+        unit(2),
+        damageHook("ordinary", "reception", (_context, value) => {
+            calls.push("ordinary");
+            return { value };
+        }),
+    );
+    target = damage.setHook(
+        target,
+        damageHook("skipped", "skippedReception", (_context, value) => {
+            calls.push("skipped");
+            return { value: { ...value, amount: value.amount / 2 } };
+        }),
+    );
+    target = damage.setHook(
+        target,
+        damageHook("reaction", "reaction", () => {
+            calls.push("reaction");
+        }),
+    );
+    const battle = workFor(unit(1), target);
+    const result = resolveDamage(
+        battle,
+        request(100, {
+            receptionPolicy: { considerInvincibility: true, skipModifierEvents: true },
+        }),
+        new CombatResources(),
+    );
+    assert.equal(result.hpLoss, 50);
+    assert.deepEqual(calls, ["skipped"]);
+});
+
+test("healing hooks resolve output and reception before notifying each participant", () => {
+    const calls = [];
+    const source = healingEffect("healing-output", {}, [
+        {
+            stage: "output",
+            invoke(_context, _self, pending) {
+                calls.push("output");
+                return { value: { ...pending, amount: pending.amount * 2 } };
+            },
+        },
+        {
+            stage: "reaction",
+            invoke(_context, _self, report) {
+                calls.push(`source:${report.amount}`);
+            },
+        },
+    ]);
+    const target = healingEffect("healing-reception", {}, [
+        {
+            stage: "reception",
+            invoke(_context, _self, pending) {
+                calls.push("reception");
+                return { value: { ...pending, amount: pending.amount + 5 } };
+            },
+        },
+        {
+            stage: "reaction",
+            invoke(_context, _self, report) {
+                calls.push(`target:${report.amount}`);
+            },
+        },
+    ]);
+    const battle = workFor(
+        attach(unit(1), source),
+        attach(unit(2, { hp: 990, maxHp: 1000 }), target),
+    );
+    const result = resolveHealing(battle, healRequest(10), new CombatResources());
+    assert.equal(result.amount, 10);
+    assert.deepEqual(calls, ["output", "reception", "target:10", "source:10"]);
+    assert.equal(getUnit(battle, 2).vitality.hp, 1000);
+});
+
+test("healing cancellation stays visible to reception and reaction while ignoreHealFree changes the request rule", () => {
+    const calls = [];
+    const observer = healingEffect("observe-healing", {}, [
+        {
+            stage: "reception",
+            invoke(_context, _self, pending) {
+                calls.push(pending.cancellation?.reason ?? "accepted");
+                return { value: pending };
+            },
+        },
+        {
+            stage: "reaction",
+            invoke(_context, _self, report) {
+                calls.push(`reaction:${report.amount}`);
+            },
+        },
+    ]);
+    const target = attach(unit(2, { hp: 500, maxHp: 1000, flags: ["HEAL_FREE"] }), observer);
+    const battle = workFor(unit(1), target);
+    const resources = new CombatResources();
+    assert.equal(resolveHealing(battle, healRequest(10), resources).amount, 0);
+    assert.equal(
+        resolveHealing(battle, healRequest(10, { ignoreHealFree: true }), resources).amount,
+        10,
+    );
+    assert.deepEqual(calls, ["HEAL_FREE", "reaction:0", "accepted", "reaction:10"]);
+});
+
+test("healing uses the dedicated skipped stage and suppresses output and reaction modifiers", () => {
+    const calls = [];
+    const source = healing.setHook(
+        unit(1),
+        healingHook("output", "output", (_context, value) => {
+            calls.push("output");
+            return { value: { ...value, amount: value.amount * 2 } };
+        }),
+    );
+    let target = healing.setHook(
+        unit(2, { hp: 500, maxHp: 1000 }),
+        healingHook("ordinary", "reception", (_context, value) => {
+            calls.push("ordinary");
+            return { value };
+        }),
+    );
+    target = healing.setHook(
+        target,
+        healingHook("skipped", "skippedReception", (_context, value) => {
+            calls.push("skipped");
+            return { value: { ...value, amount: value.amount / 2 } };
+        }),
+    );
+    target = healing.setHook(
+        target,
+        healingHook("reaction", "reaction", () => {
+            calls.push("reaction");
+        }),
+    );
+    const battle = workFor(source, target);
+    const result = resolveHealing(
+        battle,
+        healRequest(100, { skipModifierEvents: true }),
+        new CombatResources(),
+    );
+    assert.equal(result.amount, 50);
+    assert.deepEqual(calls, ["skipped"]);
 });

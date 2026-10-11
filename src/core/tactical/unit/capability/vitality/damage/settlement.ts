@@ -13,14 +13,13 @@ import {
     type PendingDamage,
     NORMAL_DAMAGE_RECEPTION,
 } from "./contract.js";
-import { EffectDispatchScope } from "../../effects/dispatch.js";
+import { withDispatch, type Dispatch } from "../hook.js";
 import {
     dispatchDamageFormula,
     dispatchDamageAmount,
     dispatchDamageReactions,
 } from "./dispatch.js";
-import { retireCombatUnit } from "../../../../battle/execution/unit-lifecycle.js";
-import type { DamageResourceServices } from "./resources.js";
+import type { Services } from "./hook.js";
 import { gainUnitSkillSp } from "../../../../battle/execution/skill-sp.js";
 import {
     battlefieldView,
@@ -103,22 +102,14 @@ function formulaPower(operands: DamageOperands): number {
 function confirmDamage(
     work: BattleState,
     report: DamageReport,
-    resources: DamageResourceServices,
-    dispatch: EffectDispatchScope,
+    resources: Services,
+    dispatch: Dispatch,
 ): DamageReport {
-    report = Object.freeze(report);
-
     if (!(report.request.receptionPolicy ?? NORMAL_DAMAGE_RECEPTION).skipModifierEvents) {
         dispatchDamageReactions(work, report, resources, dispatch);
     }
     if (report.deathOccurred) {
-        retireCombatUnit(
-            work,
-            report.request.targetUnitId,
-            resources,
-            report.request.tick,
-            dispatch,
-        );
+        resources.retireUnit(work, report.request.targetUnitId, report.request.tick);
     }
 
     return report;
@@ -127,8 +118,17 @@ function confirmDamage(
 export function resolveDamage(
     work: BattleState,
     request: DamageRequest,
-    resources: DamageResourceServices,
-    dispatch = new EffectDispatchScope(),
+    resources: Services,
+    dispatch?: Dispatch,
+): DamageReport {
+    return withDispatch(work, dispatch, (scope) => settleDamage(work, request, resources, scope));
+}
+
+function settleDamage(
+    work: BattleState,
+    request: DamageRequest,
+    resources: Services,
+    dispatch: Dispatch,
 ): DamageReport {
     const policy = request.receptionPolicy ?? NORMAL_DAMAGE_RECEPTION;
     const target = getUnit(work, request.targetUnitId);

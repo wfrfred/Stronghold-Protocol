@@ -1,3 +1,5 @@
+import { attackBuff } from "../helpers/effects.js";
+import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { fixtureBattlefield } from "../helpers/battlefield.js";
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -6,9 +8,6 @@ import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { createLegacyCombatSpec } from '../../dist/legacy/combat.js';
 import { createOperatorDefinition } from '../../dist/core/tactical/unit/archetype/operator.js';
 import { createSkillDefinition } from '../../dist/core/tactical/unit/capability/skill/capability.js';
-import { createEffectDefinition } from '../../dist/core/tactical/unit/capability/effects/definition.js';
-import { create as modifier } from '../../dist/core/tactical/contribution/value.js';
-import { attack } from '../../dist/core/tactical/unit/capability/offense/contributions.js';
 import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { compileAction } from '../../dist/core/tactical/unit/capability/action/compile.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
@@ -42,16 +41,14 @@ function target() {
 }
 function scenario(skill, { targets = 1, content, compile } = {}) {
   const resources = new CombatResources();
-  const buff = resources.registerEffect(createEffectDefinition({
-    id: 'skill/attack', initialize: () => ({}),
-  }), { contributions: [attack(() => [modifier({ multiplier: 1 })])] });
+  const buff = attackBuff('skill/attack', 100);
   const fault = { enabled: false };
   resources.skills.register({ definition: skill, activate: content ?? ((context) => {
-    const installed = context.effects.install(context.unitId, buff, {
+    const installed = effects.apply(context.battle, getUnit(context.battle, context.unitId), buff, {
       source: context.unitId, scopes: [{ type: 'SKILL', unitId: context.unitId, activationId: context.activationId }],
     });
     if (fault.enabled) { throw new Error('skill fault'); }
-    assert.equal(installed.type, 'INSTALLED');
+    assert.ok(installed);
     return { type: 'ACTIVATED' };
   }) });
   const base = createLegacyCombatSpec({ rows: 1, columns: 8, operators: [], enemies: [], maxTicks: 200, seed: 7 });
