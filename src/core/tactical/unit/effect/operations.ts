@@ -59,7 +59,9 @@ export function apply<S extends object, H extends object>(
     const ref: Ref = { type: "EFFECT", unitId: unit.id, effectId: instance.id };
 
     updateUnit(battle, { ...unit, effects: state.append(unit.effects, instance) });
+    battle.installingEffects.add(key(ref));
     definition.onApply?.(createContext<S, H>(battle, ref, instance));
+    battle.installingEffects.delete(key(ref));
 
     if (instance.group === undefined) {
         updateStatus(battle, ref);
@@ -324,7 +326,12 @@ function updateStatus(battle: BattleState, ref: Ref): void {
     const unit = getUnit(battle, ref.unitId);
     const instance = get(battle, ref);
 
-    if (unit === undefined || instance === undefined || instance.status === "FINISHED") {
+    if (
+        unit === undefined ||
+        instance === undefined ||
+        instance.status === "FINISHED" ||
+        battle.installingEffects.has(key(ref))
+    ) {
         return;
     }
 
