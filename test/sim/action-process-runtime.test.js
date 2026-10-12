@@ -37,12 +37,14 @@ test('action runtime: delayed actions preserve ordinary same-tick order and data
   assert.deepEqual(one.events.filter(event => event.type === 'DAMAGE').map(event => [event.sourceUnitId, event.amount]), [[1, 3]]);
   assert.equal(snapshot.actionExecution.executions.length, 1);
   assertData(assert, snapshot.actionExecution);
-  assert.deepEqual(structuredClone(snapshot), snapshot);
+  const saved = JSON.stringify(snapshot);
+  assert.deepEqual(JSON.parse(saved).actionExecution, snapshot.actionExecution);
   assert.equal(runtime.step().events.some(event => event.type === 'ACTION_RELEASED'), false);
   const three = runtime.step();
   assert.deepEqual(three.events.filter(event => event.type === 'DAMAGE').map(event => event.amount), [7]);
   assert.equal(runtime.snapshot().actionExecution.executions.length, 0);
   assert.equal(snapshot.units.find(value => value.id === 2).vitality.hp, 97);
+  assert.equal(JSON.stringify(snapshot), saved);
 });
 
 test('action runtime: a cancellation command precedes release and preserves sibling progress', () => {

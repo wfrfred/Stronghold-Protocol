@@ -283,10 +283,10 @@ test("runtime allocates initial IDs, resolves creation references, and never reu
         range: [[0, 0]],
         direction: "RIGHT",
     });
-    assert.equal(initial.units[1].effects.instances[0].source, 1);
-    assert.equal(initial.units[1].effects.instances[0].definition, effectDefinition);
-    assert.equal(initial.units[1].effects.instances[0].status, "ACTIVE");
-    assert.deepEqual(initial.units[1].effects.instances[0].state, {
+    assert.equal(initial.units[1].effects.values()[0].source, 1);
+    assert.equal(initial.units[1].effects.values()[0].definition, effectDefinition);
+    assert.equal(initial.units[1].effects.values()[0].status, "ACTIVE");
+    assert.deepEqual(initial.units[1].effects.values()[0].data, {
         quota: { remaining: 3 },
         marks: [1, 2],
     });

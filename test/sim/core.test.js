@@ -1,4 +1,4 @@
-import { empty as emptyEffects } from '../../dist/core/tactical/unit/effect/state.js';
+import { Effects } from "../../dist/core/tactical/unit/effect/effects.js";
 import { createActionState } from "../../dist/core/tactical/unit/capability/action/capability.js";
 // Sim core: rng, grid/pathing, damage formulas, stat aggregation, buffs.
 import { test } from 'node:test';
@@ -247,7 +247,7 @@ const presenceBattlefield = () => createBattlefieldRuntime({
 });
 
 const presenceUnit = (id, position) => ({
-  effects:emptyEffects(), id, definition: Object.freeze({ id: `presence_${id}`, vitality: Object.freeze({ maxHp: 100 }) }), position: Object.freeze(position),
+  effects:Effects.empty(), id, definition: Object.freeze({ id: `presence_${id}`, vitality: Object.freeze({ maxHp: 100 }) }), position: Object.freeze(position),
   vitality: initializeVitalityState({maxHp:100}), spatialPresence: { present: true },
 });
 
@@ -262,7 +262,7 @@ const presenceNavigationModifier = (id, source, region, costFloor = 1000) => cre
 test('core spatial presence preserves earlier unit values while removing only spatial membership', () => {
   const runtime = presenceBattlefield();
   const unit = presenceUnit(1, [2, 0]);
-  const bare = { effects:emptyEffects(), id: 2, definition: Object.freeze({ id: 'bare' }), position: Object.freeze([2, 0]) };
+  const bare = { effects:Effects.empty(), id: 2, definition: Object.freeze({ id: 'bare' }), position: Object.freeze([2, 0]) };
   assert.equal(hasSpatialPresence(unit), true);
   assert.equal(hasSpatialPresence(bare), false);
   assert.equal(isSpatiallyPresent(bare), true);
@@ -312,7 +312,7 @@ test('core removal facts share the latest unit while updates preserve retained b
 test('core hidden navigation modifier sources and anchors suspend contributions without removing effects', () => {
   const runtime = presenceBattlefield();
   const source = presenceUnit(1, [0, 0]), anchor = presenceUnit(2, [2, 0]);
-  const bare = { effects:emptyEffects(), id: 3, definition: Object.freeze({ id: 'bare' }), position: Object.freeze([4, 0]) };
+  const bare = { effects:Effects.empty(), id: 3, definition: Object.freeze({ id: 'bare' }), position: Object.freeze([4, 0]) };
   const fixed = position => ({ type: 'FIXED', position, range: [[0, 0]], direction: 'RIGHT' });
   runtime.advance([
     { type: 'REGISTER_UNIT', unit: source }, { type: 'REGISTER_UNIT', unit: anchor },

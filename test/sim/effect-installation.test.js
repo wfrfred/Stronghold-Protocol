@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import * as effect from "../../dist/core/tactical/unit/effect/operations.js";
-import { get } from "../../dist/core/tactical/unit/effect/query.js";
+import { get } from "../../dist/core/tactical/unit/effect/operations.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { effectFixtureWork, install, definition, attackBuff } from "../helpers/effects.js";
 
@@ -42,13 +42,13 @@ test("effect installation: a nested weaker rule does not enable its parent befor
             state = effect.replaceEffect(
                 state,
                 context.ref.unitId,
-                effect.setState(get(state, context.ref), { amount: 100 }),
+                effect.setData(get(state, context.ref), { amount: 100 }),
             );
             trace.push("install end");
             return state;
         },
         onEnable(state, context) {
-            trace.push(["enable", context.self.state.amount]);
+            trace.push(["enable", context.self.data.amount]);
             return state;
         },
     });
@@ -76,14 +76,14 @@ for (const grouped of [false, true]) {
                 state = effect.replaceEffect(
                     state,
                     context.ref.unitId,
-                    effect.setState(get(state, context.ref), { amount: 100 }),
+                    effect.setData(get(state, context.ref), { amount: 100 }),
                 );
                 assert.equal(get(state, context.ref).status, "INSTALLING");
                 trace.push("install end");
                 return state;
             },
             onEnable(state, context) {
-                trace.push(["enable", context.self.state.amount]);
+                trace.push(["enable", context.self.data.amount]);
                 return state;
             },
         });
@@ -113,13 +113,13 @@ test("effect installation: an independent child enables while its parent finishe
             state = effect.replaceEffect(
                 state,
                 context.ref.unitId,
-                effect.setState(get(state, context.ref), { amount: 100 }),
+                effect.setData(get(state, context.ref), { amount: 100 }),
             );
             trace.push("install end");
             return state;
         },
         onEnable(state, context) {
-            trace.push(["enable", context.self.state.amount]);
+            trace.push(["enable", context.self.data.amount]);
             return state;
         },
     });

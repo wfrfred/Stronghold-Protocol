@@ -9,24 +9,18 @@ import {
 import { emptyCall, type CallContext } from "../../battle/execution/call.js";
 import type { Unit, UnitId } from "../unit.js";
 import type { Definition, EndContext } from "./definition.js";
-import {
-    deadline,
-    key,
-    type Effect,
-    type Lifetime,
-    type Ref,
-    type Scope,
-    type Instance,
-} from "./effect.js";
+import { deadline, key, type Effect, type Lifetime, type Ref, type Scope } from "./effect.js";
 import { dependents } from "../../battlefield/storage/effect-lifetimes.js";
-import { get } from "./query.js";
-import * as state from "./state.js";
 
 export interface Initial<S extends object> {
     readonly source?: UnitId | null;
     readonly scopes?: readonly Scope[];
-    readonly state?: S;
+    readonly data?: S;
     readonly enabled?: boolean;
+}
+
+export function get(battle: BattleState, ref: Ref): Effect | undefined {
+    return getUnit(battle, ref.unitId)?.effects.get(ref.effectId);
 }
 
 export function install<S extends object, H extends object>(
@@ -50,14 +44,14 @@ export function install<S extends object, H extends object>(
     const instance: Effect<S, H> = {
         id: unit.effects.nextId,
         definition,
-        state: initial.state ?? definition.initialize(),
+        data: initial.data ?? definition.initialize(),
         source: initial.source ?? null,
         scopes,
         enabled: initial.enabled ?? true,
         status: "INSTALLING",
     };
     const ref: Ref = { type: "EFFECT", unitId: unit.id, effectId: instance.id };
-    battle = updateUnit(battle, { ...unit, effects: state.append(unit.effects, instance) });
+    battle = updateUnit(battle, { ...unit, effects: unit.effects.add(instance) });
 
     if (definition.onInstall !== undefined) {
         battle = definition.onInstall(battle, createContext<S, H>(battle, ref, instance, call));
@@ -73,19 +67,23 @@ export function install<S extends object, H extends object>(
     return { state: battle, value: ref };
 }
 
-export function setState<S extends object, H extends object>(
+export function setData<S extends object, H extends object>(
     effect: Effect<S, H>,
     next: NoInfer<S> | ((current: NoInfer<S>) => NoInfer<S>),
 ): Effect<S, H> {
-    const value = typeof next === "function" ? next(effect.state) : next;
+    const value = typeof next === "function" ? next(effect.data) : next;
 
-    return value === effect.state ? effect : { ...effect, state: value };
+    return value === effect.data ? effect : { ...effect, data: value };
 }
 
-export function replaceEffect(battle: BattleState, unitId: UnitId, effect: Instance): BattleState {
+export function replaceEffect<S extends object, H extends object>(
+    battle: BattleState,
+    unitId: UnitId,
+    effect: Effect<S, H>,
+): BattleState {
     return transitionUnit(battle, unitId, (unit) => ({
         ...unit,
-        effects: state.replace(unit.effects, effect),
+        effects: unit.effects.replace(effect),
     }));
 }
 
@@ -144,7 +142,7 @@ export function end(
     ref: Ref,
     reason = "EXPLICIT",
     call: CallContext = emptyCall,
-): Result<Instance | undefined> {
+): Result<Effect | undefined> {
     const instance = get(battle, ref);
 
     if (instance === undefined || instance.status === "ENDING") {
@@ -176,7 +174,7 @@ export function end(
 
     battle = transitionUnit(battle, ref.unitId, (unit) => ({
         ...unit,
-        effects: state.remove(unit.effects, ref.effectId),
+        effects: unit.effects.remove(ref.effectId),
     }));
 
     if (instance.definition.group !== undefined) {
@@ -206,7 +204,7 @@ export function endScope(
     const roots = dependents(battlefieldView(battle).effectLifetimes, lifetime);
 
     if (lifetime.type === "UNIT") {
-        const hosted = getUnit(battle, lifetime.unitId)?.effects.instances ?? [];
+        const hosted = getUnit(battle, lifetime.unitId)?.effects.values() ?? [];
 
         for (const instance of hosted) {
             battle = end(
@@ -228,11 +226,14 @@ export function endScope(
 export function advance(battle: BattleState, call: CallContext = emptyCall): BattleState {
     const view = battlefieldView(battle);
     const candidates = view.unitIds.flatMap((unitId) =>
-        view.getUnit(unitId)!.effects.instances.map((instance): Ref => ({
-            type: "EFFECT",
-            unitId,
-            effectId: instance.id,
-        })),
+        view
+            .getUnit(unitId)!
+            .effects.values()
+            .map((instance): Ref => ({
+                type: "EFFECT",
+                unitId,
+                effectId: instance.id,
+            })),
     );
 
     for (const ref of candidates) {
@@ -259,7 +260,7 @@ export function advance(battle: BattleState, call: CallContext = emptyCall): Bat
 
 export function validateScopes(battle: BattleState): void {
     for (const unitId of battlefieldView(battle).unitIds) {
-        for (const instance of getUnit(battle, unitId)!.effects.instances) {
+        for (const instance of getUnit(battle, unitId)!.effects.values()) {
             const ref: Ref = { type: "EFFECT", unitId, effectId: instance.id };
 
             for (const scope of instance.scopes) {
@@ -280,7 +281,7 @@ export function validateScopes(battle: BattleState): void {
 function createContext<S extends object = object, H extends object = object>(
     battle: BattleState,
     ref: Ref,
-    instance: Instance,
+    instance: Effect<S, H>,
     call: CallContext,
     reason = "EXPLICIT",
     host = getUnit(battle, ref.unitId)!,
@@ -291,7 +292,7 @@ function createContext<S extends object = object, H extends object = object>(
         reason,
         call,
         unit: (getUnit(battle, ref.unitId) ?? host) as Unit & H,
-        self: instance as Effect<S, H>,
+        self: instance,
     };
 }
 
@@ -319,17 +320,13 @@ function available(battle: BattleState, lifetime: Lifetime): boolean {
     }
 }
 
-function change(
-    battle: BattleState,
-    ref: Ref,
-    next: (instance: Instance) => Instance,
-): BattleState {
+function change(battle: BattleState, ref: Ref, next: (instance: Effect) => Effect): BattleState {
     const current = get(battle, ref);
 
     return current === undefined ? battle : replaceEffect(battle, ref.unitId, next(current));
 }
 
-function shouldBeActive(battle: BattleState, instance: Instance, unit: Unit): boolean {
+function shouldBeActive(battle: BattleState, instance: Effect, unit: Unit): boolean {
     if (
         !instance.enabled ||
         instance.status === "ENDING" ||
@@ -343,13 +340,16 @@ function shouldBeActive(battle: BattleState, instance: Instance, unit: Unit): bo
 
     return (
         group === undefined ||
-        !unit.effects.instances.some(
-            (other) =>
-                other.status !== "ENDING" &&
-                other.definition.group?.id === group.id &&
-                (other.definition.group.priority > group.priority ||
-                    (other.definition.group.priority === group.priority && other.id < instance.id)),
-        )
+        !unit.effects
+            .values()
+            .some(
+                (other) =>
+                    other.status !== "ENDING" &&
+                    other.definition.group?.id === group.id &&
+                    (other.definition.group.priority > group.priority ||
+                        (other.definition.group.priority === group.priority &&
+                            other.id < instance.id)),
+            )
     );
 }
 
@@ -389,7 +389,7 @@ function reconcileGroupActivity(
     groupId: string,
     call: CallContext,
 ): BattleState {
-    const refs = (getUnit(battle, unitId)?.effects.instances ?? [])
+    const refs = (getUnit(battle, unitId)?.effects.values() ?? [])
         .filter((instance) => instance.definition.group?.id === groupId)
         .map((instance): Ref => ({ type: "EFFECT", unitId, effectId: instance.id }));
 

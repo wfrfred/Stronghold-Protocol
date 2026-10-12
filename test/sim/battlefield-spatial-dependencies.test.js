@@ -11,6 +11,12 @@ import {
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/deployment.js';
 
+function projectionFacts(state) {
+  return { ...state, units: new Map([...state.units].map(([id, unit]) => [
+    id, { ...unit, effects: unit.effects.toJSON() },
+  ])) };
+}
+
 function projectionHarness() {
   const map = createBattlefieldMap(1, 5, Array.from({ length: 5 }, () => createTile({
     heightType: 'LOWLAND', buildableType: 'ALL', passableMask: 'ALL',
@@ -29,11 +35,11 @@ function projectionHarness() {
     commit(changes) {
       const facts = branches.map(branch => {
         const previous = branch.state;
-        const snapshot = structuredClone(previous);
+        const snapshot = structuredClone(projectionFacts(previous));
         const batch = typeof changes === 'function' ? changes(previous) : changes;
         const applied = applyBattlefieldChanges(previous, batch);
         const settled = branch.settle(map, baseline, previous, applied.content, applied.dependencies);
-        assert.deepEqual(previous, snapshot, 'settlement must preserve the prior state');
+        assert.deepEqual(projectionFacts(previous), snapshot, 'settlement must preserve the prior state');
         branch.state = settled.state;
         return { ...applied.facts, ...settled.facts };
       });

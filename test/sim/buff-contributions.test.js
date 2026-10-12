@@ -48,8 +48,8 @@ test("Buff contribution integration: the native Astesia DEF facet merges layers,
         remove: removeDefenseContribution,
         value: (instance) => {
             const value = compiled.sample({
-                blackboard: new Map([["def", instance.state.defenseRatio]]),
-                stackCount: policy.validStackCount(instance.state.stackCount),
+                blackboard: new Map([["def", instance.data.defenseRatio]]),
+                stackCount: policy.validStackCount(instance.data.stackCount),
                 readSourceAttribute: () => undefined,
             });
             return value === undefined ? [] : [value];
@@ -70,13 +70,13 @@ test("Buff contribution integration: the native Astesia DEF facet merges layers,
     );
     const original = battlefieldView(work);
     const apply = (source, defenseRatio, expiresAtTick, tick) => {
-        const current = getUnit(work, 0).effects?.instances.find(
+        const current = getUnit(work, 0).effects?.values().find(
             (instance) => instance.definition === program && instance.status !== "ENDING",
         );
         const plan = policy.plan(
             current === undefined
                 ? undefined
-                : { stackCount: current.state.stackCount, expiresAtTick: deadline(current) },
+                : { stackCount: current.data.stackCount, expiresAtTick: deadline(current) },
             { stackCount: 1, expiresAtTick },
             tick,
         );
@@ -84,12 +84,12 @@ test("Buff contribution integration: the native Astesia DEF facet merges layers,
             work = effects.install(at(work, tick), getUnit(work, 0), program, {
                 source,
                 scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }],
-                state: { stackCount: 1, defenseRatio },
+                data: { stackCount: 1, defenseRatio },
             }).state;
         } else if (plan.type === "REFRESH") {
             const address = { type: "EFFECT", unitId: 0, effectId: current.id };
-            const next = effects.setDeadline(effects.setState(current, {
-                ...current.state, stackCount: plan.stackCount,
+            const next = effects.setDeadline(effects.setData(current, {
+                ...current.data, stackCount: plan.stackCount,
             }), plan.expiresAtTick);
             work = effects.replaceEffect(work, 0, next);
             work = refreshContribution(work, address, program, output);
@@ -102,13 +102,13 @@ test("Buff contribution integration: the native Astesia DEF facet merges layers,
     const first = battlefieldView(work);
     apply(20, 0.9, 15, 1);
     close(effective(), 140);
-    let instance = getUnit(work, 0).effects.instances[0];
+    let instance = getUnit(work, 0).effects.values()[0];
     assert.equal(instance.source, 10);
-    assert.equal(instance.state.defenseRatio, 0.2);
-    assert.equal(instance.state.stackCount, 2);
+    assert.equal(instance.data.defenseRatio, 0.2);
+    assert.equal(instance.data.stackCount, 2);
     assert.equal(deadline(instance), 15);
-    assert.equal(getUnit(work, 0).effects.instances.length, 1);
-    assert.equal(first.getUnit(0).effects.instances[0].state.stackCount, 1);
+    assert.equal(getUnit(work, 0).effects.values().length, 1);
+    assert.equal(first.getUnit(0).effects.values()[0].data.stackCount, 1);
     assert.equal(starts, 1);
     const address = { type: "EFFECT", unitId: 0, effectId: instance.id };
     work = effects.setEnabled(work, address, false);
@@ -128,7 +128,7 @@ test("Buff contribution integration: the native Astesia DEF facet merges layers,
     assert.equal(effective(), 100);
     assert.equal(resolveDefense(0, original).defense, 100);
     assert.equal(starts, 1);
-    instance = getUnit(work, 0).effects.instances[0];
+    instance = getUnit(work, 0).effects.values()[0];
     assert.equal(instance, undefined);
 });
 
@@ -158,8 +158,8 @@ test("Buff contribution integration: only effective layer growth resamples the r
         value: (instance) => [
             compiled.sample({
                 blackboard: new Map(),
-                stackCount: policy.validStackCount(instance.state.stackCount),
-                readSourceAttribute: () => instance.state.sourceAttack,
+                stackCount: policy.validStackCount(instance.data.stackCount),
+                readSourceAttribute: () => instance.data.sourceAttack,
             }),
         ],
     };
@@ -184,17 +184,17 @@ test("Buff contribution integration: only effective layer growth resamples the r
     const power = () => resolveAttackPower(0, battlefieldView(work));
     assert.equal(power(), 150);
     const apply = (currentSourceAttack, tick, expiresAtTick) => {
-        const current = getUnit(work, 0).effects.instances[0];
+        const current = getUnit(work, 0).effects.values()[0];
         const plan = policy.plan(
-            { stackCount: current.state.stackCount, expiresAtTick: deadline(current) },
+            { stackCount: current.data.stackCount, expiresAtTick: deadline(current) },
             { stackCount: 1, expiresAtTick },
             tick,
         );
         assert.equal(plan.type, "REFRESH");
-        const next = effects.setDeadline(effects.setState(current, {
-            ...current.state,
+        const next = effects.setDeadline(effects.setData(current, {
+            ...current.data,
             stackCount: plan.stackCount,
-            sourceAttack: plan.reloadModifiers ? currentSourceAttack : current.state.sourceAttack,
+            sourceAttack: plan.reloadModifiers ? currentSourceAttack : current.data.sourceAttack,
         }), plan.expiresAtTick);
         work = effects.replaceEffect(work, 0, next);
         work = refreshContribution(work, address, program, output);
@@ -206,9 +206,9 @@ test("Buff contribution integration: only effective layer growth resamples the r
     assert.equal(power(), 300);
     assert.equal(apply(800, 3, 40).reloadModifiers, false);
     assert.equal(power(), 300);
-    const current = getUnit(work, 0).effects.instances[0];
-    assert.equal(current.state.stackCount, 3);
-    assert.equal(current.state.sourceAttack, 200);
+    const current = getUnit(work, 0).effects.values()[0];
+    assert.equal(current.data.stackCount, 3);
+    assert.equal(current.data.sourceAttack, 200);
     assert.equal(deadline(current), 40);
     assert.equal(current.source, 10);
 });

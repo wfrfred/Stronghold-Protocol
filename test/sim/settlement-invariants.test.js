@@ -62,7 +62,7 @@ test("settlement invariants: invalid final damage preserves its input despite pr
         let battle = workFor(unit(1), attach(unit(2), content));
         assert.throws(() => resolveDamage(battle, damageRequest(), resources), RangeError);
         assert.equal(getUnit(battle, 2).vitality.hp, 200);
-        assert.equal(getUnit(battle, 2).effects.instances[0].state.uses, 0);
+        assert.equal(getUnit(battle, 2).effects.values()[0].data.uses, 0);
         assert.equal(getUnit(battle, 2).vitality.hp, 200);
         assert.equal(reactions, 0);
         malformed = false;
@@ -71,7 +71,7 @@ test("settlement invariants: invalid final damage preserves its input despite pr
         valid = reportSettlement.state;
         const report = reportSettlement.value;
         assert.equal(getUnit(valid, 2).vitality.hp, 180);
-        assert.equal(getUnit(valid, 2).effects.instances[0].state.uses, 1);
+        assert.equal(getUnit(valid, 2).effects.values()[0].data.uses, 1);
         assert.equal(report.hpLoss, 30);
         assert.equal(reactions, 1);
     }
@@ -109,7 +109,7 @@ test("settlement invariants: invalid final healing preserves its input despite p
         let battle = workFor(unit(1), attach(unit(2), content));
         assert.throws(() => resolveHealing(battle, healingRequest()), RangeError);
         assert.equal(getUnit(battle, 2).vitality.hp, 200);
-        assert.equal(getUnit(battle, 2).effects.instances[0].state.uses, 0);
+        assert.equal(getUnit(battle, 2).effects.values()[0].data.uses, 0);
         assert.equal(reactions, 0);
         malformed = false;
         let valid = battle;
@@ -117,7 +117,7 @@ test("settlement invariants: invalid final healing preserves its input despite p
         valid = reportSettlement.state;
         const report = reportSettlement.value;
         assert.equal(getUnit(valid, 2).vitality.hp, 220);
-        assert.equal(getUnit(valid, 2).effects.instances[0].state.uses, 1);
+        assert.equal(getUnit(valid, 2).effects.values()[0].data.uses, 1);
         assert.equal(report.amount, 30);
         assert.equal(reactions, 1);
     }

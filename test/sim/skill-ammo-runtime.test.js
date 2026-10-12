@@ -126,7 +126,7 @@ test("ammo runtime: the final EXECUTE buffs every target before ending the skill
     "DAMAGE", "DAMAGE", "DAMAGE", "SKILL_FINISHED",
   ]);
   assert.equal(source(runtime).skill.active, null);
-  assert.equal(source(runtime).effects.instances.length === 0, true);
+  assert.equal(source(runtime).effects.values().length === 0, true);
   assert.equal(released.events.filter(({ type }) => type === "SKILL_FINISHED").length, 1);
 });
 
@@ -206,7 +206,7 @@ test("ammo runtime: the last released projectile survives skill completion and r
   assert.deepEqual(damageEvents(launched), []);
   assert.equal(launched.events.filter(({ type }) => type === "SKILL_FINISHED").length, 1);
   assert.equal(source(runtime).skill.active, null);
-  assert.equal(source(runtime).effects.instances.length === 0, true);
+  assert.equal(source(runtime).effects.values().length === 0, true);
   assert.equal(runtime.snapshot().projectiles.instances.length, 1);
   assert.equal(runtime.snapshot().projectiles.instances[0].cachedAtk, 200);
   assert.deepEqual(runtime.snapshot().projectiles.instances[0].position, [0, 0]);

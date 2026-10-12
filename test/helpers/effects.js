@@ -6,7 +6,7 @@ import {
     transitionUnit,
 } from "../../dist/core/tactical/battle/state.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
-import { get } from "../../dist/core/tactical/unit/effect/query.js";
+import { get } from "../../dist/core/tactical/unit/effect/operations.js";
 import {
     setAttackContribution,
     removeAttackContribution,
@@ -73,7 +73,7 @@ function contributionBuff(id, amount, set, remove, callbacks) {
                 state = transitionUnit(state, context.ref.unitId, (unit) =>
                     set(unit, {
                         id: `${context.ref.unitId}:${context.ref.effectId}`,
-                        value: [modifier({ finalAddition: context.self.state.amount })],
+                        value: [modifier({ finalAddition: context.self.data.amount })],
                     }),
                 );
                 return callbacks.onEnable ? callbacks.onEnable(state, context) : state;
@@ -94,7 +94,7 @@ export function refreshAttack(state, ref) {
     return transitionUnit(state, ref.unitId, (unit) =>
         setAttackContribution(unit, {
             id: `${ref.unitId}:${ref.effectId}`,
-            value: [modifier({ finalAddition: instance.state.amount })],
+            value: [modifier({ finalAddition: instance.data.amount })],
         }),
     );
 }
@@ -116,7 +116,7 @@ export function contributionEffect(
                     : { group: typeof group === "function" ? group(context.self) : group }),
                 value: dynamic
                     ? (query) => {
-                          const current = query.unit.effects.instances.find(
+                          const current = query.unit.effects.values().find(
                               (effect) =>
                                   effect.id === context.ref.effectId &&
                                   effect.definition === content,

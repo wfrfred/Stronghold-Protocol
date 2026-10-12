@@ -5,6 +5,7 @@ import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/m
 import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
 import { createNavigationModifierDefinition } from "../../dist/core/tactical/battlefield/navigation/modifier.js";
 import { createTileBindingDefinition } from "../../dist/core/tactical/unit/capability/deployment.js";
+import { Effects } from "../../dist/core/tactical/unit/effect/effects.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 
 const create = () =>
@@ -183,7 +184,7 @@ test("draft removal maintains support, blocking and lifetime projections before 
         id: 0,
         source: 1,
         definition: { id: "draft-effect", initialize: () => ({}) },
-        state: {},
+        data: {},
         scopes: [
             { type: "UNIT", unitId: 1 },
             { type: "TICK", tick: 10 },
@@ -196,7 +197,7 @@ test("draft removal maintains support, blocking and lifetime projections before 
             allegiance: { side: "ENEMY" },
             blockable: { weight: 1 },
         }),
-        effects: { instances: [effect], nextId: 1 },
+        effects: Effects.empty().add(effect),
     };
     const support = { supportedUnitId: 2, supportUnitId: 1 };
     battlefield.advance([
@@ -210,7 +211,7 @@ test("draft removal maintains support, blocking and lifetime projections before 
     const facts = battlefield.advance([
         {
             type: "UPDATE_UNIT",
-            unit: { ...blocked, effects: { ...blocked.effects, instances: [ending] } },
+            unit: { ...blocked, effects: blocked.effects.replace(ending) },
         },
         { type: "REMOVE_UNIT", unitId: 1, reason: "RETREAT" },
     ]);
@@ -223,7 +224,7 @@ test("draft removal maintains support, blocking and lifetime projections before 
     assert.equal(battlefield.snapshot("draft").supportOf(2), undefined);
     assert.equal(battlefield.snapshot("draft").blockerOf(3), undefined);
     assert.deepEqual(battlefield.snapshot("draft").blockedBy(1), []);
-    assert.equal(battlefield.snapshot("draft").getUnit(3).effects.instances[0].status, "ENDING");
+    assert.equal(battlefield.snapshot("draft").getUnit(3).effects.values()[0].status, "ENDING");
     assert.equal(
         battlefield.snapshot("draft").effectLifetimes.dependents.get("UNIT:1")?.size ?? 0,
         0,
@@ -232,7 +233,7 @@ test("draft removal maintains support, blocking and lifetime projections before 
     assert.equal(published.blockerOf(3), 1);
     assert.equal(published.blockingUsedCapacity(1), 1);
     assert.equal(
-        published.getUnit(3).effects.instances[0].scopes.some((scope) => scope.type === "TICK"),
+        published.getUnit(3).effects.values()[0].scopes.some((scope) => scope.type === "TICK"),
         true,
     );
 

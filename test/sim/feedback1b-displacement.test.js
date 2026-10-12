@@ -546,7 +546,7 @@ test('core forced displacement preserves the resolved route target, navigation c
   const walking = stepRoutedEnemy(initialized.enemy, context);
   const route = walking.enemy.locomotion.mainRoute;
   const goal = getNavigationRequest(route.navigation);
-  const before = structuredClone(walking.enemy);
+  const before = JSON.stringify(walking.enemy);
   const forcedContext = {
     ...context, tick: 1, movementAllowed: false,
     rngState: walking.rngState, nextNavigationRequestId: walking.nextNavigationRequestId,
@@ -561,7 +561,7 @@ test('core forced displacement preserves the resolved route target, navigation c
   assert.deepEqual(forced.enemy.locomotion.steering, walking.enemy.locomotion.steering);
   assert.equal(forced.rngState, walking.rngState);
   assert.equal(forced.nextNavigationRequestId, walking.nextNavigationRequestId);
-  assert.deepEqual(walking.enemy, before);
+  assert.equal(JSON.stringify(walking.enemy), before);
   assert.deepEqual(stepRoutedEnemy(walking.enemy, forcedContext), forced);
   const resumed = stepRoutedEnemy(forced.enemy, {
     ...context, tick: 2, rngState: forced.rngState, nextNavigationRequestId: forced.nextNavigationRequestId,
@@ -602,7 +602,7 @@ test('core forced displacement outside the map resumes with budgeted recovery an
   });
   const control = forced.enemy.locomotion.mainRoute;
   const goal = getNavigationRequest(control.navigation);
-  const before = structuredClone(forced.enemy);
+  const before = JSON.stringify(forced.enemy);
   const resumed = stepRoutedEnemy(forced.enemy, {
     ...context, tick: 1, rngState: forced.rngState, nextNavigationRequestId: forced.nextNavigationRequestId,
   });
@@ -612,5 +612,5 @@ test('core forced displacement outside the map resumes with budgeted recovery an
   assert.deepEqual(resumed.enemy.locomotion.mainRoute.navigation.execution.locatorOffset, control.navigation.execution.locatorOffset);
   assert.equal(resumed.rngState, forced.rngState);
   assert.equal(resumed.nextNavigationRequestId, forced.nextNavigationRequestId);
-  assert.deepEqual(forced.enemy, before);
+  assert.equal(JSON.stringify(forced.enemy), before);
 });

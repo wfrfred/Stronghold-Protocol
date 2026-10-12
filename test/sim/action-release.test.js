@@ -5,7 +5,7 @@ import { getUnit, transitionUnit } from '../../dist/core/tactical/battle/state.j
 import { setBeforeReleaseHook, removeBeforeReleaseHook } from '../../dist/core/tactical/unit/capability/action/capability.js';
 import { beforeActionRelease } from '../../dist/core/tactical/unit/capability/action/release.js';
 import * as effects from '../../dist/core/tactical/unit/effect/operations.js';
-import { find, get } from '../../dist/core/tactical/unit/effect/query.js';
+import { get } from '../../dist/core/tactical/unit/effect/operations.js';
 
 function releaseEffect(id, initial, run) {
   const definition = { id, initialize: () => initial,
@@ -13,8 +13,8 @@ function releaseEffect(id, initial, run) {
       const ref = context.ref;
       return transitionUnit(state, ref.unitId, unit => setBeforeReleaseHook(unit, {
         id: `release/${ref.effectId}`,
-        enabled: context => find(context.unit, definition, ref.effectId)?.status === 'ACTIVE',
-        invoke: (state, context) => run(state, context, find(context.unit, definition, ref.effectId), ref),
+        enabled: context => context.unit.effects.get(ref.effectId, definition)?.status === 'ACTIVE',
+        invoke: (state, context) => run(state, context, context.unit.effects.get(ref.effectId, definition), ref),
       }));
     },
     onEnd: (state, context) => transitionUnit(state, context.ref.unitId, unit => removeBeforeReleaseHook(unit, `release/${context.ref.effectId}`)),
@@ -23,7 +23,7 @@ function releaseEffect(id, initial, run) {
 }
 const continueRelease = { type: 'CONTINUE' };
 const attach = (state, definition) => effects.install(state, getUnit(state, 0), definition);
-const stateOf = (state, ref, next) => effects.replaceEffect(state, ref.unitId, effects.setState(get(state, ref), next));
+const stateOf = (state, ref, next) => effects.replaceEffect(state, ref.unitId, effects.setData(get(state, ref), next));
 
 test('action release: ordinary and disabled effects do not interrupt', () => {
   const initial = battle(unit(0, { action: true }));
@@ -36,9 +36,9 @@ test('action release: ordinary and disabled effects do not interrupt', () => {
 test('action release: charges update before end and recovery never shortens', () => {
   const initial = battle(unit(0, { action: true }));
   const definition = releaseEffect('charges', { remaining: 3 }, (state, context, self, ref) => {
-    const remaining = self.state.remaining - 1;
+    const remaining = self.data.remaining - 1;
     state = stateOf(state, ref, { remaining });
-    assert.equal(get(state, ref).state.remaining, remaining);
+    assert.equal(get(state, ref).data.remaining, remaining);
     if (remaining === 0) state = effects.end(state, ref, undefined, context.call).state;
     return { state, value: { type: 'INTERRUPT', recoveryTicks: 15 } };
   });
@@ -52,8 +52,8 @@ test('action release: charges update before end and recovery never shortens', ()
   assert.equal(get(state, installed.value), undefined);
   assert.equal(beforeActionRelease(state, 0, 4).value, false);
   assert.equal(getUnit(state, 0).action.recoveryUntilTick, 18);
-  assert.deepEqual(getUnit(initial, 0).effects.instances, []);
-  assert.equal(get(installed.state, installed.value).state.remaining, 3);
+  assert.deepEqual(getUnit(initial, 0).effects.values(), []);
+  assert.equal(get(installed.state, installed.value).data.remaining, 3);
 });
 
 test('action release: registration order stops at the first interruption', () => {
@@ -76,7 +76,7 @@ for (const operation of ['enable', 'end']) {
     let secondRef;
     const first = releaseEffect('first', { entered: false }, (state, context, self, ref) => {
       calls.push('A');
-      if (!self.state.entered) {
+      if (!self.data.entered) {
         state = stateOf(state, ref, { entered: true });
         state = operation === 'enable' ? effects.setEnabled(state, secondRef, true, context.call) : effects.end(state, secondRef, undefined, context.call).state;
         state = attach(state, third).state;
@@ -98,11 +98,11 @@ for (const operation of ['enable', 'end']) {
 
 test('action release: an exception leaves the input private state untouched', () => {
   const installed = attach(battle(unit(0, { action: true })), releaseEffect('fault', { attempts: 0 }, (state, _context, self, ref) => {
-    state = stateOf(state, ref, { attempts: self.state.attempts + 1 });
+    state = stateOf(state, ref, { attempts: self.data.attempts + 1 });
     throw new Error('release failed');
   }));
   assert.throws(() => beforeActionRelease(installed.state, 0, 0), /release failed/);
-  assert.equal(get(installed.state, installed.value).state.attempts, 0);
+  assert.equal(get(installed.state, installed.value).data.attempts, 0);
 });
 
 for (const recoveryTicks of [-1, 0.5, Number.MAX_SAFE_INTEGER]) {

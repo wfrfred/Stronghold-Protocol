@@ -33,7 +33,7 @@ export function compileArknightsAttackBuffSkill(value: unknown, level: number): 
                 state,
                 setAttackContribution(context.unit, {
                     id: `@effect/${context.self.id}/attack`,
-                    value: [modifier.create({ multiplier: context.self.state.attackIncrease })],
+                    value: [modifier.create({ multiplier: context.self.data.attackIncrease })],
                 }),
             );
         },

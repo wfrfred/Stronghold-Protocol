@@ -225,7 +225,7 @@ test("damage pipeline: barrier before doubling takes 400 HP; doubling before bar
         assert.deepEqual(result.resourceConsumptions, [
             { ownerUnitId: 2, resourceId: "2:0", resource: "barrier", amount: 500 },
         ]);
-        assert.equal(target.effects.instances[0].state.remainingAmount, 500);
+        assert.equal(target.effects.values()[0].data.remainingAmount, 500);
     }
 });
 
@@ -249,7 +249,7 @@ test("damage pipeline: reduction and complete absorption consume shield without 
     assert.equal(result.cancellation, null);
     assert.equal(result.resourceConsumptions[0].amount, 600);
     assert.equal(stateOf(battle, 2, shield).remainingAmount, 200);
-    assert.equal(target.effects.instances[0].state.remainingAmount, 800);
+    assert.equal(target.effects.values()[0].data.remainingAmount, 800);
 });
 
 test("damage pipeline: Effect overwriting gates hooks while retaining suppressed instances", () => {
@@ -271,7 +271,7 @@ test("damage pipeline: Effect overwriting gates hooks while retaining suppressed
     let battle = workFor(unit(1), target);
     assert.equal(resolveDamage(battle, request(100), new CombatResources()).value.hpLoss, 300);
     assert.deepEqual(
-        getUnit(battle, 2).effects.instances.map((self) => self.status),
+        getUnit(battle, 2).effects.values().map((self) => self.status),
         ["INACTIVE", "ACTIVE"],
     );
 });
@@ -473,7 +473,7 @@ test("damage pipeline: nested damage and healing observe consumption and latest 
         {
             stage: "reaction",
             invoke(state, context, self, report) {
-                if (report.request.sourceUnitId !== context.unit.id || self.state.charges === 0)
+                if (report.request.sourceUnitId !== context.unit.id || self.data.charges === 0)
                     return { state, value: {} };
                 state = setSelf(state, context, self, { charges: 0 });
                 state = resolveDamage(

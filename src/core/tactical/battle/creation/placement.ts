@@ -16,7 +16,7 @@ import {
     type PreparedCapabilityStates,
 } from "../../unit/capability/catalog.js";
 import type { BattleExecutionState } from "../execution/state.js";
-import type { State as EffectState } from "../../unit/effect/effect.js";
+import type { Effects } from "../../unit/effect/effects.js";
 
 export interface UnitNavigationModifierPlacement {
     readonly definition: NavigationModifierDefinition;
@@ -29,7 +29,7 @@ export interface UnitPlacementDefinition<D extends UnitDefinition = UnitDefiniti
     readonly position: WorldPosition;
     readonly navigationModifiers?: readonly UnitNavigationModifierPlacement[];
     readonly states?: Partial<CapabilityStates>;
-    readonly effects?: EffectState;
+    readonly effects?: Effects;
 }
 
 export interface UnitPlacementInstantiation<U extends Unit = Unit> {
@@ -50,7 +50,7 @@ type NormalizedUnitPlacement<P extends UnitPlacementDefinition> = P extends unkn
           readonly definition: ImmutableData<P["definition"]>;
           readonly position: WorldPosition;
           readonly navigationModifiers: readonly UnitNavigationModifierPlacement[];
-          readonly effects?: EffectState;
+          readonly effects?: Effects;
       } & (P extends { readonly states: infer S extends object }
           ? { readonly states: SelectedCapabilityStates<S> }
           : "states" extends keyof P

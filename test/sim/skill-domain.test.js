@@ -5,7 +5,7 @@ import { battlefieldView, getUnit, updateUnit } from "../../dist/core/tactical/b
 import { definition as effectDefinition, effectFixtureWork } from "../helpers/effects.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { deadline } from "../../dist/core/tactical/unit/effect/effect.js";
-import { get } from "../../dist/core/tactical/unit/effect/query.js";
+import { get } from "../../dist/core/tactical/unit/effect/operations.js";
 import { createSkillDefinition, createSkillState, initializeSkillState } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { activateSkill, advanceSkill, finishSkill } from "../../dist/core/tactical/unit/capability/skill/execution.js";
 import { drainSkillSp, gainSkillSp, spendSkillSp } from "../../dist/core/tactical/unit/capability/skill/sp.js";
@@ -134,7 +134,7 @@ for (const scoped of [false, true]) {
     const rejected = activateSkill(f.state, { unitId: 1, tick: 0 }, f.resources);
     const unit = getUnit(rejected.state, 1);
     assert.equal(rejected.value.result.reason, "CONTENT_REJECTED");
-    assert.equal(unit.effects.instances.length, scoped ? 0 : 1);
+    assert.equal(unit.effects.values().length, scoped ? 0 : 1);
     assert.equal(unit.effects.nextId, 1);
     assert.equal(unit.skill.sp, 2);
     assert.equal(unit.skill.nextActivationId, 1);
@@ -156,7 +156,7 @@ test("zero-duration activation closes its scope before finish content; closed bi
     },
     finish(state, context) {
       const unit = getUnit(state, 1);
-      observed.push({ active: unit.skill.active, effects: unit.effects.instances.length });
+      observed.push({ active: unit.skill.active, effects: unit.effects.values().length });
       const rebound = effects.bind(state, independent, { type: "SKILL", unitId: 1, activationId: context.activationId });
       assert.equal(rebound.value, false);
       const rejected = effects.install(rebound.state, unit, definition, { scopes: [{ type: "SKILL", unitId: 1, activationId: context.activationId }] }, context.call);
@@ -179,8 +179,8 @@ for (const trigger of ["SKILL", "EFFECT", "TICK"]) {
     const ended = [];
     const dependent = effectDefinition(`dependent-${trigger}`, { renewed: false }, {
       onTick(state, context) {
-        if (context.tick !== 5 || context.self.state.renewed) return state;
-        const next = effects.setDeadline(effects.setState(context.self, { renewed: true }), 10);
+        if (context.tick !== 5 || context.self.data.renewed) return state;
+        const next = effects.setDeadline(effects.setData(context.self, { renewed: true }), 10);
         return effects.replaceEffect(state, 1, next);
       },
       onEnd(state, context) { ended.push(context.reason); return state; },

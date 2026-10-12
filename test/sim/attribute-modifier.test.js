@@ -307,8 +307,8 @@ test("attribute modifiers: inspiration samples belong to the Effect input and re
         value: (instance) => [
             compiled.sample(
                 context({
-                    blackboard: new Map([["atk", instance.state.ratio]]),
-                    readSourceAttribute: () => instance.state.sourceAttack,
+                    blackboard: new Map([["atk", instance.data.ratio]]),
+                    readSourceAttribute: () => instance.data.sourceAttack,
                 }),
             ),
         ],
@@ -338,7 +338,7 @@ test("attribute modifiers: inspiration samples belong to the Effect input and re
     const sampleInput = (work) => ({ sourceAttack: resolve(work, 0), ratio: 0.6 });
     const installed = effects.install(work, getUnit(work, 1), program, {
         source: 0,
-        state: sampleInput(work),
+        data: sampleInput(work),
     });
     work = installed.state;
     const ref = installed.value;
@@ -354,8 +354,8 @@ test("attribute modifiers: inspiration samples belong to the Effect input and re
     work = effects.replaceEffect(
         work,
         ref.unitId,
-        effects.setState(
-            getUnit(work, 1).effects.instances.find((instance) => instance.id === ref.effectId),
+        effects.setData(
+            getUnit(work, 1).effects.values().find((instance) => instance.id === ref.effectId),
             sampleInput(work),
         ),
     );
@@ -363,7 +363,7 @@ test("attribute modifiers: inspiration samples belong to the Effect input and re
     assert.equal(resolve(work, 1), 140);
     work = removeUnit(work, 0, "RETREAT");
     assert.equal(resolve(work, 1), 140);
-    assert.equal(copied.effects.instances[0].state.sourceAttack, 100);
+    assert.equal(copied.effects.values()[0].data.sourceAttack, 100);
     work = effects.end(work, ref).state;
     assert.equal(resolve(work, 1), 20);
 });

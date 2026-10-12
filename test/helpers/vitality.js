@@ -1,7 +1,7 @@
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { transitionUnit, getUnit, battlefieldView } from "../../dist/core/tactical/battle/state.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
-import { find } from "../../dist/core/tactical/unit/effect/query.js";
+
 import * as damage from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
 import * as healing from "../../dist/core/tactical/unit/capability/vitality/healing/hook.js";
 import {
@@ -44,15 +44,15 @@ export function request(power = 100, overrides = {}) {
 
 export function setSelf(state, context, self, next) {
     const unit = getUnit(state, context.unit.id);
-    const current = unit && find(unit, self.definition, self.id);
+    const current = unit && unit.effects.get(self.id, self.definition);
     return current === undefined
         ? state
-        : effects.replaceEffect(state, unit.id, effects.setState(current, next));
+        : effects.replaceEffect(state, unit.id, effects.setData(current, next));
 }
 
 export function current(state, context, self) {
     const unit = getUnit(state, context.unit.id);
-    return unit && find(unit, self.definition, self.id);
+    return unit && unit.effects.get(self.id, self.definition);
 }
 
 function hookEffect(domain, id, initial, entries, callbacks = {}) {
@@ -68,7 +68,7 @@ function hookEffect(domain, id, initial, entries, callbacks = {}) {
                             stage: entry.stage,
                             priority: entry.priority ?? 0,
                             enabled(invocation) {
-                                const self = find(invocation.unit, content, context.ref.effectId);
+                                const self = invocation.unit.effects.get(context.ref.effectId, content);
                                 return (
                                     self?.status === "ACTIVE" &&
                                     (entry.enabled?.(invocation, self) ?? true)
@@ -78,7 +78,7 @@ function hookEffect(domain, id, initial, entries, callbacks = {}) {
                                 return entry.invoke(
                                     state,
                                     invocation,
-                                    find(invocation.unit, content, context.ref.effectId),
+                                    invocation.unit.effects.get(context.ref.effectId, content),
                                     input,
                                 );
                             },
@@ -120,7 +120,7 @@ export function barrier(id = "barrier", remainingAmount = 500, priority = 0) {
             priority,
             invoke(state, context, self, pending) {
                 if (pending.cancellation !== null) return { state, value: { value: pending } };
-                const absorbed = Math.min(pending.amount, self.state.remainingAmount);
+                const absorbed = Math.min(pending.amount, self.data.remainingAmount);
                 if (absorbed <= 0) return { state, value: { value: pending } };
                 state = setSelf(state, context, self, (state) => ({
                     ...state,
@@ -177,9 +177,9 @@ export function statusEffect(id, flags) {
 }
 
 export function stateOf(battle, unitId, content) {
-    return getUnit(battle, unitId).effects.instances.find(
+    return getUnit(battle, unitId).effects.values().find(
         (instance) => instance.definition === content,
-    )?.state;
+    )?.data;
 }
 
 export const view = battlefieldView;

@@ -177,7 +177,7 @@ test('combat program: source retirement ends explicit lifetime dependencies and 
   state = effects.install(state, getUnit(state, 1), sourceOnly, { source: 0 }).state;
   state = effects.install(state, getUnit(state, 1), owned, { source: 0, scopes: [{ type: 'UNIT', unitId: 0 }] }).state;
   const result = removeUnitWithEffects(state, 0, 'RETREAT', resources, 0);
-  assert.deepEqual(getUnit(result, 1).effects.instances.map(value => value.definition.id), ['source-only']);
+  assert.deepEqual(getUnit(result, 1).effects.values().map(value => value.definition.id), ['source-only']);
 });
 
 test('combat program: readiness gates binding and current targets live only in execution and reports', () => {

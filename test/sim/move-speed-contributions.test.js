@@ -161,7 +161,7 @@ function harness({ speed = 0.25, minimum = 0, definition = route(), maps } = {})
 const output = {
     set: setMoveSpeedContribution,
     remove: removeMoveSpeedContribution,
-    value: (instance) => [instance.state.value],
+    value: (instance) => [instance.data.value],
 };
 function movementEffect(value = modifier.create({ multiplier: -0.5 })) {
     return contributionEffect("movement-buff", { value }, output);
@@ -174,8 +174,8 @@ const changeSpeed = (work, program, next) => {
     work = effects.replaceEffect(
         work,
         address.unitId,
-        effects.setState(
-            getUnit(work, address.unitId).effects.instances.find(
+        effects.setData(
+            getUnit(work, address.unitId).effects.values().find(
                 (instance) => instance.id === address.effectId,
             ),
             next,

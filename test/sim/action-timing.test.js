@@ -10,7 +10,7 @@ import { resolveAttackSpeed, resolveBaseAttackTime, resolveActionIntervalTicks }
 import { copyUnitSnapshot } from '../../dist/core/tactical/unit/snapshot.js';
 import { create as modifier } from '../../dist/core/tactical/unit/contribution/value.js';
 import * as effects from '../../dist/core/tactical/unit/effect/operations.js';
-import { get } from '../../dist/core/tactical/unit/effect/query.js';
+import { get } from '../../dist/core/tactical/unit/effect/operations.js';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
 import { createLegacyCombatSpec } from '../../dist/legacy/combat.js';
 import { createEnemyDefinition } from '../../dist/core/tactical/unit/archetype/enemy.js';
@@ -23,8 +23,8 @@ const target = () => unit(1, { hp: 1e6 });
 
 function refresh(state) {
   const self = get(state, ref);
-  state = updateUnit(state, setAttackSpeedContribution(getUnit(state, 0), { id: 'timing/speed', value: [modifier({ addition: self.state.speed })] }));
-  return updateUnit(state, setBaseAttackTimeContribution(getUnit(state, 0), { id: 'timing/time', value: [self.state.time] }));
+  state = updateUnit(state, setAttackSpeedContribution(getUnit(state, 0), { id: 'timing/speed', value: [modifier({ addition: self.data.speed })] }));
+  return updateUnit(state, setBaseAttackTimeContribution(getUnit(state, 0), { id: 'timing/time', value: [self.data.time] }));
 }
 
 function tempo(speed = 100, time = modifier()) {
@@ -36,7 +36,7 @@ function tempo(speed = 100, time = modifier()) {
   };
 }
 const install = (state, definition, tick = 0, expires = null) => effects.install({ ...state, tick }, getUnit(state, 0), definition, { scopes: expires === null ? [] : [{ type: 'TICK', tick: expires }] }).state;
-const edit = (state, change) => refresh(effects.replaceEffect(state, 0, effects.setState(get(state, ref), { ...get(state, ref).state, ...change })));
+const edit = (state, change) => refresh(effects.replaceEffect(state, 0, effects.setData(get(state, ref), { ...get(state, ref).data, ...change })));
 function values(state) {
   const current = getUnit(state, 0);
   const context = { unit: current, battlefield: battlefieldView(state) };

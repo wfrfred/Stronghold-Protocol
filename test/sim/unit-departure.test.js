@@ -27,7 +27,7 @@ import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { activateSkill } from "../../dist/core/tactical/unit/capability/skill/execution.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
-import { get } from "../../dist/core/tactical/unit/effect/query.js";
+import { get } from "../../dist/core/tactical/unit/effect/operations.js";
 import { definition } from "../helpers/effects.js";
 import {
     setHook,
@@ -70,10 +70,10 @@ function fixture() {
                         id: "consume",
                         stage: "reception",
                         priority: 0,
-                        enabled: context => context.unit.effects.instances.find(effect => effect.id === ref.effectId)?.status === "ACTIVE",
+                        enabled: context => context.unit.effects.values().find(effect => effect.id === ref.effectId)?.status === "ACTIVE",
                         invoke(state, context, value) {
                             const current = get(state, ref);
-                            state = effects.replaceEffect(state, ref.unitId, effects.setState(current, { consumed: current.state.consumed + 1 }));
+                            state = effects.replaceEffect(state, ref.unitId, effects.setData(current, { consumed: current.data.consumed + 1 }));
                             return { state, value: { value } };
                         },
                     }),
@@ -141,8 +141,8 @@ for (const domain of ["deployment", "predefined"]) {
             ).state;
         }
 
-        assert.equal(getUnit(state, 2).effects.instances[0].state.consumed, 2);
-        assert.equal(before.getUnit(2).effects.instances[0].state.consumed, 0);
+        assert.equal(getUnit(state, 2).effects.values()[0].data.consumed, 2);
+        assert.equal(before.getUnit(2).effects.values()[0].data.consumed, 0);
         assert.deepEqual(
             state.removedUnits.map((unit) => unit.unitId),
             [0, 1],
@@ -349,7 +349,7 @@ test("effect terminal callback can retire its host and settle remote Action and 
     const installed = effects.install(battle, getUnit(battle, 0), content);
     battle = effects.end(installed.state, installed.value).state;
     assert.equal(getUnit(battle, 0), undefined);
-    assert.deepEqual(getUnit(battle, 1).effects.instances, []);
+    assert.deepEqual(getUnit(battle, 1).effects.values(), []);
     assert.ok(trace.indexOf("action-effect") < trace.indexOf("after-damage"));
     assert.ok(trace.indexOf("skill-effect") < trace.indexOf("after-damage"));
     assert.ok(trace.indexOf("skill") < trace.indexOf("after-damage"));

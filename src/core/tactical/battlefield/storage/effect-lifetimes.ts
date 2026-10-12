@@ -1,5 +1,5 @@
 import type { Unit, UnitId } from "../../unit/unit.js";
-import { key, type Ref, type Instance, type Lifetime } from "../../unit/effect/effect.js";
+import { key, type Ref, type Effect, type Lifetime } from "../../unit/effect/effect.js";
 
 type RefBucket = ReadonlyMap<string, Ref>;
 
@@ -12,7 +12,7 @@ export interface UnitTransition {
     readonly nextUnit: Unit | undefined;
 }
 
-function relationKeys(instance: Instance | undefined): readonly string[] {
+function relationKeys(instance: Effect | undefined): readonly string[] {
     return instance === undefined || instance.status === "ENDING"
         ? []
         : [
@@ -30,7 +30,7 @@ export function project(units: Iterable<Unit>): Index {
     const dependents = new Map<string, Map<string, Ref>>();
 
     for (const unit of units) {
-        for (const instance of unit.effects.instances) {
+        for (const instance of unit.effects.values()) {
             const ref = effectRef(unit.id, instance.id);
             const id = key(ref);
 
@@ -67,8 +67,8 @@ export function derive(index: Index, transitions: readonly UnitTransition[]): In
     };
     const changeRelations = (
         unitId: UnitId,
-        before: Instance | undefined,
-        after: Instance | undefined,
+        before: Effect | undefined,
+        after: Effect | undefined,
     ): void => {
         if (
             before === after ||
@@ -97,8 +97,8 @@ export function derive(index: Index, transitions: readonly UnitTransition[]): In
     };
 
     for (const { previousUnit, nextUnit } of transitions) {
-        const previousInstances = previousUnit?.effects.instances;
-        const nextInstances = nextUnit?.effects.instances;
+        const previousInstances = previousUnit?.effects.values();
+        const nextInstances = nextUnit?.effects.values();
 
         if (previousInstances === nextInstances) {
             continue;

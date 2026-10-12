@@ -90,8 +90,8 @@ const change = (work, effect, next, setting) => {
     work = effects.replaceEffect(
         work,
         effectAddress.unitId,
-        effects.setState(
-            getUnit(work, effectAddress.unitId).effects.instances.find(
+        effects.setData(
+            getUnit(work, effectAddress.unitId).effects.values().find(
                 (instance) => instance.id === effectAddress.effectId,
             ),
             next,
@@ -152,7 +152,7 @@ test("blocking capacity: immutable updates retain sampled contributions and reso
 });
 
 test("blocking capacity: explicit refresh and lifecycle output changes preserve base capacity and unrelated HP", () => {
-    const setting = output((instance) => [modifier.create({ addition: instance.state.amount })]);
+    const setting = output((instance) => [modifier.create({ addition: instance.data.amount })]);
     const effect = contributionEffect("capacity", { amount: -1 }, setting);
     const initialized = blocker();
     const owner = { ...initialized, vitality: { ...initialized.vitality, hp: 50 } };
@@ -268,7 +268,7 @@ test("blocking capacity: native stack renewal and terminal cleanup update real b
     const setting = output((instance) => [
         compiled.sample({
             blackboard: new Map([["block_cnt", -1]]),
-            stackCount: rule.validStackCount(instance.state.stackCount),
+            stackCount: rule.validStackCount(instance.data.stackCount),
             readSourceAttribute: () => undefined,
         }),
     ]);
@@ -281,15 +281,15 @@ test("blocking capacity: native stack renewal and terminal cleanup update real b
             onTick(state, ctx) {
                 if (ctx.tick < deadline(ctx.self)) return state;
                 const plan = rule.expire(
-                    { stackCount: ctx.self.state.stackCount, expiresAtTick: deadline(ctx.self) },
-                    ctx.self.state.lifetimeTicks,
+                    { stackCount: ctx.self.data.stackCount, expiresAtTick: deadline(ctx.self) },
+                    ctx.self.data.lifetimeTicks,
                     ctx.tick,
                 );
                 if (plan.type === "FINISH")
                     return effects.end(state, ctx.ref, "EXPIRED", ctx.call).state;
                 else {
                     const next = effects.setDeadline(
-                        effects.setState(ctx.self, (current) => ({
+                        effects.setData(ctx.self, (current) => ({
                             ...current,
                             stackCount: plan.stackCount,
                         })),
@@ -321,7 +321,7 @@ test("blocking capacity: native stack renewal and terminal cleanup update real b
             Array.from({ length: remaining }, (_, index) => index + 1),
         );
     }
-    assert.deepEqual(h.state.units.get(0).effects.instances, []);
+    assert.deepEqual(h.state.units.get(0).effects.values(), []);
     assert.equal(original.units.get(0).blocker.capacity.length, 0);
 });
 

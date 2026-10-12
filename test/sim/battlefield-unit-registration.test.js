@@ -1,4 +1,4 @@
-import { empty as emptyEffects } from "../../dist/core/tactical/unit/effect/state.js";
+import { Effects } from "../../dist/core/tactical/unit/effect/effects.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -203,7 +203,7 @@ for (const [name, create] of modes) {
 test("unit snapshots copy partial composition without enforcing battlefield registration", () => {
     const unit = initializeUnit({ id: 1, definition: definition(), position: [0, 0] });
     const partial = {
-        effects: emptyEffects(),
+        effects: Effects.empty(),
         id: unit.id,
         lifecycle: unit.lifecycle,
         definition: unit.definition,
@@ -225,14 +225,14 @@ test("Unit with an acting definition and no action state remains statically lega
             path,
             `
 import type { Unit } from ${sourceModule("unit/unit")};
-import { empty } from ${sourceModule("unit/effect/state")};
+import { Effects } from ${sourceModule("unit/effect/effects")};
 import type { ActingUnitDefinition } from ${sourceModule("unit/capability/action/capability")};
 import type { ImmutableData } from ${sourceModule("../common/immutable-data")};
 import type { BattlefieldMap } from ${sourceModule("battlefield/map/map")};
 import { createBattlefieldRuntime } from ${sourceModule("battlefield/runtime")};
 declare const definition: ImmutableData<ActingUnitDefinition>;
 declare const map: BattlefieldMap;
-const unit: Unit<ActingUnitDefinition> = { id: 1, definition, position: [0, 0], effects: empty(), lifecycle: 'PRESENT' };
+const unit: Unit<ActingUnitDefinition> = { id: 1, definition, position: [0, 0], effects: Effects.empty(), lifecycle: 'PRESENT' };
 const battlefield = createBattlefieldRuntime({ map });
 battlefield.advance([{ type: 'REGISTER_UNIT', unit }]);
 const custom = createBattlefieldRuntime<Unit<ActingUnitDefinition>>({ map });

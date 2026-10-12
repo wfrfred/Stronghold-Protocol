@@ -71,7 +71,7 @@ test("hook dispatch checks each Effect against its current status immediately be
     enableSecond = true;
     battle = resolveDamage(battle, request(), resources).state;
     assert.deepEqual(calls, ["first", "first", "second"]);
-    assert.equal(target.effects.instances[1].status, "ACTIVE");
+    assert.equal(target.effects.values()[1].status, "ACTIVE");
 });
 
 test("finishing a pending Effect removes its Hook before that candidate can execute", () => {
@@ -114,7 +114,7 @@ test("finishing a pending Effect removes its Hook before that candidate can exec
     let battle = workFor(unit(1), attach(attach(unit(2), first), second));
     battle = resolveDamage(battle, request(), new CombatResources()).state;
     assert.deepEqual(calls, ["first", "end"]);
-    assert.equal(getUnit(battle, 2).effects.instances.length, 1);
+    assert.equal(getUnit(battle, 2).effects.values().length, 1);
     assert.equal(getUnit(battle, 2).vitality.damageHooks.length, 1);
 });
 
@@ -306,8 +306,8 @@ test("nested operations read already changed Effect state and inherit the enclos
         {
             stage: "reception",
             invoke(state, context, self, pending) {
-                uses.push(self.state.ready);
-                if (self.state.ready) {
+                uses.push(self.data.ready);
+                if (self.data.ready) {
                     state = setSelf(state, context, self, { ready: false });
                     state = resolveHealing(
                         state,

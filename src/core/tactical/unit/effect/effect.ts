@@ -21,24 +21,14 @@ export interface Group {
     readonly priority: number;
 }
 
-export interface Instance {
+export interface Effect<S extends object = object, H extends object = object> {
     readonly id: Id;
-    readonly definition: { readonly id: string; readonly group?: Group };
-    readonly state: object;
+    readonly definition: Definition<S, H>;
+    readonly data: S;
     readonly source: UnitId | null;
     readonly scopes: readonly Scope[];
     readonly enabled: boolean;
     readonly status: Status;
-}
-
-export interface Effect<S extends object, H extends object = object> extends Instance {
-    readonly definition: Definition<S, H>;
-    readonly state: S;
-}
-
-export interface State {
-    readonly instances: readonly Instance[];
-    readonly nextId: Id;
 }
 
 export function key(scope: Scope): string {
@@ -60,7 +50,9 @@ export function key(scope: Scope): string {
     }
 }
 
-export function deadline(instance: Instance): number | null {
+export function deadline<S extends object, H extends object>(
+    instance: Effect<S, H>,
+): number | null {
     const ticks = instance.scopes.flatMap((scope) => (scope.type === "TICK" ? [scope.tick] : []));
 
     return ticks.length === 0 ? null : Math.min(...ticks);

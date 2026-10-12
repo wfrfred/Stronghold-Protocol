@@ -36,7 +36,7 @@ test("departure callbacks observe LEAVING while old snapshots remain PRESENT", (
   state = removeUnitWithEffects(state, 0, "RETREAT", resources, 0);
   assert.deepEqual(trace, [["stop skill", "LEAVING"], ["disable effect", "LEAVING"], ["end effect", "LEAVING"]]);
   assert.equal(before.getUnit(0).lifecycle, "PRESENT");
-  assert.equal(before.getUnit(0).effects.instances[0].status, "ACTIVE");
+  assert.equal(before.getUnit(0).effects.values()[0].status, "ACTIVE");
   assert.equal(getUnit(original, 0).lifecycle, "PRESENT");
   assert.equal(getUnit(state, 0), undefined);
   assert.deepEqual(state.removedUnits.map(({ unitId, reason }) => [unitId, reason]), [[0, "RETREAT"]]);

@@ -5,7 +5,6 @@ import * as modifier from "../../core/tactical/unit/contribution/value.js";
 import { TICKS_PER_SECOND } from "../../core/tactical/tick.js";
 import type { Definition } from "../../core/tactical/unit/effect/definition.js";
 import * as effects from "../../core/tactical/unit/effect/operations.js";
-import { find } from "../../core/tactical/unit/effect/query.js";
 import {
     hasAction,
     setBeforeReleaseHook,
@@ -83,13 +82,13 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                     if (profile.defReduction !== 0) {
                         unit = setDefenseContribution(unit, {
                             id: `@effect/${context.self.id}/defense`,
-                            value: [modifier.create({ addition: -context.self.state.defense })],
+                            value: [modifier.create({ addition: -context.self.data.defense })],
                         });
                     }
                     if (profile.resReduction !== 0) {
                         unit = setResistanceContribution(unit, {
                             id: `@effect/${context.self.id}/resistance`,
-                            value: [modifier.create({ addition: -context.self.state.resistance })],
+                            value: [modifier.create({ addition: -context.self.data.resistance })],
                         });
                     }
 
@@ -128,7 +127,7 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                         state,
                         setAttackContribution(context.unit, {
                             id: `@effect/${context.self.id}/attack`,
-                            value: [modifier.create({ finalScaler: context.self.state.scaler })],
+                            value: [modifier.create({ finalScaler: context.self.data.scaler })],
                         }),
                     );
                 },
@@ -150,22 +149,22 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                         setBeforeReleaseHook(context.unit, {
                             id: `@effect/${effectId}/paralysis`,
                             enabled: (context) => {
-                                const current = find(context.unit, paralysis, effectId);
+                                const current = context.unit.effects.get(effectId, paralysis);
 
-                                return current?.status === "ACTIVE" && current.state.remaining > 0;
+                                return current?.status === "ACTIVE" && current.data.remaining > 0;
                             },
                             invoke: (state, context) => {
-                                const self = find(context.unit, paralysis, effectId)!;
+                                const self = context.unit.effects.get(effectId, paralysis)!;
                                 const ref = {
                                     type: "EFFECT" as const,
                                     unitId: context.unit.id,
                                     effectId,
                                 };
-                                const remaining = self.state.remaining - 1;
+                                const remaining = self.data.remaining - 1;
                                 state = effects.replaceEffect(
                                     state,
                                     context.unit.id,
-                                    effects.setState(self, { remaining }),
+                                    effects.setData(self, { remaining }),
                                 );
 
                                 if (remaining === 0) {
@@ -322,16 +321,18 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                             unit !== undefined &&
                             hasOffense(unit)
                         ) {
-                            const instance = unit.effects.instances.find(
-                                (candidate) =>
-                                    candidate.definition === weakness &&
-                                    candidate.status !== "ENDING" &&
-                                    candidate.scopes.some(
-                                        (scope) =>
-                                            scope.type === "TICK" &&
-                                            scope.tick === context.burst.endsAtTick,
-                                    ),
-                            );
+                            const instance = unit.effects
+                                .values()
+                                .find(
+                                    (candidate) =>
+                                        candidate.definition === weakness &&
+                                        candidate.status !== "ENDING" &&
+                                        candidate.scopes.some(
+                                            (scope) =>
+                                                scope.type === "TICK" &&
+                                                scope.tick === context.burst.endsAtTick,
+                                        ),
+                                );
 
                             if (instance !== undefined) {
                                 const durationSeconds =
@@ -341,11 +342,11 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                                     1 -
                                     profile.attackReductionRatio *
                                         Math.max(0, 1 - second / durationSeconds);
-                                const typed = find(unit, weakness, instance.id)!;
+                                const typed = unit.effects.get(instance.id, weakness)!;
                                 state = effects.replaceEffect(
                                     state,
                                     unit.id,
-                                    effects.setState(typed, { scaler }),
+                                    effects.setData(typed, { scaler }),
                                 );
 
                                 if (instance.status === "ACTIVE") {

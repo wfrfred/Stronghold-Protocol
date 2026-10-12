@@ -1,4 +1,4 @@
-import { empty as emptyEffects } from '../../dist/core/tactical/unit/effect/state.js';
+import { Effects } from "../../dist/core/tactical/unit/effect/effects.js";
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -1248,7 +1248,7 @@ test('core routed enemy supports full checkpoint flag combinations and rejects i
 });
 
 const battlefieldUnit = (id, position) => ({
-  effects:emptyEffects(), id, definition: Object.freeze({ id: `battlefield_unit_${id}` }), position: Object.freeze([...position]),
+  effects:Effects.empty(), id, definition: Object.freeze({ id: `battlefield_unit_${id}` }), position: Object.freeze([...position]),
 });
 const battlefieldMechanism = (id, active = true) => createMechanism({
   id, definition: createMechanismDefinition({ id: `battlefield_mechanism_${id}` }), active,
@@ -1262,6 +1262,12 @@ const fixedNavigationModifier = (id, source, position, definition, overrides = {
 const flatBattlefieldRuntime = (rows = 1, columns = 5) => createBattlefieldRuntime({
   map: createBattlefieldMap(rows, columns, Array.from({ length: rows * columns }, () => coreGround())),
 });
+
+function projectionFacts(state) {
+  return { ...state, units: new Map([...state.units].map(([id, unit]) => [
+    id, { ...unit, effects: unit.effects.toJSON() },
+  ])) };
+}
 
 function battlefieldProjectionHarness(rows = 2, columns = 5,
   map = createBattlefieldMap(rows, columns, Array.from({ length: rows * columns }, () => coreGround()))) {
@@ -1286,11 +1292,11 @@ function battlefieldProjectionHarness(rows = 2, columns = 5,
   const commit = (changes, tick = 0) => {
     const results = branches.map((branch, index) => {
       const previous = branch.state;
-      const snapshot = structuredClone(previous);
+      const snapshot = structuredClone(projectionFacts(previous));
       const batch = typeof changes === 'function' ? changes(previous, index) : changes;
       const applied = applyBattlefieldChanges(previous, batch);
       const settled = branch.settle(map, branch.baseline, previous, applied.content, applied.dependencies);
-      assert.deepEqual(previous, snapshot);
+      assert.deepEqual(projectionFacts(previous), snapshot);
       branch.state = settled.state;
       return { ...applied.facts, ...settled.facts };
     });
@@ -1305,14 +1311,14 @@ function battlefieldProjectionHarness(rows = 2, columns = 5,
   const reject = (changes, expected) => {
     for (const branch of branches) {
       const previous = branch.state;
-      const snapshot = structuredClone(previous);
+      const snapshot = structuredClone(projectionFacts(previous));
       assert.throws(() => {
         const batch = typeof changes === 'function' ? changes(previous) : changes;
         const applied = applyBattlefieldChanges(previous, batch);
         branch.settle(map, branch.baseline, previous, applied.content, applied.dependencies);
       }, expected);
       assert.equal(branch.state, previous);
-      assert.deepEqual(previous, snapshot);
+      assert.deepEqual(projectionFacts(previous), snapshot);
     }
     equivalent();
   };
@@ -1891,7 +1897,7 @@ test('core battlefield snapshots retain unit, map, field and path facts across d
   assert.equal(path.field.map, maps.WALK);
   const cached = runtime.snapshot('draft').fieldCache.get(maps.WALK, path.request);
   assert.equal(retained.fieldCache.get(maps.WALK, path.request), cached);
-  const previousFacts = structuredClone(before);
+  const previousFacts = JSON.stringify(before);
   const mainRoute = before.locomotion.mainRoute;
   const execution = mainRoute.navigation.execution;
   const updated = {
@@ -1921,7 +1927,7 @@ test('core battlefield snapshots retain unit, map, field and path facts across d
     { type: 'SET_NAVIGATION_MODIFIER_ACTIVE', navigationModifierId: 1, active: true },
   ]);
   assert.equal(retained.getUnit(1), before);
-  assert.deepEqual(before, previousFacts);
+  assert.equal(JSON.stringify(before), previousFacts);
   assert.equal(retained.getMechanism(1).active, true);
   assert.equal(retained.getNavigationModifier(1).active, false);
   assert.deepEqual(retained.unitsAt([0, 0]).map(unit => unit.id), [1]);

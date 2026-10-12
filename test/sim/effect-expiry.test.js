@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import * as effect from "../../dist/core/tactical/unit/effect/operations.js";
-import { get } from "../../dist/core/tactical/unit/effect/query.js";
+import { get } from "../../dist/core/tactical/unit/effect/operations.js";
 import { effectFixtureWork, install, definition, at } from "../helpers/effects.js";
 
 const unit = () =>
@@ -51,8 +51,8 @@ test("effect deadlines: layered content renews the same identity and ends only a
         { layers: 3, deadline: 2 },
         {
             onTick(state, context) {
-                if (context.tick < context.self.state.deadline) return state;
-                const layers = context.self.state.layers - 1;
+                if (context.tick < context.self.data.deadline) return state;
+                const layers = context.self.data.layers - 1;
                 if (layers === 0) {
                     return effect.end(state, context.ref, "LAYERS_EXHAUSTED", context.call).state;
                 }
@@ -61,7 +61,7 @@ test("effect deadlines: layered content renews the same identity and ends only a
                     state,
                     context.ref.unitId,
                     effect.setDeadline(
-                        effect.setState(context.self, { layers, deadline }),
+                        effect.setData(context.self, { layers, deadline }),
                         deadline,
                     ),
                 );
@@ -74,7 +74,7 @@ test("effect deadlines: layered content renews the same identity and ends only a
         scopes: [{ type: "TICK", tick: 2 }],
     }));
     for (let tick = 0; tick < 6; tick++) battle = effect.advance(at(battle, tick));
-    assert.equal(get(battle, ref).state.layers, 1);
+    assert.equal(get(battle, ref).data.layers, 1);
     assert.equal(get(battle, ref).id, ref.effectId);
     battle = effect.advance(at(battle, 6));
     assert.equal(get(battle, ref), undefined);

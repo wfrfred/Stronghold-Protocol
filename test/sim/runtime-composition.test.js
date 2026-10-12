@@ -7,7 +7,7 @@ import {
     setHook as setDamageHook,
     removeHook as removeDamageHook,
 } from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
-import { get as getEffect } from "../../dist/core/tactical/unit/effect/query.js";
+import { get as getEffect } from "../../dist/core/tactical/unit/effect/operations.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
@@ -22,7 +22,7 @@ import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/
 import { compileAction } from "../../dist/core/tactical/unit/capability/action/compile.js";
 import {
     install as installEffect,
-    setState as setEffectState,
+    setData as setEffectData,
     replaceEffect,
     end as endEffect,
 } from "../../dist/core/tactical/unit/effect/operations.js";
@@ -121,7 +121,7 @@ function view(snapshot) {
 function effect(snapshot, unitId, ref) {
     return snapshot.units
         .find((unit) => unit.id === unitId)
-        .effects.instances.find((instance) => instance.definition.id === ref.id);
+        .effects.values().find((instance) => instance.definition.id === ref.id);
 }
 
 function scenario({ failure = null, cancelled = false } = {}) {
@@ -142,7 +142,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
             return replaceEffect(
                 state,
                 context.ref.unitId,
-                setEffectState(context.self, (current) => ({
+                setEffectData(context.self, (current) => ({
                     ...current,
                     starts: current.starts + 1,
                 })),
@@ -152,7 +152,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
             state = replaceEffect(
                 state,
                 context.ref.unitId,
-                setEffectState(context.self, (current) => ({
+                setEffectData(context.self, (current) => ({
                     ...current,
                     enables: current.enables + 1,
                 })),
@@ -194,15 +194,15 @@ function scenario({ failure = null, cancelled = false } = {}) {
                     stage: "reception",
                     priority: 0,
                     enabled: (invocation) =>
-                        invocation.unit.effects.instances.find(
+                        invocation.unit.effects.values().find(
                             (instance) => instance.id === ref.effectId,
                         )?.status === "ACTIVE",
                     invoke(state, invocation, pending) {
-                        assert.ok(getEffect(state, auraAddress).state.remaining > 0);
+                        assert.ok(getEffect(state, auraAddress).data.remaining > 0);
                         state = replaceEffect(
                             state,
                             auraAddress.unitId,
-                            setEffectState(getEffect(state, auraAddress), (current) => ({
+                            setEffectData(getEffect(state, auraAddress), (current) => ({
                                 ...current,
                                 remaining: current.remaining - 1,
                                 consumed: current.consumed + 1,
@@ -211,7 +211,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                         state = replaceEffect(
                             state,
                             ref.unitId,
-                            setEffectState(getEffect(state, ref), (current) => ({
+                            setEffectData(getEffect(state, ref), (current) => ({
                                 ...current,
                                 uses: current.uses + 1,
                             })),
@@ -243,7 +243,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                             assert.ok(installed.value);
                             state = installed.state;
                         }
-                        const quota = getEffect(state, auraAddress).state;
+                        const quota = getEffect(state, auraAddress).data;
                         attempts.push({
                             address: ref,
                             quota: { remaining: quota.remaining, consumed: quota.consumed },
@@ -284,11 +284,11 @@ function scenario({ failure = null, cancelled = false } = {}) {
             for (const unitId of battlefieldView(state).unitIds) {
                 const self = getEffect(state, context.ref);
                 if (self === undefined || self.status === "ENDING") return state;
-                if (self.state.receivers.some((binding) => binding.unitId === unitId)) continue;
+                if (self.data.receivers.some((binding) => binding.unitId === unitId)) continue;
                 state = replaceEffect(
                     state,
                     context.ref.unitId,
-                    setEffectState(self, (current) => ({
+                    setEffectData(self, (current) => ({
                         ...current,
                         receivers: [...current.receivers, { unitId, ref: null, attempts: 1 }],
                     })),
@@ -309,7 +309,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                 state = replaceEffect(
                     state,
                     context.ref.unitId,
-                    setEffectState(getEffect(state, context.ref), (current) => ({
+                    setEffectData(getEffect(state, context.ref), (current) => ({
                         ...current,
                         receivers: current.receivers.map((binding) =>
                             binding.unitId === unitId ? { ...binding, ref } : binding,
@@ -355,9 +355,9 @@ function scenario({ failure = null, cancelled = false } = {}) {
                     context.call,
                 );
                 if (fault.enabled && failure === "late-projectile") {
-                    const auraState = getUnit(state, 0).effects.instances.find(
+                    const auraState = getUnit(state, 0).effects.values().find(
                         (instance) => instance.definition === aura,
-                    ).state;
+                    ).data;
                     assert.deepEqual(
                         auraState.receivers.map((binding) => binding.unitId),
                         [0, 1, 2, 3],
@@ -552,7 +552,7 @@ test("runtime composition: late exceptions and invalid settlement propagate with
         assert.equal(before.projectiles.nextProjectileId, 1);
         assert.equal(before.execution.nextUnitId, 3);
         assert.equal(before.spawning.spawnedCount, 0);
-        assert.equal(effect(before, 0, failed.scoped).state.starts, 1);
+        assert.equal(effect(before, 0, failed.scoped).data.starts, 1);
         assert.equal(resolveAttackPower(0, view(before)), 17);
 
         assert.throws(
@@ -615,14 +615,14 @@ test("runtime composition: a successful battle preserves identities, snapshots a
         [18, 17],
     );
     assert.equal(resolveAttackPower(0, view(after)), 18);
-    assert.equal(effect(after, 0, run.aura).state.remaining, 2);
-    assert.equal(effect(after, 0, run.aura).state.consumed, 1);
+    assert.equal(effect(after, 0, run.aura).data.remaining, 2);
+    assert.equal(effect(after, 0, run.aura).data.consumed, 1);
     assert.deepEqual(
-        effect(after, 0, run.aura).state.receivers.map((binding) => binding.attempts),
+        effect(after, 0, run.aura).data.receivers.map((binding) => binding.attempts),
         [1, 1, 1, 1],
     );
-    assert.deepEqual(effect(after, 3, run.receiver).state, { starts: 1, enables: 1, uses: 0 });
-    assert.deepEqual(effect(after, 1, run.receiver).state, { starts: 1, enables: 1, uses: 1 });
+    assert.deepEqual(effect(after, 3, run.receiver).data, { starts: 1, enables: 1, uses: 0 });
+    assert.deepEqual(effect(after, 1, run.receiver).data, { starts: 1, enables: 1, uses: 1 });
     assert.equal(effect(after, 1, run.marker).id, 1);
     assert.deepEqual(effect(after, 1, run.marker).scopes, [
         { type: "EFFECT", unitId: 1, effectId: 0 },
@@ -645,10 +645,10 @@ test("runtime composition: a successful battle preserves identities, snapshots a
         before.units.map((unit) => unit.id),
         [0, 1, 2],
     );
-    assert.equal(effect(before, 0, run.aura).state.remaining, 3);
-    assert.equal(effect(before, 0, run.aura).state.consumed, 0);
+    assert.equal(effect(before, 0, run.aura).data.remaining, 3);
+    assert.equal(effect(before, 0, run.aura).data.consumed, 0);
     assert.deepEqual(
-        effect(before, 0, run.aura).state.receivers.map((binding) => binding.unitId),
+        effect(before, 0, run.aura).data.receivers.map((binding) => binding.unitId),
         [0, 1, 2],
     );
     assert.equal(before.units[1].vitality.hp, 100);
@@ -745,9 +745,9 @@ test("runtime composition: content conditions skip installation while cancelled 
     assert.equal(after.spawning.spawnedCount, 1);
     assert.equal(after.actionExecution.nextExecutionId, 2);
     assert.equal(after.projectiles.nextProjectileId, 3);
-    assert.equal(effect(after, 0, run.aura).state.remaining, 2);
-    assert.equal(effect(after, 0, run.aura).state.consumed, 1);
-    assert.equal(effect(after, 1, run.receiver).state.uses, 1);
+    assert.equal(effect(after, 0, run.aura).data.remaining, 2);
+    assert.equal(effect(after, 0, run.aura).data.consumed, 1);
+    assert.equal(effect(after, 1, run.receiver).data.uses, 1);
     assert.equal(effect(after, 1, run.marker), undefined);
     assert.equal(
         hasStatusFlag(

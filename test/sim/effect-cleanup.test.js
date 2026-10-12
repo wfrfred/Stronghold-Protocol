@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { effectFixtureWork, install, definition } from "../helpers/effects.js";
 import * as effect from "../../dist/core/tactical/unit/effect/operations.js";
-import { get } from "../../dist/core/tactical/unit/effect/query.js";
+import { get } from "../../dist/core/tactical/unit/effect/operations.js";
 
 const unit = () =>
     initializeUnit({
@@ -21,7 +21,7 @@ test("effect cleanup: terminal business sees the ending instance and ending imme
         {
             onEnd(state, context) {
                 assert.equal(get(state, context.ref).status, "ENDING");
-                seen.push(context.self.state.count);
+                seen.push(context.self.data.count);
                 return state;
             },
         },
@@ -33,7 +33,7 @@ test("effect cleanup: terminal business sees the ending instance and ending imme
     battle = effect.end(battle, ref).state;
     assert.equal(get(battle, ref), undefined);
     assert.deepEqual(seen, [3]);
-    assert.equal(before.getUnit(0).effects.instances[0].status, "ACTIVE");
+    assert.equal(before.getUnit(0).effects.values()[0].status, "ACTIVE");
 });
 
 test("effect cleanup: a replacement installed during end uses a new identity and survives the old cleanup", () => {

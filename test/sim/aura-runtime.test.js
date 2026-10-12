@@ -87,14 +87,14 @@ test("aura runtime: a restored aura refreshes on its first tick without creating
     const runtime = new BattleRuntime(input(host), { combat: resources });
     const initial = runtime.snapshot();
     assert.deepEqual(initial.mechanisms, []);
-    assert.equal(initial.units[0].effects.instances[0].definition, aura);
-    assert.deepEqual(initial.units[0].effects.instances[0].state.bindings, []);
+    assert.equal(initial.units[0].effects.values()[0].definition, aura);
+    assert.deepEqual(initial.units[0].effects.values()[0].data.bindings, []);
     assert.equal(snapshotAttack(initial, 1, resources), 100);
-    assert.deepEqual(host.effects.instances[0].state.bindings, []);
+    assert.deepEqual(host.effects.values()[0].data.bindings, []);
     runtime.step();
     const after = runtime.snapshot();
     assert.deepEqual(
-        after.units[0].effects.instances[0].state.bindings.map((binding) => binding.unitId),
+        after.units[0].effects.values()[0].data.bindings.map((binding) => binding.unitId),
         [1],
     );
     assert.equal(snapshotAttack(after, 1, resources), 120);
@@ -122,7 +122,7 @@ test("aura runtime: predefined, deployment and spawning join before the same tic
                     id,
                     view
                         .getUnit(id)
-                        .effects.instances.some((effect) => effect.definition === receiver),
+                        .effects.values().some((effect) => effect.definition === receiver),
                 ]),
             );
             return state;
@@ -179,11 +179,11 @@ test("aura runtime: predefined, deployment and spawning join before the same tic
         ],
     ]);
     const after = runtime.snapshot();
-    const auraInstance = after.units[0].effects.instances.find(
+    const auraInstance = after.units[0].effects.values().find(
         (effect) => effect.definition === aura,
     );
     assert.deepEqual(
-        auraInstance.state.bindings.map((binding) => binding.unitId),
+        auraInstance.data.bindings.map((binding) => binding.unitId),
         [1, 2, 3, 4],
     );
     assert.deepEqual(
@@ -224,7 +224,7 @@ test("aura runtime: movement departure is observed at the next aura tick", () =>
     assert.equal(snapshotAttack(before, 2, resources), 120);
     assert.equal(snapshotAttack(departed, 2, resources), 120);
     assert.equal(
-        departed.units[0].effects.instances[0].state.bindings.some(
+        departed.units[0].effects.values()[0].data.bindings.some(
             (binding) => binding.unitId === 2,
         ),
         true,
@@ -233,7 +233,7 @@ test("aura runtime: movement departure is observed at the next aura tick", () =>
     const refreshed = runtime.snapshot();
     assert.equal(snapshotAttack(refreshed, 2, resources), 100);
     assert.equal(
-        refreshed.units[0].effects.instances[0].state.bindings.some(
+        refreshed.units[0].effects.values()[0].data.bindings.some(
             (binding) => binding.unitId === 2,
         ),
         false,
@@ -252,7 +252,7 @@ test("aura runtime: callback failure propagates the original error without publi
             state = effects.replaceEffect(
                 state,
                 context.ref.unitId,
-                effects.setState(context.self, (current) => ({ ...current, starts: 1 })),
+                effects.setData(context.self, (current) => ({ ...current, starts: 1 })),
             );
             if (context.ref.unitId === 2) {
                 attempts.push(context.ref);

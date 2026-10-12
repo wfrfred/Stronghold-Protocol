@@ -24,8 +24,9 @@ import { setMaxHpContribution } from ${module("unit/capability/vitality/capabili
 import { setAttackContribution } from ${module("unit/capability/offense/capability")};
 import { setCapacityContribution } from ${module("unit/capability/blocking/capability")};
 import type { Definition } from ${module("unit/effect/definition")};
-import { install, setState, replaceEffect } from ${module("unit/effect/operations")};
-import { find } from ${module("unit/effect/query")};
+import { install, setData, replaceEffect } from ${module("unit/effect/operations")};
+import type { Effect } from ${module("unit/effect/effect")};
+import { Effects } from ${module("unit/effect/effects")};
 import type { Contribution, Input } from ${module("unit/contribution/contribution")};
 import type { QueryContext } from ${module("unit/query")};
 const host=initializeUnit({id:1,position:[0,0],definition:{id:'host',vitality:{maxHp:100}}});
@@ -33,9 +34,9 @@ const content: Definition<{charges:number},Vitality> = {
  id:'shield',initialize:()=>({charges:2}),
  onTick(state,context) {
    const hp:number=context.unit.vitality.hp;
-   const next=setState(context.self,current=>({charges:current.charges-1}));
+   const next=setData(context.self,current=>({charges:current.charges-1}));
    // @ts-expect-error private state remains specific to this definition.
-   setState(context.self,{missing:1});
+   setData(context.self,{missing:1});
    // @ts-expect-error stored values are readonly.
    context.self.status='ENDING';
    // @ts-expect-error shared host state must use immutable transitions.
@@ -50,14 +51,30 @@ const bare=initializeUnit({id:2,position:[0,0],definition:{id:'bare'}});
 // @ts-expect-error required host capabilities must be present.
 install(battle,bare,content);
 if(ref!==undefined) {
- const found=find(host,content,ref.effectId);
+ const found=host.effects.get(ref.effectId,content);
  if(found!==undefined){
-   const charges:number=found.state.charges;
-   setState(found,{charges:5});
+   const charges:number=found.data.charges;
+   const typed:Effect<{charges:number},Vitality>=found;
+   setData(found,{charges:5});
    // @ts-expect-error state transitions preserve the Effect's private state type.
-   setState(found,{charges:'five'});
+   setData(found,{charges:'five'});
  }
 }
+declare const shield:Effect<{charges:number},Vitality>;
+declare const poison:Effect<{damage:number}>;
+const mixed=Effects.empty().add(shield).add(poison);
+const restored=mixed.get(shield.id,content);
+if(restored!==undefined){
+ const charges:number=restored.data.charges;
+ const typed:Effect<{charges:number},Vitality>=restored;
+}
+const untyped=mixed.get(shield.id);
+if(untyped!==undefined){
+ // @ts-expect-error a bare ID returns generic data without a claimed shape.
+ const charges:number=untyped.data.charges;
+}
+// @ts-expect-error an ID alone cannot claim a private data type.
+host.effects.get<{charges:number},Vitality>(0);
 declare const capabilityHost:Unit & Vitality & {readonly tag:'kept';readonly vitality:VitalityState & {readonly hp:100}};
 const fixed:Contribution={id:'fixed',value:[]};
 const dynamic:Contribution<Input<QueryContext>>={id:'dynamic',value:()=>[]};

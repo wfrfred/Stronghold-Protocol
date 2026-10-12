@@ -1178,7 +1178,7 @@ test('core action: query and healing settlement ignore flags have independent fo
         operations: [healEffect(30, effectIgnore)] }]);
       const source = actionUnit(0, 'ALLY', [0, 0], { action });
       const target = actionUnit(1, 'ALLY', [1, 0], { hp: 40, flags: ['HEAL_FREE'] });
-      const before = structuredClone([source, target]);
+      const before = JSON.stringify([source, target]);
       const result = startSingleAction(source, compileAction(source.definition.action.normalAction, new CombatResources()), {
         battlefield: actionView([source, target]), tick: 0,
       });
@@ -1187,7 +1187,7 @@ test('core action: query and healing settlement ignore flags have independent fo
       assert.equal(result.events.some(event => event.type === 'ACTION'), queryIgnore);
       assert.deepEqual(heals.map(event => [event.amount, event.hp]),
         queryIgnore ? [[effectIgnore ? 30 : 0, effectIgnore ? 70 : 40]] : []);
-      assert.deepEqual([source, target], before);
+      assert.equal(JSON.stringify([source, target]), before);
     }
   }
 });
@@ -1261,8 +1261,11 @@ test('core combat: healing sees earlier phase damage and replays without executa
     assert.equal(snapshot.units.find(unit => unit.id === 1).vitality.hp, 90);
     assert.deepEqual(step.events.filter(event => event.type === 'HEAL')
       .map(event => [event.sourceUnitId, event.targetUnitId, event.amount]), [[2, 1, 10]]);
-    assert.deepEqual(structuredClone(snapshot), snapshot);
-    return { step, snapshot };
+    const serialized = JSON.parse(JSON.stringify(snapshot));
+    assert.deepEqual(serialized.units.map(unit => unit.effects), snapshot.units.map(unit => ({
+      instances: unit.effects.values(), nextId: unit.effects.nextId,
+    })));
+    return { step, snapshot: serialized };
   };
   assert.deepEqual(run(), run());
 });

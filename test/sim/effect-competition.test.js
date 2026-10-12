@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import * as effect from "../../dist/core/tactical/unit/effect/operations.js";
-import { get } from "../../dist/core/tactical/unit/effect/query.js";
+import { get } from "../../dist/core/tactical/unit/effect/operations.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { effectFixtureWork, install, definition, attackBuff } from "../helpers/effects.js";
 
@@ -24,7 +24,7 @@ test("effect groups: replacing the selected rule withdraws old output and restor
     const weak = attackBuff("weak", 20, {
         group: group(1),
         onEnable: (state, context) => {
-            trace.push(["weak+", context.self.state.amount]);
+            trace.push(["weak+", context.self.data.amount]);
             return state;
         },
         onDisable: (state) => {
@@ -55,11 +55,11 @@ test("effect groups: replacing the selected rule withdraws old output and restor
     battle = effect.replaceEffect(
         battle,
         first.unitId,
-        effect.setState(get(battle, first), { amount: 30 }),
+        effect.setData(get(battle, first), { amount: 30 }),
     );
     battle = effect.end(battle, second).state;
     assert.equal(get(battle, first).status, "ACTIVE");
-    assert.equal(get(battle, first).state.amount, 30);
+    assert.equal(get(battle, first).data.amount, 30);
     assert.equal(resolveAttackPower(0, battlefieldView(battle)), 130);
     assert.deepEqual(trace, [["weak+", 20], ["weak-"], ["strong+"], ["strong-"], ["weak+", 30]]);
 });

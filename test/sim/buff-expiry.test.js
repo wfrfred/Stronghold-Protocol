@@ -43,7 +43,7 @@ const refresh = (stackCount, expiresAtTick, reloadModifiers) => ({
     expiresAtTick,
     reloadModifiers,
 });
-const instance = (view) => view.getUnit(0).effects.instances[0];
+const instance = (view) => view.getUnit(0).effects.values()[0];
 const power = (view) => resolveAttackPower(0, view);
 const address = { type: "EFFECT", unitId: 0, effectId: 0 };
 
@@ -127,8 +127,8 @@ function harness({ stackCount = 3, maxValidStackCnt = -1 } = {}) {
         value: (current) => [
             compiled.sample({
                 blackboard: new Map(),
-                stackCount: current.state.sample.stackCount,
-                readSourceAttribute: () => current.state.sample.sourceAttack,
+                stackCount: current.data.sample.stackCount,
+                readSourceAttribute: () => current.data.sample.sourceAttack,
             }),
         ],
     };
@@ -141,14 +141,14 @@ function harness({ stackCount = 3, maxValidStackCnt = -1 } = {}) {
             onTick(state, ctx) {
                 if (ctx.tick < deadline(ctx.self)) return state;
                 const plan = policy.expire(
-                    { stackCount: ctx.self.state.stackCount, expiresAtTick: deadline(ctx.self) },
-                    ctx.self.state.lifetimeTicks, ctx.tick,
+                    { stackCount: ctx.self.data.stackCount, expiresAtTick: deadline(ctx.self) },
+                    ctx.self.data.lifetimeTicks, ctx.tick,
                 );
                 if (plan.type === "FINISH") return effects.end(state, ctx.ref, "EXPIRED", ctx.call).state;
-                const next = effects.setDeadline(effects.setState(ctx.self, {
-                    ...ctx.self.state,
+                const next = effects.setDeadline(effects.setData(ctx.self, {
+                    ...ctx.self.data,
                     stackCount: plan.stackCount,
-                    sample: plan.reloadModifiers ? sample(plan.stackCount) : ctx.self.state.sample,
+                    sample: plan.reloadModifiers ? sample(plan.stackCount) : ctx.self.data.sample,
                 }), plan.expiresAtTick);
                 state = effects.replaceEffect(state, ctx.ref.unitId, next);
                 return refreshContribution(state, ctx.ref, content, output);
@@ -195,7 +195,7 @@ test("buff expiry content renews private layers and refreshes static contributio
     assert.equal(instance(battlefieldView(buff.work)), undefined);
     assert.equal(power(battlefieldView(buff.work)), 100);
     assert.equal(power(before), 250);
-    assert.equal(instance(before).state.stackCount, 3);
+    assert.equal(instance(before).data.stackCount, 3);
 });
 test("inactive layered buffs reach deadline without executing their active tick behavior", () => {
     const buff = harness({ stackCount: 2 });
@@ -210,12 +210,12 @@ test("native effective cap preserves sampled input until a renewal requires resa
     const original = battlefieldView(buff.work);
     buff.source(200);
     buff.work = effects.advance(at(buff.work, 30));
-    assert.equal(instance(battlefieldView(buff.work)).state.stackCount, 3);
+    assert.equal(instance(battlefieldView(buff.work)).data.stackCount, 3);
     assert.deepEqual(buff.samples, [100]);
     assert.equal(power(battlefieldView(buff.work)), 200);
     buff.source(400);
     buff.work = effects.advance(at(buff.work, 60));
-    assert.equal(instance(battlefieldView(buff.work)).state.stackCount, 2);
+    assert.equal(instance(battlefieldView(buff.work)).data.stackCount, 2);
     assert.deepEqual(buff.samples, [100, 400]);
     assert.equal(power(battlefieldView(buff.work)), 500);
     assert.equal(power(original), 200);

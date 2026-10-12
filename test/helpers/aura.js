@@ -33,14 +33,14 @@ export function auraEffect(
     } = {},
 ) {
     const selfOf = (state, context) =>
-        getUnit(state, context.ref.unitId)?.effects.instances.find(
+        getUnit(state, context.ref.unitId)?.effects.values().find(
             (effect) => effect.id === context.ref.effectId,
         );
     const save = (state, context, update) => {
         const current = selfOf(state, context);
         return current === undefined
             ? state
-            : effects.replaceEffect(state, context.ref.unitId, effects.setState(current, update));
+            : effects.replaceEffect(state, context.ref.unitId, effects.setData(current, update));
     };
     const refresh = (state, context) => {
         let self = selfOf(state, context);
@@ -56,7 +56,7 @@ export function auraEffect(
                 limit: (query) => query.battlefield.unitIds.length,
             },
         ).map((target) => target.id);
-        for (const binding of self.state.bindings) {
+        for (const binding of self.data.bindings) {
             if (selected.includes(binding.unitId)) continue;
             state = save(state, context, (current) => ({
                 ...current,
@@ -68,7 +68,7 @@ export function auraEffect(
         for (const unitId of selected) {
             self = selfOf(state, context);
             if (self?.status !== "ACTIVE") break;
-            if (self.state.bindings.some((binding) => binding.unitId === unitId)) continue;
+            if (self.data.bindings.some((binding) => binding.unitId === unitId)) continue;
             state = save(state, context, (current) => ({
                 ...current,
                 bindings: [...current.bindings, { unitId, refs: [] }],
@@ -88,7 +88,7 @@ export function auraEffect(
                 {
                     source: context.ref.unitId,
                     scopes: bindLifetime ? [context.ref] : [],
-                    ...(value === undefined ? {} : { state: value }),
+                    ...(value === undefined ? {} : { data: value }),
                 },
                 context.call,
             );
@@ -113,7 +113,7 @@ export function auraEffect(
         {
             ...(group === undefined ? {} : { group }),
             onTick(state, context) {
-                if (context.tick < context.self.state.nextRefreshTick) return state;
+                if (context.tick < context.self.data.nextRefreshTick) return state;
                 state = save(state, context, (current) => ({
                     ...current,
                     nextRefreshTick: context.tick + refreshInterval,
@@ -124,7 +124,7 @@ export function auraEffect(
                 state = refresh(state, context);
                 const self = selfOf(state, context);
                 if (self?.status !== "ACTIVE") return state;
-                for (const binding of self.state.bindings) {
+                for (const binding of self.data.bindings) {
                     for (const ref of binding.refs)
                         state = effects.setEnabled(state, ref, true, context.call);
                 }
@@ -132,7 +132,7 @@ export function auraEffect(
             },
             onDisable(state, context) {
                 if (context.self.status === "ENDING") return state;
-                for (const binding of context.self.state.bindings) {
+                for (const binding of context.self.data.bindings) {
                     for (const ref of binding.refs)
                         state = effects.setEnabled(state, ref, false, context.call);
                 }

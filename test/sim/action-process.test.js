@@ -88,10 +88,10 @@ test('action process: cancellation ends owned effects while retaining an already
   const cancelled = cancelActionExecution(waiting.state, { executionId: 0, tick: 1 });
   assert.deepEqual(cancelled.value.result, { type: 'CANCELLED', reason: 'CANCELLED' });
   assert.equal(getUnit(cancelled.state, 1).vitality.hp, 80);
-  assert.deepEqual(getUnit(cancelled.state, 1).effects.instances, []);
+  assert.deepEqual(getUnit(cancelled.state, 1).effects.values(), []);
   assert.equal(resolveAttackPower(1, battlefieldView(cancelled.state)), 10);
   assert.equal(getUnit(initial, 1).vitality.hp, 100);
-  assert.equal(getUnit(waiting.state, 1).effects.instances.length, 1);
+  assert.equal(getUnit(waiting.state, 1).effects.values().length, 1);
   assert.equal(cancelActionExecution(cancelled.state, { executionId: 0, tick: 1 }).state, cancelled.state);
   assert.equal(cancelled.state.events.some(event => event.type === 'ACTION_RELEASED'), false);
 });
@@ -171,7 +171,7 @@ test('action process: an entered segment completes after source departure and un
   assert.deepEqual(observed, ['synchronous']);
   assert.deepEqual(result.value.result, { type: 'CANCELLED', reason: 'SOURCE_ABSENT' });
   assert.deepEqual(getUnit(result.state, 1).position, [3, 0]);
-  assert.deepEqual(getUnit(result.state, 1).effects.instances, []);
+  assert.deepEqual(getUnit(result.state, 1).effects.values(), []);
 });
 
 test('action process: source absence before a later release retains earlier release signals', () => {
@@ -201,7 +201,7 @@ test('action process: nested lifecycle removal cancels the execution before a su
   assert.equal(reached, false);
   assert.deepEqual(result.state.actionExecutions.executions, []);
   assert.equal(getUnit(result.state, 0), undefined);
-  assert.deepEqual(getUnit(result.state, 1).effects.instances, []);
+  assert.deepEqual(getUnit(result.state, 1).effects.values(), []);
 });
 
 test('action process: attack completion cannot revive an execution cancelled by departure', () => {

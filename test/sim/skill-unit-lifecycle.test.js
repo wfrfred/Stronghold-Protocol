@@ -4,7 +4,7 @@ import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { definition as effectDefinition, effectFixtureWork, at } from "../helpers/effects.js";
 import { battlefieldView, getUnit, transitionUnit } from "../../dist/core/tactical/battle/state.js";
 import { setHook, removeHook } from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
-import { find } from "../../dist/core/tactical/unit/effect/query.js";
+
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { removeUnitWithEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
@@ -66,17 +66,17 @@ for (const reason of ["DEATH", "RETREAT", "SCRIPT"]) {
     state = reason === "DEATH" ? f.resources.settleDamage(state, sourceDamage()).state : removeUnitWithEffects(state, 0, reason, f.resources, 1);
     assert.equal(getUnit(state, 0), undefined);
     assert.equal(state.removedUnits.find(value => value.unitId === 0).reason, reason);
-    assert.deepEqual(getUnit(state, 1).effects.instances, []);
+    assert.deepEqual(getUnit(state, 1).effects.values(), []);
     assert.deepEqual(f.disabled, [0, 1]);
     assert.deepEqual(f.finished, [{ sourcePresent: true, active: null, tick: 1 }]);
     assert.equal(skillsFinished(state).length, 1);
     assert.equal(before.getUnit(0).skill.active.id, 0);
-    assert.equal(before.getUnit(1).effects.instances.every(instance => instance.status === "ACTIVE"), true);
+    assert.equal(before.getUnit(1).effects.values().every(instance => instance.status === "ACTIVE"), true);
     state = removeUnitWithEffects(state, 0, reason, f.resources, 1);
     state = effects.advance(at(state, 2));
     assert.equal(skillsFinished(state).length, 1);
     assert.equal(f.finished.length, 1);
-    assert.deepEqual(getUnit(state, 1).effects.instances, []);
+    assert.deepEqual(getUnit(state, 1).effects.values(), []);
     assert.equal(getUnit(f.work, 0).vitality.hp, 100);
   });
 }
@@ -88,7 +88,7 @@ test("skill finish can install a hook before nested damage", () => {
       const id = context.self.id;
       return transitionUnit(state, context.unit.id, unit => setHook(unit, {
         id: "skill-finish-observer", stage: "reception", priority: 0,
-        enabled: context => find(context.unit, observer, id)?.status === "ACTIVE",
+        enabled: context => context.unit.effects.get(id, observer)?.status === "ACTIVE",
         invoke(state, _context, value) { hits.push("observer"); return { state, value: { value } }; },
       }));
     },
@@ -113,7 +113,7 @@ test("activation continues after self-death, but late dependencies are rejected 
     assert.equal(getUnit(state, 0), undefined);
     observed.push("continued");
     state = installOwned(state, context, false).state;
-    assert.deepEqual(getUnit(state, 1).effects.instances, []);
+    assert.deepEqual(getUnit(state, 1).effects.values(), []);
     assert.equal(getUnit(state, 1).effects.nextId, 2);
     return { state, value: { type: "ACTIVATED" } };
   } });
@@ -127,7 +127,7 @@ test("activation continues after self-death, but late dependencies are rejected 
   assert.equal(skillsFinished(activated.state).length, 1);
   assert.equal(getUnit(f.work, 0).skill.active, null);
   assert.equal(getUnit(f.work, 0).vitality.hp, 100);
-  assert.deepEqual(getUnit(f.work, 1).effects.instances, []);
+  assert.deepEqual(getUnit(f.work, 1).effects.values(), []);
 });
 
 test("refusal after self-death preserves independent remote effects", () => {
@@ -142,7 +142,7 @@ test("refusal after self-death preserves independent remote effects", () => {
   const rejected = activateSkill(f.work, { unitId: 0, tick: 0 }, f.resources);
   assert.deepEqual(rejected.value.result, { type: "REJECTED", reason: "CONTENT_REJECTED", detail: "late prerequisite" });
   assert.equal(getUnit(rejected.state, 0), undefined);
-  assert.equal(getUnit(rejected.state, 1).effects.instances.every(instance => instance.status === "ACTIVE"), true);
+  assert.equal(getUnit(rejected.state, 1).effects.values().every(instance => instance.status === "ACTIVE"), true);
   assert.equal(skillsFinished(rejected.state).length, 1);
 });
 
@@ -178,7 +178,7 @@ test("self-death during activation publishes one finish and no late start", () =
   const step = battle.step([{ type: "ACTIVATE_SKILL", unitId: 0 }]);
   assert.deepEqual(step.events.filter(event => event.type.startsWith("SKILL_")).map(event => event.type), ["SKILL_FINISHED"]);
   assert.equal(battle.snapshot().units.some(unit => unit.id === 0), false);
-  assert.deepEqual(battle.snapshot().units.find(unit => unit.id === 1).effects.instances, []);
+  assert.deepEqual(battle.snapshot().units.find(unit => unit.id === 1).effects.values(), []);
   assert.equal(f.finished.length, 1);
 });
 

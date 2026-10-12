@@ -7,7 +7,7 @@ import {
     transitionUnit,
 } from "../../dist/core/tactical/battle/state.js";
 import * as effect from "../../dist/core/tactical/unit/effect/operations.js";
-import { get, find } from "../../dist/core/tactical/unit/effect/query.js";
+import { get } from "../../dist/core/tactical/unit/effect/operations.js";
 import {
     definition,
     effectFixtureWork,
@@ -37,14 +37,14 @@ test("effects: a direct static definition initializes private state and runs ins
         {
             onInstall(state, context) {
                 assert.equal(get(state, context.ref).definition, value);
-                const next = effect.setState(context.self, (current) => ({
+                const next = effect.setData(context.self, (current) => ({
                     count: current.count + 1,
                 }));
-                seen.push(["install", next.state.count]);
+                seen.push(["install", next.data.count]);
                 return effect.replaceEffect(state, context.ref.unitId, next);
             },
             onEnable(state, context) {
-                seen.push(["enable", context.self.state.count]);
+                seen.push(["enable", context.self.data.count]);
                 return state;
             },
         },
@@ -54,16 +54,16 @@ test("effects: a direct static definition initializes private state and runs ins
     let ref;
     ({ state: battle, value: ref } = install(battle, value));
     assert.equal(get(battle, ref).definition, value);
-    assert.deepEqual(get(battle, ref).state, { count: 1 });
+    assert.deepEqual(get(battle, ref).data, { count: 1 });
     assert.equal(get(battle, ref).status, "ACTIVE");
     assert.deepEqual(seen, [
         ["install", 1],
         ["enable", 1],
     ]);
-    assert.equal(old.getUnit(0).effects?.instances.length ?? 0, 0);
+    assert.equal(old.getUnit(0).effects?.values().length ?? 0, 0);
 });
 
-test("effects: updates share immutable values and find pairs a definition with its state", () => {
+test("effects: updates share immutable values and container queries pair a definition with its data", () => {
     const nested = { amount: 1 };
     const value = definition("state", { count: 1, nested });
     const other = definition("other");
@@ -74,14 +74,14 @@ test("effects: updates share immutable values and find pairs a definition with i
     battle = effect.replaceEffect(
         battle,
         ref.unitId,
-        effect.setState(old, (current) => ({ ...current, count: 2 })),
+        effect.setData(old, (current) => ({ ...current, count: 2 })),
     );
     const current = get(battle, ref);
-    assert.equal(current.state.nested, nested);
-    assert.equal(old.state.count, 1);
-    assert.equal(current.state.count, 2);
-    assert.equal(find(getUnit(battle, 0), value, ref.effectId), current);
-    assert.equal(find(getUnit(battle, 0), other, ref.effectId), undefined);
+    assert.equal(current.data.nested, nested);
+    assert.equal(old.data.count, 1);
+    assert.equal(current.data.count, 2);
+    assert.equal(getUnit(battle, 0).effects.get(ref.effectId, value), current);
+    assert.equal(getUnit(battle, 0).effects.get(ref.effectId, other), undefined);
 });
 
 test("effects: disabling withdraws output while preserving private state and identity", () => {
@@ -110,7 +110,7 @@ test("effects: disabling withdraws output while preserving private state and ide
     battle = effect.replaceEffect(
         battle,
         ref.unitId,
-        effect.setState(get(battle, ref), { amount: 30 }),
+        effect.setData(get(battle, ref), { amount: 30 }),
     );
     assert.equal(attack(), 100);
     battle = effect.setEnabled(battle, ref, true);
@@ -128,7 +128,7 @@ test("effects: content explicitly refreshes a static contribution after changing
     battle = effect.replaceEffect(
         battle,
         ref.unitId,
-        effect.setState(get(battle, ref), { amount: 50 }),
+        effect.setData(get(battle, ref), { amount: 50 }),
     );
     assert.equal(resolveAttackPower(0, battlefieldView(battle)), 120);
     battle = refreshAttack(battle, ref);
@@ -179,7 +179,7 @@ test("effects: callbacks read current Unit state after a preceding nested operat
                 return effect.replaceEffect(
                     state,
                     context.ref.unitId,
-                    effect.setState(context.self, {
+                    effect.setData(context.self, {
                         observedHp: context.unit.vitality.hp,
                         tick: context.tick,
                     }),
@@ -191,7 +191,7 @@ test("effects: callbacks read current Unit state after a preceding nested operat
     let ref;
     ({ state: battle, value: ref } = install(battle, value));
     battle = effect.advance(at(battle, 7));
-    assert.deepEqual(get(battle, ref).state, { observedHp: 30, tick: 7 });
+    assert.deepEqual(get(battle, ref).data, { observedHp: 30, tick: 7 });
 });
 
 test("effects: a callback sees termination when a nested operation ends its instance", () => {
