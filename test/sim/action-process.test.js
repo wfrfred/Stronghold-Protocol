@@ -28,10 +28,10 @@ const wait = ticks => ({ type: 'WAIT', resolve: () => ({ type: 'FOR_TICKS', tick
 const pass = (state, value) => ({ state, value });
 const bonus = {
   id: 'action-owned-bonus', initialize: () => ({}),
-  onEnable: (state, context) => updateUnit(state, setAttackContribution(context.unit, {
+  onEnable: (state, context) => updateUnit(state, ({ ...context.unit, offense: setAttackContribution(context.unit.offense, {
     id: `bonus/${context.self.id}`, value: [modifier({ finalAddition: 13 })],
-  })),
-  onDisable: (state, context) => updateUnit(state, removeAttackContribution(context.unit, `bonus/${context.self.id}`)),
+  }) })),
+  onDisable: (state, context) => updateUnit(state, ({ ...context.unit, offense: removeAttackContribution(context.unit.offense, `bonus/${context.self.id}`) })),
 };
 
 function installOwned(state, context, content = bonus, unitId = 1) {

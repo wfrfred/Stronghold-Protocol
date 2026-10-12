@@ -2,7 +2,7 @@ import type { QueryContext } from "../../query.js";
 import { assertNonnegativeNumber } from "../../../../common/assert.js";
 import * as contribution from "../../contribution/contribution.js";
 import * as modifier from "../../contribution/value.js";
-import { widenUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
+import type { Unit, UnitDefinition } from "../../unit.js";
 
 export interface OffenseDefinition {
     readonly attack: number;
@@ -13,6 +13,9 @@ export interface OffenseState {
 }
 
 export interface Offense {
+    readonly definition: {
+        readonly offense: OffenseDefinition;
+    };
     readonly offense: OffenseState;
 }
 
@@ -20,9 +23,7 @@ export interface OffensiveUnitDefinition extends UnitDefinition {
     readonly offense: OffenseDefinition;
 }
 
-export function hasOffense<U extends Unit>(
-    unit: U,
-): unit is U & Offense & Unit<U["definition"] & OffensiveUnitDefinition> {
+export function hasOffense<U extends Unit>(unit: U): unit is U & Offense {
     return "offense" in unit && "offense" in unit.definition;
 }
 
@@ -43,35 +44,24 @@ export function initializeOffenseState(): OffenseState {
     return { attack: [] };
 }
 
-function changeAttackContributions<U extends Unit>(
-    input: U | StableUnit<U>,
+function changeAttackContributions(
+    state: OffenseState,
     transition: (entries: OffenseState["attack"]) => OffenseState["attack"],
-): StableUnit<U> {
-    const unit = widenUnit<U>(input);
+): OffenseState {
+    const attack = transition(state.attack);
 
-    if (!hasOffense(unit)) {
-        throw new TypeError("attack contributions require Offense capability");
-    }
-
-    const attack = transition(unit.offense.attack);
-
-    return attack === unit.offense.attack
-        ? unit
-        : { ...unit, offense: { ...unit.offense, attack } };
+    return attack === state.attack ? state : { ...state, attack };
 }
 
-export function setAttackContribution<U extends Unit>(
-    unit: U | StableUnit<U>,
+export function setAttackContribution(
+    state: OffenseState,
     entry: contribution.Contribution<contribution.Input<QueryContext>>,
-): StableUnit<U> {
-    return changeAttackContributions<U>(unit, (entries) => contribution.set(entries, entry));
+): OffenseState {
+    return changeAttackContributions(state, (entries) => contribution.set(entries, entry));
 }
 
-export function removeAttackContribution<U extends Unit>(
-    unit: U | StableUnit<U>,
-    id: string,
-): StableUnit<U> {
-    return changeAttackContributions<U>(unit, (entries) => contribution.remove(entries, id));
+export function removeAttackContribution(state: OffenseState, id: string): OffenseState {
+    return changeAttackContributions(state, (entries) => contribution.remove(entries, id));
 }
 
 export function resolveOffenseAttack(

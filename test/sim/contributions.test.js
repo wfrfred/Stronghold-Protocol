@@ -106,28 +106,28 @@ test("contributions: winners alone evaluate and effective modifiers follow ID or
 test("contributions: capability set, remove and replacement preserve prior snapshots", () => {
     const initial = unit(1);
     const sample = { id: "inspiration", value: [value(150)] };
-    const sampled = setAttackContribution(initial, sample);
+    const sampled = ({ ...initial, offense: setAttackContribution(initial.offense, sample) });
     let work = workFor(sampled);
     assert.equal(resolveAttackPower(1, battlefieldView(work)), 250);
-    work = transitionUnit(work, 1, (current) => removeAttackContribution(current, "inspiration"));
+    work = transitionUnit(work, 1, (current) => ({ ...current, offense: removeAttackContribution(current.offense, "inspiration") }));
     assert.equal(resolveAttackPower(1, battlefieldView(work)), 100);
-    work = transitionUnit(work, 1, (current) => setAttackContribution(current, sample));
+    work = transitionUnit(work, 1, (current) => ({ ...current, offense: setAttackContribution(current.offense, sample) }));
     assert.equal(resolveAttackPower(1, battlefieldView(work)), 250);
     const copied = copyUnitSnapshot(getUnit(work, 1));
     assert.equal(copied.offense.attack, getUnit(work, 1).offense.attack);
     const resumedSnapshot = battlefieldView(work);
     work = transitionUnit(work, 1, (current) =>
-        setAttackContribution(current, { id: "inspiration", value: [value(200)] }),
+        ({ ...current, offense: setAttackContribution(current.offense, { id: "inspiration", value: [value(200)] }) }),
     );
     assert.equal(resolveAttackPower(1, battlefieldView(work)), 300);
     assert.equal(resolveAttackPower(1, resumedSnapshot), 250);
 });
 
 test("contributions: direct capability closures read current facts and retain previous snapshots", () => {
-    const initial = setAttackContribution(unit(1), {
+    const initial = ({ ...unit(1), offense: setAttackContribution(unit(1).offense, {
         id: "dynamic",
         value: ({ unit }) => [value(unit.vitality.hp < 50 ? 100 : 0)],
-    });
+    }) });
     let work = workFor(initial);
     const original = battlefieldView(work);
     assert.equal(resolveAttackPower(1, original), 100);
@@ -155,7 +155,7 @@ test("contributions: sampled and dynamic defense values resolve without mutating
             });
             const modifiers = [value(amount)];
             const entry = { id: "resistance", value: dynamic ? () => modifiers : modifiers };
-            const current = setResistanceContribution(base, entry);
+            const current = ({ ...base, defense: setResistanceContribution(base.defense, entry) });
             const view = battlefieldView(workFor(current));
             assert.deepEqual(resolveDefense(1, view), { defense: 200, resistance: expected });
             assert.equal(current.defense.resistance[0], entry);

@@ -139,10 +139,7 @@ test("removed registrations stay absent even when replaced under the same id dur
             if (!changed) {
                 changed = true;
                 state = transitionUnit(state, 1, (value) =>
-                    damage.setHook(
-                        damage.setHook(damage.removeHook(value, "second"), replacement),
-                        added,
-                    ),
+                    ({ ...value, vitality: damage.setHook(damage.setHook(damage.removeHook(value.vitality, "second"), replacement), added) }),
                 );
                 nested = true;
                 state = resolveDamage(state, request(10), resources, context.call).state;
@@ -156,7 +153,7 @@ test("removed registrations stay absent even when replaced under the same id dur
         calls.push("removed");
         return { state, value: { value: input } };
     });
-    const source = damage.setHook(damage.setHook(unit(1, { hp: 1000 }), first), old);
+    const source = ({ ...unit(1, { hp: 1000 }), vitality: damage.setHook(damage.setHook(unit(1, { hp: 1000 }).vitality, first), old) });
     let battle = workFor(source, unit(2, { hp: 1000 }));
     const initialSettlement = resolveDamage(battle, request(100), resources);
     battle = initialSettlement.state;
@@ -189,16 +186,13 @@ test("damage and healing share the active receiver candidates across direct nest
         if (!changed) {
             changed = true;
             state = transitionUnit(state, 2, (value) =>
-                healing.setHook(healing.removeHook(value, "original"), newHealing),
+                ({ ...value, vitality: healing.setHook(healing.removeHook(value.vitality, "original"), newHealing) }),
             );
             state = resolveHealing(state, healRequest(), context.call).state;
         }
         return { state, value: { value: pending } };
     });
-    const receiver = healing.setHook(
-        damage.setHook(unit(2, { hp: 500, maxHp: 1000 }), first),
-        originalHealing,
-    );
+    const receiver = ({ ...unit(2, { hp: 500, maxHp: 1000 }), vitality: healing.setHook(damage.setHook(unit(2, { hp: 500, maxHp: 1000 }).vitality, first), originalHealing) });
     let battle = workFor(unit(1), receiver);
     battle = resolveDamage(battle, request(100), resources).state;
     assert.deepEqual(calls, ["damage"]);
@@ -220,12 +214,12 @@ test("nested damage shares a healing receiver enumeration without admitting newl
         calls.push("healing");
         if (!changed) {
             changed = true;
-            state = transitionUnit(state, 2, (value) => damage.setHook(value, late));
+            state = transitionUnit(state, 2, (value) => ({ ...value, vitality: damage.setHook(value.vitality, late) }));
             state = resolveDamage(state, request(10), resources, context.call).state;
         }
         return { state, value: { value: pending } };
     });
-    let battle = workFor(unit(1), healing.setHook(unit(2, { hp: 500, maxHp: 1000 }), first));
+    let battle = workFor(unit(1), ({ ...unit(2, { hp: 500, maxHp: 1000 }), vitality: healing.setHook(unit(2, { hp: 500, maxHp: 1000 }).vitality, first) }));
     battle = resolveHealing(battle, healRequest(20)).state;
     assert.deepEqual(calls, ["healing"]);
     assert.equal(getUnit(battle, 2).vitality.hp, 510);
@@ -263,8 +257,8 @@ test("cancellation and stopping this Hook stage are separate decisions", () => {
 
             return { state, value: {} };
         });
-        let target = damage.setHook(unit(2), cancel);
-        target = damage.setHook(damage.setHook(target, after), react);
+        let target = ({ ...unit(2), vitality: damage.setHook(unit(2).vitality, cancel) });
+        target = ({ ...target, vitality: damage.setHook(damage.setHook(target.vitality, after), react) });
         let battle = workFor(unit(1), target);
         const reportSettlement = resolveDamage(battle, request(), new CombatResources());
         battle = reportSettlement.state;
@@ -293,7 +287,7 @@ test("reaction stages run once per participant and can stop their own receiver e
 
         return { state, value: {} };
     });
-    const self = damage.setHook(damage.setHook(unit(1), first), second);
+    const self = ({ ...unit(1), vitality: damage.setHook(damage.setHook(unit(1).vitality, first), second) });
     let battle = workFor(self);
     battle = resolveDamage(battle, request(10, { targetUnitId: 1 }), new CombatResources()).state;
     assert.deepEqual(calls, ["first"]);
@@ -370,28 +364,19 @@ test("invincibility cancels reception while allowing ordinary observation and re
 
 test("skipping modifier events selects the dedicated reception stage and suppresses reactions", () => {
     const calls = [];
-    let target = damage.setHook(
-        unit(2),
-        damageHook("ordinary", "reception", (state, _context, value) => {
+    let target = ({ ...unit(2), vitality: damage.setHook(unit(2).vitality, damageHook("ordinary", "reception", (state, _context, value) => {
             calls.push("ordinary");
             return { state, value: { value } };
-        }),
-    );
-    target = damage.setHook(
-        target,
-        damageHook("skipped", "skippedReception", (state, _context, value) => {
+        })) });
+    target = ({ ...target, vitality: damage.setHook(target.vitality, damageHook("skipped", "skippedReception", (state, _context, value) => {
             calls.push("skipped");
             return { state, value: { value: { ...value, amount: value.amount / 2 } } };
-        }),
-    );
-    target = damage.setHook(
-        target,
-        damageHook("reaction", "reaction", (state) => {
+        })) });
+    target = ({ ...target, vitality: damage.setHook(target.vitality, damageHook("reaction", "reaction", (state) => {
             calls.push("reaction");
 
             return { state, value: {} };
-        }),
-    );
+        })) });
     let battle = workFor(unit(1), target);
     const resultSettlement = resolveDamage(
         battle,
@@ -486,35 +471,23 @@ test("healing cancellation stays visible to reception and reaction while ignoreH
 
 test("healing uses the dedicated skipped stage and suppresses output and reaction modifiers", () => {
     const calls = [];
-    const source = healing.setHook(
-        unit(1),
-        healingHook("output", "output", (state, _context, value) => {
+    const source = ({ ...unit(1), vitality: healing.setHook(unit(1).vitality, healingHook("output", "output", (state, _context, value) => {
             calls.push("output");
             return { state, value: { value: { ...value, amount: value.amount * 2 } } };
-        }),
-    );
-    let target = healing.setHook(
-        unit(2, { hp: 500, maxHp: 1000 }),
-        healingHook("ordinary", "reception", (state, _context, value) => {
+        })) });
+    let target = ({ ...unit(2, { hp: 500, maxHp: 1000 }), vitality: healing.setHook(unit(2, { hp: 500, maxHp: 1000 }).vitality, healingHook("ordinary", "reception", (state, _context, value) => {
             calls.push("ordinary");
             return { state, value: { value } };
-        }),
-    );
-    target = healing.setHook(
-        target,
-        healingHook("skipped", "skippedReception", (state, _context, value) => {
+        })) });
+    target = ({ ...target, vitality: healing.setHook(target.vitality, healingHook("skipped", "skippedReception", (state, _context, value) => {
             calls.push("skipped");
             return { state, value: { value: { ...value, amount: value.amount / 2 } } };
-        }),
-    );
-    target = healing.setHook(
-        target,
-        healingHook("reaction", "reaction", (state) => {
+        })) });
+    target = ({ ...target, vitality: healing.setHook(target.vitality, healingHook("reaction", "reaction", (state) => {
             calls.push("reaction");
 
             return { state, value: {} };
-        }),
-    );
+        })) });
     let battle = workFor(source, target);
     const resultSettlement = resolveHealing(battle, healRequest(100, { skipModifierEvents: true }));
     battle = resultSettlement.state;

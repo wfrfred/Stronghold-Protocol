@@ -7,7 +7,7 @@ import {
 import * as contribution from "../../contribution/contribution.js";
 import * as operation from "./operation.js";
 import { createTargetingDefinition, type TargetingDefinition } from "../../targeting/definition.js";
-import { widenUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
+import type { Unit, UnitDefinition } from "../../unit.js";
 import * as hook from "../../hook/hook.js";
 import type { ActionReleaseHook } from "./release.js";
 
@@ -50,6 +50,7 @@ export interface ActionState {
 }
 
 export interface Action {
+    readonly definition: { readonly action: ActionCapabilityDefinition };
     readonly action: ActionState;
 }
 
@@ -57,9 +58,7 @@ export interface ActingUnitDefinition extends UnitDefinition {
     readonly action: ActionCapabilityDefinition;
 }
 
-export function hasAction<U extends Unit>(
-    unit: U,
-): unit is U & Action & Unit<U["definition"] & ActingUnitDefinition> {
+export function hasAction<U extends Unit>(unit: U): unit is U & Action {
     return "action" in unit && "action" in unit.definition;
 }
 
@@ -146,82 +145,50 @@ export function initializeActionState(
     return createActionState(context.tick);
 }
 
-export function setBeforeReleaseHook<U extends Unit & Action>(
-    input: U | StableUnit<U>,
-    entry: ActionReleaseHook,
-): StableUnit<U> {
-    const unit = widenUnit<U>(input);
+export function setBeforeReleaseHook(state: ActionState, entry: ActionReleaseHook): ActionState {
+    const beforeRelease = hook.set(state.beforeRelease, entry);
 
-    const beforeRelease = hook.set(unit.action.beforeRelease, entry);
-
-    return beforeRelease === unit.action.beforeRelease
-        ? unit
-        : widenUnit<U>({ ...unit, action: { ...unit.action, beforeRelease } });
+    return beforeRelease === state.beforeRelease ? state : { ...state, beforeRelease };
 }
 
-export function removeBeforeReleaseHook<U extends Unit & Action>(
-    input: U | StableUnit<U>,
-    id: string,
-): StableUnit<U> {
-    const unit = widenUnit<U>(input);
+export function removeBeforeReleaseHook(state: ActionState, id: string): ActionState {
+    const beforeRelease = hook.remove(state.beforeRelease, id);
 
-    const beforeRelease = hook.remove(unit.action.beforeRelease, id);
-
-    return beforeRelease === unit.action.beforeRelease
-        ? unit
-        : widenUnit<U>({ ...unit, action: { ...unit.action, beforeRelease } });
+    return beforeRelease === state.beforeRelease ? state : { ...state, beforeRelease };
 }
 
-function updateContributions<U extends Unit>(
-    input: U | StableUnit<U>,
+function updateContributions(
+    state: ActionState,
     key: "attackSpeed" | "baseAttackTime",
     transition: (entries: ActionState["attackSpeed"]) => ActionState["attackSpeed"],
-): StableUnit<U> {
-    const unit = widenUnit<U>(input);
+): ActionState {
+    const updated = transition(state[key]);
 
-    if (!hasAction(unit)) {
-        throw new TypeError("attack timing contributions require Action capability");
-    }
-
-    const state = transition(unit.action[key]);
-
-    return state === unit.action[key]
-        ? unit
-        : { ...unit, action: { ...unit.action, [key]: state } };
+    return updated === state[key] ? state : { ...state, [key]: updated };
 }
 
-export function setAttackSpeedContribution<U extends Unit>(
-    unit: U | StableUnit<U>,
+export function setAttackSpeedContribution(
+    state: ActionState,
     entry: contribution.Contribution<contribution.Input<QueryContext>>,
-): StableUnit<U> {
-    return updateContributions<U>(unit, "attackSpeed", (entries) =>
+): ActionState {
+    return updateContributions(state, "attackSpeed", (entries) => contribution.set(entries, entry));
+}
+
+export function removeAttackSpeedContribution(state: ActionState, id: string): ActionState {
+    return updateContributions(state, "attackSpeed", (entries) => contribution.remove(entries, id));
+}
+
+export function setBaseAttackTimeContribution(
+    state: ActionState,
+    entry: contribution.Contribution<contribution.Input<QueryContext>>,
+): ActionState {
+    return updateContributions(state, "baseAttackTime", (entries) =>
         contribution.set(entries, entry),
     );
 }
 
-export function removeAttackSpeedContribution<U extends Unit>(
-    unit: U | StableUnit<U>,
-    id: string,
-): StableUnit<U> {
-    return updateContributions<U>(unit, "attackSpeed", (entries) =>
-        contribution.remove(entries, id),
-    );
-}
-
-export function setBaseAttackTimeContribution<U extends Unit>(
-    unit: U | StableUnit<U>,
-    entry: contribution.Contribution<contribution.Input<QueryContext>>,
-): StableUnit<U> {
-    return updateContributions<U>(unit, "baseAttackTime", (entries) =>
-        contribution.set(entries, entry),
-    );
-}
-
-export function removeBaseAttackTimeContribution<U extends Unit>(
-    unit: U | StableUnit<U>,
-    id: string,
-): StableUnit<U> {
-    return updateContributions<U>(unit, "baseAttackTime", (entries) =>
+export function removeBaseAttackTimeContribution(state: ActionState, id: string): ActionState {
+    return updateContributions(state, "baseAttackTime", (entries) =>
         contribution.remove(entries, id),
     );
 }

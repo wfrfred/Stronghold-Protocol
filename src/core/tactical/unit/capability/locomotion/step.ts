@@ -48,7 +48,6 @@ import {
     type RoutedLocomotionState,
 } from "./capability.js";
 import { integrateSteeringDirection } from "./steering.js";
-import { widenUnit, type StableUnit } from "../../unit.js";
 import type { QueryContext } from "../../query.js";
 
 export interface RoutedLocomotionStepContext {
@@ -75,23 +74,18 @@ export interface RoutedLocomotionStep {
     readonly outcomes: readonly NavigationOutcome[];
 }
 
-export interface RoutedUnitStep<U extends RoutedLocomotiveUnit = RoutedLocomotiveUnit> {
-    readonly unit: StableUnit<U>;
+export interface RoutedUnitStep {
+    readonly unit: RoutedLocomotiveUnit;
     readonly signals: readonly LocatedRouteSignal[];
     readonly rngState: Seed;
     readonly nextNavigationRequestId: NavigationRequestId;
     readonly outcomes: readonly NavigationOutcome[];
 }
 
-export function stepRoutedUnit<U extends RoutedLocomotiveUnit>(
-    input: U | StableUnit<U>,
-    context: RoutedLocomotionStepContext,
-): RoutedUnitStep<U>;
 export function stepRoutedUnit(
-    input: RoutedLocomotiveUnit,
+    unit: RoutedLocomotiveUnit,
     context: RoutedLocomotionStepContext,
 ): RoutedUnitStep {
-    const unit = widenUnit(input);
     const step = stepRoutedLocomotion(
         unit.locomotion,
         unit.position,

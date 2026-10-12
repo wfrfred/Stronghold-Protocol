@@ -86,13 +86,13 @@ test("skill finish can install a hook before nested damage", () => {
   const observer = effectDefinition("finish-installed-observer", {}, {
     onInstall(state, context) {
       const id = context.self.id;
-      return transitionUnit(state, context.unit.id, unit => setHook(unit, {
+      return transitionUnit(state, context.unit.id, unit => ({ ...unit, vitality: setHook(unit.vitality, {
         id: "skill-finish-observer", stage: "reception", priority: 0,
         enabled: context => context.unit.effects.get(id, observer)?.status === "ACTIVE",
         invoke(state, _context, value) { hits.push("observer"); return { state, value: { value } }; },
-      }));
+      }) }));
     },
-    onEnd(state, context) { return transitionUnit(state, context.unit.id, unit => removeHook(unit, "skill-finish-observer")); },
+    onEnd(state, context) { return transitionUnit(state, context.unit.id, unit => ({ ...unit, vitality: removeHook(unit.vitality, "skill-finish-observer") })); },
   });
   const f = fixture({ finish(state, context, resources) {
     const installed = effects.install(state, getUnit(state, 1), observer, {}, context.call);

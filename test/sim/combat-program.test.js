@@ -91,7 +91,7 @@ test('combat program: ordered segments rebind after damage removes the first tar
 test('combat program: live source attack reads the passed version and fixed power remains independent', () => {
   const resources = new CombatResources();
   const initial = battle(unit(0), unit(1));
-  const boosted = updateUnit(initial, setAttackContribution(getUnit(initial, 0), { id: 'bonus', value: [modifier({ addition: 15 })] }));
+  const boosted = updateUnit(initial, ({ ...getUnit(initial, 0), offense: setAttackContribution(getUnit(initial, 0).offense, { id: 'bonus', value: [modifier({ addition: 15 })] }) }));
   const live = compileOperation({ type: 'DAMAGE', power: 1, powerSource: 'SOURCE_ATTACK', damageType: 'TRUE' }, resources);
   const result = live(boosted, { sourceUnitId: 0, targetUnitId: 1, tick: 0, call: emptyCall });
   assert.equal(getUnit(result, 1).vitality.hp, 75);
@@ -124,12 +124,12 @@ test('combat program: lethal retaliation removes the source before a later unsam
     { type: 'DAMAGE', power: 1, powerSource: 'SOURCE_ATTACK', damageType: 'TRUE' },
     { type: 'DAMAGE', power: 1, powerSource: 'SOURCE_ATTACK', damageType: 'TRUE' },
   ] })) }) });
-  const target = setHook(unit(1), { id: 'retaliation', stage: 'reaction', priority: 0, enabled: ctx => ctx.request.targetUnitId === ctx.unit.id,
+  const target = ({ ...unit(1), vitality: setHook(unit(1).vitality, { id: 'retaliation', stage: 'reaction', priority: 0, enabled: ctx => ctx.request.targetUnitId === ctx.unit.id,
     invoke: (state, ctx, input) => {
       const damage = resources.settleDamage(state, { sourceUnitId: 1, targetUnitId: 0, tick: ctx.tick, damageType: 'TRUE', operands: createDamageOperands(10) }, ctx.call);
       return { state: damage.state, value: undefined };
     },
-  });
+  }) });
   const result = start(battle(source, target), compileAction(source.definition.action.normalAction, resources), resources);
   assert.equal(getUnit(result, 0), undefined);
   assert.equal(getUnit(result, 1).vitality.hp, 90);

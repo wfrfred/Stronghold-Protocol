@@ -43,7 +43,7 @@ test("Buff contribution integration: the native Astesia DEF facet merges layers,
     );
     let starts = 0;
     const output = {
-        set: setDefenseContribution,
+        capability: "defense", set: setDefenseContribution,
         remove: removeDefenseContribution,
         value: (instance) => {
             const value = compiled.sample({
@@ -152,7 +152,7 @@ test("Buff contribution integration: only effective layer growth resamples the r
         ]),
     );
     const output = {
-        set: setAttackContribution,
+        capability: "offense", set: setAttackContribution,
         remove: removeAttackContribution,
         value: (instance) => [
             compiled.sample({

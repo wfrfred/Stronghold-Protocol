@@ -54,20 +54,23 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
         id: "post-launch-attack-boost",
         initialize: () => ({}),
         onEnable: (state, context) => {
-            return updateUnit(
-                state,
-                setAttackContribution(context.unit, {
+            return updateUnit(state, {
+                ...context.unit,
+                offense: setAttackContribution(context.unit.offense, {
                     id: `@effect/${context.self.id}/attack`,
                     value: [modifier.create({ addition: 60 })],
                     group: { id: "demo-attack-boost", priority: 1 },
                 }),
-            );
+            });
         },
         onDisable: (state, context) => {
-            return updateUnit(
-                state,
-                removeAttackContribution(context.unit, `@effect/${context.self.id}/attack`),
-            );
+            return updateUnit(state, {
+                ...context.unit,
+                offense: removeAttackContribution(
+                    context.unit.offense,
+                    `@effect/${context.self.id}/attack`,
+                ),
+            });
         },
     };
     const contactRange: RangeGeometry = Object.freeze({

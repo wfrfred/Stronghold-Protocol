@@ -95,7 +95,7 @@ test("damage pipeline: dynamic low HP attack reads current state and stable prio
         "low-hp",
         {},
         {
-            set: setAttackContribution,
+            capability: "offense", set: setAttackContribution,
             remove: removeAttackContribution,
             dynamic: true,
             value: (_self, { unit }) =>
@@ -174,7 +174,7 @@ test("damage pipeline: resistance contributions clamp before penetration", () =>
         "resistance",
         {},
         {
-            set: setResistanceContribution,
+            capability: "defense", set: setResistanceContribution,
             remove: removeResistanceContribution,
             value: () => [modifier.create({ finalAddition: 70 })],
         },
@@ -281,7 +281,7 @@ test("damage pipeline: Contribution groups and Effect groups have separate respo
         "attack",
         {},
         {
-            set: setAttackContribution,
+            capability: "offense", set: setAttackContribution,
             remove: removeAttackContribution,
             group: { id: "shared", priority: 100 },
             value: () => [modifier.create({ multiplier: 1 })],

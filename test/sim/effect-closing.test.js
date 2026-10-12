@@ -248,7 +248,7 @@ test("effect lifetimes: terminal hook cleanup cannot recreate a host killed by a
             onInstall(state, context) {
                 return updateUnit(
                     state,
-                    setHook(context.unit, {
+                    ({ ...context.unit, vitality: setHook(context.unit.vitality, {
                         id: "parent-hook",
                         stage: "reaction",
                         priority: 0,
@@ -256,14 +256,14 @@ test("effect lifetimes: terminal hook cleanup cannot recreate a host killed by a
                         invoke(state) {
                             return { state, value: {} };
                         },
-                    }),
+                    }) }),
                 );
             },
             onEnd(state, context) {
                 const host = getUnit(state, context.ref.unitId);
                 return host === undefined
                     ? state
-                    : updateUnit(state, removeHook(host, "parent-hook"));
+                    : updateUnit(state, ({ ...host, vitality: removeHook(host.vitality, "parent-hook") }));
             },
         },
     );

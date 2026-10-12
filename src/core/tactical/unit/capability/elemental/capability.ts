@@ -5,13 +5,7 @@ import {
     assertPositiveNumber,
     assertPositiveSafeInteger,
 } from "../../../../common/assert.js";
-import {
-    widenUnit,
-    type StableUnit,
-    type Unit,
-    type UnitDefinition,
-    type UnitId,
-} from "../../unit.js";
+import type { Unit, UnitDefinition, UnitId } from "../../unit.js";
 
 export const ELEMENT_TYPES = Object.freeze(["NEURAL", "EROSION", "BURN", "NECROSIS"] as const);
 
@@ -46,6 +40,7 @@ export interface ElementalState {
 }
 
 export interface Elemental {
+    readonly definition: { readonly elemental: ElementalDefinition };
     readonly elemental: ElementalState;
 }
 
@@ -56,9 +51,7 @@ export interface ElementalUnitDefinition extends UnitDefinition {
 export type ElementalUnit<D extends ElementalUnitDefinition = ElementalUnitDefinition> = Unit<D> &
     Elemental;
 
-export function hasElemental<U extends Unit>(
-    unit: U,
-): unit is U & ElementalUnit<U["definition"] & ElementalUnitDefinition> {
+export function hasElemental<U extends Unit>(unit: U): unit is U & Elemental {
     return "elemental" in unit && "elemental" in unit.definition;
 }
 
@@ -120,18 +113,6 @@ export function initializeElementalState(
     };
 }
 
-export function setElementalImmunity<U extends Unit>(
-    input: U | StableUnit<U>,
-    immune: boolean,
-): StableUnit<U> {
-    const unit = widenUnit<U>(input);
-
-    if (!hasElemental(unit)) {
-        throw new TypeError("element immunity requires Elemental capability");
-    }
-    if (unit.elemental.immune === immune) {
-        return unit;
-    }
-
-    return { ...unit, elemental: { ...unit.elemental, immune } };
+export function setElementalImmunity(state: ElementalState, immune: boolean): ElementalState {
+    return state.immune === immune ? state : { ...state, immune };
 }

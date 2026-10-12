@@ -29,19 +29,22 @@ export function compileArknightsAttackBuffSkill(value: unknown, level: number): 
         id: `skill/${parsed.definition.id}/${level}/attack`,
         initialize: () => ({ attackIncrease }),
         onEnable: (state, context) => {
-            return updateUnit(
-                state,
-                setAttackContribution(context.unit, {
+            return updateUnit(state, {
+                ...context.unit,
+                offense: setAttackContribution(context.unit.offense, {
                     id: `@effect/${context.self.id}/attack`,
                     value: [modifier.create({ multiplier: context.self.data.attackIncrease })],
                 }),
-            );
+            });
         },
         onDisable: (state, context) => {
-            return updateUnit(
-                state,
-                removeAttackContribution(context.unit, `@effect/${context.self.id}/attack`),
-            );
+            return updateUnit(state, {
+                ...context.unit,
+                offense: removeAttackContribution(
+                    context.unit.offense,
+                    `@effect/${context.self.id}/attack`,
+                ),
+            });
         },
     };
 

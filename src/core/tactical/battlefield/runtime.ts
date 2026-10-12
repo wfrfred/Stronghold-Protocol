@@ -1,5 +1,5 @@
 import { createNavigationFieldCache } from "./navigation/cache.js";
-import type { StableUnit, Unit } from "../unit/unit.js";
+import type { Unit } from "../unit/unit.js";
 import type {
     Battlefield,
     BattlefieldChange,
@@ -12,7 +12,7 @@ import { view } from "./view.js";
 
 export class BattlefieldRuntime<U extends Unit = Unit> {
     readonly #fieldCache = createNavigationFieldCache();
-    readonly #views = new WeakMap<State<U>, BattlefieldView<StableUnit<U>>>();
+    readonly #views = new WeakMap<State<U>, BattlefieldView<U>>();
 
     #state: State<U>;
     #draft: State<U>;
@@ -26,7 +26,7 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
         return new BattlefieldRuntime<U>(create<U>(options));
     }
 
-    snapshot(version: "state" | "draft"): BattlefieldView<StableUnit<U>> {
+    snapshot(version: "state" | "draft"): BattlefieldView<U> {
         const state = version === "state" ? this.#state : this.#draft;
         let snapshot = this.#views.get(state);
 
@@ -38,9 +38,7 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
         return snapshot;
     }
 
-    advance(
-        changes: readonly BattlefieldChange<StableUnit<U>>[],
-    ): BattlefieldChangeResult<StableUnit<U>> {
+    advance(changes: readonly BattlefieldChange<U>[]): BattlefieldChangeResult<U> {
         const result = transition<U>(this.#draft, changes);
         this.#draft = result.state;
 
@@ -58,6 +56,6 @@ export class BattlefieldRuntime<U extends Unit = Unit> {
 
 export function createBattlefieldRuntime<U extends Unit = Unit>(
     options: BattlefieldRuntimeOptions,
-): Battlefield<StableUnit<U>> {
+): Battlefield<U> {
     return BattlefieldRuntime.create<U>(options);
 }

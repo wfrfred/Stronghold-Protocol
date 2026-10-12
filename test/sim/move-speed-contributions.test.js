@@ -159,7 +159,7 @@ function harness({ speed = 0.25, minimum = 0, definition = route(), maps } = {})
 }
 
 const output = {
-    set: setMoveSpeedContribution,
+    capability: "locomotion", set: setMoveSpeedContribution,
     remove: removeMoveSpeedContribution,
     value: (instance) => [instance.data.value],
 };
@@ -346,7 +346,7 @@ test("move speed: live contributions read phase facts without storing final spee
         "live-move",
         {},
         {
-            set: setMoveSpeedContribution,
+            capability: "locomotion", set: setMoveSpeedContribution,
             remove: removeMoveSpeedContribution,
             dynamic: true,
             value: (_, { unit, battlefield }) => {

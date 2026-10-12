@@ -19,10 +19,11 @@ test("direct Effect definitions type host capabilities, private state and immuta
 import { initializeUnit } from ${module("unit/initialize")};
 import type { Unit } from ${module("unit/unit")};
 import type { BattleState } from ${module("battle/state")};
-import type { Vitality, VitalityState } from ${module("unit/capability/vitality/capability")};
+import type { Vitality } from ${module("unit/capability/vitality/capability")};
 import { setMaxHpContribution } from ${module("unit/capability/vitality/capability")};
-import { setAttackContribution } from ${module("unit/capability/offense/capability")};
-import { setCapacityContribution } from ${module("unit/capability/blocking/capability")};
+import { setAttackContribution, type Offense } from ${module("unit/capability/offense/capability")};
+import { setCapacityContribution, type Blocker } from ${module("unit/capability/blocking/capability")};
+import { setMoveSpeedContribution, type RoutedLocomotion, type RouteControlState } from ${module("unit/capability/locomotion/capability")};
 import type { Context, Definition } from ${module("unit/effect/definition")};
 import { install, replaceEffect, get } from ${module("unit/effect/operations")};
 import { setData, type Effect } from ${module("unit/effect/effect")};
@@ -95,19 +96,40 @@ for(const stored of mixed.values()){
 }
 // @ts-expect-error an ID alone cannot claim a private data type.
 host.effects.get<{charges:number},Vitality>(0);
-declare const capabilityHost:Unit & Vitality & {readonly tag:'kept';readonly vitality:VitalityState & {readonly hp:100}};
+declare const capabilityHost:Unit & Vitality & Offense & Blocker & RoutedLocomotion;
 const fixed:Contribution={id:'fixed',value:[]};
 const dynamic:Contribution<Input<QueryContext>>={id:'dynamic',value:()=>[]};
-const changed=setMaxHpContribution(capabilityHost,fixed);
-const retained:'kept'=changed.tag;
+const vitality=setMaxHpContribution(capabilityHost.definition.vitality,capabilityHost.vitality,fixed);
+const changed={...capabilityHost,vitality};
 const hp:number=changed.vitality.hp;
-// @ts-expect-error state setters widen changed values.
-const staleHp:100=changed.vitality.hp;
-setAttackContribution(capabilityHost,dynamic);
+const attack:number=changed.definition.offense.attack;
+const maxHp:number=changed.definition.vitality.maxHp;
+const retainedRoute:RouteControlState=changed.locomotion.mainRoute;
+setAttackContribution(capabilityHost.offense,dynamic);
 // @ts-expect-error MaxHP cannot coordinate HP from a query-time closure.
-setMaxHpContribution(capabilityHost,dynamic);
+setMaxHpContribution(capabilityHost.definition.vitality,capabilityHost.vitality,dynamic);
 // @ts-expect-error blocking capacity requires settled static values.
-setCapacityContribution(capabilityHost,dynamic);
+setCapacityContribution(capabilityHost.blocker,dynamic);
+const movement={
+ ...capabilityHost.locomotion,
+ ...setMoveSpeedContribution(capabilityHost.locomotion,dynamic),
+};
+const mainRoute:RouteControlState=movement.mainRoute;
+const crossCapability:Definition<{bonus:number},Vitality & Offense>={
+ id:'low-hp-attack',initialize:()=>({bonus:10}),
+ onEnable(state,context){
+  const hp:number=context.unit.vitality.hp;
+  const maxHp:number=context.unit.definition.vitality.maxHp;
+  const attack:number=context.unit.definition.offense.attack;
+  const offense=setAttackContribution(context.unit.offense,fixed);
+  const host:Unit & Vitality & Offense={...context.unit,offense};
+  return state;
+ },
+};
+const combined=initializeUnit({id:3,position:[0,0],definition:{id:'combined',vitality:{maxHp:100},offense:{attack:20}}});
+install(battle,combined,crossCapability);
+// @ts-expect-error the concrete Effect requires both capability pairs.
+install(battle,host,crossCapability);
 `,
     );
     try {

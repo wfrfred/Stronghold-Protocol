@@ -222,21 +222,25 @@ test("attribute modifiers: native Mire percentages affect existing ASPD and norm
         {
             onEnable(state, ctx) {
                 const id = `${ctx.ref.effectId}`;
-                return transitionUnit(state, ctx.ref.unitId, (unit) =>
-                    setMoveSpeedContribution(
-                        setAttackSpeedContribution(unit, {
-                            id,
-                            value: [sampled.get("ATTACK_SPEED")],
-                        }),
-                        { id, value: [sampled.get("MOVE_SPEED")] },
-                    ),
-                );
+                return transitionUnit(state, ctx.ref.unitId, (unit) => ({
+                    ...unit,
+                    action: setAttackSpeedContribution(unit.action, {
+                        id,
+                        value: [sampled.get("ATTACK_SPEED")],
+                    }),
+                    locomotion: setMoveSpeedContribution(unit.locomotion, {
+                        id,
+                        value: [sampled.get("MOVE_SPEED")],
+                    }),
+                }));
             },
             onDisable(state, ctx) {
                 const id = `${ctx.ref.effectId}`;
-                return transitionUnit(state, ctx.ref.unitId, (unit) =>
-                    removeMoveSpeedContribution(removeAttackSpeedContribution(unit, id), id),
-                );
+                return transitionUnit(state, ctx.ref.unitId, (unit) => ({
+                    ...unit,
+                    action: removeAttackSpeedContribution(unit.action, id),
+                    locomotion: removeMoveSpeedContribution(unit.locomotion, id),
+                }));
             },
         },
     );
@@ -302,7 +306,7 @@ test("attribute modifiers: inspiration samples belong to the Effect input and re
         parseAttributeModifiers(raw.node._buff.attributes.attributeModifiers),
     );
     const output = {
-        set: setAttackContribution,
+        capability: "offense", set: setAttackContribution,
         remove: removeAttackContribution,
         value: (instance) => [
             compiled.sample(
@@ -317,7 +321,7 @@ test("attribute modifiers: inspiration samples belong to the Effect input and re
         "source-amplification",
         {},
         {
-            set: setAttackContribution,
+            capability: "offense", set: setAttackContribution,
             remove: removeAttackContribution,
             value: () => [modifier.create({ multiplier: 1 })],
         },

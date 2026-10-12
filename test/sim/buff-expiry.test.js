@@ -121,7 +121,7 @@ function harness({ stackCount = 3, maxValidStackCnt = -1 } = {}) {
         return { sourceAttack, stackCount: policy.validStackCount(count) };
     };
     const output = {
-        set: setAttackContribution,
+        capability: "offense", set: setAttackContribution,
         remove: removeAttackContribution,
         value: (current) => [
             compiled.sample({

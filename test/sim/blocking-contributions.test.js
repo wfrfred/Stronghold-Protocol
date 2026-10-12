@@ -75,7 +75,7 @@ const enemy = (id, weight = 1) =>
 const capacityOf = (unit) => resolveBlockingCapacity(unit.definition.blocker, unit.blocker);
 const capacity = (work) => capacityOf(getUnit(work, 0));
 const output = (value) => ({
-    set: setCapacityContribution,
+    capability: "blocker", set: setCapacityContribution,
     remove: removeCapacityContribution,
     value,
 });
@@ -362,10 +362,13 @@ test("blocking capacity: replacing contribution entries without changing the res
     const h = battlefield([blocker(), enemy(1)]);
     const before = h.state;
     const owner = before.units.get(0);
-    const changed = setCapacityContribution(
-        setCapacityContribution(owner, entry("positive", modifier.create({ addition: 1 }))),
-        entry("negative", modifier.create({ addition: -1 })),
-    );
+    const changed = {
+        ...owner,
+        blocker: setCapacityContribution(
+            setCapacityContribution(owner.blocker, entry("positive", modifier.create({ addition: 1 }))),
+            entry("negative", modifier.create({ addition: -1 })),
+        ),
+    };
     assert.notEqual(changed.blocker.capacity, owner.blocker.capacity);
     assert.equal(capacityOf(changed), capacityOf(owner));
     const result = h.commit([{ type: "UPDATE_UNIT", unit: changed }]);
@@ -380,10 +383,7 @@ test("blocking capacity: replacing contribution entries without changing the res
     assert.equal(h.state.blockingRelations, before.blockingRelations);
     assert.equal(h.state.spatial, before.spatial);
     assert.equal(h.state.navigationMaps, before.navigationMaps);
-    const refreshed = setCapacityContribution(
-        h.state.units.get(0),
-        entry("positive", modifier.create({ addition: 1.1 })),
-    );
+    const refreshed = ({ ...h.state.units.get(0), blocker: setCapacityContribution(h.state.units.get(0).blocker, entry("positive", modifier.create({ addition: 1.1 }))) });
     assert.equal(capacityOf(refreshed), 3);
     assert.equal(h.commit([{ type: "UPDATE_UNIT", unit: refreshed }]).dependencies.blocking, false);
 });

@@ -2,7 +2,7 @@ import type { QueryContext } from "../../query.js";
 import { assertNonnegativeNumber } from "../../../../common/assert.js";
 import * as contribution from "../../contribution/contribution.js";
 import * as modifier from "../../contribution/value.js";
-import { widenUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
+import type { Unit, UnitDefinition } from "../../unit.js";
 
 export interface DefenseDefinition {
     readonly defense: number;
@@ -15,6 +15,9 @@ export interface DefenseState {
 }
 
 export interface Defense {
+    readonly definition: {
+        readonly defense: DefenseDefinition;
+    };
     readonly defense: DefenseState;
 }
 
@@ -22,9 +25,7 @@ export interface DefendedUnitDefinition extends UnitDefinition {
     readonly defense: DefenseDefinition;
 }
 
-export function hasDefense<U extends Unit>(
-    unit: U,
-): unit is U & Defense & Unit<U["definition"] & DefendedUnitDefinition> {
+export function hasDefense<U extends Unit>(unit: U): unit is U & Defense {
     return "defense" in unit && "defense" in unit.definition;
 }
 
@@ -64,52 +65,26 @@ function updateContributions(
     return updated === current ? state : { ...state, [parameter]: updated };
 }
 
-function changeContributions<U extends Unit>(
-    input: U | StableUnit<U>,
-    parameter: keyof DefenseState,
-    transition: (entries: DefenseState["defense"]) => DefenseState["defense"],
-): StableUnit<U> {
-    const unit = widenUnit<U>(input);
-
-    if (!hasDefense(unit)) {
-        throw new TypeError("defense contributions require Defense capability");
-    }
-
-    const defense = updateContributions(unit.defense, parameter, transition);
-
-    return defense === unit.defense ? unit : { ...unit, defense };
-}
-
-export function setDefenseContribution<U extends Unit>(
-    unit: U | StableUnit<U>,
+export function setDefenseContribution(
+    state: DefenseState,
     entry: contribution.Contribution<contribution.Input<QueryContext>>,
-): StableUnit<U> {
-    return changeContributions<U>(unit, "defense", (entries) => contribution.set(entries, entry));
+): DefenseState {
+    return updateContributions(state, "defense", (entries) => contribution.set(entries, entry));
 }
 
-export function removeDefenseContribution<U extends Unit>(
-    unit: U | StableUnit<U>,
-    id: string,
-): StableUnit<U> {
-    return changeContributions<U>(unit, "defense", (entries) => contribution.remove(entries, id));
+export function removeDefenseContribution(state: DefenseState, id: string): DefenseState {
+    return updateContributions(state, "defense", (entries) => contribution.remove(entries, id));
 }
 
-export function setResistanceContribution<U extends Unit>(
-    unit: U | StableUnit<U>,
+export function setResistanceContribution(
+    state: DefenseState,
     entry: contribution.Contribution<contribution.Input<QueryContext>>,
-): StableUnit<U> {
-    return changeContributions<U>(unit, "resistance", (entries) =>
-        contribution.set(entries, entry),
-    );
+): DefenseState {
+    return updateContributions(state, "resistance", (entries) => contribution.set(entries, entry));
 }
 
-export function removeResistanceContribution<U extends Unit>(
-    unit: U | StableUnit<U>,
-    id: string,
-): StableUnit<U> {
-    return changeContributions<U>(unit, "resistance", (entries) =>
-        contribution.remove(entries, id),
-    );
+export function removeResistanceContribution(state: DefenseState, id: string): DefenseState {
+    return updateContributions(state, "resistance", (entries) => contribution.remove(entries, id));
 }
 
 export function resolveDefenseParameters(

@@ -1,7 +1,7 @@
 import { emptyCall, type CallContext } from "../../../../battle/execution/call.js";
 import { hasStatusFlag } from "../../status/capability.js";
-import { hasVitality, resolveVitalityMaxHp, type VitalUnit } from "../capability.js";
-import { widenUnit, type StableUnit, type UnitId } from "../../../unit.js";
+import { hasVitality, resolveVitalityMaxHp, type Vitality } from "../capability.js";
+import type { Unit, UnitId } from "../../../unit.js";
 import type { Hook as RegisteredHook } from "../../../hook/hook.js";
 import { resolveMaxHp } from "../query.js";
 import { hookScope, type Result } from "../hook.js";
@@ -23,37 +23,32 @@ import {
     type Result as Settlement,
 } from "../../../../battle/state.js";
 
-function applyHealingValue<U extends VitalUnit>(
-    unit: U | StableUnit<U>,
-    power: number,
-    maxHp: number,
-): HealingResult<U> {
+function applyHealingValue(unit: Unit & Vitality, power: number, maxHp: number): HealingResult {
     const amount = Math.max(0, Math.min(power, maxHp - unit.vitality.hp));
 
     return {
-        unit: widenUnit<U>(
+        unit:
             amount === 0
                 ? unit
                 : { ...unit, vitality: { ...unit.vitality, hp: unit.vitality.hp + amount } },
-        ),
         amount,
     };
 }
 
-export function healUnit<U extends VitalUnit>(
-    unit: U | StableUnit<U>,
+export function healUnit(
+    unit: Unit & Vitality,
     power: number,
     ignoreHealFree = false,
     maxHp = resolveVitalityMaxHp(unit.definition.vitality, unit.vitality),
-): HealingResult<U> {
+): HealingResult {
     assertNonnegativeNumber(power, "healing amount");
     assertNonnegativeNumber(maxHp, "healing maximum HP");
 
     if (unit.vitality.hp <= 0 || (!ignoreHealFree && hasStatusFlag(unit, "HEAL_FREE"))) {
-        return { unit: widenUnit<U>(unit), amount: 0 };
+        return { unit, amount: 0 };
     }
 
-    return applyHealingValue<U>(unit, power, maxHp);
+    return applyHealingValue(unit, power, maxHp);
 }
 
 export function resolveHealing(

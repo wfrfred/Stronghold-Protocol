@@ -10,6 +10,7 @@ export interface SpatialDefinition {
 export type SpatialState = SpatialDefinition;
 
 export interface Spatial {
+    readonly definition: { readonly spatial: SpatialDefinition };
     readonly spatial: SpatialState;
 }
 
@@ -24,6 +25,7 @@ export interface HitDefinition {
 export type HitState = HitDefinition;
 
 export interface Hit {
+    readonly definition: { readonly hit: HitDefinition };
     readonly hit: HitState;
 }
 
@@ -31,15 +33,11 @@ export interface HitUnitDefinition extends UnitDefinition {
     readonly hit: HitDefinition;
 }
 
-export function hasSpatial<U extends Unit>(
-    unit: U,
-): unit is U & Spatial & Unit<U["definition"] & SpatialUnitDefinition> {
+export function hasSpatial<U extends Unit>(unit: U): unit is U & Spatial {
     return "spatial" in unit && "spatial" in unit.definition;
 }
 
-export function hasHit<U extends Unit>(
-    unit: U,
-): unit is U & Hit & Unit<U["definition"] & HitUnitDefinition> {
+export function hasHit<U extends Unit>(unit: U): unit is U & Hit {
     return "hit" in unit && "hit" in unit.definition;
 }
 

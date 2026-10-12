@@ -124,7 +124,7 @@ test('projectile runtime: live source attack, cached-only attack and missing-sou
     const cached = program(resources, { id: 'cached', cachedOnly: true });
     let state = launch(battle(unit(0), unit(1)), resources, live).state;
     state = launch(state, resources, cached).state;
-    state = updateUnit(state, setAttackContribution(getUnit(state, 0), { id: 'bonus', value: [modifier({ addition: 10 })] }));
+    state = updateUnit(state, ({ ...getUnit(state, 0), offense: setAttackContribution(getUnit(state, 0).offense, { id: 'bonus', value: [modifier({ addition: 10 })] }) }));
     if (missing) state = removeUnit(state, 0, 'RETREAT');
     const arrived = advanceProjectiles(state, resources, 1);
     assert.deepEqual(damageEvents(arrived).map(event => event.amount), missing ? [10, 10] : [20, 10]);

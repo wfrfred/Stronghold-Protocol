@@ -2,7 +2,7 @@ import { emptyCall, type CallContext } from "../../../../battle/execution/call.j
 import { hasDefenseDefinition, type DefenseDefinition } from "../../defense/capability.js";
 import { hasElemental } from "../../elemental/capability.js";
 import { hasVitality, type Vitality } from "../capability.js";
-import { widenUnit, type StableUnit, type Unit, type UnitId } from "../../../unit.js";
+import type { Unit, UnitId } from "../../../unit.js";
 import { hasStatusFlag } from "../../status/capability.js";
 import { resolveDefense } from "../../defense/query.js";
 import { assertFiniteNumber, assertNonnegativeNumber } from "../../../../../common/assert.js";
@@ -38,8 +38,8 @@ export interface Resources {
 
 const NO_DEFENSE: DefenseDefinition = Object.freeze({ defense: 0, resistance: 0 });
 
-export interface DamageResult<U extends Unit & Vitality> {
-    readonly unit: StableUnit<U>;
+export interface DamageResult {
+    readonly unit: Unit & Vitality;
     readonly amount: number;
     readonly killed: boolean;
 }
@@ -68,11 +68,11 @@ export function calculateDamage(
     }
 }
 
-export function damageUnit<U extends Unit & Vitality>(
-    unit: U | StableUnit<U>,
+export function damageUnit(
+    unit: Unit & Vitality,
     power: number,
     damageType: DamageType,
-): DamageResult<U> {
+): DamageResult {
     const defense = hasDefenseDefinition(unit.definition) ? unit.definition.defense : NO_DEFENSE;
     const formulaDamage = calculateDamage(
         power,
@@ -92,7 +92,7 @@ export function damageUnit<U extends Unit & Vitality>(
     const amount = unit.vitality.hp - hp;
 
     return {
-        unit: widenUnit<U>(amount === 0 ? unit : { ...unit, vitality: { ...unit.vitality, hp } }),
+        unit: amount === 0 ? unit : { ...unit, vitality: { ...unit.vitality, hp } },
         amount,
         killed: unit.vitality.hp > 0 && hp === 0,
     };

@@ -1,7 +1,7 @@
 import type { CallContext } from "../../../../battle/execution/call.js";
-import type { StableUnit, UnitId } from "../../../unit.js";
+import type { Unit, UnitId } from "../../../unit.js";
 import type { BattleState, Result } from "../../../../battle/state.js";
-import type { VitalUnit } from "../capability.js";
+import type { Vitality } from "../capability.js";
 
 export interface HealingRequest {
     readonly tick: number;
@@ -27,8 +27,8 @@ export interface HealingReport {
     readonly cancellation: HealingCancellation | null;
 }
 
-export interface HealingResult<U extends VitalUnit> {
-    readonly unit: StableUnit<U>;
+export interface HealingResult {
+    readonly unit: Unit & Vitality;
     readonly amount: number;
 }
 

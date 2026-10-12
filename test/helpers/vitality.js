@@ -47,7 +47,11 @@ export function setSelf(state, context, self, next) {
     const current = unit && unit.effects.get(self.id, self.definition);
     return current === undefined
         ? state
-        : effects.replaceEffect(state, { type: "EFFECT", unitId: unit.id, effectId: (current).id }, setData(current, next));
+        : effects.replaceEffect(
+              state,
+              { type: "EFFECT", unitId: unit.id, effectId: current.id },
+              setData(current, next),
+          );
 }
 
 export function current(state, context, self) {
@@ -62,13 +66,17 @@ function hookEffect(domain, id, initial, entries, callbacks = {}) {
         onInstall(state, context) {
             state = transitionUnit(state, context.ref.unitId, (unit) =>
                 entries.reduce(
-                    (unit, entry, index) =>
-                        domain.setHook(unit, {
+                    (unit, entry, index) => ({
+                        ...unit,
+                        vitality: domain.setHook(unit.vitality, {
                             id: `${context.ref.unitId}:${context.ref.effectId}:${index}`,
                             stage: entry.stage,
                             priority: entry.priority ?? 0,
                             enabled(invocation) {
-                                const self = invocation.unit.effects.get(context.ref.effectId, content);
+                                const self = invocation.unit.effects.get(
+                                    context.ref.effectId,
+                                    content,
+                                );
                                 return (
                                     self?.status === "ACTIVE" &&
                                     (entry.enabled?.(invocation, self) ?? true)
@@ -83,6 +91,7 @@ function hookEffect(domain, id, initial, entries, callbacks = {}) {
                                 );
                             },
                         }),
+                    }),
                     unit,
                 ),
             );
@@ -91,11 +100,13 @@ function hookEffect(domain, id, initial, entries, callbacks = {}) {
         onEnd(state, context) {
             state = transitionUnit(state, context.ref.unitId, (unit) =>
                 entries.reduce(
-                    (unit, _entry, index) =>
-                        domain.removeHook(
-                            unit,
+                    (unit, _entry, index) => ({
+                        ...unit,
+                        vitality: domain.removeHook(
+                            unit.vitality,
                             `${context.ref.unitId}:${context.ref.effectId}:${index}`,
                         ),
+                    }),
                     unit,
                 ),
             );
@@ -177,9 +188,9 @@ export function statusEffect(id, flags) {
 }
 
 export function stateOf(battle, unitId, content) {
-    return getUnit(battle, unitId).effects.values().find(
-        (instance) => instance.definition === content,
-    )?.data;
+    return getUnit(battle, unitId)
+        .effects.values()
+        .find((instance) => instance.definition === content)?.data;
 }
 
 export const view = battlefieldView;

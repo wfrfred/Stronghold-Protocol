@@ -1,4 +1,4 @@
-import type { StableUnit, Unit } from "../unit/unit.js";
+import type { Unit } from "../unit/unit.js";
 import type {
     BattlefieldChange,
     BattlefieldChangeResult,
@@ -14,14 +14,14 @@ import {
     type BattlefieldState,
 } from "./storage/state.js";
 
-export interface State<U extends Unit = Unit> extends BattlefieldState<StableUnit<U>> {
+export interface State<U extends Unit = Unit> extends BattlefieldState<U> {
     readonly map: BattlefieldMap;
     readonly baseline: NavigationMaps;
 }
 
 export interface Result<U extends Unit = Unit> {
     readonly state: State<U>;
-    readonly facts: BattlefieldChangeResult<StableUnit<U>>;
+    readonly facts: BattlefieldChangeResult<U>;
 }
 
 export function create<U extends Unit = Unit>(options: BattlefieldRuntimeOptions): State<U> {
@@ -33,13 +33,13 @@ export function create<U extends Unit = Unit>(options: BattlefieldRuntimeOptions
     return {
         map: options.map,
         baseline,
-        ...createBattlefieldState<StableUnit<U>>(options.map, baseline),
+        ...createBattlefieldState<U>(options.map, baseline),
     };
 }
 
 export function transition<U extends Unit>(
     previous: State<U>,
-    changes: readonly BattlefieldChange<StableUnit<U>>[],
+    changes: readonly BattlefieldChange<U>[],
 ): Result<U> {
     const applied = applyBattlefieldChanges<U>(previous, changes);
     const settled = settleBattlefieldState<U>(

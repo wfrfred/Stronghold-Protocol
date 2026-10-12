@@ -31,14 +31,14 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, program } = {}) {
   });
   const buff = attackBuff("runtime-ammo-attack", 100, {
     onInstall: (state, context) => {
-      if (interrupt) state = transitionUnit(state, context.unit.id, current => setBeforeReleaseHook(current, {
+      if (interrupt) state = transitionUnit(state, context.unit.id, current => ({ ...current, action: setBeforeReleaseHook(current.action, {
         id: "ammo-interrupt", enabled: () => true,
         invoke: state => ({ state, value: { type: "INTERRUPT", recoveryTicks: 15 } }),
-      }));
+      }) }));
       return state;
     },
     onEnd: (state, context) => {
-      if (interrupt) state = transitionUnit(state, context.unit.id, current => removeBeforeReleaseHook(current, "ammo-interrupt"));
+      if (interrupt) state = transitionUnit(state, context.unit.id, current => ({ ...current, action: removeBeforeReleaseHook(current.action, "ammo-interrupt") }));
       return state;
     },
   });

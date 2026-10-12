@@ -5,7 +5,7 @@ import {
 import { createBlockGeometry, type BlockGeometry } from "../../../geometry/shape.js";
 import * as contribution from "../../contribution/contribution.js";
 import * as modifier from "../../contribution/value.js";
-import { widenUnit, type StableUnit, type Unit, type UnitDefinition } from "../../unit.js";
+import type { Unit, UnitDefinition } from "../../unit.js";
 
 export interface BlockerDefinition {
     readonly capacity: number;
@@ -19,6 +19,9 @@ export interface BlockerState {
 }
 
 export interface Blocker {
+    readonly definition: {
+        readonly blocker: BlockerDefinition;
+    };
     readonly blocker: BlockerState;
 }
 
@@ -36,6 +39,9 @@ export interface BlockableState {
 }
 
 export interface Blockable {
+    readonly definition: {
+        readonly blockable: BlockableDefinition;
+    };
     readonly blockable: BlockableState;
 }
 
@@ -43,15 +49,11 @@ export interface BlockableUnitDefinition extends UnitDefinition {
     readonly blockable: BlockableDefinition;
 }
 
-export function hasBlocker<U extends Unit>(
-    unit: U,
-): unit is U & Blocker & Unit<U["definition"] & BlockingUnitDefinition> {
+export function hasBlocker<U extends Unit>(unit: U): unit is U & Blocker {
     return "blocker" in unit && "blocker" in unit.definition;
 }
 
-export function hasBlockable<U extends Unit>(
-    unit: U,
-): unit is U & Blockable & Unit<U["definition"] & BlockableUnitDefinition> {
+export function hasBlockable<U extends Unit>(unit: U): unit is U & Blockable {
     return "blockable" in unit && "blockable" in unit.definition;
 }
 
@@ -82,37 +84,26 @@ export function initializeBlockableState(definition: BlockableDefinition): Block
     return { weight: definition.weight, enabled: true };
 }
 
-function changeCapacityContributions<U extends Unit>(
-    input: U | StableUnit<U>,
+function changeCapacityContributions(
+    state: BlockerState,
     transition: (
         entries: readonly contribution.Contribution[],
     ) => readonly contribution.Contribution[],
-): StableUnit<U> {
-    const unit = widenUnit<U>(input);
+): BlockerState {
+    const capacity = transition(state.capacity);
 
-    if (!hasBlocker(unit)) {
-        throw new TypeError("blocking capacity contributions require Blocker capability");
-    }
-
-    const capacity = transition(unit.blocker.capacity);
-
-    return capacity === unit.blocker.capacity
-        ? unit
-        : { ...unit, blocker: { ...unit.blocker, capacity } };
+    return capacity === state.capacity ? state : { ...state, capacity };
 }
 
-export function setCapacityContribution<U extends Unit>(
-    unit: U | StableUnit<U>,
+export function setCapacityContribution(
+    state: BlockerState,
     entry: contribution.Contribution,
-): StableUnit<U> {
-    return changeCapacityContributions<U>(unit, (entries) => contribution.set(entries, entry));
+): BlockerState {
+    return changeCapacityContributions(state, (entries) => contribution.set(entries, entry));
 }
 
-export function removeCapacityContribution<U extends Unit>(
-    unit: U | StableUnit<U>,
-    id: string,
-): StableUnit<U> {
-    return changeCapacityContributions<U>(unit, (entries) => contribution.remove(entries, id));
+export function removeCapacityContribution(state: BlockerState, id: string): BlockerState {
+    return changeCapacityContributions(state, (entries) => contribution.remove(entries, id));
 }
 
 export function resolveBlockingCapacity(

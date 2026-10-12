@@ -52,7 +52,7 @@ type CapabilityKey = keyof CapabilityStates;
 
 type CapabilityState<K extends CapabilityKey> = CapabilityStates[K];
 
-export type WidenedCapabilityState<K extends CapabilityKey, S> = K extends "locomotion"
+type SelectedCapabilityState<K extends CapabilityKey, S> = K extends "locomotion"
     ? NonNullable<S> extends RoutedLocomotionState
         ? RoutedLocomotionState
         : CapabilityState<K>
@@ -60,7 +60,7 @@ export type WidenedCapabilityState<K extends CapabilityKey, S> = K extends "loco
 
 export type SelectedCapabilityStates<S extends object> = {
     readonly [K in keyof S as K extends CapabilityKey ? K : never]: K extends CapabilityKey
-        ? WidenedCapabilityState<K, S[K]>
+        ? SelectedCapabilityState<K, S[K]>
         : never;
 };
 

@@ -1,5 +1,5 @@
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
-import type { StableUnit, Unit, UnitId } from "../../unit/unit.js";
+import type { Unit, UnitId } from "../../unit/unit.js";
 import {
     assertUnitCapabilityComposition,
     assertUnitCapabilityPairing,
@@ -46,8 +46,8 @@ function copyOnWriteMap<K, V>(source: ReadonlyMap<K, V>) {
 }
 
 export function applyBattlefieldChanges<U extends Unit>(
-    previous: BattlefieldContent<StableUnit<U>>,
-    changes: readonly BattlefieldChange<StableUnit<U>>[],
+    previous: BattlefieldContent<U>,
+    changes: readonly BattlefieldChange<U>[],
 ) {
     const units = copyOnWriteMap(previous.units);
     const projectiles = copyOnWriteMap(previous.projectiles);
@@ -58,7 +58,7 @@ export function applyBattlefieldChanges<U extends Unit>(
     const removedUnits: {
         unitId: UnitId;
         reason: BattlefieldRemovalReason;
-        unit: StableUnit<U>;
+        unit: U;
     }[] = [];
     const registeredUnitIds: UnitId[] = [];
     const removedMechanisms: { mechanismId: MechanismId; reason: BattlefieldRemovalReason }[] = [];

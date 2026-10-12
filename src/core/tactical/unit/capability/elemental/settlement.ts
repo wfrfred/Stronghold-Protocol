@@ -3,7 +3,7 @@ import {
     assertNonnegativeNumber,
     assertNonnegativeSafeInteger,
 } from "../../../../common/assert.js";
-import { widenUnit, type StableUnit, type Unit, type UnitId } from "../../unit.js";
+import type { Unit, UnitId } from "../../unit.js";
 import {
     ELEMENT_TYPES,
     elementValues,
@@ -33,8 +33,8 @@ export interface ElementHealRequest {
     readonly tick: number;
 }
 
-export type ElementDamageResult<U extends Unit = Unit> = {
-    readonly unit: StableUnit<U>;
+export type ElementDamageResult = {
+    readonly unit: Unit;
 } & (
     | {
           readonly outcome: "REJECTED";
@@ -46,8 +46,8 @@ export type ElementDamageResult<U extends Unit = Unit> = {
     | { readonly outcome: "BURST"; readonly amount: number; readonly burst: ElementalBurst }
 );
 
-export type ElementHealResult<U extends Unit = Unit> = {
-    readonly unit: StableUnit<U>;
+export type ElementHealResult = {
+    readonly unit: Unit;
     readonly amount: number;
     readonly amounts: ElementValues;
 } & (
@@ -55,8 +55,8 @@ export type ElementHealResult<U extends Unit = Unit> = {
     | { readonly outcome: "APPLIED" }
 );
 
-export interface ElementalAdvanceResult<U extends Unit = Unit> {
-    readonly unit: StableUnit<U>;
+export interface ElementalAdvanceResult {
+    readonly unit: Unit;
     readonly recovered: boolean;
     readonly burst: ElementalBurst | null;
 }
@@ -77,12 +77,10 @@ function burstOf(unit: ElementalUnit, recovery: ElementalRecovery): ElementalBur
     });
 }
 
-export function receiveElementDamage<U extends Unit>(
-    input: U | StableUnit<U>,
+export function receiveElementDamage(
+    unit: Unit,
     request: ElementDamageRequest,
-): ElementDamageResult<U> {
-    const unit = widenUnit<U>(input);
-
+): ElementDamageResult {
     assertTick(unit, request.tick);
     assertNonnegativeNumber(request.power, "element damage power");
 
@@ -157,12 +155,7 @@ export function receiveElementDamage<U extends Unit>(
     };
 }
 
-export function receiveElementHeal<U extends Unit>(
-    input: U | StableUnit<U>,
-    request: ElementHealRequest,
-): ElementHealResult<U> {
-    const unit = widenUnit<U>(input);
-
+export function receiveElementHeal(unit: Unit, request: ElementHealRequest): ElementHealResult {
     assertTick(unit, request.tick);
     assertNonnegativeNumber(request.power, "element heal power");
 
@@ -207,12 +200,7 @@ export function receiveElementHeal<U extends Unit>(
     };
 }
 
-export function advanceElemental<U extends Unit>(
-    input: U | StableUnit<U>,
-    tick: number,
-): ElementalAdvanceResult<U> {
-    const unit = widenUnit<U>(input);
-
+export function advanceElemental(unit: Unit, tick: number): ElementalAdvanceResult {
     assertTick(unit, tick);
 
     if (!hasElemental(unit) || tick === unit.elemental.lastRecoveryTick) {

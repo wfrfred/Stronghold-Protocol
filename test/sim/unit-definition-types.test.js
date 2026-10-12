@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-test('archetype factories retain capability presence and widen only their normalized fields', async () => {
+test('definitions retain capability presence and initialization produces standard capability states', async () => {
   const { default: ts } = await import('typescript');
   const directory = mkdtempSync(join(tmpdir(), 'stronghold-unit-definition-types-'));
   const sourceModule = name => JSON.stringify(fileURLToPath(new URL(`../../src/core/tactical/${name}.js`, import.meta.url)));
@@ -16,7 +16,6 @@ import { createOperatorDefinition, initializeOperator, type OperatorDefinition }
 import { createEnemyDefinition, createCombatEnemyDefinition, type EnemyDefinition, type CombatEnemyDefinition } from ${sourceModule('unit/archetype/enemy')};
 import { initializeUnit, type InitializedUnit } from ${sourceModule('unit/initialize')};
 import { copyUnitSnapshot } from ${sourceModule('unit/snapshot')};
-import { widenUnit, type Unit, type StableUnit } from ${sourceModule('unit/unit')};
 import { selectCapabilityStates, type SelectedCapabilityStates } from ${sourceModule('unit/capability/catalog')};
 import type { OffenseDefinition, OffenseState } from ${sourceModule('unit/capability/offense/capability')};
 import type { SkillDefinition, SkillState } from ${sourceModule('unit/capability/skill/capability')};
@@ -69,10 +68,7 @@ declare const unionPrepared: { readonly locomotion: RoutedLocomotionState & { re
 const copiedUnion = selectCapabilityStates(unionPrepared);
 declare const routed: RoutedLocomotionState & { readonly moving: false };
 const preparedUnit = initializeUnit({ id: 7, definition: combatEnemy, position: [0, 0], states: { locomotion: routed } });
-type Narrow = Unit<{ readonly id: 'retained' }> & { readonly id: 8; readonly tag: 'retained'; readonly locomotion?: RoutedLocomotionState & { readonly moving: false }; readonly vitality: VitalityState & { readonly hp: 100 } };
-declare const narrow: Narrow;
-const widened = widenUnit(narrow);
-const snapshot = copyUnitSnapshot(narrow);
+const snapshot = copyUnitSnapshot(preparedUnit);
 `;
   const positive = `
 const offenseDefinitions: OffenseDefinition[] = [operator.offense, combatEnemy.offense];
@@ -89,15 +85,10 @@ const unionEnemyRuntime: InitializedUnit<CombatEnemyBase & { readonly offense: O
 const copiedComposition: { readonly locomotion: RoutedLocomotionState } | { readonly offense: OffenseState } = copiedUnion;
 const preparedRoute: RouteControlState = preparedUnit.locomotion.mainRoute;
 const requiredHp: number = copiedOptional.vitality.hp;
-const stable: StableUnit<Narrow> = widened;
-const retainedDefinitionId: 'retained' = widened.definition.id;
-const retainedId: 8 = widened.id;
-const retainedTag: 'retained' = widened.tag;
 if (optionalOperator.offense !== undefined) { const attack: number = optionalOperator.offense.attack; }
 if (optionalEnemy.skill !== undefined) { const id: string = optionalEnemy.skill.id; }
 if (optionalUnit.skill !== undefined) { const sp: number = optionalUnit.skill.sp; }
 if (copiedOptional.locomotion !== undefined) { const route: RouteControlState = copiedOptional.locomotion.mainRoute; }
-if (widened.locomotion !== undefined) { const route: RouteControlState = widened.locomotion.mainRoute; }
 if (snapshot.locomotion !== undefined) { const route: RouteControlState = snapshot.locomotion.mainRoute; }
 type PreparedA = { readonly locomotion?: RoutedLocomotionState };
 const optionalCopiedType: SelectedCapabilityStates<PreparedA> = copiedOptional;
@@ -124,8 +115,6 @@ const optionalCopiedType: SelectedCapabilityStates<PreparedA> = copiedOptional;
     "const staleCopiedHp: 100 = copiedOptional.vitality.hp;",
     "const staleCopiedMove: false = copiedOptional.locomotion!.moving;",
     "const stalePreparedMoving: false = preparedUnit.locomotion.moving;",
-    "const staleWidenedHp: 100 = widened.vitality.hp;",
-    "const staleWidenedMoving: false = widened.locomotion!.moving;",
   ];
   try {
     writeFileSync(positivePath, declarations + positive);

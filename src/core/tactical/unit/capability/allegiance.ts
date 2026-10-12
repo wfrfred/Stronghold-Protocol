@@ -5,6 +5,7 @@ export interface AllegianceState {
 }
 
 export interface Allegiance {
+    readonly definition: { readonly allegiance: AllegianceState };
     readonly allegiance: AllegianceState;
 }
 
@@ -12,9 +13,7 @@ export interface AllegiantUnitDefinition extends UnitDefinition {
     readonly allegiance: AllegianceState;
 }
 
-export function hasAllegiance<U extends Unit>(
-    unit: U,
-): unit is U & Allegiance & Unit<U["definition"] & AllegiantUnitDefinition> {
+export function hasAllegiance<U extends Unit>(unit: U): unit is U & Allegiance {
     return "allegiance" in unit && "allegiance" in unit.definition;
 }
 

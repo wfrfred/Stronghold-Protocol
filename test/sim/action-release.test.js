@@ -12,13 +12,13 @@ function releaseEffect(id, initial, run) {
   const definition = { id, initialize: () => initial,
     onInstall(state, context) {
       const ref = context.ref;
-      return transitionUnit(state, ref.unitId, unit => setBeforeReleaseHook(unit, {
+      return transitionUnit(state, ref.unitId, unit => ({ ...unit, action: setBeforeReleaseHook(unit.action, {
         id: `release/${ref.effectId}`,
         enabled: context => context.unit.effects.get(ref.effectId, definition)?.status === 'ACTIVE',
         invoke: (state, context) => run(state, context, context.unit.effects.get(ref.effectId, definition), ref),
-      }));
+      }) }));
     },
-    onEnd: (state, context) => transitionUnit(state, context.ref.unitId, unit => removeBeforeReleaseHook(unit, `release/${context.ref.effectId}`)),
+    onEnd: (state, context) => transitionUnit(state, context.ref.unitId, unit => ({ ...unit, action: removeBeforeReleaseHook(unit.action, `release/${context.ref.effectId}`) })),
   };
   return definition;
 }

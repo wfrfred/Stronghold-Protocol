@@ -166,7 +166,7 @@ test('elemental HP damage ignores physical defense, magic resistance, source att
   for (const [damageResistance, expected] of [[0, 100], [50, 50], [100, 5], [1000, 5], [-50, 100]]) {
     const supplied = resources();
     const source = initializeUnit({ id: 0, position: [0, 0], definition: { id: 'element-source', offense: { attack: 10000 } } });
-    const boosted = setAttackContribution(source, { id: 'attack-buff', value: [modifier({ multiplier: 100 })] });
+    const boosted = ({ ...source, offense: setAttackContribution(source.offense, { id: 'attack-buff', value: [modifier({ multiplier: 100 })] }) });
     const input = effectFixtureWork(boosted, unit('ENEMY', { defense: { defense: 100000, resistance: 99 } }, { damageResistance, elementResistance: 100 }));
     const result = resolveDamage(input, { sourceUnitId: 0, targetUnitId: 1, damageType: 'ELEMENTAL', operands: createDamageOperands(100), tick: 0 }, supplied);
     assert.equal(result.value.hpLoss, expected);
@@ -302,11 +302,11 @@ test('elemental runtime: nested burst damage failure publishes neither EP progre
   const { runtime } = battle('CHARACTER', 'BURN', {
     targetStates: (_supplied, selected) => {
       const target = initializeUnit({ id: 1, position: [1, 0], definition: selected });
-      const changed = setHook(target, {
+      const changed = ({ ...target, vitality: setHook(target.vitality, {
         id: 'elemental-fault', stage: 'reception', priority: 100,
         enabled: () => true,
         invoke: () => { throw new Error('nested burst failed'); },
-      });
+      }) });
       return { vitality: changed.vitality };
     },
   });

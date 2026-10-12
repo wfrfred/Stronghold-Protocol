@@ -1,39 +1,26 @@
-import { widenUnit, type StableUnit, type Unit } from "../../unit.js";
-import { hasVitality, resolveVitalityMaxHp } from "./capability.js";
+import { resolveVitalityMaxHp, type VitalityDefinition, type VitalityState } from "./capability.js";
 
-export function preserveHpRatio<U extends Unit>(
-    previous: U | StableUnit<U>,
-    input: U | StableUnit<U>,
-): StableUnit<U> {
-    const updated = widenUnit<U>(input);
-
-    if (
-        previous === updated ||
-        !hasVitality(previous) ||
-        !hasVitality(updated) ||
-        previous.vitality.maxHp === updated.vitality.maxHp
-    ) {
+export function preserveHpRatio(
+    definition: VitalityDefinition,
+    previous: VitalityState,
+    updated: VitalityState,
+): VitalityState {
+    if (previous === updated || previous.maxHp === updated.maxHp) {
         return updated;
     }
 
-    const previousMaxHp = resolveVitalityMaxHp(previous.definition.vitality, previous.vitality);
-    const updatedMaxHp = resolveVitalityMaxHp(updated.definition.vitality, updated.vitality);
+    const previousMaxHp = resolveVitalityMaxHp(definition, previous);
+    const updatedMaxHp = resolveVitalityMaxHp(definition, updated);
 
-    if (previousMaxHp === updatedMaxHp || updated.vitality.hp <= 0) {
+    if (previousMaxHp === updatedMaxHp || updated.hp <= 0) {
         return updated;
     }
 
-    const hp = Math.min(updatedMaxHp, (updated.vitality.hp / previousMaxHp) * updatedMaxHp);
+    const hp = Math.min(updatedMaxHp, (updated.hp / previousMaxHp) * updatedMaxHp);
 
-    if (hp === updated.vitality.hp) {
+    if (hp === updated.hp) {
         return updated;
     }
 
-    return {
-        ...updated,
-        vitality: {
-            ...updated.vitality,
-            hp,
-        },
-    };
+    return { ...updated, hp };
 }

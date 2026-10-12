@@ -40,6 +40,7 @@ export interface StatusState {
 }
 
 export interface Status {
+    readonly definition: { readonly status: StatusDefinition };
     readonly status: StatusState;
 }
 
@@ -49,9 +50,7 @@ export interface StatusUnitDefinition extends UnitDefinition {
 
 export type EffectiveStatusFlags = ReadonlySet<StatusFlag>;
 
-export function hasStatus<U extends Unit>(
-    unit: U,
-): unit is U & Status & Unit<U["definition"] & StatusUnitDefinition> {
+export function hasStatus<U extends Unit>(unit: U): unit is U & Status {
     return "status" in unit && "status" in unit.definition;
 }
 

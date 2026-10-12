@@ -24,15 +24,15 @@ const target = () => unit(1, { hp: 1e6 });
 
 function refresh(state) {
   const self = get(state, ref);
-  state = updateUnit(state, setAttackSpeedContribution(getUnit(state, 0), { id: 'timing/speed', value: [modifier({ addition: self.data.speed })] }));
-  return updateUnit(state, setBaseAttackTimeContribution(getUnit(state, 0), { id: 'timing/time', value: [self.data.time] }));
+  state = updateUnit(state, ({ ...getUnit(state, 0), action: setAttackSpeedContribution(getUnit(state, 0).action, { id: 'timing/speed', value: [modifier({ addition: self.data.speed })] }) }));
+  return updateUnit(state, ({ ...getUnit(state, 0), action: setBaseAttackTimeContribution(getUnit(state, 0).action, { id: 'timing/time', value: [self.data.time] }) }));
 }
 
 function tempo(speed = 100, time = modifier()) {
   return { id: 'timing-buff', initialize: () => ({ speed, time }), onEnable: state => refresh(state),
     onDisable: (state, ctx) => {
-      state = updateUnit(state, removeAttackSpeedContribution(ctx.unit, 'timing/speed'));
-      return updateUnit(state, removeBaseAttackTimeContribution(getUnit(state, ctx.unit.id), 'timing/time'));
+      state = updateUnit(state, ({ ...ctx.unit, action: removeAttackSpeedContribution(ctx.unit.action, 'timing/speed') }));
+      return updateUnit(state, ({ ...getUnit(state, ctx.unit.id), action: removeBaseAttackTimeContribution(getUnit(state, ctx.unit.id).action, 'timing/time') }));
     },
   };
 }
@@ -105,8 +105,8 @@ test('action timing: BAT updates change cooldown without rescaling recovery', ()
 
 test('action timing: live contributions read the input version rather than installation samples', () => {
   const definition = { id: 'live-timing', initialize: () => ({}), onEnable: (state, ctx) => {
-    state = updateUnit(state, setAttackSpeedContribution(ctx.unit, { id: 'live/speed', value: ({ unit }) => [modifier({ addition: unit.vitality.hp })] }));
-    return updateUnit(state, setBaseAttackTimeContribution(getUnit(state, 0), { id: 'live/time', value: ({ unit }) => [modifier({ addition: unit.vitality.hp / 10 })] }));
+    state = updateUnit(state, ({ ...ctx.unit, action: setAttackSpeedContribution(ctx.unit.action, { id: 'live/speed', value: ({ unit }) => [modifier({ addition: unit.vitality.hp })] }) }));
+    return updateUnit(state, ({ ...getUnit(state, 0), action: setBaseAttackTimeContribution(getUnit(state, 0).action, { id: 'live/time', value: ({ unit }) => [modifier({ addition: unit.vitality.hp / 10 })] }) }));
   } };
   const installed = install(battle(actor(), target()), definition);
   assert.deepEqual(values(installed), [200, 40, 20]);

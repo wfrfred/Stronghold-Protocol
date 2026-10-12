@@ -155,10 +155,10 @@ function scenario({ failure = null, cancelled = false } = {}) {
             );
             const id = `effect:${context.self.id}`;
             return transitionUnit(state, context.ref.unitId, (unit) => {
-                const next = setAttackContribution(unit, {
+                const next = ({ ...unit, offense: setAttackContribution(unit.offense, {
                     id,
                     value: [modifier.create({ finalAddition: addition })],
-                });
+                }) });
                 return flags.length === 0
                     ? next
                     : { ...next, status: addStatusContribution(next.status, { id, flags }) };
@@ -167,7 +167,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
         onDisable(state, context) {
             const id = `effect:${context.self.id}`;
             return transitionUnit(state, context.ref.unitId, (unit) => {
-                const next = removeAttackContribution(unit, id);
+                const next = ({ ...unit, offense: removeAttackContribution(unit.offense, id) });
                 return flags.length === 0
                     ? next
                     : { ...next, status: removeStatusContribution(next.status, id) };
@@ -185,7 +185,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
             state = receiverOutput.onInstall(state, context);
             const ref = context.ref;
             return transitionUnit(state, ref.unitId, (unit) =>
-                setDamageHook(unit, {
+                ({ ...unit, vitality: setDamageHook(unit.vitality, {
                     id: `receiver:${ref.effectId}`,
                     stage: "reception",
                     priority: 0,
@@ -261,12 +261,12 @@ function scenario({ failure = null, cancelled = false } = {}) {
                             },
                         };
                     },
-                }),
+                }) }),
             );
         },
         onEnd(state, context) {
             return transitionUnit(state, context.ref.unitId, (unit) =>
-                removeDamageHook(unit, `receiver:${context.self.id}`),
+                ({ ...unit, vitality: removeDamageHook(unit.vitality, `receiver:${context.self.id}`) }),
             );
         },
     };

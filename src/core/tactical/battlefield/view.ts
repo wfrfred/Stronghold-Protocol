@@ -1,4 +1,4 @@
-import type { StableUnit, Unit } from "../unit/unit.js";
+import type { Unit } from "../unit/unit.js";
 import { blockingUsedCapacity } from "./blocking/relations.js";
 import type { BattlefieldView } from "./contract.js";
 import type { NavigationFieldProvider } from "./navigation/cache.js";
@@ -18,7 +18,7 @@ const fields: NavigationFieldProvider = {
 export function view<U extends Unit>(
     state: State<U>,
     fieldProvider: NavigationFieldProvider = fields,
-): BattlefieldView<StableUnit<U>> {
+): BattlefieldView<U> {
     const map = state.map;
 
     return {

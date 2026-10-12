@@ -148,12 +148,12 @@ test('global elemental immunity rejects damage and healing without resetting pro
   const raw = holder({}, { status: { initialFlags: ['HEAL_FREE'] } });
   const damaged = damage(raw, 'BURN', 100).unit;
   assert.equal(heal(damaged, 50).amount, 50);
-  const immune = setElementalImmunity(damaged, true);
+  const immune = { ...damaged, elemental: setElementalImmunity(damaged.elemental, true) };
   assert.equal(damage(immune, 'BURN', 50).reason, 'IMMUNE');
   assert.equal(heal(immune, 50).reason, 'IMMUNE');
   assert.equal(immune.elemental.ep.BURN, 900);
-  assert.equal(setElementalImmunity(immune, true), immune);
-  const enabled = setElementalImmunity(immune, false);
+  assert.equal(setElementalImmunity(immune.elemental, true), immune.elemental);
+  const enabled = { ...immune, elemental: setElementalImmunity(immune.elemental, false) };
   assert.equal(heal(enabled, 50).unit.elemental.ep.BURN, 950);
 });
 

@@ -1,7 +1,6 @@
 import type { BattleState } from "../../../../battle/state.js";
-import { widenUnit, type Unit, type StableUnit } from "../../../unit.js";
 import * as hook from "../../../hook/hook.js";
-import type { Vitality } from "../capability.js";
+import type { VitalityState } from "../capability.js";
 import type { Context as VitalityContext, Result } from "../hook.js";
 import type { HealingReport, HealingRequest, PendingHealing } from "./contract.js";
 
@@ -31,26 +30,14 @@ export interface ReactionHook extends hook.Hook<
 
 export type Hook = AmountHook | ReactionHook;
 
-export function setHook<U extends Unit & Vitality>(
-    input: U | StableUnit<U>,
-    entry: Hook,
-): StableUnit<U> {
-    const unit = widenUnit<U>(input);
-    const healingHooks = hook.set(unit.vitality.healingHooks, entry);
+export function setHook(state: VitalityState, entry: Hook): VitalityState {
+    const healingHooks = hook.set(state.healingHooks, entry);
 
-    return healingHooks === unit.vitality.healingHooks
-        ? unit
-        : widenUnit<U>({ ...unit, vitality: { ...unit.vitality, healingHooks } });
+    return healingHooks === state.healingHooks ? state : { ...state, healingHooks };
 }
 
-export function removeHook<U extends Unit & Vitality>(
-    input: U | StableUnit<U>,
-    id: string,
-): StableUnit<U> {
-    const unit = widenUnit<U>(input);
-    const healingHooks = hook.remove(unit.vitality.healingHooks, id);
+export function removeHook(state: VitalityState, id: string): VitalityState {
+    const healingHooks = hook.remove(state.healingHooks, id);
 
-    return healingHooks === unit.vitality.healingHooks
-        ? unit
-        : widenUnit<U>({ ...unit, vitality: { ...unit.vitality, healingHooks } });
+    return healingHooks === state.healingHooks ? state : { ...state, healingHooks };
 }

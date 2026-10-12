@@ -1,6 +1,6 @@
 import type { ProjectileId, Projectile } from "../projectile/projectile.js";
 import type { NavigationMaps } from "../navigation/map.js";
-import type { StableUnit, Unit, UnitId } from "../../unit/unit.js";
+import type { Unit, UnitId } from "../../unit/unit.js";
 import { updateBlockingRelations, type BlockingRelation } from "../blocking/relations.js";
 import type { BattlefieldChangeResult } from "../contract.js";
 import {
@@ -96,8 +96,8 @@ function finishSettlement<U extends Unit>(
 export function settleBattlefieldState<U extends Unit>(
     map: BattlefieldMap,
     baseline: NavigationMaps,
-    previous: BattlefieldState<StableUnit<U>>,
-    content: BattlefieldContent<StableUnit<U>>,
+    previous: BattlefieldState<U>,
+    content: BattlefieldContent<U>,
     changes: BattlefieldDependencyChanges,
 ) {
     const dependencies = deriveBattlefieldDependencies(map, previous, content, changes);
@@ -183,8 +183,8 @@ export function settleBattlefieldState<U extends Unit>(
 export function settleBattlefieldStateFully<U extends Unit>(
     map: BattlefieldMap,
     baseline: NavigationMaps,
-    previous: BattlefieldState<StableUnit<U>>,
-    content: BattlefieldContent<StableUnit<U>>,
+    previous: BattlefieldState<U>,
+    content: BattlefieldContent<U>,
 ) {
     const supportRelations = reconcileSupportRelations(content.units, content.supportRelations);
     const spatial = projectBattlefieldSpatial(
