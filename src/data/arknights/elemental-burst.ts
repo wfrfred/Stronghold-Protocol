@@ -1,3 +1,4 @@
+import { setData } from "../../core/tactical/unit/effect/effect.js";
 import type { CombatResources } from "../../core/tactical/battle/resources.js";
 import { getUnit, updateUnit, type BattleState } from "../../core/tactical/battle/state.js";
 import { drainUnitSkillSp } from "../../core/tactical/battle/execution/skill-sp.js";
@@ -163,12 +164,12 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                                 const remaining = self.data.remaining - 1;
                                 state = effects.replaceEffect(
                                     state,
-                                    context.unit.id,
-                                    effects.setData(self, { remaining }),
+                                    ref,
+                                    setData(self, { remaining }),
                                 );
 
                                 if (remaining === 0) {
-                                    state = effects.end(state, ref, "EXPLICIT", context.call).state;
+                                    state = effects.end(state, ref, "EXPLICIT", context.call);
                                 }
 
                                 const recoveryTicks = TICKS_PER_SECOND / 2;
@@ -345,8 +346,8 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                                 const typed = unit.effects.get(instance.id, weakness)!;
                                 state = effects.replaceEffect(
                                     state,
-                                    unit.id,
-                                    effects.setData(typed, { scaler }),
+                                    { type: "EFFECT", unitId: unit.id, effectId: typed.id },
+                                    setData(typed, { scaler }),
                                 );
 
                                 if (instance.status === "ACTIVE") {

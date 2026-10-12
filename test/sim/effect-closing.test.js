@@ -1,3 +1,4 @@
+import { closeLifetime } from "../../dist/core/tactical/battle/execution/lifetime.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
@@ -59,12 +60,12 @@ test("effect lifetimes: parent ending cascades across Units and shared descendan
         data: { name: "shared" },
         scopes: [b, c],
     }));
-    battle = effect.end(battle, a, "DISPELLED").state;
+    battle = effect.end(battle, a, "DISPELLED");
     assert.deepEqual(new Set(trace), new Set(["parent", "left", "right", "shared"]));
     assert.equal(trace.length, 4);
     assert.equal(trace.at(-1), "parent");
     assert.ok([a, b, c, d].every((ref) => get(battle, ref) === undefined));
-    battle = effect.end(battle, d).state;
+    battle = effect.end(battle, d);
     assert.equal(trace.length, 4);
 });
 
@@ -79,10 +80,10 @@ test("effect lifetimes: provenance does not imply dependence on the source Unit"
         source: 0,
         scopes: [{ type: "UNIT", unitId: 0 }],
     }));
-    battle = effect.endScope(battle, { type: "UNIT", unitId: 0 }, "RETREAT");
+    battle = closeLifetime(battle, { type: "UNIT", unitId: 0 }, "RETREAT");
     assert.ok(get(battle, independent));
     assert.equal(get(battle, bound), undefined);
-    battle = effect.endScope(battle, { type: "UNIT", unitId: 1 }, "DEATH");
+    battle = closeLifetime(battle, { type: "UNIT", unitId: 1 }, "DEATH");
     assert.equal(get(battle, independent), undefined);
 });
 
@@ -112,7 +113,7 @@ test("effect lifetimes: a closing host rejects a new dependent before its instal
     );
     let battle = effectFixtureWork(unit(0));
     battle = install(battle, parent).state;
-    battle = effect.endScope(battle, { type: "UNIT", unitId: 0 }, "DEATH");
+    battle = closeLifetime(battle, { type: "UNIT", unitId: 0 }, "DEATH");
     assert.equal(installed, undefined);
     assert.equal(attempts, 0);
 });
@@ -142,7 +143,7 @@ test("effect lifetimes: a closed parent cannot admit a remote dependent during t
     let battle = effectFixtureWork(unit(0), unit(1));
     let ref;
     ({ state: battle, value: ref } = install(battle, parent, 0));
-    battle = effect.end(battle, ref).state;
+    battle = effect.end(battle, ref);
     assert.equal(accepted, undefined);
     assert.equal(getUnit(battle, 1).effects?.values().length ?? 0, 0);
 });
@@ -169,7 +170,7 @@ test("effect lifetimes: each subsequent terminal callback sees preceding state c
                     ...receiver,
                     vitality: { ...receiver.vitality, hp: 30 },
                 });
-                return effect.end(state, later, "EXPLICIT", context.call).state;
+                return effect.end(state, later, "EXPLICIT", context.call);
             },
         },
     );
@@ -177,7 +178,7 @@ test("effect lifetimes: each subsequent terminal callback sees preceding state c
     let ref;
     ({ state: battle, value: ref } = install(battle, first, 0));
     ({ state: battle, value: later } = install(battle, last, 1));
-    battle = effect.end(battle, ref).state;
+    battle = effect.end(battle, ref);
     assert.equal(get(battle, later), undefined);
 });
 
@@ -187,7 +188,7 @@ test("effect lifetimes: ending the same instance in its disable callback remains
         onDisable(state, context) {
             calls.push("disable");
             state = effect.setEnabled(state, context.ref, true, context.call);
-            return effect.end(state, context.ref, "NESTED", context.call).state;
+            return effect.end(state, context.ref, "NESTED", context.call);
         },
         onEnd: (state) => {
             calls.push("end");
@@ -197,7 +198,7 @@ test("effect lifetimes: ending the same instance in its disable callback remains
     let battle = effectFixtureWork(unit(0));
     let ref;
     ({ state: battle, value: ref } = install(battle, value));
-    battle = effect.end(battle, ref).state;
+    battle = effect.end(battle, ref);
     assert.deepEqual(calls, ["disable", "end"]);
     assert.equal(get(battle, ref), undefined);
     assert.equal(resolveAttackPower(0, battlefieldView(battle)), 100);
@@ -232,7 +233,7 @@ test("effect lifetimes: closing a host never reenables its suppressed effects", 
     battle = install(battle, strong).state;
     enabled.length = 0;
 
-    battle = effect.endScope(battle, { type: "UNIT", unitId: 0 }, "RETREAT");
+    battle = closeLifetime(battle, { type: "UNIT", unitId: 0 }, "RETREAT");
 
     assert.deepEqual(enabled, []);
     assert.deepEqual(getUnit(battle, 0).effects.values(), []);
@@ -291,7 +292,7 @@ test("effect lifetimes: terminal hook cleanup cannot recreate a host killed by a
     ({ state: battle, value: ref } = install(battle, parent, 0));
     battle = install(battle, child, 1, { scopes: [ref] }).state;
 
-    battle = effect.end(battle, ref).state;
+    battle = effect.end(battle, ref);
 
     assert.equal(getUnit(battle, 0), undefined);
     assert.deepEqual(battle.registeredUnitIds, []);

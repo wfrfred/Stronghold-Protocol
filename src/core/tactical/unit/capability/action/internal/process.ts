@@ -1,10 +1,10 @@
+import { closeLifetime } from "../../../../battle/execution/lifetime.js";
 import { getActionExecution, removeActionExecution, replaceActionExecution } from "./executions.js";
 import { assertFiniteNumber, assertNonnegativeSafeInteger } from "../../../../../common/assert.js";
 import { appendEvents, getUnit, type BattleState, type Result } from "../../../../battle/state.js";
 import { emptyCall, type CallContext } from "../../../../battle/execution/call.js";
 import type { UnitId } from "../../../unit.js";
 import { isSpatiallyPresent } from "../../presence.js";
-import { endScope } from "../../../effect/operations.js";
 import type { TargetBindingId } from "../capability.js";
 import type { ProjectileOperations } from "../../../../battlefield/projectile/operations.js";
 import { gainUnitSkillSp } from "../../../../battle/execution/skill-sp.js";
@@ -101,7 +101,7 @@ function endExecution(
         actionExecutions: removeActionExecution(state.actionExecutions, execution.id),
     };
 
-    return endScope(state, { type: "ACTION", executionId: execution.id }, reason, call);
+    return closeLifetime(state, { type: "ACTION", executionId: execution.id }, reason, call);
 }
 
 function finish(

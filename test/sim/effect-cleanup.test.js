@@ -30,7 +30,7 @@ test("effect cleanup: terminal business sees the ending instance and ending imme
     let ref;
     ({ state: battle, value: ref } = install(battle, value));
     const before = battlefieldView(battle);
-    battle = effect.end(battle, ref).state;
+    battle = effect.end(battle, ref);
     assert.equal(get(battle, ref), undefined);
     assert.deepEqual(seen, [3]);
     assert.equal(before.getUnit(0).effects.values()[0].status, "ACTIVE");
@@ -59,7 +59,7 @@ test("effect cleanup: a replacement installed during end uses a new identity and
     let battle = effectFixtureWork(unit());
     let old;
     ({ state: battle, value: old } = install(battle, value));
-    battle = effect.end(battle, old).state;
+    battle = effect.end(battle, old);
     assert.equal(get(battle, old), undefined);
     assert.notEqual(next.effectId, old.effectId);
     assert.equal(get(battle, next).definition, replacement);

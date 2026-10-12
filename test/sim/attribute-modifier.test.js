@@ -1,3 +1,4 @@
+import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -5,7 +6,6 @@ import {
     parseAttributeModifiers,
     compileAttributeModifiers,
 } from "../../dist/data/arknights/modifier.js";
-
 import {
     battlefieldView,
     getUnit,
@@ -353,8 +353,8 @@ test("attribute modifiers: inspiration samples belong to the Effect input and re
     assert.equal(resolve(work, 1), 80);
     work = effects.replaceEffect(
         work,
-        ref.unitId,
-        effects.setData(
+        ref,
+        setData(
             getUnit(work, 1).effects.values().find((instance) => instance.id === ref.effectId),
             sampleInput(work),
         ),
@@ -364,6 +364,6 @@ test("attribute modifiers: inspiration samples belong to the Effect input and re
     work = removeUnit(work, 0, "RETREAT");
     assert.equal(resolve(work, 1), 140);
     assert.equal(copied.effects.values()[0].data.sourceAttack, 100);
-    work = effects.end(work, ref).state;
+    work = effects.end(work, ref);
     assert.equal(resolve(work, 1), 20);
 });

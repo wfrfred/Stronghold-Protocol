@@ -1,3 +1,5 @@
+import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
+import { closeLifetime } from "../../dist/core/tactical/battle/execution/lifetime.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
@@ -22,7 +24,7 @@ test("aura membership persists after a child ends until leave and reentry", () =
     ({ state: battle, value: ref } = install(battle, aura, 0));
     const child = get(battle, ref).data.bindings[0].refs[0];
     const before = battlefieldView(battle);
-    battle = effects.end(battle, child).state;
+    battle = effects.end(battle, child);
     battle = effects.advance(at(battle, 1));
     assert.equal(power(battle, 1), 100);
     assert.deepEqual(get(battle, ref).data.bindings[0].refs, [child]);
@@ -65,7 +67,7 @@ test("host lifetime closes remote children only when explicitly bound", () => {
         let ref;
         ({ state: battle, value: ref } = install(battle, aura, 0));
         const child = get(battle, ref).data.bindings[0].refs[0];
-        battle = effects.endScope(battle, { type: "UNIT", unitId: 0 }, "RETREAT");
+        battle = closeLifetime(battle, { type: "UNIT", unitId: 0 }, "RETREAT");
         assert.equal(get(battle, ref), undefined);
         assert.equal(get(battle, child) === undefined, bindLifetime);
         assert.equal(power(battle, 1), bindLifetime ? 100 : 120);
@@ -99,8 +101,8 @@ test("ordinary end policies decide each receiver against current state", () => {
                     state = installed.state;
                     state = effects.replaceEffect(
                         state,
-                        ctx.ref.unitId,
-                        effects.setData(get(state, ctx.ref), (current) => ({
+                        ctx.ref,
+                        setData(get(state, ctx.ref), (current) => ({
                             ...current,
                             bindings: [...current.bindings, { unitId, ref: installed.value }],
                         })),
@@ -114,7 +116,7 @@ test("ordinary end policies decide each receiver against current state", () => {
                         (value) => value.definition === marker,
                     );
                     trace.push(["decide", binding.unitId, keep]);
-                    if (!keep) state = effects.end(state, binding.ref, "EXPLICIT", ctx.call).state;
+                    if (!keep) state = effects.end(state, binding.ref, "EXPLICIT", ctx.call);
                 }
                 return state;
             },
@@ -123,7 +125,7 @@ test("ordinary end policies decide each receiver against current state", () => {
     let battle = effectFixtureWork(auraUnit(0), auraUnit(1), auraUnit(2));
     let ref;
     ({ state: battle, value: ref } = install(battle, aura, 0));
-    battle = effects.end(battle, ref).state;
+    battle = effects.end(battle, ref);
     assert.deepEqual(trace, [
         ["decide", 1, false],
         ["end", 1],
@@ -154,7 +156,7 @@ test("group suppression preserves aura members and child identities", () => {
     ));
     assert.equal(get(battle, ref).status, "INACTIVE");
     assert.equal(power(battle, 1), 100);
-    battle = effects.end(battle, winner).state;
+    battle = effects.end(battle, winner);
     assert.deepEqual(get(battle, ref).data.bindings[0], binding);
     assert.equal(power(battle, 1), 120);
     assert.equal(getUnit(battle, 1).effects.nextId, 1);
@@ -208,7 +210,7 @@ test("nested child installation ending the aura does not revive parent or child"
     const receiver = attackEffect("nested-end", {
         onInstall(state, ctx) {
             starts.push(ctx.ref.unitId);
-            return effects.end(state, ctx.self.scopes[0], "EXPLICIT", ctx.call).state;
+            return effects.end(state, ctx.self.scopes[0], "EXPLICIT", ctx.call);
         },
     });
     let battle = effectFixtureWork(auraUnit(0), auraUnit(1), auraUnit(2));

@@ -1,3 +1,4 @@
+import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
@@ -251,8 +252,8 @@ test("aura runtime: callback failure propagates the original error without publi
         onInstall: (state, context) => {
             state = effects.replaceEffect(
                 state,
-                context.ref.unitId,
-                effects.setData(context.self, (current) => ({ ...current, starts: 1 })),
+                context.ref,
+                setData(context.self, (current) => ({ ...current, starts: 1 })),
             );
             if (context.ref.unitId === 2) {
                 attempts.push(context.ref);

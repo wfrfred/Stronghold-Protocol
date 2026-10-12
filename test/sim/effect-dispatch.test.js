@@ -87,7 +87,7 @@ test("finishing a pending Effect removes its Hook before that candidate can exec
                     { type: "EFFECT", unitId: 2, effectId: 1 },
                     "EXPLICIT",
                     context.call,
-                ).state;
+                );
                 return { state, value: { value: pending } };
             },
         },

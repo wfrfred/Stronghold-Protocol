@@ -1,3 +1,4 @@
+import { closeLifetime } from "../../../battle/execution/lifetime.js";
 import { assertNonnegativeSafeInteger } from "../../../../common/assert.js";
 import {
     getUnit,
@@ -9,7 +10,6 @@ import {
 import { emptyCall, type CallContext } from "../../../battle/execution/call.js";
 import type { UnitId } from "../../unit.js";
 import { TICKS_PER_SECOND } from "../../../tick.js";
-import { endScope } from "../../effect/operations.js";
 import { isSpatiallyPresent } from "../presence.js";
 import { hasStatusFlag } from "../status/capability.js";
 import { hasVitality } from "../vitality/capability.js";
@@ -195,7 +195,7 @@ export function activateSkill(
             });
         }
 
-        state = endScope(
+        state = closeLifetime(
             state,
             { type: "SKILL", unitId, activationId: activation.id },
             "SKILL_REJECTED",
@@ -218,7 +218,7 @@ export function activateSkill(
     const current = getUnit(state, unitId);
 
     if (current === undefined || !hasSkill(current) || current.skill.active?.id !== activation.id) {
-        state = endScope(
+        state = closeLifetime(
             state,
             { type: "SKILL", unitId, activationId: activation.id },
             "SKILL_FINISHED",
@@ -305,7 +305,7 @@ export function finishSkill(
         return { state, value: { result: { type: "ABSENT" }, signals: [] } };
     }
 
-    state = endScope(
+    state = closeLifetime(
         state,
         { type: "SKILL", unitId, activationId: stopped.value.active.id },
         "SKILL_FINISHED",

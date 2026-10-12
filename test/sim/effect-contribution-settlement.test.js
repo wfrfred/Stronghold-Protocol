@@ -36,7 +36,7 @@ test("sequential lifecycle callbacks observe each capability change immediately"
     ({ state: battle, value: parent } = install(battle, content, 1));
     battle = install(battle, content, 2, { scopes: [parent] }).state;
     const before = battlefieldView(battle);
-    battle = effects.end(battle, parent).state;
+    battle = effects.end(battle, parent);
     assert.deepEqual(notices, [
         ["disable", 1, 50, 100],
         ["disable", 2, 50, 100],

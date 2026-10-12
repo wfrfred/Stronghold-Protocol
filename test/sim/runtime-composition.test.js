@@ -1,3 +1,4 @@
+import { setData as setEffectData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { createActionState } from "../../dist/core/tactical/unit/capability/action/capability.js";
 import {
     setAttackContribution,
@@ -20,12 +21,7 @@ import { seededPlacement } from "../helpers/aura.js";
 import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
 import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
 import { compileAction } from "../../dist/core/tactical/unit/capability/action/compile.js";
-import {
-    install as installEffect,
-    setData as setEffectData,
-    replaceEffect,
-    end as endEffect,
-} from "../../dist/core/tactical/unit/effect/operations.js";
+import { install as installEffect, replaceEffect, end as endEffect } from "../../dist/core/tactical/unit/effect/operations.js";
 import {
     hasStatusFlag,
     addStatusContribution,
@@ -141,7 +137,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
         onInstall(state, context) {
             return replaceEffect(
                 state,
-                context.ref.unitId,
+                context.ref,
                 setEffectData(context.self, (current) => ({
                     ...current,
                     starts: current.starts + 1,
@@ -151,7 +147,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
         onEnable(state, context) {
             state = replaceEffect(
                 state,
-                context.ref.unitId,
+                context.ref,
                 setEffectData(context.self, (current) => ({
                     ...current,
                     enables: current.enables + 1,
@@ -201,7 +197,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                         assert.ok(getEffect(state, auraAddress).data.remaining > 0);
                         state = replaceEffect(
                             state,
-                            auraAddress.unitId,
+                            auraAddress,
                             setEffectData(getEffect(state, auraAddress), (current) => ({
                                 ...current,
                                 remaining: current.remaining - 1,
@@ -210,7 +206,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                         );
                         state = replaceEffect(
                             state,
-                            ref.unitId,
+                            ref,
                             setEffectData(getEffect(state, ref), (current) => ({
                                 ...current,
                                 uses: current.uses + 1,
@@ -279,7 +275,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
         initialize: () => ({ remaining: 3, consumed: 0, receivers: [] }),
         onTick(state, context) {
             if (context.tick >= 3) {
-                return endEffect(state, context.ref, "AURA_FINISHED", context.call).state;
+                return endEffect(state, context.ref, "AURA_FINISHED", context.call);
             }
             for (const unitId of battlefieldView(state).unitIds) {
                 const self = getEffect(state, context.ref);
@@ -287,7 +283,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                 if (self.data.receivers.some((binding) => binding.unitId === unitId)) continue;
                 state = replaceEffect(
                     state,
-                    context.ref.unitId,
+                    context.ref,
                     setEffectData(self, (current) => ({
                         ...current,
                         receivers: [...current.receivers, { unitId, ref: null, attempts: 1 }],
@@ -308,7 +304,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                 assert.ok(ref);
                 state = replaceEffect(
                     state,
-                    context.ref.unitId,
+                    context.ref,
                     setEffectData(getEffect(state, context.ref), (current) => ({
                         ...current,
                         receivers: current.receivers.map((binding) =>

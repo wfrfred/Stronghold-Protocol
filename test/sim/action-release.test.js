@@ -1,3 +1,4 @@
+import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { battle, unit } from '../helpers/action-fixture.js';
@@ -23,7 +24,7 @@ function releaseEffect(id, initial, run) {
 }
 const continueRelease = { type: 'CONTINUE' };
 const attach = (state, definition) => effects.install(state, getUnit(state, 0), definition);
-const stateOf = (state, ref, next) => effects.replaceEffect(state, ref.unitId, effects.setData(get(state, ref), next));
+const stateOf = (state, ref, next) => effects.replaceEffect(state, ref, setData(get(state, ref), next));
 
 test('action release: ordinary and disabled effects do not interrupt', () => {
   const initial = battle(unit(0, { action: true }));
@@ -39,7 +40,7 @@ test('action release: charges update before end and recovery never shortens', ()
     const remaining = self.data.remaining - 1;
     state = stateOf(state, ref, { remaining });
     assert.equal(get(state, ref).data.remaining, remaining);
-    if (remaining === 0) state = effects.end(state, ref, undefined, context.call).state;
+    if (remaining === 0) state = effects.end(state, ref, undefined, context.call);
     return { state, value: { type: 'INTERRUPT', recoveryTicks: 15 } };
   });
   const installed = attach(initial, definition);
@@ -78,7 +79,7 @@ for (const operation of ['enable', 'end']) {
       calls.push('A');
       if (!self.data.entered) {
         state = stateOf(state, ref, { entered: true });
-        state = operation === 'enable' ? effects.setEnabled(state, secondRef, true, context.call) : effects.end(state, secondRef, undefined, context.call).state;
+        state = operation === 'enable' ? effects.setEnabled(state, secondRef, true, context.call) : effects.end(state, secondRef, undefined, context.call);
         state = attach(state, third).state;
       }
       return { state, value: continueRelease };

@@ -1,3 +1,4 @@
+import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -28,7 +29,6 @@ import {
 import { stepRoutedUnit } from "../../dist/core/tactical/unit/capability/locomotion/step.js";
 import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
-
 import { copyUnitSnapshot } from "../../dist/core/tactical/unit/snapshot.js";
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
 import * as modifier from "../../dist/core/tactical/unit/contribution/value.js";
@@ -173,8 +173,8 @@ const install = (work, program, resources, expiresAtTick = null) =>
 const changeSpeed = (work, program, next) => {
     work = effects.replaceEffect(
         work,
-        address.unitId,
-        effects.setData(
+        address,
+        setData(
             getUnit(work, address.unitId).effects.values().find(
                 (instance) => instance.id === address.effectId,
             ),
@@ -250,7 +250,7 @@ test("move speed: lifecycle updates preserve shared snapshots, route samples and
     h.work = effects.setEnabled(h.work, address, true);
     const participating = copyUnitSnapshot(h.unit);
     assert.equal(participating.locomotion, h.unit.locomotion);
-    h.work = effects.end(h.work, address).state;
+    h.work = effects.end(h.work, address);
     assert.equal(h.unit.locomotion.mainRoute.navigation.execution, cursor);
     assert.equal(h.unit.locomotion.moveSpeed.length, 0);
     assert.equal(h.execution.rngState, randomState);

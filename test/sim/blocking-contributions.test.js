@@ -1,5 +1,5 @@
 import { fixtureBattlefieldState as fixtureBattlefield } from "../helpers/battlefield.js";
-import { deadline } from "../../dist/core/tactical/unit/effect/effect.js";
+import { deadline, setData, setDeadline } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -28,9 +28,7 @@ import {
     setCapacityContribution,
     removeCapacityContribution,
 } from "../../dist/core/tactical/unit/capability/blocking/capability.js";
-
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
-
 import { resolveMaxHp } from "../../dist/core/tactical/unit/capability/vitality/query.js";
 import * as contribution from "../../dist/core/tactical/unit/contribution/contribution.js";
 import * as modifier from "../../dist/core/tactical/unit/contribution/value.js";
@@ -89,8 +87,8 @@ const install = (work, effect, expiresAtTick = null) =>
 const change = (work, effect, next, setting) => {
     work = effects.replaceEffect(
         work,
-        effectAddress.unitId,
-        effects.setData(
+        effectAddress,
+        setData(
             getUnit(work, effectAddress.unitId).effects.values().find(
                 (instance) => instance.id === effectAddress.effectId,
             ),
@@ -170,7 +168,7 @@ test("blocking capacity: explicit refresh and lifecycle output changes preserve 
     assert.equal(capacity(work), 0);
     work = effects.install(work, getUnit(work, 0), maxHpBuff("hp", 100)).state;
     assert.equal(getUnit(work, 0).vitality.hp, 100);
-    work = effects.end(work, effectAddress).state;
+    work = effects.end(work, effectAddress);
     assert.equal(capacity(work), 3);
     assert.equal(getUnit(work, 0).vitality.hp, 100);
     assert.equal(old.blocker.capacity.length, 1);
@@ -286,16 +284,16 @@ test("blocking capacity: native stack renewal and terminal cleanup update real b
                     ctx.tick,
                 );
                 if (plan.type === "FINISH")
-                    return effects.end(state, ctx.ref, "EXPIRED", ctx.call).state;
+                    return effects.end(state, ctx.ref, "EXPIRED", ctx.call);
                 else {
-                    const next = effects.setDeadline(
-                        effects.setData(ctx.self, (current) => ({
+                    const next = setDeadline(
+                        setData(ctx.self, (current) => ({
                             ...current,
                             stackCount: plan.stackCount,
                         })),
                         plan.expiresAtTick,
                     );
-                    state = effects.replaceEffect(state, ctx.ref.unitId, next);
+                    state = effects.replaceEffect(state, ctx.ref, next);
                     return refreshContribution(state, ctx.ref, content, setting);
                 }
             },
@@ -351,7 +349,7 @@ test("blocking capacity: native zero scaler releases weighted targets and restor
     h.publish(resumed);
     assert.deepEqual(h.blocked(), []);
     let finished = h.work();
-    finished = effects.end(finished, effectAddress).state;
+    finished = effects.end(finished, effectAddress);
     h.publish(finished);
     assert.deepEqual(h.blocked(), [1, 2]);
     assert.deepEqual(

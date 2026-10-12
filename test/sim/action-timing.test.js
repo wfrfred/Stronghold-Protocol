@@ -1,3 +1,4 @@
+import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { battle, unit, actionDefinition } from '../helpers/action-fixture.js';
@@ -36,7 +37,7 @@ function tempo(speed = 100, time = modifier()) {
   };
 }
 const install = (state, definition, tick = 0, expires = null) => effects.install({ ...state, tick }, getUnit(state, 0), definition, { scopes: expires === null ? [] : [{ type: 'TICK', tick: expires }] }).state;
-const edit = (state, change) => refresh(effects.replaceEffect(state, 0, effects.setData(get(state, ref), { ...get(state, ref).data, ...change })));
+const edit = (state, change) => refresh(effects.replaceEffect(state, { type: "EFFECT", unitId: 0, effectId: ref.effectId }, setData(get(state, ref), { ...get(state, ref).data, ...change })));
 function values(state) {
   const current = getUnit(state, 0);
   const context = { unit: current, battlefield: battlefieldView(state) };
@@ -74,7 +75,7 @@ test('action timing: lifecycle updates both slots while snapshots preserve share
   assert.deepEqual(values(disabled), [100, 30, 30]);
   const enabled = effects.setEnabled(disabled, ref, true);
   assert.deepEqual(values(enabled), [200, 15, 7.5]);
-  const ended = effects.end(enabled, ref).state;
+  const ended = effects.end(enabled, ref);
   assert.deepEqual(values(ended), [100, 30, 30]);
   assert.equal(snapshot.action.attackSpeed.length, 1);
   assert.equal(getUnit(ended, 0).action.attackSpeed.length, 0);

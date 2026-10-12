@@ -1,4 +1,4 @@
-import { endScope } from "../../unit/effect/operations.js";
+import { closeLifetime } from "./lifetime.js";
 import type { UnitId } from "../../unit/unit.js";
 import type { BattlefieldRemovalReason } from "../../battlefield/contract.js";
 import type { StoppedSkillActivation } from "../../unit/capability/skill/execution.js";
@@ -73,7 +73,7 @@ export function removeUnitWithEffects(
             ...state,
             actionExecutions: removeActionExecution(state.actionExecutions, action.id),
         };
-        state = endScope(state, { type: "ACTION", executionId: action.id }, reason, call);
+        state = closeLifetime(state, { type: "ACTION", executionId: action.id }, reason, call);
         signals.push({
             type: "ACTION_CANCELLED",
             executionId: action.id,
@@ -83,7 +83,7 @@ export function removeUnitWithEffects(
         });
     }
     if (stopped.value !== null) {
-        state = endScope(
+        state = closeLifetime(
             state,
             { type: "SKILL", unitId, activationId: stopped.value.active.id },
             reason,
@@ -91,7 +91,7 @@ export function removeUnitWithEffects(
         );
     }
 
-    state = endScope(state, lifetime, reason, call);
+    state = closeLifetime(state, lifetime, reason, call);
 
     if (stopped.value !== null) {
         state = resources.notifySkillFinished(state, stopped.value, tick, call);

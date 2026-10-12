@@ -1,3 +1,4 @@
+import { setDeadline, setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
@@ -54,14 +55,14 @@ test("effect deadlines: layered content renews the same identity and ends only a
                 if (context.tick < context.self.data.deadline) return state;
                 const layers = context.self.data.layers - 1;
                 if (layers === 0) {
-                    return effect.end(state, context.ref, "LAYERS_EXHAUSTED", context.call).state;
+                    return effect.end(state, context.ref, "LAYERS_EXHAUSTED", context.call);
                 }
                 const deadline = context.tick + 2;
                 return effect.replaceEffect(
                     state,
-                    context.ref.unitId,
-                    effect.setDeadline(
-                        effect.setData(context.self, { layers, deadline }),
+                    context.ref,
+                    setDeadline(
+                        setData(context.self, { layers, deadline }),
                         deadline,
                     ),
                 );
@@ -89,8 +90,8 @@ test("effect deadlines: current scopes are read after an earlier callback renews
             onTick(state) {
                 return effect.replaceEffect(
                     state,
-                    later.unitId,
-                    effect.setDeadline(get(state, later), 10),
+                    later,
+                    setDeadline(get(state, later), 10),
                 );
             },
         },
@@ -110,7 +111,7 @@ test("effect deadlines: removing a deadline keeps an otherwise active instance a
     ({ state: battle, value: ref } = install(battle, definition("permanent"), 0, {
         scopes: [{ type: "TICK", tick: 1 }],
     }));
-    battle = effect.replaceEffect(battle, ref.unitId, effect.setDeadline(get(battle, ref), null));
+    battle = effect.replaceEffect(battle, ref, setDeadline(get(battle, ref), null));
     battle = effect.advance(at(battle, 100));
     assert.equal(get(battle, ref).status, "ACTIVE");
 });

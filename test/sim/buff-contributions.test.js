@@ -1,4 +1,4 @@
-import { deadline } from "../../dist/core/tactical/unit/effect/effect.js";
+import { deadline, setDeadline, setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -7,7 +7,6 @@ import {
     compileAttributeModifiers,
     parseAttributeModifiers,
 } from "../../dist/data/arknights/modifier.js";
-
 import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/state.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
@@ -88,10 +87,10 @@ test("Buff contribution integration: the native Astesia DEF facet merges layers,
             }).state;
         } else if (plan.type === "REFRESH") {
             const address = { type: "EFFECT", unitId: 0, effectId: current.id };
-            const next = effects.setDeadline(effects.setData(current, {
+            const next = setDeadline(setData(current, {
                 ...current.data, stackCount: plan.stackCount,
             }), plan.expiresAtTick);
-            work = effects.replaceEffect(work, 0, next);
+            work = effects.replaceEffect(work, { type: "EFFECT", unitId: 0, effectId: (next).id }, next);
             work = refreshContribution(work, address, program, output);
         }
         return plan;
@@ -124,7 +123,7 @@ test("Buff contribution integration: the native Astesia DEF facet merges layers,
     assert.equal(getUnit(work, 0), capped.getUnit(0));
     work = effects.advance(at(work, 19));
     close(effective(), 200);
-    work = effects.end(work, address).state;
+    work = effects.end(work, address);
     assert.equal(effective(), 100);
     assert.equal(resolveDefense(0, original).defense, 100);
     assert.equal(starts, 1);
@@ -191,12 +190,12 @@ test("Buff contribution integration: only effective layer growth resamples the r
             tick,
         );
         assert.equal(plan.type, "REFRESH");
-        const next = effects.setDeadline(effects.setData(current, {
+        const next = setDeadline(setData(current, {
             ...current.data,
             stackCount: plan.stackCount,
             sourceAttack: plan.reloadModifiers ? currentSourceAttack : current.data.sourceAttack,
         }), plan.expiresAtTick);
-        work = effects.replaceEffect(work, 0, next);
+        work = effects.replaceEffect(work, { type: "EFFECT", unitId: 0, effectId: (next).id }, next);
         work = refreshContribution(work, address, program, output);
         return plan;
     };

@@ -1,4 +1,4 @@
-import { deadline } from "../../dist/core/tactical/unit/effect/effect.js";
+import { deadline, setDeadline, setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -7,7 +7,6 @@ import {
     compileAttributeModifiers,
     parseAttributeModifiers,
 } from "../../dist/data/arknights/modifier.js";
-
 import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/state.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import {
@@ -144,13 +143,13 @@ function harness({ stackCount = 3, maxValidStackCnt = -1 } = {}) {
                     { stackCount: ctx.self.data.stackCount, expiresAtTick: deadline(ctx.self) },
                     ctx.self.data.lifetimeTicks, ctx.tick,
                 );
-                if (plan.type === "FINISH") return effects.end(state, ctx.ref, "EXPIRED", ctx.call).state;
-                const next = effects.setDeadline(effects.setData(ctx.self, {
+                if (plan.type === "FINISH") return effects.end(state, ctx.ref, "EXPIRED", ctx.call);
+                const next = setDeadline(setData(ctx.self, {
                     ...ctx.self.data,
                     stackCount: plan.stackCount,
                     sample: plan.reloadModifiers ? sample(plan.stackCount) : ctx.self.data.sample,
                 }), plan.expiresAtTick);
-                state = effects.replaceEffect(state, ctx.ref.unitId, next);
+                state = effects.replaceEffect(state, ctx.ref, next);
                 return refreshContribution(state, ctx.ref, content, output);
             },
         },

@@ -1,7 +1,12 @@
 import type { BattleState } from "../../battle/state.js";
 import type { CallContext } from "../../battle/execution/call.js";
 import type { Unit } from "../unit.js";
-import type { Effect, Group, Ref } from "./effect.js";
+import type { Effect, Ref } from "./effect.js";
+
+export interface Group {
+    readonly id: string;
+    readonly priority: number;
+}
 
 export interface Context<S extends object, H extends object = object> {
     readonly tick: number;

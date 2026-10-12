@@ -1,3 +1,5 @@
+import { closeLifetime } from "../../dist/core/tactical/battle/execution/lifetime.js";
+import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { battlefieldView } from "../../dist/core/tactical/battle/state.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -41,8 +43,8 @@ test("effect installation: a nested weaker rule does not enable its parent befor
             assert.equal(get(state, context.ref).status, "INSTALLING");
             state = effect.replaceEffect(
                 state,
-                context.ref.unitId,
-                effect.setData(get(state, context.ref), { amount: 100 }),
+                context.ref,
+                setData(get(state, context.ref), { amount: 100 }),
             );
             trace.push("install end");
             return state;
@@ -75,8 +77,8 @@ for (const grouped of [false, true]) {
                 state = effect.setEnabled(state, context.ref, true, context.call);
                 state = effect.replaceEffect(
                     state,
-                    context.ref.unitId,
-                    effect.setData(get(state, context.ref), { amount: 100 }),
+                    context.ref,
+                    setData(get(state, context.ref), { amount: 100 }),
                 );
                 assert.equal(get(state, context.ref).status, "INSTALLING");
                 trace.push("install end");
@@ -112,8 +114,8 @@ test("effect installation: an independent child enables while its parent finishe
             assert.equal(get(state, context.ref).status, "INSTALLING");
             state = effect.replaceEffect(
                 state,
-                context.ref.unitId,
-                effect.setData(get(state, context.ref), { amount: 100 }),
+                context.ref,
+                setData(get(state, context.ref), { amount: 100 }),
             );
             trace.push("install end");
             return state;
@@ -137,7 +139,7 @@ test("effect installation: ending during installation never publishes the effect
         onInstall(state, context) {
             assert.equal(context.self.status, "INSTALLING");
             trace.push("install");
-            state = effect.end(state, context.ref, "NOT_APPLICABLE", context.call).state;
+            state = effect.end(state, context.ref, "NOT_APPLICABLE", context.call);
             assert.equal(get(state, context.ref), undefined);
             return state;
         },
@@ -172,7 +174,7 @@ test("effect installation: closing the host from a nested installation never ena
         {},
         {
             onInstall(state, context) {
-                return effect.endScope(state, { type: "UNIT", unitId: 0 }, "RETREAT", context.call);
+                return closeLifetime(state, { type: "UNIT", unitId: 0 }, "RETREAT", context.call);
             },
         },
     );

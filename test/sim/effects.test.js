@@ -1,3 +1,4 @@
+import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
@@ -37,11 +38,11 @@ test("effects: a direct static definition initializes private state and runs ins
         {
             onInstall(state, context) {
                 assert.equal(get(state, context.ref).definition, value);
-                const next = effect.setData(context.self, (current) => ({
+                const next = setData(context.self, (current) => ({
                     count: current.count + 1,
                 }));
                 seen.push(["install", next.data.count]);
-                return effect.replaceEffect(state, context.ref.unitId, next);
+                return effect.replaceEffect(state, context.ref, next);
             },
             onEnable(state, context) {
                 seen.push(["enable", context.self.data.count]);
@@ -73,8 +74,8 @@ test("effects: updates share immutable values and container queries pair a defin
     const old = get(battle, ref);
     battle = effect.replaceEffect(
         battle,
-        ref.unitId,
-        effect.setData(old, (current) => ({ ...current, count: 2 })),
+        ref,
+        setData(old, (current) => ({ ...current, count: 2 })),
     );
     const current = get(battle, ref);
     assert.equal(current.data.nested, nested);
@@ -109,8 +110,8 @@ test("effects: disabling withdraws output while preserving private state and ide
     assert.equal(attack(), 100);
     battle = effect.replaceEffect(
         battle,
-        ref.unitId,
-        effect.setData(get(battle, ref), { amount: 30 }),
+        ref,
+        setData(get(battle, ref), { amount: 30 }),
     );
     assert.equal(attack(), 100);
     battle = effect.setEnabled(battle, ref, true);
@@ -127,8 +128,8 @@ test("effects: content explicitly refreshes a static contribution after changing
     const previous = battlefieldView(battle);
     battle = effect.replaceEffect(
         battle,
-        ref.unitId,
-        effect.setData(get(battle, ref), { amount: 50 }),
+        ref,
+        setData(get(battle, ref), { amount: 50 }),
     );
     assert.equal(resolveAttackPower(0, battlefieldView(battle)), 120);
     battle = refreshAttack(battle, ref);
@@ -145,14 +146,14 @@ test("effects: ending withdraws outputs before terminal business and repeated en
         },
         onEnd(state, context) {
             seen.push(["end", context.reason, resolveAttackPower(0, battlefieldView(state))]);
-            return effect.end(state, context.ref, "REENTRANT", context.call).state;
+            return effect.end(state, context.ref, "REENTRANT", context.call);
         },
     });
     let battle = effectFixtureWork(unit());
     let ref;
     ({ state: battle, value: ref } = install(battle, value));
-    battle = effect.end(battle, ref, "DISPELLED").state;
-    battle = effect.end(battle, ref, "OTHER").state;
+    battle = effect.end(battle, ref, "DISPELLED");
+    battle = effect.end(battle, ref, "OTHER");
     assert.deepEqual(
         seen.map((entry) => entry[0]),
         ["disable", "end"],
@@ -178,8 +179,8 @@ test("effects: callbacks read current Unit state after a preceding nested operat
             onTick(state, context) {
                 return effect.replaceEffect(
                     state,
-                    context.ref.unitId,
-                    effect.setData(context.self, {
+                    context.ref,
+                    setData(context.self, {
                         observedHp: context.unit.vitality.hp,
                         tick: context.tick,
                     }),
@@ -201,7 +202,7 @@ test("effects: a callback sees termination when a nested operation ends its inst
         {},
         {
             onTick(state, context) {
-                state = effect.end(state, context.ref, "EXPLICIT", context.call).state;
+                state = effect.end(state, context.ref, "EXPLICIT", context.call);
                 seen.push(context.self.status);
                 assert.equal(get(state, context.ref), undefined);
                 return state;

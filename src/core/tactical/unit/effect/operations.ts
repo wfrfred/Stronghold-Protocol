@@ -8,8 +8,17 @@ import {
 } from "../../battle/state.js";
 import { emptyCall, type CallContext } from "../../battle/execution/call.js";
 import type { Unit, UnitId } from "../unit.js";
-import type { Definition, EndContext } from "./definition.js";
-import { deadline, key, type Effect, type Lifetime, type Ref, type Scope } from "./effect.js";
+import type { Definition, Context } from "./definition.js";
+import {
+    deadline,
+    key,
+    type Effect,
+    type Lifetime,
+    type Ref,
+    type Scope,
+    type Status,
+} from "./effect.js";
+import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import { dependents } from "../../battlefield/storage/effect-lifetimes.js";
 
 type StoredEffect = ReturnType<Unit["effects"]["values"]>[number];
@@ -21,8 +30,22 @@ export interface Initial<S extends object> {
     readonly enabled?: boolean;
 }
 
-export function get(battle: BattleState, ref: Ref): StoredEffect | undefined {
-    return getUnit(battle, ref.unitId)?.effects.get(ref.effectId);
+export function get(battle: BattleState, ref: Ref): StoredEffect | undefined;
+export function get<S extends object, H extends object>(
+    battle: BattleState,
+    ref: Ref,
+    definition: Definition<S, H>,
+): Effect<S, H> | undefined;
+export function get<S extends object, H extends object>(
+    battle: BattleState,
+    ref: Ref,
+    definition?: Definition<S, H>,
+): StoredEffect | Effect<S, H> | undefined {
+    const effects = getUnit(battle, ref.unitId)?.effects;
+
+    return definition === undefined
+        ? effects?.get(ref.effectId)
+        : effects?.get(ref.effectId, definition);
 }
 
 export function install<S extends object, H extends object>(
@@ -34,6 +57,12 @@ export function install<S extends object, H extends object>(
 ): Result<Ref | undefined> {
     const unit = getUnit(battle, host.id);
     const scopes = initial.scopes ?? [];
+
+    for (const scope of scopes) {
+        if (scope.type === "TICK") {
+            assertNonnegativeSafeInteger(scope.tick, "effect deadline");
+        }
+    }
 
     if (
         unit === undefined ||
@@ -59,7 +88,7 @@ export function install<S extends object, H extends object>(
         battle = definition.onInstall(battle, createContext<S, H>(battle, ref, instance, call));
     }
     if (get(battle, ref)?.status === "INSTALLING") {
-        battle = change(battle, ref, (current) => ({ ...current, status: "INACTIVE" }));
+        battle = change(battle, ref, { status: "INACTIVE" });
         battle =
             definition.group === undefined
                 ? updateStatus(battle, ref, call)
@@ -69,24 +98,20 @@ export function install<S extends object, H extends object>(
     return { state: battle, value: ref };
 }
 
-export function setData<S extends object, H extends object>(
-    effect: Effect<S, H>,
-    next: NoInfer<S> | ((current: NoInfer<S>) => NoInfer<S>),
-): Effect<S, H> {
-    const value = typeof next === "function" ? next(effect.data) : next;
-
-    return value === effect.data ? effect : { ...effect, data: value };
-}
-
 export function replaceEffect<S extends object, H extends object>(
     battle: BattleState,
-    unitId: UnitId,
+    ref: Ref,
     effect: Effect<S, H>,
 ): BattleState {
-    return transitionUnit(battle, unitId, (unit) => ({
-        ...unit,
-        effects: unit.effects.replace(effect),
-    }));
+    if (ref.effectId !== effect.id) {
+        throw new TypeError("effect identity mismatch");
+    }
+
+    return transitionUnit(battle, ref.unitId, (unit) => {
+        const effects = unit.effects.replace(effect);
+
+        return effects === unit.effects ? unit : { ...unit, effects };
+    });
 }
 
 export function setEnabled(
@@ -101,25 +126,12 @@ export function setEnabled(
         return battle;
     }
 
-    battle = change(battle, ref, (current) => ({ ...current, enabled }));
+    battle = change(battle, ref, { enabled });
 
     return updateStatus(battle, ref, call);
 }
 
-export function setDeadline<S extends object, H extends object>(
-    effect: Effect<S, H>,
-    tick: number | null,
-): Effect<S, H> {
-    return {
-        ...effect,
-        scopes: [
-            ...effect.scopes.filter((scope) => scope.type !== "TICK"),
-            ...(tick === null ? [] : [{ type: "TICK" as const, tick }]),
-        ],
-    };
-}
-
-export function bind(battle: BattleState, ref: Ref, lifetime: Lifetime): Result<boolean> {
+export function bindLifetime(battle: BattleState, ref: Ref, lifetime: Lifetime): Result<boolean> {
     const instance = get(battle, ref);
 
     if (instance === undefined || instance.status === "ENDING" || !available(battle, lifetime)) {
@@ -130,10 +142,7 @@ export function bind(battle: BattleState, ref: Ref, lifetime: Lifetime): Result<
         throw new TypeError("effect scopes cannot form a cycle");
     }
     if (!instance.scopes.some((scope) => key(scope) === key(lifetime))) {
-        battle = change(battle, ref, (current) => ({
-            ...current,
-            scopes: [...current.scopes, lifetime],
-        }));
+        battle = change(battle, ref, { scopes: [...instance.scopes, lifetime] });
     }
 
     return { state: battle, value: true };
@@ -144,21 +153,21 @@ export function end(
     ref: Ref,
     reason = "EXPLICIT",
     call: CallContext = emptyCall,
-): Result<StoredEffect | undefined> {
+): BattleState {
     const instance = get(battle, ref);
 
     if (instance === undefined || instance.status === "ENDING") {
-        return { state: battle, value: instance };
+        return battle;
     }
 
     const children = dependents(battlefieldView(battle).effectLifetimes, ref);
     const host = getUnit(battle, ref.unitId)!;
 
-    return host.effects.read<Result<StoredEffect | undefined>>(ref.effectId, (instance) => {
+    return host.effects.read(ref.effectId, (instance) => {
         const definition = instance.definition;
-        battle = change(battle, ref, (current) => ({ ...current, status: "ENDING" }));
+        battle = change(battle, ref, { status: "ENDING" });
         let ended = getUnit(battle, ref.unitId)!.effects.get(ref.effectId, definition)!;
-        const disabling = createContext(battle, ref, ended, call, reason, host);
+        const disabling = createContext(battle, ref, ended, call, host);
 
         if (instance.status === "ACTIVE" && definition.onDisable !== undefined) {
             battle = definition.onDisable(battle, disabling);
@@ -166,15 +175,14 @@ export function end(
         }
 
         for (const child of children) {
-            battle = end(battle, child, reason, call).state;
+            battle = end(battle, child, reason, call);
         }
 
         ended = getUnit(battle, ref.unitId)?.effects.get(ref.effectId, definition) ?? ended;
-        const ending = createContext(battle, ref, ended, call, reason, host);
+        const ending = { ...createContext(battle, ref, ended, call, host), reason };
 
         if (definition.onEnd !== undefined) {
             battle = definition.onEnd(battle, ending);
-            ended = getUnit(battle, ref.unitId)?.effects.get(ref.effectId, definition) ?? ended;
         }
 
         battle = transitionUnit(battle, ref.unitId, (unit) => ({
@@ -186,27 +194,16 @@ export function end(
             battle = reconcileGroupActivity(battle, ref.unitId, definition.group.id, call);
         }
 
-        return { state: battle, value: ended };
+        return battle;
     })!;
 }
 
-export function endScope(
+export function endDependents(
     battle: BattleState,
     lifetime: Lifetime,
     reason = "SCOPE_CLOSED",
     call: CallContext = emptyCall,
 ): BattleState {
-    if (lifetime.type === "UNIT") {
-        battle = transitionUnit(battle, lifetime.unitId, (unit) =>
-            unit.lifecycle === "LEAVING" ? unit : { ...unit, lifecycle: "LEAVING" },
-        );
-    } else {
-        battle = {
-            ...battle,
-            closedLifetimes: new Set([...battle.closedLifetimes, key(lifetime)]),
-        };
-    }
-
     const roots = dependents(battlefieldView(battle).effectLifetimes, lifetime);
 
     if (lifetime.type === "UNIT") {
@@ -218,12 +215,12 @@ export function endScope(
                 { type: "EFFECT", unitId: lifetime.unitId, effectId: instance.id },
                 reason,
                 call,
-            ).state;
+            );
         }
     }
 
     for (const ref of roots) {
-        battle = end(battle, ref, reason, call).state;
+        battle = end(battle, ref, reason, call);
     }
 
     return battle;
@@ -259,7 +256,7 @@ export function advance(battle: BattleState, call: CallContext = emptyCall): Bat
         const expires = current === undefined ? null : deadline(current);
 
         if (expires !== null && expires <= battle.tick) {
-            battle = end(battle, ref, "EXPIRED", call).state;
+            battle = end(battle, ref, "EXPIRED", call);
         }
     }
 
@@ -273,6 +270,7 @@ export function validateScopes(battle: BattleState): void {
 
             for (const scope of instance.scopes) {
                 if (scope.type === "TICK") {
+                    assertNonnegativeSafeInteger(scope.tick, "effect deadline");
                     continue;
                 }
                 if (!available(battle, scope)) {
@@ -291,13 +289,11 @@ function createContext<S extends object = object, H extends object = object>(
     ref: Ref,
     instance: Effect<S, H>,
     call: CallContext,
-    reason = "EXPLICIT",
     host = getUnit(battle, ref.unitId)!,
-): EndContext<S, H> {
+): Context<S, H> {
     return {
         tick: battle.tick,
         ref,
-        reason,
         call,
         unit: (getUnit(battle, ref.unitId) ?? host) as Unit & H,
         self: instance,
@@ -331,11 +327,15 @@ function available(battle: BattleState, lifetime: Lifetime): boolean {
 function change(
     battle: BattleState,
     ref: Ref,
-    next: <S extends object, H extends object>(instance: Effect<S, H>) => Effect<S, H>,
+    changes: {
+        readonly status?: Status;
+        readonly enabled?: boolean;
+        readonly scopes?: readonly Scope[];
+    },
 ): BattleState {
     return (
         getUnit(battle, ref.unitId)?.effects.read(ref.effectId, (instance) =>
-            replaceEffect(battle, ref.unitId, next(instance)),
+            replaceEffect(battle, ref, { ...instance, ...changes }),
         ) ?? battle
     );
 }
@@ -386,10 +386,7 @@ function updateStatus(battle: BattleState, ref: Ref, call: CallContext): BattleS
         return battle;
     }
 
-    battle = change(battle, ref, (current) => ({
-        ...current,
-        status: active ? "ACTIVE" : "INACTIVE",
-    }));
+    battle = change(battle, ref, { status: active ? "ACTIVE" : "INACTIVE" });
 
     return getUnit(battle, ref.unitId)!.effects.read(ref.effectId, (current) => {
         const context = createContext(battle, ref, current, call);

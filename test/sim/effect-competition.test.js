@@ -1,3 +1,4 @@
+import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { battlefieldView } from "../../dist/core/tactical/battle/state.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -54,10 +55,10 @@ test("effect groups: replacing the selected rule withdraws old output and restor
     assert.equal(resolveAttackPower(0, battlefieldView(battle)), 150);
     battle = effect.replaceEffect(
         battle,
-        first.unitId,
-        effect.setData(get(battle, first), { amount: 30 }),
+        first,
+        setData(get(battle, first), { amount: 30 }),
     );
-    battle = effect.end(battle, second).state;
+    battle = effect.end(battle, second);
     assert.equal(get(battle, first).status, "ACTIVE");
     assert.equal(get(battle, first).data.amount, 30);
     assert.equal(resolveAttackPower(0, battlefieldView(battle)), 130);
@@ -78,7 +79,7 @@ test("effect groups: equal priority retains the earlier identity across differen
     ));
     assert.equal(get(battle, first).status, "ACTIVE");
     assert.equal(get(battle, second).status, "INACTIVE");
-    battle = effect.end(battle, first).state;
+    battle = effect.end(battle, first);
     assert.equal(get(battle, second).status, "ACTIVE");
 });
 
@@ -95,7 +96,7 @@ test("effect groups: disabling the strongest rule does not select a weaker fallb
     assert.equal(get(battle, strong).status, "INACTIVE");
     assert.equal(get(battle, weak).status, "INACTIVE");
     assert.equal(resolveAttackPower(0, battlefieldView(battle)), 100);
-    battle = effect.end(battle, strong).state;
+    battle = effect.end(battle, strong);
     assert.equal(get(battle, weak).status, "ACTIVE");
     assert.equal(resolveAttackPower(0, battlefieldView(battle)), 120);
 });

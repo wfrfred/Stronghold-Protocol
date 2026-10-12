@@ -1,3 +1,4 @@
+import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { selectTargets } from "../../dist/core/tactical/unit/targeting/select.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { selectCapabilityStates } from "../../dist/core/tactical/unit/capability/catalog.js";
@@ -40,7 +41,7 @@ export function auraEffect(
         const current = selfOf(state, context);
         return current === undefined
             ? state
-            : effects.replaceEffect(state, context.ref.unitId, effects.setData(current, update));
+            : effects.replaceEffect(state, context.ref, setData(current, update));
     };
     const refresh = (state, context) => {
         let self = selfOf(state, context);
@@ -63,7 +64,7 @@ export function auraEffect(
                 bindings: current.bindings.filter((item) => item !== binding),
             }));
             for (const ref of binding.refs)
-                state = effects.end(state, ref, "AURA_LEFT", context.call).state;
+                state = effects.end(state, ref, "AURA_LEFT", context.call);
         }
         for (const unitId of selected) {
             self = selfOf(state, context);

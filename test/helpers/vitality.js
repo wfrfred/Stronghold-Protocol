@@ -1,7 +1,7 @@
+import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { transitionUnit, getUnit, battlefieldView } from "../../dist/core/tactical/battle/state.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
-
 import * as damage from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
 import * as healing from "../../dist/core/tactical/unit/capability/vitality/healing/hook.js";
 import {
@@ -47,7 +47,7 @@ export function setSelf(state, context, self, next) {
     const current = unit && unit.effects.get(self.id, self.definition);
     return current === undefined
         ? state
-        : effects.replaceEffect(state, unit.id, effects.setData(current, next));
+        : effects.replaceEffect(state, { type: "EFFECT", unitId: unit.id, effectId: (current).id }, setData(current, next));
 }
 
 export function current(state, context, self) {

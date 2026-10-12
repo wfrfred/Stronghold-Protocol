@@ -24,8 +24,8 @@ import { setMaxHpContribution } from ${module("unit/capability/vitality/capabili
 import { setAttackContribution } from ${module("unit/capability/offense/capability")};
 import { setCapacityContribution } from ${module("unit/capability/blocking/capability")};
 import type { Context, Definition } from ${module("unit/effect/definition")};
-import { install, setData, replaceEffect } from ${module("unit/effect/operations")};
-import type { Effect } from ${module("unit/effect/effect")};
+import { install, replaceEffect, get } from ${module("unit/effect/operations")};
+import { setData, type Effect } from ${module("unit/effect/effect")};
 import { Effects } from ${module("unit/effect/effects")};
 import type { Contribution, Input } from ${module("unit/contribution/contribution")};
 import type { QueryContext } from ${module("unit/query")};
@@ -41,7 +41,7 @@ const content: Definition<{charges:number},Vitality> = {
    context.self.status='ENDING';
    // @ts-expect-error shared host state must use immutable transitions.
    context.unit.vitality.hp=hp;
-   return replaceEffect(state,context.ref.unitId,next);
+   return replaceEffect(state,context.ref,next);
  }
 };
 declare const battle:BattleState;
@@ -51,7 +51,7 @@ const bare=initializeUnit({id:2,position:[0,0],definition:{id:'bare'}});
 // @ts-expect-error required host capabilities must be present.
 install(battle,bare,content);
 if(ref!==undefined) {
- const found=host.effects.get(ref.effectId,content);
+ const found=get(battle,ref,content);
  if(found!==undefined){
    const charges:number=found.data.charges;
    const typed:Effect<{charges:number},Vitality>=found;

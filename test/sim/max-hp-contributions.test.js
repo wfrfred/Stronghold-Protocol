@@ -1,3 +1,4 @@
+import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
@@ -55,10 +56,10 @@ test("MaxHP outputs coordinate each setter before its lifecycle callback", () =>
     battle = effects.setEnabled(battle, ref, false);
     assert.deepEqual(pair(battle), [50, 100]);
     const current = getUnit(battle, ref.unitId).effects.values().find(effect => effect.id === ref.effectId);
-    battle = effects.replaceEffect(battle, ref.unitId, effects.setData(current, { amount: 200 }));
+    battle = effects.replaceEffect(battle, ref, setData(current, { amount: 200 }));
     battle = effects.setEnabled(battle, ref, true);
     assert.deepEqual(pair(battle), [150, 300]);
-    battle = effects.end(battle, ref).state;
+    battle = effects.end(battle, ref);
     assert.deepEqual(pair(battle), [50, 100]);
     assert.deepEqual(observed, [
         ["enabled", 100],
@@ -80,9 +81,9 @@ test("MaxHP competing effects remove old outputs before installing new and resto
     }), 1);
     battle = second.state;
     assert.deepEqual(pair(battle), [150, 300]);
-    battle = effects.end(battle, second.value).state;
+    battle = effects.end(battle, second.value);
     assert.deepEqual(pair(battle), [100, 200]);
-    battle = effects.end(battle, first.value).state;
+    battle = effects.end(battle, first.value);
     assert.deepEqual(pair(battle), [50, 100]);
 });
 test("MaxHP tick deadline and callback successor use the latest HP ratio", () => {

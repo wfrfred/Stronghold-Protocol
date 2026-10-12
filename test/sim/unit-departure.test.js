@@ -1,3 +1,4 @@
+import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { fixtureBattlefieldState as fixtureBattlefield } from "../helpers/battlefield.js";
 import { createActionDefinition } from "../../dist/core/tactical/unit/capability/action/capability.js";
 import {
@@ -33,7 +34,6 @@ import {
     setHook,
     removeHook,
 } from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
-
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 
 function fixture() {
@@ -73,7 +73,7 @@ function fixture() {
                         enabled: context => context.unit.effects.values().find(effect => effect.id === ref.effectId)?.status === "ACTIVE",
                         invoke(state, context, value) {
                             const current = get(state, ref);
-                            state = effects.replaceEffect(state, ref.unitId, effects.setData(current, { consumed: current.data.consumed + 1 }));
+                            state = effects.replaceEffect(state, ref, setData(current, { consumed: current.data.consumed + 1 }));
                             return { state, value: { value } };
                         },
                     }),
@@ -347,7 +347,7 @@ test("effect terminal callback can retire its host and settle remote Action and 
         },
     );
     const installed = effects.install(battle, getUnit(battle, 0), content);
-    battle = effects.end(installed.state, installed.value).state;
+    battle = effects.end(installed.state, installed.value);
     assert.equal(getUnit(battle, 0), undefined);
     assert.deepEqual(getUnit(battle, 1).effects.values(), []);
     assert.ok(trace.indexOf("action-effect") < trace.indexOf("after-damage"));
