@@ -19,7 +19,7 @@ import {
 import type { BattleExecutionState } from "../execution/state.js";
 import type { Command } from "../contract.js";
 import { removeUnitWithEffects, type UnitLifecycleResources } from "../execution/unit-lifecycle.js";
-import { advanceBattlefield, battlefieldView, type BattleState } from "../execution/context.js";
+import { advanceBattlefield, battlefieldView, type BattleState, type Result } from "../state.js";
 
 export interface PredefinedUnitCreation extends UnitPlacementDefinition {
     readonly type: "UNIT";
@@ -225,26 +225,33 @@ export function advancePredefined(
     commands: readonly Command[],
     tick: number,
     resources: UnitLifecycleResources,
-): readonly PredefinedPresence[] {
-    const transition = changePredefinedInstances(
-        definitions,
-        reconcilePredefinedPresence(presence, battlefieldView(state)),
-        commands.filter(
-            (command) =>
-                command.type === "APPEAR_PREDEFINED" || command.type === "REMOVE_PREDEFINED",
-        ),
-        state.execution,
-        tick,
-    );
-    state.execution = transition.execution;
+): Result<readonly PredefinedPresence[]> {
+    presence = reconcilePredefinedPresence(presence, battlefieldView(state));
 
-    for (const change of transition.changes) {
-        if (change.type === "REMOVE_UNIT") {
-            removeUnitWithEffects(state, change.unitId, change.reason, resources, tick);
-        } else {
-            advanceBattlefield(state, [change]);
+    for (const command of commands) {
+        if (command.type !== "APPEAR_PREDEFINED" && command.type !== "REMOVE_PREDEFINED") {
+            continue;
         }
+
+        const transition = changePredefinedInstances(
+            definitions,
+            reconcilePredefinedPresence(presence, battlefieldView(state)),
+            [command],
+            state.execution,
+            tick,
+        );
+        state = { ...state, execution: transition.execution };
+
+        for (const change of transition.changes) {
+            if (change.type === "REMOVE_UNIT") {
+                state = removeUnitWithEffects(state, change.unitId, change.reason, resources, tick);
+            } else {
+                state = advanceBattlefield(state, [change]);
+            }
+        }
+
+        presence = transition.presence;
     }
 
-    return transition.presence;
+    return { state, value: presence };
 }

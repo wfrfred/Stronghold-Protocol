@@ -1,6 +1,6 @@
 import { attackBuff } from "../helpers/effects.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
-import { fixtureBattlefield } from "../helpers/battlefield.js";
+import { fixtureBattlefieldState as fixtureBattlefield } from "../helpers/battlefield.js";
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
@@ -11,7 +11,7 @@ import { createSkillDefinition } from '../../dist/core/tactical/unit/capability/
 import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { compileAction } from '../../dist/core/tactical/unit/capability/action/compile.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
-import { createBattleState, getUnit } from '../../dist/core/tactical/battle/execution/context.js';
+import { createBattleState, getUnit } from '../../dist/core/tactical/battle/state.js';
 import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
 
 const geometry = createShapeGeometry({ shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 5 }] });
@@ -43,13 +43,13 @@ function scenario(skill, { targets = 1, content, compile } = {}) {
   const resources = new CombatResources();
   const buff = attackBuff('skill/attack', 100);
   const fault = { enabled: false };
-  resources.skills.register({ definition: skill, activate: content ?? ((context) => {
-    const installed = effects.install(context.battle, getUnit(context.battle, context.unitId), buff, {
+  resources.skills.register({ definition: skill, activate: content ?? ((state, context) => {
+    const installed = effects.install(state, getUnit(state, context.unitId), buff, {
       source: context.unitId, scopes: [{ type: 'SKILL', unitId: context.unitId, activationId: context.activationId }],
     });
     if (fault.enabled) { throw new Error('skill fault'); }
-    assert.ok(installed);
-    return { type: 'ACTIVATED' };
+    assert.ok(installed.value);
+    return { state: installed.state, value: { type: 'ACTIVATED' } };
   }) });
   const base = createLegacyCombatSpec({ rows: 1, columns: 8, operators: [], enemies: [], maxTicks: 200, seed: 7 });
   const definition = actor(skill);
@@ -143,9 +143,9 @@ test('skill runtime: HIT SP counts zero damage but respects cancellation and ign
     const resources = new CombatResources();
     const definition = actor(skill({ spRecovery: 'HIT', initialSp: 0 }));
     const receiver = initializeUnit({ id: 0, definition: { ...definition, status: { initialFlags: flags } }, position: [0, 0] });
-    const work = createBattleState(fixtureBattlefield({ unitIds: [0], getUnit: () => receiver, blockerOf: () => undefined, blockedBy: () => [] }));
-    resources.settleDamage(work, { sourceUnitId: null, targetUnitId: 0,
-      damageType: 'TRUE', operands: createDamageOperands(0), tick: 0, ignoreForSp });
+    let work = createBattleState(fixtureBattlefield({ unitIds: [0], getUnit: () => receiver, blockerOf: () => undefined, blockedBy: () => [] }));
+    work = resources.settleDamage(work, { sourceUnitId: null, targetUnitId: 0,
+      damageType: 'TRUE', operands: createDamageOperands(0), tick: 0, ignoreForSp }).state;
     assert.equal(getUnit(work, 0).skill.sp, expected);
     assert.equal(getUnit(work, 0).vitality.hp, 100000);
   }

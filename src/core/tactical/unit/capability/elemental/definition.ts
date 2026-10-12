@@ -1,19 +1,17 @@
-import type { BattleState } from "../../../battle/execution/context.js";
+import type { BattleState } from "../../../battle/state.js";
 import type { BattlefieldView } from "../../../battlefield/contract.js";
-import type { DamageReport, DamageRequest } from "../vitality/damage/contract.js";
+import type { CallContext } from "../../../battle/execution/call.js";
 import type { ElementalBurst } from "./settlement.js";
 
 export interface ElementalBurstContext {
-    readonly battle: BattleState;
     readonly burst: ElementalBurst;
     readonly tick: number;
     readonly previousTick: number;
     readonly facts: BattlefieldView;
-    damage(request: Omit<DamageRequest, "tick">): DamageReport;
-    drainSp(amount: number): number;
+    readonly call: CallContext;
 }
 
 export interface ElementalBurstDefinition {
-    readonly begin: (context: ElementalBurstContext) => undefined;
-    readonly advance?: (context: ElementalBurstContext) => undefined;
+    readonly begin: (state: BattleState, context: ElementalBurstContext) => BattleState;
+    readonly advance?: (state: BattleState, context: ElementalBurstContext) => BattleState;
 }

@@ -1,6 +1,7 @@
 import { CombatResources } from "../core/tactical/battle/resources.js";
 import type { BattleResources } from "../core/tactical/battle/runtime.js";
-import { battlefieldView, getUnit, updateUnit } from "../core/tactical/battle/execution/context.js";
+import { battlefieldView, getUnit, updateUnit } from "../core/tactical/battle/state.js";
+import { resolveProjectileAttackPower } from "../core/tactical/battlefield/projectile/operations.js";
 import { createProjectileDefinition } from "../core/tactical/battlefield/projectile/definition.js";
 import { createShapeGeometry, type RangeGeometry } from "../core/tactical/geometry/shape.js";
 import * as modifier from "../core/tactical/unit/contribution/value.js";
@@ -29,9 +30,10 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
     const marker: Definition<object, Status> = {
         id: "contact-mark",
         initialize: () => ({}),
-        onEnable: (context) => {
+        onEnable: (state, context) => {
             const unit = context.unit;
-            updateUnit(context.battle, {
+
+            return updateUnit(state, {
                 ...unit,
                 status: addStatusContribution(unit.status, {
                     id: `@effect/${context.self.id}/status`,
@@ -39,9 +41,10 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
                 }),
             });
         },
-        onDisable: (context) => {
+        onDisable: (state, context) => {
             const unit = context.unit;
-            updateUnit(context.battle, {
+
+            return updateUnit(state, {
                 ...unit,
                 status: removeStatusContribution(unit.status, `@effect/${context.self.id}/status`),
             });
@@ -50,9 +53,9 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
     const boost: Definition<object, Offense> = {
         id: "post-launch-attack-boost",
         initialize: () => ({}),
-        onEnable: (context) => {
-            updateUnit(
-                context.battle,
+        onEnable: (state, context) => {
+            return updateUnit(
+                state,
                 setAttackContribution(context.unit, {
                     id: `@effect/${context.self.id}/attack`,
                     value: [modifier.create({ addition: 60 })],
@@ -60,9 +63,9 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
                 }),
             );
         },
-        onDisable: (context) => {
-            updateUnit(
-                context.battle,
+        onDisable: (state, context) => {
+            return updateUnit(
+                state,
                 removeAttackContribution(context.unit, `@effect/${context.self.id}/attack`),
             );
         },
@@ -83,24 +86,37 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
                 target.allegiance.side === "ENEMY" &&
                 hasVitality(target) &&
                 target.vitality.hp > 0,
-            contact: (context) => {
+            contact: (state, context) => {
                 const target = context.facts.getUnit(context.targetUnitId);
 
                 if (target !== undefined && hasStatus(target)) {
-                    install(context.battle, target, marker, {
-                        source: context.projectile.source,
-                        scopes: [{ type: "TICK", tick: context.tick + 45 }],
-                    });
+                    state = install(
+                        state,
+                        target,
+                        marker,
+                        {
+                            source: context.projectile.source,
+                            scopes: [{ type: "TICK", tick: context.tick + 45 }],
+                        },
+                        context.call,
+                    ).state;
                 }
 
-                context.operations.damage({
-                    sourceUnitId: context.projectile.source,
-                    targetUnitId: context.targetUnitId,
-                    damageType: "ARTS",
-                    operands: createDamageOperands(
-                        cachedOnly ? context.projectile.cachedAtk : context.attackPower(),
-                    ),
-                });
+                return resources.settleDamage(
+                    state,
+                    {
+                        sourceUnitId: context.projectile.source,
+                        targetUnitId: context.targetUnitId,
+                        tick: context.tick,
+                        damageType: "ARTS",
+                        operands: createDamageOperands(
+                            cachedOnly
+                                ? context.projectile.cachedAtk
+                                : resolveProjectileAttackPower(state, context.projectile),
+                        ),
+                    },
+                    context.call,
+                ).state;
             },
         }),
     );
@@ -118,29 +134,26 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
                 { type: "RELEASE", markerId: "demo-shell" },
                 {
                     type: "EXECUTE",
-                    run: (context) => {
-                        const source = getUnit(context.work, context.sourceUnitId);
+                    run: (state, context) => {
+                        const source = getUnit(state, context.sourceUnitId);
                         const targetId = context.bindings.get(definition.triggerBindingId)?.[0];
                         const target =
-                            targetId === undefined ? undefined : getUnit(context.work, targetId);
+                            targetId === undefined ? undefined : getUnit(state, targetId);
 
                         if (source === undefined || target === undefined) {
-                            return { continuation: "CANCEL" };
+                            return { state, value: { continuation: "CANCEL" } };
                         }
                         if (context.projectiles === undefined) {
                             throw new Error("projectile demo requires a launch operation");
                         }
 
-                        const cachedAtk = resolveAttackPower(
-                            source.id,
-                            battlefieldView(context.work),
-                        );
+                        const cachedAtk = resolveAttackPower(source.id, battlefieldView(state));
 
                         if (cachedAtk === undefined || !hasOffense(source)) {
                             throw new Error("projectile demo source requires Offense capability");
                         }
 
-                        const projectileId = context.projectiles.launch(shell.ref, {
+                        const launched = context.projectiles.launch(state, shell.ref, {
                             source: source.id,
                             traceTarget: target.id,
                             position: source.position,
@@ -150,12 +163,21 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
                             contactRange,
                             stopDelayTicks: 6,
                         });
-                        install(context.work, source, boost, {
-                            source: source.id,
-                            scopes: [{ type: "TICK", tick: context.tick + 70 }],
-                        });
+                        state = install(
+                            launched.state,
+                            source,
+                            boost,
+                            {
+                                source: source.id,
+                                scopes: [{ type: "TICK", tick: context.tick + 70 }],
+                            },
+                            context.call,
+                        ).state;
 
-                        return { samples: { cachedAtk, projectileId } };
+                        return {
+                            state,
+                            value: { samples: { cachedAtk, projectileId: launched.value } },
+                        };
                     },
                 },
                 {

@@ -1,3 +1,4 @@
+import type { BattleState } from "../../../../battle/state.js";
 import { widenUnit, type Unit, type StableUnit } from "../../../unit.js";
 import * as hook from "../../../hook/hook.js";
 import type { Vitality } from "../capability.js";
@@ -8,12 +9,18 @@ export type Context = VitalityContext<HealingRequest>;
 
 export type Stage = "output" | "reception" | "skippedReception";
 
-export interface AmountHook extends hook.Hook<Context, PendingHealing, Result<PendingHealing>> {
+export interface AmountHook extends hook.Hook<
+    BattleState,
+    Context,
+    PendingHealing,
+    Result<PendingHealing>
+> {
     readonly stage: Stage;
     readonly priority: number;
 }
 
 export interface ReactionHook extends hook.Hook<
+    BattleState,
     Context,
     HealingReport,
     undefined | { readonly stopDispatch?: boolean }

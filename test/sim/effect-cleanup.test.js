@@ -1,3 +1,4 @@
+import { battlefieldView } from "../../dist/core/tactical/battle/state.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
@@ -18,16 +19,18 @@ test("effect cleanup: terminal business sees the ending instance and ending imme
         "terminal",
         { count: 3 },
         {
-            onEnd(context) {
-                assert.equal(get(context.battle, context.ref).status, "ENDING");
+            onEnd(state, context) {
+                assert.equal(get(state, context.ref).status, "ENDING");
                 seen.push(context.self.state.count);
+                return state;
             },
         },
     );
-    const battle = effectFixtureWork(unit());
-    const ref = install(battle, value);
-    const before = battle.battlefield.snapshot("draft");
-    effect.end(battle, ref);
+    let battle = effectFixtureWork(unit());
+    let ref;
+    ({ state: battle, value: ref } = install(battle, value));
+    const before = battlefieldView(battle);
+    battle = effect.end(battle, ref).state;
     assert.equal(get(battle, ref), undefined);
     assert.deepEqual(seen, [3]);
     assert.equal(before.getUnit(0).effects.instances[0].status, "ACTIVE");
@@ -40,14 +43,23 @@ test("effect cleanup: a replacement installed during end uses a new identity and
         "old",
         {},
         {
-            onEnd(context) {
-                next = effect.install(context.battle, context.unit, replacement);
+            onEnd(state, context) {
+                const installed = effect.install(
+                    state,
+                    context.unit,
+                    replacement,
+                    {},
+                    context.call,
+                );
+                next = installed.value;
+                return installed.state;
             },
         },
     );
-    const battle = effectFixtureWork(unit());
-    const old = install(battle, value);
-    effect.end(battle, old);
+    let battle = effectFixtureWork(unit());
+    let old;
+    ({ state: battle, value: old } = install(battle, value));
+    battle = effect.end(battle, old).state;
     assert.equal(get(battle, old), undefined);
     assert.notEqual(next.effectId, old.effectId);
     assert.equal(get(battle, next).definition, replacement);

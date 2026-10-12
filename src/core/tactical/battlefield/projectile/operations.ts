@@ -1,13 +1,17 @@
-import { ProjectileWork } from "./internal/state.js";
 import { assertNonnegativeNumber, assertNonnegativeSafeInteger } from "../../../common/assert.js";
-import type { SynchronousResult } from "../../../common/synchronous.js";
+import {
+    advanceBattlefield,
+    battlefieldView,
+    type BattleState,
+    type Result,
+} from "../../battle/state.js";
+import { resolveAttackPower } from "../../unit/capability/offense/query.js";
 import type { WorldPosition } from "../../geometry/coordinate.js";
 import type { RangeGeometry } from "../../geometry/shape.js";
 import type { UnitId } from "../../unit/unit.js";
 import type { ProjectileDefinitionRef } from "./definition.js";
 import type { ProjectileResources } from "./resources.js";
-import type { BattlefieldChange } from "../contract.js";
-import type { ProjectileId, Projectile, ProjectileView } from "./projectile.js";
+import type { ProjectileId, Projectile } from "./projectile.js";
 
 export interface ProjectileLaunchInput<S extends object = object> {
     readonly source: UnitId | null;
@@ -24,117 +28,93 @@ export interface ProjectileLaunchInput<S extends object = object> {
 
 export interface ProjectileOperations {
     launch<S extends object>(
+        state: BattleState,
         ref: ProjectileDefinitionRef<S>,
         input: ProjectileLaunchInput<NoInfer<S>>,
-    ): ProjectileId;
-    get(id: ProjectileId): Projectile | undefined;
+    ): Result<ProjectileId>;
+    get(state: BattleState, id: ProjectileId): Projectile | undefined;
 }
 
-export function withProjectileOperations(
-    battlefield: ProjectileView,
-    nextProjectileId: ProjectileId,
+export function getProjectile(state: BattleState, id: ProjectileId): Projectile | undefined {
+    return battlefieldView(state).getProjectile(id);
+}
+
+export function replaceProjectile(state: BattleState, projectile: Projectile): BattleState {
+    const current = getProjectile(state, projectile.id);
+
+    return current === undefined || current === projectile
+        ? state
+        : advanceBattlefield(state, [{ type: "UPDATE_PROJECTILE", projectile }]);
+}
+
+export function resolveProjectileAttackPower(state: BattleState, projectile: Projectile): number {
+    return (
+        (projectile.source === null
+            ? undefined
+            : resolveAttackPower(projectile.source, battlefieldView(state))) ?? projectile.cachedAtk
+    );
+}
+
+export function launchProjectile<S extends object>(
+    state: BattleState,
+    ref: ProjectileDefinitionRef<S>,
+    input: ProjectileLaunchInput<NoInfer<S>>,
     resources: ProjectileResources,
     tick: number,
-    run: (operations: ProjectileOperations) => undefined,
-): {
-    readonly changes: readonly BattlefieldChange[];
-    readonly nextProjectileId: ProjectileId;
-    readonly result: undefined;
-};
-export function withProjectileOperations<T>(
-    battlefield: ProjectileView,
-    nextProjectileId: ProjectileId,
-    resources: ProjectileResources,
-    tick: number,
-    run: (operations: ProjectileOperations) => SynchronousResult<T>,
-): {
-    readonly changes: readonly BattlefieldChange[];
-    readonly nextProjectileId: ProjectileId;
-    readonly result: T;
-};
-export function withProjectileOperations<T>(
-    battlefield: ProjectileView,
-    nextProjectileId: ProjectileId,
-    resources: ProjectileResources,
-    tick: number,
-    run: (operations: ProjectileOperations) => SynchronousResult<T>,
-): {
-    readonly changes: readonly BattlefieldChange[];
-    readonly nextProjectileId: ProjectileId;
-    readonly result: T;
-} {
-    assertNonnegativeSafeInteger(nextProjectileId, "projectile identity");
-    const current = new ProjectileWork(battlefield);
-    let active = true;
+): Result<ProjectileId> {
+    const id = state.execution.nextProjectileId;
+    const nextProjectileId = id + 1;
+    assertNonnegativeSafeInteger(id, "projectile identity");
 
-    const readWork = (): ProjectileWork => {
-        if (!active) {
-            throw new TypeError("projectile operations are no longer active");
-        }
-
-        return current;
-    };
-
-    const operations: ProjectileOperations = {
-        get: (id) => readWork().get(id),
-        launch: (ref, input) => {
-            const previous = readWork();
-            const allocatedNextId = nextProjectileId + 1;
-
-            if (!Number.isSafeInteger(allocatedNextId)) {
-                throw new RangeError("projectile identity overflow");
-            }
-
-            assertNonnegativeSafeInteger(tick, "projectile launch tick");
-            assertNonnegativeNumber(input.cachedAtk, "projectile cached attack");
-            assertNonnegativeNumber(input.speedPerTick, "projectile speed per tick");
-            assertNonnegativeSafeInteger(input.stopDelayTicks, "projectile stop delay");
-
-            if (input.source !== null) {
-                assertNonnegativeSafeInteger(input.source, "projectile source identity");
-            }
-            if (input.traceTarget !== null) {
-                assertNonnegativeSafeInteger(input.traceTarget, "projectile target identity");
-            }
-            if (input.expiresAtTick !== undefined && input.expiresAtTick !== null) {
-                assertNonnegativeSafeInteger(input.expiresAtTick, "projectile expiration tick");
-            }
-
-            const definition = resources.get(ref);
-            const instance: Projectile = {
-                id: nextProjectileId,
-                definitionRef: ref,
-                source: input.source,
-                traceTarget: input.traceTarget,
-                position: input.position,
-                destination: input.destination,
-                cachedAtk: input.cachedAtk,
-                speedPerTick: input.speedPerTick,
-                contactRange: input.contactRange,
-                stopDelayTicks: input.stopDelayTicks,
-                launchedAtTick: tick,
-                lastAdvancedTick: tick,
-                expiresAtTick: input.expiresAtTick ?? null,
-                progress: { type: "FLYING" },
-                hitUnitIds: [],
-                state: input.initialState ?? definition.initialize(),
-            };
-            previous.add(instance);
-            nextProjectileId = allocatedNextId;
-
-            return instance.id;
-        },
-    };
-
-    try {
-        const result = run(operations);
-
-        return {
-            changes: current.changes(),
-            nextProjectileId,
-            result,
-        };
-    } finally {
-        active = false;
+    if (!Number.isSafeInteger(nextProjectileId)) {
+        throw new RangeError("projectile identity overflow");
     }
+
+    assertNonnegativeSafeInteger(tick, "projectile launch tick");
+    assertNonnegativeNumber(input.cachedAtk, "projectile cached attack");
+    assertNonnegativeNumber(input.speedPerTick, "projectile speed per tick");
+    assertNonnegativeSafeInteger(input.stopDelayTicks, "projectile stop delay");
+
+    if (input.source !== null) {
+        assertNonnegativeSafeInteger(input.source, "projectile source identity");
+    }
+    if (input.traceTarget !== null) {
+        assertNonnegativeSafeInteger(input.traceTarget, "projectile target identity");
+    }
+    if (input.expiresAtTick !== undefined && input.expiresAtTick !== null) {
+        assertNonnegativeSafeInteger(input.expiresAtTick, "projectile expiration tick");
+    }
+
+    const definition = resources.get(ref);
+    const projectile: Projectile = {
+        id,
+        definitionRef: ref,
+        source: input.source,
+        traceTarget: input.traceTarget,
+        position: input.position,
+        destination: input.destination,
+        cachedAtk: input.cachedAtk,
+        speedPerTick: input.speedPerTick,
+        contactRange: input.contactRange,
+        stopDelayTicks: input.stopDelayTicks,
+        launchedAtTick: tick,
+        lastAdvancedTick: tick,
+        expiresAtTick: input.expiresAtTick ?? null,
+        progress: { type: "FLYING" },
+        hitUnitIds: [],
+        state: input.initialState ?? definition.initialize(),
+    };
+    state = advanceBattlefield(state, [{ type: "REGISTER_PROJECTILE", projectile }]);
+
+    return { state: { ...state, execution: { ...state.execution, nextProjectileId } }, value: id };
+}
+
+export function createProjectileOperations(
+    resources: ProjectileResources,
+    tick: number,
+): ProjectileOperations {
+    return {
+        get: getProjectile,
+        launch: (state, ref, input) => launchProjectile(state, ref, input, resources, tick),
+    };
 }

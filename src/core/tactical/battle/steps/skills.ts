@@ -5,17 +5,17 @@ import {
     type SkillExecutionResources,
 } from "../../unit/capability/skill/execution.js";
 import type { Command } from "../contract.js";
-import { appendEvents, battlefieldView, type BattleState } from "../execution/context.js";
+import { appendEvents, battlefieldView, type BattleState } from "../state.js";
 
 export function advanceSkills(
     state: BattleState,
     commands: readonly Command[],
     tick: number,
     resources: SkillExecutionResources,
-): void {
+): BattleState {
     for (const id of battlefieldView(state).unitIds) {
         const advanced = advanceSkill(state, id, tick, resources);
-        appendEvents(state, advanced.signals);
+        state = appendEvents(advanced.state, advanced.value.signals);
     }
 
     for (const command of commands) {
@@ -27,6 +27,8 @@ export function advanceSkills(
             command.type === "ACTIVATE_SKILL"
                 ? activateSkill(state, { unitId: command.unitId, tick }, resources)
                 : finishSkill(state, command.unitId, tick, resources);
-        appendEvents(state, changed.signals);
+        state = appendEvents(changed.state, changed.value.signals);
     }
+
+    return state;
 }

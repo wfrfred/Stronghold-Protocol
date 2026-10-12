@@ -18,41 +18,45 @@ test("direct Effect definitions type host capabilities, private state and immuta
         `
 import { initializeUnit } from ${module("unit/initialize")};
 import type { Unit } from ${module("unit/unit")};
-import type { BattleState } from ${module("battle/execution/context")};
+import type { BattleState } from ${module("battle/state")};
 import type { Vitality, VitalityState } from ${module("unit/capability/vitality/capability")};
 import { setMaxHpContribution } from ${module("unit/capability/vitality/capability")};
 import { setAttackContribution } from ${module("unit/capability/offense/capability")};
 import { setCapacityContribution } from ${module("unit/capability/blocking/capability")};
 import type { Definition } from ${module("unit/effect/definition")};
-import { install, setState } from ${module("unit/effect/operations")};
+import { install, setState, replaceEffect } from ${module("unit/effect/operations")};
 import { find } from ${module("unit/effect/query")};
 import type { Contribution, Input } from ${module("unit/contribution/contribution")};
 import type { QueryContext } from ${module("unit/query")};
 const host=initializeUnit({id:1,position:[0,0],definition:{id:'host',vitality:{maxHp:100}}});
 const content: Definition<{charges:number},Vitality> = {
  id:'shield',initialize:()=>({charges:2}),
- onTick(context) {
+ onTick(state,context) {
    const hp:number=context.unit.vitality.hp;
-   context.setState(current=>({charges:current.charges-1}));
+   const next=setState(context.self,current=>({charges:current.charges-1}));
    // @ts-expect-error private state remains specific to this definition.
-   context.setState({missing:1});
+   setState(context.self,{missing:1});
    // @ts-expect-error stored values are readonly.
    context.self.status='ENDING';
    // @ts-expect-error shared host state must use immutable transitions.
    context.unit.vitality.hp=hp;
+   return replaceEffect(state,context.ref.unitId,next);
  }
 };
 declare const battle:BattleState;
-const ref=install(battle,host,content);
+const installed=install(battle,host,content);
+const ref=installed.value;
 const bare=initializeUnit({id:2,position:[0,0],definition:{id:'bare'}});
 // @ts-expect-error required host capabilities must be present.
 install(battle,bare,content);
 if(ref!==undefined) {
- setState(battle,ref,content,{charges:5});
- // @ts-expect-error state transitions preserve Definition's state type.
- setState(battle,ref,content,{charges:'five'});
  const found=find(host,content,ref.effectId);
- if(found!==undefined){const charges:number=found.state.charges;}
+ if(found!==undefined){
+   const charges:number=found.state.charges;
+   setState(found,{charges:5});
+   // @ts-expect-error state transitions preserve the Effect's private state type.
+   setState(found,{charges:'five'});
+ }
 }
 declare const capabilityHost:Unit & Vitality & {readonly tag:'kept';readonly vitality:VitalityState & {readonly hp:100}};
 const fixed:Contribution={id:'fixed',value:[]};

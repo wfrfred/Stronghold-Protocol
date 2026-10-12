@@ -1,7 +1,7 @@
-export interface Hook<C, I, O> {
+export interface Hook<S, C, I, O> {
     readonly id: string;
     readonly enabled: (context: C) => boolean;
-    readonly invoke: (context: C, input: I) => O;
+    readonly invoke: (state: S, context: C, input: I) => { readonly state: S; readonly value: O };
 }
 
 export function set<T extends { readonly id: string }>(

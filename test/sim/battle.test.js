@@ -1,3 +1,7 @@
+import { installFixtureEffect } from "../helpers/effects.js";
+import { create as createBattlefieldState, transition as transitionBattlefield } from "../../dist/core/tactical/battlefield/state.js";
+import { view as viewBattlefield } from "../../dist/core/tactical/battlefield/view.js";
+import { battlefieldView } from "../../dist/core/tactical/battle/state.js";
 import { getNavigationRequest } from "../../dist/core/tactical/battlefield/navigation/state.js";
 // Battle-level rules: DP & redeploy, pathing around crates, FLY checkpoints, leaks/results, time limit, unite & boss
 // fields, shared boss pool, wire format, determinism, robustness, deployment order.
@@ -38,7 +42,7 @@ import { createOccupancyState } from '../../dist/core/tactical/unit/capability/o
 import { createPredefinedDefinition } from '../../dist/core/tactical/battle/steps/predefined.js';
 import { advanceMovement } from '../../dist/core/tactical/battle/steps/movement.js';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
-import { createBattleState, appendEvents, getUnit, registerUnit } from '../../dist/core/tactical/battle/execution/context.js';
+import { createBattleState, appendEvents, getUnit, registerUnit } from '../../dist/core/tactical/battle/state.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { createActionDefinition } from '../../dist/core/tactical/unit/capability/action/capability.js';
 import { install as installEffect } from '../../dist/core/tactical/unit/effect/operations.js';
@@ -1093,6 +1097,21 @@ test('core battle publishes a completed tick only after all operations succeed',
       expiresAtTick: 1,
     });
     const predefinedUnit = Object.freeze({ id: 'late-failure-predefined', vitality: Object.freeze({ maxHp: 25 }) });
+    let failureEnabled = false;
+    let failures = 0;
+    let observedRuntime;
+    let observedSnapshot;
+    let observedMaps;
+    const lifecycle = { id: 'late-failure-rule', initialize: () => ({}), onTick(state, context) {
+      if (context.tick !== 1) return state;
+      assert.ok(state.battlefield.units.size > observedSnapshot.units.length);
+      assert.ok(state.battlefield.mechanisms.has(1));
+      assert.deepEqual(observedRuntime.snapshot(), observedSnapshot);
+      assert.equal(observedRuntime.navigationMaps, observedMaps);
+      if (failureEnabled) { failures++; throw new Error('late-stage failure'); }
+      return state;
+    } };
+    const failingEffects = installFixtureEffect(initializeUnit({ id: 99, definition: predefinedUnit, position: [8, 9] }), lifecycle).effects;
     const input = {
       ...withTimelineSpawns(base, [
         ...(reason === 'TIME_LIMIT' ? [source] : []),
@@ -1108,7 +1127,7 @@ test('core battle publishes a completed tick only after all operations succeed',
               region: createNavigationModifierRegion({ type: 'FIXED', position: [9, 7], range: [[0, 0]], direction: 'RIGHT' }) },
           ] } },
         { id: 2, alias: null, initiallyPresent: false,
-          creation: { type: 'UNIT', definition: predefinedUnit, position: Object.freeze([8, 9]), navigationModifiers: [] } },
+          creation: { type: 'UNIT', definition: predefinedUnit, position: Object.freeze([8, 9]), navigationModifiers: [], effects: failingEffects } },
       ],
     };
     const runtime = new BattleRuntime(input), replay = new BattleRuntime(input);
@@ -1119,6 +1138,7 @@ test('core battle publishes a completed tick only after all operations succeed',
       { type: 'APPEAR_PREDEFINED', definitionId: 1 },
       { type: 'APPEAR_PREDEFINED', definitionId: 2 },
     ];
+    observedRuntime = runtime; observedSnapshot = before; observedMaps = maps;
     const expected = replay.step(commands), expectedSnapshot = replay.snapshot();
     assert.equal(expected.result.reason, reason);
     assert.equal(expected.result.completedRouteCount, 1);
@@ -1130,37 +1150,10 @@ test('core battle publishes a completed tick only after all operations succeed',
     assert.ok(expectedSnapshot.execution.nextUnitId > before.execution.nextUnitId);
     assert.ok(expectedSnapshot.execution.nextMechanismId > before.execution.nextMechanismId);
     assert.ok(expectedSnapshot.execution.nextNavigationModifierId > before.execution.nextNavigationModifierId);
-    const snapshot = BattlefieldRuntime.prototype.snapshot;
-    const spawnedId = expectedSnapshot.execution.nextUnitId - 1;
-    let failures = 0;
-    let spawned = false;
-    try {
-      BattlefieldRuntime.prototype.snapshot = function(version) {
-        const view = snapshot.call(this, version);
-        if (version !== 'draft') return view;
-        spawned ||= view.unitIds.includes(spawnedId);
-        return new Proxy(view, {
-          get(target, property, receiver) {
-            const value = Reflect.get(target, property, receiver);
-            if (property === 'unitIds' && spawned &&
-                JSON.stringify(value) === JSON.stringify(expectedSnapshot.units.map(unit => unit.id))) {
-              assert.deepEqual(view.mechanismIds, expectedSnapshot.mechanisms.map(mechanism => mechanism.id));
-              assert.deepEqual(view.navigationModifierIds, [1]);
-              assert.deepEqual(runtime.snapshot(), before);
-              assert.equal(runtime.navigationMaps, maps);
-              failures++;
-              throw new Error('late-stage failure');
-            }
-            return value;
-          },
-        });
-      };
-      assert.throws(() => runtime.step(commands), /late-stage failure/);
-      assert.deepEqual(runtime.snapshot(), before);
-      assert.equal(runtime.navigationMaps, maps);
-    } finally {
-      BattlefieldRuntime.prototype.snapshot = snapshot;
-    }
+    failureEnabled = true;
+    assert.throws(() => runtime.step(commands), /late-stage failure/);
+    assert.deepEqual(runtime.snapshot(), before);
+    assert.equal(runtime.navigationMaps, maps);
     assert.equal(failures, 1);
     assert.deepEqual(replay.step(), { events: [], result: expected.result });
     assert.deepEqual(replay.snapshot(), expectedSnapshot);
@@ -1170,7 +1163,6 @@ test('core battle publishes a completed tick only after all operations succeed',
 test('core battle propagates nested settlement errors without publishing battlefield, identities or Action progress', () => {
   const sentinel = new Error('nested settlement failure');
   let fail = true;
-  let activeState;
   let observedRuntime;
   let observedSnapshot;
   let observedMaps;
@@ -1178,17 +1170,18 @@ test('core battle propagates nested settlement errors without publishing battlef
   const resources = new CombatResources();
   const effect = {
     id: 'nested-failure-effect', initialize: () => ({}),
-    onInstall: context => {
-      resources.settleDamage(context.battle, { sourceUnitId: 0, targetUnitId: 1, damageType: 'TRUE', operands: createDamageOperands(7), tick: context.tick });
-      assert.equal(getUnit(activeState, 1).vitality.hp, 93);
-      assert.equal(getUnit(activeState, 2).definition.id, 'nested-created');
-      assert.equal(activeState.execution.nextUnitId, 3);
-      assert.equal(activeState.actionExecutions.result().executions.length, 1);
-      assert.ok(activeState.events.some(event => event.type === 'DAMAGE'));
+    onInstall: (state, context) => {
+      state = resources.settleDamage(state, { sourceUnitId: 0, targetUnitId: 1, damageType: 'TRUE', operands: createDamageOperands(7), tick: context.tick }, context.call).state;
+      assert.equal(getUnit(state, 1).vitality.hp, 93);
+      assert.equal(getUnit(state, 2).definition.id, 'nested-created');
+      assert.equal(state.execution.nextUnitId, 3);
+      assert.equal(state.actionExecutions.executions.length, 1);
+      assert.ok(state.events.some(event => event.type === 'DAMAGE'));
       assert.deepEqual(observedRuntime.snapshot(), observedSnapshot);
       assert.equal(observedRuntime.navigationMaps, observedMaps);
       observations++;
       if (fail) throw sentinel;
+      return state;
     },
   };
   const action = createActionDefinition({
@@ -1205,15 +1198,15 @@ test('core battle propagates nested settlement errors without publishing battlef
   ] });
   const compileAction = definition => ({
     definition, bind: () => new Map([['primary', [1]]]), program: [
-      { type: 'EXECUTE', run: context => {
-        activeState = context.work;
-        const unit = initializeUnit({ id: context.work.execution.nextUnitId, position: [2, 0], definition: {
+      { type: 'EXECUTE', run: (state, context) => {
+        const unit = initializeUnit({ id: state.execution.nextUnitId, position: [2, 0], definition: {
           id: 'nested-created', vitality: { maxHp: 10 },
         } });
-        registerUnit(context.work, unit);
-        context.work.execution = { ...context.work.execution, nextUnitId: unit.id + 1 };
-        appendEvents(context.work, [{ type: 'UNIT_DEPLOYED', unitId: unit.id, position: unit.position, tick: context.tick }]);
-        installEffect(context.work, getUnit(context.work, 1), effect, { source: 0 });
+        state = registerUnit(state, unit);
+        state = { ...state, execution: { ...state.execution, nextUnitId: unit.id + 1 } };
+        state = appendEvents(state, [{ type: 'UNIT_DEPLOYED', unitId: unit.id, position: unit.position, tick: context.tick }]);
+        state = installEffect(state, getUnit(state, 1), effect, { source: 0 }, context.call).state;
+        return { state, value: undefined };
       } },
       { type: 'WAIT', resolve: () => ({ type: 'FOR_TICKS', ticks: 2 }), allowNewAction: false },
     ],
@@ -1271,35 +1264,17 @@ test('core schedule removal feedback advances the next wave only on the next tic
   });
 });
 
-test('core clearing derived navigation fields preserves every tick, event and RNG transition', () => {
+test('core independently rebuilding navigation fields preserves every tick, event and RNG transition', () => {
   const input = routeCommandBattle([
     { type: 'MOVE', target: { position: [9, 8], reachOffset: [0.25, 0.25], randomizeReachOffset: true, reachDistance: 0.05 } },
     { type: 'WAIT_FOR_TICKS', durationTicks: 2 },
     { type: 'MOVE', target: { position: [9, 6], reachOffset: [0.25, 0.25], randomizeReachOffset: true, reachDistance: 0.05 } },
   ], { speed: 1 / 5, maxTicks: 100 });
   const runtime = new BattleRuntime(input), replay = new BattleRuntime(input);
-  const snapshot = BattlefieldRuntime.prototype.snapshot;
-  let clearCount = 0;
   for (let tick = 0; runtime.result === null; tick++) {
-    const expected = replay.step();
-    let actual;
-    try {
-      BattlefieldRuntime.prototype.snapshot = function(version) {
-        const view = snapshot.call(this, version);
-        if (version === 'draft') {
-          view.fieldCache.clear();
-          clearCount++;
-        }
-        return view;
-      };
-      actual = runtime.step();
-    } finally {
-      BattlefieldRuntime.prototype.snapshot = snapshot;
-    }
-    assert.deepEqual(actual, expected);
+    assert.deepEqual(runtime.step(), replay.step());
     assert.deepEqual(runtime.snapshot(), replay.snapshot());
   }
-  assert.ok(clearCount > 10);
   assert.equal(runtime.result.reason, 'SCHEDULE_COMPLETED');
   assert.equal(runtime.result.completedRouteCount, 1);
 });
@@ -2255,7 +2230,7 @@ test('core visibility: movement reads one navigation projection before following
     heightType: 'LOWLAND', buildableType: 'ALL', passableMask: 'ALL',
     playerSideMask: 'ALL', terrain: 'NORMAL', mechanism: null,
   })));
-  const battlefield = createBattlefieldRuntime({ map });
+  let battlefield = createBattlefieldState({ map });
   const definition = createEnemyDefinition({ id: 'moving_effect_anchor', vitality: { maxHp: 100 }, locomotion: {
     moveSpeedPerTick: 1, steeringParameters: createSteeringParameters({ steeringFactor: 1, maxSteeringForce: 1 }),
   } });
@@ -2276,21 +2251,21 @@ test('core visibility: movement reads one navigation projection before following
       alwaysCheckCurrentPoint: true, rngState: execution.rngState, nextNavigationRequestId: execution.nextNavigationRequestId,
     });
     execution = { ...execution, rngState: spawned.rngState, nextNavigationRequestId: spawned.nextNavigationRequestId };
-    battlefield.advance([{ type: 'REGISTER_UNIT', unit: spawned.enemy }]);
+    battlefield = transitionBattlefield(battlefield, [{ type: 'REGISTER_UNIT', unit: spawned.enemy }]).state;
   }
 
-  battlefield.advance([{ type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: createNavigationModifier({
+  battlefield = transitionBattlefield(battlefield, [{ type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: createNavigationModifier({
     id: 0, definition: createNavigationModifierDefinition({ id: 'moving_denied_tile',
       WALK: { denyPassage: true, deniedDepartures: [], costFloor: 1 }, FLY: null }),
     source: { type: 'UNIT', unitId: 0 }, active: true,
     region: { type: 'FOLLOW_UNIT', unitId: 0, range: [[0, 0]], direction: 'RIGHT' }, expiresAtTick: null,
-  }) }]);
-  assert.deepEqual(battlefield.snapshot('draft').navigationMaps.WALK.cells.map(cell => cell.passable), [true, false, true, true, true]);
+  }) }]).state;
+  assert.deepEqual(viewBattlefield(battlefield).navigationMaps.WALK.cells.map(cell => cell.passable), [true, false, true, true, true]);
 
-  const moved = createBattleState(battlefield, execution);
-  advanceMovement(moved, 0, { routeMoveMultiplier: 1 }, new CombatResources());
+  const initial = createBattleState(battlefield, execution);
+  const moved = advanceMovement(initial, 0, { routeMoveMultiplier: 1 }, new CombatResources());
 
-  const view = battlefield.snapshot('draft');
+  const view = battlefieldView(moved);
   assert.deepEqual(view.unitIds.map(id => view.getUnit(id).position), [[2, 0], [2, 0]]);
   assert.deepEqual(moved.events.filter(event => event.type === 'NAVIGATION').map(event => [event.unitId, event.outcome.type]),
     [[0, 'ARRIVED'], [1, 'ARRIVED']]);

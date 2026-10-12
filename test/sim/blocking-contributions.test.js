@@ -1,4 +1,4 @@
-import { fixtureBattlefield } from "../helpers/battlefield.js";
+import { fixtureBattlefieldState as fixtureBattlefield } from "../helpers/battlefield.js";
 import { deadline } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -8,7 +8,7 @@ import {
     createBattleState,
     battlefieldView,
     getUnit,
-} from "../../dist/core/tactical/battle/execution/context.js";
+} from "../../dist/core/tactical/battle/state.js";
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
 import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
 import { projectStaticNavigationMap } from "../../dist/core/tactical/battlefield/navigation/projection.js";
@@ -87,8 +87,17 @@ const install = (work, effect, expiresAtTick = null) =>
         scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }],
     });
 const change = (work, effect, next, setting) => {
-    effects.setState(work, effectAddress, effect, next);
-    refreshContribution(work, effectAddress, effect, setting);
+    work = effects.replaceEffect(
+        work,
+        effectAddress.unitId,
+        effects.setState(
+            getUnit(work, effectAddress.unitId).effects.instances.find(
+                (instance) => instance.id === effectAddress.effectId,
+            ),
+            next,
+        ),
+    );
+    return refreshContribution(work, effectAddress, effect, setting);
 };
 const entry = (id, value) => ({ id, value: [value] });
 
@@ -147,21 +156,21 @@ test("blocking capacity: explicit refresh and lifecycle output changes preserve 
     const effect = contributionEffect("capacity", { amount: -1 }, setting);
     const initialized = blocker();
     const owner = { ...initialized, vitality: { ...initialized.vitality, hp: 50 } };
-    const work = effectFixtureWork(owner);
-    install(work, effect);
+    let work = effectFixtureWork(owner);
+    work = install(work, effect).state;
     const old = getUnit(work, 0);
     assert.equal(capacity(work), 2);
-    change(work, effect, { amount: -2 }, setting);
+    work = change(work, effect, { amount: -2 }, setting);
     assert.equal(capacity(work), 1);
-    effects.setEnabled(work, effectAddress, false);
+    work = effects.setEnabled(work, effectAddress, false);
     assert.equal(capacity(work), 3);
-    change(work, effect, { amount: -9 }, setting);
+    work = change(work, effect, { amount: -9 }, setting);
     assert.equal(capacity(work), 3);
-    effects.setEnabled(work, effectAddress, true);
+    work = effects.setEnabled(work, effectAddress, true);
     assert.equal(capacity(work), 0);
-    effects.install(work, getUnit(work, 0), maxHpBuff("hp", 100));
+    work = effects.install(work, getUnit(work, 0), maxHpBuff("hp", 100)).state;
     assert.equal(getUnit(work, 0).vitality.hp, 100);
-    effects.end(work, effectAddress);
+    work = effects.end(work, effectAddress).state;
     assert.equal(capacity(work), 3);
     assert.equal(getUnit(work, 0).vitality.hp, 100);
     assert.equal(old.blocker.capacity.length, 1);
@@ -229,9 +238,10 @@ function battlefield(units) {
         },
         publish(work) {
             return commit(
-                work.battlefield
-                    .snapshot("draft")
-                    .unitIds.map((id) => ({ type: "UPDATE_UNIT", unit: getUnit(work, id) })),
+                battlefieldView(work).unitIds.map((id) => ({
+                    type: "UPDATE_UNIT",
+                    unit: getUnit(work, id),
+                })),
             );
         },
         blocked() {
@@ -268,26 +278,33 @@ test("blocking capacity: native stack renewal and terminal cleanup update real b
         { stackCount: 3, lifetimeTicks: 2 },
         setting,
         {
-            onTick(ctx) {
-                if (ctx.tick < deadline(ctx.self)) return;
+            onTick(state, ctx) {
+                if (ctx.tick < deadline(ctx.self)) return state;
                 const plan = rule.expire(
                     { stackCount: ctx.self.state.stackCount, expiresAtTick: deadline(ctx.self) },
                     ctx.self.state.lifetimeTicks,
                     ctx.tick,
                 );
-                if (plan.type === "FINISH") ctx.end();
+                if (plan.type === "FINISH")
+                    return effects.end(state, ctx.ref, "EXPIRED", ctx.call).state;
                 else {
-                    effects.setDeadline(ctx.battle, ctx.ref, plan.expiresAtTick);
-                    ctx.setState((state) => ({ ...state, stackCount: plan.stackCount }));
-                    refreshContribution(ctx.battle, ctx.ref, content, setting);
+                    const next = effects.setDeadline(
+                        effects.setState(ctx.self, (current) => ({
+                            ...current,
+                            stackCount: plan.stackCount,
+                        })),
+                        plan.expiresAtTick,
+                    );
+                    state = effects.replaceEffect(state, ctx.ref.unitId, next);
+                    return refreshContribution(state, ctx.ref, content, setting);
                 }
             },
         },
     );
     const h = battlefield([blocker(), enemy(1), enemy(2), enemy(3), enemy(4, 4)]);
     const original = h.state;
-    const work = h.work();
-    install(work, content, 2);
+    let work = h.work();
+    work = install(work, content, 2).state;
     h.publish(work);
     assert.deepEqual(h.blocked(), []);
     for (const [tick, remaining] of [
@@ -295,8 +312,8 @@ test("blocking capacity: native stack renewal and terminal cleanup update real b
         [4, 2],
         [6, 3],
     ]) {
-        const work = h.work();
-        effects.advance(at(work, tick));
+        let work = h.work();
+        work = effects.advance(at(work, tick));
         h.publish(work);
         assert.equal(capacityOf(h.state.units.get(0)), remaining);
         assert.deepEqual(
@@ -321,20 +338,20 @@ test("blocking capacity: native zero scaler releases weighted targets and restor
     const content = contributionEffect(raw.node._buff.buffKey, {}, setting);
     const h = battlefield([blocker(), enemy(1, 2), enemy(2), enemy(3, 4)]);
     assert.deepEqual(h.blocked(), [1, 2]);
-    const work = h.work();
-    install(work, content);
+    let work = h.work();
+    work = install(work, content).state;
     h.publish(work);
     assert.deepEqual(h.blocked(), []);
-    const paused = h.work();
-    effects.setEnabled(paused, effectAddress, false);
+    let paused = h.work();
+    paused = effects.setEnabled(paused, effectAddress, false);
     h.publish(paused);
     assert.deepEqual(h.blocked(), [1, 2]);
-    const resumed = h.work();
-    effects.setEnabled(resumed, effectAddress, true);
+    let resumed = h.work();
+    resumed = effects.setEnabled(resumed, effectAddress, true);
     h.publish(resumed);
     assert.deepEqual(h.blocked(), []);
-    const finished = h.work();
-    effects.end(finished, effectAddress);
+    let finished = h.work();
+    finished = effects.end(finished, effectAddress).state;
     h.publish(finished);
     assert.deepEqual(h.blocked(), [1, 2]);
     assert.deepEqual(

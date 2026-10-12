@@ -5,7 +5,7 @@ import {
     getUnit,
     battlefieldView,
     transitionUnit,
-} from "../../dist/core/tactical/battle/execution/context.js";
+} from "../../dist/core/tactical/battle/state.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import {
     setMaxHpContribution,
@@ -41,21 +41,24 @@ test("MaxHP: direct capability changes coordinate HP independently of Effects", 
 
 test("MaxHP outputs coordinate each setter before its lifecycle callback", () => {
     const observed = [];
-    const battle = effectFixtureWork(receiver());
+    let battle = effectFixtureWork(receiver());
     const content = maxHpBuff("hp", 100, {
-        onEnable: (ctx) => observed.push(["enabled", ctx.unit.vitality.hp]),
-        onDisable: (ctx) => observed.push(["disabled", ctx.unit.vitality.hp]),
-        onEnd: (ctx) => observed.push(["ended", ctx.unit.vitality.hp]),
+        onEnable: (state, ctx) => { observed.push(["enabled", getUnit(state, ctx.ref.unitId).vitality.hp]); return state; },
+        onDisable: (state, ctx) => { observed.push(["disabled", getUnit(state, ctx.ref.unitId).vitality.hp]); return state; },
+        onEnd: (state, ctx) => { observed.push(["ended", getUnit(state, ctx.ref.unitId).vitality.hp]); return state; },
     });
     const before = battlefieldView(battle);
-    const ref = install(battle, content);
+    const installed = install(battle, content);
+    battle = installed.state;
+    const ref = installed.value;
     assert.deepEqual(pair(battle), [100, 200]);
-    effects.setEnabled(battle, ref, false);
+    battle = effects.setEnabled(battle, ref, false);
     assert.deepEqual(pair(battle), [50, 100]);
-    effects.setState(battle, ref, content, { amount: 200 });
-    effects.setEnabled(battle, ref, true);
+    const current = getUnit(battle, ref.unitId).effects.instances.find(effect => effect.id === ref.effectId);
+    battle = effects.replaceEffect(battle, ref.unitId, effects.setState(current, { amount: 200 }));
+    battle = effects.setEnabled(battle, ref, true);
     assert.deepEqual(pair(battle), [150, 300]);
-    effects.end(battle, ref);
+    battle = effects.end(battle, ref).state;
     assert.deepEqual(pair(battle), [50, 100]);
     assert.deepEqual(observed, [
         ["enabled", 100],
@@ -67,28 +70,30 @@ test("MaxHP outputs coordinate each setter before its lifecycle callback", () =>
     assert.equal(before.getUnit(1).vitality.hp, 50);
 });
 test("MaxHP competing effects remove old outputs before installing new and restore the retained candidate", () => {
-    const battle = effectFixtureWork(receiver());
+    let battle = effectFixtureWork(receiver());
     const first = install(battle, maxHpBuff("weak", 100, {
         group: { id: "hp", priority: 1 },
     }), 1);
+    battle = first.state;
     const second = install(battle, maxHpBuff("strong", 200, {
         group: { id: "hp", priority: 2 },
     }), 1);
+    battle = second.state;
     assert.deepEqual(pair(battle), [150, 300]);
-    effects.end(battle, second);
+    battle = effects.end(battle, second.value).state;
     assert.deepEqual(pair(battle), [100, 200]);
-    effects.end(battle, first);
+    battle = effects.end(battle, first.value).state;
     assert.deepEqual(pair(battle), [50, 100]);
 });
 test("MaxHP tick deadline and callback successor use the latest HP ratio", () => {
-    const battle = effectFixtureWork(receiver());
+    let battle = effectFixtureWork(receiver());
     const successor = maxHpBuff("successor", 50);
     const content = maxHpBuff("expiring", 100, {
-        onEnd: (ctx) => effects.install(ctx.battle, ctx.unit, successor),
+        onEnd: (state, ctx) => effects.install(state, getUnit(state, ctx.unit.id), successor, {}, ctx.call).state,
     });
-    install(battle, content, 1, { scopes: [{ type: "TICK", tick: 1 }] });
-    transitionUnit(battle, 1, (unit) => ({ ...unit, vitality: { ...unit.vitality, hp: 40 } }));
-    effects.advance(at(battle, 1));
+    battle = install(battle, content, 1, { scopes: [{ type: "TICK", tick: 1 }] }).state;
+    battle = transitionUnit(battle, 1, (unit) => ({ ...unit, vitality: { ...unit.vitality, hp: 40 } }));
+    battle = effects.advance(at(battle, 1));
     assert.deepEqual(pair(battle), [30, 150]);
     assert.equal(getUnit(battle, 1).effects.instances[0].definition, successor);
 });

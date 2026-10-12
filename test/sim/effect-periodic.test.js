@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { getUnit } from "../../dist/core/tactical/battle/state.js";
 import * as effect from "../../dist/core/tactical/unit/effect/operations.js";
 import { get } from "../../dist/core/tactical/unit/effect/query.js";
 import { effectFixtureWork, install, definition, at } from "../helpers/effects.js";
@@ -18,19 +19,22 @@ test("effect time: content controls periodic intervals and state is visible befo
         "periodic",
         { nextTick: 0, count: 0 },
         {
-            onTick(context) {
-                if (context.tick < context.self.state.nextTick) return;
-                context.setState((current) => ({
+            onTick(state, context) {
+                if (context.tick < context.self.state.nextTick) return state;
+                const next = effect.setState(context.self, (current) => ({
                     nextTick: context.tick + 3,
                     count: current.count + 1,
                 }));
-                seen.push([context.tick, get(context.battle, context.ref).state.count]);
+                state = effect.replaceEffect(state, context.ref.unitId, next);
+                seen.push([context.tick, get(state, context.ref).state.count]);
+                return state;
             },
         },
     );
-    const battle = effectFixtureWork(unit(0));
-    const ref = install(battle, value);
-    for (let tick = 0; tick <= 7; tick++) effect.advance(at(battle, tick));
+    let battle = effectFixtureWork(unit(0));
+    let ref;
+    ({ state: battle, value: ref } = install(battle, value));
+    for (let tick = 0; tick <= 7; tick++) battle = effect.advance(at(battle, tick));
     assert.deepEqual(seen, [
         [0, 1],
         [3, 2],
@@ -41,11 +45,15 @@ test("effect time: content controls periodic intervals and state is visible befo
 
 test("effect time: inactive Effects do not tick, but their deadlines continue to expire", () => {
     const value = definition("disabled", {}, { onTick: () => assert.fail("inactive tick") });
-    const battle = effectFixtureWork(unit(0));
-    const ref = install(battle, value, 0, { enabled: false, scopes: [{ type: "TICK", tick: 2 }] });
-    effect.advance(at(battle, 1));
+    let battle = effectFixtureWork(unit(0));
+    let ref;
+    ({ state: battle, value: ref } = install(battle, value, 0, {
+        enabled: false,
+        scopes: [{ type: "TICK", tick: 2 }],
+    }));
+    battle = effect.advance(at(battle, 1));
     assert.equal(get(battle, ref).status, "INACTIVE");
-    effect.advance(at(battle, 2));
+    battle = effect.advance(at(battle, 2));
     assert.equal(get(battle, ref), undefined);
 });
 
@@ -55,28 +63,34 @@ test("effect time: periodic progress pauses while inactive and resumes from the 
         "paused-periodic",
         { progress: 0 },
         {
-            onTick(context) {
+            onTick(state, context) {
                 const progress = context.self.state.progress + 1;
-                context.setState({ progress: progress === 5 ? 0 : progress });
+                state = effect.replaceEffect(
+                    state,
+                    context.ref.unitId,
+                    effect.setState(context.self, { progress: progress === 5 ? 0 : progress }),
+                );
 
                 if (progress === 5) triggered.push(context.tick);
+                return state;
             },
         },
     );
-    const battle = effectFixtureWork(unit(0));
-    const ref = install(battle, value);
+    let battle = effectFixtureWork(unit(0));
+    let ref;
+    ({ state: battle, value: ref } = install(battle, value));
 
-    effect.advance(at(battle, 0));
-    effect.advance(at(battle, 1));
-    effect.setEnabled(battle, ref, false);
-    for (let tick = 2; tick < 12; tick++) effect.advance(at(battle, tick));
+    battle = effect.advance(at(battle, 0));
+    battle = effect.advance(at(battle, 1));
+    battle = effect.setEnabled(battle, ref, false);
+    for (let tick = 2; tick < 12; tick++) battle = effect.advance(at(battle, tick));
     assert.equal(get(battle, ref).state.progress, 2);
 
-    effect.setEnabled(battle, ref, true);
-    effect.advance(at(battle, 12));
-    effect.advance(at(battle, 13));
+    battle = effect.setEnabled(battle, ref, true);
+    battle = effect.advance(at(battle, 12));
+    battle = effect.advance(at(battle, 13));
     assert.deepEqual(triggered, []);
-    effect.advance(at(battle, 14));
+    battle = effect.advance(at(battle, 14));
     assert.deepEqual(triggered, [14]);
     assert.equal(get(battle, ref).state.progress, 0);
 });
@@ -84,27 +98,55 @@ test("effect time: periodic progress pauses while inactive and resumes from the 
 test("effect time: a new Effect waits for the next advance while ended candidates are skipped", () => {
     const seen = [];
     let later;
-    const newborn = definition("newborn", {}, { onTick: () => seen.push("newborn") });
+    const newborn = definition(
+        "newborn",
+        {},
+        {
+            onTick: (state) => {
+                seen.push("newborn");
+                return state;
+            },
+        },
+    );
     const first = definition(
         "first",
         { spawned: false },
         {
-            onTick(context) {
+            onTick(state, context) {
                 seen.push("first");
-                if (context.self.state.spawned) return;
-                context.setState({ spawned: true });
-                effect.install(context.battle, context.unit, newborn);
-                effect.end(context.battle, later);
+                if (context.self.state.spawned) return state;
+                state = effect.replaceEffect(
+                    state,
+                    context.ref.unitId,
+                    effect.setState(context.self, { spawned: true }),
+                );
+                state = effect.install(
+                    state,
+                    getUnit(state, context.unit.id),
+                    newborn,
+                    {},
+                    context.call,
+                ).state;
+                return effect.end(state, later, "EXPLICIT", context.call).state;
             },
         },
     );
-    const last = definition("later", {}, { onTick: () => seen.push("later") });
-    const battle = effectFixtureWork(unit(0));
-    install(battle, first);
-    later = install(battle, last);
-    effect.advance(at(battle, 0));
+    const last = definition(
+        "later",
+        {},
+        {
+            onTick: (state) => {
+                seen.push("later");
+                return state;
+            },
+        },
+    );
+    let battle = effectFixtureWork(unit(0));
+    battle = install(battle, first).state;
+    ({ state: battle, value: later } = install(battle, last));
+    battle = effect.advance(at(battle, 0));
     assert.deepEqual(seen, ["first"]);
-    effect.advance(at(battle, 1));
+    battle = effect.advance(at(battle, 1));
     assert.deepEqual(seen, ["first", "first", "newborn"]);
 });
 
@@ -113,14 +155,21 @@ test("effect time: zero shield charges do not suspend the periodic recharge Effe
         "shield-recharge",
         { charges: 0 },
         {
-            onTick(context) {
-                context.setState((current) => ({ charges: Math.min(3, current.charges + 1) }));
+            onTick(state, context) {
+                return effect.replaceEffect(
+                    state,
+                    context.ref.unitId,
+                    effect.setState(context.self, (current) => ({
+                        charges: Math.min(3, current.charges + 1),
+                    })),
+                );
             },
         },
     );
-    const battle = effectFixtureWork(unit(0));
-    const ref = install(battle, value);
-    effect.advance(at(battle, 0));
+    let battle = effectFixtureWork(unit(0));
+    let ref;
+    ({ state: battle, value: ref } = install(battle, value));
+    battle = effect.advance(at(battle, 0));
     assert.equal(get(battle, ref).state.charges, 1);
     assert.equal(get(battle, ref).status, "ACTIVE");
 });

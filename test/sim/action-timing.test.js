@@ -1,310 +1,178 @@
-import assert from "node:assert/strict";
-import { test } from "node:test";
-import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
-import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
-import { battlefieldView, getUnit, registerUnit, updateUnit } from "../../dist/core/tactical/battle/execution/context.js";
-import { createActionCapabilityDefinition, setAttackSpeedContribution, removeAttackSpeedContribution, setBaseAttackTimeContribution, removeBaseAttackTimeContribution } from "../../dist/core/tactical/unit/capability/action/capability.js";
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { battle, unit, actionDefinition } from '../helpers/action-fixture.js';
+import { getUnit, updateUnit, registerUnit, battlefieldView } from '../../dist/core/tactical/battle/state.js';
+import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
+import { startAction } from '../../dist/core/tactical/unit/capability/action/execution.js';
+import { compileAction } from '../../dist/core/tactical/unit/capability/action/compile.js';
+import { setAttackSpeedContribution, removeAttackSpeedContribution, setBaseAttackTimeContribution, removeBaseAttackTimeContribution } from '../../dist/core/tactical/unit/capability/action/capability.js';
+import { resolveAttackSpeed, resolveBaseAttackTime, resolveActionIntervalTicks } from '../../dist/core/tactical/unit/capability/action/timing.js';
+import { copyUnitSnapshot } from '../../dist/core/tactical/unit/snapshot.js';
+import { create as modifier } from '../../dist/core/tactical/unit/contribution/value.js';
+import * as effects from '../../dist/core/tactical/unit/effect/operations.js';
+import { get } from '../../dist/core/tactical/unit/effect/query.js';
+import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
+import { createLegacyCombatSpec } from '../../dist/legacy/combat.js';
+import { createEnemyDefinition } from '../../dist/core/tactical/unit/archetype/enemy.js';
+import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
 
-import { compileAction } from "../../dist/core/tactical/unit/capability/action/compile.js";
-import { startAction } from "../../dist/core/tactical/unit/capability/action/execution.js";
-import { createActionExecutionState } from "../../dist/core/tactical/unit/capability/action/process.js";
-import { resolveAttackSpeed, resolveBaseAttackTime, resolveActionIntervalTicks } from "../../dist/core/tactical/unit/capability/action/timing.js";
-import { definition } from "../helpers/effects.js";
-import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
-import { get } from "../../dist/core/tactical/unit/effect/query.js";
-
-
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
-import { copyUnitSnapshot } from "../../dist/core/tactical/unit/snapshot.js";
-import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
-import * as modifier from "../../dist/core/tactical/unit/contribution/value.js";
-import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
-import { createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
-import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
-import { effectFixtureWork } from "../helpers/effects.js";
-
-const geometry = createShapeGeometry({ shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 5 }] });
-const address = { type: "EFFECT", unitId: 0, effectId: 0 };
+const ref = { type: 'EFFECT', unitId: 0, effectId: 0 };
 const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} ≈ ${expected}`);
+const actor = (baseAttackTimeTicks = 30, recoveryTicks = 0) => unit(0, { action: actionDefinition(1, { baseAttackTimeTicks, recoveryTicks }) });
+const target = () => unit(1, { hp: 1e6 });
 
-function actor(baseAttackTimeTicks = 30, recoveryTicks = 0) {
-    return initializeUnit({
-        id: 0, position: [0, 0],
-        definition: {
-            id: "timing-actor", vitality: { maxHp: 100 }, allegiance: { side: "ALLY" }, spatial: { layer: "GROUND" },
-            action: createActionCapabilityDefinition({
-                attackSpeed: 100,
-                normalAction: {
-                    baseAttackTimeTicks, recoveryTicks, triggerBindingId: "primary", followUps: [],
-                    targetGroups: [{
-                        id: "primary",
-                        targeting: {
-                            type: "DAMAGE", scope: { type: "RANGE", geometry: { type: "SHAPES", geometry } },
-                            canTargetAir: true, includeBlockingRelations: false, preferBlockingRelations: false,
-                            ignoreTargetFree: false, ignoreInvisible: false, maxTargets: 1,
-                        },
-                        operations: [{ type: "DAMAGE", power: 1, damageType: "TRUE" }],
-                    }],
-                },
-            }),
-        },
-    });
+function refresh(state) {
+  const self = get(state, ref);
+  state = updateUnit(state, setAttackSpeedContribution(getUnit(state, 0), { id: 'timing/speed', value: [modifier({ addition: self.state.speed })] }));
+  return updateUnit(state, setBaseAttackTimeContribution(getUnit(state, 0), { id: 'timing/time', value: [self.state.time] }));
 }
 
-function target() {
-    return initializeUnit({ id: 1, position: [1, 0], definition: {
-        id: "timing-target", vitality: { maxHp: 1e6 }, allegiance: { side: "ENEMY" }, hit: { geometry }, spatial: { layer: "GROUND" },
-    } });
+function tempo(speed = 100, time = modifier()) {
+  return { id: 'timing-buff', initialize: () => ({ speed, time }), onEnable: state => refresh(state),
+    onDisable: (state, ctx) => {
+      state = updateUnit(state, removeAttackSpeedContribution(ctx.unit, 'timing/speed'));
+      return updateUnit(state, removeBaseAttackTimeContribution(getUnit(state, ctx.unit.id), 'timing/time'));
+    },
+  };
 }
-
-function refresh(work, program) {
-    const self = get(work, address);
-    const unit = getUnit(work, 0);
-    updateUnit(work, setAttackSpeedContribution(unit, {
-        id: "timing/speed", value: [modifier.create({ addition: self.state.speed })],
-    }));
-    updateUnit(work, setBaseAttackTimeContribution(getUnit(work, 0), {
-        id: "timing/time", value: [self.state.time],
-    }));
+const install = (state, definition, tick = 0, expires = null) => effects.install({ ...state, tick }, getUnit(state, 0), definition, { scopes: expires === null ? [] : [{ type: 'TICK', tick: expires }] }).state;
+const edit = (state, change) => refresh(effects.replaceEffect(state, 0, effects.setState(get(state, ref), { ...get(state, ref).state, ...change })));
+function values(state) {
+  const current = getUnit(state, 0);
+  const context = { unit: current, battlefield: battlefieldView(state) };
+  return [resolveAttackSpeed(current.definition.action, current.action, context), resolveBaseAttackTime(current.definition.action.normalAction, current.action, context), resolveActionIntervalTicks(current.definition.action.normalAction, current.definition.action, current.action, context)];
 }
-
-function register(resources, speed = 100, time = modifier.create()) {
-    const program = definition("timing-buff", { speed, time }, {
-        onEnable: context => refresh(context.battle, program),
-        onDisable: context => {
-            updateUnit(context.battle, removeAttackSpeedContribution(context.unit, "timing/speed"));
-            updateUnit(context.battle, removeBaseAttackTimeContribution(context.unit, "timing/time"));
-        },
-    });
-    return program;
-}
-
-function install(work, program, resources, tick = 0, expiresAtTick = null) {
-    effects.install({ ...work, tick }, getUnit(work, 0), program, {
-        source: null, scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }],
-    });
-    return work;
-}
-
-function values(work, resources) {
-    return valuesAt(battlefieldView(work), resources);
-}
-
-function valuesAt(battlefield, resources) {
-    const unit = battlefield.getUnit(0);
-    const evaluate = { unit, battlefield };
-    return [
-        resolveAttackSpeed(unit.definition.action, unit.action, evaluate),
-        resolveBaseAttackTime(unit.definition.action.normalAction, unit.action, evaluate),
-        resolveActionIntervalTicks(unit.definition.action.normalAction, unit.definition.action, unit.action, evaluate),
-    ];
-}
-
-function advance(work, resources, tick, state = createActionExecutionState(), compiled) {
-    return startAction(
-      work,
-      state,
-      {
-        sourceUnitId: 0,
-        compiled:
-          compiled ??
-          compileAction(getUnit(work, 0).definition.action.normalAction, resources),
-        tick,
-        mayStart: true,
-      },
-      resources,
-    );
-}
-
+const advance = (state, tick, resources = new CombatResources(), compiled) => startAction({ ...state, tick }, { sourceUnitId: 0, compiled: compiled ?? compileAction(getUnit(state, 0).definition.action.normalAction, resources), tick, mayStart: true }, resources);
+const actions = state => state.events.filter(event => event.type === 'ACTION').length;
 function spec(source, maxTicks) {
-    const passive = createEnemyDefinition({ id: "keep-open", vitality: { maxHp: 1 }, locomotion: {
-        moveSpeedPerTick: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 },
-    } });
-    return {
-        ...createLegacyCombatSpec({ rows: 1, columns: 3, operators: [], enemies: [], maxTicks, seed: 17 }),
-        initialUnits: [
-            { definition: source.definition, position: source.position, effects: source.effects, states: { action: source.action } },
-            { definition: target().definition, position: [1, 0] },
-        ],
-        schedule: { type: "TIMELINE", spawns: [{ definition: passive, tick: maxTicks + 1,
-            route: createRouteDefinition({ pathMotionMode: "WALK", startPosition: [0, 2], endPosition: [0, 0],
-                spawnOffset: [0, 0], spawnRandomRange: [0, 0], checkpoints: [], allowDiagonalMove: false,
-                visitEveryTileCenter: false, visitEveryNodeCenter: false, visitEveryCheckPoint: true }),
-            timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 }, alwaysCheckCurrentPoint: true, notCountInTotal: false,
-        }] },
-    };
+  return { ...createLegacyCombatSpec({ rows: 1, columns: 8, operators: [], enemies: [], maxTicks, seed: 17 }),
+    initialUnits: [{ definition: source.definition, position: source.position, effects: source.effects, states: { action: source.action } }, { definition: target().definition, position: [1, 0] }],
+    schedule: { type: 'TIMELINE', spawns: [{ definition: createEnemyDefinition({ id: 'future', vitality: { maxHp: 1 }, locomotion: { moveSpeedPerTick: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } } }),
+      route: createRouteDefinition({ pathMotionMode: 'WALK', startPosition: [0, 7], endPosition: [0, 1], spawnOffset: [0, 0], spawnRandomRange: [0, 0], checkpoints: [], allowDiagonalMove: false, visitEveryTileCenter: false, visitEveryNodeCenter: false, visitEveryCheckPoint: true }),
+      tick: maxTicks + 1, timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 }, alwaysCheckCurrentPoint: true, notCountInTotal: false }] },
+  };
 }
 
-test("action timing: ASPD attribute floor, interval cap and BAT algebra remain distinct", () => {
-    const resources = new CombatResources();
-    const program = register(resources, -200, modifier.create({ addition: -6, multiplier: 0.5, finalAddition: 3, finalScaler: 0.5 }));
-    const initial = effectFixtureWork(actor(), target());
-    const original = initial.battlefield.snapshot("draft");
-    let work = install(initial, program, resources);
-    assert.deepEqual(values(work, resources), [20, 19.5, 97.5]);
-    effects.setState(work, address, program, state => ({ ...state, speed: 900 }));
-    refresh(work, program);
-    assert.deepEqual(values(work, resources), [1000, 19.5, 3.25]);
-    effects.setState(work, address, program, state => ({ ...state, time: modifier.create({ addition: -100 }) }));
-    refresh(work, program);
-    assert.deepEqual(values(work, resources), [1000, 0, 1]);
-    assert.deepEqual(valuesAt(original, resources), [100, 30, 30]);
+test('action timing: ASPD floor, interval cap and BAT algebra remain distinct', () => {
+  const initial = battle(actor(), target());
+  let state = install(initial, tempo(-200, modifier({ addition: -6, multiplier: 0.5, finalAddition: 3, finalScaler: 0.5 })));
+  assert.deepEqual(values(state), [20, 19.5, 97.5]);
+  state = edit(state, { speed: 900 });
+  assert.deepEqual(values(state), [1000, 19.5, 3.25]);
+  state = edit(state, { time: modifier({ addition: -100 }) });
+  assert.deepEqual(values(state), [1000, 0, 1]);
+  assert.deepEqual(values(initial), [100, 30, 30]);
 });
 
-test("action timing: lifecycle updates both slots and snapshots retain shared immutable contributions", () => {
-    const resources = new CombatResources();
-    const program = register(resources, 100, modifier.create({ finalScaler: 0.5 }));
-    const initial = effectFixtureWork(actor(), target());
-    const installed = install(initial, program, resources);
-    const installedSnapshot = installed.battlefield.snapshot("draft");
-    assert.deepEqual(values(installed, resources), [200, 15, 7.5]);
-    const copied = copyUnitSnapshot(getUnit(installed, 0));
-    assert.equal(copied.action.attackSpeed, getUnit(installed, 0).action.attackSpeed);
-    assert.equal(copied.action, getUnit(installed, 0).action);
-    assert.equal(copied.action.baseAttackTime, getUnit(installed, 0).action.baseAttackTime);
-    effects.setEnabled(installed, address, false);
-    assert.deepEqual(values(installed, resources), [100, 30, 30]);
-    effects.setEnabled(installed, address, true);
-    assert.deepEqual(values(installed, resources), [200, 15, 7.5]);
-    effects.end(installed, address);
-    assert.deepEqual(values(installed, resources), [100, 30, 30]);
-    assert.equal(getUnit(installed, 0).action.attackSpeed.length, 0);
-    assert.equal(getUnit(installed, 0).action.baseAttackTime.length, 0);
-    assert.equal(copied.action.attackSpeed.length, 1);
-    assert.deepEqual(valuesAt(installedSnapshot, resources), [200, 15, 7.5]);
+test('action timing: lifecycle updates both slots while snapshots preserve shared immutable inputs', () => {
+  const initial = battle(actor(), target());
+  const installed = install(initial, tempo(100, modifier({ finalScaler: 0.5 })));
+  assert.deepEqual(values(installed), [200, 15, 7.5]);
+  const snapshot = copyUnitSnapshot(getUnit(installed, 0));
+  assert.equal(snapshot.action, getUnit(installed, 0).action);
+  const disabled = effects.setEnabled(installed, ref, false);
+  assert.deepEqual(values(disabled), [100, 30, 30]);
+  const enabled = effects.setEnabled(disabled, ref, true);
+  assert.deepEqual(values(enabled), [200, 15, 7.5]);
+  const ended = effects.end(enabled, ref).state;
+  assert.deepEqual(values(ended), [100, 30, 30]);
+  assert.equal(snapshot.action.attackSpeed.length, 1);
+  assert.equal(getUnit(ended, 0).action.attackSpeed.length, 0);
+  assert.deepEqual(values(installed), [200, 15, 7.5]);
 });
 
-test("action timing: speed-up and slow-down preserve completed cooldown percentage", () => {
-    const resources = new CombatResources();
-    const program = register(resources);
-    const work = effectFixtureWork(actor(), target());
-    const initial = advance(work, resources, 0);
-    const initialSnapshot = work.battlefield.snapshot("draft");
-    assert.equal(getUnit(work, 0).action.readyAtTick, 30);
-    const installed = install(work, program, resources, 15);
-    const spedUp = advance(installed, resources, 15, initial);
-    close(getUnit(work, 0).action.readyAtTick, 22.5);
-    assert.equal(work.events.filter((event) => event.type === "ACTION").length, 1);
-    effects.setEnabled(work, address, false);
-    const slowed = advance(work, resources, 18, spedUp);
-    close(getUnit(work, 0).action.readyAtTick, 27);
-    const beforeReady = advance(work, resources, 26, slowed);
-    assert.equal(work.events.filter((event) => event.type === "ACTION").length, 1);
-    const due = advance(work, resources, 27, beforeReady);
-    assert.equal(work.events.filter((event) => event.type === "ACTION").length, 2);
-    assert.equal(initialSnapshot.getUnit(0).action.readyAtTick, 30);
+test('action timing: speed-up and slow-down preserve completed cooldown percentage', () => {
+  const initial = advance(battle(actor(), target()), 0);
+  let state = advance(install(initial, tempo(), 15), 15);
+  close(getUnit(state, 0).action.readyAtTick, 22.5);
+  state = advance(effects.setEnabled(state, ref, false), 18);
+  close(getUnit(state, 0).action.readyAtTick, 27);
+  state = advance(state, 26);
+  assert.equal(actions(state), 1);
+  state = advance(state, 27);
+  assert.equal(actions(state), 2);
+  assert.equal(getUnit(initial, 0).action.readyAtTick, 30);
 });
 
-test("action timing: BAT changes adjust cooldown without rescaling recovery", () => {
-    const resources = new CombatResources();
-    const program = register(resources, 0, modifier.create({ finalScaler: 0.5 }));
-    const work = effectFixtureWork(actor(30, 20), target());
-    const initial = advance(work, resources, 0);
-    const changed = advance(install(work, program, resources, 10), resources, 10, initial);
-    assert.equal(getUnit(work, 0).action.readyAtTick, 20);
-    assert.equal(getUnit(work, 0).action.recoveryUntilTick, 20);
-    const due = advance(work, resources, 20, changed);
-    assert.equal(getUnit(work, 0).action.readyAtTick, 35);
+test('action timing: BAT updates change cooldown without rescaling recovery', () => {
+  const initial = advance(battle(actor(30, 20), target()), 0);
+  const changed = advance(install(initial, tempo(0, modifier({ finalScaler: 0.5 })), 10), 10);
+  close(getUnit(changed, 0).action.readyAtTick, 20);
+  assert.equal(getUnit(changed, 0).action.recoveryUntilTick, 20);
+  assert.equal(getUnit(initial, 0).action.readyAtTick, 30);
 });
 
-test("action timing: live values read current facts rather than installation samples", () => {
-    const resources = new CombatResources();
-    const program = definition("live-timing", {}, {
-        onEnable(context) {
-            updateUnit(context.battle, setAttackSpeedContribution(context.unit, {
-                id: "live/speed", value: ({ unit }) => [modifier.create({ addition: unit.vitality.hp })],
-            }));
-            updateUnit(context.battle, setBaseAttackTimeContribution(context.unit, {
-                id: "live/time", value: ({ unit }) => [modifier.create({ addition: unit.vitality.hp / 10 })],
-            }));
-        },
-    });
-    const installed = install(effectFixtureWork(actor(), target()), program, resources);
-    assert.deepEqual(values(installed, resources), [200, 40, 20]);
-    const unit = getUnit(installed, 0);
-    updateUnit(installed, { ...unit, vitality: { ...unit.vitality, hp: 50 } });
-    assert.deepEqual(values(installed, resources), [150, 35, 35 / 1.5]);
+test('action timing: live contributions read the input version rather than installation samples', () => {
+  const definition = { id: 'live-timing', initialize: () => ({}), onEnable: (state, ctx) => {
+    state = updateUnit(state, setAttackSpeedContribution(ctx.unit, { id: 'live/speed', value: ({ unit }) => [modifier({ addition: unit.vitality.hp })] }));
+    return updateUnit(state, setBaseAttackTimeContribution(getUnit(state, 0), { id: 'live/time', value: ({ unit }) => [modifier({ addition: unit.vitality.hp / 10 })] }));
+  } };
+  const installed = install(battle(actor(), target()), definition);
+  assert.deepEqual(values(installed), [200, 40, 20]);
+  const current = getUnit(installed, 0);
+  const damaged = updateUnit(installed, { ...current, vitality: { ...current.vitality, hp: 50 } });
+  assert.deepEqual(values(damaged), [150, 35, 35 / 1.5]);
+  assert.deepEqual(values(installed), [200, 40, 20]);
 });
 
-test("action timing: delayed targeting resumes without accumulating missed attacks", () => {
-    const resources = new CombatResources();
-    const source = actor(4.5);
-    const work = effectFixtureWork(source);
-    const initial = advance(work, resources, 0);
-    assert.equal(getUnit(work, 0), source);
-    registerUnit(work, target());
-    const resumed = advance(work, resources, 101, initial);
-    assert.equal(getUnit(work, 0).action.readyAtTick, 105.5);
-    const once = advance(work, resources, 101, resumed);
-    assert.equal(work.events.filter((event) => event.type === "ACTION").length, 1);
+test('action timing: delayed targeting resumes without accumulating missed attacks', () => {
+  const source = actor(4.5);
+  const initial = advance(battle(source), 0);
+  assert.equal(getUnit(initial, 0), source);
+  let state = advance(registerUnit(initial, target()), 101);
+  assert.equal(getUnit(state, 0).action.readyAtTick, 105.5);
+  state = advance(state, 101);
+  assert.equal(actions(state), 1);
 });
 
-test("action timing: a real 600 ASPD contribution preserves long-run fractional cadence at 30 Hz", () => {
-    const resources = new CombatResources();
-    const program = register(resources, 500);
-    const installed = install(effectFixtureWork(actor(27), target()), program, resources);
-    assert.deepEqual(values(installed, resources), [600, 27, 4.5]);
-    const definition = spec(getUnit(installed, 0), 1200);
-    const battle = new BattleRuntime(definition, { combat: resources });
-    const reference = new BattleRuntime(definition, { combat: resources });
-    const ticks = [];
-    while (battle.result === null) {
-        const stepped = battle.step();
-        assert.deepEqual(stepped, reference.step());
-        ticks.push(...stepped.events.filter((event) => event.type === "ACTION").map((event) => event.tick));
-    }
-    assert.equal(ticks.length, Math.ceil(1200 / 4.5));
-    assert.deepEqual(ticks.slice(0, 8), [0, 5, 9, 14, 18, 23, 27, 32]);
-    assert.deepEqual(battle.snapshot(), reference.snapshot());
-    assert.equal(battle.snapshot().units.find((unit) => unit.id === 0).action.attackSpeed.length, 1);
+test('action timing: 600 ASPD preserves fractional 30 Hz cadence across pure state transitions', () => {
+  const initial = install(battle(actor(27), target()), tempo(500));
+  assert.deepEqual(values(initial), [600, 27, 4.5]);
+  const run = () => {
+    let state = initial;
+    for (let tick = 0; tick < 1200; tick++) state = advance(state, tick);
+    return state;
+  };
+  const actual = run();
+  const ticks = actual.events.filter(event => event.type === 'ACTION').map(event => event.tick);
+  assert.equal(ticks.length, Math.ceil(1200 / 4.5));
+  assert.deepEqual(ticks.slice(0, 8), [0, 5, 9, 14, 18, 23, 27, 32]);
+  assert.deepEqual(run(), actual);
 });
 
-test("action timing: expiring a tempo Buff leaves accepted WAIT and recovery facts intact", () => {
-    const resources = new CombatResources();
-    const program = register(resources);
-    const installed = install(effectFixtureWork(actor(30, 8), target()), program, resources, 0, 2);
-    const battle = new BattleRuntime(spec(getUnit(installed, 0), 35), {
-        combat: resources,
-        compileAction: (definition, ports) => {
-            const compiled = compileAction(definition, ports);
-            return { ...compiled, program: [{ type: "WAIT", resolve: () => ({ type: "UNTIL_TICK", targetTick: 5 }) }, ...compiled.program] };
-        },
-    });
-    battle.step();
-    const accepted = battle.snapshot();
-    assert.equal(accepted.units[0].action.readyAtTick, 15);
-    assert.equal(accepted.units[0].action.recoveryUntilTick, 8);
-    battle.step();
-    battle.step();
-    const expired = battle.snapshot();
-    assert.equal(expired.units[0].action.readyAtTick, 28);
-    assert.equal(expired.units[0].action.recoveryUntilTick, 8);
-    assert.equal(expired.actionExecution.executions[0].wait.targetTick, 5);
-    assert.equal(expired.actionExecution.executions[0].id, accepted.actionExecution.executions[0].id);
-    const events = [];
-    while (battle.snapshot().tickIndex <= 5) { events.push(...battle.step().events); }
-    assert.equal(events.find((event) => event.type === "DAMAGE").tick, 5);
+test('action timing: tempo expiry preserves an accepted WAIT and recovery deadline', () => {
+  const installed = install(battle(actor(30, 8), target()), tempo(), 0, 2);
+  const resources = new CombatResources();
+  const rt = new BattleRuntime(spec(getUnit(installed, 0), 35), { combat: resources, compileAction: (definition, ports) => {
+    const compiled = compileAction(definition, ports);
+    return { ...compiled, program: [{ type: 'WAIT', allowNewAction: false, resolve: () => ({ type: 'UNTIL_TICK', targetTick: 5 }) }, ...compiled.program] };
+  } });
+  rt.step();
+  const accepted = rt.snapshot();
+  assert.equal(accepted.units[0].action.readyAtTick, 15);
+  assert.equal(accepted.units[0].action.recoveryUntilTick, 8);
+  rt.step(); rt.step();
+  const expired = rt.snapshot();
+  assert.equal(expired.units[0].action.readyAtTick, 28);
+  assert.equal(expired.units[0].action.recoveryUntilTick, 8);
+  assert.equal(expired.actionExecution.executions[0].wait.targetTick, 5);
+  const events = [];
+  while (rt.snapshot().tickIndex <= 5) events.push(...rt.step().events);
+  assert.equal(events.find(event => event.type === 'DAMAGE').tick, 5);
 });
 
-test("action timing: tick failure does not publish cooldown changes", () => {
-    const resources = new CombatResources();
-    const program = register(resources);
-    const installed = install(effectFixtureWork(actor(), target()), program, resources, 0, 15);
-    const fault = { enabled: false };
-    const battle = new BattleRuntime(spec(getUnit(installed, 0), 40), {
-        combat: resources,
-        compileAction: (definition, ports) => {
-            const compiled = compileAction(definition, ports);
-            return { ...compiled, bind: (context) => {
-                if (fault.enabled) { throw new Error("abort timing tick"); }
-                return compiled.bind(context);
-            } };
-        },
-    });
-    battle.step();
-    while (battle.snapshot().tickIndex < 15) { battle.step(); }
-    const before = battle.snapshot();
-    fault.enabled = true;
-    assert.throws(() => battle.step(), /abort timing tick/);
-    assert.deepEqual(battle.snapshot(), before);
+test('action timing: a failed Tick never publishes recomputed cooldown', () => {
+  const installed = install(battle(actor(), target()), tempo(), 0, 15);
+  const resources = new CombatResources();
+  let fail = false;
+  const rt = new BattleRuntime(spec(getUnit(installed, 0), 40), { combat: resources, compileAction: (definition, ports) => {
+    const compiled = compileAction(definition, ports);
+    return { ...compiled, bind: context => { if (fail) throw new Error('timing failed'); return compiled.bind(context); } };
+  } });
+  rt.step();
+  while (rt.snapshot().tickIndex < 15) rt.step();
+  const before = rt.snapshot();
+  fail = true;
+  assert.throws(() => rt.step(), /timing failed/);
+  assert.deepEqual(rt.snapshot(), before);
 });

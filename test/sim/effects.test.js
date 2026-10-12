@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
-import { getUnit, transitionUnit } from "../../dist/core/tactical/battle/execution/context.js";
+import {
+    battlefieldView,
+    getUnit,
+    transitionUnit,
+} from "../../dist/core/tactical/battle/state.js";
 import * as effect from "../../dist/core/tactical/unit/effect/operations.js";
 import { get, find } from "../../dist/core/tactical/unit/effect/query.js";
 import {
@@ -31,19 +35,24 @@ test("effects: a direct static definition initializes private state and runs ins
         "direct",
         { count: 0 },
         {
-            onInstall(context) {
-                assert.equal(get(context.battle, context.ref).definition, value);
-                context.setState((current) => ({ count: current.count + 1 }));
-                seen.push(["install", context.self.state.count]);
+            onInstall(state, context) {
+                assert.equal(get(state, context.ref).definition, value);
+                const next = effect.setState(context.self, (current) => ({
+                    count: current.count + 1,
+                }));
+                seen.push(["install", next.state.count]);
+                return effect.replaceEffect(state, context.ref.unitId, next);
             },
-            onEnable(context) {
+            onEnable(state, context) {
                 seen.push(["enable", context.self.state.count]);
+                return state;
             },
         },
     );
-    const battle = effectFixtureWork(unit());
-    const old = battle.battlefield.snapshot("draft");
-    const ref = install(battle, value);
+    let battle = effectFixtureWork(unit());
+    const old = battlefieldView(battle);
+    let ref;
+    ({ state: battle, value: ref } = install(battle, value));
     assert.equal(get(battle, ref).definition, value);
     assert.deepEqual(get(battle, ref).state, { count: 1 });
     assert.equal(get(battle, ref).status, "ACTIVE");
@@ -58,10 +67,15 @@ test("effects: updates share immutable values and find pairs a definition with i
     const nested = { amount: 1 };
     const value = definition("state", { count: 1, nested });
     const other = definition("other");
-    const battle = effectFixtureWork(unit());
-    const ref = install(battle, value);
+    let battle = effectFixtureWork(unit());
+    let ref;
+    ({ state: battle, value: ref } = install(battle, value));
     const old = get(battle, ref);
-    effect.setState(battle, ref, value, (current) => ({ ...current, count: 2 }));
+    battle = effect.replaceEffect(
+        battle,
+        ref.unitId,
+        effect.setState(old, (current) => ({ ...current, count: 2 })),
+    );
     const current = get(battle, ref);
     assert.equal(current.state.nested, nested);
     assert.equal(old.state.count, 1);
@@ -73,19 +87,33 @@ test("effects: updates share immutable values and find pairs a definition with i
 test("effects: disabling withdraws output while preserving private state and identity", () => {
     const seen = [];
     const value = attackBuff("attack", 20, {
-        onInstall: () => seen.push("install"),
-        onEnable: () => seen.push("enable"),
-        onDisable: () => seen.push("disable"),
+        onInstall: (state) => {
+            seen.push("install");
+            return state;
+        },
+        onEnable: (state) => {
+            seen.push("enable");
+            return state;
+        },
+        onDisable: (state) => {
+            seen.push("disable");
+            return state;
+        },
     });
-    const battle = effectFixtureWork(unit());
-    const ref = install(battle, value);
-    const attack = () => resolveAttackPower(0, battle.battlefield.snapshot("draft"));
+    let battle = effectFixtureWork(unit());
+    let ref;
+    ({ state: battle, value: ref } = install(battle, value));
+    const attack = () => resolveAttackPower(0, battlefieldView(battle));
     assert.equal(attack(), 120);
-    effect.setEnabled(battle, ref, false);
+    battle = effect.setEnabled(battle, ref, false);
     assert.equal(attack(), 100);
-    effect.setState(battle, ref, value, { amount: 30 });
+    battle = effect.replaceEffect(
+        battle,
+        ref.unitId,
+        effect.setState(get(battle, ref), { amount: 30 }),
+    );
     assert.equal(attack(), 100);
-    effect.setEnabled(battle, ref, true);
+    battle = effect.setEnabled(battle, ref, true);
     assert.equal(attack(), 130);
     assert.deepEqual(seen, ["install", "enable", "disable", "enable"]);
     assert.equal(get(battle, ref).id, ref.effectId);
@@ -93,41 +121,44 @@ test("effects: disabling withdraws output while preserving private state and ide
 
 test("effects: content explicitly refreshes a static contribution after changing private state", () => {
     const value = attackBuff();
-    const battle = effectFixtureWork(unit());
-    const ref = install(battle, value);
-    const previous = battle.battlefield.snapshot("draft");
-    effect.setState(battle, ref, value, { amount: 50 });
-    assert.equal(resolveAttackPower(0, battle.battlefield.snapshot("draft")), 120);
-    refreshAttack(battle, ref);
-    assert.equal(resolveAttackPower(0, battle.battlefield.snapshot("draft")), 150);
+    let battle = effectFixtureWork(unit());
+    let ref;
+    ({ state: battle, value: ref } = install(battle, value));
+    const previous = battlefieldView(battle);
+    battle = effect.replaceEffect(
+        battle,
+        ref.unitId,
+        effect.setState(get(battle, ref), { amount: 50 }),
+    );
+    assert.equal(resolveAttackPower(0, battlefieldView(battle)), 120);
+    battle = refreshAttack(battle, ref);
+    assert.equal(resolveAttackPower(0, battlefieldView(battle)), 150);
     assert.equal(resolveAttackPower(0, previous), 120);
 });
 
 test("effects: ending withdraws outputs before terminal business and repeated ending does nothing", () => {
     const seen = [];
     const value = attackBuff("ending", 20, {
-        onDisable(context) {
+        onDisable(state, context) {
             seen.push(["disable", context.self.status]);
+            return state;
         },
-        onEnd(context) {
-            seen.push([
-                "end",
-                context.reason,
-                resolveAttackPower(0, context.battle.battlefield.snapshot("draft")),
-            ]);
-            context.end("REENTRANT");
+        onEnd(state, context) {
+            seen.push(["end", context.reason, resolveAttackPower(0, battlefieldView(state))]);
+            return effect.end(state, context.ref, "REENTRANT", context.call).state;
         },
     });
-    const battle = effectFixtureWork(unit());
-    const ref = install(battle, value);
-    effect.end(battle, ref, "DISPELLED");
-    effect.end(battle, ref, "OTHER");
+    let battle = effectFixtureWork(unit());
+    let ref;
+    ({ state: battle, value: ref } = install(battle, value));
+    battle = effect.end(battle, ref, "DISPELLED").state;
+    battle = effect.end(battle, ref, "OTHER").state;
     assert.deepEqual(
         seen.map((entry) => entry[0]),
         ["disable", "end"],
     );
     assert.deepEqual(seen[1], ["end", "DISPELLED", 100]);
-    assert.equal(resolveAttackPower(0, battle.battlefield.snapshot("draft")), 100);
+    assert.equal(resolveAttackPower(0, battlefieldView(battle)), 100);
 });
 
 test("effects: callbacks read current Unit state after a preceding nested operation", () => {
@@ -135,21 +166,31 @@ test("effects: callbacks read current Unit state after a preceding nested operat
         "current-host",
         {},
         {
-            onInstall(context) {
-                transitionUnit(context.battle, 0, (current) => ({
+            onInstall(state, context) {
+                state = transitionUnit(state, 0, (current) => ({
                     ...current,
                     vitality: { ...current.vitality, hp: 30 },
                 }));
-                assert.equal(context.unit.vitality.hp, 30);
+                assert.equal(context.unit.vitality.hp, 100, "Context retains its input version");
+                assert.equal(getUnit(state, 0).vitality.hp, 30);
+                return state;
             },
-            onTick(context) {
-                context.setState({ observedHp: context.unit.vitality.hp, tick: context.tick });
+            onTick(state, context) {
+                return effect.replaceEffect(
+                    state,
+                    context.ref.unitId,
+                    effect.setState(context.self, {
+                        observedHp: context.unit.vitality.hp,
+                        tick: context.tick,
+                    }),
+                );
             },
         },
     );
-    const battle = effectFixtureWork(unit());
-    const ref = install(battle, value);
-    effect.advance(at(battle, 7));
+    let battle = effectFixtureWork(unit());
+    let ref;
+    ({ state: battle, value: ref } = install(battle, value));
+    battle = effect.advance(at(battle, 7));
     assert.deepEqual(get(battle, ref).state, { observedHp: 30, tick: 7 });
 });
 
@@ -159,17 +200,20 @@ test("effects: a callback sees termination when a nested operation ends its inst
         "ended-by-operation",
         {},
         {
-            onTick(context) {
-                effect.end(context.battle, context.ref);
+            onTick(state, context) {
+                state = effect.end(state, context.ref, "EXPLICIT", context.call).state;
                 seen.push(context.self.status);
+                assert.equal(get(state, context.ref), undefined);
+                return state;
             },
         },
     );
-    const battle = effectFixtureWork(unit());
-    const ref = install(battle, value);
+    let battle = effectFixtureWork(unit());
+    let ref;
+    ({ state: battle, value: ref } = install(battle, value));
 
-    effect.advance(at(battle, 1));
+    battle = effect.advance(at(battle, 1));
 
-    assert.deepEqual(seen, ["ENDING"]);
+    assert.deepEqual(seen, ["ACTIVE"], "Context values retain their input version after ending");
     assert.equal(get(battle, ref), undefined);
 });

@@ -1,5 +1,4 @@
-import { fixtureBattlefield } from "../helpers/battlefield.js";
-import { installFixtureEffect } from "../helpers/effects.js";
+import { effectFixtureWork as workFor } from "../helpers/effects.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as modifier from "../../dist/core/tactical/unit/contribution/value.js";
@@ -24,7 +23,7 @@ import {
     registerUnit,
     transitionUnit,
     removeUnit,
-} from "../../dist/core/tactical/battle/execution/context.js";
+} from "../../dist/core/tactical/battle/state.js";
 
 const unit = (id, attack = 100) =>
     initializeUnit({
@@ -32,17 +31,6 @@ const unit = (id, attack = 100) =>
         definition: { id: `unit-${id}`, offense: { attack }, vitality: { maxHp: 100 } },
         position: [0, 0],
     });
-const workFor = (...units) => {
-    const byId = new Map(units.map((unit) => [unit.id, unit]));
-    return createBattleState(
-        fixtureBattlefield({
-            unitIds: [...byId.keys()],
-            getUnit: (id) => byId.get(id),
-            blockerOf: () => undefined,
-            blockedBy: () => [],
-        }),
-    );
-};
 const value = (amount) => modifier.create({ finalAddition: amount });
 test("contributions: set and remove preserve immutable arrays and shared values", () => {
     const group = { id: "attack", priority: 3 };
@@ -119,16 +107,16 @@ test("contributions: capability set, remove and replacement preserve prior snaps
     const initial = unit(1);
     const sample = { id: "inspiration", value: [value(150)] };
     const sampled = setAttackContribution(initial, sample);
-    const work = workFor(sampled);
+    let work = workFor(sampled);
     assert.equal(resolveAttackPower(1, battlefieldView(work)), 250);
-    transitionUnit(work, 1, (current) => removeAttackContribution(current, "inspiration"));
+    work = transitionUnit(work, 1, (current) => removeAttackContribution(current, "inspiration"));
     assert.equal(resolveAttackPower(1, battlefieldView(work)), 100);
-    transitionUnit(work, 1, (current) => setAttackContribution(current, sample));
+    work = transitionUnit(work, 1, (current) => setAttackContribution(current, sample));
     assert.equal(resolveAttackPower(1, battlefieldView(work)), 250);
     const copied = copyUnitSnapshot(getUnit(work, 1));
     assert.equal(copied.offense.attack, getUnit(work, 1).offense.attack);
-    const resumedSnapshot = work.battlefield.snapshot("draft");
-    transitionUnit(work, 1, (current) =>
+    const resumedSnapshot = battlefieldView(work);
+    work = transitionUnit(work, 1, (current) =>
         setAttackContribution(current, { id: "inspiration", value: [value(200)] }),
     );
     assert.equal(resolveAttackPower(1, battlefieldView(work)), 300);
@@ -140,10 +128,10 @@ test("contributions: direct capability closures read current facts and retain pr
         id: "dynamic",
         value: ({ unit }) => [value(unit.vitality.hp < 50 ? 100 : 0)],
     });
-    const work = workFor(initial);
-    const original = work.battlefield.snapshot("draft");
+    let work = workFor(initial);
+    const original = battlefieldView(work);
     assert.equal(resolveAttackPower(1, original), 100);
-    transitionUnit(work, 1, (current) => ({
+    work = transitionUnit(work, 1, (current) => ({
         ...current,
         vitality: { ...current.vitality, hp: 30 },
     }));

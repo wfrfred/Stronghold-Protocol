@@ -1,38 +1,24 @@
-import {
-    type ActionExecutionWork,
-    actionExecutionsBySource,
-} from "../../unit/capability/action/internal/executions.js";
 import { compileAction } from "../../unit/capability/action/compile.js";
-import type { ActionStartResources } from "../../unit/capability/action/execution.js";
-import { startActionInWork } from "../../unit/capability/action/internal/execution.js";
+import { startAction, type ActionStartResources } from "../../unit/capability/action/execution.js";
 import {
-    cancelActionExecutionInWork,
-    resumeActionExecutionInWork,
-} from "../../unit/capability/action/internal/process.js";
-import type { CompiledAction } from "../../unit/capability/action/compiled.js";
-import {
+    cancelActionExecution,
+    resumeActionExecution,
     actionExecutionPermissions,
     type ActionExecution,
     type ActionExecutionState,
     type CompiledActionSegment,
 } from "../../unit/capability/action/process.js";
+import type { CompiledAction } from "../../unit/capability/action/compiled.js";
 import { retireCombatUnit } from "../execution/unit-lifecycle.js";
 import { CombatResources } from "../resources.js";
-import {
-    advanceBattlefield,
-    battlefieldView,
-    getUnit,
-    type BattleState,
-} from "../execution/context.js";
+import { battlefieldView, getUnit, type BattleState } from "../state.js";
+import { emptyCall, type CallContext } from "../execution/call.js";
 import { hasAction, type ActionDefinition } from "../../unit/capability/action/capability.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
 import { hasVitality } from "../../unit/capability/vitality/capability.js";
 import type { UnitId } from "../../unit/unit.js";
 import type { Command } from "../contract.js";
-import {
-    withProjectileOperations,
-    type ProjectileOperations,
-} from "../../battlefield/projectile/operations.js";
+import { createProjectileOperations } from "../../battlefield/projectile/operations.js";
 import { hasSkill } from "../../unit/capability/skill/capability.js";
 import { hasStatusFlag } from "../../unit/capability/status/capability.js";
 
@@ -46,13 +32,12 @@ export function createCombat(
         let compiled = compiledActions.get(definition);
 
         if (compiled === undefined) {
-            const candidate = compile(definition, resources);
+            compiled = compile(definition, resources);
 
-            if (candidate.definition !== definition) {
+            if (compiled.definition !== definition) {
                 throw new TypeError("compiled action must retain its definition association");
             }
 
-            compiled = candidate;
             compiledActions.set(definition, compiled);
         }
 
@@ -61,53 +46,46 @@ export function createCombat(
 
     const segmentsOf = (execution: ActionExecution): readonly CompiledActionSegment[] =>
         compiledAction(execution.definition).program;
+    const forSource = (state: ActionExecutionState, unitId: UnitId): readonly ActionExecution[] =>
+        state.executions.filter((execution) => execution.sourceUnitId === unitId);
+    const mayStart = (state: ActionExecutionState, unitId: UnitId): boolean =>
+        forSource(state, unitId).every(
+            (execution) =>
+                actionExecutionPermissions(execution, segmentsOf(execution)).allowNewAction,
+        );
 
-    const mayStart = (executions: ActionExecutionWork, unitId: UnitId): boolean =>
-        executions
-            .forSource(unitId)
-            .every(
-                (execution) =>
-                    actionExecutionPermissions(execution, segmentsOf(execution)).allowNewAction,
-            );
-
-    const executionsOf = (state: BattleState): ActionExecutionWork => {
-        if (state.actionExecutions === undefined) {
-            throw new TypeError("combat requires action execution state");
-        }
-
-        return state.actionExecutions;
-    };
-
-    const prepare = (state: BattleState, commands: readonly Command[], tick: number): void => {
-        const executions = executionsOf(state);
-
+    const prepare = (
+        state: BattleState,
+        commands: readonly Command[],
+        tick: number,
+        call: CallContext = emptyCall,
+    ): BattleState => {
         for (const command of commands) {
-            if (command.type !== "CANCEL_ACTION_EXECUTION") {
-                continue;
+            if (command.type === "CANCEL_ACTION_EXECUTION") {
+                state = cancelActionExecution(
+                    state,
+                    { executionId: command.executionId, tick },
+                    call,
+                ).state;
             }
-
-            cancelActionExecutionInWork(state, executions, {
-                executionId: command.executionId,
-                tick,
-            });
         }
+
+        return state;
     };
 
-    const advanceActions = (
+    const advance = (
         state: BattleState,
         tick: number,
-        projectiles: ProjectileOperations,
-    ): void => {
-        const battlefield = battlefieldView(state);
-        const executions = executionsOf(state);
+        call: CallContext = emptyCall,
+    ): BattleState => {
         const actionResources: ActionStartResources = {
             completeAttack: resources.completeAttack,
-            projectileOperations: projectiles,
+            projectileOperations: createProjectileOperations(resources.projectiles, tick),
         };
         const ids = [
             ...new Set([
-                ...battlefield.unitIds,
-                ...executions.result().executions.map(({ sourceUnitId }) => sourceUnitId),
+                ...battlefieldView(state).unitIds,
+                ...state.actionExecutions.executions.map(({ sourceUnitId }) => sourceUnitId),
             ]),
         ].sort((left, right) => left - right);
 
@@ -115,18 +93,17 @@ export function createCombat(
             const unit = getUnit(state, id);
 
             if (unit !== undefined && hasVitality(unit) && unit.vitality.hp <= 0) {
-                retireCombatUnit(state, id, resources, tick);
+                state = retireCombatUnit(state, id, resources, tick, call);
             }
         }
-
         for (const id of ids) {
-            for (const execution of executions.forSource(id)) {
-                resumeActionExecutionInWork(
+            for (const execution of forSource(state.actionExecutions, id)) {
+                state = resumeActionExecution(
                     state,
-                    executions,
                     { executionId: execution.id, segments: segmentsOf(execution), tick },
                     actionResources,
-                );
+                    call,
+                ).state;
             }
 
             const unit = getUnit(state, id);
@@ -140,9 +117,8 @@ export function createCombat(
                 continue;
             }
 
-            startActionInWork(
+            state = startAction(
                 state,
-                executions,
                 {
                     sourceUnitId: id,
                     compiled: compiledAction(
@@ -152,34 +128,21 @@ export function createCombat(
                             : unit.definition.action.normalAction,
                     ),
                     tick,
-                    mayStart: mayStart(executions, id),
+                    mayStart: mayStart(state.actionExecutions, id),
                 },
                 actionResources,
+                call,
             );
         }
-    };
 
-    const advance = (state: BattleState, tick: number): void => {
-        const launched = withProjectileOperations(
-            battlefieldView(state),
-            state.execution.nextProjectileId,
-            resources.projectiles,
-            tick,
-            (projectiles) => {
-                advanceActions(state, tick, projectiles);
-
-                return undefined;
-            },
-        );
-        advanceBattlefield(state, launched.changes);
-        state.execution = { ...state.execution, nextProjectileId: launched.nextProjectileId };
+        return state;
     };
 
     return {
         prepare,
         advance,
         allowsMovement: (state: ActionExecutionState, unitId: UnitId) =>
-            (actionExecutionsBySource(state).get(unitId) ?? []).every(
+            forSource(state, unitId).every(
                 (execution) =>
                     !actionExecutionPermissions(execution, segmentsOf(execution)).blockingMovement,
             ),

@@ -33,12 +33,45 @@ import {
     multiplyDamage,
     reduceDamage,
 } from "../../dist/core/tactical/unit/capability/vitality/damage/rules.js";
-import { getUnit } from "../../dist/core/tactical/battle/execution/context.js";
+import { getUnit, transitionUnit } from "../../dist/core/tactical/battle/state.js";
+
+test("damage pipeline: fatal reactions return the current life state before departure is decided", () => {
+    const rescue = damageEffect("fatal-rescue", {}, [{
+        stage: "reaction",
+        invoke(state, context, _self, report) {
+            if (report.deathOccurred && report.request.targetUnitId === context.unit.id) {
+                state = transitionUnit(state, context.unit.id, unit => ({
+                    ...unit, vitality: { ...unit.vitality, hp: 50 },
+                }));
+            }
+            return { state, value: undefined };
+        },
+    }]);
+    const initial = workFor(unit(1), attach(unit(2, { hp: 100 }), rescue));
+    const resolved = resolveDamage(initial, request(100), new CombatResources());
+    assert.equal(resolved.value.hpLoss, 100);
+    assert.equal(resolved.value.deathOccurred, true);
+    assert.equal(getUnit(resolved.state, 2).vitality.hp, 50);
+    assert.deepEqual(resolved.state.removedUnits, []);
+    assert.equal(getUnit(initial, 2).vitality.hp, 100);
+});
 
 const rule = (id, stage, invoke, priority = 0, properties = {}) =>
-    damageEffect(id, {}, [
-        { stage, priority, invoke: (context, _self, value) => invoke(context, value) },
-    ], properties);
+    damageEffect(
+        id,
+        {},
+        [
+            {
+                stage,
+                priority,
+                invoke: (state, context, _self, value) => ({
+                    state,
+                    value: invoke(context, value),
+                }),
+            },
+        ],
+        properties,
+    );
 
 test("damage pipeline: numeric contributions retain four distinct positions and clamp the direct multiplier", () => {
     assert.equal(
@@ -72,19 +105,25 @@ test("damage pipeline: dynamic low HP attack reads current state and stable prio
         },
     );
     const source = attach(unit(1, { hp: 750, maxHp: 1000 }), lowHp);
-    const battle = workFor(source, unit(2));
-    resolveDamage(battle, request(500, { sourceUnitId: 2, targetUnitId: 1 }), resources);
-    const damaged = view(battle);
-    resolveHealing(
+    let battle = workFor(source, unit(2));
+    battle = resolveDamage(
         battle,
-        { sourceUnitId: 2, targetUnitId: 1, power: 400, ignoreHealFree: false, tick: 12 },
+        request(500, { sourceUnitId: 2, targetUnitId: 1 }),
         resources,
-    );
+    ).state;
+    const damaged = view(battle);
+    battle = resolveHealing(battle, {
+        sourceUnitId: 2,
+        targetUnitId: 1,
+        power: 400,
+        ignoreHealFree: false,
+        tick: 12,
+    }).state;
     assert.equal(resolveAttackPower(1, damaged), 200);
     assert.equal(damaged.getUnit(1).vitality.hp, 250);
     assert.equal(getUnit(battle, 1).vitality.hp, 650);
     assert.equal(resolveAttackPower(1, view(battle)), 100);
-    assert.equal(battle.battlefield.snapshot("state").getUnit(1).vitality.hp, 750);
+    assert.equal(source.vitality.hp, 750);
 });
 
 test("damage pipeline: multiplication and replacement retain their explicit execution order", () => {
@@ -96,7 +135,12 @@ test("damage pipeline: multiplication and replacement retain their explicit exec
             unit(1),
             rule("attack-scale", "sourceFormula", compose(first, second)),
         );
-        const result = resolveDamage(workFor(source, unit(2)), request(100), new CombatResources());
+        const resultSettlement = resolveDamage(
+            workFor(source, unit(2)),
+            request(100),
+            new CombatResources(),
+        );
+        const result = resultSettlement.value;
         assert.equal(result.formulaDamage, expected);
         assert.equal(result.hpLoss, expected);
     }
@@ -108,7 +152,7 @@ test("damage pipeline: fixed penetration precedes proportional penetration", () 
         ["ARTS", 0, 80, 650],
         ["ARTS", 0, 150, 550],
     ]) {
-        const result = resolveDamage(
+        const resultSettlement = resolveDamage(
             workFor(unit(1), unit(2, { defense, resistance })),
             request(1000, {
                 damageType,
@@ -120,6 +164,7 @@ test("damage pipeline: fixed penetration precedes proportional penetration", () 
             }),
             new CombatResources(),
         );
+        const result = resultSettlement.value;
         assert.equal(result.formulaDamage, expected);
     }
 });
@@ -135,8 +180,8 @@ test("damage pipeline: resistance contributions clamp before penetration", () =>
         },
     );
     const target = attach(unit(2, { resistance: 80 }), effect);
-    const battle = workFor(unit(1), target);
-    const result = resolveDamage(
+    let battle = workFor(unit(1), target);
+    const resultSettlement = resolveDamage(
         battle,
         request(1000, {
             damageType: "ARTS",
@@ -148,6 +193,8 @@ test("damage pipeline: resistance contributions clamp before penetration", () =>
         }),
         new CombatResources(),
     );
+    battle = resultSettlement.state;
+    const result = resultSettlement.value;
     assert.equal(result.formulaDamage, 550);
     assert.equal(getUnit(battle, 2).vitality.hp, 4450);
     assert.equal(getUnit(battle, 2).definition.defense.resistance, 80);
@@ -168,8 +215,10 @@ test("damage pipeline: barrier before doubling takes 400 HP; doubling before bar
                 scalePriority,
             ),
         );
-        const battle = workFor(unit(1), target);
-        const result = resolveDamage(battle, request(700), new CombatResources());
+        let battle = workFor(unit(1), target);
+        const resultSettlement = resolveDamage(battle, request(700), new CombatResources());
+        battle = resultSettlement.state;
+        const result = resultSettlement.value;
         assert.equal(result.hpDamage, expected);
         assert.equal(result.hpLoss, expected);
         assert.equal(stateOf(battle, 2, shield).remainingAmount, 0);
@@ -191,14 +240,16 @@ test("damage pipeline: reduction and complete absorption consume shield without 
             100,
         ),
     );
-    const battle = workFor(unit(1), target);
-    const result = resolveDamage(battle, request(700), new CombatResources());
+    let battle = workFor(unit(1), target);
+    const resultSettlement = resolveDamage(battle, request(700), new CombatResources());
+    battle = resultSettlement.state;
+    const result = resultSettlement.value;
     assert.equal(result.hpLoss, 0);
     assert.equal(result.hpDamage, 0);
     assert.equal(result.cancellation, null);
     assert.equal(result.resourceConsumptions[0].amount, 600);
     assert.equal(stateOf(battle, 2, shield).remainingAmount, 200);
-    assert.equal(battle.battlefield.snapshot("state").getUnit(2), target);
+    assert.equal(target.effects.instances[0].state.remainingAmount, 800);
 });
 
 test("damage pipeline: Effect overwriting gates hooks while retaining suppressed instances", () => {
@@ -217,8 +268,8 @@ test("damage pipeline: Effect overwriting gates hooks while retaining suppressed
         { group: { id: "fragile", priority: 3 } },
     );
     const target = attach(attach(unit(2), weak), strong);
-    const battle = workFor(unit(1), target);
-    assert.equal(resolveDamage(battle, request(100), new CombatResources()).hpLoss, 300);
+    let battle = workFor(unit(1), target);
+    assert.equal(resolveDamage(battle, request(100), new CombatResources()).value.hpLoss, 300);
     assert.deepEqual(
         getUnit(battle, 2).effects.instances.map((self) => self.status),
         ["INACTIVE", "ACTIVE"],
@@ -251,9 +302,9 @@ test("damage pipeline: Contribution groups and Effect groups have separate respo
         { group: { id: "shared", priority: 2 } },
     );
     const target = attach(attach(attach(unit(2), attack), weak), strong);
-    const battle = workFor(unit(1), target);
+    let battle = workFor(unit(1), target);
     assert.equal(resolveAttackPower(2, view(battle)), 200);
-    assert.equal(resolveDamage(battle, request(100), new CombatResources()).hpLoss, 300);
+    assert.equal(resolveDamage(battle, request(100), new CombatResources()).value.hpLoss, 300);
 });
 
 test("damage pipeline: independent formula, output and reaction hooks all execute", () => {
@@ -261,9 +312,13 @@ test("damage pipeline: independent formula, output and reaction hooks all execut
     const observer = damageEffect("observer", { reports: 0 }, [
         {
             stage: "reaction",
-            invoke(context, self) {
-                setSelf(context, self, (state) => ({ reports: state.reports + 1 }));
+            invoke(state, context, self) {
+                state = setSelf(state, context, self, (current) => ({
+                    reports: current.reports + 1,
+                }));
                 reactions.push(context.unit.id);
+
+                return { state, value: {} };
             },
         },
     ]);
@@ -291,21 +346,25 @@ test("damage pipeline: independent formula, output and reaction hooks all execut
             {
                 stage: "reaction",
                 priority: 1000,
-                invoke: (context) => {
+                invoke: (state, context) => {
                     reactions.push(context.unit.id);
+
+                    return { state, value: {} };
                 },
             },
         ]),
     );
-    const battle = workFor(source, target);
-    const result = resolveDamage(battle, request(100), new CombatResources());
+    let battle = workFor(source, target);
+    const resultSettlement = resolveDamage(battle, request(100), new CombatResources());
+    battle = resultSettlement.state;
+    const result = resultSettlement.value;
     assert.equal(result.formulaDamage, 200);
     assert.equal(result.outputDamage, 600);
     assert.equal(result.hpLoss, 600);
     assert.equal(stateOf(battle, 1, observer).reports, 1);
     assert.deepEqual(reactions, [1, 2]);
     reactions.length = 0;
-    resolveDamage(battle, request(100, { targetUnitId: 1 }), new CombatResources());
+    battle = resolveDamage(battle, request(100, { targetUnitId: 1 }), new CombatResources()).state;
     assert.deepEqual(reactions, [1]);
 });
 
@@ -336,14 +395,21 @@ test("damage pipeline: priority precedes registration order and disabled candida
                 1000,
             ),
         );
-        const result = resolveDamage(workFor(unit(1), target), request(300), new CombatResources());
+        const resultSettlement = resolveDamage(
+            workFor(unit(1), target),
+            request(300),
+            new CombatResources(),
+        );
+        const result = resultSettlement.value;
         assert.equal(result.hpLoss, reverse ? 1200 : 900);
     }
 });
 
 test("damage pipeline: lethal protection keeps HP 1 without removal", () => {
-    const battle = workFor(unit(1), unit(2, { hp: 1000, flags: ["UNDEADABLE"] }));
-    const result = resolveDamage(battle, request(5000), new CombatResources());
+    let battle = workFor(unit(1), unit(2, { hp: 1000, flags: ["UNDEADABLE"] }));
+    const resultSettlement = resolveDamage(battle, request(5000), new CombatResources());
+    battle = resultSettlement.state;
+    const result = resultSettlement.value;
     assert.equal(getUnit(battle, 2).vitality.hp, 1);
     assert.equal(result.hpLoss, 999);
     assert.equal(result.fatalProtection, true);
@@ -352,8 +418,10 @@ test("damage pipeline: lethal protection keeps HP 1 without removal", () => {
 });
 
 test("damage pipeline: missing target leaves numerical stages uncomputed", () => {
-    const battle = workFor(unit(1));
-    const result = resolveDamage(battle, request(100), new CombatResources());
+    let battle = workFor(unit(1));
+    const resultSettlement = resolveDamage(battle, request(100), new CombatResources());
+    battle = resultSettlement.state;
+    const result = resultSettlement.value;
     assert.equal(result.formulaDamage, null);
     assert.equal(result.outputDamage, null);
     assert.equal(result.hpDamage, null);
@@ -367,17 +435,27 @@ test("damage pipeline: invincibility preserves shield resources and still notifi
     const source = attach(
         unit(1),
         damageEffect("observer", {}, [
-            { stage: "output", invoke: (ctx, _self, value) => multiplyDamage(() => 2)(ctx, value) },
+            {
+                stage: "output",
+                invoke: (state, ctx, _self, value) => ({
+                    state,
+                    value: multiplyDamage(() => 2)(ctx, value),
+                }),
+            },
             {
                 stage: "reaction",
-                invoke: (_ctx, _self, report) => {
+                invoke: (state, _ctx, _self, report) => {
                     observations.push(report);
+
+                    return { state, value: {} };
                 },
             },
         ]),
     );
-    const battle = workFor(source, attach(unit(2, { flags: ["INVINCIBLE"] }), shield));
-    const result = resolveDamage(battle, request(700), new CombatResources());
+    let battle = workFor(source, attach(unit(2, { flags: ["INVINCIBLE"] }), shield));
+    const resultSettlement = resolveDamage(battle, request(700), new CombatResources());
+    battle = resultSettlement.state;
+    const result = resultSettlement.value;
     assert.equal(result.formulaDamage, 700);
     assert.equal(result.outputDamage, 1400);
     assert.equal(result.hpDamage, null);
@@ -389,34 +467,50 @@ test("damage pipeline: invincibility preserves shield resources and still notifi
 });
 
 test("damage pipeline: nested damage and healing observe consumption and latest HP", () => {
+    const resources = new CombatResources();
     const shield = barrier("source-shield", 30);
     const once = damageEffect("once", { charges: 1 }, [
         {
             stage: "reaction",
-            invoke(context, self, report) {
+            invoke(state, context, self, report) {
                 if (report.request.sourceUnitId !== context.unit.id || self.state.charges === 0)
-                    return;
-                setSelf(context, self, { charges: 0 });
-                context.operations.damage(request(40, { sourceUnitId: 2, targetUnitId: 1 }));
-                context.operations.heal({
-                    sourceUnitId: 1,
-                    targetUnitId: 2,
-                    power: 10,
-                    ignoreHealFree: false,
-                });
-                setSelf(context, self, (state) => ({
-                    ...state,
-                    observedSourceHp: context.unit.vitality.hp,
-                    observedTargetHp: getUnit(context.battle, 2).vitality.hp,
+                    return { state, value: {} };
+                state = setSelf(state, context, self, { charges: 0 });
+                state = resolveDamage(
+                    state,
+                    request(40, { sourceUnitId: 2, targetUnitId: 1, tick: context.tick }),
+                    resources,
+                    context.call,
+                ).state;
+                state = resolveHealing(
+                    state,
+                    {
+                        sourceUnitId: 1,
+                        targetUnitId: 2,
+                        power: 10,
+                        ignoreHealFree: false,
+                        tick: context.tick,
+                    },
+                    context.call,
+                ).state;
+                state = setSelf(state, context, self, (current) => ({
+                    ...current,
+                    observedSourceHp: getUnit(state, context.unit.id).vitality.hp,
+                    observedTargetHp: getUnit(state, 2).vitality.hp,
                 }));
+
+                return { state, value: {} };
             },
         },
     ]);
-    const battle = workFor(
+    let battle = workFor(
         attach(attach(unit(1, { hp: 800, maxHp: 1000 }), shield), once),
         unit(2, { hp: 1000 }),
     );
-    const result = resolveDamage(battle, request(100), new CombatResources());
+    const previous = battle;
+    const resultSettlement = resolveDamage(battle, request(100), resources);
+    battle = resultSettlement.state;
+    const result = resultSettlement.value;
     assert.equal(result.hpLoss, 100);
     assert.equal(getUnit(battle, 1).vitality.hp, 790);
     assert.equal(getUnit(battle, 2).vitality.hp, 910);
@@ -434,5 +528,5 @@ test("damage pipeline: nested damage and healing observe consumption and latest 
             ["HEAL", 10],
         ],
     );
-    assert.equal(battle.battlefield.snapshot("state").getUnit(1).vitality.hp, 800);
+    assert.equal(getUnit(previous, 1).vitality.hp, 800);
 });

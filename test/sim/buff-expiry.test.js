@@ -8,7 +8,7 @@ import {
     parseAttributeModifiers,
 } from "../../dist/data/arknights/modifier.js";
 
-import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/execution/context.js";
+import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/state.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import {
     setAttackContribution,
@@ -138,46 +138,43 @@ function harness({ stackCount = 3, maxValidStackCnt = -1 } = {}) {
         { stackCount, lifetimeTicks: 30, sample: sample(stackCount) },
         output,
         {
-            onTick(ctx) {
-                if (ctx.tick < deadline(ctx.self)) return;
+            onTick(state, ctx) {
+                if (ctx.tick < deadline(ctx.self)) return state;
                 const plan = policy.expire(
                     { stackCount: ctx.self.state.stackCount, expiresAtTick: deadline(ctx.self) },
-                    ctx.self.state.lifetimeTicks,
-                    ctx.tick,
+                    ctx.self.state.lifetimeTicks, ctx.tick,
                 );
-                if (plan.type === "FINISH") ctx.end("EXPIRED");
-                else {
-                    effects.setDeadline(ctx.battle, ctx.ref, plan.expiresAtTick);
-                    ctx.setState((state) => ({
-                        ...state,
-                        stackCount: plan.stackCount,
-                        sample: plan.reloadModifiers ? sample(plan.stackCount) : state.sample,
-                    }));
-                    refreshContribution(ctx.battle, ctx.ref, content, output);
-                }
+                if (plan.type === "FINISH") return effects.end(state, ctx.ref, "EXPIRED", ctx.call).state;
+                const next = effects.setDeadline(effects.setState(ctx.self, {
+                    ...ctx.self.state,
+                    stackCount: plan.stackCount,
+                    sample: plan.reloadModifiers ? sample(plan.stackCount) : ctx.self.state.sample,
+                }), plan.expiresAtTick);
+                state = effects.replaceEffect(state, ctx.ref.unitId, next);
+                return refreshContribution(state, ctx.ref, content, output);
             },
         },
     );
-    const work = effectFixtureWork(
+    let work = effectFixtureWork(
         initializeUnit({
             id: 0,
             position: [0, 0],
             definition: { id: "receiver", offense: { attack: 100 } },
         }),
     );
-    const ref = effects.install(work, getUnit(work, 0), content, {
+    const installed = effects.install(work, getUnit(work, 0), content, {
         source: 10,
         scopes: [{ type: "TICK", tick: 30 }],
     });
+    work = installed.state;
     return {
         work,
-        ref,
+        ref: installed.value,
         content,
         samples,
         source: (value) => {
             sourceAttack = value;
         },
-        tick: (tick) => effects.advance(at(work, tick)),
     };
 }
 
@@ -186,15 +183,15 @@ test("buff expiry content renews private layers and refreshes static contributio
     const before = battlefieldView(buff.work);
     const id = instance(before).id;
     assert.equal(power(before), 250);
-    buff.tick(29);
+    buff.work = effects.advance(at(buff.work, 29));
     assert.equal(power(battlefieldView(buff.work)), 250);
-    buff.tick(30);
+    buff.work = effects.advance(at(buff.work, 30));
     assert.equal(instance(battlefieldView(buff.work)).id, id);
     assert.equal(deadline(instance(battlefieldView(buff.work))), 60);
     assert.equal(power(battlefieldView(buff.work)), 200);
-    buff.tick(60);
+    buff.work = effects.advance(at(buff.work, 60));
     assert.equal(power(battlefieldView(buff.work)), 150);
-    buff.tick(90);
+    buff.work = effects.advance(at(buff.work, 90));
     assert.equal(instance(battlefieldView(buff.work)), undefined);
     assert.equal(power(battlefieldView(buff.work)), 100);
     assert.equal(power(before), 250);
@@ -202,8 +199,8 @@ test("buff expiry content renews private layers and refreshes static contributio
 });
 test("inactive layered buffs reach deadline without executing their active tick behavior", () => {
     const buff = harness({ stackCount: 2 });
-    effects.setEnabled(buff.work, buff.ref, false);
-    buff.tick(30);
+    buff.work = effects.setEnabled(buff.work, buff.ref, false);
+    buff.work = effects.advance(at(buff.work, 30));
     assert.equal(instance(battlefieldView(buff.work)), undefined);
     assert.equal(power(battlefieldView(buff.work)), 100);
     assert.deepEqual(buff.samples, [100]);
@@ -212,12 +209,12 @@ test("native effective cap preserves sampled input until a renewal requires resa
     const buff = harness({ stackCount: 4, maxValidStackCnt: 2 });
     const original = battlefieldView(buff.work);
     buff.source(200);
-    buff.tick(30);
+    buff.work = effects.advance(at(buff.work, 30));
     assert.equal(instance(battlefieldView(buff.work)).state.stackCount, 3);
     assert.deepEqual(buff.samples, [100]);
     assert.equal(power(battlefieldView(buff.work)), 200);
     buff.source(400);
-    buff.tick(60);
+    buff.work = effects.advance(at(buff.work, 60));
     assert.equal(instance(battlefieldView(buff.work)).state.stackCount, 2);
     assert.deepEqual(buff.samples, [100, 400]);
     assert.equal(power(battlefieldView(buff.work)), 500);

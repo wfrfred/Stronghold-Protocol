@@ -1,5 +1,6 @@
+import type { CallContext } from "../../../../battle/execution/call.js";
 import type { UnitId } from "../../../unit.js";
-import type { BattleState } from "../../../../battle/execution/context.js";
+import type { BattleState, Result } from "../../../../battle/state.js";
 
 export type DamageType = "PHYSICAL" | "ARTS" | "TRUE" | "ELEMENTAL";
 
@@ -76,4 +77,8 @@ export function createDamageOperands(power: number): DamageOperands {
     };
 }
 
-export type DamageOperation = (work: BattleState, request: DamageRequest) => DamageReport;
+export type DamageOperation = (
+    state: BattleState,
+    request: DamageRequest,
+    call?: CallContext,
+) => Result<DamageReport>;

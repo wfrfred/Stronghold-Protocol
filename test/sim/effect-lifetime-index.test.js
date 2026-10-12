@@ -5,43 +5,50 @@ import {
     battlefieldView,
     getUnit,
     transitionUnit,
-} from "../../dist/core/tactical/battle/execution/context.js";
+} from "../../dist/core/tactical/battle/state.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { dependents } from "../../dist/core/tactical/battlefield/storage/effect-lifetimes.js";
 import { definition, install, effectFixtureWork } from "../helpers/effects.js";
 const unit = (id) => initializeUnit({ id, position: [0, 0], definition: { id: `host-${id}` } });
 
 test("scope index tracks remote dependencies and preserves captured indexes", () => {
-    const battle = effectFixtureWork(unit(1), unit(2), unit(9));
+    let battle = effectFixtureWork(unit(1), unit(2), unit(9));
     const content = definition("indexed");
-    const parent = install(battle, content, 1);
-    const child = install(battle, content, 9, { scopes: [parent] });
-    const other = install(battle, content, 2, { scopes: [parent] });
+    let parent;
+    ({ state: battle, value: parent } = install(battle, content, 1));
+    let child;
+    ({ state: battle, value: child } = install(battle, content, 9, { scopes: [parent] }));
+    let other;
+    ({ state: battle, value: other } = install(battle, content, 2, { scopes: [parent] }));
     const captured = battlefieldView(battle);
     assert.deepEqual(dependents(battlefieldView(battle).effectLifetimes, parent), [other, child]);
-    effects.end(battle, other);
+    battle = effects.end(battle, other).state;
     assert.deepEqual(dependents(battlefieldView(battle).effectLifetimes, parent), [child]);
     assert.equal(captured.effectLifetimes.dependents.get("EFFECT:1:0").size, 2);
     const unrelated = battlefieldView(battle).effectLifetimes;
-    transitionUnit(battle, 2, (current) => ({ ...current, position: [1, 0] }));
+    battle = transitionUnit(battle, 2, (current) => ({ ...current, position: [1, 0] }));
     assert.equal(battlefieldView(battle).effectLifetimes, unrelated);
-    effects.end(battle, parent);
+    battle = effects.end(battle, parent).state;
     assert.deepEqual(dependents(battlefieldView(battle).effectLifetimes, parent), []);
     assert.deepEqual(getUnit(battle, 9).effects.instances, []);
 });
 
 test("binding rejects scope cycles while sharing independent scopes", () => {
-    const battle = effectFixtureWork(unit(1), unit(2));
+    let battle = effectFixtureWork(unit(1), unit(2));
     const content = definition("cycle");
-    const first = install(battle, content, 1);
-    const second = install(battle, content, 2, { scopes: [first] });
+    let first;
+    ({ state: battle, value: first } = install(battle, content, 1));
+    let second;
+    ({ state: battle, value: second } = install(battle, content, 2, { scopes: [first] }));
     assert.throws(() => effects.bind(battle, first, second), /cycle/);
-    assert.equal(effects.bind(battle, second, { type: "UNIT", unitId: 1 }), true);
+    const bound = effects.bind(battle, second, { type: "UNIT", unitId: 1 });
+    battle = bound.state;
+    assert.equal(bound.value, true);
     assert.deepEqual(
         dependents(battlefieldView(battle).effectLifetimes, { type: "UNIT", unitId: 1 }),
         [second],
     );
-    effects.endScope(battle, { type: "UNIT", unitId: 1 });
+    battle = effects.endScope(battle, { type: "UNIT", unitId: 1 });
     assert.deepEqual(getUnit(battle, 1).effects.instances, []);
     assert.deepEqual(getUnit(battle, 2).effects.instances, []);
 });

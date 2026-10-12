@@ -4,7 +4,7 @@ import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import {
     battlefieldView,
     transitionUnit,
-} from "../../dist/core/tactical/battle/execution/context.js";
+} from "../../dist/core/tactical/battle/state.js";
 import {
     setAttackContribution,
     removeAttackContribution,
@@ -34,11 +34,11 @@ test("attribute selection keeps weaker candidates while independent attributes s
     unit = setAttackContribution(unit, entry("b", 60, 0.6));
     unit = setDefenseContribution(unit, { id: "a", value: [create({ finalAddition: 10 })] });
     unit = setDefenseContribution(unit, { id: "b", value: [create({ finalAddition: 20 })] });
-    const battle = effectFixtureWork(unit);
+    let battle = effectFixtureWork(unit);
     const before = battlefieldView(battle);
     assert.equal(resolveAttackPower(1, before), 160);
     assert.equal(resolveDefense(1, before).defense, 30);
-    transitionUnit(battle, 1, (current) => removeAttackContribution(current, "b"));
+    battle = transitionUnit(battle, 1, (current) => removeAttackContribution(current, "b"));
     assert.equal(resolveAttackPower(1, battlefieldView(battle)), 400);
     assert.equal(resolveAttackPower(1, before), 160);
 });
@@ -52,14 +52,14 @@ test("dynamic values read current sources while selection changes explicitly", (
     });
     let unit = setAttackContribution(base(1), dynamic("a", 2, 0.3));
     unit = setAttackContribution(unit, dynamic("b", 3, 0.6));
-    const battle = effectFixtureWork(unit, base(2), base(3));
+    let battle = effectFixtureWork(unit, base(2), base(3));
     assert.equal(resolveAttackPower(1, battlefieldView(battle)), 160);
-    transitionUnit(battle, 3, (current) =>
+    battle = transitionUnit(battle, 3, (current) =>
         setAttackContribution(current, { id: "source", value: [create({ finalAddition: 100 })] }),
     );
     assert.equal(resolveAttackPower(1, battlefieldView(battle)), 220);
     const before = battlefieldView(battle);
-    transitionUnit(battle, 1, (current) => setAttackContribution(current, dynamic("a", 2, 0.7)));
+    battle = transitionUnit(battle, 1, (current) => setAttackContribution(current, dynamic("a", 2, 0.7)));
     assert.equal(resolveAttackPower(1, battlefieldView(battle)), 170);
     assert.equal(resolveAttackPower(1, before), 220);
 });

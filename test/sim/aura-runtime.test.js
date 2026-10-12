@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
-import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/execution/context.js";
+import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/state.js";
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
 import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
 import { createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
@@ -106,16 +106,17 @@ test("aura runtime: predefined, deployment and spawning join before the same tic
     const resources = new CombatResources();
     const starts = [];
     const receiver = attackEffect("registration-receiver", {
-        onInstall: (context) => {
+        onInstall: (state, context) => {
             starts.push([context.ref.unitId, context.tick]);
+            return state;
         },
     });
     const aura = auraEffect(receiver);
     const seen = [];
     const observer = {
         ...effectProgram("registration-observer"),
-        onTick: (context) => {
-            const view = battlefieldView(context.battle);
+        onTick: (state) => {
+            const view = battlefieldView(state);
             seen.push(
                 view.unitIds.map((id) => [
                     id,
@@ -124,11 +125,12 @@ test("aura runtime: predefined, deployment and spawning join before the same tic
                         .effects.instances.some((effect) => effect.definition === receiver),
                 ]),
             );
+            return state;
         },
     };
-    const hostState = effectFixtureWork(auraUnit(0));
+    let hostState = effectFixtureWork(auraUnit(0));
     for (const effect of [observer, aura])
-        effects.install(hostState, getUnit(hostState, 0), effect, { source: 0 });
+        hostState = effects.install(hostState, getUnit(hostState, 0), effect, { source: 0 }).state;
     const hostUnit = getUnit(hostState, 0);
     const host = {
         definition: hostUnit.definition,
@@ -194,11 +196,12 @@ test("aura runtime: movement departure is observed at the next aura tick", () =>
     const resources = new CombatResources();
     let before;
     const receiver = attackEffect("moving-receiver", {
-        onEnable: (context) => {
+        onEnable: (state, context) => {
             if (context.ref.unitId === 2) {
-                const view = battlefieldView(context.battle);
+                const view = battlefieldView(state);
                 before = { units: view.unitIds.map((id) => view.getUnit(id)) };
             }
+            return state;
         },
     });
     const aura = auraEffect(receiver, { accepts: (target) => target.position[0] <= 4.1 });
@@ -245,12 +248,17 @@ test("aura runtime: callback failure propagates the original error without publi
     const attempts = [];
     let receiver;
     receiver = attackEffect("fallible-aura-receiver", {
-        onInstall: (context) => {
-            context.setState((state) => ({ ...state, starts: 1 }));
+        onInstall: (state, context) => {
+            state = effects.replaceEffect(
+                state,
+                context.ref.unitId,
+                effects.setState(context.self, (current) => ({ ...current, starts: 1 })),
+            );
             if (context.ref.unitId === 2) {
                 attempts.push(context.ref);
                 throw failure;
             }
+            return state;
         },
     });
     const aura = auraEffect(receiver);

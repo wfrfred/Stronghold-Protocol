@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
-import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/execution/context.js";
+import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/state.js";
 import { resolveMaxHp } from "../../dist/core/tactical/unit/capability/vitality/query.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { effectFixtureWork, install, maxHpBuff } from "../helpers/effects.js";
@@ -15,25 +15,28 @@ test("sequential lifecycle callbacks observe each capability change immediately"
         });
         return { ...unit, vitality: { ...unit.vitality, hp: 50 } };
     };
-    const battle = effectFixtureWork(host(1), host(2));
+    let battle = effectFixtureWork(host(1), host(2));
     const notices = [];
     const content = maxHpBuff("hp", 100, {
-        onDisable(ctx) {
+        onDisable(state, ctx) {
             notices.push([
                 "disable",
                 ctx.ref.unitId,
-                ctx.unit.vitality.hp,
-                resolveMaxHp(ctx.ref.unitId, battlefieldView(ctx.battle)),
+                getUnit(state, ctx.ref.unitId).vitality.hp,
+                resolveMaxHp(ctx.ref.unitId, battlefieldView(state)),
             ]);
+            return state;
         },
-        onEnd(ctx) {
+        onEnd(state, ctx) {
             notices.push(["end", ctx.ref.unitId, ctx.unit.vitality.hp]);
+            return state;
         },
     });
-    const parent = install(battle, content, 1);
-    install(battle, content, 2, { scopes: [parent] });
+    let parent;
+    ({ state: battle, value: parent } = install(battle, content, 1));
+    battle = install(battle, content, 2, { scopes: [parent] }).state;
     const before = battlefieldView(battle);
-    effects.end(battle, parent);
+    battle = effects.end(battle, parent).state;
     assert.deepEqual(notices, [
         ["disable", 1, 50, 100],
         ["disable", 2, 50, 100],

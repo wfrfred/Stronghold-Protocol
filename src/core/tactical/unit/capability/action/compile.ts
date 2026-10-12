@@ -29,17 +29,17 @@ export function compileAction(
         ids: (context: ActionExecutionContext) => readonly UnitId[],
     ): CompiledActionSegment => ({
         type: "EXECUTE",
-        run: (context) => {
-            const { work } = context;
-
+        run: (state, context) => {
             for (const targetUnitId of ids(context)) {
-                run({
-                    work,
+                state = run(state, {
                     sourceUnitId: context.sourceUnitId,
                     targetUnitId,
                     tick: context.tick,
+                    call: context.call,
                 });
             }
+
+            return { state, value: undefined };
         },
     });
 

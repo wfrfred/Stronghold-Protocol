@@ -4,7 +4,7 @@ import type { BattleExecutionState } from "../execution/state.js";
 import type { UnitRouteSignal } from "./route-control.js";
 import type { UnitId } from "../../unit/unit.js";
 import type { Command, Event } from "../contract.js";
-import { advanceBattlefield, appendEvents, type BattleState } from "../execution/context.js";
+import { advanceBattlefield, appendEvents, type BattleState, type Result } from "../state.js";
 import { advanceSpawnSchedule, recordScheduleSpawns } from "../schedule/runtime.js";
 import type { SpawnScheduleExecution } from "../schedule/state.js";
 import type { ScheduledEnemySpawn } from "../schedule/definition.js";
@@ -89,22 +89,24 @@ export function advanceSpawning(
     schedule: SpawnScheduleExecution,
     commands: readonly Command[],
     tick: number,
-): SpawnScheduleExecution {
+): Result<SpawnScheduleExecution> {
     const scheduled = advanceSpawnSchedule(schedule, {
         tick,
         triggers: commands.filter((command) => command.type === "TRIGGER_BRANCH"),
     });
     const spawned = spawnEnemies(scheduled.spawns, state.execution, tick);
-    state.execution = spawned.execution;
-    appendEvents(state, enemySpawnEvents(spawned, tick));
-    advanceBattlefield(
+    state = { ...state, execution: spawned.execution };
+    state = appendEvents(state, enemySpawnEvents(spawned, tick));
+    state = advanceBattlefield(
         state,
         spawned.enemies.map((unit) => ({ type: "REGISTER_UNIT", unit })),
     );
 
-    return recordScheduleSpawns(
+    const value = recordScheduleSpawns(
         scheduled.state,
         scheduled.spawns,
         spawned.enemies.map((enemy) => enemy.id),
     );
+
+    return { state, value };
 }

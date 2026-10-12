@@ -1,9 +1,8 @@
 import type { UnitId } from "../../unit.js";
 import type { CombatTargetingView } from "../../targeting/query.js";
-import type { BattleState } from "../../../battle/execution/context.js";
+import type { BattleState, Result } from "../../../battle/state.js";
+import type { CallContext } from "../../../battle/execution/call.js";
 import type { SkillDefinition } from "./capability.js";
-import type { DamageReport, DamageRequest } from "../vitality/damage/contract.js";
-import type { HealingReport, HealingRequest } from "../vitality/healing/contract.js";
 
 export type SkillFacts = CombatTargetingView;
 
@@ -16,9 +15,7 @@ export interface SkillQueryContext {
 export interface SkillActivationContext extends SkillQueryContext {
     readonly activationId: number;
     readonly endsAtTick: number | null;
-    readonly battle: BattleState;
-    damage(request: Omit<DamageRequest, "tick">): DamageReport;
-    heal(request: Omit<HealingRequest, "tick">): HealingReport;
+    readonly call: CallContext;
 }
 
 export type SkillContentResult =
@@ -27,6 +24,9 @@ export type SkillContentResult =
 export interface CompiledSkill {
     readonly definition: SkillDefinition;
     readonly accepts?: (context: SkillQueryContext) => boolean;
-    readonly activate: (context: SkillActivationContext) => SkillContentResult;
-    readonly finish?: (context: SkillActivationContext) => undefined;
+    readonly activate: (
+        state: BattleState,
+        context: SkillActivationContext,
+    ) => Result<SkillContentResult>;
+    readonly finish?: (state: BattleState, context: SkillActivationContext) => BattleState;
 }

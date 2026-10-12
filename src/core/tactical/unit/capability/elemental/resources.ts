@@ -29,7 +29,7 @@ export class ElementalResources {
             throw new TypeError(`duplicate elemental burst ${receiver}/${type}`);
         }
 
-        definitions.set(type, Object.freeze({ ...definition }));
+        definitions.set(type, definition);
     }
 
     get(receiver: ElementalReceiver, type: ElementType): ElementalBurstDefinition {

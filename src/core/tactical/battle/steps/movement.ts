@@ -7,18 +7,13 @@ import type { UnitId } from "../../unit/unit.js";
 import { changeAlternativeRoutes } from "./route-control.js";
 import type { Command, Event } from "../contract.js";
 import { removeUnitWithEffects, type UnitLifecycleResources } from "../execution/unit-lifecycle.js";
-import {
-    advanceBattlefield,
-    appendEvents,
-    battlefieldView,
-    type BattleState,
-} from "../execution/context.js";
+import { advanceBattlefield, appendEvents, battlefieldView, type BattleState } from "../state.js";
 
 export function advanceRouteCommands(
     state: BattleState,
     commands: readonly Command[],
     tick: number,
-): void {
+): BattleState {
     const battlefield = battlefieldView(state);
     const changed = changeAlternativeRoutes(
         (id) => battlefield.getUnit(id),
@@ -30,12 +25,14 @@ export function advanceRouteCommands(
         state.execution,
         tick,
     );
-    state.execution = changed.execution;
-    appendEvents(
+    state = { ...state, execution: changed.execution };
+    state = appendEvents(
         state,
         changed.signals.map((signal) => ({ type: "ROUTE", ...signal, tick })),
     );
-    advanceBattlefield(state, changed.changes);
+    state = advanceBattlefield(state, changed.changes);
+
+    return state;
 }
 
 export function advanceMovement(
@@ -49,8 +46,8 @@ export function advanceMovement(
         readonly movementAllowed?: (unitId: UnitId) => boolean;
     },
     resources: UnitLifecycleResources,
-): void {
-    const battlefield = state.battlefield.snapshot("draft");
+): BattleState {
+    const battlefield = battlefieldView(state);
     let execution = state.execution;
     const changes: BattlefieldChange[] = [];
     const events: Event[] = [];
@@ -111,11 +108,13 @@ export function advanceMovement(
         changes.push({ type: "UPDATE_UNIT", unit: moved.unit });
     }
 
-    state.execution = execution;
-    appendEvents(state, events);
-    advanceBattlefield(state, changes);
+    state = { ...state, execution };
+    state = appendEvents(state, events);
+    state = advanceBattlefield(state, changes);
 
     for (const unitId of completed) {
-        removeUnitWithEffects(state, unitId, "SCRIPT", resources, tick);
+        state = removeUnitWithEffects(state, unitId, "SCRIPT", resources, tick);
     }
+
+    return state;
 }

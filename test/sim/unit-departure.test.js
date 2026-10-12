@@ -1,11 +1,11 @@
-import { fixtureBattlefield } from "../helpers/battlefield.js";
+import { fixtureBattlefieldState as fixtureBattlefield } from "../helpers/battlefield.js";
 import { createActionDefinition } from "../../dist/core/tactical/unit/capability/action/capability.js";
 import {
     acceptActionExecution,
     createActionExecutionState,
 } from "../../dist/core/tactical/unit/capability/action/process.js";
-import { ActionExecutionWork } from "../../dist/core/tactical/unit/capability/action/internal/executions.js";
-import { BattlefieldRuntime } from "../../dist/core/tactical/battlefield/runtime.js";
+import { getActionExecution } from "../../dist/core/tactical/unit/capability/action/internal/executions.js";
+import { create as createBattlefield } from "../../dist/core/tactical/battlefield/state.js";
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
 import { createNavigationModifierDefinition } from "../../dist/core/tactical/battlefield/navigation/modifier.js";
 import { createDeploymentProfile } from "../../dist/core/tactical/unit/capability/deployment.js";
@@ -19,9 +19,10 @@ import {
 } from "../../dist/core/tactical/battle/steps/predefined.js";
 import {
     createBattleState,
+    battlefieldView,
     getUnit,
     transitionUnit,
-} from "../../dist/core/tactical/battle/execution/context.js";
+} from "../../dist/core/tactical/battle/state.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { activateSkill } from "../../dist/core/tactical/unit/capability/skill/execution.js";
@@ -47,39 +48,39 @@ function fixture() {
     });
     resources.skills.register({
         definition: skill,
-        activate: () => ({ type: "ACTIVATED" }),
-        finish: (context) => {
-            context.damage({
+        activate: state => ({ state, value: { type: "ACTIVATED" } }),
+        finish: (state, context) => {
+            return resources.settleDamage(state, {
                 sourceUnitId: null,
                 targetUnitId: 2,
                 damageType: "TRUE",
                 operands: createDamageOperands(1),
-            });
+                tick: context.tick,
+            }, context.call).state;
         },
     });
     const counter = definition(
         "consume-on-damage",
         { consumed: 0 },
         {
-            onInstall(ctx) {
+            onInstall(state, ctx) {
                 const ref = ctx.ref;
-                transitionUnit(ctx.battle, ref.unitId, (unit) =>
+                return transitionUnit(state, ref.unitId, (unit) =>
                     setHook(unit, {
                         id: "consume",
                         stage: "reception",
                         priority: 0,
-                        enabled: (context) => get(context.battle, ref)?.status === "ACTIVE",
-                        invoke(context, value) {
-                            effects.setState(context.battle, ref, counter, (current) => ({
-                                consumed: current.consumed + 1,
-                            }));
-                            return { value };
+                        enabled: context => context.unit.effects.instances.find(effect => effect.id === ref.effectId)?.status === "ACTIVE",
+                        invoke(state, context, value) {
+                            const current = get(state, ref);
+                            state = effects.replaceEffect(state, ref.unitId, effects.setState(current, { consumed: current.state.consumed + 1 }));
+                            return { state, value: { value } };
                         },
                     }),
                 );
             },
-            onEnd(ctx) {
-                transitionUnit(ctx.battle, ctx.ref.unitId, (unit) => removeHook(unit, "consume"));
+            onEnd(state, ctx) {
+                return transitionUnit(state, ctx.ref.unitId, (unit) => removeHook(unit, "consume"));
             },
         },
     );
@@ -102,20 +103,19 @@ function fixture() {
         blockedBy: () => [],
         supportRelations: [],
     };
-    const work = createBattleState(fixtureBattlefield(battlefield), undefined);
-    for (const id of [0, 1]) activateSkill(work, { unitId: id, tick: 0 }, resources);
-    effects.install(work, getUnit(work, 2), counter);
-    work.battlefield.apply();
+    let work = createBattleState(fixtureBattlefield(battlefield), undefined);
+    for (const id of [0, 1]) work = activateSkill(work, { unitId: id, tick: 0 }, resources).state;
+    work = effects.install(work, getUnit(work, 2), counter).state;
     return { battlefield: work.battlefield, resources, execution: work.execution };
 }
 
 for (const domain of ["deployment", "predefined"]) {
     test(`${domain}: successive departures share effect updates from skill finish damage`, () => {
         const { battlefield, resources, execution } = fixture();
-        const before = battlefield.snapshot("state");
-        const state = createBattleState(battlefield, execution, undefined, 1);
+        const before = battlefieldView(createBattleState(battlefield));
+        let state = createBattleState(battlefield, execution, undefined, 1);
         if (domain === "deployment") {
-            resolveDeploymentCommands(
+            state = resolveDeploymentCommands(
                 state,
                 [
                     { type: "RETREAT_UNIT", unitId: 0 },
@@ -125,7 +125,7 @@ for (const domain of ["deployment", "predefined"]) {
                 resources,
             );
         } else {
-            advancePredefined(
+            state = advancePredefined(
                 state,
                 [{ id: 10 }, { id: 11 }],
                 [
@@ -138,7 +138,7 @@ for (const domain of ["deployment", "predefined"]) {
                 ],
                 1,
                 resources,
-            );
+            ).state;
         }
 
         assert.equal(getUnit(state, 2).effects.instances[0].state.consumed, 2);
@@ -166,7 +166,7 @@ for (const domain of ["deployment", "predefined"]) {
                 mechanism: null,
             })),
         );
-        const battlefield = BattlefieldRuntime.create({ map });
+        const battlefield = createBattlefield({ map });
         const resources = new CombatResources();
         const definition = Object.freeze({
             id: "transient-placement",
@@ -184,9 +184,9 @@ for (const domain of ["deployment", "predefined"]) {
                 direction: "RIGHT",
             },
         ];
-        const state = createBattleState(battlefield);
+        let state = createBattleState(battlefield);
         if (domain === "deployment") {
-            resolveDeploymentCommands(
+            state = resolveDeploymentCommands(
                 state,
                 [
                     {
@@ -203,7 +203,7 @@ for (const domain of ["deployment", "predefined"]) {
                 resources,
             );
         } else {
-            advancePredefined(
+            state = advancePredefined(
                 state,
                 [
                     createPredefinedDefinition({
@@ -225,15 +225,15 @@ for (const domain of ["deployment", "predefined"]) {
                 ],
                 0,
                 resources,
-            );
+            ).state;
         }
 
         assert.deepEqual(
             state.removedUnits.map((unit) => unit.unitId),
             [0],
         );
-        assert.deepEqual(battlefield.snapshot("draft").navigationModifierIds, []);
-        assert.deepEqual(battlefield.snapshot("draft").unitIds, domain === "deployment" ? [1] : []);
+        assert.deepEqual(battlefieldView(state).navigationModifierIds, []);
+        assert.deepEqual(battlefieldView(state).unitIds, domain === "deployment" ? [1] : []);
     });
 }
 
@@ -250,9 +250,10 @@ test("effect terminal callback can retire its host and settle remote Action and 
     });
     resources.skills.register({
         definition: skill,
-        activate: () => ({ type: "ACTIVATED" }),
-        finish: () => {
+        activate: state => ({ state, value: { type: "ACTIVATED" } }),
+        finish: state => {
             trace.push("skill");
+            return state;
         },
     });
     const action = createActionDefinition({
@@ -284,7 +285,7 @@ test("effect terminal callback can retire its host and settle remote Action and 
         bindings: new Map([["primary", [1]]]),
         tick: 0,
     });
-    const executions = new ActionExecutionWork(accepted.state);
+    const executions = accepted.state;
     const units = [
         initializeUnit({
             id: 0,
@@ -297,14 +298,15 @@ test("effect terminal callback can retire its host and settle remote Action and 
             definition: { id: "receiver", vitality: { maxHp: 100 } },
         }),
     ];
-    const battle = createBattleState(fixtureBattlefield(units), undefined, executions);
-    activateSkill(battle, { unitId: 0, tick: 0 }, resources);
+    let battle = createBattleState(fixtureBattlefield(units), undefined, executions);
+    battle = activateSkill(battle, { unitId: 0, tick: 0 }, resources).state;
     const actionDependent = definition(
         "action-dependent",
         {},
         {
-            onEnd: () => {
+            onEnd: state => {
                 trace.push("action-effect");
+                return state;
             },
         },
     );
@@ -312,38 +314,40 @@ test("effect terminal callback can retire its host and settle remote Action and 
         "skill-dependent",
         {},
         {
-            onEnd: () => {
+            onEnd: state => {
                 trace.push("skill-effect");
+                return state;
             },
         },
     );
-    effects.install(battle, getUnit(battle, 1), actionDependent, {
+    battle = effects.install(battle, getUnit(battle, 1), actionDependent, {
         scopes: [{ type: "ACTION", executionId: 0 }],
-    });
-    effects.install(battle, getUnit(battle, 1), skillDependent, {
+    }).state;
+    battle = effects.install(battle, getUnit(battle, 1), skillDependent, {
         scopes: [{ type: "SKILL", unitId: 0, activationId: 0 }],
-    });
+    }).state;
     const content = definition(
         "nested-death",
         {},
         {
-            onEnd(ctx) {
+            onEnd(state, ctx) {
                 trace.push("effect");
-                resources.settleDamage(ctx.battle, {
+                state = resources.settleDamage(state, {
                     sourceUnitId: null,
                     targetUnitId: 0,
                     damageType: "TRUE",
                     operands: createDamageOperands(100),
                     tick: 1,
-                });
+                }, ctx.call).state;
                 trace.push("after-damage");
-                assert.equal(getUnit(ctx.battle, 0), undefined);
-                assert.equal(executions.get(0), undefined);
+                assert.equal(getUnit(state, 0), undefined);
+                assert.equal(getActionExecution(state.actionExecutions, 0), undefined);
+                return state;
             },
         },
     );
-    const ref = effects.install(battle, getUnit(battle, 0), content);
-    effects.end(battle, ref);
+    const installed = effects.install(battle, getUnit(battle, 0), content);
+    battle = effects.end(installed.state, installed.value).state;
     assert.equal(getUnit(battle, 0), undefined);
     assert.deepEqual(getUnit(battle, 1).effects.instances, []);
     assert.ok(trace.indexOf("action-effect") < trace.indexOf("after-damage"));

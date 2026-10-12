@@ -1,3 +1,4 @@
+import type { BattleState } from "../../../../battle/state.js";
 import { widenUnit, type Unit, type StableUnit } from "../../../unit.js";
 import * as hook from "../../../hook/hook.js";
 import type { Vitality } from "../capability.js";
@@ -10,17 +11,28 @@ export type FormulaStage = "sourceFormula" | "targetFormula";
 
 export type AmountStage = "output" | "reception" | "skippedReception";
 
-export interface FormulaHook extends hook.Hook<Context, DamageOperands, Result<DamageOperands>> {
+export interface FormulaHook extends hook.Hook<
+    BattleState,
+    Context,
+    DamageOperands,
+    Result<DamageOperands>
+> {
     readonly stage: FormulaStage;
     readonly priority: number;
 }
 
-export interface AmountHook extends hook.Hook<Context, PendingDamage, Result<PendingDamage>> {
+export interface AmountHook extends hook.Hook<
+    BattleState,
+    Context,
+    PendingDamage,
+    Result<PendingDamage>
+> {
     readonly stage: AmountStage;
     readonly priority: number;
 }
 
 export interface ReactionHook extends hook.Hook<
+    BattleState,
     Context,
     DamageReport,
     undefined | { readonly stopDispatch?: boolean }

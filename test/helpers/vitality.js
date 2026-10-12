@@ -1,9 +1,5 @@
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
-import {
-    transitionUnit,
-    getUnit,
-    battlefieldView,
-} from "../../dist/core/tactical/battle/execution/context.js";
+import { transitionUnit, getUnit, battlefieldView } from "../../dist/core/tactical/battle/state.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { find } from "../../dist/core/tactical/unit/effect/query.js";
 import * as damage from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
@@ -46,32 +42,29 @@ export function request(power = 100, overrides = {}) {
     };
 }
 
-export function setSelf(context, self, next) {
-    effects.setState(
-        context.battle,
-        { type: "EFFECT", unitId: context.unit.id, effectId: self.id },
-        self.definition,
-        next,
-    );
+export function setSelf(state, context, self, next) {
+    const unit = getUnit(state, context.unit.id);
+    const current = unit && find(unit, self.definition, self.id);
+    return current === undefined
+        ? state
+        : effects.replaceEffect(state, unit.id, effects.setState(current, next));
 }
 
-export function current(context, self) {
-    return find(context.unit, self.definition, self.id);
+export function current(state, context, self) {
+    const unit = getUnit(state, context.unit.id);
+    return unit && find(unit, self.definition, self.id);
 }
 
 function hookEffect(domain, id, initial, entries, callbacks = {}) {
     let content;
     content = definition(id, initial, {
         ...callbacks,
-        onInstall(context) {
-            const ids = entries.map(
-                (entry, index) => `${context.ref.unitId}:${context.ref.effectId}:${index}`,
-            );
-            transitionUnit(context.battle, context.ref.unitId, (unit) =>
+        onInstall(state, context) {
+            state = transitionUnit(state, context.ref.unitId, (unit) =>
                 entries.reduce(
                     (unit, entry, index) =>
                         domain.setHook(unit, {
-                            id: ids[index],
+                            id: `${context.ref.unitId}:${context.ref.effectId}:${index}`,
                             stage: entry.stage,
                             priority: entry.priority ?? 0,
                             enabled(invocation) {
@@ -81,8 +74,9 @@ function hookEffect(domain, id, initial, entries, callbacks = {}) {
                                     (entry.enabled?.(invocation, self) ?? true)
                                 );
                             },
-                            invoke(invocation, input) {
+                            invoke(state, invocation, input) {
                                 return entry.invoke(
+                                    state,
                                     invocation,
                                     find(invocation.unit, content, context.ref.effectId),
                                     input,
@@ -92,10 +86,10 @@ function hookEffect(domain, id, initial, entries, callbacks = {}) {
                     unit,
                 ),
             );
-            callbacks.onInstall?.(context);
+            return callbacks.onInstall ? callbacks.onInstall(state, context) : state;
         },
-        onEnd(context) {
-            transitionUnit(context.battle, context.ref.unitId, (unit) =>
+        onEnd(state, context) {
+            state = transitionUnit(state, context.ref.unitId, (unit) =>
                 entries.reduce(
                     (unit, _entry, index) =>
                         domain.removeHook(
@@ -105,7 +99,7 @@ function hookEffect(domain, id, initial, entries, callbacks = {}) {
                     unit,
                 ),
             );
-            callbacks.onEnd?.(context);
+            return callbacks.onEnd ? callbacks.onEnd(state, context) : state;
         },
     });
     return content;
@@ -124,27 +118,30 @@ export function barrier(id = "barrier", remainingAmount = 500, priority = 0) {
         {
             stage: "reception",
             priority,
-            invoke(context, self, pending) {
-                if (pending.cancellation !== null) return { value: pending };
+            invoke(state, context, self, pending) {
+                if (pending.cancellation !== null) return { state, value: { value: pending } };
                 const absorbed = Math.min(pending.amount, self.state.remainingAmount);
-                if (absorbed <= 0) return { value: pending };
-                setSelf(context, self, (state) => ({
+                if (absorbed <= 0) return { state, value: { value: pending } };
+                state = setSelf(state, context, self, (state) => ({
                     ...state,
                     remainingAmount: state.remainingAmount - absorbed,
                 }));
                 return {
+                    state,
                     value: {
-                        ...pending,
-                        amount: pending.amount - absorbed,
-                        consumptions: [
-                            ...pending.consumptions,
-                            {
-                                ownerUnitId: context.unit.id,
-                                resourceId: `${context.unit.id}:${self.id}`,
-                                resource: "barrier",
-                                amount: absorbed,
-                            },
-                        ],
+                        value: {
+                            ...pending,
+                            amount: pending.amount - absorbed,
+                            consumptions: [
+                                ...pending.consumptions,
+                                {
+                                    ownerUnitId: context.unit.id,
+                                    resourceId: `${context.unit.id}:${self.id}`,
+                                    resource: "barrier",
+                                    amount: absorbed,
+                                },
+                            ],
+                        },
                     },
                 };
             },
@@ -157,8 +154,8 @@ export function statusEffect(id, flags) {
         id,
         {},
         {
-            onEnable(context) {
-                transitionUnit(context.battle, context.ref.unitId, (unit) => ({
+            onEnable(state, context) {
+                return transitionUnit(state, context.ref.unitId, (unit) => ({
                     ...unit,
                     status: addStatusContribution(unit.status, {
                         id: `${context.ref.unitId}:${context.ref.effectId}`,
@@ -166,8 +163,8 @@ export function statusEffect(id, flags) {
                     }),
                 }));
             },
-            onDisable(context) {
-                transitionUnit(context.battle, context.ref.unitId, (unit) => ({
+            onDisable(state, context) {
+                return transitionUnit(state, context.ref.unitId, (unit) => ({
                     ...unit,
                     status: removeStatusContribution(
                         unit.status,

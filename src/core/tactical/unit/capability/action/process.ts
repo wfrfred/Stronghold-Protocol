@@ -1,18 +1,19 @@
-import { ActionExecutionWork } from "./internal/executions.js";
-import {
-    acceptActionExecutionInWork,
-    cancelActionExecutionInWork,
-    resumeActionExecutionInWork,
-} from "./internal/process.js";
+import { accept, cancel, resume } from "./internal/process.js";
 import { assertNonnegativeSafeInteger } from "../../../../common/assert.js";
-import type { BattleState } from "../../../battle/execution/context.js";
+import type { BattleState, Result } from "../../../battle/state.js";
+import type { CallContext } from "../../../battle/execution/call.js";
 import type { UnitId } from "../../unit.js";
 import type { ActionDefinition, TargetBindingId } from "./capability.js";
 import type { ProjectileOperations } from "../../../battlefield/projectile/operations.js";
 
 export interface ActionExecutionResources {
     readonly projectileOperations?: ProjectileOperations;
-    readonly completeAttack?: (work: BattleState, unitId: UnitId, tick: number) => void;
+    readonly completeAttack?: (
+        state: BattleState,
+        unitId: UnitId,
+        tick: number,
+        call?: CallContext,
+    ) => BattleState;
 }
 
 export type ActionExecutionId = number;
@@ -56,7 +57,7 @@ export interface ActionExecutionInput {
 }
 
 export interface ActionExecutionContext {
-    readonly work: BattleState;
+    readonly call: CallContext;
     readonly sourceUnitId: UnitId;
     readonly executionId: ActionExecutionId;
     readonly acceptedAtTick: number;
@@ -83,7 +84,10 @@ export type CompiledActionSegment = {
 } & (
     | {
           readonly type: "EXECUTE";
-          readonly run: (context: ActionExecutionContext) => ActionExecutionStepResult | undefined;
+          readonly run: (
+              state: BattleState,
+              context: ActionExecutionContext,
+          ) => Result<ActionExecutionStepResult | undefined>;
       }
     | {
           readonly type: "WAIT";
@@ -114,8 +118,7 @@ export type ActionExecutionResult =
     | { readonly type: "ABSENT" | "WAITING" | "FINISHED" }
     | { readonly type: "CANCELLED"; readonly reason: ActionExecutionCancellationReason };
 
-export interface ActionExecutionTransition {
-    readonly state: ActionExecutionState;
+export interface ActionExecutionOutcome {
     readonly result: ActionExecutionResult;
     readonly signals: readonly ActionExecutionSignal[];
 }
@@ -142,10 +145,7 @@ export function acceptActionExecution(
     state: ActionExecutionState,
     input: ActionExecutionInput,
 ): { readonly state: ActionExecutionState; readonly execution: ActionExecution } {
-    const executions = new ActionExecutionWork(state);
-    const execution = acceptActionExecutionInWork(executions, input);
-
-    return { state: executions.result(), execution };
+    return accept(state, input);
 }
 
 export function actionExecutionPermissions(
@@ -161,24 +161,18 @@ export function actionExecutionPermissions(
 }
 
 export function cancelActionExecution(
-    work: BattleState,
-    state: ActionExecutionState,
+    state: BattleState,
     request: ActionExecutionCancelRequest,
-): ActionExecutionTransition {
-    const executions = new ActionExecutionWork(state);
-    const result = cancelActionExecutionInWork(work, executions, request);
-
-    return { ...result, state: executions.result() };
+    call?: CallContext,
+): Result<ActionExecutionOutcome> {
+    return cancel(state, request, call);
 }
 
 export function resumeActionExecution(
-    work: BattleState,
-    state: ActionExecutionState,
+    state: BattleState,
     request: ActionExecutionResumeRequest,
     resources: ActionExecutionResources,
-): ActionExecutionTransition {
-    const executions = new ActionExecutionWork(state);
-    const result = resumeActionExecutionInWork(work, executions, request, resources);
-
-    return { ...result, state: executions.result() };
+    call?: CallContext,
+): Result<ActionExecutionOutcome> {
+    return resume(state, request, resources, call);
 }

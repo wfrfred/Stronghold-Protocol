@@ -1,7 +1,7 @@
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { fixtureBattlefield } from "../helpers/battlefield.js";
+import { fixtureBattlefieldState } from "../helpers/battlefield.js";
 import {
     appendEvents,
     battlefieldView,
@@ -11,105 +11,86 @@ import {
     removeUnit,
     updateUnit,
     updateUnits,
-} from "../../dist/core/tactical/battle/execution/context.js";
+} from "../../dist/core/tactical/battle/state.js";
 
 const unit = (id, position = [0, 0]) =>
     initializeUnit({ id, definition: { id: `unit-${id}` }, position });
+const fixture = (...units) => createBattleState(fixtureBattlefieldState(units));
 
-function fixture(...units) {
-    return createBattleState(fixtureBattlefield(units));
-}
-
-test("battle state: nested updates and removals are immediately visible through the battlefield draft", () => {
-    const first = unit(1);
-    const second = unit(2);
-    const state = fixture(first, second);
-    const published = state.battlefield.snapshot("state");
+test("battle state: each returned version exposes completed updates and retains prior facts", () => {
+    const first = unit(1),
+        second = unit(2);
+    const initial = fixture(first, second);
+    const published = battlefieldView(initial);
     const moved = { ...second, position: [3, 0] };
-    updateUnit(state, moved);
-    removeUnit(state, 1, "SCRIPT");
-    const view = battlefieldView(state);
-    assert.equal(view.getUnit(2), moved);
-    assert.equal(view.getUnit(1), undefined);
-    assert.deepEqual(view.unitIds, [2]);
+    const updated = updateUnit(initial, moved);
+    const removed = removeUnit(updated, 1, "SCRIPT");
+    assert.equal(getUnit(removed, 2), moved);
+    assert.equal(getUnit(removed, 1), undefined);
+    assert.deepEqual(battlefieldView(removed).unitIds, [2]);
+    assert.equal(getUnit(updated, 1), first);
     assert.equal(published.getUnit(1), first);
     assert.equal(published.getUnit(2), second);
-    assert.deepEqual(state.removedUnits, [{ unitId: 1, reason: "SCRIPT", unit: first }]);
+    assert.deepEqual(initial.removedUnits, []);
+    assert.deepEqual(removed.removedUnits, [{ unitId: 1, reason: "SCRIPT", unit: first }]);
 });
 
-test("battle state: publishing accepts the already advanced state and drop discards subsequent drafts", () => {
-    const first = unit(1);
-    const state = fixture(first);
+test("battle state: independent branches keep their own registrations and removals", () => {
+    const first = unit(1),
+        spawned = unit(8);
+    const initial = fixture(first);
     const moved = { ...first, position: [1, 0] };
-    updateUnit(state, moved);
-    state.battlefield.apply();
-    const published = state.battlefield.snapshot("state");
-    const spawned = unit(8);
-    registerUnit(state, spawned);
-    removeUnit(state, 1, "DEATH");
-    assert.deepEqual(state.battlefield.snapshot("draft").unitIds, [8]);
-    state.battlefield.drop();
-    assert.equal(getUnit(state, 1), moved);
-    assert.equal(getUnit(state, 8), undefined);
-    assert.equal(published.getUnit(1), moved);
+    const left = updateUnit(initial, moved);
+    const right = removeUnit(registerUnit(initial, spawned), 1, "DEATH");
+    assert.equal(getUnit(left, 1), moved);
+    assert.equal(getUnit(left, 8), undefined);
+    assert.deepEqual(battlefieldView(right).unitIds, [8]);
+    assert.equal(getUnit(initial, 1), first);
+    assert.deepEqual(initial.registeredUnitIds, []);
 });
 
-test("battle state: no-op updates and missing removals do not create registration or removal facts", () => {
+test("battle state: no-op updates retain identity and zero HP alone does not remove a unit", () => {
     const first = initializeUnit({
         id: 1,
         position: [0, 0],
         definition: { id: "vitality", vitality: { maxHp: 100 } },
     });
-    const state = fixture(first);
-    updateUnit(state, first);
-    removeUnit(state, 99);
-    appendEvents(state, []);
-    assert.deepEqual(state.registeredUnitIds, []);
-    assert.deepEqual(state.removedUnits, []);
+    const initial = fixture(first);
+    assert.equal(updateUnit(initial, first), initial);
+    assert.equal(removeUnit(initial, 99), initial);
+    assert.equal(appendEvents(initial, []), initial);
     const zeroHp = { ...first, vitality: { ...first.vitality, hp: 0 } };
-    updateUnit(state, zeroHp);
-    assert.equal(getUnit(state, 1), zeroHp);
-    assert.deepEqual(state.removedUnits, []);
+    const advanced = updateUnit(initial, zeroHp);
+    assert.equal(getUnit(advanced, 1), zeroHp);
+    assert.deepEqual(advanced.removedUnits, []);
+    assert.equal(getUnit(initial, 1).vitality.hp, 100);
 });
 
-test("battle state: a batch updates the common draft while fixed snapshots retain earlier units", () => {
-    const first = unit(1);
-    const second = unit(2);
-    const state = fixture(first, second);
-    const snapshot = state.battlefield.snapshot("draft");
-    const moved = { ...first, position: [3, 0] };
-    const spawned = unit(8);
-    updateUnits(state, [moved, second]);
-    registerUnit(state, spawned);
-    assert.equal(getUnit(state, 1), moved);
-    assert.equal(getUnit(state, 8), spawned);
-    assert.equal(snapshot.getUnit(1), first);
-    assert.equal(snapshot.getUnit(8), undefined);
-    assert.deepEqual(state.registeredUnitIds, [8]);
-});
-
-test("battle state: nested operations share event accumulation and the latest execution state", () => {
-    const state = fixture(unit(1));
+test("battle state: facts, event prefixes and execution progress travel through explicit values", () => {
+    const initial = fixture(unit(1));
     const first = { type: "ACTION", sourceUnitId: 1, targetUnitId: 2, tick: 3 };
     const second = { ...first, targetUnitId: 3 };
-    const supplied = [first];
-    appendEvents(state, supplied);
-    supplied.push(second);
-    const execution = { ...state.execution, rngState: 123, nextUnitId: 4 };
-    state.execution = execution;
-    appendEvents(state, [second]);
-    assert.deepEqual(state.events, [first, second]);
-    assert.equal(state.execution, execution);
+    const recorded = appendEvents(initial, [first]);
+    const execution = { ...recorded.execution, rngState: 123, nextUnitId: 4 };
+    const advanced = appendEvents({ ...recorded, execution }, [second]);
+    assert.deepEqual(advanced.events, [first, second]);
+    assert.equal(advanced.execution, execution);
+    assert.deepEqual(initial.events, []);
+    assert.deepEqual(recorded.events, [first]);
+    assert.equal(initial.execution.rngState, 0);
 });
 
-test("battle state: batch updates keep the final value without implicitly registering missing units", () => {
-    const first = unit(1);
-    const state = fixture(first);
-    const moved = { ...first, position: [2, 0] };
-    const spawned = unit(8);
-    const changedSpawned = { ...spawned, position: [3, 0] };
-    updateUnits(state, [moved, spawned, first, changedSpawned]);
-    assert.equal(getUnit(state, 1), first);
-    assert.equal(getUnit(state, 8), undefined);
-    assert.deepEqual(state.registeredUnitIds, []);
+test("battle state: explicit batch updates do not register missing units", () => {
+    const first = unit(1),
+        second = unit(2);
+    const initial = fixture(first, second);
+    const snapshot = battlefieldView(initial);
+    const moved = { ...first, position: [3, 0] },
+        spawned = unit(8);
+    const changed = registerUnit(updateUnits(initial, [moved, second, spawned]), spawned);
+    assert.equal(getUnit(changed, 1), moved);
+    assert.equal(getUnit(changed, 8), spawned);
+    assert.equal(snapshot.getUnit(1), first);
+    assert.equal(snapshot.getUnit(8), undefined);
+    assert.deepEqual(changed.registeredUnitIds, [8]);
 });

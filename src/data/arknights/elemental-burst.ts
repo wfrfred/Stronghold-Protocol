@@ -1,5 +1,6 @@
 import type { CombatResources } from "../../core/tactical/battle/resources.js";
-import { getUnit, updateUnit } from "../../core/tactical/battle/execution/context.js";
+import { getUnit, updateUnit, type BattleState } from "../../core/tactical/battle/state.js";
+import { drainUnitSkillSp } from "../../core/tactical/battle/execution/skill-sp.js";
 import * as modifier from "../../core/tactical/unit/contribution/value.js";
 import { TICKS_PER_SECOND } from "../../core/tactical/tick.js";
 import type { Definition } from "../../core/tactical/unit/effect/definition.js";
@@ -41,9 +42,10 @@ function statusEffect(id: string, flags: readonly StatusFlag[]): Definition<obje
     return {
         id,
         initialize: () => ({}),
-        onEnable: (context) => {
+        onEnable: (state, context) => {
             const unit = context.unit;
-            updateUnit(context.battle, {
+
+            return updateUnit(state, {
                 ...unit,
                 status: addStatusContribution(unit.status, {
                     id: `@effect/${context.self.id}/status`,
@@ -51,9 +53,10 @@ function statusEffect(id: string, flags: readonly StatusFlag[]): Definition<obje
                 }),
             });
         },
-        onDisable: (context) => {
+        onDisable: (state, context) => {
             const unit = context.unit;
-            updateUnit(context.battle, {
+
+            return updateUnit(state, {
                 ...unit,
                 status: removeStatusContribution(unit.status, `@effect/${context.self.id}/status`),
             });
@@ -74,42 +77,33 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                     defense: profile.defReduction,
                     resistance: profile.resReduction,
                 }),
-                onEnable: (context) => {
+                onEnable: (state, context) => {
+                    let unit = context.unit;
+
                     if (profile.defReduction !== 0) {
-                        updateUnit(
-                            context.battle,
-                            setDefenseContribution(context.unit, {
-                                id: `@effect/${context.self.id}/defense`,
-                                value: [modifier.create({ addition: -context.self.state.defense })],
-                            }),
-                        );
+                        unit = setDefenseContribution(unit, {
+                            id: `@effect/${context.self.id}/defense`,
+                            value: [modifier.create({ addition: -context.self.state.defense })],
+                        });
                     }
                     if (profile.resReduction !== 0) {
-                        updateUnit(
-                            context.battle,
-                            setResistanceContribution(context.unit, {
-                                id: `@effect/${context.self.id}/resistance`,
-                                value: [
-                                    modifier.create({ addition: -context.self.state.resistance }),
-                                ],
-                            }),
-                        );
+                        unit = setResistanceContribution(unit, {
+                            id: `@effect/${context.self.id}/resistance`,
+                            value: [modifier.create({ addition: -context.self.state.resistance })],
+                        });
                     }
+
+                    return updateUnit(state, unit);
                 },
-                onDisable: (context) => {
-                    updateUnit(
-                        context.battle,
-                        removeDefenseContribution(
-                            context.unit,
-                            `@effect/${context.self.id}/defense`,
-                        ),
+                onDisable: (state, context) => {
+                    const unit = removeDefenseContribution(
+                        context.unit,
+                        `@effect/${context.self.id}/defense`,
                     );
-                    updateUnit(
-                        context.battle,
-                        removeResistanceContribution(
-                            context.unit,
-                            `@effect/${context.self.id}/resistance`,
-                        ),
+
+                    return updateUnit(
+                        state,
+                        removeResistanceContribution(unit, `@effect/${context.self.id}/resistance`),
                     );
                 },
             };
@@ -129,18 +123,18 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
             const weakness: Definition<{ scaler: number }, Offense> = {
                 id: `${prefix}/weakness`,
                 initialize: () => ({ scaler: 1 - profile.attackReductionRatio }),
-                onEnable: (context) => {
-                    updateUnit(
-                        context.battle,
+                onEnable: (state, context) => {
+                    return updateUnit(
+                        state,
                         setAttackContribution(context.unit, {
                             id: `@effect/${context.self.id}/attack`,
                             value: [modifier.create({ finalScaler: context.self.state.scaler })],
                         }),
                     );
                 },
-                onDisable: (context) => {
-                    updateUnit(
-                        context.battle,
+                onDisable: (state, context) => {
+                    return updateUnit(
+                        state,
                         removeAttackContribution(context.unit, `@effect/${context.self.id}/attack`),
                     );
                 },
@@ -148,10 +142,11 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
             const paralysis: Definition<{ remaining: number }, Action> = {
                 id: `${prefix}/paralysis`,
                 initialize: () => ({ remaining: profile.paralysisStacks }),
-                onInstall: (context) => {
+                onInstall: (state, context) => {
                     const effectId = context.self.id;
-                    updateUnit(
-                        context.battle,
+
+                    return updateUnit(
+                        state,
                         setBeforeReleaseHook(context.unit, {
                             id: `@effect/${effectId}/paralysis`,
                             enabled: (context) => {
@@ -159,7 +154,7 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
 
                                 return current?.status === "ACTIVE" && current.state.remaining > 0;
                             },
-                            invoke: (context) => {
+                            invoke: (state, context) => {
                                 const self = find(context.unit, paralysis, effectId)!;
                                 const ref = {
                                     type: "EFFECT" as const,
@@ -167,31 +162,46 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                                     effectId,
                                 };
                                 const remaining = self.state.remaining - 1;
-                                effects.setState(context.battle, ref, paralysis, { remaining });
+                                state = effects.replaceEffect(
+                                    state,
+                                    context.unit.id,
+                                    effects.setState(self, { remaining }),
+                                );
 
                                 if (remaining === 0) {
-                                    effects.end(context.battle, ref);
+                                    state = effects.end(state, ref, "EXPLICIT", context.call).state;
                                 }
 
                                 const recoveryTicks = TICKS_PER_SECOND / 2;
 
-                                if (hasStatus(context.unit)) {
-                                    effects.install(context.battle, context.unit, paralysisStun, {
-                                        source: null,
-                                        scopes: [
-                                            { type: "TICK", tick: context.tick + recoveryTicks },
-                                        ],
-                                    });
+                                const current = getUnit(state, context.unit.id);
+
+                                if (current !== undefined && hasStatus(current)) {
+                                    state = effects.install(
+                                        state,
+                                        current,
+                                        paralysisStun,
+                                        {
+                                            source: null,
+                                            scopes: [
+                                                {
+                                                    type: "TICK",
+                                                    tick: context.tick + recoveryTicks,
+                                                },
+                                            ],
+                                        },
+                                        context.call,
+                                    ).state;
                                 }
 
-                                return { type: "INTERRUPT", recoveryTicks };
+                                return { state, value: { type: "INTERRUPT", recoveryTicks } };
                             },
                         }),
                     );
                 },
-                onEnd: (context) => {
-                    updateUnit(
-                        context.battle,
+                onEnd: (state, context) => {
+                    return updateUnit(
+                        state,
                         removeBeforeReleaseHook(
                             context.unit,
                             `@effect/${context.self.id}/paralysis`,
@@ -201,26 +211,32 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
             };
 
             const hurt = (
+                state: BattleState,
                 context: ElementalBurstContext,
                 damage: NonNullable<typeof profile.burstDamage>,
                 ignoreForSp: boolean,
-            ): void => {
-                context.damage({
-                    sourceUnitId: null,
-                    targetUnitId: context.burst.targetUnitId,
-                    damageType: damage.type,
-                    operands: createDamageOperands(damage.power),
-                    ignoreForSp,
-                });
+            ): BattleState => {
+                return resources.settleDamage(
+                    state,
+                    {
+                        sourceUnitId: null,
+                        targetUnitId: context.burst.targetUnitId,
+                        damageType: damage.type,
+                        operands: createDamageOperands(damage.power),
+                        ignoreForSp,
+                        tick: context.tick,
+                    },
+                    context.call,
+                ).state;
             };
 
             resources.elemental.register(receiver, type, {
-                begin: (context) => {
+                begin: (state, context) => {
                     const unitId = context.burst.targetUnitId;
-                    const unit = context.facts.getUnit(unitId);
+                    let unit = getUnit(state, unitId);
 
                     if (unit === undefined) {
-                        return;
+                        return state;
                     }
 
                     const input = {
@@ -232,28 +248,53 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                         hasDefense(unit) &&
                         (profile.defReduction !== 0 || profile.resReduction !== 0)
                     ) {
-                        effects.install(context.battle, unit, reduction, {
-                            ...input,
-                            scopes: profile.defReduction > 0 ? [] : input.scopes,
-                        });
+                        state = effects.install(
+                            state,
+                            unit,
+                            reduction,
+                            {
+                                ...input,
+                                scopes: profile.defReduction > 0 ? [] : input.scopes,
+                            },
+                            context.call,
+                        ).state;
+                        unit = getUnit(state, unitId);
+                    }
+
+                    if (unit === undefined) {
+                        return state;
                     }
                     if (hasStatus(unit) && flags.length > 0) {
-                        effects.install(context.battle, unit, status, input);
+                        state = effects.install(state, unit, status, input, context.call).state;
+                        unit = getUnit(state, unitId);
                     }
-                    if (hasOffense(unit) && profile.attackReductionRatio > 0) {
-                        effects.install(context.battle, unit, weakness, input);
+                    if (
+                        unit !== undefined &&
+                        hasOffense(unit) &&
+                        profile.attackReductionRatio > 0
+                    ) {
+                        state = effects.install(state, unit, weakness, input, context.call).state;
+                        unit = getUnit(state, unitId);
                     }
-                    if (profile.paralysisStacks > 0 && hasAction(unit)) {
-                        effects.install(context.battle, unit, paralysis, {
-                            ...input,
-                            scopes: [],
-                        });
+                    if (unit !== undefined && profile.paralysisStacks > 0 && hasAction(unit)) {
+                        state = effects.install(
+                            state,
+                            unit,
+                            paralysis,
+                            {
+                                ...input,
+                                scopes: [],
+                            },
+                            context.call,
+                        ).state;
                     }
                     if (profile.burstDamage !== null) {
-                        hurt(context, profile.burstDamage, false);
+                        state = hurt(state, context, profile.burstDamage, false);
                     }
+
+                    return state;
                 },
-                advance: (context) => {
+                advance: (state, context) => {
                     const end = Math.min(context.tick, context.burst.endsAtTick);
                     const completedSeconds = Math.floor(
                         (end - context.burst.startedAtTick) / TICKS_PER_SECOND,
@@ -264,13 +305,17 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
 
                     for (let second = previousSeconds + 1; second <= completedSeconds; second++) {
                         if (profile.spDrainPerSecond > 0) {
-                            context.drainSp(profile.spDrainPerSecond);
+                            state = drainUnitSkillSp(
+                                state,
+                                context.burst.targetUnitId,
+                                profile.spDrainPerSecond,
+                            ).state;
                         }
                         if (profile.damagePerSecond !== null) {
-                            hurt(context, profile.damagePerSecond, true);
+                            state = hurt(state, context, profile.damagePerSecond, true);
                         }
 
-                        const unit = context.facts.getUnit(context.burst.targetUnitId);
+                        const unit = getUnit(state, context.burst.targetUnitId);
 
                         if (
                             profile.attackReductionRatio > 0 &&
@@ -296,17 +341,17 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                                     1 -
                                     profile.attackReductionRatio *
                                         Math.max(0, 1 - second / durationSeconds);
-                                effects.setState(
-                                    context.battle,
-                                    { type: "EFFECT", unitId: unit.id, effectId: instance.id },
-                                    weakness,
-                                    { scaler },
+                                const typed = find(unit, weakness, instance.id)!;
+                                state = effects.replaceEffect(
+                                    state,
+                                    unit.id,
+                                    effects.setState(typed, { scaler }),
                                 );
 
                                 if (instance.status === "ACTIVE") {
-                                    const current = getUnit(context.battle, unit.id)!;
-                                    updateUnit(
-                                        context.battle,
+                                    const current = getUnit(state, unit.id)!;
+                                    state = updateUnit(
+                                        state,
                                         setAttackContribution(current, {
                                             id: `@effect/${instance.id}/attack`,
                                             value: [modifier.create({ finalScaler: scaler })],
@@ -316,6 +361,8 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                             }
                         }
                     }
+
+                    return state;
                 },
             });
         }

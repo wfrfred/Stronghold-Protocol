@@ -1,17 +1,9 @@
-import type { BattleState } from "../../battle/execution/context.js";
-import type {
-    DamageOperation,
-    DamageReport,
-    DamageRequest,
-} from "../../unit/capability/vitality/damage/contract.js";
-import type {
-    HealingOperation,
-    HealingReport,
-    HealingRequest,
-} from "../../unit/capability/vitality/healing/contract.js";
+import type { CallContext } from "../../battle/execution/call.js";
+import type { DamageOperation } from "../../unit/capability/vitality/damage/contract.js";
+import type { HealingOperation } from "../../unit/capability/vitality/healing/contract.js";
 import type { Unit, UnitId } from "../../unit/unit.js";
 import type { ProjectileResources } from "./resources.js";
-import type { ProjectileId, Projectile, ProjectileStopReason } from "./projectile.js";
+import type { ProjectileId, Projectile } from "./projectile.js";
 
 export interface ProjectileFacts {
     readonly unitIds: readonly UnitId[];
@@ -20,25 +12,13 @@ export interface ProjectileFacts {
 }
 
 export interface ProjectileQueryContext<S extends object = object> {
-    readonly battle: BattleState;
     readonly projectile: Projectile<S>;
     readonly tick: number;
     readonly facts: ProjectileFacts;
+    readonly call: CallContext;
 }
 
-export interface ProjectileOperationsFor<S extends object> {
-    damage(request: Omit<DamageRequest, "tick">): DamageReport;
-    heal(request: Omit<HealingRequest, "tick">): HealingReport;
-    updateState(transition: (current: S) => S): void;
-    stopSelf(reason?: ProjectileStopReason): void;
-}
-
-export interface ProjectileCallbackContext<
-    S extends object = object,
-> extends ProjectileQueryContext<S> {
-    readonly operations: ProjectileOperationsFor<S>;
-    attackPower(): number;
-}
+export type ProjectileCallbackContext<S extends object = object> = ProjectileQueryContext<S>;
 
 export type ProjectileStopContext<S extends object = object> = ProjectileCallbackContext<S>;
 

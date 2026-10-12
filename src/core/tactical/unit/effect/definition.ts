@@ -1,15 +1,14 @@
-import type { BattleState } from "../../battle/execution/context.js";
+import type { BattleState } from "../../battle/state.js";
+import type { CallContext } from "../../battle/execution/call.js";
 import type { Unit } from "../unit.js";
 import type { Effect, Group, Ref } from "./effect.js";
 
 export interface Context<S extends object, H extends object = object> {
-    readonly battle: BattleState;
     readonly tick: number;
     readonly ref: Ref;
     readonly unit: Unit & H;
     readonly self: Effect<S, H>;
-    setState(next: S | ((current: S) => S)): void;
-    end(reason?: string): void;
+    readonly call: CallContext;
 }
 
 export interface EndContext<S extends object, H extends object = object> extends Context<S, H> {
@@ -20,9 +19,9 @@ export interface Definition<S extends object, H extends object = object> {
     readonly id: string;
     readonly group?: Group;
     readonly initialize: () => S;
-    readonly onInstall?: (context: Context<S, H>) => void;
-    readonly onEnable?: (context: Context<S, H>) => void;
-    readonly onDisable?: (context: Context<S, H>) => void;
-    readonly onTick?: (context: Context<S, H>) => void;
-    readonly onEnd?: (context: EndContext<S, H>) => void;
+    readonly onInstall?: (state: BattleState, context: Context<S, H>) => BattleState;
+    readonly onEnable?: (state: BattleState, context: Context<S, H>) => BattleState;
+    readonly onDisable?: (state: BattleState, context: Context<S, H>) => BattleState;
+    readonly onTick?: (state: BattleState, context: Context<S, H>) => BattleState;
+    readonly onEnd?: (state: BattleState, context: EndContext<S, H>) => BattleState;
 }

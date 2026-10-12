@@ -1,4 +1,4 @@
-import { transitionUnit } from "../../dist/core/tactical/battle/execution/context.js";
+import { transitionUnit } from "../../dist/core/tactical/battle/state.js";
 import { setBeforeReleaseHook, removeBeforeReleaseHook } from "../../dist/core/tactical/unit/capability/action/capability.js";
 import { attackBuff } from "../helpers/effects.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
-import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/execution/context.js";
+import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/state.js";
 import { createProjectileDefinition } from "../../dist/core/tactical/battlefield/projectile/definition.js";
 import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
 import { createOperatorDefinition } from "../../dist/core/tactical/unit/archetype/operator.js";
@@ -30,23 +30,24 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, program } = {}) {
     spCost: 1, initialSp: 1, durationTicks: null, ammo,
   });
   const buff = attackBuff("runtime-ammo-attack", 100, {
-    onInstall: (context) => {
-      if (interrupt) transitionUnit(context.battle, context.unit.id, current => setBeforeReleaseHook(current, {
+    onInstall: (state, context) => {
+      if (interrupt) state = transitionUnit(state, context.unit.id, current => setBeforeReleaseHook(current, {
         id: "ammo-interrupt", enabled: () => true,
-        invoke: () => ({ type: "INTERRUPT", recoveryTicks: 15 }),
+        invoke: state => ({ state, value: { type: "INTERRUPT", recoveryTicks: 15 } }),
       }));
+      return state;
     },
-    onEnd: (context) => {
-      if (interrupt) transitionUnit(context.battle, context.unit.id, current => removeBeforeReleaseHook(current, "ammo-interrupt"));
+    onEnd: (state, context) => {
+      if (interrupt) state = transitionUnit(state, context.unit.id, current => removeBeforeReleaseHook(current, "ammo-interrupt"));
+      return state;
     },
   });
-  resources.skills.register({ definition: skill, activate: (context) => {
-    const installed = effects.install(context.battle, getUnit(context.battle, context.unitId), buff, {
+  resources.skills.register({ definition: skill, activate: (state, context) => {
+    const installed = effects.install(state, getUnit(state, context.unitId), buff, {
       source: context.unitId, scopes: [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }],
     });
-    assert.ok(installed);
-    assert.ok(installed);
-    return { type: "ACTIVATED" };
+    assert.ok(installed.value);
+    return { state: installed.state, value: { type: "ACTIVATED" } };
   } });
   const definition = createOperatorDefinition({
     id: "ammo-actor", vitality: { maxHp: 10000 }, offense: { attack: 100 },
@@ -70,11 +71,11 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, program } = {}) {
   const shell = resources.projectiles.register(createProjectileDefinition({
     id: "runtime-ammo-shell", initialize: () => ({}),
     acceptsContact: (_context, unit) => unit.allegiance?.side === "ENEMY",
-    contact: (context) => {
-      context.operations.damage({
+    contact: (state, context) => {
+      return resources.settleDamage(state, {
         sourceUnitId: context.projectile.source, targetUnitId: context.targetUnitId,
         tick: context.tick, damageType: "TRUE", operands: createDamageOperands(context.projectile.cachedAtk),
-      });
+      }, context.call).state;
     },
   }));
   const base = createLegacyCombatSpec({ rows: 1, columns: 8, operators: [], enemies: [], maxTicks: 20, seed: 7 });
@@ -108,7 +109,7 @@ function damageEvents(step) {
 
 function delayed(compiled) {
   return [
-    { type: "EXECUTE", run: ({ work }) => ({ work }) },
+    { type: "EXECUTE", run: state => ({ state, value: undefined }) },
     { type: "WAIT", resolve: () => ({ type: "FOR_TICKS", ticks: 2 }) },
     { type: "RELEASE", markerId: "attack" },
     ...compiled.program,
@@ -189,16 +190,16 @@ test("ammo runtime: explicit releases with multiple EXECUTEs consume once across
 test("ammo runtime: the last released projectile survives skill completion and retains buffed attack", () => {
   const runtime = scenario({ program: (_compiled, services, shell) => [
     { type: "RELEASE", markerId: "shell" },
-    { type: "EXECUTE", run: (context) => {
-      const actor = getUnit(context.work, context.sourceUnitId);
+    { type: "EXECUTE", run: (state, context) => {
+      const actor = getUnit(state, context.sourceUnitId);
       const targetUnitId = context.bindings.get("main")[0];
-      const target = getUnit(context.work, targetUnitId);
-      context.projectiles.launch(shell.ref, {
+      const target = getUnit(state, targetUnitId);
+      const launched = context.projectiles.launch(state, shell.ref, {
         source: actor.id, traceTarget: targetUnitId, position: actor.position, destination: target.position,
-        cachedAtk: resolveAttackPower(actor.id, battlefieldView(context.work)),
+        cachedAtk: resolveAttackPower(actor.id, battlefieldView(state)),
         speedPerTick: 1, contactRange: { type: "SHAPES", geometry: hit }, stopDelayTicks: 0,
       });
-
+      return { state: launched.state, value: undefined };
     } },
   ] });
   const launched = runtime.step([{ type: "ACTIVATE_SKILL", unitId: 0 }]);

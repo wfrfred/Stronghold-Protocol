@@ -2,14 +2,16 @@ import {
     advanceElementalState,
     type ElementalExecutionResources,
 } from "../../unit/capability/elemental/execution.js";
-import { battlefieldView, type BattleState } from "../execution/context.js";
+import { battlefieldView, type BattleState } from "../state.js";
 
 export function advanceElements(
     state: BattleState,
     tick: number,
     resources: ElementalExecutionResources,
-): void {
+): BattleState {
     for (const id of battlefieldView(state).unitIds) {
-        advanceElementalState(state, id, tick, resources);
+        state = advanceElementalState(state, id, tick, resources);
     }
+
+    return state;
 }

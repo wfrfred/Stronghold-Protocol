@@ -4,15 +4,15 @@ import {
     battlefieldView,
     updateUnit,
     type BattleState,
-} from "../../../battle/execution/context.js";
+    type Result,
+} from "../../../battle/state.js";
+import { emptyCall, type CallContext } from "../../../battle/execution/call.js";
 import type { UnitId } from "../../unit.js";
 import { TICKS_PER_SECOND } from "../../../tick.js";
 import { endScope } from "../../effect/operations.js";
 import { isSpatiallyPresent } from "../presence.js";
 import { hasStatusFlag } from "../status/capability.js";
 import { hasVitality } from "../vitality/capability.js";
-import type { DamageOperation } from "../vitality/damage/contract.js";
-import type { HealingOperation } from "../vitality/healing/contract.js";
 import {
     hasSkill,
     skillSpCapacity,
@@ -20,26 +20,13 @@ import {
     type SkillActivationMode,
     type SkillState,
 } from "./capability.js";
-import type { CompiledSkill, SkillActivationContext, SkillFacts } from "./compiled.js";
+import type { CompiledSkill, SkillActivationContext } from "./compiled.js";
 import { spendSkillSp } from "./sp.js";
 import type { SkillResources } from "./resources.js";
 import { spendSkillAmmo, type SkillAmmoResult } from "./ammo.js";
 
 export interface SkillExecutionResources {
     readonly skills: SkillResources;
-    readonly settleDamage: DamageOperation;
-    readonly settleHealing: HealingOperation;
-}
-
-function skillFacts(readWork: () => BattleState): SkillFacts {
-    return {
-        get unitIds() {
-            return battlefieldView(readWork()).unitIds;
-        },
-        getUnit: (id) => getUnit(readWork(), id),
-        blockerOf: (id) => battlefieldView(readWork()).blockerOf(id),
-        blockedBy: (id) => battlefieldView(readWork()).blockedBy(id),
-    };
 }
 
 export interface SkillActivationInput {
@@ -78,52 +65,51 @@ export interface SkillTransition {
     readonly signals: readonly SkillSignal[];
 }
 
-function saveState(work: BattleState, unitId: UnitId, state: SkillState): void {
-    const unit = getUnit(work, unitId);
+function saveState(state: BattleState, unitId: UnitId, skill: SkillState): BattleState {
+    const unit = getUnit(state, unitId);
 
-    if (unit !== undefined && hasSkill(unit) && unit.skill !== state) {
-        updateUnit(work, { ...unit, skill: state });
-    }
+    return unit !== undefined && hasSkill(unit) && unit.skill !== skill
+        ? updateUnit(state, { ...unit, skill })
+        : state;
 }
 
-function withSkillContext<R>(
-    work: BattleState,
+function skillContext(
+    state: BattleState,
     unitId: UnitId,
     activation: SkillActivation,
-    resources: SkillExecutionResources,
     tick: number,
-    run: (context: SkillActivationContext) => R,
-): R {
-    return run({
-        battle: work,
+    call: CallContext,
+): SkillActivationContext {
+    return {
         unitId,
         tick,
         activationId: activation.id,
         endsAtTick: activation.endsAtTick,
-        facts: skillFacts(() => work),
-        damage: (request) => resources.settleDamage(work, { ...request, tick }),
-        heal: (request) => resources.settleHealing(work, { ...request, tick }),
-    });
+        facts: battlefieldView(state),
+        call,
+    };
 }
 
 export function activateSkill(
-    work: BattleState,
+    state: BattleState,
     input: SkillActivationInput,
     resources: SkillExecutionResources,
-): SkillTransition {
+    call: CallContext = emptyCall,
+): Result<SkillTransition> {
     const { unitId, tick, trigger = "MANUAL" } = input;
     assertNonnegativeSafeInteger(tick, "skill activation tick");
-    const unit = getUnit(work, unitId);
+    const unit = getUnit(state, unitId);
     const reject = (
         reason: Extract<SkillExecutionResult, { type: "REJECTED" }>["reason"],
-    ): SkillTransition => ({
-        result: { type: "REJECTED", reason },
-        signals: [],
+    ): Result<SkillTransition> => ({
+        state,
+        value: { result: { type: "REJECTED", reason }, signals: [] },
     });
 
     if (
         unit === undefined ||
         !hasSkill(unit) ||
+        unit.lifecycle === "LEAVING" ||
         !isSpatiallyPresent(unit) ||
         (hasVitality(unit) && unit.vitality.hp <= 0) ||
         hasStatusFlag(unit, "STUNNED") ||
@@ -156,7 +142,7 @@ export function activateSkill(
     const query = {
         unitId,
         tick,
-        facts: skillFacts(() => work),
+        facts: battlefieldView(state),
     };
 
     if (!(compiled.accepts?.(query) ?? true)) {
@@ -182,23 +168,24 @@ export function activateSkill(
             ? {}
             : { remainingAmmo: compiled.definition.ammo }),
     };
-    saveState(work, unitId, {
+    state = saveState(state, unitId, {
         ...spent.state,
         lastAdvancedTick: tick,
         nextActivationId,
         active: activation,
     });
-    const invoked = withSkillContext(work, unitId, activation, resources, tick, compiled.activate);
+    const invoked = compiled.activate(state, skillContext(state, unitId, activation, tick, call));
+    state = invoked.state;
 
-    if (invoked.type === "REJECTED") {
-        const rejectedUnit = getUnit(work, unitId);
+    if (invoked.value.type === "REJECTED") {
+        const rejectedUnit = getUnit(state, unitId);
 
         if (
             rejectedUnit !== undefined &&
             hasSkill(rejectedUnit) &&
             rejectedUnit.skill.active?.id === activation.id
         ) {
-            saveState(work, unitId, {
+            state = saveState(state, unitId, {
                 ...rejectedUnit.skill,
                 sp: Math.min(
                     skillSpCapacity(compiled.definition),
@@ -208,23 +195,37 @@ export function activateSkill(
             });
         }
 
-        endScope(work, { type: "SKILL", unitId, activationId: activation.id }, "SKILL_REJECTED");
+        state = endScope(
+            state,
+            { type: "SKILL", unitId, activationId: activation.id },
+            "SKILL_REJECTED",
+            call,
+        );
 
         return {
-            result: { type: "REJECTED", reason: "CONTENT_REJECTED", detail: invoked.reason },
-            signals: [],
+            state,
+            value: {
+                result: {
+                    type: "REJECTED",
+                    reason: "CONTENT_REJECTED",
+                    detail: invoked.value.reason,
+                },
+                signals: [],
+            },
         };
     }
 
-    const current = getUnit(work, unitId);
+    const current = getUnit(state, unitId);
 
     if (current === undefined || !hasSkill(current) || current.skill.active?.id !== activation.id) {
-        endScope(work, { type: "SKILL", unitId, activationId: activation.id }, "SKILL_FINISHED");
+        state = endScope(
+            state,
+            { type: "SKILL", unitId, activationId: activation.id },
+            "SKILL_FINISHED",
+            call,
+        );
 
-        return {
-            result: { type: "FINISHED" },
-            signals: [],
-        };
+        return { state, value: { result: { type: "FINISHED" }, signals: [] } };
     }
 
     const signal: SkillSignal = {
@@ -237,16 +238,18 @@ export function activateSkill(
     };
 
     if (endsAtTick === tick) {
-        const finished = finishSkill(work, unitId, tick, resources);
+        const finished = finishSkill(state, unitId, tick, resources, call);
 
         return {
-            ...finished,
-            result: { type: "ACTIVATED" },
-            signals: [signal, ...finished.signals],
+            state: finished.state,
+            value: {
+                result: { type: "ACTIVATED" },
+                signals: [signal, ...finished.value.signals],
+            },
         };
     }
 
-    return { result: { type: "ACTIVATED" }, signals: [signal] };
+    return { state, value: { result: { type: "ACTIVATED" }, signals: [signal] } };
 }
 
 export interface SkillAmmoTransition {
@@ -255,50 +258,61 @@ export interface SkillAmmoTransition {
 }
 
 export function consumeSkillAmmo(
-    work: BattleState,
+    state: BattleState,
     unitId: UnitId,
     tick: number,
     resources: SkillExecutionResources,
-): SkillAmmoTransition {
+    call: CallContext = emptyCall,
+): Result<SkillAmmoTransition> {
     assertNonnegativeSafeInteger(tick, "skill ammunition consumption tick");
-    const unit = getUnit(work, unitId);
+    const unit = getUnit(state, unitId);
 
     if (unit === undefined || !hasSkill(unit)) {
-        return { result: { type: "REJECTED", reason: "INACTIVE" }, signals: [] };
+        return { state, value: { result: { type: "REJECTED", reason: "INACTIVE" }, signals: [] } };
     }
 
     const spent = spendSkillAmmo(unit.skill, unit.definition.skill.ammoPerAttack ?? 1);
 
     if (spent.result.type === "REJECTED") {
-        return { result: spent.result, signals: [] };
+        return { state, value: { result: spent.result, signals: [] } };
     }
 
-    saveState(work, unitId, spent.state);
+    state = saveState(state, unitId, spent.state);
 
     if (spent.result.remainingAmmo === 0) {
-        const finished = finishSkill(work, unitId, tick, resources);
+        const finished = finishSkill(state, unitId, tick, resources, call);
 
-        return { result: spent.result, signals: finished.signals };
+        return {
+            state: finished.state,
+            value: { result: spent.result, signals: finished.value.signals },
+        };
     }
 
-    return { result: spent.result, signals: [] };
+    return { state, value: { result: spent.result, signals: [] } };
 }
 
 export function finishSkill(
-    work: BattleState,
+    state: BattleState,
     unitId: UnitId,
     tick: number,
     resources: SkillExecutionResources,
-): SkillTransition {
-    const stopped = stopSkillActivation(work, unitId, tick, resources);
+    call: CallContext = emptyCall,
+): Result<SkillTransition> {
+    const stopped = stopSkillActivation(state, unitId, tick, resources);
+    state = stopped.state;
 
-    if (stopped === null) {
-        return { result: { type: "ABSENT" }, signals: [] };
+    if (stopped.value === null) {
+        return { state, value: { result: { type: "ABSENT" }, signals: [] } };
     }
 
-    endScope(work, { type: "SKILL", unitId, activationId: stopped.active.id }, "SKILL_FINISHED");
+    state = endScope(
+        state,
+        { type: "SKILL", unitId, activationId: stopped.value.active.id },
+        "SKILL_FINISHED",
+        call,
+    );
 
-    return notifySkillFinished(work, stopped, tick, resources);
+    return notifySkillFinished(state, stopped.value, tick, call);
 }
 
 export interface StoppedSkillActivation {
@@ -308,63 +322,67 @@ export interface StoppedSkillActivation {
 }
 
 export function stopSkillActivation(
-    work: BattleState,
+    state: BattleState,
     unitId: UnitId,
     tick: number,
     resources: SkillExecutionResources,
-): StoppedSkillActivation | null {
+): Result<StoppedSkillActivation | null> {
     assertNonnegativeSafeInteger(tick, "skill finish tick");
-    const unit = getUnit(work, unitId);
+    const unit = getUnit(state, unitId);
 
     if (unit === undefined || !hasSkill(unit) || unit.skill.active === null) {
-        return null;
+        return { state, value: null };
     }
 
     const compiled = resources.skills.get(unit.definition.skill);
 
     const { active } = unit.skill;
-    saveState(work, unitId, { ...unit.skill, active: null, lastAdvancedTick: tick });
+    state = saveState(state, unitId, { ...unit.skill, active: null, lastAdvancedTick: tick });
 
-    return { unitId, active, compiled };
+    return { state, value: { unitId, active, compiled } };
 }
 
 export function notifySkillFinished(
-    work: BattleState,
+    state: BattleState,
     activation: StoppedSkillActivation,
     tick: number,
-    resources: SkillExecutionResources,
-): SkillTransition {
+    call: CallContext = emptyCall,
+): Result<SkillTransition> {
     const { unitId, active, compiled } = activation;
 
     if (compiled.finish !== undefined) {
-        withSkillContext(work, unitId, active, resources, tick, compiled.finish);
+        state = compiled.finish(state, skillContext(state, unitId, active, tick, call));
     }
 
     return {
-        result: { type: "FINISHED" },
-        signals: [
-            {
-                type: "SKILL_FINISHED",
-                unitId,
-                skillId: compiled.definition.id,
-                activationId: active.id,
-                tick,
-            },
-        ],
+        state,
+        value: {
+            result: { type: "FINISHED" },
+            signals: [
+                {
+                    type: "SKILL_FINISHED",
+                    unitId,
+                    skillId: compiled.definition.id,
+                    activationId: active.id,
+                    tick,
+                },
+            ],
+        },
     };
 }
 
 export function advanceSkill(
-    work: BattleState,
+    state: BattleState,
     unitId: UnitId,
     tick: number,
     resources: SkillExecutionResources,
-): SkillTransition {
+    call: CallContext = emptyCall,
+): Result<SkillTransition> {
     assertNonnegativeSafeInteger(tick, "skill advancement tick");
-    let unit = getUnit(work, unitId);
+    let unit = getUnit(state, unitId);
 
     if (unit === undefined || !hasSkill(unit)) {
-        return { result: { type: "ABSENT" }, signals: [] };
+        return { state, value: { result: { type: "ABSENT" }, signals: [] } };
     }
 
     const compiled = resources.skills.get(unit.definition.skill);
@@ -382,18 +400,19 @@ export function advanceSkill(
         unit.skill.active.endsAtTick !== null &&
         tick >= unit.skill.active.endsAtTick
     ) {
-        const finished = finishSkill(work, unitId, tick, resources);
-        signals.push(...finished.signals);
-        unit = getUnit(work, unitId);
+        const finished = finishSkill(state, unitId, tick, resources, call);
+        state = finished.state;
+        signals.push(...finished.value.signals);
+        unit = getUnit(state, unitId);
 
         if (unit === undefined || !hasSkill(unit)) {
-            return { result: { type: "FINISHED" }, signals };
+            return { state, value: { result: { type: "FINISHED" }, signals } };
         }
     }
 
-    const state = unit.skill;
-    let sp = state.sp;
-    let spRecoveryProgressTicks = state.spRecoveryProgressTicks;
+    const skill = unit.skill;
+    let sp = skill.sp;
+    let spRecoveryProgressTicks = skill.spRecoveryProgressTicks;
     const capacity = skillSpCapacity(compiled.definition);
 
     if (
@@ -405,15 +424,15 @@ export function advanceSkill(
         sp < capacity
     ) {
         const interval = compiled.definition.spRecoveryIntervalTicks ?? TICKS_PER_SECOND;
-        const progress = spRecoveryProgressTicks + tick - state.lastAdvancedTick;
+        const progress = spRecoveryProgressTicks + tick - skill.lastAdvancedTick;
         const pulses = Math.floor((progress + 1e-8) / interval);
         const gained = Math.min(pulses, capacity - sp);
         sp += gained;
         spRecoveryProgressTicks = sp === capacity ? 0 : Math.max(0, progress - gained * interval);
     }
 
-    saveState(work, unitId, {
-        ...state,
+    state = saveState(state, unitId, {
+        ...skill,
         sp,
         spRecoveryProgressTicks,
         lastAdvancedTick: tick,
@@ -421,16 +440,24 @@ export function advanceSkill(
 
     if (compiled.definition.activation !== "MANUAL" && !alreadyAdvanced) {
         const attempted = activateSkill(
-            work,
+            state,
             { unitId, tick, trigger: compiled.definition.activation },
             resources,
+            call,
         );
-        signals.push(...attempted.signals);
+        state = attempted.state;
+        signals.push(...attempted.value.signals);
 
-        if (attempted.result.type === "ACTIVATED" || attempted.result.type === "FINISHED") {
-            return { result: attempted.result, signals };
+        if (
+            attempted.value.result.type === "ACTIVATED" ||
+            attempted.value.result.type === "FINISHED"
+        ) {
+            return { state, value: { result: attempted.value.result, signals } };
         }
     }
 
-    return { result: { type: signals.length === 0 ? "ADVANCED" : "FINISHED" }, signals };
+    return {
+        state,
+        value: { result: { type: signals.length === 0 ? "ADVANCED" : "FINISHED" }, signals },
+    };
 }

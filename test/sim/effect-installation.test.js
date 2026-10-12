@@ -1,3 +1,4 @@
+import { battlefieldView } from "../../dist/core/tactical/battle/state.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
@@ -18,29 +19,42 @@ const host = () =>
     });
 
 const group = (priority) => ({ id: "installation-rules", priority });
-const attack = (battle) => resolveAttackPower(0, battle.battlefield.snapshot("draft"));
+const attack = (battle) => resolveAttackPower(0, battlefieldView(battle));
 
 test("effect installation: a nested weaker rule does not enable its parent before installation completes", () => {
     const trace = [];
-    const battle = effectFixtureWork(host());
+    let battle = effectFixtureWork(host());
     const child = attackBuff("child", 20, { group: group(1) });
     let childRef;
     const parent = attackBuff("parent", 0, {
         group: group(2),
-        onInstall(context) {
+        onInstall(state, context) {
             assert.equal(context.self.status, "INSTALLING");
             trace.push("install begin");
-            childRef = effect.install(context.battle, context.unit, child);
-            assert.equal(context.self.status, "INSTALLING");
-            context.setState({ amount: 100 });
+            ({ state, value: childRef } = effect.install(
+                state,
+                context.unit,
+                child,
+                {},
+                context.call,
+            ));
+            assert.equal(get(state, context.ref).status, "INSTALLING");
+            state = effect.replaceEffect(
+                state,
+                context.ref.unitId,
+                effect.setState(get(state, context.ref), { amount: 100 }),
+            );
             trace.push("install end");
+            return state;
         },
-        onEnable(context) {
+        onEnable(state, context) {
             trace.push(["enable", context.self.state.amount]);
+            return state;
         },
     });
 
-    const parentRef = install(battle, parent);
+    let parentRef;
+    ({ state: battle, value: parentRef } = install(battle, parent));
 
     assert.equal(attack(battle), 200);
     assert.deepEqual(trace, ["install begin", "install end", ["enable", 100]]);
@@ -51,24 +65,30 @@ test("effect installation: a nested weaker rule does not enable its parent befor
 for (const grouped of [false, true]) {
     test(`effect installation: ${grouped ? "a grouped" : "an ungrouped"} rule can change its enable flag before publishing its final output`, () => {
         const trace = [];
-        const battle = effectFixtureWork(host());
+        let battle = effectFixtureWork(host());
         const parent = attackBuff("parent", 0, {
             ...(grouped ? { group: group(2) } : {}),
-            onInstall(context) {
+            onInstall(state, context) {
                 assert.equal(context.self.status, "INSTALLING");
                 trace.push("install begin");
-                effect.setEnabled(context.battle, context.ref, false);
-                effect.setEnabled(context.battle, context.ref, true);
-                context.setState({ amount: 100 });
-                assert.equal(context.self.status, "INSTALLING");
+                state = effect.setEnabled(state, context.ref, false, context.call);
+                state = effect.setEnabled(state, context.ref, true, context.call);
+                state = effect.replaceEffect(
+                    state,
+                    context.ref.unitId,
+                    effect.setState(get(state, context.ref), { amount: 100 }),
+                );
+                assert.equal(get(state, context.ref).status, "INSTALLING");
                 trace.push("install end");
+                return state;
             },
-            onEnable(context) {
+            onEnable(state, context) {
                 trace.push(["enable", context.self.state.amount]);
+                return state;
             },
         });
 
-        install(battle, parent);
+        battle = install(battle, parent).state;
 
         assert.equal(attack(battle), 200);
         assert.deepEqual(trace, ["install begin", "install end", ["enable", 100]]);
@@ -77,27 +97,34 @@ for (const grouped of [false, true]) {
 
 test("effect installation: an independent child enables while its parent finishes its own installation", () => {
     const trace = [];
-    const battle = effectFixtureWork(host());
+    let battle = effectFixtureWork(host());
     const child = attackBuff("child", 20, {
-        onEnable() {
+        onEnable(state) {
             trace.push("child enable");
+            return state;
         },
     });
     const parent = attackBuff("parent", 0, {
-        onInstall(context) {
+        onInstall(state, context) {
             assert.equal(context.self.status, "INSTALLING");
             trace.push("install begin");
-            effect.install(context.battle, context.unit, child);
-            assert.equal(context.self.status, "INSTALLING");
-            context.setState({ amount: 100 });
+            state = effect.install(state, context.unit, child, {}, context.call).state;
+            assert.equal(get(state, context.ref).status, "INSTALLING");
+            state = effect.replaceEffect(
+                state,
+                context.ref.unitId,
+                effect.setState(get(state, context.ref), { amount: 100 }),
+            );
             trace.push("install end");
+            return state;
         },
-        onEnable(context) {
+        onEnable(state, context) {
             trace.push(["enable", context.self.state.amount]);
+            return state;
         },
     });
 
-    install(battle, parent);
+    battle = install(battle, parent).state;
 
     assert.equal(attack(battle), 220);
     assert.deepEqual(trace, ["install begin", "child enable", "install end", ["enable", 100]]);
@@ -105,23 +132,32 @@ test("effect installation: an independent child enables while its parent finishe
 
 test("effect installation: ending during installation never publishes the effect's output", () => {
     const trace = [];
-    const battle = effectFixtureWork(host());
+    let battle = effectFixtureWork(host());
     const content = attackBuff("self-ending", 100, {
-        onInstall(context) {
+        onInstall(state, context) {
             assert.equal(context.self.status, "INSTALLING");
             trace.push("install");
-            context.end("NOT_APPLICABLE");
-            assert.equal(context.self.status, "ENDING");
+            state = effect.end(state, context.ref, "NOT_APPLICABLE", context.call).state;
+            assert.equal(get(state, context.ref), undefined);
+            return state;
         },
-        onEnable: () => trace.push("enable"),
-        onDisable: () => trace.push("disable"),
-        onEnd(context) {
+        onEnable: (state) => {
+            trace.push("enable");
+            return state;
+        },
+        onDisable: (state) => {
+            trace.push("disable");
+            return state;
+        },
+        onEnd(state, context) {
             assert.equal(context.self.status, "ENDING");
             trace.push("end");
+            return state;
         },
     });
 
-    const ref = install(battle, content);
+    let ref;
+    ({ state: battle, value: ref } = install(battle, content));
 
     assert.deepEqual(trace, ["install", "end"]);
     assert.equal(get(battle, ref), undefined);
@@ -130,26 +166,34 @@ test("effect installation: ending during installation never publishes the effect
 
 test("effect installation: closing the host from a nested installation never enables the parent", () => {
     const trace = [];
-    const battle = effectFixtureWork(host());
+    let battle = effectFixtureWork(host());
     const child = definition(
         "host-closing-child",
         {},
         {
-            onInstall(context) {
-                effect.endScope(context.battle, { type: "UNIT", unitId: 0 }, "RETREAT");
+            onInstall(state, context) {
+                return effect.endScope(state, { type: "UNIT", unitId: 0 }, "RETREAT", context.call);
             },
         },
     );
     const parent = attackBuff("parent", 100, {
-        onInstall(context) {
-            effect.install(context.battle, context.unit, child);
-            assert.equal(context.self.status, "ENDING");
+        onInstall(state, context) {
+            state = effect.install(state, context.unit, child, {}, context.call).state;
+            assert.equal(get(state, context.ref), undefined);
+            return state;
         },
-        onEnable: () => trace.push("enable"),
-        onEnd: () => trace.push("end"),
+        onEnable: (state) => {
+            trace.push("enable");
+            return state;
+        },
+        onEnd: (state) => {
+            trace.push("end");
+            return state;
+        },
     });
 
-    const ref = install(battle, parent);
+    let ref;
+    ({ state: battle, value: ref } = install(battle, parent));
 
     assert.deepEqual(trace, ["end"]);
     assert.equal(get(battle, ref), undefined);

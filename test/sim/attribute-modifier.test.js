@@ -11,7 +11,7 @@ import {
     getUnit,
     removeUnit,
     transitionUnit,
-} from "../../dist/core/tactical/battle/execution/context.js";
+} from "../../dist/core/tactical/battle/state.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import {
     setAttackContribution,
@@ -220,9 +220,9 @@ test("attribute modifiers: native Mire percentages affect existing ASPD and norm
         "compiled-mire",
         {},
         {
-            onEnable(ctx) {
+            onEnable(state, ctx) {
                 const id = `${ctx.ref.effectId}`;
-                transitionUnit(ctx.battle, ctx.ref.unitId, (unit) =>
+                return transitionUnit(state, ctx.ref.unitId, (unit) =>
                     setMoveSpeedContribution(
                         setAttackSpeedContribution(unit, {
                             id,
@@ -232,9 +232,9 @@ test("attribute modifiers: native Mire percentages affect existing ASPD and norm
                     ),
                 );
             },
-            onDisable(ctx) {
+            onDisable(state, ctx) {
                 const id = `${ctx.ref.effectId}`;
-                transitionUnit(ctx.battle, ctx.ref.unitId, (unit) =>
+                return transitionUnit(state, ctx.ref.unitId, (unit) =>
                     removeMoveSpeedContribution(removeAttackSpeedContribution(unit, id), id),
                 );
             },
@@ -277,8 +277,8 @@ test("attribute modifiers: native Mire percentages affect existing ASPD and norm
             },
         },
     });
-    const installed = effectFixtureWork(unit);
-    effects.install(installed, getUnit(installed, 0), program);
+    let installed = effectFixtureWork(unit);
+    installed = effects.install(installed, getUnit(installed, 0), program).state;
     const receiver = getUnit(installed, 0);
     assert.equal(
         resolveAttackSpeed(receiver.definition.action, receiver.action, {
@@ -333,28 +333,37 @@ test("attribute modifiers: inspiration samples belong to the Effect input and re
             position: [id, 0],
             definition: { id: `inspiration-${id}`, offense: { attack: power } },
         });
-    const work = effectFixtureWork(unit(0, 100), unit(1, 20));
+    let work = effectFixtureWork(unit(0, 100), unit(1, 20));
     const resolve = (work, id) => resolveAttackPower(id, battlefieldView(work));
     const sampleInput = (work) => ({ sourceAttack: resolve(work, 0), ratio: 0.6 });
-    const ref = effects.install(work, getUnit(work, 1), program, {
+    const installed = effects.install(work, getUnit(work, 1), program, {
         source: 0,
         state: sampleInput(work),
     });
+    work = installed.state;
+    const ref = installed.value;
     assert.equal(resolve(work, 1), 80);
     const copied = getUnit(work, 1);
-    effects.install(work, getUnit(work, 0), amplify);
+    work = effects.install(work, getUnit(work, 0), amplify).state;
     assert.equal(resolve(work, 0), 200);
     assert.equal(resolve(work, 1), 80);
-    effects.setEnabled(work, ref, false);
+    work = effects.setEnabled(work, ref, false);
     assert.equal(resolve(work, 1), 20);
-    effects.setEnabled(work, ref, true);
+    work = effects.setEnabled(work, ref, true);
     assert.equal(resolve(work, 1), 80);
-    effects.setState(work, ref, program, sampleInput(work));
-    refreshContribution(work, ref, program, output);
+    work = effects.replaceEffect(
+        work,
+        ref.unitId,
+        effects.setState(
+            getUnit(work, 1).effects.instances.find((instance) => instance.id === ref.effectId),
+            sampleInput(work),
+        ),
+    );
+    work = refreshContribution(work, ref, program, output);
     assert.equal(resolve(work, 1), 140);
-    removeUnit(work, 0, "RETREAT");
+    work = removeUnit(work, 0, "RETREAT");
     assert.equal(resolve(work, 1), 140);
     assert.equal(copied.effects.instances[0].state.sourceAttack, 100);
-    effects.end(work, ref);
+    work = effects.end(work, ref).state;
     assert.equal(resolve(work, 1), 20);
 });

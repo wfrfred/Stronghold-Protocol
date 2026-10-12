@@ -4,7 +4,8 @@ import type { HealingOperation } from "../unit/capability/vitality/healing/contr
 import { ProjectileResources } from "../battlefield/projectile/resources.js";
 import { resolveDamage } from "../unit/capability/vitality/damage/settlement.js";
 import { resolveHealing } from "../unit/capability/vitality/healing/settlement.js";
-import { appendEvents, type BattleState } from "./execution/context.js";
+import { appendEvents, type BattleState } from "./state.js";
+import { emptyCall, type CallContext } from "./execution/call.js";
 import type { UnitId } from "../unit/unit.js";
 import {
     consumeSkillAmmo,
@@ -28,54 +29,71 @@ export class CombatResources {
     readonly projectiles = new ProjectileResources(this.#registration);
     readonly skills = new SkillResources(this.#registration);
     readonly elemental = new ElementalResources(this.#registration);
-    readonly settleElementDamage: ElementDamageOperation = (battle, request) => {
+    readonly settleElementDamage: ElementDamageOperation = (state, request, call) => {
         this.#registration.assertUsable();
 
-        return resolveElementDamage(battle, request, this);
+        return resolveElementDamage(state, request, this, call);
     };
 
-    readonly settleElementHeal: ElementHealOperation = (battle, request) => {
+    readonly settleElementHeal: ElementHealOperation = (state, request) => {
         this.#registration.assertUsable();
 
-        return resolveElementHeal(battle, request);
+        return resolveElementHeal(state, request);
     };
 
-    readonly completeAttack = (battle: BattleState, unitId: UnitId, tick: number): void => {
-        const consumed = consumeSkillAmmo(battle, unitId, tick, this);
-        appendEvents(battle, consumed.signals);
+    readonly completeAttack = (
+        state: BattleState,
+        unitId: UnitId,
+        tick: number,
+        call: CallContext = emptyCall,
+    ): BattleState => {
+        const consumed = consumeSkillAmmo(state, unitId, tick, this, call);
+
+        return appendEvents(consumed.state, consumed.value.signals);
     };
 
-    readonly stopSkillActivation = (battle: BattleState, unitId: UnitId, tick: number) =>
-        stopSkillActivation(battle, unitId, tick, this);
+    readonly stopSkillActivation = (state: BattleState, unitId: UnitId, tick: number) =>
+        stopSkillActivation(state, unitId, tick, this);
 
     readonly notifySkillFinished = (
-        battle: BattleState,
+        state: BattleState,
         activation: StoppedSkillActivation,
         tick: number,
-    ): void => {
-        const finished = notifySkillFinished(battle, activation, tick, this);
-        appendEvents(battle, finished.signals);
+        call: CallContext = emptyCall,
+    ): BattleState => {
+        const finished = notifySkillFinished(state, activation, tick, call);
+
+        return appendEvents(finished.state, finished.value.signals);
     };
 
-    readonly finishSkill = (battle: BattleState, unitId: UnitId, tick: number): void => {
-        const finished = finishSkill(battle, unitId, tick, this);
-        appendEvents(battle, finished.signals);
+    readonly finishSkill = (
+        state: BattleState,
+        unitId: UnitId,
+        tick: number,
+        call: CallContext = emptyCall,
+    ): BattleState => {
+        const finished = finishSkill(state, unitId, tick, this, call);
+
+        return appendEvents(finished.state, finished.value.signals);
     };
 
-    readonly retireUnit = (battle: BattleState, unitId: UnitId, tick: number): void => {
-        retireCombatUnit(battle, unitId, this, tick);
-    };
+    readonly retireUnit = (
+        state: BattleState,
+        unitId: UnitId,
+        tick: number,
+        call: CallContext = emptyCall,
+    ): BattleState => retireCombatUnit(state, unitId, this, tick, call);
 
-    readonly settleDamage: DamageOperation = (battle, request) => {
+    readonly settleDamage: DamageOperation = (state, request, call) => {
         this.#registration.assertUsable();
 
-        return resolveDamage(battle, request, this);
+        return resolveDamage(state, request, this, call);
     };
 
-    readonly settleHealing: HealingOperation = (battle, request) => {
+    readonly settleHealing: HealingOperation = (state, request, call) => {
         this.#registration.assertUsable();
 
-        return resolveHealing(battle, request, this);
+        return resolveHealing(state, request, call);
     };
 
     seal(): this {

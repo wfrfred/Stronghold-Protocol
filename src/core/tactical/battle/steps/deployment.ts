@@ -24,7 +24,7 @@ import {
     battlefieldView,
     getUnit,
     type BattleState,
-} from "../execution/context.js";
+} from "../state.js";
 
 export type DeploymentCommand =
     | {
@@ -47,7 +47,7 @@ export function resolveDeploymentCommands(
     commands: readonly Command[],
     tick: number,
     resources: UnitLifecycleResources,
-): void {
+): BattleState {
     for (const command of commands) {
         if (
             command.type !== "DEPLOY_UNIT" &&
@@ -62,7 +62,7 @@ export function resolveDeploymentCommands(
                 throw new RangeError(`unknown retreat unit ${command.unitId}`);
             }
 
-            removeUnitWithEffects(state, command.unitId, "RETREAT", resources, tick);
+            state = removeUnitWithEffects(state, command.unitId, "RETREAT", resources, tick);
             continue;
         }
 
@@ -126,14 +126,16 @@ export function resolveDeploymentCommands(
                 tick,
             );
             unit = placed.unit;
-            state.execution = placed.execution;
+            state = { ...state, execution: placed.execution };
             changes.push(...placed.changes);
-            appendEvents(state, [{ type: "UNIT_DEPLOYED", unitId: unit.id, position, tick }]);
+            state = appendEvents(state, [
+                { type: "UNIT_DEPLOYED", unitId: unit.id, position, tick },
+            ]);
         } else {
             unit = { ...existing, position, occupancy };
             changes.push({ type: "UPDATE_UNIT", unit });
             changes.push({ type: "RELEASE_BLOCKING_RELATIONS", unitId: unit.id });
-            appendEvents(state, [
+            state = appendEvents(state, [
                 {
                     type: "UNIT_RELOCATED",
                     unitId: unit.id,
@@ -155,9 +157,11 @@ export function resolveDeploymentCommands(
             supports = [...supports, relation];
         }
 
-        advanceBattlefield(state, [
+        state = advanceBattlefield(state, [
             ...changes,
             { type: "SET_SUPPORT_RELATIONS", relations: supports },
         ]);
     }
+
+    return state;
 }

@@ -1,4 +1,4 @@
-import { fixtureBattlefield } from "../helpers/battlefield.js";
+import { fixtureBattlefield, fixtureBattlefieldState } from "../helpers/battlefield.js";
 // Combat rules: statuses & immunities, cold→freeze, element bursts, blocking, melee vs FLY, stealth, priorities, healers.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -27,21 +27,21 @@ import { addStatusContribution, hasStatusFlag } from '../../dist/core/tactical/u
 import * as contribution from '../../dist/core/tactical/unit/contribution/contribution.js';
 import * as modifier from '../../dist/core/tactical/unit/contribution/value.js';
 
-import { createBattleState, getUnit, updateUnit } from '../../dist/core/tactical/battle/execution/context.js';
+import { createBattleState, getUnit, updateUnit } from '../../dist/core/tactical/battle/state.js';
 import { createActionExecutionState } from '../../dist/core/tactical/unit/capability/action/process.js';
 
 const startSingleAction = (source, compiled, context) => {
-  const battleState = createBattleState(fixtureBattlefield(context.battlefield));
-  updateUnit(battleState, source);
+  let battleState = createBattleState(fixtureBattlefieldState(context.battlefield));
+  battleState = updateUnit(battleState, source);
   const actionState = startAction(
     battleState,
-    createActionExecutionState(),
     { sourceUnitId: source.id, compiled, tick: context.tick, mayStart: true },
     new CombatResources(),
   );
-  return { units: battleState.battlefield.snapshot("draft").unitIds.map(id => getUnit(battleState, id)),
+  battleState = actionState;
+  return { units: [...battleState.battlefield.units.values()],
     removedUnitIds: battleState.removedUnits.map(value => value.unitId),
-    events: battleState.events, execution: battleState.execution, state: actionState };
+    events: battleState.events, execution: battleState.execution, state: actionState.actionExecutions };
 };
 
 const approx = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);

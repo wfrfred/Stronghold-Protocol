@@ -4,7 +4,7 @@ import { instantiateMechanismPlacement } from "./creation/mechanism.js";
 import { instantiateNavigationModifierPlacement } from "./creation/navigation-modifier.js";
 import { changePredefinedInstances } from "./steps/predefined.js";
 import type { Input } from "./contract.js";
-import { advanceBattlefield, type BattleState } from "./execution/context.js";
+import { advanceBattlefield, type BattleState } from "./state.js";
 
 export function initializeBattlefield(input: Input, state: BattleState) {
     const initialChanges: BattlefieldChange[] = [];
@@ -16,14 +16,14 @@ export function initializeBattlefield(input: Input, state: BattleState) {
 
         initialChanges.push(...instantiated.changes);
         initialUnitIds.push(instantiated.unit.id);
-        state.execution = instantiated.execution;
+        state = { ...state, execution: instantiated.execution };
     }
 
     for (const placement of input.initialMechanisms) {
         const instantiated = instantiateMechanismPlacement(placement, state.execution);
         initialChanges.push(...instantiated.changes);
         initialMechanismIds.push(instantiated.mechanism.id);
-        state.execution = instantiated.execution;
+        state = { ...state, execution: instantiated.execution };
     }
     for (const placement of input.initialNavigationModifiers) {
         const instantiated = instantiateNavigationModifierPlacement(
@@ -33,7 +33,7 @@ export function initializeBattlefield(input: Input, state: BattleState) {
             initialMechanismIds,
         );
         initialChanges.push(...instantiated.changes);
-        state.execution = instantiated.execution;
+        state = { ...state, execution: instantiated.execution };
     }
 
     const initialized = changePredefinedInstances(
@@ -48,8 +48,8 @@ export function initializeBattlefield(input: Input, state: BattleState) {
         state.execution,
     );
 
-    state.execution = initialized.execution;
-    advanceBattlefield(state, [...initialChanges, ...initialized.changes]);
+    state = { ...state, execution: initialized.execution };
+    state = advanceBattlefield(state, [...initialChanges, ...initialized.changes]);
 
-    return initialized.presence;
+    return { state, value: initialized.presence };
 }

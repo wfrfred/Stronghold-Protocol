@@ -46,7 +46,7 @@ if (resolved.type === 'TIMELINE') {
 }
 getSpawnScheduleCounts(execution);
 const spawned = advanceSpawning(input, execution, [], 0);
-resolveScheduleUnits(spawned, []);
+resolveScheduleUnits(spawned.value, []);
 // @ts-expect-error A bare snapshot cannot advance an execution.
 advanceSpawnSchedule(progress, { tick: 0 });
 // @ts-expect-error A bare snapshot cannot be paired by a separate definition argument.

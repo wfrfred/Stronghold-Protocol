@@ -1,8 +1,11 @@
-import { advanceBattlefield, battlefieldView, createBattleState } from "./execution/context.js";
+import { advanceBattlefield, battlefieldView, createBattleState } from "./state.js";
 import { advance as advanceEffects, validateScopes } from "../unit/effect/operations.js";
-import { ActionExecutionWork } from "../unit/capability/action/internal/executions.js";
 import { assert, assertNonnegativeNumber, assertPositiveSafeInteger } from "../../common/assert.js";
-import { BattlefieldRuntime } from "../battlefield/runtime.js";
+import {
+    create as createBattlefield,
+    type State as BattlefieldState,
+} from "../battlefield/state.js";
+import { view as createBattlefieldView } from "../battlefield/view.js";
 import type { NavigationMaps } from "../battlefield/navigation/map.js";
 import { copyUnitSnapshot } from "../unit/snapshot.js";
 import type { compileAction } from "../unit/capability/action/compile.js";
@@ -18,7 +21,6 @@ import {
     type PredefinedPresence,
 } from "./steps/predefined.js";
 import type { Input, Command, Result, Snapshot, Step } from "./contract.js";
-import { finishBattleEvents } from "./events.js";
 import { CombatResources } from "./resources.js";
 import { createCombat } from "./steps/combat.js";
 import { advanceSpawning } from "./steps/spawning.js";
@@ -27,6 +29,7 @@ import { advanceMovement, advanceRouteCommands } from "./steps/movement.js";
 import { advanceProjectiles } from "./steps/projectiles.js";
 import { advanceElements } from "./steps/elemental.js";
 import { advanceSkills } from "./steps/skills.js";
+import { finishBattleEvents } from "./events.js";
 import {
     getSpawnScheduleCounts,
     isSpawnScheduleCompleted,
@@ -40,6 +43,17 @@ import {
 } from "./schedule/state.js";
 import { initializeBattlefield } from "./initialization.js";
 
+interface State {
+    readonly battlefield: BattlefieldState;
+    readonly tick: number;
+    readonly schedule: SpawnScheduleExecution;
+    readonly actionExecutions: ActionExecutionState;
+    readonly predefinedPresence: readonly PredefinedPresence[];
+    readonly execution: BattleExecutionState;
+    readonly completedRouteCount: number;
+    readonly result: Result | null;
+}
+
 export interface BattleResources {
     readonly combat?: CombatResources;
     readonly compileAction?: typeof compileAction;
@@ -47,22 +61,11 @@ export interface BattleResources {
 
 export type { Input, Command, Event, Result, Snapshot, Step } from "./contract.js";
 
-interface BattleRuntimeState {
-    readonly battlefield: BattlefieldRuntime;
-    readonly tickIndex: number;
-    readonly schedule: SpawnScheduleExecution;
-    readonly actionExecution: ActionExecutionState;
-    readonly predefinedPresence: readonly PredefinedPresence[];
-    readonly execution: BattleExecutionState;
-    readonly completedRouteCount: number;
-    readonly result: Result | null;
-}
-
 export class BattleRuntime {
     readonly #input: Input;
     readonly #combat: ReturnType<typeof createCombat>;
     readonly #combatResources: CombatResources;
-    #state: BattleRuntimeState;
+    #state: State;
 
     constructor(input: Input, resources: BattleResources = {}) {
         assertPositiveSafeInteger(input.maxTicks, "battle tick budget");
@@ -88,7 +91,7 @@ export class BattleRuntime {
         this.#combat = createCombat(this.#combatResources, resources.compileAction);
         const scheduleDefinition = createSpawnScheduleDefinition(input.schedule);
 
-        const battlefield = BattlefieldRuntime.create({ map: this.#input.map });
+        const battlefield = createBattlefield({ map: this.#input.map });
         const actionExecution = createActionExecutionState();
         const initial = createBattleState(
             battlefield,
@@ -100,26 +103,25 @@ export class BattleRuntime {
                 nextNavigationModifierId: 0,
                 nextProjectileId: 0,
             },
-            new ActionExecutionWork(actionExecution),
+            actionExecution,
         );
-        const predefinedPresence = initializeBattlefield(input, initial);
-        validateScopes(initial);
-        battlefield.apply();
+        const initialized = initializeBattlefield(input, initial);
+        validateScopes(initialized.state);
 
         this.#state = {
-            battlefield,
+            battlefield: initialized.state.battlefield,
             schedule: createSpawnScheduleExecution(scheduleDefinition),
-            actionExecution,
-            predefinedPresence,
-            execution: initial.execution,
-            tickIndex: 0,
+            actionExecutions: initialized.state.actionExecutions,
+            predefinedPresence: initialized.value,
+            execution: initialized.state.execution,
+            tick: 0,
             completedRouteCount: 0,
             result: null,
         };
     }
 
     get navigationMaps(): NavigationMaps {
-        return this.#state.battlefield.snapshot("state").navigationMaps;
+        return this.#state.battlefield.navigationMaps;
     }
 
     predefinedIdsForAlias(alias: string): readonly number[] {
@@ -137,16 +139,16 @@ export class BattleRuntime {
     snapshot(): Snapshot {
         const {
             battlefield,
-            tickIndex,
+            tick: tickIndex,
             schedule,
-            actionExecution,
+            actionExecutions: actionExecution,
             predefinedPresence,
             execution,
             completedRouteCount,
             result,
         } = this.#state;
 
-        const view = battlefield.snapshot("state");
+        const view = createBattlefieldView(battlefield);
 
         return {
             tickIndex,
@@ -176,15 +178,18 @@ export class BattleRuntime {
         }
 
         const previous = this.#state;
-        const battlefield = previous.battlefield;
-        const tick = previous.tickIndex;
-        let { schedule, predefinedPresence } = previous;
-        const actionExecutions = new ActionExecutionWork(previous.actionExecution);
-        const state = createBattleState(battlefield, previous.execution, actionExecutions, tick);
+        const tick = previous.tick;
         const resources = this.#combatResources;
+        let { schedule, predefinedPresence } = previous;
+        let state = createBattleState(
+            previous.battlefield,
+            previous.execution,
+            previous.actionExecutions,
+            tick,
+        );
 
-        advanceBattlefield(state, [{ type: "EXPIRE_NAVIGATION_MODIFIERS", tick }]);
-        predefinedPresence = advancePredefined(
+        state = advanceBattlefield(state, [{ type: "EXPIRE_NAVIGATION_MODIFIERS", tick }]);
+        const predefined = advancePredefined(
             state,
             this.#input.predefines,
             predefinedPresence,
@@ -192,32 +197,36 @@ export class BattleRuntime {
             tick,
             resources,
         );
+        state = predefined.state;
+        predefinedPresence = predefined.value;
 
-        this.#combat.prepare(state, commands, tick);
+        state = this.#combat.prepare(state, commands, tick);
 
-        resolveDeploymentCommands(state, commands, tick, resources);
+        state = resolveDeploymentCommands(state, commands, tick, resources);
 
-        schedule = advanceSpawning(state, schedule, commands, tick);
+        const spawned = advanceSpawning(state, schedule, commands, tick);
+        state = spawned.state;
+        schedule = spawned.value;
 
-        advanceEffects(state);
+        state = advanceEffects(state);
 
-        advanceElements(state, tick, resources);
+        state = advanceElements(state, tick, resources);
 
-        advanceSkills(state, commands, tick, resources);
+        state = advanceSkills(state, commands, tick, resources);
 
-        advanceRouteCommands(state, commands, tick);
+        state = advanceRouteCommands(state, commands, tick);
 
-        this.#combat.advance(state, tick);
+        state = this.#combat.advance(state, tick);
 
-        advanceProjectiles(state, tick, commands, resources);
+        state = advanceProjectiles(state, tick, commands, resources);
 
-        advanceMovement(
+        state = advanceMovement(
             state,
             tick,
             {
                 routeMoveMultiplier: this.#input.routeMoveMultiplier,
                 movementAllowed: (unitId) =>
-                    this.#combat.allowsMovement(actionExecutions.result(), unitId),
+                    this.#combat.allowsMovement(state.actionExecutions, unitId),
             },
             resources,
         );
@@ -246,24 +255,18 @@ export class BattleRuntime {
                   }
                 : null;
 
-        const output: Step = { events: finishedEvents.events, result };
-
-        const nextState: BattleRuntimeState = {
-            ...previous,
-            battlefield,
-            tickIndex,
+        this.#state = {
+            battlefield: state.battlefield,
+            tick: tickIndex,
             completedRouteCount,
             result,
             schedule,
-            actionExecution: actionExecutions.result(),
+            actionExecutions: state.actionExecutions,
             predefinedPresence,
             execution: state.execution,
         };
 
-        battlefield.apply();
-        this.#state = nextState;
-
-        return output;
+        return { events: finishedEvents.events, result };
     }
 }
 

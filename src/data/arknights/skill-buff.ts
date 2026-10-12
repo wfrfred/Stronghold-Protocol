@@ -1,4 +1,4 @@
-import { getUnit, updateUnit } from "../../core/tactical/battle/execution/context.js";
+import { getUnit, updateUnit } from "../../core/tactical/battle/state.js";
 import * as modifier from "../../core/tactical/unit/contribution/value.js";
 import type { Definition } from "../../core/tactical/unit/effect/definition.js";
 import { install } from "../../core/tactical/unit/effect/operations.js";
@@ -28,18 +28,18 @@ export function compileArknightsAttackBuffSkill(value: unknown, level: number): 
     const buff: Definition<{ readonly attackIncrease: number }, Offense> = {
         id: `skill/${parsed.definition.id}/${level}/attack`,
         initialize: () => ({ attackIncrease }),
-        onEnable: (context) => {
-            updateUnit(
-                context.battle,
+        onEnable: (state, context) => {
+            return updateUnit(
+                state,
                 setAttackContribution(context.unit, {
                     id: `@effect/${context.self.id}/attack`,
                     value: [modifier.create({ multiplier: context.self.state.attackIncrease })],
                 }),
             );
         },
-        onDisable: (context) => {
-            updateUnit(
-                context.battle,
+        onDisable: (state, context) => {
+            return updateUnit(
+                state,
                 removeAttackContribution(context.unit, `@effect/${context.self.id}/attack`),
             );
         },
@@ -47,27 +47,40 @@ export function compileArknightsAttackBuffSkill(value: unknown, level: number): 
 
     return {
         definition: parsed.definition,
-        activate: (context) => {
-            const unit = getUnit(context.battle, context.unitId);
+        activate: (state, context) => {
+            const unit = getUnit(state, context.unitId);
 
             if (unit === undefined || !hasOffense(unit)) {
-                return { type: "REJECTED", reason: "attack buff requires Offense capability" };
+                return {
+                    state,
+                    value: { type: "REJECTED", reason: "attack buff requires Offense capability" },
+                };
             }
 
-            const installed = install(context.battle, unit, buff, {
-                source: context.unitId,
-                scopes: [
-                    {
-                        type: "SKILL",
-                        unitId: context.unitId,
-                        activationId: context.activationId,
-                    },
-                ],
-            });
+            const installed = install(
+                state,
+                unit,
+                buff,
+                {
+                    source: context.unitId,
+                    scopes: [
+                        {
+                            type: "SKILL",
+                            unitId: context.unitId,
+                            activationId: context.activationId,
+                        },
+                    ],
+                },
+                context.call,
+            );
 
-            return installed === undefined
-                ? { type: "REJECTED", reason: "effect installation rejected" }
-                : { type: "ACTIVATED" };
+            return {
+                state: installed.state,
+                value:
+                    installed.value === undefined
+                        ? { type: "REJECTED", reason: "effect installation rejected" }
+                        : { type: "ACTIVATED" },
+            };
         },
     };
 }

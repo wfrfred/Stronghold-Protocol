@@ -1269,7 +1269,7 @@ test('core act1 m02 keeps hidden crate recipes out of the battlefield and applie
   assert.equal(external.navigationModifiers[0], effect);
   assert.equal(external.predefinedPresence, appeared.predefinedPresence);
   const removed = runtime.step([{ type: 'REMOVE_PREDEFINED', definitionId, reason: 'SCRIPT' }]);
-  assert.deepEqual(removed.events, [{ type: 'UNIT_REMOVED', unitId: unit.id, reason: 'SCRIPT', tick: 2, unit }]);
+  assert.deepEqual(removed.events, [{ type: 'UNIT_REMOVED', unitId: unit.id, reason: 'SCRIPT', tick: 2, unit: { ...unit, lifecycle: 'LEAVING' } }]);
   assert.deepEqual(runtime.snapshot().units, []);
   assert.deepEqual(runtime.snapshot().navigationModifiers, []);
   assert.deepEqual(runtime.snapshot().predefinedPresence, []);

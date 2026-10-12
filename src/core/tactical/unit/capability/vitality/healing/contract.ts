@@ -1,5 +1,6 @@
+import type { CallContext } from "../../../../battle/execution/call.js";
 import type { StableUnit, UnitId } from "../../../unit.js";
-import type { BattleState } from "../../../../battle/execution/context.js";
+import type { BattleState, Result } from "../../../../battle/state.js";
 import type { VitalUnit } from "../capability.js";
 
 export interface HealingRequest {
@@ -31,4 +32,8 @@ export interface HealingResult<U extends VitalUnit> {
     readonly amount: number;
 }
 
-export type HealingOperation = (work: BattleState, request: HealingRequest) => HealingReport;
+export type HealingOperation = (
+    state: BattleState,
+    request: HealingRequest,
+    call?: CallContext,
+) => Result<HealingReport>;

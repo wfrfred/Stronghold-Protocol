@@ -3,69 +3,101 @@ import type { UnitId } from "../../unit/unit.js";
 import type { BattlefieldRemovalReason } from "../../battlefield/contract.js";
 import type { StoppedSkillActivation } from "../../unit/capability/skill/execution.js";
 import type { ActionExecutionSignal } from "../../unit/capability/action/process.js";
-import { appendEvents, getUnit, removeUnit, updateUnit, type BattleState } from "./context.js";
+import {
+    appendEvents,
+    getUnit,
+    removeUnit,
+    updateUnit,
+    type BattleState,
+    type Result,
+} from "../state.js";
+import { emptyCall, type CallContext } from "./call.js";
+import {
+    getActionExecution,
+    removeActionExecution,
+} from "../../unit/capability/action/internal/executions.js";
 
 export interface UnitLifecycleResources {
     readonly stopSkillActivation: (
-        battle: BattleState,
+        state: BattleState,
         unitId: UnitId,
         tick: number,
-    ) => StoppedSkillActivation | null;
+    ) => Result<StoppedSkillActivation | null>;
     readonly notifySkillFinished: (
-        battle: BattleState,
+        state: BattleState,
         activation: StoppedSkillActivation,
         tick: number,
-    ) => void;
+        call?: CallContext,
+    ) => BattleState;
 }
 
 export function retireCombatUnit(
-    battle: BattleState,
+    state: BattleState,
     unitId: UnitId,
     resources: UnitLifecycleResources,
     tick: number,
-): void {
-    removeUnitWithEffects(battle, unitId, "DEATH", resources, tick);
+    call: CallContext = emptyCall,
+): BattleState {
+    return removeUnitWithEffects(state, unitId, "DEATH", resources, tick, call);
 }
 
 export function removeUnitWithEffects(
-    battle: BattleState,
+    state: BattleState,
     unitId: UnitId,
     reason: BattlefieldRemovalReason,
     resources: UnitLifecycleResources,
     tick: number,
-): void {
+    call: CallContext = emptyCall,
+): BattleState {
     const lifetime = { type: "UNIT" as const, unitId };
-    const unit = getUnit(battle, unitId);
+    const unit = getUnit(state, unitId);
 
     if (unit === undefined || unit.lifecycle === "LEAVING") {
-        return;
+        return state;
     }
 
-    updateUnit(battle, { ...unit, lifecycle: "LEAVING" });
-    const actions = battle.actionExecutions?.forSource(unitId) ?? [];
-    const stopped = resources.stopSkillActivation(battle, unitId, tick);
+    state = updateUnit(state, { ...unit, lifecycle: "LEAVING" });
+    const actions = state.actionExecutions.executions.filter(
+        (action) => action.sourceUnitId === unitId,
+    );
+    const stopped = resources.stopSkillActivation(state, unitId, tick);
+    state = stopped.state;
+    const signals: ActionExecutionSignal[] = [];
 
     for (const action of actions) {
-        battle.actionExecutions!.remove(action);
-        endScope(battle, { type: "ACTION", executionId: action.id }, reason);
+        if (getActionExecution(state.actionExecutions, action.id) === undefined) {
+            continue;
+        }
+
+        state = {
+            ...state,
+            actionExecutions: removeActionExecution(state.actionExecutions, action.id),
+        };
+        state = endScope(state, { type: "ACTION", executionId: action.id }, reason, call);
+        signals.push({
+            type: "ACTION_CANCELLED",
+            executionId: action.id,
+            sourceUnitId: unitId,
+            tick,
+            reason: "SOURCE_ABSENT",
+        });
     }
-    if (stopped !== null) {
-        endScope(battle, { type: "SKILL", unitId, activationId: stopped.active.id }, reason);
+    if (stopped.value !== null) {
+        state = endScope(
+            state,
+            { type: "SKILL", unitId, activationId: stopped.value.active.id },
+            reason,
+            call,
+        );
     }
 
-    endScope(battle, lifetime, reason);
+    state = endScope(state, lifetime, reason, call);
 
-    if (stopped !== null) {
-        resources.notifySkillFinished(battle, stopped, tick);
+    if (stopped.value !== null) {
+        state = resources.notifySkillFinished(state, stopped.value, tick, call);
     }
 
-    const signals: ActionExecutionSignal[] = actions.map(({ id }) => ({
-        type: "ACTION_CANCELLED",
-        executionId: id,
-        sourceUnitId: unitId,
-        tick,
-        reason: "SOURCE_ABSENT",
-    }));
-    appendEvents(battle, signals);
-    removeUnit(battle, unitId, reason);
+    state = appendEvents(state, signals);
+
+    return removeUnit(state, unitId, reason);
 }

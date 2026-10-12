@@ -1,15 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
-import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
-import { BattlefieldRuntime } from "../../dist/core/tactical/battlefield/runtime.js";
+import { create, transition } from "../../dist/core/tactical/battlefield/state.js";
+import { createBattleState, getUnit } from "../../dist/core/tactical/battle/state.js";
+import { startAction } from "../../dist/core/tactical/unit/capability/action/execution.js";
+import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
-import { copyUnitSnapshot } from "../../dist/core/tactical/unit/snapshot.js";
 import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
 import { createActionDefinition } from "../../dist/core/tactical/unit/capability/action/capability.js";
 import { compileAction } from "../../dist/core/tactical/unit/capability/action/compile.js";
 
-test("action event order: lethal damage settles support loss before the action finishes", (t) => {
+test("action event order: lethal damage settles support loss before the action finishes", () => {
     const geometry = createShapeGeometry({
         shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 5 }],
     });
@@ -80,36 +81,23 @@ test("action event order: lethal damage settles support loss before the action f
     const spec = createLegacyCombatSpec({
         rows: 1, columns: 4, operators: [], enemies: [], maxTicks: 10, seed: 17,
     });
-    const battlefield = BattlefieldRuntime.create({ map: spec.map }, copyUnitSnapshot);
-    battlefield.advance([
+    const battlefield = transition(create({ map: spec.map }), [
         ...[attacker, support, recipient].map(unit => ({ type: "REGISTER_UNIT", unit })),
         { type: "SET_SUPPORT_RELATIONS", relations: [{ supportedUnitId: 2, supportUnitId: 1 }] },
-    ]);
-    // Supply the battlefield fixture with an established support relation.
-    t.mock.method(BattlefieldRuntime, "create", () => battlefield);
-    const runtime = new BattleRuntime(spec, {
-        compileAction: (definition, resources) => {
-            const compiled = compileAction(definition, resources);
-
-            return {
-                ...compiled,
-                program: [
-                    { type: "RELEASE", markerId: "damage" },
-                    ...compiled.program,
-                ],
-            };
-        },
-    });
-    const output = runtime.step();
-    const snapshot = runtime.snapshot();
+    ]).state;
+    const resources = new CombatResources();
+    const compiled = compileAction(action, resources);
+    const output = startAction(createBattleState(battlefield), {
+      sourceUnitId: 0, compiled: { ...compiled, program: [{ type: "RELEASE", markerId: "damage" }, ...compiled.program] }, tick: 0, mayStart: true,
+    }, resources);
 
     assert.deepEqual(output.events.map(event => event.type), [
-        "ACTION", "ACTION_RELEASED", "DAMAGE", "SUPPORT_LOST", "ACTION_FINISHED", "UNIT_REMOVED",
+        "ACTION", "ACTION_RELEASED", "DAMAGE", "SUPPORT_LOST", "ACTION_FINISHED",
     ]);
     const lost = output.events.find(event => event.type === "SUPPORT_LOST");
     assert.equal(lost.supportedUnitId, 2);
     assert.equal(lost.supportUnitId, 1);
-    assert.equal(snapshot.units.find(unit => unit.id === 1), undefined);
-    assert.equal(snapshot.units.find(unit => unit.id === 2).vitality.hp, 100);
-    assert.deepEqual(snapshot.supportRelations, []);
+    assert.equal(getUnit(output, 1), undefined);
+    assert.equal(getUnit(output, 2).vitality.hp, 100);
+    assert.deepEqual(output.battlefield.supportRelations, []);
 });
