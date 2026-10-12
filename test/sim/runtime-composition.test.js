@@ -14,7 +14,7 @@ import { seededPlacement } from "../helpers/aura.js";
 import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
 import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
 import { compileAction } from "../../dist/core/tactical/unit/capability/action/compile.js";
-import { apply as applyEffect, setState as setEffectState } from "../../dist/core/tactical/unit/effect/operations.js";
+import { install as installEffect, setState as setEffectState } from "../../dist/core/tactical/unit/effect/operations.js";
 import { hasStatusFlag, addStatusContribution, removeStatusContribution } from "../../dist/core/tactical/unit/capability/status/capability.js";
 import * as modifier from "../../dist/core/tactical/unit/contribution/value.js";
 import { initializeVitalityState } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
@@ -111,7 +111,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
   const registerBuff = (id, addition, flags = []) => ({
     id,
     initialize: () => ({ starts: 0, enables: 0 }),
-    onApply(context) {
+    onInstall(context) {
       context.setState(state => ({ ...state, starts: state.starts + 1 }));
     },
     onEnable(context) {
@@ -137,8 +137,8 @@ function scenario({ failure = null, cancelled = false } = {}) {
   const receiver = {
     ...receiverOutput,
     initialize: () => ({ ...receiverOutput.initialize(), uses: 0 }),
-    onApply(context) {
-      receiverOutput.onApply(context);
+    onInstall(context) {
+      receiverOutput.onInstall(context);
       const ref = context.ref;
       transitionUnit(context.battle, ref.unitId, unit => setDamageHook(unit, {
         id: `receiver:${ref.effectId}`,
@@ -158,7 +158,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
               sourceUnitId: 0, targetUnitId: ref.unitId, power: 4, ignoreHealFree: false,
             });
           } else {
-            assert.ok(applyEffect(battle, getUnit(battle, ref.unitId), marker, {
+            assert.ok(installEffect(battle, getUnit(battle, ref.unitId), marker, {
               source: 0, scopes: [ref],
             }));
           }
@@ -187,12 +187,12 @@ function scenario({ failure = null, cancelled = false } = {}) {
         return;
       }
       for (const unitId of battlefieldView(context.battle).unitIds) {
-        if (context.self.status === "FINISHED") return;
+        if (context.self.status === "ENDING") return;
         if (context.self.state.receivers.some(binding => binding.unitId === unitId)) continue;
         context.setState(state => ({ ...state,
           receivers: [...state.receivers, { unitId, ref: null, attempts: 1 }],
         }));
-        const ref = applyEffect(context.battle, getUnit(context.battle, unitId), receiver, {
+        const ref = installEffect(context.battle, getUnit(context.battle, unitId), receiver, {
           source: context.ref.unitId, scopes: [context.ref],
         });
         assert.ok(ref);
@@ -250,7 +250,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
     allowDiagonalMove: false, visitEveryTileCenter: false,
     visitEveryNodeCenter: false, visitEveryCheckPoint: true,
   });
-  const installation = (context, services, program) => applyEffect(
+  const installation = (context, services, program) => installEffect(
     context.work, getUnit(context.work, context.sourceUnitId), program, {
       source: context.sourceUnitId,
       scopes: [{ type: "ACTION", executionId: context.executionId }],

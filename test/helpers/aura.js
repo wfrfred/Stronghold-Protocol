@@ -29,6 +29,7 @@ export function auraEffect(
         bindLifetime = true,
         initialState = () => undefined,
         refreshInterval = 1,
+        group,
     } = {},
 ) {
     const refresh = (context) => {
@@ -59,12 +60,12 @@ export function auraEffect(
                 bindings: [...state.bindings, { unitId, refs: [] }],
             }));
             const value = initialState(context, unitId);
-            const ref = effects.apply(context.battle, getUnit(context.battle, unitId), receiver, {
+            const ref = effects.install(context.battle, getUnit(context.battle, unitId), receiver, {
                 source: context.ref.unitId,
                 scopes: bindLifetime ? [context.ref] : [],
-                ...(value === undefined ? {} : { initialState: value }),
+                ...(value === undefined ? {} : { state: value }),
             });
-            if (ref === undefined || context.self.status === "FINISHED") continue;
+            if (ref === undefined || context.self.status === "ENDING") continue;
             context.setState((state) => ({
                 ...state,
                 bindings: state.bindings.map((binding) =>
@@ -78,6 +79,7 @@ export function auraEffect(
         id,
         { bindings: [], nextRefreshTick: 0 },
         {
+            ...(group === undefined ? {} : { group }),
             onTick(context) {
                 if (context.tick < context.self.state.nextRefreshTick) return;
                 context.setState((state) => ({
@@ -94,7 +96,7 @@ export function auraEffect(
                 }
             },
             onDisable(context) {
-                if (context.self.status === "FINISHED") return;
+                if (context.self.status === "ENDING") return;
                 for (const binding of context.self.state.bindings) {
                     for (const ref of binding.refs) effects.setEnabled(context.battle, ref, false);
                 }
@@ -105,7 +107,7 @@ export function auraEffect(
 
 export function seededPlacement(effect, unit = auraUnit(0), scopes = []) {
     const battle = effectFixtureWork(unit);
-    effects.apply(battle, unit, effect, { source: unit.id, scopes });
+    effects.install(battle, unit, effect, { source: unit.id, scopes });
     const seeded = getUnit(battle, unit.id);
     return {
         definition: seeded.definition,

@@ -1,7 +1,7 @@
 import { getUnit, updateUnit } from "../../core/tactical/battle/execution/context.js";
 import * as modifier from "../../core/tactical/unit/contribution/value.js";
 import type { Definition } from "../../core/tactical/unit/effect/definition.js";
-import { apply } from "../../core/tactical/unit/effect/operations.js";
+import { install } from "../../core/tactical/unit/effect/operations.js";
 import {
     hasOffense,
     removeAttackContribution,
@@ -54,7 +54,7 @@ export function compileArknightsAttackBuffSkill(value: unknown, level: number): 
                 return { type: "REJECTED", reason: "attack buff requires Offense capability" };
             }
 
-            const installed = apply(context.battle, unit, buff, {
+            const installed = install(context.battle, unit, buff, {
                 source: context.unitId,
                 scopes: [
                     {

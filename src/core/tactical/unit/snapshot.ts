@@ -9,6 +9,7 @@ export function copyUnitSnapshot<U extends Unit>(unit: U): UnitSnapshot<U>;
 export function copyUnitSnapshot(unit: Readonly<Unit>): Unit {
     return {
         id: unit.id,
+        lifecycle: unit.lifecycle,
         definition: unit.definition,
         position: unit.position,
         effects: unit.effects,

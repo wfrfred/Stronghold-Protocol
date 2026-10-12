@@ -24,7 +24,7 @@ function actor() {
 }
 function releaseEffect(id, initialState, run) {
   const program = definition(id, initialState, {
-    onApply(context) {
+    onInstall(context) {
       const ref = context.ref;
       transitionUnit(context.battle, ref.unitId, unit => setBeforeReleaseHook(unit, {
         id: `release/${ref.effectId}`,
@@ -40,7 +40,7 @@ function releaseEffect(id, initialState, run) {
 }
 
 function attach(work, program, input = {}) {
-  return effects.apply(work, getUnit(work, 0), program, input);
+  return effects.install(work, getUnit(work, 0), program, input);
 }
 
 const continueRelease = { type: "CONTINUE" };

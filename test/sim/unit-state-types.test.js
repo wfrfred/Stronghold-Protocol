@@ -24,7 +24,7 @@ import { setMaxHpContribution } from ${module("unit/capability/vitality/capabili
 import { setAttackContribution } from ${module("unit/capability/offense/capability")};
 import { setCapacityContribution } from ${module("unit/capability/blocking/capability")};
 import type { Definition } from ${module("unit/effect/definition")};
-import { apply, setState } from ${module("unit/effect/operations")};
+import { install, setState } from ${module("unit/effect/operations")};
 import { find } from ${module("unit/effect/query")};
 import type { Contribution, Input } from ${module("unit/contribution/contribution")};
 import type { QueryContext } from ${module("unit/query")};
@@ -37,16 +37,16 @@ const content: Definition<{charges:number},Vitality> = {
    // @ts-expect-error private state remains specific to this definition.
    context.setState({missing:1});
    // @ts-expect-error stored values are readonly.
-   context.self.status='FINISHED';
+   context.self.status='ENDING';
    // @ts-expect-error shared host state must use immutable transitions.
    context.unit.vitality.hp=hp;
  }
 };
 declare const battle:BattleState;
-const ref=apply(battle,host,content);
+const ref=install(battle,host,content);
 const bare=initializeUnit({id:2,position:[0,0],definition:{id:'bare'}});
 // @ts-expect-error required host capabilities must be present.
-apply(battle,bare,content);
+install(battle,bare,content);
 if(ref!==undefined) {
  setState(battle,ref,content,{charges:5});
  // @ts-expect-error state transitions preserve Definition's state type.

@@ -75,7 +75,7 @@ test("ordinary end policies decide each receiver against current state", () => {
     const receiver = attackEffect("retention", {
         onEnd(ctx) {
             trace.push(["end", ctx.ref.unitId]);
-            if (ctx.ref.unitId === 1) effects.apply(ctx.battle, getUnit(ctx.battle, 2), marker);
+            if (ctx.ref.unitId === 1) effects.install(ctx.battle, getUnit(ctx.battle, 2), marker);
         },
     });
     const aura = definition(
@@ -84,7 +84,7 @@ test("ordinary end policies decide each receiver against current state", () => {
         {
             onEnable(ctx) {
                 for (const unitId of [1, 2]) {
-                    const ref = effects.apply(ctx.battle, getUnit(ctx.battle, unitId), receiver);
+                    const ref = effects.install(ctx.battle, getUnit(ctx.battle, unitId), receiver);
                     ctx.setState((state) => ({
                         ...state,
                         bindings: [...state.bindings, { unitId, ref }],
@@ -116,12 +116,21 @@ test("ordinary end policies decide each receiver against current state", () => {
 
 test("group suppression preserves aura members and child identities", () => {
     const battle = effectFixtureWork(auraUnit(0), auraUnit(1));
-    const aura = auraEffect(attackEffect("competing-child"));
-    const ref = install(battle, aura, 0, { group: { id: "aura", priority: 1 } });
-    const binding = get(battle, ref).state.bindings[0];
-    const winner = install(battle, definition("aura-winner"), 0, {
-        group: { id: "aura", priority: 2 },
+    const aura = auraEffect(attackEffect("competing-child"), {
+        group: { id: "aura", priority: 1 },
     });
+    const ref = install(battle, aura);
+    const binding = get(battle, ref).state.bindings[0];
+    const winner = install(
+        battle,
+        definition(
+            "aura-winner",
+            {},
+            {
+                group: { id: "aura", priority: 2 },
+            },
+        ),
+    );
     assert.equal(get(battle, ref).status, "INACTIVE");
     assert.equal(power(battle, 1), 100);
     effects.end(battle, winner);
@@ -153,7 +162,7 @@ test("reenabling refreshes departed receivers before restoring child outputs", (
 test("nested installation can disable an aura before later receivers enter", () => {
     const starts = [];
     const receiver = attackEffect("nested-stop", {
-        onApply(ctx) {
+        onInstall(ctx) {
             starts.push(ctx.ref.unitId);
             effects.setEnabled(ctx.battle, ctx.self.scopes[0], false);
         },
@@ -169,7 +178,7 @@ test("nested installation can disable an aura before later receivers enter", () 
 test("nested child installation ending the aura does not revive parent or child", () => {
     const starts = [];
     const receiver = attackEffect("nested-end", {
-        onApply(ctx) {
+        onInstall(ctx) {
             starts.push(ctx.ref.unitId);
             effects.end(ctx.battle, ctx.self.scopes[0]);
         },

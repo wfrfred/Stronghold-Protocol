@@ -35,10 +35,10 @@ test("effect lifetimes: parent ending cascades across Units and shared descendan
         },
     );
     const battle = effectFixtureWork(unit(0), unit(1), unit(2));
-    const a = install(battle, value, 0, { initialState: { name: "parent" } });
-    const b = install(battle, value, 1, { initialState: { name: "left" }, scopes: [a] });
-    const c = install(battle, value, 2, { initialState: { name: "right" }, scopes: [a] });
-    const d = install(battle, value, 2, { initialState: { name: "shared" }, scopes: [b, c] });
+    const a = install(battle, value, 0, { state: { name: "parent" } });
+    const b = install(battle, value, 1, { state: { name: "left" }, scopes: [a] });
+    const c = install(battle, value, 2, { state: { name: "right" }, scopes: [a] });
+    const d = install(battle, value, 2, { state: { name: "shared" }, scopes: [b, c] });
     effect.end(battle, a, "DISPELLED");
     assert.deepEqual(new Set(trace), new Set(["parent", "left", "right", "shared"]));
     assert.equal(trace.length, 4);
@@ -62,14 +62,14 @@ test("effect lifetimes: provenance does not imply dependence on the source Unit"
     assert.equal(get(battle, independent), undefined);
 });
 
-test("effect lifetimes: a closing host rejects a new dependent before its apply callback", () => {
+test("effect lifetimes: a closing host rejects a new dependent before its install callback", () => {
     let attempts = 0;
     let installed;
     const child = definition(
         "new-child",
         {},
         {
-            onApply: () => {
+            onInstall: () => {
                 attempts++;
             },
         },
@@ -79,7 +79,7 @@ test("effect lifetimes: a closing host rejects a new dependent before its apply 
         {},
         {
             onEnd(context) {
-                installed = effect.apply(context.battle, context.unit, child);
+                installed = effect.install(context.battle, context.unit, child);
             },
         },
     );
@@ -98,7 +98,7 @@ test("effect lifetimes: a closed parent cannot admit a remote dependent during t
         {},
         {
             onEnd(context) {
-                accepted = effect.apply(context.battle, getUnit(context.battle, 1), child, {
+                accepted = effect.install(context.battle, getUnit(context.battle, 1), child, {
                     scopes: [context.ref],
                 });
             },
@@ -167,11 +167,25 @@ test("effect lifetimes: ending the same instance in its disable callback remains
 
 test("effect lifetimes: closing a host never reenables its suppressed effects", () => {
     const enabled = [];
-    const weak = definition("weak", {}, { onEnable: () => enabled.push("weak") });
-    const strong = definition("strong", {}, { onEnable: () => enabled.push("strong") });
+    const weak = definition(
+        "weak",
+        {},
+        {
+            group: { id: "rule", priority: 1 },
+            onEnable: () => enabled.push("weak"),
+        },
+    );
+    const strong = definition(
+        "strong",
+        {},
+        {
+            group: { id: "rule", priority: 2 },
+            onEnable: () => enabled.push("strong"),
+        },
+    );
     const battle = effectFixtureWork(unit(0));
-    install(battle, weak, 0, { group: { id: "rule", priority: 1 } });
-    install(battle, strong, 0, { group: { id: "rule", priority: 2 } });
+    install(battle, weak);
+    install(battle, strong);
     enabled.length = 0;
 
     effect.endScope(battle, { type: "UNIT", unitId: 0 }, "RETREAT");
@@ -186,7 +200,7 @@ test("effect lifetimes: terminal hook cleanup cannot recreate a host killed by a
         "parent-hook",
         {},
         {
-            onApply(context) {
+            onInstall(context) {
                 updateUnit(
                     context.battle,
                     setHook(context.unit, {

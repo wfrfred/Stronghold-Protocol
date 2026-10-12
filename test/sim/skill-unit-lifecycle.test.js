@@ -39,7 +39,7 @@ function fixture(content = {}) {
     spCost: 1, initialSp: 1, durationTicks: null,
   });
   const installOwned = (context, expected = true) => [[], [{ type: 'UNIT', unitId: 1 }]].map(additional => {
-    const result = effects.apply(context.battle, getUnit(context.battle, 1), owned, {
+    const result = effects.install(context.battle, getUnit(context.battle, 1), owned, {
       source: context.unitId, scopes: [{ type: 'SKILL', unitId: context.unitId, activationId: context.activationId }, ...additional],
     });
     assert.equal(result !== undefined, expected);
@@ -109,7 +109,7 @@ for (const reason of ['DEATH', 'RETREAT', 'SCRIPT']) {
 test('skill ownership: finish content can install a hook before nested damage', () => {
   const hits = [];
   const observer = effectDefinition('finish-installed-observer', {}, {
-    onApply(context) {
+    onInstall(context) {
       const id = context.self.id;
       transitionUnit(context.battle, context.unit.id, unit => setHook(unit, {
         id: 'skill-finish-observer', stage: 'reception', priority: 0,
@@ -122,7 +122,7 @@ test('skill ownership: finish content can install a hook before nested damage', 
     },
   });
   const f = fixture({ finish: context => {
-    assert.ok(effects.apply(context.battle, getUnit(context.battle, 1), observer));
+    assert.ok(effects.install(context.battle, getUnit(context.battle, 1), observer));
     context.damage({ sourceUnitId: 0, targetUnitId: 1, damageType: 'TRUE', operands: createDamageOperands(1) });
   } });
   activateSkill(f.work, { unitId: 0, tick: 0 }, f.resources);
@@ -152,7 +152,7 @@ test('skill scope: activation continues after synchronous self-death but rejects
   assert.deepEqual(f.finished, [{ sourcePresent: true, active: null, tick: 0 }]);
   assert.deepEqual(f.disabled, [0, 1]);
   assert.equal(skillsFinished(f.work).length, 1);
-  assert.equal(getUnit(f.work, 1).effects.instances.every(instance => instance.status === "FINISHED"), true);
+  assert.equal(getUnit(f.work, 1).effects.instances.every(instance => instance.status === "ENDING"), true);
   assert.equal(f.work.battlefield.snapshot("state").getUnit(0).skill.active, null);
   assert.equal(f.work.battlefield.snapshot("state").getUnit(0).vitality.hp, 100);
   assert.deepEqual(f.work.battlefield.snapshot("state").getUnit(1).effects.instances, []);
@@ -164,7 +164,7 @@ test('skill scope: refusal after self-death keeps independent remote effects but
     context.damage({ sourceUnitId: null, targetUnitId: 0,
       damageType: 'TRUE', operands: createDamageOperands(100) });
     installOwned(context, false);
-    assert.equal(effects.apply(context.battle, getUnit(context.battle, 1), independent, { source: context.unitId, scopes: [] }) !== undefined, true);
+    assert.equal(effects.install(context.battle, getUnit(context.battle, 1), independent, { source: context.unitId, scopes: [] }) !== undefined, true);
     return { type: 'REJECTED', reason: 'late prerequisite' };
   } });
   independent = effectProgram('independent-after-refusal');
@@ -200,7 +200,7 @@ function runtime(f) {
 test('skill ownership: a throwing departure callback propagates without publishing the tick', () => {
   let prefix;
   const f = fixture({ finish: context => {
-    assert.equal(effects.apply(context.battle, getUnit(context.battle, 1), prefix, { source: 0, scopes: [] }) !== undefined, true);
+    assert.equal(effects.install(context.battle, getUnit(context.battle, 1), prefix, { source: 0, scopes: [] }) !== undefined, true);
     throw new Error('skill departure failed');
   } });
   prefix = effectProgram('finish-prefix');

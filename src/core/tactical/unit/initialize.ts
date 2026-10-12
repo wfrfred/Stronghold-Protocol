@@ -54,6 +54,7 @@ export function initializeUnit<D extends UnitDefinition>(
 
     return {
         id,
+        lifecycle: "PRESENT",
         definition: definition as Unit<D>["definition"],
         position,
         effects: input.effects ?? empty(),

@@ -25,16 +25,16 @@ const unit = (id = 0) =>
         },
     });
 
-test("effects: a direct static definition initializes private state and runs apply before enable", () => {
+test("effects: a direct static definition initializes private state and runs install before enable", () => {
     const seen = [];
     const value = definition(
         "direct",
         { count: 0 },
         {
-            onApply(context) {
+            onInstall(context) {
                 assert.equal(get(context.battle, context.ref).definition, value);
                 context.setState((current) => ({ count: current.count + 1 }));
-                seen.push(["apply", context.self.state.count]);
+                seen.push(["install", context.self.state.count]);
             },
             onEnable(context) {
                 seen.push(["enable", context.self.state.count]);
@@ -48,7 +48,7 @@ test("effects: a direct static definition initializes private state and runs app
     assert.deepEqual(get(battle, ref).state, { count: 1 });
     assert.equal(get(battle, ref).status, "ACTIVE");
     assert.deepEqual(seen, [
-        ["apply", 1],
+        ["install", 1],
         ["enable", 1],
     ]);
     assert.equal(old.getUnit(0).effects?.instances.length ?? 0, 0);
@@ -73,7 +73,7 @@ test("effects: updates share immutable values and find pairs a definition with i
 test("effects: disabling withdraws output while preserving private state and identity", () => {
     const seen = [];
     const value = attackBuff("attack", 20, {
-        onApply: () => seen.push("apply"),
+        onInstall: () => seen.push("install"),
         onEnable: () => seen.push("enable"),
         onDisable: () => seen.push("disable"),
     });
@@ -87,7 +87,7 @@ test("effects: disabling withdraws output while preserving private state and ide
     assert.equal(attack(), 100);
     effect.setEnabled(battle, ref, true);
     assert.equal(attack(), 130);
-    assert.deepEqual(seen, ["apply", "enable", "disable", "enable"]);
+    assert.deepEqual(seen, ["install", "enable", "disable", "enable"]);
     assert.equal(get(battle, ref).id, ref.effectId);
 });
 
@@ -135,7 +135,7 @@ test("effects: callbacks read current Unit state after a preceding nested operat
         "current-host",
         {},
         {
-            onApply(context) {
+            onInstall(context) {
                 transitionUnit(context.battle, 0, (current) => ({
                     ...current,
                     vitality: { ...current.vitality, hp: 30 },
@@ -170,6 +170,6 @@ test("effects: a callback sees termination when a nested operation ends its inst
 
     effect.advance(at(battle, 1));
 
-    assert.deepEqual(seen, ["FINISHED"]);
+    assert.deepEqual(seen, ["ENDING"]);
     assert.equal(get(battle, ref), undefined);
 });

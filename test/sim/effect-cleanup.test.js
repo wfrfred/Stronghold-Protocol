@@ -12,14 +12,14 @@ const unit = () =>
         definition: { id: "cleanup", vitality: { maxHp: 100 } },
     });
 
-test("effect cleanup: terminal business sees the finished instance and ending immediately removes it", () => {
+test("effect cleanup: terminal business sees the ending instance and ending immediately removes it", () => {
     const seen = [];
     const value = definition(
         "terminal",
         { count: 3 },
         {
             onEnd(context) {
-                assert.equal(get(context.battle, context.ref).status, "FINISHED");
+                assert.equal(get(context.battle, context.ref).status, "ENDING");
                 seen.push(context.self.state.count);
             },
         },
@@ -41,7 +41,7 @@ test("effect cleanup: a replacement installed during end uses a new identity and
         {},
         {
             onEnd(context) {
-                next = effect.apply(context.battle, context.unit, replacement);
+                next = effect.install(context.battle, context.unit, replacement);
             },
         },
     );

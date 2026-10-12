@@ -165,7 +165,7 @@ function harness({ stackCount = 3, maxValidStackCnt = -1 } = {}) {
             definition: { id: "receiver", offense: { attack: 100 } },
         }),
     );
-    const ref = effects.apply(work, getUnit(work, 0), content, {
+    const ref = effects.install(work, getUnit(work, 0), content, {
         source: 10,
         scopes: [{ type: "TICK", tick: 30 }],
     });

@@ -11,7 +11,6 @@ import {
     deadline,
     key,
     type Effect,
-    type Group,
     type Lifetime,
     type Ref,
     type Scope,
@@ -21,22 +20,21 @@ import { dependents } from "../../battlefield/storage/effect-lifetimes.js";
 import { get } from "./query.js";
 import * as state from "./state.js";
 
-export interface Input<S extends object> {
+export interface Initial<S extends object> {
     readonly source?: UnitId | null;
     readonly scopes?: readonly Scope[];
-    readonly initialState?: S;
-    readonly group?: Group;
+    readonly state?: S;
     readonly enabled?: boolean;
 }
 
-export function apply<S extends object, H extends object>(
+export function install<S extends object, H extends object>(
     battle: BattleState,
     host: Unit & NoInfer<H>,
     definition: Definition<S, H>,
-    input: Input<NoInfer<S>> = {},
+    initial: Initial<NoInfer<S>> = {},
 ): Ref | undefined {
     const unit = getUnit(battle, host.id);
-    const scopes = input.scopes ?? [];
+    const scopes = initial.scopes ?? [];
 
     if (
         unit === undefined ||
@@ -49,24 +47,25 @@ export function apply<S extends object, H extends object>(
     const instance: Effect<S, H> = {
         id: unit.effects.nextId,
         definition,
-        state: input.initialState ?? definition.initialize(),
-        source: input.source ?? null,
+        state: initial.state ?? definition.initialize(),
+        source: initial.source ?? null,
         scopes,
-        ...(input.group === undefined ? {} : { group: input.group }),
-        enabled: input.enabled ?? true,
-        status: "INACTIVE",
+        enabled: initial.enabled ?? true,
+        status: "INSTALLING",
     };
     const ref: Ref = { type: "EFFECT", unitId: unit.id, effectId: instance.id };
 
     updateUnit(battle, { ...unit, effects: state.append(unit.effects, instance) });
-    battle.installingEffects.add(key(ref));
-    definition.onApply?.(createContext<S, H>(battle, ref, instance));
-    battle.installingEffects.delete(key(ref));
+    definition.onInstall?.(createContext<S, H>(battle, ref, instance));
 
-    if (instance.group === undefined) {
-        updateStatus(battle, ref);
-    } else {
-        reconcileGroupActivity(battle, unit.id, instance.group.id);
+    if (get(battle, ref)?.status === "INSTALLING") {
+        change(battle, ref, (current) => ({ ...current, status: "INACTIVE" }));
+
+        if (definition.group === undefined) {
+            updateStatus(battle, ref);
+        } else {
+            reconcileGroupActivity(battle, unit.id, definition.group.id);
+        }
     }
 
     return ref;
@@ -91,7 +90,7 @@ export function setState<S extends object, H extends object>(
 export function setEnabled(battle: BattleState, ref: Ref, enabled: boolean): void {
     const instance = get(battle, ref);
 
-    if (instance === undefined || instance.status === "FINISHED" || instance.enabled === enabled) {
+    if (instance === undefined || instance.status === "ENDING" || instance.enabled === enabled) {
         return;
     }
 
@@ -112,7 +111,7 @@ export function setDeadline(battle: BattleState, ref: Ref, tick: number | null):
 export function bind(battle: BattleState, ref: Ref, lifetime: Lifetime): boolean {
     const instance = get(battle, ref);
 
-    if (instance === undefined || instance.status === "FINISHED" || !available(battle, lifetime)) {
+    if (instance === undefined || instance.status === "ENDING" || !available(battle, lifetime)) {
         return false;
     }
     if (wouldCycle(battle, ref, lifetime)) {
@@ -128,13 +127,13 @@ export function bind(battle: BattleState, ref: Ref, lifetime: Lifetime): boolean
 export function end(battle: BattleState, ref: Ref, reason = "EXPLICIT"): Instance | undefined {
     const instance = get(battle, ref);
 
-    if (instance === undefined || instance.status === "FINISHED") {
+    if (instance === undefined || instance.status === "ENDING") {
         return instance;
     }
 
     const children = dependents(battlefieldView(battle).effectLifetimes, ref);
     const host = getUnit(battle, ref.unitId)!;
-    change(battle, ref, (current) => ({ ...current, status: "FINISHED" }));
+    change(battle, ref, (current) => ({ ...current, status: "ENDING" }));
     const context = createContext(battle, ref, get(battle, ref)!, reason, host);
 
     if (instance.status === "ACTIVE") {
@@ -146,23 +145,28 @@ export function end(battle: BattleState, ref: Ref, reason = "EXPLICIT"): Instanc
     }
 
     context.self.definition.onEnd?.(context);
-    const finished = context.self;
+    const ended = context.self;
     transitionUnit(battle, ref.unitId, (unit) => ({
         ...unit,
         effects: state.remove(unit.effects, ref.effectId),
     }));
 
-    if (instance.group !== undefined) {
-        reconcileGroupActivity(battle, ref.unitId, instance.group.id);
+    if (instance.definition.group !== undefined) {
+        reconcileGroupActivity(battle, ref.unitId, instance.definition.group.id);
     }
 
-    return finished;
+    return ended;
 }
 
 export function endScope(battle: BattleState, lifetime: Lifetime, reason = "SCOPE_CLOSED"): void {
-    const identity = key(lifetime);
+    if (lifetime.type === "UNIT") {
+        transitionUnit(battle, lifetime.unitId, (unit) =>
+            unit.lifecycle === "LEAVING" ? unit : { ...unit, lifecycle: "LEAVING" },
+        );
+    } else {
+        battle.closedLifetimes.add(key(lifetime));
+    }
 
-    battle.closedLifetimes.add(identity);
     const roots = dependents(battlefieldView(battle).effectLifetimes, lifetime);
 
     if (lifetime.type === "UNIT") {
@@ -245,7 +249,7 @@ function createContext<S extends object = object, H extends object = object>(
         get self() {
             const current = get(battle, ref);
             self =
-                current === undefined ? { ...self, status: "FINISHED" } : (current as Effect<S, H>);
+                current === undefined ? { ...self, status: "ENDING" } : (current as Effect<S, H>);
 
             return self;
         },
@@ -254,10 +258,10 @@ function createContext<S extends object = object, H extends object = object>(
             self = (get(battle, ref) as Effect<S, H> | undefined) ?? self;
         },
         end(why) {
-            const finished = end(battle, ref, why);
+            const ended = end(battle, ref, why);
 
-            if (finished !== undefined) {
-                self = finished as Effect<S, H>;
+            if (ended !== undefined) {
+                self = ended as Effect<S, H>;
             }
         },
     };
@@ -270,7 +274,7 @@ function available(battle: BattleState, lifetime: Lifetime): boolean {
 
     switch (lifetime.type) {
         case "UNIT":
-            return getUnit(battle, lifetime.unitId) !== undefined;
+            return getUnit(battle, lifetime.unitId)?.lifecycle === "PRESENT";
 
         case "ACTION":
             return battle.actionExecutions?.get(lifetime.executionId) !== undefined;
@@ -281,7 +285,7 @@ function available(battle: BattleState, lifetime: Lifetime): boolean {
         case "EFFECT": {
             const instance = get(battle, lifetime);
 
-            return instance !== undefined && instance.status !== "FINISHED";
+            return instance !== undefined && instance.status !== "ENDING";
         }
     }
 }
@@ -300,24 +304,24 @@ function change(battle: BattleState, ref: Ref, next: (instance: Instance) => Ins
 function shouldBeActive(battle: BattleState, instance: Instance, unit: Unit): boolean {
     if (
         !instance.enabled ||
-        instance.status === "FINISHED" ||
+        instance.status === "ENDING" ||
         !available(battle, { type: "UNIT", unitId: unit.id }) ||
         instance.scopes.some((scope) => scope.type !== "TICK" && !available(battle, scope))
     ) {
         return false;
     }
 
-    const group = instance.group;
+    const group = instance.definition.group;
 
     // A disabled winner still suppresses weaker members of its group.
     return (
         group === undefined ||
         !unit.effects.instances.some(
             (other) =>
-                other.status !== "FINISHED" &&
-                other.group?.id === group.id &&
-                (other.group.priority > group.priority ||
-                    (other.group.priority === group.priority && other.id < instance.id)),
+                other.status !== "ENDING" &&
+                other.definition.group?.id === group.id &&
+                (other.definition.group.priority > group.priority ||
+                    (other.definition.group.priority === group.priority && other.id < instance.id)),
         )
     );
 }
@@ -329,8 +333,8 @@ function updateStatus(battle: BattleState, ref: Ref): void {
     if (
         unit === undefined ||
         instance === undefined ||
-        instance.status === "FINISHED" ||
-        battle.installingEffects.has(key(ref))
+        instance.status === "ENDING" ||
+        instance.status === "INSTALLING"
     ) {
         return;
     }
@@ -353,7 +357,7 @@ function updateStatus(battle: BattleState, ref: Ref): void {
 
 function reconcileGroupActivity(battle: BattleState, unitId: UnitId, groupId: string): void {
     const refs = (getUnit(battle, unitId)?.effects.instances ?? [])
-        .filter((instance) => instance.group?.id === groupId)
+        .filter((instance) => instance.definition.group?.id === groupId)
         .map((instance): Ref => ({
             type: "EFFECT",
             unitId,

@@ -21,16 +21,18 @@ const group = (priority) => ({ id: "mutually-exclusive", priority });
 test("effect groups: replacing the selected rule withdraws old output and restores its state when the winner ends", () => {
     const trace = [];
     const weak = attackBuff("weak", 20, {
+        group: group(1),
         onEnable: (context) => trace.push(["weak+", context.self.state.amount]),
         onDisable: () => trace.push(["weak-"]),
     });
     const strong = attackBuff("strong", 50, {
+        group: group(2),
         onEnable: () => trace.push(["strong+"]),
         onDisable: () => trace.push(["strong-"]),
     });
     const battle = effectFixtureWork(unit());
-    const first = install(battle, weak, 0, { group: group(1) });
-    const second = install(battle, strong, 0, { group: group(2) });
+    const first = install(battle, weak);
+    const second = install(battle, strong);
     assert.equal(get(battle, first).status, "INACTIVE");
     assert.equal(get(battle, first).enabled, true);
     assert.equal(get(battle, second).status, "ACTIVE");
@@ -45,8 +47,8 @@ test("effect groups: replacing the selected rule withdraws old output and restor
 
 test("effect groups: equal priority retains the earlier identity across different definitions", () => {
     const battle = effectFixtureWork(unit());
-    const first = install(battle, definition("first"), 0, { group: group(2) });
-    const second = install(battle, definition("second"), 0, { group: group(2) });
+    const first = install(battle, definition("first", {}, { group: group(2) }));
+    const second = install(battle, definition("second", {}, { group: group(2) }));
     assert.equal(get(battle, first).status, "ACTIVE");
     assert.equal(get(battle, second).status, "INACTIVE");
     effect.end(battle, first);
@@ -55,8 +57,8 @@ test("effect groups: equal priority retains the earlier identity across differen
 
 test("effect groups: disabling the strongest rule does not select a weaker fallback", () => {
     const battle = effectFixtureWork(unit());
-    const weak = install(battle, attackBuff("weak", 20), 0, { group: group(1) });
-    const strong = install(battle, attackBuff("strong", 50), 0, { group: group(2) });
+    const weak = install(battle, attackBuff("weak", 20, { group: group(1) }));
+    const strong = install(battle, attackBuff("strong", 50, { group: group(2) }));
     effect.setEnabled(battle, strong, false);
     assert.equal(get(battle, strong).status, "INACTIVE");
     assert.equal(get(battle, weak).status, "INACTIVE");
@@ -69,24 +71,23 @@ test("effect groups: disabling the strongest rule does not select a weaker fallb
 test("effect groups: unrelated groups and ungrouped Effects provide their outputs together", () => {
     const battle = effectFixtureWork(unit());
     install(battle, attackBuff("plain", 5));
-    install(battle, attackBuff("one", 20), 0, { group: { id: "one", priority: 1 } });
-    install(battle, attackBuff("two", 30), 0, { group: { id: "two", priority: 1 } });
+    install(battle, attackBuff("one", 20, { group: { id: "one", priority: 1 } }));
+    install(battle, attackBuff("two", 30, { group: { id: "two", priority: 1 } }));
     assert.equal(resolveAttackPower(0, battle.battlefield.snapshot("draft")), 155);
 });
 
 test("effect groups: a stronger rule installed during withdrawal supersedes the outer selection", () => {
     const battle = effectFixtureWork(unit());
     let replacementRef;
-    const replacement = attackBuff("replacement", 300);
+    const replacement = attackBuff("replacement", 300, { group: group(3) });
     const weak = attackBuff("weak", 10, {
+        group: group(1),
         onDisable(context) {
-            replacementRef = effect.apply(context.battle, context.unit, replacement, {
-                group: group(3),
-            });
+            replacementRef = effect.install(context.battle, context.unit, replacement);
         },
     });
-    const weakRef = install(battle, weak, 0, { group: group(1) });
-    const middleRef = install(battle, attackBuff("middle", 100), 0, { group: group(2) });
+    const weakRef = install(battle, weak);
+    const middleRef = install(battle, attackBuff("middle", 100, { group: group(2) }));
     assert.equal(get(battle, weakRef).status, "INACTIVE");
     assert.equal(get(battle, middleRef).status, "INACTIVE");
     assert.equal(get(battle, replacementRef).status, "ACTIVE");

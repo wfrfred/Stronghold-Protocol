@@ -31,7 +31,7 @@ function ammoFixture(ammo = 31, ammoPerAttack = 1) {
   const definition = parseArknightsSkillLevel(ash, 1, ammo, ammoPerAttack).definition;
   const buff = attackBuff("ammo-fixture-attack", 100);
   resources.skills.register({ definition, activate: (context) => {
-    const installed = effects.apply(context.battle, getUnit(context.battle, context.unitId), buff, { source: 1, scopes: [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }] });
+    const installed = effects.install(context.battle, getUnit(context.battle, context.unitId), buff, { source: 1, scopes: [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }] });
     assert.ok(installed);
     return { type: "ACTIVATED" };
   } });

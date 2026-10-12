@@ -30,7 +30,7 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, program } = {}) {
     spCost: 1, initialSp: 1, durationTicks: null, ammo,
   });
   const buff = attackBuff("runtime-ammo-attack", 100, {
-    onApply: (context) => {
+    onInstall: (context) => {
       if (interrupt) transitionUnit(context.battle, context.unit.id, current => setBeforeReleaseHook(current, {
         id: "ammo-interrupt", enabled: () => true,
         invoke: () => ({ type: "INTERRUPT", recoveryTicks: 15 }),
@@ -41,7 +41,7 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, program } = {}) {
     },
   });
   resources.skills.register({ definition: skill, activate: (context) => {
-    const installed = effects.apply(context.battle, getUnit(context.battle, context.unitId), buff, {
+    const installed = effects.install(context.battle, getUnit(context.battle, context.unitId), buff, {
       source: context.unitId, scopes: [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }],
     });
     assert.ok(installed);

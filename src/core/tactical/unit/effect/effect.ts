@@ -14,7 +14,7 @@ export type Ref = Extract<Lifetime, { type: "EFFECT" }>;
 
 export type Scope = Lifetime | { readonly type: "TICK"; readonly tick: number };
 
-export type Status = "ACTIVE" | "INACTIVE" | "FINISHED";
+export type Status = "INSTALLING" | "INACTIVE" | "ACTIVE" | "ENDING";
 
 export interface Group {
     readonly id: string;
@@ -23,11 +23,10 @@ export interface Group {
 
 export interface Instance {
     readonly id: Id;
-    readonly definition: { readonly id: string };
+    readonly definition: { readonly id: string; readonly group?: Group };
     readonly state: object;
     readonly source: UnitId | null;
     readonly scopes: readonly Scope[];
-    readonly group?: Group;
     readonly enabled: boolean;
     readonly status: Status;
 }

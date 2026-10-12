@@ -206,11 +206,11 @@ test("draft removal maintains support, blocking and lifetime projections before 
     ]);
     battlefield.apply();
     const published = battlefield.snapshot("state");
-    const finished = { ...effect, status: "FINISHED" };
+    const ending = { ...effect, status: "ENDING" };
     const facts = battlefield.advance([
         {
             type: "UPDATE_UNIT",
-            unit: { ...blocked, effects: { ...blocked.effects, instances: [finished] } },
+            unit: { ...blocked, effects: { ...blocked.effects, instances: [ending] } },
         },
         { type: "REMOVE_UNIT", unitId: 1, reason: "RETREAT" },
     ]);
@@ -223,7 +223,7 @@ test("draft removal maintains support, blocking and lifetime projections before 
     assert.equal(battlefield.snapshot("draft").supportOf(2), undefined);
     assert.equal(battlefield.snapshot("draft").blockerOf(3), undefined);
     assert.deepEqual(battlefield.snapshot("draft").blockedBy(1), []);
-    assert.equal(battlefield.snapshot("draft").getUnit(3).effects.instances[0].status, "FINISHED");
+    assert.equal(battlefield.snapshot("draft").getUnit(3).effects.instances[0].status, "ENDING");
     assert.equal(
         battlefield.snapshot("draft").effectLifetimes.dependents.get("UNIT:1")?.size ?? 0,
         0,

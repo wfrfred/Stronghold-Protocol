@@ -56,7 +56,7 @@ test("Buff contribution integration: the native Astesia DEF facet merges layers,
         },
     };
     const program = contributionEffect(raw.buffKey, { stackCount: 1, defenseRatio: 0.2 }, output, {
-        onApply: () => {
+        onInstall: () => {
             starts++;
         },
     });
@@ -70,7 +70,7 @@ test("Buff contribution integration: the native Astesia DEF facet merges layers,
     const original = work.battlefield.snapshot("draft");
     const apply = (source, defenseRatio, expiresAtTick, tick) => {
         const current = getUnit(work, 0).effects?.instances.find(
-            (instance) => instance.definition === program && instance.status !== "FINISHED",
+            (instance) => instance.definition === program && instance.status !== "ENDING",
         );
         const plan = policy.plan(
             current === undefined
@@ -80,10 +80,10 @@ test("Buff contribution integration: the native Astesia DEF facet merges layers,
             tick,
         );
         if (plan.type === "INSTALL") {
-            effects.apply(at(work, tick), getUnit(work, 0), program, {
+            effects.install(at(work, tick), getUnit(work, 0), program, {
                 source,
                 scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }],
-                initialState: { stackCount: 1, defenseRatio },
+                state: { stackCount: 1, defenseRatio },
             });
         } else if (plan.type === "REFRESH") {
             const address = { type: "EFFECT", unitId: 0, effectId: current.id };
@@ -175,7 +175,7 @@ test("Buff contribution integration: only effective layer growth resamples the r
             definition: { id: "receiver", offense: { attack: 100 } },
         }),
     );
-    const address = effects.apply(work, getUnit(work, 0), program, {
+    const address = effects.install(work, getUnit(work, 0), program, {
         source: 10,
         scopes: [{ type: "TICK", tick: 10 }],
     });

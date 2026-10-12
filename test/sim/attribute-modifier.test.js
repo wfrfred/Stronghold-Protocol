@@ -278,7 +278,7 @@ test("attribute modifiers: native Mire percentages affect existing ASPD and norm
         },
     });
     const installed = effectFixtureWork(unit);
-    effects.apply(installed, getUnit(installed, 0), program);
+    effects.install(installed, getUnit(installed, 0), program);
     const receiver = getUnit(installed, 0);
     assert.equal(
         resolveAttackSpeed(receiver.definition.action, receiver.action, {
@@ -336,13 +336,13 @@ test("attribute modifiers: inspiration samples belong to the Effect input and re
     const work = effectFixtureWork(unit(0, 100), unit(1, 20));
     const resolve = (work, id) => resolveAttackPower(id, battlefieldView(work));
     const sampleInput = (work) => ({ sourceAttack: resolve(work, 0), ratio: 0.6 });
-    const ref = effects.apply(work, getUnit(work, 1), program, {
+    const ref = effects.install(work, getUnit(work, 1), program, {
         source: 0,
-        initialState: sampleInput(work),
+        state: sampleInput(work),
     });
     assert.equal(resolve(work, 1), 80);
     const copied = getUnit(work, 1);
-    effects.apply(work, getUnit(work, 0), amplify);
+    effects.install(work, getUnit(work, 0), amplify);
     assert.equal(resolve(work, 0), 200);
     assert.equal(resolve(work, 1), 80);
     effects.setEnabled(work, ref, false);

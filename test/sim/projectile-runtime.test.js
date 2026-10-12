@@ -18,7 +18,7 @@ import { createProjectileDefinition } from "../../dist/core/tactical/battlefield
 import { createBattlefieldRuntime } from "../../dist/core/tactical/battlefield/runtime.js";
 import { advanceProjectiles, stopProjectile } from "../../dist/core/tactical/battlefield/projectile/settlement.js";
 import { withProjectileOperations } from "../../dist/core/tactical/battlefield/projectile/operations.js";
-import { apply as applyEffect } from "../../dist/core/tactical/unit/effect/operations.js";
+import { install as installEffect } from "../../dist/core/tactical/unit/effect/operations.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import * as modifier from "../../dist/core/tactical/unit/contribution/value.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
@@ -415,7 +415,7 @@ test("projectile runtime: current ATK and cached-only ATK stay distinct, while a
             { type: "EXECUTE", run: (context) => {
               launch(context, services, normal);
               launch(context, services, cached);
-              applyEffect(context.work, getUnit(context.work, context.sourceUnitId), bonus, {
+              installEffect(context.work, getUnit(context.work, context.sourceUnitId), bonus, {
                 source: context.sourceUnitId,
               });
 
@@ -496,7 +496,7 @@ test("projectile runtime: contact history prevents stop fallback damage while sy
   const attached = {
     id: "contact-before-damage",
     initialize: () => ({}),
-    onApply(context) {
+    onInstall(context) {
       const ref = context.ref;
       transitionUnit(context.battle, ref.unitId, unit => setDamageHook(unit, {
         id: `effect:${ref.effectId}`,
@@ -516,7 +516,7 @@ test("projectile runtime: contact history prevents stop fallback damage while sy
     contact: (context) => {
       trace.push({ stage: "CONTACT", hitUnitIds: [...context.projectile.hitUnitIds] });
       context.operations.updateState((state) => ({ contacts: state.contacts + 1 }));
-      const installed = applyEffect(context.battle, context.facts.getUnit(context.targetUnitId), attached, {
+      const installed = installEffect(context.battle, context.facts.getUnit(context.targetUnitId), attached, {
         source: context.projectile.source,
       });
       assert.ok(installed);

@@ -41,7 +41,7 @@ import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { createBattleState, appendEvents, getUnit, registerUnit } from '../../dist/core/tactical/battle/execution/context.js';
 import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
 import { createActionDefinition } from '../../dist/core/tactical/unit/capability/action/capability.js';
-import { apply as applyEffect } from '../../dist/core/tactical/unit/effect/operations.js';
+import { install as installEffect } from '../../dist/core/tactical/unit/effect/operations.js';
 import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
 
 const approx = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
@@ -1178,7 +1178,7 @@ test('core battle propagates nested settlement errors without publishing battlef
   const resources = new CombatResources();
   const effect = {
     id: 'nested-failure-effect', initialize: () => ({}),
-    onApply: context => {
+    onInstall: context => {
       resources.settleDamage(context.battle, { sourceUnitId: 0, targetUnitId: 1, damageType: 'TRUE', operands: createDamageOperands(7), tick: context.tick });
       assert.equal(getUnit(activeState, 1).vitality.hp, 93);
       assert.equal(getUnit(activeState, 2).definition.id, 'nested-created');
@@ -1213,7 +1213,7 @@ test('core battle propagates nested settlement errors without publishing battlef
         registerUnit(context.work, unit);
         context.work.execution = { ...context.work.execution, nextUnitId: unit.id + 1 };
         appendEvents(context.work, [{ type: 'UNIT_DEPLOYED', unitId: unit.id, position: unit.position, tick: context.tick }]);
-        applyEffect(context.work, getUnit(context.work, 1), effect, { source: 0 });
+        installEffect(context.work, getUnit(context.work, 1), effect, { source: 0 });
       } },
       { type: 'WAIT', resolve: () => ({ type: 'FOR_TICKS', ticks: 2 }), allowNewAction: false },
     ],
@@ -2241,8 +2241,9 @@ test('core visibility: commands from different domains execute in phase order be
   assert.deepEqual(step.events.filter(event => event.type === 'UNIT_DEPLOYED' || event.type === 'UNIT_REMOVED'), [
     { type: 'UNIT_DEPLOYED', unitId: 1, position: [1, 0], tick: 0 },
     { type: 'UNIT_REMOVED', unitId: 0, reason: 'SCRIPT', tick: 0,
-      unit: unitAtRemoval },
+      unit: { ...unitAtRemoval, lifecycle: 'LEAVING' } },
   ]);
+  assert.equal(unitAtRemoval.lifecycle, 'PRESENT');
   const snapshot = runtime.snapshot();
   assert.deepEqual(snapshot.units.map(unit => [unit.id, unit.position]), [[1, [1, 0]]]);
   assert.deepEqual(snapshot.predefinedPresence, []);

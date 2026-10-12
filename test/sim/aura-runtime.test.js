@@ -106,7 +106,7 @@ test("aura runtime: predefined, deployment and spawning join before the same tic
     const resources = new CombatResources();
     const starts = [];
     const receiver = attackEffect("registration-receiver", {
-        onApply: (context) => {
+        onInstall: (context) => {
             starts.push([context.ref.unitId, context.tick]);
         },
     });
@@ -128,7 +128,7 @@ test("aura runtime: predefined, deployment and spawning join before the same tic
     };
     const hostState = effectFixtureWork(auraUnit(0));
     for (const effect of [observer, aura])
-        effects.apply(hostState, getUnit(hostState, 0), effect, { source: 0 });
+        effects.install(hostState, getUnit(hostState, 0), effect, { source: 0 });
     const hostUnit = getUnit(hostState, 0);
     const host = {
         definition: hostUnit.definition,
@@ -245,7 +245,7 @@ test("aura runtime: callback failure propagates the original error without publi
     const attempts = [];
     let receiver;
     receiver = attackEffect("fallible-aura-receiver", {
-        onApply: (context) => {
+        onInstall: (context) => {
             context.setState((state) => ({ ...state, starts: 1 }));
             if (context.ref.unitId === 2) {
                 attempts.push(context.ref);

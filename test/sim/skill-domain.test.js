@@ -142,7 +142,7 @@ test("content refusal retains effect prefix and allocated identities while refun
   let ref;
   const f = fixture({}, {
     activate: (context) => {
-      assert.equal(effects.apply(context.battle, getUnit(context.battle, context.unitId), ref, { source: 1, scopes: [] }) !== undefined, true);
+      assert.equal(effects.install(context.battle, getUnit(context.battle, context.unitId), ref, { source: 1, scopes: [] }) !== undefined, true);
       return { type: "REJECTED", reason: "later prerequisite unavailable" };
     },
   });
@@ -165,7 +165,7 @@ test("content refusal closes activation scopes while independent effects survive
         [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }],
         [],
       ]) {
-        assert.equal(effects.apply(context.battle, getUnit(context.battle, context.unitId), ref, { source: 1, scopes }) !== undefined, true);
+        assert.equal(effects.install(context.battle, getUnit(context.battle, context.unitId), ref, { source: 1, scopes }) !== undefined, true);
       }
       return { type: "REJECTED", reason: "content prerequisite" };
     },
@@ -184,7 +184,7 @@ test("zero-duration activation closes its scope before skill finish content", ()
   const observed = [];
   const f = fixture({ durationTicks: 0 }, {
     activate: (context) => {
-      assert.equal(effects.apply(context.battle, getUnit(context.battle, context.unitId), ref, {
+      assert.equal(effects.install(context.battle, getUnit(context.battle, context.unitId), ref, {
         source: context.unitId,
         scopes: [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }],
       }) !== undefined, true);
@@ -192,7 +192,7 @@ test("zero-duration activation closes its scope before skill finish content", ()
     },
     finish: (context) => {
       observed.push({ active: context.facts.getUnit(context.unitId).skill.active, effects: context.facts.getUnit(context.unitId).effects.instances.length });
-      assert.equal(effects.apply(context.battle, getUnit(context.battle, context.unitId), ref, {
+      assert.equal(effects.install(context.battle, getUnit(context.battle, context.unitId), ref, {
         source: context.unitId,
         scopes: [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }],
       }) === undefined, true);
@@ -210,7 +210,7 @@ test("skill finish rejects binding a surviving independent effect to its closed 
   let independent;
   const f = fixture({}, {
     activate: (context) => {
-      const installed = effects.apply(context.battle, getUnit(context.battle, context.unitId), program, { source: 1, scopes: [] });
+      const installed = effects.install(context.battle, getUnit(context.battle, context.unitId), program, { source: 1, scopes: [] });
       assert.ok(installed);
       independent = installed;
       return { type: "ACTIVATED" };
@@ -247,8 +247,8 @@ for (const trigger of ["SKILL", "EFFECT", "TICK"]) {
     const f = fixture({}, {
       activate(context) {
         const unit = getUnit(context.battle, context.unitId);
-        parentRef = effects.apply(context.battle, unit, parent);
-        dependentRef = effects.apply(context.battle, unit, dependent, {
+        parentRef = effects.install(context.battle, unit, parent);
+        dependentRef = effects.install(context.battle, unit, dependent, {
           scopes: [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }, parentRef, { type: "TICK", tick: 5 }],
         });
         return { type: "ACTIVATED" };

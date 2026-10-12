@@ -82,7 +82,7 @@ const output = (value) => ({
     value,
 });
 const install = (work, effect, expiresAtTick = null) =>
-    effects.apply(work, getUnit(work, 0), effect, {
+    effects.install(work, getUnit(work, 0), effect, {
         source: 7,
         scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }],
     });
@@ -159,7 +159,7 @@ test("blocking capacity: explicit refresh and lifecycle output changes preserve 
     assert.equal(capacity(work), 3);
     effects.setEnabled(work, effectAddress, true);
     assert.equal(capacity(work), 0);
-    effects.apply(work, getUnit(work, 0), maxHpBuff("hp", 100));
+    effects.install(work, getUnit(work, 0), maxHpBuff("hp", 100));
     assert.equal(getUnit(work, 0).vitality.hp, 100);
     effects.end(work, effectAddress);
     assert.equal(capacity(work), 3);

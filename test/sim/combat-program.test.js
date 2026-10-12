@@ -520,9 +520,9 @@ test("combat program: retreat cleans lifetime-owned effects without treating pro
   const otherOwner = initializeUnit({ id: 2, definition: { id: "other-owner" }, position: [2, 0] });
   let seeded = initializeUnit({ id: 1, definition, position: [1, 0] });
   const installing = workWith(owner, seeded, otherOwner);
-  effects.apply(installing, seeded, program, { source: 0, scopes: [{ type: "UNIT", unitId: 0 }] });
-  effects.apply(installing, seeded, neutral, { source: 0 });
-  effects.apply(installing, seeded, invisible, { source: 0, scopes: [{ type: "UNIT", unitId: 2 }] });
+  effects.install(installing, seeded, program, { source: 0, scopes: [{ type: "UNIT", unitId: 0 }] });
+  effects.install(installing, seeded, neutral, { source: 0 });
+  effects.install(installing, seeded, invisible, { source: 0, scopes: [{ type: "UNIT", unitId: 2 }] });
   seeded = getUnit(installing, seeded.id);
   const removed = workWith(owner, seeded, otherOwner);
   removeUnitWithEffects(removed, 0, "RETREAT", resources, 0);
@@ -639,7 +639,7 @@ test("combat program: immediate execution cleans owned Effects and cancels succe
     program: [
       { type: "EXECUTE", run: (context) => {
         observed.push(["install", context.executionId]);
-        effects.apply(context.work, getUnit(context.work, 1), marker, {
+        effects.install(context.work, getUnit(context.work, 1), marker, {
           source: 0, scopes: [{ type: "ACTION", executionId: context.executionId }],
         });
       } },

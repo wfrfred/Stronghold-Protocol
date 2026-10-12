@@ -6,7 +6,7 @@ import { createShapeGeometry, type RangeGeometry } from "../core/tactical/geomet
 import * as modifier from "../core/tactical/unit/contribution/value.js";
 import { compileAction } from "../core/tactical/unit/capability/action/compile.js";
 import { hasAllegiance } from "../core/tactical/unit/capability/allegiance.js";
-import { apply } from "../core/tactical/unit/effect/operations.js";
+import { install } from "../core/tactical/unit/effect/operations.js";
 import type { Definition } from "../core/tactical/unit/effect/definition.js";
 import {
     hasOffense,
@@ -87,7 +87,7 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
                 const target = context.facts.getUnit(context.targetUnitId);
 
                 if (target !== undefined && hasStatus(target)) {
-                    apply(context.battle, target, marker, {
+                    install(context.battle, target, marker, {
                         source: context.projectile.source,
                         scopes: [{ type: "TICK", tick: context.tick + 45 }],
                     });
@@ -150,7 +150,7 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
                             contactRange,
                             stopDelayTicks: 6,
                         });
-                        apply(context.work, source, boost, {
+                        install(context.work, source, boost, {
                             source: source.id,
                             scopes: [{ type: "TICK", tick: context.tick + 70 }],
                         });

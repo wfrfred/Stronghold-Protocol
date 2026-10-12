@@ -113,7 +113,7 @@ function statusEffect(id, flags) {
 }
 
 function installOwned(resources, content, context, unitId = 1) {
-  return effects.apply(context.work, getUnit(context.work, unitId), content, {
+  return effects.install(context.work, getUnit(context.work, unitId), content, {
     source: context.sourceUnitId, scopes: [{ type: "ACTION", executionId: context.executionId }],
   });
 }
@@ -284,7 +284,7 @@ test("action process: install then query binds current targets and the next segm
   const segments = [
     {
       type: "EXECUTE",
-      run: (context) => {effects.apply(context.work, getUnit(context.work, 1), invisible, { source: 0, scopes: [] });},
+      run: (context) => {effects.install(context.work, getUnit(context.work, 1), invisible, { source: 0, scopes: [] });},
     },
     {
       type: "EXECUTE",

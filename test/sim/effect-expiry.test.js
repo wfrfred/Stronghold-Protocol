@@ -30,7 +30,7 @@ test("effect deadlines: one time advance ticks the active Effect then ends it at
     effect.advance(at(battle, 2));
     assert.equal(get(battle, ref), undefined);
     effect.advance(at(battle, 3));
-    assert.deepEqual(trace, [["tick", 1], ["tick", 2], ["disable"], ["end", "FINISHED"]]);
+    assert.deepEqual(trace, [["tick", 1], ["tick", 2], ["disable"], ["end", "ENDING"]]);
 });
 
 test("effect deadlines: layered content renews the same identity and ends only after its last layer", () => {

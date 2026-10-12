@@ -148,7 +148,7 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
             const paralysis: Definition<{ remaining: number }, Action> = {
                 id: `${prefix}/paralysis`,
                 initialize: () => ({ remaining: profile.paralysisStacks }),
-                onApply: (context) => {
+                onInstall: (context) => {
                     const effectId = context.self.id;
                     updateUnit(
                         context.battle,
@@ -176,7 +176,7 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                                 const recoveryTicks = TICKS_PER_SECOND / 2;
 
                                 if (hasStatus(context.unit)) {
-                                    effects.apply(context.battle, context.unit, paralysisStun, {
+                                    effects.install(context.battle, context.unit, paralysisStun, {
                                         source: null,
                                         scopes: [
                                             { type: "TICK", tick: context.tick + recoveryTicks },
@@ -232,19 +232,19 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                         hasDefense(unit) &&
                         (profile.defReduction !== 0 || profile.resReduction !== 0)
                     ) {
-                        effects.apply(context.battle, unit, reduction, {
+                        effects.install(context.battle, unit, reduction, {
                             ...input,
                             scopes: profile.defReduction > 0 ? [] : input.scopes,
                         });
                     }
                     if (hasStatus(unit) && flags.length > 0) {
-                        effects.apply(context.battle, unit, status, input);
+                        effects.install(context.battle, unit, status, input);
                     }
                     if (hasOffense(unit) && profile.attackReductionRatio > 0) {
-                        effects.apply(context.battle, unit, weakness, input);
+                        effects.install(context.battle, unit, weakness, input);
                     }
                     if (profile.paralysisStacks > 0 && hasAction(unit)) {
-                        effects.apply(context.battle, unit, paralysis, {
+                        effects.install(context.battle, unit, paralysis, {
                             ...input,
                             scopes: [],
                         });
@@ -280,7 +280,7 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                             const instance = unit.effects.instances.find(
                                 (candidate) =>
                                     candidate.definition === weakness &&
-                                    candidate.status !== "FINISHED" &&
+                                    candidate.status !== "ENDING" &&
                                     candidate.scopes.some(
                                         (scope) =>
                                             scope.type === "TICK" &&

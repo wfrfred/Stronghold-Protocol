@@ -80,7 +80,7 @@ function register(resources, speed = 100, time = modifier.create()) {
 }
 
 function install(work, program, resources, tick = 0, expiresAtTick = null) {
-    effects.apply({ ...work, tick }, getUnit(work, 0), program, {
+    effects.install({ ...work, tick }, getUnit(work, 0), program, {
         source: null, scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }],
     });
     return work;

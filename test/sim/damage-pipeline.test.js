@@ -35,10 +35,10 @@ import {
 } from "../../dist/core/tactical/unit/capability/vitality/damage/rules.js";
 import { getUnit } from "../../dist/core/tactical/battle/execution/context.js";
 
-const rule = (id, stage, invoke, priority = 0) =>
+const rule = (id, stage, invoke, priority = 0, properties = {}) =>
     damageEffect(id, {}, [
         { stage, priority, invoke: (context, _self, value) => invoke(context, value) },
-    ]);
+    ], properties);
 
 test("damage pipeline: numeric contributions retain four distinct positions and clamp the direct multiplier", () => {
     assert.equal(
@@ -206,17 +206,17 @@ test("damage pipeline: Effect overwriting gates hooks while retaining suppressed
         "weak",
         "reception",
         multiplyDamage(() => 2),
+        0,
+        { group: { id: "fragile", priority: 2 } },
     );
     const strong = rule(
         "strong",
         "reception",
         multiplyDamage(() => 3),
-    );
-    const target = attach(
-        attach(unit(2), weak, { group: { id: "fragile", priority: 2 } }),
-        strong,
+        0,
         { group: { id: "fragile", priority: 3 } },
     );
+    const target = attach(attach(unit(2), weak), strong);
     const battle = workFor(unit(1), target);
     assert.equal(resolveDamage(battle, request(100), new CombatResources()).hpLoss, 300);
     assert.deepEqual(
@@ -240,17 +240,17 @@ test("damage pipeline: Contribution groups and Effect groups have separate respo
         "weak",
         "reception",
         multiplyDamage(() => 2),
+        0,
+        { group: { id: "shared", priority: 1 } },
     );
     const strong = rule(
         "strong",
         "reception",
         multiplyDamage(() => 3),
-    );
-    const target = attach(
-        attach(attach(unit(2), attack), weak, { group: { id: "shared", priority: 1 } }),
-        strong,
+        0,
         { group: { id: "shared", priority: 2 } },
     );
+    const target = attach(attach(attach(unit(2), attack), weak), strong);
     const battle = workFor(unit(1), target);
     assert.equal(resolveAttackPower(2, view(battle)), 200);
     assert.equal(resolveDamage(battle, request(100), new CombatResources()).hpLoss, 300);

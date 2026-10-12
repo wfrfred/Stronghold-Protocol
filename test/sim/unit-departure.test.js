@@ -61,7 +61,7 @@ function fixture() {
         "consume-on-damage",
         { consumed: 0 },
         {
-            onApply(ctx) {
+            onInstall(ctx) {
                 const ref = ctx.ref;
                 transitionUnit(ctx.battle, ref.unitId, (unit) =>
                     setHook(unit, {
@@ -104,7 +104,7 @@ function fixture() {
     };
     const work = createBattleState(fixtureBattlefield(battlefield), undefined);
     for (const id of [0, 1]) activateSkill(work, { unitId: id, tick: 0 }, resources);
-    effects.apply(work, getUnit(work, 2), counter);
+    effects.install(work, getUnit(work, 2), counter);
     work.battlefield.apply();
     return { battlefield: work.battlefield, resources, execution: work.execution };
 }
@@ -317,10 +317,10 @@ test("effect terminal callback can retire its host and settle remote Action and 
             },
         },
     );
-    effects.apply(battle, getUnit(battle, 1), actionDependent, {
+    effects.install(battle, getUnit(battle, 1), actionDependent, {
         scopes: [{ type: "ACTION", executionId: 0 }],
     });
-    effects.apply(battle, getUnit(battle, 1), skillDependent, {
+    effects.install(battle, getUnit(battle, 1), skillDependent, {
         scopes: [{ type: "SKILL", unitId: 0, activationId: 0 }],
     });
     const content = definition(
@@ -342,7 +342,7 @@ test("effect terminal callback can retire its host and settle remote Action and 
             },
         },
     );
-    const ref = effects.apply(battle, getUnit(battle, 0), content);
+    const ref = effects.install(battle, getUnit(battle, 0), content);
     effects.end(battle, ref);
     assert.equal(getUnit(battle, 0), undefined);
     assert.deepEqual(getUnit(battle, 1).effects.instances, []);

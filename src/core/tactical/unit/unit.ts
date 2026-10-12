@@ -7,6 +7,8 @@ export type UnitId = number;
 
 export type UnitDefinitionId = string;
 
+export type UnitLifecycle = "PRESENT" | "LEAVING";
+
 export interface UnitDefinition {
     readonly id: UnitDefinitionId;
 }
@@ -28,6 +30,7 @@ export type NormalizedUnitDefinition<
 
 export interface Unit<D extends UnitDefinition = UnitDefinition> extends Partial<CapabilityStates> {
     readonly id: UnitId;
+    readonly lifecycle: UnitLifecycle;
     readonly definition: ImmutableData<D>;
     readonly position: WorldPosition;
     readonly effects: EffectState;

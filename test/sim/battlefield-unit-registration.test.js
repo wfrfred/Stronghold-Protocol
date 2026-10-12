@@ -205,6 +205,7 @@ test("unit snapshots copy partial composition without enforcing battlefield regi
     const partial = {
         effects: emptyEffects(),
         id: unit.id,
+        lifecycle: unit.lifecycle,
         definition: unit.definition,
         position: unit.position,
     };
@@ -231,7 +232,7 @@ import type { BattlefieldMap } from ${sourceModule("battlefield/map/map")};
 import { createBattlefieldRuntime } from ${sourceModule("battlefield/runtime")};
 declare const definition: ImmutableData<ActingUnitDefinition>;
 declare const map: BattlefieldMap;
-const unit: Unit<ActingUnitDefinition> = { id: 1, definition, position: [0, 0], effects: empty() };
+const unit: Unit<ActingUnitDefinition> = { id: 1, definition, position: [0, 0], effects: empty(), lifecycle: 'PRESENT' };
 const battlefield = createBattlefieldRuntime({ map });
 battlefield.advance([{ type: 'REGISTER_UNIT', unit }]);
 const custom = createBattlefieldRuntime<Unit<ActingUnitDefinition>>({ map });

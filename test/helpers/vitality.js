@@ -63,7 +63,7 @@ function hookEffect(domain, id, initial, entries, callbacks = {}) {
     let content;
     content = definition(id, initial, {
         ...callbacks,
-        onApply(context) {
+        onInstall(context) {
             const ids = entries.map(
                 (entry, index) => `${context.ref.unitId}:${context.ref.effectId}:${index}`,
             );
@@ -92,7 +92,7 @@ function hookEffect(domain, id, initial, entries, callbacks = {}) {
                     unit,
                 ),
             );
-            callbacks.onApply?.(context);
+            callbacks.onInstall?.(context);
         },
         onEnd(context) {
             transitionUnit(context.battle, context.ref.unitId, (unit) =>

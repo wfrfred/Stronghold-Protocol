@@ -68,10 +68,12 @@ test("MaxHP outputs coordinate each setter before its lifecycle callback", () =>
 });
 test("MaxHP competing effects remove old outputs before installing new and restore the retained candidate", () => {
     const battle = effectFixtureWork(receiver());
-    const first = install(battle, maxHpBuff("weak", 100), 1, { group: { id: "hp", priority: 1 } });
-    const second = install(battle, maxHpBuff("strong", 200), 1, {
+    const first = install(battle, maxHpBuff("weak", 100, {
+        group: { id: "hp", priority: 1 },
+    }), 1);
+    const second = install(battle, maxHpBuff("strong", 200, {
         group: { id: "hp", priority: 2 },
-    });
+    }), 1);
     assert.deepEqual(pair(battle), [150, 300]);
     effects.end(battle, second);
     assert.deepEqual(pair(battle), [100, 200]);
@@ -82,7 +84,7 @@ test("MaxHP tick deadline and callback successor use the latest HP ratio", () =>
     const battle = effectFixtureWork(receiver());
     const successor = maxHpBuff("successor", 50);
     const content = maxHpBuff("expiring", 100, {
-        onEnd: (ctx) => effects.apply(ctx.battle, ctx.unit, successor),
+        onEnd: (ctx) => effects.install(ctx.battle, ctx.unit, successor),
     });
     install(battle, content, 1, { scopes: [{ type: "TICK", tick: 1 }] });
     transitionUnit(battle, 1, (unit) => ({ ...unit, vitality: { ...unit.vitality, hp: 40 } }));

@@ -44,7 +44,7 @@ function scenario(skill, { targets = 1, content, compile } = {}) {
   const buff = attackBuff('skill/attack', 100);
   const fault = { enabled: false };
   resources.skills.register({ definition: skill, activate: content ?? ((context) => {
-    const installed = effects.apply(context.battle, getUnit(context.battle, context.unitId), buff, {
+    const installed = effects.install(context.battle, getUnit(context.battle, context.unitId), buff, {
       source: context.unitId, scopes: [{ type: 'SKILL', unitId: context.unitId, activationId: context.activationId }],
     });
     if (fault.enabled) { throw new Error('skill fault'); }

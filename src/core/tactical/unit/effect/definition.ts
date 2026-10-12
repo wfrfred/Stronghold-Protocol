@@ -1,6 +1,6 @@
 import type { BattleState } from "../../battle/execution/context.js";
 import type { Unit } from "../unit.js";
-import type { Effect, Ref } from "./effect.js";
+import type { Effect, Group, Ref } from "./effect.js";
 
 export interface Context<S extends object, H extends object = object> {
     readonly battle: BattleState;
@@ -18,8 +18,9 @@ export interface EndContext<S extends object, H extends object = object> extends
 
 export interface Definition<S extends object, H extends object = object> {
     readonly id: string;
+    readonly group?: Group;
     readonly initialize: () => S;
-    readonly onApply?: (context: Context<S, H>) => void;
+    readonly onInstall?: (context: Context<S, H>) => void;
     readonly onEnable?: (context: Context<S, H>) => void;
     readonly onDisable?: (context: Context<S, H>) => void;
     readonly onTick?: (context: Context<S, H>) => void;

@@ -1,10 +1,9 @@
 import { endScope } from "../../unit/effect/operations.js";
-import { key } from "../../unit/effect/effect.js";
 import type { UnitId } from "../../unit/unit.js";
 import type { BattlefieldRemovalReason } from "../../battlefield/contract.js";
 import type { StoppedSkillActivation } from "../../unit/capability/skill/execution.js";
 import type { ActionExecutionSignal } from "../../unit/capability/action/process.js";
-import { appendEvents, getUnit, removeUnit, type BattleState } from "./context.js";
+import { appendEvents, getUnit, removeUnit, updateUnit, type BattleState } from "./context.js";
 
 export interface UnitLifecycleResources {
     readonly stopSkillActivation: (
@@ -36,12 +35,13 @@ export function removeUnitWithEffects(
     tick: number,
 ): void {
     const lifetime = { type: "UNIT" as const, unitId };
+    const unit = getUnit(battle, unitId);
 
-    if (getUnit(battle, unitId) === undefined || battle.closedLifetimes.has(key(lifetime))) {
+    if (unit === undefined || unit.lifecycle === "LEAVING") {
         return;
     }
 
-    battle.closedLifetimes.add(key(lifetime));
+    updateUnit(battle, { ...unit, lifecycle: "LEAVING" });
     const actions = battle.actionExecutions?.forSource(unitId) ?? [];
     const stopped = resources.stopSkillActivation(battle, unitId, tick);
 

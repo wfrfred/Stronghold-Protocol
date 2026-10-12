@@ -13,7 +13,7 @@ export interface UnitTransition {
 }
 
 function relationKeys(instance: Instance | undefined): readonly string[] {
-    return instance === undefined || instance.status === "FINISHED"
+    return instance === undefined || instance.status === "ENDING"
         ? []
         : [
               ...new Set(
@@ -74,7 +74,7 @@ export function derive(index: Index, transitions: readonly UnitTransition[]): In
             before === after ||
             (before !== undefined &&
                 before.scopes === after?.scopes &&
-                (before.status === "FINISHED") === (after.status === "FINISHED"))
+                (before.status === "ENDING") === (after.status === "ENDING"))
         ) {
             return;
         }

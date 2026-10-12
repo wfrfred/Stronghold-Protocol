@@ -29,9 +29,9 @@ export function effectFixtureWork(...units) {
     );
 }
 
-export function installFixtureEffect(unit, definition, input = {}, tick = 0) {
+export function installFixtureEffect(unit, definition, initial = {}, tick = 0) {
     const state = effectFixtureWork(unit);
-    effects.apply({ ...state, tick }, unit, definition, input);
+    effects.install({ ...state, tick }, unit, definition, initial);
     return getUnit(state, unit.id);
 }
 
@@ -45,9 +45,9 @@ export function install(
     state,
     definition,
     unitId = state.battlefield.snapshot("draft").unitIds[0],
-    input = {},
+    initial = {},
 ) {
-    return effects.apply(state, getUnit(state, unitId), definition, input);
+    return effects.install(state, getUnit(state, unitId), definition, initial);
 }
 
 export function at(state, tick) {

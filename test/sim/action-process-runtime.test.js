@@ -368,7 +368,7 @@ test("action runtime: failed continuation publishes no progress, sample, settlem
             program: [
               {
                 type: "EXECUTE",
-                run: (context) => {effects.apply(context.work, getUnit(context.work, 0), marker, {
+                run: (context) => {effects.install(context.work, getUnit(context.work, 0), marker, {
                     source: 0, scopes: [{ type: "ACTION", executionId: context.executionId }],
                   });},
               },
@@ -428,7 +428,7 @@ test("action runtime: a throwing Effect finish after nested host death does not 
       return {
         ...compiled,
         program: [
-          { type: "EXECUTE", run: context => {effects.apply(context.work, getUnit(context.work, 0), terminal, {
+          { type: "EXECUTE", run: context => {effects.install(context.work, getUnit(context.work, 0), terminal, {
               source: 0, scopes: [{ type: "ACTION", executionId: context.executionId }],
             });} },
           { type: "WAIT", allowNewAction: false, resolve: () => ({ type: "FOR_TICKS", ticks: 10 }) },

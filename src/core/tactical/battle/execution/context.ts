@@ -32,7 +32,6 @@ export interface BattleState {
     readonly registeredUnitIds: UnitId[];
     readonly removedUnits: BattlefieldChangeResult["removedUnits"][number][];
     readonly closedLifetimes: Set<string>;
-    readonly installingEffects: Set<string>;
     /** Same-unit nested Damage/Healing calls share these candidate snapshots. */
     readonly activeVitalityHookSnapshots: Map<
         UnitId,
@@ -54,7 +53,6 @@ export function createBattleState(
         registeredUnitIds: [],
         removedUnits: [],
         closedLifetimes: new Set(),
-        installingEffects: new Set(),
         activeVitalityHookSnapshots: new Map(),
         ...(actionExecutions === undefined ? {} : { actionExecutions }),
     };

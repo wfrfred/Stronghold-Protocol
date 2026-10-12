@@ -93,7 +93,7 @@ test("effect time: a new Effect waits for the next advance while ended candidate
                 seen.push("first");
                 if (context.self.state.spawned) return;
                 context.setState({ spawned: true });
-                effect.apply(context.battle, context.unit, newborn);
+                effect.install(context.battle, context.unit, newborn);
                 effect.end(context.battle, later);
             },
         },
