@@ -50,9 +50,7 @@ export function key(scope: Scope): string {
     }
 }
 
-export function deadline<S extends object, H extends object>(
-    instance: Effect<S, H>,
-): number | null {
+export function deadline(instance: { readonly scopes: readonly Scope[] }): number | null {
     const ticks = instance.scopes.flatMap((scope) => (scope.type === "TICK" ? [scope.tick] : []));
 
     return ticks.length === 0 ? null : Math.min(...ticks);

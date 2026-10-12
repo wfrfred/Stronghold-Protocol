@@ -12,6 +12,8 @@ import type { Definition, EndContext } from "./definition.js";
 import { deadline, key, type Effect, type Lifetime, type Ref, type Scope } from "./effect.js";
 import { dependents } from "../../battlefield/storage/effect-lifetimes.js";
 
+type StoredEffect = ReturnType<Unit["effects"]["values"]>[number];
+
 export interface Initial<S extends object> {
     readonly source?: UnitId | null;
     readonly scopes?: readonly Scope[];
@@ -19,7 +21,7 @@ export interface Initial<S extends object> {
     readonly enabled?: boolean;
 }
 
-export function get(battle: BattleState, ref: Ref): Effect | undefined {
+export function get(battle: BattleState, ref: Ref): StoredEffect | undefined {
     return getUnit(battle, ref.unitId)?.effects.get(ref.effectId);
 }
 
@@ -142,7 +144,7 @@ export function end(
     ref: Ref,
     reason = "EXPLICIT",
     call: CallContext = emptyCall,
-): Result<Effect | undefined> {
+): Result<StoredEffect | undefined> {
     const instance = get(battle, ref);
 
     if (instance === undefined || instance.status === "ENDING") {
@@ -151,37 +153,41 @@ export function end(
 
     const children = dependents(battlefieldView(battle).effectLifetimes, ref);
     const host = getUnit(battle, ref.unitId)!;
-    battle = change(battle, ref, (current) => ({ ...current, status: "ENDING" }));
-    let ended = get(battle, ref)!;
-    const disabling = createContext(battle, ref, ended, call, reason, host);
 
-    if (instance.status === "ACTIVE" && disabling.self.definition.onDisable !== undefined) {
-        battle = disabling.self.definition.onDisable(battle, disabling);
-        ended = get(battle, ref) ?? ended;
-    }
+    return host.effects.read<Result<StoredEffect | undefined>>(ref.effectId, (instance) => {
+        const definition = instance.definition;
+        battle = change(battle, ref, (current) => ({ ...current, status: "ENDING" }));
+        let ended = getUnit(battle, ref.unitId)!.effects.get(ref.effectId, definition)!;
+        const disabling = createContext(battle, ref, ended, call, reason, host);
 
-    for (const child of children) {
-        battle = end(battle, child, reason, call).state;
-    }
+        if (instance.status === "ACTIVE" && definition.onDisable !== undefined) {
+            battle = definition.onDisable(battle, disabling);
+            ended = getUnit(battle, ref.unitId)?.effects.get(ref.effectId, definition) ?? ended;
+        }
 
-    ended = get(battle, ref) ?? ended;
-    const ending = createContext(battle, ref, ended, call, reason, host);
+        for (const child of children) {
+            battle = end(battle, child, reason, call).state;
+        }
 
-    if (ending.self.definition.onEnd !== undefined) {
-        battle = ending.self.definition.onEnd(battle, ending);
-        ended = get(battle, ref) ?? ended;
-    }
+        ended = getUnit(battle, ref.unitId)?.effects.get(ref.effectId, definition) ?? ended;
+        const ending = createContext(battle, ref, ended, call, reason, host);
 
-    battle = transitionUnit(battle, ref.unitId, (unit) => ({
-        ...unit,
-        effects: unit.effects.remove(ref.effectId),
-    }));
+        if (definition.onEnd !== undefined) {
+            battle = definition.onEnd(battle, ending);
+            ended = getUnit(battle, ref.unitId)?.effects.get(ref.effectId, definition) ?? ended;
+        }
 
-    if (instance.definition.group !== undefined) {
-        battle = reconcileGroupActivity(battle, ref.unitId, instance.definition.group.id, call);
-    }
+        battle = transitionUnit(battle, ref.unitId, (unit) => ({
+            ...unit,
+            effects: unit.effects.remove(ref.effectId),
+        }));
 
-    return { state: battle, value: ended };
+        if (definition.group !== undefined) {
+            battle = reconcileGroupActivity(battle, ref.unitId, definition.group.id, call);
+        }
+
+        return { state: battle, value: ended };
+    })!;
 }
 
 export function endScope(
@@ -237,15 +243,17 @@ export function advance(battle: BattleState, call: CallContext = emptyCall): Bat
     );
 
     for (const ref of candidates) {
-        const instance = get(battle, ref);
+        battle =
+            getUnit(battle, ref.unitId)?.effects.read(ref.effectId, (instance) => {
+                if (instance.status !== "ACTIVE" || instance.definition.onTick === undefined) {
+                    return battle;
+                }
 
-        if (instance?.status === "ACTIVE") {
-            const context = createContext(battle, ref, instance, call);
-
-            if (context.self.definition.onTick !== undefined) {
-                battle = context.self.definition.onTick(battle, context);
-            }
-        }
+                return instance.definition.onTick(
+                    battle,
+                    createContext(battle, ref, instance, call),
+                );
+            }) ?? battle;
 
         const current = get(battle, ref);
         const expires = current === undefined ? null : deadline(current);
@@ -320,13 +328,19 @@ function available(battle: BattleState, lifetime: Lifetime): boolean {
     }
 }
 
-function change(battle: BattleState, ref: Ref, next: (instance: Effect) => Effect): BattleState {
-    const current = get(battle, ref);
-
-    return current === undefined ? battle : replaceEffect(battle, ref.unitId, next(current));
+function change(
+    battle: BattleState,
+    ref: Ref,
+    next: <S extends object, H extends object>(instance: Effect<S, H>) => Effect<S, H>,
+): BattleState {
+    return (
+        getUnit(battle, ref.unitId)?.effects.read(ref.effectId, (instance) =>
+            replaceEffect(battle, ref.unitId, next(instance)),
+        ) ?? battle
+    );
 }
 
-function shouldBeActive(battle: BattleState, instance: Effect, unit: Unit): boolean {
+function shouldBeActive(battle: BattleState, instance: StoredEffect, unit: Unit): boolean {
     if (
         !instance.enabled ||
         instance.status === "ENDING" ||
@@ -376,11 +390,13 @@ function updateStatus(battle: BattleState, ref: Ref, call: CallContext): BattleS
         ...current,
         status: active ? "ACTIVE" : "INACTIVE",
     }));
-    const current = get(battle, ref)!;
-    const context = createContext(battle, ref, current, call);
-    const callback = active ? context.self.definition.onEnable : context.self.definition.onDisable;
 
-    return callback === undefined ? battle : callback(battle, context);
+    return getUnit(battle, ref.unitId)!.effects.read(ref.effectId, (current) => {
+        const context = createContext(battle, ref, current, call);
+        const callback = active ? current.definition.onEnable : current.definition.onDisable;
+
+        return callback === undefined ? battle : callback(battle, context);
+    })!;
 }
 
 function reconcileGroupActivity(

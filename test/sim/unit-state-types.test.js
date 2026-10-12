@@ -23,7 +23,7 @@ import type { Vitality, VitalityState } from ${module("unit/capability/vitality/
 import { setMaxHpContribution } from ${module("unit/capability/vitality/capability")};
 import { setAttackContribution } from ${module("unit/capability/offense/capability")};
 import { setCapacityContribution } from ${module("unit/capability/blocking/capability")};
-import type { Definition } from ${module("unit/effect/definition")};
+import type { Context, Definition } from ${module("unit/effect/definition")};
 import { install, setData, replaceEffect } from ${module("unit/effect/operations")};
 import type { Effect } from ${module("unit/effect/effect")};
 import { Effects } from ${module("unit/effect/effects")};
@@ -63,6 +63,14 @@ if(ref!==undefined) {
 declare const shield:Effect<{charges:number},Vitality>;
 declare const poison:Effect<{damage:number}>;
 const mixed=Effects.empty().add(shield).add(poison);
+declare function contextOf<S extends object,H extends object>(self:Effect<S,H>):Context<S,H>;
+const readState:BattleState|undefined=mixed.read(shield.id,effect=>
+ effect.definition.onTick?.(battle,contextOf(effect))??battle,
+);
+// @ts-expect-error a polymorphic reader cannot expose a falsely universal Effect.
+const leakedEffect:Effect|undefined=mixed.read(shield.id,effect=>effect);
+// @ts-expect-error a polymorphic reader cannot expose a falsely universal Definition.
+const leakedDefinition:Definition<object,object>|undefined=mixed.read(shield.id,effect=>effect.definition);
 const restored=mixed.get(shield.id,content);
 if(restored!==undefined){
  const charges:number=restored.data.charges;
@@ -72,6 +80,18 @@ const untyped=mixed.get(shield.id);
 if(untyped!==undefined){
  // @ts-expect-error a bare ID returns generic data without a claimed shape.
  const charges:number=untyped.data.charges;
+ // @ts-expect-error erased storage views do not claim a callable lifecycle definition.
+ untyped.definition.onTick;
+ // @ts-expect-error erased storage views do not claim a typed initializer.
+ untyped.definition.initialize;
+ const definitionId:string=untyped.definition.id;
+}
+for(const stored of mixed.values()){
+ // @ts-expect-error heterogeneous collection traversal cannot invoke definition callbacks.
+ stored.definition.onTick;
+ // @ts-expect-error heterogeneous collection traversal cannot initialize generic Effect data.
+ stored.definition.initialize;
+ const definitionId:string=stored.definition.id;
 }
 // @ts-expect-error an ID alone cannot claim a private data type.
 host.effects.get<{charges:number},Vitality>(0);

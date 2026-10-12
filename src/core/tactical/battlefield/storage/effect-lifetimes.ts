@@ -1,7 +1,9 @@
 import type { Unit, UnitId } from "../../unit/unit.js";
-import { key, type Ref, type Effect, type Lifetime } from "../../unit/effect/effect.js";
+import { key, type Ref, type Lifetime } from "../../unit/effect/effect.js";
 
 type RefBucket = ReadonlyMap<string, Ref>;
+
+type StoredEffect = ReturnType<Unit["effects"]["values"]>[number];
 
 export interface Index {
     readonly dependents: ReadonlyMap<string, RefBucket>;
@@ -12,7 +14,7 @@ export interface UnitTransition {
     readonly nextUnit: Unit | undefined;
 }
 
-function relationKeys(instance: Effect | undefined): readonly string[] {
+function relationKeys(instance: StoredEffect | undefined): readonly string[] {
     return instance === undefined || instance.status === "ENDING"
         ? []
         : [
@@ -67,8 +69,8 @@ export function derive(index: Index, transitions: readonly UnitTransition[]): In
     };
     const changeRelations = (
         unitId: UnitId,
-        before: Effect | undefined,
-        after: Effect | undefined,
+        before: StoredEffect | undefined,
+        after: StoredEffect | undefined,
     ): void => {
         if (
             before === after ||
