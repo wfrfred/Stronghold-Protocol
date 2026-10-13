@@ -8,10 +8,11 @@ import {
     type DeployableUnitDefinition,
 } from "../../unit/capability/deployment.js";
 import {
-    createOccupancyState,
+    validateOccupancyState,
     hasOccupancy,
     type OccupancyClaim,
     type Occupancy,
+    type OccupancyState,
 } from "../../unit/capability/occupancy.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
 import { instantiateUnitPlacement, type UnitPlacementDefinition } from "../creation/placement.js";
@@ -105,9 +106,10 @@ export function resolveDeploymentCommands(
             existing !== undefined
                 ? existing.occupancy.claims.filter((claim) => claim.type === "RESERVATION")
                 : [];
-        const occupancy = createOccupancyState({
+        const occupancy: OccupancyState = {
             claims: [...claims, { position: command.tilePosition, slot, type: "PRESENT" }],
-        });
+        };
+        validateOccupancyState(occupancy);
         const position = Tile.center(command.tilePosition);
         let unit: Unit & Occupancy;
         const changes: BattlefieldChange[] = [];

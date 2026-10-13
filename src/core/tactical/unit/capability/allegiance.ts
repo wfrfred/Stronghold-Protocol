@@ -17,12 +17,8 @@ export function hasAllegiance<U extends Unit>(unit: U): unit is U & Allegiance {
     return "allegiance" in unit && "allegiance" in unit.definition;
 }
 
-export function createAllegianceState(state: Readonly<AllegianceState>): AllegianceState {
-    return Object.freeze({ side: state.side });
-}
-
 export function initializeAllegianceState(definition: AllegianceState): AllegianceState {
-    return { side: definition.side };
+    return definition;
 }
 
 export function areHostile(left: Unit, right: Unit): boolean {

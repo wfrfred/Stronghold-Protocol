@@ -125,16 +125,19 @@ export function initializeSkillState(
 ): SkillState {
     assertNonnegativeSafeInteger(context.tick, "skill initialization tick");
 
-    return createSkillState({
+    const state: SkillState = {
         sp: definition.initialSp,
         spRecoveryProgressTicks: 0,
         lastAdvancedTick: context.tick,
         nextActivationId: 0,
         active: null,
-    });
+    };
+    validateSkillState(state);
+
+    return state;
 }
 
-export function createSkillState(state: SkillState): SkillState {
+export function validateSkillState(state: SkillState): void {
     assertNonnegativeSafeInteger(state.sp, "skill SP");
     assertNonnegativeNumber(state.spRecoveryProgressTicks, "skill SP recovery progress");
     assertNonnegativeSafeInteger(state.lastAdvancedTick, "skill last advanced tick");
@@ -158,6 +161,4 @@ export function createSkillState(state: SkillState): SkillState {
             }
         }
     }
-
-    return state;
 }

@@ -3,7 +3,7 @@ import {
     createActionCapabilityDefinition,
     type ActingUnitDefinition,
 } from "../capability/action/capability.js";
-import { createAllegianceState, type AllegiantUnitDefinition } from "../capability/allegiance.js";
+import type { AllegiantUnitDefinition } from "../capability/allegiance.js";
 import {
     createBlockerDefinition,
     type BlockingUnitDefinition,
@@ -18,14 +18,10 @@ import {
 } from "../capability/offense/capability.js";
 import {
     createHitDefinition,
-    createSpatialDefinition,
     type HitUnitDefinition,
     type SpatialUnitDefinition,
 } from "../capability/spatial.js";
-import {
-    createStatusDefinition,
-    type StatusUnitDefinition,
-} from "../capability/status/capability.js";
+import type { StatusUnitDefinition } from "../capability/status/capability.js";
 import type { VitalUnitDefinition } from "../capability/vitality/capability.js";
 import * as initialization from "../initialize.js";
 import {
@@ -64,10 +60,10 @@ export function createDefinition(definition: Definition): Definition {
         id: definition.id,
         vitality: Object.freeze({ maxHp: definition.vitality.maxHp }),
         action: createActionCapabilityDefinition(definition.action),
-        allegiance: createAllegianceState(definition.allegiance),
-        spatial: createSpatialDefinition(definition.spatial),
+        allegiance: definition.allegiance,
+        spatial: definition.spatial,
         hit: createHitDefinition(definition.hit),
-        status: createStatusDefinition(definition.status),
+        status: definition.status,
         defense: createDefenseDefinition(definition.defense),
         ...(definition.offense === undefined
             ? {}

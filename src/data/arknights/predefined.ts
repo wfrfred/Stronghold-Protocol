@@ -13,7 +13,10 @@ import {
     type DeployableUnitDefinition,
     type TileBoundUnitDefinition,
 } from "../../core/tactical/unit/capability/deployment.js";
-import { createOccupancyState } from "../../core/tactical/unit/capability/occupancy.js";
+import {
+    validateOccupancyState,
+    type OccupancyState,
+} from "../../core/tactical/unit/capability/occupancy.js";
 import type { VitalUnitDefinition } from "../../core/tactical/unit/capability/vitality/capability.js";
 import type { ArknightsPredefinedInstance } from "./level.js";
 import type { PredefinedPrefab } from "./prefab.js";
@@ -157,6 +160,12 @@ export function parsePredefinedDefinition(
         WALK: { denyPassage: false, deniedDepartures: [], costFloor: profile.walkCostFloor },
         FLY: null,
     });
+    const definition = unitDefinition(instance, phase, profile);
+    const position = Tile.center(instance.position);
+    const occupancy: OccupancyState = {
+        claims: [{ position: instance.position, slot: "SUPPORT", type: "PRESENT" }],
+    };
+    validateOccupancyState(occupancy);
 
     return createPredefinedDefinition({
         id,
@@ -164,13 +173,9 @@ export function parsePredefinedDefinition(
         initiallyPresent: !instance.hidden,
         creation: {
             type: "UNIT",
-            definition: unitDefinition(instance, phase, profile),
-            position: Tile.center(instance.position),
-            states: {
-                occupancy: createOccupancyState({
-                    claims: [{ position: instance.position, slot: "SUPPORT", type: "PRESENT" }],
-                }),
-            },
+            definition,
+            position,
+            states: { occupancy },
             navigationModifiers: [
                 {
                     definition: navigationModifierDefinition,

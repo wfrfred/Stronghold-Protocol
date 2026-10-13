@@ -26,8 +26,8 @@ import { createActionCapabilityDefinition, hasAction } from '../../dist/core/tac
 import { hasAllegiance } from '../../dist/core/tactical/unit/capability/allegiance.js';
 import { createBlockerDefinition, hasBlockable, hasBlocker, resolveBlockingCapacity } from '../../dist/core/tactical/unit/capability/blocking/capability.js';
 import * as modifier from '../../dist/core/tactical/unit/contribution/value.js';
-import { createHitDefinition, createSpatialDefinition, hasHit, hasSpatial } from '../../dist/core/tactical/unit/capability/spatial.js';
-import { addStatusContribution, createStatusDefinition, deriveEffectiveStatusFlags, hasStatus, initializeStatusState, removeStatusContribution, setStatusContributionParticipation } from '../../dist/core/tactical/unit/capability/status/capability.js';
+import { createHitDefinition, hasHit, hasSpatial } from '../../dist/core/tactical/unit/capability/spatial.js';
+import { addStatusContribution, deriveEffectiveStatusFlags, hasStatus, initializeStatusState, removeStatusContribution, setStatusContributionParticipation } from '../../dist/core/tactical/unit/capability/status/capability.js';
 import { createBlockGeometry, createRangeGeometry, createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { geometryContainsPosition, rangeContainsPosition, rangeOverlapsHit } from '../../dist/core/tactical/geometry/intersection.js';
 import { updateBlockingRelations } from '../../dist/core/tactical/battlefield/blocking/relations.js';
@@ -38,7 +38,9 @@ import { createRouteState, createRouteTiming } from '../../dist/core/tactical/un
 import { createNavigationState } from '../../dist/core/tactical/battlefield/navigation/state.js';
 import { createUnitPlacementDefinition, instantiateUnitPlacement } from '../../dist/core/tactical/battle/creation/placement.js';
 import { createDeploymentProfile, createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/deployment.js';
-import { createOccupancyState } from '../../dist/core/tactical/unit/capability/occupancy.js';
+import { validateOccupancyState } from '../../dist/core/tactical/unit/capability/occupancy.js';
+import { createDefinition as createOperatorDefinition } from '../../dist/core/tactical/unit/archetype/operator.js';
+import { createCombatDefinition } from '../../dist/core/tactical/unit/archetype/enemy.js';
 import { evaluateDeployment } from '../../dist/core/tactical/battlefield/deployment/query.js';
 
 const approx = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
@@ -421,9 +423,9 @@ const catalogDefinition = () => Object.freeze({
         ignoreTargetFree: false, ignoreInvisible: false, maxTargets: 1 },
     }],
   } }),
-  spatial: createSpatialDefinition({ layer: 'GROUND' }),
+  spatial: Object.freeze({ layer: 'GROUND' }),
   hit: createHitDefinition({ geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.25 }] } }),
-  status: createStatusDefinition({ initialFlags: ['HEAL_FREE'] }),
+  status: { initialFlags: ['HEAL_FREE'] },
   blocker: createBlockerDefinition({ capacity: 2, geometry: { radius: 0.7 } }),
   blockable: Object.freeze({ weight: 1 }),
   defense: Object.freeze({ defense: 20, resistance: 10 }),
@@ -499,6 +501,22 @@ test('core initialization and snapshots share immutable definitions', () => {
   assert.equal(revised.vitality.hp, 200);
   assert.equal(first.definition.vitality.maxHp, 100);
   assert.deepEqual(snapshot.definition.metadata.labels, ['a']);
+});
+
+test('archetype definitions share passive configuration while current allegiance changes independently', () => {
+  const input = catalogDefinition();
+  for (const createDefinition of [createOperatorDefinition, createCombatDefinition]) {
+    const definition = createDefinition(input);
+    assert.equal(definition.allegiance, input.allegiance);
+    assert.equal(definition.spatial, input.spatial);
+    assert.equal(definition.status, input.status);
+    const unit = initialize({ id: 1, definition, position: [0, 0] });
+    assert.equal(unit.allegiance, definition.allegiance);
+    const changed = { ...unit, allegiance: { side: 'ENEMY' } };
+    assert.equal(unit.allegiance.side, 'ALLY');
+    assert.equal(changed.allegiance.side, 'ENEMY');
+    assert.equal(changed.definition.allegiance.side, 'ALLY');
+  }
 });
 
 test('core prepared states retain capability values without rebuilding their fields', () => {
@@ -648,7 +666,7 @@ test('core grid ranges rotate all four directions around continuous source posit
 
 test('core status contributions share immutable flags and preserve earlier states', () => {
   const initialFlags = ['INVINCIBLE'];
-  const definition = createStatusDefinition({ initialFlags });
+  const definition = { initialFlags };
   assert.equal(definition.initialFlags, initialFlags);
   const initial = initializeStatusState(definition);
   let state = initial;
@@ -898,10 +916,14 @@ const deploymentTile = (overrides = {}) => ({
   playerSideMask: 'ALL', terrain: 'NORMAL', mechanism: null, ...overrides,
 });
 
-const deploymentUnit = (id, position, definition, claims, present = true) => initialize({
-  id, position, definition: Object.freeze({ id: `deployment_${id}`, ...definition }),
-  states: { occupancy: createOccupancyState({ claims }), spatialPresence: { present } },
-});
+const deploymentUnit = (id, position, definition, claims, present = true) => {
+  const occupancy = { claims };
+  validateOccupancyState(occupancy);
+  return initialize({
+    id, position, definition: Object.freeze({ id: `deployment_${id}`, ...definition }),
+    states: { occupancy, spatialPresence: { present } },
+  });
+};
 
 test('core deployment uses buildability, side and terrain independently of navigation passability', () => {
   const map = createBattlefieldMap(1, 8, [
@@ -946,6 +968,12 @@ test('core deployment uses buildability, side and terrain independently of navig
 });
 
 test('core occupancy separates present claims, reservations and geometric membership', () => {
+  const claims = [{ position: [0, 1], slot: 'DEPLOYMENT', type: 'PRESENT' }];
+  const valid = { claims };
+  assert.equal(validateOccupancyState(valid), undefined);
+  assert.equal(valid.claims, claims);
+  assert.throws(() => validateOccupancyState({ claims: [{ ...claims[0], position: [0.5, 1] }] }), /integer/);
+  assert.throws(() => validateOccupancyState({ claims: [{ ...claims[0], position: [0, Number.MAX_SAFE_INTEGER + 1] }] }), /integer/);
   const runtime = createBattlefieldRuntime({ map: createBattlefieldMap(1, 4,
     Array.from({ length: 4 }, () => deploymentTile())) });
   const present = deploymentUnit(1, [1, 0], {}, [
@@ -970,10 +998,12 @@ test('core occupancy separates present claims, reservations and geometric member
   assert.deepEqual(runtime.snapshot('draft').unitsAt([0, 1]).map(unit => unit.id), [1, 3]);
   const original = runtime.snapshot('draft');
   const previousUnit = original.getUnit(1);
-  const updated = { ...previousUnit, occupancy: createOccupancyState({ claims: [
+  const occupancy = { claims: [
     { ...previousUnit.occupancy.claims[0], slot: 'SUPPORT' },
     { position: [0, 3], slot: 'DEPLOYMENT', type: 'RESERVATION' },
-  ] }) };
+  ] };
+  validateOccupancyState(occupancy);
+  const updated = { ...previousUnit, occupancy };
   runtime.advance([{ type: 'UPDATE_UNIT', unit: updated }]);
   assert.deepEqual(runtime.snapshot('draft').occupancyAt([0, 1], 'SUPPORT'), [1]);
   assert.deepEqual(runtime.snapshot('draft').occupancyAt([0, 3], 'DEPLOYMENT'), [1]);

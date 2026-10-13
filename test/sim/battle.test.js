@@ -38,7 +38,6 @@ import { compileLevelMovementFragment } from '../../dist/data/arknights/movement
 import { loadMovementScenario } from '../../dist/data/arknights/movement-scenario.js';
 import { createLegacyCombatBattle } from '../../dist/legacy/combat.js';
 import { createDeploymentProfile, createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/deployment.js';
-import { createOccupancyState } from '../../dist/core/tactical/unit/capability/occupancy.js';
 import { createPredefinedDefinition } from '../../dist/core/tactical/battle/steps/predefined.js';
 import { advanceMovement } from '../../dist/core/tactical/battle/steps/movement.js';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
@@ -2117,7 +2116,7 @@ test('core battle deploys, relocates and retreats units with immutable occupancy
   assert.deepEqual(runtime.snapshot().units.map(value => [value.id, value.position]), [[1, [1, 0]], [2, [3, 0]]]);
   assert.equal(runtime.navigationMaps, maps);
 
-  const occupancy = createOccupancyState({ claims: [{ position: [0, 5], slot: 'DEPLOYMENT', type: 'RESERVATION' }] });
+  const occupancy = { claims: [{ position: [0, 5], slot: 'DEPLOYMENT', type: 'RESERVATION' }] };
   const initialNavigationModifiers = [{
     definition: createNavigationModifierDefinition({ id: 'initial_placement_navigation',
       WALK: { denyPassage: false, deniedDepartures: [], costFloor: 1000 }, FLY: null }),
@@ -2202,7 +2201,7 @@ test('core visibility: commands from different domains execute in phase order be
   const spec = deploymentBattleInput({ predefines: [{
     id: 17, alias: null, initiallyPresent: true, creation: {
       type: 'UNIT', definition, position: [1, 0], navigationModifiers: [],
-      states: { occupancy: createOccupancyState({ claims: [{ position: [0, 1], slot: 'DEPLOYMENT', type: 'PRESENT' }] }) },
+      states: { occupancy: { claims: [{ position: [0, 1], slot: 'DEPLOYMENT', type: 'PRESENT' }] } },
     },
   }] });
   const runtime = new BattleRuntime(spec);
@@ -2283,7 +2282,7 @@ test('core elevated support disables blocking without changing target layer and 
     vitality: Object.freeze({ maxHp: 100 }), allegiance: Object.freeze({ side: 'ENEMY' }),
     spatial: Object.freeze({ layer: 'GROUND' }), blockable: Object.freeze({ weight: 1 }),
   });
-  const occupancy = createOccupancyState({ claims: [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }] });
+  const occupancy = { claims: [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }] };
   const recipe = createPredefinedDefinition({ id: 50, alias: 'test_platform', initiallyPresent: true, creation: {
     type: 'UNIT', definition: provider, position: [1, 0], navigationModifiers: [], states: { occupancy },
   } });

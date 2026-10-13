@@ -63,10 +63,6 @@ export function hasStatusFlag(unit: Unit, flag: StatusFlag): boolean {
     );
 }
 
-export function createStatusDefinition(definition: StatusDefinition): StatusDefinition {
-    return definition;
-}
-
 export function initializeStatusState(definition: StatusDefinition): StatusState {
     return {
         contributions: [

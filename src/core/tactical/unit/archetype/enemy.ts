@@ -3,7 +3,7 @@ import {
     createActionCapabilityDefinition,
     type ActingUnitDefinition,
 } from "../capability/action/capability.js";
-import { createAllegianceState, type AllegiantUnitDefinition } from "../capability/allegiance.js";
+import type { AllegiantUnitDefinition } from "../capability/allegiance.js";
 import {
     createBlockableDefinition,
     type BlockableUnitDefinition,
@@ -24,14 +24,10 @@ import type {
 import type { SpatialPresence } from "../capability/presence.js";
 import {
     createHitDefinition,
-    createSpatialDefinition,
     type HitUnitDefinition,
     type SpatialUnitDefinition,
 } from "../capability/spatial.js";
-import {
-    createStatusDefinition,
-    type StatusUnitDefinition,
-} from "../capability/status/capability.js";
+import type { StatusUnitDefinition } from "../capability/status/capability.js";
 import type { Unit } from "../unit.js";
 import type { Vitality, VitalUnitDefinition } from "../capability/vitality/capability.js";
 import type * as initialization from "../initialize.js";
@@ -99,10 +95,10 @@ export function createCombatDefinition(definition: CombatDefinition): CombatDefi
     return Object.freeze({
         ...createDefinition(definition),
         action: createActionCapabilityDefinition(definition.action),
-        allegiance: createAllegianceState(definition.allegiance),
-        spatial: createSpatialDefinition(definition.spatial),
+        allegiance: definition.allegiance,
+        spatial: definition.spatial,
         hit: createHitDefinition(definition.hit),
-        status: createStatusDefinition(definition.status),
+        status: definition.status,
         defense: createDefenseDefinition(definition.defense),
         ...(definition.offense === undefined
             ? {}

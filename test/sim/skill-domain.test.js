@@ -6,7 +6,7 @@ import { definition as effectDefinition, effectFixtureWork } from "../helpers/ef
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { deadline, setDeadline, setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { get } from "../../dist/core/tactical/unit/effect/operations.js";
-import { createSkillDefinition, createSkillState, initializeSkillState } from "../../dist/core/tactical/unit/capability/skill/capability.js";
+import { createSkillDefinition, validateSkillState, initializeSkillState } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { activateSkill, advanceSkill, finishSkill } from "../../dist/core/tactical/unit/capability/skill/execution.js";
 import { drainSkillSp, gainSkillSp, spendSkillSp } from "../../dist/core/tactical/unit/capability/skill/sp.js";
 import { initialize } from "../../dist/core/tactical/unit/initialize.js";
@@ -31,7 +31,9 @@ test("skill definitions retain identity and initial SP is deployment-only", () =
   assert.equal(initializeSkillState(f.definition, { tick: 90 }).lastAdvancedTick, 90);
   assert.equal(spendSkillSp(f.unit.skill, f.definition, 1).state.sp, 0);
   assert.throws(() => createSkillDefinition({ ...f.definition, initialSp: 5 }), /capacity/);
-  assert.throws(() => createSkillState({ ...f.unit.skill, sp: 0.5 }), /integer/);
+  assert.equal(validateSkillState(f.unit.skill), undefined);
+  assert.throws(() => validateSkillState({ ...f.unit.skill, sp: 0.5 }), /integer/);
+  assert.throws(() => initializeSkillState({ ...f.definition, initialSp: 0.5 }), /integer/);
 });
 for (const source of ["TIME", "ATTACK", "HIT"]) {
   test(`${source} SP accepts its base source and preserves charge capacity`, () => {

@@ -41,10 +41,6 @@ export function hasHit<U extends Unit>(unit: U): unit is U & Hit {
     return "hit" in unit && "hit" in unit.definition;
 }
 
-export function createSpatialDefinition(definition: SpatialDefinition): SpatialDefinition {
-    return Object.freeze({ layer: definition.layer });
-}
-
 export function createHitDefinition(definition: HitDefinition): HitDefinition {
     return Object.freeze({ geometry: createShapeGeometry(definition.geometry) });
 }

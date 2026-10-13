@@ -27,17 +27,9 @@ export function isOccupancyClaimActive(unit: Unit, claim: OccupancyClaim): boole
     return claim.type === "RESERVATION" || isSpatiallyPresent(unit);
 }
 
-export function createOccupancyState(state: Readonly<OccupancyState>): OccupancyState {
+export function validateOccupancyState(state: OccupancyState): void {
     for (const claim of state.claims) {
         assertSafeInteger(claim.position[0], "occupancy row");
         assertSafeInteger(claim.position[1], "occupancy column");
     }
-
-    return state;
-}
-
-export function createOccupancyClaims(
-    claims: readonly OccupancyClaim[],
-): readonly OccupancyClaim[] {
-    return createOccupancyState({ claims }).claims;
 }
