@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { battlefieldView, createBattleState, getUnit } from "../../dist/core/tactical/battle/state.js";
-import { removeUnitWithEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
+import {
+  advanceBattlefield, battlefieldView, createBattleState, getUnit, registerUnit, updateUnit,
+} from "../../dist/core/tactical/battle/state.js";
+import { enterUnits, removeUnitWithEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { createDefinition as createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
+import { createMechanism, createMechanismDefinition } from "../../dist/core/tactical/battlefield/mechanism.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { createDefinition as createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { activateSkill } from "../../dist/core/tactical/unit/capability/skill/execution.js";
@@ -94,4 +98,142 @@ test("departure callbacks cannot start a new skill activation", () => {
   assert.equal(getUnit(state, 0), undefined);
   assert.equal(getUnit(original, 0).lifecycle, "PRESENT");
   assert.equal(getUnit(original, 0).skill.nextActivationId, 0);
+});
+
+test("onLeave reads the pre-cleanup Unit after removal and passes its changes to mechanisms", () => {
+  const resources = new CombatResources();
+  const trace = [];
+  const skill = createSkillDefinition({
+    id: "leave-with-sp", activation: "MANUAL", spRecovery: "NONE",
+    spCost: 1, initialSp: 3, maxCharges: 3, durationTicks: null,
+  });
+  resources.skills.register({
+    definition: skill,
+    activate: state => ({ state, value: { type: "ACTIVATED" } }),
+    finish(state) {
+      trace.push("skill finish");
+      const current = getUnit(state, 0);
+      assert.equal(current.lifecycle, "LEAVING");
+      assert.deepEqual(current.effects.values(), []);
+      return updateUnit(state, { ...current, skill: { ...current.skill, sp: 0 } });
+    },
+  });
+  let departing;
+  const child = unit(2, {
+    onEnter(state, unitId) {
+      trace.push("new unit enter");
+      const current = getUnit(state, unitId);
+      return updateUnit(state, { ...current, vitality: { ...current.vitality, hp: 55 } });
+    },
+  });
+  const host = unit(0, {
+    skill,
+    onLeave(state, departure) {
+      trace.push("unit leave");
+      assert.equal(getUnit(state, 0), undefined);
+      assert.equal(departure.unit, departing);
+      assert.equal(departure.reason, "RETREAT");
+      assert.equal(departure.unit.lifecycle, "PRESENT");
+      assert.equal(departure.unit.skill.sp, 2);
+      assert.equal(departure.unit.skill.active.id, 0);
+      assert.equal(departure.unit.effects.values()[0].status, "ACTIVE");
+      const other = getUnit(state, 1);
+      state = updateUnit(state, { ...other, vitality: { ...other.vitality, hp: 77 } });
+      return enterUnits(registerUnit(state, child), [child.id]);
+    },
+  });
+  const mechanism = createMechanism({
+    id: 4, active: true,
+    definition: createMechanismDefinition({
+      id: "observe-unit-leave",
+      onUnitLeave(state, mechanismId, departure) {
+        trace.push("mechanism leave");
+        assert.equal(mechanismId, 4);
+        assert.equal(departure.unit, departing);
+        assert.equal(getUnit(state, 0), undefined);
+        assert.equal(getUnit(state, 1).vitality.hp, 77);
+        assert.equal(getUnit(state, 2).vitality.hp, 55);
+        const other = getUnit(state, 1);
+        return updateUnit(state, { ...other, vitality: { ...other.vitality, hp: 60 } });
+      },
+    }),
+  });
+  let state = createBattleState(fixtureBattlefield([host, unit(1)], {
+    mechanismIds: [4], getMechanism: () => mechanism,
+  }));
+  state = activateSkill(state, { unitId: 0, tick: 0 }, resources).state;
+  state = effects.install(state, getUnit(state, 0), {
+    id: "leave-effect", initialize: () => ({}),
+    onDisable(state) { trace.push("effect disable"); return state; },
+    onEnd(state) { trace.push("effect end"); return state; },
+  }).state;
+  departing = getUnit(state, 0);
+  const before = state;
+  state = removeUnitWithEffects(state, 0, "RETREAT", resources, 1);
+  assert.deepEqual(trace, ["effect disable", "effect end", "skill finish", "unit leave", "new unit enter", "mechanism leave"]);
+  assert.equal(getUnit(state, 1).vitality.hp, 60);
+  assert.equal(getUnit(state, 2).vitality.hp, 55);
+  assert.equal(getUnit(before, 0), departing);
+  assert.equal(getUnit(before, 1).vitality.hp, 100);
+  assert.equal(getUnit(before, 2), undefined);
+});
+
+test("mechanism leave responses keep their candidate IDs and reread current registrations", () => {
+  const resources = new CombatResources();
+  const trace = [];
+  const later = createMechanism({ id: 3, active: true, definition: {
+    id: "registered-during-notification",
+    onUnitLeave(state) { trace.push("new observer"); return state; },
+  } });
+  const mechanisms = [
+    createMechanism({ id: 0, active: true, definition: {
+      id: "first-observer",
+      onUnitLeave(state) {
+        trace.push("first");
+        return advanceBattlefield(state, [
+          { type: "REMOVE_MECHANISM", mechanismId: 1, reason: "SCRIPT" },
+          { type: "SET_MECHANISM_ACTIVE", mechanismId: 2, active: true },
+          { type: "REGISTER_MECHANISM", mechanism: later },
+        ]);
+      },
+    } }),
+    createMechanism({ id: 1, active: true, definition: {
+      id: "removed-before-response",
+      onUnitLeave(state) { trace.push("removed observer"); return state; },
+    } }),
+    createMechanism({ id: 2, active: false, definition: {
+      id: "activated-before-response",
+      onUnitLeave(state) { trace.push("activated observer"); return state; },
+    } }),
+  ];
+  const original = createBattleState(fixtureBattlefield([unit(0)], {
+    mechanismIds: [0, 1, 2], getMechanism: id => mechanisms[id],
+  }));
+  const state = removeUnitWithEffects(original, 0, "SCRIPT", resources, 0);
+  assert.deepEqual(trace, ["first", "activated observer"]);
+  assert.deepEqual(battlefieldView(state).mechanismIds, [0, 2, 3]);
+  assert.deepEqual(battlefieldView(original).mechanismIds, [0, 1, 2]);
+});
+
+test("factory-created enemies retain onLeave and call it only for an actual departure", () => {
+  const resources = new CombatResources();
+  let notifications = 0;
+  const onLeave = (state, departure) => {
+    notifications++;
+    assert.equal(getUnit(state, departure.unit.id), undefined);
+    assert.equal(departure.reason, "DEATH");
+    return state;
+  };
+  const definition = createEnemyDefinition({
+    id: "enemy-with-leave", vitality: { maxHp: 100 },
+    locomotion: { moveSpeedPerTick: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 } },
+    onLeave,
+  });
+  assert.equal(definition.onLeave, onLeave);
+  let state = createBattleState(fixtureBattlefield([
+    initialize({ id: 0, position: [0, 0], definition }),
+  ]));
+  state = removeUnitWithEffects(state, 0, "DEATH", resources, 0);
+  assert.equal(removeUnitWithEffects(state, 0, "DEATH", resources, 0), state);
+  assert.equal(notifications, 1);
 });

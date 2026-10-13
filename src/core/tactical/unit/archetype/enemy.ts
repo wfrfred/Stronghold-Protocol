@@ -83,6 +83,7 @@ export function createDefinition(definition: Definition): Definition {
     return Object.freeze({
         id: definition.id,
         ...(definition.onEnter === undefined ? {} : { onEnter: definition.onEnter }),
+        ...(definition.onLeave === undefined ? {} : { onLeave: definition.onLeave }),
         vitality: Object.freeze({ maxHp: definition.vitality.maxHp }),
         locomotion: Object.freeze({
             moveSpeedPerTick: definition.locomotion.moveSpeedPerTick,

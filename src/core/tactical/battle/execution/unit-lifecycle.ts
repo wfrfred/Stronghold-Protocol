@@ -5,6 +5,7 @@ import type { StoppedSkillActivation } from "../../unit/capability/skill/executi
 import type { ActionExecutionSignal } from "../../unit/capability/action/process.js";
 import {
     appendEvents,
+    getMechanism,
     getUnit,
     removeUnit,
     updateUnit,
@@ -110,6 +111,22 @@ export function removeUnitWithEffects(
     }
 
     state = appendEvents(state, signals);
+    state = removeUnit(state, unitId, reason);
+    const departure = { unit, reason };
 
-    return removeUnit(state, unitId, reason);
+    if (unit.definition.onLeave !== undefined) {
+        state = unit.definition.onLeave(state, departure);
+    }
+
+    const mechanismIds = [...state.battlefield.mechanisms.keys()];
+
+    for (const mechanismId of mechanismIds) {
+        const mechanism = getMechanism(state, mechanismId);
+
+        if (mechanism?.active && mechanism.definition.onUnitLeave !== undefined) {
+            state = mechanism.definition.onUnitLeave(state, mechanismId, departure);
+        }
+    }
+
+    return state;
 }

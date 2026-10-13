@@ -1,4 +1,6 @@
 import { assertNonnegativeSafeInteger } from "../../common/assert.js";
+import type { BattleState } from "../battle/state.js";
+import type { Departure } from "../unit/unit.js";
 
 export type MechanismId = number;
 
@@ -9,6 +11,11 @@ export interface MechanismView {
 
 export interface MechanismDefinition {
     readonly id: string;
+    readonly onUnitLeave?: (
+        state: BattleState,
+        mechanismId: MechanismId,
+        departure: Departure,
+    ) => BattleState;
 }
 
 export interface Mechanism<D extends MechanismDefinition = MechanismDefinition> {
@@ -22,7 +29,7 @@ export function createMechanismDefinition(definition: MechanismDefinition): Mech
         throw new TypeError("mechanism definition id must be nonempty");
     }
 
-    return Object.freeze({ id: definition.id });
+    return definition;
 }
 
 export function createMechanism<D extends MechanismDefinition>(
