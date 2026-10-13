@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>主模式内容 · Tactical Core</title>
+  <style>
+    :root{color-scheme:dark;font-family:system-ui,sans-serif;color:#e6ecea;background:#111916}
+    body{max-width:1080px;margin:32px auto;padding:0 20px}h1{font-size:24px;margin-bottom:8px}
+    p,footer{color:#9cabaa;font-size:13px}a{color:#63d9b2}form,.controls{display:flex;gap:14px;flex-wrap:wrap;align-items:end;margin:24px 0}
+    label{display:grid;gap:6px;font-size:12px;color:#a8bcb3}input,select,button{font:inherit;color:#e6ecea;background:#24322b;border:1px solid #465b50;border-radius:5px;padding:8px}
+    input{width:68px}button{cursor:pointer}button:disabled{opacity:.4;cursor:default}.primary{color:#63d9b2}
+    canvas{display:block;width:100%;background:#1a2520;border:1px solid #35483e;border-radius:8px}
+    .panels{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px}.panel{background:#19231e;padding:16px;border-radius:8px}
+    pre{font:12px/1.65 ui-monospace,monospace;white-space:pre-wrap;margin:0}#error{color:#ffb59f;min-height:20px}#clock{font-variant-numeric:tabular-nums}
+    @media(max-width:640px){body{margin:18px auto}.panels{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <a href="/dev/render-demo.html?scene=core&amp;mode=combat&amp;stage=act1autochess_m01">返回战场演示</a>
+  <h1>主模式内容练习场</h1>
+  <p>泥岩：护盾与二技能；玫兰莎：天赋与一技能。敌人为猎狗和弩手。配置采用主模式数据，练习场暂不包含费用与再部署。</p>
+  <form id="configuration">
+    <label>泥岩精英阶段<select id="elite"><option value="1">精一</option><option value="2" selected>精二</option></select></label>
+    <label>等级<input id="level" type="number" min="1" max="90" value="60" required></label>
+    <label>潜能<input id="potential" type="number" min="1" max="6" value="1" required></label>
+    <label>技能等级<input id="skill-level" type="number" min="1" max="10" value="7" required></label>
+    <label>信赖 %<input id="trust" type="number" min="0" max="200" value="100" required></label>
+    <label>模组<select id="module"><option value="">未装备</option><option value="uniequip_002_mudrok">X 模组</option></select></label>
+    <label>模组等级<select id="module-level"><option>1</option><option>2</option><option>3</option></select></label>
+    <label>种子<input id="seed" type="number" min="0" max="4294967295" value="123" required></label>
+    <button type="submit" class="primary">应用并重置</button>
+  </form>
+  <div id="error" role="alert"></div>
+  <div class="controls">
+    <button id="play" type="button">播放</button><button id="step" type="button">单帧</button>
+    <button id="second" type="button">推进一秒</button><button id="reset" type="button">重置</button>
+    <button id="skill" type="button">玫兰莎释放技能</button><span id="clock">0.00 s</span>
+  </div>
+  <canvas id="battlefield" width="1000" height="500" aria-label="两条路线上的主模式战斗"></canvas>
+  <div class="panels">
+    <div class="panel"><pre id="stats"></pre></div><div class="panel"><pre id="events"></pre></div>
+  </div>
+  <footer>客户端数据快照：2026-10-08。练习场攻击前摇与弩箭弹速采用项目配置。<a href="https://github.com/Kengxxiao/ArknightsGameData/tree/17759cc8cdf37388414145d16262a3a06f3ab25e/zh_CN/gamedata">查看数据来源</a></footer>
+  <script type="module" src="/dev/content-demo.js"></script>
+</body>
+</html>
