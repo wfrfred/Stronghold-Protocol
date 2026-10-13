@@ -1,5 +1,5 @@
 import { World, type WorldPosition } from "../../geometry/coordinate.js";
-import { hasAllegiance, type State as AllegianceState } from "../../unit/capability/allegiance.js";
+import { hasAllegiance, type Side } from "../../unit/capability/allegiance.js";
 import { hasBlockable } from "../../unit/capability/blocking/blockable.js";
 import { hasBlocker, resolveCapacity } from "../../unit/capability/blocking/blocker.js";
 import { hasTileBindingDefinition } from "../../unit/capability/deployment.js";
@@ -26,7 +26,7 @@ export interface BlockingFacts {
     readonly active: boolean;
     readonly ground: boolean;
     readonly highland: boolean;
-    readonly side: AllegianceState["side"] | undefined;
+    readonly side: Side | undefined;
     readonly blocker: BlockerFacts | undefined;
     readonly blockable: BlockableFacts | undefined;
 }

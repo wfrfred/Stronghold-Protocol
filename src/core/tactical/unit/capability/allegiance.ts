@@ -1,10 +1,14 @@
 import type { Unit } from "../unit.js";
 
+export type Side = "ALLY" | "ENEMY" | "NEUTRAL";
+
 export interface Definition {
-    readonly side: "ALLY" | "ENEMY" | "NEUTRAL";
+    readonly side: Side;
 }
 
-export type State = Definition;
+export interface State {
+    readonly side: Side;
+}
 
 export interface Allegiance {
     readonly definition: { readonly allegiance: Definition };
@@ -27,10 +31,7 @@ export function areHostile(left: Unit, right: Unit): boolean {
     return areHostileSides(left.allegiance.side, right.allegiance.side);
 }
 
-export function areHostileSides(
-    leftSide: State["side"] | undefined,
-    rightSide: State["side"] | undefined,
-): boolean {
+export function areHostileSides(leftSide: Side | undefined, rightSide: Side | undefined): boolean {
     return (
         (leftSide === "ALLY" && rightSide === "ENEMY") ||
         (leftSide === "ENEMY" && rightSide === "ALLY")
