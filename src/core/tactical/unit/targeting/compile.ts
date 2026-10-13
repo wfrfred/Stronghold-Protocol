@@ -15,7 +15,7 @@ import {
     canReceiveElementHeal,
     elementDamageRatio,
 } from "../capability/elemental/query.js";
-import { hasVitality, type VitalUnit } from "../capability/vitality/capability.js";
+import { hasVitality, type Vitality } from "../capability/vitality/capability.js";
 import type { Unit, Id } from "../unit.js";
 import type {
     DamageTargetingDefinition,
@@ -25,7 +25,7 @@ import type {
 
 const staticMaxHp: HealingMaxHpProvider = (unit) => unit.definition.vitality.maxHp;
 
-function isActiveVitalUnit(target: Unit): target is VitalUnit {
+function isActiveVitalUnit(target: Unit): target is Unit & Vitality {
     return hasVitality(target) && target.vitality.hp > 0 && isSpatiallyPresent(target);
 }
 

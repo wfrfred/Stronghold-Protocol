@@ -5,7 +5,7 @@ import {
 import { createBlockGeometry, type BlockGeometry } from "../../../geometry/shape.js";
 import * as contribution from "../../contribution/contribution.js";
 import * as modifier from "../../contribution/value.js";
-import type { Unit, Definition } from "../../unit.js";
+import type { Unit } from "../../unit.js";
 
 export interface BlockerDefinition {
     readonly capacity: number;
@@ -25,10 +25,6 @@ export interface Blocker {
     readonly blocker: BlockerState;
 }
 
-export interface BlockingUnitDefinition extends Definition {
-    readonly blocker: BlockerDefinition;
-}
-
 export interface BlockableDefinition {
     readonly weight: number;
 }
@@ -43,10 +39,6 @@ export interface Blockable {
         readonly blockable: BlockableDefinition;
     };
     readonly blockable: BlockableState;
-}
-
-export interface BlockableUnitDefinition extends Definition {
-    readonly blockable: BlockableDefinition;
 }
 
 export function hasBlocker<U extends Unit>(unit: U): unit is U & Blocker {

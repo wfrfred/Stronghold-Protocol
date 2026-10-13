@@ -1,5 +1,5 @@
 import {
-    advanceElementalState,
+    advanceElemental,
     type ElementalExecutionResources,
 } from "../../unit/capability/elemental/execution.js";
 import { battlefieldView, type BattleState } from "../state.js";
@@ -10,7 +10,7 @@ export function advanceElements(
     resources: ElementalExecutionResources,
 ): BattleState {
     for (const id of battlefieldView(state).unitIds) {
-        state = advanceElementalState(state, id, tick, resources);
+        state = advanceElemental(state, id, tick, resources);
     }
 
     return state;

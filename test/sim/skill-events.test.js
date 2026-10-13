@@ -9,7 +9,7 @@ import { activateSkill, finishSkill } from "../../dist/core/tactical/unit/capabi
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 
-function fixture({ durationTicks = 0, reject = false } = {}) {
+function fixture({ durationTicks = 0, reject = false, finishDuringActivation = false } = {}) {
   const resources = new CombatResources();
   const definition = createSkillDefinition({
     id: "event-order", activation: "MANUAL", spRecovery: "NONE",
@@ -30,6 +30,10 @@ function fixture({ durationTicks = 0, reject = false } = {}) {
         scopes: [{ type: "SKILL", unitId: 1, activationId: context.activationId }],
       }, context.call).state;
       state = damage(state, context.tick, 1, context.call);
+      if (finishDuringActivation) {
+        state = finishSkill(state, 1, context.tick, resources, context.call);
+        state = damage(state, context.tick, 4, context.call);
+      }
       return { state, value: reject
         ? { type: "REJECTED", reason: "content condition" }
         : { type: "ACTIVATED" } };
@@ -82,4 +86,16 @@ test("explicit finish owns its events and repeated finish does not repeat callba
   ]);
   assert.equal(finishSkill(finished, 1, 1, f.resources), finished);
   assert.equal(getUnit(activated, 2).vitality.hp, 99);
+});
+
+test("ending during activation completes cleanup synchronously and entered content can continue", () => {
+  const f = fixture({ durationTicks: null, finishDuringActivation: true });
+  const settled = activateSkill(f.state, { unitId: 1, tick: 0 }, f.resources);
+  assert.deepEqual(settled.value, { type: "FINISHED" });
+  assert.deepEqual(settled.state.events.map(event => event.type), [
+    "DAMAGE", "DAMAGE", "DAMAGE", "SKILL_FINISHED", "DAMAGE",
+  ]);
+  assert.equal(getUnit(settled.state, 2).vitality.hp, 90);
+  assert.equal(getUnit(settled.state, 1).skill.active, null);
+  assert.equal(finishSkill(settled.state, 1, 0, f.resources), settled.state);
 });

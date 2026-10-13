@@ -1,8 +1,8 @@
 import { emptyCall, type CallContext } from "../../../../battle/execution/call.js";
-import { hasDefenseDefinition, type DefenseDefinition } from "../../defense/capability.js";
+import type { Parameters } from "../../defense/capability.js";
 import { hasElemental } from "../../elemental/capability.js";
-import { hasVitality, type Vitality } from "../capability.js";
-import type { Unit, Id } from "../../../unit.js";
+import { hasVitality } from "../capability.js";
+import type { Id } from "../../../unit.js";
 import { hasStatusFlag } from "../../status/capability.js";
 import { resolveDefense } from "../../defense/query.js";
 import { assertFiniteNumber, assertNonnegativeNumber } from "../../../../../common/assert.js";
@@ -36,18 +36,10 @@ export interface Resources {
     ) => BattleState;
 }
 
-const NO_DEFENSE: DefenseDefinition = Object.freeze({ defense: 0, resistance: 0 });
-
-export interface DamageResult {
-    readonly unit: Unit & Vitality;
-    readonly amount: number;
-    readonly killed: boolean;
-}
-
 export function calculateDamage(
     power: number,
     damageType: DamageType,
-    defense: DefenseDefinition,
+    defense: Parameters,
     elementDamageResistance = 0,
 ): number {
     switch (damageType) {
@@ -66,36 +58,6 @@ export function calculateDamage(
                 power * Math.max(0, 1 - Math.max(0, elementDamageResistance) / 100),
             );
     }
-}
-
-export function damageUnit(
-    unit: Unit & Vitality,
-    power: number,
-    damageType: DamageType,
-): DamageResult {
-    const defense = hasDefenseDefinition(unit.definition) ? unit.definition.defense : NO_DEFENSE;
-    const formulaDamage = calculateDamage(
-        power,
-        damageType,
-        defense,
-        hasElemental(unit) ? unit.definition.elemental.damageResistance : 0,
-    );
-
-    assertNonnegativeNumber(formulaDamage, "damage amount");
-
-    const damage = hasStatusFlag(unit, "INVINCIBLE") ? 0 : formulaDamage;
-    const candidateHp = Math.max(0, unit.vitality.hp - damage);
-    const hp =
-        candidateHp === 0 && unit.vitality.hp > 0 && hasStatusFlag(unit, "UNDEADABLE")
-            ? Math.min(1, unit.vitality.hp)
-            : candidateHp;
-    const amount = unit.vitality.hp - hp;
-
-    return {
-        unit: amount === 0 ? unit : { ...unit, vitality: { ...unit.vitality, hp } },
-        amount,
-        killed: unit.vitality.hp > 0 && hp === 0,
-    };
 }
 
 export function resolveDamage(

@@ -1,4 +1,4 @@
-import type { Unit, Definition } from "../unit.js";
+import type { Unit } from "../unit.js";
 
 export interface AllegianceState {
     readonly side: "ALLY" | "ENEMY" | "NEUTRAL";
@@ -6,10 +6,6 @@ export interface AllegianceState {
 
 export interface Allegiance {
     readonly definition: { readonly allegiance: AllegianceState };
-    readonly allegiance: AllegianceState;
-}
-
-export interface AllegiantUnitDefinition extends Definition {
     readonly allegiance: AllegianceState;
 }
 

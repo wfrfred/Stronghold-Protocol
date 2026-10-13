@@ -17,7 +17,7 @@ import {
     validateOccupancyState,
     type OccupancyState,
 } from "../../core/tactical/unit/capability/occupancy.js";
-import type { VitalUnitDefinition } from "../../core/tactical/unit/capability/vitality/capability.js";
+import type { VitalityDefinition } from "../../core/tactical/unit/capability/vitality/capability.js";
 import type { ArknightsPredefinedInstance } from "./level.js";
 import type { PredefinedPrefab } from "./prefab.js";
 
@@ -91,7 +91,7 @@ function unitDefinition(
     instance: ArknightsPredefinedInstance,
     phase: Record<string, unknown>,
     profile: Extract<PredefinedPrefab, { readonly type: "UNIT" }>,
-): VitalUnitDefinition & TileBoundUnitDefinition & DeployableUnitDefinition {
+): { readonly vitality: VitalityDefinition } & TileBoundUnitDefinition & DeployableUnitDefinition {
     if (instance.inst.potentialRank !== 0 || instance.inst.favorPoint !== 0) {
         throw new TypeError("predefined unit potential and favor modifiers are not supported");
     }

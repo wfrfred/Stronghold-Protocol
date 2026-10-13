@@ -54,15 +54,13 @@ export interface Action {
     readonly action: ActionState;
 }
 
-export interface ActingUnitDefinition extends Definition {
-    readonly action: ActionCapabilityDefinition;
-}
-
 export function hasAction<U extends Unit>(unit: U): unit is U & Action {
     return "action" in unit && "action" in unit.definition;
 }
 
-export function hasActionDefinition(definition: Definition): definition is ActingUnitDefinition {
+export function hasActionDefinition(
+    definition: Definition,
+): definition is Definition & Action["definition"] {
     return "action" in definition;
 }
 

@@ -1,7 +1,7 @@
 import { emptyCall, type CallContext } from "../../../../battle/execution/call.js";
 import { hasStatusFlag } from "../../status/capability.js";
-import { hasVitality, resolveVitalityMaxHp, type Vitality } from "../capability.js";
-import type { Unit, Id } from "../../../unit.js";
+import { hasVitality } from "../capability.js";
+import type { Id } from "../../../unit.js";
 import type { Hook as RegisteredHook } from "../../../hook/hook.js";
 import { resolveMaxHp } from "../query.js";
 import { hookScope, type Result } from "../hook.js";
@@ -11,7 +11,6 @@ import type {
     HealingCancellation,
     HealingReport,
     HealingRequest,
-    HealingResult,
     PendingHealing,
 } from "./contract.js";
 import {
@@ -22,34 +21,6 @@ import {
     type BattleState,
     type Result as Settlement,
 } from "../../../../battle/state.js";
-
-function applyHealingValue(unit: Unit & Vitality, power: number, maxHp: number): HealingResult {
-    const amount = Math.max(0, Math.min(power, maxHp - unit.vitality.hp));
-
-    return {
-        unit:
-            amount === 0
-                ? unit
-                : { ...unit, vitality: { ...unit.vitality, hp: unit.vitality.hp + amount } },
-        amount,
-    };
-}
-
-export function healUnit(
-    unit: Unit & Vitality,
-    power: number,
-    ignoreHealFree = false,
-    maxHp = resolveVitalityMaxHp(unit.definition.vitality, unit.vitality),
-): HealingResult {
-    assertNonnegativeNumber(power, "healing amount");
-    assertNonnegativeNumber(maxHp, "healing maximum HP");
-
-    if (unit.vitality.hp <= 0 || (!ignoreHealFree && hasStatusFlag(unit, "HEAL_FREE"))) {
-        return { unit, amount: 0 };
-    }
-
-    return applyHealingValue(unit, power, maxHp);
-}
 
 export function resolveHealing(
     state: BattleState,
@@ -127,10 +98,12 @@ export function resolveHealing(
 
         if (finalCancellation === null) {
             const maxHp = resolveMaxHp(current.id, battlefieldView(state))!;
-            const healed = applyHealingValue(current, healingAmount, maxHp);
-            state = updateUnit(state, healed.unit);
-            amount = healed.amount;
-            hp = healed.unit.vitality.hp;
+            amount = Math.max(0, Math.min(healingAmount, maxHp - hp));
+            hp += amount;
+
+            if (amount !== 0) {
+                state = updateUnit(state, { ...current, vitality: { ...current.vitality, hp } });
+            }
         }
 
         state = appendEvents(state, [

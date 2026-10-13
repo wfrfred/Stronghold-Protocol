@@ -19,17 +19,13 @@ export interface Offense {
     readonly offense: OffenseState;
 }
 
-export interface OffensiveUnitDefinition extends Definition {
-    readonly offense: OffenseDefinition;
-}
-
 export function hasOffense<U extends Unit>(unit: U): unit is U & Offense {
     return "offense" in unit && "offense" in unit.definition;
 }
 
 export function hasOffenseDefinition(
     definition: Definition,
-): definition is OffensiveUnitDefinition {
+): definition is Definition & Offense["definition"] {
     return "offense" in definition;
 }
 

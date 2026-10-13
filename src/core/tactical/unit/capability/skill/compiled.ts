@@ -9,7 +9,7 @@ export type SkillFacts = CombatTargetingView;
 export interface SkillQueryContext {
     readonly unitId: Id;
     readonly tick: number;
-    readonly facts: SkillFacts;
+    readonly battlefield: SkillFacts;
 }
 
 export interface SkillActivationContext extends SkillQueryContext {

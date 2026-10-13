@@ -12,11 +12,9 @@ import {
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { getUnit } from "../../dist/core/tactical/battle/state.js";
 import {
-    damageUnit,
     resolveDamage,
 } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import {
-    healUnit,
     resolveHealing,
 } from "../../dist/core/tactical/unit/capability/vitality/healing/settlement.js";
 
@@ -240,8 +238,6 @@ test("settlement invariants: zero amounts remain valid and negative source heali
     assert.equal(healing.amount, 0);
     assert.equal(normalized.amount, 0);
     assert.equal(getUnit(battle, 2).vitality.hp, 200);
-    assert.equal(damageUnit(unit(2), 0, "TRUE").amount, 0);
-    assert.equal(healUnit(unit(2), 0).amount, 0);
     for (const invalid of [NaN, Infinity])
         assert.throws(() => resolveHealing(battle, healingRequest(invalid)), RangeError);
 });
@@ -264,15 +260,4 @@ test("settlement invariants: cancelled healing rejects a nonfinite final hook am
     assert.throws(() => resolveHealing(battle, healingRequest()), RangeError);
     assert.equal(getUnit(battle, 2).vitality.hp, 200);
     assert.deepEqual(battle.events, []);
-});
-
-test("settlement invariants: public vitality transitions validate final amounts", () => {
-    for (const target of [unit(2), unit(2, ["INVINCIBLE", "HEAL_FREE"])]) {
-        for (const invalid of [-1, NaN, Infinity, -Infinity]) {
-            assert.throws(() => damageUnit(target, invalid, "TRUE"), RangeError);
-            assert.throws(() => healUnit(target, invalid), RangeError);
-            assert.throws(() => healUnit(target, 10, true, invalid), RangeError);
-            assert.equal(target.vitality.hp, 200);
-        }
-    }
 });

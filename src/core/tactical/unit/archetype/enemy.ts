@@ -1,16 +1,16 @@
 import { assertNonnegativeNumber, assertPositiveNumber } from "../../../common/assert.js";
 import {
     createActionCapabilityDefinition,
-    type ActingUnitDefinition,
+    type ActionCapabilityDefinition,
 } from "../capability/action/capability.js";
-import type { AllegiantUnitDefinition } from "../capability/allegiance.js";
+import type { AllegianceState } from "../capability/allegiance.js";
 import {
     createBlockableDefinition,
-    type BlockableUnitDefinition,
+    type BlockableDefinition,
 } from "../capability/blocking/capability.js";
 import {
     createDefenseDefinition,
-    type DefendedUnitDefinition,
+    type DefenseDefinition,
 } from "../capability/defense/capability.js";
 import {
     createOffenseDefinition,
@@ -18,18 +18,18 @@ import {
 } from "../capability/offense/capability.js";
 import type {
     Locomotion,
-    LocomotiveUnitDefinition,
+    LocomotionDefinition,
     RoutedLocomotion,
 } from "../capability/locomotion/capability.js";
 import type { SpatialPresence } from "../capability/presence.js";
 import {
     createHitDefinition,
-    type HitUnitDefinition,
-    type SpatialUnitDefinition,
+    type HitDefinition,
+    type SpatialDefinition,
 } from "../capability/spatial.js";
-import type { StatusUnitDefinition } from "../capability/status/capability.js";
-import type { Unit } from "../unit.js";
-import type { Vitality, VitalUnitDefinition } from "../capability/vitality/capability.js";
+import type { StatusDefinition } from "../capability/status/capability.js";
+import type { Unit, DefinitionId } from "../unit.js";
+import type { Vitality, VitalityDefinition } from "../capability/vitality/capability.js";
 import type * as initialization from "../initialize.js";
 import {
     createElementalDefinition,
@@ -37,7 +37,10 @@ import {
 } from "../capability/elemental/capability.js";
 import { createSkillDefinition, type SkillDefinition } from "../capability/skill/capability.js";
 
-export interface Definition extends VitalUnitDefinition, LocomotiveUnitDefinition {
+export interface Definition {
+    readonly id: DefinitionId;
+    readonly vitality: VitalityDefinition;
+    readonly locomotion: LocomotionDefinition;
     readonly skill?: SkillDefinition;
     readonly elemental?: ElementalDefinition;
 }
@@ -49,16 +52,14 @@ export type RoutedEnemy<D extends Definition = Definition> = Enemy<D> &
     RoutedLocomotion &
     SpatialPresence;
 
-export interface CombatDefinition
-    extends
-        Definition,
-        ActingUnitDefinition,
-        AllegiantUnitDefinition,
-        SpatialUnitDefinition,
-        HitUnitDefinition,
-        StatusUnitDefinition,
-        DefendedUnitDefinition,
-        BlockableUnitDefinition {
+export interface CombatDefinition extends Definition {
+    readonly action: ActionCapabilityDefinition;
+    readonly allegiance: AllegianceState;
+    readonly spatial: SpatialDefinition;
+    readonly hit: HitDefinition;
+    readonly status: StatusDefinition;
+    readonly defense: DefenseDefinition;
+    readonly blockable: BlockableDefinition;
     readonly offense?: OffenseDefinition;
 }
 

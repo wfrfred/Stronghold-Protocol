@@ -224,18 +224,19 @@ test("Unit with an acting definition and no action state remains statically lega
         writeFileSync(
             path,
             `
-import type { Unit } from ${sourceModule("unit/unit")};
+import type { Unit, Definition } from ${sourceModule("unit/unit")};
 import { Effects } from ${sourceModule("unit/effect/effects")};
-import type { ActingUnitDefinition } from ${sourceModule("unit/capability/action/capability")};
+import type { Action } from ${sourceModule("unit/capability/action/capability")};
 import type { ImmutableData } from ${sourceModule("../common/immutable-data")};
 import type { BattlefieldMap } from ${sourceModule("battlefield/map/map")};
 import { createBattlefieldRuntime } from ${sourceModule("battlefield/runtime")};
-declare const definition: ImmutableData<ActingUnitDefinition>;
+type ActingDefinition = Definition & Action['definition'];
+declare const definition: ImmutableData<ActingDefinition>;
 declare const map: BattlefieldMap;
-const unit: Unit<ActingUnitDefinition> = { id: 1, definition, position: [0, 0], effects: Effects.empty(), lifecycle: 'PRESENT' };
+const unit: Unit<ActingDefinition> = { id: 1, definition, position: [0, 0], effects: Effects.empty(), lifecycle: 'PRESENT' };
 const battlefield = createBattlefieldRuntime({ map });
 battlefield.advance([{ type: 'REGISTER_UNIT', unit }]);
-const custom = createBattlefieldRuntime<Unit<ActingUnitDefinition>>({ map });
+const custom = createBattlefieldRuntime<Unit<ActingDefinition>>({ map });
 custom.advance([{ type: 'REGISTER_UNIT', unit }]);
 `,
         );

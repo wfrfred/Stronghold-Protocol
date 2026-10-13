@@ -16,10 +16,10 @@ import {
   getCurrentElementType,
 } from '../../dist/core/tactical/unit/capability/elemental/query.js';
 import {
-  advanceElemental,
+  advanceElementalUnit,
   receiveElementDamage,
   receiveElementHeal,
-} from '../../dist/core/tactical/unit/capability/elemental/settlement.js';
+} from '../../dist/core/tactical/unit/capability/elemental/transition.js';
 import {
   createArknightsElementalDefinition,
   getArknightsElementalBurstProfile,
@@ -115,18 +115,18 @@ test('the first zero bar starts one unit recovery and discards overflow and all 
 test('burst recovery is progressive, idempotent at a tick, independently copyable and restores every bar at its deadline', () => {
   const broken = damage(holder(), 'NECROSIS', 1000, 2).unit;
   const snapshot = copy(broken);
-  const half = advanceElemental(broken, 227);
+  const half = advanceElementalUnit(broken, 227);
   assert.deepEqual(half.unit.elemental.ep, elementValues(500));
   assert.equal(half.recovered, false);
   assert.equal(half.burst.type, 'NECROSIS');
   assert.equal(canReceiveElementHeal(half.unit), false);
-  assert.equal(advanceElemental(half.unit, 227).unit, half.unit);
-  const restored = advanceElemental(half.unit, 452);
+  assert.equal(advanceElementalUnit(half.unit, 227).unit, half.unit);
+  const restored = advanceElementalUnit(half.unit, 452);
   assert.equal(restored.recovered, true);
   assert.equal(restored.burst.sourceUnitId, 9);
   assert.equal(restored.unit.elemental.recovery, null);
   assert.deepEqual(restored.unit.elemental.ep, elementValues(1000));
-  assert.deepEqual(advanceElemental(snapshot, 452), advanceElemental(broken, 452));
+  assert.deepEqual(advanceElementalUnit(snapshot, 452), advanceElementalUnit(broken, 452));
   assert.deepEqual(snapshot.elemental.ep, elementValues(0));
   assert.equal(damage(restored.unit, 'EROSION', 1000, 452).outcome, 'BURST');
 });
@@ -171,8 +171,8 @@ test('neutral, absent and dead receivers are ordinary rejections while invalid n
   }
   assert.throws(() => damage(holder(), 'BURN', Infinity), RangeError);
   assert.throws(() => heal(holder(), -1), RangeError);
-  assert.throws(() => advanceElemental(holder(), -1), RangeError);
-  const advanced = advanceElemental(holder({ recoveryPerSecond: 30 }), 5).unit;
+  assert.throws(() => advanceElementalUnit(holder(), -1), RangeError);
+  const advanced = advanceElementalUnit(holder({ recoveryPerSecond: 30 }), 5).unit;
   assert.throws(() => damage(advanced, 'BURN', 1, 4), RangeError);
 });
 
@@ -180,14 +180,14 @@ test('natural EP recovery is explicit, affects all bars and does not accumulate 
   const unit = holder({ recoveryPerSecond: 30 });
   let damaged = damage(unit, 'BURN', 100, 10).unit;
   damaged = damage(damaged, 'NEURAL', 20, 10).unit;
-  const recovered = advanceElemental(damaged, 40).unit;
+  const recovered = advanceElementalUnit(damaged, 40).unit;
   assert.equal(recovered.elemental.ep.BURN, 930);
   assert.equal(recovered.elemental.ep.NEURAL, 1000);
-  assert.equal(advanceElemental(recovered, 40).unit, recovered);
-  const newDamage = damage(advanceElemental(unit, 1000).unit, 'BURN', 100, 1000).unit;
-  assert.equal(advanceElemental(newDamage, 1001).unit.elemental.ep.BURN, 901);
+  assert.equal(advanceElementalUnit(recovered, 40).unit, recovered);
+  const newDamage = damage(advanceElementalUnit(unit, 1000).unit, 'BURN', 100, 1000).unit;
+  assert.equal(advanceElementalUnit(newDamage, 1001).unit.elemental.ep.BURN, 901);
   const standard = damage(holder(), 'BURN', 100).unit;
-  assert.equal(advanceElemental(standard, 1000).unit, standard);
+  assert.equal(advanceElementalUnit(standard, 1000).unit, standard);
 });
 
 test('raw element identities preserve the four supported native types and reject NONE, ANGER and guessed aliases', () => {

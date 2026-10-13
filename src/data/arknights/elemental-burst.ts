@@ -21,7 +21,7 @@ import {
     type Defense,
 } from "../../core/tactical/unit/capability/defense/capability.js";
 import { ELEMENT_TYPES } from "../../core/tactical/unit/capability/elemental/capability.js";
-import type { ElementalBurstContext } from "../../core/tactical/unit/capability/elemental/definition.js";
+import type { ElementalBurstContext } from "../../core/tactical/unit/capability/elemental/burst-definition.js";
 import {
     hasOffense,
     setAttackContribution,

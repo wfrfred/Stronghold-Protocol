@@ -1,16 +1,16 @@
 import { assertNonnegativeSafeInteger, assertPositiveNumber } from "../../../common/assert.js";
 import {
     createActionCapabilityDefinition,
-    type ActingUnitDefinition,
+    type ActionCapabilityDefinition,
 } from "../capability/action/capability.js";
-import type { AllegiantUnitDefinition } from "../capability/allegiance.js";
+import type { AllegianceState } from "../capability/allegiance.js";
 import {
     createBlockerDefinition,
-    type BlockingUnitDefinition,
+    type BlockerDefinition,
 } from "../capability/blocking/capability.js";
 import {
     createDefenseDefinition,
-    type DefendedUnitDefinition,
+    type DefenseDefinition,
 } from "../capability/defense/capability.js";
 import {
     createOffenseDefinition,
@@ -18,11 +18,12 @@ import {
 } from "../capability/offense/capability.js";
 import {
     createHitDefinition,
-    type HitUnitDefinition,
-    type SpatialUnitDefinition,
+    type HitDefinition,
+    type SpatialDefinition,
 } from "../capability/spatial.js";
-import type { StatusUnitDefinition } from "../capability/status/capability.js";
-import type { VitalUnitDefinition } from "../capability/vitality/capability.js";
+import type { StatusDefinition } from "../capability/status/capability.js";
+import type { VitalityDefinition } from "../capability/vitality/capability.js";
+import type { DefinitionId } from "../unit.js";
 import * as initialization from "../initialize.js";
 import {
     createElementalDefinition,
@@ -30,16 +31,16 @@ import {
 } from "../capability/elemental/capability.js";
 import { createSkillDefinition, type SkillDefinition } from "../capability/skill/capability.js";
 
-export interface Definition
-    extends
-        VitalUnitDefinition,
-        ActingUnitDefinition,
-        AllegiantUnitDefinition,
-        SpatialUnitDefinition,
-        HitUnitDefinition,
-        StatusUnitDefinition,
-        DefendedUnitDefinition,
-        BlockingUnitDefinition {
+export interface Definition {
+    readonly id: DefinitionId;
+    readonly vitality: VitalityDefinition;
+    readonly action: ActionCapabilityDefinition;
+    readonly allegiance: AllegianceState;
+    readonly spatial: SpatialDefinition;
+    readonly hit: HitDefinition;
+    readonly status: StatusDefinition;
+    readonly defense: DefenseDefinition;
+    readonly blocker: BlockerDefinition;
     readonly offense?: OffenseDefinition;
     readonly skill?: SkillDefinition;
     readonly elemental?: ElementalDefinition;

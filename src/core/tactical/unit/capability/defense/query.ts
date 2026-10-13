@@ -1,11 +1,8 @@
-import { hasDefense, resolveDefenseParameters, type DefenseDefinition } from "./capability.js";
+import { hasDefense, resolveDefenseParameters, type Parameters } from "./capability.js";
 import type { Id } from "../../unit.js";
 import type { BattlefieldView } from "../../../battlefield/contract.js";
 
-export function resolveDefense(
-    unitId: Id,
-    battlefield: BattlefieldView,
-): DefenseDefinition | undefined {
+export function resolveDefense(unitId: Id, battlefield: BattlefieldView): Parameters | undefined {
     const unit = battlefield.getUnit(unitId);
 
     if (unit === undefined) {

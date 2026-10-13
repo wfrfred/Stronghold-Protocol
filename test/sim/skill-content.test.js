@@ -135,7 +135,7 @@ function instantDamageFixture(automatic = false, withTarget = true) {
   const resources = new CombatResources();
   const parsed = parseArknightsSkillLevel(unsheathe);
   const definition = automatic ? createSkillDefinition({ ...parsed.definition, activation: "AUTO" }) : parsed.definition;
-  const target = (context) => context.facts.getUnit(2);
+  const target = (context) => context.battlefield.getUnit(2);
   let reports = [];
   resources.skills.register({
     definition,
@@ -144,8 +144,8 @@ function instantDamageFixture(automatic = false, withTarget = true) {
       return receiver !== undefined && receiver.vitality.hp > 0;
     },
     activate: (state, context) => {
-      assert.deepEqual(context.facts.blockedBy(1), []);
-      assert.equal(context.facts.blockerOf(2), undefined);
+      assert.deepEqual(context.battlefield.blockedBy(1), []);
+      assert.equal(context.battlefield.blockerOf(2), undefined);
       for (const damageType of ["PHYSICAL", "ARTS"]) {
         const settled = resources.settleDamage(state, { sourceUnitId: 1, targetUnitId: 2, damageType, operands: createDamageOperands(330), tick: context.tick }, context.call);
         state = settled.state;

@@ -10,16 +10,16 @@ import { emptyCall, type CallContext } from "../../../battle/execution/call.js";
 import type { Id } from "../../unit.js";
 import { hasElemental, type ElementType, type ElementValues } from "./capability.js";
 import type { ElementalRejection } from "./query.js";
-import type { ElementalBurstContext } from "./definition.js";
+import type { ElementalBurstContext } from "./burst-definition.js";
 import type { ElementalResources } from "./resources.js";
 import {
-    advanceElemental,
+    advanceElementalUnit,
     receiveElementDamage,
     receiveElementHeal,
     type ElementalBurst,
     type ElementDamageRequest,
     type ElementHealRequest,
-} from "./settlement.js";
+} from "./transition.js";
 
 export interface ElementalExecutionResources {
     readonly elemental: ElementalResources;
@@ -72,10 +72,12 @@ export type ElementHealOperation = (
     call?: CallContext,
 ) => Result<ElementHealReport>;
 
-export interface ElementHealReport {
+export type ElementHealReport = {
     readonly amount: number;
-    readonly outcome: "REJECTED" | "APPLIED";
-}
+} & (
+    | { readonly outcome: "REJECTED"; readonly reason: ElementalRejection | "TARGET_ABSENT" }
+    | { readonly outcome: "APPLIED" }
+);
 
 function burstContext(
     state: BattleState,
@@ -84,7 +86,7 @@ function burstContext(
     previousTick: number,
     call: CallContext,
 ): ElementalBurstContext {
-    return { burst, tick, previousTick, facts: battlefieldView(state), call };
+    return { burst, tick, previousTick, battlefield: battlefieldView(state), call };
 }
 
 export function resolveElementDamage(
@@ -143,11 +145,12 @@ export function resolveElementHeal(
     const unit = getUnit(state, request.targetUnitId);
 
     if (unit === undefined) {
-        return { state, value: { amount: 0, outcome: "REJECTED" } };
+        return { state, value: { amount: 0, outcome: "REJECTED", reason: "TARGET_ABSENT" } };
     }
 
     const received = receiveElementHeal(unit, request);
-    state = updateUnit(state, received.unit);
+    const { unit: next, amounts, ...report } = received;
+    state = updateUnit(state, next);
 
     if (received.outcome === "APPLIED") {
         state = appendEvents(state, [
@@ -155,16 +158,16 @@ export function resolveElementHeal(
                 type: "ELEMENT_HEAL",
                 sourceUnitId: request.sourceUnitId,
                 targetUnitId: unit.id,
-                amounts: received.amounts,
+                amounts,
                 tick: request.tick,
             },
         ]);
     }
 
-    return { state, value: { amount: received.amount, outcome: received.outcome } };
+    return { state, value: report };
 }
 
-export function advanceElementalState(
+export function advanceElemental(
     state: BattleState,
     unitId: Id,
     tick: number,
@@ -177,7 +180,7 @@ export function advanceElementalState(
         return state;
     }
 
-    const advanced = advanceElemental(unit, tick);
+    const advanced = advanceElementalUnit(unit, tick);
     state = updateUnit(state, advanced.unit);
 
     if (advanced.burst !== null) {

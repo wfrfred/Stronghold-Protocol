@@ -22,7 +22,7 @@ import { create as modifier } from '../../dist/core/tactical/unit/contribution/v
 import { calculateDamage, resolveDamage } from '../../dist/core/tactical/unit/capability/vitality/damage/settlement.js';
 import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
 import { resolveHealing } from '../../dist/core/tactical/unit/capability/vitality/healing/settlement.js';
-import { resolveElementDamage, resolveElementHeal, advanceElementalState } from '../../dist/core/tactical/unit/capability/elemental/execution.js';
+import { resolveElementDamage, resolveElementHeal, advanceElemental } from '../../dist/core/tactical/unit/capability/elemental/execution.js';
 import { elementValues } from '../../dist/core/tactical/unit/capability/elemental/capability.js';
 import { createArknightsElementalDefinition } from '../../dist/data/arknights/elemental.js';
 import { registerArknightsElementalBursts } from '../../dist/data/arknights/elemental-burst.js';
@@ -58,7 +58,7 @@ function element(work, type, supplied, tick = 0, power = 1000) {
   return resolveElementDamage(work, { type, power, sourceUnitId: 9, targetUnitId: 1, tick }, supplied);
 }
 function advance(work, tick, supplied) {
-  work = advanceElementalState({ ...work, tick }, 1, tick, supplied);
+  work = advanceElemental({ ...work, tick }, 1, tick, supplied);
   return effects.advance(work);
 }
 function defense(work, supplied) {
@@ -194,9 +194,56 @@ test('elemental healing receives every EP bar independently from HP healing and 
   assert.deepEqual(getUnit(work, 1).elemental.ep, { NEURAL: 1000, EROSION: 1000, BURN: 900, NECROSIS: 1000 });
   let broken = work;
   broken = element(broken, 'BURN', supplied).state;
-  assert.deepEqual(resolveElementHeal(broken, { power: 1000, sourceUnitId: null, targetUnitId: 1, tick: 0 }).value, { amount: 0, outcome: 'REJECTED' });
+  assert.deepEqual(resolveElementHeal(broken, { power: 1000, sourceUnitId: null, targetUnitId: 1, tick: 0 }).value, { amount: 0, outcome: 'REJECTED', reason: 'RECOVERING' });
   const immune = effectFixtureWork(unit('CHARACTER', {}, { immune: true }));
   assert.equal(resolveElementHeal(immune, { power: 100, sourceUnitId: null, targetUnitId: 1, tick: 0 }).value.outcome, 'REJECTED');
+});
+
+test('elemental healing reports preserve each rejection reason without changing state or emitting events', () => {
+  const receiver = unit();
+  const noElemental = initialize({ id: 1, position: [1, 0], definition: { id: 'no-elemental' } });
+  const recovering = {
+    ...receiver,
+    elemental: {
+      ...receiver.elemental,
+      recovery: { type: 'BURN', sourceUnitId: null, startedAtTick: 0, endsAtTick: 300 },
+    },
+  };
+  for (const [reason, units] of [
+    ['TARGET_ABSENT', []],
+    ['NO_ELEMENTAL', [noElemental]],
+    ['INACTIVE', [{ ...receiver, vitality: { ...receiver.vitality, hp: 0 } }]],
+    ['NEUTRAL', [{ ...receiver, allegiance: { side: 'NEUTRAL' } }]],
+    ['RECOVERING', [recovering]],
+    ['IMMUNE', [unit('CHARACTER', {}, { immune: true })]],
+  ]) {
+    const state = effectFixtureWork(...units);
+    const before = JSON.stringify(state);
+    const healed = resolveElementHeal(state, { power: 100, sourceUnitId: null, targetUnitId: 1, tick: 0 });
+    assert.deepEqual(healed.value, { outcome: 'REJECTED', reason, amount: 0 });
+    assert.equal(healed.state, state);
+    assert.equal(JSON.stringify(state), before);
+    assert.deepEqual(healed.state.events, []);
+  }
+});
+
+test('elemental burst callbacks receive the current battlefield on begin and recovery advancement', () => {
+  const supplied = new CombatResources();
+  const seen = [];
+  const observe = (state, context) => {
+    const current = getUnit(state, context.burst.targetUnitId);
+    assert.equal(context.battlefield.getUnit(current.id), current);
+    seen.push([context.tick, context.previousTick, current.elemental.ep.BURN]);
+    return state;
+  };
+  supplied.elemental.register('CHARACTER', 'BURN', { begin: observe, advance: observe });
+  const initial = effectFixtureWork(unit());
+  const burst = element(initial, 'BURN', supplied);
+  const recovered = advanceElemental(burst.state, 1, 150, supplied);
+  assert.deepEqual(seen, [[0, 0, 0], [150, 0, 500]]);
+  assert.equal(getUnit(initial, 1).elemental.ep.BURN, 1000);
+  assert.equal(getUnit(burst.state, 1).elemental.ep.BURN, 0);
+  assert.equal(getUnit(recovered, 1).elemental.ep.BURN, 500);
 });
 
 test('elemental compiled actions select EP receivers without Vitality and keep element healing independent from HEAL_FREE', () => {

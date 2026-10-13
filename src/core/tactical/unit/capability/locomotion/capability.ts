@@ -1,7 +1,7 @@
 import type { Context } from "../../query.js";
 import type { NavigationState } from "../../../battlefield/navigation/state.js";
 import type { RouteState } from "./route/state.js";
-import type { Unit, Definition } from "../../unit.js";
+import type { Unit } from "../../unit.js";
 import { createSteeringState, type SteeringParameters, type SteeringState } from "./steering.js";
 import * as contribution from "../../contribution/contribution.js";
 import * as modifier from "../../contribution/value.js";
@@ -39,15 +39,7 @@ export interface RoutedLocomotion extends Locomotion {
     readonly locomotion: RoutedLocomotionState;
 }
 
-export interface LocomotiveUnitDefinition extends Definition {
-    readonly locomotion: LocomotionDefinition;
-}
-
-export type LocomotiveUnit<D extends LocomotiveUnitDefinition = LocomotiveUnitDefinition> =
-    Unit<D> & Locomotion;
-
-export type RoutedLocomotiveUnit<D extends LocomotiveUnitDefinition = LocomotiveUnitDefinition> =
-    Unit<D> & RoutedLocomotion;
+export type RoutedLocomotiveUnit = Unit & RoutedLocomotion;
 
 export function hasLocomotion<U extends Unit>(unit: U): unit is U & Locomotion {
     return "locomotion" in unit && "locomotion" in unit.definition;

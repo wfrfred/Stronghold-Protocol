@@ -4,10 +4,12 @@ import * as contribution from "../../contribution/contribution.js";
 import * as modifier from "../../contribution/value.js";
 import type { Unit, Definition } from "../../unit.js";
 
-export interface DefenseDefinition {
+export interface Parameters {
     readonly defense: number;
     readonly resistance: number;
 }
+
+export type DefenseDefinition = Parameters;
 
 export interface DefenseState {
     readonly defense: readonly contribution.Contribution<contribution.Input<Context>>[];
@@ -21,15 +23,13 @@ export interface Defense {
     readonly defense: DefenseState;
 }
 
-export interface DefendedUnitDefinition extends Definition {
-    readonly defense: DefenseDefinition;
-}
-
 export function hasDefense<U extends Unit>(unit: U): unit is U & Defense {
     return "defense" in unit && "defense" in unit.definition;
 }
 
-export function hasDefenseDefinition(definition: Definition): definition is DefendedUnitDefinition {
+export function hasDefenseDefinition(
+    definition: Definition,
+): definition is Definition & Defense["definition"] {
     return "defense" in definition;
 }
 
@@ -88,7 +88,7 @@ export function resolveDefenseParameters(
     definition: DefenseDefinition,
     state: DefenseState,
     context: Context,
-): DefenseDefinition {
+): Parameters {
     return {
         defense: Math.max(
             0,

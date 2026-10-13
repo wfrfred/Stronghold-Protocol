@@ -46,15 +46,13 @@ export interface Skill {
     readonly skill: SkillState;
 }
 
-export interface SkilledUnitDefinition extends Definition {
-    readonly skill: SkillDefinition;
-}
-
 export function hasSkill<U extends Unit>(unit: U): unit is U & Skill {
     return "skill" in unit && "skill" in unit.definition;
 }
 
-export function hasSkillDefinition(definition: Definition): definition is SkilledUnitDefinition {
+export function hasSkillDefinition(
+    definition: Definition,
+): definition is Definition & Skill["definition"] {
     return "skill" in definition;
 }
 

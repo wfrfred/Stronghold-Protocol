@@ -81,7 +81,7 @@ function skillContext(
         tick,
         activationId: activation.id,
         endsAtTick: activation.endsAtTick,
-        facts: battlefieldView(state),
+        battlefield: battlefieldView(state),
         call,
     };
 }
@@ -138,7 +138,7 @@ export function activateSkill(
     const query = {
         unitId,
         tick,
-        facts: battlefieldView(state),
+        battlefield: battlefieldView(state),
     };
 
     if (!(compiled.accepts?.(query) ?? true)) {

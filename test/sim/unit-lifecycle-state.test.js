@@ -52,7 +52,7 @@ test("skill finish sees LEAVING and cannot install dependencies on its departing
   resources.skills.register({ definition: skill,
     activate: state => ({ state, value: { type: "ACTIVATED" } }),
     finish(state, context) {
-      statuses.push(context.facts.getUnit(0).lifecycle);
+      statuses.push(context.battlefield.getUnit(0).lifecycle);
       state = removeUnitWithEffects(state, 0, "DEATH", resources, context.tick, context.call);
       const rejected = effects.install(state, getUnit(state, 1), { id: "late-dependency", initialize: () => ({}), onInstall(state) { installations++; return state; } }, { scopes: [{ type: "UNIT", unitId: 0 }] }, context.call);
       assert.equal(rejected.value, undefined);

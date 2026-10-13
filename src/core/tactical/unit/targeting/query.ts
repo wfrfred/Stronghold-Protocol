@@ -1,5 +1,5 @@
 import type { BattlefieldView } from "../../battlefield/contract.js";
-import type { VitalUnit } from "../capability/vitality/capability.js";
+import type { Vitality } from "../capability/vitality/capability.js";
 import type { Unit, Id } from "../unit.js";
 
 export interface TargetQueryContext {
@@ -23,6 +23,9 @@ export interface CombatTargetQueryContext extends TargetQueryContext {
     readonly battlefield: CombatTargetingView;
 }
 
-export type HealingMaxHpProvider = (unit: VitalUnit, context: CombatTargetQueryContext) => number;
+export type HealingMaxHpProvider = (
+    unit: Unit & Vitality,
+    context: CombatTargetQueryContext,
+) => number;
 
 export type QueryPurpose = "DAMAGE" | "HEAL" | "ELEMENT_DAMAGE" | "ELEMENT_HEAL";

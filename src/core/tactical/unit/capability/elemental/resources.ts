@@ -1,6 +1,6 @@
 import { ResourceRegistration } from "../../../../common/resource-registration.js";
 import type { ElementalReceiver, ElementType } from "./capability.js";
-import type { ElementalBurstDefinition } from "./definition.js";
+import type { ElementalBurstDefinition } from "./burst-definition.js";
 
 export class ElementalResources {
     readonly #registration: ResourceRegistration;

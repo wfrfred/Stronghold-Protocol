@@ -10,7 +10,7 @@ import {
     hasElemental,
     type ElementalRecovery,
     type ElementalReceiver,
-    type ElementalUnit,
+    type Elemental,
     type ElementType,
     type ElementValues,
 } from "./capability.js";
@@ -69,7 +69,7 @@ function assertTick(unit: Unit, tick: number): void {
     }
 }
 
-function burstOf(unit: ElementalUnit, recovery: ElementalRecovery): ElementalBurst {
+function burstOf(unit: Unit & Elemental, recovery: ElementalRecovery): ElementalBurst {
     return Object.freeze({
         ...recovery,
         receiver: unit.definition.elemental.receiver,
@@ -200,7 +200,7 @@ export function receiveElementHeal(unit: Unit, request: ElementHealRequest): Ele
     };
 }
 
-export function advanceElemental(unit: Unit, tick: number): ElementalAdvanceResult {
+export function advanceElementalUnit(unit: Unit, tick: number): ElementalAdvanceResult {
     assertTick(unit, tick);
 
     if (!hasElemental(unit) || tick === unit.elemental.lastRecoveryTick) {

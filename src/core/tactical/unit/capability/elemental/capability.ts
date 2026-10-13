@@ -44,20 +44,13 @@ export interface Elemental {
     readonly elemental: ElementalState;
 }
 
-export interface ElementalUnitDefinition extends Definition {
-    readonly elemental: ElementalDefinition;
-}
-
-export type ElementalUnit<D extends ElementalUnitDefinition = ElementalUnitDefinition> = Unit<D> &
-    Elemental;
-
 export function hasElemental<U extends Unit>(unit: U): unit is U & Elemental {
     return "elemental" in unit && "elemental" in unit.definition;
 }
 
 export function hasElementalDefinition(
     definition: Definition,
-): definition is ElementalUnitDefinition {
+): definition is Definition & Elemental["definition"] {
     return "elemental" in definition;
 }
 

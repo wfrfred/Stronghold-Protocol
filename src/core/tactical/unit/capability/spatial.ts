@@ -1,5 +1,5 @@
 import { createShapeGeometry, type HitGeometry } from "../../geometry/shape.js";
-import type { Unit, Definition } from "../unit.js";
+import type { Unit } from "../unit.js";
 
 export type SpatialLayer = "GROUND" | "AIR";
 
@@ -14,10 +14,6 @@ export interface Spatial {
     readonly spatial: SpatialState;
 }
 
-export interface SpatialUnitDefinition extends Definition {
-    readonly spatial: SpatialDefinition;
-}
-
 export interface HitDefinition {
     readonly geometry: HitGeometry;
 }
@@ -27,10 +23,6 @@ export type HitState = HitDefinition;
 export interface Hit {
     readonly definition: { readonly hit: HitDefinition };
     readonly hit: HitState;
-}
-
-export interface HitUnitDefinition extends Definition {
-    readonly hit: HitDefinition;
 }
 
 export function hasSpatial<U extends Unit>(unit: U): unit is U & Spatial {

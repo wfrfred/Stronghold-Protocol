@@ -7,7 +7,8 @@ import { makeBattle, chessRec, enemyRec } from '../helpers/battleHarness.js';
 import { ELEMENT } from '../../server/sim/constants.js';
 import { createLegacyCombatBattle, createLegacyCombatSpec } from '../../dist/legacy/combat.js';
 import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
-import { calculateDamage, damageUnit } from '../../dist/core/tactical/unit/capability/vitality/damage/settlement.js';
+import { calculateDamage, resolveDamage } from '../../dist/core/tactical/unit/capability/vitality/damage/settlement.js';
+import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
 import { createBattlefieldMap, BattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
@@ -354,18 +355,22 @@ test('core combat: damage formulas retain the 5% floor and immutable vitality tr
   assert.equal(calculateDamage(1000, 'ARTS', { defense: 0, resistance: 100 }), 50);
   assert.equal(calculateDamage(1000, 'TRUE', { defense: 9999, resistance: 100 }), 1000);
 
-  const unit = Object.freeze({
-    id: 0, position: Object.freeze([0, 0]),
-    definition: Object.freeze({ id: 'core_target', vitality: Object.freeze({ maxHp: 7 }), defense: Object.freeze({ defense: 0, resistance: 0 }) }),
-    vitality: Object.freeze({ hp: 7 }),
+  const unit = initialize({
+    id: 0, position: [0, 0],
+    definition: { id: 'core_target', vitality: { maxHp: 7 }, defense: { defense: 0, resistance: 0 } },
   });
-  const harmless = damageUnit(unit, 0, 'TRUE');
-  const lethal = damageUnit(unit, 1000, 'TRUE');
+  const state = createBattleState(fixtureBattlefieldState([unit]));
+  const resources = new CombatResources();
+  const request = power => ({ sourceUnitId: null, targetUnitId: 0, tick: 0,
+    damageType: 'TRUE', operands: createDamageOperands(power) });
+  const harmless = resolveDamage(state, request(0), resources);
+  const lethal = resolveDamage(state, request(1000), resources);
 
-  assert.equal(harmless.unit, unit);
-  assert.equal(lethal.amount, 7);
-  assert.equal(lethal.killed, true);
-  assert.equal(lethal.unit.vitality.hp, 0);
+  assert.equal(getUnit(harmless.state, 0), unit);
+  assert.equal(lethal.value.hpLoss, 7);
+  assert.equal(lethal.value.deathOccurred, true);
+  assert.equal(getUnit(lethal.state, 0), undefined);
+  assert.equal(lethal.state.removedUnits[0].unit.vitality.hp, 0);
   assert.equal(unit.vitality.hp, 7);
 });
 

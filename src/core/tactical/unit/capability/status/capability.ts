@@ -1,4 +1,4 @@
-import type { Unit, Definition } from "../../unit.js";
+import type { Unit } from "../../unit.js";
 
 export const STATUS_FLAGS = Object.freeze([
     "TARGET_FREE",
@@ -42,10 +42,6 @@ export interface StatusState {
 export interface Status {
     readonly definition: { readonly status: StatusDefinition };
     readonly status: StatusState;
-}
-
-export interface StatusUnitDefinition extends Definition {
-    readonly status: StatusDefinition;
 }
 
 export type EffectiveStatusFlags = ReadonlySet<StatusFlag>;

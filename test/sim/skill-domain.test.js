@@ -231,7 +231,7 @@ test("dead or absent units do not activate or accumulate time SP", () => {
 
 test("SP drain applies during active skills and finish callbacks see the inactive skill", () => {
   let observed;
-  const f = fixture({}, { finish(state, context) { observed = context.facts.getUnit(1).skill.active; return state; } });
+  const f = fixture({}, { finish(state, context) { observed = context.battlefield.getUnit(1).skill.active; return state; } });
   const started = activateSkill(f.state, { unitId: 1, tick: 0 }, f.resources);
   assert.equal(drainSkillSp({ ...getUnit(started.state, 1).skill, sp: 2 }, 5).result.amount, 2);
   const ended = finishSkill(started.state, 1, 30, f.resources);
