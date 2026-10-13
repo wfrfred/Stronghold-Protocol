@@ -69,20 +69,21 @@ export function advanceBattlefield(
     const advanced = transition(state.battlefield, changes);
     const facts = advanced.facts;
 
-    return {
+    const next = {
         ...state,
         battlefield: advanced.state,
         registeredUnitIds: [...state.registeredUnitIds, ...facts.registeredUnitIds],
         removedUnits: [...state.removedUnits, ...facts.removedUnits],
-        events: [
-            ...state.events,
-            ...facts.lostSupports.map((relation): Event => ({
-                type: "SUPPORT_LOST",
-                ...relation,
-                tick: state.tick,
-            })),
-        ],
     };
+
+    return appendEvents(
+        next,
+        facts.lostSupports.map((relation): Event => ({
+            type: "SUPPORT_LOST",
+            ...relation,
+            tick: state.tick,
+        })),
+    );
 }
 
 export function battlefieldView(state: BattleState): BattlefieldView {
