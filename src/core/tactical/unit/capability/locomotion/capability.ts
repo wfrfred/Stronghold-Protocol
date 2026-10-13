@@ -61,10 +61,6 @@ export function createLocomotionState(): LocomotionState {
     return { moving: false, moveSpeed: [], steering: createSteeringState() };
 }
 
-export function initializeLocomotionState(
-    definition: LocomotionDefinition,
-    context: { readonly tick: number },
-): LocomotionState;
 export function initializeLocomotionState(): LocomotionState {
     return createLocomotionState();
 }

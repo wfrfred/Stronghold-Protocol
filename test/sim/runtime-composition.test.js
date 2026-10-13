@@ -1,5 +1,5 @@
 import { setData as setEffectData } from "../../dist/core/tactical/unit/effect/effect.js";
-import { createActionState } from "../../dist/core/tactical/unit/capability/action/capability.js";
+import { initializeActionState } from "../../dist/core/tactical/unit/capability/action/capability.js";
 import {
     setAttackContribution,
     removeAttackContribution,
@@ -452,7 +452,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                 {
                     definition: sibling,
                     position: [0, 2],
-                    states: { action: { ...createActionState(), readyAtTick: 1 } },
+                    states: { action: { ...initializeActionState(), readyAtTick: 1 } },
                 },
             ],
             initialMechanisms: [],

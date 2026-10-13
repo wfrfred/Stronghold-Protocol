@@ -1,5 +1,5 @@
 import { Effects } from "../../dist/core/tactical/unit/effect/effects.js";
-import { createActionState } from "../../dist/core/tactical/unit/capability/action/capability.js";
+import { initializeActionState } from "../../dist/core/tactical/unit/capability/action/capability.js";
 // Sim core: rng, grid/pathing, damage formulas, stat aggregation, buffs.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -449,7 +449,7 @@ function catalogRoutedState() {
 test('core unit initialization uses prepared states and separates configuration from runtime-only capabilities', () => {
   const definition = catalogDefinition();
   const vitality = {...initializeVitalityState(definition.vitality), hp: 25};
-  const action = { ...createActionState(), readyAtTick: 9, recoveryUntilTick: 10 };
+  const action = { ...initializeActionState(), readyAtTick: 9, recoveryUntilTick: 10 };
   const locomotion = catalogRoutedState();
   const unit = initialize({ id: 1, definition, position: [2, 0], tick: 17,
     states: { vitality, action, locomotion, spatialPresence: { present: false } } });
@@ -747,9 +747,11 @@ import { initialize as initializeUnit, type Result as InitializedUnit } from ${s
 import type { Unit, Definition as UnitDefinition } from ${sourceModule('unit')};
 import type { ImmutableData } from ${sourceModule('../../common/immutable-data')};
 import { initializeOffenseState } from ${sourceModule('capability/offense/capability')};
+import { initializeDefenseState } from ${sourceModule('capability/defense/capability')};
+import { initializeActionState } from ${sourceModule('capability/action/capability')};
 import type { Definition as EnemyDefinition } from ${sourceModule('archetype/enemy')};
 import { hasVitality, type VitalityDefinition } from ${sourceModule('capability/vitality/capability')};
-import { hasRoutedLocomotion, type LocomotionState, type RoutedLocomotionState } from ${sourceModule('capability/locomotion/capability')};
+import { initializeLocomotionState, hasRoutedLocomotion, type LocomotionState, type RoutedLocomotionState } from ${sourceModule('capability/locomotion/capability')};
 import { createBattlefieldRuntime } from ${sourceModule('../battlefield/runtime')};
 import type { BattlefieldView } from ${sourceModule('../battlefield/contract')};
 import type { BattlefieldMap } from ${sourceModule('../battlefield/map/map')};
@@ -795,6 +797,18 @@ declare const placement: { readonly definition: EnemyProbe; readonly position: r
 
   try {
     const positive = compile('positive', `
+initializeOffenseState();
+initializeDefenseState();
+initializeLocomotionState();
+initializeActionState(7);
+// @ts-expect-error offense state does not consume configuration.
+initializeOffenseState({ attack: 1 });
+// @ts-expect-error defense state does not consume configuration.
+initializeDefenseState({ defense: 1, resistance: 0 });
+// @ts-expect-error locomotion state does not consume configuration or context.
+initializeLocomotionState(enemyDefinition.locomotion, { tick: 7 });
+// @ts-expect-error action state consumes the tick directly.
+initializeActionState({}, { tick: 7 });
 type Distributed = Assert<Equal<InitializedUnit<EnemyProbe | DeviceProbe>, InitializedUnit<EnemyProbe> | InitializedUnit<DeviceProbe>>>;
 type OptionalHasNoRequiredCapabilities = Assert<Equal<RequiredKeys<InitializedUnit<OptionalProbe>>, 'id' | 'definition' | 'position' | 'effects' | 'lifecycle'>>;
 type WideHasNoRequiredCapabilities = Assert<Equal<RequiredKeys<InitializedUnit<UnitDefinition>>, 'id' | 'definition' | 'position' | 'effects' | 'lifecycle'>>;
@@ -862,6 +876,7 @@ type ProjectileState = Assert<Equal<typeof projectileResult.state, BattleState>>
       ['normalized-state-extra', `instantiateUnitPlacement(createUnitPlacementDefinition({ definition: { id: 'offense', offense: { attack: 1 } }, position: [0, 0], states: { offense: { ...initializeOffenseState(), marker: 'extra' as const } } }), execution, 0).unit.offense.marker;`],
       ['mutable-definition', `initializeUnit({ id: 1, definition: { id: 'mutable', vitality: { maxHp: 10 } }, position: [0, 0] }).definition.vitality.maxHp = 99;`],
       ['unconfigured', `initializeUnit({ id: 1, definition: { id: 'bare' }, position: [0, 0], states: { locomotion: routed } });`],
+      ['invalid-offense-config', `initializeUnit({ id: 1, definition: { id: 'invalid', offense: { attack: [] } }, position: [0, 0], states: { offense: initializeOffenseState() } });`],
       ['optional', `declare const optionalDefinition: OptionalProbe; initializeUnit({ id: 1, definition: optionalDefinition, position: [0, 0] }).vitality.hp;`],
       ['wide', `declare const wideDefinition: UnitDefinition; initializeUnit({ id: 1, definition: wideDefinition, position: [0, 0] }).locomotion.moving;`],
       ['optional-refinement', `declare const optionalStates: Partial<{ locomotion: RoutedLocomotionState }>; initializeUnit({ id: 1, definition: enemyDefinition, position: [0, 0], states: optionalStates }).locomotion.mainRoute;`],

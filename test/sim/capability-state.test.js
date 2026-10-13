@@ -42,13 +42,13 @@ const entries = [
         locomotion.removeMoveSpeedContribution,
     ],
     [
-        action.createActionState(5),
+        action.initializeActionState(5),
         "attackSpeed",
         action.setAttackSpeedContribution,
         action.removeAttackSpeedContribution,
     ],
     [
-        action.createActionState(5),
+        action.initializeActionState(5),
         "baseAttackTime",
         action.setBaseAttackTimeContribution,
         action.removeBaseAttackTimeContribution,
@@ -94,7 +94,7 @@ test("local hook registration retains progress and changes only its registration
             healing.removeHook,
         ],
         [
-            action.createActionState(5),
+            action.initializeActionState(5),
             "beforeRelease",
             action.setBeforeReleaseHook,
             action.removeBeforeReleaseHook,

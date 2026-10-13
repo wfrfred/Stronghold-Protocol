@@ -39,7 +39,6 @@ export function createOffenseDefinition(definition: OffenseDefinition): OffenseD
     return Object.freeze({ attack: definition.attack });
 }
 
-export function initializeOffenseState(definition?: OffenseDefinition): OffenseState;
 export function initializeOffenseState(): OffenseState {
     return { attack: [] };
 }

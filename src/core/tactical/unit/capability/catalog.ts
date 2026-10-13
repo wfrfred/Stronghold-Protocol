@@ -1,27 +1,116 @@
 import type { Unit, Definition } from "../unit.js";
-import { initializeActionState } from "./action/capability.js";
-import { initializeAllegianceState } from "./allegiance.js";
-import { initializeBlockableState, initializeBlockerState } from "./blocking/capability.js";
-import { initializeDefenseState } from "./defense/capability.js";
-import { initializeLocomotionState, type RoutedLocomotionState } from "./locomotion/capability.js";
+import {
+    initializeActionState,
+    type ActionCapabilityDefinition,
+    type ActionState,
+} from "./action/capability.js";
+import { initializeAllegianceState, type AllegianceState } from "./allegiance.js";
+import {
+    initializeBlockableState,
+    initializeBlockerState,
+    type BlockableDefinition,
+    type BlockableState,
+    type BlockerDefinition,
+    type BlockerState,
+} from "./blocking/capability.js";
+import {
+    initializeDefenseState,
+    type DefenseDefinition,
+    type DefenseState,
+} from "./defense/capability.js";
+import {
+    initializeLocomotionState,
+    type LocomotionDefinition,
+    type LocomotionState,
+    type RoutedLocomotionState,
+} from "./locomotion/capability.js";
 import type { SpatialPresenceState } from "./presence.js";
 import type { OccupancyState } from "./occupancy.js";
-import { initializeOffenseState } from "./offense/capability.js";
-import { initializeHitState, initializeSpatialState } from "./spatial.js";
-import { initializeStatusState } from "./status/capability.js";
-import { initializeVitalityState } from "./vitality/capability.js";
-import { initializeElementalState } from "./elemental/capability.js";
-import { initializeSkillState } from "./skill/capability.js";
+import {
+    initializeOffenseState,
+    type OffenseDefinition,
+    type OffenseState,
+} from "./offense/capability.js";
+import {
+    initializeHitState,
+    initializeSpatialState,
+    type HitDefinition,
+    type HitState,
+    type SpatialDefinition,
+    type SpatialState,
+} from "./spatial.js";
+import {
+    initializeStatusState,
+    type StatusDefinition,
+    type StatusState,
+} from "./status/capability.js";
+import {
+    initializeVitalityState,
+    type VitalityDefinition,
+    type VitalityState,
+} from "./vitality/capability.js";
+import {
+    initializeElementalState,
+    type ElementalDefinition,
+    type ElementalState,
+} from "./elemental/capability.js";
+import { initializeSkillState, type SkillDefinition, type SkillState } from "./skill/capability.js";
 
 export interface CapabilityInitializationContext {
     readonly tick: number;
 }
 
-export const configuredCapabilities = {
+interface CapabilityConfigurations {
+    readonly vitality: VitalityDefinition;
+    readonly offense: OffenseDefinition;
+    readonly defense: DefenseDefinition;
+    readonly action: ActionCapabilityDefinition;
+    readonly skill: SkillDefinition;
+    readonly elemental: ElementalDefinition;
+    readonly allegiance: AllegianceState;
+    readonly spatial: SpatialDefinition;
+    readonly hit: HitDefinition;
+    readonly status: StatusDefinition;
+    readonly blocker: BlockerDefinition;
+    readonly blockable: BlockableDefinition;
+    readonly locomotion: LocomotionDefinition;
+}
+
+interface RuntimeCapabilityStates {
+    readonly spatialPresence: SpatialPresenceState;
+    readonly occupancy: OccupancyState;
+}
+
+export type ConfiguredCapabilityKey = keyof CapabilityConfigurations;
+
+type CapabilityConfig<K extends ConfiguredCapabilityKey> = CapabilityConfigurations[K];
+
+export type CapabilityStates = {
+    readonly vitality: VitalityState;
+    readonly offense: OffenseState;
+    readonly defense: DefenseState;
+    readonly action: ActionState;
+    readonly skill: SkillState;
+    readonly elemental: ElementalState;
+    readonly allegiance: AllegianceState;
+    readonly spatial: SpatialState;
+    readonly hit: HitState;
+    readonly status: StatusState;
+    readonly blocker: BlockerState;
+    readonly blockable: BlockableState;
+    readonly locomotion: LocomotionState;
+} & RuntimeCapabilityStates;
+
+export const configuredCapabilities: {
+    readonly [K in ConfiguredCapabilityKey]: (
+        config: CapabilityConfig<K>,
+        context: CapabilityInitializationContext,
+    ) => CapabilityStates[K];
+} = {
     vitality: initializeVitalityState,
-    offense: initializeOffenseState,
-    defense: initializeDefenseState,
-    action: initializeActionState,
+    offense: () => initializeOffenseState(),
+    defense: () => initializeDefenseState(),
+    action: (_definition, context) => initializeActionState(context.tick),
     skill: initializeSkillState,
     elemental: initializeElementalState,
     allegiance: initializeAllegianceState,
@@ -30,23 +119,8 @@ export const configuredCapabilities = {
     status: initializeStatusState,
     blocker: initializeBlockerState,
     blockable: initializeBlockableState,
-    locomotion: initializeLocomotionState,
-} as const;
-
-interface RuntimeCapabilityStates {
-    readonly spatialPresence: SpatialPresenceState;
-    readonly occupancy: OccupancyState;
-}
-
-export type ConfiguredCapabilityKey = keyof typeof configuredCapabilities;
-
-type CapabilityConfig<K extends ConfiguredCapabilityKey> = Parameters<
-    (typeof configuredCapabilities)[K]
->[0];
-
-export type CapabilityStates = {
-    readonly [K in ConfiguredCapabilityKey]: ReturnType<(typeof configuredCapabilities)[K]>;
-} & RuntimeCapabilityStates;
+    locomotion: () => initializeLocomotionState(),
+};
 
 type CapabilityKey = keyof CapabilityStates;
 
@@ -110,12 +184,7 @@ function initializeCapability<K extends ConfiguredCapabilityKey>(
     config: CapabilityConfig<K>,
     context: CapabilityInitializationContext,
 ): CapabilityState<K> {
-    const initialize = configuredCapabilities[key] as (
-        config: CapabilityConfig<K>,
-        context: CapabilityInitializationContext,
-    ) => CapabilityState<K>;
-
-    return initialize(config, context);
+    return configuredCapabilities[key](config, context);
 }
 
 export function selectCapabilityStates<S extends Partial<CapabilityStates>>(

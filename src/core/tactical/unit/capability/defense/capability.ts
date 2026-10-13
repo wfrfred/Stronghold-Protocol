@@ -44,7 +44,6 @@ export function createDefenseDefinition(definition: DefenseDefinition): DefenseD
     return Object.freeze({ defense: definition.defense, resistance: definition.resistance });
 }
 
-export function initializeDefenseState(definition?: DefenseDefinition): DefenseState;
 export function initializeDefenseState(): DefenseState {
     return {
         defense: [],

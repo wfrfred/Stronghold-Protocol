@@ -41,7 +41,7 @@ import { initializeRoutedEnemy } from "../../dist/core/tactical/battle/creation/
 import { stepRoutedEnemy } from "../../dist/legacy/enemy.js";
 import { copy } from '../../dist/core/tactical/unit/snapshot.js';
 import { initialize } from '../../dist/core/tactical/unit/initialize.js';
-import { createActionCapabilityDefinition, createActionState } from '../../dist/core/tactical/unit/capability/action/capability.js';
+import { createActionCapabilityDefinition, initializeActionState } from '../../dist/core/tactical/unit/capability/action/capability.js';
 import { createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/deployment.js';
 import { createSteeringParameters, createSteeringState, integrateSteering } from '../../dist/core/tactical/unit/capability/locomotion/steering.js';
 import { Grid, OBSTACLE_COST, bresenhamTiles } from '../../server/sim/grid.js';
@@ -1342,7 +1342,7 @@ test('core selective projection retains untouched collections, indexes and live 
         ignoreTargetFree: false, ignoreInvisible: false, maxTargets: 1 },
     }],
   } }) });
-  h.commit([{ type: 'REGISTER_UNIT', unit: { ...routed.enemy, definition, action: createActionState() } }]);
+  h.commit([{ type: 'REGISTER_UNIT', unit: { ...routed.enemy, definition, action: initializeActionState() } }]);
   h.commit((state, index) => {
     const moved = stepRoutedEnemy(state.units.get(1), {
       tick: 0, maps: state.navigationMaps, fieldCache: h.branches[index].fieldCache,

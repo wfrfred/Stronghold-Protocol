@@ -123,7 +123,7 @@ export function createActionCapabilityDefinition(
     });
 }
 
-export function createActionState(tick = 0): ActionState {
+export function initializeActionState(tick = 0): ActionState {
     assertNonnegativeSafeInteger(tick, "action tick");
 
     return {
@@ -134,13 +134,6 @@ export function createActionState(tick = 0): ActionState {
         baseAttackTime: [],
         beforeRelease: [],
     };
-}
-
-export function initializeActionState(
-    _definition: ActionCapabilityDefinition,
-    context: { readonly tick: number },
-): ActionState {
-    return createActionState(context.tick);
 }
 
 export function setBeforeReleaseHook(state: ActionState, entry: ActionReleaseHook): ActionState {
