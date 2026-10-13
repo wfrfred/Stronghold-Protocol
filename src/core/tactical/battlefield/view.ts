@@ -1,9 +1,7 @@
 import type { Unit } from "../unit/unit.js";
 import { blockingUsedCapacity } from "./blocking/relations.js";
 import type { BattlefieldView } from "./contract.js";
-import type { NavigationFieldProvider } from "./navigation/cache.js";
-import { deriveNavigationFieldQuery } from "./navigation/field.js";
-import { buildNavigationField } from "./navigation/pathfinding.js";
+import { createNavigationFieldCache, type NavigationFieldProvider } from "./navigation/cache.js";
 import type { State } from "./state.js";
 import {
     battlefieldTileKey,
@@ -11,9 +9,7 @@ import {
     navigationModifierSourceKey,
 } from "./storage/indexes.js";
 
-const fields: NavigationFieldProvider = {
-    get: (map, request) => buildNavigationField(map, deriveNavigationFieldQuery(request)),
-};
+const fields: NavigationFieldProvider = createNavigationFieldCache();
 
 export function view<U extends Unit>(
     state: State<U>,
