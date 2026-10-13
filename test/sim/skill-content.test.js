@@ -4,7 +4,7 @@ import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { battlefieldView, getUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { activateSkill, advanceSkill } from "../../dist/core/tactical/unit/capability/skill/execution.js";
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import { compileArknightsAttackBuffSkill } from "../../dist/data/arknights/skill-buff.js";
 import { parseArknightsSkillLevel } from "../../dist/data/arknights/skill-definition.js";
 import { createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
@@ -30,7 +30,7 @@ test("native Attack Enhancement Alpha level 1 charges, buffs attack for 20 secon
   const resources = new CombatResources();
   const compiled = resources.skills.register(compileArknightsAttackBuffSkill(attackBuff, 1));
   resources.seal();
-  const unit = initializeUnit({
+  const unit = initialize({
     id: 1, position: [0, 0],
     definition: { id: "real-skill-fixture", skill: compiled.definition, offense: { attack: 100 } },
   });
@@ -154,8 +154,8 @@ function instantDamageFixture(automatic = false, withTarget = true) {
       return { state, value: { type: "ACTIVATED" } };
     },
   });
-  const unit = initializeUnit({ id: 1, position: [0, 0], definition: { id: "instant-caster", skill: definition } });
-  const enemy = initializeUnit({ id: 2, position: [1, 0], definition: { id: "instant-target", vitality: { maxHp: 1000 } } });
+  const unit = initialize({ id: 1, position: [0, 0], definition: { id: "instant-caster", skill: definition } });
+  const enemy = initialize({ id: 2, position: [1, 0], definition: { id: "instant-target", vitality: { maxHp: 1000 } } });
   let work = effectFixtureWork(unit, ...(withTarget ? [enemy] : []));
   work = updateUnit(work, { ...unit, skill: gainSkillSp(unit.skill, definition, "EXTERNAL", 17).state });
   return { resources, work, reports };
@@ -190,7 +190,7 @@ test("instant healing uses the current activation tick and returns the settled h
     report = healed.value;
     return { state: healed.state, value: { type: "ACTIVATED" } };
   } });
-  const unit = initializeUnit({ id: 1, position: [0, 0], definition: { id: "heal-caster", skill: definition, vitality: { maxHp: 100 } }, states: { vitality: { hp: 50, maxHp: [], damageHooks: [], healingHooks: [] } } });
+  const unit = initialize({ id: 1, position: [0, 0], definition: { id: "heal-caster", skill: definition, vitality: { maxHp: 100 } }, states: { vitality: { hp: 50, maxHp: [], damageHooks: [], healingHooks: [] } } });
   let activatedState = effectFixtureWork(unit);
   activatedState = activateSkill(activatedState, { unitId: 1, tick: 3 }, resources).state;
   assert.equal(getUnit(activatedState, 1).vitality.hp, 80);

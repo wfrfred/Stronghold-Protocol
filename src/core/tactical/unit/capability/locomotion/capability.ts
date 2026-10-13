@@ -1,7 +1,7 @@
-import type { QueryContext } from "../../query.js";
+import type { Context } from "../../query.js";
 import type { NavigationState } from "../../../battlefield/navigation/state.js";
 import type { RouteState } from "./route/state.js";
-import type { Unit, UnitDefinition } from "../../unit.js";
+import type { Unit, Definition } from "../../unit.js";
 import { createSteeringState, type SteeringParameters, type SteeringState } from "./steering.js";
 import * as contribution from "../../contribution/contribution.js";
 import * as modifier from "../../contribution/value.js";
@@ -14,7 +14,7 @@ export interface LocomotionDefinition {
 
 export interface LocomotionState {
     readonly moving: boolean;
-    readonly moveSpeed: readonly contribution.Contribution<contribution.Input<QueryContext>>[];
+    readonly moveSpeed: readonly contribution.Contribution<contribution.Input<Context>>[];
     readonly steering: SteeringState;
 }
 
@@ -39,7 +39,7 @@ export interface RoutedLocomotion extends Locomotion {
     readonly locomotion: RoutedLocomotionState;
 }
 
-export interface LocomotiveUnitDefinition extends UnitDefinition {
+export interface LocomotiveUnitDefinition extends Definition {
     readonly locomotion: LocomotionDefinition;
 }
 
@@ -88,7 +88,7 @@ function changeMoveSpeedContributions(
 
 export function setMoveSpeedContribution(
     state: LocomotionState,
-    entry: contribution.Contribution<contribution.Input<QueryContext>>,
+    entry: contribution.Contribution<contribution.Input<Context>>,
 ): LocomotionState {
     return changeMoveSpeedContributions(state, (entries) => contribution.set(entries, entry));
 }
@@ -100,7 +100,7 @@ export function removeMoveSpeedContribution(state: LocomotionState, id: string):
 export function resolveMoveSpeedPerTick(
     definition: LocomotionDefinition,
     state: LocomotionState,
-    context: QueryContext,
+    context: Context,
 ): number {
     return Math.max(
         definition.minimumMoveSpeedPerTick ?? 0,

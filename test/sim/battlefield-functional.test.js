@@ -5,7 +5,7 @@ import { view } from '../../dist/core/tactical/battlefield/view.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
 import { createNavigationModifierDefinition } from '../../dist/core/tactical/battlefield/navigation/modifier.js';
-import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
+import { initialize } from '../../dist/core/tactical/unit/initialize.js';
 
 const initial = () => create({
   map: createBattlefieldMap(1, 3, Array.from({ length: 3 }, () => createTile({
@@ -13,7 +13,7 @@ const initial = () => create({
     playerSideMask: 'ALL', terrain: 'NORMAL', mechanism: null,
   }))),
 });
-const unit = (id, position = [1, 0], definition = {}) => initializeUnit({
+const unit = (id, position = [1, 0], definition = {}) => initialize({
   id, position, definition: { id: `functional-${id}`, vitality: { maxHp: 100 }, ...definition },
 });
 const register = unit => ({ type: 'REGISTER_UNIT', unit });

@@ -1,7 +1,7 @@
 import { preserveHpRatio } from "./max-hp.js";
 import * as contribution from "../../contribution/contribution.js";
 import * as modifier from "../../contribution/value.js";
-import type { Unit, UnitDefinition } from "../../unit.js";
+import type { Unit, Definition } from "../../unit.js";
 import type { Hook as DamageHook } from "./damage/hook.js";
 import type { Hook as HealingHook } from "./healing/hook.js";
 
@@ -23,7 +23,7 @@ export interface Vitality {
     readonly vitality: VitalityState;
 }
 
-export interface VitalUnitDefinition extends UnitDefinition {
+export interface VitalUnitDefinition extends Definition {
     readonly vitality: VitalityDefinition;
 }
 
@@ -33,9 +33,7 @@ export function hasVitality<U extends Unit>(unit: U): unit is U & Vitality {
     return "vitality" in unit && "vitality" in unit.definition;
 }
 
-export function hasVitalityDefinition(
-    definition: UnitDefinition,
-): definition is VitalUnitDefinition {
+export function hasVitalityDefinition(definition: Definition): definition is VitalUnitDefinition {
     return "vitality" in definition;
 }
 

@@ -14,7 +14,7 @@ import { create as modifier } from '../../dist/core/tactical/unit/contribution/v
 import { transition } from '../../dist/core/tactical/battlefield/state.js';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
 import { createLegacyCombatSpec } from '../../dist/legacy/combat.js';
-import { createEnemyDefinition } from '../../dist/core/tactical/unit/archetype/enemy.js';
+import { createDefinition } from '../../dist/core/tactical/unit/archetype/enemy.js';
 import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
 import { compileAction } from '../../dist/core/tactical/unit/capability/action/compile.js';
 
@@ -46,7 +46,7 @@ const damageEvents = state => state.events.filter(event => event.type === 'DAMAG
 function runtime(initialUnits, resources, buildProgram, maxTicks = 20) {
   return new BattleRuntime({ ...createLegacyCombatSpec({ rows: 1, columns: 8, operators: [], enemies: [], maxTicks, seed: 17 }),
     initialUnits: initialUnits.map(value => ({ definition: value.definition, position: value.position })),
-    schedule: { type: 'TIMELINE', spawns: [{ definition: createEnemyDefinition({ id: 'future', vitality: { maxHp: 1 }, locomotion: { moveSpeedPerTick: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } } }),
+    schedule: { type: 'TIMELINE', spawns: [{ definition: createDefinition({ id: 'future', vitality: { maxHp: 1 }, locomotion: { moveSpeedPerTick: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } } }),
       route: createRouteDefinition({ pathMotionMode: 'WALK', startPosition: [0, 7], endPosition: [0, 1], spawnOffset: [0, 0], spawnRandomRange: [0, 0], checkpoints: [], allowDiagonalMove: false, visitEveryTileCenter: false, visitEveryNodeCenter: false, visitEveryCheckPoint: true }),
       tick: 100, timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 }, alwaysCheckCurrentPoint: true, notCountInTotal: false }] },
   }, { combat: resources, compileAction: (definition, services) => ({ ...compileAction(definition, services), program: buildProgram(definition, services) }) });

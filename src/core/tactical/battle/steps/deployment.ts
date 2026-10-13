@@ -15,7 +15,7 @@ import {
 } from "../../unit/capability/occupancy.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
 import { instantiateUnitPlacement, type UnitPlacementDefinition } from "../creation/placement.js";
-import type { Unit, UnitId } from "../../unit/unit.js";
+import type { Unit, Id } from "../../unit/unit.js";
 import type { Command } from "../contract.js";
 import { removeUnitWithEffects, type UnitLifecycleResources } from "../execution/unit-lifecycle.js";
 import {
@@ -36,11 +36,11 @@ export type DeploymentCommand =
       }
     | {
           readonly type: "RELOCATE_UNIT";
-          readonly unitId: UnitId;
+          readonly unitId: Id;
           readonly tilePosition: TilePosition;
           readonly playerSide: "SIDE_A" | "SIDE_B";
       }
-    | { readonly type: "RETREAT_UNIT"; readonly unitId: UnitId };
+    | { readonly type: "RETREAT_UNIT"; readonly unitId: Id };
 
 export function resolveDeploymentCommands(
     state: BattleState,

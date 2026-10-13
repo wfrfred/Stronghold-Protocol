@@ -9,8 +9,8 @@ import type { Direction } from "../core/tactical/geometry/direction.js";
 import { RangeGrid } from "../core/tactical/geometry/range.js";
 import type { RouteDefinition } from "../core/tactical/unit/capability/locomotion/route/definition.js";
 import { TICKS_PER_SECOND } from "../core/tactical/tick.js";
-import { createCombatEnemyDefinition } from "../core/tactical/unit/archetype/enemy.js";
-import { createOperatorDefinition } from "../core/tactical/unit/archetype/operator.js";
+import * as enemy from "../core/tactical/unit/archetype/enemy.js";
+import * as operator from "../core/tactical/unit/archetype/operator.js";
 
 interface LegacyCombatContent {
     readonly operators: readonly {
@@ -139,7 +139,7 @@ function operatorDefinition(value: unknown, direction: Direction) {
         throw new TypeError("canHitFly must be boolean when specified");
     }
 
-    return createOperatorDefinition({
+    return operator.createDefinition({
         id: stringField(definition.chessId, "chessId"),
         vitality: { maxHp: numberField(stats.maxHp, "maxHp") },
         offense: { attack: numberField(stats.atk, "attack") },
@@ -219,7 +219,7 @@ function enemyDefinition(value: unknown) {
 
     const radius = numberField(stats.rangeRadius, "enemy range radius");
 
-    return createCombatEnemyDefinition({
+    return enemy.createCombatDefinition({
         id: stringField(definition.key, "enemy key"),
         vitality: { maxHp: numberField(stats.maxHp, "maxHp") },
         offense: { attack: numberField(stats.atk, "attack") },

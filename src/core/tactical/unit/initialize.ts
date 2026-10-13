@@ -6,11 +6,11 @@ import {
     type PreparedCapabilityStates,
     type RuntimeCapabilitiesFor,
 } from "./capability/catalog.js";
-import type { Unit, UnitDefinition, UnitId } from "./unit.js";
+import type { Unit, Definition, Id } from "./unit.js";
 import { Effects } from "./effect/effects.js";
 
-export interface UnitInitialization<D extends UnitDefinition = UnitDefinition> {
-    readonly id: UnitId;
+export interface Input<D extends Definition = Definition> {
+    readonly id: Id;
     readonly definition: D;
     readonly position: WorldPosition;
     readonly tick?: number;
@@ -18,31 +18,29 @@ export interface UnitInitialization<D extends UnitDefinition = UnitDefinition> {
     readonly states?: never;
 }
 
-export type PreparedUnitInitialization<
-    D extends UnitDefinition,
-    S extends PreparedCapabilityStates<D>,
-> = Omit<UnitInitialization<D>, "states"> & {
+export type PreparedInput<D extends Definition, S extends PreparedCapabilityStates<D>> = Omit<
+    Input<D>,
+    "states"
+> & {
     readonly states: S & Record<Exclude<keyof S, keyof PreparedCapabilityStates<D>>, never>;
 };
 
-type RuntimeCapabilitiesWithStates<D extends UnitDefinition, S extends object> = {
+type RuntimeCapabilitiesWithStates<D extends Definition, S extends object> = {
     readonly [K in keyof RuntimeCapabilitiesFor<D>]: S extends Readonly<Record<K, unknown>>
         ? SelectedCapabilityStates<S>[K & keyof SelectedCapabilityStates<S>]
         : RuntimeCapabilitiesFor<D>[K];
 } & Omit<SelectedCapabilityStates<S>, keyof RuntimeCapabilitiesFor<D>>;
 
-export type InitializedUnit<D extends UnitDefinition, S extends object = object> = D extends unknown
+export type Result<D extends Definition, S extends object = object> = D extends unknown
     ? Unit<D> & RuntimeCapabilitiesWithStates<D, S>
     : never;
 
-export function initializeUnit<D extends UnitDefinition>(
-    input: UnitInitialization<D>,
-): InitializedUnit<D>;
-export function initializeUnit<D extends UnitDefinition, S extends PreparedCapabilityStates<D>>(
-    prepared: PreparedUnitInitialization<D, S>,
-): InitializedUnit<D, S>;
-export function initializeUnit<D extends UnitDefinition>(
-    input: Omit<UnitInitialization<D>, "states"> & { readonly states?: Partial<CapabilityStates> },
+export function initialize<D extends Definition>(input: Input<D>): Result<D>;
+export function initialize<D extends Definition, S extends PreparedCapabilityStates<D>>(
+    prepared: PreparedInput<D, S>,
+): Result<D, S>;
+export function initialize<D extends Definition>(
+    input: Omit<Input<D>, "states"> & { readonly states?: Partial<CapabilityStates> },
 ): Unit<D> {
     const { id, position, definition } = input;
     const states = initializeUnitCapabilities(

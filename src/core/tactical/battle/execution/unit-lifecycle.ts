@@ -1,5 +1,5 @@
 import { closeLifetime } from "./lifetime.js";
-import type { UnitId } from "../../unit/unit.js";
+import type { Id } from "../../unit/unit.js";
 import type { BattlefieldRemovalReason } from "../../battlefield/contract.js";
 import type { StoppedSkillActivation } from "../../unit/capability/skill/execution.js";
 import type { ActionExecutionSignal } from "../../unit/capability/action/process.js";
@@ -20,7 +20,7 @@ import {
 export interface UnitLifecycleResources {
     readonly stopSkillActivation: (
         state: BattleState,
-        unitId: UnitId,
+        unitId: Id,
         tick: number,
     ) => Result<StoppedSkillActivation | null>;
     readonly notifySkillFinished: (
@@ -33,7 +33,7 @@ export interface UnitLifecycleResources {
 
 export function retireCombatUnit(
     state: BattleState,
-    unitId: UnitId,
+    unitId: Id,
     resources: UnitLifecycleResources,
     tick: number,
     call: CallContext = emptyCall,
@@ -43,7 +43,7 @@ export function retireCombatUnit(
 
 export function removeUnitWithEffects(
     state: BattleState,
-    unitId: UnitId,
+    unitId: Id,
     reason: BattlefieldRemovalReason,
     resources: UnitLifecycleResources,
     tick: number,

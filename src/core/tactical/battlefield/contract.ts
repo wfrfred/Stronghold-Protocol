@@ -1,7 +1,7 @@
 import type { TilePosition, WorldPosition } from "../geometry/coordinate.js";
 import type { NavigationFieldProvider } from "./navigation/cache.js";
 import type { NavigationMaps, PathMotionMode } from "./navigation/map.js";
-import type { Unit, UnitId } from "../unit/unit.js";
+import type { Unit, Id } from "../unit/unit.js";
 import type { OccupancySlot } from "../unit/capability/occupancy.js";
 import type { BattlefieldMap } from "./map/map.js";
 import type { MechanismId, Mechanism, MechanismView } from "./mechanism.js";
@@ -29,15 +29,15 @@ export type BattlefieldChange<U extends Unit = Unit> =
           readonly relations: readonly BlockingRelation[];
       }
     | { readonly type: "SET_SUPPORT_RELATIONS"; readonly relations: readonly SupportRelation[] }
-    | { readonly type: "RELEASE_BLOCKING_RELATIONS"; readonly unitId: UnitId }
+    | { readonly type: "RELEASE_BLOCKING_RELATIONS"; readonly unitId: Id }
     | {
           readonly type: "SET_POSITION_AND_RELEASE_BLOCKING";
-          readonly unitId: UnitId;
+          readonly unitId: Id;
           readonly position: WorldPosition;
       }
     | {
           readonly type: "REMOVE_UNIT";
-          readonly unitId: UnitId;
+          readonly unitId: Id;
           readonly reason: BattlefieldRemovalReason;
       }
     | { readonly type: "REGISTER_MECHANISM"; readonly mechanism: Mechanism }
@@ -71,9 +71,9 @@ export type BattlefieldChange<U extends Unit = Unit> =
 
 export interface BattlefieldChangeResult<U extends Unit = Unit> {
     readonly changedNavigationModes: readonly PathMotionMode[];
-    readonly registeredUnitIds: readonly UnitId[];
+    readonly registeredUnitIds: readonly Id[];
     readonly removedUnits: readonly {
-        readonly unitId: UnitId;
+        readonly unitId: Id;
         readonly reason: BattlefieldRemovalReason;
         readonly unit: U;
     }[];
@@ -93,23 +93,23 @@ export interface BattlefieldView<U extends Unit = Unit> extends MechanismView, P
     readonly map: BattlefieldMap;
     readonly navigationMaps: NavigationMaps;
     readonly fieldCache: NavigationFieldProvider;
-    readonly unitIds: readonly UnitId[];
+    readonly unitIds: readonly Id[];
     readonly effectLifetimes: Index;
     readonly navigationModifierIds: readonly NavigationModifierId[];
     readonly blockingRelations: readonly BlockingRelation[];
     readonly supportRelations: readonly SupportRelation[];
-    getUnit(id: UnitId): U | undefined;
+    getUnit(id: Id): U | undefined;
     getNavigationModifier(id: NavigationModifierId): NavigationModifier | undefined;
     unitsAt(position: TilePosition): readonly U[];
-    blockerOf(unitId: UnitId): UnitId | undefined;
-    blockedBy(unitId: UnitId): readonly UnitId[];
-    blockingUsedCapacity(unitId: UnitId): number;
-    occupancyAt(position: TilePosition, slot: OccupancySlot): readonly UnitId[];
-    supportOf(unitId: UnitId): UnitId | undefined;
-    supportedBy(unitId: UnitId): readonly UnitId[];
+    blockerOf(unitId: Id): Id | undefined;
+    blockedBy(unitId: Id): readonly Id[];
+    blockingUsedCapacity(unitId: Id): number;
+    occupancyAt(position: TilePosition, slot: OccupancySlot): readonly Id[];
+    supportOf(unitId: Id): Id | undefined;
+    supportedBy(unitId: Id): readonly Id[];
     navigationModifiersAt(position: TilePosition): readonly NavigationModifierId[];
     navigationModifiersFrom(source: NavigationModifierSource): readonly NavigationModifierId[];
-    navigationModifiersFollowing(unitId: UnitId): readonly NavigationModifierId[];
+    navigationModifiersFollowing(unitId: Id): readonly NavigationModifierId[];
 }
 
 export interface Battlefield<U extends Unit = Unit> {

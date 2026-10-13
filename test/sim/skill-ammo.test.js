@@ -13,7 +13,7 @@ import { activateSkill, advanceSkill, consumeSkillAmmo } from "../../dist/core/t
 import { spendSkillAmmo } from "../../dist/core/tactical/unit/capability/skill/ammo.js";
 import { gainSkillSp } from "../../dist/core/tactical/unit/capability/skill/sp.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import { parseArknightsSkillLevel } from "../../dist/data/arknights/skill-definition.js";
 import { effectFixtureWork } from "../helpers/effects.js";
 
@@ -35,8 +35,8 @@ function ammoFixture(ammo = 31, ammoPerAttack = 1) {
     assert.ok(installed.value);
     return { state: installed.state, value: { type: "ACTIVATED" } };
   } });
-  const unit = initializeUnit({ id: 1, position: [0, 0], definition: { id: "ammo-caster", skill: definition, offense: { attack: 100 } } });
-  const enemy = initializeUnit({ id: 2, position: [1, 0], definition: { id: "ammo-target", vitality: { maxHp: 1000 }, hit: { geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.2 }] } } } });
+  const unit = initialize({ id: 1, position: [0, 0], definition: { id: "ammo-caster", skill: definition, offense: { attack: 100 } } });
+  const enemy = initialize({ id: 2, position: [1, 0], definition: { id: "ammo-target", vitality: { maxHp: 1000 }, hit: { geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.2 }] } } } });
   let work = effectFixtureWork(unit, enemy);
   work = updateUnit(work, { ...unit, skill: gainSkillSp(unit.skill, definition, "EXTERNAL", 30).state });
   work = activateSkill(work, { unitId: 1, tick: 0 }, resources).state;

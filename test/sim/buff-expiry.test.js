@@ -14,7 +14,7 @@ import {
     removeAttackContribution,
 } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import {
     contributionEffect,
     refreshContribution,
@@ -155,7 +155,7 @@ function harness({ stackCount = 3, maxValidStackCnt = -1 } = {}) {
         },
     );
     let work = effectFixtureWork(
-        initializeUnit({
+        initialize({
             id: 0,
             position: [0, 0],
             definition: { id: "receiver", offense: { attack: 100 } },

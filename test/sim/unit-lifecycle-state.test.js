@@ -3,13 +3,13 @@ import { test } from "node:test";
 import { battlefieldView, createBattleState, getUnit } from "../../dist/core/tactical/battle/state.js";
 import { removeUnitWithEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { activateSkill } from "../../dist/core/tactical/unit/capability/skill/execution.js";
 import { fixtureBattlefieldState as fixtureBattlefield } from "../helpers/battlefield.js";
 
-const unit = (id, extra = {}) => initializeUnit({ id, position: [0, id], definition: { id: `lifecycle-unit-${id}`, vitality: { maxHp: 100 }, ...extra } });
+const unit = (id, extra = {}) => initialize({ id, position: [0, id], definition: { id: `lifecycle-unit-${id}`, vitality: { maxHp: 100 }, ...extra } });
 
 test("departure callbacks observe LEAVING while old snapshots remain PRESENT", () => {
   let state = createBattleState(fixtureBattlefield([unit(0)]));

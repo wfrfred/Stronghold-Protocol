@@ -5,7 +5,7 @@ import { create, transition } from "../../dist/core/tactical/battlefield/state.j
 import { createBattleState, getUnit } from "../../dist/core/tactical/battle/state.js";
 import { startAction } from "../../dist/core/tactical/unit/capability/action/execution.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
 import { createActionDefinition } from "../../dist/core/tactical/unit/capability/action/capability.js";
 import { compileAction } from "../../dist/core/tactical/unit/capability/action/compile.js";
@@ -40,7 +40,7 @@ test("action event order: lethal damage settles support loss before the action f
         status: Object.freeze({ initialFlags: Object.freeze([]) }),
         defense: Object.freeze({ defense: 0, resistance: 0 }),
     };
-    const attacker = initializeUnit({
+    const attacker = initialize({
         id: 0,
         position: [0, 0],
         definition: Object.freeze({
@@ -51,7 +51,7 @@ test("action event order: lethal damage settles support loss before the action f
             action: Object.freeze({ normalAction: action }),
         }),
     });
-    const support = initializeUnit({
+    const support = initialize({
         id: 1,
         position: [1, 0],
         definition: Object.freeze({
@@ -67,7 +67,7 @@ test("action event order: lethal damage settles support loss before the action f
         }),
         states: { occupancy: { claims: [{ position: [0, 1], slot: "SUPPORT", type: "PRESENT" }] } },
     });
-    const recipient = initializeUnit({
+    const recipient = initialize({
         id: 2,
         position: [1, 0],
         definition: Object.freeze({

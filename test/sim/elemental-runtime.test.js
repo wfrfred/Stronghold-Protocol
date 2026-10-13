@@ -7,7 +7,7 @@ import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { createLegacyCombatSpec } from '../../dist/legacy/combat.js';
 import { createBattleState, battlefieldView, getUnit } from '../../dist/core/tactical/battle/state.js';
-import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
+import { initialize } from '../../dist/core/tactical/unit/initialize.js';
 import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { createActionDefinition } from '../../dist/core/tactical/unit/capability/action/capability.js';
 import { compileAction } from '../../dist/core/tactical/unit/capability/action/compile.js';
@@ -47,7 +47,7 @@ function definition(receiver = 'CHARACTER', overrides = {}, elementOptions = {})
     elemental: createArknightsElementalDefinition({ receiver, ...elementOptions }), ...overrides };
 }
 function unit(receiver = 'CHARACTER', overrides = {}, elementOptions = {}) {
-  return initializeUnit({ id: 1, position: [1, 0], definition: definition(receiver, overrides, elementOptions) });
+  return initialize({ id: 1, position: [1, 0], definition: definition(receiver, overrides, elementOptions) });
 }
 function resources() {
   const result = new CombatResources();
@@ -165,7 +165,7 @@ test('elemental execution: enemy necrosis damage is elemental and its attack red
 test('elemental HP damage ignores physical defense, magic resistance, source attack contributions and EP resistance but has its own five percent floor', () => {
   for (const [damageResistance, expected] of [[0, 100], [50, 50], [100, 5], [1000, 5], [-50, 100]]) {
     const supplied = resources();
-    const source = initializeUnit({ id: 0, position: [0, 0], definition: { id: 'element-source', offense: { attack: 10000 } } });
+    const source = initialize({ id: 0, position: [0, 0], definition: { id: 'element-source', offense: { attack: 10000 } } });
     const boosted = ({ ...source, offense: setAttackContribution(source.offense, { id: 'attack-buff', value: [modifier({ multiplier: 100 })] }) });
     const input = effectFixtureWork(boosted, unit('ENEMY', { defense: { defense: 100000, resistance: 99 } }, { damageResistance, elementResistance: 100 }));
     const result = resolveDamage(input, { sourceUnitId: 0, targetUnitId: 1, damageType: 'ELEMENTAL', operands: createDamageOperands(100), tick: 0 }, supplied);
@@ -205,9 +205,9 @@ test('elemental compiled actions select EP receivers without Vitality and keep e
     targetGroups: [{ id: 'primary', targeting: { type: 'HEAL', geometry: { type: 'SHAPES', geometry: range },
       includeSelf: false, ignoreAllyTargetFree: false, ignoreHealFree: false, maxTargets: 1 },
     operations: [{ type: 'ELEMENT_HEAL', power: 100 }] }], followUps: [] });
-  const healer = initializeUnit({ id: 0, position: [0, 0], definition: definition('CHARACTER', { action: { normalAction: healingAction } }) });
+  const healer = initialize({ id: 0, position: [0, 0], definition: definition('CHARACTER', { action: { normalAction: healingAction } }) });
   const { vitality: omitted, ...receiverDefinition } = definition('CHARACTER', { status: { initialFlags: ['HEAL_FREE'] } });
-  let receiver = initializeUnit({ id: 1, position: [1, 0], definition: receiverDefinition });
+  let receiver = initialize({ id: 1, position: [1, 0], definition: receiverDefinition });
   let work = effectFixtureWork(healer, receiver);
   work = element(work, 'BURN', supplied, 0, 200).state;
   const compiled = compileAction(healingAction, supplied);
@@ -301,7 +301,7 @@ test('elemental runtime: enemy neural paralysis consumes exactly three ordinary 
 test('elemental runtime: nested burst damage failure publishes neither EP progress, HP, effects nor tick', () => {
   const { runtime } = battle('CHARACTER', 'BURN', {
     targetStates: (_supplied, selected) => {
-      const target = initializeUnit({ id: 1, position: [1, 0], definition: selected });
+      const target = initialize({ id: 1, position: [1, 0], definition: selected });
       const changed = ({ ...target, vitality: setHook(target.vitality, {
         id: 'elemental-fault', stage: 'reception', priority: 100,
         enabled: () => true,

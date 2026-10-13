@@ -1,4 +1,4 @@
-import type { UnitId } from "../unit.js";
+import type { Id as UnitId } from "../unit.js";
 import type { ActionExecutionId } from "../capability/action/process.js";
 import type { Definition } from "./definition.js";
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";

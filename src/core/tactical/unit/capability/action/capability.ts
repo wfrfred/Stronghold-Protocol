@@ -1,4 +1,4 @@
-import type { QueryContext } from "../../query.js";
+import type { Context } from "../../query.js";
 import {
     assertNonnegativeSafeInteger,
     assertNonnegativeNumber,
@@ -7,7 +7,7 @@ import {
 import * as contribution from "../../contribution/contribution.js";
 import * as operation from "./operation.js";
 import { createTargetingDefinition, type TargetingDefinition } from "../../targeting/definition.js";
-import type { Unit, UnitDefinition } from "../../unit.js";
+import type { Unit, Definition } from "../../unit.js";
 import * as hook from "../../hook/hook.js";
 import type { ActionReleaseHook } from "./release.js";
 
@@ -44,8 +44,8 @@ export interface ActionState {
     readonly readyAtTick: number;
     readonly recoveryUntilTick: number;
     readonly cooldownIntervalTicks: number | null;
-    readonly attackSpeed: readonly contribution.Contribution<contribution.Input<QueryContext>>[];
-    readonly baseAttackTime: readonly contribution.Contribution<contribution.Input<QueryContext>>[];
+    readonly attackSpeed: readonly contribution.Contribution<contribution.Input<Context>>[];
+    readonly baseAttackTime: readonly contribution.Contribution<contribution.Input<Context>>[];
     readonly beforeRelease: readonly ActionReleaseHook[];
 }
 
@@ -54,7 +54,7 @@ export interface Action {
     readonly action: ActionState;
 }
 
-export interface ActingUnitDefinition extends UnitDefinition {
+export interface ActingUnitDefinition extends Definition {
     readonly action: ActionCapabilityDefinition;
 }
 
@@ -62,9 +62,7 @@ export function hasAction<U extends Unit>(unit: U): unit is U & Action {
     return "action" in unit && "action" in unit.definition;
 }
 
-export function hasActionDefinition(
-    definition: UnitDefinition,
-): definition is ActingUnitDefinition {
+export function hasActionDefinition(definition: Definition): definition is ActingUnitDefinition {
     return "action" in definition;
 }
 
@@ -169,7 +167,7 @@ function updateContributions(
 
 export function setAttackSpeedContribution(
     state: ActionState,
-    entry: contribution.Contribution<contribution.Input<QueryContext>>,
+    entry: contribution.Contribution<contribution.Input<Context>>,
 ): ActionState {
     return updateContributions(state, "attackSpeed", (entries) => contribution.set(entries, entry));
 }
@@ -180,7 +178,7 @@ export function removeAttackSpeedContribution(state: ActionState, id: string): A
 
 export function setBaseAttackTimeContribution(
     state: ActionState,
-    entry: contribution.Contribution<contribution.Input<QueryContext>>,
+    entry: contribution.Contribution<contribution.Input<Context>>,
 ): ActionState {
     return updateContributions(state, "baseAttackTime", (entries) =>
         contribution.set(entries, entry),

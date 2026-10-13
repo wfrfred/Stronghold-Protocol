@@ -8,7 +8,7 @@ import { applyBattlefieldChanges } from '../../dist/core/tactical/battlefield/st
 import {
   createBattlefieldState, settleBattlefieldState, settleBattlefieldStateFully,
 } from '../../dist/core/tactical/battlefield/storage/state.js';
-import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
+import { initialize } from '../../dist/core/tactical/unit/initialize.js';
 import { createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/deployment.js';
 
 function projectionFacts(state) {
@@ -55,7 +55,7 @@ function projectionHarness() {
 }
 
 const claim = (column, slot, type = 'PRESENT') => ({ position: [0, column], slot, type });
-const unit = (id, position, definition = {}, states = {}) => initializeUnit({
+const unit = (id, position, definition = {}, states = {}) => initialize({
   id, position, definition: { id: `spatial_dependencies_${id}`, ...definition }, states,
 });
 const register = units => units.map(unit => ({ type: 'REGISTER_UNIT', unit }));

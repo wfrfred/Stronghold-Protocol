@@ -10,7 +10,7 @@ import {
 } from "../../battlefield/navigation/modifier.js";
 import type { Direction } from "../../geometry/direction.js";
 import { RangeGrid } from "../../geometry/range.js";
-import type { UnitId } from "../../unit/unit.js";
+import type { Id } from "../../unit/unit.js";
 import type { BattleExecutionState } from "../execution/state.js";
 
 export type NavigationModifierPlacementSource =
@@ -57,7 +57,7 @@ function initialIdentity(index: number, ids: readonly number[], name: string): n
 export function instantiateNavigationModifierPlacement(
     placement: NavigationModifierPlacementDefinition,
     execution: BattleExecutionState,
-    initialUnitIds: readonly UnitId[] = [],
+    initialUnitIds: readonly Id[] = [],
     initialMechanismIds: readonly MechanismId[] = [],
 ): NavigationModifierPlacementInstantiation {
     assertNonnegativeSafeInteger(execution.nextNavigationModifierId, "navigation modifier id");

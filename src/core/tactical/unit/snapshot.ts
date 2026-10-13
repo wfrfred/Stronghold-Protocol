@@ -1,12 +1,12 @@
 import { selectCapabilityStates } from "./capability/catalog.js";
 import type { Unit } from "./unit.js";
 
-export type UnitSnapshot<U extends Unit> = U extends unknown
+export type Snapshot<U extends Unit> = U extends unknown
     ? Pick<U, Extract<keyof U, keyof Unit>>
     : never;
 
-export function copyUnitSnapshot<U extends Unit>(unit: U): UnitSnapshot<U>;
-export function copyUnitSnapshot(unit: Readonly<Unit>): Unit {
+export function copy<U extends Unit>(unit: U): Snapshot<U>;
+export function copy(unit: Readonly<Unit>): Unit {
     return {
         id: unit.id,
         lifecycle: unit.lifecycle,

@@ -28,7 +28,7 @@ import {
     removeMoveSpeedContribution,
 } from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
 import { resolveMoveSpeedPerTick } from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import * as modifier from "../../dist/core/tactical/unit/contribution/value.js";
 import {
     definition,
@@ -244,7 +244,7 @@ test("attribute modifiers: native Mire percentages affect existing ASPD and norm
             },
         },
     );
-    const unit = initializeUnit({
+    const unit = initialize({
         id: 0,
         position: [0, 0],
         definition: {
@@ -332,7 +332,7 @@ test("attribute modifiers: inspiration samples belong to the Effect input and re
         output,
     );
     const unit = (id, power) =>
-        initializeUnit({
+        initialize({
             id,
             position: [id, 0],
             definition: { id: `inspiration-${id}`, offense: { attack: power } },

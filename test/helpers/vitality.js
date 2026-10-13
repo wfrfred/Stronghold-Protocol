@@ -1,5 +1,5 @@
 import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import { transitionUnit, getUnit, battlefieldView } from "../../dist/core/tactical/battle/state.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import * as damage from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
@@ -17,7 +17,7 @@ export function unit(
     id,
     { hp = 5000, maxHp = hp, attack = 100, defense = 0, resistance = 0, flags = [] } = {},
 ) {
-    const value = initializeUnit({
+    const value = initialize({
         id,
         position: [0, 0],
         definition: {

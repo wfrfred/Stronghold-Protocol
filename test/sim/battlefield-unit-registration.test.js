@@ -11,8 +11,8 @@ import {
 } from "../../dist/core/tactical/battlefield/runtime.js";
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
 import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
-import { copyUnitSnapshot } from "../../dist/core/tactical/unit/snapshot.js";
+import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { copy } from "../../dist/core/tactical/unit/snapshot.js";
 import { configuredCapabilities } from "../../dist/core/tactical/unit/capability/catalog.js";
 import { createActionCapabilityDefinition } from "../../dist/core/tactical/unit/capability/action/capability.js";
 
@@ -106,7 +106,7 @@ const modes = [
 for (const [name, create] of modes) {
     test(`battlefield ${name} rejects unpaired configured capabilities atomically at registration`, () => {
         const runtime = create();
-        const unit = initializeUnit({ id: 1, definition: definition(), position: [0, 0] });
+        const unit = initialize({ id: 1, definition: definition(), position: [0, 0] });
         const maps = runtime.snapshot("draft").navigationMaps;
         for (const key of Object.keys(configuredCapabilities)) {
             const missingState = { ...unit };
@@ -145,8 +145,8 @@ for (const [name, create] of modes) {
 
     test(`battlefield ${name} preserves configured capability composition on update`, () => {
         const runtime = create();
-        const unit = initializeUnit({ id: 1, definition: definition(), position: [0, 0] });
-        const bare = initializeUnit({ id: 2, definition: { id: "bare" }, position: [2, 0] });
+        const unit = initialize({ id: 1, definition: definition(), position: [0, 0] });
+        const bare = initialize({ id: 2, definition: { id: "bare" }, position: [2, 0] });
         runtime.advance([
             { type: "REGISTER_UNIT", unit },
             { type: "REGISTER_UNIT", unit: bare },
@@ -201,7 +201,7 @@ for (const [name, create] of modes) {
 }
 
 test("unit snapshots copy partial composition without enforcing battlefield registration", () => {
-    const unit = initializeUnit({ id: 1, definition: definition(), position: [0, 0] });
+    const unit = initialize({ id: 1, definition: definition(), position: [0, 0] });
     const partial = {
         effects: Effects.empty(),
         id: unit.id,
@@ -209,7 +209,7 @@ test("unit snapshots copy partial composition without enforcing battlefield regi
         definition: unit.definition,
         position: unit.position,
     };
-    assert.deepEqual(copyUnitSnapshot(partial), partial);
+    assert.deepEqual(copy(partial), partial);
 });
 
 test("Unit with an acting definition and no action state remains statically legal", async () => {

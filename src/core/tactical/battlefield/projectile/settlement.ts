@@ -9,7 +9,7 @@ import {
     type BattleState,
 } from "../../battle/state.js";
 import { emptyCall, type CallContext } from "../../battle/execution/call.js";
-import type { Unit, UnitId } from "../../unit/unit.js";
+import type { Unit, Id } from "../../unit/unit.js";
 import { hasHit } from "../../unit/capability/spatial.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
 import type { ProjectileQueryContext, ProjectileServices } from "./context.js";
@@ -18,12 +18,12 @@ import type { ProjectileId, Projectile, ProjectileStopReason } from "./projectil
 
 export type ProjectileSignal = {
     readonly projectileId: ProjectileId;
-    readonly source: UnitId | null;
+    readonly source: Id | null;
     readonly tick: number;
     readonly position: WorldPosition;
 } & (
     | { readonly type: "PROJECTILE_REACHED" }
-    | { readonly type: "PROJECTILE_HIT"; readonly targetUnitId: UnitId }
+    | { readonly type: "PROJECTILE_HIT"; readonly targetUnitId: Id }
     | { readonly type: "PROJECTILE_STOPPED"; readonly reason: ProjectileStopReason }
 );
 

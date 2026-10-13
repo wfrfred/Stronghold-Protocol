@@ -6,7 +6,7 @@ import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/state.js";
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
 import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
-import { createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
+import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
 import { createDeploymentProfile } from "../../dist/core/tactical/unit/capability/deployment.js";
 import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
@@ -47,7 +47,7 @@ function route({ start = 4, end = 7, wait = true } = {}) {
 function spawn({ tick = 2, start = 4, end = 7, speed = 0, wait = true } = {}) {
     return {
         definition: {
-            ...createEnemyDefinition({
+            ...createDefinition({
                 id: "scheduled-receiver",
                 vitality: { maxHp: 100 },
                 locomotion: {

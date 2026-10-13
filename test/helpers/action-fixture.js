@@ -1,4 +1,4 @@
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import { createBattleState } from "../../dist/core/tactical/battle/state.js";
 import {
     create as createBattlefield,
@@ -69,7 +69,7 @@ export function unit(
     };
     for (const [key, value] of Object.entries(definition))
         if (value === undefined) delete definition[key];
-    return initializeUnit({ id, position: [id, 0], definition });
+    return initialize({ id, position: [id, 0], definition });
 }
 
 export function battle(...units) {

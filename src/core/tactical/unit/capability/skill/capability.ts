@@ -5,7 +5,7 @@ import {
     assertPositiveSafeInteger,
 } from "../../../../common/assert.js";
 import { TICKS_PER_SECOND } from "../../../tick.js";
-import type { Unit, UnitDefinition } from "../../unit.js";
+import type { Unit, Definition } from "../../unit.js";
 import type { ActionDefinition } from "../action/capability.js";
 
 export type SkillActivationMode = "MANUAL" | "AUTO" | "PASSIVE";
@@ -46,7 +46,7 @@ export interface Skill {
     readonly skill: SkillState;
 }
 
-export interface SkilledUnitDefinition extends UnitDefinition {
+export interface SkilledUnitDefinition extends Definition {
     readonly skill: SkillDefinition;
 }
 
@@ -54,9 +54,7 @@ export function hasSkill<U extends Unit>(unit: U): unit is U & Skill {
     return "skill" in unit && "skill" in unit.definition;
 }
 
-export function hasSkillDefinition(
-    definition: UnitDefinition,
-): definition is SkilledUnitDefinition {
+export function hasSkillDefinition(definition: Definition): definition is SkilledUnitDefinition {
     return "skill" in definition;
 }
 

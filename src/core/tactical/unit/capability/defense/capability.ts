@@ -1,8 +1,8 @@
-import type { QueryContext } from "../../query.js";
+import type { Context } from "../../query.js";
 import { assertNonnegativeNumber } from "../../../../common/assert.js";
 import * as contribution from "../../contribution/contribution.js";
 import * as modifier from "../../contribution/value.js";
-import type { Unit, UnitDefinition } from "../../unit.js";
+import type { Unit, Definition } from "../../unit.js";
 
 export interface DefenseDefinition {
     readonly defense: number;
@@ -10,8 +10,8 @@ export interface DefenseDefinition {
 }
 
 export interface DefenseState {
-    readonly defense: readonly contribution.Contribution<contribution.Input<QueryContext>>[];
-    readonly resistance: readonly contribution.Contribution<contribution.Input<QueryContext>>[];
+    readonly defense: readonly contribution.Contribution<contribution.Input<Context>>[];
+    readonly resistance: readonly contribution.Contribution<contribution.Input<Context>>[];
 }
 
 export interface Defense {
@@ -21,7 +21,7 @@ export interface Defense {
     readonly defense: DefenseState;
 }
 
-export interface DefendedUnitDefinition extends UnitDefinition {
+export interface DefendedUnitDefinition extends Definition {
     readonly defense: DefenseDefinition;
 }
 
@@ -29,9 +29,7 @@ export function hasDefense<U extends Unit>(unit: U): unit is U & Defense {
     return "defense" in unit && "defense" in unit.definition;
 }
 
-export function hasDefenseDefinition(
-    definition: UnitDefinition,
-): definition is DefendedUnitDefinition {
+export function hasDefenseDefinition(definition: Definition): definition is DefendedUnitDefinition {
     return "defense" in definition;
 }
 
@@ -67,7 +65,7 @@ function updateContributions(
 
 export function setDefenseContribution(
     state: DefenseState,
-    entry: contribution.Contribution<contribution.Input<QueryContext>>,
+    entry: contribution.Contribution<contribution.Input<Context>>,
 ): DefenseState {
     return updateContributions(state, "defense", (entries) => contribution.set(entries, entry));
 }
@@ -78,7 +76,7 @@ export function removeDefenseContribution(state: DefenseState, id: string): Defe
 
 export function setResistanceContribution(
     state: DefenseState,
-    entry: contribution.Contribution<contribution.Input<QueryContext>>,
+    entry: contribution.Contribution<contribution.Input<Context>>,
 ): DefenseState {
     return updateContributions(state, "resistance", (entries) => contribution.set(entries, entry));
 }
@@ -90,7 +88,7 @@ export function removeResistanceContribution(state: DefenseState, id: string): D
 export function resolveDefenseParameters(
     definition: DefenseDefinition,
     state: DefenseState,
-    context: QueryContext,
+    context: Context,
 ): DefenseDefinition {
     return {
         defense: Math.max(

@@ -8,13 +8,13 @@ import { startAction } from '../../dist/core/tactical/unit/capability/action/exe
 import { compileAction } from '../../dist/core/tactical/unit/capability/action/compile.js';
 import { setAttackSpeedContribution, removeAttackSpeedContribution, setBaseAttackTimeContribution, removeBaseAttackTimeContribution } from '../../dist/core/tactical/unit/capability/action/capability.js';
 import { resolveAttackSpeed, resolveBaseAttackTime, resolveActionIntervalTicks } from '../../dist/core/tactical/unit/capability/action/timing.js';
-import { copyUnitSnapshot } from '../../dist/core/tactical/unit/snapshot.js';
+import { copy } from '../../dist/core/tactical/unit/snapshot.js';
 import { create as modifier } from '../../dist/core/tactical/unit/contribution/value.js';
 import * as effects from '../../dist/core/tactical/unit/effect/operations.js';
 import { get } from '../../dist/core/tactical/unit/effect/operations.js';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
 import { createLegacyCombatSpec } from '../../dist/legacy/combat.js';
-import { createEnemyDefinition } from '../../dist/core/tactical/unit/archetype/enemy.js';
+import { createDefinition } from '../../dist/core/tactical/unit/archetype/enemy.js';
 import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
 
 const ref = { type: 'EFFECT', unitId: 0, effectId: 0 };
@@ -48,7 +48,7 @@ const actions = state => state.events.filter(event => event.type === 'ACTION').l
 function spec(source, maxTicks) {
   return { ...createLegacyCombatSpec({ rows: 1, columns: 8, operators: [], enemies: [], maxTicks, seed: 17 }),
     initialUnits: [{ definition: source.definition, position: source.position, effects: source.effects, states: { action: source.action } }, { definition: target().definition, position: [1, 0] }],
-    schedule: { type: 'TIMELINE', spawns: [{ definition: createEnemyDefinition({ id: 'future', vitality: { maxHp: 1 }, locomotion: { moveSpeedPerTick: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } } }),
+    schedule: { type: 'TIMELINE', spawns: [{ definition: createDefinition({ id: 'future', vitality: { maxHp: 1 }, locomotion: { moveSpeedPerTick: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } } }),
       route: createRouteDefinition({ pathMotionMode: 'WALK', startPosition: [0, 7], endPosition: [0, 1], spawnOffset: [0, 0], spawnRandomRange: [0, 0], checkpoints: [], allowDiagonalMove: false, visitEveryTileCenter: false, visitEveryNodeCenter: false, visitEveryCheckPoint: true }),
       tick: maxTicks + 1, timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 }, alwaysCheckCurrentPoint: true, notCountInTotal: false }] },
   };
@@ -69,7 +69,7 @@ test('action timing: lifecycle updates both slots while snapshots preserve share
   const initial = battle(actor(), target());
   const installed = install(initial, tempo(100, modifier({ finalScaler: 0.5 })));
   assert.deepEqual(values(installed), [200, 15, 7.5]);
-  const snapshot = copyUnitSnapshot(getUnit(installed, 0));
+  const snapshot = copy(getUnit(installed, 0));
   assert.equal(snapshot.action, getUnit(installed, 0).action);
   const disabled = effects.setEnabled(installed, ref, false);
   assert.deepEqual(values(disabled), [100, 30, 30]);

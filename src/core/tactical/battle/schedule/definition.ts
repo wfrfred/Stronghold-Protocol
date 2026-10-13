@@ -4,10 +4,10 @@ import {
     type RouteTiming,
 } from "../../unit/capability/locomotion/route/state.js";
 import type { RouteDefinition } from "../../unit/capability/locomotion/route/definition.js";
-import type { EnemyDefinition } from "../../unit/archetype/enemy.js";
+import type { Definition } from "../../unit/archetype/enemy.js";
 
 export interface EnemySpawnDefinition {
-    readonly definition: EnemyDefinition;
+    readonly definition: Definition;
     readonly route: RouteDefinition;
     readonly alwaysCheckCurrentPoint: boolean;
     readonly notCountInTotal: boolean;

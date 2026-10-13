@@ -5,26 +5,26 @@ import {
 } from "../../unit/capability/deployment.js";
 import { hasOccupancy, type OccupancySlot } from "../../unit/capability/occupancy.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
-import type { Unit, UnitId } from "../../unit/unit.js";
+import type { Unit, Id } from "../../unit/unit.js";
 import { BattlefieldMap } from "../map/map.js";
 import type { BuildableType } from "../map/tile.js";
 
 export interface DeploymentView {
     readonly map: BattlefieldMap;
-    getUnit(id: UnitId): Unit | undefined;
-    occupancyAt(position: TilePosition, slot: OccupancySlot): readonly UnitId[];
+    getUnit(id: Id): Unit | undefined;
+    occupancyAt(position: TilePosition, slot: OccupancySlot): readonly Id[];
 }
 
 export interface DeploymentRequest {
     readonly profile: DeploymentProfile;
     readonly tile: TilePosition;
     readonly playerSide: "SIDE_A" | "SIDE_B";
-    readonly relocatingUnitId?: UnitId;
+    readonly relocatingUnitId?: Id;
     readonly slot?: OccupancySlot;
 }
 
 export type DeploymentDecision =
-    | { readonly type: "ALLOWED"; readonly supportUnitId: UnitId | null }
+    | { readonly type: "ALLOWED"; readonly supportUnitId: Id | null }
     | {
           readonly type: "DENIED";
           readonly reason:
@@ -64,7 +64,7 @@ export function evaluateDeployment(
 
     let buildableType = tile.buildableType;
     let advancedBuildableMask = tile.advancedBuildableMask ?? 0;
-    let supportUnitId: UnitId | null = null;
+    let supportUnitId: Id | null = null;
 
     if (slot === "DEPLOYMENT") {
         const providers = occupied("SUPPORT");

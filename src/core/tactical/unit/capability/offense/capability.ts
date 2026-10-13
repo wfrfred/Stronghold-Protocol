@@ -1,15 +1,15 @@
-import type { QueryContext } from "../../query.js";
+import type { Context } from "../../query.js";
 import { assertNonnegativeNumber } from "../../../../common/assert.js";
 import * as contribution from "../../contribution/contribution.js";
 import * as modifier from "../../contribution/value.js";
-import type { Unit, UnitDefinition } from "../../unit.js";
+import type { Unit, Definition } from "../../unit.js";
 
 export interface OffenseDefinition {
     readonly attack: number;
 }
 
 export interface OffenseState {
-    readonly attack: readonly contribution.Contribution<contribution.Input<QueryContext>>[];
+    readonly attack: readonly contribution.Contribution<contribution.Input<Context>>[];
 }
 
 export interface Offense {
@@ -19,7 +19,7 @@ export interface Offense {
     readonly offense: OffenseState;
 }
 
-export interface OffensiveUnitDefinition extends UnitDefinition {
+export interface OffensiveUnitDefinition extends Definition {
     readonly offense: OffenseDefinition;
 }
 
@@ -28,7 +28,7 @@ export function hasOffense<U extends Unit>(unit: U): unit is U & Offense {
 }
 
 export function hasOffenseDefinition(
-    definition: UnitDefinition,
+    definition: Definition,
 ): definition is OffensiveUnitDefinition {
     return "offense" in definition;
 }
@@ -55,7 +55,7 @@ function changeAttackContributions(
 
 export function setAttackContribution(
     state: OffenseState,
-    entry: contribution.Contribution<contribution.Input<QueryContext>>,
+    entry: contribution.Contribution<contribution.Input<Context>>,
 ): OffenseState {
     return changeAttackContributions(state, (entries) => contribution.set(entries, entry));
 }
@@ -67,7 +67,7 @@ export function removeAttackContribution(state: OffenseState, id: string): Offen
 export function resolveOffenseAttack(
     definition: OffenseDefinition,
     state: OffenseState,
-    context: QueryContext,
+    context: Context,
 ): number {
     return Math.max(
         0,

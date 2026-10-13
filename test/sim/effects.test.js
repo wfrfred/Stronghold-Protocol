@@ -1,7 +1,7 @@
 import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import {
     battlefieldView,
     getUnit,
@@ -20,7 +20,7 @@ import {
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 
 const unit = (id = 0) =>
-    initializeUnit({
+    initialize({
         id,
         position: [0, 0],
         definition: {

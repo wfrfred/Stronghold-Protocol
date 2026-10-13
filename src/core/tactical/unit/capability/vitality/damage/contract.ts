@@ -1,5 +1,5 @@
 import type { CallContext } from "../../../../battle/execution/call.js";
-import type { UnitId } from "../../../unit.js";
+import type { Id } from "../../../unit.js";
 import type { BattleState, Result } from "../../../../battle/state.js";
 
 export type DamageType = "PHYSICAL" | "ARTS" | "TRUE" | "ELEMENTAL";
@@ -13,8 +13,8 @@ export interface DamageOperands {
 }
 
 export interface DamageRequest {
-    readonly sourceUnitId: UnitId | null;
-    readonly targetUnitId: UnitId;
+    readonly sourceUnitId: Id | null;
+    readonly targetUnitId: Id;
     readonly damageType: DamageType;
     readonly operands: DamageOperands;
     readonly tick: number;
@@ -43,7 +43,7 @@ export interface DamageCancellation {
 }
 
 export interface DamageResourceConsumption {
-    readonly ownerUnitId: UnitId;
+    readonly ownerUnitId: Id;
     readonly resourceId: string;
     readonly resource: string;
     readonly amount: number;

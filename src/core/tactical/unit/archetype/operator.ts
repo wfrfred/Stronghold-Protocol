@@ -27,14 +27,14 @@ import {
     type StatusUnitDefinition,
 } from "../capability/status/capability.js";
 import type { VitalUnitDefinition } from "../capability/vitality/capability.js";
-import { initializeUnit, type InitializedUnit, type UnitInitialization } from "../initialize.js";
+import * as initialization from "../initialize.js";
 import {
     createElementalDefinition,
     type ElementalDefinition,
 } from "../capability/elemental/capability.js";
 import { createSkillDefinition, type SkillDefinition } from "../capability/skill/capability.js";
 
-export interface OperatorDefinition
+export interface Definition
     extends
         VitalUnitDefinition,
         ActingUnitDefinition,
@@ -49,12 +49,11 @@ export interface OperatorDefinition
     readonly elemental?: ElementalDefinition;
 }
 
-export type Operator<D extends OperatorDefinition = OperatorDefinition> = InitializedUnit<D>;
+export type Operator<D extends Definition = Definition> = initialization.Result<D>;
 
-export type OperatorInitialization<D extends OperatorDefinition = OperatorDefinition> =
-    UnitInitialization<D>;
+export type Input<D extends Definition = Definition> = initialization.Input<D>;
 
-export function createOperatorDefinition(definition: OperatorDefinition): OperatorDefinition {
+export function createDefinition(definition: Definition): Definition {
     if (definition.id.length === 0) {
         throw new TypeError("operator definition id must be nonempty");
     }
@@ -83,10 +82,8 @@ export function createOperatorDefinition(definition: OperatorDefinition): Operat
     });
 }
 
-export function initializeOperator<D extends OperatorDefinition>(
-    input: OperatorInitialization<D>,
-): Operator<D> {
+export function initialize<D extends Definition>(input: Input<D>): Operator<D> {
     assertNonnegativeSafeInteger(input.id, "operator id");
 
-    return initializeUnit(input);
+    return initialization.initialize(input);
 }

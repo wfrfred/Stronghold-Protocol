@@ -8,9 +8,9 @@ import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
 import { definition } from "../helpers/effects.js";
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import { seededPlacement } from "../helpers/aura.js";
-import { createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
+import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
 import { createNavigationModifierDefinition } from "../../dist/core/tactical/battlefield/navigation/modifier.js";
 import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
 
@@ -131,7 +131,7 @@ function fixture({ spawnTick = 100 } = {}) {
     );
     const resources = new CombatResources();
     const initial = definition("initial-state", { quota: { remaining: 3 }, marks: [1, 2] });
-    const enemy = createEnemyDefinition({
+    const enemy = createDefinition({
         id: "scheduled-enemy",
         vitality: { maxHp: 100 },
         locomotion: {
@@ -168,7 +168,7 @@ function fixture({ spawnTick = 100 } = {}) {
         },
         initialUnits: [
             placement("placed-a", 0, [attached("unit-navigation", 2)]),
-            seededPlacement(initial, initializeUnit({ id: 1, ...placement("placed-b", 1) })),
+            seededPlacement(initial, initialize({ id: 1, ...placement("placed-b", 1) })),
         ],
         initialMechanisms: [
             { definition: { id: "first-mechanism" } },

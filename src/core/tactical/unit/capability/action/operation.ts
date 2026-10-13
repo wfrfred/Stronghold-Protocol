@@ -5,7 +5,7 @@ import { resolveAttackPower } from "../offense/query.js";
 import { createDamageOperands, type DamageType } from "../vitality/damage/contract.js";
 import { battlefieldView, type BattleState } from "../../../battle/state.js";
 import type { CallContext } from "../../../battle/execution/call.js";
-import type { UnitId } from "../../unit.js";
+import type { Id } from "../../unit.js";
 import type { ActionResources } from "./resources.js";
 
 export type Definition =
@@ -47,8 +47,8 @@ export function purposes(definition: Definition): readonly QueryPurpose[] {
 
 export interface Context {
     readonly call: CallContext;
-    readonly sourceUnitId: UnitId;
-    readonly targetUnitId: UnitId;
+    readonly sourceUnitId: Id;
+    readonly targetUnitId: Id;
     readonly tick: number;
 }
 

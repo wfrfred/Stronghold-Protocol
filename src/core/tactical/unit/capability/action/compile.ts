@@ -1,4 +1,4 @@
-import type { UnitId } from "../../unit.js";
+import type { Id } from "../../unit.js";
 import { selectTargets } from "../../targeting/select.js";
 import { compileTargeting } from "../../targeting/compile.js";
 import { resolveMaxHp } from "../vitality/query.js";
@@ -26,7 +26,7 @@ export function compileAction(
 
     const applyTo = (
         run: operation.Program,
-        ids: (context: ActionExecutionContext) => readonly UnitId[],
+        ids: (context: ActionExecutionContext) => readonly Id[],
     ): CompiledActionSegment => ({
         type: "EXECUTE",
         run: (state, context) => {
@@ -59,7 +59,7 @@ export function compileAction(
     return {
         definition,
         bind: (query) => {
-            const bindings = new Map<TargetBindingId, readonly UnitId[]>();
+            const bindings = new Map<TargetBindingId, readonly Id[]>();
 
             for (const group of groups) {
                 bindings.set(

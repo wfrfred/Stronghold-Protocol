@@ -1,6 +1,6 @@
 import type { ProjectileId, Projectile } from "../projectile/projectile.js";
 import type { NavigationMaps } from "../navigation/map.js";
-import type { Unit, UnitId } from "../../unit/unit.js";
+import type { Unit, Id } from "../../unit/unit.js";
 import { updateBlockingRelations, type BlockingRelation } from "../blocking/relations.js";
 import type { BattlefieldChangeResult } from "../contract.js";
 import {
@@ -28,7 +28,7 @@ import { derive, project, type Index } from "./effect-lifetimes.js";
 
 export interface BattlefieldContent<U extends Unit> {
     readonly projectiles: ReadonlyMap<ProjectileId, Projectile>;
-    readonly units: ReadonlyMap<UnitId, U>;
+    readonly units: ReadonlyMap<Id, U>;
     readonly blockingRelations: readonly BlockingRelation[];
     readonly supportRelations: readonly SupportRelation[];
     readonly mechanisms: ReadonlyMap<MechanismId, Mechanism>;
@@ -45,7 +45,7 @@ export function createBattlefieldState<U extends Unit>(
     map: BattlefieldMap,
     baseline: NavigationMaps,
 ): BattlefieldState<U> {
-    const units = new Map<UnitId, U>();
+    const units = new Map<Id, U>();
     const mechanisms = new Map<MechanismId, Mechanism>();
     const navigationModifiers = new Map<NavigationModifierId, NavigationModifier>();
 

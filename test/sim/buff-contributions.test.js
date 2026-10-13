@@ -9,7 +9,7 @@ import {
 } from "../../dist/data/arknights/modifier.js";
 import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/state.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import {
     setAttackContribution,
     removeAttackContribution,
@@ -61,7 +61,7 @@ test("Buff contribution integration: the native Astesia DEF facet merges layers,
         },
     });
     let work = effectFixtureWork(
-        initializeUnit({
+        initialize({
             id: 0,
             position: [0, 0],
             definition: { id: "receiver", defense: { defense: 100, resistance: 0 } },
@@ -168,7 +168,7 @@ test("Buff contribution integration: only effective layer growth resamples the r
         output,
     );
     let work = effectFixtureWork(
-        initializeUnit({
+        initialize({
             id: 0,
             position: [0, 0],
             definition: { id: "receiver", offense: { attack: 100 } },

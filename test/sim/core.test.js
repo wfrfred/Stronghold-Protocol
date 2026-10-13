@@ -18,9 +18,9 @@ import { createBattlefieldRuntime } from '../../dist/core/tactical/battlefield/r
 import { createMechanismDefinition } from '../../dist/core/tactical/battlefield/mechanism.js';
 import { createNavigationModifierDefinition, createNavigationModifier } from '../../dist/core/tactical/battlefield/navigation/modifier.js';
 import { hasSpatialPresence, isSpatiallyPresent } from '../../dist/core/tactical/unit/capability/presence.js';
-import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
+import { initialize } from '../../dist/core/tactical/unit/initialize.js';
 import { initializeOffenseState } from '../../dist/core/tactical/unit/capability/offense/capability.js';
-import { copyUnitSnapshot } from '../../dist/core/tactical/unit/snapshot.js';
+import { copy } from '../../dist/core/tactical/unit/snapshot.js';
 import { hasVitality, initializeVitalityState } from '../../dist/core/tactical/unit/capability/vitality/capability.js';
 import { createActionCapabilityDefinition, hasAction } from '../../dist/core/tactical/unit/capability/action/capability.js';
 import { hasAllegiance } from '../../dist/core/tactical/unit/capability/allegiance.js';
@@ -288,7 +288,7 @@ test('core removal facts share the latest unit while updates preserve retained b
   const unit = presenceUnit(1, [2, 0]);
   runtime.advance([{ type: 'REGISTER_UNIT', unit }]);
   const retained = runtime.snapshot('draft');
-  const snapshot = copyUnitSnapshot(runtime.snapshot('draft').getUnit(1));
+  const snapshot = copy(runtime.snapshot('draft').getUnit(1));
   assert.equal(snapshot.vitality, unit.vitality);
   assert.equal(snapshot.spatialPresence, unit.spatialPresence);
   assert.deepEqual(retained.getUnit(1), unit);
@@ -451,7 +451,7 @@ test('core unit initialization uses prepared states and separates configuration 
   const vitality = {...initializeVitalityState(definition.vitality), hp: 25};
   const action = { ...createActionState(), readyAtTick: 9, recoveryUntilTick: 10 };
   const locomotion = catalogRoutedState();
-  const unit = initializeUnit({ id: 1, definition, position: [2, 0], tick: 17,
+  const unit = initialize({ id: 1, definition, position: [2, 0], tick: 17,
     states: { vitality, action, locomotion, spatialPresence: { present: false } } });
 
   assert.equal(unit.definition, definition);
@@ -473,28 +473,28 @@ test('core unit initialization uses prepared states and separates configuration 
   assert.equal(unit.vitality.hp, 25);
   assert.equal(unit.action.readyAtTick, 9);
   assert.equal(unit.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 9);
-  assert.equal(initializeUnit({ id: 2, definition, position: [0, 0], tick: 17 }).action.readyAtTick, 17);
+  assert.equal(initialize({ id: 2, definition, position: [0, 0], tick: 17 }).action.readyAtTick, 17);
 
-  const bare = initializeUnit({ id: 3, definition: Object.freeze({ id: 'presence_only' }),
+  const bare = initialize({ id: 3, definition: Object.freeze({ id: 'presence_only' }),
     position: [0, 0], states: { spatialPresence: { present: false } } });
   assert.equal(hasSpatialPresence(bare), true);
   assert.equal(hasVitality(bare), false);
-  assert.throws(() => initializeUnit({ id: 4, definition: { id: 'bare' }, position: [0, 0],
+  assert.throws(() => initialize({ id: 4, definition: { id: 'bare' }, position: [0, 0],
     states: { locomotion: createLocomotionState() } }));
 });
 
 test('core initialization and snapshots share immutable definitions', () => {
   const definition = { id: 'shared-definition', vitality: { maxHp: 100 }, metadata: { labels: ['a'] } };
-  const first = initializeUnit({ id: 1, definition, position: [0, 0] });
-  const second = initializeUnit({ id: 2, definition, position: [1, 0] });
-  const snapshot = copyUnitSnapshot(first);
+  const first = initialize({ id: 1, definition, position: [0, 0] });
+  const second = initialize({ id: 2, definition, position: [1, 0] });
+  const snapshot = copy(first);
   assert.equal(first.definition, definition);
   assert.equal(second.definition, definition);
   assert.equal(snapshot.definition, definition);
   assert.equal(snapshot.definition.metadata.labels, definition.metadata.labels);
 
   const revisedDefinition = { ...definition, vitality: { maxHp: 200 }, metadata: { labels: ['b'] } };
-  const revised = initializeUnit({ id: 3, definition: revisedDefinition, position: [0, 0] });
+  const revised = initialize({ id: 3, definition: revisedDefinition, position: [0, 0] });
   assert.equal(revised.definition, revisedDefinition);
   assert.equal(revised.vitality.hp, 200);
   assert.equal(first.definition.vitality.maxHp, 100);
@@ -504,14 +504,14 @@ test('core initialization and snapshots share immutable definitions', () => {
 test('core prepared states retain capability values without rebuilding their fields', () => {
   const definition = { id: 'state-shapes', offense: { attack: 10 } };
   const offense = { ...initializeOffenseState(), marker: 'retained' };
-  const unit = initializeUnit({ id: 1, definition, position: [0, 0], states: { offense } });
+  const unit = initialize({ id: 1, definition, position: [0, 0], states: { offense } });
   assert.equal(unit.offense, offense);
   assert.equal(unit.offense.marker, 'retained');
-  assert.equal(copyUnitSnapshot(unit).offense, offense);
+  assert.equal(copy(unit).offense, offense);
 });
 
 test('core capability guards inspect composition independently of shared snapshot values', () => {
-  const unit = initializeUnit({ id: 1, definition: catalogDefinition(), position: [0, 0],
+  const unit = initialize({ id: 1, definition: catalogDefinition(), position: [0, 0],
     states: { locomotion: catalogRoutedState() } });
   for (const [key, guard] of [
     ['vitality', hasVitality], ['locomotion', hasLocomotion], ['allegiance', hasAllegiance],
@@ -533,15 +533,15 @@ test('core capability guards inspect composition independently of shared snapsho
   assert.equal(hasRoutedLocomotion(unit), true);
   const presence = { id: 2, definition: Object.freeze({ id: 'presence' }), position: [0, 0],
     spatialPresence: { present: false } };
-  assert.deepEqual(copyUnitSnapshot(presence).spatialPresence, { present: false });
+  assert.deepEqual(copy(presence).spatialPresence, { present: false });
 
 
 });
 
 test('core snapshots share capabilities and retain earlier values across immutable updates', () => {
-  const unit = initializeUnit({ id: 1, definition: catalogDefinition(), position: [2, 0],
+  const unit = initialize({ id: 1, definition: catalogDefinition(), position: [2, 0],
     states: { locomotion: catalogRoutedState(), spatialPresence: { present: true } } });
-  const snapshot = copyUnitSnapshot({ ...unit, extension: 'outside-unit-state' });
+  const snapshot = copy({ ...unit, extension: 'outside-unit-state' });
   assert.equal(Object.hasOwn(snapshot, 'extension'), false);
   assert.equal(snapshot.definition, unit.definition);
   assert.equal(snapshot.position, unit.position);
@@ -599,9 +599,9 @@ test('core geometry boundaries own shape values and share them across snapshots'
   assert.throws(() => createBlockGeometry({ radius: -1 }), /nonnegative/);
 
   const definition = Object.freeze({ id: 'shared_geometry', hit: createHitDefinition({ geometry }) });
-  const first = initializeUnit({ id: 1, definition, position: [0, 0] });
-  const second = initializeUnit({ id: 2, definition, position: [1, 0] });
-  const snapshot = copyUnitSnapshot(first);
+  const first = initialize({ id: 1, definition, position: [0, 0] });
+  const second = initialize({ id: 2, definition, position: [1, 0] });
+  const snapshot = copy(first);
   assert.equal(snapshot.hit.geometry, geometry);
   assert.equal(second.hit.geometry, geometry);
   assert.notEqual(first.hit, second.hit);
@@ -679,8 +679,8 @@ test('core status contributions share immutable flags and preserve earlier state
   assert.throws(() => removeStatusContribution(state, baseline.id), /cannot be removed/);
 
   const unitDefinition = Object.freeze({ id: 'shared_status_definition', status: definition });
-  const firstUnit = initializeUnit({ id: 1, definition: unitDefinition, position: [0, 0] });
-  const second = initializeUnit({ id: 2, definition: unitDefinition, position: [0, 0] });
+  const firstUnit = initialize({ id: 1, definition: unitDefinition, position: [0, 0] });
+  const second = initialize({ id: 2, definition: unitDefinition, position: [0, 0] });
   const updated = { ...firstUnit, status: addStatusContribution(firstUnit.status, { id: 'source-a', flags: ['HEAL_FREE'] }) };
   assert.equal(deriveEffectiveStatusFlags(second.status).has('HEAL_FREE'), false);
   assert.equal(deriveEffectiveStatusFlags(firstUnit.status).has('HEAL_FREE'), false);
@@ -689,10 +689,10 @@ test('core status contributions share immutable flags and preserve earlier state
 
 test('core blocking uses current state radius and includes center-distance equality', () => {
   const map = createBattlefieldMap(1, 3, Array.from({ length: 3 }, () => deploymentTile()));
-  const blocker = initializeUnit({ id: 1, definition: Object.freeze({ id: 'radius_blocker',
+  const blocker = initialize({ id: 1, definition: Object.freeze({ id: 'radius_blocker',
     allegiance: { side: 'ALLY' }, blocker: createBlockerDefinition({ capacity: 1, geometry: { radius: 0.5 } }),
   }), position: [0, 0] });
-  const blocked = initializeUnit({ id: 2, definition: Object.freeze({ id: 'radius_enemy',
+  const blocked = initialize({ id: 2, definition: Object.freeze({ id: 'radius_enemy',
     allegiance: { side: 'ENEMY' }, blockable: { weight: 1 }, spatial: { layer: 'GROUND' },
     hit: createHitDefinition({ geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 10 }] } }),
   }), position: [1, 0] });
@@ -709,7 +709,7 @@ test('core blocking uses current state radius and includes center-distance equal
 
 test('core unit updates preserve definition identity and fail atomically while presence stays dynamic', () => {
   const runtime = presenceBattlefield();
-  const unit = initializeUnit({ id: 1, definition: catalogDefinition(), position: [2, 0] });
+  const unit = initialize({ id: 1, definition: catalogDefinition(), position: [2, 0] });
   runtime.advance([{ type: 'REGISTER_UNIT', unit }]);
   const maps = runtime.snapshot('draft').navigationMaps;
   for (const invalid of [{ ...unit, definition: Object.freeze({ ...unit.definition }) }]) {
@@ -722,7 +722,7 @@ test('core unit updates preserve definition identity and fail atomically while p
     assert.equal(runtime.snapshot('draft').navigationMaps, maps);
   }
 
-  const bare = initializeUnit({ id: 2, definition: Object.freeze({ id: 'bare' }), position: [0, 0] });
+  const bare = initialize({ id: 2, definition: Object.freeze({ id: 'bare' }), position: [0, 0] });
   runtime.advance([{ type: 'REGISTER_UNIT', unit: bare }]);
   assert.throws(() => runtime.advance([{ type: 'UPDATE_UNIT', unit: {
     ...bare, definition: Object.freeze({ ...bare.definition, vitality: { maxHp: 1 } }), vitality: initializeVitalityState({ maxHp: 1 }),
@@ -731,7 +731,7 @@ test('core unit updates preserve definition identity and fail atomically while p
   const hidden = { ...runtime.snapshot('draft').getUnit(1), spatialPresence: { present: false } };
   runtime.advance([{ type: 'UPDATE_UNIT', unit: hidden }]);
   assert.deepEqual(runtime.snapshot('draft').unitsAt([0, 2]), []);
-  const restored = copyUnitSnapshot(runtime.snapshot('draft').getUnit(1));
+  const restored = copy(runtime.snapshot('draft').getUnit(1));
   delete restored.spatialPresence;
   runtime.advance([{ type: 'UPDATE_UNIT', unit: restored }]);
   assert.deepEqual(runtime.snapshot('draft').unitsAt([0, 2]).map(value => value.id), [1]);
@@ -743,11 +743,11 @@ test('core initializer types preserve definition unions, prepared refinements an
   const sourceModule = name => JSON.stringify(fileURLToPath(
     new URL(`../../src/core/tactical/unit/${name}.js`, import.meta.url)));
   const imports = `
-import { initializeUnit, type InitializedUnit } from ${sourceModule('initialize')};
-import type { Unit, UnitDefinition } from ${sourceModule('unit')};
+import { initialize as initializeUnit, type Result as InitializedUnit } from ${sourceModule('initialize')};
+import type { Unit, Definition as UnitDefinition } from ${sourceModule('unit')};
 import type { ImmutableData } from ${sourceModule('../../common/immutable-data')};
 import { initializeOffenseState } from ${sourceModule('capability/offense/capability')};
-import type { EnemyDefinition } from ${sourceModule('archetype/enemy')};
+import type { Definition as EnemyDefinition } from ${sourceModule('archetype/enemy')};
 import { hasVitality, type VitalityDefinition } from ${sourceModule('capability/vitality/capability')};
 import { hasRoutedLocomotion, type LocomotionState, type RoutedLocomotionState } from ${sourceModule('capability/locomotion/capability')};
 import { createBattlefieldRuntime } from ${sourceModule('../battlefield/runtime')};
@@ -883,7 +883,7 @@ const deploymentTile = (overrides = {}) => ({
   playerSideMask: 'ALL', terrain: 'NORMAL', mechanism: null, ...overrides,
 });
 
-const deploymentUnit = (id, position, definition, claims, present = true) => initializeUnit({
+const deploymentUnit = (id, position, definition, claims, present = true) => initialize({
   id, position, definition: Object.freeze({ id: `deployment_${id}`, ...definition }),
   states: { occupancy: createOccupancyState({ claims }), spatialPresence: { present } },
 });
@@ -939,7 +939,7 @@ test('core occupancy separates present claims, reservations and geometric member
   const reserved = deploymentUnit(2, [2, 0], {}, [
     { position: [0, 2], slot: 'DEPLOYMENT', type: 'RESERVATION' },
   ], false);
-  const enemy = initializeUnit({ id: 3, definition: Object.freeze({ id: 'enemy_without_claim' }), position: [1, 0] });
+  const enemy = initialize({ id: 3, definition: Object.freeze({ id: 'enemy_without_claim' }), position: [1, 0] });
   runtime.advance([present, reserved, enemy].map(unit => ({ type: 'REGISTER_UNIT', unit })));
   assert.deepEqual(runtime.snapshot('draft').unitsAt([0, 1]).map(unit => unit.id), [3]);
   assert.deepEqual(runtime.snapshot('draft').occupancyAt([0, 1], 'DEPLOYMENT'), []);

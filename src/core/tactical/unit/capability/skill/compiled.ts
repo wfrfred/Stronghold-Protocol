@@ -1,4 +1,4 @@
-import type { UnitId } from "../../unit.js";
+import type { Id } from "../../unit.js";
 import type { CombatTargetingView } from "../../targeting/query.js";
 import type { BattleState, Result } from "../../../battle/state.js";
 import type { CallContext } from "../../../battle/execution/call.js";
@@ -7,7 +7,7 @@ import type { SkillDefinition } from "./capability.js";
 export type SkillFacts = CombatTargetingView;
 
 export interface SkillQueryContext {
-    readonly unitId: UnitId;
+    readonly unitId: Id;
     readonly tick: number;
     readonly facts: SkillFacts;
 }

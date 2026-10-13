@@ -1,6 +1,6 @@
 import { World, type TilePosition } from "../../geometry/coordinate.js";
 import { RangeGrid } from "../../geometry/range.js";
-import type { Unit, UnitId } from "../../unit/unit.js";
+import type { Unit, Id } from "../../unit/unit.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
 import {
     hasOccupancy,
@@ -17,11 +17,11 @@ import type {
 import type { ProjectedNavigationModifier } from "../navigation/projection.js";
 
 export interface BattlefieldSpatialView {
-    readonly unitsByTile: ReadonlyMap<number, ReadonlySet<UnitId>>;
-    readonly occupancyBySlot: ReadonlyMap<string, ReadonlySet<UnitId>>;
+    readonly unitsByTile: ReadonlyMap<number, ReadonlySet<Id>>;
+    readonly occupancyBySlot: ReadonlyMap<string, ReadonlySet<Id>>;
     readonly navigationModifiersByTile: ReadonlyMap<number, ReadonlySet<NavigationModifierId>>;
     readonly navigationModifiersBySource: ReadonlyMap<string, ReadonlySet<NavigationModifierId>>;
-    readonly navigationModifiersByAnchor: ReadonlyMap<UnitId, ReadonlySet<NavigationModifierId>>;
+    readonly navigationModifiersByAnchor: ReadonlyMap<Id, ReadonlySet<NavigationModifierId>>;
     readonly navigationModifiers: readonly ProjectedNavigationModifier[];
 }
 
@@ -71,9 +71,9 @@ function requireEntry<K extends number, V>(entries: ReadonlyMap<K, V>, id: K, na
 
 export function projectUnitsByTile(
     map: BattlefieldMap,
-    units: ReadonlyMap<UnitId, Unit>,
+    units: ReadonlyMap<Id, Unit>,
 ): Pick<BattlefieldSpatialView, "unitsByTile"> {
-    const unitsByTile = new Map<number, Set<UnitId>>();
+    const unitsByTile = new Map<number, Set<Id>>();
 
     for (const unit of units.values()) {
         if (!isSpatiallyPresent(unit)) {
@@ -92,9 +92,9 @@ export function projectUnitsByTile(
 
 export function projectOccupancyBySlot(
     map: BattlefieldMap,
-    units: ReadonlyMap<UnitId, Unit>,
+    units: ReadonlyMap<Id, Unit>,
 ): Pick<BattlefieldSpatialView, "occupancyBySlot"> {
-    const occupancyBySlot = new Map<string, Set<UnitId>>();
+    const occupancyBySlot = new Map<string, Set<Id>>();
 
     for (const unit of units.values()) {
         if (!hasOccupancy(unit)) {
@@ -126,12 +126,12 @@ export function projectOccupancyBySlot(
 }
 
 export function projectNavigationModifierRelations(
-    units: ReadonlyMap<UnitId, Unit>,
+    units: ReadonlyMap<Id, Unit>,
     mechanisms: ReadonlyMap<MechanismId, Mechanism>,
     navigationModifiers: ReadonlyMap<NavigationModifierId, NavigationModifier>,
 ): Pick<BattlefieldSpatialView, "navigationModifiersBySource" | "navigationModifiersByAnchor"> {
     const navigationModifiersBySource = new Map<string, Set<NavigationModifierId>>();
-    const navigationModifiersByAnchor = new Map<UnitId, Set<NavigationModifierId>>();
+    const navigationModifiersByAnchor = new Map<Id, Set<NavigationModifierId>>();
 
     for (const navigationModifier of navigationModifiers.values()) {
         if (navigationModifier.source.type === "UNIT") {
@@ -173,7 +173,7 @@ export function projectNavigationModifierRelations(
 
 export function projectNavigationModifierCoverage(
     map: BattlefieldMap,
-    units: ReadonlyMap<UnitId, Unit>,
+    units: ReadonlyMap<Id, Unit>,
     mechanisms: ReadonlyMap<MechanismId, Mechanism>,
     navigationModifiers: ReadonlyMap<NavigationModifierId, NavigationModifier>,
 ): Pick<BattlefieldSpatialView, "navigationModifiersByTile" | "navigationModifiers"> {
@@ -222,7 +222,7 @@ export function projectNavigationModifierCoverage(
 
 export function projectBattlefieldSpatial(
     map: BattlefieldMap,
-    units: ReadonlyMap<UnitId, Unit>,
+    units: ReadonlyMap<Id, Unit>,
     mechanisms: ReadonlyMap<MechanismId, Mechanism>,
     navigationModifiers: ReadonlyMap<NavigationModifierId, NavigationModifier>,
 ): BattlefieldSpatialView {

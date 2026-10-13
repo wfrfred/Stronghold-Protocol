@@ -24,7 +24,7 @@ import { advanceSpawnSchedule, getSpawnedCount, getUnspawnedCount, isSpawnSchedu
 import { snapshotSchedule, createSpawnScheduleExecution } from "../../dist/core/tactical/battle/schedule/state.js";
 import { createSpawnScheduleDefinition } from "../../dist/core/tactical/battle/schedule/definition.js";
 import { createSteeringParameters } from '../../dist/core/tactical/unit/capability/locomotion/steering.js';
-import { createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
+import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
 import { initializeRoutedEnemy } from "../../dist/core/tactical/battle/creation/enemy.js";
 import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
 import { TICKS_PER_SECOND } from '../../dist/core/tactical/tick.js';
@@ -43,7 +43,7 @@ import { createPredefinedDefinition } from '../../dist/core/tactical/battle/step
 import { advanceMovement } from '../../dist/core/tactical/battle/steps/movement.js';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { createBattleState, appendEvents, getUnit, registerUnit } from '../../dist/core/tactical/battle/state.js';
-import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
+import { initialize } from '../../dist/core/tactical/unit/initialize.js';
 import { createActionDefinition } from '../../dist/core/tactical/unit/capability/action/capability.js';
 import { install as installEffect } from '../../dist/core/tactical/unit/effect/operations.js';
 import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
@@ -81,7 +81,7 @@ function routeCommandBattle(checkpoints, options = {}) {
   const source = spec.schedule.spawns[0];
   const route = createRouteDefinition({ ...source.route, visitEveryCheckPoint: true, checkpoints,
     spawnOffset: [0, 0], spawnRandomRange: [0, 0], ...options.route });
-  const definition = createEnemyDefinition({ ...source.definition,
+  const definition = createDefinition({ ...source.definition,
     locomotion: { ...source.definition.locomotion, moveSpeedPerTick: options.speed ?? 0, minimumMoveSpeedPerTick: 0 } });
   return { ...withTimelineSpawns(spec, [{ ...source, tick: 0, definition, route, alwaysCheckCurrentPoint: true }]),
     maxTicks: options.maxTicks ?? 20, ...options.spec };
@@ -783,7 +783,7 @@ test('core battle snapshots share immutable values and retain the published tick
 test('core battle initializes all route waits at the birth tick and replays their exact completion edges', () => {
   const { spec } = slimeMovementFragment();
   const spawn = spec.schedule.spawns[0];
-  const definition = createEnemyDefinition({ ...spawn.definition,
+  const definition = createDefinition({ ...spawn.definition,
     locomotion: { ...spawn.definition.locomotion, moveSpeedPerTick: 0 },
   });
   const cases = [
@@ -837,7 +837,7 @@ test('core route absolute waits retain birth timing after the scheduler enters a
     const route = createRouteDefinition({ ...action.spawn.route, visitEveryCheckPoint: true,
       checkpoints: [{ type, targetElapsedTicks: 8 }],
     });
-    const definition = createEnemyDefinition({ ...action.spawn.definition,
+    const definition = createDefinition({ ...action.spawn.definition,
       locomotion: { ...action.spawn.definition.locomotion, moveSpeedPerTick: 0 },
     });
     const runtime = new BattleRuntime({ ...spec, maxTicks: 16, schedule: { ...schedule, waves: [
@@ -870,7 +870,7 @@ test('core patrol stays registered and pending in the spawn schedule through det
   const route = createRouteDefinition({ ...spawn.route, visitEveryCheckPoint: true, checkpoints: [10, 9].map(column => ({
     type: 'PATROL_MOVE', target: { position: [9, column], reachOffset: [0, 0], randomizeReachOffset: false, reachDistance: 0 },
   })) });
-  const definition = createEnemyDefinition({ ...spawn.definition,
+  const definition = createDefinition({ ...spawn.definition,
     locomotion: { ...spawn.definition.locomotion, moveSpeedPerTick: 4 },
   });
   const input = { ...withTimelineSpawns(spec, [{ ...spawn, tick: 0, definition, route, alwaysCheckCurrentPoint: true }]), maxTicks: 24 };
@@ -1111,7 +1111,7 @@ test('core battle publishes a completed tick only after all operations succeed',
       if (failureEnabled) { failures++; throw new Error('late-stage failure'); }
       return state;
     } };
-    const failingEffects = installFixtureEffect(initializeUnit({ id: 99, definition: predefinedUnit, position: [8, 9] }), lifecycle).effects;
+    const failingEffects = installFixtureEffect(initialize({ id: 99, definition: predefinedUnit, position: [8, 9] }), lifecycle).effects;
     const input = {
       ...withTimelineSpawns(base, [
         ...(reason === 'TIME_LIMIT' ? [source] : []),
@@ -1199,7 +1199,7 @@ test('core battle propagates nested settlement errors without publishing battlef
   const compileAction = definition => ({
     definition, bind: () => new Map([['primary', [1]]]), program: [
       { type: 'EXECUTE', run: (state, context) => {
-        const unit = initializeUnit({ id: state.execution.nextUnitId, position: [2, 0], definition: {
+        const unit = initialize({ id: state.execution.nextUnitId, position: [2, 0], definition: {
           id: 'nested-created', vitality: { maxHp: 10 },
         } });
         state = registerUnit(state, unit);
@@ -2231,7 +2231,7 @@ test('core visibility: movement reads one navigation projection before following
     playerSideMask: 'ALL', terrain: 'NORMAL', mechanism: null,
   })));
   let battlefield = createBattlefieldState({ map });
-  const definition = createEnemyDefinition({ id: 'moving_effect_anchor', vitality: { maxHp: 100 }, locomotion: {
+  const definition = createDefinition({ id: 'moving_effect_anchor', vitality: { maxHp: 100 }, locomotion: {
     moveSpeedPerTick: 1, steeringParameters: createSteeringParameters({ steeringFactor: 1, maxSteeringForce: 1 }),
   } });
   let execution = { rngState: 123, nextUnitId: 2, nextNavigationRequestId: 0, nextMechanismId: 0, nextNavigationModifierId: 1, nextProjectileId: 0 };

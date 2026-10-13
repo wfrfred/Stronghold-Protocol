@@ -1,4 +1,4 @@
-import type { QueryContext } from "../../query.js";
+import type { Context } from "../../query.js";
 import { assertFiniteNumber } from "../../../../common/assert.js";
 import * as contribution from "../../contribution/contribution.js";
 import * as modifier from "../../contribution/value.js";
@@ -7,7 +7,7 @@ import type { ActionCapabilityDefinition, ActionDefinition, ActionState } from "
 export function resolveAttackSpeed(
     definition: ActionCapabilityDefinition,
     state: ActionState,
-    context: QueryContext,
+    context: Context,
 ): number {
     return Math.max(
         20,
@@ -23,7 +23,7 @@ export function resolveAttackSpeed(
 export function resolveBaseAttackTime(
     definition: ActionDefinition,
     state: ActionState,
-    context: QueryContext,
+    context: Context,
 ): number {
     return Math.max(
         0,
@@ -40,7 +40,7 @@ export function resolveActionIntervalTicks(
     definition: ActionDefinition,
     capability: ActionCapabilityDefinition,
     state: ActionState,
-    context: QueryContext,
+    context: Context,
 ): number {
     const attackSpeed = Math.min(600, resolveAttackSpeed(capability, state, context));
     const interval = resolveBaseAttackTime(definition, state, context) * (100 / attackSpeed);

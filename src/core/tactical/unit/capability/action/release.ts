@@ -9,7 +9,7 @@ import {
 import { emptyCall, type CallContext } from "../../../battle/execution/call.js";
 import type { BattlefieldView } from "../../../battlefield/contract.js";
 import type { Hook } from "../../hook/hook.js";
-import type { Unit, UnitId } from "../../unit.js";
+import type { Unit, Id } from "../../unit.js";
 import { hasAction, type Action } from "./capability.js";
 
 export type ActionReleaseDirective =
@@ -31,7 +31,7 @@ export type ActionReleaseHook = Hook<
 
 export function beforeActionRelease(
     state: BattleState,
-    unitId: UnitId,
+    unitId: Id,
     tick: number,
     call: CallContext = emptyCall,
 ): Result<boolean> {

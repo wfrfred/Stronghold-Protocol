@@ -9,20 +9,20 @@ import {
 } from "../../unit/capability/locomotion/route-control.js";
 import { hasRoutedLocomotion } from "../../unit/capability/locomotion/capability.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
-import type { Unit, UnitId } from "../../unit/unit.js";
+import type { Unit, Id } from "../../unit/unit.js";
 import type { BattleExecutionState } from "../execution/state.js";
 
 export type AlternativeRouteCommand =
     | {
           readonly type: "SET_ALTERNATIVE_ROUTE";
-          readonly unitId: UnitId;
+          readonly unitId: Id;
           readonly route: RouteDefinition;
           readonly alwaysCheckCurrentPoint: boolean;
       }
-    | { readonly type: "CLEAR_ALTERNATIVE_ROUTE"; readonly unitId: UnitId };
+    | { readonly type: "CLEAR_ALTERNATIVE_ROUTE"; readonly unitId: Id };
 
 export interface UnitRouteSignal extends LocatedRouteSignal {
-    readonly unitId: UnitId;
+    readonly unitId: Id;
 }
 
 export interface AlternativeRouteChanges {
@@ -32,12 +32,12 @@ export interface AlternativeRouteChanges {
 }
 
 export function changeAlternativeRoutes(
-    getUnit: (id: UnitId) => Unit | undefined,
+    getUnit: (id: Id) => Unit | undefined,
     commands: readonly AlternativeRouteCommand[],
     execution: BattleExecutionState,
     tick: number,
 ): AlternativeRouteChanges {
-    const units = new Map<UnitId, Unit>();
+    const units = new Map<Id, Unit>();
     const signals: UnitRouteSignal[] = [];
 
     for (const command of commands) {

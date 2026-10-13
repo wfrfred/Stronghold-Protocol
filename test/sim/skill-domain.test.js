@@ -9,13 +9,13 @@ import { get } from "../../dist/core/tactical/unit/effect/operations.js";
 import { createSkillDefinition, createSkillState, initializeSkillState } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { activateSkill, advanceSkill, finishSkill } from "../../dist/core/tactical/unit/capability/skill/execution.js";
 import { drainSkillSp, gainSkillSp, spendSkillSp } from "../../dist/core/tactical/unit/capability/skill/sp.js";
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 
 function fixture(options = {}, content = {}) {
   const resources = new CombatResources();
   const definition = createSkillDefinition({ id: "skill-domain-fixture", activation: "MANUAL", spRecovery: "TIME", spCost: 2, initialSp: 2, durationTicks: 30, ...options });
   resources.skills.register({ definition, activate: state => ({ state, value: { type: "ACTIVATED" } }), ...content });
-  const unit = initializeUnit({ id: 1, position: [0, 0], definition: { id: "skilled-unit", skill: definition } });
+  const unit = initialize({ id: 1, position: [0, 0], definition: { id: "skilled-unit", skill: definition } });
   return { resources, definition, unit, state: effectFixtureWork(unit) };
 }
 function setSp(state, definition, amount) {
@@ -220,7 +220,7 @@ test("callback failure propagates without changing its input", () => {
 
 test("dead or absent units do not activate or accumulate time SP", () => {
   const f = fixture({ initialSp: 0 });
-  const unit = initializeUnit({ id: 1, position: [0, 0], definition: { id: "dead-skilled", skill: f.definition, vitality: { maxHp: 100 } } });
+  const unit = initialize({ id: 1, position: [0, 0], definition: { id: "dead-skilled", skill: f.definition, vitality: { maxHp: 100 } } });
   const state = effectFixtureWork({ ...unit, vitality: { ...unit.vitality, hp: 0 } });
   assert.equal(activateSkill(state, { unitId: 1, tick: 0 }, f.resources).value.result.reason, "UNAVAILABLE");
   assert.equal(getUnit(advanceSkill(state, 1, 300, f.resources).state, 1).skill.sp, 0);

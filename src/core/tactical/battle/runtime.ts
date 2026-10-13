@@ -7,7 +7,7 @@ import {
 } from "../battlefield/state.js";
 import { view as createBattlefieldView } from "../battlefield/view.js";
 import type { NavigationMaps } from "../battlefield/navigation/map.js";
-import { copyUnitSnapshot } from "../unit/snapshot.js";
+import { copy } from "../unit/snapshot.js";
 import type { compileAction } from "../unit/capability/action/compile.js";
 import {
     createActionExecutionState,
@@ -160,7 +160,7 @@ export class BattleRuntime {
                 instances: view.projectileIds.map((id) => view.getProjectile(id)!),
             },
             execution,
-            units: view.unitIds.map((id) => copyUnitSnapshot(view.getUnit(id)!)),
+            units: view.unitIds.map((id) => copy(view.getUnit(id)!)),
             blockingRelations: view.blockingRelations,
             supportRelations: view.supportRelations,
             mechanisms: view.mechanismIds.map((id) => view.getMechanism(id)!),

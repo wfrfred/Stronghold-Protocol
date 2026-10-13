@@ -3,7 +3,7 @@ import {
     assertNonnegativeNumber,
     assertNonnegativeSafeInteger,
 } from "../../../../common/assert.js";
-import type { Unit, UnitId } from "../../unit.js";
+import type { Unit, Id } from "../../unit.js";
 import {
     ELEMENT_TYPES,
     elementValues,
@@ -18,13 +18,13 @@ import { elementalRejection, type ElementalRejection } from "./query.js";
 
 export interface ElementalBurst extends ElementalRecovery {
     readonly receiver: ElementalReceiver;
-    readonly targetUnitId: UnitId;
+    readonly targetUnitId: Id;
 }
 
 export interface ElementDamageRequest {
     readonly type: ElementType;
     readonly power: number;
-    readonly sourceUnitId: UnitId | null;
+    readonly sourceUnitId: Id | null;
     readonly tick: number;
 }
 

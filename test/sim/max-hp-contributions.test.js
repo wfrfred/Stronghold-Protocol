@@ -1,7 +1,7 @@
 import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import {
     getUnit,
     battlefieldView,
@@ -17,7 +17,7 @@ import { create } from "../../dist/core/tactical/unit/contribution/value.js";
 import { effectFixtureWork, install, maxHpBuff, at } from "../helpers/effects.js";
 const bonus = (amount) => create({ finalAddition: amount });
 const receiver = (hp = 50) => {
-    const unit = initializeUnit({
+    const unit = initialize({
         id: 1,
         position: [0, 0],
         definition: { id: "host", vitality: { maxHp: 100 } },

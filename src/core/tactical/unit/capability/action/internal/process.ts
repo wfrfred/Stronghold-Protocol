@@ -3,7 +3,7 @@ import { getActionExecution, removeActionExecution, replaceActionExecution } fro
 import { assertFiniteNumber, assertNonnegativeSafeInteger } from "../../../../../common/assert.js";
 import { appendEvents, getUnit, type BattleState, type Result } from "../../../../battle/state.js";
 import { emptyCall, type CallContext } from "../../../../battle/execution/call.js";
-import type { UnitId } from "../../../unit.js";
+import type { Id } from "../../../unit.js";
 import { isSpatiallyPresent } from "../../presence.js";
 import type { TargetBindingId } from "../capability.js";
 import type { ProjectileOperations } from "../../../../battlefield/projectile/operations.js";
@@ -29,7 +29,7 @@ import type {
 } from "../process.js";
 
 function targetBindings(
-    bindings: ReadonlyMap<TargetBindingId, readonly UnitId[]>,
+    bindings: ReadonlyMap<TargetBindingId, readonly Id[]>,
 ): ActionExecutionBindings {
     return Object.fromEntries(bindings);
 }

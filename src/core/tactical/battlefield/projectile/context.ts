@@ -1,13 +1,13 @@
 import type { CallContext } from "../../battle/execution/call.js";
 import type { DamageOperation } from "../../unit/capability/vitality/damage/contract.js";
 import type { HealingOperation } from "../../unit/capability/vitality/healing/contract.js";
-import type { Unit, UnitId } from "../../unit/unit.js";
+import type { Unit, Id } from "../../unit/unit.js";
 import type { ProjectileResources } from "./resources.js";
 import type { ProjectileId, Projectile } from "./projectile.js";
 
 export interface ProjectileFacts {
-    readonly unitIds: readonly UnitId[];
-    getUnit(id: UnitId): Unit | undefined;
+    readonly unitIds: readonly Id[];
+    getUnit(id: Id): Unit | undefined;
     getProjectile(id: ProjectileId): Projectile | undefined;
 }
 
@@ -25,7 +25,7 @@ export type ProjectileStopContext<S extends object = object> = ProjectileCallbac
 export interface ProjectileContactContext<
     S extends object = object,
 > extends ProjectileCallbackContext<S> {
-    readonly targetUnitId: UnitId;
+    readonly targetUnitId: Id;
 }
 
 export interface ProjectileServices {

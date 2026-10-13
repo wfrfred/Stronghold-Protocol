@@ -1,5 +1,5 @@
 import type { RouteTiming } from "../../unit/capability/locomotion/route/state.js";
-import type { UnitId } from "../../unit/unit.js";
+import type { Id } from "../../unit/unit.js";
 import type {
     EnemySpawnDefinition,
     SpawnScheduleDefinition,
@@ -38,8 +38,8 @@ export type MainWaveProgress =
 export interface ScheduleLedger {
     readonly spawnedCount: number;
     readonly pendingSpawnCount: number;
-    readonly managedWaveUnitIds: readonly UnitId[];
-    readonly managedFinalUnitIds: readonly UnitId[];
+    readonly managedWaveUnitIds: readonly Id[];
+    readonly managedFinalUnitIds: readonly Id[];
     readonly lastTick: number | null;
 }
 

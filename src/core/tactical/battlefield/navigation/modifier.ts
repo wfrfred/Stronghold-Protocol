@@ -3,12 +3,12 @@ import { createTilePosition, type TilePosition } from "../../geometry/coordinate
 import type { Direction } from "../../geometry/direction.js";
 import { RangeGrid } from "../../geometry/range.js";
 import type { MechanismId } from "../mechanism.js";
-import type { UnitId } from "../../unit/unit.js";
+import type { Id } from "../../unit/unit.js";
 
 export type NavigationModifierId = number;
 
 export type NavigationModifierSource =
-    | { readonly type: "UNIT"; readonly unitId: UnitId }
+    | { readonly type: "UNIT"; readonly unitId: Id }
     | { readonly type: "MECHANISM"; readonly mechanismId: MechanismId };
 
 export type NavigationModifierRegion =
@@ -20,7 +20,7 @@ export type NavigationModifierRegion =
       }
     | {
           readonly type: "FOLLOW_UNIT";
-          readonly unitId: UnitId;
+          readonly unitId: Id;
           readonly range: RangeGrid;
           readonly direction: Direction;
       };

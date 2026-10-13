@@ -16,7 +16,7 @@ import { emptyCall, type CallContext } from "../execution/call.js";
 import { hasAction, type ActionDefinition } from "../../unit/capability/action/capability.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
 import { hasVitality } from "../../unit/capability/vitality/capability.js";
-import type { UnitId } from "../../unit/unit.js";
+import type { Id } from "../../unit/unit.js";
 import type { Command } from "../contract.js";
 import { createProjectileOperations } from "../../battlefield/projectile/operations.js";
 import { hasSkill } from "../../unit/capability/skill/capability.js";
@@ -46,9 +46,9 @@ export function createCombat(
 
     const segmentsOf = (execution: ActionExecution): readonly CompiledActionSegment[] =>
         compiledAction(execution.definition).program;
-    const forSource = (state: ActionExecutionState, unitId: UnitId): readonly ActionExecution[] =>
+    const forSource = (state: ActionExecutionState, unitId: Id): readonly ActionExecution[] =>
         state.executions.filter((execution) => execution.sourceUnitId === unitId);
-    const mayStart = (state: ActionExecutionState, unitId: UnitId): boolean =>
+    const mayStart = (state: ActionExecutionState, unitId: Id): boolean =>
         forSource(state, unitId).every(
             (execution) =>
                 actionExecutionPermissions(execution, segmentsOf(execution)).allowNewAction,
@@ -141,7 +141,7 @@ export function createCombat(
     return {
         prepare,
         advance,
-        allowsMovement: (state: ActionExecutionState, unitId: UnitId) =>
+        allowsMovement: (state: ActionExecutionState, unitId: Id) =>
             forSource(state, unitId).every(
                 (execution) =>
                     !actionExecutionPermissions(execution, segmentsOf(execution)).blockingMovement,

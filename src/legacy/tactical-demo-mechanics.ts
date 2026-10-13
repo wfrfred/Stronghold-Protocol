@@ -2,8 +2,8 @@ import type { Input } from "../core/tactical/battle/contract.js";
 import { CombatResources } from "../core/tactical/battle/resources.js";
 import type { BattlefieldMap } from "../core/tactical/battlefield/map/map.js";
 import { TICKS_PER_SECOND } from "../core/tactical/tick.js";
-import { createCombatEnemyDefinition } from "../core/tactical/unit/archetype/enemy.js";
-import { createOperatorDefinition } from "../core/tactical/unit/archetype/operator.js";
+import * as enemy from "../core/tactical/unit/archetype/enemy.js";
+import * as operator from "../core/tactical/unit/archetype/operator.js";
 import type { ElementType } from "../core/tactical/unit/capability/elemental/capability.js";
 import {
     createRouteDefinition,
@@ -53,12 +53,12 @@ export function createTacticalMechanicsDemo(
     const group = action.targetGroups[0];
     const definition =
         scenario === "SKILL"
-            ? createOperatorDefinition({
+            ? operator.createDefinition({
                   ...sourceDefinition,
                   skill: combat.skills.register(compileArknightsAttackBuffSkill(rawSkill, 4))
                       .definition,
               })
-            : createOperatorDefinition({
+            : operator.createDefinition({
                   ...sourceDefinition,
                   action: {
                       ...sourceDefinition.action,
@@ -85,7 +85,7 @@ export function createTacticalMechanicsDemo(
         registerArknightsElementalBursts(combat);
     }
 
-    const target = createCombatEnemyDefinition({
+    const target = enemy.createCombatDefinition({
         ...spawn.definition,
         vitality: { maxHp: 200_000 },
         locomotion: {

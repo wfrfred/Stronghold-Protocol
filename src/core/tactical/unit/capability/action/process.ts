@@ -2,7 +2,7 @@ import { accept, cancel, resume } from "./internal/process.js";
 import { assertNonnegativeSafeInteger } from "../../../../common/assert.js";
 import type { BattleState, Result } from "../../../battle/state.js";
 import type { CallContext } from "../../../battle/execution/call.js";
-import type { UnitId } from "../../unit.js";
+import type { Id } from "../../unit.js";
 import type { ActionDefinition, TargetBindingId } from "./capability.js";
 import type { ProjectileOperations } from "../../../battlefield/projectile/operations.js";
 
@@ -10,7 +10,7 @@ export interface ActionExecutionResources {
     readonly projectileOperations?: ProjectileOperations;
     readonly completeAttack?: (
         state: BattleState,
-        unitId: UnitId,
+        unitId: Id,
         tick: number,
         call?: CallContext,
     ) => BattleState;
@@ -20,7 +20,7 @@ export type ActionExecutionId = number;
 
 export type ActionExecutionSamples = Readonly<Record<string, number>>;
 
-export type ActionExecutionBindings = Readonly<Record<TargetBindingId, readonly UnitId[]>>;
+export type ActionExecutionBindings = Readonly<Record<TargetBindingId, readonly Id[]>>;
 
 export type ActionExecutionWait =
     | {
@@ -32,10 +32,10 @@ export type ActionExecutionWait =
 
 export interface ActionExecution {
     readonly id: ActionExecutionId;
-    readonly sourceUnitId: UnitId;
+    readonly sourceUnitId: Id;
     readonly definition: ActionDefinition;
     readonly acceptedAtTick: number;
-    readonly inputTargetUnitId: UnitId | null;
+    readonly inputTargetUnitId: Id | null;
     readonly cursor: number;
     readonly bindings: ActionExecutionBindings;
     readonly samples: ActionExecutionSamples;
@@ -48,28 +48,28 @@ export interface ActionExecutionState {
 }
 
 export interface ActionExecutionInput {
-    readonly sourceUnitId: UnitId;
+    readonly sourceUnitId: Id;
     readonly definition: ActionDefinition;
-    readonly inputTargetUnitId: UnitId | null;
-    readonly bindings: ReadonlyMap<TargetBindingId, readonly UnitId[]>;
+    readonly inputTargetUnitId: Id | null;
+    readonly bindings: ReadonlyMap<TargetBindingId, readonly Id[]>;
     readonly tick: number;
     readonly samples?: ActionExecutionSamples;
 }
 
 export interface ActionExecutionContext {
     readonly call: CallContext;
-    readonly sourceUnitId: UnitId;
+    readonly sourceUnitId: Id;
     readonly executionId: ActionExecutionId;
     readonly acceptedAtTick: number;
-    readonly inputTargetUnitId: UnitId | null;
+    readonly inputTargetUnitId: Id | null;
     readonly tick: number;
-    readonly bindings: ReadonlyMap<TargetBindingId, readonly UnitId[]>;
+    readonly bindings: ReadonlyMap<TargetBindingId, readonly Id[]>;
     readonly samples: ActionExecutionSamples;
     readonly projectiles?: ProjectileOperations;
 }
 
 export interface ActionExecutionStepResult {
-    readonly bindings?: ReadonlyMap<TargetBindingId, readonly UnitId[]>;
+    readonly bindings?: ReadonlyMap<TargetBindingId, readonly Id[]>;
     readonly samples?: ActionExecutionSamples;
     readonly continuation?: "NEXT" | "FINISH" | "CANCEL";
 }
@@ -106,7 +106,7 @@ export type ActionExecutionCancellationReason =
 
 export type ActionExecutionSignal = {
     readonly executionId: ActionExecutionId;
-    readonly sourceUnitId: UnitId;
+    readonly sourceUnitId: Id;
     readonly tick: number;
 } & (
     | { readonly type: "ACTION_RELEASED"; readonly markerId: string }

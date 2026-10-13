@@ -19,8 +19,8 @@ import {
     settleBattlefieldState,
     settleBattlefieldStateFully,
 } from "../../dist/core/tactical/battlefield/storage/state.js";
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
-import { copyUnitSnapshot } from "../../dist/core/tactical/unit/snapshot.js";
+import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { copy } from "../../dist/core/tactical/unit/snapshot.js";
 import {
     createBlockerDefinition,
     initializeBlockerState,
@@ -52,7 +52,7 @@ const fixture = (key) => fixtures.find((entry) => entry.node._buff.buffKey === k
 const effectAddress = { type: "EFFECT", unitId: 0, effectId: 0 };
 
 const blocker = (capacity = 3) =>
-    initializeUnit({
+    initialize({
         id: 0,
         position: [0, 0],
         definition: {
@@ -63,7 +63,7 @@ const blocker = (capacity = 3) =>
         },
     });
 const enemy = (id, weight = 1) =>
-    initializeUnit({
+    initialize({
         id,
         position: [0.25, 0],
         definition: {

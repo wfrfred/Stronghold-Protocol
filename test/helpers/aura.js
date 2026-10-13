@@ -2,7 +2,7 @@ import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { selectTargets } from "../../dist/core/tactical/unit/targeting/select.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { selectCapabilityStates } from "../../dist/core/tactical/unit/capability/catalog.js";
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize as initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/state.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { definition, attackBuff, effectFixtureWork } from "./effects.js";

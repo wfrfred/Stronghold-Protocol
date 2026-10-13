@@ -34,28 +34,28 @@ import {
 } from "../capability/status/capability.js";
 import type { Unit } from "../unit.js";
 import type { Vitality, VitalUnitDefinition } from "../capability/vitality/capability.js";
-import type { InitializedUnit } from "../initialize.js";
+import type * as initialization from "../initialize.js";
 import {
     createElementalDefinition,
     type ElementalDefinition,
 } from "../capability/elemental/capability.js";
 import { createSkillDefinition, type SkillDefinition } from "../capability/skill/capability.js";
 
-export interface EnemyDefinition extends VitalUnitDefinition, LocomotiveUnitDefinition {
+export interface Definition extends VitalUnitDefinition, LocomotiveUnitDefinition {
     readonly skill?: SkillDefinition;
     readonly elemental?: ElementalDefinition;
 }
 
-export type Enemy<D extends EnemyDefinition = EnemyDefinition> = Unit<D> & Vitality & Locomotion;
+export type Enemy<D extends Definition = Definition> = Unit<D> & Vitality & Locomotion;
 
-export type RoutedEnemy<D extends EnemyDefinition = EnemyDefinition> = Enemy<D> &
-    InitializedUnit<D> &
+export type RoutedEnemy<D extends Definition = Definition> = Enemy<D> &
+    initialization.Result<D> &
     RoutedLocomotion &
     SpatialPresence;
 
-export interface CombatEnemyDefinition
+export interface CombatDefinition
     extends
-        EnemyDefinition,
+        Definition,
         ActingUnitDefinition,
         AllegiantUnitDefinition,
         SpatialUnitDefinition,
@@ -66,9 +66,9 @@ export interface CombatEnemyDefinition
     readonly offense?: OffenseDefinition;
 }
 
-export type CombatRoutedEnemy = RoutedEnemy<CombatEnemyDefinition>;
+export type CombatRoutedEnemy = RoutedEnemy<CombatDefinition>;
 
-export function createEnemyDefinition(definition: EnemyDefinition): EnemyDefinition {
+export function createDefinition(definition: Definition): Definition {
     if (definition.id.length === 0) {
         throw new TypeError("enemy definition id must be nonempty");
     }
@@ -95,11 +95,9 @@ export function createEnemyDefinition(definition: EnemyDefinition): EnemyDefinit
     });
 }
 
-export function createCombatEnemyDefinition(
-    definition: CombatEnemyDefinition,
-): CombatEnemyDefinition {
+export function createCombatDefinition(definition: CombatDefinition): CombatDefinition {
     return Object.freeze({
-        ...createEnemyDefinition(definition),
+        ...createDefinition(definition),
         action: createActionCapabilityDefinition(definition.action),
         allegiance: createAllegianceState(definition.allegiance),
         spatial: createSpatialDefinition(definition.spatial),

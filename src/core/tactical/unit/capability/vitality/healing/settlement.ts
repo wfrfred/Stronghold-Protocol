@@ -1,7 +1,7 @@
 import { emptyCall, type CallContext } from "../../../../battle/execution/call.js";
 import { hasStatusFlag } from "../../status/capability.js";
 import { hasVitality, resolveVitalityMaxHp, type Vitality } from "../capability.js";
-import type { Unit, UnitId } from "../../../unit.js";
+import type { Unit, Id } from "../../../unit.js";
 import type { Hook as RegisteredHook } from "../../../hook/hook.js";
 import { resolveMaxHp } from "../query.js";
 import { hookScope, type Result } from "../hook.js";
@@ -163,7 +163,7 @@ interface StageHook<V> extends RegisteredHook<
 function callHooks<V>(
     battle: BattleState,
     request: HealingRequest,
-    ownerUnitId: UnitId | null,
+    ownerUnitId: Id | null,
     value: V,
     call: CallContext,
     select: (entry: Hook) => StageHook<V> | undefined,
@@ -224,7 +224,7 @@ function callHooks<V>(
 function applyHealingRules(
     state: BattleState,
     request: HealingRequest,
-    ownerUnitId: UnitId | null,
+    ownerUnitId: Id | null,
     stage: Stage,
     pending: PendingHealing,
     call: CallContext,
@@ -250,7 +250,7 @@ function notifyReactions(
     return state;
 }
 
-function targetCancellation(state: BattleState, targetUnitId: UnitId): HealingCancellation | null {
+function targetCancellation(state: BattleState, targetUnitId: Id): HealingCancellation | null {
     const receiver = getUnit(state, targetUnitId);
 
     if (receiver === undefined) {

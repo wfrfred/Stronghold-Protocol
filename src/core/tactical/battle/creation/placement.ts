@@ -6,8 +6,8 @@ import type {
 import type { WorldPosition } from "../../geometry/coordinate.js";
 import { Direction } from "../../geometry/direction.js";
 import { RangeGrid } from "../../geometry/range.js";
-import { initializeUnit, type InitializedUnit } from "../../unit/initialize.js";
-import type { Unit, UnitDefinition } from "../../unit/unit.js";
+import * as initialization from "../../unit/initialize.js";
+import type { Unit, Definition } from "../../unit/unit.js";
 import type { ImmutableData } from "../../../common/immutable-data.js";
 import {
     selectCapabilityStates,
@@ -24,7 +24,7 @@ export interface UnitNavigationModifierPlacement {
     readonly direction: Direction;
 }
 
-export interface UnitPlacementDefinition<D extends UnitDefinition = UnitDefinition> {
+export interface UnitPlacementDefinition<D extends Definition = Definition> {
     readonly definition: D;
     readonly position: WorldPosition;
     readonly navigationModifiers?: readonly UnitNavigationModifierPlacement[];
@@ -39,7 +39,7 @@ export interface UnitPlacementInstantiation<U extends Unit = Unit> {
 }
 
 type PlacedUnit<P extends UnitPlacementDefinition> = P extends unknown
-    ? InitializedUnit<
+    ? initialization.Result<
           P["definition"],
           P extends { readonly states: infer S extends object } ? S : object
       >
@@ -117,7 +117,7 @@ export function instantiateUnitPlacement(
     tick: number,
 ): UnitPlacementInstantiation {
     const nextUnitId = nextIdentity(execution.nextUnitId, "unit");
-    const unit = initializeUnit<UnitDefinition, PreparedCapabilityStates<UnitDefinition>>({
+    const unit = initialization.initialize<Definition, PreparedCapabilityStates<Definition>>({
         id: execution.nextUnitId,
         definition: placement.definition,
         position: placement.position,

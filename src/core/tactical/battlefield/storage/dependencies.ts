@@ -5,7 +5,7 @@ import {
     type OccupancyClaim,
 } from "../../unit/capability/occupancy.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
-import type { Unit, UnitId } from "../../unit/unit.js";
+import type { Unit, Id } from "../../unit/unit.js";
 import type { BattlefieldMap } from "../map/map.js";
 import type { MechanismId } from "../mechanism.js";
 import type { NavigationModifierId, NavigationModifierRegion } from "../navigation/modifier.js";
@@ -15,7 +15,7 @@ import { readBlockingFacts, sameBlockingFacts } from "../blocking/facts.js";
 import { readSupportFacts, sameSupportFacts } from "../support/facts.js";
 
 export interface BattlefieldDependencyChanges {
-    readonly updatedUnitIds: ReadonlySet<UnitId>;
+    readonly updatedUnitIds: ReadonlySet<Id>;
     readonly updatedMechanismIds: ReadonlySet<MechanismId>;
     readonly updatedNavigationModifierIds: ReadonlySet<NavigationModifierId>;
     readonly unitMembershipChanged: boolean;
@@ -85,7 +85,7 @@ function sameRegion(left: NavigationModifierRegion, right: NavigationModifierReg
     });
 }
 
-function anchorId(region: NavigationModifierRegion): UnitId | undefined {
+function anchorId(region: NavigationModifierRegion): Id | undefined {
     return region.type === "FOLLOW_UNIT" ? region.unitId : undefined;
 }
 

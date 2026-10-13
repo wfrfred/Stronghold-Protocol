@@ -1,6 +1,6 @@
 import type { BattlefieldChangeResult } from "../battlefield/contract.js";
 import type { Event } from "./contract.js";
-import { copyUnitSnapshot } from "../unit/snapshot.js";
+import { copy } from "../unit/snapshot.js";
 
 export function finishBattleEvents(
     phaseEvents: readonly Event[],
@@ -12,7 +12,7 @@ export function finishBattleEvents(
         ...removedUnits.map((removed): Event => ({
             type: "UNIT_REMOVED",
             ...removed,
-            unit: copyUnitSnapshot(removed.unit),
+            unit: copy(removed.unit),
             tick,
         })),
     ];

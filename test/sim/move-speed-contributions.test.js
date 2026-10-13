@@ -20,7 +20,7 @@ import { createNavigationMap } from "../../dist/core/tactical/battlefield/naviga
 import { createNavigationFieldCache } from "../../dist/core/tactical/battlefield/navigation/cache.js";
 import { canTraverseNavigationSegment } from "../../dist/core/tactical/battlefield/navigation/segment.js";
 import { getNavigationRequest } from "../../dist/core/tactical/battlefield/navigation/state.js";
-import { createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
+import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
 import { resolveMoveSpeedPerTick } from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
 import {
     setMoveSpeedContribution,
@@ -29,7 +29,7 @@ import {
 import { stepRoutedUnit } from "../../dist/core/tactical/unit/capability/locomotion/step.js";
 import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
-import { copyUnitSnapshot } from "../../dist/core/tactical/unit/snapshot.js";
+import { copy } from "../../dist/core/tactical/unit/snapshot.js";
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
 import * as modifier from "../../dist/core/tactical/unit/contribution/value.js";
 import { contributionEffect, refreshContribution, effectFixtureWork } from "../helpers/effects.js";
@@ -78,7 +78,7 @@ function harness({ speed = 0.25, minimum = 0, definition = route(), maps } = {})
     const initialized = initializeRoutedEnemy({
         id: 0,
         tick: 0,
-        definition: createEnemyDefinition({
+        definition: createDefinition({
             id: "dynamic-mover",
             vitality: { maxHp: 100 },
             locomotion: {
@@ -236,7 +236,7 @@ test("move speed: lifecycle updates preserve shared snapshots, route samples and
     });
     h.step(resources, 0);
     const before = h.unit;
-    const copied = copyUnitSnapshot(before);
+    const copied = copy(before);
     assert.equal(copied.locomotion, before.locomotion);
     const sample = before.locomotion.mainRoute.route.progress.checkpoint.goal;
     const cursor = before.locomotion.mainRoute.navigation.execution;
@@ -248,7 +248,7 @@ test("move speed: lifecycle updates preserve shared snapshots, route samples and
     h.work = effects.setEnabled(h.work, address, false);
     close(speed(h.work, resources), 0.25);
     h.work = effects.setEnabled(h.work, address, true);
-    const participating = copyUnitSnapshot(h.unit);
+    const participating = copy(h.unit);
     assert.equal(participating.locomotion, h.unit.locomotion);
     h.work = effects.end(h.work, address);
     assert.equal(h.unit.locomotion.mainRoute.navigation.execution, cursor);

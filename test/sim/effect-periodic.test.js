@@ -1,14 +1,14 @@
 import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import { getUnit } from "../../dist/core/tactical/battle/state.js";
 import * as effect from "../../dist/core/tactical/unit/effect/operations.js";
 import { get } from "../../dist/core/tactical/unit/effect/operations.js";
 import { effectFixtureWork, install, definition, at } from "../helpers/effects.js";
 
 const unit = (id) =>
-    initializeUnit({
+    initialize({
         id,
         position: [0, 0],
         definition: { id: `periodic-${id}`, vitality: { maxHp: 100 } },

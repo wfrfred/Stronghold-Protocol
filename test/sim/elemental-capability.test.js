@@ -25,10 +25,10 @@ import {
   getArknightsElementalBurstProfile,
   parseElementType,
 } from '../../dist/data/arknights/elemental.js';
-import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
-import { copyUnitSnapshot } from '../../dist/core/tactical/unit/snapshot.js';
+import { initialize } from '../../dist/core/tactical/unit/initialize.js';
+import { copy } from '../../dist/core/tactical/unit/snapshot.js';
 
-const holder = (options = {}, extras = {}) => initializeUnit({
+const holder = (options = {}, extras = {}) => initialize({
   id: 1,
   position: [0, 0],
   definition: {
@@ -44,7 +44,7 @@ const damage = (unit, type, power, tick = 0, sourceUnitId = 9) => receiveElement
 const heal = (unit, power, tick = 0) => receiveElementHeal(unit, { power, tick });
 
 test('Elemental is optional and has its own definition, progress and ownership', () => {
-  const ordinary = initializeUnit({ id: 0, position: [0, 0], definition: { id: 'hp-only', vitality: { maxHp: 100 } } });
+  const ordinary = initialize({ id: 0, position: [0, 0], definition: { id: 'hp-only', vitality: { maxHp: 100 } } });
   assert.equal(hasElemental(ordinary), false);
   assert.equal(canReceiveElementDamage(ordinary), false);
   assert.equal(canReceiveElementHeal(ordinary), false);
@@ -114,7 +114,7 @@ test('the first zero bar starts one unit recovery and discards overflow and all 
 
 test('burst recovery is progressive, idempotent at a tick, independently copyable and restores every bar at its deadline', () => {
   const broken = damage(holder(), 'NECROSIS', 1000, 2).unit;
-  const snapshot = copyUnitSnapshot(broken);
+  const snapshot = copy(broken);
   const half = advanceElemental(broken, 227);
   assert.deepEqual(half.unit.elemental.ep, elementValues(500));
   assert.equal(half.recovered, false);

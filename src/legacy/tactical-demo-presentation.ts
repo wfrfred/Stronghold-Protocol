@@ -24,7 +24,7 @@ import {
     resolveVitalityMaxHp,
 } from "../core/tactical/unit/capability/vitality/capability.js";
 import type { Direction } from "../core/tactical/geometry/direction.js";
-import type { Unit, UnitId } from "../core/tactical/unit/unit.js";
+import type { Unit, Id } from "../core/tactical/unit/unit.js";
 import { TICKS_PER_SECOND } from "../core/tactical/tick.js";
 
 export interface LegacyData {
@@ -52,7 +52,7 @@ export interface LegacyUnitInfo {
 type LegacyElementType = "neural" | "erosion" | "burn" | "apoptosis";
 
 export type LegacyElementGauge = readonly [
-    unitId: UnitId,
+    unitId: Id,
     element: LegacyElementType,
     fill: number,
     cooldownEnd: number,
@@ -60,24 +60,19 @@ export type LegacyElementGauge = readonly [
 ];
 
 export type LegacyVisualEvent =
-    | readonly ["atk", sourceId: UnitId, targetId: UnitId, "none"]
-    | readonly [
-          "dmg",
-          targetId: UnitId,
-          amount: number,
-          "phys" | "arts" | "true" | LegacyElementType,
-      ]
-    | readonly ["heal", targetId: UnitId, amount: number]
-    | readonly ["skill", unitId: UnitId, active: boolean]
+    | readonly ["atk", sourceId: Id, targetId: Id, "none"]
+    | readonly ["dmg", targetId: Id, amount: number, "phys" | "arts" | "true" | LegacyElementType]
+    | readonly ["heal", targetId: Id, amount: number]
+    | readonly ["skill", unitId: Id, active: boolean]
     | readonly [
           "fx",
           "burst",
           x: number,
           y: number,
-          { readonly id: UnitId; readonly element: LegacyElementType },
+          { readonly id: Id; readonly element: LegacyElementType },
       ]
-    | readonly ["die", unitId: UnitId, "killed"]
-    | readonly ["leak", unitId: UnitId];
+    | readonly ["die", unitId: Id, "killed"]
+    | readonly ["leak", unitId: Id];
 
 interface PresentedUnit {
     readonly info: LegacyUnitInfo;
@@ -268,9 +263,9 @@ function unitTuple(unit: Unit, snapshot: Snapshot, dead = false): number[] {
 export class TacticalDemoPresentation {
     readonly #data: LegacyData;
     readonly #projectileActions: boolean;
-    readonly #tombstones = new Map<UnitId, Tombstone>();
-    readonly #attacks = new Map<UnitId, RecentAttack>();
-    readonly #pendingAttackTargets = new Map<UnitId, UnitId>();
+    readonly #tombstones = new Map<Id, Tombstone>();
+    readonly #attacks = new Map<Id, RecentAttack>();
+    readonly #pendingAttackTargets = new Map<Id, Id>();
     #killedCount = 0;
     #attackCount = 0;
     #damageCount = 0;
@@ -295,7 +290,7 @@ export class TacticalDemoPresentation {
 
     advance(after: Snapshot, events: readonly Event[]): readonly LegacyVisualEvent[] {
         const visible: LegacyVisualEvent[] = [];
-        const resumableSources = new Set<UnitId>();
+        const resumableSources = new Set<Id>();
 
         if (this.#projectileActions) {
             for (const execution of after.actionExecution.executions) {
@@ -485,7 +480,7 @@ export class TacticalDemoPresentation {
         return visible;
     }
 
-    #attack(source: UnitId, target: UnitId, tick: number): RecentAttack["event"] {
+    #attack(source: Id, target: Id, tick: number): RecentAttack["event"] {
         const event = ["atk", source, target, "none"] as const;
         this.#attacks.set(source, {
             event,

@@ -6,11 +6,11 @@ import { test } from 'node:test';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { createLegacyCombatSpec } from '../../dist/legacy/combat.js';
-import { createOperatorDefinition } from '../../dist/core/tactical/unit/archetype/operator.js';
+import { createDefinition } from '../../dist/core/tactical/unit/archetype/operator.js';
 import { createSkillDefinition } from '../../dist/core/tactical/unit/capability/skill/capability.js';
 import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { compileAction } from '../../dist/core/tactical/unit/capability/action/compile.js';
-import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
+import { initialize } from '../../dist/core/tactical/unit/initialize.js';
 import { createBattleState, getUnit } from '../../dist/core/tactical/battle/state.js';
 import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
 
@@ -27,7 +27,7 @@ function action(maxTargets = 1) {
   };
 }
 function actor(skill) {
-  return createOperatorDefinition({
+  return createDefinition({
     id: 'skill-actor', vitality: { maxHp: 100000 }, offense: { attack: 100 },
     defense: { defense: 0, resistance: 0 }, allegiance: { side: 'ALLY' },
     spatial: { layer: 'GROUND' }, hit: { geometry: hit }, status: { initialFlags: [] },
@@ -142,7 +142,7 @@ test('skill runtime: HIT SP counts zero damage but respects cancellation and ign
   for (const [flags, ignoreForSp, expected] of [[[], false, 1], [[], true, 0], [['INVINCIBLE'], false, 0]]) {
     const resources = new CombatResources();
     const definition = actor(skill({ spRecovery: 'HIT', initialSp: 0 }));
-    const receiver = initializeUnit({ id: 0, definition: { ...definition, status: { initialFlags: flags } }, position: [0, 0] });
+    const receiver = initialize({ id: 0, definition: { ...definition, status: { initialFlags: flags } }, position: [0, 0] });
     let work = createBattleState(fixtureBattlefield({ unitIds: [0], getUnit: () => receiver, blockerOf: () => undefined, blockedBy: () => [] }));
     work = resources.settleDamage(work, { sourceUnitId: null, targetUnitId: 0,
       damageType: 'TRUE', operands: createDamageOperands(0), tick: 0, ignoreForSp }).state;

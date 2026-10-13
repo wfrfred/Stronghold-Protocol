@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createBattlefieldRuntime } from '../../dist/core/tactical/battlefield/runtime.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
-import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
+import { initialize } from '../../dist/core/tactical/unit/initialize.js';
 import {
   addStatusContribution, removeStatusContribution,
 } from '../../dist/core/tactical/unit/capability/status/capability.js';
@@ -20,13 +20,13 @@ const create = units => {
   battlefield.advance(units.map(unit => ({ type: 'REGISTER_UNIT', unit })));
   return battlefield;
 };
-const blocker = (id, position = [1, 1], capacity = 1, radius = 1) => initializeUnit({
+const blocker = (id, position = [1, 1], capacity = 1, radius = 1) => initialize({
   id, position, definition: {
     id: `blocker-${id}`, allegiance: { side: 'ALLY' }, vitality: { maxHp: 100 },
     blocker: { capacity, geometry: { radius } }, status: { initialFlags: [] },
   },
 });
-const enemy = (id, position = [1.25, 1], weight = 1) => initializeUnit({
+const enemy = (id, position = [1.25, 1], weight = 1) => initialize({
   id, position, definition: {
     id: `enemy-${id}`, allegiance: { side: 'ENEMY' }, vitality: { maxHp: 100 },
     blockable: { weight }, spatial: { layer: 'GROUND' },

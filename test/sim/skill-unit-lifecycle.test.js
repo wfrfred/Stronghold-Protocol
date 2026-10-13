@@ -11,7 +11,7 @@ import { removeUnitWithEffects } from "../../dist/core/tactical/battle/execution
 import { createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { activateSkill } from "../../dist/core/tactical/unit/capability/skill/execution.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
 
 function fixture(content = {}) {
@@ -49,8 +49,8 @@ function fixture(content = {}) {
   });
   const sourceDefinition = { id: "skill-source", vitality: { maxHp: 100 }, skill: definition };
   const receiverDefinition = { id: "skill-receiver", vitality: { maxHp: 100 } };
-  const source = initializeUnit({ id: 0, definition: sourceDefinition, position: [0, 0] });
-  const receiver = initializeUnit({ id: 1, definition: receiverDefinition, position: [1, 0] });
+  const source = initialize({ id: 0, definition: sourceDefinition, position: [0, 0] });
+  const receiver = initialize({ id: 1, definition: receiverDefinition, position: [1, 0] });
   return { resources, finished, disabled, sourceDefinition, receiverDefinition, work: effectFixtureWork(source, receiver) };
 }
 function sourceDamage(power = 100, tick = 1) {

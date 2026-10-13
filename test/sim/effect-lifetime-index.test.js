@@ -1,7 +1,7 @@
 import { closeLifetime } from "../../dist/core/tactical/battle/execution/lifetime.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import {
     battlefieldView,
     getUnit,
@@ -10,7 +10,7 @@ import {
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { dependents } from "../../dist/core/tactical/battlefield/storage/effect-lifetimes.js";
 import { definition, install, effectFixtureWork } from "../helpers/effects.js";
-const unit = (id) => initializeUnit({ id, position: [0, 0], definition: { id: `host-${id}` } });
+const unit = (id) => initialize({ id, position: [0, 0], definition: { id: `host-${id}` } });
 
 test("scope index tracks remote dependencies and preserves captured indexes", () => {
     let battle = effectFixtureWork(unit(1), unit(2), unit(9));

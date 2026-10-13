@@ -7,7 +7,7 @@ import {
     type Result,
 } from "../../../battle/state.js";
 import { emptyCall, type CallContext } from "../../../battle/execution/call.js";
-import type { UnitId } from "../../unit.js";
+import type { Id } from "../../unit.js";
 import { hasElemental, type ElementType, type ElementValues } from "./capability.js";
 import type { ElementalRejection } from "./query.js";
 import type { ElementalBurstContext } from "./definition.js";
@@ -28,8 +28,8 @@ export interface ElementalExecutionResources {
 export type ElementalSignal =
     | {
           readonly type: "ELEMENT_DAMAGE";
-          readonly sourceUnitId: UnitId | null;
-          readonly targetUnitId: UnitId;
+          readonly sourceUnitId: Id | null;
+          readonly targetUnitId: Id;
           readonly elementType: ElementType;
           readonly amount: number;
           readonly ep: number;
@@ -37,15 +37,15 @@ export type ElementalSignal =
       }
     | {
           readonly type: "ELEMENT_HEAL";
-          readonly sourceUnitId: UnitId | null;
-          readonly targetUnitId: UnitId;
+          readonly sourceUnitId: Id | null;
+          readonly targetUnitId: Id;
           readonly amounts: ElementValues;
           readonly tick: number;
       }
     | { readonly type: "ELEMENT_BURST"; readonly burst: ElementalBurst; readonly tick: number }
     | {
           readonly type: "ELEMENT_RECOVERED";
-          readonly unitId: UnitId;
+          readonly unitId: Id;
           readonly elementType: ElementType;
           readonly tick: number;
       };
@@ -59,15 +59,15 @@ export interface ElementDamageReport {
 
 export type ElementDamageOperation = (
     state: BattleState,
-    request: ElementDamageRequest & { readonly targetUnitId: UnitId },
+    request: ElementDamageRequest & { readonly targetUnitId: Id },
     call?: CallContext,
 ) => Result<ElementDamageReport>;
 
 export type ElementHealOperation = (
     state: BattleState,
     request: ElementHealRequest & {
-        readonly targetUnitId: UnitId;
-        readonly sourceUnitId: UnitId | null;
+        readonly targetUnitId: Id;
+        readonly sourceUnitId: Id | null;
     },
     call?: CallContext,
 ) => Result<ElementHealReport>;
@@ -89,7 +89,7 @@ function burstContext(
 
 export function resolveElementDamage(
     state: BattleState,
-    request: ElementDamageRequest & { readonly targetUnitId: UnitId },
+    request: ElementDamageRequest & { readonly targetUnitId: Id },
     resources: ElementalExecutionResources,
     call: CallContext = emptyCall,
 ): Result<ElementDamageReport> {
@@ -136,8 +136,8 @@ export function resolveElementDamage(
 export function resolveElementHeal(
     state: BattleState,
     request: ElementHealRequest & {
-        readonly targetUnitId: UnitId;
-        readonly sourceUnitId: UnitId | null;
+        readonly targetUnitId: Id;
+        readonly sourceUnitId: Id | null;
     },
 ): Result<ElementHealReport> {
     const unit = getUnit(state, request.targetUnitId);
@@ -166,7 +166,7 @@ export function resolveElementHeal(
 
 export function advanceElementalState(
     state: BattleState,
-    unitId: UnitId,
+    unitId: Id,
     tick: number,
     resources: ElementalExecutionResources,
     call: CallContext = emptyCall,

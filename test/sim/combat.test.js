@@ -15,8 +15,8 @@ import { World } from '../../dist/core/tactical/geometry/coordinate.js';
 import { loadMovementScenario } from '../../dist/data/arknights/movement-scenario.js';
 import { createTacticalCombatDemoSpec } from '../../dist/legacy/tactical-demo-combat.js';
 import { createTacticalDemo } from '../../dist/legacy/tactical-demo.js';
-import { createOperatorDefinition } from '../../dist/core/tactical/unit/archetype/operator.js';
-import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
+import { createDefinition } from '../../dist/core/tactical/unit/archetype/operator.js';
+import { initialize } from '../../dist/core/tactical/unit/initialize.js';
 import { compileAction } from "../../dist/core/tactical/unit/capability/action/compile.js";
 import { startAction } from "../../dist/core/tactical/unit/capability/action/execution.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
@@ -1099,7 +1099,7 @@ const normalAction = (targetGroups, followUps = []) => ({
 });
 
 function actionUnit(id, side, position, { hp = 100, flags = [], action } = {}) {
-  const definition = createOperatorDefinition({
+  const definition = createDefinition({
     id: `action_unit_${id}`, vitality: { maxHp: 100 }, allegiance: { side },
     spatial: { layer: 'GROUND' }, hit: { geometry: {
       shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.1 }],
@@ -1109,7 +1109,7 @@ function actionUnit(id, side, position, { hp = 100, flags = [], action } = {}) {
       { id: 'primary', targeting: damageTargeting(), operations: [damageEffect(0)] },
     ]) },
   });
-  const unit = initializeUnit({ id, definition, position });
+  const unit = initialize({ id, definition, position });
 
   return { ...unit, vitality: { ...unit.vitality, hp } };
 }

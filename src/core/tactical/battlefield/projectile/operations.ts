@@ -8,14 +8,14 @@ import {
 import { resolveAttackPower } from "../../unit/capability/offense/query.js";
 import type { WorldPosition } from "../../geometry/coordinate.js";
 import type { RangeGeometry } from "../../geometry/shape.js";
-import type { UnitId } from "../../unit/unit.js";
+import type { Id } from "../../unit/unit.js";
 import type { ProjectileDefinitionRef } from "./definition.js";
 import type { ProjectileResources } from "./resources.js";
 import type { ProjectileId, Projectile } from "./projectile.js";
 
 export interface ProjectileLaunchInput<S extends object = object> {
-    readonly source: UnitId | null;
-    readonly traceTarget: UnitId | null;
+    readonly source: Id | null;
+    readonly traceTarget: Id | null;
     readonly position: WorldPosition;
     readonly destination: WorldPosition;
     readonly cachedAtk: number;

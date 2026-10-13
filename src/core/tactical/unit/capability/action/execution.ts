@@ -16,12 +16,12 @@ import {
 } from "./timing.js";
 import { hasStatusFlag } from "../status/capability.js";
 
-import type { UnitId } from "../../unit.js";
+import type { Id } from "../../unit.js";
 import type { CompiledAction } from "./compiled.js";
 import type { ActionExecutionResources } from "./process.js";
 
 export interface ActionStartRequest {
-    readonly sourceUnitId: UnitId;
+    readonly sourceUnitId: Id;
     readonly compiled: CompiledAction;
     readonly tick: number;
     readonly mayStart: boolean;

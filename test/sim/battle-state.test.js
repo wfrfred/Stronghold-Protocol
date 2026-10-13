@@ -1,4 +1,4 @@
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { fixtureBattlefieldState } from "../helpers/battlefield.js";
@@ -14,7 +14,7 @@ import {
 } from "../../dist/core/tactical/battle/state.js";
 
 const unit = (id, position = [0, 0]) =>
-    initializeUnit({ id, definition: { id: `unit-${id}` }, position });
+    initialize({ id, definition: { id: `unit-${id}` }, position });
 const fixture = (...units) => createBattleState(fixtureBattlefieldState(units));
 
 test("battle state: each returned version exposes completed updates and retains prior facts", () => {
@@ -50,7 +50,7 @@ test("battle state: independent branches keep their own registrations and remova
 });
 
 test("battle state: no-op updates retain identity and zero HP alone does not remove a unit", () => {
-    const first = initializeUnit({
+    const first = initialize({
         id: 1,
         position: [0, 0],
         definition: { id: "vitality", vitality: { maxHp: 100 } },

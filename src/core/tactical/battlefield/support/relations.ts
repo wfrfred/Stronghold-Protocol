@@ -1,16 +1,13 @@
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
-import type { Unit, UnitId } from "../../unit/unit.js";
+import type { Unit, Id } from "../../unit/unit.js";
 import { readSupportFacts } from "./facts.js";
 
 export interface SupportRelation {
-    readonly supportedUnitId: UnitId;
-    readonly supportUnitId: UnitId;
+    readonly supportedUnitId: Id;
+    readonly supportUnitId: Id;
 }
 
-function isValidSupportRelation(
-    units: ReadonlyMap<UnitId, Unit>,
-    relation: SupportRelation,
-): boolean {
+function isValidSupportRelation(units: ReadonlyMap<Id, Unit>, relation: SupportRelation): boolean {
     const provider = units.get(relation.supportUnitId);
     const supported = units.get(relation.supportedUnitId);
 
@@ -39,7 +36,7 @@ function isValidSupportRelation(
 }
 
 export function reconcileSupportRelations(
-    units: ReadonlyMap<UnitId, Unit>,
+    units: ReadonlyMap<Id, Unit>,
     relations: readonly SupportRelation[],
 ): readonly SupportRelation[] {
     const retained = relations.filter((relation) => isValidSupportRelation(units, relation));
@@ -50,7 +47,7 @@ export function reconcileSupportRelations(
 export function getLostSupports(
     previous: readonly SupportRelation[],
     next: readonly SupportRelation[],
-    units: ReadonlyMap<UnitId, Unit>,
+    units: ReadonlyMap<Id, Unit>,
 ): readonly SupportRelation[] {
     const supportedIds = new Set(next.map((relation) => relation.supportedUnitId));
 
@@ -66,10 +63,10 @@ export function getLostSupports(
 }
 
 export function validateSupportRelations(
-    units: ReadonlyMap<UnitId, Unit>,
+    units: ReadonlyMap<Id, Unit>,
     relations: readonly SupportRelation[],
 ): void {
-    const supportedIds = new Set<UnitId>();
+    const supportedIds = new Set<Id>();
 
     for (const relation of relations) {
         if (supportedIds.has(relation.supportedUnitId)) {

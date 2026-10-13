@@ -1,5 +1,5 @@
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
-import type { Unit, UnitId } from "../../unit/unit.js";
+import type { Unit, Id } from "../../unit/unit.js";
 import {
     assertUnitCapabilityComposition,
     assertUnitCapabilityPairing,
@@ -56,14 +56,14 @@ export function applyBattlefieldChanges<U extends Unit>(
     const mechanisms = copyOnWriteMap(previous.mechanisms);
     const navigationModifiers = copyOnWriteMap(previous.navigationModifiers);
     const removedUnits: {
-        unitId: UnitId;
+        unitId: Id;
         reason: BattlefieldRemovalReason;
         unit: U;
     }[] = [];
-    const registeredUnitIds: UnitId[] = [];
+    const registeredUnitIds: Id[] = [];
     const removedMechanisms: { mechanismId: MechanismId; reason: BattlefieldRemovalReason }[] = [];
     const removedNavigationModifiers = new Set<NavigationModifierId>();
-    const updatedUnitIds = new Set<UnitId>();
+    const updatedUnitIds = new Set<Id>();
     const updatedMechanismIds = new Set<MechanismId>();
     const updatedNavigationModifierIds = new Set<NavigationModifierId>();
     let unitMembershipChanged = false;

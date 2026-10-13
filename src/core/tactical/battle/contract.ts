@@ -12,7 +12,7 @@ import type { NavigationModifier } from "../battlefield/navigation/modifier.js";
 import type { NavigationOutcome } from "../battlefield/navigation/state.js";
 import type { WorldPosition } from "../geometry/coordinate.js";
 import type { RouteSignal } from "../unit/capability/locomotion/route/execution.js";
-import type { Unit, UnitId } from "../unit/unit.js";
+import type { Unit, Id } from "../unit/unit.js";
 import type {
     PredefinedDefinition,
     PredefinedCommand,
@@ -50,8 +50,8 @@ export type Command =
     | PredefinedCommand
     | AlternativeRouteCommand
     | DeploymentCommand
-    | { readonly type: "ACTIVATE_SKILL"; readonly unitId: UnitId }
-    | { readonly type: "FINISH_SKILL"; readonly unitId: UnitId }
+    | { readonly type: "ACTIVATE_SKILL"; readonly unitId: Id }
+    | { readonly type: "FINISH_SKILL"; readonly unitId: Id }
     | { readonly type: "CANCEL_ACTION_EXECUTION"; readonly executionId: ActionExecutionId }
     | { readonly type: "STOP_PROJECTILE"; readonly projectileId: ProjectileId }
     | { readonly type: "TRIGGER_BRANCH"; readonly branchId: string; readonly isLoop: boolean };
@@ -64,26 +64,26 @@ export type Event =
     | ElementalSignal
     | {
           readonly type: "UNIT_DEPLOYED" | "UNIT_RELOCATED";
-          readonly unitId: UnitId;
+          readonly unitId: Id;
           readonly position: WorldPosition;
           readonly tick: number;
       }
     | ({ readonly type: "SUPPORT_LOST"; readonly tick: number } & SupportRelation)
-    | { readonly type: "ENEMY_SPAWNED"; readonly unitId: UnitId; readonly tick: number }
+    | { readonly type: "ENEMY_SPAWNED"; readonly unitId: Id; readonly tick: number }
     | {
           readonly type: "ROUTE";
-          readonly unitId: UnitId;
+          readonly unitId: Id;
           readonly signal: RouteSignal;
           readonly position: WorldPosition;
           readonly tick: number;
       }
     | {
           readonly type: "NAVIGATION";
-          readonly unitId: UnitId;
+          readonly unitId: Id;
           readonly outcome: NavigationOutcome;
           readonly tick: number;
       }
-    | { readonly type: "ROUTE_COMPLETED"; readonly unitId: UnitId; readonly tick: number }
+    | { readonly type: "ROUTE_COMPLETED"; readonly unitId: Id; readonly tick: number }
     | ({
           readonly type: "UNIT_REMOVED";
           readonly tick: number;
@@ -94,7 +94,7 @@ export interface Result {
     readonly elapsedTicks: number;
     readonly spawnedCount: number;
     readonly completedRouteCount: number;
-    readonly remainingUnitIds: readonly UnitId[];
+    readonly remainingUnitIds: readonly Id[];
     readonly unspawnedCount: number;
 }
 

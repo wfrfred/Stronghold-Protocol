@@ -3,7 +3,7 @@ import { hasRoutedLocomotion } from "../../unit/capability/locomotion/capability
 import { hasAction } from "../../unit/capability/action/capability.js";
 import { hasStatusFlag } from "../../unit/capability/status/capability.js";
 import { stepRoutedUnit } from "../../unit/capability/locomotion/step.js";
-import type { UnitId } from "../../unit/unit.js";
+import type { Id } from "../../unit/unit.js";
 import { changeAlternativeRoutes } from "./route-control.js";
 import type { Command, Event } from "../contract.js";
 import { removeUnitWithEffects, type UnitLifecycleResources } from "../execution/unit-lifecycle.js";
@@ -43,7 +43,7 @@ export function advanceMovement(
         movementAllowed,
     }: {
         readonly routeMoveMultiplier: number;
-        readonly movementAllowed?: (unitId: UnitId) => boolean;
+        readonly movementAllowed?: (unitId: Id) => boolean;
     },
     resources: UnitLifecycleResources,
 ): BattleState {
@@ -51,7 +51,7 @@ export function advanceMovement(
     let execution = state.execution;
     const changes: BattlefieldChange[] = [];
     const events: Event[] = [];
-    const completed: UnitId[] = [];
+    const completed: Id[] = [];
 
     for (const unitId of [...battlefield.unitIds].sort((left, right) => left - right)) {
         const unit = battlefield.getUnit(unitId)!;

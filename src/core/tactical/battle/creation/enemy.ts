@@ -10,12 +10,12 @@ import {
     type LocatedRouteSignal,
 } from "../../unit/capability/locomotion/route-control.js";
 import { createRoutedLocomotionState } from "../../unit/capability/locomotion/capability.js";
-import type { EnemyDefinition, RoutedEnemy } from "../../unit/archetype/enemy.js";
-import type { UnitId } from "../../unit/unit.js";
-import { initializeUnit } from "../../unit/initialize.js";
+import type { Definition, RoutedEnemy } from "../../unit/archetype/enemy.js";
+import type { Id } from "../../unit/unit.js";
+import { initialize } from "../../unit/initialize.js";
 
-export interface RoutedEnemySpawn<D extends EnemyDefinition = EnemyDefinition> {
-    readonly id: UnitId;
+export interface RoutedEnemySpawn<D extends Definition = Definition> {
+    readonly id: Id;
     readonly tick: number;
     readonly definition: D;
     readonly route: RouteDefinition;
@@ -25,14 +25,14 @@ export interface RoutedEnemySpawn<D extends EnemyDefinition = EnemyDefinition> {
     readonly nextNavigationRequestId: NavigationRequestId;
 }
 
-export interface RoutedEnemyInitialization<D extends EnemyDefinition = EnemyDefinition> {
+export interface RoutedEnemyInitialization<D extends Definition = Definition> {
     readonly enemy: RoutedEnemy<D>;
     readonly signals: readonly LocatedRouteSignal[];
     readonly rngState: Seed;
     readonly nextNavigationRequestId: NavigationRequestId;
 }
 
-export function initializeRoutedEnemy<D extends EnemyDefinition>(
+export function initializeRoutedEnemy<D extends Definition>(
     spawn: RoutedEnemySpawn<D>,
 ): RoutedEnemyInitialization<D> {
     assertNonnegativeSafeInteger(spawn.id, "enemy id");
@@ -53,7 +53,7 @@ export function initializeRoutedEnemy<D extends EnemyDefinition>(
         spatialPresence: { present: initial.present },
         locomotion: createRoutedLocomotionState(initial.control),
     };
-    const enemy = initializeUnit<EnemyDefinition, typeof states>({
+    const enemy = initialize<Definition, typeof states>({
         id: spawn.id,
         definition: spawn.definition,
         position: initial.position,

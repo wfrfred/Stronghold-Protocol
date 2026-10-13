@@ -8,7 +8,7 @@ import {
     type Result,
 } from "../../../battle/state.js";
 import { emptyCall, type CallContext } from "../../../battle/execution/call.js";
-import type { UnitId } from "../../unit.js";
+import type { Id } from "../../unit.js";
 import { TICKS_PER_SECOND } from "../../../tick.js";
 import { isSpatiallyPresent } from "../presence.js";
 import { hasStatusFlag } from "../status/capability.js";
@@ -30,13 +30,13 @@ export interface SkillExecutionResources {
 }
 
 export interface SkillActivationInput {
-    readonly unitId: UnitId;
+    readonly unitId: Id;
     readonly tick: number;
     readonly trigger?: SkillActivationMode;
 }
 
 export type SkillSignal = {
-    readonly unitId: UnitId;
+    readonly unitId: Id;
     readonly skillId: string;
     readonly activationId: number;
     readonly tick: number;
@@ -65,7 +65,7 @@ export interface SkillTransition {
     readonly signals: readonly SkillSignal[];
 }
 
-function saveState(state: BattleState, unitId: UnitId, skill: SkillState): BattleState {
+function saveState(state: BattleState, unitId: Id, skill: SkillState): BattleState {
     const unit = getUnit(state, unitId);
 
     return unit !== undefined && hasSkill(unit) && unit.skill !== skill
@@ -75,7 +75,7 @@ function saveState(state: BattleState, unitId: UnitId, skill: SkillState): Battl
 
 function skillContext(
     state: BattleState,
-    unitId: UnitId,
+    unitId: Id,
     activation: SkillActivation,
     tick: number,
     call: CallContext,
@@ -259,7 +259,7 @@ export interface SkillAmmoTransition {
 
 export function consumeSkillAmmo(
     state: BattleState,
-    unitId: UnitId,
+    unitId: Id,
     tick: number,
     resources: SkillExecutionResources,
     call: CallContext = emptyCall,
@@ -293,7 +293,7 @@ export function consumeSkillAmmo(
 
 export function finishSkill(
     state: BattleState,
-    unitId: UnitId,
+    unitId: Id,
     tick: number,
     resources: SkillExecutionResources,
     call: CallContext = emptyCall,
@@ -316,14 +316,14 @@ export function finishSkill(
 }
 
 export interface StoppedSkillActivation {
-    readonly unitId: UnitId;
+    readonly unitId: Id;
     readonly active: SkillActivation;
     readonly compiled: CompiledSkill;
 }
 
 export function stopSkillActivation(
     state: BattleState,
-    unitId: UnitId,
+    unitId: Id,
     tick: number,
     resources: SkillExecutionResources,
 ): Result<StoppedSkillActivation | null> {
@@ -373,7 +373,7 @@ export function notifySkillFinished(
 
 export function advanceSkill(
     state: BattleState,
-    unitId: UnitId,
+    unitId: Id,
     tick: number,
     resources: SkillExecutionResources,
     call: CallContext = emptyCall,

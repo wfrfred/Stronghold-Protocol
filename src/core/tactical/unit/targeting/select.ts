@@ -1,4 +1,4 @@
-import type { Unit, UnitId } from "../unit.js";
+import type { Unit, Id } from "../unit.js";
 import type { CompiledTargeting, TargetQueryContext } from "./query.js";
 
 type Comparator = (left: Unit, right: Unit) => number;
@@ -7,7 +7,7 @@ function* acceptedTargets<C extends TargetQueryContext>(
     context: C,
     targeting: CompiledTargeting<C>,
 ): Iterable<Unit> {
-    const visited = new Set<UnitId>();
+    const visited = new Set<Id>();
 
     for (const id of targeting.candidates(context)) {
         if (visited.has(id)) {

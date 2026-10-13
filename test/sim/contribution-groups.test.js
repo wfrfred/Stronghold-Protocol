@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import {
     battlefieldView,
     transitionUnit,
@@ -15,7 +15,7 @@ import { resolveDefense } from "../../dist/core/tactical/unit/capability/defense
 import { create } from "../../dist/core/tactical/unit/contribution/value.js";
 import { effectFixtureWork } from "../helpers/effects.js";
 const base = (id) =>
-    initializeUnit({
+    initialize({
         id,
         position: [0, 0],
         definition: {

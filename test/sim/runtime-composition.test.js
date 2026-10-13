@@ -14,9 +14,9 @@ import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
-import { createOperatorDefinition } from "../../dist/core/tactical/unit/archetype/operator.js";
-import { createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { createDefinition } from "../../dist/core/tactical/unit/archetype/operator.js";
+import { createDefinition as createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
+import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import { seededPlacement } from "../helpers/aura.js";
 import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
 import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
@@ -73,7 +73,7 @@ function passive(id, hp = 100) {
 }
 
 function actor(id) {
-    return createOperatorDefinition({
+    return createDefinition({
         ...passive(id),
         allegiance: { side: "ALLY" },
         blocker: { capacity: 0, geometry: { radius: 0.1 } },
@@ -433,7 +433,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
             initialUnits: [
                 seededPlacement(
                     aura,
-                    initializeUnit({ id: 0, definition: primary, position: [0, 0] }),
+                    initialize({ id: 0, definition: primary, position: [0, 0] }),
                 ),
                 {
                     definition: passive("first-target"),

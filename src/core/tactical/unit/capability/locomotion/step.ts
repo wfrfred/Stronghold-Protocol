@@ -48,14 +48,14 @@ import {
     type RoutedLocomotionState,
 } from "./capability.js";
 import { integrateSteeringDirection } from "./steering.js";
-import type { QueryContext } from "../../query.js";
+import type { Context } from "../../query.js";
 
 export interface RoutedLocomotionStepContext {
     readonly tick: number;
     readonly maps: NavigationMaps;
     readonly fieldCache: NavigationFieldProvider;
     readonly moveMultiplier: number;
-    readonly queryContext: QueryContext;
+    readonly queryContext: Context;
     readonly movementAllowed: boolean;
     readonly waitTickAllowed: boolean;
     readonly routeAdvanceAllowed: boolean;

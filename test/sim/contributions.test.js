@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as modifier from "../../dist/core/tactical/unit/contribution/value.js";
 import * as contribution from "../../dist/core/tactical/unit/contribution/contribution.js";
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
-import { copyUnitSnapshot } from "../../dist/core/tactical/unit/snapshot.js";
+import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { copy } from "../../dist/core/tactical/unit/snapshot.js";
 import {
     setAttackContribution,
     removeAttackContribution,
@@ -26,7 +26,7 @@ import {
 } from "../../dist/core/tactical/battle/state.js";
 
 const unit = (id, attack = 100) =>
-    initializeUnit({
+    initialize({
         id,
         definition: { id: `unit-${id}`, offense: { attack }, vitality: { maxHp: 100 } },
         position: [0, 0],
@@ -113,7 +113,7 @@ test("contributions: capability set, remove and replacement preserve prior snaps
     assert.equal(resolveAttackPower(1, battlefieldView(work)), 100);
     work = transitionUnit(work, 1, (current) => ({ ...current, offense: setAttackContribution(current.offense, sample) }));
     assert.equal(resolveAttackPower(1, battlefieldView(work)), 250);
-    const copied = copyUnitSnapshot(getUnit(work, 1));
+    const copied = copy(getUnit(work, 1));
     assert.equal(copied.offense.attack, getUnit(work, 1).offense.attack);
     const resumedSnapshot = battlefieldView(work);
     work = transitionUnit(work, 1, (current) =>
@@ -148,7 +148,7 @@ test("contributions: sampled and dynamic defense values resolve without mutating
             [-50, 0],
             [90, 100],
         ]) {
-            const base = initializeUnit({
+            const base = initialize({
                 id: 1,
                 position: [0, 0],
                 definition: { id: "defended", defense: { defense: 200, resistance: 30 } },

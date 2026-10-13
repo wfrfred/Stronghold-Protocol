@@ -1,12 +1,12 @@
 import type { CallContext } from "../../../../battle/execution/call.js";
-import type { Unit, UnitId } from "../../../unit.js";
+import type { Unit, Id } from "../../../unit.js";
 import type { BattleState, Result } from "../../../../battle/state.js";
 import type { Vitality } from "../capability.js";
 
 export interface HealingRequest {
     readonly tick: number;
-    readonly sourceUnitId: UnitId | null;
-    readonly targetUnitId: UnitId;
+    readonly sourceUnitId: Id | null;
+    readonly targetUnitId: Id;
     readonly power: number;
     readonly ignoreHealFree: boolean;
     readonly skipModifierEvents?: boolean;

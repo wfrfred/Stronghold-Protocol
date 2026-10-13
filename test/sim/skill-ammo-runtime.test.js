@@ -9,7 +9,7 @@ import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/state.js";
 import { createProjectileDefinition } from "../../dist/core/tactical/battlefield/projectile/definition.js";
 import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
-import { createOperatorDefinition } from "../../dist/core/tactical/unit/archetype/operator.js";
+import { createDefinition } from "../../dist/core/tactical/unit/archetype/operator.js";
 import { compileAction } from "../../dist/core/tactical/unit/capability/action/compile.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
@@ -49,7 +49,7 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, program } = {}) {
     assert.ok(installed.value);
     return { state: installed.state, value: { type: "ACTIVATED" } };
   } });
-  const definition = createOperatorDefinition({
+  const definition = createDefinition({
     id: "ammo-actor", vitality: { maxHp: 10000 }, offense: { attack: 100 },
     defense: { defense: 0, resistance: 0 }, allegiance: { side: "ALLY" },
     spatial: { layer: "GROUND" }, hit: { geometry: hit }, status: { initialFlags: [] },

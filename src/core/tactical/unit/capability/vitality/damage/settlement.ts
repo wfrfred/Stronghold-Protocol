@@ -2,7 +2,7 @@ import { emptyCall, type CallContext } from "../../../../battle/execution/call.j
 import { hasDefenseDefinition, type DefenseDefinition } from "../../defense/capability.js";
 import { hasElemental } from "../../elemental/capability.js";
 import { hasVitality, type Vitality } from "../capability.js";
-import type { Unit, UnitId } from "../../../unit.js";
+import type { Unit, Id } from "../../../unit.js";
 import { hasStatusFlag } from "../../status/capability.js";
 import { resolveDefense } from "../../defense/query.js";
 import { assertFiniteNumber, assertNonnegativeNumber } from "../../../../../common/assert.js";
@@ -30,7 +30,7 @@ import {
 export interface Resources {
     readonly retireUnit: (
         battle: BattleState,
-        unitId: UnitId,
+        unitId: Id,
         tick: number,
         call?: CallContext,
     ) => BattleState;
@@ -346,7 +346,7 @@ interface StageHook<V> extends RegisteredHook<
 function callHooks<V>(
     battle: BattleState,
     request: DamageRequest,
-    ownerUnitId: UnitId | null,
+    ownerUnitId: Id | null,
     value: V,
     call: CallContext,
     select: (entry: Hook) => StageHook<V> | undefined,
@@ -407,7 +407,7 @@ function callHooks<V>(
 function applyFormulaHooks(
     battle: BattleState,
     request: DamageRequest,
-    owner: UnitId | null,
+    owner: Id | null,
     stage: FormulaStage,
     operands: DamageOperands,
     call: CallContext,
@@ -423,7 +423,7 @@ function applyFormulaHooks(
 function applyAmountHooks(
     battle: BattleState,
     request: DamageRequest,
-    owner: UnitId | null,
+    owner: Id | null,
     stage: AmountStage,
     pending: PendingDamage,
     call: CallContext,

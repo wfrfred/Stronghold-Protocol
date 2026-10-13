@@ -1,5 +1,5 @@
 import { createRouteTiming } from "../../unit/capability/locomotion/route/state.js";
-import type { UnitId } from "../../unit/unit.js";
+import type { Id } from "../../unit/unit.js";
 import { addScheduleTicks, countFragmentSpawns, type WaveDefinition } from "./definition.js";
 import type {
     SpawnScheduleExecution,
@@ -256,7 +256,7 @@ export function advanceSpawnSchedule(
 export function recordScheduleSpawns(
     previous: SpawnScheduleExecution,
     spawns: readonly ScheduleSpawn[],
-    unitIds: readonly UnitId[],
+    unitIds: readonly Id[],
 ): SpawnScheduleExecution {
     if (spawns.length !== unitIds.length || spawns.length !== previous.pendingSpawnCount) {
         throw new RangeError("recorded schedule spawns must match the pending spawn batch");
@@ -265,8 +265,8 @@ export function recordScheduleSpawns(
         return previous;
     }
 
-    const newWaveUnitIds: UnitId[] = [];
-    const newFinalUnitIds: UnitId[] = [];
+    const newWaveUnitIds: Id[] = [];
+    const newFinalUnitIds: Id[] = [];
 
     for (let index = 0; index < spawns.length; index++) {
         const unitId = unitIds[index]!;
@@ -303,7 +303,7 @@ export function recordScheduleSpawns(
 
 export function resolveScheduleUnits(
     previous: SpawnScheduleExecution,
-    resolvedIds: readonly UnitId[],
+    resolvedIds: readonly Id[],
 ): SpawnScheduleExecution {
     if (resolvedIds.length === 0) {
         return previous;

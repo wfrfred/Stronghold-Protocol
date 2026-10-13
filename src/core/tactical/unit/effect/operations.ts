@@ -7,7 +7,7 @@ import {
     type Result,
 } from "../../battle/state.js";
 import { emptyCall, type CallContext } from "../../battle/execution/call.js";
-import type { Unit, UnitId } from "../unit.js";
+import type { Unit, Id } from "../unit.js";
 import type { Definition, Context } from "./definition.js";
 import {
     deadline,
@@ -24,7 +24,7 @@ import { dependents } from "../../battlefield/storage/effect-lifetimes.js";
 type StoredEffect = ReturnType<Unit["effects"]["values"]>[number];
 
 export interface Initial<S extends object> {
-    readonly source?: UnitId | null;
+    readonly source?: Id | null;
     readonly scopes?: readonly Scope[];
     readonly data?: S;
     readonly enabled?: boolean;
@@ -398,7 +398,7 @@ function updateStatus(battle: BattleState, ref: Ref, call: CallContext): BattleS
 
 function reconcileGroupActivity(
     battle: BattleState,
-    unitId: UnitId,
+    unitId: Id,
     groupId: string,
     call: CallContext,
 ): BattleState {

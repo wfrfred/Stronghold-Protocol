@@ -12,10 +12,10 @@ test('definition factories return standard shapes while static definitions retai
   const positivePath = join(directory, 'positive.mts');
   const negativePath = join(directory, 'negative.mts');
   const declarations = `
-import { createOperatorDefinition, initializeOperator, type OperatorDefinition } from ${sourceModule('unit/archetype/operator')};
-import { createEnemyDefinition, createCombatEnemyDefinition, type EnemyDefinition, type CombatEnemyDefinition } from ${sourceModule('unit/archetype/enemy')};
-import { initializeUnit } from ${sourceModule('unit/initialize')};
-import { copyUnitSnapshot } from ${sourceModule('unit/snapshot')};
+import { createDefinition, initialize, type Definition as OperatorDefinition } from ${sourceModule('unit/archetype/operator')};
+import { createDefinition as createEnemyDefinition, createCombatDefinition, type Definition as EnemyDefinition, type CombatDefinition } from ${sourceModule('unit/archetype/enemy')};
+import { initialize as initializeUnit } from ${sourceModule('unit/initialize')};
+import { copy } from ${sourceModule('unit/snapshot')};
 import { hasOffense, type Offense, type OffenseDefinition, type OffenseState } from ${sourceModule('unit/capability/offense/capability')};
 import { hasSkill, type SkillDefinition, type SkillState } from ${sourceModule('unit/capability/skill/capability')};
 import type { ElementalDefinition, ElementalState } from ${sourceModule('unit/capability/elemental/capability')};
@@ -26,7 +26,7 @@ import { install } from ${sourceModule('unit/effect/operations')};
 import type { BattleState } from ${sourceModule('battle/state')};
 type OptionalKey = 'offense' | 'skill' | 'elemental';
 type OperatorBase = Omit<OperatorDefinition, OptionalKey>;
-type CombatEnemyBase = Omit<CombatEnemyDefinition, OptionalKey>;
+type CombatEnemyBase = Omit<CombatDefinition, OptionalKey>;
 type EnemyBase = Omit<EnemyDefinition, 'skill' | 'elemental'>;
 declare const operatorBase: OperatorBase;
 declare const combatEnemyBase: CombatEnemyBase;
@@ -39,23 +39,23 @@ const staticOperator = {
 } satisfies OperatorDefinition;
 const staticCombatEnemy = {
   ...combatEnemyBase, offense: { attack: 10 }, skill: skillInput, elemental: elementalInput,
-} satisfies CombatEnemyDefinition;
+} satisfies CombatDefinition;
 const staticEnemy = {
   ...enemyBase, skill: skillInput, elemental: elementalInput,
 } satisfies EnemyDefinition;
-const operator = createOperatorDefinition(staticOperator);
-const combatEnemy = createCombatEnemyDefinition(staticCombatEnemy);
+const operator = createDefinition(staticOperator);
+const combatEnemy = createCombatDefinition(staticCombatEnemy);
 const enemy = createEnemyDefinition(staticEnemy);
-const initializedOperator = initializeOperator({ id: 1, definition: operator, position: [0, 0] });
+const initializedOperator = initialize({ id: 1, definition: operator, position: [0, 0] });
 const initializedCombatEnemy = initializeUnit({ id: 2, definition: combatEnemy, position: [0, 0] });
 const initializedEnemy = initializeUnit({ id: 3, definition: enemy, position: [0, 0] });
-const staticOperatorUnit = initializeOperator({ id: 4, definition: staticOperator, position: [0, 0] });
+const staticOperatorUnit = initialize({ id: 4, definition: staticOperator, position: [0, 0] });
 const staticCombatEnemyUnit = initializeUnit({ id: 5, definition: staticCombatEnemy, position: [0, 0] });
 const staticEnemyUnit = initializeUnit({ id: 6, definition: staticEnemy, position: [0, 0] });
-const bareOperatorUnit = initializeOperator({ id: 7, definition: operatorBase, position: [0, 0] });
+const bareOperatorUnit = initialize({ id: 7, definition: operatorBase, position: [0, 0] });
 declare const routed: RoutedLocomotionState;
 const preparedUnit = initializeUnit({ id: 8, definition: combatEnemy, position: [0, 0], states: { locomotion: routed } });
-const snapshot = copyUnitSnapshot(preparedUnit);
+const snapshot = copy(preparedUnit);
 const healthAttack: Definition<{ bonus: number }, Vitality & Offense> = {
   id: 'health-attack',
   initialize: () => ({ bonus: 0 }),
@@ -70,7 +70,7 @@ const healthAttack: Definition<{ bonus: number }, Vitality & Offense> = {
 `;
   const positive = `
 const standardOperator: OperatorDefinition = operator;
-const standardCombatEnemy: CombatEnemyDefinition = combatEnemy;
+const standardCombatEnemy: CombatDefinition = combatEnemy;
 const standardEnemy: EnemyDefinition = enemy;
 const offenseDefinitions: OffenseDefinition[] = [staticOperator.offense, staticCombatEnemy.offense];
 const offenseStates: OffenseState[] = [staticOperatorUnit.offense, staticCombatEnemyUnit.offense];

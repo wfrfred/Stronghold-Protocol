@@ -16,7 +16,7 @@ test("direct Effect definitions type host capabilities, private state and immuta
     writeFileSync(
         path,
         `
-import { initializeUnit } from ${module("unit/initialize")};
+import { initialize } from ${module("unit/initialize")};
 import type { Unit } from ${module("unit/unit")};
 import type { BattleState } from ${module("battle/state")};
 import type { Vitality } from ${module("unit/capability/vitality/capability")};
@@ -29,8 +29,8 @@ import { install, replaceEffect, get } from ${module("unit/effect/operations")};
 import { setData, type Effect } from ${module("unit/effect/effect")};
 import { Effects } from ${module("unit/effect/effects")};
 import type { Contribution, Input } from ${module("unit/contribution/contribution")};
-import type { QueryContext } from ${module("unit/query")};
-const host=initializeUnit({id:1,position:[0,0],definition:{id:'host',vitality:{maxHp:100}}});
+import type { Context as QueryContext } from ${module("unit/query")};
+const host=initialize({id:1,position:[0,0],definition:{id:'host',vitality:{maxHp:100}}});
 const content: Definition<{charges:number},Vitality> = {
  id:'shield',initialize:()=>({charges:2}),
  onTick(state,context) {
@@ -48,7 +48,7 @@ const content: Definition<{charges:number},Vitality> = {
 declare const battle:BattleState;
 const installed=install(battle,host,content);
 const ref=installed.value;
-const bare=initializeUnit({id:2,position:[0,0],definition:{id:'bare'}});
+const bare=initialize({id:2,position:[0,0],definition:{id:'bare'}});
 // @ts-expect-error required host capabilities must be present.
 install(battle,bare,content);
 if(ref!==undefined) {
@@ -126,7 +126,7 @@ const crossCapability:Definition<{bonus:number},Vitality & Offense>={
   return state;
  },
 };
-const combined=initializeUnit({id:3,position:[0,0],definition:{id:'combined',vitality:{maxHp:100},offense:{attack:20}}});
+const combined=initialize({id:3,position:[0,0],definition:{id:'combined',vitality:{maxHp:100},offense:{attack:20}}});
 install(battle,combined,crossCapability);
 // @ts-expect-error the concrete Effect requires both capability pairs.
 install(battle,host,crossCapability);

@@ -3,10 +3,7 @@ import {
     assertNonnegativeSafeInteger,
     assertPositiveNumber,
 } from "../../core/common/assert.js";
-import {
-    createEnemyDefinition,
-    type EnemyDefinition,
-} from "../../core/tactical/unit/archetype/enemy.js";
+import { createDefinition, type Definition } from "../../core/tactical/unit/archetype/enemy.js";
 import type { EnemyMovementPrefab } from "./prefab.js";
 import { perSecondToPerTick } from "./tick.js";
 
@@ -26,7 +23,7 @@ export interface ArknightsResolvedEnemyMovement {
 }
 
 export interface ArknightsEnemyMovementContent {
-    readonly definition: EnemyDefinition;
+    readonly definition: Definition;
     readonly alwaysCheckCurrentPoint: boolean;
     readonly notCountInTotal: boolean;
     readonly delayToBornTicks: number;
@@ -229,7 +226,7 @@ export function createEnemyMovementContent(
         throw new TypeError(`enemy movement prefab does not match ${prefabKey}`);
     }
 
-    const definition = createEnemyDefinition({
+    const definition = createDefinition({
         id,
         vitality: { maxHp },
         locomotion: {
@@ -265,6 +262,6 @@ export function parseEnemyMovementDefinition(
     level: number,
     profile: EnemyMovementPrefab,
     overwrittenData?: unknown,
-): EnemyDefinition {
+): Definition {
     return parseEnemyMovementContent(value, level, profile, overwrittenData).definition;
 }

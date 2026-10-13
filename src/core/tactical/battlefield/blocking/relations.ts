@@ -1,6 +1,6 @@
 import { World } from "../../geometry/coordinate.js";
 import { areHostileSides } from "../../unit/capability/allegiance.js";
-import type { Unit, UnitId } from "../../unit/unit.js";
+import type { Unit, Id } from "../../unit/unit.js";
 import { hasBlocker } from "../../unit/capability/blocking/capability.js";
 import type { SupportRelation } from "../support/relations.js";
 import { BattlefieldMap } from "../map/map.js";
@@ -12,13 +12,13 @@ import {
 } from "./facts.js";
 
 export interface BlockingRelation {
-    readonly blockerUnitId: UnitId;
-    readonly blockedUnitId: UnitId;
+    readonly blockerUnitId: Id;
+    readonly blockedUnitId: Id;
 }
 
 export function releaseBlockingRelations(
     relations: readonly BlockingRelation[],
-    unitId: UnitId,
+    unitId: Id,
 ): readonly BlockingRelation[] {
     const retained = relations.filter(
         (relation) => relation.blockerUnitId !== unitId && relation.blockedUnitId !== unitId,
@@ -33,9 +33,9 @@ export function canBlockGround(unit: Unit, map: BattlefieldMap): boolean {
 
 function canBlockFrom(
     map: BattlefieldMap,
-    blockerId: UnitId,
+    blockerId: Id,
     blocker: BlockingFacts,
-    units: ReadonlyMap<UnitId, Unit>,
+    units: ReadonlyMap<Id, Unit>,
     supports: readonly SupportRelation[],
 ): boolean {
     const supportId = supports.find(
@@ -61,12 +61,12 @@ function canBlockTarget(blocker: BlockingFacts, blocked: BlockingFacts): boolean
 
 function reconcileBlockingRelations(
     map: BattlefieldMap,
-    units: ReadonlyMap<UnitId, Unit>,
+    units: ReadonlyMap<Id, Unit>,
     relations: readonly BlockingRelation[],
     supports: readonly SupportRelation[] = [],
 ): readonly BlockingRelation[] {
-    const used = new Map<UnitId, number>();
-    const blockedIds = new Set<UnitId>();
+    const used = new Map<Id, number>();
+    const blockedIds = new Set<Id>();
     const retained: BlockingRelation[] = [];
 
     for (const relation of relations) {
@@ -102,9 +102,9 @@ function reconcileBlockingRelations(
 }
 
 export function blockingUsedCapacity(
-    units: ReadonlyMap<UnitId, Unit>,
+    units: ReadonlyMap<Id, Unit>,
     relations: readonly BlockingRelation[],
-    blockerUnitId: UnitId,
+    blockerUnitId: Id,
 ): number {
     let used = 0;
 
@@ -125,14 +125,14 @@ export function blockingUsedCapacity(
 
 export function updateBlockingRelations(
     map: BattlefieldMap,
-    units: ReadonlyMap<UnitId, Unit>,
+    units: ReadonlyMap<Id, Unit>,
     previous: readonly BlockingRelation[],
-    unitsByTile: ReadonlyMap<number, ReadonlySet<UnitId>>,
+    unitsByTile: ReadonlyMap<number, ReadonlySet<Id>>,
     supports: readonly SupportRelation[] = [],
 ): readonly BlockingRelation[] {
     const retained = reconcileBlockingRelations(map, units, previous, supports);
     const blockedIds = new Set(retained.map((relation) => relation.blockedUnitId));
-    const used = new Map<UnitId, number>();
+    const used = new Map<Id, number>();
     const additions: BlockingRelation[] = [];
 
     for (const relation of retained) {
@@ -161,11 +161,11 @@ export function updateBlockingRelations(
     }
 
     const candidates = new Map<
-        UnitId,
+        Id,
         { weight: number; blockers: { blocker: (typeof blockers)[number]; distance: number }[] }
     >();
 
-    const addCandidate = (blocker: (typeof blockers)[number], unitId: UnitId): void => {
+    const addCandidate = (blocker: (typeof blockers)[number], unitId: Id): void => {
         if (blockedIds.has(unitId)) {
             return;
         }

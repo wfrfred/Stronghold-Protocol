@@ -1,12 +1,12 @@
 import type { BuildableType, HeightType } from "../../battlefield/map/tile.js";
-import type { UnitDefinition } from "../unit.js";
+import type { Definition } from "../unit.js";
 
 export interface DeploymentProfile {
     readonly buildableType: Exclude<BuildableType, "NONE">;
     readonly advancedBuildableMask: number;
 }
 
-export interface DeployableUnitDefinition extends UnitDefinition {
+export interface DeployableUnitDefinition extends Definition {
     readonly deployment: DeploymentProfile;
 }
 
@@ -16,18 +16,18 @@ export interface TileBindingDefinition {
     readonly advancedBuildableMask: number | null;
 }
 
-export interface TileBoundUnitDefinition extends UnitDefinition {
+export interface TileBoundUnitDefinition extends Definition {
     readonly tileBinding: TileBindingDefinition;
 }
 
 export function hasDeploymentDefinition(
-    definition: UnitDefinition,
+    definition: Definition,
 ): definition is DeployableUnitDefinition {
     return "deployment" in definition;
 }
 
 export function hasTileBindingDefinition(
-    definition: UnitDefinition,
+    definition: Definition,
 ): definition is TileBoundUnitDefinition {
     return "tileBinding" in definition;
 }

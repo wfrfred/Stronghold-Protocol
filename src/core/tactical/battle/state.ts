@@ -7,7 +7,7 @@ import type {
 import { transition, type State as BattlefieldState } from "../battlefield/state.js";
 import { view } from "../battlefield/view.js";
 import type { MechanismId, Mechanism } from "../battlefield/mechanism.js";
-import type { Unit, UnitId } from "../unit/unit.js";
+import type { Unit, Id } from "../unit/unit.js";
 import {
     createActionExecutionState,
     type ActionExecutionState,
@@ -30,7 +30,7 @@ export interface BattleState {
     readonly execution: BattleExecutionState;
     readonly actionExecutions: ActionExecutionState;
     readonly events: readonly Event[];
-    readonly registeredUnitIds: readonly UnitId[];
+    readonly registeredUnitIds: readonly Id[];
     readonly removedUnits: BattlefieldChangeResult["removedUnits"];
     readonly closedLifetimes: ReadonlySet<string>;
 }
@@ -89,7 +89,7 @@ export function battlefieldView(state: BattleState): BattlefieldView {
     return view(state.battlefield);
 }
 
-export function getUnit(state: BattleState, id: UnitId): Unit | undefined {
+export function getUnit(state: BattleState, id: Id): Unit | undefined {
     return state.battlefield.units.get(id);
 }
 
@@ -134,7 +134,7 @@ export function registerUnit(state: BattleState, unit: Unit): BattleState {
 
 export function transitionUnit(
     state: BattleState,
-    id: UnitId,
+    id: Id,
     transitionUnitState: (current: Unit) => Unit,
 ): BattleState {
     const current = getUnit(state, id);
@@ -154,7 +154,7 @@ export function transitionUnit(
 
 export function removeUnit(
     state: BattleState,
-    id: UnitId,
+    id: Id,
     reason: BattlefieldRemovalReason = "DEATH",
 ): BattleState {
     return getUnit(state, id) === undefined

@@ -1,4 +1,4 @@
-import type { Unit, UnitId } from "../../unit/unit.js";
+import type { Unit, Id } from "../../unit/unit.js";
 import { key, type Ref, type Lifetime } from "../../unit/effect/effect.js";
 
 type RefBucket = ReadonlyMap<string, Ref>;
@@ -24,7 +24,7 @@ function relationKeys(instance: StoredEffect | undefined): readonly string[] {
           ];
 }
 
-function effectRef(unitId: UnitId, effectId: number): Ref {
+function effectRef(unitId: Id, effectId: number): Ref {
     return { type: "EFFECT", unitId, effectId };
 }
 
@@ -68,7 +68,7 @@ export function derive(index: Index, transitions: readonly UnitTransition[]): In
         return bucket;
     };
     const changeRelations = (
-        unitId: UnitId,
+        unitId: Id,
         before: StoredEffect | undefined,
         after: StoredEffect | undefined,
     ): void => {

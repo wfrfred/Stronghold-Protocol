@@ -1,4 +1,4 @@
-import type { Unit, UnitDefinition } from "../unit.js";
+import type { Unit, Definition } from "../unit.js";
 import { initializeActionState } from "./action/capability.js";
 import { initializeAllegianceState } from "./allegiance.js";
 import { initializeBlockableState, initializeBlockerState } from "./blocking/capability.js";
@@ -64,7 +64,7 @@ export type SelectedCapabilityStates<S extends object> = {
         : never;
 };
 
-export type RuntimeCapabilitiesFor<D extends UnitDefinition> = {
+export type RuntimeCapabilitiesFor<D extends Definition> = {
     readonly [
         K in ConfiguredCapabilityKey as [D] extends [Readonly<Record<K, CapabilityConfig<K>>>]
             ? K
@@ -72,7 +72,7 @@ export type RuntimeCapabilitiesFor<D extends UnitDefinition> = {
     ]: CapabilityState<K>;
 };
 
-export type PreparedCapabilityStates<D extends UnitDefinition> = Partial<
+export type PreparedCapabilityStates<D extends Definition> = Partial<
     RuntimeCapabilitiesFor<D> & RuntimeCapabilityStates
 >;
 
@@ -135,7 +135,7 @@ export function selectCapabilityStates<S extends Partial<CapabilityStates>>(
 }
 
 export function initializeUnitCapabilities(
-    definition: UnitDefinition,
+    definition: Definition,
     context: CapabilityInitializationContext,
     prepared: Partial<CapabilityStates>,
 ): object {

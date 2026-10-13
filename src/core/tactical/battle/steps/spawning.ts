@@ -2,7 +2,7 @@ import { initializeRoutedEnemy } from "../creation/enemy.js";
 import { type RoutedEnemy } from "../../unit/archetype/enemy.js";
 import type { BattleExecutionState } from "../execution/state.js";
 import type { UnitRouteSignal } from "./route-control.js";
-import type { UnitId } from "../../unit/unit.js";
+import type { Id } from "../../unit/unit.js";
 import type { Command, Event } from "../contract.js";
 import { advanceBattlefield, appendEvents, type BattleState, type Result } from "../state.js";
 import { advanceSpawnSchedule, recordScheduleSpawns } from "../schedule/runtime.js";
@@ -63,7 +63,7 @@ function spawnEnemies(
 }
 
 function enemySpawnEvents(spawned: SpawnedEnemies, tick: number): Event[] {
-    const signalsByUnit = new Map<UnitId, UnitRouteSignal[]>();
+    const signalsByUnit = new Map<Id, UnitRouteSignal[]>();
 
     for (const signal of spawned.signals) {
         const signals = signalsByUnit.get(signal.unitId) ?? [];

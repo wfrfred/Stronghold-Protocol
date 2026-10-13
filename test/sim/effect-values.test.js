@@ -7,10 +7,10 @@ import {
     validateScopes,
 } from "../../dist/core/tactical/unit/effect/operations.js";
 import { getUnit } from "../../dist/core/tactical/battle/state.js";
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import { definition, effectFixtureWork, install } from "../helpers/effects.js";
 
-const host = () => initializeUnit({ id: 0, position: [0, 0], definition: { id: "values" } });
+const host = () => initialize({ id: 0, position: [0, 0], definition: { id: "values" } });
 
 test("effect values: local no-ops and replacements retain the input version", () => {
     const value = definition("identity", { charges: 2 });

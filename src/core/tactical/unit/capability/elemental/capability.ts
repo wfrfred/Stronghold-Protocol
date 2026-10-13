@@ -5,7 +5,7 @@ import {
     assertPositiveNumber,
     assertPositiveSafeInteger,
 } from "../../../../common/assert.js";
-import type { Unit, UnitDefinition, UnitId } from "../../unit.js";
+import type { Unit, Definition, Id } from "../../unit.js";
 
 export const ELEMENT_TYPES = Object.freeze(["NEURAL", "EROSION", "BURN", "NECROSIS"] as const);
 
@@ -27,7 +27,7 @@ export interface ElementalDefinition {
 
 export interface ElementalRecovery {
     readonly type: ElementType;
-    readonly sourceUnitId: UnitId | null;
+    readonly sourceUnitId: Id | null;
     readonly startedAtTick: number;
     readonly endsAtTick: number;
 }
@@ -44,7 +44,7 @@ export interface Elemental {
     readonly elemental: ElementalState;
 }
 
-export interface ElementalUnitDefinition extends UnitDefinition {
+export interface ElementalUnitDefinition extends Definition {
     readonly elemental: ElementalDefinition;
 }
 
@@ -56,7 +56,7 @@ export function hasElemental<U extends Unit>(unit: U): unit is U & Elemental {
 }
 
 export function hasElementalDefinition(
-    definition: UnitDefinition,
+    definition: Definition,
 ): definition is ElementalUnitDefinition {
     return "elemental" in definition;
 }

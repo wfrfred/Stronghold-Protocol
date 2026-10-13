@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/state.js";
 import { resolveMaxHp } from "../../dist/core/tactical/unit/capability/vitality/query.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
@@ -8,7 +8,7 @@ import { effectFixtureWork, install, maxHpBuff } from "../helpers/effects.js";
 
 test("sequential lifecycle callbacks observe each capability change immediately", () => {
     const host = (id) => {
-        const unit = initializeUnit({
+        const unit = initialize({
             id,
             position: [id, 0],
             definition: { id: `host-${id}`, vitality: { maxHp: 100 } },

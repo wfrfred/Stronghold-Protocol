@@ -25,7 +25,7 @@ import { createNavigationFieldCache } from '../../dist/core/tactical/battlefield
 import { getNavigationRequest } from '../../dist/core/tactical/battlefield/navigation/state.js';
 import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
 import { createRouteTiming } from '../../dist/core/tactical/unit/capability/locomotion/route/state.js';
-import { createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
+import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
 import { initializeRoutedEnemy } from "../../dist/core/tactical/battle/creation/enemy.js";
 import { stepRoutedEnemy } from "../../dist/legacy/enemy.js";
 import { createSteeringParameters, integrateSteeringDirection } from '../../dist/core/tactical/unit/capability/locomotion/steering.js';
@@ -518,7 +518,7 @@ function coreDisplacedEnemy(checkpoints = [{
   const initialized = initializeRoutedEnemy({
     id: 1, tick: 0, rngState: 42, nextNavigationRequestId: 0,
     alwaysCheckCurrentPoint: true,
-    definition: createEnemyDefinition({
+    definition: createDefinition({
       id: 'enemy_displacement_boundary', vitality: { maxHp: 100 },
       locomotion: { moveSpeedPerTick: 0.1, steeringParameters: coreSteeringParameters },
     }),

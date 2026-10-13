@@ -16,7 +16,7 @@ import {
     elementDamageRatio,
 } from "../capability/elemental/query.js";
 import { hasVitality, type VitalUnit } from "../capability/vitality/capability.js";
-import type { Unit, UnitId } from "../unit.js";
+import type { Unit, Id } from "../unit.js";
 import type {
     DamageTargetingDefinition,
     HealingTargetingDefinition,
@@ -37,7 +37,7 @@ function sameSide(source: Unit, target: Unit): boolean {
     );
 }
 
-function blockingRelated(context: CombatTargetQueryContext, targetId: UnitId): boolean {
+function blockingRelated(context: CombatTargetQueryContext, targetId: Id): boolean {
     const { source, battlefield } = context;
 
     return (

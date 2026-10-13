@@ -24,7 +24,7 @@ import {
     getUnit,
     transitionUnit,
 } from "../../dist/core/tactical/battle/state.js";
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import { createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { activateSkill } from "../../dist/core/tactical/unit/capability/skill/execution.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
@@ -85,7 +85,7 @@ function fixture() {
         },
     );
     const units = Array.from({ length: 3 }, (_, id) =>
-        initializeUnit({
+        initialize({
             id,
             position: [id, 0],
             definition: {
@@ -287,12 +287,12 @@ test("effect terminal callback can retire its host and settle remote Action and 
     });
     const executions = accepted.state;
     const units = [
-        initializeUnit({
+        initialize({
             id: 0,
             position: [0, 0],
             definition: { id: "source", vitality: { maxHp: 100 }, skill },
         }),
-        initializeUnit({
+        initialize({
             id: 1,
             position: [1, 0],
             definition: { id: "receiver", vitality: { maxHp: 100 } },

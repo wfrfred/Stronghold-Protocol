@@ -6,7 +6,7 @@ import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
 import { createNavigationModifierDefinition } from "../../dist/core/tactical/battlefield/navigation/modifier.js";
 import { createTileBindingDefinition } from "../../dist/core/tactical/unit/capability/deployment.js";
 import { Effects } from "../../dist/core/tactical/unit/effect/effects.js";
-import { initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 
 const create = () =>
     createBattlefieldRuntime({
@@ -26,7 +26,7 @@ const create = () =>
         ),
     });
 const unit = (id, column = 0, definition = {}, states = {}) =>
-    initializeUnit({
+    initialize({
         id,
         position: [column, 0],
         definition: { id: `draft-unit-${id}`, vitality: { maxHp: 100 }, ...definition },

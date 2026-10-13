@@ -3,19 +3,19 @@ import type { ImmutableData } from "../../common/immutable-data.js";
 import type { CapabilityStates } from "./capability/catalog.js";
 import type { Effects } from "./effect/effects.js";
 
-export type UnitId = number;
+export type Id = number;
 
-export type UnitDefinitionId = string;
+export type DefinitionId = string;
 
-export type UnitLifecycle = "PRESENT" | "LEAVING";
+export type Lifecycle = "PRESENT" | "LEAVING";
 
-export interface UnitDefinition {
-    readonly id: UnitDefinitionId;
+export interface Definition {
+    readonly id: DefinitionId;
 }
 
-export interface Unit<D extends UnitDefinition = UnitDefinition> extends Partial<CapabilityStates> {
-    readonly id: UnitId;
-    readonly lifecycle: UnitLifecycle;
+export interface Unit<D extends Definition = Definition> extends Partial<CapabilityStates> {
+    readonly id: Id;
+    readonly lifecycle: Lifecycle;
     readonly definition: ImmutableData<D>;
     readonly position: WorldPosition;
     readonly effects: Effects;

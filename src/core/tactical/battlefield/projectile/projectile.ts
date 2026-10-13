@@ -1,6 +1,6 @@
 import type { WorldPosition } from "../../geometry/coordinate.js";
 import type { RangeGeometry } from "../../geometry/shape.js";
-import type { UnitId } from "../../unit/unit.js";
+import type { Id } from "../../unit/unit.js";
 
 export type ProjectileId = number;
 
@@ -14,8 +14,8 @@ export type ProjectileProgress =
 export interface Projectile<S extends object = object> {
     readonly id: ProjectileId;
     readonly definitionRef: { readonly id: string };
-    readonly source: UnitId | null;
-    readonly traceTarget: UnitId | null;
+    readonly source: Id | null;
+    readonly traceTarget: Id | null;
     readonly position: WorldPosition;
     readonly destination: WorldPosition;
     readonly cachedAtk: number;
@@ -26,7 +26,7 @@ export interface Projectile<S extends object = object> {
     readonly lastAdvancedTick: number;
     readonly expiresAtTick: number | null;
     readonly progress: ProjectileProgress;
-    readonly hitUnitIds: readonly UnitId[];
+    readonly hitUnitIds: readonly Id[];
     readonly state: S;
 }
 

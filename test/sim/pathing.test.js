@@ -36,11 +36,11 @@ import { parseRouteDefinition } from '../../dist/data/arknights/route.js';
 import { createRng } from '../../dist/core/common/rng.js';
 import { World } from '../../dist/core/tactical/geometry/coordinate.js';
 import { RangeGrid } from '../../dist/core/tactical/geometry/range.js';
-import { createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
+import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
 import { initializeRoutedEnemy } from "../../dist/core/tactical/battle/creation/enemy.js";
 import { stepRoutedEnemy } from "../../dist/legacy/enemy.js";
-import { copyUnitSnapshot } from '../../dist/core/tactical/unit/snapshot.js';
-import { initializeUnit } from '../../dist/core/tactical/unit/initialize.js';
+import { copy } from '../../dist/core/tactical/unit/snapshot.js';
+import { initialize } from '../../dist/core/tactical/unit/initialize.js';
 import { createActionCapabilityDefinition, createActionState } from '../../dist/core/tactical/unit/capability/action/capability.js';
 import { createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/deployment.js';
 import { createSteeringParameters, createSteeringState, integrateSteering } from '../../dist/core/tactical/unit/capability/locomotion/steering.js';
@@ -748,7 +748,7 @@ function routedEnemyHarness({
   }));
   const initialized = initializeRoutedEnemy({
     id: 1,
-    definition: createEnemyDefinition({ id: 'enemy_core_walker', vitality: { maxHp: 100 }, locomotion: {
+    definition: createDefinition({ id: 'enemy_core_walker', vitality: { maxHp: 100 }, locomotion: {
       moveSpeedPerTick: speedPerTick,
       steeringParameters: createSteeringParameters({ steeringFactor: 2.5, maxSteeringForce: 4 }),
     } }),
@@ -941,7 +941,7 @@ test('core ordinary steering cannot carry old velocity through a wall to a passa
   const map = fieldMap(5, 3, cells);
   const h = routedEnemyHarness({ speedPerTick: 2, checkpoints: [], routeOverrides: { endPosition: [4, 0] } });
   h.setMaps({ WALK: map, FLY: map });
-  h.enemy.definition = createEnemyDefinition({ ...h.enemy.definition, locomotion: {
+  h.enemy.definition = createDefinition({ ...h.enemy.definition, locomotion: {
     ...h.enemy.definition.locomotion,
     steeringParameters: createSteeringParameters({ steeringFactor: 1, maxSteeringForce: 0 }),
   } });
@@ -1241,7 +1241,7 @@ test('core routed enemy supports full checkpoint flag combinations and rejects i
       assert.deepEqual(h.trace.flatMap(step => step.signals), []);
     }
   }
-  assert.throws(() => createEnemyDefinition({ id: 'enemy_bad', vitality: { maxHp: 0 }, locomotion: {
+  assert.throws(() => createDefinition({ id: 'enemy_bad', vitality: { maxHp: 0 }, locomotion: {
     moveSpeedPerTick: 1, steeringParameters: createSteeringParameters({ steeringFactor: 2.5, maxSteeringForce: 4 }),
   } }), RangeError);
   assert.throws(() => createSteeringParameters({ steeringFactor: Infinity, maxSteeringForce: 4 }), RangeError);
@@ -1326,7 +1326,7 @@ function battlefieldProjectionHarness(rows = 2, columns = 5,
 }
 
 const projectionClaim = (column, type = 'PRESENT', slot = 'DEPLOYMENT') => ({ position: [0, column], type, slot });
-const projectionUnit = (id, position, definition = {}, states = {}) => initializeUnit({
+const projectionUnit = (id, position, definition = {}, states = {}) => initialize({
   id, position, definition: Object.freeze({ id: `projection_unit_${id}`, ...definition }), states,
 });
 
@@ -1827,7 +1827,7 @@ test('core battlefield rejects a failed batch without changing state, maps or ca
   assert.throws(() => runtime.advance([{ type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: fixedNavigationModifier(2, { type: 'UNIT', unitId: 99 }, [0, 3], effect.definition) }]));
   assert.equal(runtime.snapshot('draft').navigationMaps, maps);
   assert.deepEqual(runtime.snapshot('draft').navigationModifierIds, [1]);
-  const updated = copyUnitSnapshot(runtime.snapshot('draft').getUnit(1));
+  const updated = copy(runtime.snapshot('draft').getUnit(1));
   updated.definition = Object.freeze({ ...updated.definition });
   assert.throws(() => runtime.advance([{ type: 'UPDATE_UNIT', unit: updated }]));
 });
@@ -2108,7 +2108,7 @@ test('core blocked movement retains steering changes and shares stationary unrea
   const blocked = routedEnemyHarness({ speedPerTick: 2, checkpoints: [], routeOverrides: { endPosition: [4, 0] } });
   blocked.setMaps({ WALK: map, FLY: map });
   blocked.step({ moveMultiplier: 0 });
-  blocked.enemy.definition = createEnemyDefinition({ ...blocked.enemy.definition, locomotion: {
+  blocked.enemy.definition = createDefinition({ ...blocked.enemy.definition, locomotion: {
     ...blocked.enemy.definition.locomotion,
     steeringParameters: createSteeringParameters({ steeringFactor: 1, maxSteeringForce: 0.25 }),
   } });
@@ -2940,7 +2940,7 @@ test('core waits keep navigation idle without consuming visits, samples or reque
   h.step();
   assert.equal(h.enemy.locomotion.mainRoute.navigation.execution.activity.type, 'IDLE');
   assert.deepEqual(h.enemy.locomotion.mainRoute.navigation.execution.visits.visitedCenters, []);
-  const snapshot = copyUnitSnapshot(h.enemy);
+  const snapshot = copy(h.enemy);
   assert.equal(snapshot.locomotion, h.enemy.locomotion);
   const remainingTicks = snapshot.locomotion.mainRoute.route.progress.checkpoint.remainingTicks;
   h.step();
@@ -2963,7 +2963,7 @@ test('core zero wait advances in the heading phase while a live wait damps previ
   const wait = routedEnemyHarness({ speedPerTick: 0.1,
     checkpoints: [{ type: 'WAIT_FOR_TICKS', durationTicks: 3 }, coreMove(3)] });
   wait.enemy.locomotion.steering.lastVelocity = [0.1, 0];
-  wait.enemy.definition = createEnemyDefinition({ ...wait.enemy.definition,
+  wait.enemy.definition = createDefinition({ ...wait.enemy.definition,
     locomotion: { ...wait.enemy.definition.locomotion,
       steeringParameters: createSteeringParameters({ steeringFactor: 0.25, maxSteeringForce: 1 }) } });
   wait.step();
@@ -3085,7 +3085,7 @@ test('core original h07_02 teleport and patrol routes execute their unchanged fa
   const map = parseBattlefieldMap(raw.mapData);
   const maps = { WALK: projectStaticNavigationMap(map, 'WALK', 0), FLY: projectStaticNavigationMap(map, 'FLY', 0) };
   const fieldCache = createNavigationFieldCache();
-  const definition = createEnemyDefinition({ id: 'enemy_route_fixture', vitality: { maxHp: 100 }, locomotion: {
+  const definition = createDefinition({ id: 'enemy_route_fixture', vitality: { maxHp: 100 }, locomotion: {
     moveSpeedPerTick: 0.1, steeringParameters: createSteeringParameters({ steeringFactor: 10 / 30, maxSteeringForce: 100 / 900 }),
   } });
   function run(routeIndex, ticks) {
@@ -3123,7 +3123,7 @@ test('core original h07_02 teleport and patrol routes execute their unchanged fa
 
 test('core END completes after committed motion and keeps steering toward its centre inside the arrival radius', () => {
   const leaving = routedEnemyHarness({ speedPerTick: 0.01, checkpoints: [] });
-  leaving.enemy.definition = createEnemyDefinition({ ...leaving.enemy.definition,
+  leaving.enemy.definition = createDefinition({ ...leaving.enemy.definition,
     locomotion: { ...leaving.enemy.definition.locomotion,
       steeringParameters: createSteeringParameters({ steeringFactor: 0.25, maxSteeringForce: 0 }) } });
   leaving.enemy.locomotion.steering.lastVelocity = [-0.01, 0];
