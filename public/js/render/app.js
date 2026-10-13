@@ -279,6 +279,7 @@ export function renderInfo(u) {
     // tap hands them to the detail card (a teammate's unit shows its owner's skill / module)
     skillIndex: Number.isInteger(u.skillIndex) ? u.skillIndex : undefined,
     moduleId: typeof u.moduleId === 'string' ? u.moduleId : undefined,
+    animation: u.animation,
   };
 }
 
@@ -1414,7 +1415,7 @@ export async function createFieldView(host, options = {}) {
     if (e[0] !== 'atk' || woundUp.has(e) || CHAIN_KINDS.has(e[3])) return;
     const v = views.get(e[1]);
     if (!v || !v.windUp) return;
-    if (v.windUp(t - upcomingT, e[3])) woundUp.add(e);
+    if (v.windUp(t - upcomingT, e[3], e[4])) woundUp.add(e);
   }
 
   const EVS = [];
@@ -1449,7 +1450,7 @@ export async function createFieldView(host, options = {}) {
         const src = views.get(e[1]) || battleView(e[1]);
         const tgt = views.get(e[2]) || battleView(e[2]);
         // chain / chainHeal bounces: the "source" is the previous target of the bounce, not an attacker
-        if (src && !CHAIN_KINDS.has(e[3])) src.onAttack?.(tgt, now, e[3]);
+        if (src && !CHAIN_KINDS.has(e[3])) src.onAttack?.(tgt, now, e[3], e[4]);
         if (e[3] === 'none' || !e[3]) { if (tgt && src) meleePending.set(tgt.id, { src, t: now }); }
         fx.attack(src, tgt, e[3]);
         break;

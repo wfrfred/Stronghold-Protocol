@@ -61,9 +61,10 @@ export class SpineActor {
    * @param {any} spineData PIXI.spine skeleton data
    * @param {object} entry manifest Spine entry (anims, animations, hits, bounds, pma)
    */
-  constructor(spineData, entry) {
+  constructor(spineData, entry, animation = {}) {
     const P = globalThis.PIXI;
     this.entry = entry;
+    this.animation = animation;
     this.roles = entry.anims || {};
     this.durations = entry.animations || {};
     this.spine = new P.spine.Spine(spineData);
@@ -162,7 +163,7 @@ export class SpineActor {
 
   _idleName() {
     const sk = this.roles.skill;
-    if (this.skillOn && sk && this.has(sk.idle)) return sk.idle;
+    if (!this.animation.skill && this.skillOn && sk && this.has(sk.idle)) return sk.idle;
     return this.has(this.roles.idle) ? this.roles.idle : (this.has('Idle') ? 'Idle' : [...this.names][0]);
   }
 
@@ -230,9 +231,9 @@ export class SpineActor {
    * clip from its wind-up so the strike frame lands when the attack event is rendered. Returns true once started;
    * false when it is still too early (call again next frame) or there is nothing to wind up.
    */
-  windUp(interval, lead, once = false) {
+  windUp(interval, lead, once = false, clipName) {
     if (this.dead || this.mode === 'stun' || this.mode === 'die' || this.mode === 'change' || !(lead >= 0)) return false;
-    const clip = this._attackClip();
+    const clip = this._attackClip(clipName);
     if (!clip) return false;
     if (this.mode === 'attack' && this.current === clip.loop) return false;
     const loopDur = this.dur(clip.loop);
@@ -255,27 +256,30 @@ export class SpineActor {
    * An attack happened now. `interval` = seconds between attacks (game time already scaled to real); `once` = a one-off
    * cast (no rhythm): the clip plays once at its own speed from its strike frame, then the resting state.
    */
-  attack(interval, once = false) {
+  attack(interval, once = false, clipName, recoverySeconds) {
     if (this.dead || this.mode === 'stun' || this.mode === 'die' || this.mode === 'change') return;   // a form change plays out
     if (!once) this.interval = clampN(Number.isFinite(interval) && interval > 0 ? interval : this.interval, 0.08, 8);
-    const clip = this._attackClip();
+    const clip = this._attackClip(clipName);
     if (!clip) return;
     const loopDur = this.dur(clip.loop);
-    const ts = once ? 1 : clampN(loopDur / this.interval, 0.35, 4);
     const hit = this._hitTime(clip.loop, loopDur);
+    const start = once && clipName ? 0 : hit;
+    const ts = recoverySeconds > 0
+      ? (loopDur - start) / recoverySeconds
+      : once ? 1 : clampN(loopDur / this.interval, 0.35, 4);
     const wasAttacking = this.mode === 'attack' && this.current === clip.loop;
     const wasWoundUp = wasAttacking && this.woundAttackPending;
     this.woundAttackPending = false;
     this.mode = 'attack';
-    this.attackUntil = this.clock + Math.max(0, loopDur - hit) / ts;
+    this.attackUntil = this.clock + Math.max(0, loopDur - start) / ts;
     this.windUntil = null;
-    if (!wasAttacking || (!once && !wasWoundUp)) {
-      this._play(clip.loop, false, { timeScale: ts, start: hit, mix: 0.06 });
+    if (!wasAttacking || (!wasWoundUp && (!once || clipName))) {
+      this._play(clip.loop, false, { timeScale: ts, start, mix: 0.06 });
     } else {
       const e = this.spine.state.tracks[0];
       if (e) {
         e.timeScale = ts;
-        if (!once) {
+        if (!once || wasWoundUp) {
           e.trackTime = Math.max(e.trackTime, hit);
           this.attackUntil = this.clock + Math.max(0, loopDur - e.trackTime) / ts;
         }
@@ -283,9 +287,11 @@ export class SpineActor {
     }
   }
 
-  _attackClip() {
+  _attackClip(clipName) {
+    const explicit = clipName || this.animation.attack;
+    if (this.has(explicit)) return { begin: null, loop: explicit, end: null };
     const sk = this.roles.skill;
-    if (this.skillOn && sk && this.has(sk.loop) && sk.via !== 'attack' && !this._skillIsBuffOnly()) return sk;
+    if (!this.animation.skill && this.skillOn && sk && this.has(sk.loop) && sk.via !== 'attack' && !this._skillIsBuffOnly()) return sk;
     const a = this.roles.attack;
     if (a && this.has(a.loop)) return a;
     return null;
@@ -309,6 +315,7 @@ export class SpineActor {
     on = !!on;
     if (on === this.skillOn || this.dead) return;
     this.skillOn = on;
+    if (this.animation.skill) return;
     const sk = this.roles.skill;
     if (this.mode === 'stun' || this.mode === 'die') return;
     if (on && sk) {

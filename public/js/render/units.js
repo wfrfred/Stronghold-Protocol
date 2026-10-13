@@ -420,7 +420,7 @@ export class UnitView {
       this._retryAt = 0;
       let actor = null;
       try {
-        actor = new SpineActor(data, entry);
+        actor = new SpineActor(data, entry, this.info.animation);
         actor.setSkillIndex(this.info.skillIndex);
       } catch (err) {
         console.warn('[render] spine build failed', id, err?.message || err);
@@ -646,10 +646,10 @@ export class UnitView {
   }
 
   /** An attack was made (b.ev 'atk'). `target` = view or null. */
-  onAttack(target, now, kind) {
+  onAttack(target, now, kind, options) {
     if (!this.alive) return;
     // a one-off cast (PROJ[kind].once: 暴鸰's bomb drop) is no attack rhythm: its clip plays once at its own speed
-    const once = !!PROJ[kind]?.once;
+    const once = options?.skill === true || !!PROJ[kind]?.once;
     if (!once) {
       if (this.lastAtk >= 0) {
         const d = now - this.lastAtk;
@@ -667,8 +667,9 @@ export class UnitView {
       const dx = target.x - this.x, dy = target.y - this.y, len = Math.hypot(dx, dy) || 1;
       this.lungeDir.x = dx / len; this.lungeDir.y = dy / len;
     }
-    this.lunge = 1;
-    if (this.actor) this.actor.attack(this.atkInterval, once); // game seconds: the actor's clock runs in game time
+    this.lunge = this.info.animation?.lunge === false ? 0 : 1;
+    const clipName = options?.skill === true ? this.info.animation?.skillAttack : undefined;
+    if (this.actor) this.actor.attack(this.atkInterval, once, clipName, this.info.animation?.recoverySeconds);
     if (this.imp) this.imp.dirty = true;
   }
 
@@ -677,9 +678,10 @@ export class UnitView {
    * so the strike frame lines up with the attack. True once started (then stop calling for that attack). `kind` = the
    * 'atk' projKind (a one-off cast winds up at the clip's own speed).
    */
-  windUp(lead, kind) {
+  windUp(lead, kind, options) {
     if (!this.alive || !this.actor || !this.spineReady) return false;
-    const ok = this.actor.windUp(this.atkInterval, lead, !!PROJ[kind]?.once);
+    const clipName = options?.skill === true ? this.info.animation?.skillAttack : undefined;
+    const ok = this.actor.windUp(this.atkInterval, lead, options?.skill === true || !!PROJ[kind]?.once, clipName);
     if (ok && this.imp) this.imp.dirty = true;
     return ok;
   }

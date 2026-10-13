@@ -40,7 +40,7 @@ let demoHover = null;
 const STAGE_IDS = ['act2autochess_m01', 'act2autochess_m02', 'act2autochess_m03', 'act2autochess_m04', 'act1autochess_m01', 'act1autochess_m02', 'act1autochess_m03', 'act1autochess_m04'];
 const CORE_STAGE_IDS = ['act1autochess_01', 'act1autochess_m01', 'act1autochess_m02', 'act2autochess_m02', 'act2autochess_m04'];
 const COMBAT_STAGE_IDS = ['act1autochess_m01'];
-const isCoreScene = (name) => ['core', 'core-combat', 'core-ranged', 'core-blocking', 'core-projectile', 'core-projectile-cached', 'core-skill', 'core-element-neural', 'core-element-erosion', 'core-element-burn', 'core-element-necrosis'].includes(name);
+const isCoreScene = (name) => ['core', 'core-content', 'core-combat', 'core-ranged', 'core-blocking', 'core-projectile', 'core-projectile-cached', 'core-skill', 'core-element-neural', 'core-element-erosion', 'core-element-burn', 'core-element-necrosis'].includes(name);
 
 async function main() {
   if (q.get('panel') === '0') $('panel').classList.add('is-hidden');
@@ -58,6 +58,7 @@ async function main() {
   const sceneSel = $('scene');
   const scenes = [
     { name: 'prep', title: '休整期 · 拖拽演示' },
+    { name: 'core-content', title: '主模式 · 泥岩与玫兰莎', mode: 'COMBAT', combatScenario: 'CONTENT' },
     { name: 'core-skill', title: '地灵技能 · 攻击力强化β', mode: 'COMBAT', combatScenario: 'SKILL' },
     { name: 'core-element-neural', title: '元素机制 · 神经损伤', mode: 'COMBAT', combatScenario: 'ELEMENT_NEURAL' },
     { name: 'core-element-erosion', title: '元素机制 · 侵蚀损伤', mode: 'COMBAT', combatScenario: 'ELEMENT_EROSION' },
@@ -111,6 +112,41 @@ async function main() {
   $('next-skill-ready').onclick = () => { setPlay(false); current?.nextSkillReady?.(); };
   $('activate-skill').onclick = () => { setPlay(false); current?.command?.('ACTIVATE_SKILL'); };
   $('finish-skill').onclick = () => { setPlay(false); current?.command?.('FINISH_SKILL'); };
+  function contentConfiguration() {
+    const module = $('content-module').value;
+    return { mudrock: {
+      elite: Number($('content-elite').value),
+      level: $('content-level').valueAsNumber,
+      potential: $('content-potential').valueAsNumber,
+      skillIndex: 1,
+      skillLevel: $('content-skill-level').valueAsNumber,
+      trust: $('content-trust').valueAsNumber,
+      ...(module ? { module: { id: module, level: Number($('content-module-level').value) } } : {}),
+    } };
+  }
+  function updateContentControls() {
+    const elite = Number($('content-elite').value);
+    for (const [id, max] of [['content-level', elite === 2 ? 90 : 80], ['content-skill-level', elite === 2 ? 10 : 7]]) {
+      $(id).max = String(max);
+      if ($(id).valueAsNumber > max) $(id).value = String(max);
+    }
+    const moduleAvailable = elite === 2 && $('content-level').valueAsNumber >= 60;
+    $('content-module').disabled = !moduleAvailable;
+    if (!moduleAvailable) $('content-module').value = '';
+    const trust = $('content-trust').valueAsNumber;
+    for (const option of $('content-module-level').options) {
+      option.disabled = Number(option.value) === 2 ? trust < 50 : Number(option.value) === 3 && trust < 100;
+    }
+    if ($('content-module-level').selectedOptions[0].disabled) $('content-module-level').value = '1';
+    $('content-module-level').disabled = !$('content-module').value;
+  }
+  for (const id of ['content-elite', 'content-level', 'content-trust', 'content-module']) $(id).onchange = updateContentControls;
+  updateContentControls();
+  $('content-controls').onsubmit = (event) => {
+    event.preventDefault();
+    setPlay(false);
+    setScene('core-content', stageSel.value);
+  };
   // board layer toggle (3D official scene ⇄ 2D atlas board) and the official camera framings
   const syncBoardBtn = () => { const on = !!view.stats().board3d?.on; $('board3d').classList.toggle('is-on', on); $('board3d').textContent = on ? '3D' : '2D'; };
   $('board3d').onclick = async () => { await view.setBoardMode?.(view.stats().board3d?.on ? '2d' : '3d'); syncBoardBtn(); };
@@ -128,8 +164,9 @@ async function main() {
     const s = scenes.find((x) => x.name === name) || scenes[0];
     const core = isCoreScene(s.name);
     const combat = s.mode === 'COMBAT';
+    const content = s.combatScenario === 'CONTENT';
     const projectiles = s.combatScenario === 'PROJECTILE' || s.combatScenario === 'PROJECTILE_CACHED';
-    const skill = s.combatScenario === 'SKILL';
+    const skill = s.combatScenario === 'SKILL' || content;
     const elemental = s.combatScenario?.startsWith('ELEMENT_') ?? false;
     const stageIds = combat ? COMBAT_STAGE_IDS : CORE_STAGE_IDS;
     if (core) {
@@ -140,6 +177,7 @@ async function main() {
         if (current?.stageId) stageSel.value = current.stageId;
         return Promise.resolve(current);
       }
+      if (content && !$('content-controls').reportValidity()) return Promise.resolve(current);
     }
     const seed = $('seed').valueAsNumber;
     const request = ++sceneRequest;
@@ -169,7 +207,11 @@ async function main() {
       if (core) {
         const { createTacticalDemo } = await import('/dist/legacy/tactical-demo.js');
         if (request !== sceneRequest) return current;
-        next = await createTacticalDemo(view, { stageId: selectedStage, data, seed, mode: s.mode, combatScenario: s.combatScenario, onEvent: log });
+        next = await createTacticalDemo(view, {
+          stageId: selectedStage, data, seed, mode: s.mode, combatScenario: s.combatScenario,
+          ...(content ? { contentConfiguration: contentConfiguration() } : {}),
+          onEvent: log,
+        });
       } else if (s.name === 'prep') next = await prepScene(view, selectedStage, index);
       else if (s.name === 'numbers') next = numbersScene(view, stageId || q.get('stage') || 'act2autochess_m02');
       else if (s.name === 'stress') next = stressScene(view, selectedStage);
@@ -186,8 +228,13 @@ async function main() {
       $('core-scope').textContent = combat ? `${combatScope}；攻击即时命中，技能、天赋与地形效果暂未接入` : '生成与移动演示；地形伤害、部署和交战尚未接入';
       $('projectile-controls').hidden = !projectiles;
       $('skill-controls').hidden = !skill;
+      $('content-controls').hidden = !content;
+      $('next-skill-ready').textContent = content ? '玫兰莎充满 SP' : '充满 SP';
+      $('activate-skill').textContent = content ? '玫兰莎释放技能' : '释放技能';
+      $('finish-skill').textContent = content ? '玫兰莎结束技能' : '结束技能';
       if (projectiles) $('core-scope').textContent = `地灵普攻弹道测试：蓄力 6 tick，发射后 ATK +60；${s.combatScenario === 'PROJECTILE_CACHED' ? '伤害读发射缓存' : '伤害读当前来源 ATK，缺席则回退缓存'}，命中附着 45 tick 禁疗标记`;
-      if (skill) $('core-scope').textContent = '地灵 · 攻击力强化β：自动回复 37 SP，手动释放，攻击力 +35%，持续 25 秒；固定靶用于观察技能前后的数值。';
+      if (s.combatScenario === 'SKILL') $('core-scope').textContent = '地灵 · 攻击力强化β：自动回复 37 SP，手动释放，攻击力 +35%，持续 25 秒；固定靶用于观察技能前后的数值。';
+      if (content) $('core-scope').textContent = '泥岩护盾与二技能自动触发，玫兰莎一技能手动释放；敌人为猎狗和弩手。泥岩配置修改后应用并重置。';
       if (elemental) $('core-scope').textContent = '元素机制测试：借用地灵与狗的模型，每次攻击额外造成 400 点元素损伤，固定靶 200000 HP；这是测试配置，并非地灵原技能。';
       $('next-release').disabled = !projectiles;
       $('retreat-source').disabled = !projectiles;
@@ -202,6 +249,7 @@ async function main() {
       $('appear-crates').disabled = !core || combat || selectedStage === 'act1autochess_01';
       $('remove-crates').disabled = !core || combat || selectedStage === 'act1autochess_01';
       $('trigger-dragon').disabled = !core || combat || selectedStage !== 'act1autochess_01';
+      for (const id of ['appear-crates', 'remove-crates', 'trigger-dragon']) $(id).hidden = content;
       demo.scene = current;
       return current;
     });
@@ -253,6 +301,15 @@ async function main() {
         $('next-skill-ready').disabled = core.result !== null || skill.active || skill.ready;
         $('activate-skill').disabled = core.result !== null || skill.active || !skill.ready;
         $('finish-skill').disabled = core.result !== null || !skill.active;
+      }
+      if (core.content) {
+        for (const [key, name] of [['mudrock', '泥岩'], ['melantha', '玫兰莎']]) {
+          const unit = core.content[key];
+          $('stats').textContent += unit
+            ? `\n${name} HP ${unit.hp.toFixed(0)} / ${unit.maxHp.toFixed(0)}  SP ${unit.sp.toFixed(1)} / ${unit.maxSp}`
+            : `\n${name}已离场`;
+          if (key === 'mudrock' && unit) $('stats').textContent += `  护盾 ${unit.shieldLayers}  充能 ${(unit.shieldTimerTicks / 30).toFixed(1)} s`;
+        }
       }
       if (core.elementType) {
         const elementNames = { NEURAL: '神经', EROSION: '侵蚀', BURN: '灼燃', NECROSIS: '坏死' };

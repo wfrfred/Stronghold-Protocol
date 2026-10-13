@@ -19,10 +19,11 @@
     #field { position: fixed; inset: 0; }
     .rd-panel {
       position: fixed; right: 12px; bottom: 12px; z-index: 5; display: flex; flex-direction: column; gap: 8px;
-      padding: 10px 12px; min-width: 320px; background: rgba(12, 16, 15, .86); border: 1px solid #2f3a35;
+      padding: 10px 12px; min-width: 320px; max-width: calc(100vw - 48px); max-height: calc(100vh - 48px); overflow: auto; background: rgba(12, 16, 15, .86); border: 1px solid #2f3a35;
       color: #c3cbc7; font: 13px/1.35 "Noto Sans SC", system-ui, sans-serif; backdrop-filter: blur(6px);
     }
     .rd-panel.is-hidden { display: none; }
+    .rd-panel > * { flex-shrink: 0; }
     .rd-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .rd-panel select, .rd-panel button, .rd-panel input[type=number] {
       background: #1e2421; color: #f2f2f2; border: 1px solid #3e4b45; padding: 4px 8px; font: inherit; cursor: pointer;
@@ -30,6 +31,11 @@
     .rd-panel input[type=number] { width: 86px; cursor: text; }
     .rd-panel button:disabled { opacity: .4; cursor: default; }
     .rd-row[hidden] { display: none; }
+    .rd-content { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+    .rd-content[hidden] { display: none; }
+    .rd-content label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; }
+    .rd-content input[type=number] { box-sizing: border-box; width: 100%; }
+    .rd-content button { align-self: end; }
     .rd-scope { color: #8a948f; font-size: 11px; }
     .rd-result { color: #4ed8af; font-weight: 700; }
     .rd-panel button.is-on { border-color: #4ed8af; color: #4ed8af; }
@@ -43,7 +49,6 @@
 <body>
   <div id="field"></div>
   <div class="rd-panel" id="panel">
-    <a href="/dev/content-demo.html" style="color:#4ed8af">主模式干员与敌人练习场</a>
     <div class="rd-row"><span class="rd-micro">RENDER DEMO</span><span class="rd-title" id="title">—</span></div>
     <div class="rd-row">
       <select id="scene" aria-label="scene"></select>
@@ -60,6 +65,16 @@
       <button id="appear-crates" type="button">工事出现</button><button id="remove-crates" type="button">移除工事</button>
       <button id="trigger-dragon" type="button">触发飞行分支</button>
     </div>
+    <form class="rd-content" id="content-controls" hidden>
+      <label>泥岩精英阶段<select id="content-elite"><option value="1">精一</option><option value="2" selected>精二</option></select></label>
+      <label>等级<input id="content-level" type="number" min="1" max="90" step="1" value="60" required /></label>
+      <label>潜能<input id="content-potential" type="number" min="1" max="6" step="1" value="1" required /></label>
+      <label>二技能等级<input id="content-skill-level" type="number" min="1" max="10" step="1" value="7" required /></label>
+      <label>信赖 %<input id="content-trust" type="number" min="0" max="200" step="1" value="100" required /></label>
+      <label>模组<select id="content-module"><option value="">未装备</option><option value="uniequip_002_mudrok">X 模组</option></select></label>
+      <label>模组等级<select id="content-module-level"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></label>
+      <button type="submit">应用并重置</button>
+    </form>
     <div class="rd-row" id="projectile-controls" hidden>
       <button id="next-release" type="button">下一次发射</button>
       <button id="retreat-source" type="button">撤退来源</button>

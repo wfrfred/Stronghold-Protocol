@@ -31,6 +31,14 @@ export interface LegacyData {
     lookup(file: string, key: string): unknown;
 }
 
+export interface LegacyUnitAnimation {
+    readonly attack?: string;
+    readonly skillAttack?: string;
+    readonly skill?: "BUFF" | "ATTACK";
+    readonly recoverySeconds?: number;
+    readonly lunge?: boolean;
+}
+
 export interface LegacyUnitInfo {
     readonly id: number;
     readonly kind: "op" | "enemy" | "device";
@@ -47,6 +55,16 @@ export interface LegacyUnitInfo {
     readonly motion: "WALK" | "FLY";
     readonly skillActive: boolean;
     readonly skillIndex?: number;
+    readonly animation?: LegacyUnitAnimation;
+}
+
+export interface LegacyUnitMetadata {
+    readonly kind: LegacyUnitInfo["kind"];
+    readonly name: string;
+    readonly spine: string;
+    readonly avatar: string;
+    readonly skillIndex?: number;
+    readonly animation?: LegacyUnitAnimation;
 }
 
 type LegacyElementType = "neural" | "erosion" | "burn" | "apoptosis";
@@ -60,7 +78,7 @@ export type LegacyElementGauge = readonly [
 ];
 
 export type LegacyVisualEvent =
-    | readonly ["atk", sourceId: Id, targetId: Id, "none"]
+    | readonly ["atk", sourceId: Id, targetId: Id, "none", animation?: { readonly skill: boolean }]
     | readonly ["dmg", targetId: Id, amount: number, "phys" | "arts" | "true" | LegacyElementType]
     | readonly ["heal", targetId: Id, amount: number]
     | readonly ["skill", unitId: Id, active: boolean]
@@ -90,6 +108,7 @@ interface RecentAttack {
 
 export interface TacticalDemoPresentationOptions {
     readonly projectileActions?: boolean;
+    readonly unitMetadata?: (unit: Unit) => LegacyUnitMetadata | undefined;
 }
 
 const DEATH_WINDOW_TICKS = 24;
@@ -139,8 +158,9 @@ function maxHp(unit: Unit): number {
     return hasVitalityDefinition(unit.definition) ? unit.definition.vitality.maxHp : 0;
 }
 
-function skillActive(unit: Unit): boolean {
+function skillActive(unit: Unit, animation?: LegacyUnitAnimation["skill"]): boolean {
     return (
+        animation !== "ATTACK" &&
         hasSkill(unit) &&
         unit.definition.skill.activation !== "PASSIVE" &&
         (!hasVitality(unit) || unit.vitality.hp > 0) &&
@@ -148,7 +168,7 @@ function skillActive(unit: Unit): boolean {
     );
 }
 
-function unitInfo(unit: Unit, data: LegacyData): LegacyUnitInfo {
+function unitInfo(unit: Unit, data: LegacyData, supplied?: LegacyUnitMetadata): LegacyUnitInfo {
     const enemy = isEnemy(unit);
     const chess = record(data.lookup("chess", unit.definition.id));
     const operator = Object.keys(chess).length > 0;
@@ -161,7 +181,8 @@ function unitInfo(unit: Unit, data: LegacyData): LegacyUnitInfo {
         ? metadata.skills.map(record)
         : [record(metadata.skill)];
     const skillId = hasSkill(unit) ? unit.definition.skill.id : undefined;
-    const skillIndex = skills.find((skill) => skill.skillId === skillId)?.index;
+    const skillIndex =
+        supplied?.skillIndex ?? skills.find((skill) => skill.skillId === skillId)?.index;
     let dir: Direction = "RIGHT";
 
     if (hasActionDefinition(unit.definition)) {
@@ -192,24 +213,39 @@ function unitInfo(unit: Unit, data: LegacyData): LegacyUnitInfo {
 
     return {
         id: unit.id,
-        kind,
+        kind: supplied?.kind ?? kind,
         side: enemy ? "enemy" : "ally",
         defId: unit.definition.id,
-        name: text(metadata.name, unit.definition.id),
-        spine: text(assets.spine, text(metadata.spine, fallbackAsset)),
-        avatar: text(assets.avatar, text(metadata.iconId, text(metadata.avatar, fallbackAsset))),
+        name: supplied?.name ?? text(metadata.name, unit.definition.id),
+        spine: supplied?.spine ?? text(assets.spine, text(metadata.spine, fallbackAsset)),
+        avatar:
+            supplied?.avatar ??
+            text(assets.avatar, text(metadata.iconId, text(metadata.avatar, fallbackAsset))),
         x: unit.position[0],
         y: unit.position[1],
         facing: facing ? 1 : -1,
         dir,
         maxHp: maxHp(unit),
         motion: isFlying(unit) ? "FLY" : "WALK",
-        skillActive: skillActive(unit),
+        skillActive: skillActive(unit, supplied?.animation?.skill),
         ...(typeof skillIndex === "number" ? { skillIndex } : {}),
+        ...supplied,
     };
 }
 
-function unitTuple(unit: Unit, snapshot: Snapshot, dead = false): number[] {
+function unitTuple(
+    unit: Unit,
+    snapshot: Snapshot,
+    {
+        dead = false,
+        moving = false,
+        skillAnimation,
+    }: {
+        readonly dead?: boolean;
+        readonly moving?: boolean;
+        readonly skillAnimation?: LegacyUnitAnimation["skill"];
+    } = {},
+): number[] {
     const blocked = snapshot.blockingRelations.some(
         (relation) => relation.blockedUnitId === unit.id,
     );
@@ -217,7 +253,7 @@ function unitTuple(unit: Unit, snapshot: Snapshot, dead = false): number[] {
         (blocked ? 1 : 0) |
         (isFlying(unit) ? 512 : 0) |
         (hasStatusFlag(unit, "STUNNED") ? 2 : 0) |
-        (!dead && skillActive(unit) ? 16 : 0) |
+        (!dead && skillActive(unit, skillAnimation) ? 16 : 0) |
         (hasStatusFlag(unit, "INVINCIBLE") ? 64 : 0);
     let animation = 0;
 
@@ -225,7 +261,7 @@ function unitTuple(unit: Unit, snapshot: Snapshot, dead = false): number[] {
         animation = 4;
     } else if (hasStatusFlag(unit, "STUNNED")) {
         animation = 5;
-    } else if (hasLocomotion(unit) && unit.locomotion.moving) {
+    } else if (moving) {
         animation = 1;
     }
 
@@ -263,9 +299,13 @@ function unitTuple(unit: Unit, snapshot: Snapshot, dead = false): number[] {
 export class TacticalDemoPresentation {
     readonly #data: LegacyData;
     readonly #projectileActions: boolean;
+    readonly #unitMetadata: TacticalDemoPresentationOptions["unitMetadata"];
     readonly #tombstones = new Map<Id, Tombstone>();
     readonly #attacks = new Map<Id, RecentAttack>();
     readonly #pendingAttackTargets = new Map<Id, Id>();
+    readonly #activeSkillAttacks = new Set<Id>();
+    #lastPresentedSnapshot: Snapshot | undefined;
+    #movingUnitIds = new Set<Id>();
     #killedCount = 0;
     #attackCount = 0;
     #damageCount = 0;
@@ -275,12 +315,16 @@ export class TacticalDemoPresentation {
     constructor(data: LegacyData, options: TacticalDemoPresentationOptions = {}) {
         this.#data = data;
         this.#projectileActions = options.projectileActions === true;
+        this.#unitMetadata = options.unitMetadata;
     }
 
     reset(): void {
         this.#tombstones.clear();
         this.#attacks.clear();
         this.#pendingAttackTargets.clear();
+        this.#activeSkillAttacks.clear();
+        this.#lastPresentedSnapshot = undefined;
+        this.#movingUnitIds.clear();
         this.#killedCount = 0;
         this.#attackCount = 0;
         this.#damageCount = 0;
@@ -297,11 +341,7 @@ export class TacticalDemoPresentation {
                 resumableSources.add(execution.sourceUnitId);
             }
             for (const event of events) {
-                if (
-                    event.type === "ACTION_RELEASED" ||
-                    event.type === "ACTION_FINISHED" ||
-                    event.type === "ACTION_CANCELLED"
-                ) {
+                if (event.type === "ACTION_RELEASED" || event.type === "ACTION_CANCELLED") {
                     resumableSources.add(event.sourceUnitId);
                 }
             }
@@ -387,6 +427,20 @@ export class TacticalDemoPresentation {
                         break;
                     }
 
+                    if (
+                        this.#activeSkillAttacks.has(event.unitId) ||
+                        (unit !== undefined &&
+                            this.#unitMetadata?.(unit)?.animation?.skill === "ATTACK")
+                    ) {
+                        if (event.type === "SKILL_ACTIVATED") {
+                            this.#activeSkillAttacks.add(event.unitId);
+                        } else {
+                            this.#activeSkillAttacks.delete(event.unitId);
+                        }
+
+                        break;
+                    }
+
                     visible.push(["skill", event.unitId, event.type === "SKILL_ACTIVATED"]);
                     break;
                 }
@@ -438,6 +492,8 @@ export class TacticalDemoPresentation {
                 }
 
                 case "UNIT_REMOVED": {
+                    this.#activeSkillAttacks.delete(event.unitId);
+
                     if (event.reason !== "DEATH") {
                         break;
                     }
@@ -451,8 +507,8 @@ export class TacticalDemoPresentation {
                     }
 
                     this.#tombstones.set(event.unitId, {
-                        info: unitInfo(unit, this.#data),
-                        tuple: unitTuple(unit, after, true),
+                        info: unitInfo(unit, this.#data, this.#unitMetadata?.(unit)),
+                        tuple: unitTuple(unit, after, { dead: true }),
                         expiresAtTick: after.tickIndex + DEATH_WINDOW_TICKS,
                     });
 
@@ -481,7 +537,9 @@ export class TacticalDemoPresentation {
     }
 
     #attack(source: Id, target: Id, tick: number): RecentAttack["event"] {
-        const event = ["atk", source, target, "none"] as const;
+        const event: RecentAttack["event"] = this.#activeSkillAttacks.has(source)
+            ? ["atk", source, target, "none", { skill: true }]
+            : ["atk", source, target, "none"];
         this.#attacks.set(source, {
             event,
             expiresAtTick: tick + ATTACK_REPLAY_TICKS,
@@ -491,10 +549,39 @@ export class TacticalDemoPresentation {
     }
 
     units(snapshot: Snapshot): readonly PresentedUnit[] {
-        const presented = snapshot.units.filter(isSpatiallyPresent).map((unit) => ({
-            info: unitInfo(unit, this.#data),
-            tuple: unitTuple(unit, snapshot),
-        }));
+        if (snapshot.tickIndex !== this.#lastPresentedSnapshot?.tickIndex) {
+            const previous = new Map(
+                this.#lastPresentedSnapshot?.units.map((unit) => [unit.id, unit.position]),
+            );
+            this.#movingUnitIds = new Set(
+                snapshot.units
+                    .filter((unit) => {
+                        const position = previous.get(unit.id);
+
+                        return (
+                            hasLocomotion(unit) &&
+                            (position === undefined
+                                ? unit.locomotion.moving
+                                : position[0] !== unit.position[0] ||
+                                  position[1] !== unit.position[1])
+                        );
+                    })
+                    .map((unit) => unit.id),
+            );
+            this.#lastPresentedSnapshot = snapshot;
+        }
+
+        const presented = snapshot.units.filter(isSpatiallyPresent).map((unit) => {
+            const supplied = this.#unitMetadata?.(unit);
+
+            return {
+                info: unitInfo(unit, this.#data, supplied),
+                tuple: unitTuple(unit, snapshot, {
+                    moving: this.#movingUnitIds.has(unit.id),
+                    skillAnimation: supplied?.animation?.skill,
+                }),
+            };
+        });
         const liveIds = new Set(snapshot.units.map((unit) => unit.id));
 
         for (const [id, tombstone] of this.#tombstones) {

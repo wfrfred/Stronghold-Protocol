@@ -26,6 +26,14 @@ import {
     type TacticalMechanicsScenario,
 } from "./tactical-demo-mechanics.js";
 import { hasElemental } from "../core/tactical/unit/capability/elemental/capability.js";
+import {
+    createTacticalContentDemo,
+    defaults as contentDefaults,
+    type Tables as ContentTables,
+    type ConfigurationInput as ContentConfiguration,
+} from "./tactical-demo-content.js";
+import { readShield } from "../content/tactical/operators/mudrock.js";
+import { hasVitality } from "../core/tactical/unit/capability/vitality/capability.js";
 
 interface LegacyView {
     setStage(stage: Record<string, unknown>): unknown;
@@ -69,7 +77,8 @@ export interface TacticalDemoOptions {
     readonly seed?: number;
     readonly mode?: "MOVEMENT" | "COMBAT";
     readonly combatScenario?:
-        TacticalCombatScenario | TacticalMechanicsScenario | "PROJECTILE_CACHED";
+        TacticalCombatScenario | TacticalMechanicsScenario | "PROJECTILE_CACHED" | "CONTENT";
+    readonly contentConfiguration?: Pick<ContentConfiguration, "mudrock">;
     readonly onEvent?: (event: unknown) => void;
 }
 
@@ -176,7 +185,10 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
     const { stageId, data, seed = 123, mode = "MOVEMENT" } = options;
     const projectileActions =
         mode === "COMBAT" &&
-        (options.combatScenario === "PROJECTILE" || options.combatScenario === "PROJECTILE_CACHED");
+        (options.combatScenario === "PROJECTILE" ||
+            options.combatScenario === "PROJECTILE_CACHED" ||
+            options.combatScenario === "CONTENT");
+    const contentScene = mode === "COMBAT" && options.combatScenario === "CONTENT";
     const combatScenario =
         options.combatScenario === "PROJECTILE_CACHED" ? "PROJECTILE" : options.combatScenario;
     const mechanicsScenario =
@@ -226,6 +238,18 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
     const scenario = loadMovementScenario(rawLevel, selection, catalog, seed);
 
     const route = scenario.level.routes[0]!;
+    const content = contentScene
+        ? createTacticalContentDemo(
+              scenario.spec.map,
+              route,
+              (await fixture("main-mode-units")) as ContentTables,
+              {
+                  ...contentDefaults,
+                  ...options.contentConfiguration,
+                  seed,
+              },
+          )
+        : null;
     const mechanics =
         mechanicsScenario === null
             ? null
@@ -238,6 +262,7 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
                   mechanicsScenario === "SKILL" ? await fixture("skill_skcom_atk_up_2") : undefined,
               );
     const spec =
+        content?.input ??
         mechanics?.input ??
         (mode === "COMBAT"
             ? createTacticalCombatDemoSpec(
@@ -245,10 +270,15 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
                   route,
                   data,
                   seed,
-                  isTacticalMechanicsScenario(combatScenario) ? undefined : combatScenario,
+                  isTacticalMechanicsScenario(combatScenario) || combatScenario === "CONTENT"
+                      ? undefined
+                      : combatScenario,
               )
             : scenario.spec);
-    const presentation = new TacticalDemoPresentation(data, { projectileActions });
+    const presentation = new TacticalDemoPresentation(data, {
+        projectileActions,
+        ...(content === null ? {} : { unitMetadata: content.unitMetadata }),
+    });
 
     const legacyStage = record(data.lookup("stages", stageId));
     const renderedStageId = `ts-demo:${stageId}`;
@@ -268,11 +298,12 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
         .filter((definition) => definition.creation.type === "UNIT")
         .map((definition) => definition.id);
 
-    const resources = mechanics === null ? {} : { combat: mechanics.combat };
+    const resources =
+        content?.resources ?? (mechanics === null ? {} : { combat: mechanics.combat });
     const createRuntime = () =>
         new BattleRuntime(
             spec,
-            projectileActions
+            projectileActions && !contentScene
                 ? createTacticalProjectileResources(options.combatScenario === "PROJECTILE_CACHED")
                 : resources,
         );
@@ -399,7 +430,7 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
     }
 
     function skillStats() {
-        const source = snapshot.units.find(hasSkill);
+        const source = manualSkillUnit();
 
         if (source === undefined) {
             return null;
@@ -420,6 +451,40 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
             remainingAmmo: active?.remainingAmmo,
             ready: active === null && skill.sp >= spCost && snapshot.result === null,
         };
+    }
+
+    function manualSkillUnit() {
+        return snapshot.units
+            .filter(hasSkill)
+            .find((unit) => unit.definition.skill.activation === "MANUAL");
+    }
+
+    function contentStats() {
+        if (!contentScene) {
+            return null;
+        }
+
+        const stats = (definitionId: string) => {
+            const unit = snapshot.units.find((unit) => unit.definition.id === definitionId);
+
+            if (unit === undefined || !hasVitality(unit) || !hasSkill(unit)) {
+                return null;
+            }
+
+            const shield = readShield(unit);
+
+            return {
+                hp: unit.vitality.hp,
+                maxHp: unit.definition.vitality.maxHp,
+                sp: unit.skill.sp,
+                maxSp: unit.definition.skill.spCost,
+                ...(shield === undefined
+                    ? {}
+                    : { shieldLayers: shield.layers, shieldTimerTicks: shield.timer }),
+            };
+        };
+
+        return { mudrock: stats("char_311_mudrok"), melantha: stats("char_208_melan") };
     }
 
     function elementStats() {
@@ -457,6 +522,7 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
             combatScenario: options.combatScenario ?? "MIXED",
             ...presentation.stats(),
             skill: skillStats(),
+            content: contentStats(),
             elementType: mechanics?.elementType ?? null,
             element: elementStats(),
             blockingCount: snapshot.blockingRelations.length,
@@ -507,7 +573,11 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
         },
 
         nextSkillReady(): void {
-            if (mechanicsScenario !== "SKILL" || stopped || runtime.result !== null) {
+            if (
+                (mechanicsScenario !== "SKILL" && !contentScene) ||
+                stopped ||
+                runtime.result !== null
+            ) {
                 return;
             }
 
@@ -559,7 +629,7 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
             let requested: readonly Command[];
 
             if (type === "ACTIVATE_SKILL" || type === "FINISH_SKILL") {
-                const source = snapshot.units.find(hasSkill);
+                const source = manualSkillUnit();
 
                 if (source === undefined) {
                     return;

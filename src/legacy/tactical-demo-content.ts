@@ -1,15 +1,20 @@
-import { CombatResources } from "../../core/tactical/battle/resources.js";
-import { BattleRuntime, type BattleResources } from "../../core/tactical/battle/runtime.js";
-import type { Input } from "../../core/tactical/battle/contract.js";
-import { createBattlefieldMap } from "../../core/tactical/battlefield/map/map.js";
-import { createRouteDefinition } from "../../core/tactical/unit/capability/locomotion/route/definition.js";
-import { compileAction } from "../../core/tactical/unit/capability/action/compile.js";
-import { prepare as prepareOperator, type Configuration } from "../../data/arknights/operator.js";
-import { prepare as prepareEnemy } from "../../data/arknights/enemy.js";
-import { TICKS_PER_SECOND } from "../../core/tactical/tick.js";
-import * as melantha from "./operators/melantha.js";
-import * as mudrock from "./operators/mudrock.js";
-import * as enemies from "./enemies.js";
+import { CombatResources } from "../core/tactical/battle/resources.js";
+import type { BattleResources } from "../core/tactical/battle/runtime.js";
+import type { Input } from "../core/tactical/battle/contract.js";
+import type { BattlefieldMap } from "../core/tactical/battlefield/map/map.js";
+import {
+    createRouteDefinition,
+    type RouteDefinition,
+} from "../core/tactical/unit/capability/locomotion/route/definition.js";
+import { compileAction } from "../core/tactical/unit/capability/action/compile.js";
+import { prepare as prepareOperator, type Configuration } from "../data/arknights/operator.js";
+import { prepare as prepareEnemy } from "../data/arknights/enemy.js";
+import { TICKS_PER_SECOND } from "../core/tactical/tick.js";
+import * as melantha from "../content/tactical/operators/melantha.js";
+import * as mudrock from "../content/tactical/operators/mudrock.js";
+import * as enemies from "../content/tactical/enemies.js";
+import type { LegacyUnitMetadata } from "./tactical-demo-presentation.js";
+import type { Unit } from "../core/tactical/unit/unit.js";
 
 export interface Tables {
     readonly characters: Readonly<Record<string, unknown>>;
@@ -35,7 +40,12 @@ export const defaults: ConfigurationInput = {
     seed: 123,
 };
 
-export function create(tables: Tables, configuration: ConfigurationInput = defaults) {
+export function createTacticalContentDemo(
+    map: BattlefieldMap,
+    route: RouteDefinition,
+    tables: Tables,
+    configuration: ConfigurationInput = defaults,
+) {
     const combat = new CombatResources();
     const prepare = (id: string, skillId: string, selected: Configuration) =>
         prepareOperator({ id, record: tables.characters[id] }, tables.skills[skillId], selected, {
@@ -92,33 +102,15 @@ export function create(tables: Tables, configuration: ConfigurationInput = defau
             actions.find((action) => action.definition === definition) ??
             compileAction(definition, registered),
     };
-    const map = createBattlefieldMap(
-        5,
-        10,
-        Array.from({ length: 50 }, () => ({
-            heightType: "LOWLAND",
-            buildableType: "ALL",
-            passableMask: "ALL",
-            playerSideMask: "ALL",
-            terrain: "NORMAL",
-            mechanism: null,
-        })),
-    );
-    const route = (row: number) =>
-        createRouteDefinition({
-            pathMotionMode: "WALK",
-            startPosition: [row, 9],
-            endPosition: [row, 0],
-            spawnOffset: [0, 0],
-            spawnRandomRange: [0, 0],
-            checkpoints: [],
-            allowDiagonalMove: false,
-            visitEveryTileCenter: true,
-            visitEveryNodeCenter: true,
-            visitEveryCheckPoint: true,
-        });
-    const firstLane = route(1);
-    const secondLane = route(3);
+    const firstLane = createRouteDefinition({
+        ...route,
+        allowDiagonalMove: false,
+        visitEveryTileCenter: true,
+        checkpoints: [],
+        spawnOffset: [0, 0],
+        spawnRandomRange: [0, 0],
+    });
+    const secondLane = createRouteDefinition({ ...firstLane, startPosition: [2, 10] });
     const spawns: Extract<Input["schedule"], { type: "TIMELINE" }>["spawns"][number][] = [];
 
     for (let index = 0; index < 18; index++) {
@@ -150,8 +142,8 @@ export function create(tables: Tables, configuration: ConfigurationInput = defau
         map,
         schedule: { type: "TIMELINE", spawns },
         initialUnits: [
-            { definition: defender.definition, position: [4, 1] },
-            { definition: guard, position: [3, 3] },
+            { definition: defender.definition, position: [6, 5] },
+            { definition: guard, position: [8, 3] },
         ],
         initialMechanisms: [],
         initialNavigationModifiers: [],
@@ -161,5 +153,40 @@ export function create(tables: Tables, configuration: ConfigurationInput = defau
         rngState: configuration.seed,
     };
 
-    return { input, resources, runtime: new BattleRuntime(input, resources) };
+    const metadata: Readonly<Record<string, LegacyUnitMetadata>> = {
+        char_311_mudrok: {
+            kind: "op",
+            name: "泥岩",
+            spine: "char_311_mudrok",
+            avatar: "char_311_mudrok",
+            skillIndex: configuration.mudrock.skillIndex,
+            animation: { attack: "Attack", skillAttack: "Skill_1", skill: "ATTACK" },
+        },
+        char_208_melan: {
+            kind: "op",
+            name: "玫兰莎",
+            spine: "char_208_melan",
+            avatar: "char_208_melan",
+            skillIndex: configuration.melantha.skillIndex,
+            animation: { skill: "BUFF" },
+        },
+        enemy_1000_gopro: {
+            kind: "enemy",
+            name: hound.profile.name,
+            spine: "enemy_1000_gopro_2",
+            avatar: "enemy_1000_gopro_2",
+        },
+        enemy_1003_ncbow: {
+            kind: "enemy",
+            name: crossbowman.profile.name,
+            spine: "enemy_1003_ncbow",
+            avatar: "enemy_1003_ncbow",
+            animation: {
+                recoverySeconds: crossbowman.attackTiming.recoveryTicks / TICKS_PER_SECOND,
+                lunge: false,
+            },
+        },
+    };
+
+    return { input, resources, unitMetadata: (unit: Unit) => metadata[unit.definition.id] };
 }

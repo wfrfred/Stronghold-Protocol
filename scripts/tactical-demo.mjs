@@ -61,7 +61,7 @@ async function serve(request, response) {
     return finish(403, 'Forbidden');
   }
   if (pathname === '/') {
-    response.writeHead(302, { Location: '/dev/content-demo.html' });
+    response.writeHead(302, { Location: '/dev/render-demo.html?scene=core-content&paused=1' });
     return response.end();
   }
   const [prefix, directory] = mounts.find(([prefix]) => pathname.startsWith(prefix));
