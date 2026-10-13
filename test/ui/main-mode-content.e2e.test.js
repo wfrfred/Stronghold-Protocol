@@ -15,7 +15,8 @@ test('main-mode demo applies configuration, steps, runs skills and arrows, and r
     const page = await browser.newPage();
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await page.goto(`http://127.0.0.1:${server.address().port}/dev/content-demo.html`);
+    await page.goto(`http://127.0.0.1:${server.address().port}/`);
+    assert.equal(new URL(page.url()).pathname, '/dev/content-demo.html');
     await page.waitForFunction(() => document.querySelector('#stats').textContent.includes('泥岩'));
     await page.click('#step');
     assert.match(await page.$eval('#clock', element => element.textContent), /0\.03 s/);
