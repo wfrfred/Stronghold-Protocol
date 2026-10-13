@@ -16,10 +16,10 @@ import { createDefinition, initialize, type Definition as OperatorDefinition } f
 import { createDefinition as createEnemyDefinition, createCombatDefinition, type Definition as EnemyDefinition, type CombatDefinition } from ${sourceModule('unit/archetype/enemy')};
 import { initialize as initializeUnit } from ${sourceModule('unit/initialize')};
 import { copy } from ${sourceModule('unit/snapshot')};
-import { hasOffense, type Offense, type OffenseDefinition, type OffenseState } from ${sourceModule('unit/capability/offense/capability')};
-import { hasSkill, type SkillDefinition, type SkillState } from ${sourceModule('unit/capability/skill/capability')};
-import type { ElementalDefinition, ElementalState } from ${sourceModule('unit/capability/elemental/capability')};
-import type { Vitality, VitalityState } from ${sourceModule('unit/capability/vitality/capability')};
+import { hasOffense, type Offense, type Definition as OffenseDefinition, type State as OffenseState } from ${sourceModule('unit/capability/offense/capability')};
+import { hasSkill, type Definition as SkillDefinition, type State as SkillState } from ${sourceModule('unit/capability/skill/capability')};
+import type { Definition as ElementalDefinition, State as ElementalState } from ${sourceModule('unit/capability/elemental/capability')};
+import type { Vitality, State as VitalityState } from ${sourceModule('unit/capability/vitality/capability')};
 import type { RoutedLocomotionState, RouteControlState } from ${sourceModule('unit/capability/locomotion/capability')};
 import type { Definition } from ${sourceModule('unit/effect/definition')};
 import { install } from ${sourceModule('unit/effect/operations')};

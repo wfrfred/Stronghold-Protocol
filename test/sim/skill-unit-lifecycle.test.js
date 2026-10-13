@@ -8,7 +8,7 @@ import { setHook, removeHook } from "../../dist/core/tactical/unit/capability/vi
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { removeUnitWithEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
-import { createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
+import { createDefinition as createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { activateSkill } from "../../dist/core/tactical/unit/capability/skill/execution.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import { initialize } from "../../dist/core/tactical/unit/initialize.js";

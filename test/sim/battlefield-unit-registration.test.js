@@ -14,7 +14,7 @@ import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
 import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import { copy } from "../../dist/core/tactical/unit/snapshot.js";
 import { configuredCapabilities } from "../../dist/core/tactical/unit/capability/catalog.js";
-import { createActionCapabilityDefinition } from "../../dist/core/tactical/unit/capability/action/capability.js";
+import { createDefinition as createActionCapabilityDefinition } from "../../dist/core/tactical/unit/capability/action/capability.js";
 
 const map = () =>
     createBattlefieldMap(

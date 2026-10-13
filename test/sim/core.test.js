@@ -1,5 +1,5 @@
 import { Effects } from "../../dist/core/tactical/unit/effect/effects.js";
-import { initializeActionState } from "../../dist/core/tactical/unit/capability/action/capability.js";
+import { initialize as initializeActionState } from "../../dist/core/tactical/unit/capability/action/capability.js";
 // Sim core: rng, grid/pathing, damage formulas, stat aggregation, buffs.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,26 +19,26 @@ import { createMechanismDefinition } from '../../dist/core/tactical/battlefield/
 import { createNavigationModifierDefinition, createNavigationModifier } from '../../dist/core/tactical/battlefield/navigation/modifier.js';
 import { hasSpatialPresence, isSpatiallyPresent } from '../../dist/core/tactical/unit/capability/presence.js';
 import { initialize } from '../../dist/core/tactical/unit/initialize.js';
-import { initializeOffenseState } from '../../dist/core/tactical/unit/capability/offense/capability.js';
+import { initialize as initializeOffenseState } from '../../dist/core/tactical/unit/capability/offense/capability.js';
 import { copy } from '../../dist/core/tactical/unit/snapshot.js';
-import { hasVitality, initializeVitalityState } from '../../dist/core/tactical/unit/capability/vitality/capability.js';
-import { createActionCapabilityDefinition, hasAction } from '../../dist/core/tactical/unit/capability/action/capability.js';
+import { hasVitality, initialize as initializeVitalityState } from '../../dist/core/tactical/unit/capability/vitality/capability.js';
+import { createDefinition as createActionCapabilityDefinition, hasAction } from '../../dist/core/tactical/unit/capability/action/capability.js';
 import { hasAllegiance } from '../../dist/core/tactical/unit/capability/allegiance.js';
 import { createBlockerDefinition, hasBlockable, hasBlocker, resolveBlockingCapacity } from '../../dist/core/tactical/unit/capability/blocking/capability.js';
 import * as modifier from '../../dist/core/tactical/unit/contribution/value.js';
 import { createHitDefinition, hasHit, hasSpatial } from '../../dist/core/tactical/unit/capability/spatial.js';
-import { addStatusContribution, deriveEffectiveStatusFlags, hasStatus, initializeStatusState, removeStatusContribution, setStatusContributionParticipation } from '../../dist/core/tactical/unit/capability/status/capability.js';
+import { addStatusContribution, deriveEffectiveStatusFlags, hasStatus, initialize as initializeStatusState, removeStatusContribution, setStatusContributionParticipation } from '../../dist/core/tactical/unit/capability/status/capability.js';
 import { createBlockGeometry, createRangeGeometry, createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { geometryContainsPosition, rangeContainsPosition, rangeOverlapsHit } from '../../dist/core/tactical/geometry/intersection.js';
 import { updateBlockingRelations } from '../../dist/core/tactical/battlefield/blocking/relations.js';
 import { projectUnitsByTile } from '../../dist/core/tactical/battlefield/storage/indexes.js';
-import { createLocomotionState, createRoutedLocomotionState, hasLocomotion, hasRoutedLocomotion } from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
+import { initialize as createLocomotionState, createRoutedLocomotionState, hasLocomotion, hasRoutedLocomotion } from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
 import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
 import { createRouteState, createRouteTiming } from '../../dist/core/tactical/unit/capability/locomotion/route/state.js';
 import { createNavigationState } from '../../dist/core/tactical/battlefield/navigation/state.js';
 import { createUnitPlacementDefinition, instantiateUnitPlacement } from '../../dist/core/tactical/battle/creation/placement.js';
 import { createDeploymentProfile, createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/deployment.js';
-import { validateOccupancyState } from '../../dist/core/tactical/unit/capability/occupancy.js';
+import { validateState as validateOccupancyState } from '../../dist/core/tactical/unit/capability/occupancy.js';
 import { createDefinition as createOperatorDefinition } from '../../dist/core/tactical/unit/archetype/operator.js';
 import { createCombatDefinition } from '../../dist/core/tactical/unit/archetype/enemy.js';
 import { evaluateDeployment } from '../../dist/core/tactical/battlefield/deployment/query.js';
@@ -764,12 +764,12 @@ test('core initializer types preserve definition unions, prepared refinements an
 import { initialize as initializeUnit, type Result as InitializedUnit } from ${sourceModule('initialize')};
 import type { Unit, Definition as UnitDefinition } from ${sourceModule('unit')};
 import type { ImmutableData } from ${sourceModule('../../common/immutable-data')};
-import { initializeOffenseState } from ${sourceModule('capability/offense/capability')};
-import { initializeDefenseState } from ${sourceModule('capability/defense/capability')};
-import { initializeActionState } from ${sourceModule('capability/action/capability')};
+import { initialize as initializeOffenseState } from ${sourceModule('capability/offense/capability')};
+import { initialize as initializeDefenseState } from ${sourceModule('capability/defense/capability')};
+import { initialize as initializeActionState } from ${sourceModule('capability/action/capability')};
 import type { Definition as EnemyDefinition } from ${sourceModule('archetype/enemy')};
-import { hasVitality, type VitalityDefinition } from ${sourceModule('capability/vitality/capability')};
-import { initializeLocomotionState, hasRoutedLocomotion, type LocomotionState, type RoutedLocomotionState } from ${sourceModule('capability/locomotion/capability')};
+import { hasVitality, type Definition as VitalityDefinition } from ${sourceModule('capability/vitality/capability')};
+import { initialize as initializeLocomotionState, hasRoutedLocomotion, type State as LocomotionState, type RoutedLocomotionState } from ${sourceModule('capability/locomotion/capability')};
 import { createBattlefieldRuntime } from ${sourceModule('../battlefield/runtime')};
 import type { BattlefieldView } from ${sourceModule('../battlefield/contract')};
 import type { BattlefieldMap } from ${sourceModule('../battlefield/map/map')};
@@ -778,8 +778,9 @@ import type { BattleExecutionState } from ${sourceModule('../battle/execution/st
 import { launchProjectile, type ProjectileLaunchInput } from ${sourceModule('../battlefield/projectile/operations')};
 import type { ProjectileDefinitionRef } from ${sourceModule('../battlefield/projectile/definition')};
 import type { BattleState } from ${sourceModule('../battle/state')};
+import type { ElementDamageReport } from ${sourceModule('capability/elemental/execution')};
 import type { ProjectileResources } from ${sourceModule('../battlefield/projectile/resources')};
-import type { Occupancy, OccupancyState } from ${sourceModule('capability/occupancy')};
+import type { Occupancy, State as OccupancyState } from ${sourceModule('capability/occupancy')};
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
 type Assert<T extends true> = T;
 type RequiredKeys<T> = { [K in keyof T]-?: {} extends Pick<T, K> ? never : K }[keyof T];
@@ -815,6 +816,14 @@ declare const placement: { readonly definition: EnemyProbe; readonly position: r
 
   try {
     const positive = compile('positive', `
+declare const elementalReport: ElementDamageReport;
+if (elementalReport.outcome === "BURST") {
+  const targetId: number = elementalReport.burst.targetUnitId;
+}
+if (elementalReport.outcome === "REJECTED") {
+  const reason: string = elementalReport.reason;
+  const amount: 0 = elementalReport.amount;
+}
 initializeOffenseState();
 initializeDefenseState();
 initializeLocomotionState();

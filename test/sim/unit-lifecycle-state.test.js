@@ -5,7 +5,7 @@ import { removeUnitWithEffects } from "../../dist/core/tactical/battle/execution
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
-import { createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
+import { createDefinition as createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { activateSkill } from "../../dist/core/tactical/unit/capability/skill/execution.js";
 import { fixtureBattlefieldState as fixtureBattlefield } from "../helpers/battlefield.js";
 

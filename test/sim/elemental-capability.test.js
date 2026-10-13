@@ -3,10 +3,10 @@ import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import {
   ELEMENT_TYPES,
-  createElementalDefinition,
+  createDefinition as createElementalDefinition,
   elementValues,
   hasElemental,
-  initializeElementalState,
+  initialize as initializeElementalState,
   setElementalImmunity,
 } from '../../dist/core/tactical/unit/capability/elemental/capability.js';
 import {

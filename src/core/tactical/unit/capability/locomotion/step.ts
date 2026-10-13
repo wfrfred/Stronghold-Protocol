@@ -41,8 +41,8 @@ import {
     type RouteControlTransition,
 } from "./route-control.js";
 import {
-    resolveMoveSpeedPerTick,
-    type LocomotionDefinition,
+    resolveMoveSpeed,
+    type Definition,
     type RouteControlState,
     type RoutedLocomotiveUnit,
     type RoutedLocomotionState,
@@ -152,7 +152,7 @@ function isMoveCheckpointReached(
 export function stepRoutedLocomotion(
     state: Readonly<RoutedLocomotionState>,
     position: WorldPosition,
-    definition: LocomotionDefinition,
+    definition: Definition,
     context: RoutedLocomotionStepContext,
     present = true,
 ): RoutedLocomotionStep {
@@ -175,7 +175,7 @@ export function stepRoutedLocomotion(
     let steering = state.steering;
     let moving = false;
     const speed =
-        resolveMoveSpeedPerTick(definition, state, context.queryContext) * context.moveMultiplier;
+        resolveMoveSpeed(definition, state, context.queryContext) * context.moveMultiplier;
 
     assertNonnegativeNumber(speed, "movement budget");
 

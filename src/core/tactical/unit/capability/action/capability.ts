@@ -7,7 +7,7 @@ import {
 import * as contribution from "../../contribution/contribution.js";
 import * as operation from "./operation.js";
 import { createTargetingDefinition, type TargetingDefinition } from "../../targeting/definition.js";
-import type { Unit, Definition } from "../../unit.js";
+import type { Unit, Definition as UnitDefinition } from "../../unit.js";
 import * as hook from "../../hook/hook.js";
 import type { ActionReleaseHook } from "./release.js";
 
@@ -35,12 +35,12 @@ export interface ActionDefinition {
     readonly recoveryTicks: number;
 }
 
-export interface ActionCapabilityDefinition {
+export interface Definition {
     readonly attackSpeed?: number;
     readonly normalAction: ActionDefinition;
 }
 
-export interface ActionState {
+export interface State {
     readonly readyAtTick: number;
     readonly recoveryUntilTick: number;
     readonly cooldownIntervalTicks: number | null;
@@ -50,8 +50,8 @@ export interface ActionState {
 }
 
 export interface Action {
-    readonly definition: { readonly action: ActionCapabilityDefinition };
-    readonly action: ActionState;
+    readonly definition: { readonly action: Definition };
+    readonly action: State;
 }
 
 export function hasAction<U extends Unit>(unit: U): unit is U & Action {
@@ -59,8 +59,8 @@ export function hasAction<U extends Unit>(unit: U): unit is U & Action {
 }
 
 export function hasActionDefinition(
-    definition: Definition,
-): definition is Definition & Action["definition"] {
+    definition: UnitDefinition,
+): definition is UnitDefinition & Action["definition"] {
     return "action" in definition;
 }
 
@@ -109,9 +109,7 @@ export function createActionDefinition(definition: ActionDefinition): ActionDefi
     });
 }
 
-export function createActionCapabilityDefinition(
-    definition: ActionCapabilityDefinition,
-): ActionCapabilityDefinition {
+export function createDefinition(definition: Definition): Definition {
     const attackSpeed = definition.attackSpeed ?? 100;
     assertNonnegativeNumber(attackSpeed, "attack speed");
 
@@ -121,7 +119,7 @@ export function createActionCapabilityDefinition(
     });
 }
 
-export function initializeActionState(tick = 0): ActionState {
+export function initialize(tick = 0): State {
     assertNonnegativeSafeInteger(tick, "action tick");
 
     return {
@@ -134,49 +132,49 @@ export function initializeActionState(tick = 0): ActionState {
     };
 }
 
-export function setBeforeReleaseHook(state: ActionState, entry: ActionReleaseHook): ActionState {
+export function setBeforeReleaseHook(state: State, entry: ActionReleaseHook): State {
     const beforeRelease = hook.set(state.beforeRelease, entry);
 
     return beforeRelease === state.beforeRelease ? state : { ...state, beforeRelease };
 }
 
-export function removeBeforeReleaseHook(state: ActionState, id: string): ActionState {
+export function removeBeforeReleaseHook(state: State, id: string): State {
     const beforeRelease = hook.remove(state.beforeRelease, id);
 
     return beforeRelease === state.beforeRelease ? state : { ...state, beforeRelease };
 }
 
 function updateContributions(
-    state: ActionState,
+    state: State,
     key: "attackSpeed" | "baseAttackTime",
-    transition: (entries: ActionState["attackSpeed"]) => ActionState["attackSpeed"],
-): ActionState {
+    transition: (entries: State["attackSpeed"]) => State["attackSpeed"],
+): State {
     const updated = transition(state[key]);
 
     return updated === state[key] ? state : { ...state, [key]: updated };
 }
 
 export function setAttackSpeedContribution(
-    state: ActionState,
+    state: State,
     entry: contribution.Contribution<contribution.Input<Context>>,
-): ActionState {
+): State {
     return updateContributions(state, "attackSpeed", (entries) => contribution.set(entries, entry));
 }
 
-export function removeAttackSpeedContribution(state: ActionState, id: string): ActionState {
+export function removeAttackSpeedContribution(state: State, id: string): State {
     return updateContributions(state, "attackSpeed", (entries) => contribution.remove(entries, id));
 }
 
 export function setBaseAttackTimeContribution(
-    state: ActionState,
+    state: State,
     entry: contribution.Contribution<contribution.Input<Context>>,
-): ActionState {
+): State {
     return updateContributions(state, "baseAttackTime", (entries) =>
         contribution.set(entries, entry),
     );
 }
 
-export function removeBaseAttackTimeContribution(state: ActionState, id: string): ActionState {
+export function removeBaseAttackTimeContribution(state: State, id: string): State {
     return updateContributions(state, "baseAttackTime", (entries) =>
         contribution.remove(entries, id),
     );

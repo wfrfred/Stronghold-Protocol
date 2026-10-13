@@ -7,7 +7,7 @@ import { activateSkill, advanceSkill } from "../../dist/core/tactical/unit/capab
 import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import { compileArknightsAttackBuffSkill } from "../../dist/data/arknights/skill-buff.js";
 import { parseArknightsSkillLevel } from "../../dist/data/arknights/skill-definition.js";
-import { createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
+import { createDefinition as createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { gainSkillSp } from "../../dist/core/tactical/unit/capability/skill/sp.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import { effectFixtureWork } from "../helpers/effects.js";

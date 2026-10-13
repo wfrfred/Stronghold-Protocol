@@ -12,19 +12,19 @@ import { create } from "../../dist/core/tactical/unit/contribution/value.js";
 
 const entries = [
     [
-        offense.initializeOffenseState(),
+        offense.initialize(),
         "attack",
         offense.setAttackContribution,
         offense.removeAttackContribution,
     ],
     [
-        defense.initializeDefenseState(),
+        defense.initialize(),
         "defense",
         defense.setDefenseContribution,
         defense.removeDefenseContribution,
     ],
     [
-        defense.initializeDefenseState(),
+        defense.initialize(),
         "resistance",
         defense.setResistanceContribution,
         defense.removeResistanceContribution,
@@ -36,19 +36,19 @@ const entries = [
         blocking.removeCapacityContribution,
     ],
     [
-        locomotion.createLocomotionState(),
+        locomotion.initialize(),
         "moveSpeed",
         locomotion.setMoveSpeedContribution,
         locomotion.removeMoveSpeedContribution,
     ],
     [
-        action.initializeActionState(5),
+        action.initialize(5),
         "attackSpeed",
         action.setAttackSpeedContribution,
         action.removeAttackSpeedContribution,
     ],
     [
-        action.initializeActionState(5),
+        action.initialize(5),
         "baseAttackTime",
         action.setBaseAttackTimeContribution,
         action.removeBaseAttackTimeContribution,
@@ -82,19 +82,19 @@ test("local hook registration retains progress and changes only its registration
     };
     const registrations = [
         [
-            vitality.initializeVitalityState({ maxHp: 100 }),
+            vitality.initialize({ maxHp: 100 }),
             "damageHooks",
             damage.setHook,
             damage.removeHook,
         ],
         [
-            vitality.initializeVitalityState({ maxHp: 100 }),
+            vitality.initialize({ maxHp: 100 }),
             "healingHooks",
             healing.setHook,
             healing.removeHook,
         ],
         [
-            action.initializeActionState(5),
+            action.initialize(5),
             "beforeRelease",
             action.setBeforeReleaseHook,
             action.removeBeforeReleaseHook,

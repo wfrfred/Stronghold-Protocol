@@ -2,13 +2,9 @@ import type { Context } from "../../query.js";
 import { assertFiniteNumber } from "../../../../common/assert.js";
 import * as contribution from "../../contribution/contribution.js";
 import * as modifier from "../../contribution/value.js";
-import type { ActionCapabilityDefinition, ActionDefinition, ActionState } from "./capability.js";
+import type { Definition, ActionDefinition, State } from "./capability.js";
 
-export function resolveAttackSpeed(
-    definition: ActionCapabilityDefinition,
-    state: ActionState,
-    context: Context,
-): number {
+export function resolveAttackSpeed(definition: Definition, state: State, context: Context): number {
     return Math.max(
         20,
         modifier.apply(
@@ -22,7 +18,7 @@ export function resolveAttackSpeed(
 
 export function resolveBaseAttackTime(
     definition: ActionDefinition,
-    state: ActionState,
+    state: State,
     context: Context,
 ): number {
     return Math.max(
@@ -38,8 +34,8 @@ export function resolveBaseAttackTime(
 
 export function resolveActionIntervalTicks(
     definition: ActionDefinition,
-    capability: ActionCapabilityDefinition,
-    state: ActionState,
+    capability: Definition,
+    state: State,
     context: Context,
 ): number {
     const attackSpeed = Math.min(600, resolveAttackSpeed(capability, state, context));
@@ -49,11 +45,7 @@ export function resolveActionIntervalTicks(
     return Math.max(1, interval);
 }
 
-export function reconcileActionCooldown(
-    state: ActionState,
-    intervalTicks: number,
-    tick: number,
-): ActionState {
+export function reconcileActionCooldown(state: State, intervalTicks: number, tick: number): State {
     if (state.cooldownIntervalTicks === null || state.cooldownIntervalTicks === intervalTicks) {
         return state;
     }
@@ -71,11 +63,11 @@ export function reconcileActionCooldown(
 }
 
 export function beginActionCooldown(
-    state: ActionState,
+    state: State,
     definition: ActionDefinition,
     intervalTicks: number,
     tick: number,
-): ActionState {
+): State {
     const overdue = tick - state.readyAtTick;
     const anchor = overdue >= 0 && overdue < 1 ? state.readyAtTick : tick;
 

@@ -8,11 +8,11 @@ import { copy } from "../../dist/core/tactical/unit/snapshot.js";
 import {
     setAttackContribution,
     removeAttackContribution,
-    resolveOffenseAttack,
+    resolveAttack as resolveOffenseAttack,
 } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import {
-    createDefenseDefinition,
+    createDefinition as createDefenseDefinition,
     setResistanceContribution,
 } from "../../dist/core/tactical/unit/capability/defense/capability.js";
 import { resolveDefense } from "../../dist/core/tactical/unit/capability/defense/query.js";

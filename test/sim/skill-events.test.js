@@ -4,7 +4,7 @@ import { effectFixtureWork } from "../helpers/effects.js";
 import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import { getUnit } from "../../dist/core/tactical/battle/state.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
-import { createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
+import { createDefinition as createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { activateSkill, finishSkill } from "../../dist/core/tactical/unit/capability/skill/execution.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";

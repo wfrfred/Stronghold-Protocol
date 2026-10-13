@@ -6,7 +6,7 @@ import { definition as effectDefinition, effectFixtureWork } from "../helpers/ef
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { deadline, setDeadline, setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { get } from "../../dist/core/tactical/unit/effect/operations.js";
-import { createSkillDefinition, validateSkillState, initializeSkillState } from "../../dist/core/tactical/unit/capability/skill/capability.js";
+import { createDefinition as createSkillDefinition, validateState as validateSkillState, initialize as initializeSkillState } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { activateSkill, advanceSkill, finishSkill } from "../../dist/core/tactical/unit/capability/skill/execution.js";
 import { drainSkillSp, gainSkillSp, spendSkillSp } from "../../dist/core/tactical/unit/capability/skill/sp.js";
 import { initialize } from "../../dist/core/tactical/unit/initialize.js";

@@ -2,25 +2,25 @@ import type { Context } from "../../query.js";
 import { assertNonnegativeNumber } from "../../../../common/assert.js";
 import * as contribution from "../../contribution/contribution.js";
 import * as modifier from "../../contribution/value.js";
-import type { Unit, Definition } from "../../unit.js";
+import type { Unit, Definition as UnitDefinition } from "../../unit.js";
 
 export interface Parameters {
     readonly defense: number;
     readonly resistance: number;
 }
 
-export type DefenseDefinition = Parameters;
+export type Definition = Parameters;
 
-export interface DefenseState {
+export interface State {
     readonly defense: readonly contribution.Contribution<contribution.Input<Context>>[];
     readonly resistance: readonly contribution.Contribution<contribution.Input<Context>>[];
 }
 
 export interface Defense {
     readonly definition: {
-        readonly defense: DefenseDefinition;
+        readonly defense: Definition;
     };
-    readonly defense: DefenseState;
+    readonly defense: State;
 }
 
 export function hasDefense<U extends Unit>(unit: U): unit is U & Defense {
@@ -28,12 +28,12 @@ export function hasDefense<U extends Unit>(unit: U): unit is U & Defense {
 }
 
 export function hasDefenseDefinition(
-    definition: Definition,
-): definition is Definition & Defense["definition"] {
+    definition: UnitDefinition,
+): definition is UnitDefinition & Defense["definition"] {
     return "defense" in definition;
 }
 
-export function createDefenseDefinition(definition: DefenseDefinition): DefenseDefinition {
+export function createDefinition(definition: Definition): Definition {
     for (const [name, value] of [
         ["defense", definition.defense],
         ["resistance", definition.resistance],
@@ -44,7 +44,7 @@ export function createDefenseDefinition(definition: DefenseDefinition): DefenseD
     return Object.freeze({ defense: definition.defense, resistance: definition.resistance });
 }
 
-export function initializeDefenseState(): DefenseState {
+export function initialize(): State {
     return {
         defense: [],
         resistance: [],
@@ -52,10 +52,10 @@ export function initializeDefenseState(): DefenseState {
 }
 
 function updateContributions(
-    state: DefenseState,
-    parameter: keyof DefenseState,
-    transition: (entries: DefenseState["defense"]) => DefenseState["defense"],
-): DefenseState {
+    state: State,
+    parameter: keyof State,
+    transition: (entries: State["defense"]) => State["defense"],
+): State {
     const current = state[parameter];
     const updated = transition(current);
 
@@ -63,30 +63,30 @@ function updateContributions(
 }
 
 export function setDefenseContribution(
-    state: DefenseState,
+    state: State,
     entry: contribution.Contribution<contribution.Input<Context>>,
-): DefenseState {
+): State {
     return updateContributions(state, "defense", (entries) => contribution.set(entries, entry));
 }
 
-export function removeDefenseContribution(state: DefenseState, id: string): DefenseState {
+export function removeDefenseContribution(state: State, id: string): State {
     return updateContributions(state, "defense", (entries) => contribution.remove(entries, id));
 }
 
 export function setResistanceContribution(
-    state: DefenseState,
+    state: State,
     entry: contribution.Contribution<contribution.Input<Context>>,
-): DefenseState {
+): State {
     return updateContributions(state, "resistance", (entries) => contribution.set(entries, entry));
 }
 
-export function removeResistanceContribution(state: DefenseState, id: string): DefenseState {
+export function removeResistanceContribution(state: State, id: string): State {
     return updateContributions(state, "resistance", (entries) => contribution.remove(entries, id));
 }
 
-export function resolveDefenseParameters(
-    definition: DefenseDefinition,
-    state: DefenseState,
+export function resolveParameters(
+    definition: Definition,
+    state: State,
     context: Context,
 ): Parameters {
     return {

@@ -1,5 +1,5 @@
 import { World, type WorldPosition } from "../../geometry/coordinate.js";
-import { hasAllegiance, type AllegianceState } from "../../unit/capability/allegiance.js";
+import { hasAllegiance, type State as AllegianceState } from "../../unit/capability/allegiance.js";
 import {
     hasBlockable,
     hasBlocker,

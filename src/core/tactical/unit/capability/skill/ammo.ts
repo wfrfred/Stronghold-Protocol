@@ -1,16 +1,16 @@
 import { assertPositiveSafeInteger } from "../../../../common/assert.js";
-import type { SkillState } from "./capability.js";
+import type { State } from "./capability.js";
 
 export type SkillAmmoResult =
     | { readonly type: "APPLIED"; readonly amount: number; readonly remainingAmmo: number }
     | { readonly type: "REJECTED"; readonly reason: "INACTIVE" | "NO_AMMO" };
 
 export interface SkillAmmoSpending {
-    readonly state: SkillState;
+    readonly state: State;
     readonly result: SkillAmmoResult;
 }
 
-export function spendSkillAmmo(state: SkillState, amount = 1): SkillAmmoSpending {
+export function spendSkillAmmo(state: State, amount = 1): SkillAmmoSpending {
     assertPositiveSafeInteger(amount, "skill ammunition consumption");
     const { active } = state;
 

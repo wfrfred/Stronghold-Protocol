@@ -1,9 +1,9 @@
 import { assertNonnegativeSafeInteger } from "../../../../common/assert.js";
 import {
     skillSpCapacity,
-    type SkillDefinition,
+    type Definition,
     type SkillSpRecovery,
-    type SkillState,
+    type State,
 } from "./capability.js";
 
 export type SkillSpSource = Exclude<SkillSpRecovery, "NONE"> | "EXTERNAL";
@@ -16,13 +16,13 @@ export type SkillSpResult =
       };
 
 export interface SkillSpTransition {
-    readonly state: SkillState;
+    readonly state: State;
     readonly result: SkillSpResult;
 }
 
 export function gainSkillSp(
-    state: SkillState,
-    definition: SkillDefinition,
+    state: State,
+    definition: Definition,
     source: SkillSpSource,
     amount = 1,
 ): SkillSpTransition {
@@ -48,8 +48,8 @@ export function gainSkillSp(
 }
 
 export function spendSkillSp(
-    state: SkillState,
-    definition: SkillDefinition,
+    state: State,
+    definition: Definition,
     amount = definition.spCost,
 ): SkillSpTransition {
     assertNonnegativeSafeInteger(amount, "skill SP spending");
@@ -68,10 +68,10 @@ export function spendSkillSp(
 }
 
 export function drainSkillSp(
-    state: SkillState,
+    state: State,
     amount: number,
 ): {
-    readonly state: SkillState;
+    readonly state: State;
     readonly result: { readonly type: "APPLIED"; readonly amount: number };
 } {
     assertNonnegativeSafeInteger(amount, "skill external SP drain");

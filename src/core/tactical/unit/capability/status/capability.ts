@@ -19,7 +19,7 @@ export type StatusContributionId = string;
 
 export const BASELINE_STATUS_CONTRIBUTION_ID = "@baseline";
 
-export interface StatusDefinition {
+export interface Definition {
     readonly initialFlags: readonly StatusFlag[];
 }
 
@@ -35,13 +35,13 @@ export interface StatusContributionInput {
     readonly participating?: boolean;
 }
 
-export interface StatusState {
+export interface State {
     readonly contributions: readonly StatusContribution[];
 }
 
 export interface Status {
-    readonly definition: { readonly status: StatusDefinition };
-    readonly status: StatusState;
+    readonly definition: { readonly status: Definition };
+    readonly status: State;
 }
 
 export type EffectiveStatusFlags = ReadonlySet<StatusFlag>;
@@ -59,7 +59,7 @@ export function hasStatusFlag(unit: Unit, flag: StatusFlag): boolean {
     );
 }
 
-export function initializeStatusState(definition: StatusDefinition): StatusState {
+export function initialize(definition: Definition): State {
     return {
         contributions: [
             {
@@ -71,10 +71,7 @@ export function initializeStatusState(definition: StatusDefinition): StatusState
     };
 }
 
-export function addStatusContribution(
-    state: StatusState,
-    contribution: StatusContributionInput,
-): StatusState {
+export function addStatusContribution(state: State, contribution: StatusContributionInput): State {
     if (contribution.id.length === 0) {
         throw new TypeError("status contribution id must be nonempty");
     }
@@ -98,10 +95,10 @@ export function addStatusContribution(
 }
 
 export function setStatusContributionParticipation(
-    state: StatusState,
+    state: State,
     contributionId: StatusContributionId,
     participating: boolean,
-): StatusState {
+): State {
     if (contributionId === BASELINE_STATUS_CONTRIBUTION_ID) {
         throw new TypeError("baseline status contribution participation cannot be changed");
     }
@@ -120,9 +117,9 @@ export function setStatusContributionParticipation(
 }
 
 export function removeStatusContribution(
-    state: StatusState,
+    state: State,
     contributionId: StatusContributionId,
-): StatusState {
+): State {
     if (contributionId === BASELINE_STATUS_CONTRIBUTION_ID) {
         throw new TypeError("baseline status contribution cannot be removed");
     }
@@ -136,7 +133,7 @@ export function removeStatusContribution(
     return { contributions };
 }
 
-export function deriveEffectiveStatusFlags(state: StatusState): EffectiveStatusFlags {
+export function deriveEffectiveStatusFlags(state: State): EffectiveStatusFlags {
     return new Set(
         state.contributions.flatMap(({ flags, participating }) => (participating ? flags : [])),
     );

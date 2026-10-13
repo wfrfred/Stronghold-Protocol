@@ -2,21 +2,21 @@ import type { Context } from "../../query.js";
 import { assertNonnegativeNumber } from "../../../../common/assert.js";
 import * as contribution from "../../contribution/contribution.js";
 import * as modifier from "../../contribution/value.js";
-import type { Unit, Definition } from "../../unit.js";
+import type { Unit, Definition as UnitDefinition } from "../../unit.js";
 
-export interface OffenseDefinition {
+export interface Definition {
     readonly attack: number;
 }
 
-export interface OffenseState {
+export interface State {
     readonly attack: readonly contribution.Contribution<contribution.Input<Context>>[];
 }
 
 export interface Offense {
     readonly definition: {
-        readonly offense: OffenseDefinition;
+        readonly offense: Definition;
     };
-    readonly offense: OffenseState;
+    readonly offense: State;
 }
 
 export function hasOffense<U extends Unit>(unit: U): unit is U & Offense {
@@ -24,46 +24,42 @@ export function hasOffense<U extends Unit>(unit: U): unit is U & Offense {
 }
 
 export function hasOffenseDefinition(
-    definition: Definition,
-): definition is Definition & Offense["definition"] {
+    definition: UnitDefinition,
+): definition is UnitDefinition & Offense["definition"] {
     return "offense" in definition;
 }
 
-export function createOffenseDefinition(definition: OffenseDefinition): OffenseDefinition {
+export function createDefinition(definition: Definition): Definition {
     assertNonnegativeNumber(definition.attack, "attack");
 
     return Object.freeze({ attack: definition.attack });
 }
 
-export function initializeOffenseState(): OffenseState {
+export function initialize(): State {
     return { attack: [] };
 }
 
 function changeAttackContributions(
-    state: OffenseState,
-    transition: (entries: OffenseState["attack"]) => OffenseState["attack"],
-): OffenseState {
+    state: State,
+    transition: (entries: State["attack"]) => State["attack"],
+): State {
     const attack = transition(state.attack);
 
     return attack === state.attack ? state : { ...state, attack };
 }
 
 export function setAttackContribution(
-    state: OffenseState,
+    state: State,
     entry: contribution.Contribution<contribution.Input<Context>>,
-): OffenseState {
+): State {
     return changeAttackContributions(state, (entries) => contribution.set(entries, entry));
 }
 
-export function removeAttackContribution(state: OffenseState, id: string): OffenseState {
+export function removeAttackContribution(state: State, id: string): State {
     return changeAttackContributions(state, (entries) => contribution.remove(entries, id));
 }
 
-export function resolveOffenseAttack(
-    definition: OffenseDefinition,
-    state: OffenseState,
-    context: Context,
-): number {
+export function resolveAttack(definition: Definition, state: State, context: Context): number {
     return Math.max(
         0,
         modifier.apply(

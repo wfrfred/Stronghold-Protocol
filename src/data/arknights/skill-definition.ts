@@ -1,7 +1,7 @@
 import {
-    createSkillDefinition,
+    createDefinition as createSkillDefinition,
     type SkillActivationMode,
-    type SkillDefinition,
+    type Definition as SkillDefinition,
     type SkillSpRecovery,
 } from "../../core/tactical/unit/capability/skill/capability.js";
 import { TICKS_PER_SECOND } from "../../core/tactical/tick.js";

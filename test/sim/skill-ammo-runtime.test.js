@@ -12,7 +12,7 @@ import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js"
 import { createDefinition } from "../../dist/core/tactical/unit/archetype/operator.js";
 import { compileAction } from "../../dist/core/tactical/unit/capability/action/compile.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
-import { createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
+import { createDefinition as createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
 

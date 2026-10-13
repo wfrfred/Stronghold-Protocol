@@ -1,6 +1,6 @@
 import type { BattleState } from "../../../../battle/state.js";
 import * as hook from "../../../hook/hook.js";
-import type { VitalityState } from "../capability.js";
+import type { State } from "../capability.js";
 import type { Context as VitalityContext, Result } from "../hook.js";
 import type { HealingReport, HealingRequest, PendingHealing } from "./contract.js";
 
@@ -30,13 +30,13 @@ export interface ReactionHook extends hook.Hook<
 
 export type Hook = AmountHook | ReactionHook;
 
-export function setHook(state: VitalityState, entry: Hook): VitalityState {
+export function setHook(state: State, entry: Hook): State {
     const healingHooks = hook.set(state.healingHooks, entry);
 
     return healingHooks === state.healingHooks ? state : { ...state, healingHooks };
 }
 
-export function removeHook(state: VitalityState, id: string): VitalityState {
+export function removeHook(state: State, id: string): State {
     const healingHooks = hook.remove(state.healingHooks, id);
 
     return healingHooks === state.healingHooks ? state : { ...state, healingHooks };

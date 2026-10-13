@@ -25,7 +25,7 @@ import {
     transitionUnit,
 } from "../../dist/core/tactical/battle/state.js";
 import { initialize } from "../../dist/core/tactical/unit/initialize.js";
-import { createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
+import { createDefinition as createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { activateSkill } from "../../dist/core/tactical/unit/capability/skill/execution.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { get } from "../../dist/core/tactical/unit/effect/operations.js";

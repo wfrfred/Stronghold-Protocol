@@ -8,7 +8,7 @@ import { createProjectileDefinition } from "../../dist/core/tactical/battlefield
 import { launchProjectile, getProjectile } from "../../dist/core/tactical/battlefield/projectile/operations.js";
 import { advanceProjectiles } from "../../dist/core/tactical/battlefield/projectile/settlement.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
-import { createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
+import { createDefinition as createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { activateSkill, advanceSkill, consumeSkillAmmo } from "../../dist/core/tactical/unit/capability/skill/execution.js";
 import { spendSkillAmmo } from "../../dist/core/tactical/unit/capability/skill/ammo.js";
 import { gainSkillSp } from "../../dist/core/tactical/unit/capability/skill/sp.js";

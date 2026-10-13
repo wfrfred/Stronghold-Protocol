@@ -1,11 +1,11 @@
 import type { Unit } from "../unit.js";
 
-export interface SpatialPresenceState {
+export interface State {
     readonly present: boolean;
 }
 
 export interface SpatialPresence {
-    readonly spatialPresence: SpatialPresenceState;
+    readonly spatialPresence: State;
 }
 
 export function hasSpatialPresence(unit: Unit): unit is Unit & SpatialPresence {

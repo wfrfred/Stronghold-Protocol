@@ -21,7 +21,7 @@ import { hasStatusFlag } from "../core/tactical/unit/capability/status/capabilit
 import {
     hasVitality,
     hasVitalityDefinition,
-    resolveVitalityMaxHp,
+    resolveMaxHp as resolveVitalityMaxHp,
 } from "../core/tactical/unit/capability/vitality/capability.js";
 import type { Direction } from "../core/tactical/geometry/direction.js";
 import type { Unit, Id } from "../core/tactical/unit/unit.js";

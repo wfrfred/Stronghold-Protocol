@@ -12,7 +12,7 @@ import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js'
 import { createActionDefinition } from '../../dist/core/tactical/unit/capability/action/capability.js';
 import { compileAction } from '../../dist/core/tactical/unit/capability/action/compile.js';
 import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
-import { createSkillDefinition } from '../../dist/core/tactical/unit/capability/skill/capability.js';
+import { createDefinition as createSkillDefinition } from '../../dist/core/tactical/unit/capability/skill/capability.js';
 import { activateSkill, advanceSkill } from '../../dist/core/tactical/unit/capability/skill/execution.js';
 import { gainUnitSkillSp } from '../../dist/core/tactical/battle/execution/skill-sp.js';
 import { hasStatusFlag } from '../../dist/core/tactical/unit/capability/status/capability.js';

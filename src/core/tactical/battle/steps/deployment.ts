@@ -8,11 +8,11 @@ import {
     type DeployableUnitDefinition,
 } from "../../unit/capability/deployment.js";
 import {
-    validateOccupancyState,
+    validateState as validateOccupancyState,
     hasOccupancy,
     type OccupancyClaim,
     type Occupancy,
-    type OccupancyState,
+    type State as OccupancyState,
 } from "../../unit/capability/occupancy.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
 import { instantiateUnitPlacement, type UnitPlacementDefinition } from "../creation/placement.js";

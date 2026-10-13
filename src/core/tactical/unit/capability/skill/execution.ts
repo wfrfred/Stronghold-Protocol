@@ -19,7 +19,7 @@ import {
     skillSpCapacity,
     type SkillActivation,
     type SkillActivationMode,
-    type SkillState,
+    type State,
 } from "./capability.js";
 import type { CompiledSkill, SkillActivationContext } from "./compiled.js";
 import { spendSkillSp } from "./sp.js";
@@ -61,7 +61,7 @@ export type SkillExecutionResult =
           readonly detail?: string;
       };
 
-function saveState(state: BattleState, unitId: Id, skill: SkillState): BattleState {
+function saveState(state: BattleState, unitId: Id, skill: State): BattleState {
     const unit = getUnit(state, unitId);
 
     return unit !== undefined && hasSkill(unit) && unit.skill !== skill

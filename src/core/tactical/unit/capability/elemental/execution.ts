@@ -50,12 +50,15 @@ export type ElementalSignal =
           readonly tick: number;
       };
 
-export interface ElementDamageReport {
-    readonly outcome: "REJECTED" | "APPLIED" | "BURST";
-    readonly reason?: ElementalRejection | "TARGET_ABSENT";
-    readonly amount: number;
-    readonly burst: ElementalBurst | null;
-}
+export type ElementDamageReport =
+    | {
+          readonly outcome: "REJECTED";
+          readonly reason: ElementalRejection | "TARGET_ABSENT";
+          readonly amount: 0;
+          readonly burst: null;
+      }
+    | { readonly outcome: "APPLIED"; readonly amount: number; readonly burst: null }
+    | { readonly outcome: "BURST"; readonly amount: number; readonly burst: ElementalBurst };
 
 export type ElementDamageOperation = (
     state: BattleState,

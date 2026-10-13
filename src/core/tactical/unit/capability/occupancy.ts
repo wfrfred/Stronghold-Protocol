@@ -11,12 +11,12 @@ export interface OccupancyClaim {
     readonly type: "PRESENT" | "RESERVATION";
 }
 
-export interface OccupancyState {
+export interface State {
     readonly claims: readonly OccupancyClaim[];
 }
 
 export interface Occupancy {
-    readonly occupancy: OccupancyState;
+    readonly occupancy: State;
 }
 
 export function hasOccupancy<U extends Unit>(unit: U): unit is U & Occupancy {
@@ -27,7 +27,7 @@ export function isOccupancyClaimActive(unit: Unit, claim: OccupancyClaim): boole
     return claim.type === "RESERVATION" || isSpatiallyPresent(unit);
 }
 
-export function validateOccupancyState(state: OccupancyState): void {
+export function validateState(state: State): void {
     for (const claim of state.claims) {
         assertSafeInteger(claim.position[0], "occupancy row");
         assertSafeInteger(claim.position[1], "occupancy column");

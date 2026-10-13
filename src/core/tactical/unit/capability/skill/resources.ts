@@ -1,9 +1,9 @@
 import { ResourceRegistration } from "../../../../common/resource-registration.js";
-import type { SkillDefinition } from "./capability.js";
+import type { Definition } from "./capability.js";
 import type { CompiledSkill } from "./compiled.js";
 
 export class SkillResources {
-    readonly #compiledSkills = new Map<SkillDefinition, CompiledSkill>();
+    readonly #compiledSkills = new Map<Definition, CompiledSkill>();
     readonly #registration: ResourceRegistration;
 
     constructor(registration = new ResourceRegistration()) {
@@ -24,7 +24,7 @@ export class SkillResources {
         return compiled;
     }
 
-    get(definition: SkillDefinition): CompiledSkill {
+    get(definition: Definition): CompiledSkill {
         this.#registration.assertUsable();
         const compiled = this.#compiledSkills.get(definition);
 

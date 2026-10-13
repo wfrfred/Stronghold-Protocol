@@ -5,14 +5,14 @@ import {
     assertPositiveSafeInteger,
 } from "../../../../common/assert.js";
 import { TICKS_PER_SECOND } from "../../../tick.js";
-import type { Unit, Definition } from "../../unit.js";
+import type { Unit, Definition as UnitDefinition } from "../../unit.js";
 import type { ActionDefinition } from "../action/capability.js";
 
 export type SkillActivationMode = "MANUAL" | "AUTO" | "PASSIVE";
 
 export type SkillSpRecovery = "TIME" | "ATTACK" | "HIT" | "NONE";
 
-export interface SkillDefinition {
+export interface Definition {
     readonly id: string;
     readonly activation: SkillActivationMode;
     readonly spRecovery: SkillSpRecovery;
@@ -33,7 +33,7 @@ export interface SkillActivation {
     readonly remainingAmmo?: number;
 }
 
-export interface SkillState {
+export interface State {
     readonly sp: number;
     readonly spRecoveryProgressTicks: number;
     readonly lastAdvancedTick: number;
@@ -42,8 +42,8 @@ export interface SkillState {
 }
 
 export interface Skill {
-    readonly definition: { readonly skill: SkillDefinition };
-    readonly skill: SkillState;
+    readonly definition: { readonly skill: Definition };
+    readonly skill: State;
 }
 
 export function hasSkill<U extends Unit>(unit: U): unit is U & Skill {
@@ -51,16 +51,16 @@ export function hasSkill<U extends Unit>(unit: U): unit is U & Skill {
 }
 
 export function hasSkillDefinition(
-    definition: Definition,
-): definition is Definition & Skill["definition"] {
+    definition: UnitDefinition,
+): definition is UnitDefinition & Skill["definition"] {
     return "skill" in definition;
 }
 
-export function skillSpCapacity(definition: SkillDefinition): number {
+export function skillSpCapacity(definition: Definition): number {
     return definition.spCost * (definition.maxCharges ?? 1);
 }
 
-export function createSkillDefinition(definition: SkillDefinition): SkillDefinition {
+export function createDefinition(definition: Definition): Definition {
     if (definition.id.length === 0) {
         throw new TypeError("skill identity must be nonempty");
     }
@@ -117,25 +117,25 @@ export function createSkillDefinition(definition: SkillDefinition): SkillDefinit
     };
 }
 
-export function initializeSkillState(
-    definition: SkillDefinition,
+export function initialize(
+    definition: Definition,
     context: { readonly tick: number } = { tick: 0 },
-): SkillState {
+): State {
     assertNonnegativeSafeInteger(context.tick, "skill initialization tick");
 
-    const state: SkillState = {
+    const state: State = {
         sp: definition.initialSp,
         spRecoveryProgressTicks: 0,
         lastAdvancedTick: context.tick,
         nextActivationId: 0,
         active: null,
     };
-    validateSkillState(state);
+    validateState(state);
 
     return state;
 }
 
-export function validateSkillState(state: SkillState): void {
+export function validateState(state: State): void {
     assertNonnegativeSafeInteger(state.sp, "skill SP");
     assertNonnegativeNumber(state.spRecoveryProgressTicks, "skill SP recovery progress");
     assertNonnegativeSafeInteger(state.lastAdvancedTick, "skill last advanced tick");

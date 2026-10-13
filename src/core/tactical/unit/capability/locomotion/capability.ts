@@ -6,13 +6,13 @@ import { createSteeringState, type SteeringParameters, type SteeringState } from
 import * as contribution from "../../contribution/contribution.js";
 import * as modifier from "../../contribution/value.js";
 
-export interface LocomotionDefinition {
+export interface Definition {
     readonly moveSpeedPerTick: number;
     readonly minimumMoveSpeedPerTick?: number;
     readonly steeringParameters: SteeringParameters;
 }
 
-export interface LocomotionState {
+export interface State {
     readonly moving: boolean;
     readonly moveSpeed: readonly contribution.Contribution<contribution.Input<Context>>[];
     readonly steering: SteeringState;
@@ -23,16 +23,16 @@ export interface RouteControlState {
     readonly navigation: NavigationState;
 }
 
-export interface RoutedLocomotionState extends LocomotionState {
+export interface RoutedLocomotionState extends State {
     readonly mainRoute: RouteControlState;
     readonly alternativeRoute: RouteControlState | null;
 }
 
 export interface Locomotion {
     readonly definition: {
-        readonly locomotion: LocomotionDefinition;
+        readonly locomotion: Definition;
     };
-    readonly locomotion: LocomotionState;
+    readonly locomotion: State;
 }
 
 export interface RoutedLocomotion extends Locomotion {
@@ -49,47 +49,39 @@ export function hasRoutedLocomotion<U extends Unit>(unit: U): unit is U & Routed
     return hasLocomotion(unit) && "mainRoute" in unit.locomotion;
 }
 
-export function createLocomotionState(): LocomotionState {
+export function initialize(): State {
     return { moving: false, moveSpeed: [], steering: createSteeringState() };
-}
-
-export function initializeLocomotionState(): LocomotionState {
-    return createLocomotionState();
 }
 
 export function createRoutedLocomotionState(mainRoute: RouteControlState): RoutedLocomotionState {
     return {
-        ...createLocomotionState(),
+        ...initialize(),
         mainRoute,
         alternativeRoute: null,
     };
 }
 
 function changeMoveSpeedContributions(
-    state: LocomotionState,
-    transition: (entries: LocomotionState["moveSpeed"]) => LocomotionState["moveSpeed"],
-): LocomotionState {
+    state: State,
+    transition: (entries: State["moveSpeed"]) => State["moveSpeed"],
+): State {
     const moveSpeed = transition(state.moveSpeed);
 
     return moveSpeed === state.moveSpeed ? state : { ...state, moveSpeed };
 }
 
 export function setMoveSpeedContribution(
-    state: LocomotionState,
+    state: State,
     entry: contribution.Contribution<contribution.Input<Context>>,
-): LocomotionState {
+): State {
     return changeMoveSpeedContributions(state, (entries) => contribution.set(entries, entry));
 }
 
-export function removeMoveSpeedContribution(state: LocomotionState, id: string): LocomotionState {
+export function removeMoveSpeedContribution(state: State, id: string): State {
     return changeMoveSpeedContributions(state, (entries) => contribution.remove(entries, id));
 }
 
-export function resolveMoveSpeedPerTick(
-    definition: LocomotionDefinition,
-    state: LocomotionState,
-    context: Context,
-): number {
+export function resolveMoveSpeed(definition: Definition, state: State, context: Context): number {
     return Math.max(
         definition.minimumMoveSpeedPerTick ?? 0,
         modifier.apply(

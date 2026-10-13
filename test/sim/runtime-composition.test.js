@@ -1,5 +1,5 @@
 import { setData as setEffectData } from "../../dist/core/tactical/unit/effect/effect.js";
-import { initializeActionState } from "../../dist/core/tactical/unit/capability/action/capability.js";
+import { initialize as initializeActionState } from "../../dist/core/tactical/unit/capability/action/capability.js";
 import {
     setAttackContribution,
     removeAttackContribution,
@@ -28,7 +28,7 @@ import {
     removeStatusContribution,
 } from "../../dist/core/tactical/unit/capability/status/capability.js";
 import * as modifier from "../../dist/core/tactical/unit/contribution/value.js";
-import { initializeVitalityState } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
+import { initialize as initializeVitalityState } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import {

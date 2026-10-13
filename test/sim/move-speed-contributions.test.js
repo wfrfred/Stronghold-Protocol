@@ -21,7 +21,7 @@ import { createNavigationFieldCache } from "../../dist/core/tactical/battlefield
 import { canTraverseNavigationSegment } from "../../dist/core/tactical/battlefield/navigation/segment.js";
 import { getNavigationRequest } from "../../dist/core/tactical/battlefield/navigation/state.js";
 import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
-import { resolveMoveSpeedPerTick } from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
+import { resolveMoveSpeed as resolveMoveSpeedPerTick } from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
 import {
     setMoveSpeedContribution,
     removeMoveSpeedContribution,

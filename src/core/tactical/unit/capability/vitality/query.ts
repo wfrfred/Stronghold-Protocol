@@ -1,4 +1,4 @@
-import { hasVitality, resolveVitalityMaxHp } from "./capability.js";
+import { hasVitality, resolveMaxHp as resolveVitalityMaxHp } from "./capability.js";
 import type { Id } from "../../unit.js";
 import type { CombatTargetingView } from "../../targeting/query.js";
 

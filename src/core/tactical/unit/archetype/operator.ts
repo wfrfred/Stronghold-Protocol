@@ -1,41 +1,44 @@
 import { assertNonnegativeSafeInteger, assertPositiveNumber } from "../../../common/assert.js";
 import {
-    createActionCapabilityDefinition,
-    type ActionCapabilityDefinition,
+    createDefinition as createActionCapabilityDefinition,
+    type Definition as ActionCapabilityDefinition,
 } from "../capability/action/capability.js";
-import type { AllegianceState } from "../capability/allegiance.js";
+import type { Definition as AllegianceDefinition } from "../capability/allegiance.js";
 import {
     createBlockerDefinition,
     type BlockerDefinition,
 } from "../capability/blocking/capability.js";
 import {
-    createDefenseDefinition,
-    type DefenseDefinition,
+    createDefinition as createDefenseDefinition,
+    type Definition as DefenseDefinition,
 } from "../capability/defense/capability.js";
 import {
-    createOffenseDefinition,
-    type OffenseDefinition,
+    createDefinition as createOffenseDefinition,
+    type Definition as OffenseDefinition,
 } from "../capability/offense/capability.js";
 import {
     createHitDefinition,
     type HitDefinition,
     type SpatialDefinition,
 } from "../capability/spatial.js";
-import type { StatusDefinition } from "../capability/status/capability.js";
-import type { VitalityDefinition } from "../capability/vitality/capability.js";
+import type { Definition as StatusDefinition } from "../capability/status/capability.js";
+import type { Definition as VitalityDefinition } from "../capability/vitality/capability.js";
 import type { DefinitionId } from "../unit.js";
 import * as initialization from "../initialize.js";
 import {
-    createElementalDefinition,
-    type ElementalDefinition,
+    createDefinition as createElementalDefinition,
+    type Definition as ElementalDefinition,
 } from "../capability/elemental/capability.js";
-import { createSkillDefinition, type SkillDefinition } from "../capability/skill/capability.js";
+import {
+    createDefinition as createSkillDefinition,
+    type Definition as SkillDefinition,
+} from "../capability/skill/capability.js";
 
 export interface Definition {
     readonly id: DefinitionId;
     readonly vitality: VitalityDefinition;
     readonly action: ActionCapabilityDefinition;
-    readonly allegiance: AllegianceState;
+    readonly allegiance: AllegianceDefinition;
     readonly spatial: SpatialDefinition;
     readonly hit: HitDefinition;
     readonly status: StatusDefinition;

@@ -5,7 +5,7 @@ import {
     assertPositiveNumber,
     assertPositiveSafeInteger,
 } from "../../../../common/assert.js";
-import type { Unit, Definition, Id } from "../../unit.js";
+import type { Unit, Definition as UnitDefinition, Id } from "../../unit.js";
 
 export const ELEMENT_TYPES = Object.freeze(["NEURAL", "EROSION", "BURN", "NECROSIS"] as const);
 
@@ -15,7 +15,7 @@ export type ElementalReceiver = "CHARACTER" | "ENEMY";
 
 export type ElementValues = Readonly<Record<ElementType, number>>;
 
-export interface ElementalDefinition {
+export interface Definition {
     readonly receiver: ElementalReceiver;
     readonly maxEp: number;
     readonly recoveryPerTick: number;
@@ -32,7 +32,7 @@ export interface ElementalRecovery {
     readonly endsAtTick: number;
 }
 
-export interface ElementalState {
+export interface State {
     readonly ep: ElementValues;
     readonly immune: boolean;
     readonly recovery: ElementalRecovery | null;
@@ -40,8 +40,8 @@ export interface ElementalState {
 }
 
 export interface Elemental {
-    readonly definition: { readonly elemental: ElementalDefinition };
-    readonly elemental: ElementalState;
+    readonly definition: { readonly elemental: Definition };
+    readonly elemental: State;
 }
 
 export function hasElemental<U extends Unit>(unit: U): unit is U & Elemental {
@@ -49,8 +49,8 @@ export function hasElemental<U extends Unit>(unit: U): unit is U & Elemental {
 }
 
 export function hasElementalDefinition(
-    definition: Definition,
-): definition is Definition & Elemental["definition"] {
+    definition: UnitDefinition,
+): definition is UnitDefinition & Elemental["definition"] {
     return "elemental" in definition;
 }
 
@@ -58,18 +58,18 @@ export function elementValues(value: number): ElementValues {
     return Object.freeze({ NEURAL: value, EROSION: value, BURN: value, NECROSIS: value });
 }
 
-export function createElementalDefinition(
+export function createDefinition(
     definition: Omit<
-        ElementalDefinition,
+        Definition,
         "recoveryPerTick" | "elementResistance" | "damageResistance" | "immune"
     > &
         Partial<
             Pick<
-                ElementalDefinition,
+                Definition,
                 "recoveryPerTick" | "elementResistance" | "damageResistance" | "immune"
             >
         >,
-): ElementalDefinition {
+): Definition {
     const { recoveryPerTick = 0, elementResistance = 0, damageResistance = 0 } = definition;
 
     assertPositiveNumber(definition.maxEp, "maximum EP");
@@ -92,10 +92,10 @@ export function createElementalDefinition(
     });
 }
 
-export function initializeElementalState(
-    definition: ElementalDefinition,
+export function initialize(
+    definition: Definition,
     context: { readonly tick: number } = { tick: 0 },
-): ElementalState {
+): State {
     assertNonnegativeSafeInteger(context.tick, "elemental initialization tick");
 
     return {
@@ -106,6 +106,6 @@ export function initializeElementalState(
     };
 }
 
-export function setElementalImmunity(state: ElementalState, immune: boolean): ElementalState {
+export function setElementalImmunity(state: State, immune: boolean): State {
     return state.immune === immune ? state : { ...state, immune };
 }

@@ -14,10 +14,10 @@ import {
     type TileBoundUnitDefinition,
 } from "../../core/tactical/unit/capability/deployment.js";
 import {
-    validateOccupancyState,
-    type OccupancyState,
+    validateState as validateOccupancyState,
+    type State as OccupancyState,
 } from "../../core/tactical/unit/capability/occupancy.js";
-import type { VitalityDefinition } from "../../core/tactical/unit/capability/vitality/capability.js";
+import type { Definition as VitalityDefinition } from "../../core/tactical/unit/capability/vitality/capability.js";
 import type { ArknightsPredefinedInstance } from "./level.js";
 import type { PredefinedPrefab } from "./prefab.js";
 

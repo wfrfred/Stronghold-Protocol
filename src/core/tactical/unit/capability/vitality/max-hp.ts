@@ -1,16 +1,12 @@
-import { resolveVitalityMaxHp, type VitalityDefinition, type VitalityState } from "./capability.js";
+import { resolveMaxHp, type Definition, type State } from "./capability.js";
 
-export function preserveHpRatio(
-    definition: VitalityDefinition,
-    previous: VitalityState,
-    updated: VitalityState,
-): VitalityState {
+export function preserveHpRatio(definition: Definition, previous: State, updated: State): State {
     if (previous === updated || previous.maxHp === updated.maxHp) {
         return updated;
     }
 
-    const previousMaxHp = resolveVitalityMaxHp(definition, previous);
-    const updatedMaxHp = resolveVitalityMaxHp(definition, updated);
+    const previousMaxHp = resolveMaxHp(definition, previous);
+    const updatedMaxHp = resolveMaxHp(definition, updated);
 
     if (previousMaxHp === updatedMaxHp || updated.hp <= 0) {
         return updated;

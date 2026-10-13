@@ -1,4 +1,4 @@
-import { hasOffense, resolveOffenseAttack } from "./capability.js";
+import { hasOffense, resolveAttack } from "./capability.js";
 import type { Id } from "../../unit.js";
 import type { BattlefieldView } from "../../../battlefield/contract.js";
 
@@ -10,6 +10,6 @@ export function resolveAttackPower(unitId: Id, battlefield: BattlefieldView): nu
     }
 
     return hasOffense(unit)
-        ? resolveOffenseAttack(unit.definition.offense, unit.offense, { unit, battlefield })
+        ? resolveAttack(unit.definition.offense, unit.offense, { unit, battlefield })
         : 0;
 }

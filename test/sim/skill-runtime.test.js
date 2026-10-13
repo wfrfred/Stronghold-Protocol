@@ -7,7 +7,7 @@ import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { createLegacyCombatSpec } from '../../dist/legacy/combat.js';
 import { createDefinition } from '../../dist/core/tactical/unit/archetype/operator.js';
-import { createSkillDefinition } from '../../dist/core/tactical/unit/capability/skill/capability.js';
+import { createDefinition as createSkillDefinition } from '../../dist/core/tactical/unit/capability/skill/capability.js';
 import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { compileAction } from '../../dist/core/tactical/unit/capability/action/compile.js';
 import { initialize } from '../../dist/core/tactical/unit/initialize.js';

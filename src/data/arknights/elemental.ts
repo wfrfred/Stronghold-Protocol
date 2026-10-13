@@ -1,6 +1,6 @@
 import {
-    createElementalDefinition,
-    type ElementalDefinition,
+    createDefinition as createElementalDefinition,
+    type Definition as ElementalDefinition,
     type ElementalReceiver,
     type ElementType,
 } from "../../core/tactical/unit/capability/elemental/capability.js";

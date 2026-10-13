@@ -1,10 +1,14 @@
-import type { Unit, Definition } from "../unit.js";
+import type { Unit, Definition as UnitDefinition } from "../unit.js";
 import {
-    initializeActionState,
-    type ActionCapabilityDefinition,
-    type ActionState,
+    initialize as initializeActionState,
+    type Definition as ActionCapabilityDefinition,
+    type State as ActionState,
 } from "./action/capability.js";
-import { initializeAllegianceState, type AllegianceState } from "./allegiance.js";
+import {
+    initialize as initializeAllegianceState,
+    type Definition as AllegianceDefinition,
+    type State as AllegianceState,
+} from "./allegiance.js";
 import {
     initializeBlockableState,
     initializeBlockerState,
@@ -14,22 +18,22 @@ import {
     type BlockerState,
 } from "./blocking/capability.js";
 import {
-    initializeDefenseState,
-    type DefenseDefinition,
-    type DefenseState,
+    initialize as initializeDefenseState,
+    type Definition as DefenseDefinition,
+    type State as DefenseState,
 } from "./defense/capability.js";
 import {
-    initializeLocomotionState,
-    type LocomotionDefinition,
-    type LocomotionState,
+    initialize as initializeLocomotionState,
+    type Definition as LocomotionDefinition,
+    type State as LocomotionState,
     type RoutedLocomotionState,
 } from "./locomotion/capability.js";
-import type { SpatialPresenceState } from "./presence.js";
-import type { OccupancyState } from "./occupancy.js";
+import type { State as SpatialPresenceState } from "./presence.js";
+import type { State as OccupancyState } from "./occupancy.js";
 import {
-    initializeOffenseState,
-    type OffenseDefinition,
-    type OffenseState,
+    initialize as initializeOffenseState,
+    type Definition as OffenseDefinition,
+    type State as OffenseState,
 } from "./offense/capability.js";
 import {
     initializeHitState,
@@ -40,21 +44,25 @@ import {
     type SpatialState,
 } from "./spatial.js";
 import {
-    initializeStatusState,
-    type StatusDefinition,
-    type StatusState,
+    initialize as initializeStatusState,
+    type Definition as StatusDefinition,
+    type State as StatusState,
 } from "./status/capability.js";
 import {
-    initializeVitalityState,
-    type VitalityDefinition,
-    type VitalityState,
+    initialize as initializeVitalityState,
+    type Definition as VitalityDefinition,
+    type State as VitalityState,
 } from "./vitality/capability.js";
 import {
-    initializeElementalState,
-    type ElementalDefinition,
-    type ElementalState,
+    initialize as initializeElementalState,
+    type Definition as ElementalDefinition,
+    type State as ElementalState,
 } from "./elemental/capability.js";
-import { initializeSkillState, type SkillDefinition, type SkillState } from "./skill/capability.js";
+import {
+    initialize as initializeSkillState,
+    type Definition as SkillDefinition,
+    type State as SkillState,
+} from "./skill/capability.js";
 
 export interface CapabilityInitializationContext {
     readonly tick: number;
@@ -67,7 +75,7 @@ interface CapabilityConfigurations {
     readonly action: ActionCapabilityDefinition;
     readonly skill: SkillDefinition;
     readonly elemental: ElementalDefinition;
-    readonly allegiance: AllegianceState;
+    readonly allegiance: AllegianceDefinition;
     readonly spatial: SpatialDefinition;
     readonly hit: HitDefinition;
     readonly status: StatusDefinition;
@@ -138,7 +146,7 @@ export type SelectedCapabilityStates<S extends object> = {
         : never;
 };
 
-export type RuntimeCapabilitiesFor<D extends Definition> = {
+export type RuntimeCapabilitiesFor<D extends UnitDefinition> = {
     readonly [
         K in ConfiguredCapabilityKey as [D] extends [Readonly<Record<K, CapabilityConfig<K>>>]
             ? K
@@ -146,7 +154,7 @@ export type RuntimeCapabilitiesFor<D extends Definition> = {
     ]: CapabilityState<K>;
 };
 
-export type PreparedCapabilityStates<D extends Definition> = Partial<
+export type PreparedCapabilityStates<D extends UnitDefinition> = Partial<
     RuntimeCapabilitiesFor<D> & RuntimeCapabilityStates
 >;
 
@@ -204,7 +212,7 @@ export function selectCapabilityStates<S extends Partial<CapabilityStates>>(
 }
 
 export function initializeUnitCapabilities(
-    definition: Definition,
+    definition: UnitDefinition,
     context: CapabilityInitializationContext,
     prepared: Partial<CapabilityStates>,
 ): object {
