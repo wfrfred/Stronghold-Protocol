@@ -6,20 +6,20 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { initialize } from '../../dist/core/tactical/unit/initialize.js';
 import { assertUnitCapabilityPairing } from '../../dist/core/tactical/unit/capability/catalog.js';
-import { createDeploymentProfile, hasDeployable } from '../../dist/core/tactical/unit/capability/deployment.js';
+import { createDefinition as createDeployableDefinition, hasDeployable } from '../../dist/core/tactical/unit/capability/deployable/capability.js';
 import { createDefinition as createOperator } from '../../dist/core/tactical/unit/archetype/operator.js';
 import { unit as actionUnit } from '../helpers/action-fixture.js';
 
 const definition = {
   id: 'deployable',
-  deployment: createDeploymentProfile({ buildableType: 'MELEE' }),
+  deployable: createDeployableDefinition({ buildableType: 'MELEE' }),
 };
 
-test('deployment definitions initialize a paired capability without a Card', () => {
+test('deployable definitions initialize a paired capability without a Card', () => {
   const unit = initialize({ id: 0, definition, position: [0, 0] });
   assert.equal(hasDeployable(unit), true);
-  assert.equal(unit.definition.deployment, definition.deployment);
-  assert.deepEqual(unit.deployment, { cardId: null });
+  assert.equal(unit.definition.deployable, definition.deployable);
+  assert.deepEqual(unit.deployable, { cardId: null });
   assert.doesNotThrow(() => assertUnitCapabilityPairing(unit));
 
   const other = initialize({ id: 1, definition: { id: 'enemy' }, position: [0, 0] });
@@ -27,32 +27,32 @@ test('deployment definitions initialize a paired capability without a Card', () 
   assert.doesNotThrow(() => assertUnitCapabilityPairing(other));
 });
 
-test('prepared deployment state preserves its Card association and requires configuration', () => {
-  const deployment = { cardId: 17 };
-  const unit = initialize({ id: 0, definition, position: [0, 0], states: { deployment } });
-  assert.equal(unit.deployment, deployment);
-  assert.equal(unit.deployment.cardId, 17);
-  assert.deepEqual(deployment, { cardId: 17 });
+test('prepared deployable state preserves its Card association and requires configuration', () => {
+  const deployable = { cardId: 17 };
+  const unit = initialize({ id: 0, definition, position: [0, 0], states: { deployable } });
+  assert.equal(unit.deployable, deployable);
+  assert.equal(unit.deployable.cardId, 17);
+  assert.deepEqual(deployable, { cardId: 17 });
   assert.throws(() => initialize({
-    id: 1, definition: { id: 'unconfigured' }, position: [0, 0], states: { deployment },
-  }), /prepared capability deployment requires configuration/);
-  const { deployment: _deployment, ...unpaired } = unit;
+    id: 1, definition: { id: 'unconfigured' }, position: [0, 0], states: { deployable },
+  }), /prepared capability deployable requires configuration/);
+  const { deployable: _deployment, ...unpaired } = unit;
   assert.throws(() => assertUnitCapabilityPairing(unpaired), /configuration and state must be paired/);
 });
 
-test('operator content factories preserve an optional deployment capability', () => {
+test('operator content factories preserve an optional deployable capability', () => {
   const operator = createOperator({
     ...actionUnit(0, { action: true }).definition,
     blocker: { capacity: 0, geometry: { radius: 0.1 } },
-    deployment: definition.deployment,
+    deployable: definition.deployable,
   });
   const created = initialize({ id: 0, position: [0, 0], definition: operator });
-  assert.equal(operator.deployment, definition.deployment);
+  assert.equal(operator.deployable, definition.deployable);
   assert.equal(hasDeployable(created), true);
-  assert.deepEqual(created.deployment, { cardId: null });
+  assert.deepEqual(created.deployable, { cardId: null });
 });
 
-test('factory inference and the deployment guard retain capability and caller types', async () => {
+test('factory inference and the deployable guard retain capability and caller types', async () => {
   const { default: ts } = await import('typescript');
   const directory = mkdtempSync(join(tmpdir(), 'stronghold-deployable-types-'));
   const module = (path) => JSON.stringify(fileURLToPath(new URL(path, import.meta.url)));
@@ -60,24 +60,24 @@ test('factory inference and the deployment guard retain capability and caller ty
   try {
     writeFileSync(path, `
 import { initialize } from ${module('../../src/core/tactical/unit/initialize.js')};
-import { hasDeployable, type Deployable } from ${module('../../src/core/tactical/unit/capability/deployment.js')};
+import { hasDeployable, type Deployable } from ${module('../../src/core/tactical/unit/capability/deployable/capability.js')};
 import type { Unit } from ${module('../../src/core/tactical/unit/unit.js')};
 
-const definition = { id: 'typed-deployable', deployment: {
+const definition = { id: 'typed-deployable', deployable: {
   buildableType: 'MELEE' as const, advancedBuildableMask: 1,
 } };
 const unit: Unit & Deployable = initialize({ id: 0, definition, position: [0, 0] });
 const prepared: Unit & Deployable = initialize({
-  id: 1, definition, position: [0, 0], states: { deployment: { cardId: 17 } },
+  id: 1, definition, position: [0, 0], states: { deployable: { cardId: 17 } },
 });
-const cardId: number | null = prepared.deployment.cardId;
+const cardId: number | null = prepared.deployable.cardId;
 declare const unknownUnit: Unit & { readonly label: string };
 if (hasDeployable(unknownUnit)) {
   const guarded: Unit & Deployable = unknownUnit;
   const label: string = guarded === unknownUnit ? unknownUnit.label : '';
 }
-// @ts-expect-error deployment state requires a corresponding definition
-initialize({ id: 2, definition: { id: 'enemy' }, position: [0, 0], states: { deployment: { cardId: 17 } } });
+// @ts-expect-error deployable state requires a corresponding definition
+initialize({ id: 2, definition: { id: 'enemy' }, position: [0, 0], states: { deployable: { cardId: 17 } } });
 `);
     const program = ts.createProgram([path], {
       noEmit: true, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.NodeNext,

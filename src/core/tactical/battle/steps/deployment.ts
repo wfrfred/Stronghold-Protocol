@@ -2,12 +2,8 @@ import type { BattlefieldChange } from "../../battlefield/contract.js";
 import { evaluateDeployment } from "../../battlefield/deployment/query.js";
 import type { SupportRelation } from "../../battlefield/support/relations.js";
 import { Tile, type TilePosition } from "../../geometry/coordinate.js";
-import {
-    hasDeployable,
-    hasTileBindingDefinition,
-    type DeployableUnitDefinition,
-    type Deployable,
-} from "../../unit/capability/deployment.js";
+import { hasDeployable, type Deployable } from "../../unit/capability/deployable/capability.js";
+import { hasDefinition as hasTileBindingDefinition } from "../../unit/capability/tile-binding/capability.js";
 import {
     validateState as validateOccupancyState,
     hasOccupancy,
@@ -17,7 +13,7 @@ import {
 } from "../../unit/capability/occupancy.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
 import { instantiateUnitPlacement, type UnitPlacementDefinition } from "../creation/placement.js";
-import type { Unit, Id } from "../../unit/unit.js";
+import type { Unit, Id, Definition as UnitDefinition } from "../../unit/unit.js";
 import type { Command } from "../contract.js";
 import {
     enterUnits,
@@ -36,7 +32,7 @@ import { notifyDeployed } from "../deployment/deployment.js";
 export type DeploymentCommand =
     | {
           readonly type: "DEPLOY_UNIT";
-          readonly definition: DeployableUnitDefinition;
+          readonly definition: UnitDefinition & Deployable["definition"];
           readonly navigationModifiers?: UnitPlacementDefinition["navigationModifiers"];
           readonly tilePosition: TilePosition;
           readonly playerSide: "SIDE_A" | "SIDE_B";
@@ -75,7 +71,7 @@ export function resolveDeploymentCommands(
 
         const battlefield = battlefieldView(state);
         let existing: (Unit & Deployable & Occupancy) | undefined;
-        let definition: DeployableUnitDefinition;
+        let definition: UnitDefinition & Deployable["definition"];
 
         if (command.type === "DEPLOY_UNIT") {
             definition = command.definition;
@@ -97,7 +93,7 @@ export function resolveDeploymentCommands(
 
         const slot = hasTileBindingDefinition(definition) ? "SUPPORT" : "DEPLOYMENT";
         const decision = evaluateDeployment(battlefield, {
-            profile: definition.deployment,
+            profile: definition.deployable,
             tile: command.tilePosition,
             playerSide: command.playerSide,
             slot,

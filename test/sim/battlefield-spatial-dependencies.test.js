@@ -9,7 +9,7 @@ import {
   createBattlefieldState, settleBattlefieldState, settleBattlefieldStateFully,
 } from '../../dist/core/tactical/battlefield/storage/state.js';
 import { initialize } from '../../dist/core/tactical/unit/initialize.js';
-import { createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/deployment.js';
+import { createDefinition as createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/tile-binding/capability.js';
 
 function projectionFacts(state) {
   return { ...state, units: new Map([...state.units].map(([id, unit]) => [

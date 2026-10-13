@@ -1,9 +1,7 @@
 import { assertNonnegativeNumber } from "../../core/common/assert.js";
 import { TICKS_PER_SECOND } from "../../core/tactical/tick.js";
-import type {
-    DeploymentProfile,
-    TileBindingDefinition,
-} from "../../core/tactical/unit/capability/deployment.js";
+import type { Definition as DeployableDefinition } from "../../core/tactical/unit/capability/deployable/capability.js";
+import type { Definition as TileBindingDefinition } from "../../core/tactical/unit/capability/tile-binding/capability.js";
 import {
     createSteeringParameters,
     type SteeringParameters,
@@ -29,7 +27,7 @@ export type PredefinedPrefab =
           readonly prefabKey: string;
           readonly walkCostFloor: number;
           readonly tileBinding: TileBindingDefinition;
-          readonly deployment: DeploymentProfile;
+          readonly deployable: DeployableDefinition;
       }
     | {
           readonly type: "MECHANISM";
@@ -236,7 +234,7 @@ function tileBinding(
     });
 }
 
-function deployment(token: Record<string, unknown>): DeploymentProfile {
+function deployable(token: Record<string, unknown>): DeployableDefinition {
     const condition = object(token._buildCondition, "token build condition");
     const extra = object(condition.extraBuildConditionArray, "token extra build condition");
     const buildableType = condition.buildableType;
@@ -313,7 +311,7 @@ export function parsePredefinedPrefab(value: unknown, skillValue?: unknown): Pre
             prefabKey: source.prefabKey,
             walkCostFloor: 1000,
             tileBinding: tileBinding(mode, options),
-            deployment: deployment(token),
+            deployable: deployable(token),
         });
     }
     if (token._disableUIHub !== true || token._withdrawable !== false || token._category !== 2) {

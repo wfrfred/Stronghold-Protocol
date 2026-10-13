@@ -38,7 +38,8 @@ import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/
 import { createRouteState, createRouteTiming } from '../../dist/core/tactical/unit/capability/locomotion/route/state.js';
 import { createNavigationState } from '../../dist/core/tactical/battlefield/navigation/state.js';
 import { createUnitPlacementDefinition, instantiateUnitPlacement } from '../../dist/core/tactical/battle/creation/placement.js';
-import { createDeploymentProfile, createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/deployment.js';
+import { createDefinition as createDeployableDefinition } from '../../dist/core/tactical/unit/capability/deployable/capability.js';
+import { createDefinition as createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/tile-binding/capability.js';
 import { validateState as validateOccupancyState } from '../../dist/core/tactical/unit/capability/occupancy.js';
 import { createDefinition as createOperatorDefinition } from '../../dist/core/tactical/unit/archetype/operator.js';
 import { createCombatDefinition } from '../../dist/core/tactical/unit/archetype/enemy.js';
@@ -967,7 +968,7 @@ test('core deployment uses buildability, side and terrain independently of navig
   ]);
   const runtime = createBattlefieldRuntime({ map });
   const query = (type, column, playerSide = 'SIDE_A') => evaluateDeployment(runtime.snapshot('draft'), {
-    profile: createDeploymentProfile({ buildableType: type }), tile: [0, column], playerSide,
+    profile: createDeployableDefinition({ buildableType: type }), tile: [0, column], playerSide,
   });
   for (const [type, column, allowed] of [
     ['MELEE', 0, true], ['RANGED', 0, false], ['ALL', 0, true],
@@ -985,11 +986,11 @@ test('core deployment uses buildability, side and terrain independently of navig
   }
   assert.deepEqual(query('ALL', 4, 'SIDE_B'), { type: 'ALLOWED', supportUnitId: null });
   assert.deepEqual(evaluateDeployment(runtime.snapshot('draft'), {
-    profile: createDeploymentProfile({ buildableType: 'ALL', advancedBuildableMask: 2 }),
+    profile: createDeployableDefinition({ buildableType: 'ALL', advancedBuildableMask: 2 }),
     tile: [0, 7], playerSide: 'SIDE_A',
   }), { type: 'ALLOWED', supportUnitId: null });
   assert.deepEqual(evaluateDeployment(runtime.snapshot('draft'), {
-    profile: createDeploymentProfile({ buildableType: 'ALL', advancedBuildableMask: 3 }),
+    profile: createDeployableDefinition({ buildableType: 'ALL', advancedBuildableMask: 3 }),
     tile: [0, 7], playerSide: 'SIDE_A',
   }), { type: 'ALLOWED', supportUnitId: null });
 });
@@ -1014,7 +1015,7 @@ test('core occupancy separates present claims, reservations and geometric member
   assert.deepEqual(runtime.snapshot('draft').unitsAt([0, 1]).map(unit => unit.id), [3]);
   assert.deepEqual(runtime.snapshot('draft').occupancyAt([0, 1], 'DEPLOYMENT'), []);
   assert.deepEqual(runtime.snapshot('draft').occupancyAt([0, 2], 'DEPLOYMENT'), [2]);
-  const profile = createDeploymentProfile({ buildableType: 'ALL' });
+  const profile = createDeployableDefinition({ buildableType: 'ALL' });
   assert.equal(evaluateDeployment(runtime.snapshot('draft'), { profile, tile: [0, 1], playerSide: 'SIDE_A' }).type, 'ALLOWED');
   assert.deepEqual(evaluateDeployment(runtime.snapshot('draft'), { profile, tile: [0, 2], playerSide: 'SIDE_A' }),
     { type: 'DENIED', reason: 'OCCUPIED' });
@@ -1048,10 +1049,10 @@ test('core support allows a platform and occupant to coexist without treating th
     tileBinding: createTileBindingDefinition({ buildableType: 'RANGED', heightType: 'HIGHLAND' }),
   }, [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }]);
   runtime.advance([{ type: 'REGISTER_UNIT', unit: platform }]);
-  const profile = createDeploymentProfile({ buildableType: 'RANGED' });
+  const profile = createDeployableDefinition({ buildableType: 'RANGED' });
   assert.deepEqual(evaluateDeployment(runtime.snapshot('draft'), { profile, tile: [0, 1], playerSide: 'SIDE_A' }),
     { type: 'ALLOWED', supportUnitId: 1 });
-  const occupant = deploymentUnit(2, [1, 0], { deployment: profile }, [
+  const occupant = deploymentUnit(2, [1, 0], { deployable: profile }, [
     { position: [0, 1], slot: 'DEPLOYMENT', type: 'PRESENT' },
   ]);
   runtime.advance([{ type: 'REGISTER_UNIT', unit: occupant }, { type: 'SET_SUPPORT_RELATIONS',

@@ -8,11 +8,14 @@ import { createNavigationModifierDefinition } from "../../core/tactical/battlefi
 import { Tile, createTileOffset } from "../../core/tactical/geometry/coordinate.js";
 import { RangeGrid } from "../../core/tactical/geometry/range.js";
 import {
-    createDeploymentProfile,
-    createTileBindingDefinition,
-    type DeployableUnitDefinition,
-    type TileBoundUnitDefinition,
-} from "../../core/tactical/unit/capability/deployment.js";
+    createDefinition as createDeployableDefinition,
+    type Deployable,
+} from "../../core/tactical/unit/capability/deployable/capability.js";
+import {
+    createDefinition as createTileBindingDefinition,
+    type TileBinding,
+} from "../../core/tactical/unit/capability/tile-binding/capability.js";
+import type { Definition as UnitDefinition } from "../../core/tactical/unit/unit.js";
 import {
     validateState as validateOccupancyState,
     type State as OccupancyState,
@@ -91,7 +94,8 @@ function unitDefinition(
     instance: ArknightsPredefinedInstance,
     phase: Record<string, unknown>,
     profile: Extract<PredefinedPrefab, { readonly type: "UNIT" }>,
-): { readonly vitality: VitalityDefinition } & TileBoundUnitDefinition & DeployableUnitDefinition {
+): UnitDefinition & { readonly vitality: VitalityDefinition } & TileBinding["definition"] &
+    Deployable["definition"] {
     if (instance.inst.potentialRank !== 0 || instance.inst.favorPoint !== 0) {
         throw new TypeError("predefined unit potential and favor modifiers are not supported");
     }
@@ -130,7 +134,7 @@ function unitDefinition(
         id: instance.inst.characterKey,
         vitality: Object.freeze({ maxHp: maxHp! }),
         tileBinding: createTileBindingDefinition(profile.tileBinding),
-        deployment: createDeploymentProfile(profile.deployment),
+        deployable: createDeployableDefinition(profile.deployable),
     });
 }
 

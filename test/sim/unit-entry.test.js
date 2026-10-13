@@ -71,7 +71,7 @@ test('factory-created enemies enter after spawning and keep immutable old snapsh
 
 test('predefined appearances and deployment initialize once; relocation does not re-enter', () => {
   const trace = [];
-  const deployable = { ...markEntered(trace, 'deployed'), deployment: { buildableType: 'ALL', advancedBuildableMask: 1 } };
+  const deployable = { ...markEntered(trace, 'deployed'), deployable: { buildableType: 'ALL', advancedBuildableMask: 1 } };
   const runtime = new BattleRuntime(input({ predefines: [{
     id: 9, alias: null, initiallyPresent: true,
     creation: { type: 'UNIT', definition: markEntered(trace, 'predefined'), position: [2, 0] },

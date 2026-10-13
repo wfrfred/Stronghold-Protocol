@@ -15,7 +15,7 @@ import { loadMovementScenario } from '../../dist/data/arknights/movement-scenari
 import { createLevelDefinition, parseLevelContent } from '../../dist/data/arknights/level.js';
 import { resolvePredefinedSkillBlackboard } from '../../dist/data/arknights/skill.js';
 import { parsePredefinedPrefab, parseTileDeploymentPrefab } from '../../dist/data/arknights/prefab.js';
-import { createDeploymentProfile } from '../../dist/core/tactical/unit/capability/deployment.js';
+import { createDefinition as createDeployableDefinition } from '../../dist/core/tactical/unit/capability/deployable/capability.js';
 import { evaluateDeployment } from '../../dist/core/tactical/battlefield/deployment/query.js';
 
 const REAL = { skip: !hasGeneratedData() };
@@ -1492,13 +1492,13 @@ test('core raw tile modes distinguish crates from platforms and require the refe
   assert.deepEqual(parsePredefinedPrefab(arknightsFixture('prefab_trap_1105_accrate')), {
     type: 'UNIT', prefabKey: 'trap_1105_accrate', walkCostFloor: 1000,
     tileBinding: { heightType: null, buildableType: 'NONE', advancedBuildableMask: null },
-    deployment: { buildableType: 'MELEE', advancedBuildableMask: 1 },
+    deployable: { buildableType: 'MELEE', advancedBuildableMask: 1 },
   });
   const raw = arknightsFixture('prefab_trap_1106_achplat');
   assert.deepEqual(parsePredefinedPrefab(raw), {
     type: 'UNIT', prefabKey: 'trap_1106_achplat', walkCostFloor: 1000,
     tileBinding: { heightType: 'HIGHLAND', buildableType: 'RANGED', advancedBuildableMask: null },
-    deployment: { buildableType: 'MELEE', advancedBuildableMask: 1 },
+    deployable: { buildableType: 'MELEE', advancedBuildableMask: 1 },
   });
   for (const reference of [
     { m_FileID: 0, m_PathID: '999999999999999999' },
@@ -1548,9 +1548,9 @@ test('core real hidden platforms grant ranged deployment support while retaining
   const field = createBattlefieldRuntime({ map: scenario.spec.map });
   field.advance(appeared.units.map(unit => ({ type: 'REGISTER_UNIT', unit })));
   assert.deepEqual(field.snapshot('draft').occupancyAt(tile, 'SUPPORT'), [platform.id]);
-  assert.deepEqual(evaluateDeployment(field.snapshot('draft'), { profile: createDeploymentProfile({ buildableType: 'RANGED' }),
+  assert.deepEqual(evaluateDeployment(field.snapshot('draft'), { profile: createDeployableDefinition({ buildableType: 'RANGED' }),
     tile, playerSide: 'SIDE_A' }), { type: 'ALLOWED', supportUnitId: platform.id });
-  assert.deepEqual(evaluateDeployment(field.snapshot('draft'), { profile: createDeploymentProfile({ buildableType: 'MELEE' }),
+  assert.deepEqual(evaluateDeployment(field.snapshot('draft'), { profile: createDeployableDefinition({ buildableType: 'MELEE' }),
     tile, playerSide: 'SIDE_A' }), { type: 'DENIED', reason: 'BUILDABLE_TYPE' });
 
   runtime.step([{ type: 'REMOVE_PREDEFINED', definitionId, reason: 'SCRIPT' }]);

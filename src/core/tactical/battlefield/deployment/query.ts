@@ -1,8 +1,6 @@
 import type { TilePosition } from "../../geometry/coordinate.js";
-import {
-    hasTileBindingDefinition,
-    type DeploymentProfile,
-} from "../../unit/capability/deployment.js";
+import type { Definition as DeployableDefinition } from "../../unit/capability/deployable/capability.js";
+import { hasTileBinding } from "../../unit/capability/tile-binding/capability.js";
 import { hasOccupancy, type OccupancySlot } from "../../unit/capability/occupancy.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
 import type { Unit, Id } from "../../unit/unit.js";
@@ -16,7 +14,7 @@ export interface DeploymentView {
 }
 
 export interface DeploymentRequest {
-    readonly profile: DeploymentProfile;
+    readonly profile: DeployableDefinition;
     readonly tile: TilePosition;
     readonly playerSide: "SIDE_A" | "SIDE_B";
     readonly relocatingUnitId?: Id;
@@ -78,7 +76,7 @@ export function evaluateDeployment(
             if (
                 provider === undefined ||
                 !isSpatiallyPresent(provider) ||
-                !hasTileBindingDefinition(provider.definition) ||
+                !hasTileBinding(provider) ||
                 !hasOccupancy(provider) ||
                 !provider.occupancy.claims.some(
                     (claim) =>

@@ -42,7 +42,7 @@ import { stepRoutedEnemy } from "../../dist/legacy/enemy.js";
 import { copy } from '../../dist/core/tactical/unit/snapshot.js';
 import { initialize } from '../../dist/core/tactical/unit/initialize.js';
 import { createDefinition as createActionCapabilityDefinition, initialize as initializeActionState } from '../../dist/core/tactical/unit/capability/action/capability.js';
-import { createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/deployment.js';
+import { createDefinition as createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/tile-binding/capability.js';
 import { createSteeringParameters, createSteeringState, integrateSteering } from '../../dist/core/tactical/unit/capability/locomotion/steering.js';
 import { Grid, OBSTACLE_COST, bresenhamTiles } from '../../server/sim/grid.js';
 import { flowFieldForGrid, navigationMapFromGrid, waypointsForGrid } from '../../dist/legacy/navigation.js';

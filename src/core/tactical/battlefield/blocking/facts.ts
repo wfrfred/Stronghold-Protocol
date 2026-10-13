@@ -2,7 +2,7 @@ import { World, type WorldPosition } from "../../geometry/coordinate.js";
 import { hasAllegiance, type Side } from "../../unit/capability/allegiance.js";
 import { hasBlockable } from "../../unit/capability/blocking/blockable.js";
 import { hasBlocker, resolveCapacity } from "../../unit/capability/blocking/blocker.js";
-import { hasTileBindingDefinition } from "../../unit/capability/deployment.js";
+import { hasTileBinding } from "../../unit/capability/tile-binding/capability.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
 import { hasSpatial } from "../../unit/capability/spatial.js";
 import { hasVitality } from "../../unit/capability/vitality/capability.js";
@@ -49,9 +49,7 @@ export function readBlockingFacts(unit: Unit): BlockingFacts {
         position: unit.position,
         active,
         ground: !hasSpatial(unit) || unit.spatial.layer === "GROUND",
-        highland:
-            hasTileBindingDefinition(unit.definition) &&
-            unit.definition.tileBinding.heightType === "HIGHLAND",
+        highland: hasTileBinding(unit) && unit.definition.tileBinding.heightType === "HIGHLAND",
         side: hasAllegiance(unit) ? unit.allegiance.side : undefined,
         blocker,
         blockable: readBlockableFacts(unit),

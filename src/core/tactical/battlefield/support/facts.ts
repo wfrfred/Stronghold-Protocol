@@ -1,4 +1,4 @@
-import { hasTileBindingDefinition } from "../../unit/capability/deployment.js";
+import { hasTileBinding } from "../../unit/capability/tile-binding/capability.js";
 import { hasOccupancy, type OccupancyClaim } from "../../unit/capability/occupancy.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
 import type { Unit } from "../../unit/unit.js";
@@ -14,9 +14,7 @@ const EMPTY_CLAIMS: readonly OccupancyClaim[] = Object.freeze([]);
 export function readSupportFacts(unit: Unit): SupportFacts {
     return {
         present: isSpatiallyPresent(unit),
-        provider:
-            hasTileBindingDefinition(unit.definition) &&
-            unit.definition.tileBinding.buildableType !== "NONE",
+        provider: hasTileBinding(unit) && unit.definition.tileBinding.buildableType !== "NONE",
         claims: hasOccupancy(unit)
             ? unit.occupancy.claims.filter((claim) => claim.type === "PRESENT")
             : EMPTY_CLAIMS,

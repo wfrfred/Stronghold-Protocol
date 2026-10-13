@@ -9,7 +9,7 @@ import { getActionExecution } from "../../dist/core/tactical/unit/capability/act
 import { create as createBattlefield } from "../../dist/core/tactical/battlefield/state.js";
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
 import { createNavigationModifierDefinition } from "../../dist/core/tactical/battlefield/navigation/modifier.js";
-import { createDeploymentProfile } from "../../dist/core/tactical/unit/capability/deployment.js";
+import { createDefinition as createDeployableDefinition } from "../../dist/core/tactical/unit/capability/deployable/capability.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
@@ -170,7 +170,7 @@ for (const domain of ["deployment", "predefined"]) {
         const resources = new CombatResources();
         const definition = Object.freeze({
             id: "transient-placement",
-            deployment: createDeploymentProfile({ buildableType: "ALL" }),
+            deployable: createDeployableDefinition({ buildableType: "ALL" }),
             vitality: Object.freeze({ maxHp: 100 }),
         });
         const navigationModifiers = [

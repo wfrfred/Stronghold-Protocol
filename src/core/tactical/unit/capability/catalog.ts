@@ -25,10 +25,10 @@ import {
     type State as DefenseState,
 } from "./defense/capability.js";
 import {
-    initialize as initializeDeploymentState,
-    type Definition as DeploymentDefinition,
-    type State as DeploymentState,
-} from "./deployment.js";
+    initialize as initializeDeployableState,
+    type Definition as DeployableDefinition,
+    type State as DeployableState,
+} from "./deployable/capability.js";
 import {
     initialize as initializeLocomotionState,
     type Definition as LocomotionDefinition,
@@ -76,7 +76,7 @@ export interface CapabilityInitializationContext {
 }
 
 interface CapabilityConfigurations {
-    readonly deployment: DeploymentDefinition;
+    readonly deployable: DeployableDefinition;
     readonly vitality: VitalityDefinition;
     readonly offense: OffenseDefinition;
     readonly defense: DefenseDefinition;
@@ -102,7 +102,7 @@ export type ConfiguredCapabilityKey = keyof CapabilityConfigurations;
 type CapabilityConfig<K extends ConfiguredCapabilityKey> = CapabilityConfigurations[K];
 
 export type CapabilityStates = {
-    readonly deployment: DeploymentState;
+    readonly deployable: DeployableState;
     readonly vitality: VitalityState;
     readonly offense: OffenseState;
     readonly defense: DefenseState;
@@ -124,7 +124,7 @@ export const configuredCapabilities: {
         context: CapabilityInitializationContext,
     ) => CapabilityStates[K];
 } = {
-    deployment: () => initializeDeploymentState(),
+    deployable: () => initializeDeployableState(),
     vitality: initializeVitalityState,
     offense: () => initializeOffenseState(),
     defense: () => initializeDefenseState(),

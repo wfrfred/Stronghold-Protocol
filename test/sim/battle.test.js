@@ -37,7 +37,8 @@ import { compileSpawnSchedule } from '../../dist/data/arknights/schedule.js';
 import { compileLevelMovementFragment } from '../../dist/data/arknights/movement-fragment.js';
 import { loadMovementScenario } from '../../dist/data/arknights/movement-scenario.js';
 import { createLegacyCombatBattle } from '../../dist/legacy/combat.js';
-import { createDeploymentProfile, createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/deployment.js';
+import { createDefinition as createDeployableDefinition } from '../../dist/core/tactical/unit/capability/deployable/capability.js';
+import { createDefinition as createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/tile-binding/capability.js';
 import { createPredefinedDefinition } from '../../dist/core/tactical/battle/steps/predefined.js';
 import { advanceMovement } from '../../dist/core/tactical/battle/steps/movement.js';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
@@ -2078,7 +2079,7 @@ function deploymentBattleInput(overrides = {}) {
 }
 
 const deployableDefinition = (id = 'test_deployable') => Object.freeze({
-  id, deployment: createDeploymentProfile({ buildableType: 'ALL' }),
+  id, deployable: createDeployableDefinition({ buildableType: 'ALL' }),
   vitality: Object.freeze({ maxHp: 100 }), allegiance: Object.freeze({ side: 'ALLY' }),
   spatial: Object.freeze({ layer: 'GROUND' }),
   blocker: Object.freeze({ capacity: 1, geometry: Object.freeze({ radius: 0.7 }) }),

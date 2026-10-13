@@ -1,6 +1,6 @@
 import type { BattlefieldView } from "../../battlefield/contract.js";
 import type { Unit } from "../../unit/unit.js";
-import type { Deployable } from "../../unit/capability/deployment.js";
+import type { Deployable } from "../../unit/capability/deployable/capability.js";
 import * as hook from "../../unit/hook/hook.js";
 import { battlefieldView, type BattleState } from "../state.js";
 

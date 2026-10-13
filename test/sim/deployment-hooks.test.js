@@ -41,7 +41,7 @@ const spawn = (definition, tick) => ({
     tick, definition, route, alwaysCheckCurrentPoint: true, notCountInTotal: false,
     timing: { waveStartedAtTick: tick, fragmentStartedAtTick: tick },
 });
-const definition = (id, fields = {}) => ({ id, vitality: { maxHp: 100 }, deployment: profile, ...fields });
+const definition = (id, fields = {}) => ({ id, vitality: { maxHp: 100 }, deployable: profile, ...fields });
 const unit = (id, fields = {}) => initialize({ id, definition: definition(`unit:${id}`, fields), position: [id, 0] });
 const input = (fields = {}) => ({
     map, schedule: { type: "TIMELINE", spawns: [spawn(enemy(), 1000)] }, initialUnits: [], predefines: [],
@@ -125,7 +125,7 @@ test("entry precedes deployment observers; observer registrations survive succes
     const bootstrap = { id: "bootstrap", onEnter(state) {
         return addHook(state, record("observer", (state, view, fact) => {
             calls.push(["observed", fact.unit.id, fact.kind]);
-            assert.equal(fact.unit.deployment.cardId, null);
+            assert.equal(fact.unit.deployable.cardId, null);
             assert.equal(view.getUnit(fact.unit.id).vitality.hp, 75);
             return state;
         }));

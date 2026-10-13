@@ -23,7 +23,7 @@ import {
 } from "../capability/spatial.js";
 import type { Definition as StatusDefinition } from "../capability/status/capability.js";
 import type { Definition as VitalityDefinition } from "../capability/vitality/capability.js";
-import type { Definition as DeploymentDefinition } from "../capability/deployment.js";
+import type { Definition as DeployableDefinition } from "../capability/deployable/capability.js";
 import type { Definition as UnitDefinition } from "../unit.js";
 import * as initialization from "../initialize.js";
 import {
@@ -47,7 +47,7 @@ export interface Definition extends UnitDefinition {
     readonly offense?: OffenseDefinition;
     readonly skill?: SkillDefinition;
     readonly elemental?: ElementalDefinition;
-    readonly deployment?: DeploymentDefinition;
+    readonly deployable?: DeployableDefinition;
 }
 
 export type Operator<D extends Definition = Definition> = initialization.Result<D>;
@@ -65,7 +65,7 @@ export function createDefinition(definition: Definition): Definition {
         id: definition.id,
         ...(definition.onEnter === undefined ? {} : { onEnter: definition.onEnter }),
         ...(definition.onLeave === undefined ? {} : { onLeave: definition.onLeave }),
-        ...(definition.deployment === undefined ? {} : { deployment: definition.deployment }),
+        ...(definition.deployable === undefined ? {} : { deployable: definition.deployable }),
         vitality: Object.freeze({ maxHp: definition.vitality.maxHp }),
         action: createActionCapabilityDefinition(definition.action),
         allegiance: definition.allegiance,
