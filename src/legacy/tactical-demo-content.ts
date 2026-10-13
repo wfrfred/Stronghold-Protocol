@@ -12,7 +12,11 @@ import { prepare as prepareEnemy } from "../data/arknights/enemy.js";
 import { TICKS_PER_SECOND } from "../core/tactical/tick.js";
 import * as melantha from "../content/tactical/operators/melantha.js";
 import * as mudrock from "../content/tactical/operators/mudrock.js";
-import * as enemies from "../content/tactical/enemies.js";
+import { create as createHound } from "../content/tactical/enemies/hound.js";
+import {
+    create as createCrossbowman,
+    registerArrow,
+} from "../content/tactical/enemies/crossbowman.js";
 import type { LegacyUnitMetadata } from "./tactical-demo-presentation.js";
 import type { Unit } from "../core/tactical/unit/unit.js";
 
@@ -69,33 +73,31 @@ export function createTacticalContentDemo(
     const profiles = tables.enemies.map((raw) =>
         prepareEnemy(raw, { level: configuration.enemyLevel }),
     );
-    const hound = enemies.createDefinition(
+    const hound = createHound(
         profiles.find((profile) => profile.id === "enemy_1000_gopro")!,
+        combat,
         {
             windupTicks: 4,
             recoveryTicks: 4,
             hitRadius: 0.2,
         },
     );
-    const crossbowman = enemies.createDefinition(
+    const crossbowman = createCrossbowman(
         profiles.find((profile) => profile.id === "enemy_1003_ncbow")!,
+        combat,
         {
             windupTicks: 9,
             recoveryTicks: 6,
             hitRadius: 0.2,
             projectile: {
-                ref: enemies.registerArrow(combat),
+                ref: registerArrow(combat),
                 speedPerSecond: 6,
                 contactRadius: 0.15,
                 stopDelayTicks: 0,
             },
         },
     );
-    const actions = [
-        defender.action,
-        enemies.compileNormalAction(hound, combat),
-        enemies.compileNormalAction(crossbowman, combat),
-    ];
+    const actions = [defender.action, hound.action, crossbowman.action];
     const resources: BattleResources = {
         combat,
         compileAction: (definition, registered) =>
@@ -119,7 +121,7 @@ export function createTacticalContentDemo(
         for (const selectedRoute of [firstLane, secondLane]) {
             spawns.push({
                 tick,
-                definition: hound,
+                definition: hound.definition,
                 route: selectedRoute,
                 alwaysCheckCurrentPoint: true,
                 notCountInTotal: false,
@@ -130,7 +132,7 @@ export function createTacticalContentDemo(
     for (let index = 0; index < 6; index++) {
         spawns.push({
             tick: index * 6 * TICKS_PER_SECOND,
-            definition: crossbowman,
+            definition: crossbowman.definition,
             route: firstLane,
             alwaysCheckCurrentPoint: true,
             notCountInTotal: false,
@@ -172,17 +174,18 @@ export function createTacticalContentDemo(
         },
         enemy_1000_gopro: {
             kind: "enemy",
-            name: hound.profile.name,
+            name: hound.definition.profile.name,
             spine: "enemy_1000_gopro_2",
             avatar: "enemy_1000_gopro_2",
         },
         enemy_1003_ncbow: {
             kind: "enemy",
-            name: crossbowman.profile.name,
+            name: crossbowman.definition.profile.name,
             spine: "enemy_1003_ncbow",
             avatar: "enemy_1003_ncbow",
             animation: {
-                recoverySeconds: crossbowman.attackTiming.recoveryTicks / TICKS_PER_SECOND,
+                recoverySeconds:
+                    crossbowman.definition.attackTiming.recoveryTicks / TICKS_PER_SECOND,
                 lunge: false,
             },
         },
