@@ -23,7 +23,7 @@ import {
     isRouteEndReached,
     isRouteMoveCheckpointReached,
 } from "./route/plan.js";
-import { hasSpatialPresence, isSpatiallyPresent } from "../presence.js";
+import { hasSpatialPresence, isSpatiallyPresent, type SpatialPresence } from "../presence.js";
 import {
     applyMotionOverride,
     getNavigationRecoveryTarget,
@@ -93,7 +93,7 @@ export function stepRoutedUnit(
         context,
         isSpatiallyPresent(unit),
     );
-    let next =
+    let next: RoutedLocomotiveUnit & Partial<SpatialPresence> =
         step.position === unit.position && step.state === unit.locomotion
             ? unit
             : { ...unit, position: step.position, locomotion: step.state };

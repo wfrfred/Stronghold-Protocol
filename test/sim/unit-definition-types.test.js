@@ -122,3 +122,65 @@ install(battle, staticOperatorUnit, healthAttack);
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test('base Unit has common fields while concrete content and guards provide capability pairs', async () => {
+  const { default: ts } = await import('typescript');
+  const directory = mkdtempSync(join(tmpdir(), 'stronghold-content-unit-types-'));
+  const source = name => JSON.stringify(fileURLToPath(new URL(`../../src/${name}.js`, import.meta.url)));
+  const path = join(directory, 'content.mts');
+  writeFileSync(path, `
+import type { Unit } from ${source('core/tactical/unit/unit')};
+import { initialize } from ${source('core/tactical/unit/initialize')};
+import { copy } from ${source('core/tactical/unit/snapshot')};
+import { updateUnit, type BattleState } from ${source('core/tactical/battle/state')};
+import { hasVitality, type Vitality } from ${source('core/tactical/unit/capability/vitality/capability')};
+import type { Offense } from ${source('core/tactical/unit/capability/offense/capability')};
+import type { Definition as MudrockDefinition } from ${source('content/tactical/operators/mudrock')};
+import type { Definition as MelanthaDefinition } from ${source('content/tactical/operators/melantha')};
+import type { Definition as HoundDefinition } from ${source('content/tactical/enemies/hound')};
+import type { Definition as CrossbowmanDefinition } from ${source('content/tactical/enemies/crossbowman')};
+declare const mudrockDefinition: MudrockDefinition;
+declare const melanthaDefinition: MelanthaDefinition;
+declare const houndDefinition: HoundDefinition;
+declare const crossbowmanDefinition: CrossbowmanDefinition;
+declare const battle: BattleState;
+declare const base: Unit;
+const mudrock = initialize({ id: 0, position: [0, 0], definition: mudrockDefinition });
+const melantha = initialize({ id: 1, position: [0, 0], definition: melanthaDefinition });
+const hound = initialize({ id: 2, position: [0, 0], definition: houndDefinition });
+const crossbowman = initialize({ id: 3, position: [0, 0], definition: crossbowmanDefinition });
+const armed: readonly (Unit & Vitality & Offense)[] = [mudrock, melantha, hound, crossbowman];
+const next = { ...mudrock, vitality: { ...mudrock.vitality, hp: mudrock.vitality.hp - 1 } };
+updateUnit(battle, next);
+updateUnit(battle, { ...mudrock, vitality: next.vitality });
+const captured = copy(mudrock);
+const paired: Unit & Vitality & Offense = captured;
+const attack: number = captured.definition.offense.attack;
+const hp: number = captured.vitality.hp;
+if (hasVitality(base)) {
+  const maxHp: number = base.definition.vitality.maxHp;
+  const currentHp: number = base.vitality.hp;
+}
+// @ts-expect-error base Unit does not declare optional capability state.
+base.vitality;
+// @ts-expect-error guards are required after heterogeneous lookup.
+base.definition.vitality;
+// @ts-expect-error these operators do not declare locomotion.
+mudrock.locomotion;
+// @ts-expect-error these enemies do not declare skill.
+hound.skill;
+// @ts-expect-error a selected Capability requires its configuration and state together.
+const incomplete: Unit & Vitality = { ...base, vitality: mudrock.vitality };
+// @ts-expect-error a selected Capability cannot omit its runtime state.
+const absent: Unit & Vitality = { ...base, definition: { ...base.definition, vitality: { maxHp: 100 } } };
+`);
+  try {
+    const program = ts.createProgram([path], {
+      noEmit: true, strict: true, exactOptionalPropertyTypes: true, noUncheckedIndexedAccess: true,
+      target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.NodeNext,
+      moduleResolution: ts.ModuleResolutionKind.NodeNext, skipLibCheck: true, types: [],
+    });
+    assert.deepEqual(ts.getPreEmitDiagnostics(program).map(diagnostic =>
+      ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')), []);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});

@@ -33,33 +33,42 @@ export interface ElementHealRequest {
     readonly tick: number;
 }
 
-export type ElementDamageResult = {
-    readonly unit: Unit;
-} & (
+export type ElementDamageResult =
     | {
+          readonly unit: Unit;
           readonly outcome: "REJECTED";
           readonly reason: ElementalRejection;
           readonly amount: 0;
           readonly burst: null;
       }
-    | { readonly outcome: "APPLIED"; readonly amount: number; readonly burst: null }
-    | { readonly outcome: "BURST"; readonly amount: number; readonly burst: ElementalBurst }
-);
+    | {
+          readonly unit: Unit & Elemental;
+          readonly outcome: "APPLIED";
+          readonly amount: number;
+          readonly burst: null;
+      }
+    | {
+          readonly unit: Unit & Elemental;
+          readonly outcome: "BURST";
+          readonly amount: number;
+          readonly burst: ElementalBurst;
+      };
 
 export type ElementHealResult = {
-    readonly unit: Unit;
     readonly amount: number;
     readonly amounts: ElementValues;
 } & (
-    | { readonly outcome: "REJECTED"; readonly reason: ElementalRejection }
-    | { readonly outcome: "APPLIED" }
+    | { readonly unit: Unit; readonly outcome: "REJECTED"; readonly reason: ElementalRejection }
+    | { readonly unit: Unit & Elemental; readonly outcome: "APPLIED" }
 );
 
-export interface ElementalAdvanceResult {
-    readonly unit: Unit;
-    readonly recovered: boolean;
-    readonly burst: ElementalBurst | null;
-}
+export type ElementalAdvanceResult =
+    | { readonly unit: Unit; readonly recovered: false; readonly burst: null }
+    | {
+          readonly unit: Unit & Elemental;
+          readonly recovered: boolean;
+          readonly burst: ElementalBurst | null;
+      };
 
 function assertTick(unit: Unit, tick: number): void {
     assertNonnegativeSafeInteger(tick, "element operation tick");

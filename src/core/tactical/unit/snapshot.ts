@@ -1,8 +1,8 @@
-import { selectCapabilityStates } from "./capability/catalog.js";
+import { selectCapabilityStates, type CapabilityStates } from "./capability/catalog.js";
 import type { Unit } from "./unit.js";
 
 export type Snapshot<U extends Unit> = U extends unknown
-    ? Pick<U, Extract<keyof U, keyof Unit>>
+    ? Pick<U, Extract<keyof U, keyof Unit | keyof CapabilityStates>>
     : never;
 
 export function copy<U extends Unit>(unit: U): Snapshot<U>;

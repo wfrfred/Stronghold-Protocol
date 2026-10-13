@@ -197,13 +197,11 @@ function initializeCapability<K extends ConfiguredCapabilityKey>(
     return configuredCapabilities[key](config, context);
 }
 
-export function selectCapabilityStates<S extends Partial<CapabilityStates>>(
-    source: S,
-): SelectedCapabilityStates<S> {
+export function selectCapabilityStates<S extends object>(source: S): SelectedCapabilityStates<S> {
     const states: Record<string, unknown> = {};
 
     for (const key of capabilityKeys) {
-        const state = source[key];
+        const state: unknown = Reflect.get(source, key);
 
         if (state !== undefined) {
             states[key] = state;

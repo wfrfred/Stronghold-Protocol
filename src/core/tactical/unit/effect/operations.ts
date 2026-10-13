@@ -8,6 +8,7 @@ import {
 } from "../../battle/state.js";
 import { emptyCall, type CallContext } from "../../battle/execution/call.js";
 import type { Unit, Id } from "../unit.js";
+import { hasSkill } from "../capability/skill/capability.js";
 import type { Definition, Context } from "./definition.js";
 import {
     deadline,
@@ -313,8 +314,15 @@ function available(battle: BattleState, lifetime: Lifetime): boolean {
                 (execution) => execution.id === lifetime.executionId,
             );
 
-        case "SKILL":
-            return getUnit(battle, lifetime.unitId)?.skill?.active?.id === lifetime.activationId;
+        case "SKILL": {
+            const unit = getUnit(battle, lifetime.unitId);
+
+            return (
+                unit !== undefined &&
+                hasSkill(unit) &&
+                unit.skill.active?.id === lifetime.activationId
+            );
+        }
 
         case "EFFECT": {
             const instance = get(battle, lifetime);

@@ -111,11 +111,12 @@ export function updateMechanism(state: BattleState, mechanism: Mechanism): Battl
           ]);
 }
 
-export function updateUnit(state: BattleState, unit: Unit): BattleState {
+/* eslint-disable @typescript-eslint/no-unnecessary-type-parameters -- Accept capability-bearing object literals while returning only BattleState. */
+export function updateUnit<U extends Unit>(state: BattleState, unit: U): BattleState {
     return updateUnits(state, [unit]);
 }
 
-export function updateUnits(state: BattleState, units: readonly Unit[]): BattleState {
+export function updateUnits<U extends Unit>(state: BattleState, units: readonly U[]): BattleState {
     const changes: BattlefieldChange[] = [];
 
     for (const unit of new Map(units.map((unit) => [unit.id, unit])).values()) {
@@ -129,9 +130,10 @@ export function updateUnits(state: BattleState, units: readonly Unit[]): BattleS
     return advanceBattlefield(state, changes);
 }
 
-export function registerUnit(state: BattleState, unit: Unit): BattleState {
+export function registerUnit<U extends Unit>(state: BattleState, unit: U): BattleState {
     return advanceBattlefield(state, [{ type: "REGISTER_UNIT", unit }]);
 }
+/* eslint-enable @typescript-eslint/no-unnecessary-type-parameters */
 
 export function transitionUnit(
     state: BattleState,

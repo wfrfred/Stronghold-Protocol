@@ -1,5 +1,4 @@
 import type { WorldPosition } from "../geometry/coordinate.js";
-import type { CapabilityStates } from "./capability/catalog.js";
 import type { Effects } from "./effect/effects.js";
 import type { BattleState } from "../battle/state.js";
 
@@ -14,7 +13,7 @@ export interface Definition {
     readonly onEnter?: (state: BattleState, unitId: Id) => BattleState;
 }
 
-export interface Unit extends Partial<CapabilityStates> {
+export interface Unit {
     readonly id: Id;
     readonly lifecycle: Lifecycle;
     readonly definition: Definition;

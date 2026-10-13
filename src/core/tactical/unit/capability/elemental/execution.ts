@@ -122,7 +122,7 @@ export function resolveElementDamage(
             targetUnitId: unit.id,
             elementType: request.type,
             amount: received.amount,
-            ep: next.elemental!.ep[request.type],
+            ep: received.unit.elemental.ep[request.type],
             tick: request.tick,
         },
     ]);
