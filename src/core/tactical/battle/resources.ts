@@ -9,7 +9,6 @@ import { emptyCall, type CallContext } from "./execution/call.js";
 import type { Id } from "../unit/unit.js";
 import {
     consumeSkillAmmo,
-    finishSkill,
     stopSkillActivation,
     notifySkillFinished,
     type StoppedSkillActivation,
@@ -57,13 +56,6 @@ export class CombatResources {
         tick: number,
         call: CallContext = emptyCall,
     ): BattleState => notifySkillFinished(state, activation, tick, call);
-
-    readonly finishSkill = (
-        state: BattleState,
-        unitId: Id,
-        tick: number,
-        call: CallContext = emptyCall,
-    ): BattleState => finishSkill(state, unitId, tick, this, call);
 
     readonly retireUnit = (
         state: BattleState,
