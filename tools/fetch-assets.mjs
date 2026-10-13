@@ -212,12 +212,14 @@ async function main() {
   log(`[assets] root ${ROOT}`);
   if (!skelParserAvailable()) throw new Error('@pixi-spine/runtime-3.8 not found — run `npm install` first');
 
-  const [assets07, ops03, enemies05, maps05] = await Promise.all([
+  const [assets07, ops03, enemies05, maps05, tacticalDemoAssets] = await Promise.all([
     readJson('docs/research/07-assets.json'),
     readJson('docs/research/03-operators.json'),
     readJson('docs/research/05-enemies.json'),
     readJson('docs/research/05-maps.json'),
+    readJson('tools/assets/tactical-demo.json'),
   ]);
+  assets07.operators = { ...assets07.operators, ...tacticalDemoAssets.operators };
   const { audioData, modelsData } = await loadIndexes(ROOT, { refresh: opts.refreshIndex && !opts.offline, offline: opts.offline, log });
   const audio = indexAudio(audioData);
   // The game data built by tools/build-data.mjs (when present) may reference more
@@ -229,7 +231,7 @@ async function main() {
   const localEnemySpines = await syncLocalEnemySpines(opts);
   const plan = buildPlan({
     assets07, ops03, enemies05, maps05, audio, modelsData,
-    extraEnemyIds: Object.keys(dataEnemies || {}),
+    extraEnemyIds: [...Object.keys(dataEnemies || {}), ...tacticalDemoAssets.enemies],
     extraTokenIds: Object.keys(dataTokens || {}),
     extraHandbook,
     localEnemySpines,

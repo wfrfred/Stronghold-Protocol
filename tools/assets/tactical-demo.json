@@ -1,0 +1,41 @@
+{
+  "operators": {
+    "char_208_melan": {
+      "avatar": {
+        "e0e1": {
+          "url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_208_melan.png"
+        }
+      },
+      "portrait": {
+        "e0e1": {
+          "url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/portrait/char_208_melan_1.png"
+        }
+      },
+      "battleSpine": {
+        "front": {
+          "skel": "https://raw.githubusercontent.com/fexli/ArknightsResource/main/spine/char_208_melan/char_208_melan/Front/char_208_melan.skel",
+          "atlas": "https://raw.githubusercontent.com/fexli/ArknightsResource/main/spine/char_208_melan/char_208_melan/Front/char_208_melan.atlas",
+          "png": "https://raw.githubusercontent.com/fexli/ArknightsResource/main/spine/char_208_melan/char_208_melan/Front/char_208_melan.png"
+        },
+        "back": {
+          "skel": "https://raw.githubusercontent.com/fexli/ArknightsResource/main/spine/char_208_melan/char_208_melan/Back/char_208_melan.skel",
+          "atlas": "https://raw.githubusercontent.com/fexli/ArknightsResource/main/spine/char_208_melan/char_208_melan/Back/char_208_melan.atlas",
+          "png": "https://raw.githubusercontent.com/fexli/ArknightsResource/main/spine/char_208_melan/char_208_melan/Back/char_208_melan.png"
+        }
+      },
+      "skills": [
+        {
+          "index": 0,
+          "skillId": "skcom_atk_up[1]",
+          "iconId": "skcom_atk_up[1]",
+          "icon": {
+            "url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/skill/skill_icon_skcom_atk_up[1].png"
+          }
+        }
+      ]
+    }
+  },
+  "enemies": [
+    "enemy_1003_ncbow"
+  ]
+}
