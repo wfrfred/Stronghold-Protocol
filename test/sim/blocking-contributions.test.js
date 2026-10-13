@@ -22,12 +22,12 @@ import {
 import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import { copy } from "../../dist/core/tactical/unit/snapshot.js";
 import {
-    createBlockerDefinition,
-    initializeBlockerState,
-    resolveBlockingCapacity,
+    createDefinition,
+    initialize as initializeBlockerState,
+    resolveCapacity,
     setCapacityContribution,
     removeCapacityContribution,
-} from "../../dist/core/tactical/unit/capability/blocking/capability.js";
+} from "../../dist/core/tactical/unit/capability/blocker.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { resolveMaxHp } from "../../dist/core/tactical/unit/capability/vitality/query.js";
 import * as contribution from "../../dist/core/tactical/unit/contribution/contribution.js";
@@ -72,7 +72,7 @@ const enemy = (id, weight = 1) =>
             blockable: { weight },
         },
     });
-const capacityOf = (unit) => resolveBlockingCapacity(unit.definition.blocker, unit.blocker);
+const capacityOf = (unit) => resolveCapacity(unit.definition.blocker, unit.blocker);
 const capacity = (work) => capacityOf(getUnit(work, 0));
 const output = (value) => ({
     capability: "blocker", set: setCapacityContribution,
@@ -100,11 +100,11 @@ const change = (work, effect, next, setting) => {
 const entry = (id, value) => ({ id, value: [value] });
 
 test("blocking capacity: immutable updates retain sampled contributions and resolve ties to even after clamping", () => {
-    const definition = createBlockerDefinition({ capacity: 3, geometry: { radius: 1 } });
+    const definition = createDefinition({ capacity: 3, geometry: { radius: 1 } });
     const state = initializeBlockerState(definition);
     assert.equal(definition.capacity, 3);
     assert.deepEqual(state.capacity, []);
-    assert.equal(resolveBlockingCapacity(definition, state), 3);
+    assert.equal(resolveCapacity(definition, state), 3);
     const modified = {
         ...state,
         capacity: contribution.set(
@@ -120,14 +120,14 @@ test("blocking capacity: immutable updates retain sampled contributions and reso
             ),
         ),
     };
-    assert.equal(resolveBlockingCapacity(definition, modified), 14);
+    assert.equal(resolveCapacity(definition, modified), 14);
     const disabled = {
         ...modified,
         capacity: contribution.remove(modified.capacity, "arithmetic"),
     };
     assert.deepEqual(disabled.capacity, []);
-    assert.equal(resolveBlockingCapacity(definition, disabled), 3);
-    assert.equal(resolveBlockingCapacity(definition, modified), 14);
+    assert.equal(resolveCapacity(definition, disabled), 3);
+    assert.equal(resolveCapacity(definition, modified), 14);
     for (const [value, expected] of [
         [-3, 0],
         [-0.5, 0],
@@ -145,7 +145,7 @@ test("blocking capacity: immutable updates retain sampled contributions and reso
                 entry("rounding", modifier.create({ finalAddition: value - 3 })),
             ),
         };
-        assert.equal(resolveBlockingCapacity(definition, result), expected, `resolved ${value}`);
+        assert.equal(resolveCapacity(definition, result), expected, `resolved ${value}`);
     }
 });
 

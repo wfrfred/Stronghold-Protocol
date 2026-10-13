@@ -10,13 +10,15 @@ import {
     type State as AllegianceState,
 } from "./allegiance.js";
 import {
-    initializeBlockableState,
-    initializeBlockerState,
-    type BlockableDefinition,
-    type BlockableState,
-    type BlockerDefinition,
-    type BlockerState,
-} from "./blocking/capability.js";
+    initialize as initializeBlockableState,
+    type Definition as BlockableDefinition,
+    type State as BlockableState,
+} from "./blockable.js";
+import {
+    initialize as initializeBlockerState,
+    type Definition as BlockerDefinition,
+    type State as BlockerState,
+} from "./blocker.js";
 import {
     initialize as initializeDefenseState,
     type Definition as DefenseDefinition,

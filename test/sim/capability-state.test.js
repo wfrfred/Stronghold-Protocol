@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as offense from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import * as defense from "../../dist/core/tactical/unit/capability/defense/capability.js";
-import * as blocking from "../../dist/core/tactical/unit/capability/blocking/capability.js";
+import * as blocker from "../../dist/core/tactical/unit/capability/blocker.js";
 import * as locomotion from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
 import * as action from "../../dist/core/tactical/unit/capability/action/capability.js";
 import * as vitality from "../../dist/core/tactical/unit/capability/vitality/capability.js";
@@ -30,10 +30,10 @@ const entries = [
         defense.removeResistanceContribution,
     ],
     [
-        blocking.initializeBlockerState({ capacity: 2, geometry: { radius: 0.5 } }),
+        blocker.initialize({ capacity: 2, geometry: { radius: 0.5 } }),
         "capacity",
-        blocking.setCapacityContribution,
-        blocking.removeCapacityContribution,
+        blocker.setCapacityContribution,
+        blocker.removeCapacityContribution,
     ],
     [
         locomotion.initialize(),

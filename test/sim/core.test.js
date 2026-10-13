@@ -24,7 +24,8 @@ import { copy } from '../../dist/core/tactical/unit/snapshot.js';
 import { hasVitality, initialize as initializeVitalityState } from '../../dist/core/tactical/unit/capability/vitality/capability.js';
 import { createDefinition as createActionCapabilityDefinition, hasAction } from '../../dist/core/tactical/unit/capability/action/capability.js';
 import { hasAllegiance } from '../../dist/core/tactical/unit/capability/allegiance.js';
-import { createBlockerDefinition, hasBlockable, hasBlocker, resolveBlockingCapacity } from '../../dist/core/tactical/unit/capability/blocking/capability.js';
+import { createDefinition as createBlockerDefinition, hasBlocker, resolveCapacity } from '../../dist/core/tactical/unit/capability/blocker.js';
+import { hasBlockable } from '../../dist/core/tactical/unit/capability/blockable.js';
 import * as modifier from '../../dist/core/tactical/unit/contribution/value.js';
 import { createHitDefinition, hasHit, hasSpatial } from '../../dist/core/tactical/unit/capability/spatial.js';
 import { addStatusContribution, deriveEffectiveStatusFlags, hasStatus, initialize as initializeStatusState, removeStatusContribution, setStatusContributionParticipation } from '../../dist/core/tactical/unit/capability/status/capability.js';
@@ -465,7 +466,7 @@ test('core unit initialization uses prepared states and separates configuration 
   assert.equal(unit.spatialPresence.present, false);
   assert.equal(Object.hasOwn(unit, 'defense'), true);
   assert.deepEqual(unit.blocker, { capacity: [], geometry: { radius: 0.7 }, enabled: true });
-  assert.equal(resolveBlockingCapacity(unit.definition.blocker, unit.blocker), 2);
+  assert.equal(resolveCapacity(unit.definition.blocker, unit.blocker), 2);
   assert.deepEqual(unit.blockable, { weight: 1, enabled: true });
 
   const updated = { ...unit, vitality: { ...unit.vitality, hp: 0 }, action: { ...unit.action, readyAtTick: 99 } };

@@ -22,7 +22,7 @@ import type { BattleState } from ${module("battle/state")};
 import type { Vitality } from ${module("unit/capability/vitality/capability")};
 import { setMaxHpContribution } from ${module("unit/capability/vitality/capability")};
 import { setAttackContribution, type Offense } from ${module("unit/capability/offense/capability")};
-import { setCapacityContribution, type Blocker } from ${module("unit/capability/blocking/capability")};
+import { setCapacityContribution, type Blocker } from ${module("unit/capability/blocker")};
 import { setMoveSpeedContribution, type RoutedLocomotion, type RouteControlState } from ${module("unit/capability/locomotion/capability")};
 import type { Context, Definition } from ${module("unit/effect/definition")};
 import { install, replaceEffect, get } from ${module("unit/effect/operations")};
