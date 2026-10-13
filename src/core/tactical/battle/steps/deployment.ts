@@ -18,7 +18,11 @@ import { isSpatiallyPresent } from "../../unit/capability/presence.js";
 import { instantiateUnitPlacement, type UnitPlacementDefinition } from "../creation/placement.js";
 import type { Unit, Id } from "../../unit/unit.js";
 import type { Command } from "../contract.js";
-import { removeUnitWithEffects, type UnitLifecycleResources } from "../execution/unit-lifecycle.js";
+import {
+    enterUnits,
+    removeUnitWithEffects,
+    type UnitLifecycleResources,
+} from "../execution/unit-lifecycle.js";
 import {
     advanceBattlefield,
     appendEvents,
@@ -163,6 +167,10 @@ export function resolveDeploymentCommands(
             ...changes,
             { type: "SET_SUPPORT_RELATIONS", relations: supports },
         ]);
+
+        if (existing === undefined) {
+            state = enterUnits(state, [unit.id]);
+        }
     }
 
     return state;

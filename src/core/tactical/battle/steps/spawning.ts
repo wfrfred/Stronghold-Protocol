@@ -8,6 +8,7 @@ import { advanceBattlefield, appendEvents, type BattleState, type Result } from 
 import { advanceSpawnSchedule, recordScheduleSpawns } from "../schedule/runtime.js";
 import type { SpawnScheduleExecution } from "../schedule/state.js";
 import type { ScheduledEnemySpawn } from "../schedule/definition.js";
+import { enterUnits } from "../execution/unit-lifecycle.js";
 
 interface SpawnedEnemies {
     readonly execution: BattleExecutionState;
@@ -100,6 +101,10 @@ export function advanceSpawning(
     state = advanceBattlefield(
         state,
         spawned.enemies.map((unit) => ({ type: "REGISTER_UNIT", unit })),
+    );
+    state = enterUnits(
+        state,
+        spawned.enemies.map((unit) => unit.id),
     );
 
     const value = recordScheduleSpawns(

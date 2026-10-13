@@ -28,7 +28,7 @@ import {
     type SpatialDefinition,
 } from "../capability/spatial.js";
 import type { Definition as StatusDefinition } from "../capability/status/capability.js";
-import type { Unit, DefinitionId } from "../unit.js";
+import type { Unit, Definition as UnitDefinition } from "../unit.js";
 import type {
     Vitality,
     Definition as VitalityDefinition,
@@ -43,8 +43,7 @@ import {
     type Definition as SkillDefinition,
 } from "../capability/skill/capability.js";
 
-export interface Definition {
-    readonly id: DefinitionId;
+export interface Definition extends UnitDefinition {
     readonly vitality: VitalityDefinition;
     readonly locomotion: LocomotionDefinition;
     readonly skill?: SkillDefinition;
@@ -83,6 +82,7 @@ export function createDefinition(definition: Definition): Definition {
 
     return Object.freeze({
         id: definition.id,
+        ...(definition.onEnter === undefined ? {} : { onEnter: definition.onEnter }),
         vitality: Object.freeze({ maxHp: definition.vitality.maxHp }),
         locomotion: Object.freeze({
             moveSpeedPerTick: definition.locomotion.moveSpeedPerTick,

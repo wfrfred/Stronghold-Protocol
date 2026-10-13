@@ -31,6 +31,18 @@ export interface UnitLifecycleResources {
     ) => BattleState;
 }
 
+export function enterUnits(state: BattleState, unitIds: readonly Id[]): BattleState {
+    for (const unitId of unitIds) {
+        const unit = getUnit(state, unitId);
+
+        if (unit?.lifecycle === "PRESENT" && unit.definition.onEnter !== undefined) {
+            state = unit.definition.onEnter(state, unitId);
+        }
+    }
+
+    return state;
+}
+
 export function retireCombatUnit(
     state: BattleState,
     unitId: Id,

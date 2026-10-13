@@ -23,7 +23,7 @@ import {
 } from "../capability/spatial.js";
 import type { Definition as StatusDefinition } from "../capability/status/capability.js";
 import type { Definition as VitalityDefinition } from "../capability/vitality/capability.js";
-import type { DefinitionId } from "../unit.js";
+import type { Definition as UnitDefinition } from "../unit.js";
 import * as initialization from "../initialize.js";
 import {
     createDefinition as createElementalDefinition,
@@ -34,8 +34,7 @@ import {
     type Definition as SkillDefinition,
 } from "../capability/skill/capability.js";
 
-export interface Definition {
-    readonly id: DefinitionId;
+export interface Definition extends UnitDefinition {
     readonly vitality: VitalityDefinition;
     readonly action: ActionCapabilityDefinition;
     readonly allegiance: AllegianceDefinition;
@@ -62,6 +61,7 @@ export function createDefinition(definition: Definition): Definition {
 
     return Object.freeze({
         id: definition.id,
+        ...(definition.onEnter === undefined ? {} : { onEnter: definition.onEnter }),
         vitality: Object.freeze({ maxHp: definition.vitality.maxHp }),
         action: createActionCapabilityDefinition(definition.action),
         allegiance: definition.allegiance,

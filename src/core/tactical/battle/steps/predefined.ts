@@ -18,7 +18,11 @@ import {
 } from "../creation/placement.js";
 import type { BattleExecutionState } from "../execution/state.js";
 import type { Command } from "../contract.js";
-import { removeUnitWithEffects, type UnitLifecycleResources } from "../execution/unit-lifecycle.js";
+import {
+    enterUnits,
+    removeUnitWithEffects,
+    type UnitLifecycleResources,
+} from "../execution/unit-lifecycle.js";
 import { advanceBattlefield, battlefieldView, type BattleState, type Result } from "../state.js";
 
 export interface PredefinedUnitCreation extends UnitPlacementDefinition {
@@ -249,6 +253,13 @@ export function advancePredefined(
                 state = advanceBattlefield(state, [change]);
             }
         }
+
+        state = enterUnits(
+            state,
+            transition.changes.flatMap((change) =>
+                change.type === "REGISTER_UNIT" ? [change.unit.id] : [],
+            ),
+        );
 
         presence = transition.presence;
     }
