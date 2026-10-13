@@ -233,10 +233,11 @@ import { createBattlefieldRuntime } from ${sourceModule("battlefield/runtime")};
 type ActingDefinition = Definition & Action['definition'];
 declare const definition: ImmutableData<ActingDefinition>;
 declare const map: BattlefieldMap;
-const unit: Unit<ActingDefinition> = { id: 1, definition, position: [0, 0], effects: Effects.empty(), lifecycle: 'PRESENT' };
+const unit = { id: 1, definition, position: [0, 0], effects: Effects.empty(), lifecycle: 'PRESENT' } satisfies Unit;
+const baseUnit: Unit = unit;
 const battlefield = createBattlefieldRuntime({ map });
-battlefield.advance([{ type: 'REGISTER_UNIT', unit }]);
-const custom = createBattlefieldRuntime<Unit<ActingDefinition>>({ map });
+battlefield.advance([{ type: 'REGISTER_UNIT', unit: baseUnit }]);
+const custom = createBattlefieldRuntime<typeof unit>({ map });
 custom.advance([{ type: 'REGISTER_UNIT', unit }]);
 `,
         );

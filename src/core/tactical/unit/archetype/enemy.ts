@@ -51,9 +51,9 @@ export interface Definition {
     readonly elemental?: ElementalDefinition;
 }
 
-export type Enemy<D extends Definition = Definition> = Unit<D> & Vitality & Locomotion;
+export type Enemy = Unit & Vitality & Locomotion;
 
-export type RoutedEnemy<D extends Definition = Definition> = Enemy<D> &
+export type RoutedEnemy<D extends Definition = Definition> = Enemy &
     initialization.Result<D> &
     RoutedLocomotion &
     SpatialPresence;

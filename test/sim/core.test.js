@@ -763,6 +763,8 @@ test('core initializer types preserve definition unions, prepared refinements an
     new URL(`../../src/core/tactical/unit/${name}.js`, import.meta.url)));
   const imports = `
 import { initialize as initializeUnit, type Result as InitializedUnit } from ${sourceModule('initialize')};
+import { initializeRoutedEnemy, type RoutedEnemySpawn } from ${sourceModule('../battle/creation/enemy')};
+import { stepRoutedEnemy, type RoutedEnemyStepContext } from ${sourceModule('../../../legacy/enemy')};
 import type { Unit, Definition as UnitDefinition } from ${sourceModule('unit')};
 import type { ImmutableData } from ${sourceModule('../../common/immutable-data')};
 import { initialize as initializeOffenseState } from ${sourceModule('capability/offense/capability')};
@@ -789,6 +791,8 @@ interface EnemyProbe extends EnemyDefinition { readonly kind: 'enemy'; readonly 
 interface DeviceProbe extends UnitDefinition { readonly kind: 'device'; readonly deviceCode: 29; }
 interface OptionalProbe extends UnitDefinition { readonly vitality?: VitalityDefinition; }
 declare const enemyDefinition: EnemyProbe;
+declare const enemySpawn: RoutedEnemySpawn<EnemyProbe>;
+declare const enemyStepContext: RoutedEnemyStepContext;
 declare const unionDefinition: EnemyProbe | DeviceProbe;
 declare const routed: RoutedLocomotionState;
 declare const battlefieldMap: BattlefieldMap;
@@ -844,8 +848,17 @@ function initializeGeneric<D extends EnemyDefinition>(definition: D): Initialize
   return initializeUnit({ id: 0, definition, position: [0, 0] });
 }
 const enemy = initializeUnit({ id: 1, definition: enemyDefinition, position: [0, 0] });
+const baseUnit: Unit = enemy;
+const instanceId: number = baseUnit.id;
+const contentId: string = baseUnit.definition.id;
 type PlainDefinition = Assert<Equal<typeof enemy.definition, ImmutableData<EnemyProbe>>>;
 type PlainUnit = Assert<Equal<typeof enemy, InitializedUnit<EnemyProbe>>>;
+const routedEnemy = initializeRoutedEnemy(enemySpawn).enemy;
+const spawnedCode: 17 = routedEnemy.definition.enemyCode;
+routedEnemy.locomotion.mainRoute.route.definition;
+const movedEnemy = stepRoutedEnemy(routedEnemy, enemyStepContext).enemy;
+const movedCode: 17 = movedEnemy.definition.enemyCode;
+movedEnemy.locomotion.mainRoute.route.definition;
 const union = initializeUnit({ id: 2, definition: unionDefinition, position: [0, 0] });
 type UnionUnit = Assert<Equal<typeof union, InitializedUnit<EnemyProbe | DeviceProbe>>>;
 const placed = instantiateUnitPlacement(placement, execution, 0);
@@ -879,7 +892,10 @@ const optionalPrepared = initializeUnit({ id: 4, definition: enemyDefinition, po
 type OptionalPreparedLocomotion = Assert<typeof optionalPrepared.locomotion extends LocomotionState ? true : false>;
 type OptionalPreparedLocomotionShape = Assert<LocomotionState extends typeof optionalPrepared.locomotion ? true : false>;
 optionalPrepared.locomotion.moving;
-declare const guarded: Unit<EnemyProbe> & { readonly extra: 23 };
+declare const guarded: Unit & {
+  readonly definition: ImmutableData<EnemyProbe>;
+  readonly extra: 23;
+};
 if (hasVitality(guarded)) {
   const extra: 23 = guarded.extra;
   const kind: 'enemy' = guarded.definition.kind;
@@ -907,6 +923,7 @@ type ProjectileState = Assert<Equal<typeof projectileResult.state, BattleState>>
       ['invalid-offense-config', `initializeUnit({ id: 1, definition: { id: 'invalid', offense: { attack: [] } }, position: [0, 0], states: { offense: initializeOffenseState() } });`],
       ['optional', `declare const optionalDefinition: OptionalProbe; initializeUnit({ id: 1, definition: optionalDefinition, position: [0, 0] }).vitality.hp;`],
       ['wide', `declare const wideDefinition: UnitDefinition; initializeUnit({ id: 1, definition: wideDefinition, position: [0, 0] }).locomotion.moving;`],
+      ['base-unit-definition', `declare const unit: Unit; unit.definition.vitality.maxHp;`],
       ['optional-refinement', `declare const optionalStates: Partial<{ locomotion: RoutedLocomotionState }>; initializeUnit({ id: 1, definition: enemyDefinition, position: [0, 0], states: optionalStates }).locomotion.mainRoute;`],
       ['optional-normalized-occupancy', `declare const optionalPlacement: UnitPlacementDefinition<EnemyProbe>; instantiateUnitPlacement(createUnitPlacementDefinition(optionalPlacement), execution, 0).unit.occupancy.claims;`],
       ['normalized-union-occupancy', `instantiateUnitPlacement(createUnitPlacementDefinition(placement), execution, 0).unit.occupancy.claims;`],

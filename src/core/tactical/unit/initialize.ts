@@ -1,4 +1,5 @@
 import type { WorldPosition } from "../geometry/coordinate.js";
+import type { ImmutableData } from "../../common/immutable-data.js";
 import {
     initializeUnitCapabilities,
     type SelectedCapabilityStates,
@@ -32,16 +33,18 @@ type RuntimeCapabilitiesWithStates<D extends Definition, S extends object> = {
 } & Omit<SelectedCapabilityStates<S>, keyof RuntimeCapabilitiesFor<D>>;
 
 export type Result<D extends Definition, S extends object = object> = D extends unknown
-    ? Unit<D> & RuntimeCapabilitiesWithStates<D, S>
+    ? Omit<Unit, "definition"> & {
+          readonly definition: ImmutableData<D>;
+      } & RuntimeCapabilitiesWithStates<D, S>
     : never;
 
 export function initialize<D extends Definition>(input: Input<D>): Result<D>;
 export function initialize<D extends Definition, S extends PreparedCapabilityStates<D>>(
     prepared: PreparedInput<D, S>,
 ): Result<D, S>;
-export function initialize<D extends Definition>(
-    input: Omit<Input<D>, "states"> & { readonly states?: Partial<CapabilityStates> },
-): Unit<D> {
+export function initialize(
+    input: Omit<Input, "states"> & { readonly states?: Partial<CapabilityStates> },
+): Unit {
     const { id, position, definition } = input;
     const states = initializeUnitCapabilities(
         definition,
@@ -52,7 +55,7 @@ export function initialize<D extends Definition>(
     return {
         id,
         lifecycle: "PRESENT",
-        definition: definition as Unit<D>["definition"],
+        definition,
         position,
         effects: input.effects ?? Effects.empty(),
         ...states,
