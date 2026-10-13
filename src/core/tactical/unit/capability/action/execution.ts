@@ -7,7 +7,11 @@ import {
 } from "../../../battle/state.js";
 import { emptyCall, type CallContext } from "../../../battle/execution/call.js";
 import { hasAction } from "./capability.js";
-import { accept, resume } from "./internal/process.js";
+import {
+    acceptActionExecution,
+    resumeActionExecution,
+    type ActionExecutionResources,
+} from "./process.js";
 import { isSpatiallyPresent } from "../presence.js";
 import {
     beginActionCooldown,
@@ -18,7 +22,6 @@ import { hasStatusFlag } from "../status/capability.js";
 
 import type { Id } from "../../unit.js";
 import type { CompiledAction } from "./compiled.js";
-import type { ActionExecutionResources } from "./process.js";
 
 export interface ActionStartRequest {
     readonly sourceUnitId: Id;
@@ -75,7 +78,7 @@ export function startAction(
         action: beginActionCooldown(action, definition, intervalTicks, tick),
     });
     state = appendEvents(state, [{ type: "ACTION", sourceUnitId, targetUnitId, tick }]);
-    const initialized = accept(state.actionExecutions, {
+    const initialized = acceptActionExecution(state.actionExecutions, {
         sourceUnitId,
         definition,
         inputTargetUnitId: targetUnitId,
@@ -84,7 +87,7 @@ export function startAction(
     });
     state = { ...state, actionExecutions: initialized.state };
 
-    return resume(
+    return resumeActionExecution(
         state,
         { executionId: initialized.execution.id, segments: compiled.program, tick },
         resources,
