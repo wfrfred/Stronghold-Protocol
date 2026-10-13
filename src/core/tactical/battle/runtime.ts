@@ -42,12 +42,14 @@ import {
     type SpawnScheduleExecution,
 } from "./schedule/state.js";
 import { initializeBattlefield } from "./initialization.js";
+import type { State as DeploymentState } from "./deployment/deployment.js";
 
 interface State {
     readonly battlefield: BattlefieldState;
     readonly tick: number;
     readonly schedule: SpawnScheduleExecution;
     readonly actionExecutions: ActionExecutionState;
+    readonly deployment: DeploymentState;
     readonly predefinedPresence: readonly PredefinedPresence[];
     readonly execution: BattleExecutionState;
     readonly completedRouteCount: number;
@@ -112,6 +114,7 @@ export class BattleRuntime {
             battlefield: initialized.state.battlefield,
             schedule: createSpawnScheduleExecution(scheduleDefinition),
             actionExecutions: initialized.state.actionExecutions,
+            deployment: initialized.state.deployment,
             predefinedPresence: initialized.value,
             execution: initialized.state.execution,
             tick: 0,
@@ -142,6 +145,7 @@ export class BattleRuntime {
             tick: tickIndex,
             schedule,
             actionExecutions: actionExecution,
+            deployment,
             predefinedPresence,
             execution,
             completedRouteCount,
@@ -151,6 +155,7 @@ export class BattleRuntime {
         const view = createBattlefieldView(battlefield);
 
         return {
+            deployment,
             tickIndex,
             spawning: snapshotSchedule(schedule),
             predefinedPresence,
@@ -186,6 +191,7 @@ export class BattleRuntime {
             previous.execution,
             previous.actionExecutions,
             tick,
+            previous.deployment,
         );
 
         state = advanceBattlefield(state, [{ type: "EXPIRE_NAVIGATION_MODIFIERS", tick }]);
@@ -262,6 +268,7 @@ export class BattleRuntime {
             result,
             schedule,
             actionExecutions: state.actionExecutions,
+            deployment: state.deployment,
             predefinedPresence,
             execution: state.execution,
         };

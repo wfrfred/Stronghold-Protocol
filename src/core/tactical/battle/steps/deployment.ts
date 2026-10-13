@@ -3,9 +3,10 @@ import { evaluateDeployment } from "../../battlefield/deployment/query.js";
 import type { SupportRelation } from "../../battlefield/support/relations.js";
 import { Tile, type TilePosition } from "../../geometry/coordinate.js";
 import {
-    hasDeploymentDefinition,
+    hasDeployable,
     hasTileBindingDefinition,
     type DeployableUnitDefinition,
+    type Deployable,
 } from "../../unit/capability/deployment.js";
 import {
     validateState as validateOccupancyState,
@@ -30,6 +31,7 @@ import {
     getUnit,
     type BattleState,
 } from "../state.js";
+import { notifyDeployed } from "../deployment/deployment.js";
 
 export type DeploymentCommand =
     | {
@@ -72,7 +74,7 @@ export function resolveDeploymentCommands(
         }
 
         const battlefield = battlefieldView(state);
-        let existing: (Unit & Occupancy) | undefined;
+        let existing: (Unit & Deployable & Occupancy) | undefined;
         let definition: DeployableUnitDefinition;
 
         if (command.type === "DEPLOY_UNIT") {
@@ -82,7 +84,7 @@ export function resolveDeploymentCommands(
 
             if (
                 candidate === undefined ||
-                !hasDeploymentDefinition(candidate.definition) ||
+                !hasDeployable(candidate) ||
                 !hasOccupancy(candidate) ||
                 !isSpatiallyPresent(candidate)
             ) {
@@ -115,7 +117,7 @@ export function resolveDeploymentCommands(
         };
         validateOccupancyState(occupancy);
         const position = Tile.center(command.tilePosition);
-        let unit: Unit & Occupancy;
+        let unit: Unit & Deployable & Occupancy;
         const changes: BattlefieldChange[] = [];
 
         if (existing === undefined) {
@@ -134,9 +136,6 @@ export function resolveDeploymentCommands(
             unit = placed.unit;
             state = { ...state, execution: placed.execution };
             changes.push(...placed.changes);
-            state = appendEvents(state, [
-                { type: "UNIT_DEPLOYED", unitId: unit.id, position, tick },
-            ]);
         } else {
             unit = { ...existing, position, occupancy };
             changes.push({ type: "UPDATE_UNIT", unit });
@@ -169,7 +168,11 @@ export function resolveDeploymentCommands(
         ]);
 
         if (existing === undefined) {
+            state = appendEvents(state, [
+                { type: "UNIT_DEPLOYED", unitId: unit.id, position, tick },
+            ]);
             state = enterUnits(state, [unit.id]);
+            state = notifyDeployed(state, { unit, kind: "MANUAL" });
         }
     }
 

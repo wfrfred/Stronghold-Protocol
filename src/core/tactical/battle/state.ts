@@ -14,6 +14,10 @@ import {
 } from "../unit/capability/action/process.js";
 import type { Event } from "./contract.js";
 import type { BattleExecutionState } from "./execution/state.js";
+import {
+    initialize as initializeDeployment,
+    type State as DeploymentState,
+} from "./deployment/deployment.js";
 
 const defaultExecution: BattleExecutionState = {
     rngState: 0,
@@ -29,6 +33,7 @@ export interface BattleState {
     readonly tick: number;
     readonly execution: BattleExecutionState;
     readonly actionExecutions: ActionExecutionState;
+    readonly deployment: DeploymentState;
     readonly events: readonly Event[];
     readonly registeredUnitIds: readonly Id[];
     readonly removedUnits: BattlefieldChangeResult["removedUnits"];
@@ -45,12 +50,14 @@ export function createBattleState(
     execution: BattleExecutionState = defaultExecution,
     actionExecutions: ActionExecutionState = createActionExecutionState(),
     tick = 0,
+    deployment: DeploymentState = initializeDeployment(),
 ): BattleState {
     return {
         battlefield,
         tick,
         execution,
         actionExecutions,
+        deployment,
         events: [],
         registeredUnitIds: [],
         removedUnits: [],

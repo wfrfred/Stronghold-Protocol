@@ -1,13 +1,36 @@
 import type { BuildableType, HeightType } from "../../battlefield/map/tile.js";
-import type { Definition } from "../unit.js";
+import type { Unit, Definition as UnitDefinition } from "../unit.js";
+
+export type CardId = number;
 
 export interface DeploymentProfile {
     readonly buildableType: Exclude<BuildableType, "NONE">;
     readonly advancedBuildableMask: number;
 }
 
-export interface DeployableUnitDefinition extends Definition {
-    readonly deployment: DeploymentProfile;
+export type Definition = DeploymentProfile;
+
+export interface State {
+    readonly cardId: CardId | null;
+}
+
+export interface Deployable {
+    readonly definition: { readonly deployment: Definition };
+    readonly deployment: State;
+}
+
+const initialState: State = { cardId: null };
+
+export function initialize(): State {
+    return initialState;
+}
+
+export function hasDeployable<U extends Unit>(unit: U): unit is U & Deployable {
+    return "deployment" in unit && "deployment" in unit.definition;
+}
+
+export interface DeployableUnitDefinition extends UnitDefinition {
+    readonly deployment: Definition;
 }
 
 export interface TileBindingDefinition {
@@ -16,18 +39,18 @@ export interface TileBindingDefinition {
     readonly advancedBuildableMask: number | null;
 }
 
-export interface TileBoundUnitDefinition extends Definition {
+export interface TileBoundUnitDefinition extends UnitDefinition {
     readonly tileBinding: TileBindingDefinition;
 }
 
 export function hasDeploymentDefinition(
-    definition: Definition,
+    definition: UnitDefinition,
 ): definition is DeployableUnitDefinition {
     return "deployment" in definition;
 }
 
 export function hasTileBindingDefinition(
-    definition: Definition,
+    definition: UnitDefinition,
 ): definition is TileBoundUnitDefinition {
     return "tileBinding" in definition;
 }

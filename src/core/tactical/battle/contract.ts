@@ -13,6 +13,7 @@ import type { NavigationOutcome } from "../battlefield/navigation/state.js";
 import type { WorldPosition } from "../geometry/coordinate.js";
 import type { RouteSignal } from "../unit/capability/locomotion/route/execution.js";
 import type { Unit, Id } from "../unit/unit.js";
+import type { State as DeploymentState } from "./deployment/deployment.js";
 import type {
     PredefinedDefinition,
     PredefinedCommand,
@@ -99,6 +100,7 @@ export interface Result {
 }
 
 export interface Snapshot {
+    readonly deployment: DeploymentState;
     readonly tickIndex: number;
     readonly spawning: SpawnScheduleState;
     readonly execution: BattleExecutionState;
