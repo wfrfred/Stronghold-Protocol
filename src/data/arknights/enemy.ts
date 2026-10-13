@@ -265,3 +265,217 @@ export function parseEnemyMovementDefinition(
 ): Definition {
     return parseEnemyMovementContent(value, level, profile, overwrittenData).definition;
 }
+
+export interface Configuration {
+    readonly level: number;
+    readonly overwrittenData?: unknown;
+}
+
+export interface Profile {
+    readonly id: string;
+    readonly level: number;
+    readonly name: string;
+    readonly prefabKey: string;
+    readonly maxHp: number;
+    readonly attack: number;
+    readonly defense: number;
+    readonly resistance: number;
+    readonly attackSpeed: number;
+    readonly baseAttackTime: number;
+    readonly moveSpeedPerSecond: number;
+    readonly rangeRadius: number;
+    readonly mass: number;
+    readonly blockWeight: number;
+    readonly stunImmune: boolean;
+    readonly tags: readonly string[];
+    readonly applyWay: "MELEE" | "RANGED";
+    readonly lifePointReduce: number;
+    readonly notCountInTotal: boolean;
+}
+
+function levelData(source: Record<string, unknown>, level: number): Record<string, unknown> {
+    if (!Array.isArray(source.Value)) {
+        throw new TypeError("enemy database Value must be an array");
+    }
+
+    const matches = source.Value.filter(
+        (entry: unknown) => record(entry, "enemy level entry").level === level,
+    );
+
+    if (matches.length !== 1) {
+        throw new RangeError(`enemy database requires exactly one level ${level}`);
+    }
+
+    return record(record(matches[0], "enemy level entry").enemyData, "enemy level data");
+}
+
+function mergeDefined(
+    layers: readonly Record<string, unknown>[],
+    name: string,
+): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
+
+    for (const layer of layers) {
+        for (const [key, value] of Object.entries(layer)) {
+            const current = defined(value, `${name}.${key}`);
+
+            if (current !== undefined) {
+                result[key] = current;
+            }
+        }
+    }
+
+    return result;
+}
+
+function numeric(source: Record<string, unknown>, key: string, fallback?: number): number {
+    const value = source[key] ?? fallback;
+    assertNonnegativeNumber(value, `enemy ${key}`);
+
+    return value;
+}
+
+function flag(source: Record<string, unknown>, key: string, fallback = false): boolean {
+    const value = source[key] ?? fallback;
+
+    if (typeof value !== "boolean") {
+        throw new TypeError(`enemy ${key} must be boolean`);
+    }
+
+    return value;
+}
+
+function textValue(source: Record<string, unknown>, key: string): string {
+    const value = source[key];
+
+    if (typeof value !== "string" || value.length === 0) {
+        throw new TypeError(`enemy ${key} must be nonempty`);
+    }
+
+    return value;
+}
+
+/** Resolves client table inheritance before the values enter tactical content. */
+export function prepare(value: unknown, configuration: Configuration): Profile {
+    const level = enemyLevel(configuration.level);
+    const source = record(value, "enemy database entry");
+    const id = textValue(source, "Key");
+    const layers = [levelData(source, 0), levelData(source, level)];
+
+    if (configuration.overwrittenData !== undefined && configuration.overwrittenData !== null) {
+        layers.push(record(configuration.overwrittenData, "enemy overwrittenData"));
+    }
+
+    const attributes = mergeDefined(
+        layers.map((layer) =>
+            layer.attributes === undefined ? {} : record(layer.attributes, "enemy attributes"),
+        ),
+        "attributes",
+    );
+    const fields = mergeDefined(
+        layers.map((layer) =>
+            Object.fromEntries(
+                Object.entries(layer).filter(
+                    ([key]) =>
+                        key !== "attributes" &&
+                        key !== "skills" &&
+                        key !== "talentBlackboard" &&
+                        key !== "spData",
+                ),
+            ),
+        ),
+        "data",
+    );
+
+    const supportedAttributes = new Set([
+        "maxHp",
+        "atk",
+        "def",
+        "magicResistance",
+        "attackSpeed",
+        "baseAttackTime",
+        "moveSpeed",
+        "massLevel",
+        "blockCnt",
+        "stunImmune",
+    ]);
+
+    for (const [key, current] of Object.entries(attributes)) {
+        if (!supportedAttributes.has(key) && current !== 0 && current !== false) {
+            throw new TypeError(`unsupported enemy attribute ${key}`);
+        }
+    }
+
+    const supportedFields = new Set([
+        "name",
+        "prefabKey",
+        "applyWay",
+        "motion",
+        "enemyTags",
+        "rangeRadius",
+        "lifePointReduce",
+        "notCountInTotal",
+        "levelType",
+    ]);
+
+    for (const [key, current] of Object.entries(fields)) {
+        if (!supportedFields.has(key) && current !== 0 && current !== false && current !== null) {
+            throw new TypeError(`unsupported enemy ${key}`);
+        }
+    }
+    for (const layer of layers) {
+        for (const key of ["skills", "talentBlackboard", "spData"]) {
+            const current = layer[key];
+
+            if (current != null && !(Array.isArray(current) && current.length === 0)) {
+                throw new TypeError(`unsupported enemy ${key}`);
+            }
+        }
+    }
+
+    if (fields.motion !== "WALK") {
+        throw new TypeError(`unsupported enemy motion ${String(fields.motion)}`);
+    }
+    if (fields.applyWay !== "MELEE" && fields.applyWay !== "RANGED") {
+        throw new TypeError(`unsupported enemy applyWay ${String(fields.applyWay)}`);
+    }
+
+    const tags = fields.enemyTags ?? [];
+
+    if (!Array.isArray(tags) || !tags.every((tag: unknown) => typeof tag === "string")) {
+        throw new TypeError("enemy tags must be a string array");
+    }
+
+    const maxHp = numeric(attributes, "maxHp");
+    const baseAttackTime = numeric(attributes, "baseAttackTime");
+    assertPositiveNumber(maxHp, "enemy maxHp");
+    assertPositiveNumber(baseAttackTime, "enemy baseAttackTime");
+    const mass = numeric(attributes, "massLevel", 0);
+    const blockWeight = numeric(attributes, "blockCnt", 1);
+    const lifePointReduce = numeric(fields, "lifePointReduce", 1);
+    assertNonnegativeSafeInteger(mass, "enemy mass");
+    assertNonnegativeSafeInteger(blockWeight, "enemy block weight");
+    assertNonnegativeSafeInteger(lifePointReduce, "enemy life point reduction");
+
+    return {
+        id,
+        level,
+        name: textValue(fields, "name"),
+        prefabKey: textValue(fields, "prefabKey"),
+        maxHp,
+        attack: numeric(attributes, "atk"),
+        defense: numeric(attributes, "def", 0),
+        resistance: numeric(attributes, "magicResistance", 0),
+        attackSpeed: numeric(attributes, "attackSpeed", 100),
+        baseAttackTime,
+        moveSpeedPerSecond: numeric(attributes, "moveSpeed"),
+        rangeRadius: numeric(fields, "rangeRadius", 0),
+        mass,
+        blockWeight,
+        stunImmune: flag(attributes, "stunImmune"),
+        tags,
+        applyWay: fields.applyWay,
+        lifePointReduce,
+        notCountInTotal: flag(fields, "notCountInTotal"),
+    };
+}
