@@ -1,7 +1,7 @@
 import { World, type WorldPosition } from "../../geometry/coordinate.js";
 import { hasAllegiance, type State as AllegianceState } from "../../unit/capability/allegiance.js";
-import { hasBlockable } from "../../unit/capability/blockable.js";
-import { hasBlocker, resolveCapacity } from "../../unit/capability/blocker.js";
+import { hasBlockable } from "../../unit/capability/blocking/blockable.js";
+import { hasBlocker, resolveCapacity } from "../../unit/capability/blocking/blocker.js";
 import { hasTileBindingDefinition } from "../../unit/capability/deployment.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence.js";
 import { hasSpatial } from "../../unit/capability/spatial.js";

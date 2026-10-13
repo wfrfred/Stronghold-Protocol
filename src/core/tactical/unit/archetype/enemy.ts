@@ -7,7 +7,7 @@ import type { Definition as AllegianceDefinition } from "../capability/allegianc
 import {
     createDefinition as createBlockableDefinition,
     type Definition as BlockableDefinition,
-} from "../capability/blockable.js";
+} from "../capability/blocking/blockable.js";
 import {
     createDefinition as createDefenseDefinition,
     type Definition as DefenseDefinition,

@@ -27,7 +27,7 @@ import {
     resolveCapacity,
     setCapacityContribution,
     removeCapacityContribution,
-} from "../../dist/core/tactical/unit/capability/blocker.js";
+} from "../../dist/core/tactical/unit/capability/blocking/blocker.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { resolveMaxHp } from "../../dist/core/tactical/unit/capability/vitality/query.js";
 import * as contribution from "../../dist/core/tactical/unit/contribution/contribution.js";

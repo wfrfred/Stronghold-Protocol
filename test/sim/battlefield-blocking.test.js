@@ -7,7 +7,7 @@ import { initialize } from '../../dist/core/tactical/unit/initialize.js';
 import {
   addStatusContribution, removeStatusContribution,
 } from '../../dist/core/tactical/unit/capability/status/capability.js';
-import { setCapacityContribution } from '../../dist/core/tactical/unit/capability/blocker.js';
+import { setCapacityContribution } from '../../dist/core/tactical/unit/capability/blocking/blocker.js';
 import * as modifier from '../../dist/core/tactical/unit/contribution/value.js';
 
 const create = units => {

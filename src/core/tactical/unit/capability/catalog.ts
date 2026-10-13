@@ -13,12 +13,12 @@ import {
     initialize as initializeBlockableState,
     type Definition as BlockableDefinition,
     type State as BlockableState,
-} from "./blockable.js";
+} from "./blocking/blockable.js";
 import {
     initialize as initializeBlockerState,
     type Definition as BlockerDefinition,
     type State as BlockerState,
-} from "./blocker.js";
+} from "./blocking/blocker.js";
 import {
     initialize as initializeDefenseState,
     type Definition as DefenseDefinition,

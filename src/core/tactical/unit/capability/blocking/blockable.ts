@@ -1,5 +1,5 @@
-import { assertPositiveSafeInteger } from "../../../common/assert.js";
-import type { Unit } from "../unit.js";
+import { assertPositiveSafeInteger } from "../../../../common/assert.js";
+import type { Unit } from "../../unit.js";
 
 export interface Definition {
     readonly weight: number;

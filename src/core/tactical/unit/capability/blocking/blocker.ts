@@ -1,8 +1,8 @@
-import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
-import { createBlockGeometry, type BlockGeometry } from "../../geometry/shape.js";
-import * as contribution from "../contribution/contribution.js";
-import * as modifier from "../contribution/value.js";
-import type { Unit } from "../unit.js";
+import { assertNonnegativeSafeInteger } from "../../../../common/assert.js";
+import { createBlockGeometry, type BlockGeometry } from "../../../geometry/shape.js";
+import * as contribution from "../../contribution/contribution.js";
+import * as modifier from "../../contribution/value.js";
+import type { Unit } from "../../unit.js";
 
 export interface Definition {
     readonly capacity: number;
