@@ -32,7 +32,7 @@ import {
     createStatusDefinition,
     type StatusUnitDefinition,
 } from "../capability/status/capability.js";
-import type { NormalizedUnitDefinition, Unit } from "../unit.js";
+import type { Unit } from "../unit.js";
 import type { Vitality, VitalUnitDefinition } from "../capability/vitality/capability.js";
 import type { InitializedUnit } from "../initialize.js";
 import {
@@ -68,16 +68,7 @@ export interface CombatEnemyDefinition
 
 export type CombatRoutedEnemy = RoutedEnemy<CombatEnemyDefinition>;
 
-type NormalizedEnemyShape = EnemyDefinition & {
-    readonly locomotion: EnemyDefinition["locomotion"] & {
-        readonly minimumMoveSpeedPerTick: number;
-    };
-};
-
-export function createEnemyDefinition<D extends EnemyDefinition>(
-    definition: D,
-): NormalizedUnitDefinition<D, NormalizedEnemyShape>;
-export function createEnemyDefinition(definition: EnemyDefinition): NormalizedEnemyShape {
+export function createEnemyDefinition(definition: EnemyDefinition): EnemyDefinition {
     if (definition.id.length === 0) {
         throw new TypeError("enemy definition id must be nonempty");
     }
@@ -104,12 +95,9 @@ export function createEnemyDefinition(definition: EnemyDefinition): NormalizedEn
     });
 }
 
-export function createCombatEnemyDefinition<D extends CombatEnemyDefinition>(
-    definition: D,
-): NormalizedUnitDefinition<D, CombatEnemyDefinition & NormalizedEnemyShape>;
 export function createCombatEnemyDefinition(
     definition: CombatEnemyDefinition,
-): CombatEnemyDefinition & NormalizedEnemyShape {
+): CombatEnemyDefinition {
     return Object.freeze({
         ...createEnemyDefinition(definition),
         action: createActionCapabilityDefinition(definition.action),

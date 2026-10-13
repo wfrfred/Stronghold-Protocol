@@ -33,7 +33,6 @@ import {
     type ElementalDefinition,
 } from "../capability/elemental/capability.js";
 import { createSkillDefinition, type SkillDefinition } from "../capability/skill/capability.js";
-import type { NormalizedUnitDefinition } from "../unit.js";
 
 export interface OperatorDefinition
     extends
@@ -55,9 +54,6 @@ export type Operator<D extends OperatorDefinition = OperatorDefinition> = Initia
 export type OperatorInitialization<D extends OperatorDefinition = OperatorDefinition> =
     UnitInitialization<D>;
 
-export function createOperatorDefinition<D extends OperatorDefinition>(
-    definition: D,
-): NormalizedUnitDefinition<D, OperatorDefinition>;
 export function createOperatorDefinition(definition: OperatorDefinition): OperatorDefinition {
     if (definition.id.length === 0) {
         throw new TypeError("operator definition id must be nonempty");

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-test('definitions retain capability presence and initialization produces standard capability states', async () => {
+test('definition factories return standard shapes while static definitions retain capability composition', async () => {
   const { default: ts } = await import('typescript');
   const directory = mkdtempSync(join(tmpdir(), 'stronghold-unit-definition-types-'));
   const sourceModule = name => JSON.stringify(fileURLToPath(new URL(`../../src/core/tactical/${name}.js`, import.meta.url)));
@@ -14,14 +14,16 @@ test('definitions retain capability presence and initialization produces standar
   const declarations = `
 import { createOperatorDefinition, initializeOperator, type OperatorDefinition } from ${sourceModule('unit/archetype/operator')};
 import { createEnemyDefinition, createCombatEnemyDefinition, type EnemyDefinition, type CombatEnemyDefinition } from ${sourceModule('unit/archetype/enemy')};
-import { initializeUnit, type InitializedUnit } from ${sourceModule('unit/initialize')};
+import { initializeUnit } from ${sourceModule('unit/initialize')};
 import { copyUnitSnapshot } from ${sourceModule('unit/snapshot')};
-import { selectCapabilityStates, type SelectedCapabilityStates } from ${sourceModule('unit/capability/catalog')};
-import type { OffenseDefinition, OffenseState } from ${sourceModule('unit/capability/offense/capability')};
-import type { SkillDefinition, SkillState } from ${sourceModule('unit/capability/skill/capability')};
+import { hasOffense, type Offense, type OffenseDefinition, type OffenseState } from ${sourceModule('unit/capability/offense/capability')};
+import { hasSkill, type SkillDefinition, type SkillState } from ${sourceModule('unit/capability/skill/capability')};
 import type { ElementalDefinition, ElementalState } from ${sourceModule('unit/capability/elemental/capability')};
-import type { VitalityState } from ${sourceModule('unit/capability/vitality/capability')};
+import type { Vitality, VitalityState } from ${sourceModule('unit/capability/vitality/capability')};
 import type { RoutedLocomotionState, RouteControlState } from ${sourceModule('unit/capability/locomotion/capability')};
+import type { Definition } from ${sourceModule('unit/effect/definition')};
+import { install } from ${sourceModule('unit/effect/operations')};
+import type { BattleState } from ${sourceModule('battle/state')};
 type OptionalKey = 'offense' | 'skill' | 'elemental';
 type OperatorBase = Omit<OperatorDefinition, OptionalKey>;
 type CombatEnemyBase = Omit<CombatEnemyDefinition, OptionalKey>;
@@ -29,92 +31,77 @@ type EnemyBase = Omit<EnemyDefinition, 'skill' | 'elemental'>;
 declare const operatorBase: OperatorBase;
 declare const combatEnemyBase: CombatEnemyBase;
 declare const enemyBase: EnemyBase;
-declare const skillInput: SkillDefinition & { readonly id: 'literal-skill'; readonly initialSp: 0 };
-declare const elementalInput: ElementalDefinition & { readonly maxEp: 1000 };
-declare const optionalInput: OperatorDefinition;
-declare const optionalEnemyInput: EnemyDefinition;
-const operator = createOperatorDefinition({ ...operatorBase,
-  id: 'literal-operator' as const, vitality: { maxHp: 100 as const },
-  offense: { attack: 10 as const }, skill: skillInput, elemental: elementalInput,
-  extra: 'discarded' as const,
-});
-const combatEnemy = createCombatEnemyDefinition({ ...combatEnemyBase,
-  offense: { attack: 10 as const }, skill: skillInput, elemental: elementalInput,
-  extra: 'discarded' as const,
-});
-const enemy = createEnemyDefinition({ ...enemyBase, skill: skillInput,
-  elemental: elementalInput, extra: 'discarded' as const,
-});
-const bareOperator = createOperatorDefinition(operatorBase);
-const bareCombatEnemy = createCombatEnemyDefinition(combatEnemyBase);
-const bareEnemy = createEnemyDefinition(enemyBase);
-const optionalOperator = createOperatorDefinition(optionalInput);
-const optionalEnemy = createEnemyDefinition(optionalEnemyInput);
+declare const skillInput: SkillDefinition;
+declare const elementalInput: ElementalDefinition;
+declare const battle: BattleState;
+const staticOperator = {
+  ...operatorBase, offense: { attack: 10 }, skill: skillInput, elemental: elementalInput,
+} satisfies OperatorDefinition;
+const staticCombatEnemy = {
+  ...combatEnemyBase, offense: { attack: 10 }, skill: skillInput, elemental: elementalInput,
+} satisfies CombatEnemyDefinition;
+const staticEnemy = {
+  ...enemyBase, skill: skillInput, elemental: elementalInput,
+} satisfies EnemyDefinition;
+const operator = createOperatorDefinition(staticOperator);
+const combatEnemy = createCombatEnemyDefinition(staticCombatEnemy);
+const enemy = createEnemyDefinition(staticEnemy);
 const initializedOperator = initializeOperator({ id: 1, definition: operator, position: [0, 0] });
 const initializedCombatEnemy = initializeUnit({ id: 2, definition: combatEnemy, position: [0, 0] });
 const initializedEnemy = initializeUnit({ id: 3, definition: enemy, position: [0, 0] });
-const optionalUnit = initializeOperator({ id: 4, definition: optionalOperator, position: [0, 0] });
-type OffensiveDefinition = OperatorBase & { readonly offense: OffenseDefinition };
-type SkilledDefinition = OperatorBase & { readonly skill: SkillDefinition };
-declare const unionInput: OffensiveDefinition | SkilledDefinition;
-const unionDefinition = createOperatorDefinition(unionInput);
-const unionUnit = initializeOperator({ id: 5, definition: unionDefinition, position: [0, 0] });
-declare const unionEnemyInput: (CombatEnemyBase & { readonly offense: OffenseDefinition }) | (CombatEnemyBase & { readonly elemental: ElementalDefinition });
-const unionEnemyDefinition = createCombatEnemyDefinition(unionEnemyInput);
-const unionEnemyUnit = initializeUnit({ id: 6, definition: unionEnemyDefinition, position: [0, 0] });
-declare const optionalPrepared: { readonly locomotion?: RoutedLocomotionState & { readonly moving: false }; readonly vitality: VitalityState & { readonly hp: 100 }; readonly extra: 'discarded' };
-const copiedOptional = selectCapabilityStates(optionalPrepared);
-declare const unionPrepared: { readonly locomotion: RoutedLocomotionState & { readonly moving: false } } | { readonly offense: OffenseState };
-const copiedUnion = selectCapabilityStates(unionPrepared);
-declare const routed: RoutedLocomotionState & { readonly moving: false };
-const preparedUnit = initializeUnit({ id: 7, definition: combatEnemy, position: [0, 0], states: { locomotion: routed } });
+const staticOperatorUnit = initializeOperator({ id: 4, definition: staticOperator, position: [0, 0] });
+const staticCombatEnemyUnit = initializeUnit({ id: 5, definition: staticCombatEnemy, position: [0, 0] });
+const staticEnemyUnit = initializeUnit({ id: 6, definition: staticEnemy, position: [0, 0] });
+const bareOperatorUnit = initializeOperator({ id: 7, definition: operatorBase, position: [0, 0] });
+declare const routed: RoutedLocomotionState;
+const preparedUnit = initializeUnit({ id: 8, definition: combatEnemy, position: [0, 0], states: { locomotion: routed } });
 const snapshot = copyUnitSnapshot(preparedUnit);
+const healthAttack: Definition<{ bonus: number }, Vitality & Offense> = {
+  id: 'health-attack',
+  initialize: () => ({ bonus: 0 }),
+  onEnable(state, context) {
+    const hp: number = context.unit.vitality.hp;
+    const maxHp: number = context.unit.definition.vitality.maxHp;
+    const attack: number = context.unit.definition.offense.attack;
+    const offense: OffenseState = context.unit.offense;
+    return state;
+  },
+};
 `;
   const positive = `
-const offenseDefinitions: OffenseDefinition[] = [operator.offense, combatEnemy.offense];
-const skillDefinitions: SkillDefinition[] = [operator.skill, combatEnemy.skill, enemy.skill];
-const elementalDefinitions: ElementalDefinition[] = [operator.elemental, combatEnemy.elemental, enemy.elemental];
-const offenseStates: OffenseState[] = [initializedOperator.offense, initializedCombatEnemy.offense];
-const skillStates: SkillState[] = [initializedOperator.skill, initializedCombatEnemy.skill, initializedEnemy.skill];
-const elementalStates: ElementalState[] = [initializedOperator.elemental, initializedCombatEnemy.elemental, initializedEnemy.elemental];
-const minimumSpeeds: number[] = [enemy.locomotion.minimumMoveSpeedPerTick, combatEnemy.locomotion.minimumMoveSpeedPerTick];
-const unionProjection: OffensiveDefinition | SkilledDefinition = unionDefinition;
-const unionRuntime: InitializedUnit<OffensiveDefinition> | InitializedUnit<SkilledDefinition> = unionUnit;
-const unionEnemyProjection: (CombatEnemyBase & { readonly offense: OffenseDefinition }) | (CombatEnemyBase & { readonly elemental: ElementalDefinition }) = unionEnemyDefinition;
-const unionEnemyRuntime: InitializedUnit<CombatEnemyBase & { readonly offense: OffenseDefinition }> | InitializedUnit<CombatEnemyBase & { readonly elemental: ElementalDefinition }> = unionEnemyUnit;
-const copiedComposition: { readonly locomotion: RoutedLocomotionState } | { readonly offense: OffenseState } = copiedUnion;
+const standardOperator: OperatorDefinition = operator;
+const standardCombatEnemy: CombatEnemyDefinition = combatEnemy;
+const standardEnemy: EnemyDefinition = enemy;
+const offenseDefinitions: OffenseDefinition[] = [staticOperator.offense, staticCombatEnemy.offense];
+const offenseStates: OffenseState[] = [staticOperatorUnit.offense, staticCombatEnemyUnit.offense];
+const skillStates: SkillState[] = [staticOperatorUnit.skill, staticCombatEnemyUnit.skill, staticEnemyUnit.skill];
+const elementalStates: ElementalState[] = [staticOperatorUnit.elemental, staticCombatEnemyUnit.elemental, staticEnemyUnit.elemental];
+const vitalityStates: VitalityState[] = [initializedOperator.vitality, initializedCombatEnemy.vitality, initializedEnemy.vitality];
 const preparedRoute: RouteControlState = preparedUnit.locomotion.mainRoute;
-const requiredHp: number = copiedOptional.vitality.hp;
-if (optionalOperator.offense !== undefined) { const attack: number = optionalOperator.offense.attack; }
-if (optionalEnemy.skill !== undefined) { const id: string = optionalEnemy.skill.id; }
-if (optionalUnit.skill !== undefined) { const sp: number = optionalUnit.skill.sp; }
-if (copiedOptional.locomotion !== undefined) { const route: RouteControlState = copiedOptional.locomotion.mainRoute; }
+if (operator.offense !== undefined) { const attack: number = operator.offense.attack; }
+if (enemy.skill !== undefined) { const id: string = enemy.skill.id; }
+if (hasOffense(initializedOperator)) {
+  const attack: number = initializedOperator.definition.offense.attack;
+  const offense: OffenseState = initializedOperator.offense;
+  install(battle, initializedOperator, healthAttack);
+}
+if (hasSkill(initializedEnemy)) {
+  const id: string = initializedEnemy.definition.skill.id;
+  const sp: number = initializedEnemy.skill.sp;
+}
 if (snapshot.locomotion !== undefined) { const route: RouteControlState = snapshot.locomotion.mainRoute; }
-type PreparedA = { readonly locomotion?: RoutedLocomotionState };
-const optionalCopiedType: SelectedCapabilityStates<PreparedA> = copiedOptional;
+install(battle, staticOperatorUnit, healthAttack);
 `;
   const negatives = [
-    "const droppedOperator = operator.extra;",
-    "const droppedCombatEnemy = combatEnemy.extra;",
-    "const droppedEnemy = enemy.extra;",
-    "const staleId: 'literal-operator' = operator.id;",
-    "const staleHp: 100 = operator.vitality.maxHp;",
-    "const staleAttack: 10 = operator.offense.attack;",
-    "const staleSkillId: 'literal-skill' = operator.skill.id;",
-    "const staleEp: 1000 = operator.elemental.maxEp;",
-    "const absentOperatorOffense = bareOperator.offense;",
-    "const absentOperatorSkill = bareOperator.skill;",
-    "const absentCombatOffense = bareCombatEnemy.offense;",
-    "const absentEnemySkill = bareEnemy.skill;",
-    "const absentEnemyElemental = bareEnemy.elemental;",
-    "const optionalOffense: OffenseDefinition = optionalOperator.offense;",
-    "const optionalSkill: SkillDefinition = optionalEnemy.skill;",
-    "const optionalSkillState: SkillState = optionalUnit.skill;",
-    "const forcedUnionOffense: OffensiveDefinition = unionDefinition;",
-    "const droppedPreparedExtra = copiedOptional.extra;",
-    "const staleCopiedHp: 100 = copiedOptional.vitality.hp;",
-    "const staleCopiedMove: false = copiedOptional.locomotion!.moving;",
-    "const stalePreparedMoving: false = preparedUnit.locomotion.moving;",
+    "const requiredOperatorOffense: OffenseDefinition = operator.offense;",
+    "const requiredCombatOffense: OffenseDefinition = combatEnemy.offense;",
+    "const requiredOperatorSkill: SkillDefinition = operator.skill;",
+    "const requiredEnemySkill: SkillDefinition = enemy.skill;",
+    "const requiredEnemyElemental: ElementalDefinition = enemy.elemental;",
+    "const requiredOperatorOffenseState: OffenseState = initializedOperator.offense;",
+    "const requiredEnemySkillState: SkillState = initializedEnemy.skill;",
+    "install(battle, initializedOperator, healthAttack);",
+    "install(battle, bareOperatorUnit, healthAttack);",
   ];
   try {
     writeFileSync(positivePath, declarations + positive);
