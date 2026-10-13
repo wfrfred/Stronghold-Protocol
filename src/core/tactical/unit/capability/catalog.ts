@@ -8,7 +8,7 @@ import {
     initialize as initializeAllegianceState,
     type Definition as AllegianceDefinition,
     type State as AllegianceState,
-} from "./allegiance.js";
+} from "./allegiance/capability.js";
 import {
     initialize as initializeBlockableState,
     type Definition as BlockableDefinition,
@@ -35,8 +35,8 @@ import {
     type State as LocomotionState,
     type RoutedLocomotionState,
 } from "./locomotion/capability.js";
-import type { State as SpatialPresenceState } from "./presence.js";
-import type { State as OccupancyState } from "./occupancy.js";
+import type { State as SpatialPresenceState } from "./presence/capability.js";
+import type { State as OccupancyState } from "./occupancy/capability.js";
 import {
     initialize as initializeOffenseState,
     type Definition as OffenseDefinition,
@@ -49,7 +49,7 @@ import {
     type HitState,
     type SpatialDefinition,
     type SpatialState,
-} from "./spatial.js";
+} from "./spatial/capability.js";
 import {
     initialize as initializeStatusState,
     type Definition as StatusDefinition,
@@ -124,7 +124,7 @@ export const configuredCapabilities: {
         context: CapabilityInitializationContext,
     ) => CapabilityStates[K];
 } = {
-    deployable: () => initializeDeployableState(),
+    deployable: initializeDeployableState,
     vitality: initializeVitalityState,
     offense: () => initializeOffenseState(),
     defense: () => initializeDefenseState(),

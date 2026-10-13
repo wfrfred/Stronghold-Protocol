@@ -23,7 +23,11 @@ import {
     isRouteEndReached,
     isRouteMoveCheckpointReached,
 } from "./route/plan.js";
-import { hasSpatialPresence, isSpatiallyPresent, type SpatialPresence } from "../presence.js";
+import {
+    hasSpatialPresence,
+    isSpatiallyPresent,
+    type SpatialPresence,
+} from "../presence/capability.js";
 import {
     applyMotionOverride,
     getNavigationRecoveryTarget,

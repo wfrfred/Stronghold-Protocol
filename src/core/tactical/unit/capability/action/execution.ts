@@ -12,7 +12,7 @@ import {
     resumeActionExecution,
     type ActionExecutionResources,
 } from "./process.js";
-import { isSpatiallyPresent } from "../presence.js";
+import { isSpatiallyPresent } from "../presence/capability.js";
 import {
     beginActionCooldown,
     reconcileActionCooldown,

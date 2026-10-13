@@ -63,6 +63,12 @@ test("entry installs one persistent shield container and preserves prior snapsho
     assert.deepEqual(readShield(getUnit(state, 0)), { layers: 1, timer: 270 });
     assert.equal(getUnit(state, 0).effects.values().length, 1);
     assert.equal(getUnit(state, 0).definition.profile, prepared);
+    assert.deepEqual(getUnit(state, 0).definition.deployable, {
+        cost: prepared.attributes.cost, redeployTicks: prepared.attributes.respawnTime * 30,
+        slots: 1, buildableType: "MELEE", advancedBuildableMask: 1,
+        refund: { rate: 0.5, limit: "BASE_COST" },
+    });
+    assert.equal(getUnit(state, 0).deployable.refundAllowed, false);
     assert.equal(hasStatusFlag(getUnit(state, 0), "HEAL_FREE"), true);
     const enteredLate = enterUnits({ ...initial, tick: 100 }, [0]);
     assert.deepEqual(readShield(getUnit(advance({ ...enteredLate, tick: 101 }), 0)), { layers: 1, timer: 269 });

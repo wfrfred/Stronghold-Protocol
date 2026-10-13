@@ -269,6 +269,7 @@ test("runtime allocates initial IDs, resolves creation references, and never reu
     );
     assert.deepEqual(initial.execution, {
         rngState: 17,
+        nextCardId: 0,
         nextUnitId: 3,
         nextNavigationRequestId: 0,
         nextMechanismId: 3,

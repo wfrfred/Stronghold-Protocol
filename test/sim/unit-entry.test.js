@@ -71,8 +71,11 @@ test('factory-created enemies enter after spawning and keep immutable old snapsh
 
 test('predefined appearances and deployment initialize once; relocation does not re-enter', () => {
   const trace = [];
-  const deployable = { ...markEntered(trace, 'deployed'), deployable: { buildableType: 'ALL', advancedBuildableMask: 1 } };
-  const runtime = new BattleRuntime(input({ predefines: [{
+  const deployable = { ...markEntered(trace, 'deployed'), deployable: { cost: 0, redeployTicks: 0, slots: 1, buildableType: 'ALL', advancedBuildableMask: 1, refund: { rate: 0.5, limit: 'BASE_COST' } } };
+  const runtime = new BattleRuntime(input({ deployment: {
+    definition: { initialDp: 0, maxDp: 99, dpRecoveryTicks: null, slotLimit: null },
+    cards: [{ unit: deployable }],
+  }, predefines: [{
     id: 9, alias: null, initiallyPresent: true,
     creation: { type: 'UNIT', definition: markEntered(trace, 'predefined'), position: [2, 0] },
   }], schedule: { type: 'TIMELINE', spawns: [spawn(createEnemy({
@@ -81,7 +84,7 @@ test('predefined appearances and deployment initialize once; relocation does not
       steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 },
     },
   }), 1000)] } }));
-  runtime.step([{ type: 'DEPLOY_UNIT', definition: deployable, tilePosition: [0, 0], playerSide: 'SIDE_A' }]);
+  runtime.step([{ type: 'DEPLOY_UNIT', cardId: 0, tilePosition: [0, 0], playerSide: 'SIDE_A' }]);
   const before = runtime.snapshot();
   runtime.step([{ type: 'RELOCATE_UNIT', unitId: 1, tilePosition: [0, 1], playerSide: 'SIDE_A' }]);
   runtime.step([{ type: 'REMOVE_PREDEFINED', definitionId: 9, reason: 'SCRIPT' },

@@ -1,6 +1,6 @@
 import { hasTileBinding } from "../../unit/capability/tile-binding/capability.js";
-import { hasOccupancy, type OccupancyClaim } from "../../unit/capability/occupancy.js";
-import { isSpatiallyPresent } from "../../unit/capability/presence.js";
+import { hasOccupancy, type OccupancyClaim } from "../../unit/capability/occupancy/capability.js";
+import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";
 import type { Unit } from "../../unit/unit.js";
 
 export interface SupportFacts {

@@ -3,7 +3,7 @@ import {
     createDefinition as createActionCapabilityDefinition,
     type Definition as ActionCapabilityDefinition,
 } from "../capability/action/capability.js";
-import type { Definition as AllegianceDefinition } from "../capability/allegiance.js";
+import type { Definition as AllegianceDefinition } from "../capability/allegiance/capability.js";
 import {
     createDefinition as createBlockableDefinition,
     type Definition as BlockableDefinition,
@@ -21,12 +21,12 @@ import type {
     Definition as LocomotionDefinition,
     RoutedLocomotion,
 } from "../capability/locomotion/capability.js";
-import type { SpatialPresence } from "../capability/presence.js";
+import type { SpatialPresence } from "../capability/presence/capability.js";
 import {
     createHitDefinition,
     type HitDefinition,
     type SpatialDefinition,
-} from "../capability/spatial.js";
+} from "../capability/spatial/capability.js";
 import type { Definition as StatusDefinition } from "../capability/status/capability.js";
 import type { Unit, Definition as UnitDefinition } from "../unit.js";
 import type {

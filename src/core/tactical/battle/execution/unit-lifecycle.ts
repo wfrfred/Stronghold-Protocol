@@ -17,6 +17,7 @@ import {
     getActionExecution,
     removeActionExecution,
 } from "../../unit/capability/action/internal/executions.js";
+import { refundUnit, recycleUnitCard } from "../deployment/deployment.js";
 
 export interface UnitLifecycleResources {
     readonly stopSkillActivation: (
@@ -70,6 +71,7 @@ export function removeUnitWithEffects(
     }
 
     state = updateUnit(state, { ...unit, lifecycle: "LEAVING" });
+    state = refundUnit(state, unit, reason, tick);
     const actions = state.actionExecutions.executions.filter(
         (action) => action.sourceUnitId === unitId,
     );
@@ -112,6 +114,7 @@ export function removeUnitWithEffects(
 
     state = appendEvents(state, signals);
     state = removeUnit(state, unitId, reason);
+    state = recycleUnitCard(state, unit, reason, tick);
     const departure = { unit, reason };
 
     if (unit.definition.onLeave !== undefined) {

@@ -21,6 +21,7 @@ import {
 
 const defaultExecution: BattleExecutionState = {
     rngState: 0,
+    nextCardId: 0,
     nextUnitId: 0,
     nextNavigationRequestId: 0,
     nextMechanismId: 0,

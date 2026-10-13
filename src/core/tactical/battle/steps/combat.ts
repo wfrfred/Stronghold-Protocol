@@ -14,7 +14,7 @@ import { CombatResources } from "../resources.js";
 import { battlefieldView, getUnit, type BattleState } from "../state.js";
 import { emptyCall, type CallContext } from "../execution/call.js";
 import { hasAction, type ActionDefinition } from "../../unit/capability/action/capability.js";
-import { isSpatiallyPresent } from "../../unit/capability/presence.js";
+import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";
 import { hasVitality } from "../../unit/capability/vitality/capability.js";
 import type { Id } from "../../unit/unit.js";
 import type { Command } from "../contract.js";

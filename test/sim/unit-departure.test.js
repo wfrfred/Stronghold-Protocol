@@ -13,7 +13,8 @@ import { createDefinition as createDeployableDefinition } from "../../dist/core/
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
-import { resolveDeploymentCommands } from "../../dist/core/tactical/battle/steps/deployment.js";
+import { addCard } from "../../dist/core/tactical/battle/deployment/deployment.js";
+import { resolveDeploymentCommands } from "../../dist/core/tactical/battle/deployment/operations.js";
 import {
     advancePredefined,
     createPredefinedDefinition,
@@ -121,7 +122,6 @@ for (const domain of ["deployment", "predefined"]) {
                     { type: "RETREAT_UNIT", unitId: 0 },
                     { type: "RETREAT_UNIT", unitId: 1 },
                 ],
-                1,
                 resources,
             );
         } else {
@@ -170,7 +170,7 @@ for (const domain of ["deployment", "predefined"]) {
         const resources = new CombatResources();
         const definition = Object.freeze({
             id: "transient-placement",
-            deployable: createDeployableDefinition({ buildableType: "ALL" }),
+            deployable: createDeployableDefinition({ cost: 0, redeployTicks: 0, slots: 1, buildableType: "ALL" }),
             vitality: Object.freeze({ maxHp: 100 }),
         });
         const navigationModifiers = [
@@ -186,20 +186,20 @@ for (const domain of ["deployment", "predefined"]) {
         ];
         let state = createBattleState(battlefield);
         if (domain === "deployment") {
+            state = addCard(state, { unit: definition, navigationModifiers }).state;
+            state = addCard(state, { unit: definition }).state;
             state = resolveDeploymentCommands(
                 state,
                 [
                     {
                         type: "DEPLOY_UNIT",
-                        definition,
-                        navigationModifiers,
+                        cardId: 0,
                         tilePosition: [0, 0],
                         playerSide: "SIDE_A",
                     },
                     { type: "RETREAT_UNIT", unitId: 0 },
-                    { type: "DEPLOY_UNIT", definition, tilePosition: [0, 0], playerSide: "SIDE_A" },
+                    { type: "DEPLOY_UNIT", cardId: 1, tilePosition: [0, 0], playerSide: "SIDE_A" },
                 ],
-                0,
                 resources,
             );
         } else {

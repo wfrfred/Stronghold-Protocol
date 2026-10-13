@@ -1,10 +1,10 @@
 import { World, type WorldPosition } from "../../geometry/coordinate.js";
-import { hasAllegiance, type Side } from "../../unit/capability/allegiance.js";
+import { hasAllegiance, type Side } from "../../unit/capability/allegiance/capability.js";
 import { hasBlockable } from "../../unit/capability/blocking/blockable.js";
 import { hasBlocker, resolveCapacity } from "../../unit/capability/blocking/blocker.js";
 import { hasTileBinding } from "../../unit/capability/tile-binding/capability.js";
-import { isSpatiallyPresent } from "../../unit/capability/presence.js";
-import { hasSpatial } from "../../unit/capability/spatial.js";
+import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";
+import { hasSpatial } from "../../unit/capability/spatial/capability.js";
 import { hasVitality } from "../../unit/capability/vitality/capability.js";
 import { hasStatusFlag } from "../../unit/capability/status/capability.js";
 import type { Unit } from "../../unit/unit.js";

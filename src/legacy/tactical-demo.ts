@@ -18,7 +18,7 @@ import {
     type LegacyVisualEvent,
 } from "./tactical-demo-presentation.js";
 import { createTacticalProjectileResources } from "./projectile-demo.js";
-import { hasAllegiance } from "../core/tactical/unit/capability/allegiance.js";
+import { hasAllegiance } from "../core/tactical/unit/capability/allegiance/capability.js";
 import { hasSkill } from "../core/tactical/unit/capability/skill/capability.js";
 import {
     createTacticalMechanicsDemo,

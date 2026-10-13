@@ -2,7 +2,7 @@ import type { TilePosition, WorldPosition } from "../geometry/coordinate.js";
 import type { NavigationFieldProvider } from "./navigation/cache.js";
 import type { NavigationMaps, PathMotionMode } from "./navigation/map.js";
 import type { Unit, Id } from "../unit/unit.js";
-import type { OccupancySlot } from "../unit/capability/occupancy.js";
+import type { OccupancySlot } from "../unit/capability/occupancy/capability.js";
 import type { BattlefieldMap } from "./map/map.js";
 import type { MechanismId, Mechanism, MechanismView } from "./mechanism.js";
 import type {

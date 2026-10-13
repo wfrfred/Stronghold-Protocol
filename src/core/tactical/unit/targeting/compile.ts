@@ -6,9 +6,9 @@ import type {
     HealingMaxHpProvider,
     QueryPurpose,
 } from "./query.js";
-import { areHostile, hasAllegiance } from "../capability/allegiance.js";
-import { isSpatiallyPresent } from "../capability/presence.js";
-import { hasHit, hasSpatial } from "../capability/spatial.js";
+import { areHostile, hasAllegiance } from "../capability/allegiance/capability.js";
+import { isSpatiallyPresent } from "../capability/presence/capability.js";
+import { hasHit, hasSpatial } from "../capability/spatial/capability.js";
 import { hasStatusFlag } from "../capability/status/capability.js";
 import {
     canReceiveElementDamage,

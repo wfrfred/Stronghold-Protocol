@@ -1,5 +1,5 @@
 import { World } from "../../geometry/coordinate.js";
-import { areHostileSides } from "../../unit/capability/allegiance.js";
+import { areHostileSides } from "../../unit/capability/allegiance/capability.js";
 import type { Unit, Id } from "../../unit/unit.js";
 import { hasBlocker } from "../../unit/capability/blocking/blocker.js";
 import type { SupportRelation } from "../support/relations.js";

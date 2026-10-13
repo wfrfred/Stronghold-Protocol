@@ -1,6 +1,6 @@
 import { assertNonnegativeNumber } from "../../core/common/assert.js";
 import { TICKS_PER_SECOND } from "../../core/tactical/tick.js";
-import type { Definition as DeployableDefinition } from "../../core/tactical/unit/capability/deployable/capability.js";
+import type { BuildableType } from "../../core/tactical/battlefield/map/tile.js";
 import type { Definition as TileBindingDefinition } from "../../core/tactical/unit/capability/tile-binding/capability.js";
 import {
     createSteeringParameters,
@@ -27,7 +27,10 @@ export type PredefinedPrefab =
           readonly prefabKey: string;
           readonly walkCostFloor: number;
           readonly tileBinding: TileBindingDefinition;
-          readonly deployable: DeployableDefinition;
+          readonly deployable: {
+              readonly buildableType: Exclude<BuildableType, "NONE">;
+              readonly advancedBuildableMask: number;
+          };
       }
     | {
           readonly type: "MECHANISM";
@@ -234,7 +237,9 @@ function tileBinding(
     });
 }
 
-function deployable(token: Record<string, unknown>): DeployableDefinition {
+function deployable(
+    token: Record<string, unknown>,
+): Extract<PredefinedPrefab, { readonly type: "UNIT" }>["deployable"] {
     const condition = object(token._buildCondition, "token build condition");
     const extra = object(condition.extraBuildConditionArray, "token extra build condition");
     const buildableType = condition.buildableType;

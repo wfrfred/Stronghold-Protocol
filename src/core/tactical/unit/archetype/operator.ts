@@ -3,7 +3,7 @@ import {
     createDefinition as createActionCapabilityDefinition,
     type Definition as ActionCapabilityDefinition,
 } from "../capability/action/capability.js";
-import type { Definition as AllegianceDefinition } from "../capability/allegiance.js";
+import type { Definition as AllegianceDefinition } from "../capability/allegiance/capability.js";
 import {
     createDefinition as createBlockerDefinition,
     type Definition as BlockerDefinition,
@@ -20,7 +20,7 @@ import {
     createHitDefinition,
     type HitDefinition,
     type SpatialDefinition,
-} from "../capability/spatial.js";
+} from "../capability/spatial/capability.js";
 import type { Definition as StatusDefinition } from "../capability/status/capability.js";
 import type { Definition as VitalityDefinition } from "../capability/vitality/capability.js";
 import type { Definition as DeployableDefinition } from "../capability/deployable/capability.js";

@@ -6,7 +6,7 @@ import { createProjectileDefinition } from "../core/tactical/battlefield/project
 import { createShapeGeometry, type RangeGeometry } from "../core/tactical/geometry/shape.js";
 import * as modifier from "../core/tactical/unit/contribution/value.js";
 import { compileAction } from "../core/tactical/unit/capability/action/compile.js";
-import { hasAllegiance } from "../core/tactical/unit/capability/allegiance.js";
+import { hasAllegiance } from "../core/tactical/unit/capability/allegiance/capability.js";
 import { install } from "../core/tactical/unit/effect/operations.js";
 import type { Definition } from "../core/tactical/unit/effect/definition.js";
 import {

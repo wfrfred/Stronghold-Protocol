@@ -1,6 +1,6 @@
 import type { Unit } from "../../unit.js";
-import { hasAllegiance } from "../allegiance.js";
-import { isSpatiallyPresent } from "../presence.js";
+import { hasAllegiance } from "../allegiance/capability.js";
+import { isSpatiallyPresent } from "../presence/capability.js";
 import { hasVitality } from "../vitality/capability.js";
 import { ELEMENT_TYPES, hasElemental, type ElementType } from "./capability.js";
 

@@ -1,15 +1,31 @@
 import type { BuildableType } from "../../../battlefield/map/tile.js";
 import type { Unit, Definition as UnitDefinition } from "../../unit.js";
+import type { DeployedHook } from "./hook.js";
+import {
+    assertNonnegativeNumber,
+    assertNonnegativeSafeInteger,
+} from "../../../../common/assert.js";
 
 export type CardId = number;
 
 export interface Definition {
+    readonly cost: number;
+    readonly redeployTicks: number;
+    readonly slots: number;
     readonly buildableType: Exclude<BuildableType, "NONE">;
     readonly advancedBuildableMask: number;
+    readonly refund: {
+        readonly rate: number;
+        readonly limit: "BASE_COST" | "DEPLOYMENT_COST";
+    };
 }
 
 export interface State {
     readonly cardId: CardId | null;
+    readonly cost: number;
+    readonly refundLimit: number;
+    readonly refundAllowed: boolean;
+    readonly deployedHooks: readonly DeployedHook[];
 }
 
 export interface Deployable {
@@ -17,10 +33,20 @@ export interface Deployable {
     readonly deployable: State;
 }
 
-const initialState: State = { cardId: null };
+export function initialize(definition: Definition): State {
+    return {
+        cardId: null,
+        cost: definition.cost,
+        refundLimit: definition.cost,
+        refundAllowed: false,
+        deployedHooks: [],
+    };
+}
 
-export function initialize(): State {
-    return initialState;
+export function resolveRefund(definition: Definition, state: State): number {
+    return state.refundAllowed
+        ? Math.max(0, Math.floor(Math.min(state.cost * definition.refund.rate, state.refundLimit)))
+        : 0;
 }
 
 export function hasDeployable<U extends Unit>(unit: U): unit is U & Deployable {
@@ -34,11 +60,17 @@ export function hasDefinition(
 }
 
 export function createDefinition(
-    definition: Omit<Definition, "advancedBuildableMask"> & {
+    definition: Omit<Definition, "advancedBuildableMask" | "refund"> & {
         readonly advancedBuildableMask?: number;
+        readonly refund?: Definition["refund"];
     },
 ): Definition {
     const advancedBuildableMask = definition.advancedBuildableMask ?? 1;
+    const refund = definition.refund ?? { rate: 0.5, limit: "BASE_COST" };
+    assertNonnegativeNumber(definition.cost, "deployment cost");
+    assertNonnegativeSafeInteger(definition.redeployTicks, "redeployment duration");
+    assertNonnegativeSafeInteger(definition.slots, "deployment slot usage");
+    assertNonnegativeNumber(refund.rate, "retreat refund rate");
 
     if (
         !Number.isInteger(advancedBuildableMask) ||
@@ -48,8 +80,12 @@ export function createDefinition(
         throw new RangeError("advanced buildable mask must be a uint32");
     }
 
-    return Object.freeze({
+    return {
+        cost: definition.cost,
+        redeployTicks: definition.redeployTicks,
+        slots: definition.slots,
         buildableType: definition.buildableType,
         advancedBuildableMask,
-    });
+        refund,
+    };
 }

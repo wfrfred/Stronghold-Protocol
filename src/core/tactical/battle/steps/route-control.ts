@@ -8,7 +8,7 @@ import {
     type LocatedRouteSignal,
 } from "../../unit/capability/locomotion/route-control.js";
 import { hasRoutedLocomotion } from "../../unit/capability/locomotion/capability.js";
-import { isSpatiallyPresent } from "../../unit/capability/presence.js";
+import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";
 import type { Unit, Id } from "../../unit/unit.js";
 import type { BattleExecutionState } from "../execution/state.js";
 

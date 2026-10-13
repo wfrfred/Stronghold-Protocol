@@ -26,6 +26,12 @@ test('Melantha uses main-mode level, potential, trust and talent, then a scoped 
   const prepared = profile();
   const definition = create(prepared, combat);
   const unit = initialize({ id: 0, position: [0, 0], definition });
+  assert.deepEqual(definition.deployable, {
+    cost: prepared.attributes.cost, redeployTicks: prepared.attributes.respawnTime * 30,
+    slots: 1, buildableType: 'MELEE', advancedBuildableMask: 1,
+    refund: { rate: 0.5, limit: 'BASE_COST' },
+  });
+  assert.equal(unit.deployable.refundAllowed, false);
   let state = createBattleState(fixtureBattlefieldState([unit]));
   const untouched = state;
   state = enterUnits(state, [0]);

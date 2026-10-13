@@ -13,7 +13,10 @@ import type { NavigationOutcome } from "../battlefield/navigation/state.js";
 import type { WorldPosition } from "../geometry/coordinate.js";
 import type { RouteSignal } from "../unit/capability/locomotion/route/execution.js";
 import type { Unit, Id } from "../unit/unit.js";
-import type { State as DeploymentState } from "./deployment/deployment.js";
+import type {
+    Input as DeploymentInput,
+    State as DeploymentState,
+} from "./deployment/deployment.js";
 import type {
     PredefinedDefinition,
     PredefinedCommand,
@@ -22,7 +25,10 @@ import type {
 import type { SpawnScheduleState } from "./schedule/state.js";
 import type { AlternativeRouteCommand } from "./steps/route-control.js";
 import type { BattleExecutionState } from "./execution/state.js";
-import type { DeploymentCommand } from "./steps/deployment.js";
+import type {
+    DeploymentCommand,
+    Rejection as DeploymentRejection,
+} from "./deployment/operations.js";
 import type { SupportRelation } from "../battlefield/support/relations.js";
 import type {
     ActionExecutionId,
@@ -36,6 +42,7 @@ import type { SkillSignal } from "../unit/capability/skill/execution.js";
 
 /** Shared creation data. Keep this input unchanged for the runtime lifetime. */
 export interface Input {
+    readonly deployment?: DeploymentInput;
     readonly map: BattlefieldMap;
     readonly schedule: SpawnScheduleDefinition;
     readonly predefines: readonly PredefinedDefinition[];
@@ -58,6 +65,12 @@ export type Command =
     | { readonly type: "TRIGGER_BRANCH"; readonly branchId: string; readonly isLoop: boolean };
 
 export type Event =
+    | {
+          readonly type: "DEPLOYMENT_REJECTED";
+          readonly cardId: number;
+          readonly reason: DeploymentRejection;
+          readonly tick: number;
+      }
     | CombatEvent
     | ActionExecutionSignal
     | ProjectileSignal

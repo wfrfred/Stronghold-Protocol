@@ -11,7 +11,7 @@ import {
 import { emptyCall, type CallContext } from "../../../battle/execution/call.js";
 import type { Id } from "../../unit.js";
 import { TICKS_PER_SECOND } from "../../../tick.js";
-import { isSpatiallyPresent } from "../presence.js";
+import { isSpatiallyPresent } from "../presence/capability.js";
 import { hasStatusFlag } from "../status/capability.js";
 import { hasVitality } from "../vitality/capability.js";
 import {

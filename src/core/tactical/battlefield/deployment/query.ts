@@ -1,8 +1,8 @@
 import type { TilePosition } from "../../geometry/coordinate.js";
 import type { Definition as DeployableDefinition } from "../../unit/capability/deployable/capability.js";
 import { hasTileBinding } from "../../unit/capability/tile-binding/capability.js";
-import { hasOccupancy, type OccupancySlot } from "../../unit/capability/occupancy.js";
-import { isSpatiallyPresent } from "../../unit/capability/presence.js";
+import { hasOccupancy, type OccupancySlot } from "../../unit/capability/occupancy/capability.js";
+import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";
 import type { Unit, Id } from "../../unit/unit.js";
 import { BattlefieldMap } from "../map/map.js";
 import type { BuildableType } from "../map/tile.js";

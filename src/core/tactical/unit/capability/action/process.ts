@@ -8,7 +8,7 @@ import { assertFiniteNumber, assertNonnegativeSafeInteger } from "../../../../co
 import { appendEvents, getUnit, type BattleState, type Result } from "../../../battle/state.js";
 import { emptyCall, type CallContext } from "../../../battle/execution/call.js";
 import type { Id } from "../../unit.js";
-import { isSpatiallyPresent } from "../presence.js";
+import { isSpatiallyPresent } from "../presence/capability.js";
 import type { ActionDefinition, TargetBindingId } from "./capability.js";
 import type { ProjectileOperations } from "../../../battlefield/projectile/operations.js";
 import { gainUnitSkillSp } from "../../../battle/execution/skill-sp.js";

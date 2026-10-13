@@ -8,7 +8,7 @@ import {
     type ProjectileDefinitionRef,
 } from "../../../core/tactical/battlefield/projectile/definition.js";
 import { resolveProjectileAttackPower } from "../../../core/tactical/battlefield/projectile/operations.js";
-import { hasAllegiance } from "../../../core/tactical/unit/capability/allegiance.js";
+import { hasAllegiance } from "../../../core/tactical/unit/capability/allegiance/capability.js";
 import { compileAction } from "../../../core/tactical/unit/capability/action/compile.js";
 import type { CompiledAction } from "../../../core/tactical/unit/capability/action/compiled.js";
 import type { CompiledActionSegment } from "../../../core/tactical/unit/capability/action/process.js";

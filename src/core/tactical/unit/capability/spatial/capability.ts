@@ -1,5 +1,5 @@
-import { createShapeGeometry, type HitGeometry } from "../../geometry/shape.js";
-import type { Unit } from "../unit.js";
+import { createShapeGeometry, type HitGeometry } from "../../../geometry/shape.js";
+import type { Unit } from "../../unit.js";
 
 export type SpatialLayer = "GROUND" | "AIR";
 

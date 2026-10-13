@@ -1,4 +1,4 @@
-import { isSpatiallyPresent } from "../../unit/capability/presence.js";
+import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";
 import type { Unit, Id } from "../../unit/unit.js";
 import { readSupportFacts } from "./facts.js";
 

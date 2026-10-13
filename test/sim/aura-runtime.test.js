@@ -150,11 +150,15 @@ test("aura runtime: predefined, deployment and spawning join before the same tic
         },
     };
     const deployable = auraUnit(3, [0, 0], {
-        deployable: createDeployableDefinition({ buildableType: "ALL" }),
+        deployable: createDeployableDefinition({ cost: 0, redeployTicks: 0, slots: 1, buildableType: "ALL" }),
     }).definition;
     const runtime = new BattleRuntime(
         input(host, {
             predefines: [predefined],
+            deployment: {
+                definition: { initialDp: 0, maxDp: 99, dpRecoveryTicks: null, slotLimit: null },
+                cards: [{ unit: deployable }],
+            },
             schedule: { type: "TIMELINE", spawns: [spawn({ tick: 0 })] },
         }),
         { combat: resources },
@@ -162,7 +166,7 @@ test("aura runtime: predefined, deployment and spawning join before the same tic
     assert.deepEqual(starts, []);
     runtime.step([
         { type: "APPEAR_PREDEFINED", definitionId: 7 },
-        { type: "DEPLOY_UNIT", definition: deployable, tilePosition: [0, 2], playerSide: "SIDE_A" },
+        { type: "DEPLOY_UNIT", cardId: 0, tilePosition: [0, 2], playerSide: "SIDE_A" },
     ]);
     assert.deepEqual(starts, [
         [1, 0],

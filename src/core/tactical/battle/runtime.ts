@@ -24,7 +24,7 @@ import type { Input, Command, Result, Snapshot, Step } from "./contract.js";
 import { CombatResources } from "./resources.js";
 import { createCombat } from "./steps/combat.js";
 import { advanceSpawning } from "./steps/spawning.js";
-import { resolveDeploymentCommands } from "./steps/deployment.js";
+import { resolveDeploymentCommands } from "./deployment/operations.js";
 import { advanceMovement, advanceRouteCommands } from "./steps/movement.js";
 import { advanceProjectiles } from "./steps/projectiles.js";
 import { advanceElements } from "./steps/elemental.js";
@@ -42,7 +42,12 @@ import {
     type SpawnScheduleExecution,
 } from "./schedule/state.js";
 import { initializeBattlefield } from "./initialization.js";
-import type { State as DeploymentState } from "./deployment/deployment.js";
+import {
+    addCard,
+    advance as advanceDeployment,
+    initialize as initializeDeployment,
+    type State as DeploymentState,
+} from "./deployment/deployment.js";
 
 interface State {
     readonly battlefield: BattlefieldState;
@@ -95,10 +100,11 @@ export class BattleRuntime {
 
         const battlefield = createBattlefield({ map: this.#input.map });
         const actionExecution = createActionExecutionState();
-        const initial = createBattleState(
+        let initial = createBattleState(
             battlefield,
             {
                 rngState: input.rngState,
+                nextCardId: 0,
                 nextUnitId: 0,
                 nextNavigationRequestId: 0,
                 nextMechanismId: 0,
@@ -106,7 +112,14 @@ export class BattleRuntime {
                 nextProjectileId: 0,
             },
             actionExecution,
+            0,
+            initializeDeployment(input.deployment?.definition),
         );
+
+        for (const definition of input.deployment?.cards ?? []) {
+            initial = addCard(initial, definition).state;
+        }
+
         const initialized = initializeBattlefield(input, initial);
         validateScopes(initialized.state);
 
@@ -195,6 +208,7 @@ export class BattleRuntime {
         );
 
         state = advanceBattlefield(state, [{ type: "EXPIRE_NAVIGATION_MODIFIERS", tick }]);
+        state = advanceDeployment(state, tick);
         const predefined = advancePredefined(
             state,
             this.#input.predefines,
@@ -208,7 +222,7 @@ export class BattleRuntime {
 
         state = this.#combat.prepare(state, commands, tick);
 
-        state = resolveDeploymentCommands(state, commands, tick, resources);
+        state = resolveDeploymentCommands(state, commands, resources);
 
         const spawned = advanceSpawning(state, schedule, commands, tick);
         state = spawned.state;

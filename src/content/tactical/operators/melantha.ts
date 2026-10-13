@@ -4,6 +4,10 @@ import type { CombatResources } from "../../../core/tactical/battle/resources.js
 import type { Definition as OperatorDefinition } from "../../../core/tactical/unit/archetype/operator.js";
 import type { Definition as SkillDefinition } from "../../../core/tactical/unit/capability/skill/capability.js";
 import {
+    createDefinition as createDeployableDefinition,
+    type Definition as DeployableDefinition,
+} from "../../../core/tactical/unit/capability/deployable/capability.js";
+import {
     hasOffense,
     setAttackContribution,
     removeAttackContribution,
@@ -16,6 +20,7 @@ import type { Direction } from "../../../core/tactical/geometry/direction.js";
 import { secondsToTicks } from "../../../data/arknights/tick.js";
 
 export interface Definition extends OperatorDefinition {
+    readonly deployable: DeployableDefinition;
     readonly offense: Offense["definition"]["offense"];
     readonly skill: SkillDefinition;
     readonly profile: Profile;
@@ -85,6 +90,13 @@ export function create(
     return {
         id: profile.id,
         profile,
+        deployable: createDeployableDefinition({
+            cost: profile.attributes.cost,
+            redeployTicks: secondsToTicks(profile.attributes.respawnTime),
+            slots: 1,
+            buildableType: "MELEE",
+            advancedBuildableMask: 1,
+        }),
         vitality: { maxHp: profile.attributes.maxHp },
         offense: { attack: profile.attributes.attack },
         defense: {

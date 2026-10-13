@@ -10,8 +10,8 @@ import {
 } from "../../battle/state.js";
 import { emptyCall, type CallContext } from "../../battle/execution/call.js";
 import type { Unit, Id } from "../../unit/unit.js";
-import { hasHit } from "../../unit/capability/spatial.js";
-import { isSpatiallyPresent } from "../../unit/capability/presence.js";
+import { hasHit } from "../../unit/capability/spatial/capability.js";
+import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";
 import type { ProjectileQueryContext, ProjectileServices } from "./context.js";
 import type { ProjectileDefinition } from "./definition.js";
 import type { ProjectileId, Projectile, ProjectileStopReason } from "./projectile.js";

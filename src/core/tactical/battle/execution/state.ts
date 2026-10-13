@@ -7,6 +7,7 @@ import type { NavigationModifierId } from "../../battlefield/navigation/modifier
 
 export interface BattleExecutionState {
     readonly rngState: Seed;
+    readonly nextCardId: number;
     readonly nextProjectileId: ProjectileId;
     readonly nextUnitId: Id;
     readonly nextNavigationRequestId: NavigationRequestId;

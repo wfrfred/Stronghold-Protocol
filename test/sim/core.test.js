@@ -17,17 +17,17 @@ import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/m
 import { createBattlefieldRuntime } from '../../dist/core/tactical/battlefield/runtime.js';
 import { createMechanismDefinition } from '../../dist/core/tactical/battlefield/mechanism.js';
 import { createNavigationModifierDefinition, createNavigationModifier } from '../../dist/core/tactical/battlefield/navigation/modifier.js';
-import { hasSpatialPresence, isSpatiallyPresent } from '../../dist/core/tactical/unit/capability/presence.js';
+import { hasSpatialPresence, isSpatiallyPresent } from '../../dist/core/tactical/unit/capability/presence/capability.js';
 import { initialize } from '../../dist/core/tactical/unit/initialize.js';
 import { initialize as initializeOffenseState } from '../../dist/core/tactical/unit/capability/offense/capability.js';
 import { copy } from '../../dist/core/tactical/unit/snapshot.js';
 import { hasVitality, initialize as initializeVitalityState } from '../../dist/core/tactical/unit/capability/vitality/capability.js';
 import { createDefinition as createActionCapabilityDefinition, hasAction } from '../../dist/core/tactical/unit/capability/action/capability.js';
-import { hasAllegiance } from '../../dist/core/tactical/unit/capability/allegiance.js';
+import { hasAllegiance } from '../../dist/core/tactical/unit/capability/allegiance/capability.js';
 import { createDefinition as createBlockerDefinition, hasBlocker, resolveCapacity } from '../../dist/core/tactical/unit/capability/blocking/blocker.js';
 import { hasBlockable } from '../../dist/core/tactical/unit/capability/blocking/blockable.js';
 import * as modifier from '../../dist/core/tactical/unit/contribution/value.js';
-import { createHitDefinition, hasHit, hasSpatial } from '../../dist/core/tactical/unit/capability/spatial.js';
+import { createHitDefinition, hasHit, hasSpatial } from '../../dist/core/tactical/unit/capability/spatial/capability.js';
 import { addStatusContribution, deriveEffectiveStatusFlags, hasStatus, initialize as initializeStatusState, removeStatusContribution, setStatusContributionParticipation } from '../../dist/core/tactical/unit/capability/status/capability.js';
 import { createBlockGeometry, createRangeGeometry, createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { geometryContainsPosition, rangeContainsPosition, rangeOverlapsHit } from '../../dist/core/tactical/geometry/intersection.js';
@@ -40,7 +40,7 @@ import { createNavigationState } from '../../dist/core/tactical/battlefield/navi
 import { createUnitPlacementDefinition, instantiateUnitPlacement } from '../../dist/core/tactical/battle/creation/placement.js';
 import { createDefinition as createDeployableDefinition } from '../../dist/core/tactical/unit/capability/deployable/capability.js';
 import { createDefinition as createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/tile-binding/capability.js';
-import { validateState as validateOccupancyState } from '../../dist/core/tactical/unit/capability/occupancy.js';
+import { validateState as validateOccupancyState } from '../../dist/core/tactical/unit/capability/occupancy/capability.js';
 import { createDefinition as createOperatorDefinition } from '../../dist/core/tactical/unit/archetype/operator.js';
 import { createCombatDefinition } from '../../dist/core/tactical/unit/archetype/enemy.js';
 import { evaluateDeployment } from '../../dist/core/tactical/battlefield/deployment/query.js';
@@ -390,7 +390,7 @@ test('core failed presence updates restore spatial membership and projected maps
 test('core placement shares immutable prepared capability states', () => {
   const states = { occupancy: { claims: [{ position: [0, 1], slot: 'DEPLOYMENT', type: 'RESERVATION' }] } };
   const placement = { definition: { id: 'placement' }, position: [0, 0], states };
-  const execution = { rngState: 1, nextUnitId: 0, nextNavigationRequestId: 0, nextMechanismId: 0, nextNavigationModifierId: 0, nextProjectileId: 0 };
+  const execution = { rngState: 1, nextUnitId: 0, nextNavigationRequestId: 0, nextMechanismId: 0, nextNavigationModifierId: 0, nextProjectileId: 0, nextCardId: 0 };
   const direct = instantiateUnitPlacement(placement, execution, 0).unit;
   const normalized = createUnitPlacementDefinition(placement);
   const placed = instantiateUnitPlacement(normalized, execution, 0).unit;
@@ -784,7 +784,7 @@ import type { ProjectileDefinitionRef } from ${sourceModule('../battlefield/proj
 import type { BattleState } from ${sourceModule('../battle/state')};
 import type { ElementDamageReport } from ${sourceModule('capability/elemental/execution')};
 import type { ProjectileResources } from ${sourceModule('../battlefield/projectile/resources')};
-import type { Occupancy, State as OccupancyState } from ${sourceModule('capability/occupancy')};
+import type { Occupancy, State as OccupancyState } from ${sourceModule('capability/occupancy/capability')};
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
 type Assert<T extends true> = T;
 type RequiredKeys<T> = { [K in keyof T]-?: {} extends Pick<T, K> ? never : K }[keyof T];
@@ -968,7 +968,7 @@ test('core deployment uses buildability, side and terrain independently of navig
   ]);
   const runtime = createBattlefieldRuntime({ map });
   const query = (type, column, playerSide = 'SIDE_A') => evaluateDeployment(runtime.snapshot('draft'), {
-    profile: createDeployableDefinition({ buildableType: type }), tile: [0, column], playerSide,
+    profile: createDeployableDefinition({ cost: 0, redeployTicks: 0, slots: 1, buildableType: type }), tile: [0, column], playerSide,
   });
   for (const [type, column, allowed] of [
     ['MELEE', 0, true], ['RANGED', 0, false], ['ALL', 0, true],
@@ -986,11 +986,11 @@ test('core deployment uses buildability, side and terrain independently of navig
   }
   assert.deepEqual(query('ALL', 4, 'SIDE_B'), { type: 'ALLOWED', supportUnitId: null });
   assert.deepEqual(evaluateDeployment(runtime.snapshot('draft'), {
-    profile: createDeployableDefinition({ buildableType: 'ALL', advancedBuildableMask: 2 }),
+    profile: createDeployableDefinition({ cost: 0, redeployTicks: 0, slots: 1, buildableType: 'ALL', advancedBuildableMask: 2 }),
     tile: [0, 7], playerSide: 'SIDE_A',
   }), { type: 'ALLOWED', supportUnitId: null });
   assert.deepEqual(evaluateDeployment(runtime.snapshot('draft'), {
-    profile: createDeployableDefinition({ buildableType: 'ALL', advancedBuildableMask: 3 }),
+    profile: createDeployableDefinition({ cost: 0, redeployTicks: 0, slots: 1, buildableType: 'ALL', advancedBuildableMask: 3 }),
     tile: [0, 7], playerSide: 'SIDE_A',
   }), { type: 'ALLOWED', supportUnitId: null });
 });
@@ -1015,7 +1015,7 @@ test('core occupancy separates present claims, reservations and geometric member
   assert.deepEqual(runtime.snapshot('draft').unitsAt([0, 1]).map(unit => unit.id), [3]);
   assert.deepEqual(runtime.snapshot('draft').occupancyAt([0, 1], 'DEPLOYMENT'), []);
   assert.deepEqual(runtime.snapshot('draft').occupancyAt([0, 2], 'DEPLOYMENT'), [2]);
-  const profile = createDeployableDefinition({ buildableType: 'ALL' });
+  const profile = createDeployableDefinition({ cost: 0, redeployTicks: 0, slots: 1, buildableType: 'ALL' });
   assert.equal(evaluateDeployment(runtime.snapshot('draft'), { profile, tile: [0, 1], playerSide: 'SIDE_A' }).type, 'ALLOWED');
   assert.deepEqual(evaluateDeployment(runtime.snapshot('draft'), { profile, tile: [0, 2], playerSide: 'SIDE_A' }),
     { type: 'DENIED', reason: 'OCCUPIED' });
@@ -1049,7 +1049,7 @@ test('core support allows a platform and occupant to coexist without treating th
     tileBinding: createTileBindingDefinition({ buildableType: 'RANGED', heightType: 'HIGHLAND' }),
   }, [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }]);
   runtime.advance([{ type: 'REGISTER_UNIT', unit: platform }]);
-  const profile = createDeployableDefinition({ buildableType: 'RANGED' });
+  const profile = createDeployableDefinition({ cost: 0, redeployTicks: 0, slots: 1, buildableType: 'RANGED' });
   assert.deepEqual(evaluateDeployment(runtime.snapshot('draft'), { profile, tile: [0, 1], playerSide: 'SIDE_A' }),
     { type: 'ALLOWED', supportUnitId: 1 });
   const occupant = deploymentUnit(2, [1, 0], { deployable: profile }, [

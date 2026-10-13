@@ -3,8 +3,8 @@ import {
     hasOccupancy,
     isOccupancyClaimActive,
     type OccupancyClaim,
-} from "../../unit/capability/occupancy.js";
-import { isSpatiallyPresent } from "../../unit/capability/presence.js";
+} from "../../unit/capability/occupancy/capability.js";
+import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";
 import type { Unit, Id } from "../../unit/unit.js";
 import type { BattlefieldMap } from "../map/map.js";
 import type { MechanismId } from "../mechanism.js";

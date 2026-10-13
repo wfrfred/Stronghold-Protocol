@@ -1,7 +1,7 @@
-import { assertSafeInteger } from "../../../common/assert.js";
-import type { TilePosition } from "../../geometry/coordinate.js";
-import type { Unit } from "../unit.js";
-import { isSpatiallyPresent } from "./presence.js";
+import { assertSafeInteger } from "../../../../common/assert.js";
+import type { TilePosition } from "../../../geometry/coordinate.js";
+import type { Unit } from "../../unit.js";
+import { isSpatiallyPresent } from "../presence/capability.js";
 
 export type OccupancySlot = "DEPLOYMENT" | "SUPPORT";
 

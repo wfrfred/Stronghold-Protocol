@@ -3,7 +3,7 @@ import type { NavigationRequestId } from "../core/tactical/battlefield/navigatio
 import type { NavigationOutcome } from "../core/tactical/battlefield/navigation/state.js";
 import type { Definition, RoutedEnemy } from "../core/tactical/unit/archetype/enemy.js";
 import type { LocatedRouteSignal } from "../core/tactical/unit/capability/locomotion/route-control.js";
-import { hasSpatialPresence } from "../core/tactical/unit/capability/presence.js";
+import { hasSpatialPresence } from "../core/tactical/unit/capability/presence/capability.js";
 import {
     stepRoutedUnit,
     type RoutedLocomotionStepContext,

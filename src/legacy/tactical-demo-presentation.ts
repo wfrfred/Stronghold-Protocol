@@ -1,7 +1,7 @@
 import type { Event, Snapshot } from "../core/tactical/battle/contract.js";
 import type { DamageType } from "../core/tactical/unit/capability/vitality/damage/contract.js";
 import { hasActionDefinition } from "../core/tactical/unit/capability/action/capability.js";
-import { hasAllegiance } from "../core/tactical/unit/capability/allegiance.js";
+import { hasAllegiance } from "../core/tactical/unit/capability/allegiance/capability.js";
 import {
     hasElemental,
     type ElementType,
@@ -14,8 +14,8 @@ import {
     hasLocomotion,
     hasRoutedLocomotion,
 } from "../core/tactical/unit/capability/locomotion/capability.js";
-import { isSpatiallyPresent } from "../core/tactical/unit/capability/presence.js";
-import { hasSpatial } from "../core/tactical/unit/capability/spatial.js";
+import { isSpatiallyPresent } from "../core/tactical/unit/capability/presence/capability.js";
+import { hasSpatial } from "../core/tactical/unit/capability/spatial/capability.js";
 import { hasSkill } from "../core/tactical/unit/capability/skill/capability.js";
 import { hasStatusFlag } from "../core/tactical/unit/capability/status/capability.js";
 import {
@@ -525,6 +525,7 @@ export class TacticalDemoPresentation {
                 case "PROJECTILE_STOPPED":
                 case "ELEMENT_RECOVERED":
                 case "UNIT_DEPLOYED":
+                case "DEPLOYMENT_REJECTED":
                 case "UNIT_RELOCATED":
                 case "SUPPORT_LOST":
                 case "NAVIGATION":

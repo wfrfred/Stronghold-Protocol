@@ -21,6 +21,10 @@ import { compileAction } from "../../../core/tactical/unit/capability/action/com
 import type { CompiledAction } from "../../../core/tactical/unit/capability/action/compiled.js";
 import type { CompiledActionSegment } from "../../../core/tactical/unit/capability/action/process.js";
 import type { Definition as OffenseDefinition } from "../../../core/tactical/unit/capability/offense/capability.js";
+import {
+    createDefinition as createDeployableDefinition,
+    type Definition as DeployableDefinition,
+} from "../../../core/tactical/unit/capability/deployable/capability.js";
 import { resolveAttackPower } from "../../../core/tactical/unit/capability/offense/query.js";
 import {
     hasSkill,
@@ -48,6 +52,7 @@ import { get, install, replaceEffect } from "../../../core/tactical/unit/effect/
 import { compileTargeting } from "../../../core/tactical/unit/targeting/compile.js";
 
 export interface Definition extends OperatorDefinition {
+    readonly deployable: DeployableDefinition;
     readonly offense: OffenseDefinition;
     readonly skill: SkillDefinition;
     readonly profile: Profile;
@@ -491,6 +496,13 @@ export function create(
     const definition: Definition = {
         id: profile.id,
         profile,
+        deployable: createDeployableDefinition({
+            cost: profile.attributes.cost,
+            redeployTicks: secondsToTicks(profile.attributes.respawnTime),
+            slots: 1,
+            buildableType: "MELEE",
+            advancedBuildableMask: 1,
+        }),
         vitality: { maxHp: profile.attributes.maxHp },
         offense: { attack: profile.attributes.attack },
         defense: { defense: profile.attributes.defense, resistance: profile.attributes.resistance },

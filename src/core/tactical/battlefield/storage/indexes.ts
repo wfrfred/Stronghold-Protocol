@@ -1,12 +1,12 @@
 import { World, type TilePosition } from "../../geometry/coordinate.js";
 import { RangeGrid } from "../../geometry/range.js";
 import type { Unit, Id } from "../../unit/unit.js";
-import { isSpatiallyPresent } from "../../unit/capability/presence.js";
+import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";
 import {
     hasOccupancy,
     isOccupancyClaimActive,
     type OccupancySlot,
-} from "../../unit/capability/occupancy.js";
+} from "../../unit/capability/occupancy/capability.js";
 import { BattlefieldMap } from "../map/map.js";
 import type { MechanismId, Mechanism } from "../mechanism.js";
 import type {

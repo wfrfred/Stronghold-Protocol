@@ -1,4 +1,8 @@
-import { assertPositiveNumber, assertPositiveSafeInteger } from "../../core/common/assert.js";
+import {
+    assertNonnegativeNumber,
+    assertPositiveNumber,
+    assertPositiveSafeInteger,
+} from "../../core/common/assert.js";
 import {
     createPredefinedDefinition,
     type PredefinedDefinition,
@@ -19,10 +23,11 @@ import type { Definition as UnitDefinition } from "../../core/tactical/unit/unit
 import {
     validateState as validateOccupancyState,
     type State as OccupancyState,
-} from "../../core/tactical/unit/capability/occupancy.js";
+} from "../../core/tactical/unit/capability/occupancy/capability.js";
 import type { Definition as VitalityDefinition } from "../../core/tactical/unit/capability/vitality/capability.js";
 import type { ArknightsPredefinedInstance } from "./level.js";
 import type { PredefinedPrefab } from "./prefab.js";
+import { secondsToTicks } from "./tick.js";
 
 function object(value: unknown, name: string): Record<string, unknown> {
     if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -104,6 +109,8 @@ function unitDefinition(
     }
 
     let maxHp: number | undefined;
+    let cost: number | undefined;
+    let respawnTime: number | undefined;
     let minimumLevel = Infinity;
     let maximumLevel = -Infinity;
 
@@ -114,14 +121,24 @@ function unitDefinition(
         assertPositiveSafeInteger(frame.level, "predefined keyframe level");
 
         const hp = attributes.maxHp;
+        const frameCost = attributes.cost;
+        const frameRespawnTime = attributes.respawnTime;
 
         assertPositiveNumber(hp, "predefined maxHp");
+        assertNonnegativeNumber(frameCost, "predefined deployment cost");
+        assertNonnegativeNumber(frameRespawnTime, "predefined respawn time");
 
-        if (maxHp !== undefined && maxHp !== hp) {
+        if (
+            (maxHp !== undefined && maxHp !== hp) ||
+            (cost !== undefined && cost !== frameCost) ||
+            (respawnTime !== undefined && respawnTime !== frameRespawnTime)
+        ) {
             throw new TypeError("varying predefined unit attributes are not supported");
         }
 
         maxHp = hp;
+        cost = frameCost;
+        respawnTime = frameRespawnTime;
         minimumLevel = Math.min(minimumLevel, frame.level);
         maximumLevel = Math.max(maximumLevel, frame.level);
     }
@@ -134,7 +151,12 @@ function unitDefinition(
         id: instance.inst.characterKey,
         vitality: Object.freeze({ maxHp: maxHp! }),
         tileBinding: createTileBindingDefinition(profile.tileBinding),
-        deployable: createDeployableDefinition(profile.deployable),
+        deployable: createDeployableDefinition({
+            ...profile.deployable,
+            cost: cost!,
+            redeployTicks: secondsToTicks(respawnTime!),
+            slots: 0,
+        }),
     });
 }
 
