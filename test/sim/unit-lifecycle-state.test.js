@@ -89,7 +89,7 @@ test("departure callbacks cannot start a new skill activation", () => {
     },
   });
   const state = removeUnitWithEffects(installed.state, 0, "RETREAT", resources, 0);
-  assert.deepEqual(attempted.value, { result: { type: "REJECTED", reason: "UNAVAILABLE" }, signals: [] });
+  assert.deepEqual(attempted.value, { type: "REJECTED", reason: "UNAVAILABLE" });
   assert.equal(activations, 0);
   assert.equal(getUnit(state, 0), undefined);
   assert.equal(getUnit(original, 0).lifecycle, "PRESENT");

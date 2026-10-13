@@ -118,11 +118,6 @@ export type ActionExecutionResult =
     | { readonly type: "ABSENT" | "WAITING" | "FINISHED" }
     | { readonly type: "CANCELLED"; readonly reason: ActionExecutionCancellationReason };
 
-export interface ActionExecutionOutcome {
-    readonly result: ActionExecutionResult;
-    readonly signals: readonly ActionExecutionSignal[];
-}
-
 export interface ActionExecutionResumeRequest {
     readonly executionId: ActionExecutionId;
     readonly segments: readonly CompiledActionSegment[];
@@ -164,7 +159,7 @@ export function cancelActionExecution(
     state: BattleState,
     request: ActionExecutionCancelRequest,
     call?: CallContext,
-): Result<ActionExecutionOutcome> {
+): Result<ActionExecutionResult> {
     return cancel(state, request, call);
 }
 
@@ -173,6 +168,6 @@ export function resumeActionExecution(
     request: ActionExecutionResumeRequest,
     resources: ActionExecutionResources,
     call?: CallContext,
-): Result<ActionExecutionOutcome> {
+): Result<ActionExecutionResult> {
     return resume(state, request, resources, call);
 }

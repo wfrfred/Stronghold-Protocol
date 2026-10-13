@@ -22,7 +22,7 @@ import type {
     ActionExecutionSamples,
     ActionExecutionSignal,
     ActionExecutionState,
-    ActionExecutionOutcome,
+    ActionExecutionResult,
     ActionExecutionWait,
     ActionExecutionWaitRequest,
     CompiledActionSegment,
@@ -108,9 +108,8 @@ function finish(
     state: BattleState,
     execution: ActionExecution,
     tick: number,
-    signals: readonly ActionExecutionSignal[],
     call: CallContext,
-): Result<ActionExecutionOutcome> {
+): Result<ActionExecutionResult> {
     const signal: ActionExecutionSignal = {
         type: "ACTION_FINISHED",
         executionId: execution.id,
@@ -121,7 +120,7 @@ function finish(
 
     return {
         state: appendEvents(state, [signal]),
-        value: { result: { type: "FINISHED" }, signals: [...signals, signal] },
+        value: { type: "FINISHED" },
     };
 }
 
@@ -129,12 +128,12 @@ export function cancel(
     state: BattleState,
     request: ActionExecutionCancelRequest,
     call: CallContext = emptyCall,
-): Result<ActionExecutionOutcome> {
+): Result<ActionExecutionResult> {
     const { executionId, tick, reason = "CANCELLED" } = request;
     const execution = getActionExecution(state.actionExecutions, executionId);
 
     if (execution === undefined) {
-        return { state, value: { result: { type: "ABSENT" }, signals: [] } };
+        return { state, value: { type: "ABSENT" } };
     }
 
     const signal: ActionExecutionSignal = {
@@ -148,7 +147,7 @@ export function cancel(
 
     return {
         state: appendEvents(state, [signal]),
-        value: { result: { type: "CANCELLED", reason }, signals: [signal] },
+        value: { type: "CANCELLED", reason },
     };
 }
 
@@ -181,31 +180,23 @@ export function resume(
     request: ActionExecutionResumeRequest,
     resources: ActionExecutionResources,
     call: CallContext = emptyCall,
-): Result<ActionExecutionOutcome> {
+): Result<ActionExecutionResult> {
     const { executionId, segments, tick } = request;
     let execution = getActionExecution(state.actionExecutions, executionId);
 
     if (execution === undefined) {
-        return { state, value: { result: { type: "ABSENT" }, signals: [] } };
+        return { state, value: { type: "ABSENT" } };
     }
 
-    const signals: ActionExecutionSignal[] = [];
     const releaseType = segments.some(({ type }) => type === "RELEASE") ? "RELEASE" : "EXECUTE";
-    const absent = (): Result<ActionExecutionOutcome> => ({
+    const absent = (): Result<ActionExecutionResult> => ({
         state,
-        value: { result: { type: "ABSENT" }, signals },
+        value: { type: "ABSENT" },
     });
 
     const cancelled = (
         reason: "SOURCE_ABSENT" | "INTERRUPTED" | "CONTENT_CANCELLED",
-    ): Result<ActionExecutionOutcome> => {
-        const result = cancel(state, { executionId, tick, reason }, call);
-
-        return {
-            state: result.state,
-            value: { ...result.value, signals: [...signals, ...result.value.signals] },
-        };
-    };
+    ): Result<ActionExecutionResult> => cancel(state, { executionId, tick, reason }, call);
 
     const initialSource = getUnit(state, execution.sourceUnitId);
 
@@ -221,7 +212,7 @@ export function resume(
         const segment: CompiledActionSegment | undefined = segments[execution.cursor];
 
         if (segment === undefined) {
-            return finish(state, execution, tick, signals, call);
+            return finish(state, execution, tick, call);
         }
 
         const source = getUnit(state, execution.sourceUnitId);
@@ -294,7 +285,7 @@ export function resume(
                 };
 
                 if (result?.continuation === "FINISH") {
-                    return finish(state, execution, tick, signals, call);
+                    return finish(state, execution, tick, call);
                 }
                 if (result?.continuation === "CANCEL") {
                     state = {
@@ -330,7 +321,7 @@ export function resume(
                         };
                     }
 
-                    return { state, value: { result: { type: "WAITING" }, signals } };
+                    return { state, value: { type: "WAITING" } };
                 }
 
                 execution = { ...execution, cursor: execution.cursor + 1, wait: null };
@@ -345,7 +336,6 @@ export function resume(
                     tick,
                     markerId: segment.markerId,
                 };
-                signals.push(signal);
                 state = appendEvents(state, [signal]);
                 execution = { ...execution, cursor: execution.cursor + 1 };
                 break;

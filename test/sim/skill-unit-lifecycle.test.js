@@ -118,8 +118,8 @@ test("activation continues after self-death, but late dependencies are rejected 
     return { state, value: { type: "ACTIVATED" } };
   } });
   const activated = activateSkill(f.work, { unitId: 0, tick: 0 }, f.resources);
-  assert.equal(activated.value.result.type, "FINISHED");
-  assert.deepEqual(activated.value.signals, []);
+  assert.equal(activated.value.type, "FINISHED");
+  assert.equal(activated.state.events.some(event => event.type === "SKILL_ACTIVATED"), false);
   assert.deepEqual(observed, ["continued"]);
   assert.equal(getUnit(activated.state, 0), undefined);
   assert.deepEqual(f.finished, [{ sourcePresent: true, active: null, tick: 0 }]);
@@ -140,7 +140,7 @@ test("refusal after self-death preserves independent remote effects", () => {
     return { state: installed.state, value: { type: "REJECTED", reason: "late prerequisite" } };
   } });
   const rejected = activateSkill(f.work, { unitId: 0, tick: 0 }, f.resources);
-  assert.deepEqual(rejected.value.result, { type: "REJECTED", reason: "CONTENT_REJECTED", detail: "late prerequisite" });
+  assert.deepEqual(rejected.value, { type: "REJECTED", reason: "CONTENT_REJECTED", detail: "late prerequisite" });
   assert.equal(getUnit(rejected.state, 0), undefined);
   assert.equal(getUnit(rejected.state, 1).effects.values().every(instance => instance.status === "ACTIVE"), true);
   assert.equal(skillsFinished(rejected.state).length, 1);

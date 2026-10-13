@@ -77,22 +77,22 @@ test("pure ammunition spending preserves snapshots and clamps the final consumpt
 test("Ash's 31-round profile remains active indefinitely without attacks and ends on its 31st consumption", () => {
   const f = ammoFixture();
   let work = f.work;
-  work = advanceSkill(work, 1, 10000, f.resources).state;
+  work = advanceSkill(work, 1, 10000, f.resources);
   assert.equal(getUnit(work, 1).skill.active.remainingAmmo, 31);
   assert.equal(getUnit(work, 1).skill.sp, 0);
   for (let i = 1; i <= 30; i++) {
     const consumed = consumeSkillAmmo(work, 1, 10000 + i, f.resources);
     work = consumed.state;
-    assert.equal(consumed.value.signals.length, 0);
+    assert.equal(work.events.filter(event => event.type === "SKILL_FINISHED").length, 0);
   }
   assert.equal(getUnit(work, 1).skill.active.remainingAmmo, 1);
   const final = consumeSkillAmmo(work, 1, 10031, f.resources);
   work = final.state;
-  assert.equal(final.value.result.amount, 1);
-  assert.deepEqual(final.value.signals.map((signal) => signal.type), ["SKILL_FINISHED"]);
+  assert.equal(final.value.amount, 1);
+  assert.deepEqual(final.state.events.filter(event => event.type === "SKILL_FINISHED").map(event => event.type), ["SKILL_FINISHED"]);
   assert.equal(getUnit(work, 1).skill.active, null);
   assert.equal(resolveAttackPower(1, battlefieldView(work)), 100);
-  assert.equal(consumeSkillAmmo(work, 1, 10031, f.resources).value.result.reason, "INACTIVE");
+  assert.equal(consumeSkillAmmo(work, 1, 10031, f.resources).value.reason, "INACTIVE");
 });
 
 test("explicit two-round attack consumption ends a 32-round profile after sixteen attacks", () => {
@@ -101,7 +101,7 @@ test("explicit two-round attack consumption ends a 32-round profile after sixtee
   for (let i = 1; i <= 16; i++) {
     const consumed = consumeSkillAmmo(work, 1, i, f.resources);
     work = consumed.state;
-    assert.equal(consumed.value.result.amount, 2);
+    assert.equal(consumed.value.amount, 2);
   }
   assert.equal(getUnit(work, 1).skill.active, null);
 });

@@ -35,20 +35,20 @@ test("native Attack Enhancement Alpha level 1 charges, buffs attack for 20 secon
     definition: { id: "real-skill-fixture", skill: compiled.definition, offense: { attack: 100 } },
   });
   let work = effectFixtureWork(unit);
-  assert.equal(activateSkill(work, { unitId: 1, tick: 0 }, resources).value.result.reason, "INSUFFICIENT_SP");
-  work = advanceSkill(work, 1, 1500, resources).state;
+  assert.equal(activateSkill(work, { unitId: 1, tick: 0 }, resources).value.reason, "INSUFFICIENT_SP");
+  work = advanceSkill(work, 1, 1500, resources);
   assert.equal(getUnit(work, 1).skill.sp, 50);
   const active = activateSkill(work, { unitId: 1, tick: 1500 }, resources);
   work = active.state;
-  assert.equal(active.value.result.type, "ACTIVATED");
+  assert.equal(active.value.type, "ACTIVATED");
   assert.equal(getUnit(work, 1).skill.active.endsAtTick, 2100);
   assert.equal(Math.round(resolveAttackPower(1, battlefieldView(work))), 110);
-  work = advanceSkill(work, 1, 2099, resources).state;
+  work = advanceSkill(work, 1, 2099, resources);
   assert.equal(getUnit(work, 1).skill.sp, 0);
-  work = advanceSkill(work, 1, 2100, resources).state;
+  work = advanceSkill(work, 1, 2100, resources);
   assert.equal(resolveAttackPower(1, battlefieldView(work)), 100);
   assert.equal(getUnit(work, 1).skill.active, null);
-  work = advanceSkill(work, 1, 2130, resources).state;
+  work = advanceSkill(work, 1, 2130, resources);
   assert.equal(getUnit(work, 1).skill.sp, 1);
 });
 
@@ -165,7 +165,7 @@ test("native Unsheathe level 1 metadata supports synchronous physical and arts d
   const f = instantDamageFixture();
   const activated = activateSkill(f.work, { unitId: 1, tick: 0 }, f.resources);
   f.work = activated.state;
-  assert.equal(activated.value.result.type, "ACTIVATED");
+  assert.equal(activated.value.type, "ACTIVATED");
   assert.equal(getUnit(f.work, 2).vitality.hp, 340);
   assert.equal(getUnit(f.work, 1).skill.active, null);
   assert.equal(f.reports.length, 2);
@@ -175,8 +175,8 @@ test("native Unsheathe level 1 metadata supports synchronous physical and arts d
 test("AUTO instant content keeps full SP when its required target is absent", () => {
   const f = instantDamageFixture(true, false);
   const advanced = advanceSkill(f.work, 1, 1, f.resources);
-  f.work = advanced.state;
-  assert.equal(advanced.value.signals.length, 0);
+  f.work = advanced;
+  assert.equal(advanced.events.length, 0);
   assert.equal(getUnit(f.work, 1).skill.sp, 27);
   assert.equal(f.reports.length, 0);
 });

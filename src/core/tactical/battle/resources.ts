@@ -4,7 +4,7 @@ import type { HealingOperation } from "../unit/capability/vitality/healing/contr
 import { ProjectileResources } from "../battlefield/projectile/resources.js";
 import { resolveDamage } from "../unit/capability/vitality/damage/settlement.js";
 import { resolveHealing } from "../unit/capability/vitality/healing/settlement.js";
-import { appendEvents, type BattleState } from "./state.js";
+import type { BattleState } from "./state.js";
 import { emptyCall, type CallContext } from "./execution/call.js";
 import type { Id } from "../unit/unit.js";
 import {
@@ -46,11 +46,7 @@ export class CombatResources {
         unitId: Id,
         tick: number,
         call: CallContext = emptyCall,
-    ): BattleState => {
-        const consumed = consumeSkillAmmo(state, unitId, tick, this, call);
-
-        return appendEvents(consumed.state, consumed.value.signals);
-    };
+    ): BattleState => consumeSkillAmmo(state, unitId, tick, this, call).state;
 
     readonly stopSkillActivation = (state: BattleState, unitId: Id, tick: number) =>
         stopSkillActivation(state, unitId, tick, this);
@@ -60,22 +56,14 @@ export class CombatResources {
         activation: StoppedSkillActivation,
         tick: number,
         call: CallContext = emptyCall,
-    ): BattleState => {
-        const finished = notifySkillFinished(state, activation, tick, call);
-
-        return appendEvents(finished.state, finished.value.signals);
-    };
+    ): BattleState => notifySkillFinished(state, activation, tick, call);
 
     readonly finishSkill = (
         state: BattleState,
         unitId: Id,
         tick: number,
         call: CallContext = emptyCall,
-    ): BattleState => {
-        const finished = finishSkill(state, unitId, tick, this, call);
-
-        return appendEvents(finished.state, finished.value.signals);
-    };
+    ): BattleState => finishSkill(state, unitId, tick, this, call);
 
     readonly retireUnit = (
         state: BattleState,

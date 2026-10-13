@@ -52,16 +52,16 @@ for (const source of ["TIME", "ATTACK", "HIT"]) {
 test("time SP preserves partial progress while full and returns a new state", () => {
   const f = fixture({ initialSp: 0 });
   const before = battlefieldView(f.state);
-  let state = advanceSkill(f.state, 1, 15, f.resources).state;
+  let state = advanceSkill(f.state, 1, 15, f.resources);
   assert.equal(getUnit(state, 1).skill.spRecoveryProgressTicks, 15);
   state = setSp(state, f.definition, 2);
-  state = advanceSkill(state, 1, 100, f.resources).state;
+  state = advanceSkill(state, 1, 100, f.resources);
   assert.equal(getUnit(state, 1).skill.spRecoveryProgressTicks, 15);
   const full = getUnit(state, 1);
   state = updateUnit(state, { ...full, skill: spendSkillSp(full.skill, f.definition).state });
-  state = advanceSkill(state, 1, 114, f.resources).state;
+  state = advanceSkill(state, 1, 114, f.resources);
   assert.equal(getUnit(state, 1).skill.sp, 0);
-  state = advanceSkill(state, 1, 115, f.resources).state;
+  state = advanceSkill(state, 1, 115, f.resources);
   assert.equal(getUnit(state, 1).skill.sp, 1);
   assert.equal(getUnit(state, 1).skill.spRecoveryProgressTicks, 0);
   assert.equal(before.getUnit(1).skill.spRecoveryProgressTicks, 0);
@@ -69,29 +69,29 @@ test("time SP preserves partial progress while full and returns a new state", ()
 
 test("active duration locks every SP source and resumes its preserved clock", () => {
   const f = fixture({ initialSp: 0, spCost: 1 });
-  let state = advanceSkill(f.state, 1, 15, f.resources).state;
+  let state = advanceSkill(f.state, 1, 15, f.resources);
   state = setSp(state, f.definition, 1);
   const started = activateSkill(state, { unitId: 1, tick: 15 }, f.resources);
   state = started.state;
-  assert.equal(started.value.result.type, "ACTIVATED");
+  assert.equal(started.value.type, "ACTIVATED");
   for (const source of ["TIME", "ATTACK", "HIT", "EXTERNAL"]) assert.equal(gainSkillSp(getUnit(state, 1).skill, f.definition, source).result.reason, "LOCKED");
-  state = advanceSkill(state, 1, 44, f.resources).state;
+  state = advanceSkill(state, 1, 44, f.resources);
   assert.equal(getUnit(state, 1).skill.spRecoveryProgressTicks, 15);
   const ended = advanceSkill(state, 1, 45, f.resources);
-  state = ended.state;
-  assert.equal(ended.value.signals[0].type, "SKILL_FINISHED");
+  state = ended;
+  assert.equal(ended.events.at(-1).type, "SKILL_FINISHED");
   assert.equal(getUnit(state, 1).skill.active, null);
-  state = advanceSkill(state, 1, 60, f.resources).state;
+  state = advanceSkill(state, 1, 60, f.resources);
   assert.equal(getUnit(state, 1).skill.sp, 1);
 });
 
 test("normal refusals preserve the input version and allocate no activation", () => {
   const f = fixture({ initialSp: 0 });
-  assert.equal(activateSkill(f.state, { unitId: 1, tick: 0 }, f.resources).value.result.reason, "INSUFFICIENT_SP");
-  assert.equal(activateSkill(f.state, { unitId: 1, tick: 0, trigger: "AUTO" }, f.resources).value.result.reason, "WRONG_TRIGGER");
+  assert.equal(activateSkill(f.state, { unitId: 1, tick: 0 }, f.resources).value.reason, "INSUFFICIENT_SP");
+  assert.equal(activateSkill(f.state, { unitId: 1, tick: 0, trigger: "AUTO" }, f.resources).value.reason, "WRONG_TRIGGER");
   const refused = fixture({}, { accepts: () => false, activate: () => assert.fail("must not run") });
   const result = activateSkill(refused.state, { unitId: 1, tick: 0 }, refused.resources);
-  assert.equal(result.value.result.reason, "CONDITION");
+  assert.equal(result.value.reason, "CONDITION");
   assert.equal(result.state, refused.state);
   assert.equal(getUnit(result.state, 1).skill.nextActivationId, 0);
 });
@@ -99,28 +99,28 @@ test("normal refusals preserve the input version and allocate no activation", ()
 test("instant AUTO activation occurs once per advancement tick", () => {
   const f = fixture({ activation: "AUTO", durationTicks: 0, spCost: 1, initialSp: 2, maxCharges: 2 });
   const first = advanceSkill(f.state, 1, 0, f.resources);
-  assert.deepEqual(first.value.signals.map(signal => signal.type), ["SKILL_ACTIVATED", "SKILL_FINISHED"]);
-  assert.equal(getUnit(first.state, 1).skill.sp, 1);
-  const repeated = advanceSkill(first.state, 1, 0, f.resources);
-  assert.equal(repeated.value.signals.length, 0);
-  assert.equal(getUnit(repeated.state, 1).skill.nextActivationId, 1);
-  const next = advanceSkill(repeated.state, 1, 1, f.resources);
-  assert.equal(next.value.result.type, "ACTIVATED");
-  assert.equal(getUnit(next.state, 1).skill.sp, 0);
+  assert.deepEqual(first.events.map(event => event.type), ["SKILL_ACTIVATED", "SKILL_FINISHED"]);
+  assert.equal(getUnit(first, 1).skill.sp, 1);
+  const repeated = advanceSkill(first, 1, 0, f.resources);
+  assert.equal(repeated.events.length, first.events.length);
+  assert.equal(getUnit(repeated, 1).skill.nextActivationId, 1);
+  const next = advanceSkill(repeated, 1, 1, f.resources);
+  assert.equal(next.events.at(-2).type, "SKILL_ACTIVATED");
+  assert.equal(getUnit(next, 1).skill.sp, 0);
   assert.equal(getUnit(f.state, 1).skill.sp, 2);
 });
 
 test("passive skills activate once; unlimited skills require explicit ending", () => {
   const passive = fixture({ activation: "PASSIVE", spRecovery: "NONE", spCost: 0, initialSp: 0, durationTicks: 0 });
   const first = advanceSkill(passive.state, 1, 0, passive.resources);
-  const later = advanceSkill(first.state, 1, 30, passive.resources);
-  assert.equal(later.value.signals.length, 0);
-  assert.equal(getUnit(later.state, 1).skill.nextActivationId, 1);
+  const later = advanceSkill(first, 1, 30, passive.resources);
+  assert.equal(later.events.length, first.events.length);
+  assert.equal(getUnit(later, 1).skill.nextActivationId, 1);
   const unlimited = fixture({ durationTicks: null });
   let state = activateSkill(unlimited.state, { unitId: 1, tick: 0 }, unlimited.resources).state;
-  state = advanceSkill(state, 1, 1000, unlimited.resources).state;
+  state = advanceSkill(state, 1, 1000, unlimited.resources);
   assert.equal(getUnit(state, 1).skill.active.endsAtTick, null);
-  assert.equal(finishSkill(state, 1, 1000, unlimited.resources).value.result.type, "FINISHED");
+  assert.equal(getUnit(finishSkill(state, 1, 1000, unlimited.resources), 1).skill.active, null);
 });
 
 for (const scoped of [false, true]) {
@@ -133,7 +133,7 @@ for (const scoped of [false, true]) {
     } });
     const rejected = activateSkill(f.state, { unitId: 1, tick: 0 }, f.resources);
     const unit = getUnit(rejected.state, 1);
-    assert.equal(rejected.value.result.reason, "CONTENT_REJECTED");
+    assert.equal(rejected.value.reason, "CONTENT_REJECTED");
     assert.equal(unit.effects.values().length, scoped ? 0 : 1);
     assert.equal(unit.effects.nextId, 1);
     assert.equal(unit.skill.sp, 2);
@@ -165,7 +165,7 @@ test("zero-duration activation closes its scope before finish content; closed bi
     },
   });
   const activated = activateSkill(f.state, { unitId: 1, tick: 0 }, f.resources);
-  assert.deepEqual(activated.value.signals.map(signal => signal.type), ["SKILL_ACTIVATED", "SKILL_FINISHED"]);
+  assert.deepEqual(activated.state.events.map(event => event.type), ["SKILL_ACTIVATED", "SKILL_FINISHED"]);
   assert.deepEqual(observed, [{ active: null, effects: 1 }]);
   assert.deepEqual(get(activated.state, independent).scopes, []);
   assert.equal(getUnit(activated.state, 1).effects.nextId, 2);
@@ -197,7 +197,7 @@ for (const trigger of ["SKILL", "EFFECT", "TICK"]) {
     state = effects.advance({ ...state, tick: 5 });
     assert.equal(deadline(get(state, dependentRef)), 10);
     assert.deepEqual(get(state, dependentRef).scopes.filter(scope => scope.type !== "TICK"), [{ type: "SKILL", unitId: 1, activationId: 0 }, parentRef]);
-    if (trigger === "SKILL") state = finishSkill(state, 1, 6, f.resources).state;
+    if (trigger === "SKILL") state = finishSkill(state, 1, 6, f.resources);
     else if (trigger === "EFFECT") state = effects.end(state, parentRef, "DISPELLED");
     else state = effects.advance({ ...state, tick: 10 });
     assert.equal(get(state, dependentRef), undefined);
@@ -222,9 +222,9 @@ test("dead or absent units do not activate or accumulate time SP", () => {
   const f = fixture({ initialSp: 0 });
   const unit = initialize({ id: 1, position: [0, 0], definition: { id: "dead-skilled", skill: f.definition, vitality: { maxHp: 100 } } });
   const state = effectFixtureWork({ ...unit, vitality: { ...unit.vitality, hp: 0 } });
-  assert.equal(activateSkill(state, { unitId: 1, tick: 0 }, f.resources).value.result.reason, "UNAVAILABLE");
-  assert.equal(getUnit(advanceSkill(state, 1, 300, f.resources).state, 1).skill.sp, 0);
-  assert.equal(advanceSkill(state, 9, 0, f.resources).value.result.type, "ABSENT");
+  assert.equal(activateSkill(state, { unitId: 1, tick: 0 }, f.resources).value.reason, "UNAVAILABLE");
+  assert.equal(getUnit(advanceSkill(state, 1, 300, f.resources), 1).skill.sp, 0);
+  assert.equal(advanceSkill(state, 9, 0, f.resources), state);
 });
 
 test("SP drain applies during active skills and finish callbacks see the inactive skill", () => {
@@ -234,5 +234,5 @@ test("SP drain applies during active skills and finish callbacks see the inactiv
   assert.equal(drainSkillSp({ ...getUnit(started.state, 1).skill, sp: 2 }, 5).result.amount, 2);
   const ended = finishSkill(started.state, 1, 30, f.resources);
   assert.equal(observed, null);
-  assert.equal(finishSkill(ended.state, 1, 30, f.resources).value.result.type, "ABSENT");
+  assert.equal(finishSkill(ended, 1, 30, f.resources), ended);
 });

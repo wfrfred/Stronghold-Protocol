@@ -4,6 +4,7 @@ import {
     getUnit,
     battlefieldView,
     updateUnit,
+    appendEvents,
     type BattleState,
     type Result,
 } from "../../../battle/state.js";
@@ -46,7 +47,7 @@ export type SkillSignal = {
 );
 
 export type SkillExecutionResult =
-    | { readonly type: "ACTIVATED" | "FINISHED" | "ADVANCED" | "ABSENT" }
+    | { readonly type: "ACTIVATED" | "FINISHED" }
     | {
           readonly type: "REJECTED";
           readonly reason:
@@ -59,11 +60,6 @@ export type SkillExecutionResult =
               | "CONTENT_REJECTED";
           readonly detail?: string;
       };
-
-export interface SkillTransition {
-    readonly result: SkillExecutionResult;
-    readonly signals: readonly SkillSignal[];
-}
 
 function saveState(state: BattleState, unitId: Id, skill: SkillState): BattleState {
     const unit = getUnit(state, unitId);
@@ -95,15 +91,15 @@ export function activateSkill(
     input: SkillActivationInput,
     resources: SkillExecutionResources,
     call: CallContext = emptyCall,
-): Result<SkillTransition> {
+): Result<SkillExecutionResult> {
     const { unitId, tick, trigger = "MANUAL" } = input;
     assertNonnegativeSafeInteger(tick, "skill activation tick");
     const unit = getUnit(state, unitId);
     const reject = (
         reason: Extract<SkillExecutionResult, { type: "REJECTED" }>["reason"],
-    ): Result<SkillTransition> => ({
+    ): Result<SkillExecutionResult> => ({
         state,
-        value: { result: { type: "REJECTED", reason }, signals: [] },
+        value: { type: "REJECTED", reason },
     });
 
     if (
@@ -205,12 +201,9 @@ export function activateSkill(
         return {
             state,
             value: {
-                result: {
-                    type: "REJECTED",
-                    reason: "CONTENT_REJECTED",
-                    detail: invoked.value.reason,
-                },
-                signals: [],
+                type: "REJECTED",
+                reason: "CONTENT_REJECTED",
+                detail: invoked.value.reason,
             },
         };
     }
@@ -225,7 +218,7 @@ export function activateSkill(
             call,
         );
 
-        return { state, value: { result: { type: "FINISHED" }, signals: [] } };
+        return { state, value: { type: "FINISHED" } };
     }
 
     const signal: SkillSignal = {
@@ -236,25 +229,13 @@ export function activateSkill(
         tick,
         endsAtTick,
     };
+    state = appendEvents(state, [signal]);
 
     if (endsAtTick === tick) {
-        const finished = finishSkill(state, unitId, tick, resources, call);
-
-        return {
-            state: finished.state,
-            value: {
-                result: { type: "ACTIVATED" },
-                signals: [signal, ...finished.value.signals],
-            },
-        };
+        state = finishSkill(state, unitId, tick, resources, call);
     }
 
-    return { state, value: { result: { type: "ACTIVATED" }, signals: [signal] } };
-}
-
-export interface SkillAmmoTransition {
-    readonly result: SkillAmmoResult;
-    readonly signals: readonly SkillSignal[];
+    return { state, value: { type: "ACTIVATED" } };
 }
 
 export function consumeSkillAmmo(
@@ -263,32 +244,27 @@ export function consumeSkillAmmo(
     tick: number,
     resources: SkillExecutionResources,
     call: CallContext = emptyCall,
-): Result<SkillAmmoTransition> {
+): Result<SkillAmmoResult> {
     assertNonnegativeSafeInteger(tick, "skill ammunition consumption tick");
     const unit = getUnit(state, unitId);
 
     if (unit === undefined || !hasSkill(unit)) {
-        return { state, value: { result: { type: "REJECTED", reason: "INACTIVE" }, signals: [] } };
+        return { state, value: { type: "REJECTED", reason: "INACTIVE" } };
     }
 
     const spent = spendSkillAmmo(unit.skill, unit.definition.skill.ammoPerAttack ?? 1);
 
     if (spent.result.type === "REJECTED") {
-        return { state, value: { result: spent.result, signals: [] } };
+        return { state, value: spent.result };
     }
 
     state = saveState(state, unitId, spent.state);
 
     if (spent.result.remainingAmmo === 0) {
-        const finished = finishSkill(state, unitId, tick, resources, call);
-
-        return {
-            state: finished.state,
-            value: { result: spent.result, signals: finished.value.signals },
-        };
+        state = finishSkill(state, unitId, tick, resources, call);
     }
 
-    return { state, value: { result: spent.result, signals: [] } };
+    return { state, value: spent.result };
 }
 
 export function finishSkill(
@@ -297,12 +273,12 @@ export function finishSkill(
     tick: number,
     resources: SkillExecutionResources,
     call: CallContext = emptyCall,
-): Result<SkillTransition> {
+): BattleState {
     const stopped = stopSkillActivation(state, unitId, tick, resources);
     state = stopped.state;
 
     if (stopped.value === null) {
-        return { state, value: { result: { type: "ABSENT" }, signals: [] } };
+        return state;
     }
 
     state = closeLifetime(
@@ -347,28 +323,22 @@ export function notifySkillFinished(
     activation: StoppedSkillActivation,
     tick: number,
     call: CallContext = emptyCall,
-): Result<SkillTransition> {
+): BattleState {
     const { unitId, active, compiled } = activation;
 
     if (compiled.finish !== undefined) {
         state = compiled.finish(state, skillContext(state, unitId, active, tick, call));
     }
 
-    return {
-        state,
-        value: {
-            result: { type: "FINISHED" },
-            signals: [
-                {
-                    type: "SKILL_FINISHED",
-                    unitId,
-                    skillId: compiled.definition.id,
-                    activationId: active.id,
-                    tick,
-                },
-            ],
+    return appendEvents(state, [
+        {
+            type: "SKILL_FINISHED",
+            unitId,
+            skillId: compiled.definition.id,
+            activationId: active.id,
+            tick,
         },
-    };
+    ]);
 }
 
 export function advanceSkill(
@@ -377,12 +347,12 @@ export function advanceSkill(
     tick: number,
     resources: SkillExecutionResources,
     call: CallContext = emptyCall,
-): Result<SkillTransition> {
+): BattleState {
     assertNonnegativeSafeInteger(tick, "skill advancement tick");
     let unit = getUnit(state, unitId);
 
     if (unit === undefined || !hasSkill(unit)) {
-        return { state, value: { result: { type: "ABSENT" }, signals: [] } };
+        return state;
     }
 
     const compiled = resources.skills.get(unit.definition.skill);
@@ -391,7 +361,6 @@ export function advanceSkill(
         throw new RangeError("skill cannot advance to an earlier tick");
     }
 
-    const signals: SkillSignal[] = [];
     const alreadyAdvanced = tick === unit.skill.lastAdvancedTick && unit.skill.nextActivationId > 0;
     const wasActive = unit.skill.active !== null;
 
@@ -400,13 +369,11 @@ export function advanceSkill(
         unit.skill.active.endsAtTick !== null &&
         tick >= unit.skill.active.endsAtTick
     ) {
-        const finished = finishSkill(state, unitId, tick, resources, call);
-        state = finished.state;
-        signals.push(...finished.value.signals);
+        state = finishSkill(state, unitId, tick, resources, call);
         unit = getUnit(state, unitId);
 
         if (unit === undefined || !hasSkill(unit)) {
-            return { state, value: { result: { type: "FINISHED" }, signals } };
+            return state;
         }
     }
 
@@ -439,25 +406,13 @@ export function advanceSkill(
     });
 
     if (compiled.definition.activation !== "MANUAL" && !alreadyAdvanced) {
-        const attempted = activateSkill(
+        state = activateSkill(
             state,
             { unitId, tick, trigger: compiled.definition.activation },
             resources,
             call,
-        );
-        state = attempted.state;
-        signals.push(...attempted.value.signals);
-
-        if (
-            attempted.value.result.type === "ACTIVATED" ||
-            attempted.value.result.type === "FINISHED"
-        ) {
-            return { state, value: { result: attempted.value.result, signals } };
-        }
+        ).state;
     }
 
-    return {
-        state,
-        value: { result: { type: signals.length === 0 ? "ADVANCED" : "FINISHED" }, signals },
-    };
+    return state;
 }

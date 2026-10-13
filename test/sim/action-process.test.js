@@ -60,13 +60,11 @@ test('action process: immutable execution data preserves samples, consumed waits
   assert.equal(initial.actionExecutions.executions[0].cursor, 0);
   const run = () => {
     let state = entered.state;
-    const signals = [];
     for (const tick of [5, 5, 8, 8, 10, 10]) {
       const result = resume(state, segments, tick);
       state = result.state;
-      signals.push(...result.value.signals);
     }
-    return { state, signals };
+    return { state, signals: state.events.filter(event => event.type.startsWith("ACTION_")) };
   };
   const actual = run();
   assert.deepEqual(actual, run());
@@ -86,7 +84,7 @@ test('action process: cancellation ends owned effects while retaining an already
   const waiting = resume(initial, segments, 0, resources);
   assert.equal(resolveAttackPower(1, battlefieldView(waiting.state)), 23);
   const cancelled = cancelActionExecution(waiting.state, { executionId: 0, tick: 1 });
-  assert.deepEqual(cancelled.value.result, { type: 'CANCELLED', reason: 'CANCELLED' });
+  assert.deepEqual(cancelled.value, { type: 'CANCELLED', reason: 'CANCELLED' });
   assert.equal(getUnit(cancelled.state, 1).vitality.hp, 80);
   assert.deepEqual(getUnit(cancelled.state, 1).effects.values(), []);
   assert.equal(resolveAttackPower(1, battlefieldView(cancelled.state)), 10);
@@ -138,7 +136,7 @@ test('action process: normal finish and content cancellation retain the prefix a
       execute(state => { reached = true; return pass(state, undefined); }),
     ]);
     assert.equal(reached, false);
-    assert.equal(result.value.result.type, continuation === 'FINISH' ? 'FINISHED' : 'CANCELLED');
+    assert.equal(result.value.type, continuation === 'FINISH' ? 'FINISHED' : 'CANCELLED');
     assert.deepEqual(getUnit(result.state, 1).position, [3, 0]);
     assert.deepEqual(result.state.actionExecutions.executions, []);
     assert.deepEqual(getUnit(initial, 1).position, [1, 0]);
@@ -169,7 +167,7 @@ test('action process: an entered segment completes after source departure and un
     }), wait(1), execute(state => { observed.push('successor'); return pass(state, undefined); }),
   ]);
   assert.deepEqual(observed, ['synchronous']);
-  assert.deepEqual(result.value.result, { type: 'CANCELLED', reason: 'SOURCE_ABSENT' });
+  assert.deepEqual(result.value, { type: 'CANCELLED', reason: 'SOURCE_ABSENT' });
   assert.deepEqual(getUnit(result.state, 1).position, [3, 0]);
   assert.deepEqual(getUnit(result.state, 1).effects.values(), []);
 });
@@ -179,12 +177,12 @@ test('action process: source absence before a later release retains earlier rele
     { type: 'RELEASE', markerId: 'before' }, execute(state => pass(removeUnit(state, 0, 'RETREAT'), undefined)),
     { type: 'RELEASE', markerId: 'after' },
   ]);
-  assert.deepEqual(result.value.signals.map(signal => signal.type), ['ACTION_RELEASED', 'ACTION_CANCELLED']);
+  assert.deepEqual(result.state.events.filter(event => event.type.startsWith("ACTION_")).map(event => event.type), ['ACTION_RELEASED', 'ACTION_CANCELLED']);
 });
 
 test('action process: a final entered segment may finish after removing its source', () => {
   const result = resume(accepted(), [execute(state => pass(removeUnit(state, 0, 'RETREAT'), undefined))]);
-  assert.equal(result.value.result.type, 'FINISHED');
+  assert.equal(result.value.type, 'FINISHED');
   assert.equal(getUnit(result.state, 0), undefined);
 });
 

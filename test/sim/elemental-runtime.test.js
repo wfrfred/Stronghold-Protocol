@@ -127,13 +127,13 @@ test('elemental execution: character necrosis settles fifteen magical pulses, dr
   let work = effectFixtureWork(unit('CHARACTER', { skill }));
   work = element(work, 'NECROSIS', supplied).state;
   assert.equal(getUnit(work, 1).vitality.hp, 100000);
-  assert.equal(activateSkill(work, { unitId: 1, tick: 0 }, supplied).value.result.type, 'REJECTED');
+  assert.equal(activateSkill(work, { unitId: 1, tick: 0 }, supplied).value.type, 'REJECTED');
   work = gainUnitSkillSp(work, 1, 'TIME', 3);
   assert.equal(getUnit(work, 1).skill.sp, 20);
   work = advance(work, 30, supplied);
   assert.equal(getUnit(work, 1).vitality.hp, 99950);
   assert.equal(getUnit(work, 1).skill.sp, 19);
-  work = advanceSkill(work, 1, 30, supplied).state;
+  work = advanceSkill(work, 1, 30, supplied);
   assert.equal(getUnit(work, 1).skill.sp, 19);
   work = advance(work, 450, supplied);
   assert.equal(getUnit(work, 1).vitality.hp, 99250);
