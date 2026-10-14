@@ -3,7 +3,7 @@ import {
     battlefieldView,
     getUnit,
     updateUnit,
-    type BattleState,
+    type State as BattleState,
 } from "../../../battle/state.js";
 import { emptyCall, type CallContext } from "../../../battle/execution/call.js";
 import { canAct, hasAction } from "./capability.js";

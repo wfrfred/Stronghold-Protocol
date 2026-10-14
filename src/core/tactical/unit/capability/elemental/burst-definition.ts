@@ -1,4 +1,4 @@
-import type { BattleState } from "../../../battle/state.js";
+import type { State as BattleState } from "../../../battle/state.js";
 import type { BattlefieldView } from "../../../battlefield/contract.js";
 import type { CallContext } from "../../../battle/execution/call.js";
 import type { ElementalBurst } from "./transition.js";

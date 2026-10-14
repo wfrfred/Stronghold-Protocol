@@ -18,7 +18,7 @@ test("direct Effect definitions type host capabilities, private state and immuta
         `
 import { initialize } from ${module("unit/initialize")};
 import type { Unit } from ${module("unit/unit")};
-import type { BattleState } from ${module("battle/state")};
+import type { State as BattleState } from ${module("battle/state")};
 import type { Vitality } from ${module("unit/capability/vitality/capability")};
 import { setMaxHpContribution } from ${module("unit/capability/vitality/capability")};
 import { setAttackContribution, type Offense } from ${module("unit/capability/offense/capability")};

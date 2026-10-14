@@ -45,8 +45,8 @@ if (resolved.type === 'TIMELINE') {
     resolved.waveIndex;
 }
 getSpawnScheduleCounts(execution);
-const spawned = advanceSpawning(input, execution, [], 0);
-resolveScheduleUnits(spawned.value, []);
+const spawned = advanceSpawning({ ...input, schedule: execution }, [], 0);
+resolveScheduleUnits(spawned.schedule, []);
 // @ts-expect-error A bare snapshot cannot advance an execution.
 advanceSpawnSchedule(progress, { tick: 0 });
 // @ts-expect-error A bare snapshot cannot be paired by a separate definition argument.
@@ -58,7 +58,7 @@ getUnspawnedCount(progress);
 // @ts-expect-error Schedule queries cannot accept bare progress for their counts.
 getSpawnScheduleCounts(progress);
 // @ts-expect-error Spawning requires progress paired with its definition.
-advanceSpawning(input, progress, [], 0);
+advanceSpawning({ ...input, schedule: progress }, [], 0);
 const snapshot = snapshotSchedule(execution);
 // @ts-expect-error Public progress snapshots do not carry runtime definitions.
 snapshot.definition;

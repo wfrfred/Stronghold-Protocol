@@ -105,7 +105,7 @@ test('factory inference keeps callable static content in immutable definitions',
 import { initialize } from ${module};
 const unit = initialize({ id: 0, position: [0, 0], definition: {
   id: 'typed-content', vitality: { maxHp: 100 },
-  onEnter: (state: import(${JSON.stringify(fileURLToPath(new URL('../../src/core/tactical/battle/state.js', import.meta.url)))}).BattleState, _id: number) => state,
+  onEnter: (state: import(${JSON.stringify(fileURLToPath(new URL('../../src/core/tactical/battle/state.js', import.meta.url)))}).State, _id: number) => state,
 } });
 declare const state: Parameters<typeof unit.definition.onEnter>[0];
 unit.definition.onEnter(state, unit.id);

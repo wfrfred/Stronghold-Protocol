@@ -4,10 +4,10 @@ import { instantiateMechanismPlacement } from "./creation/mechanism.js";
 import { instantiateNavigationModifierPlacement } from "./creation/navigation-modifier.js";
 import { changePredefinedInstances } from "./steps/predefined.js";
 import type { Input } from "./contract.js";
-import { advanceBattlefield, type BattleState } from "./state.js";
+import { advanceBattlefield, type State as BattleState } from "./state.js";
 import { enterUnits } from "./execution/unit-lifecycle.js";
 
-export function initializeBattlefield(input: Input, state: BattleState) {
+export function initializeBattlefield(input: Input, state: BattleState): BattleState {
     const initialChanges: BattlefieldChange[] = [];
     const initialUnitIds: number[] = [];
     const initialMechanismIds: number[] = [];
@@ -39,7 +39,7 @@ export function initializeBattlefield(input: Input, state: BattleState) {
 
     const initialized = changePredefinedInstances(
         input.predefines,
-        [],
+        state.predefinedPresence,
         input.predefines
             .filter((definition) => definition.initiallyPresent)
             .map((definition) => ({
@@ -49,7 +49,11 @@ export function initializeBattlefield(input: Input, state: BattleState) {
         state.execution,
     );
 
-    state = { ...state, execution: initialized.execution };
+    state = {
+        ...state,
+        execution: initialized.execution,
+        predefinedPresence: initialized.presence,
+    };
     state = advanceBattlefield(state, [...initialChanges, ...initialized.changes]);
     state = enterUnits(state, [
         ...initialUnitIds,
@@ -58,5 +62,5 @@ export function initializeBattlefield(input: Input, state: BattleState) {
         ),
     ]);
 
-    return { state, value: initialized.presence };
+    return state;
 }

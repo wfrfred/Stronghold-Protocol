@@ -1,6 +1,10 @@
 import { setData } from "../../core/tactical/unit/effect/effect.js";
 import type { CombatResources } from "../../core/tactical/battle/resources.js";
-import { getUnit, updateUnit, type BattleState } from "../../core/tactical/battle/state.js";
+import {
+    getUnit,
+    updateUnit,
+    type State as BattleState,
+} from "../../core/tactical/battle/state.js";
 import { drainUnitSkillSp } from "../../core/tactical/battle/execution/skill-sp.js";
 import * as modifier from "../../core/tactical/unit/contribution/value.js";
 import { TICKS_PER_SECOND } from "../../core/tactical/tick.js";

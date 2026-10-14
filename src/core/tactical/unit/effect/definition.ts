@@ -1,4 +1,4 @@
-import type { BattleState } from "../../battle/state.js";
+import type { State as BattleState } from "../../battle/state.js";
 import type { CallContext } from "../../battle/execution/call.js";
 import type { Unit } from "../unit.js";
 import type { Effect, Ref } from "./effect.js";

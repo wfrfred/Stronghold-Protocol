@@ -24,7 +24,7 @@ import {
     appendEvents,
     getUnit,
     updateUnit,
-    type BattleState,
+    type State as BattleState,
     type Result as Settlement,
 } from "../../../../battle/state.js";
 

@@ -5,7 +5,7 @@ import {
     battlefieldView,
     getUnit,
     updateUnit,
-    type BattleState,
+    type State as BattleState,
 } from "../../../core/tactical/battle/state.js";
 import type { CombatResources } from "../../../core/tactical/battle/resources.js";
 import type { CallContext } from "../../../core/tactical/battle/execution/call.js";

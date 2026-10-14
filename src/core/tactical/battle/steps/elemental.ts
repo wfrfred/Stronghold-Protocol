@@ -2,7 +2,7 @@ import {
     advanceElemental,
     type ElementalExecutionResources,
 } from "../../unit/capability/elemental/execution.js";
-import { battlefieldView, type BattleState } from "../state.js";
+import { battlefieldView, type State as BattleState } from "../state.js";
 
 export function advanceElements(
     state: BattleState,

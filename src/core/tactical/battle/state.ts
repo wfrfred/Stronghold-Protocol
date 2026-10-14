@@ -12,8 +12,11 @@ import {
     createActionExecutionState,
     type ActionExecutionState,
 } from "../unit/capability/action/process.js";
-import type { Event } from "./contract.js";
+import type { Event, Result as BattleResult } from "./contract.js";
 import type { BattleExecutionState } from "./execution/state.js";
+import type { PredefinedPresence } from "./steps/predefined.js";
+import { createSpawnScheduleDefinition } from "./schedule/definition.js";
+import { createSpawnScheduleExecution, type SpawnScheduleExecution } from "./schedule/state.js";
 import {
     initialize as initializeDeployment,
     type State as DeploymentState,
@@ -29,19 +32,23 @@ const defaultExecution: BattleExecutionState = {
     nextProjectileId: 0,
 };
 
-export interface BattleState {
+export interface State {
     readonly battlefield: BattlefieldState;
     readonly tick: number;
     readonly execution: BattleExecutionState;
     readonly actionExecutions: ActionExecutionState;
     readonly deployment: DeploymentState;
+    readonly schedule: SpawnScheduleExecution;
+    readonly predefinedPresence: readonly PredefinedPresence[];
+    readonly completedRouteCount: number;
+    readonly result: BattleResult | null;
     readonly events: readonly Event[];
     readonly removedUnits: BattlefieldChangeResult["removedUnits"];
     readonly closedLifetimes: ReadonlySet<string>;
 }
 
 export interface Result<A> {
-    readonly state: BattleState;
+    readonly state: State;
     readonly value: A;
 }
 
@@ -51,23 +58,27 @@ export function createBattleState(
     actionExecutions: ActionExecutionState = createActionExecutionState(),
     tick = 0,
     deployment: DeploymentState = initializeDeployment(),
-): BattleState {
+    schedule: SpawnScheduleExecution = createSpawnScheduleExecution(
+        createSpawnScheduleDefinition({ type: "TIMELINE", spawns: [] }),
+    ),
+): State {
     return {
         battlefield,
         tick,
         execution,
         actionExecutions,
         deployment,
+        schedule,
+        predefinedPresence: [],
+        completedRouteCount: 0,
+        result: null,
         events: [],
         removedUnits: [],
         closedLifetimes: new Set(),
     };
 }
 
-export function advanceBattlefield(
-    state: BattleState,
-    changes: readonly BattlefieldChange[],
-): BattleState {
+export function advanceBattlefield(state: State, changes: readonly BattlefieldChange[]): State {
     if (changes.length === 0) {
         return state;
     }
@@ -91,19 +102,19 @@ export function advanceBattlefield(
     );
 }
 
-export function battlefieldView(state: BattleState): BattlefieldView {
+export function battlefieldView(state: State): BattlefieldView {
     return view(state.battlefield);
 }
 
-export function getUnit(state: BattleState, id: Id): Unit | undefined {
+export function getUnit(state: State, id: Id): Unit | undefined {
     return state.battlefield.units.get(id);
 }
 
-export function getMechanism(state: BattleState, id: MechanismId): Mechanism | undefined {
+export function getMechanism(state: State, id: MechanismId): Mechanism | undefined {
     return state.battlefield.mechanisms.get(id);
 }
 
-export function updateMechanism(state: BattleState, mechanism: Mechanism): BattleState {
+export function updateMechanism(state: State, mechanism: Mechanism): State {
     const current = getMechanism(state, mechanism.id);
 
     return current === mechanism
@@ -116,12 +127,12 @@ export function updateMechanism(state: BattleState, mechanism: Mechanism): Battl
           ]);
 }
 
-/* eslint-disable @typescript-eslint/no-unnecessary-type-parameters -- Accept capability-bearing object literals while returning only BattleState. */
-export function updateUnit<U extends Unit>(state: BattleState, unit: U): BattleState {
+/* eslint-disable @typescript-eslint/no-unnecessary-type-parameters -- Accept capability-bearing object literals while returning only State. */
+export function updateUnit<U extends Unit>(state: State, unit: U): State {
     return updateUnits(state, [unit]);
 }
 
-export function updateUnits<U extends Unit>(state: BattleState, units: readonly U[]): BattleState {
+export function updateUnits<U extends Unit>(state: State, units: readonly U[]): State {
     const changes: BattlefieldChange[] = [];
 
     for (const unit of new Map(units.map((unit) => [unit.id, unit])).values()) {
@@ -135,16 +146,16 @@ export function updateUnits<U extends Unit>(state: BattleState, units: readonly 
     return advanceBattlefield(state, changes);
 }
 
-export function registerUnit<U extends Unit>(state: BattleState, unit: U): BattleState {
+export function registerUnit<U extends Unit>(state: State, unit: U): State {
     return advanceBattlefield(state, [{ type: "REGISTER_UNIT", unit }]);
 }
 /* eslint-enable @typescript-eslint/no-unnecessary-type-parameters */
 
 export function transitionUnit(
-    state: BattleState,
+    state: State,
     id: Id,
     transitionUnitState: (current: Unit) => Unit,
-): BattleState {
+): State {
     const current = getUnit(state, id);
 
     if (current === undefined) {
@@ -161,15 +172,15 @@ export function transitionUnit(
 }
 
 export function removeUnit(
-    state: BattleState,
+    state: State,
     id: Id,
     reason: BattlefieldRemovalReason = "DEATH",
-): BattleState {
+): State {
     return getUnit(state, id) === undefined
         ? state
         : advanceBattlefield(state, [{ type: "REMOVE_UNIT", unitId: id, reason }]);
 }
 
-export function appendEvents(state: BattleState, events: readonly Event[]): BattleState {
+export function appendEvents(state: State, events: readonly Event[]): State {
     return events.length === 0 ? state : { ...state, events: [...state.events, ...events] };
 }

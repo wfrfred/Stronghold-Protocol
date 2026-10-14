@@ -1,6 +1,6 @@
 import type { WorldPosition } from "../geometry/coordinate.js";
 import type { Effects } from "./effect/effects.js";
-import type { BattleState } from "../battle/state.js";
+import type { State as BattleState } from "../battle/state.js";
 import type { BattlefieldRemovalReason } from "../battlefield/contract.js";
 
 export type Id = number;

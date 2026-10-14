@@ -1,4 +1,4 @@
-import type { BattleState } from "../../../../battle/state.js";
+import type { State as BattleState } from "../../../../battle/state.js";
 import * as hook from "../../../hook/hook.js";
 import type { State } from "../capability.js";
 import type { Context as VitalityContext, Result } from "../hook.js";

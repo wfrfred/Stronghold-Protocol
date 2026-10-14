@@ -1,7 +1,7 @@
 import { hasSkill, canGainSp } from "../../unit/capability/skill/capability.js";
 import { gainSkillSp, drainSkillSp, type SkillSpSource } from "../../unit/capability/skill/sp.js";
 import type { Id } from "../../unit/unit.js";
-import { getUnit, updateUnit, type BattleState, type Result } from "../state.js";
+import { getUnit, updateUnit, type State as BattleState, type Result } from "../state.js";
 
 export function gainUnitSkillSp(
     state: BattleState,

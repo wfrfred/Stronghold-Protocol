@@ -22,7 +22,7 @@ import {
     appendEvents,
     battlefieldView,
     getUnit,
-    type BattleState,
+    type State as BattleState,
     type Result,
 } from "../state.js";
 import { changeDp, getCard, notifyDeployed, updateCard, usedSlots } from "./deployment.js";

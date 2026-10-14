@@ -23,7 +23,7 @@ import type { Vitality, State as VitalityState } from ${sourceModule('unit/capab
 import type { RoutedLocomotionState, RouteControlState } from ${sourceModule('unit/capability/locomotion/capability')};
 import type { Definition } from ${sourceModule('unit/effect/definition')};
 import { install } from ${sourceModule('unit/effect/operations')};
-import type { BattleState } from ${sourceModule('battle/state')};
+import type { State as BattleState } from ${sourceModule('battle/state')};
 type OptionalKey = 'offense' | 'skill' | 'elemental';
 type OperatorBase = Omit<OperatorDefinition, OptionalKey>;
 type CombatEnemyBase = Omit<CombatDefinition, OptionalKey>;
@@ -132,7 +132,7 @@ test('base Unit has common fields while concrete content and guards provide capa
 import type { Unit } from ${source('core/tactical/unit/unit')};
 import { initialize } from ${source('core/tactical/unit/initialize')};
 import { copy } from ${source('core/tactical/unit/snapshot')};
-import { updateUnit, type BattleState } from ${source('core/tactical/battle/state')};
+import { updateUnit, type State as BattleState } from ${source('core/tactical/battle/state')};
 import { hasVitality, type Vitality } from ${source('core/tactical/unit/capability/vitality/capability')};
 import type { Offense } from ${source('core/tactical/unit/capability/offense/capability')};
 import type { Definition as MudrockDefinition } from ${source('content/tactical/operators/mudrock')};

@@ -3,7 +3,7 @@ import type { ElementType } from "../elemental/capability.js";
 import type { QueryPurpose } from "../../targeting/query.js";
 import { resolveAttackPower } from "../offense/query.js";
 import { createDamageOperands, type DamageType } from "../vitality/damage/contract.js";
-import { battlefieldView, type BattleState } from "../../../battle/state.js";
+import { battlefieldView, type State as BattleState } from "../../../battle/state.js";
 import type { CallContext } from "../../../battle/execution/call.js";
 import type { Id } from "../../unit.js";
 import type { ActionResources } from "./resources.js";

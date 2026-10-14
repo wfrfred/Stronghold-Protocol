@@ -5,7 +5,7 @@ import {
     type SkillExecutionResources,
 } from "../../unit/capability/skill/execution.js";
 import type { Command } from "../contract.js";
-import { battlefieldView, type BattleState } from "../state.js";
+import { battlefieldView, type State as BattleState } from "../state.js";
 
 export function advanceSkills(
     state: BattleState,

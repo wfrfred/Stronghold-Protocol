@@ -147,9 +147,8 @@ test("sequential predefined commands allocate after all earlier callback results
         },
     ];
     const advanced = advancePredefined(
-        state,
+        { ...state, predefinedPresence: [{ definitionId: 0, source: { type: "UNIT", unitId: 0 } }] },
         definitions,
-        [{ definitionId: 0, source: { type: "UNIT", unitId: 0 } }],
         [
             { type: "REMOVE_PREDEFINED", definitionId: 0, reason: "SCRIPT" },
             { type: "APPEAR_PREDEFINED", definitionId: 1 },
@@ -157,11 +156,11 @@ test("sequential predefined commands allocate after all earlier callback results
         0,
         resources,
     );
-    assert.deepEqual([...advanced.state.battlefield.units.keys()], [1, 2]);
-    assert.equal(getUnit(advanced.state, 1).definition.id, "callback-child");
-    assert.equal(getUnit(advanced.state, 2).definition.id, "predefined-child");
-    assert.equal(advanced.state.execution.nextUnitId, 3);
-    assert.deepEqual(advanced.value, [{ definitionId: 1, source: { type: "UNIT", unitId: 2 } }]);
+    assert.deepEqual([...advanced.battlefield.units.keys()], [1, 2]);
+    assert.equal(getUnit(advanced, 1).definition.id, "callback-child");
+    assert.equal(getUnit(advanced, 2).definition.id, "predefined-child");
+    assert.equal(advanced.execution.nextUnitId, 3);
+    assert.deepEqual(advanced.predefinedPresence, [{ definitionId: 1, source: { type: "UNIT", unitId: 2 } }]);
     assert.equal(before.execution.nextUnitId, 1);
     assert.equal(getUnit(before, 0).lifecycle, "PRESENT");
 });

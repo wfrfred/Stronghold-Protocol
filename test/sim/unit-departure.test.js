@@ -126,19 +126,18 @@ for (const domain of ["deployment", "predefined"]) {
             );
         } else {
             state = advancePredefined(
-                state,
-                [{ id: 10 }, { id: 11 }],
-                [
+                { ...state, predefinedPresence: [
                     { definitionId: 10, source: { type: "UNIT", unitId: 0 } },
                     { definitionId: 11, source: { type: "UNIT", unitId: 1 } },
-                ],
+                ] },
+                [{ id: 10 }, { id: 11 }],
                 [
                     { type: "REMOVE_PREDEFINED", definitionId: 10, reason: "SCRIPT" },
                     { type: "REMOVE_PREDEFINED", definitionId: 11, reason: "SCRIPT" },
                 ],
                 1,
                 resources,
-            ).state;
+            );
         }
 
         assert.equal(getUnit(state, 2).effects.values()[0].data.consumed, 2);
@@ -218,14 +217,13 @@ for (const domain of ["deployment", "predefined"]) {
                         },
                     }),
                 ],
-                [],
                 [
                     { type: "APPEAR_PREDEFINED", definitionId: 10 },
                     { type: "REMOVE_PREDEFINED", definitionId: 10, reason: "SCRIPT" },
                 ],
                 0,
                 resources,
-            ).state;
+            );
         }
 
         assert.deepEqual(

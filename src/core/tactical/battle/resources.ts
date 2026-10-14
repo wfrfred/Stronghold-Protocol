@@ -4,7 +4,7 @@ import type { HealingOperation } from "../unit/capability/vitality/healing/contr
 import { ProjectileResources } from "../battlefield/projectile/resources.js";
 import { resolveDamage } from "../unit/capability/vitality/damage/settlement.js";
 import { resolveHealing } from "../unit/capability/vitality/healing/settlement.js";
-import type { BattleState } from "./state.js";
+import type { State as BattleState } from "./state.js";
 import { emptyCall, type CallContext } from "./execution/call.js";
 import type { Id } from "../unit/unit.js";
 import {

@@ -1,5 +1,5 @@
 import { assertNonnegativeSafeInteger } from "../../common/assert.js";
-import type { BattleState } from "../battle/state.js";
+import type { State as BattleState } from "../battle/state.js";
 import type { Departure } from "../unit/unit.js";
 
 export type MechanismId = number;

@@ -1,4 +1,4 @@
-import type { BattleState } from "../../battle/state.js";
+import type { State as BattleState } from "../../battle/state.js";
 import type { Unit } from "../../unit/unit.js";
 import type {
     ProjectileContactContext,

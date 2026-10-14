@@ -4,9 +4,8 @@ import type { BattleExecutionState } from "../execution/state.js";
 import type { UnitRouteSignal } from "./route-control.js";
 import type { Id } from "../../unit/unit.js";
 import type { Command, Event } from "../contract.js";
-import { advanceBattlefield, appendEvents, type BattleState, type Result } from "../state.js";
+import { advanceBattlefield, appendEvents, type State as BattleState } from "../state.js";
 import { advanceSpawnSchedule, recordScheduleSpawns } from "../schedule/runtime.js";
-import type { SpawnScheduleExecution } from "../schedule/state.js";
 import type { ScheduledEnemySpawn } from "../schedule/definition.js";
 import { enterUnits } from "../execution/unit-lifecycle.js";
 
@@ -87,16 +86,23 @@ function enemySpawnEvents(spawned: SpawnedEnemies, tick: number): Event[] {
 
 export function advanceSpawning(
     state: BattleState,
-    schedule: SpawnScheduleExecution,
     commands: readonly Command[],
     tick: number,
-): Result<SpawnScheduleExecution> {
-    const scheduled = advanceSpawnSchedule(schedule, {
+): BattleState {
+    const scheduled = advanceSpawnSchedule(state.schedule, {
         tick,
         triggers: commands.filter((command) => command.type === "TRIGGER_BRANCH"),
     });
     const spawned = spawnEnemies(scheduled.spawns, state.execution, tick);
-    state = { ...state, execution: spawned.execution };
+    state = {
+        ...state,
+        execution: spawned.execution,
+        schedule: recordScheduleSpawns(
+            scheduled.state,
+            scheduled.spawns,
+            spawned.enemies.map((enemy) => enemy.id),
+        ),
+    };
     state = appendEvents(state, enemySpawnEvents(spawned, tick));
     state = advanceBattlefield(
         state,
@@ -107,11 +113,5 @@ export function advanceSpawning(
         spawned.enemies.map((unit) => unit.id),
     );
 
-    const value = recordScheduleSpawns(
-        scheduled.state,
-        scheduled.spawns,
-        spawned.enemies.map((enemy) => enemy.id),
-    );
-
-    return { state, value };
+    return state;
 }

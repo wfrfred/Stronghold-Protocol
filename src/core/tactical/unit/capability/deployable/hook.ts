@@ -1,4 +1,4 @@
-import type { BattleState } from "../../../battle/state.js";
+import type { State as BattleState } from "../../../battle/state.js";
 import type { BattlefieldView } from "../../../battlefield/contract.js";
 import type { Unit } from "../../unit.js";
 import * as hook from "../../hook/hook.js";

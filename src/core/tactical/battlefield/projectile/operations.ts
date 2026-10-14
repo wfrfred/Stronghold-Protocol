@@ -2,7 +2,7 @@ import { assertNonnegativeNumber, assertNonnegativeSafeInteger } from "../../../
 import {
     advanceBattlefield,
     battlefieldView,
-    type BattleState,
+    type State as BattleState,
     type Result,
 } from "../../battle/state.js";
 import { resolveAttackPower } from "../../unit/capability/offense/query.js";

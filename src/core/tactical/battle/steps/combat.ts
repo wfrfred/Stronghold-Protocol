@@ -11,7 +11,7 @@ import {
 import type { CompiledAction } from "../../unit/capability/action/compiled.js";
 import { retireCombatUnit } from "../execution/unit-lifecycle.js";
 import { CombatResources } from "../resources.js";
-import { battlefieldView, getUnit, type BattleState } from "../state.js";
+import { battlefieldView, getUnit, type State as BattleState } from "../state.js";
 import { emptyCall, type CallContext } from "../execution/call.js";
 import { hasAction, type ActionDefinition } from "../../unit/capability/action/capability.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";

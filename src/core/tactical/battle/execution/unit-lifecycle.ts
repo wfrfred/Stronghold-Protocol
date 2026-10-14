@@ -9,7 +9,7 @@ import {
     getUnit,
     removeUnit,
     updateUnit,
-    type BattleState,
+    type State as BattleState,
     type Result,
 } from "../state.js";
 import { emptyCall, type CallContext } from "./call.js";

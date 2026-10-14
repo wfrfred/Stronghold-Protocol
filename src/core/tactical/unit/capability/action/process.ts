@@ -5,7 +5,12 @@ import {
     replaceActionExecution,
 } from "./internal/executions.js";
 import { assertFiniteNumber, assertNonnegativeSafeInteger } from "../../../../common/assert.js";
-import { appendEvents, getUnit, type BattleState, type Result } from "../../../battle/state.js";
+import {
+    appendEvents,
+    getUnit,
+    type State as BattleState,
+    type Result,
+} from "../../../battle/state.js";
 import { emptyCall, type CallContext } from "../../../battle/execution/call.js";
 import type { Id } from "../../unit.js";
 import { isSpatiallyPresent } from "../presence/capability.js";

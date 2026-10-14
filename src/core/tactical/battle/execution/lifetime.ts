@@ -1,6 +1,6 @@
 import { endDependents } from "../../unit/effect/operations.js";
 import { key, type Lifetime } from "../../unit/effect/effect.js";
-import { transitionUnit, type BattleState } from "../state.js";
+import { transitionUnit, type State as BattleState } from "../state.js";
 import { emptyCall, type CallContext } from "./call.js";
 
 export function closeLifetime(

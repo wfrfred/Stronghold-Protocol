@@ -7,7 +7,7 @@ import type { BattlefieldRemovalReason } from "../../battlefield/contract.js";
 import { hasDeployable, resolveRefund } from "../../unit/capability/deployable/capability.js";
 import type { Deployed } from "../../unit/capability/deployable/hook.js";
 import type { Unit } from "../../unit/unit.js";
-import { battlefieldView, getUnit, type BattleState, type Result } from "../state.js";
+import { battlefieldView, getUnit, type State as BattleState, type Result } from "../state.js";
 import * as card from "./card.js";
 
 export interface Definition {

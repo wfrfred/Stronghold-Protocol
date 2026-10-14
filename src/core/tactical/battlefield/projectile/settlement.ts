@@ -6,7 +6,7 @@ import {
     appendEvents,
     battlefieldView,
     getUnit,
-    type BattleState,
+    type State as BattleState,
 } from "../../battle/state.js";
 import { emptyCall, type CallContext } from "../../battle/execution/call.js";
 import type { Unit, Id } from "../../unit/unit.js";

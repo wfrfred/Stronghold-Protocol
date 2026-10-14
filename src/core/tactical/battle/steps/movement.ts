@@ -6,7 +6,12 @@ import type { Id } from "../../unit/unit.js";
 import { changeAlternativeRoutes } from "./route-control.js";
 import type { Command, Event } from "../contract.js";
 import { removeUnitWithEffects, type UnitLifecycleResources } from "../execution/unit-lifecycle.js";
-import { advanceBattlefield, appendEvents, battlefieldView, type BattleState } from "../state.js";
+import {
+    advanceBattlefield,
+    appendEvents,
+    battlefieldView,
+    type State as BattleState,
+} from "../state.js";
 
 export function advanceRouteCommands(
     state: BattleState,

@@ -793,7 +793,7 @@ import { createUnitPlacementDefinition, instantiateUnitPlacement, type UnitPlace
 import type { BattleExecutionState } from ${sourceModule('../battle/execution/state')};
 import { launchProjectile, type ProjectileLaunchInput } from ${sourceModule('../battlefield/projectile/operations')};
 import type { ProjectileDefinitionRef } from ${sourceModule('../battlefield/projectile/definition')};
-import type { BattleState } from ${sourceModule('../battle/state')};
+import type { State as BattleState } from ${sourceModule('../battle/state')};
 import type { ElementDamageReport } from ${sourceModule('capability/elemental/execution')};
 import type { ProjectileResources } from ${sourceModule('../battlefield/projectile/resources')};
 import type { Occupancy, State as OccupancyState } from ${sourceModule('capability/occupancy/capability')};

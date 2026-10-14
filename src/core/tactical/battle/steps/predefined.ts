@@ -23,7 +23,7 @@ import {
     removeUnitWithEffects,
     type UnitLifecycleResources,
 } from "../execution/unit-lifecycle.js";
-import { advanceBattlefield, battlefieldView, type BattleState, type Result } from "../state.js";
+import { advanceBattlefield, battlefieldView, type State as BattleState } from "../state.js";
 
 export interface PredefinedUnitCreation extends UnitPlacementDefinition {
     readonly type: "UNIT";
@@ -225,13 +225,10 @@ export function reconcilePredefinedPresence(
 export function advancePredefined(
     state: BattleState,
     definitions: readonly PredefinedDefinition[],
-    presence: readonly PredefinedPresence[],
     commands: readonly Command[],
     tick: number,
     resources: UnitLifecycleResources,
-): Result<readonly PredefinedPresence[]> {
-    presence = reconcilePredefinedPresence(presence, battlefieldView(state));
-
+): BattleState {
     for (const command of commands) {
         if (command.type !== "APPEAR_PREDEFINED" && command.type !== "REMOVE_PREDEFINED") {
             continue;
@@ -239,12 +236,16 @@ export function advancePredefined(
 
         const transition = changePredefinedInstances(
             definitions,
-            reconcilePredefinedPresence(presence, battlefieldView(state)),
+            reconcilePredefinedPresence(state.predefinedPresence, battlefieldView(state)),
             [command],
             state.execution,
             tick,
         );
-        state = { ...state, execution: transition.execution };
+        state = {
+            ...state,
+            execution: transition.execution,
+            predefinedPresence: transition.presence,
+        };
 
         for (const change of transition.changes) {
             if (change.type === "REMOVE_UNIT") {
@@ -260,9 +261,13 @@ export function advancePredefined(
                 change.type === "REGISTER_UNIT" ? [change.unit.id] : [],
             ),
         );
-
-        presence = transition.presence;
     }
 
-    return { state, value: presence };
+    return {
+        ...state,
+        predefinedPresence: reconcilePredefinedPresence(
+            state.predefinedPresence,
+            battlefieldView(state),
+        ),
+    };
 }
