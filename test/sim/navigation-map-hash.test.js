@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
-import { createBattlefieldRuntime } from '../../dist/core/tactical/battlefield/runtime.js';
+import { create as createFieldState, transition as transitionBattlefield } from '../../dist/core/tactical/battlefield/state.js';
+import { view as viewBattlefield } from '../../dist/core/tactical/battlefield/view.js';
 import { createNavigationMap, NavigationMap } from '../../dist/core/tactical/battlefield/navigation/map.js';
 import { createNavigationModifierDefinition } from '../../dist/core/tactical/battlefield/navigation/modifier.js';
 import { projectNavigationMaps, projectStaticNavigationMap } from '../../dist/core/tactical/battlefield/navigation/projection.js';
@@ -123,8 +124,8 @@ test('factory, static projection and dynamic projection agree on final navigatio
 
 test('modifier identity, source, order and intermediate revisions do not affect final hashes', () => {
   const map = flatMap();
-  const first = createBattlefieldRuntime({ map });
-  const second = createBattlefieldRuntime({ map });
+  let first = createFieldState({ map });
+  let second = createFieldState({ map });
   const registerSources = ids => ids.map(id => ({
     type: 'REGISTER_MECHANISM', mechanism: { id, definition: { id: `source-${id}` }, active: true },
   }));
@@ -136,17 +137,17 @@ test('modifier identity, source, order and intermediate revisions do not affect 
       region: { type: 'FIXED', position: projected.positions[0], range: [[0, 0]], direction: 'RIGHT' },
     },
   });
-  first.advance(registerSources([1, 2]));
-  second.advance(registerSources([7, 8]));
-  first.advance([addition(1, 1, modifier('cost-first', [[0, 1]], { costFloor: 17 }))]);
-  first.advance([addition(2, 2, modifier('block-second', [[0, 1]], { denyPassage: true }))]);
-  second.advance([
+  first = transitionBattlefield(first, registerSources([1, 2])).state;
+  second = transitionBattlefield(second, registerSources([7, 8])).state;
+  first = transitionBattlefield(first, [addition(1, 1, modifier('cost-first', [[0, 1]], { costFloor: 17 }))]).state;
+  first = transitionBattlefield(first, [addition(2, 2, modifier('block-second', [[0, 1]], { denyPassage: true }))]).state;
+  second = transitionBattlefield(second, [
     addition(90, 8, modifier('another-block', [[0, 1]], { denyPassage: true })),
     addition(91, 7, modifier('another-cost', [[0, 1]], { costFloor: 17 })),
-  ]);
+  ]).state;
 
-  const firstView = first.snapshot('draft');
-  const secondView = second.snapshot('draft');
+  const firstView = viewBattlefield(first);
+  const secondView = viewBattlefield(second);
   assert.notEqual(firstView.navigationMaps.WALK.revision, secondView.navigationMaps.WALK.revision);
   assert.deepEqual(firstView.navigationMaps.WALK.cells, secondView.navigationMaps.WALK.cells);
   assert.equal(firstView.navigationMaps.WALK.contentHash, secondView.navigationMaps.WALK.contentHash);

@@ -111,14 +111,3 @@ export interface BattlefieldView<U extends Unit = Unit> extends MechanismView, P
     navigationModifiersFrom(source: NavigationModifierSource): readonly NavigationModifierId[];
     navigationModifiersFollowing(unitId: Id): readonly NavigationModifierId[];
 }
-
-export interface Battlefield<U extends Unit = Unit> {
-    /** Captures a fixed view of the published state or current draft. */
-    snapshot(version: "state" | "draft"): BattlefieldView<U>;
-    /** Advances the draft directly; callers must not mutate submitted state or returned facts. */
-    advance(changes: readonly BattlefieldChange<U>[]): BattlefieldChangeResult<U>;
-    /** Publishes the current draft without executing its changes again. */
-    apply(): void;
-    /** Restores the draft to the last published state. */
-    drop(): void;
-}

@@ -5,10 +5,8 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-    BattlefieldRuntime,
-    createBattlefieldRuntime,
-} from "../../dist/core/tactical/battlefield/runtime.js";
+import { create as createFieldState, transition as transitionBattlefield } from '../../dist/core/tactical/battlefield/state.js';
+import { view as viewBattlefield } from '../../dist/core/tactical/battlefield/view.js';
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
 import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
 import { initialize } from "../../dist/core/tactical/unit/initialize.js";
@@ -105,107 +103,98 @@ const definition = () => ({
     },
 });
 
-const modes = [
-    ["public advance", () => createBattlefieldRuntime({ map: map() })],
-    ["runtime advance", () => BattlefieldRuntime.create({ map: map() })],
-];
-
-for (const [name, create] of modes) {
-    test(`battlefield ${name} rejects unpaired configured capabilities atomically at registration`, () => {
-        const runtime = create();
-        const unit = initialize({ id: 1, definition: definition(), position: [0, 0] });
-        const maps = runtime.snapshot("draft").navigationMaps;
-        for (const key of Object.keys(configuredCapabilities)) {
-            const missingState = { ...unit };
-            delete missingState[key];
-            const missingDefinition = { ...unit.definition };
-            delete missingDefinition[key];
-            const missingConfiguration = { ...unit, definition: missingDefinition };
-            for (const invalid of [
-                missingState,
-                missingConfiguration,
-                { ...unit, [key]: undefined },
-            ]) {
-                assert.throws(
-                    () =>
-                        runtime.advance([
-                            { type: "REGISTER_UNIT", unit: { ...unit, id: 2 } },
-                            { type: "REGISTER_UNIT", unit: invalid },
-                        ]),
-                    new RegExp(`capability ${key} configuration and state must be paired`),
-                );
-                assert.deepEqual(runtime.snapshot("draft").unitIds, []);
-                assert.equal(runtime.snapshot("draft").navigationMaps, maps);
-                assert.deepEqual(runtime.snapshot("draft").unitsAt([0, 0]), []);
-            }
+test("battlefield transition rejects unpaired configured capabilities atomically at registration", () => {
+    let runtime = createFieldState({ map: map() });
+    const unit = initialize({ id: 1, definition: definition(), position: [0, 0] });
+    const maps = viewBattlefield(runtime).navigationMaps;
+    for (const key of Object.keys(configuredCapabilities)) {
+        const missingState = { ...unit };
+        delete missingState[key];
+        const missingDefinition = { ...unit.definition };
+        delete missingDefinition[key];
+        const missingConfiguration = { ...unit, definition: missingDefinition };
+        for (const invalid of [
+            missingState,
+            missingConfiguration,
+            { ...unit, [key]: undefined },
+        ]) {
+            assert.throws(
+                () =>
+                    transitionBattlefield(runtime, [
+                        { type: "REGISTER_UNIT", unit: { ...unit, id: 2 } },
+                        { type: "REGISTER_UNIT", unit: invalid },
+                    ]),
+                new RegExp(`capability ${key} configuration and state must be paired`),
+            );
+            assert.deepEqual(viewBattlefield(runtime).unitIds, []);
+            assert.equal(viewBattlefield(runtime).navigationMaps, maps);
+            assert.deepEqual(viewBattlefield(runtime).unitsAt([0, 0]), []);
         }
-        runtime.advance([{ type: "REGISTER_UNIT", unit }]);
-        assert.equal(runtime.snapshot("draft").getUnit(1).definition, unit.definition);
-        assert.deepEqual(
-            runtime
-                .snapshot("draft")
-                .unitsAt([0, 0])
-                .map((value) => value.id),
-            [1],
-        );
-    });
+    }
+    runtime = transitionBattlefield(runtime, [{ type: "REGISTER_UNIT", unit }]).state;
+    assert.equal(viewBattlefield(runtime).getUnit(1).definition, unit.definition);
+    assert.deepEqual(
+        viewBattlefield(runtime)
+            .unitsAt([0, 0])
+            .map((value) => value.id),
+        [1],
+    );
+});
 
-    test(`battlefield ${name} preserves configured capability composition on update`, () => {
-        const runtime = create();
-        const unit = initialize({ id: 1, definition: definition(), position: [0, 0] });
-        const bare = initialize({ id: 2, definition: { id: "bare" }, position: [2, 0] });
-        runtime.advance([
-            { type: "REGISTER_UNIT", unit },
-            { type: "REGISTER_UNIT", unit: bare },
-        ]);
-        const maps = runtime.snapshot("draft").navigationMaps;
-        for (const key of Object.keys(configuredCapabilities)) {
-            const missingState = { ...unit };
-            delete missingState[key];
-            for (const invalid of [
-                missingState,
-                { ...unit, [key]: undefined },
-                { ...bare, [key]: unit[key] },
-            ]) {
-                assert.throws(
-                    () =>
-                        runtime.advance([
-                            {
-                                type: "SET_POSITION_AND_RELEASE_BLOCKING",
-                                unitId: 1,
-                                position: [1, 0],
-                            },
-                            { type: "UPDATE_UNIT", unit: invalid },
-                        ]),
-                    new RegExp(`capability ${key} state cannot be added or removed during update`),
-                );
-                assert.deepEqual(runtime.snapshot("draft").getUnit(1).position, [0, 0]);
-                assert.deepEqual(runtime.snapshot("draft").unitIds, [1, 2]);
-                assert.equal(runtime.snapshot("draft").navigationMaps, maps);
-            }
+test("battlefield transition preserves configured capability composition on update", () => {
+    let runtime = createFieldState({ map: map() });
+    const unit = initialize({ id: 1, definition: definition(), position: [0, 0] });
+    const bare = initialize({ id: 2, definition: { id: "bare" }, position: [2, 0] });
+    runtime = transitionBattlefield(runtime, [
+        { type: "REGISTER_UNIT", unit },
+        { type: "REGISTER_UNIT", unit: bare },
+    ]).state;
+    const maps = viewBattlefield(runtime).navigationMaps;
+    for (const key of Object.keys(configuredCapabilities)) {
+        const missingState = { ...unit };
+        delete missingState[key];
+        for (const invalid of [
+            missingState,
+            { ...unit, [key]: undefined },
+            { ...bare, [key]: unit[key] },
+        ]) {
+            assert.throws(
+                () =>
+                    transitionBattlefield(runtime, [
+                        {
+                            type: "SET_POSITION_AND_RELEASE_BLOCKING",
+                            unitId: 1,
+                            position: [1, 0],
+                        },
+                        { type: "UPDATE_UNIT", unit: invalid },
+                    ]),
+                new RegExp(`capability ${key} state cannot be added or removed during update`),
+            );
+            assert.deepEqual(viewBattlefield(runtime).getUnit(1).position, [0, 0]);
+            assert.deepEqual(viewBattlefield(runtime).unitIds, [1, 2]);
+            assert.equal(viewBattlefield(runtime).navigationMaps, maps);
         }
-        const updated = {
-            ...unit,
-            action: { ...unit.action, readyAtTick: 7, recoveryUntilTick: 8 },
-            spatialPresence: { present: false },
-            occupancy: { claims: [] },
-        };
-        runtime.advance([{ type: "UPDATE_UNIT", unit: updated }]);
-        assert.deepEqual(runtime.snapshot("draft").getUnit(1).action, updated.action);
-        assert.deepEqual(runtime.snapshot("draft").unitsAt([0, 0]), []);
-        const restored = { ...updated };
-        delete restored.spatialPresence;
-        delete restored.occupancy;
-        runtime.advance([{ type: "UPDATE_UNIT", unit: restored }]);
-        assert.deepEqual(
-            runtime
-                .snapshot("draft")
-                .unitsAt([0, 0])
-                .map((value) => value.id),
-            [1],
-        );
-    });
-}
+    }
+    const updated = {
+        ...unit,
+        action: { ...unit.action, readyAtTick: 7, recoveryUntilTick: 8 },
+        spatialPresence: { present: false },
+        occupancy: { claims: [] },
+    };
+    runtime = transitionBattlefield(runtime, [{ type: "UPDATE_UNIT", unit: updated }]).state;
+    assert.deepEqual(viewBattlefield(runtime).getUnit(1).action, updated.action);
+    assert.deepEqual(viewBattlefield(runtime).unitsAt([0, 0]), []);
+    const restored = { ...updated };
+    delete restored.spatialPresence;
+    delete restored.occupancy;
+    runtime = transitionBattlefield(runtime, [{ type: "UPDATE_UNIT", unit: restored }]).state;
+    assert.deepEqual(
+        viewBattlefield(runtime)
+            .unitsAt([0, 0])
+            .map((value) => value.id),
+        [1],
+    );
+});
 
 test("unit snapshots copy partial composition without enforcing battlefield registration", () => {
     const unit = initialize({ id: 1, definition: definition(), position: [0, 0] });
@@ -236,16 +225,16 @@ import { Effects } from ${sourceModule("unit/effect/effects")};
 import type { Action } from ${sourceModule("unit/capability/action/capability")};
 import type { ImmutableData } from ${sourceModule("../common/immutable-data")};
 import type { BattlefieldMap } from ${sourceModule("battlefield/map/map")};
-import { createBattlefieldRuntime } from ${sourceModule("battlefield/runtime")};
+import { create, transition } from ${sourceModule("battlefield/state")};
 type ActingDefinition = Definition & Action['definition'];
 declare const definition: ImmutableData<ActingDefinition>;
 declare const map: BattlefieldMap;
 const unit = { id: 1, definition, position: [0, 0], effects: Effects.empty(), lifecycle: 'PRESENT' } satisfies Unit;
 const baseUnit: Unit = unit;
-const battlefield = createBattlefieldRuntime({ map });
-battlefield.advance([{ type: 'REGISTER_UNIT', unit: baseUnit }]);
-const custom = createBattlefieldRuntime<typeof unit>({ map });
-custom.advance([{ type: 'REGISTER_UNIT', unit }]);
+const battlefield = create({ map });
+transition(battlefield, [{ type: 'REGISTER_UNIT', unit: baseUnit }]);
+const custom = create<typeof unit>({ map });
+transition(custom, [{ type: 'REGISTER_UNIT', unit }]);
 `,
         );
         const program = ts.createProgram([path], {

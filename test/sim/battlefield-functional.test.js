@@ -87,3 +87,19 @@ test('navigation and spatial projections belong to each returned value', () => {
   assert.equal(moved.state.map, registered.map);
   assert.equal(moved.state.baseline, registered.baseline);
 });
+
+test('pure transition reports transient registrations and removals even when the final field is empty', () => {
+  const before = initial();
+  const temporary = unit(1);
+  const advanced = transition(before, [
+    register(temporary),
+    { type: 'REMOVE_UNIT', unitId: temporary.id, reason: 'SCRIPT' },
+  ]);
+
+  assert.deepEqual(advanced.facts.registeredUnitIds, [temporary.id]);
+  assert.deepEqual(advanced.facts.removedUnits, [
+    { unitId: temporary.id, reason: 'SCRIPT', unit: temporary },
+  ]);
+  assert.deepEqual(view(advanced.state).unitIds, []);
+  assert.deepEqual(view(before).unitIds, []);
+});

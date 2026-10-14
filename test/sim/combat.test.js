@@ -1,4 +1,5 @@
-import { fixtureBattlefield, fixtureBattlefieldState } from "../helpers/battlefield.js";
+import { fixtureBattlefieldState } from "../helpers/battlefield.js";
+import { transition } from "../../dist/core/tactical/battlefield/state.js";
 // Combat rules: statuses & immunities, cold→freeze, element bursts, blocking, melee vs FLY, stealth, priorities, healers.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -403,11 +404,11 @@ test('core combat: snapshots share capabilities while immutable battlefield upda
   assert.deepEqual(snapshot.blockingRelations, [{ blockerUnitId: 0, blockedUnitId: 1 }]);
 
   const units = new Map(snapshot.units.map(unit => [unit.id, unit]));
-  const battlefield = fixtureBattlefield({ map: input.map,
+  let battlefield = fixtureBattlefieldState({ map: input.map,
     unitIds: [...units.keys()], getUnit: id => units.get(id),
     blockingRelations: snapshot.blockingRelations,
   });
-  const previous = battlefield.snapshot('state');
+  const previous = battlefieldView({ battlefield });
   const changed = {
     ...operator,
     action: { ...operator.action, readyAtTick: 999999 },
@@ -422,8 +423,8 @@ test('core combat: snapshots share capabilities while immutable battlefield upda
     }) },
     vitality: { ...operator.vitality, hp: 0 },
   };
-  battlefield.advance([{ type: 'UPDATE_UNIT', unit: changed }]);
-  const draft = battlefield.snapshot('draft');
+  battlefield = transition(battlefield, [{ type: 'UPDATE_UNIT', unit: changed }]).state;
+  const draft = battlefieldView({ battlefield });
   assert.equal(draft.getUnit(0), changed);
   assert.deepEqual(draft.blockingRelations, []);
   assert.equal(draft.getUnit(0).action.readyAtTick, 999999);
@@ -431,9 +432,7 @@ test('core combat: snapshots share capabilities while immutable battlefield upda
     target, battlefield: draft, selector: operator.definition.action.normalAction.targetGroups[0].targeting,
     purposes: ['DAMAGE'] });
   assert.equal(allowsTarget(targetingContext(draft.getUnit(0))), false);
-  assert.equal(battlefield.snapshot('state'), previous);
-  battlefield.apply();
-  assert.equal(battlefield.snapshot('state'), draft);
+  assert.equal(draft.getUnit(0), changed);
 
   assert.equal(previous.getUnit(0), operator);
   assert.deepEqual(previous.blockingRelations, [{ blockerUnitId: 0, blockedUnitId: 1 }]);

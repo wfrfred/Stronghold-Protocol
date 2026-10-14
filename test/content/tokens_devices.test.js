@@ -9,7 +9,8 @@ import { genericKit } from '../../server/sim/content/generic.js';
 import { spawnYanyou, spawnMapChar, TOKEN_IDS, wolfShadows, tileFree, findSummonTile, summonToken } from '../../server/sim/content/tokens.js';
 import { startColdWind, kjeragColdWind, activateTurrets, terrainAt, deviceOverridesOf } from '../../server/sim/content/devices.js';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
-import { createBattlefieldRuntime } from '../../dist/core/tactical/battlefield/runtime.js';
+import { create as createFieldState, transition as transitionBattlefield } from '../../dist/core/tactical/battlefield/state.js';
+import { view as viewBattlefield } from '../../dist/core/tactical/battlefield/view.js';
 import { NavigationMap } from '../../dist/core/tactical/battlefield/navigation/map.js';
 import { loadMovementScenario } from '../../dist/data/arknights/movement-scenario.js';
 import { createLevelDefinition, parseLevelContent } from '../../dist/data/arknights/level.js';
@@ -1200,7 +1201,7 @@ test('core act1 m01 initializes all 12 raw crates without changing passage or FL
   const rawLevel = arknightsFixture('level_act1autochess_m01');
   const scenario = predefinedMovementScenario(rawLevel);
   const runtime = new BattleRuntime(scenario.spec);
-  const baseline = createBattlefieldRuntime({ map: scenario.spec.map }).snapshot('state').navigationMaps;
+  const baseline = viewBattlefield(createFieldState({ map: scenario.spec.map })).navigationMaps;
   const initial = runtime.snapshot();
   const crates = rawLevel.predefines.tokenInsts.filter(instance => instance.inst.characterKey === 'trap_1105_accrate');
   assert.equal(crates.length, 12);
@@ -1549,18 +1550,18 @@ test('core real hidden platforms grant ranged deployment support while retaining
   assert.equal(NavigationMap.get(runtime.navigationMaps.WALK, tile).moveCost, 1000);
   assert.equal(runtime.navigationMaps.FLY, originalMaps.FLY);
 
-  const field = createBattlefieldRuntime({ map: scenario.spec.map });
-  field.advance(appeared.units.map(unit => ({ type: 'REGISTER_UNIT', unit })));
-  assert.deepEqual(field.snapshot('draft').occupancyAt(tile, 'SUPPORT'), [platform.id]);
-  assert.deepEqual(evaluateDeployment(field.snapshot('draft'), { profile: { buildableType: 'RANGED', advancedBuildableMask: 1 },
+  let field = createFieldState({ map: scenario.spec.map });
+  field = transitionBattlefield(field, appeared.units.map(unit => ({ type: 'REGISTER_UNIT', unit }))).state;
+  assert.deepEqual(viewBattlefield(field).occupancyAt(tile, 'SUPPORT'), [platform.id]);
+  assert.deepEqual(evaluateDeployment(viewBattlefield(field), { profile: { buildableType: 'RANGED', advancedBuildableMask: 1 },
     tile, playerSide: 'SIDE_A' }), { type: 'ALLOWED', supportUnitId: platform.id });
-  assert.deepEqual(evaluateDeployment(field.snapshot('draft'), { profile: { buildableType: 'MELEE', advancedBuildableMask: 1 },
+  assert.deepEqual(evaluateDeployment(viewBattlefield(field), { profile: { buildableType: 'MELEE', advancedBuildableMask: 1 },
     tile, playerSide: 'SIDE_A' }), { type: 'DENIED', reason: 'BUILDABLE_TYPE' });
 
   runtime.step([{ type: 'REMOVE_PREDEFINED', definitionId, reason: 'SCRIPT' }]);
   assert.equal(runtime.snapshot().units.some(unit => unit.id === platform.id), false);
   assert.deepEqual(NavigationMap.get(runtime.navigationMaps.WALK, tile), originalCell);
   assert.equal(runtime.navigationMaps.FLY, originalMaps.FLY);
-  field.advance([{ type: 'REMOVE_UNIT', unitId: platform.id, reason: 'SCRIPT' }]);
-  assert.deepEqual(field.snapshot('draft').occupancyAt(tile, 'SUPPORT'), []);
+  field = transitionBattlefield(field, [{ type: 'REMOVE_UNIT', unitId: platform.id, reason: 'SCRIPT' }]).state;
+  assert.deepEqual(viewBattlefield(field).occupancyAt(tile, 'SUPPORT'), []);
 });

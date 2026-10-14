@@ -14,7 +14,6 @@ import { UF, ANIM, BOND_LAYER_CAP } from '../../shared/constants.js';
 import { EV } from '../../shared/protocol.js';
 import { getDefaultSource, spawnsFromTemplate, hasGeneratedData } from '../../server/sim/simdata.js';
 import { LocalBossPool } from '../../server/sim/spec.js';
-import { BattlefieldRuntime, createBattlefieldRuntime } from '../../dist/core/tactical/battlefield/runtime.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createMechanismDefinition, createMechanism } from '../../dist/core/tactical/battlefield/mechanism.js';
 import { createNavigationModifierDefinition, createNavigationModifier, createNavigationModifierRegion } from '../../dist/core/tactical/battlefield/navigation/modifier.js';

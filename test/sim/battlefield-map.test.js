@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
-import { createBattlefieldRuntime } from '../../dist/core/tactical/battlefield/runtime.js';
+import { create as createFieldState } from '../../dist/core/tactical/battlefield/state.js';
+import { view as viewBattlefield } from '../../dist/core/tactical/battlefield/view.js';
 
 test('battlefield maps require the factory even when structural fields are readonly or frozen', async () => {
   const { default: ts } = await import('typescript');
@@ -59,9 +60,10 @@ test('battlefield versions share a map whose nested data is isolated from caller
   const markers = [{ type: 'START', position: [0, 0] }];
   const blockEdges = [{ position: [0, 0], direction: 'RIGHT', blockMask: 'WALK_ONLY' }];
   const map = createBattlefieldMap(1, 1, tiles, markers, blockEdges);
-  const field = createBattlefieldRuntime({ map });
-  const published = field.snapshot('state');
-  const draft = field.snapshot('draft');
+  const field = createFieldState({ map });
+    let fieldPublished = field;
+  const published = viewBattlefield(fieldPublished);
+  const draft = viewBattlefield(field);
 
   tile.passableMask = 'NONE';
   tile.mechanism.params.damagePerTick = 999;
@@ -69,7 +71,7 @@ test('battlefield versions share a map whose nested data is isolated from caller
   markers[0].position[0] = 1;
   blockEdges[0].blockMask = 'ALL';
 
-  for (const branch of [field.snapshot('draft'), published, draft]) {
+  for (const branch of [viewBattlefield(field), published, draft]) {
     assert.equal(branch.map, map);
     assert.equal(branch.map.tiles[0].passableMask, 'ALL');
     assert.equal(branch.map.tiles[0].mechanism.params.damagePerTick, 10);
