@@ -45,6 +45,20 @@ export function enterUnits(state: BattleState, unitIds: readonly Id[]): BattleSt
     return state;
 }
 
+export function advanceUnits(state: BattleState): BattleState {
+    const unitIds = [...state.battlefield.units.keys()];
+
+    for (const unitId of unitIds) {
+        const unit = getUnit(state, unitId);
+
+        if (unit?.lifecycle === "PRESENT" && unit.definition.onTick !== undefined) {
+            state = unit.definition.onTick(state, unitId);
+        }
+    }
+
+    return state;
+}
+
 export function retireCombatUnit(
     state: BattleState,
     unitId: Id,

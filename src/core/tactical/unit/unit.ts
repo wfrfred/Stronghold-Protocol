@@ -12,6 +12,7 @@ export type Lifecycle = "PRESENT" | "LEAVING";
 export interface Definition {
     readonly id: DefinitionId;
     readonly onEnter?: (state: BattleState, unitId: Id) => BattleState;
+    readonly onTick?: (state: BattleState, unitId: Id) => BattleState;
     readonly onLeave?: (state: BattleState, departure: Departure) => BattleState;
 }
 

@@ -42,6 +42,7 @@ import {
     type SpawnScheduleExecution,
 } from "./schedule/state.js";
 import { initializeBattlefield } from "./initialization.js";
+import { advanceUnits } from "./execution/unit-lifecycle.js";
 import {
     addCard,
     advance as advanceDeployment,
@@ -227,6 +228,8 @@ export class BattleRuntime {
         const spawned = advanceSpawning(state, schedule, commands, tick);
         state = spawned.state;
         schedule = spawned.value;
+
+        state = advanceUnits(state);
 
         state = advanceEffects(state);
 
