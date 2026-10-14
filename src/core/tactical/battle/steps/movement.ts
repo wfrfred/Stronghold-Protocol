@@ -2,6 +2,7 @@ import type { BattlefieldChange } from "../../battlefield/contract.js";
 import { canMove, hasRoutedLocomotion } from "../../unit/capability/locomotion/capability.js";
 import { hasAction } from "../../unit/capability/action/capability.js";
 import { stepRoutedUnit } from "../../unit/capability/locomotion/step.js";
+import * as units from "../../unit/query.js";
 import type { Id } from "../../unit/unit.js";
 import { changeAlternativeRoutes } from "./route-control.js";
 import type { Command, Event } from "../contract.js";
@@ -57,12 +58,11 @@ export function advanceMovement(
     const events: Event[] = [];
     const completed: Id[] = [];
 
-    for (const unitId of [...battlefield.unitIds].sort((left, right) => left - right)) {
-        const unit = battlefield.getUnit(unitId)!;
+    const candidates = units.filter(state, hasRoutedLocomotion);
 
-        if (!hasRoutedLocomotion(unit)) {
-            continue;
-        }
+    for (const ref of candidates.sort((left, right) => left.id - right.id)) {
+        const unit = units.get(state, ref)!;
+        const unitId = ref.id;
 
         const moved = stepRoutedUnit(unit, {
             tick,
