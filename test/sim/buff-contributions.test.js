@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { deadline, setDeadline, setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -80,7 +81,7 @@ test("Buff contribution integration: the native Astesia DEF facet merges layers,
             tick,
         );
         if (plan.type === "INSTALL") {
-            work = effects.install(at(work, tick), getUnit(work, 0), program, {
+            work = effects.install(at(work, tick), unitRef(getUnit(work, 0)), program, {
                 source,
                 scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }],
                 data: { stackCount: 1, defenseRatio },
@@ -174,7 +175,7 @@ test("Buff contribution integration: only effective layer growth resamples the r
             definition: { id: "receiver", offense: { attack: 100 } },
         }),
     );
-    const installed = effects.install(work, getUnit(work, 0), program, {
+    const installed = effects.install(work, unitRef(getUnit(work, 0)), program, {
         source: 10,
         scopes: [{ type: "TICK", tick: 10 }],
     });

@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import * as effects from '../../dist/core/tactical/unit/effect/operations.js';
 import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
 import assert from 'node:assert/strict';
@@ -81,7 +82,7 @@ test('action runtime: ending an Action-owned Effect may settle nested host death
   } };
   const rt = new BattleRuntime(spec([unit(0, { action: true }), unit(1)]), { combat: resources, compileAction: (definition, ports) => ({
     ...compileAction(definition, ports), program: [
-      { type: 'EXECUTE', run: (state, context) => ({ state: effects.install(state, getUnit(state, 1), terminal, { scopes: [{ type: 'ACTION', executionId: context.executionId }] }, context.call).state, value: undefined }) },
+      { type: 'EXECUTE', run: (state, context) => ({ state: effects.install(state, unitRef(getUnit(state, 1)), terminal, { scopes: [{ type: 'ACTION', executionId: context.executionId }] }, context.call).state, value: undefined }) },
       { type: 'WAIT', allowNewAction: false, resolve: () => ({ type: 'FOR_TICKS', ticks: 1 }) },
     ],
   }) });

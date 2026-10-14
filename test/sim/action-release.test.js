@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -23,7 +24,7 @@ function releaseEffect(id, initial, run) {
   return definition;
 }
 const continueRelease = { type: 'CONTINUE' };
-const attach = (state, definition) => effects.install(state, getUnit(state, 0), definition);
+const attach = (state, definition) => effects.install(state, unitRef(getUnit(state, 0)), definition);
 const stateOf = (state, ref, next) => effects.replaceEffect(state, ref, setData(get(state, ref), next));
 
 test('action release: ordinary and disabled effects do not interrupt', () => {

@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { fixtureBattlefieldState as fixtureBattlefield } from "../helpers/battlefield.js";
 import { deadline, setData, setDeadline } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
@@ -80,7 +81,7 @@ const output = (value) => ({
     value,
 });
 const install = (work, effect, expiresAtTick = null) =>
-    effects.install(work, getUnit(work, 0), effect, {
+    effects.install(work, unitRef(getUnit(work, 0)), effect, {
         source: 7,
         scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }],
     });
@@ -166,7 +167,7 @@ test("blocking capacity: explicit refresh and lifecycle output changes preserve 
     assert.equal(capacity(work), 3);
     work = effects.setEnabled(work, effectAddress, true);
     assert.equal(capacity(work), 0);
-    work = effects.install(work, getUnit(work, 0), maxHpBuff("hp", 100)).state;
+    work = effects.install(work, unitRef(getUnit(work, 0)), maxHpBuff("hp", 100)).state;
     assert.equal(getUnit(work, 0).vitality.hp, 100);
     work = effects.end(work, effectAddress);
     assert.equal(capacity(work), 3);

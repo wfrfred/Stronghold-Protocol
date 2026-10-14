@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -123,7 +124,7 @@ test("effect time: a new Effect waits for the next advance while ended candidate
                 );
                 state = effect.install(
                     state,
-                    getUnit(state, context.unit.id),
+                    unitRef(getUnit(state, context.unit.id)),
                     newborn,
                     {},
                     context.call,

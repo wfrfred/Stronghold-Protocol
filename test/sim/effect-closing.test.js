@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { closeLifetime } from "../../dist/core/tactical/battle/execution/lifetime.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -105,7 +106,7 @@ test("effect lifetimes: a closing host rejects a new dependent before its instal
         {},
         {
             onEnd(state, context) {
-                const result = effect.install(state, context.unit, child, {}, context.call);
+                const result = effect.install(state, unitRef(context.unit), child, {}, context.call);
                 installed = result.value;
                 return result.state;
             },
@@ -128,7 +129,7 @@ test("effect lifetimes: a closed parent cannot admit a remote dependent during t
             onEnd(state, context) {
                 const result = effect.install(
                     state,
-                    getUnit(state, 1),
+                    unitRef(getUnit(state, 1)),
                     child,
                     {
                         scopes: [context.ref],

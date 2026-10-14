@@ -29,7 +29,7 @@ import { install, replaceEffect, get } from ${module("unit/effect/operations")};
 import { setData, type Effect } from ${module("unit/effect/effect")};
 import { Effects } from ${module("unit/effect/effects")};
 import type { Contribution, Input } from ${module("unit/contribution/contribution")};
-import type { Context as QueryContext } from ${module("unit/query")};
+import { ref as unitRef, type Context as QueryContext } from ${module("unit/query")};
 const host=initialize({id:1,position:[0,0],definition:{id:'host',vitality:{maxHp:100}}});
 const content: Definition<{charges:number},Vitality> = {
  id:'shield',initialize:()=>({charges:2}),
@@ -46,11 +46,11 @@ const content: Definition<{charges:number},Vitality> = {
  }
 };
 declare const battle:BattleState;
-const installed=install(battle,host,content);
+const installed=install(battle,unitRef(host),content);
 const ref=installed.value;
 const bare=initialize({id:2,position:[0,0],definition:{id:'bare'}});
 // @ts-expect-error required host capabilities must be present.
-install(battle,bare,content);
+install(battle,unitRef(bare),content);
 if(ref!==undefined) {
  const found=get(battle,ref,content);
  if(found!==undefined){
@@ -127,9 +127,9 @@ const crossCapability:Definition<{bonus:number},Vitality & Offense>={
  },
 };
 const combined=initialize({id:3,position:[0,0],definition:{id:'combined',vitality:{maxHp:100},offense:{attack:20}}});
-install(battle,combined,crossCapability);
+install(battle,unitRef(combined),crossCapability);
 // @ts-expect-error the concrete Effect requires both capability pairs.
-install(battle,host,crossCapability);
+install(battle,unitRef(host),crossCapability);
 `,
     );
     try {

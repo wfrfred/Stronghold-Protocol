@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { fixtureBattlefieldState as fixtureBattlefield } from "../helpers/battlefield.js";
 import { createActionDefinition } from "../../dist/core/tactical/unit/capability/action/capability.js";
@@ -106,7 +107,7 @@ function fixture() {
     };
     let work = createBattleState(fixtureBattlefield(battlefield), undefined);
     for (const id of [0, 1]) work = activateSkill(work, { unitId: id, tick: 0 }, resources).state;
-    work = effects.install(work, getUnit(work, 2), counter).state;
+    work = effects.install(work, unitRef(getUnit(work, 2)), counter).state;
     return { battlefield: work.battlefield, resources, execution: work.execution };
 }
 
@@ -318,10 +319,10 @@ test("effect terminal callback can retire its host and settle remote Action and 
             },
         },
     );
-    battle = effects.install(battle, getUnit(battle, 1), actionDependent, {
+    battle = effects.install(battle, unitRef(getUnit(battle, 1)), actionDependent, {
         scopes: [{ type: "ACTION", executionId: 0 }],
     }).state;
-    battle = effects.install(battle, getUnit(battle, 1), skillDependent, {
+    battle = effects.install(battle, unitRef(getUnit(battle, 1)), skillDependent, {
         scopes: [{ type: "SKILL", unitId: 0, activationId: 0 }],
     }).state;
     const content = definition(
@@ -344,7 +345,7 @@ test("effect terminal callback can retire its host and settle remote Action and 
             },
         },
     );
-    const installed = effects.install(battle, getUnit(battle, 0), content);
+    const installed = effects.install(battle, unitRef(getUnit(battle, 0)), content);
     battle = effects.end(installed.state, installed.value);
     assert.equal(getUnit(battle, 0), undefined);
     assert.deepEqual(getUnit(battle, 1).effects.values(), []);

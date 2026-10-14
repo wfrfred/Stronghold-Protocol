@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { battle, unit, actionDefinition } from '../helpers/action-fixture.js';
@@ -158,7 +159,7 @@ test('combat program: Effect expiration removes only its own action rule and pre
   const actor = unit(0, { action: true });
   const original = { ...actor, action: setRule(actor.action, { id: 'baseline', allows: () => true }) };
   const initial = battle(original);
-  const installed = effects.install(initial, original, stun, { scopes: [{ type: 'TICK', tick: 1 }] }).state;
+  const installed = effects.install(initial, unitRef(original), stun, { scopes: [{ type: 'TICK', tick: 1 }] }).state;
   assert.equal(canAct(getUnit(installed, 0)), false);
   const expired = effects.advance({ ...installed, tick: 1 });
   assert.equal(canAct(getUnit(expired, 0)), true);
@@ -171,8 +172,8 @@ test('combat program: source retirement ends explicit lifetime dependencies and 
   let state = battle(unit(0), unit(1));
   const sourceOnly = { id: 'source-only', initialize: () => ({}) };
   const owned = { id: 'owned', initialize: () => ({}) };
-  state = effects.install(state, getUnit(state, 1), sourceOnly, { source: 0 }).state;
-  state = effects.install(state, getUnit(state, 1), owned, { source: 0, scopes: [{ type: 'UNIT', unitId: 0 }] }).state;
+  state = effects.install(state, unitRef(getUnit(state, 1)), sourceOnly, { source: 0 }).state;
+  state = effects.install(state, unitRef(getUnit(state, 1)), owned, { source: 0, scopes: [{ type: 'UNIT', unitId: 0 }] }).state;
   const result = removeUnitWithEffects(state, 0, 'RETREAT', resources, 0);
   assert.deepEqual(getUnit(result, 1).effects.values().map(value => value.definition.id), ['source-only']);
 });
@@ -201,7 +202,7 @@ test('combat program: immediate source removal finishes entered business and pre
   let successor = false;
   const result = start(battle(actor, unit(1, { action: true })), { ...compiled, program: [
     { type: 'EXECUTE', run: (state, ctx) => {
-      state = effects.install(state, getUnit(state, 1), stun, { scopes: [{ type: 'ACTION', executionId: ctx.executionId }] }, ctx.call).state;
+      state = effects.install(state, unitRef(getUnit(state, 1)), stun, { scopes: [{ type: 'ACTION', executionId: ctx.executionId }] }, ctx.call).state;
       state = removeUnit(state, 0, 'RETREAT');
       assert.equal(canAct(getUnit(state, 1)), false);
       state = updateUnit(state, { ...getUnit(state, 1), position: [2, 0] });

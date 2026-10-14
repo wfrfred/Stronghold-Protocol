@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { attackBuff } from "../helpers/effects.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { fixtureBattlefieldState as fixtureBattlefield } from "../helpers/battlefield.js";
@@ -44,7 +45,7 @@ function scenario(skill, { targets = 1, content, compile } = {}) {
   const buff = attackBuff('skill/attack', 100);
   const fault = { enabled: false };
   resources.skills.register({ definition: skill, activate: content ?? ((state, context) => {
-    const installed = effects.install(state, getUnit(state, context.unitId), buff, {
+    const installed = effects.install(state, unitRef(getUnit(state, context.unitId)), buff, {
       source: context.unitId, scopes: [{ type: 'SKILL', unitId: context.unitId, activationId: context.activationId }],
     });
     if (fault.enabled) { throw new Error('skill fault'); }

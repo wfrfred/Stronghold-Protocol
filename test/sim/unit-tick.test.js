@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
@@ -110,7 +111,7 @@ test("Runtime advances Unit content once per Tick before Effect callbacks", () =
         onEnter(state, id) {
             state = updateUnit(state, { ...getUnit(state, id), state: { phase: 0 } });
             original = getUnit(state, id);
-            return install(state, original, observer).state;
+            return install(state, unitRef(original), observer).state;
         },
         onTick(state, id) {
             const current = getUnit(state, id);

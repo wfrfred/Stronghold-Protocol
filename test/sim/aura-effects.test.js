@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { closeLifetime } from "../../dist/core/tactical/battle/execution/lifetime.js";
 import assert from "node:assert/strict";
@@ -81,7 +82,7 @@ test("ordinary end policies decide each receiver against current state", () => {
         onEnd(state, ctx) {
             trace.push(["end", ctx.ref.unitId]);
             return ctx.ref.unitId === 1
-                ? effects.install(state, getUnit(state, 2), marker, {}, ctx.call).state
+                ? effects.install(state, unitRef(getUnit(state, 2)), marker, {}, ctx.call).state
                 : state;
         },
     });
@@ -93,7 +94,7 @@ test("ordinary end policies decide each receiver against current state", () => {
                 for (const unitId of [1, 2]) {
                     const installed = effects.install(
                         state,
-                        getUnit(state, unitId),
+                        unitRef(getUnit(state, unitId)),
                         receiver,
                         {},
                         ctx.call,

@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -103,7 +104,7 @@ test("MaxHP tick deadline and callback successor use the latest HP ratio", () =>
     let battle = effectFixtureWork(receiver());
     const successor = maxHpBuff("successor", 50);
     const content = maxHpBuff("expiring", 100, {
-        onEnd: (state, ctx) => effects.install(state, getUnit(state, ctx.unit.id), successor, {}, ctx.call).state,
+        onEnd: (state, ctx) => effects.install(state, unitRef(getUnit(state, ctx.unit.id)), successor, {}, ctx.call).state,
     });
     battle = install(battle, content, 1, { scopes: [{ type: "TICK", tick: 1 }] }).state;
     battle = transitionUnit(battle, 1, (unit) => ({ ...unit, vitality: { ...unit.vitality, hp: 40 } }));

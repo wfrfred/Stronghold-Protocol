@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../core/tactical/unit/query.js";
 import { getUnit, updateUnit } from "../../core/tactical/battle/state.js";
 import * as modifier from "../../core/tactical/unit/contribution/value.js";
 import type { Definition } from "../../core/tactical/unit/effect/definition.js";
@@ -62,7 +63,7 @@ export function compileArknightsAttackBuffSkill(value: unknown, level: number): 
 
             const installed = install(
                 state,
-                unit,
+                unitRef(unit),
                 buff,
                 {
                     source: context.unitId,

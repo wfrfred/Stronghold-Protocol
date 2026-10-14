@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -167,7 +168,7 @@ function movementEffect(value = modifier.create({ multiplier: -0.5 })) {
     return contributionEffect("movement-buff", { value }, output);
 }
 const install = (work, program, resources, expiresAtTick = null) =>
-    effects.install(work, getUnit(work, 0), program, {
+    effects.install(work, unitRef(getUnit(work, 0)), program, {
         scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }],
     });
 const changeSpeed = (work, program, next) => {

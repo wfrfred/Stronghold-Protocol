@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { installFixtureEffect } from "../helpers/effects.js";
 import { create as createBattlefieldState, transition as transitionBattlefield } from "../../dist/core/tactical/battlefield/state.js";
 import { view as viewBattlefield } from "../../dist/core/tactical/battlefield/view.js";
@@ -1204,7 +1205,7 @@ test('core battle propagates nested settlement errors without publishing battlef
         state = registerUnit(state, unit);
         state = { ...state, execution: { ...state.execution, nextUnitId: unit.id + 1 } };
         state = appendEvents(state, [{ type: 'UNIT_DEPLOYED', unitId: unit.id, position: unit.position, tick: context.tick }]);
-        state = installEffect(state, getUnit(state, 1), effect, { source: 0 }, context.call).state;
+        state = installEffect(state, unitRef(getUnit(state, 1)), effect, { source: 0 }, context.call).state;
         return { state, value: undefined };
       } },
       { type: 'WAIT', resolve: () => ({ type: 'FOR_TICKS', ticks: 2 }), allowNewAction: false },

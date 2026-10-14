@@ -7,7 +7,8 @@ import {
     type Result,
 } from "../../battle/state.js";
 import { emptyCall, type CallContext } from "../../battle/execution/call.js";
-import type { Unit, Id } from "../unit.js";
+import type { Unit, Id, Ref as UnitRef } from "../unit.js";
+import * as units from "../query.js";
 import { hasSkill } from "../capability/skill/capability.js";
 import type { Definition, Context } from "./definition.js";
 import {
@@ -51,12 +52,12 @@ export function get<S extends object, H extends object>(
 
 export function install<S extends object, H extends object>(
     battle: BattleState,
-    host: Unit & NoInfer<H>,
+    host: UnitRef<Unit & NoInfer<H>>,
     definition: Definition<S, H>,
     initial: Initial<NoInfer<S>> = {},
     call: CallContext = emptyCall,
 ): Result<Ref | undefined> {
-    const unit = getUnit(battle, host.id);
+    const unit = units.get(battle, host);
     const scopes = initial.scopes ?? [];
 
     for (const scope of scopes) {

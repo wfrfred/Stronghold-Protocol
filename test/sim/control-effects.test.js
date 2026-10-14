@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { unit, battle } from "../helpers/action-fixture.js";
@@ -24,8 +25,8 @@ function actor() {
 
 test("stun composes four capabilities and overlapping instances withdraw only their own rules", () => {
     const original = battle(actor(), unit(1, { blockable: { weight: 1 } }));
-    const first = effects.install(original, getUnit(original, 0), stun, { scopes: [{ type: "TICK", tick: 5 }] });
-    const second = effects.install(first.state, getUnit(first.state, 0), stun);
+    const first = effects.install(original, unitRef(getUnit(original, 0)), stun, { scopes: [{ type: "TICK", tick: 5 }] });
+    const second = effects.install(first.state, unitRef(getUnit(first.state, 0)), stun);
     const host = getUnit(second.state, 0);
 
     assert.equal(canAct(host), false);
@@ -57,8 +58,8 @@ test("silence and SP prevention are separate rules, and prohibited time does not
     const resources = new CombatResources();
     const host = actor();
     resources.skills.register({ definition: host.definition.skill, activate: state => ({ state, value: { type: "ACTIVATED" } }) });
-    const silenced = effects.install(battle(host), host, silence);
-    const blocked = effects.install(silenced.state, getUnit(silenced.state, 0), blockSpRecovery);
+    const silenced = effects.install(battle(host), unitRef(host), silence);
+    const blocked = effects.install(silenced.state, unitRef(getUnit(silenced.state, 0)), blockSpRecovery);
     let state = blocked.state;
 
     assert.equal(canActivate(getUnit(state, 0)), false);

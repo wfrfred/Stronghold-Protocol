@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { transitionUnit } from "../../dist/core/tactical/battle/state.js";
 import { setBeforeReleaseHook, removeBeforeReleaseHook } from "../../dist/core/tactical/unit/capability/action/capability.js";
 import { attackBuff } from "../helpers/effects.js";
@@ -43,7 +44,7 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, program } = {}) {
     },
   });
   resources.skills.register({ definition: skill, activate: (state, context) => {
-    const installed = effects.install(state, getUnit(state, context.unitId), buff, {
+    const installed = effects.install(state, unitRef(getUnit(state, context.unitId)), buff, {
       source: context.unitId, scopes: [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }],
     });
     assert.ok(installed.value);

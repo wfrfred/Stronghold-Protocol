@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -105,7 +106,7 @@ test("shield cancels damage, consumes a layer, self-heals and retains normal HIT
 
 test("invincible reception leaves shield untouched and removing its effect removes the hook", () => {
     const fixture = setup({}, [enemy(1, [1, 0])]);
-    const protectedState = install(fixture.state, getUnit(fixture.state, 0), invincible).state;
+    const protectedState = install(fixture.state, unitRef(getUnit(fixture.state, 0)), invincible).state;
     const canceled = hit(protectedState, fixture.combat);
     assert.equal(canceled.value.hpLoss, 0);
     assert.equal(readShield(getUnit(canceled.state, 0)).layers, 1);

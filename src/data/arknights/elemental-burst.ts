@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../core/tactical/unit/query.js";
 import { setData } from "../../core/tactical/unit/effect/effect.js";
 import type { CombatResources } from "../../core/tactical/battle/resources.js";
 import {
@@ -150,7 +151,7 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                                 if (current !== undefined) {
                                     state = effects.install(
                                         state,
-                                        current,
+                                        unitRef(current),
                                         stun,
                                         {
                                             source: null,
@@ -221,7 +222,7 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                     ) {
                         state = effects.install(
                             state,
-                            unit,
+                            unitRef(unit),
                             reduction,
                             {
                                 ...input,
@@ -242,7 +243,13 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                             return state;
                         }
 
-                        state = effects.install(state, unit, control, input, context.call).state;
+                        state = effects.install(
+                            state,
+                            unitRef(unit),
+                            control,
+                            input,
+                            context.call,
+                        ).state;
                     }
 
                     unit = getUnit(state, unitId);
@@ -252,13 +259,19 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                         hasOffense(unit) &&
                         profile.attackReductionRatio > 0
                     ) {
-                        state = effects.install(state, unit, weakness, input, context.call).state;
+                        state = effects.install(
+                            state,
+                            unitRef(unit),
+                            weakness,
+                            input,
+                            context.call,
+                        ).state;
                         unit = getUnit(state, unitId);
                     }
                     if (unit !== undefined && profile.paralysisStacks > 0 && hasAction(unit)) {
                         state = effects.install(
                             state,
-                            unit,
+                            unitRef(unit),
                             paralysis,
                             {
                                 ...input,

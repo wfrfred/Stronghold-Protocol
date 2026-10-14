@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { effectFixtureWork } from "../helpers/effects.js";
@@ -26,7 +27,7 @@ function fixture({ durationTicks = 0, reject = false, finishDuringActivation = f
   resources.skills.register({
     definition,
     activate(state, context) {
-      state = effects.install(state, getUnit(state, 2), dependent, {
+      state = effects.install(state, unitRef(getUnit(state, 2)), dependent, {
         scopes: [{ type: "SKILL", unitId: 1, activationId: context.activationId }],
       }, context.call).state;
       state = damage(state, context.tick, 1, context.call);

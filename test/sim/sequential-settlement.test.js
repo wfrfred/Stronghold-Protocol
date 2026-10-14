@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { battle, unit, actionDefinition } from "../helpers/action-fixture.js";
@@ -30,7 +31,7 @@ for (const nested of ["cancel", "resume", "resume empty", "resume wait"]) {
         let executions = 0;
         state = install(
             state,
-            getUnit(state, 1),
+            unitRef(getUnit(state, 1)),
             {
                 id: "nested-action-end",
                 initialize: () => ({}),
@@ -109,7 +110,7 @@ test("sequential predefined commands allocate after all earlier callback results
     const resources = new CombatResources();
     let state = battle(unit(0));
     state = { ...state, execution: { ...state.execution, nextUnitId: 1 } };
-    state = install(state, getUnit(state, 0), {
+    state = install(state, unitRef(getUnit(state, 0)), {
         id: "birth-on-end",
         initialize: () => ({}),
         onEnd(state, context) {

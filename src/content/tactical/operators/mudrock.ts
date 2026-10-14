@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../../core/tactical/unit/query.js";
 import type { Profile } from "../../../data/arknights/operator.js";
 import { secondsToTicks } from "../../../data/arknights/tick.js";
 import { createRng } from "../../../core/common/rng.js";
@@ -366,7 +367,7 @@ export function create(
 
                 state = install(
                     state,
-                    source,
+                    unitRef(source),
                     finishOnActionEnd,
                     {
                         scopes: [
@@ -421,7 +422,7 @@ export function create(
                     if (applyStun && survivor !== undefined) {
                         state = install(
                             state,
-                            survivor,
+                            unitRef(survivor),
                             stun,
                             {
                                 source: source.id,
@@ -500,9 +501,10 @@ export function create(
                 return state;
             }
 
-            state = install(state, unit, shield).state;
+            const host = unitRef(unit);
+            state = install(state, host, shield).state;
 
-            return install(state, getUnit(state, unitId)!, healFree).state;
+            return install(state, host, healFree).state;
         },
     };
 

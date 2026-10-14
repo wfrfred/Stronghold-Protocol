@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { battle, unit, actionDefinition, assertData } from '../helpers/action-fixture.js';
@@ -35,7 +36,7 @@ const bonus = {
 };
 
 function installOwned(state, context, content = bonus, unitId = 1) {
-  return effects.install(state, getUnit(state, unitId), content, {
+  return effects.install(state, unitRef(getUnit(state, unitId)), content, {
     source: context.sourceUnitId, scopes: [{ type: 'ACTION', executionId: context.executionId }],
   }, context.call).state;
 }

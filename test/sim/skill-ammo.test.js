@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { attackBuff } from "../helpers/effects.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import assert from "node:assert/strict";
@@ -31,7 +32,7 @@ function ammoFixture(ammo = 31, ammoPerAttack = 1) {
   const definition = parseArknightsSkillLevel(ash, 1, ammo, ammoPerAttack).definition;
   const buff = attackBuff("ammo-fixture-attack", 100);
   resources.skills.register({ definition, activate: (state, context) => {
-    const installed = effects.install(state, getUnit(state, context.unitId), buff, { source: 1, scopes: [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }] });
+    const installed = effects.install(state, unitRef(getUnit(state, context.unitId)), buff, { source: 1, scopes: [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }] });
     assert.ok(installed.value);
     return { state: installed.state, value: { type: "ACTIVATED" } };
   } });

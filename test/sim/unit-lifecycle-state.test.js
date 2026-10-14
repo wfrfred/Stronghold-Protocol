@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
@@ -31,7 +32,7 @@ test("departure callbacks observe LEAVING while old snapshots remain PRESENT", (
     stopSkillActivation(state) { return { state: observe(state, "stop skill"), value: null }; },
     notifySkillFinished() { assert.fail("no active skill"); },
   };
-  state = effects.install(state, getUnit(state, 0), {
+  state = effects.install(state, unitRef(getUnit(state, 0)), {
     id: "departure-observer", initialize: () => ({}),
     onDisable: state => observe(state, "disable effect"),
     onEnd: state => observe(state, "end effect"),
@@ -58,7 +59,7 @@ test("skill finish sees LEAVING and cannot install dependencies on its departing
     finish(state, context) {
       statuses.push(context.battlefield.getUnit(0).lifecycle);
       state = removeUnitWithEffects(state, 0, "DEATH", resources, context.tick, context.call);
-      const rejected = effects.install(state, getUnit(state, 1), { id: "late-dependency", initialize: () => ({}), onInstall(state) { installations++; return state; } }, { scopes: [{ type: "UNIT", unitId: 0 }] }, context.call);
+      const rejected = effects.install(state, unitRef(getUnit(state, 1)), { id: "late-dependency", initialize: () => ({}), onInstall(state) { installations++; return state; } }, { scopes: [{ type: "UNIT", unitId: 0 }] }, context.call);
       assert.equal(rejected.value, undefined);
       return rejected.state;
     },
@@ -83,7 +84,7 @@ test("departure callbacks cannot start a new skill activation", () => {
   let attempted;
   resources.skills.register({ definition: skill, activate(state) { activations++; return { state, value: { type: "ACTIVATED" } }; } });
   const original = createBattleState(fixtureBattlefield([unit(0, { skill })]));
-  const installed = effects.install(original, getUnit(original, 0), {
+  const installed = effects.install(original, unitRef(getUnit(original, 0)), {
     id: "activation-on-departure", initialize: () => ({}),
     onEnd(state, context) {
       attempted = activateSkill(state, { unitId: 0, tick: context.tick }, resources, context.call);
@@ -162,7 +163,7 @@ test("onLeave reads the pre-cleanup Unit after removal and passes its changes to
     mechanismIds: [4], getMechanism: () => mechanism,
   }));
   state = activateSkill(state, { unitId: 0, tick: 0 }, resources).state;
-  state = effects.install(state, getUnit(state, 0), {
+  state = effects.install(state, unitRef(getUnit(state, 0)), {
     id: "leave-effect", initialize: () => ({}),
     onDisable(state) { trace.push("effect disable"); return state; },
     onEnd(state) { trace.push("effect end"); return state; },

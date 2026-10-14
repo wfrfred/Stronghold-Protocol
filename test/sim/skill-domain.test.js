@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
@@ -129,7 +130,7 @@ for (const scoped of [false, true]) {
   test(`content refusal retains its prefix and identity allocation, refunds SP, closes scopes (${scoped})`, () => {
     const definition = effectDefinition("rejected-prefix");
     const f = fixture({}, { activate(state, context) {
-      const installed = effects.install(state, getUnit(state, 1), definition, { source: 1, scopes: scoped ? [{ type: "SKILL", unitId: 1, activationId: context.activationId }] : [] }, context.call);
+      const installed = effects.install(state, unitRef(getUnit(state, 1)), definition, { source: 1, scopes: scoped ? [{ type: "SKILL", unitId: 1, activationId: context.activationId }] : [] }, context.call);
       assert.ok(installed.value);
       return { state: installed.state, value: { type: "REJECTED", reason: "content prerequisite" } };
     } });
@@ -151,8 +152,8 @@ test("zero-duration activation closes its scope before finish content; closed bi
   let independent;
   const f = fixture({ durationTicks: 0 }, {
     activate(state, context) {
-      state = effects.install(state, getUnit(state, 1), definition, { scopes: [{ type: "SKILL", unitId: 1, activationId: context.activationId }] }, context.call).state;
-      const installed = effects.install(state, getUnit(state, 1), definition, {}, context.call);
+      state = effects.install(state, unitRef(getUnit(state, 1)), definition, { scopes: [{ type: "SKILL", unitId: 1, activationId: context.activationId }] }, context.call).state;
+      const installed = effects.install(state, unitRef(getUnit(state, 1)), definition, {}, context.call);
       independent = installed.value;
       return { state: installed.state, value: { type: "ACTIVATED" } };
     },
@@ -161,7 +162,7 @@ test("zero-duration activation closes its scope before finish content; closed bi
       observed.push({ active: unit.skill.active, effects: unit.effects.values().length });
       const rebound = effects.bindLifetime(state, independent, { type: "SKILL", unitId: 1, activationId: context.activationId });
       assert.equal(rebound.value, false);
-      const rejected = effects.install(rebound.state, unit, definition, { scopes: [{ type: "SKILL", unitId: 1, activationId: context.activationId }] }, context.call);
+      const rejected = effects.install(rebound.state, unitRef(unit), definition, { scopes: [{ type: "SKILL", unitId: 1, activationId: context.activationId }] }, context.call);
       assert.equal(rejected.value, undefined);
       return rejected.state;
     },
@@ -188,10 +189,10 @@ for (const trigger of ["SKILL", "EFFECT", "TICK"]) {
       onEnd(state, context) { ended.push(context.reason); return state; },
     });
     const f = fixture({}, { activate(state, context) {
-      const installedParent = effects.install(state, getUnit(state, 1), parent, {}, context.call);
+      const installedParent = effects.install(state, unitRef(getUnit(state, 1)), parent, {}, context.call);
       state = installedParent.state;
       parentRef = installedParent.value;
-      const installed = effects.install(state, getUnit(state, 1), dependent, { scopes: [{ type: "SKILL", unitId: 1, activationId: context.activationId }, parentRef, { type: "TICK", tick: 5 }] }, context.call);
+      const installed = effects.install(state, unitRef(getUnit(state, 1)), dependent, { scopes: [{ type: "SKILL", unitId: 1, activationId: context.activationId }, parentRef, { type: "TICK", tick: 5 }] }, context.call);
       dependentRef = installed.value;
       return { state: installed.state, value: { type: "ACTIVATED" } };
     } });

@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
@@ -28,7 +29,7 @@ function fixture(content = {}) {
   const installOwned = (state, context, expected = true) => {
     const refs = [];
     for (const additional of [[], [{ type: "UNIT", unitId: 1 }]]) {
-      const installed = effects.install(state, getUnit(state, 1), owned, { source: context.unitId, scopes: [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }, ...additional] }, context.call);
+      const installed = effects.install(state, unitRef(getUnit(state, 1)), owned, { source: context.unitId, scopes: [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }, ...additional] }, context.call);
       state = installed.state;
       assert.equal(installed.value !== undefined, expected);
       refs.push(installed.value);
@@ -95,7 +96,7 @@ test("skill finish can install a hook before nested damage", () => {
     onEnd(state, context) { return transitionUnit(state, context.unit.id, unit => ({ ...unit, vitality: removeHook(unit.vitality, "skill-finish-observer") })); },
   });
   const f = fixture({ finish(state, context, resources) {
-    const installed = effects.install(state, getUnit(state, 1), observer, {}, context.call);
+    const installed = effects.install(state, unitRef(getUnit(state, 1)), observer, {}, context.call);
     assert.ok(installed.value);
     return resources.settleDamage(installed.state, { sourceUnitId: 0, targetUnitId: 1, damageType: "TRUE", operands: createDamageOperands(1), tick: context.tick }, context.call).state;
   } });
@@ -135,7 +136,7 @@ test("refusal after self-death preserves independent remote effects", () => {
   const f = fixture({ activate(state, context, installOwned, resources) {
     state = resources.settleDamage(state, sourceDamage(100, context.tick), context.call).state;
     state = installOwned(state, context, false).state;
-    const installed = effects.install(state, getUnit(state, 1), independent, { source: context.unitId, scopes: [] }, context.call);
+    const installed = effects.install(state, unitRef(getUnit(state, 1)), independent, { source: context.unitId, scopes: [] }, context.call);
     assert.ok(installed.value);
     return { state: installed.state, value: { type: "REJECTED", reason: "late prerequisite" } };
   } });
@@ -157,7 +158,7 @@ function runtime(f) {
 test("departure callback errors propagate without publishing their prefix", () => {
   const prefix = effectDefinition("finish-prefix");
   const f = fixture({ finish(state, context) {
-    const installed = effects.install(state, getUnit(state, 1), prefix, { source: 0, scopes: [] }, context.call);
+    const installed = effects.install(state, unitRef(getUnit(state, 1)), prefix, { source: 0, scopes: [] }, context.call);
     assert.ok(installed.value);
     throw new Error("skill departure failed");
   } });

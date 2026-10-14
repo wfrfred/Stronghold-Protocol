@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { closeLifetime } from "../../dist/core/tactical/battle/execution/lifetime.js";
 import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { battlefieldView } from "../../dist/core/tactical/battle/state.js";
@@ -35,7 +36,7 @@ test("effect installation: a nested weaker rule does not enable its parent befor
             trace.push("install begin");
             ({ state, value: childRef } = effect.install(
                 state,
-                context.unit,
+                unitRef(context.unit),
                 child,
                 {},
                 context.call,
@@ -110,7 +111,7 @@ test("effect installation: an independent child enables while its parent finishe
         onInstall(state, context) {
             assert.equal(context.self.status, "INSTALLING");
             trace.push("install begin");
-            state = effect.install(state, context.unit, child, {}, context.call).state;
+            state = effect.install(state, unitRef(context.unit), child, {}, context.call).state;
             assert.equal(get(state, context.ref).status, "INSTALLING");
             state = effect.replaceEffect(
                 state,
@@ -180,7 +181,7 @@ test("effect installation: closing the host from a nested installation never ena
     );
     const parent = attackBuff("parent", 100, {
         onInstall(state, context) {
-            state = effect.install(state, context.unit, child, {}, context.call).state;
+            state = effect.install(state, unitRef(context.unit), child, {}, context.call).state;
             assert.equal(get(state, context.ref), undefined);
             return state;
         },

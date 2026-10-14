@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -36,7 +37,7 @@ function tempo(speed = 100, time = modifier()) {
     },
   };
 }
-const install = (state, definition, tick = 0, expires = null) => effects.install({ ...state, tick }, getUnit(state, 0), definition, { scopes: expires === null ? [] : [{ type: 'TICK', tick: expires }] }).state;
+const install = (state, definition, tick = 0, expires = null) => effects.install({ ...state, tick }, unitRef(getUnit(state, 0)), definition, { scopes: expires === null ? [] : [{ type: 'TICK', tick: expires }] }).state;
 const edit = (state, change) => refresh(effects.replaceEffect(state, { type: "EFFECT", unitId: 0, effectId: ref.effectId }, setData(get(state, ref), { ...get(state, ref).data, ...change })));
 function values(state) {
   const current = getUnit(state, 0);

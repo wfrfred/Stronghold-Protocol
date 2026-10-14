@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
@@ -212,7 +213,7 @@ test("an Effect can own a deployment observer and remove it during source retire
         },
         onEnd(state, context) { return deleteHook(state, context.ref.unitId, "talent"); },
     };
-    const source = definition("source", { onEnter(state, id) { return install(state, getUnit(state, id), effect).state; } });
+    const source = definition("source", { onEnter(state, id) { return install(state, unitRef(getUnit(state, id)), effect).state; } });
     const runtime = new BattleRuntime(input({
         initialUnits: [{ definition: source, position: [7, 0] }],
         deployment: deployment([definition("first"), definition("second")]),

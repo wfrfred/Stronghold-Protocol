@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../../core/tactical/unit/query.js";
 import type { Profile } from "../../../data/arknights/operator.js";
 import { getUnit, updateUnit } from "../../../core/tactical/battle/state.js";
 import type { CombatResources } from "../../../core/tactical/battle/resources.js";
@@ -72,7 +73,7 @@ export function create(
 
             const result = install(
                 state,
-                unit,
+                unitRef(unit),
                 skillEffect,
                 {
                     source: unit.id,
@@ -147,7 +148,7 @@ export function create(
             const unit = getUnit(state, unitId);
 
             return talentBonus !== undefined && unit !== undefined && hasOffense(unit)
-                ? install(state, unit, talent).state
+                ? install(state, unitRef(unit), talent).state
                 : state;
         },
     };

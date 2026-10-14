@@ -23,6 +23,7 @@ import type { Vitality, State as VitalityState } from ${sourceModule('unit/capab
 import type { RoutedLocomotionState, RouteControlState } from ${sourceModule('unit/capability/locomotion/capability')};
 import type { Definition } from ${sourceModule('unit/effect/definition')};
 import { install } from ${sourceModule('unit/effect/operations')};
+import { ref as unitRef } from ${sourceModule('unit/query')};
 import type { State as BattleState } from ${sourceModule('battle/state')};
 type OptionalKey = 'offense' | 'skill' | 'elemental';
 type OperatorBase = Omit<OperatorDefinition, OptionalKey>;
@@ -83,14 +84,14 @@ if (enemy.skill !== undefined) { const id: string = enemy.skill.id; }
 if (hasOffense(initializedOperator)) {
   const attack: number = initializedOperator.definition.offense.attack;
   const offense: OffenseState = initializedOperator.offense;
-  install(battle, initializedOperator, healthAttack);
+  install(battle, unitRef(initializedOperator), healthAttack);
 }
 if (hasSkill(initializedEnemy)) {
   const id: string = initializedEnemy.definition.skill.id;
   const sp: number = initializedEnemy.skill.sp;
 }
 if (snapshot.locomotion !== undefined) { const route: RouteControlState = snapshot.locomotion.mainRoute; }
-install(battle, staticOperatorUnit, healthAttack);
+install(battle, unitRef(staticOperatorUnit), healthAttack);
 `;
   const negatives = [
     "const requiredOperatorOffense: OffenseDefinition = operator.offense;",
@@ -100,8 +101,8 @@ install(battle, staticOperatorUnit, healthAttack);
     "const requiredEnemyElemental: ElementalDefinition = enemy.elemental;",
     "const requiredOperatorOffenseState: OffenseState = initializedOperator.offense;",
     "const requiredEnemySkillState: SkillState = initializedEnemy.skill;",
-    "install(battle, initializedOperator, healthAttack);",
-    "install(battle, bareOperatorUnit, healthAttack);",
+    "install(battle, unitRef(initializedOperator), healthAttack);",
+    "install(battle, unitRef(bareOperatorUnit), healthAttack);",
   ];
   try {
     writeFileSync(positivePath, declarations + positive);

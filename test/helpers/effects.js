@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { fixtureBattlefieldState as fixtureBattlefield } from "./battlefield.js";
 import {
     createBattleState,
@@ -32,7 +33,7 @@ export function effectFixtureWork(...units) {
 
 export function installFixtureEffect(unit, definition, initial = {}, tick = 0) {
     const state = effectFixtureWork(unit);
-    const installed = effects.install({ ...state, tick }, unit, definition, initial);
+    const installed = effects.install({ ...state, tick }, unitRef(unit), definition, initial);
     return getUnit(installed.state, unit.id);
 }
 
@@ -48,7 +49,7 @@ export function install(
     unitId = [...state.battlefield.units.keys()][0],
     initial = {},
 ) {
-    return effects.install(state, getUnit(state, unitId), definition, initial);
+    return effects.install(state, unitRef(getUnit(state, unitId)), definition, initial);
 }
 
 export function at(state, tick) {

@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { deadline, setDeadline, setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -161,7 +162,7 @@ function harness({ stackCount = 3, maxValidStackCnt = -1 } = {}) {
             definition: { id: "receiver", offense: { attack: 100 } },
         }),
     );
-    const installed = effects.install(work, getUnit(work, 0), content, {
+    const installed = effects.install(work, unitRef(getUnit(work, 0)), content, {
         source: 10,
         scopes: [{ type: "TICK", tick: 30 }],
     });

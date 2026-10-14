@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { selectTargets } from "../../dist/core/tactical/unit/targeting/select.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
@@ -84,7 +85,7 @@ export function auraEffect(
             );
             const installed = effects.install(
                 state,
-                getUnit(state, unitId),
+                unitRef(getUnit(state, unitId)),
                 receiver,
                 {
                     source: context.ref.unitId,
@@ -144,7 +145,7 @@ export function auraEffect(
 }
 
 export function seededPlacement(effect, unit = auraUnit(0), scopes = []) {
-    const installed = effects.install(effectFixtureWork(unit), unit, effect, {
+    const installed = effects.install(effectFixtureWork(unit), unitRef(unit), effect, {
         source: unit.id,
         scopes,
     });

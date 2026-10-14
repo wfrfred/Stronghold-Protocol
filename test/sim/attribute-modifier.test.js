@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -282,7 +283,7 @@ test("attribute modifiers: native Mire percentages affect existing ASPD and norm
         },
     });
     let installed = effectFixtureWork(unit);
-    installed = effects.install(installed, getUnit(installed, 0), program).state;
+    installed = effects.install(installed, unitRef(getUnit(installed, 0)), program).state;
     const receiver = getUnit(installed, 0);
     assert.equal(
         resolveAttackSpeed(receiver.definition.action, receiver.action, {
@@ -340,7 +341,7 @@ test("attribute modifiers: inspiration samples belong to the Effect input and re
     let work = effectFixtureWork(unit(0, 100), unit(1, 20));
     const resolve = (work, id) => resolveAttackPower(id, battlefieldView(work));
     const sampleInput = (work) => ({ sourceAttack: resolve(work, 0), ratio: 0.6 });
-    const installed = effects.install(work, getUnit(work, 1), program, {
+    const installed = effects.install(work, unitRef(getUnit(work, 1)), program, {
         source: 0,
         data: sampleInput(work),
     });
@@ -348,7 +349,7 @@ test("attribute modifiers: inspiration samples belong to the Effect input and re
     const ref = installed.value;
     assert.equal(resolve(work, 1), 80);
     const copied = getUnit(work, 1);
-    work = effects.install(work, getUnit(work, 0), amplify).state;
+    work = effects.install(work, unitRef(getUnit(work, 0)), amplify).state;
     assert.equal(resolve(work, 0), 200);
     assert.equal(resolve(work, 1), 80);
     work = effects.setEnabled(work, ref, false);

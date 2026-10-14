@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../core/tactical/unit/query.js";
 import { CombatResources } from "../core/tactical/battle/resources.js";
 import type { BattleResources } from "../core/tactical/battle/runtime.js";
 import { battlefieldView, getUnit, updateUnit } from "../core/tactical/battle/state.js";
@@ -67,7 +68,7 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
             if (target !== undefined) {
                 state = install(
                     state,
-                    target,
+                    unitRef(target),
                     marker,
                     {
                         source: context.projectile.source,
@@ -139,7 +140,7 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
                         });
                         state = install(
                             launched.state,
-                            source,
+                            unitRef(source),
                             boost,
                             {
                                 source: source.id,

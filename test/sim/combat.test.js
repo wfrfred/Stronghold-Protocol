@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { fixtureBattlefieldState } from "../helpers/battlefield.js";
 import { transition } from "../../dist/core/tactical/battlefield/state.js";
 // Combat rules: statuses & immunities, cold→freeze, element bursts, blocking, melee vs FLY, stealth, priorities, healers.
@@ -1161,8 +1162,8 @@ test('core protection effects: withdrawing one source retains the other source a
 
   for (const effect of [healFree, untargetable, invincible, undeadable]) {
     let state = createBattleState(fixtureBattlefieldState([source, target]));
-    const first = effects.install(state, getUnit(state, 1), effect);
-    const second = effects.install(first.state, getUnit(first.state, 1), effect);
+    const first = effects.install(state, unitRef(getUnit(state, 1)), effect);
+    const second = effects.install(first.state, unitRef(getUnit(first.state, 1)), effect);
     state = second.state;
     const both = getUnit(state, 1);
 
@@ -1227,7 +1228,7 @@ test('core vitality: fatal protection uses the rules remaining after reception h
           state = effects.end(state, { type: 'EFFECT', unitId: 1,
             effectId: context.unit.effects.values()[0].id });
         } else {
-          state = effects.install(state, context.unit, undeadable).state;
+          state = effects.install(state, unitRef(context.unit), undeadable).state;
         }
         return { state, value: { value: pending } };
       },
@@ -1251,7 +1252,7 @@ test('core vitality: healing eligibility is rechecked when a selected target gai
   const query = compileTargeting(healingTargeting(), ['HEAL']);
   assert.deepEqual(selectTargets({ source, battlefield: battlefieldView(state) }, query)
     .map(unit => unit.id), [1]);
-  state = effects.install(state, getUnit(state, 1), healFree).state;
+  state = effects.install(state, unitRef(getUnit(state, 1)), healFree).state;
   const request = { sourceUnitId: 0, targetUnitId: 1, tick: 0, power: 30, ignoreHealFree: false };
   const blocked = resolveHealing(state, request);
   const allowed = resolveHealing(state, { ...request, ignoreHealFree: true });

@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { battlefieldView } from "../../dist/core/tactical/battle/state.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -46,7 +47,7 @@ test("effect cleanup: a replacement installed during end uses a new identity and
             onEnd(state, context) {
                 const installed = effect.install(
                     state,
-                    context.unit,
+                    unitRef(context.unit),
                     replacement,
                     {},
                     context.call,

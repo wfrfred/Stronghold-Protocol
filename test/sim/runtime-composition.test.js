@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { setData as setEffectData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { initialize as initializeActionState } from "../../dist/core/tactical/unit/capability/action/capability.js";
 import {
@@ -221,7 +222,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                         } else {
                             const installed = installEffect(
                                 state,
-                                getUnit(state, ref.unitId),
+                                unitRef(getUnit(state, ref.unitId)),
                                 marker,
                                 {
                                     source: 0,
@@ -284,7 +285,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                 );
                 const installed = installEffect(
                     state,
-                    getUnit(state, unitId),
+                    unitRef(getUnit(state, unitId)),
                     receiver,
                     {
                         source: context.ref.unitId,
@@ -385,7 +386,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
     const installation = (state, context, program) =>
         installEffect(
             state,
-            getUnit(state, context.sourceUnitId),
+            unitRef(getUnit(state, context.sourceUnitId)),
             program,
             {
                 source: context.sourceUnitId,
