@@ -46,7 +46,7 @@ test("battle state: independent branches keep their own registrations and remova
     assert.equal(getUnit(left, 8), undefined);
     assert.deepEqual(battlefieldView(right).unitIds, [8]);
     assert.equal(getUnit(initial, 1), first);
-    assert.deepEqual(initial.registeredUnitIds, []);
+    assert.deepEqual(battlefieldView(initial).unitIds, [1]);
 });
 
 test("battle state: no-op updates retain identity and zero HP alone does not remove a unit", () => {
@@ -92,5 +92,5 @@ test("battle state: explicit batch updates do not register missing units", () =>
     assert.equal(getUnit(changed, 8), spawned);
     assert.equal(snapshot.getUnit(1), first);
     assert.equal(snapshot.getUnit(8), undefined);
-    assert.deepEqual(changed.registeredUnitIds, [8]);
+    assert.deepEqual(battlefieldView(changed).unitIds, [1, 2, 8]);
 });

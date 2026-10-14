@@ -25,7 +25,6 @@ export class SkillResources {
     }
 
     get(definition: Definition): CompiledSkill {
-        this.#registration.assertUsable();
         const compiled = this.#compiledSkills.get(definition);
 
         if (compiled === undefined) {

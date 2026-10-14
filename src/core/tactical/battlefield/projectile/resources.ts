@@ -31,7 +31,6 @@ export class ProjectileResources {
     }
 
     get<S extends object>(ref: ProjectileDefinitionRef<S>): ProjectileDefinition<S> {
-        this.#registration.assertUsable();
         const definition = this.#definitions.get(ref.id);
 
         if (definition?.ref !== (ref as unknown)) {

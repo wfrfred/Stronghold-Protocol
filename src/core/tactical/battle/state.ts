@@ -36,7 +36,6 @@ export interface BattleState {
     readonly actionExecutions: ActionExecutionState;
     readonly deployment: DeploymentState;
     readonly events: readonly Event[];
-    readonly registeredUnitIds: readonly Id[];
     readonly removedUnits: BattlefieldChangeResult["removedUnits"];
     readonly closedLifetimes: ReadonlySet<string>;
 }
@@ -60,7 +59,6 @@ export function createBattleState(
         actionExecutions,
         deployment,
         events: [],
-        registeredUnitIds: [],
         removedUnits: [],
         closedLifetimes: new Set(),
     };
@@ -80,7 +78,6 @@ export function advanceBattlefield(
     const next = {
         ...state,
         battlefield: advanced.state,
-        registeredUnitIds: [...state.registeredUnitIds, ...facts.registeredUnitIds],
         removedUnits: [...state.removedUnits, ...facts.removedUnits],
     };
 

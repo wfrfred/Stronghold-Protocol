@@ -157,7 +157,7 @@ test("sequential predefined commands allocate after all earlier callback results
         0,
         resources,
     );
-    assert.deepEqual(advanced.state.registeredUnitIds, [1, 2]);
+    assert.deepEqual([...advanced.state.battlefield.units.keys()], [1, 2]);
     assert.equal(getUnit(advanced.state, 1).definition.id, "callback-child");
     assert.equal(getUnit(advanced.state, 2).definition.id, "predefined-child");
     assert.equal(advanced.state.execution.nextUnitId, 3);

@@ -29,14 +29,10 @@ export class CombatResources {
     readonly skills = new SkillResources(this.#registration);
     readonly elemental = new ElementalResources(this.#registration);
     readonly settleElementDamage: ElementDamageOperation = (state, request, call) => {
-        this.#registration.assertUsable();
-
         return resolveElementDamage(state, request, this, call);
     };
 
     readonly settleElementHeal: ElementHealOperation = (state, request) => {
-        this.#registration.assertUsable();
-
         return resolveElementHeal(state, request);
     };
 
@@ -65,14 +61,10 @@ export class CombatResources {
     ): BattleState => retireCombatUnit(state, unitId, this, tick, call);
 
     readonly settleDamage: DamageOperation = (state, request, call) => {
-        this.#registration.assertUsable();
-
         return resolveDamage(state, request, this, call);
     };
 
     readonly settleHealing: HealingOperation = (state, request, call) => {
-        this.#registration.assertUsable();
-
         return resolveHealing(state, request, call);
     };
 

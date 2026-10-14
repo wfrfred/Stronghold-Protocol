@@ -33,7 +33,6 @@ export class ElementalResources {
     }
 
     get(receiver: ElementalReceiver, type: ElementType): ElementalBurstDefinition {
-        this.#registration.assertUsable();
         const definition = this.#definitions.get(receiver)?.get(type);
 
         if (definition === undefined) {

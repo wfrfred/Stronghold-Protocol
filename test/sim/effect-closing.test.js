@@ -295,7 +295,7 @@ test("effect lifetimes: terminal hook cleanup cannot recreate a host killed by a
     battle = effect.end(battle, ref);
 
     assert.equal(getUnit(battle, 0), undefined);
-    assert.deepEqual(battle.registeredUnitIds, []);
+    assert.deepEqual(getUnit(battle, 1).effects.values(), []);
     assert.deepEqual(
         battle.removedUnits.map(({ unitId, reason }) => [unitId, reason]),
         [[0, "DEATH"]],
