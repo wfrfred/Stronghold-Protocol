@@ -28,7 +28,9 @@ import { createDefinition as createBlockerDefinition, hasBlocker, resolveCapacit
 import { hasBlockable } from '../../dist/core/tactical/unit/capability/blocking/blockable.js';
 import * as modifier from '../../dist/core/tactical/unit/contribution/value.js';
 import { createHitDefinition, hasHit, hasSpatial } from '../../dist/core/tactical/unit/capability/spatial/capability.js';
-import { addStatusContribution, deriveEffectiveStatusFlags, hasStatus, initialize as initializeStatusState, removeStatusContribution, setStatusContributionParticipation } from '../../dist/core/tactical/unit/capability/status/capability.js';
+import { initialize as initializeTargetableState, hasTargetable, setRule as setTargetableRule, removeRule as removeTargetableRule, allowsTarget } from '../../dist/core/tactical/unit/capability/targetable/capability.js';
+import { setHealingReceptionRule, removeHealingReceptionRule } from '../../dist/core/tactical/unit/capability/vitality/capability.js';
+import { canReceiveHealing } from '../../dist/core/tactical/unit/capability/vitality/healing/reception.js';
 import { createBlockGeometry, createRangeGeometry, createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { geometryContainsPosition, rangeContainsPosition, rangeOverlapsHit } from '../../dist/core/tactical/geometry/intersection.js';
 import { updateBlockingRelations } from '../../dist/core/tactical/battlefield/blocking/relations.js';
@@ -427,7 +429,6 @@ const catalogDefinition = () => Object.freeze({
   } }),
   spatial: Object.freeze({ layer: 'GROUND' }),
   hit: createHitDefinition({ geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.25 }] } }),
-  status: { initialFlags: ['HEAL_FREE'] },
   blocker: createBlockerDefinition({ capacity: 2, geometry: { radius: 0.7 } }),
   blockable: Object.freeze({ weight: 1 }),
   defense: Object.freeze({ defense: 20, resistance: 10 }),
@@ -466,7 +467,7 @@ test('core unit initialization uses prepared states and separates configuration 
   assert.equal(unit.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 9);
   assert.equal(unit.spatialPresence.present, false);
   assert.equal(Object.hasOwn(unit, 'defense'), true);
-  assert.deepEqual(unit.blocker, { capacity: [], geometry: { radius: 0.7 }, enabled: true });
+  assert.deepEqual(unit.blocker, { capacity: [], geometry: { radius: 0.7 }, enabled: true, rules: [] });
   assert.equal(resolveCapacity(unit.definition.blocker, unit.blocker), 2);
   assert.deepEqual(unit.blockable, { weight: 1, enabled: true });
 
@@ -511,7 +512,7 @@ test('archetype definitions share passive configuration while current allegiance
     const definition = createDefinition(input);
     assert.equal(definition.allegiance, input.allegiance);
     assert.equal(definition.spatial, input.spatial);
-    assert.equal(definition.status, input.status);
+    assert.equal(definition.hit.geometry, input.hit.geometry);
     const unit = initialize({ id: 1, definition, position: [0, 0] });
     assert.equal(unit.allegiance, definition.allegiance);
     const changed = { ...unit, allegiance: { side: 'ENEMY' } };
@@ -535,7 +536,7 @@ test('core capability guards inspect composition independently of shared snapsho
     states: { locomotion: catalogRoutedState() } });
   for (const [key, guard] of [
     ['vitality', hasVitality], ['locomotion', hasLocomotion], ['allegiance', hasAllegiance],
-    ['action', hasAction], ['spatial', hasSpatial], ['hit', hasHit], ['status', hasStatus], ['blocker', hasBlocker],
+    ['action', hasAction], ['spatial', hasSpatial], ['hit', hasHit], ['blocker', hasBlocker],
     ['blockable', hasBlockable],
   ]) {
     const missingState = { ...unit };
@@ -560,12 +561,12 @@ test('core capability guards inspect composition independently of shared snapsho
 
 test('core snapshots share capabilities and retain earlier values across immutable updates', () => {
   const unit = initialize({ id: 1, definition: catalogDefinition(), position: [2, 0],
-    states: { locomotion: catalogRoutedState(), spatialPresence: { present: true } } });
+    states: { locomotion: catalogRoutedState(), spatialPresence: { present: true }, targetable: initializeTargetableState() } });
   const snapshot = copy({ ...unit, extension: 'outside-unit-state' });
   assert.equal(Object.hasOwn(snapshot, 'extension'), false);
   assert.equal(snapshot.definition, unit.definition);
   assert.equal(snapshot.position, unit.position);
-  for (const key of ['vitality', 'allegiance', 'action', 'spatial', 'hit', 'status',
+  for (const key of ['vitality', 'allegiance', 'action', 'spatial', 'hit', 'targetable',
     'blocker', 'blockable', 'spatialPresence', 'locomotion']) {
     assert.equal(snapshot[key], unit[key], key);
   }
@@ -596,7 +597,7 @@ test('core snapshots share capabilities and retain earlier values across immutab
   assert.equal(updated.locomotion.alternativeRoute.route.progress.checkpoint.remainingTicks, 9);
   assert.equal(updated.locomotion.mainRoute.navigation, snapshot.locomotion.mainRoute.navigation);
   assert.equal(updated.hit, snapshot.hit);
-  assert.equal(updated.status, snapshot.status);
+  assert.equal(updated.targetable, snapshot.targetable);
 });
 
 test('core geometry boundaries own shape values and share them across snapshots', () => {
@@ -666,45 +667,55 @@ test('core grid ranges rotate all four directions around continuous source posit
   assert.equal(rangeContainsPosition(originCell, [0, 0], [0.75, 0.25]), false);
 });
 
-test('core status contributions share immutable flags and preserve earlier states', () => {
-  const initialFlags = ['INVINCIBLE'];
-  const definition = { initialFlags };
-  assert.equal(definition.initialFlags, initialFlags);
-  const initial = initializeStatusState(definition);
-  let state = initial;
-  const baseline = state.contributions[0];
-  const flags = ['HEAL_FREE'];
-  state = addStatusContribution(state, { id: 'source-a', flags });
-  const first = state;
-  state = addStatusContribution(state, { id: 'source-b', flags: ['HEAL_FREE'] });
-  assert.equal(state.contributions[0], baseline);
-  assert.equal(state.contributions[1].flags, flags);
-  assert.equal(state.contributions[1], first.contributions[1]);
-  assert.equal(deriveEffectiveStatusFlags(state).has('INVISIBLE'), false);
-  assert.deepEqual([...deriveEffectiveStatusFlags(initial)], ['INVINCIBLE']);
-  assert.throws(() => addStatusContribution(state, { id: 'source-a', flags: [] }), /duplicate/);
-  assert.throws(() => addStatusContribution(state, { id: '', flags: [] }), /nonempty/);
-  assert.throws(() => addStatusContribution(state, { id: baseline.id, flags: [] }), /reserved/);
-  const disabled = setStatusContributionParticipation(state, 'source-a', false);
-  assert.equal(disabled.contributions[0], baseline);
-  assert.equal(disabled.contributions[1].flags, flags);
-  assert.equal(disabled.contributions[2], state.contributions[2]);
-  assert.equal(state.contributions[1].participating, true);
-  assert.equal(disabled.contributions[1].participating, false);
-  assert.equal(setStatusContributionParticipation(disabled, 'source-a', false), disabled);
-  state = removeStatusContribution(state, 'source-a');
-  assert.equal(deriveEffectiveStatusFlags(state).has('HEAL_FREE'), true);
-  state = removeStatusContribution(state, 'source-b');
-  assert.deepEqual([...deriveEffectiveStatusFlags(state)], ['INVINCIBLE']);
-  assert.throws(() => removeStatusContribution(state, baseline.id), /cannot be removed/);
+test('core domain rules compose independently and preserve earlier unit states', () => {
+  const definition = { id: 'rule_unit', vitality: { maxHp: 100 } };
+  const first = initialize({ id: 1, definition, position: [0, 0],
+    states: { targetable: initializeTargetableState() } });
+  const second = initialize({ id: 2, definition, position: [0, 0],
+    states: { targetable: initializeTargetableState() } });
+  const source = { id: 3, definition: { id: 'query_source' }, position: [0, 0] };
+  const selector = { type: 'HEAL', ignoreHealFree: false };
+  const query = target => ({ source, target, battlefield: { getUnit: () => undefined },
+    selector, purposes: ['HEAL'] });
+  const restrictSource = { id: 'source-a', allows: context => context.source.id !== source.id };
+  const restrictPurpose = { id: 'source-b', allows: context => context.purposes.includes('DAMAGE') };
+  const one = setTargetableRule(first.targetable, restrictSource);
+  const both = setTargetableRule(one, restrictPurpose);
+  const afterOne = removeTargetableRule(both, 'source-a');
+  const afterBoth = removeTargetableRule(afterOne, 'source-b');
 
-  const unitDefinition = Object.freeze({ id: 'shared_status_definition', status: definition });
-  const firstUnit = initialize({ id: 1, definition: unitDefinition, position: [0, 0] });
-  const second = initialize({ id: 2, definition: unitDefinition, position: [0, 0] });
-  const updated = { ...firstUnit, status: addStatusContribution(firstUnit.status, { id: 'source-a', flags: ['HEAL_FREE'] }) };
-  assert.equal(deriveEffectiveStatusFlags(second.status).has('HEAL_FREE'), false);
-  assert.equal(deriveEffectiveStatusFlags(firstUnit.status).has('HEAL_FREE'), false);
-  assert.equal(deriveEffectiveStatusFlags(updated.status).has('HEAL_FREE'), true);
+  assert.equal(hasTargetable(first), true);
+  assert.equal(hasTargetable({ id: 4, definition, position: [0, 0] }), false);
+  assert.equal(one.rules[0], restrictSource);
+  assert.equal(both.rules[0], one.rules[0]);
+  assert.equal(setTargetableRule(both, restrictSource), both);
+  assert.equal(removeTargetableRule(both, 'missing'), both);
+  assert.equal(allowsTarget(query({ ...first, targetable: both })), false);
+  assert.equal(allowsTarget(query({ ...first, targetable: afterOne })), false);
+  assert.equal(allowsTarget(query({ ...first, targetable: afterBoth })), true);
+  assert.equal(allowsTarget(query(first)), true);
+  assert.equal(allowsTarget(query(second)), true);
+  assert.equal(first.definition, second.definition);
+  assert.deepEqual(first.targetable.rules, []);
+  assert.equal(both.rules.length, 2);
+
+  const denyHealing = id => ({ id, cancel: context =>
+    context.ignoreHealFree ? null : { reason: 'SOURCE_REJECTS_HEALING' } });
+  const vitalityOne = setHealingReceptionRule(first.vitality, denyHealing('healer-a'));
+  const vitalityBoth = setHealingReceptionRule(vitalityOne, denyHealing('healer-b'));
+  const healing = vitality => canReceiveHealing({ source, target: { ...first, vitality },
+    battlefield: query(first).battlefield, ignoreHealFree: false });
+  const withdrawnOne = removeHealingReceptionRule(vitalityBoth, 'healer-a');
+  const withdrawnBoth = removeHealingReceptionRule(withdrawnOne, 'healer-b');
+
+  assert.equal(healing(first.vitality), true);
+  assert.equal(healing(vitalityBoth), false);
+  assert.equal(healing(withdrawnOne), false);
+  assert.equal(healing(withdrawnBoth), true);
+  assert.equal(vitalityBoth.healingReceptionRules[0], vitalityOne.healingReceptionRules[0]);
+  assert.equal(removeHealingReceptionRule(vitalityBoth, 'missing'), vitalityBoth);
+  assert.equal(vitalityBoth.healingReceptionRules.length, 2);
+  assert.deepEqual(second.vitality.healingReceptionRules, []);
 });
 
 test('core blocking uses current state radius and includes center-distance equality', () => {

@@ -1,3 +1,4 @@
+import * as registry from "../../hook/hook.js";
 import { assertNonnegativeSafeInteger } from "../../../../common/assert.js";
 import { createBlockGeometry, type BlockGeometry } from "../../../geometry/shape.js";
 import * as contribution from "../../contribution/contribution.js";
@@ -9,10 +10,16 @@ export interface Definition {
     readonly geometry: BlockGeometry;
 }
 
+export interface Rule {
+    readonly id: string;
+    readonly allows: (unit: Unit) => boolean;
+}
+
 export interface State {
     readonly capacity: readonly contribution.Contribution[];
     readonly geometry: BlockGeometry;
     readonly enabled: boolean;
+    readonly rules: readonly Rule[];
 }
 
 export interface Blocker {
@@ -40,7 +47,24 @@ export function initialize(definition: Definition): State {
         capacity: [],
         geometry: definition.geometry,
         enabled: true,
+        rules: [],
     };
+}
+
+export function setRule(state: State, rule: Rule): State {
+    const rules = registry.set(state.rules, rule);
+
+    return rules === state.rules ? state : { ...state, rules };
+}
+
+export function removeRule(state: State, id: string): State {
+    const rules = registry.remove(state.rules, id);
+
+    return rules === state.rules ? state : { ...state, rules };
+}
+
+export function canBlock(unit: Unit & Blocker): boolean {
+    return unit.blocker.enabled && unit.blocker.rules.every((rule) => rule.allows(unit));
 }
 
 function changeCapacityContributions(

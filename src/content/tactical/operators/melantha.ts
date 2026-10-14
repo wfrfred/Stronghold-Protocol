@@ -106,7 +106,6 @@ export function create(
         allegiance: { side: "ALLY" },
         spatial: { layer: "GROUND" },
         hit: { geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.25 }] } },
-        status: { initialFlags: [] },
         blocker: { capacity: profile.attributes.blockCapacity, geometry: { radius: 0.70709997 } },
         action: {
             attackSpeed: profile.attributes.attackSpeed,

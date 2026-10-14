@@ -9,10 +9,9 @@ import { appendEvents, getUnit, type BattleState, type Result } from "../../../b
 import { emptyCall, type CallContext } from "../../../battle/execution/call.js";
 import type { Id } from "../../unit.js";
 import { isSpatiallyPresent } from "../presence/capability.js";
-import type { ActionDefinition, TargetBindingId } from "./capability.js";
+import { canAct, hasAction, type ActionDefinition, type TargetBindingId } from "./capability.js";
 import type { ProjectileOperations } from "../../../battlefield/projectile/operations.js";
 import { gainUnitSkillSp } from "../../../battle/execution/skill-sp.js";
-import { hasStatusFlag } from "../status/capability.js";
 import { beforeActionRelease } from "./release.js";
 
 export interface ActionExecutionResources {
@@ -351,7 +350,7 @@ export function resumeActionExecution(
             return cancelled("SOURCE_ABSENT");
         }
 
-        if (hasStatusFlag(source, "STUNNED")) {
+        if (hasAction(source) && !canAct(source)) {
             return cancelled("INTERRUPTED");
         }
         if (

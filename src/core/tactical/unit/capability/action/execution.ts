@@ -6,7 +6,7 @@ import {
     type BattleState,
 } from "../../../battle/state.js";
 import { emptyCall, type CallContext } from "../../../battle/execution/call.js";
-import { hasAction } from "./capability.js";
+import { canAct, hasAction } from "./capability.js";
 import {
     acceptActionExecution,
     resumeActionExecution,
@@ -18,7 +18,6 @@ import {
     reconcileActionCooldown,
     resolveActionIntervalTicks,
 } from "./timing.js";
-import { hasStatusFlag } from "../status/capability.js";
 
 import type { Id } from "../../unit.js";
 import type { CompiledAction } from "./compiled.js";
@@ -46,7 +45,7 @@ export function startAction(
         source.lifecycle === "LEAVING" ||
         !hasAction(source) ||
         !isSpatiallyPresent(source) ||
-        hasStatusFlag(source, "STUNNED")
+        !canAct(source)
     ) {
         return state;
     }

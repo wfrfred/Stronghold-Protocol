@@ -40,6 +40,11 @@ export interface Definition {
     readonly normalAction: ActionDefinition;
 }
 
+export interface Rule {
+    readonly id: string;
+    readonly allows: (unit: Unit) => boolean;
+}
+
 export interface State {
     readonly readyAtTick: number;
     readonly recoveryUntilTick: number;
@@ -47,6 +52,7 @@ export interface State {
     readonly attackSpeed: readonly contribution.Contribution<contribution.Input<Context>>[];
     readonly baseAttackTime: readonly contribution.Contribution<contribution.Input<Context>>[];
     readonly beforeRelease: readonly ActionReleaseHook[];
+    readonly rules: readonly Rule[];
 }
 
 export interface Action {
@@ -129,7 +135,24 @@ export function initialize(tick = 0): State {
         attackSpeed: [],
         baseAttackTime: [],
         beforeRelease: [],
+        rules: [],
     };
+}
+
+export function setRule(state: State, rule: Rule): State {
+    const rules = hook.set(state.rules, rule);
+
+    return rules === state.rules ? state : { ...state, rules };
+}
+
+export function removeRule(state: State, id: string): State {
+    const rules = hook.remove(state.rules, id);
+
+    return rules === state.rules ? state : { ...state, rules };
+}
+
+export function canAct(unit: Unit & Action): boolean {
+    return unit.action.rules.every((rule) => rule.allows(unit));
 }
 
 export function setBeforeReleaseHook(state: State, entry: ActionReleaseHook): State {

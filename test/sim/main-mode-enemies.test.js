@@ -28,7 +28,7 @@ function guard(id, position, blockCapacity = 1) {
     id: 'test-guard', vitality: { maxHp: 1000 }, defense: { defense: 40, resistance: 0 },
     allegiance: { side: 'ALLY' }, spatial: { layer: 'GROUND' },
     hit: { geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.2 }] } },
-    status: { initialFlags: [] }, blocker: { capacity: blockCapacity, geometry: { radius: 0.70709997 } },
+    blocker: { capacity: blockCapacity, geometry: { radius: 0.70709997 } },
   } });
 }
 

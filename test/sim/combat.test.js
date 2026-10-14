@@ -24,11 +24,18 @@ import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { compileTargeting } from "../../dist/core/tactical/unit/targeting/compile.js";
 import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { selectTargets } from '../../dist/core/tactical/unit/targeting/select.js';
-import { addStatusContribution, hasStatusFlag } from '../../dist/core/tactical/unit/capability/status/capability.js';
+import { initialize as initializeTargetableState, setRule as setTargetableRule, allowsTarget } from '../../dist/core/tactical/unit/capability/targetable/capability.js';
+import { invincible, undeadable, healFree } from '../../dist/content/tactical/effects/protection.js';
+import { invisible, camouflage, untargetable, allyUntargetable } from '../../dist/content/tactical/effects/visibility.js';
+import { installFixtureEffect } from '../helpers/effects.js';
+import * as effects from '../../dist/core/tactical/unit/effect/operations.js';
+import { resolveHealing } from '../../dist/core/tactical/unit/capability/vitality/healing/settlement.js';
+import { canReceiveHealing } from '../../dist/core/tactical/unit/capability/vitality/healing/reception.js';
+import { setHook as setDamageHook } from '../../dist/core/tactical/unit/capability/vitality/damage/hook.js';
 import * as contribution from '../../dist/core/tactical/unit/contribution/contribution.js';
 import * as modifier from '../../dist/core/tactical/unit/contribution/value.js';
 
-import { createBattleState, getUnit, updateUnit } from '../../dist/core/tactical/battle/state.js';
+import { createBattleState, battlefieldView, getUnit, updateUnit } from '../../dist/core/tactical/battle/state.js';
 import { createActionExecutionState } from '../../dist/core/tactical/unit/capability/action/process.js';
 
 const startSingleAction = (source, compiled, context) => {
@@ -389,7 +396,7 @@ test('core combat: snapshots share capabilities while immutable battlefield upda
   const sharedOperator = repeated.units.find(unit => unit.id === 0);
   const readyAtTick = operator.action.readyAtTick;
   const hp = operator.vitality.hp;
-  for (const key of ['action', 'allegiance', 'spatial', 'hit', 'status', 'blocker', 'vitality']) {
+  for (const key of ['action', 'allegiance', 'spatial', 'hit', 'effects', 'blocker', 'vitality']) {
     assert.equal(sharedOperator[key], operator[key], key);
   }
   assert.equal(repeated.blockingRelations, snapshot.blockingRelations);
@@ -409,7 +416,8 @@ test('core combat: snapshots share capabilities while immutable battlefield upda
     hit: { ...operator.hit, geometry: createShapeGeometry({ shapes: [
       { type: 'CIRCLE', offset: [0, 0], radius: 100 },
     ] }) },
-    status: addStatusContribution(operator.status, { id: 'changed-targeting', flags: ['TARGET_FREE'] }),
+    targetable: setTargetableRule(operator.targetable ?? initializeTargetableState(),
+      { id: 'changed-targeting', allows: () => false }),
     blocker: { ...operator.blocker, capacity: contribution.set([], { id: 'disabled-capacity', value: [modifier.create({ finalScaler: 0 })],
     }) },
     vitality: { ...operator.vitality, hp: 0 },
@@ -419,7 +427,10 @@ test('core combat: snapshots share capabilities while immutable battlefield upda
   assert.equal(draft.getUnit(0), changed);
   assert.deepEqual(draft.blockingRelations, []);
   assert.equal(draft.getUnit(0).action.readyAtTick, 999999);
-  assert.equal(hasStatusFlag(draft.getUnit(0), 'TARGET_FREE'), true);
+  const targetingContext = target => ({ source: snapshot.units.find(unit => unit.id === 1),
+    target, battlefield: draft, selector: operator.definition.action.normalAction.targetGroups[0].targeting,
+    purposes: ['DAMAGE'] });
+  assert.equal(allowsTarget(targetingContext(draft.getUnit(0))), false);
   assert.equal(battlefield.snapshot('state'), previous);
   battlefield.apply();
   assert.equal(battlefield.snapshot('state'), draft);
@@ -430,7 +441,7 @@ test('core combat: snapshots share capabilities while immutable battlefield upda
   assert.equal(operator.allegiance.side, 'ALLY');
   assert.equal(operator.spatial.layer, 'GROUND');
   assert.equal(operator.hit.geometry.shapes[0].radius, 0.25);
-  assert.equal(hasStatusFlag(operator, 'TARGET_FREE'), false);
+  assert.equal(allowsTarget(targetingContext(operator)), true);
   assert.deepEqual(operator.blocker.capacity, []);
   assert.equal(operator.vitality.hp, hp);
   assert.deepEqual(battle.snapshot(), snapshot);
@@ -1103,20 +1114,22 @@ const normalAction = (targetGroups, followUps = []) => ({
   triggerBindingId: targetGroups[0].id, targetGroups, followUps, baseAttackTimeTicks: 3, recoveryTicks: 0,
 });
 
-function actionUnit(id, side, position, { hp = 100, flags = [], action } = {}) {
+function actionUnit(id, side, position, { hp = 100, effects: initialEffects = [], action, skill } = {}) {
   const definition = createDefinition({
     id: `action_unit_${id}`, vitality: { maxHp: 100 }, allegiance: { side },
     spatial: { layer: 'GROUND' }, hit: { geometry: {
       shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.1 }],
-    } }, status: { initialFlags: flags }, defense: { defense: 0, resistance: 0 },
+    } }, defense: { defense: 0, resistance: 0 },
     blocker: { capacity: 0, geometry: { radius: 0 } },
+    ...(skill === undefined ? {} : { skill }),
     action: { normalAction: action ?? normalAction([
       { id: 'primary', targeting: damageTargeting(), operations: [damageEffect(0)] },
     ]) },
   });
-  const unit = initialize({ id, definition, position });
-
-  return { ...unit, vitality: { ...unit.vitality, hp } };
+  let unit = initialize({ id, definition, position });
+  unit = { ...unit, vitality: { ...unit.vitality, hp } };
+  for (const effect of initialEffects) unit = installFixtureEffect(unit, effect);
+  return unit;
 }
 
 function actionView(units, relations = []) {
@@ -1130,6 +1143,129 @@ function actionView(units, relations = []) {
       .map(relation => relation.blockedUnitId),
   };
 }
+
+test('core protection effects: withdrawing one source retains the other source and earlier snapshots', () => {
+  const source = actionUnit(0, 'ALLY', [0, 0]);
+  const target = actionUnit(1, 'ENEMY', [1, 0], { hp: 50 });
+  const request = { sourceUnitId: 0, targetUnitId: 1, tick: 0,
+    damageType: 'TRUE', operands: createDamageOperands(1000) };
+  const restricted = (effect, state) => {
+    const current = getUnit(state, 1);
+    if (effect === healFree) return !canReceiveHealing({ source, target: current,
+      battlefield: battlefieldView(state), ignoreHealFree: false });
+    if (effect === untargetable) return selectTargets({ source, battlefield: battlefieldView(state) },
+      compileTargeting(damageTargeting(), ['DAMAGE'])).length === 0;
+    const resolved = resolveDamage(state, request, new CombatResources());
+    return effect === invincible ? resolved.value.cancellation?.reason === 'INVINCIBLE'
+      : resolved.value.fatalProtection;
+  };
+
+  for (const effect of [healFree, untargetable, invincible, undeadable]) {
+    let state = createBattleState(fixtureBattlefieldState([source, target]));
+    const first = effects.install(state, getUnit(state, 1), effect);
+    const second = effects.install(first.state, getUnit(first.state, 1), effect);
+    state = second.state;
+    const both = getUnit(state, 1);
+
+    assert.equal(restricted(effect, state), true, effect.id);
+    state = effects.setEnabled(state, first.value, false);
+    assert.equal(restricted(effect, state), true, effect.id);
+    state = effects.end(state, second.value);
+    assert.equal(restricted(effect, state), false, effect.id);
+    state = effects.setEnabled(state, first.value, true);
+    assert.equal(restricted(effect, state), true, effect.id);
+    state = effects.end(state, first.value);
+    assert.equal(restricted(effect, state), false, effect.id);
+    assert.equal(both.effects.values().length, 2);
+    assert.equal(restricted(effect, second.state), true, effect.id);
+    assert.equal(target.effects.values().length, 0);
+  }
+});
+
+test('core vitality: invincibility is decided before HIT SP and obeys the damage reception policy', () => {
+  const observed = [];
+  const protectedTarget = actionUnit(1, 'ALLY', [1, 0], { effects: [invincible], skill: {
+    id: 'hit-sp', activation: 'MANUAL', spRecovery: 'HIT', spCost: 10,
+    initialSp: 0, durationTicks: null,
+  } });
+  const target = { ...protectedTarget, vitality: setDamageHook(protectedTarget.vitality, {
+    id: 'observe-reception', stage: 'reception', priority: 0, enabled: () => true,
+    invoke(state, context, pending) {
+      observed.push({ sp: context.unit.skill.sp, cancellation: pending.cancellation?.reason });
+      return { state, value: { value: pending } };
+    },
+  }) };
+  const state = createBattleState(fixtureBattlefieldState([target]));
+  const request = { sourceUnitId: null, targetUnitId: 1, tick: 0,
+    damageType: 'TRUE', operands: createDamageOperands(10) };
+  const blocked = resolveDamage(state, request, new CombatResources());
+  const allowed = resolveDamage(state, { ...request, receptionPolicy: {
+    considerInvincibility: false, skipModifierEvents: false,
+  } }, new CombatResources());
+
+  assert.equal(blocked.value.cancellation.reason, 'INVINCIBLE');
+  assert.equal(blocked.value.hpLoss, 0);
+  assert.equal(getUnit(blocked.state, 1).skill.sp, 0);
+  assert.equal(allowed.value.cancellation, null);
+  assert.equal(allowed.value.hpLoss, 10);
+  assert.equal(getUnit(allowed.state, 1).skill.sp, 1);
+  assert.deepEqual(observed, [
+    { sp: 0, cancellation: 'INVINCIBLE' }, { sp: 1, cancellation: undefined },
+  ]);
+  assert.equal(target.skill.sp, 0);
+  assert.equal(target.vitality.hp, 100);
+});
+
+test('core vitality: fatal protection uses the rules remaining after reception hooks', () => {
+  for (const installedInitially of [false, true]) {
+    const original = actionUnit(1, 'ENEMY', [1, 0], {
+      effects: installedInitially ? [undeadable] : [],
+    });
+    const target = { ...original, vitality: setDamageHook(original.vitality, {
+      id: 'change-fatal-protection', stage: 'reception', priority: 0, enabled: () => true,
+      invoke(state, context, pending) {
+        if (installedInitially) {
+          state = effects.end(state, { type: 'EFFECT', unitId: 1,
+            effectId: context.unit.effects.values()[0].id });
+        } else {
+          state = effects.install(state, context.unit, undeadable).state;
+        }
+        return { state, value: { value: pending } };
+      },
+    }) };
+    const state = createBattleState(fixtureBattlefieldState([target]));
+    const resolved = resolveDamage(state, { sourceUnitId: null, targetUnitId: 1, tick: 0,
+      damageType: 'TRUE', operands: createDamageOperands(1000) }, new CombatResources());
+
+    assert.equal(resolved.value.fatalProtection, !installedInitially);
+    assert.equal(resolved.value.deathOccurred, installedInitially);
+    assert.equal(resolved.value.hpLoss, installedInitially ? 100 : 99);
+    assert.equal(getUnit(resolved.state, 1)?.vitality.hp, installedInitially ? undefined : 1);
+    assert.equal(target.vitality.hp, 100);
+  }
+});
+
+test('core vitality: healing eligibility is rechecked when a selected target gains a healing restriction', () => {
+  const source = actionUnit(0, 'ALLY', [0, 0]);
+  const target = actionUnit(1, 'ALLY', [1, 0], { hp: 40 });
+  let state = createBattleState(fixtureBattlefieldState([source, target]));
+  const query = compileTargeting(healingTargeting(), ['HEAL']);
+  assert.deepEqual(selectTargets({ source, battlefield: battlefieldView(state) }, query)
+    .map(unit => unit.id), [1]);
+  state = effects.install(state, getUnit(state, 1), healFree).state;
+  const request = { sourceUnitId: 0, targetUnitId: 1, tick: 0, power: 30, ignoreHealFree: false };
+  const blocked = resolveHealing(state, request);
+  const allowed = resolveHealing(state, { ...request, ignoreHealFree: true });
+
+  assert.deepEqual(selectTargets({ source, battlefield: battlefieldView(state) }, query), []);
+  assert.equal(blocked.value.cancellation.reason, 'HEAL_FREE');
+  assert.equal(blocked.value.amount, 0);
+  assert.equal(getUnit(blocked.state, 1).vitality.hp, 40);
+  assert.equal(allowed.value.cancellation, null);
+  assert.equal(allowed.value.amount, 30);
+  assert.equal(getUnit(allowed.state, 1).vitality.hp, 70);
+  assert.equal(target.vitality.hp, 40);
+});
 
 test('core targeting: current hit geometry and spatial classification override definition initial values', () => {
   const source = actionUnit(0, 'ALLY', [0, 0]);
@@ -1155,34 +1291,34 @@ test('core targeting: hostile restrictions, friend restrictions and explicit blo
     source, battlefield: actionView([source, target], relations),
   }, compileTargeting(damageTargeting(overrides), ['DAMAGE'])).map(unit => unit.id);
 
-  for (const flag of ['TARGET_FREE', 'INVINCIBLE', 'INVISIBLE', 'CAMOUFLAGE']) {
-    const target = actionUnit(1, 'ENEMY', [1, 0], { flags: [flag] });
-    assert.deepEqual(query(target), [], flag);
-    assert.deepEqual(query(target, { ignoreInvisible: true }), flag === 'INVISIBLE' ? [1] : [], flag);
-    assert.deepEqual(query(target, { ignoreTargetFree: true }), flag === 'CAMOUFLAGE' ? [] : [1], flag);
+  for (const effect of [untargetable, invincible, invisible, camouflage]) {
+    const target = actionUnit(1, 'ENEMY', [1, 0], { effects: [effect] });
+    assert.deepEqual(query(target), [], effect.id);
+    assert.deepEqual(query(target, { ignoreInvisible: true }), effect === invisible ? [1] : [], effect.id);
+    assert.deepEqual(query(target, { ignoreTargetFree: true }), effect === camouflage ? [] : [1], effect.id);
     assert.deepEqual(query(target, { includeBlockingRelations: true },
-      [{ blockerUnitId: 0, blockedUnitId: 1 }]), [1], flag);
+      [{ blockerUnitId: 0, blockedUnitId: 1 }]), [1], effect.id);
     assert.deepEqual(query(target, { includeBlockingRelations: true },
-      [{ blockerUnitId: 9, blockedUnitId: 1 }]), [], flag);
+      [{ blockerUnitId: 9, blockedUnitId: 1 }]), [], effect.id);
   }
 
-  const friend = actionUnit(2, 'ALLY', [1, 0], { hp: 50, flags: ['INVINCIBLE', 'TARGET_FREE', 'INVISIBLE'] });
+  const friend = actionUnit(2, 'ALLY', [1, 0], { hp: 50, effects: [invincible, untargetable, invisible] });
   const selectFriend = (target, overrides = {}) => selectTargets({
     source, battlefield: actionView([source, target]),
   }, compileTargeting(healingTargeting(overrides), ['HEAL'])).map(unit => unit.id);
   assert.deepEqual(selectFriend(friend), [2]);
-  const isolated = actionUnit(2, 'ALLY', [1, 0], { hp: 50, flags: ['ALLY_TARGET_FREE'] });
+  const isolated = actionUnit(2, 'ALLY', [1, 0], { hp: 50, effects: [allyUntargetable] });
   assert.deepEqual(selectFriend(isolated), []);
   assert.deepEqual(selectFriend(isolated, { ignoreAllyTargetFree: true }), [2]);
 });
 
-test('core action: query and healing settlement ignore flags have independent four-way behavior', () => {
+test('core action: query and healing settlement ignore options have independent four-way behavior', () => {
   for (const queryIgnore of [false, true]) {
     for (const effectIgnore of [false, true]) {
       const action = normalAction([{ id: 'heal', targeting: healingTargeting({ ignoreHealFree: queryIgnore }),
         operations: [healEffect(30, effectIgnore)] }]);
       const source = actionUnit(0, 'ALLY', [0, 0], { action });
-      const target = actionUnit(1, 'ALLY', [1, 0], { hp: 40, flags: ['HEAL_FREE'] });
+      const target = actionUnit(1, 'ALLY', [1, 0], { hp: 40, effects: [healFree] });
       const before = JSON.stringify([source, target]);
       const result = startSingleAction(source, compileAction(source.definition.action.normalAction, new CombatResources()), {
         battlefield: actionView([source, target]), tick: 0,
@@ -1198,7 +1334,7 @@ test('core action: query and healing settlement ignore flags have independent fo
 });
 
 test('core action: shared query purposes gate mixed effects while source follow-ups retain their own settlement', () => {
-  const target = actionUnit(1, 'ENEMY', [1, 0], { hp: 80, flags: ['HEAL_FREE'] });
+  const target = actionUnit(1, 'ENEMY', [1, 0], { hp: 80, effects: [healFree] });
   const mixed = actionUnit(0, 'ALLY', [0, 0], { action: normalAction([
     { id: 'attack', targeting: damageTargeting(), operations: [damageEffect(10), healEffect(5)] },
   ]) });
@@ -1208,7 +1344,7 @@ test('core action: shared query purposes gate mixed effects while source follow-
   assert.deepEqual(result.events, []);
 
   for (const ignoreHealFree of [false, true]) {
-    const source = actionUnit(0, 'ALLY', [0, 0], { hp: 60, flags: ['HEAL_FREE'], action: normalAction([
+    const source = actionUnit(0, 'ALLY', [0, 0], { hp: 60, effects: [healFree], action: normalAction([
       { id: 'attack', targeting: damageTargeting(), operations: [damageEffect(10)] },
     ], [{ receiver: { type: 'SOURCE' }, operation: healEffect(15, ignoreHealFree) }]) });
     const stepped = startSingleAction(source, compileAction(source.definition.action.normalAction, new CombatResources()), {
@@ -1236,7 +1372,7 @@ test('core action: secondary target groups cannot trigger the action and use ind
   assert.deepEqual(noEnemy.events, []);
   assert.deepEqual(noEnemy.state, { nextExecutionId: 0, executions: [] });
 
-  const enemy = actionUnit(1, 'ENEMY', [1, 0], { hp: 80, flags: ['HEAL_FREE'] });
+  const enemy = actionUnit(1, 'ENEMY', [1, 0], { hp: 80, effects: [healFree] });
   const stepped = startSingleAction(source, compiled, { battlefield: actionView([source, friend, enemy]), tick: 0 });
   assert.deepEqual(stepped.events.map(event => [event.type, event.targetUnitId]),
     [['ACTION', 1], ['DAMAGE', 1], ['HEAL', 2], ['ACTION_FINISHED', undefined]]);

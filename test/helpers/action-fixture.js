@@ -61,7 +61,6 @@ export function unit(
         allegiance: { side },
         spatial: { layer: "GROUND" },
         hit: { geometry: hit },
-        status: { initialFlags: [] },
         ...(action
             ? { action: { normalAction: action === true ? actionDefinition() : action } }
             : {}),

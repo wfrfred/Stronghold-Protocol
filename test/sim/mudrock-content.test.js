@@ -9,12 +9,14 @@ import {
     createBattleState, battlefieldView, getUnit, updateUnit,
 } from "../../dist/core/tactical/battle/state.js";
 import { enterUnits } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
-import { advance, end } from "../../dist/core/tactical/unit/effect/operations.js";
+import { advance, end, install } from "../../dist/core/tactical/unit/effect/operations.js";
 import { activateSkill, advanceSkill, finishSkill } from "../../dist/core/tactical/unit/capability/skill/execution.js";
 import { startAction } from "../../dist/core/tactical/unit/capability/action/execution.js";
 import { cancelActionExecution, resumeActionExecution } from "../../dist/core/tactical/unit/capability/action/process.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
-import { hasStatusFlag, addStatusContribution } from "../../dist/core/tactical/unit/capability/status/capability.js";
+import { canMove } from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
+import { initialize as initializeTargetable, setRule as setTargetingRule } from "../../dist/core/tactical/unit/capability/targetable/capability.js";
+import { invincible } from "../../dist/content/tactical/effects/protection.js";
 import { setAttackContribution } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { setMaxHpContribution } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import { create as modifier } from "../../dist/core/tactical/unit/contribution/value.js";
@@ -38,7 +40,8 @@ const enemy = (id, position, fields = {}) => initialize({ id, position, definiti
     id: `enemy-${id}`, vitality: { maxHp: 10000 }, defense: { defense: 0, resistance: 0 },
     allegiance: { side: "ENEMY" }, spatial: { layer: "GROUND" },
     hit: { geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.1 }] } },
-    status: { initialFlags: [] }, ...fields,
+    locomotion: { moveSpeedPerTick: 0.1, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } },
+    ...fields,
 } });
 function setup(configuration = {}, targets = [], options = {}) {
     const combat = new CombatResources();
@@ -58,10 +61,10 @@ const approximate = (actual, expected) => assert.ok(Math.abs(actual - expected) 
 const clearShield = (state, combat) => hit(state, combat).state;
 
 test("entry installs one persistent shield container and preserves prior snapshots", () => {
-    const { initial, state, prepared } = setup();
+    const { initial, state, prepared, combat } = setup();
     assert.equal(readShield(getUnit(initial, 0)), undefined);
     assert.deepEqual(readShield(getUnit(state, 0)), { layers: 1, timer: 270 });
-    assert.equal(getUnit(state, 0).effects.values().length, 1);
+    assert.equal(getUnit(state, 0).effects.values().filter(instance => instance.definition.id === "mudrock/shield").length, 1);
     assert.equal(getUnit(state, 0).definition.profile, prepared);
     assert.deepEqual(getUnit(state, 0).definition.deployable, {
         cost: prepared.attributes.cost, redeployTicks: prepared.attributes.respawnTime * 30,
@@ -69,7 +72,11 @@ test("entry installs one persistent shield container and preserves prior snapsho
         refund: { rate: 0.5, limit: "BASE_COST" },
     });
     assert.equal(getUnit(state, 0).deployable.refundAllowed, false);
-    assert.equal(hasStatusFlag(getUnit(state, 0), "HEAL_FREE"), true);
+    const externalHealing = combat.settleHealing(state, {
+        sourceUnitId: null, targetUnitId: 0, power: 100, ignoreHealFree: false, tick: state.tick,
+    }).value;
+    assert.equal(externalHealing.amount, 0);
+    assert.equal(externalHealing.cancellation.reason, "HEAL_FREE");
     const enteredLate = enterUnits({ ...initial, tick: 100 }, [0]);
     assert.deepEqual(readShield(getUnit(advance({ ...enteredLate, tick: 101 }), 0)), { layers: 1, timer: 269 });
 });
@@ -84,7 +91,7 @@ test("shield cancels damage, consumes a layer, self-heals and retains normal HIT
     approximate(getUnit(result.state, 0).vitality.hp, 1000 + fixture.prepared.attributes.maxHp * 0.2);
     assert.equal(getUnit(result.state, 0).skill.sp, 1);
     assert.deepEqual(readShield(getUnit(result.state, 0)), { layers: 0, timer: 270 });
-    assert.equal(getUnit(result.state, 0).effects.values()[0].status, "ACTIVE");
+    assert.equal(getUnit(result.state, 0).effects.values().find(instance => instance.definition.id === "mudrock/shield").status, "ACTIVE");
     assert.equal(getUnit(before, 0).vitality.hp, 1000);
     assert.deepEqual(readShield(getUnit(before, 0)), { layers: 1, timer: 270 });
     const external = fixture.combat.settleHealing(result.state, {
@@ -98,13 +105,11 @@ test("shield cancels damage, consumes a layer, self-heals and retains normal HIT
 
 test("invincible reception leaves shield untouched and removing its effect removes the hook", () => {
     const fixture = setup({}, [enemy(1, [1, 0])]);
-    const invincible = save(fixture.state, { status: addStatusContribution(getUnit(fixture.state, 0).status, {
-        id: "test/invincible", flags: ["INVINCIBLE"],
-    }) });
-    const canceled = hit(invincible, fixture.combat);
+    const protectedState = install(fixture.state, getUnit(fixture.state, 0), invincible).state;
+    const canceled = hit(protectedState, fixture.combat);
     assert.equal(canceled.value.hpLoss, 0);
     assert.equal(readShield(getUnit(canceled.state, 0)).layers, 1);
-    const effect = getUnit(fixture.state, 0).effects.values()[0];
+    const effect = getUnit(fixture.state, 0).effects.values().find(instance => instance.definition.id === "mudrock/shield");
     const removed = end(fixture.state, { type: "EFFECT", unitId: 0, effectId: effect.id });
     assert.equal(readShield(getUnit(removed, 0)), undefined);
     assert.equal(hit(removed, fixture.combat).value.hpLoss, 100);
@@ -122,7 +127,7 @@ test("shield recharge keeps its periodic clock while capped and zero layers rema
     state = hit(state, fixture.combat).state;
     state = advance({ ...state, tick: 1080 });
     assert.deepEqual(readShield(getUnit(state, 0)), { layers: 3, timer: 270 });
-    assert.equal(getUnit(state, 0).effects.values().length, 1);
+    assert.equal(getUnit(state, 0).effects.values().filter(instance => instance.definition.id === "mudrock/shield").length, 1);
     const e1 = setup({ elite: 1, level: 80 });
     assert.equal(readShield(getUnit(advance({ ...e1.state, tick: 810 }), 0)).layers, 2);
 });
@@ -158,7 +163,9 @@ test("Sarkaz resistance and module blocked-source reduction compose only for the
 
 test("S2 does not consume SP without an eligible ground target in its range", () => {
     for (const receiver of [enemy(1, [5, 0]), enemy(1, [1, 0], { spatial: { layer: "AIR" } }),
-        enemy(1, [1, 0], { status: { initialFlags: ["TARGET_FREE"] } })]) {
+        { ...enemy(1, [1, 0]), targetable: setTargetingRule(initializeTargetable(), {
+            id: "not-selectable", allows: () => false,
+        }) }]) {
         const fixture = setup({}, [receiver]);
         const ready = sp(fixture.state, 5);
         const result = activateSkill(ready, { unitId: 0, tick: 0, trigger: "AUTO" }, fixture.combat);
@@ -199,11 +206,11 @@ test("S2 immediately overrides normal attack and recovery cooldown, heals once, 
     const rng = createRng(ready.execution.rngState);
     rng.chance(0.3); rng.chance(0.3);
     assert.equal(executed.execution.rngState, rng.state());
-    assert.equal(hasStatusFlag(getUnit(executed, 1), "STUNNED"), true);
-    assert.equal(hasStatusFlag(getUnit(executed, 2), "STUNNED"), true);
+    assert.equal(canMove(getUnit(executed, 1)), false);
+    assert.equal(canMove(getUnit(executed, 2)), false);
     const expired = advance({ ...executed, tick: 18 });
-    assert.equal(hasStatusFlag(getUnit(expired, 1), "STUNNED"), false);
-    assert.equal(hasStatusFlag(getUnit(expired, 2), "STUNNED"), false);
+    assert.equal(canMove(getUnit(expired, 1)), true);
+    assert.equal(canMove(getUnit(expired, 2)), true);
 });
 
 test("S2 stays active through configured recovery and finishes on completion or cancellation", () => {

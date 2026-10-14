@@ -150,7 +150,6 @@ function operatorDefinition(value: unknown, direction: Direction) {
                 shapes: [{ type: "CIRCLE", offset: [0, 0], radius: LEGACY_OPERATOR_HIT_RADIUS }],
             },
         },
-        status: { initialFlags: [] },
         defense: {
             defense: numberField(stats.def, "defense"),
             resistance: numberField(stats.res, "resistance"),
@@ -235,7 +234,6 @@ function enemyDefinition(value: unknown) {
                 shapes: [{ type: "CIRCLE", offset: [0, 0], radius: LEGACY_ENEMY_HIT_RADIUS }],
             },
         },
-        status: { initialFlags: [] },
         defense: {
             defense: numberField(stats.def, "defense"),
             resistance: numberField(stats.res, "resistance"),

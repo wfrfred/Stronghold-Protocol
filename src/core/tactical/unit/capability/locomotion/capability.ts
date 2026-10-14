@@ -1,3 +1,4 @@
+import * as registry from "../../hook/hook.js";
 import type { Context } from "../../query.js";
 import type { NavigationState } from "../../../battlefield/navigation/state.js";
 import type { RouteState } from "./route/state.js";
@@ -12,10 +13,16 @@ export interface Definition {
     readonly steeringParameters: SteeringParameters;
 }
 
+export interface Rule {
+    readonly id: string;
+    readonly allows: (unit: Unit) => boolean;
+}
+
 export interface State {
     readonly moving: boolean;
     readonly moveSpeed: readonly contribution.Contribution<contribution.Input<Context>>[];
     readonly steering: SteeringState;
+    readonly rules: readonly Rule[];
 }
 
 export interface RouteControlState {
@@ -50,7 +57,23 @@ export function hasRoutedLocomotion<U extends Unit>(unit: U): unit is U & Routed
 }
 
 export function initialize(): State {
-    return { moving: false, moveSpeed: [], steering: createSteeringState() };
+    return { moving: false, moveSpeed: [], steering: createSteeringState(), rules: [] };
+}
+
+export function setRule(state: State, rule: Rule): State {
+    const rules = registry.set(state.rules, rule);
+
+    return rules === state.rules ? state : { ...state, rules };
+}
+
+export function removeRule(state: State, id: string): State {
+    const rules = registry.remove(state.rules, id);
+
+    return rules === state.rules ? state : { ...state, rules };
+}
+
+export function canMove(unit: Unit & Locomotion): boolean {
+    return unit.locomotion.rules.every((rule) => rule.allows(unit));
 }
 
 export function createRoutedLocomotionState(mainRoute: RouteControlState): RoutedLocomotionState {

@@ -1,3 +1,4 @@
+import { invincible, undeadable } from "../../dist/content/tactical/effects/protection.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -406,7 +407,7 @@ test("damage pipeline: priority precedes registration order and disabled candida
 });
 
 test("damage pipeline: lethal protection keeps HP 1 without removal", () => {
-    let battle = workFor(unit(1), unit(2, { hp: 1000, flags: ["UNDEADABLE"] }));
+    let battle = workFor(unit(1), attach(unit(2, { hp: 1000 }), undeadable));
     const resultSettlement = resolveDamage(battle, request(5000), new CombatResources());
     battle = resultSettlement.state;
     const result = resultSettlement.value;
@@ -452,7 +453,7 @@ test("damage pipeline: invincibility preserves shield resources and still notifi
             },
         ]),
     );
-    let battle = workFor(source, attach(unit(2, { flags: ["INVINCIBLE"] }), shield));
+    let battle = workFor(source, attach(attach(unit(2), invincible), shield));
     const resultSettlement = resolveDamage(battle, request(700), new CombatResources());
     battle = resultSettlement.state;
     const result = resultSettlement.value;

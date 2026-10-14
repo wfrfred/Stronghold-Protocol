@@ -27,7 +27,6 @@ import {
     type HitDefinition,
     type SpatialDefinition,
 } from "../capability/spatial/capability.js";
-import type { Definition as StatusDefinition } from "../capability/status/capability.js";
 import type { Unit, Definition as UnitDefinition } from "../unit.js";
 import type {
     Vitality,
@@ -62,7 +61,6 @@ export interface CombatDefinition extends Definition {
     readonly allegiance: AllegianceDefinition;
     readonly spatial: SpatialDefinition;
     readonly hit: HitDefinition;
-    readonly status: StatusDefinition;
     readonly defense: DefenseDefinition;
     readonly blockable: BlockableDefinition;
     readonly offense?: OffenseDefinition;
@@ -106,7 +104,6 @@ export function createCombatDefinition(definition: CombatDefinition): CombatDefi
         allegiance: definition.allegiance,
         spatial: definition.spatial,
         hit: createHitDefinition(definition.hit),
-        status: definition.status,
         defense: createDefenseDefinition(definition.defense),
         ...(definition.offense === undefined
             ? {}

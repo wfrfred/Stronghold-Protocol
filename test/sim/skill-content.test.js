@@ -1,3 +1,4 @@
+import { initialize as initializeVitality } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
@@ -190,7 +191,7 @@ test("instant healing uses the current activation tick and returns the settled h
     report = healed.value;
     return { state: healed.state, value: { type: "ACTIVATED" } };
   } });
-  const unit = initialize({ id: 1, position: [0, 0], definition: { id: "heal-caster", skill: definition, vitality: { maxHp: 100 } }, states: { vitality: { hp: 50, maxHp: [], damageHooks: [], healingHooks: [] } } });
+  const unit = initialize({ id: 1, position: [0, 0], definition: { id: "heal-caster", skill: definition, vitality: { maxHp: 100 } }, states: { vitality: { ...initializeVitality({ maxHp: 100 }), hp: 50 } } });
   let activatedState = effectFixtureWork(unit);
   activatedState = activateSkill(activatedState, { unitId: 1, tick: 3 }, resources).state;
   assert.equal(getUnit(activatedState, 1).vitality.hp, 80);

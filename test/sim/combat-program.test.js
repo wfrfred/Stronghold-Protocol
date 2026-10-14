@@ -15,15 +15,11 @@ import { createLegacyCombatSpec } from '../../dist/legacy/combat.js';
 import { setHook } from '../../dist/core/tactical/unit/capability/vitality/damage/hook.js';
 import { removeUnitWithEffects } from '../../dist/core/tactical/battle/execution/unit-lifecycle.js';
 import * as effects from '../../dist/core/tactical/unit/effect/operations.js';
-import { addStatusContribution, removeStatusContribution, hasStatusFlag } from '../../dist/core/tactical/unit/capability/status/capability.js';
+import { canAct, setRule } from '../../dist/core/tactical/unit/capability/action/capability.js';
+import { stun } from '../../dist/content/tactical/effects/stun.js';
 
 const context = (bindings = new Map([['primary', [1]]])) => ({ sourceUnitId: 0, executionId: 0, acceptedAtTick: 0, inputTargetUnitId: 1, tick: 7, bindings, samples: {}, call: emptyCall });
 const start = (state, compiled, resources = new CombatResources(), tick = 0, mayStart = true) => startAction(state, { sourceUnitId: 0, compiled, tick, mayStart }, resources);
-const status = {
-  id: 'status-prefix', initialize: () => ({}),
-  onEnable: (state, ctx) => updateUnit(state, { ...ctx.unit, status: addStatusContribution(ctx.unit.status, { id: `status/${ctx.self.id}`, flags: ['INVINCIBLE'] }) }),
-  onDisable: (state, ctx) => updateUnit(state, { ...ctx.unit, status: removeStatusContribution(ctx.unit.status, `status/${ctx.self.id}`) }),
-};
 
 function runtime(units, resources, compile) {
   return new BattleRuntime({ ...createLegacyCombatSpec({ rows: 1, columns: 8, operators: [], enemies: [], maxTicks: 10, seed: 17 }), initialUnits: units.map(value => ({ definition: value.definition, position: value.position, effects: value.effects, states: { vitality: value.vitality, ...(value.action === undefined ? {} : { action: value.action }) } })) }, { combat: resources, compileAction: compile });
@@ -158,15 +154,16 @@ test('combat program: a throwing callback leaves no changes in the published Run
   assert.deepEqual(rt.snapshot(), before);
 });
 
-test('combat program: Effect expiration removes only its own contribution and keeps baseline status', () => {
-  const original = unit(0, { status: { initialFlags: ['INVISIBLE'] } });
+test('combat program: Effect expiration removes only its own action rule and preserves other rules', () => {
+  const actor = unit(0, { action: true });
+  const original = { ...actor, action: setRule(actor.action, { id: 'baseline', allows: () => true }) };
   const initial = battle(original);
-  const installed = effects.install(initial, original, status, { scopes: [{ type: 'TICK', tick: 1 }] }).state;
-  assert.equal(hasStatusFlag(getUnit(installed, 0), 'INVINCIBLE'), true);
+  const installed = effects.install(initial, original, stun, { scopes: [{ type: 'TICK', tick: 1 }] }).state;
+  assert.equal(canAct(getUnit(installed, 0)), false);
   const expired = effects.advance({ ...installed, tick: 1 });
-  assert.equal(hasStatusFlag(getUnit(expired, 0), 'INVINCIBLE'), false);
-  assert.equal(hasStatusFlag(getUnit(expired, 0), 'INVISIBLE'), true);
-  assert.equal(hasStatusFlag(getUnit(installed, 0), 'INVINCIBLE'), true);
+  assert.equal(canAct(getUnit(expired, 0)), true);
+  assert.deepEqual(getUnit(expired, 0).action.rules.map(rule => rule.id), ['baseline']);
+  assert.equal(canAct(getUnit(installed, 0)), false);
 });
 
 test('combat program: source retirement ends explicit lifetime dependencies and preserves mere provenance', () => {
@@ -202,18 +199,18 @@ test('combat program: immediate source removal finishes entered business and pre
   const actor = unit(0, { action: true });
   const compiled = compileAction(actor.definition.action.normalAction, resources);
   let successor = false;
-  const result = start(battle(actor, unit(1)), { ...compiled, program: [
+  const result = start(battle(actor, unit(1, { action: true })), { ...compiled, program: [
     { type: 'EXECUTE', run: (state, ctx) => {
-      state = effects.install(state, getUnit(state, 1), status, { scopes: [{ type: 'ACTION', executionId: ctx.executionId }] }, ctx.call).state;
+      state = effects.install(state, getUnit(state, 1), stun, { scopes: [{ type: 'ACTION', executionId: ctx.executionId }] }, ctx.call).state;
       state = removeUnit(state, 0, 'RETREAT');
-      assert.equal(hasStatusFlag(getUnit(state, 1), 'INVINCIBLE'), true);
+      assert.equal(canAct(getUnit(state, 1)), false);
       state = updateUnit(state, { ...getUnit(state, 1), position: [2, 0] });
       return { state, value: undefined };
     } }, { type: 'EXECUTE', run: state => { successor = true; return { state, value: undefined }; } },
   ] }, resources);
   assert.equal(successor, false);
   assert.deepEqual(getUnit(result, 1).position, [2, 0]);
-  assert.equal(hasStatusFlag(getUnit(result, 1), 'INVINCIBLE'), false);
+  assert.equal(canAct(getUnit(result, 1)), true);
   assert.equal(result.events.some(event => event.type === 'ACTION_CANCELLED'), true);
 });
 

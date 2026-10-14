@@ -28,45 +28,12 @@ import {
     removeAttackContribution,
     type Offense,
 } from "../../core/tactical/unit/capability/offense/capability.js";
-import {
-    addStatusContribution,
-    removeStatusContribution,
-    hasStatus,
-    type Status,
-    type StatusFlag,
-} from "../../core/tactical/unit/capability/status/capability.js";
+import { stun } from "../../content/tactical/effects/stun.js";
+import { silence, blockSpRecovery } from "../../content/tactical/effects/control.js";
 import { createDamageOperands } from "../../core/tactical/unit/capability/vitality/damage/contract.js";
 import { getArknightsElementalBurstProfile } from "./elemental.js";
 
-function statusEffect(id: string, flags: readonly StatusFlag[]): Definition<object, Status> {
-    return {
-        id,
-        initialize: () => ({}),
-        onEnable: (state, context) => {
-            const unit = context.unit;
-
-            return updateUnit(state, {
-                ...unit,
-                status: addStatusContribution(unit.status, {
-                    id: `@effect/${context.self.id}/status`,
-                    flags,
-                }),
-            });
-        },
-        onDisable: (state, context) => {
-            const unit = context.unit;
-
-            return updateUnit(state, {
-                ...unit,
-                status: removeStatusContribution(unit.status, `@effect/${context.self.id}/status`),
-            });
-        },
-    };
-}
-
 export function registerArknightsElementalBursts(resources: CombatResources): void {
-    const paralysisStun = statusEffect("elemental/paralysis-stun", ["STUNNED"]);
-
     for (const receiver of ["CHARACTER", "ENEMY"] as const) {
         for (const type of ELEMENT_TYPES) {
             const profile = getArknightsElementalBurstProfile(receiver, type);
@@ -112,19 +79,11 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                         : updateUnit(state, { ...context.unit, defense });
                 },
             };
-            const flags: StatusFlag[] = [];
-
-            if (profile.stunTicks > 0) {
-                flags.push("STUNNED");
-            }
-            if (profile.blocksSkill) {
-                flags.push("SILENCED");
-            }
-            if (profile.blocksSpRecovery) {
-                flags.push("SP_RECOVERY_BLOCKED");
-            }
-
-            const status = statusEffect(`${prefix}/status`, flags);
+            const controls: Definition<object>[] = [
+                ...(profile.stunTicks > 0 ? [stun] : []),
+                ...(profile.blocksSkill ? [silence] : []),
+                ...(profile.blocksSpRecovery ? [blockSpRecovery] : []),
+            ];
             const weakness: Definition<{ scaler: number }, Offense> = {
                 id: `${prefix}/weakness`,
                 initialize: () => ({ scaler: 1 - profile.attackReductionRatio }),
@@ -184,11 +143,11 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
 
                                 const current = getUnit(state, context.unit.id);
 
-                                if (current !== undefined && hasStatus(current)) {
+                                if (current !== undefined) {
                                     state = effects.install(
                                         state,
                                         current,
-                                        paralysisStun,
+                                        stun,
                                         {
                                             source: null,
                                             scopes: [
@@ -272,10 +231,18 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                     if (unit === undefined) {
                         return state;
                     }
-                    if (hasStatus(unit) && flags.length > 0) {
-                        state = effects.install(state, unit, status, input, context.call).state;
+                    for (const control of controls) {
                         unit = getUnit(state, unitId);
+
+                        if (unit === undefined) {
+                            return state;
+                        }
+
+                        state = effects.install(state, unit, control, input, context.call).state;
                     }
+
+                    unit = getUnit(state, unitId);
+
                     if (
                         unit !== undefined &&
                         hasOffense(unit) &&

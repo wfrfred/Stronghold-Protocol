@@ -31,12 +31,8 @@ import {
     type Definition as SkillDefinition,
 } from "../../../core/tactical/unit/capability/skill/capability.js";
 import { finishSkill } from "../../../core/tactical/unit/capability/skill/execution.js";
-import {
-    addStatusContribution,
-    hasStatus,
-    removeStatusContribution,
-    type Status,
-} from "../../../core/tactical/unit/capability/status/capability.js";
+import { stun } from "../effects/stun.js";
+import { healFree } from "../effects/protection.js";
 import {
     hasVitality,
     type Vitality,
@@ -273,24 +269,6 @@ function shieldEffect(
     return definition;
 }
 
-const stun: EffectDefinition<object, Status> = {
-    id: "mudrock/skill-stun",
-    initialize: () => ({}),
-    onEnable: (state, { unit, self }) =>
-        updateUnit(state, {
-            ...unit,
-            status: addStatusContribution(unit.status, {
-                id: `mudrock/stun/${self.id}`,
-                flags: ["STUNNED"],
-            }),
-        }),
-    onDisable: (state, { unit, self }) =>
-        updateUnit(state, {
-            ...unit,
-            status: removeStatusContribution(unit.status, `mudrock/stun/${self.id}`),
-        }),
-};
-
 function attackDefinition(
     profile: Profile,
     direction: Direction,
@@ -440,7 +418,7 @@ export function create(
                     state = { ...state, execution: { ...state.execution, rngState: rng.state() } };
                     const survivor = getUnit(state, target.id);
 
-                    if (applyStun && survivor !== undefined && hasStatus(survivor)) {
+                    if (applyStun && survivor !== undefined) {
                         state = install(
                             state,
                             survivor,
@@ -509,7 +487,6 @@ export function create(
         allegiance: { side: "ALLY" },
         spatial: { layer: "GROUND" },
         hit: { geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.25 }] } },
-        status: { initialFlags: ["HEAL_FREE"] },
         blocker: { capacity: profile.attributes.blockCapacity, geometry: { radius: 0.70709997 } },
         action: {
             attackSpeed: profile.attributes.attackSpeed,
@@ -519,9 +496,13 @@ export function create(
         onEnter(state, unitId) {
             const unit = getUnit(state, unitId);
 
-            return unit !== undefined && hasVitality(unit)
-                ? install(state, unit, shield).state
-                : state;
+            if (unit === undefined || !hasVitality(unit)) {
+                return state;
+            }
+
+            state = install(state, unit, shield).state;
+
+            return install(state, getUnit(state, unitId)!, healFree).state;
         },
     };
 

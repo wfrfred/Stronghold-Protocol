@@ -52,7 +52,7 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, program } = {}) {
   const definition = createDefinition({
     id: "ammo-actor", vitality: { maxHp: 10000 }, offense: { attack: 100 },
     defense: { defense: 0, resistance: 0 }, allegiance: { side: "ALLY" },
-    spatial: { layer: "GROUND" }, hit: { geometry: hit }, status: { initialFlags: [] },
+    spatial: { layer: "GROUND" }, hit: { geometry: hit },
     blocker: { capacity: 0, geometry: { radius: 0.1 } }, skill,
     action: { normalAction: {
       triggerBindingId: "main", baseAttackTimeTicks: 100, recoveryTicks: 0, followUps: [],
@@ -66,7 +66,6 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, program } = {}) {
   const receiver = {
     id: "ammo-target", vitality: { maxHp: 10000 }, defense: { defense: 0, resistance: 0 },
     allegiance: { side: "ENEMY" }, spatial: { layer: "GROUND" }, hit: { geometry: hit },
-    status: { initialFlags: [] },
   };
   const shell = resources.projectiles.register(createProjectileDefinition({
     id: "runtime-ammo-shell", initialize: () => ({}),

@@ -22,11 +22,6 @@ import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js"
 import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
 import { compileAction } from "../../dist/core/tactical/unit/capability/action/compile.js";
 import { install as installEffect, replaceEffect, end as endEffect } from "../../dist/core/tactical/unit/effect/operations.js";
-import {
-    hasStatusFlag,
-    addStatusContribution,
-    removeStatusContribution,
-} from "../../dist/core/tactical/unit/capability/status/capability.js";
 import * as modifier from "../../dist/core/tactical/unit/contribution/value.js";
 import { initialize as initializeVitalityState } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
@@ -68,7 +63,6 @@ function passive(id, hp = 100) {
         allegiance: { side: "ENEMY" },
         spatial: { layer: "GROUND" },
         hit: { geometry: hit },
-        status: { initialFlags: [] },
     };
 }
 
@@ -131,7 +125,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
     const auraAddress = { type: "EFFECT", unitId: 0, effectId: 0 };
     let aura;
 
-    const registerBuff = (id, addition, flags = []) => ({
+    const registerBuff = (id, addition) => ({
         id,
         initialize: () => ({ starts: 0, enables: 0 }),
         onInstall(state, context) {
@@ -159,22 +153,21 @@ function scenario({ failure = null, cancelled = false } = {}) {
                     id,
                     value: [modifier.create({ finalAddition: addition })],
                 }) });
-                return flags.length === 0
-                    ? next
-                    : { ...next, status: addStatusContribution(next.status, { id, flags }) };
+                return next;
             });
         },
         onDisable(state, context) {
             const id = `effect:${context.self.id}`;
             return transitionUnit(state, context.ref.unitId, (unit) => {
                 const next = ({ ...unit, offense: removeAttackContribution(unit.offense, id) });
-                return flags.length === 0
-                    ? next
-                    : { ...next, status: removeStatusContribution(next.status, id) };
+                return next;
             });
         },
     });
-    const marker = registerBuff("receiver-mark", 3, ["INVISIBLE"]);
+    const marker = registerBuff("receiver-mark", 3);
+    const marked = (unit) => unit.effects.values().some(
+        (instance) => instance.definition === marker && instance.status === "ACTIVE",
+    );
     const scoped = registerBuff("execution-power", 2);
     const pulse = registerBuff("release-power", 1);
     const receiverOutput = registerBuff("aura-receiver", 5);
@@ -243,7 +236,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                         attempts.push({
                             address: ref,
                             quota: { remaining: quota.remaining, consumed: quota.consumed },
-                            marked: hasStatusFlag(getUnit(state, ref.unitId), "INVISIBLE"),
+                            marked: marked(getUnit(state, ref.unitId)),
                         });
                         return {
                             state,
@@ -321,7 +314,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
             id: "combined-shell",
             initialize: () => ({ contacts: 0 }),
             acceptsContact: (context, unit) =>
-                unit.id === context.projectile.traceTarget && !hasStatusFlag(unit, "INVISIBLE"),
+                unit.id === context.projectile.traceTarget && !marked(unit),
             contact: (state, context) => {
                 scopes.push(context);
                 const current = getProjectile(state, context.projectile.id);
@@ -359,7 +352,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                         [0, 1, 2, 3],
                     );
                     assert.equal(getUnit(state, 1).vitality.hp, 83);
-                    assert.equal(hasStatusFlag(getUnit(state, 1), "INVISIBLE"), true);
+                    assert.equal(marked(getUnit(state, 1)), true);
                     assert.equal(getUnit(state, 2).action.readyAtTick, 101);
                     throw new Error("late composition failure");
                 }
@@ -626,10 +619,7 @@ test("runtime composition: a successful battle preserves identities, snapshots a
     assert.equal(after.units.find((unit) => unit.id === 1).effects.nextId, 2);
     assert.equal(before.units.find((unit) => unit.id === 1).effects.nextId, 1);
     assert.equal(
-        hasStatusFlag(
-            after.units.find((unit) => unit.id === 1),
-            "INVISIBLE",
-        ),
+        effect(after, 1, run.marker)?.status === "ACTIVE",
         true,
     );
     assert.equal(after.units.find((unit) => unit.id === 1).vitality.hp, 83);
@@ -662,10 +652,7 @@ test("runtime composition: a successful battle preserves identities, snapshots a
             );
             assert.equal(effect(before, 0, run.aura).status, "ACTIVE");
             assert.equal(
-                hasStatusFlag(
-                    cleaned.units.find((unit) => unit.id === 1),
-                    "INVISIBLE",
-                ),
+                effect(cleaned, 1, run.marker)?.status === "ACTIVE",
                 false,
             );
             assert.equal(resolveAttackPower(0, view(cleaned)), 10);
@@ -746,10 +733,7 @@ test("runtime composition: content conditions skip installation while cancelled 
     assert.equal(effect(after, 1, run.receiver).data.uses, 1);
     assert.equal(effect(after, 1, run.marker), undefined);
     assert.equal(
-        hasStatusFlag(
-            after.units.find((unit) => unit.id === 1),
-            "INVISIBLE",
-        ),
+        effect(after, 1, run.marker)?.status === "ACTIVE",
         false,
     );
     assert.equal(resolveAttackPower(1, view(after)), 15);
@@ -759,10 +743,7 @@ test("runtime composition: content conditions skip installation while cancelled 
     assert.equal(final.result.reason, "SCHEDULE_COMPLETED");
     assert.equal(final.units.find((unit) => unit.id === 1).vitality.hp, 44);
     assert.equal(
-        hasStatusFlag(
-            final.units.find((unit) => unit.id === 1),
-            "INVISIBLE",
-        ),
+        effect(final, 1, run.marker)?.status === "ACTIVE",
         false,
     );
     assert.equal(resolveAttackPower(1, view(final)), 10);

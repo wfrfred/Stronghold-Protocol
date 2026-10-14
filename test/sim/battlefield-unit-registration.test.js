@@ -34,6 +34,14 @@ const map = () =>
 
 const definition = () => ({
     id: "paired-capabilities",
+    deployable: {
+        cost: 10,
+        redeployTicks: 30,
+        slots: 1,
+        buildableType: "MELEE",
+        advancedBuildableMask: 1,
+        refund: { rate: 0.5, limit: "BASE_COST" },
+    },
     vitality: { maxHp: 100 },
     offense: { attack: 10 },
     defense: { defense: 20, resistance: 10 },
@@ -89,7 +97,6 @@ const definition = () => ({
     allegiance: { side: "ALLY" },
     spatial: { layer: "GROUND" },
     hit: { geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.25 }] } },
-    status: { initialFlags: [] },
     blocker: { capacity: 1, geometry: { radius: 0.5 } },
     blockable: { weight: 1 },
     locomotion: {

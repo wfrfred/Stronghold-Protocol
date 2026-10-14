@@ -50,11 +50,7 @@ import {
     type SpatialDefinition,
     type SpatialState,
 } from "./spatial/capability.js";
-import {
-    initialize as initializeStatusState,
-    type Definition as StatusDefinition,
-    type State as StatusState,
-} from "./status/capability.js";
+import type { State as TargetableState } from "./targetable/capability.js";
 import {
     initialize as initializeVitalityState,
     type Definition as VitalityDefinition,
@@ -86,13 +82,13 @@ interface CapabilityConfigurations {
     readonly allegiance: AllegianceDefinition;
     readonly spatial: SpatialDefinition;
     readonly hit: HitDefinition;
-    readonly status: StatusDefinition;
     readonly blocker: BlockerDefinition;
     readonly blockable: BlockableDefinition;
     readonly locomotion: LocomotionDefinition;
 }
 
 interface RuntimeCapabilityStates {
+    readonly targetable: TargetableState;
     readonly spatialPresence: SpatialPresenceState;
     readonly occupancy: OccupancyState;
 }
@@ -112,7 +108,6 @@ export type CapabilityStates = {
     readonly allegiance: AllegianceState;
     readonly spatial: SpatialState;
     readonly hit: HitState;
-    readonly status: StatusState;
     readonly blocker: BlockerState;
     readonly blockable: BlockableState;
     readonly locomotion: LocomotionState;
@@ -134,7 +129,6 @@ export const configuredCapabilities: {
     allegiance: initializeAllegianceState,
     spatial: initializeSpatialState,
     hit: initializeHitState,
-    status: initializeStatusState,
     blocker: initializeBlockerState,
     blockable: initializeBlockableState,
     locomotion: () => initializeLocomotionState(),
@@ -173,6 +167,7 @@ const capabilityKeys: readonly CapabilityKey[] = [
     ...configuredKeys,
     "spatialPresence",
     "occupancy",
+    "targetable",
 ];
 
 function hasCapabilityState(unit: Unit, key: ConfiguredCapabilityKey): boolean {

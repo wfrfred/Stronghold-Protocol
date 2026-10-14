@@ -20,7 +20,6 @@ import type { Id } from "../../unit/unit.js";
 import type { Command } from "../contract.js";
 import { createProjectileOperations } from "../../battlefield/projectile/operations.js";
 import { hasSkill } from "../../unit/capability/skill/capability.js";
-import { hasStatusFlag } from "../../unit/capability/status/capability.js";
 
 export function createCombat(
     resources = new CombatResources(),
@@ -108,12 +107,7 @@ export function createCombat(
 
             const unit = getUnit(state, id);
 
-            if (
-                unit === undefined ||
-                !hasAction(unit) ||
-                !isSpatiallyPresent(unit) ||
-                hasStatusFlag(unit, "STUNNED")
-            ) {
+            if (unit === undefined || !hasAction(unit) || !isSpatiallyPresent(unit)) {
                 continue;
             }
 

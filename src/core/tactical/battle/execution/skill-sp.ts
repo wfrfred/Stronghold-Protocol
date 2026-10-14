@@ -1,6 +1,5 @@
-import { hasSkill } from "../../unit/capability/skill/capability.js";
+import { hasSkill, canGainSp } from "../../unit/capability/skill/capability.js";
 import { gainSkillSp, drainSkillSp, type SkillSpSource } from "../../unit/capability/skill/sp.js";
-import { hasStatusFlag } from "../../unit/capability/status/capability.js";
 import type { Id } from "../../unit/unit.js";
 import { getUnit, updateUnit, type BattleState, type Result } from "../state.js";
 
@@ -12,7 +11,7 @@ export function gainUnitSkillSp(
 ): BattleState {
     const unit = getUnit(state, unitId);
 
-    if (unit === undefined || !hasSkill(unit) || hasStatusFlag(unit, "SP_RECOVERY_BLOCKED")) {
+    if (unit === undefined || !hasSkill(unit) || !canGainSp(unit)) {
         return state;
     }
 

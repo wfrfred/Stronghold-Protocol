@@ -74,7 +74,7 @@ test('ordinary attacks read current talent and skill contributions instead of ca
   const receiver = initialize({ id: 1, position: [1, 0], definition: {
     id: 'receiver', vitality: { maxHp: 10000 }, defense: { defense: 0, resistance: 0 },
     allegiance: { side: 'ENEMY' }, spatial: { layer: 'GROUND' },
-    hit: { geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: .1 }] } }, status: { initialFlags: [] },
+    hit: { geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: .1 }] } },
   } });
   let state = createBattleState(fixtureBattlefieldState([initialize({ id: 0, position: [0, 0], definition }), receiver]));
   state = enterUnits(state, [0]);
@@ -92,7 +92,7 @@ test('the ordinary ground block radius catches a target 0.6 units from Melantha'
   const receiver = initialize({ id: 1, position: [0.6, 0], definition: {
     id: 'nearby-enemy', vitality: { maxHp: 1000 }, blockable: { weight: 1 },
     allegiance: { side: 'ENEMY' }, spatial: { layer: 'GROUND' },
-    hit: { geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: .1 }] } }, status: { initialFlags: [] },
+    hit: { geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: .1 }] } },
   } });
   const state = createBattleState(fixtureBattlefieldState([initialize({ id: 0, position: [0, 0], definition }), receiver]));
   assert.deepEqual(battlefieldView(state).blockingRelations, [{ blockerUnitId: 0, blockedUnitId: 1 }]);

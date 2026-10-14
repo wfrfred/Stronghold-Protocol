@@ -17,7 +17,8 @@ import {
 import { isSpatiallyPresent } from "../core/tactical/unit/capability/presence/capability.js";
 import { hasSpatial } from "../core/tactical/unit/capability/spatial/capability.js";
 import { hasSkill } from "../core/tactical/unit/capability/skill/capability.js";
-import { hasStatusFlag } from "../core/tactical/unit/capability/status/capability.js";
+import { stun } from "../content/tactical/effects/stun.js";
+import { invincible } from "../content/tactical/effects/protection.js";
 import {
     hasVitality,
     hasVitalityDefinition,
@@ -249,17 +250,23 @@ function unitTuple(
     const blocked = snapshot.blockingRelations.some(
         (relation) => relation.blockedUnitId === unit.id,
     );
+    const stunned = unit.effects
+        .values()
+        .some((effect) => effect.definition === stun && effect.status === "ACTIVE");
+    const protectedFromDamage = unit.effects
+        .values()
+        .some((effect) => effect.definition === invincible && effect.status === "ACTIVE");
     const flags =
         (blocked ? 1 : 0) |
         (isFlying(unit) ? 512 : 0) |
-        (hasStatusFlag(unit, "STUNNED") ? 2 : 0) |
+        (stunned ? 2 : 0) |
         (!dead && skillActive(unit, skillAnimation) ? 16 : 0) |
-        (hasStatusFlag(unit, "INVINCIBLE") ? 64 : 0);
+        (protectedFromDamage ? 64 : 0);
     let animation = 0;
 
     if (dead) {
         animation = 4;
-    } else if (hasStatusFlag(unit, "STUNNED")) {
+    } else if (stunned) {
         animation = 5;
     } else if (moving) {
         animation = 1;

@@ -13,6 +13,7 @@ import { compileAction } from '../../dist/core/tactical/unit/capability/action/c
 import { initialize } from '../../dist/core/tactical/unit/initialize.js';
 import { createBattleState, getUnit } from '../../dist/core/tactical/battle/state.js';
 import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
+import { setDamageReceptionRule } from '../../dist/core/tactical/unit/capability/vitality/capability.js';
 
 const geometry = createShapeGeometry({ shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 5 }] });
 const hit = createShapeGeometry({ shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.1 }] });
@@ -30,14 +31,13 @@ function actor(skill) {
   return createDefinition({
     id: 'skill-actor', vitality: { maxHp: 100000 }, offense: { attack: 100 },
     defense: { defense: 0, resistance: 0 }, allegiance: { side: 'ALLY' },
-    spatial: { layer: 'GROUND' }, hit: { geometry: hit }, status: { initialFlags: [] },
+    spatial: { layer: 'GROUND' }, hit: { geometry: hit },
     blocker: { capacity: 0, geometry: { radius: 0.1 } }, action: { normalAction: action() }, skill,
   });
 }
 function target() {
   return { id: 'target', vitality: { maxHp: 100000 }, defense: { defense: 0, resistance: 0 },
-    allegiance: { side: 'ENEMY' }, spatial: { layer: 'GROUND' }, hit: { geometry: hit },
-    status: { initialFlags: [] } };
+    allegiance: { side: 'ENEMY' }, spatial: { layer: 'GROUND' }, hit: { geometry: hit } };
 }
 function scenario(skill, { targets = 1, content, compile } = {}) {
   const resources = new CombatResources();
@@ -139,10 +139,13 @@ test('skill runtime: cancelled windup earns no ATTACK SP', () => {
 });
 
 test('skill runtime: HIT SP counts zero damage but respects cancellation and ignoreForSp', () => {
-  for (const [flags, ignoreForSp, expected] of [[[], false, 1], [[], true, 0], [['INVINCIBLE'], false, 0]]) {
+  for (const [cancelReception, ignoreForSp, expected] of [[false, false, 1], [false, true, 0], [true, false, 0]]) {
     const resources = new CombatResources();
     const definition = actor(skill({ spRecovery: 'HIT', initialSp: 0 }));
-    const receiver = initialize({ id: 0, definition: { ...definition, status: { initialFlags: flags } }, position: [0, 0] });
+    let receiver = initialize({ id: 0, definition, position: [0, 0] });
+    if (cancelReception) receiver = { ...receiver, vitality: setDamageReceptionRule(receiver.vitality, {
+      id: 'test-cancel-reception', cancel: () => ({ stage: 'RECEPTION', reason: 'INVINCIBLE' }),
+    }) };
     let work = createBattleState(fixtureBattlefield({ unitIds: [0], getUnit: () => receiver, blockerOf: () => undefined, blockedBy: () => [] }));
     work = resources.settleDamage(work, { sourceUnitId: null, targetUnitId: 0,
       damageType: 'TRUE', operands: createDamageOperands(0), tick: 0, ignoreForSp }).state;

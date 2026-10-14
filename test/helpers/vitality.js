@@ -4,10 +4,6 @@ import { transitionUnit, getUnit, battlefieldView } from "../../dist/core/tactic
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import * as damage from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
 import * as healing from "../../dist/core/tactical/unit/capability/vitality/healing/hook.js";
-import {
-    addStatusContribution,
-    removeStatusContribution,
-} from "../../dist/core/tactical/unit/capability/status/capability.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import { definition, effectFixtureWork, installFixtureEffect } from "./effects.js";
 
@@ -15,7 +11,7 @@ export { effectFixtureWork as workFor, installFixtureEffect as attach };
 
 export function unit(
     id,
-    { hp = 5000, maxHp = hp, attack = 100, defense = 0, resistance = 0, flags = [] } = {},
+    { hp = 5000, maxHp = hp, attack = 100, defense = 0, resistance = 0, vitality = {} } = {},
 ) {
     const value = initialize({
         id,
@@ -25,10 +21,9 @@ export function unit(
             vitality: { maxHp },
             offense: { attack },
             defense: { defense, resistance },
-            status: { initialFlags: flags },
         },
     });
-    return { ...value, vitality: { ...value.vitality, hp } };
+    return { ...value, vitality: { ...value.vitality, hp, ...vitality } };
 }
 
 export function request(power = 100, overrides = {}) {
@@ -158,33 +153,6 @@ export function barrier(id = "barrier", remainingAmount = 500, priority = 0) {
             },
         },
     ]);
-}
-
-export function statusEffect(id, flags) {
-    return definition(
-        id,
-        {},
-        {
-            onEnable(state, context) {
-                return transitionUnit(state, context.ref.unitId, (unit) => ({
-                    ...unit,
-                    status: addStatusContribution(unit.status, {
-                        id: `${context.ref.unitId}:${context.ref.effectId}`,
-                        flags,
-                    }),
-                }));
-            },
-            onDisable(state, context) {
-                return transitionUnit(state, context.ref.unitId, (unit) => ({
-                    ...unit,
-                    status: removeStatusContribution(
-                        unit.status,
-                        `${context.ref.unitId}:${context.ref.effectId}`,
-                    ),
-                }));
-            },
-        },
-    );
 }
 
 export function stateOf(battle, unitId, content) {

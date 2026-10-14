@@ -1,0 +1,40 @@
+import { updateUnit } from "../../../core/tactical/battle/state.js";
+import type { Definition } from "../../../core/tactical/unit/effect/definition.js";
+import * as action from "../../../core/tactical/unit/capability/action/capability.js";
+import * as blocker from "../../../core/tactical/unit/capability/blocking/blocker.js";
+import * as locomotion from "../../../core/tactical/unit/capability/locomotion/capability.js";
+import * as skill from "../../../core/tactical/unit/capability/skill/capability.js";
+
+export const stun: Definition<object> = {
+    id: "control/stun",
+    initialize: () => ({}),
+    onEnable(state, { unit, self }) {
+        const id = `@effect/${self.id}/stun`;
+        const rule = { id, allows: () => false };
+
+        return updateUnit(state, {
+            ...unit,
+            ...(action.hasAction(unit) ? { action: action.setRule(unit.action, rule) } : {}),
+            ...(blocker.hasBlocker(unit) ? { blocker: blocker.setRule(unit.blocker, rule) } : {}),
+            ...(locomotion.hasLocomotion(unit)
+                ? { locomotion: locomotion.setRule(unit.locomotion, rule) }
+                : {}),
+            ...(skill.hasSkill(unit)
+                ? { skill: skill.setRule(unit.skill, { id, allowsActivation: () => false }) }
+                : {}),
+        });
+    },
+    onDisable(state, { unit, self }) {
+        const id = `@effect/${self.id}/stun`;
+
+        return updateUnit(state, {
+            ...unit,
+            ...(action.hasAction(unit) ? { action: action.removeRule(unit.action, id) } : {}),
+            ...(blocker.hasBlocker(unit) ? { blocker: blocker.removeRule(unit.blocker, id) } : {}),
+            ...(locomotion.hasLocomotion(unit)
+                ? { locomotion: locomotion.removeRule(unit.locomotion, id) }
+                : {}),
+            ...(skill.hasSkill(unit) ? { skill: skill.removeRule(unit.skill, id) } : {}),
+        });
+    },
+};

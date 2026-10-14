@@ -47,7 +47,6 @@ export function createDefinition(
                     shapes: [{ type: "CIRCLE", offset: [0, 0], radius: timing.hitRadius }],
                 },
             },
-            status: { initialFlags: [] },
             blockable: { weight: profile.blockWeight },
             locomotion: {
                 moveSpeedPerTick: perSecondToPerTick(profile.moveSpeedPerSecond),

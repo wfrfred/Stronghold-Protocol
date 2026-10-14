@@ -26,6 +26,7 @@ import {
   parseElementType,
 } from '../../dist/data/arknights/elemental.js';
 import { initialize } from '../../dist/core/tactical/unit/initialize.js';
+import { setHealingReceptionRule } from '../../dist/core/tactical/unit/capability/vitality/capability.js';
 import { copy } from '../../dist/core/tactical/unit/snapshot.js';
 
 const holder = (options = {}, extras = {}) => initialize({
@@ -144,8 +145,11 @@ test('ordinary elemental healing applies its full value to every bar, clamps eac
   assert.equal(heal(holder(), 500).amount, 0);
 });
 
-test('global elemental immunity rejects damage and healing without resetting progress; HP HEAL_FREE is independent', () => {
-  const raw = holder({}, { status: { initialFlags: ['HEAL_FREE'] } });
+test('global elemental immunity rejects damage and healing without resetting progress; HP healing rules are independent', () => {
+  const original = holder({}, { vitality: { maxHp: 100 } });
+  const raw = { ...original, vitality: setHealingReceptionRule(original.vitality, {
+    id: 'hp-healing-refused', cancel: () => ({ reason: 'HEAL_FREE' }),
+  }) };
   const damaged = damage(raw, 'BURN', 100).unit;
   assert.equal(heal(damaged, 50).amount, 50);
   const immune = { ...damaged, elemental: setElementalImmunity(damaged.elemental, true) };

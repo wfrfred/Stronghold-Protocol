@@ -1,5 +1,5 @@
 import { emptyCall, type CallContext } from "../../../../battle/execution/call.js";
-import { hasStatusFlag } from "../../status/capability.js";
+import { receptionCancellation } from "./reception.js";
 import { hasVitality } from "../capability.js";
 import type { Id } from "../../../unit.js";
 import type { Hook as RegisteredHook } from "../../../hook/hook.js";
@@ -65,10 +65,19 @@ export function resolveHealing(
     } else {
         const receiver = getUnit(state, request.targetUnitId)!;
 
-        if (!request.ignoreHealFree && hasStatusFlag(receiver, "HEAL_FREE")) {
+        const cancellation = receptionCancellation({
+            source:
+                request.sourceUnitId === null ? undefined : getUnit(state, request.sourceUnitId),
+            target: receiver,
+            battlefield: battlefieldView(state),
+            ignoreHealFree: request.ignoreHealFree,
+            request,
+        });
+
+        if (cancellation !== null) {
             pending = {
                 ...pending,
-                cancellation: pending.cancellation ?? { reason: "HEAL_FREE" },
+                cancellation: pending.cancellation ?? cancellation,
             };
         }
 

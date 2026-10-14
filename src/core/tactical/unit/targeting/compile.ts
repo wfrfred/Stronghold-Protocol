@@ -9,13 +9,14 @@ import type {
 import { areHostile, hasAllegiance } from "../capability/allegiance/capability.js";
 import { isSpatiallyPresent } from "../capability/presence/capability.js";
 import { hasHit, hasSpatial } from "../capability/spatial/capability.js";
-import { hasStatusFlag } from "../capability/status/capability.js";
+import { allowsTarget } from "../capability/targetable/capability.js";
 import {
     canReceiveElementDamage,
     canReceiveElementHeal,
     elementDamageRatio,
 } from "../capability/elemental/query.js";
 import { hasVitality, type Vitality } from "../capability/vitality/capability.js";
+import { canReceiveHealing } from "../capability/vitality/healing/reception.js";
 import type { Unit, Id } from "../unit.js";
 import type {
     DamageTargetingDefinition,
@@ -44,20 +45,6 @@ function blockingRelated(context: CombatTargetQueryContext, targetId: Id): boole
         battlefield.blockerOf(source.id) === targetId ||
         battlefield.blockedBy(source.id).includes(targetId)
     );
-}
-
-function acceptsHostileStatus(target: Unit, definition: DamageTargetingDefinition): boolean {
-    if (hasStatusFlag(target, "CAMOUFLAGE")) {
-        return false;
-    }
-    if (definition.ignoreTargetFree) {
-        return true;
-    }
-    if (hasStatusFlag(target, "TARGET_FREE") || hasStatusFlag(target, "INVINCIBLE")) {
-        return false;
-    }
-
-    return definition.ignoreInvisible || !hasStatusFlag(target, "INVISIBLE");
 }
 
 function compareDistance(context: CombatTargetQueryContext, left: Unit, right: Unit): number {
@@ -98,7 +85,12 @@ function compileDamageTargeting(
                 !hasSpatial(target) ||
                 (target.spatial.layer === "AIR" && !definition.canTargetAir) ||
                 !areHostile(context.source, target) ||
-                (requiresHealingEligibility && hasStatusFlag(target, "HEAL_FREE")) ||
+                (requiresHealingEligibility &&
+                    !canReceiveHealing({
+                        ...context,
+                        target,
+                        ignoreHealFree: false,
+                    })) ||
                 (requiresElementDamage && !canReceiveElementDamage(target)) ||
                 (requiresElementHealing && !canReceiveElementHeal(target))
             ) {
@@ -112,7 +104,7 @@ function compileDamageTargeting(
             }
 
             return (
-                acceptsHostileStatus(target, definition) &&
+                allowsTarget({ ...context, target, selector: definition, purposes }) &&
                 hasHit(target) &&
                 rangeOverlapsHit(
                     definition.scope.geometry,
@@ -163,10 +155,13 @@ function compileHealingTargeting(
                 ? elementDamageRatio(target) > 0
                 : isActiveVitalUnit(target) && target.vitality.hp < maxHp(target, context)) &&
             (!elementHealing || canReceiveElementHeal(target)) &&
-            (definition.ignoreAllyTargetFree || !hasStatusFlag(target, "ALLY_TARGET_FREE")) &&
+            allowsTarget({ ...context, target, selector: definition, purposes }) &&
             (!requiresHealingEligibility ||
-                definition.ignoreHealFree ||
-                !hasStatusFlag(target, "HEAL_FREE")) &&
+                canReceiveHealing({
+                    ...context,
+                    target,
+                    ignoreHealFree: definition.ignoreHealFree,
+                })) &&
             rangeOverlapsHit(
                 definition.geometry,
                 context.source.position,

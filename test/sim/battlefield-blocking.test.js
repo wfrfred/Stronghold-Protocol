@@ -4,10 +4,7 @@ import { createBattlefieldRuntime } from '../../dist/core/tactical/battlefield/r
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
 import { initialize } from '../../dist/core/tactical/unit/initialize.js';
-import {
-  addStatusContribution, removeStatusContribution,
-} from '../../dist/core/tactical/unit/capability/status/capability.js';
-import { setCapacityContribution } from '../../dist/core/tactical/unit/capability/blocking/blocker.js';
+import { setCapacityContribution, setRule, removeRule } from '../../dist/core/tactical/unit/capability/blocking/blocker.js';
 import * as modifier from '../../dist/core/tactical/unit/contribution/value.js';
 
 const create = units => {
@@ -23,7 +20,7 @@ const create = units => {
 const blocker = (id, position = [1, 1], capacity = 1, radius = 1) => initialize({
   id, position, definition: {
     id: `blocker-${id}`, allegiance: { side: 'ALLY' }, vitality: { maxHp: 100 },
-    blocker: { capacity, geometry: { radius } }, status: { initialFlags: [] },
+    blocker: { capacity, geometry: { radius } },
   },
 });
 const enemy = (id, position = [1.25, 1], weight = 1) => initialize({
@@ -36,10 +33,10 @@ const view = battlefield => battlefield.snapshot('draft');
 const update = (battlefield, id, transition) => ({
   type: 'UPDATE_UNIT', unit: transition(view(battlefield).getUnit(id)),
 });
-const stun = unit => ({
-  ...unit, status: addStatusContribution(unit.status, { id: 'test-stun', flags: ['STUNNED'] }),
+const disableBlocking = unit => ({
+  ...unit, blocker: setRule(unit.blocker, { id: 'test-disable-blocking', allows: () => false }),
 });
-const recover = unit => ({ ...unit, status: removeStatusContribution(unit.status, 'test-stun') });
+const enableBlocking = unit => ({ ...unit, blocker: removeRule(unit.blocker, 'test-disable-blocking') });
 const capacityChange = (unit, addition) => ({ ...unit, blocker: setCapacityContribution(unit.blocker, { id: 'test-capacity', value: [modifier.create({ addition })] }) });
 
 test('advance acquires in target ID order, choosing the nearest available blocker and then blocker ID', () => {
@@ -90,13 +87,13 @@ for (const [name, change] of [
   });
 }
 
-test('stun releases the blocker and recovery acquires without a separate blocking phase', () => {
+test('a blocking rule releases the blocker and its removal acquires without a separate blocking phase', () => {
   const battlefield = create([blocker(10), enemy(20)]);
   assert.equal(view(battlefield).blockerOf(20), 10);
-  battlefield.advance([update(battlefield, 10, stun)]);
+  battlefield.advance([update(battlefield, 10, disableBlocking)]);
   assert.equal(view(battlefield).blockerOf(20), undefined);
 
-  battlefield.advance([update(battlefield, 10, recover)]);
+  battlefield.advance([update(battlefield, 10, enableBlocking)]);
   assert.equal(view(battlefield).blockerOf(20), 10);
 });
 
@@ -105,13 +102,13 @@ test('one advance reconciles against final batch facts before publishing any new
   battlefield.apply();
   const original = view(battlefield).getUnit(10);
   battlefield.advance([
-    { type: 'UPDATE_UNIT', unit: stun(original) },
+    { type: 'UPDATE_UNIT', unit: disableBlocking(original) },
     { type: 'REGISTER_UNIT', unit: blocker(5, [1.125, 1]) },
     { type: 'UPDATE_UNIT', unit: original },
   ]);
-  assert.equal(view(battlefield).blockerOf(20), 10, 'temporary stun inside the batch must not transfer the relation');
+  assert.equal(view(battlefield).blockerOf(20), 10, 'temporary blocking denial inside the batch must not transfer the relation');
 
-  battlefield.advance([update(battlefield, 10, stun)]);
+  battlefield.advance([update(battlefield, 10, disableBlocking)]);
   assert.equal(view(battlefield).blockerOf(20), 5);
   assert.equal(battlefield.snapshot('state').blockerOf(20), 10);
   battlefield.apply();

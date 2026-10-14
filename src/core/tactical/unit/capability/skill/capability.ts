@@ -1,3 +1,4 @@
+import * as registry from "../../hook/hook.js";
 import {
     assertNonnegativeNumber,
     assertNonnegativeSafeInteger,
@@ -33,12 +34,19 @@ export interface SkillActivation {
     readonly remainingAmmo?: number;
 }
 
+export interface Rule {
+    readonly id: string;
+    readonly allowsActivation?: (unit: Unit) => boolean;
+    readonly allowsSpGain?: (unit: Unit) => boolean;
+}
+
 export interface State {
     readonly sp: number;
     readonly spRecoveryProgressTicks: number;
     readonly lastAdvancedTick: number;
     readonly nextActivationId: number;
     readonly active: SkillActivation | null;
+    readonly rules: readonly Rule[];
 }
 
 export interface Skill {
@@ -54,6 +62,26 @@ export function hasSkillDefinition(
     definition: UnitDefinition,
 ): definition is UnitDefinition & Skill["definition"] {
     return "skill" in definition;
+}
+
+export function setRule(state: State, rule: Rule): State {
+    const rules = registry.set(state.rules, rule);
+
+    return rules === state.rules ? state : { ...state, rules };
+}
+
+export function removeRule(state: State, id: string): State {
+    const rules = registry.remove(state.rules, id);
+
+    return rules === state.rules ? state : { ...state, rules };
+}
+
+export function canActivate(unit: Unit & Skill): boolean {
+    return unit.skill.rules.every((rule) => rule.allowsActivation?.(unit) ?? true);
+}
+
+export function canGainSp(unit: Unit & Skill): boolean {
+    return unit.skill.rules.every((rule) => rule.allowsSpGain?.(unit) ?? true);
 }
 
 export function skillSpCapacity(definition: Definition): number {
@@ -129,6 +157,7 @@ export function initialize(
         lastAdvancedTick: context.tick,
         nextActivationId: 0,
         active: null,
+        rules: [],
     };
     validateState(state);
 

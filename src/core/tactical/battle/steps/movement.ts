@@ -1,7 +1,6 @@
 import type { BattlefieldChange } from "../../battlefield/contract.js";
-import { hasRoutedLocomotion } from "../../unit/capability/locomotion/capability.js";
+import { canMove, hasRoutedLocomotion } from "../../unit/capability/locomotion/capability.js";
 import { hasAction } from "../../unit/capability/action/capability.js";
-import { hasStatusFlag } from "../../unit/capability/status/capability.js";
 import { stepRoutedUnit } from "../../unit/capability/locomotion/step.js";
 import type { Id } from "../../unit/unit.js";
 import { changeAlternativeRoutes } from "./route-control.js";
@@ -68,7 +67,7 @@ export function advanceMovement(
             queryContext: { unit, battlefield },
             movementAllowed:
                 (movementAllowed?.(unitId) ?? true) &&
-                !hasStatusFlag(unit, "STUNNED") &&
+                canMove(unit) &&
                 battlefield.blockerOf(unitId) === undefined &&
                 (!hasAction(unit) || tick >= unit.action.recoveryUntilTick),
             waitTickAllowed: true,

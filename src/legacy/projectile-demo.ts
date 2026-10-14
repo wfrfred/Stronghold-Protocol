@@ -16,40 +16,13 @@ import {
     type Offense,
 } from "../core/tactical/unit/capability/offense/capability.js";
 import { resolveAttackPower } from "../core/tactical/unit/capability/offense/query.js";
-import {
-    hasStatus,
-    addStatusContribution,
-    removeStatusContribution,
-    type Status,
-} from "../core/tactical/unit/capability/status/capability.js";
+import { healFree } from "../content/tactical/effects/protection.js";
 import { hasVitality } from "../core/tactical/unit/capability/vitality/capability.js";
 import { createDamageOperands } from "../core/tactical/unit/capability/vitality/damage/contract.js";
 
 export function createTacticalProjectileResources(cachedOnly = false): BattleResources {
     const resources = new CombatResources();
-    const marker: Definition<object, Status> = {
-        id: "contact-mark",
-        initialize: () => ({}),
-        onEnable: (state, context) => {
-            const unit = context.unit;
-
-            return updateUnit(state, {
-                ...unit,
-                status: addStatusContribution(unit.status, {
-                    id: `@effect/${context.self.id}/status`,
-                    flags: ["HEAL_FREE"],
-                }),
-            });
-        },
-        onDisable: (state, context) => {
-            const unit = context.unit;
-
-            return updateUnit(state, {
-                ...unit,
-                status: removeStatusContribution(unit.status, `@effect/${context.self.id}/status`),
-            });
-        },
-    };
+    const marker = { ...healFree, id: "contact-mark" };
     const boost: Definition<object, Offense> = {
         id: "post-launch-attack-boost",
         initialize: () => ({}),
@@ -92,7 +65,7 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
             contact: (state, context) => {
                 const target = context.facts.getUnit(context.targetUnitId);
 
-                if (target !== undefined && hasStatus(target)) {
+                if (target !== undefined) {
                     state = install(
                         state,
                         target,

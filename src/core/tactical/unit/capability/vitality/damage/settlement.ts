@@ -3,7 +3,8 @@ import type { Parameters } from "../../defense/capability.js";
 import { hasElemental } from "../../elemental/capability.js";
 import { hasVitality } from "../capability.js";
 import type { Id } from "../../../unit.js";
-import { hasStatusFlag } from "../../status/capability.js";
+import { receptionCancellation } from "./reception.js";
+import { isFatalDamageProtected } from "./fatal-protection.js";
 import { resolveDefense } from "../../defense/query.js";
 import { assertFiniteNumber, assertNonnegativeNumber } from "../../../../../common/assert.js";
 import {
@@ -167,13 +168,19 @@ export function resolveDamage(
             },
         };
     } else {
-        if (policy.considerInvincibility && hasStatusFlag(receiver, "INVINCIBLE")) {
+        const cancellation = receptionCancellation({
+            source:
+                request.sourceUnitId === null ? undefined : getUnit(state, request.sourceUnitId),
+            target: receiver,
+            battlefield: battlefieldView(state),
+            request,
+            policy,
+        });
+
+        if (cancellation !== null) {
             pending = {
                 ...pending,
-                cancellation: pending.cancellation ?? {
-                    stage: "RECEPTION",
-                    reason: "INVINCIBLE",
-                },
+                cancellation: pending.cancellation ?? cancellation,
             };
         }
 
@@ -237,7 +244,15 @@ export function resolveDamage(
     }
 
     const candidateHp = Math.max(0, finalTarget.vitality.hp - hpDamage);
-    const fatalProtection = candidateHp === 0 && hasStatusFlag(finalTarget, "UNDEADABLE");
+    const fatalProtection = isFatalDamageProtected({
+        source: request.sourceUnitId === null ? undefined : getUnit(state, request.sourceUnitId),
+        target: finalTarget,
+        battlefield: battlefieldView(state),
+        request,
+        policy,
+        hpDamage,
+        candidateHp,
+    });
     const hp = fatalProtection ? Math.min(1, finalTarget.vitality.hp) : candidateHp;
     const hpLoss = finalTarget.vitality.hp - hp;
 

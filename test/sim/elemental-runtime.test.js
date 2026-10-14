@@ -15,7 +15,10 @@ import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/
 import { createDefinition as createSkillDefinition } from '../../dist/core/tactical/unit/capability/skill/capability.js';
 import { activateSkill, advanceSkill } from '../../dist/core/tactical/unit/capability/skill/execution.js';
 import { gainUnitSkillSp } from '../../dist/core/tactical/battle/execution/skill-sp.js';
-import { hasStatusFlag } from '../../dist/core/tactical/unit/capability/status/capability.js';
+import { canGainSp } from '../../dist/core/tactical/unit/capability/skill/capability.js';
+import { canAct } from '../../dist/core/tactical/unit/capability/action/capability.js';
+import { canMove } from '../../dist/core/tactical/unit/capability/locomotion/capability.js';
+import { setHealingReceptionRule } from '../../dist/core/tactical/unit/capability/vitality/capability.js';
 import { resolveDefense } from '../../dist/core/tactical/unit/capability/defense/query.js';
 import { resolveAttackPower } from '../../dist/core/tactical/unit/capability/offense/query.js';
 import { create as modifier } from '../../dist/core/tactical/unit/contribution/value.js';
@@ -42,7 +45,7 @@ function definition(receiver = 'CHARACTER', overrides = {}, elementOptions = {})
   return { id: `element-${receiver}`, vitality: { maxHp: 100000 },
     defense: { defense: 500, resistance: 50 }, offense: { attack: 100 },
     allegiance: { side: receiver === 'CHARACTER' ? 'ALLY' : 'ENEMY' },
-    spatial: { layer: 'GROUND' }, hit: { geometry: hit }, status: { initialFlags: [] },
+    spatial: { layer: 'GROUND' }, hit: { geometry: hit },
     action: { normalAction: action() },
     elemental: createArknightsElementalDefinition({ receiver, ...elementOptions }), ...overrides };
 }
@@ -139,7 +142,7 @@ test('elemental execution: character necrosis settles fifteen magical pulses, dr
   assert.equal(getUnit(work, 1).vitality.hp, 99250);
   assert.equal(getUnit(work, 1).skill.sp, 5);
   assert.equal(work.events.filter(event => event.type === 'DAMAGE').length, 15);
-  assert.equal(hasStatusFlag(getUnit(work, 1), 'SP_RECOVERY_BLOCKED'), false);
+  assert.equal(canGainSp(getUnit(work, 1)), true);
   work = gainUnitSkillSp(work, 1, 'TIME', 3);
   assert.equal(getUnit(work, 1).skill.sp, 8);
 });
@@ -178,7 +181,10 @@ test('elemental HP damage ignores physical defense, magic resistance, source att
 
 test('elemental healing receives every EP bar independently from HP healing and refuses the shared burst lock', () => {
   const supplied = resources();
-  let receiver = unit('CHARACTER', { status: { initialFlags: ['HEAL_FREE'] } });
+  let receiver = unit('CHARACTER');
+  receiver = { ...receiver, vitality: setHealingReceptionRule(receiver.vitality, {
+    id: 'hp-healing-refused', cancel: ({ ignoreHealFree }) => ignoreHealFree ? null : { reason: 'HEAL_FREE' },
+  }) };
   receiver = { ...receiver, vitality: { ...receiver.vitality, hp: 99000 } };
   let work = effectFixtureWork(receiver);
   work = element(work, 'BURN', supplied, 0, 200).state;
@@ -246,14 +252,14 @@ test('elemental burst callbacks receive the current battlefield on begin and rec
   assert.equal(getUnit(recovered, 1).elemental.ep.BURN, 500);
 });
 
-test('elemental compiled actions select EP receivers without Vitality and keep element healing independent from HEAL_FREE', () => {
+test('elemental compiled actions select EP receivers without Vitality', () => {
   const supplied = resources();
   const healingAction = createActionDefinition({ triggerBindingId: 'primary', baseAttackTimeTicks: 30, recoveryTicks: 0,
     targetGroups: [{ id: 'primary', targeting: { type: 'HEAL', geometry: { type: 'SHAPES', geometry: range },
       includeSelf: false, ignoreAllyTargetFree: false, ignoreHealFree: false, maxTargets: 1 },
     operations: [{ type: 'ELEMENT_HEAL', power: 100 }] }], followUps: [] });
   const healer = initialize({ id: 0, position: [0, 0], definition: definition('CHARACTER', { action: { normalAction: healingAction } }) });
-  const { vitality: omitted, ...receiverDefinition } = definition('CHARACTER', { status: { initialFlags: ['HEAL_FREE'] } });
+  const { vitality: omitted, ...receiverDefinition } = definition('CHARACTER');
   let receiver = initialize({ id: 1, position: [1, 0], definition: receiverDefinition });
   let work = effectFixtureWork(healer, receiver);
   work = element(work, 'BURN', supplied, 0, 200).state;
@@ -320,7 +326,8 @@ test('elemental runtime: character neural stun prevents ordinary attacks and rou
   const { runtime } = battle('CHARACTER', 'NEURAL', { moving: true });
   const first = runtime.step();
   assert.equal(first.events.filter(event => event.type === 'DAMAGE' && event.sourceUnitId === 1).length, 0);
-  assert.equal(hasStatusFlag(victim(runtime), 'STUNNED'), true);
+  assert.equal(canAct(victim(runtime)), false);
+  assert.equal(canMove(victim(runtime)), false);
   const frozenPosition = [...victim(runtime).position];
   for (let tick = 1; tick < 300; tick++) {
     const step = runtime.step();
@@ -328,7 +335,8 @@ test('elemental runtime: character neural stun prevents ordinary attacks and rou
     assert.deepEqual(victim(runtime).position, frozenPosition);
   }
   const restored = runtime.step();
-  assert.equal(hasStatusFlag(victim(runtime), 'STUNNED'), false);
+  assert.equal(canAct(victim(runtime)), true);
+  assert.equal(canMove(victim(runtime)), true);
   assert.equal(restored.events.some(event => event.type === 'DAMAGE' && event.sourceUnitId === 1), true);
   assert.notDeepEqual(victim(runtime).position, frozenPosition);
 });

@@ -1511,8 +1511,8 @@ test('core selective and full projection preserve relation history and reacquire
     assert.deepEqual(h.state.blockingRelations, []);
   }
   for (const blockerState of [
-    { capacity: contribution.set([], { id: 'capacity-zero', value: [modifier.create({ finalScaler: 0 })] }), geometry: blocker.blocker.geometry, enabled: true },
-    { capacity: blocker.blocker.capacity, geometry: blocker.blocker.geometry, enabled: false },
+    { ...blocker.blocker, capacity: contribution.set([], { id: 'capacity-zero', value: [modifier.create({ finalScaler: 0 })] }) },
+    { ...blocker.blocker, enabled: false },
   ]) {
     h.commit([{ type: 'UPDATE_UNIT', unit: enemy }, { type: 'UPDATE_UNIT', unit: blocker },
       { type: 'SET_BLOCKING_RELATIONS', relations: blocking }]);

@@ -1,3 +1,4 @@
+import { invincible, healFree } from "../../dist/content/tactical/effects/protection.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
@@ -9,7 +10,6 @@ import {
     healingEffect,
     setSelf,
     stateOf,
-    statusEffect,
 } from "../helpers/vitality.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { getUnit, transitionUnit } from "../../dist/core/tactical/battle/state.js";
@@ -353,7 +353,7 @@ test("invincibility cancels reception while allowing ordinary observation and re
             },
         },
     ]);
-    const target = attach(attach(unit(2), statusEffect("invincible", ["INVINCIBLE"])), content);
+    const target = attach(attach(unit(2), invincible), content);
     let battle = workFor(unit(1), target);
     const resultSettlement = resolveDamage(battle, request(), new CombatResources());
     battle = resultSettlement.state;
@@ -458,7 +458,7 @@ test("healing cancellation stays visible to reception and reaction while ignoreH
             },
         },
     ]);
-    const target = attach(unit(2, { hp: 500, maxHp: 1000, flags: ["HEAL_FREE"] }), observer);
+    const target = attach(attach(unit(2, { hp: 500, maxHp: 1000 }), healFree), observer);
     let battle = workFor(unit(1), target);
     const cancelled = resolveHealing(battle, healRequest(10));
     battle = cancelled.state;

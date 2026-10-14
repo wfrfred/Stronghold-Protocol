@@ -12,10 +12,11 @@ import { emptyCall, type CallContext } from "../../../battle/execution/call.js";
 import type { Id } from "../../unit.js";
 import { TICKS_PER_SECOND } from "../../../tick.js";
 import { isSpatiallyPresent } from "../presence/capability.js";
-import { hasStatusFlag } from "../status/capability.js";
 import { hasVitality } from "../vitality/capability.js";
 import {
     hasSkill,
+    canActivate,
+    canGainSp,
     skillSpCapacity,
     type SkillActivation,
     type SkillActivationMode,
@@ -108,8 +109,7 @@ export function activateSkill(
         unit.lifecycle === "LEAVING" ||
         !isSpatiallyPresent(unit) ||
         (hasVitality(unit) && unit.vitality.hp <= 0) ||
-        hasStatusFlag(unit, "STUNNED") ||
-        hasStatusFlag(unit, "SILENCED")
+        !canActivate(unit)
     ) {
         return reject("UNAVAILABLE");
     }
@@ -386,7 +386,7 @@ export function advanceSkill(
         !wasActive &&
         isSpatiallyPresent(unit) &&
         (!hasVitality(unit) || unit.vitality.hp > 0) &&
-        !hasStatusFlag(unit, "SP_RECOVERY_BLOCKED") &&
+        canGainSp(unit) &&
         compiled.definition.spRecovery === "TIME" &&
         sp < capacity
     ) {

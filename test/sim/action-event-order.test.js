@@ -37,7 +37,6 @@ test("action event order: lethal damage settles support loss before the action f
     const common = {
         spatial: Object.freeze({ layer: "GROUND" }),
         hit: Object.freeze({ geometry }),
-        status: Object.freeze({ initialFlags: Object.freeze([]) }),
         defense: Object.freeze({ defense: 0, resistance: 0 }),
     };
     const attacker = initialize({
