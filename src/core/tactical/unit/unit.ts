@@ -7,7 +7,6 @@ export type Id = number;
 
 declare const unitType: unique symbol;
 
-/** Identity and stable structure within its originating battle. */
 export interface Ref<out U extends Unit = Unit> {
     readonly id: Id;
     readonly [unitType]: U;
