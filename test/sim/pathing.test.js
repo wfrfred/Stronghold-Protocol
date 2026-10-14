@@ -1265,7 +1265,7 @@ const flatBattlefield = (rows = 1, columns = 5) => createFieldState({
 });
 
 function projectionFacts(state) {
-  return { ...state, units: new Map([...state.units].map(([id, unit]) => [
+  return { ...state, projectiles: state.projectiles.values(), units: new Map([...state.units].map(([id, unit]) => [
     id, { ...unit, effects: unit.effects.toJSON() },
   ])) };
 }

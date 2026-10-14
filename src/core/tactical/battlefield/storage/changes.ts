@@ -50,7 +50,6 @@ export function applyBattlefieldChanges<U extends Unit>(
     changes: readonly BattlefieldChange<U>[],
 ) {
     const units = copyOnWriteMap(previous.units);
-    const projectiles = copyOnWriteMap(previous.projectiles);
     let blockingRelations = previous.blockingRelations;
     let supportRelations = previous.supportRelations;
     const mechanisms = copyOnWriteMap(previous.mechanisms);
@@ -78,31 +77,6 @@ export function applyBattlefieldChanges<U extends Unit>(
 
     for (const change of changes) {
         switch (change.type) {
-            case "REGISTER_PROJECTILE":
-                assertNonnegativeSafeInteger(change.projectile.id, "projectile id");
-                register(projectiles.edit(), change.projectile.id, change.projectile, "projectile");
-                break;
-
-            case "UPDATE_PROJECTILE": {
-                const previous = requireEntry(
-                    projectiles.value,
-                    change.projectile.id,
-                    "projectile",
-                );
-
-                if (previous.definitionRef.id !== change.projectile.definitionRef.id) {
-                    throw new RangeError("projectile definition cannot change during update");
-                }
-
-                projectiles.edit().set(change.projectile.id, change.projectile);
-                break;
-            }
-
-            case "REMOVE_PROJECTILE":
-                requireEntry(projectiles.value, change.projectileId, "projectile");
-                projectiles.edit().delete(change.projectileId);
-                break;
-
             case "REGISTER_UNIT":
                 assertNonnegativeSafeInteger(change.unit.id, "unit id");
                 assertUnitCapabilityPairing(change.unit);
@@ -291,7 +265,7 @@ export function applyBattlefieldChanges<U extends Unit>(
     return {
         content: {
             units: units.value,
-            projectiles: projectiles.value,
+            projectiles: previous.projectiles,
             mechanisms: mechanisms.value,
             navigationModifiers: navigationModifiers.value,
             blockingRelations,

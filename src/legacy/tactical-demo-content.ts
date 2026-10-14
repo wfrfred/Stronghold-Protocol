@@ -15,7 +15,7 @@ import * as mudrock from "../content/tactical/operators/mudrock.js";
 import { create as createHound } from "../content/tactical/enemies/hound.js";
 import {
     create as createCrossbowman,
-    registerArrow,
+    createArrow,
 } from "../content/tactical/enemies/crossbowman.js";
 import type { LegacyUnitMetadata } from "./tactical-demo-presentation.js";
 import type { Unit } from "../core/tactical/unit/unit.js";
@@ -90,7 +90,7 @@ export function createTacticalContentDemo(
             recoveryTicks: 6,
             hitRadius: 0.2,
             projectile: {
-                ref: registerArrow(combat),
+                definition: createArrow(combat),
                 speedPerSecond: 6,
                 contactRadius: 0.15,
                 stopDelayTicks: 0,

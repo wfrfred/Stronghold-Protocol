@@ -1,3 +1,5 @@
+import type { Definition } from "./definition.js";
+import type { Projectiles } from "./projectiles.js";
 import type { WorldPosition } from "../../geometry/coordinate.js";
 import type { RangeGeometry } from "../../geometry/shape.js";
 import type { Id } from "../../unit/unit.js";
@@ -13,7 +15,7 @@ export type ProjectileProgress =
 
 export interface Projectile<S extends object = object> {
     readonly id: ProjectileId;
-    readonly definitionRef: { readonly id: string };
+    readonly definition: Definition<S>;
     readonly source: Id | null;
     readonly traceTarget: Id | null;
     readonly position: WorldPosition;
@@ -32,11 +34,11 @@ export interface Projectile<S extends object = object> {
 
 export interface ProjectileView {
     readonly projectileIds: readonly ProjectileId[];
-    getProjectile(id: ProjectileId): Projectile | undefined;
+    getProjectile(id: ProjectileId): ReturnType<Projectiles["values"]>[number] | undefined;
 }
 
 /** Snapshot projection; live instances belong to Battlefield. */
 export interface ProjectileState {
     readonly nextProjectileId: ProjectileId;
-    readonly instances: readonly Projectile[];
+    readonly instances: ReturnType<Projectiles["values"]>;
 }

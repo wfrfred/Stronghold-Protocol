@@ -15,12 +15,12 @@ const defaultMap = createBattlefieldMap(1, 32, Array(32).fill(tile));
 export function fixtureBattlefieldState(input, mechanisms = input) {
     if (input.units instanceof Map && input.baseline !== undefined) return input;
     const units = Array.isArray(input) ? input : input.unitIds.map((id) => input.getUnit(id));
-    const state = create({ map: Array.isArray(input) ? defaultMap : (input.map ?? defaultMap) });
+    let state = create({ map: Array.isArray(input) ? defaultMap : (input.map ?? defaultMap) });
     const changes = units.map((unit) => ({ type: "REGISTER_UNIT", unit }));
     for (const id of mechanisms?.mechanismIds ?? [])
         changes.push({ type: "REGISTER_MECHANISM", mechanism: mechanisms.getMechanism(id) });
     for (const id of input.projectileIds ?? [])
-        changes.push({ type: "REGISTER_PROJECTILE", projectile: input.getProjectile(id) });
+        state = { ...state, projectiles: state.projectiles.add(input.getProjectile(id)) };
     for (const id of input.navigationModifierIds ?? [])
         changes.push({
             type: "ADD_NAVIGATION_MODIFIER",

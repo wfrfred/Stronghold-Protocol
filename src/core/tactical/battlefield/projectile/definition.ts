@@ -6,22 +6,15 @@ import type {
     ProjectileStopContext,
 } from "./context.js";
 
-declare const projectileStateType: unique symbol;
-
-export interface ProjectileDefinitionRef<S extends object> {
+export interface Definition<S extends object> {
     readonly id: string;
-    readonly [projectileStateType]: (state: S) => S;
-}
-
-export interface ProjectileDefinition<S extends object> {
-    readonly ref: ProjectileDefinitionRef<S>;
     readonly initialize: () => S;
     readonly acceptsContact: (context: ProjectileQueryContext<S>, target: Unit) => boolean;
     readonly contact?: (state: BattleState, context: ProjectileContactContext<S>) => BattleState;
     readonly stop?: (state: BattleState, context: ProjectileStopContext<S>) => BattleState;
 }
 
-export function createProjectileDefinition<S extends object>(definition: {
+export function createDefinition<S extends object>(definition: {
     readonly id: string;
     readonly initialize: () => S;
     readonly acceptsContact: (context: ProjectileQueryContext<NoInfer<S>>, target: Unit) => boolean;
@@ -30,13 +23,13 @@ export function createProjectileDefinition<S extends object>(definition: {
         context: ProjectileContactContext<NoInfer<S>>,
     ) => BattleState;
     readonly stop?: (state: BattleState, context: ProjectileStopContext<NoInfer<S>>) => BattleState;
-}): ProjectileDefinition<S> {
+}): Definition<S> {
     if (definition.id.length === 0) {
         throw new TypeError("projectile definition identity must be nonempty");
     }
 
     return {
-        ref: { id: definition.id } as ProjectileDefinitionRef<S>,
+        id: definition.id,
         initialize: definition.initialize,
         acceptsContact: definition.acceptsContact,
         ...(definition.contact === undefined ? {} : { contact: definition.contact }),

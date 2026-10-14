@@ -791,11 +791,11 @@ import type { BattlefieldView } from ${sourceModule('../battlefield/contract')};
 import type { BattlefieldMap } from ${sourceModule('../battlefield/map/map')};
 import { createUnitPlacementDefinition, instantiateUnitPlacement, type UnitPlacementDefinition } from ${sourceModule('../battle/creation/placement')};
 import type { BattleExecutionState } from ${sourceModule('../battle/execution/state')};
-import { launchProjectile, type ProjectileLaunchInput } from ${sourceModule('../battlefield/projectile/operations')};
-import type { ProjectileDefinitionRef } from ${sourceModule('../battlefield/projectile/definition')};
+import { launchProjectile, getProjectile, type ProjectileLaunchInput } from ${sourceModule('../battlefield/projectile/operations')};
+import type { Definition as ProjectileDefinition } from ${sourceModule('../battlefield/projectile/definition')};
+import type { Projectile } from ${sourceModule('../battlefield/projectile/projectile')};
 import type { State as BattleState } from ${sourceModule('../battle/state')};
 import type { ElementDamageReport } from ${sourceModule('capability/elemental/execution')};
-import type { ProjectileResources } from ${sourceModule('../battlefield/projectile/resources')};
 import type { Occupancy, State as OccupancyState } from ${sourceModule('capability/occupancy/capability')};
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
 type Assert<T extends true> = T;
@@ -811,9 +811,9 @@ declare const routed: RoutedLocomotionState;
 declare const battlefieldMap: BattlefieldMap;
 declare const execution: BattleExecutionState;
 declare const battleState: BattleState;
-declare const projectileRef: ProjectileDefinitionRef<{ readonly charges: number }>;
+declare const projectileDefinition: ProjectileDefinition<{ readonly charges: number }>;
 declare const projectileInput: ProjectileLaunchInput<{ readonly charges: number }>;
-declare const projectileResources: ProjectileResources;
+declare const typedProjectile: Projectile<{ readonly charges: number }>;
 declare const placement: { readonly definition: EnemyProbe; readonly position: readonly [number, number]; readonly states: { readonly occupancy: OccupancyState } }
   | { readonly definition: DeviceProbe; readonly position: readonly [number, number] };
 `;
@@ -922,13 +922,22 @@ if (hasRoutedLocomotion(guarded)) {
 const battlefield = createBattlefieldState({ map: battlefieldMap });
 const battlefieldView: BattlefieldView = view(battlefield);
 type RuleCache = Assert<Equal<Extract<keyof BattlefieldView['fieldCache'], 'invalidate' | 'clear'>, never>>;
-const projectileResult = launchProjectile(battleState, projectileRef, projectileInput, projectileResources, 0);
+const projectileResult = launchProjectile(battleState, projectileDefinition, projectileInput, 0);
 type ProjectileIdentity = Assert<Equal<typeof projectileResult.value, number>>;
 type ProjectileState = Assert<Equal<typeof projectileResult.state, BattleState>>;
+const recoveredProjectile = getProjectile(projectileResult.state, projectileResult.value, projectileDefinition);
+type ProjectileData = Assert<Equal<NonNullable<typeof recoveredProjectile>['state'], { readonly charges: number }>>;
+battleState.battlefield.projectiles.add(typedProjectile);
+battleState.battlefield.projectiles.replace(typedProjectile);
 `);
     assert.deepEqual(positive, []);
 
     for (const [name, source] of [
+      ['projectile-false-definition', `battleState.battlefield.projectiles.add({ ...typedProjectile, definition: { id: 'fake' } });`],
+      ['projectile-wrong-initial-state', `launchProjectile(battleState, projectileDefinition, { ...projectileInput, initialState: { charges: 'wrong' } }, 0);`],
+      ['projectile-wrong-state-pairing', `battleState.battlefield.projectiles.replace({ ...typedProjectile, state: { charges: 'wrong' } });`],
+      ['projectile-untyped-callback', `getProjectile(battleState, 0)!.definition.acceptsContact;`],
+      ['projectile-erased-transition', `transition(createBattlefieldState({ map: battlefieldMap }), [{ type: 'REGISTER_PROJECTILE', projectile: typedProjectile }]);`],
       ['state-extra-field', `initializeUnit({ id: 1, definition: { id: 'offense', offense: { attack: 1 } }, position: [0, 0], states: { offense: { ...initializeOffenseState(), marker: 'extra' as const } } }).offense.marker;`],
       ['normalized-state-extra', `instantiateUnitPlacement(createUnitPlacementDefinition({ definition: { id: 'offense', offense: { attack: 1 } }, position: [0, 0], states: { offense: { ...initializeOffenseState(), marker: 'extra' as const } } }), execution, 0).unit.offense.marker;`],
       ['mutable-definition', `initializeUnit({ id: 1, definition: { id: 'mutable', vitality: { maxHp: 10 } }, position: [0, 0] }).definition.vitality.maxHp = 99;`],

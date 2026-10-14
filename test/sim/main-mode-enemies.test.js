@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { prepare } from '../../dist/data/arknights/enemy.js';
 import { create as createHound } from '../../dist/content/tactical/enemies/hound.js';
-import { create as createCrossbowman, registerArrow } from '../../dist/content/tactical/enemies/crossbowman.js';
+import { create as createCrossbowman, createArrow } from '../../dist/content/tactical/enemies/crossbowman.js';
 import { initialize } from '../../dist/core/tactical/unit/initialize.js';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { createBattleState, getUnit, registerUnit } from '../../dist/core/tactical/battle/state.js';
@@ -73,7 +73,7 @@ test('unimplemented enemy mechanisms are rejected at the table and content bound
   assert.throws(() => createHound({ ...profile('enemy_1000_gopro'), stunImmune: true }, resources, timing), /stun immunity/);
   assert.throws(() => createHound(profile('enemy_1003_ncbow'), resources, timing), /Hound content/);
   assert.throws(() => createCrossbowman(profile('enemy_1000_gopro'), resources, {
-    ...timing, projectile: { ref: registerArrow(resources), speedPerSecond: 6, contactRadius: 0.1, stopDelayTicks: 0 },
+    ...timing, projectile: { definition: createArrow(resources), speedPerSecond: 6, contactRadius: 0.1, stopDelayTicks: 0 },
   }), /Crossbowman content/);
 });
 
@@ -95,26 +95,26 @@ test('hound factory composes capabilities and attacks its retained blocker with 
 
 test('crossbow uses explicit windup and arrow speed, then settles damage on contact', () => {
   const resources = new CombatResources();
-  const ref = registerArrow(resources);
+  const projectileDefinition = createArrow(resources);
   const { definition, action: compiled } = createCrossbowman(profile('enemy_1003_ncbow'), resources, {
     windupTicks: 1, recoveryTicks: 1, hitRadius: 0.2,
-    projectile: { ref, speedPerSecond: 6, contactRadius: 0.1, stopDelayTicks: 0 },
+    projectile: { definition: projectileDefinition, speedPerSecond: 6, contactRadius: 0.1, stopDelayTicks: 0 },
   });
   resources.seal();
   const bow = initialize({ id: 1, position: [2, 3.5], definition });
   const before = registerUnit(registerUnit(emptyBattle(), guard(0, [2, 2], 0)), bow);
   let state = startAction(before, { sourceUnitId: 1, compiled, tick: 0, mayStart: true }, {
-    projectileOperations: createProjectileOperations(resources.projectiles, 0),
+    projectileOperations: createProjectileOperations(0),
   });
   assert.equal(state.battlefield.projectiles.size, 0);
   assert.equal(getUnit(state, 0).vitality.hp, 1000);
   state = resumeActionExecution({ ...state, tick: 1 }, {
     executionId: 0, segments: compiled.program, tick: 1,
-  }, { projectileOperations: createProjectileOperations(resources.projectiles, 1) }).state;
+  }, { projectileOperations: createProjectileOperations(1) }).state;
   assert.equal(state.battlefield.projectiles.size, 1);
   assert.equal(getUnit(state, 0).vitality.hp, 1000);
   for (let tick = 2; tick <= 10; tick++) {
-    state = advanceProjectiles({ ...state, tick }, resources, tick, []);
+    state = advanceProjectiles({ ...state, tick }, tick, []);
   }
   assert.equal(getUnit(state, 0).vitality.hp, 800);
   assert.ok(state.events.some(event => event.type === 'PROJECTILE_HIT' && event.targetUnitId === 0));
@@ -124,7 +124,7 @@ test('crossbow uses explicit windup and arrow speed, then settles damage on cont
 
 test('different crossbow configurations share the registered arrow in one battle', () => {
   const resources = new CombatResources();
-  const projectile = { ref: registerArrow(resources), speedPerSecond: 6, contactRadius: 0.1, stopDelayTicks: 0 };
+  const projectile = { definition: createArrow(resources), speedPerSecond: 6, contactRadius: 0.1, stopDelayTicks: 0 };
   const base = createCrossbowman(profile('enemy_1003_ncbow'), resources, {
     windupTicks: 1, recoveryTicks: 1, hitRadius: 0.2, projectile,
   });
@@ -136,5 +136,5 @@ test('different crossbow configurations share the registered arrow in one battle
   assert.equal(advanced.definition.offense.attack, 310);
   assert.equal(base.action.program[0].resolve().ticks, 1);
   assert.equal(advanced.action.program[0].resolve().ticks, 2);
-  assert.strictEqual(base.definition.attackTiming.projectile.ref, advanced.definition.attackTiming.projectile.ref);
+  assert.strictEqual(base.definition.attackTiming.projectile.definition, advanced.definition.attackTiming.projectile.definition);
 });

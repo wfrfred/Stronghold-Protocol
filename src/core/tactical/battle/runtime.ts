@@ -192,7 +192,7 @@ export class BattleRuntime {
 
         state = this.#combat.advance(state, tick);
 
-        state = advanceProjectiles(state, tick, commands, resources);
+        state = advanceProjectiles(state, tick, commands);
 
         state = advanceMovement(
             state,

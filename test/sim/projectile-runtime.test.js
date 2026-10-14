@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { battle, unit } from '../helpers/action-fixture.js';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
-import { createProjectileDefinition } from '../../dist/core/tactical/battlefield/projectile/definition.js';
+import { createDefinition as createProjectileDefinition } from '../../dist/core/tactical/battlefield/projectile/definition.js';
 import { launchProjectile, getProjectile, replaceProjectile, resolveProjectileAttackPower } from '../../dist/core/tactical/battlefield/projectile/operations.js';
 import { advanceProjectiles, stopProjectile } from '../../dist/core/tactical/battlefield/projectile/settlement.js';
 import { advanceProjectiles as advanceBattleProjectiles } from '../../dist/core/tactical/battle/steps/projectiles.js';
@@ -25,7 +25,7 @@ const launchInput = {
 };
 
 function program(resources, { id = 'shell', cachedOnly = false, acceptsContact, contact, stop } = {}) {
-  return resources.projectiles.register(createProjectileDefinition({
+  return createProjectileDefinition({
     id, initialize: () => ({ contacts: 0 }),
     acceptsContact: acceptsContact ?? ((_context, target) => target.allegiance?.side === 'ENEMY'),
     contact: contact ?? ((state, context) => resources.settleDamage(state, {
@@ -33,11 +33,11 @@ function program(resources, { id = 'shell', cachedOnly = false, acceptsContact, 
       damageType: 'TRUE', operands: createDamageOperands(cachedOnly ? context.projectile.cachedAtk : resolveProjectileAttackPower(state, context.projectile)),
     }, context.call).state),
     ...(stop === undefined ? {} : { stop }),
-  }));
+  });
 }
 
 function launch(state, resources, definition, overrides = {}, tick = 0) {
-  return launchProjectile(state, definition.ref, { ...launchInput, ...overrides }, resources.projectiles, tick);
+  return launchProjectile(state, definition, { ...launchInput, ...overrides }, tick);
 }
 
 const instances = state => battlefieldView(state).projectileIds.map(id => getProjectile(state, id));
@@ -54,7 +54,7 @@ function runtime(initialUnits, resources, buildProgram, maxTicks = 20) {
 
 function actionLaunch(definition, services, overrides = {}, onLaunch = () => {}) {
   return { type: 'EXECUTE', run: (state, context) => {
-    const launched = context.projectiles.launch(state, definition.ref, { ...launchInput, ...overrides });
+    const launched = context.projectiles.launch(state, definition, { ...launchInput, ...overrides });
     onLaunch(launched.value);
     return { state: launched.state, value: { samples: { projectileId: launched.value } } };
   } };
@@ -89,7 +89,7 @@ test('projectile runtime: missing trace targets preserve the last destination an
   const initial = battle(unit(0), unit(1), { ...unit(2), position: [1.2, 0] });
   const launched = launch(initial, resources, shell).state;
   const retreated = removeUnit(launched, 1, 'RETREAT');
-  const reached = advanceProjectiles(retreated, resources, 1);
+  const reached = advanceProjectiles(retreated, 1);
   assert.deepEqual(damageEvents(reached).map(event => event.targetUnitId), [2]);
   assert.equal(getUnit(reached, 2).vitality.hp, 90);
   assert.equal(getUnit(initial, 2).vitality.hp, 100);
@@ -110,7 +110,7 @@ test('projectile runtime: frozen candidate identities read latest eligibility an
     },
   });
   const initial = launch(battle(unit(0), unit(1), { ...unit(2), position: [1.2, 0] }), resources, shell).state;
-  const reached = advanceProjectiles(initial, resources, 1);
+  const reached = advanceProjectiles(initial, 1);
   assert.deepEqual(observed, [1, 2]);
   assert.equal(getUnit(reached, 2).vitality.hp, 89);
   assert.equal(getUnit(reached, 3).vitality.hp, 100);
@@ -126,7 +126,7 @@ test('projectile runtime: live source attack, cached-only attack and missing-sou
     state = launch(state, resources, cached).state;
     state = updateUnit(state, ({ ...getUnit(state, 0), offense: setAttackContribution(getUnit(state, 0).offense, { id: 'bonus', value: [modifier({ addition: 10 })] }) }));
     if (missing) state = removeUnit(state, 0, 'RETREAT');
-    const arrived = advanceProjectiles(state, resources, 1);
+    const arrived = advanceProjectiles(state, 1);
     assert.deepEqual(damageEvents(arrived).map(event => event.amount), missing ? [10, 10] : [20, 10]);
   }
 });
@@ -150,14 +150,14 @@ test('projectile runtime: hit history is published before contact and synchronou
   const shell = program(resources, {
     contact: (state, context) => {
       assert.deepEqual(getProjectile(state, context.projectile.id).hitUnitIds, [1]);
-      state = stopProjectile(state, context.projectile.id, resources, context.tick, 'EXPLICIT', context.call);
+      state = stopProjectile(state, context.projectile.id, context.tick, 'EXPLICIT', context.call);
       observed.push(['successor', getProjectile(state, context.projectile.id)]);
       return state;
     },
     stop: (state, context) => { observed.push(['stop', context.projectile.hitUnitIds]); return state; },
   });
   const initial = launch(battle(unit(0), unit(1)), resources, shell).state;
-  const arrived = advanceProjectiles(initial, resources, 1);
+  const arrived = advanceProjectiles(initial, 1);
   assert.deepEqual(observed, [['stop', [1]], ['successor', undefined]]);
   assert.deepEqual(instances(arrived), []);
   assert.deepEqual(arrived.events.map(event => event.type), ['PROJECTILE_REACHED', 'PROJECTILE_STOPPED', 'PROJECTILE_HIT']);
@@ -167,11 +167,11 @@ test('projectile runtime: immutable copies replay arrival and stop without mutat
   const resources = new CombatResources();
   const shell = program(resources);
   const initial = launch(battle(unit(0), unit(1)), resources, shell, { stopDelayTicks: 1 }).state;
-  const arrived = advanceProjectiles(initial, resources, 1);
-  assert.deepEqual(advanceProjectiles(initial, resources, 1), arrived);
+  const arrived = advanceProjectiles(initial, 1);
+  assert.deepEqual(advanceProjectiles(initial, 1), arrived);
   assert.equal(getProjectile(initial, 0).position[0], 0);
   assert.equal(getProjectile(arrived, 0).progress.type, 'WAITING_TO_STOP');
-  const stopped = advanceProjectiles(arrived, resources, 2);
+  const stopped = advanceProjectiles(arrived, 2);
   assert.deepEqual(instances(stopped), []);
   assert.equal(getProjectile(arrived, 0).progress.type, 'WAITING_TO_STOP');
   assert.equal(damageEvents(stopped).length, 1);
@@ -184,7 +184,7 @@ test('projectile runtime: a stop callback exception exposes no partial result or
     throw new Error('stop failed');
   } });
   const initial = launch(battle(unit(0), unit(1)), resources, shell).state;
-  assert.throws(() => advanceProjectiles(initial, resources, 1), /stop failed/);
+  assert.throws(() => advanceProjectiles(initial, 1), /stop failed/);
   assert.equal(getUnit(initial, 1).vitality.hp, 100);
   assert.equal(getProjectile(initial, 0).progress.type, 'FLYING');
   assert.deepEqual(initial.events, []);
@@ -197,7 +197,7 @@ test('projectile runtime: ordered launches share immutable payloads and preserve
   const initial = battle();
   let state = initial;
   for (let index = 0; index < 32; index++) {
-    const launched = launchProjectile(state, shell.ref, input, resources.projectiles, 0);
+    const launched = launchProjectile(state, shell, input, 0);
     assert.equal(launched.value, index);
     state = launched.state;
   }
@@ -206,10 +206,10 @@ test('projectile runtime: ordered launches share immutable payloads and preserve
   assert.equal(state.execution.nextProjectileId, 32);
   assert.equal(getProjectile(state, 0).state, input.initialState);
   assert.equal(getProjectile(state, 0).contactRange, input.contactRange);
-  const advanced = advanceProjectiles(state, resources, 1);
+  const advanced = advanceProjectiles(state, 1);
   assert.equal(instances(advanced).every(value => value.position[0] === 1), true);
   assert.equal(instances(state).every(value => value.position[0] === 0), true);
-  assert.equal(advanceProjectiles(advanced, resources, 1), advanced);
+  assert.equal(advanceProjectiles(advanced, 1), advanced);
 });
 
 test('projectile runtime: a retained pure launch function operates on explicit immutable branches', () => {
@@ -238,10 +238,10 @@ test('projectile runtime: stop callbacks see peer progress while prior input sna
   } });
   let initial = launch(battle(), resources, shell, { source: null, traceTarget: null }).state;
   initial = launch(initial, resources, shell, { source: null, traceTarget: null, destination: [100, 0] }).state;
-  const progressed = advanceProjectiles(initial, resources, 1);
+  const progressed = advanceProjectiles(initial, 1);
   assert.deepEqual(observed, [{ id: 0, first: 'STOPPED', second: 'FLYING' }]);
   assert.deepEqual(instances(progressed).map(value => [value.id, value.position]), [[1, [1, 0]]]);
-  const stopped = stopProjectile(progressed, 1, resources, 1);
+  const stopped = stopProjectile(progressed, 1, 1);
   assert.deepEqual(observed[1], { id: 1, first: undefined, second: 'STOPPED' });
   assert.deepEqual(instances(stopped), []);
   assert.equal(getProjectile(initial, 0).progress.type, 'FLYING');
@@ -255,24 +255,71 @@ test('projectile runtime: ordered command stops complete before survivors advanc
   let state = battle();
   for (let index = 0; index < 4; index++) state = launch(state, resources, shell, { source: null, traceTarget: null, destination: [100, 0] }).state;
   const initial = state;
-  state = advanceBattleProjectiles(state, 1, [2, 2, 999, 0].map(projectileId => ({ type: 'STOP_PROJECTILE', projectileId })), resources);
+  state = advanceBattleProjectiles(state, 1, [2, 2, 999, 0].map(projectileId => ({ type: 'STOP_PROJECTILE', projectileId })));
   assert.deepEqual(observed, [2, 0]);
   assert.deepEqual(state.events.map(event => event.projectileId), [2, 0]);
   assert.deepEqual(instances(state).map(value => [value.id, value.position]), [[1, [1, 0]], [3, [1, 0]]]);
   assert.equal(instances(initial).every(value => value.position[0] === 0), true);
 });
 
-test('projectile Battlefield transitions: rejected batches cannot alter input facts or navigation maps', () => {
-  const resources = new CombatResources();
-  const shell = program(resources);
-  const initial = launch(battle(), resources, shell).state;
-  const projectile = getProjectile(initial, 0);
-  assert.throws(() => transition(initial.battlefield, [
-    { type: 'UPDATE_PROJECTILE', projectile: { ...projectile, position: [1, 0] } },
-    { type: 'REMOVE_PROJECTILE', projectileId: 999 },
-  ]), /unknown projectile/);
-  assert.equal(getProjectile(initial, 0), projectile);
-  assert.equal(transition(initial.battlefield, []).state.navigationMaps, initial.battlefield.navigationMaps);
+test('projectile storage: rejected edits preserve input facts and navigation maps', () => {
+  const shell = createProjectileDefinition({ id: 'shell', initialize: () => ({}), acceptsContact: () => false });
+  const initial = launchProjectile(battle(), shell, launchInput, 0).state;
+  const projectile = getProjectile(initial, 0, shell);
+  const changed = replaceProjectile(initial, { ...projectile, position: [1, 0] });
+  assert.throws(() => changed.battlefield.projectiles.remove(999), /unknown projectile/);
+  assert.strictEqual(getProjectile(initial, 0), projectile);
+  assert.strictEqual(changed.battlefield.navigationMaps, initial.battlefield.navigationMaps);
+  assert.strictEqual(changed.battlefield.spatial, initial.battlefield.spatial);
+  assert.strictEqual(transition(initial.battlefield, []).state.navigationMaps, initial.battlefield.navigationMaps);
+});
+
+test('projectile definitions: shared identity needs no registration and each launch initializes its own state', () => {
+  const definition = createProjectileDefinition({
+    id: 'shared-shell', initialize: () => ({ charges: 2 }), acceptsContact: () => false,
+  });
+  const initial = battle();
+  const first = launchProjectile(initial, definition, launchInput, 0);
+  const second = launchProjectile(first.state, definition, launchInput, 0);
+  const firstProjectile = getProjectile(second.state, first.value, definition);
+  const secondProjectile = getProjectile(second.state, second.value, definition);
+  assert.strictEqual(firstProjectile.definition, definition);
+  assert.strictEqual(secondProjectile.definition, definition);
+  assert.notStrictEqual(firstProjectile.state, secondProjectile.state);
+  const changed = replaceProjectile(second.state, { ...firstProjectile, state: { charges: 1 } });
+  assert.deepEqual(getProjectile(changed, first.value, definition).state, { charges: 1 });
+  assert.deepEqual(getProjectile(changed, second.value, definition).state, { charges: 2 });
+  assert.deepEqual(firstProjectile.state, { charges: 2 });
+  assert.equal(initial.battlefield.projectiles.size, 0);
+});
+
+test('projectile definitions: heterogeneous callbacks retain pairing and equal names do not replace identity', () => {
+  const observations = [];
+  const charges = createProjectileDefinition({
+    id: 'same-name', initialize: () => ({ charges: 2 }), acceptsContact: (_context, target) => target.id === 1,
+    contact: (state, context) => {
+      observations.push(['charges', context.projectile.state.charges]);
+      return replaceProjectile(state, { ...context.projectile, state: { charges: 1 } });
+    },
+    stop: (state, context) => { observations.push(['charges-stop', context.projectile.state.charges]); return state; },
+  });
+  const label = createProjectileDefinition({
+    id: 'same-name', initialize: () => ({ label: 'arrow' }), acceptsContact: (_context, target) => target.id === 1,
+    contact: (state, context) => { observations.push(['label', context.projectile.state.label]); return state; },
+    stop: (state, context) => { observations.push(['label-stop', context.projectile.state.label]); return state; },
+  });
+  const first = launchProjectile(battle(unit(0), unit(1)), charges, launchInput, 0);
+  const second = launchProjectile(first.state, label, launchInput, 0);
+  assert.equal(getProjectile(second.state, first.value, label), undefined);
+  assert.equal(getProjectile(second.state, second.value, charges), undefined);
+  assert.throws(() => replaceProjectile(second.state, {
+    ...getProjectile(second.state, first.value), definition: label, state: { label: 'replacement' },
+  }), /definition cannot change/);
+  const arrived = advanceProjectiles(second.state, 1);
+  assert.deepEqual(observations, [['charges', 2], ['charges-stop', 1], ['label', 'arrow'], ['label-stop', 'arrow']]);
+  assert.deepEqual(instances(arrived), []);
+  assert.strictEqual(getProjectile(second.state, first.value).definition, charges);
+  assert.deepEqual(getProjectile(second.state, first.value, charges).state, { charges: 2 });
 });
 
 test('projectile runtime: command stop callbacks see same-tick launches and a failing Tick is not published', () => {
@@ -303,4 +350,29 @@ test('projectile runtime: command stop callbacks see same-tick launches and a fa
   assert.deepEqual(control.observed, [[3, 100, 'STOPPED'], [1, 99, undefined], [0, 98, undefined]]);
   assert.equal(control.rt.snapshot().units.find(value => value.id === 1).vitality.hp, 97);
   assert.deepEqual(control.rt.snapshot().projectiles.instances.map(value => value.id), [2]);
+});
+
+
+test('projectile callbacks: nested launches and peer stops survive the outer stop', () => {
+  const observations = [];
+  const child = createProjectileDefinition({ id: 'child', initialize: () => ({ child: true }), acceptsContact: () => false });
+  const input = { ...launchInput, source: null, traceTarget: null, destination: [100, 0] };
+  const parent = createProjectileDefinition({
+    id: 'parent', initialize: () => ({}), acceptsContact: () => false,
+    stop: (state, context) => {
+      observations.push(context.projectile.id);
+      if (context.projectile.id !== 0) return state;
+      const launched = launchProjectile(state, child, input, context.tick);
+      return stopProjectile(launched.state, 1, context.tick, 'EXPLICIT', context.call);
+    },
+  });
+  const first = launchProjectile(battle(), parent, input, 0);
+  const initial = launchProjectile(first.state, parent, input, 0).state;
+  const stopped = stopProjectile(initial, 0, 1);
+  assert.deepEqual(observations, [0, 1]);
+  assert.deepEqual(instances(stopped).map(value => value.id), [2]);
+  assert.strictEqual(getProjectile(stopped, 2).definition, child);
+  assert.equal(stopped.execution.nextProjectileId, 3);
+  assert.deepEqual(instances(initial).map(value => value.id), [0, 1]);
+  assert.equal(initial.execution.nextProjectileId, 2);
 });

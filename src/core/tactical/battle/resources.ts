@@ -1,7 +1,6 @@
 import { ResourceRegistration } from "../../common/resource-registration.js";
 import type { DamageOperation } from "../unit/capability/vitality/damage/contract.js";
 import type { HealingOperation } from "../unit/capability/vitality/healing/contract.js";
-import { ProjectileResources } from "../battlefield/projectile/resources.js";
 import { resolveDamage } from "../unit/capability/vitality/damage/settlement.js";
 import { resolveHealing } from "../unit/capability/vitality/healing/settlement.js";
 import type { State as BattleState } from "./state.js";
@@ -25,7 +24,6 @@ import { SkillResources } from "../unit/capability/skill/resources.js";
 
 export class CombatResources {
     readonly #registration = new ResourceRegistration();
-    readonly projectiles = new ProjectileResources(this.#registration);
     readonly skills = new SkillResources(this.#registration);
     readonly elemental = new ElementalResources(this.#registration);
     readonly settleElementDamage: ElementDamageOperation = (state, request, call) => {

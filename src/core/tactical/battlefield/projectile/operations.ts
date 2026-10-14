@@ -1,17 +1,11 @@
 import { assertNonnegativeNumber, assertNonnegativeSafeInteger } from "../../../common/assert.js";
-import {
-    advanceBattlefield,
-    battlefieldView,
-    type State as BattleState,
-    type Result,
-} from "../../battle/state.js";
+import { battlefieldView, type State as BattleState, type Result } from "../../battle/state.js";
 import { resolveAttackPower } from "../../unit/capability/offense/query.js";
 import type { WorldPosition } from "../../geometry/coordinate.js";
 import type { RangeGeometry } from "../../geometry/shape.js";
 import type { Id } from "../../unit/unit.js";
-import type { ProjectileDefinitionRef } from "./definition.js";
-import type { ProjectileResources } from "./resources.js";
-import type { ProjectileId, Projectile } from "./projectile.js";
+import type { Definition } from "./definition.js";
+import type { ProjectileId, Projectile, ProjectileView } from "./projectile.js";
 
 export interface ProjectileLaunchInput<S extends object = object> {
     readonly source: Id | null;
@@ -29,25 +23,50 @@ export interface ProjectileLaunchInput<S extends object = object> {
 export interface ProjectileOperations {
     launch<S extends object>(
         state: BattleState,
-        ref: ProjectileDefinitionRef<S>,
+        definition: Definition<S>,
         input: ProjectileLaunchInput<NoInfer<S>>,
     ): Result<ProjectileId>;
-    get(state: BattleState, id: ProjectileId): Projectile | undefined;
+    get(state: BattleState, id: ProjectileId): ReturnType<ProjectileView["getProjectile"]>;
 }
 
-export function getProjectile(state: BattleState, id: ProjectileId): Projectile | undefined {
-    return battlefieldView(state).getProjectile(id);
+export function getProjectile(
+    state: BattleState,
+    id: ProjectileId,
+): ReturnType<ProjectileView["getProjectile"]>;
+export function getProjectile<S extends object>(
+    state: BattleState,
+    id: ProjectileId,
+    definition: Definition<S>,
+): Projectile<S> | undefined;
+export function getProjectile<S extends object>(
+    state: BattleState,
+    id: ProjectileId,
+    definition?: Definition<S>,
+): ReturnType<ProjectileView["getProjectile"]> | Projectile<S> | undefined {
+    return definition === undefined
+        ? state.battlefield.projectiles.get(id)
+        : state.battlefield.projectiles.get(id, definition);
 }
 
-export function replaceProjectile(state: BattleState, projectile: Projectile): BattleState {
+export function replaceProjectile<S extends object>(
+    state: BattleState,
+    projectile: Projectile<S>,
+): BattleState {
     const current = getProjectile(state, projectile.id);
 
-    return current === undefined || current === projectile
-        ? state
-        : advanceBattlefield(state, [{ type: "UPDATE_PROJECTILE", projectile }]);
+    if (current === undefined || current === projectile) {
+        return state;
+    }
+
+    const projectiles = state.battlefield.projectiles.replace(projectile);
+
+    return { ...state, battlefield: { ...state.battlefield, projectiles } };
 }
 
-export function resolveProjectileAttackPower(state: BattleState, projectile: Projectile): number {
+export function resolveProjectileAttackPower(
+    state: BattleState,
+    projectile: NonNullable<ReturnType<ProjectileView["getProjectile"]>>,
+): number {
     return (
         (projectile.source === null
             ? undefined
@@ -57,9 +76,8 @@ export function resolveProjectileAttackPower(state: BattleState, projectile: Pro
 
 export function launchProjectile<S extends object>(
     state: BattleState,
-    ref: ProjectileDefinitionRef<S>,
+    definition: Definition<S>,
     input: ProjectileLaunchInput<NoInfer<S>>,
-    resources: ProjectileResources,
     tick: number,
 ): Result<ProjectileId> {
     const id = state.execution.nextProjectileId;
@@ -85,10 +103,9 @@ export function launchProjectile<S extends object>(
         assertNonnegativeSafeInteger(input.expiresAtTick, "projectile expiration tick");
     }
 
-    const definition = resources.get(ref);
-    const projectile: Projectile = {
+    const projectile: Projectile<S> = {
         id,
-        definitionRef: ref,
+        definition,
         source: input.source,
         traceTarget: input.traceTarget,
         position: input.position,
@@ -104,17 +121,15 @@ export function launchProjectile<S extends object>(
         hitUnitIds: [],
         state: input.initialState ?? definition.initialize(),
     };
-    state = advanceBattlefield(state, [{ type: "REGISTER_PROJECTILE", projectile }]);
+    const projectiles = state.battlefield.projectiles.add(projectile);
+    state = { ...state, battlefield: { ...state.battlefield, projectiles } };
 
     return { state: { ...state, execution: { ...state.execution, nextProjectileId } }, value: id };
 }
 
-export function createProjectileOperations(
-    resources: ProjectileResources,
-    tick: number,
-): ProjectileOperations {
+export function createProjectileOperations(tick: number): ProjectileOperations {
     return {
         get: getProjectile,
-        launch: (state, ref, input) => launchProjectile(state, ref, input, resources, tick),
+        launch: (state, definition, input) => launchProjectile(state, definition, input, tick),
     };
 }

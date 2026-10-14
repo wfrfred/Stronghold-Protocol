@@ -31,7 +31,7 @@ import {
     getUnit,
     transitionUnit,
 } from "../../dist/core/tactical/battle/state.js";
-import { createProjectileDefinition } from "../../dist/core/tactical/battlefield/projectile/definition.js";
+import { createDefinition as createProjectileDefinition } from "../../dist/core/tactical/battlefield/projectile/definition.js";
 import {
     getProjectile,
     replaceProjectile,
@@ -309,57 +309,54 @@ function scenario({ failure = null, cancelled = false } = {}) {
             return state;
         },
     };
-    const shell = resources.projectiles.register(
-        createProjectileDefinition({
-            id: "combined-shell",
-            initialize: () => ({ contacts: 0 }),
-            acceptsContact: (context, unit) =>
-                unit.id === context.projectile.traceTarget && !marked(unit),
-            contact: (state, context) => {
-                scopes.push(context);
-                const current = getProjectile(state, context.projectile.id);
-                state = replaceProjectile(state, {
-                    ...current,
-                    state: { contacts: current.state.contacts + 1 },
-                });
-                const damaged = resources.settleDamage(
-                    state,
-                    {
-                        sourceUnitId: context.projectile.source,
-                        targetUnitId: context.targetUnitId,
-                        damageType: "TRUE",
-                        operands: createDamageOperands(context.projectile.cachedAtk),
-                        tick: context.tick,
-                    },
-                    context.call,
+    const shell = createProjectileDefinition({
+        id: "combined-shell",
+        initialize: () => ({ contacts: 0 }),
+        acceptsContact: (context, unit) =>
+            unit.id === context.projectile.traceTarget && !marked(unit),
+        contact: (state, context) => {
+            scopes.push(context);
+            const current = getProjectile(state, context.projectile.id, shell);
+            state = replaceProjectile(state, {
+                ...current,
+                state: { contacts: current.state.contacts + 1 },
+            });
+            const damaged = resources.settleDamage(
+                state,
+                {
+                    sourceUnitId: context.projectile.source,
+                    targetUnitId: context.targetUnitId,
+                    damageType: "TRUE",
+                    operands: createDamageOperands(context.projectile.cachedAtk),
+                    tick: context.tick,
+                },
+                context.call,
+            );
+            state = damaged.state;
+            reports.push(damaged.value);
+            state = stopProjectile(
+                state,
+                context.projectile.id,
+                context.tick,
+                "EXPLICIT",
+                context.call,
+            );
+            if (fault.enabled && failure === "late-projectile") {
+                const auraState = getUnit(state, 0).effects.values().find(
+                    (instance) => instance.definition === aura,
+                ).data;
+                assert.deepEqual(
+                    auraState.receivers.map((binding) => binding.unitId),
+                    [0, 1, 2, 3],
                 );
-                state = damaged.state;
-                reports.push(damaged.value);
-                state = stopProjectile(
-                    state,
-                    context.projectile.id,
-                    resources,
-                    context.tick,
-                    "EXPLICIT",
-                    context.call,
-                );
-                if (fault.enabled && failure === "late-projectile") {
-                    const auraState = getUnit(state, 0).effects.values().find(
-                        (instance) => instance.definition === aura,
-                    ).data;
-                    assert.deepEqual(
-                        auraState.receivers.map((binding) => binding.unitId),
-                        [0, 1, 2, 3],
-                    );
-                    assert.equal(getUnit(state, 1).vitality.hp, 83);
-                    assert.equal(marked(getUnit(state, 1)), true);
-                    assert.equal(getUnit(state, 2).action.readyAtTick, 101);
-                    throw new Error("late composition failure");
-                }
-                return state;
-            },
-        }),
-    );
+                assert.equal(getUnit(state, 1).vitality.hp, 83);
+                assert.equal(marked(getUnit(state, 1)), true);
+                assert.equal(getUnit(state, 2).action.readyAtTick, 101);
+                throw new Error("late composition failure");
+            }
+            return state;
+        },
+    });
     const primary = actor("primary-launcher");
     const sibling = actor("later-launcher");
     const scheduled = {
@@ -399,7 +396,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
     const launch = (state, context, targetUnitId) => {
         const source = getUnit(state, context.sourceUnitId);
         const target = getUnit(state, targetUnitId);
-        const launched = context.projectiles.launch(state, shell.ref, {
+        const launched = context.projectiles.launch(state, shell, {
             source: source.id,
             traceTarget: targetUnitId,
             position: source.position,

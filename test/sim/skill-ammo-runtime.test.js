@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/state.js";
-import { createProjectileDefinition } from "../../dist/core/tactical/battlefield/projectile/definition.js";
+import { createDefinition as createProjectileDefinition } from "../../dist/core/tactical/battlefield/projectile/definition.js";
 import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
 import { createDefinition } from "../../dist/core/tactical/unit/archetype/operator.js";
 import { compileAction } from "../../dist/core/tactical/unit/capability/action/compile.js";
@@ -67,7 +67,7 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, program } = {}) {
     id: "ammo-target", vitality: { maxHp: 10000 }, defense: { defense: 0, resistance: 0 },
     allegiance: { side: "ENEMY" }, spatial: { layer: "GROUND" }, hit: { geometry: hit },
   };
-  const shell = resources.projectiles.register(createProjectileDefinition({
+  const shell = createProjectileDefinition({
     id: "runtime-ammo-shell", initialize: () => ({}),
     acceptsContact: (_context, unit) => unit.allegiance?.side === "ENEMY",
     contact: (state, context) => {
@@ -76,7 +76,7 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, program } = {}) {
         tick: context.tick, damageType: "TRUE", operands: createDamageOperands(context.projectile.cachedAtk),
       }, context.call).state;
     },
-  }));
+  });
   const base = createLegacyCombatSpec({ rows: 1, columns: 8, operators: [], enemies: [], maxTicks: 20, seed: 7 });
   const runtime = new BattleRuntime({ ...base,
     initialUnits: [{ definition, position: [0, 0] },
@@ -193,7 +193,7 @@ test("ammo runtime: the last released projectile survives skill completion and r
       const actor = getUnit(state, context.sourceUnitId);
       const targetUnitId = context.bindings.get("main")[0];
       const target = getUnit(state, targetUnitId);
-      const launched = context.projectiles.launch(state, shell.ref, {
+      const launched = context.projectiles.launch(state, shell, {
         source: actor.id, traceTarget: targetUnitId, position: actor.position, destination: target.position,
         cachedAtk: resolveAttackPower(actor.id, battlefieldView(state)),
         speedPerTick: 1, contactRange: { type: "SHAPES", geometry: hit }, stopDelayTicks: 0,

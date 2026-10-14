@@ -13,15 +13,12 @@ import type {
 } from "./navigation/modifier.js";
 import type { BlockingRelation } from "./blocking/relations.js";
 import type { SupportRelation } from "./support/relations.js";
-import type { ProjectileId, Projectile, ProjectileView } from "./projectile/projectile.js";
+import type { ProjectileView } from "./projectile/projectile.js";
 import type { Index } from "./storage/effect-lifetimes.js";
 
 export type BattlefieldRemovalReason = "DEATH" | "RETREAT" | "EXPIRED" | "SCRIPT";
 
 export type BattlefieldChange<U extends Unit = Unit> =
-    | { readonly type: "REGISTER_PROJECTILE"; readonly projectile: Projectile }
-    | { readonly type: "UPDATE_PROJECTILE"; readonly projectile: Projectile }
-    | { readonly type: "REMOVE_PROJECTILE"; readonly projectileId: ProjectileId }
     | { readonly type: "REGISTER_UNIT"; readonly unit: U }
     | { readonly type: "UPDATE_UNIT"; readonly unit: U }
     | {

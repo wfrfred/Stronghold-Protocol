@@ -4,8 +4,8 @@ import { assertNonnegativeSafeInteger, assertPositiveNumber } from "../../../cor
 import type { CombatResources } from "../../../core/tactical/battle/resources.js";
 import { battlefieldView, getUnit } from "../../../core/tactical/battle/state.js";
 import {
-    createProjectileDefinition,
-    type ProjectileDefinitionRef,
+    createDefinition as createProjectileDefinition,
+    type Definition as ProjectileDefinition,
 } from "../../../core/tactical/battlefield/projectile/definition.js";
 import { resolveProjectileAttackPower } from "../../../core/tactical/battlefield/projectile/operations.js";
 import { hasAllegiance } from "../../../core/tactical/unit/capability/allegiance/capability.js";
@@ -24,7 +24,7 @@ import {
 } from "./ground.js";
 
 export interface Projectile {
-    readonly ref: ProjectileDefinitionRef<object>;
+    readonly definition: ProjectileDefinition<object>;
     readonly speedPerSecond: number;
     readonly contactRadius: number;
     readonly stopDelayTicks: number;
@@ -41,33 +41,31 @@ export interface Definition extends GroundDefinition {
 
 export type Enemy = InitializedUnit<Definition>;
 
-export function registerArrow(resources: CombatResources): ProjectileDefinitionRef<object> {
-    return resources.projectiles.register(
-        createProjectileDefinition({
-            id: "main-mode-crossbow-arrow",
-            initialize: () => ({}),
-            acceptsContact: (context, target) =>
-                target.id === context.projectile.traceTarget &&
-                hasAllegiance(target) &&
-                target.allegiance.side === "ALLY" &&
-                hasVitality(target) &&
-                target.vitality.hp > 0,
-            contact: (state, context) =>
-                resources.settleDamage(
-                    state,
-                    {
-                        sourceUnitId: context.projectile.source,
-                        targetUnitId: context.targetUnitId,
-                        tick: context.tick,
-                        damageType: "PHYSICAL",
-                        operands: createDamageOperands(
-                            resolveProjectileAttackPower(state, context.projectile),
-                        ),
-                    },
-                    context.call,
-                ).state,
-        }),
-    ).ref;
+export function createArrow(resources: CombatResources): ProjectileDefinition<object> {
+    return createProjectileDefinition({
+        id: "main-mode-crossbow-arrow",
+        initialize: () => ({}),
+        acceptsContact: (context, target) =>
+            target.id === context.projectile.traceTarget &&
+            hasAllegiance(target) &&
+            target.allegiance.side === "ALLY" &&
+            hasVitality(target) &&
+            target.vitality.hp > 0,
+        contact: (state, context) =>
+            resources.settleDamage(
+                state,
+                {
+                    sourceUnitId: context.projectile.source,
+                    targetUnitId: context.targetUnitId,
+                    tick: context.tick,
+                    damageType: "PHYSICAL",
+                    operands: createDamageOperands(
+                        resolveProjectileAttackPower(state, context.projectile),
+                    ),
+                },
+                context.call,
+            ).state,
+    });
 }
 
 export function create(
@@ -104,7 +102,7 @@ export function create(
         attackTiming: timing,
     };
     const action = compileAction(definition.action.normalAction, combat);
-    const arrow = projectile.ref;
+    const arrow = projectile.definition;
     const program: CompiledActionSegment[] = [
         {
             type: "EXECUTE",

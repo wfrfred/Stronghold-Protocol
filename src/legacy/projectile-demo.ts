@@ -2,7 +2,7 @@ import { CombatResources } from "../core/tactical/battle/resources.js";
 import type { BattleResources } from "../core/tactical/battle/runtime.js";
 import { battlefieldView, getUnit, updateUnit } from "../core/tactical/battle/state.js";
 import { resolveProjectileAttackPower } from "../core/tactical/battlefield/projectile/operations.js";
-import { createProjectileDefinition } from "../core/tactical/battlefield/projectile/definition.js";
+import { createDefinition as createProjectileDefinition } from "../core/tactical/battlefield/projectile/definition.js";
 import { createShapeGeometry, type RangeGeometry } from "../core/tactical/geometry/shape.js";
 import * as modifier from "../core/tactical/unit/contribution/value.js";
 import { compileAction } from "../core/tactical/unit/capability/action/compile.js";
@@ -52,50 +52,48 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
             shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.2 }],
         }),
     });
-    const shell = resources.projectiles.register(
-        createProjectileDefinition({
-            id: cachedOnly ? "cached-atk-shell" : "live-atk-shell",
-            initialize: () => ({}),
-            acceptsContact: (context, target) =>
-                target.id === context.projectile.traceTarget &&
-                hasAllegiance(target) &&
-                target.allegiance.side === "ENEMY" &&
-                hasVitality(target) &&
-                target.vitality.hp > 0,
-            contact: (state, context) => {
-                const target = context.facts.getUnit(context.targetUnitId);
+    const shell = createProjectileDefinition({
+        id: cachedOnly ? "cached-atk-shell" : "live-atk-shell",
+        initialize: () => ({}),
+        acceptsContact: (context, target) =>
+            target.id === context.projectile.traceTarget &&
+            hasAllegiance(target) &&
+            target.allegiance.side === "ENEMY" &&
+            hasVitality(target) &&
+            target.vitality.hp > 0,
+        contact: (state, context) => {
+            const target = context.facts.getUnit(context.targetUnitId);
 
-                if (target !== undefined) {
-                    state = install(
-                        state,
-                        target,
-                        marker,
-                        {
-                            source: context.projectile.source,
-                            scopes: [{ type: "TICK", tick: context.tick + 45 }],
-                        },
-                        context.call,
-                    ).state;
-                }
-
-                return resources.settleDamage(
+            if (target !== undefined) {
+                state = install(
                     state,
+                    target,
+                    marker,
                     {
-                        sourceUnitId: context.projectile.source,
-                        targetUnitId: context.targetUnitId,
-                        tick: context.tick,
-                        damageType: "ARTS",
-                        operands: createDamageOperands(
-                            cachedOnly
-                                ? context.projectile.cachedAtk
-                                : resolveProjectileAttackPower(state, context.projectile),
-                        ),
+                        source: context.projectile.source,
+                        scopes: [{ type: "TICK", tick: context.tick + 45 }],
                     },
                     context.call,
                 ).state;
-            },
-        }),
-    );
+            }
+
+            return resources.settleDamage(
+                state,
+                {
+                    sourceUnitId: context.projectile.source,
+                    targetUnitId: context.targetUnitId,
+                    tick: context.tick,
+                    damageType: "ARTS",
+                    operands: createDamageOperands(
+                        cachedOnly
+                            ? context.projectile.cachedAtk
+                            : resolveProjectileAttackPower(state, context.projectile),
+                    ),
+                },
+                context.call,
+            ).state;
+        },
+    });
 
     return {
         combat: resources,
@@ -129,7 +127,7 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
                             throw new Error("projectile demo source requires Offense capability");
                         }
 
-                        const launched = context.projectiles.launch(state, shell.ref, {
+                        const launched = context.projectiles.launch(state, shell, {
                             source: source.id,
                             traceTarget: target.id,
                             position: source.position,

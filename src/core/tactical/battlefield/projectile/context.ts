@@ -1,14 +1,11 @@
 import type { CallContext } from "../../battle/execution/call.js";
-import type { DamageOperation } from "../../unit/capability/vitality/damage/contract.js";
-import type { HealingOperation } from "../../unit/capability/vitality/healing/contract.js";
 import type { Unit, Id } from "../../unit/unit.js";
-import type { ProjectileResources } from "./resources.js";
-import type { ProjectileId, Projectile } from "./projectile.js";
+import type { ProjectileId, Projectile, ProjectileView } from "./projectile.js";
 
 export interface ProjectileFacts {
     readonly unitIds: readonly Id[];
     getUnit(id: Id): Unit | undefined;
-    getProjectile(id: ProjectileId): Projectile | undefined;
+    getProjectile(id: ProjectileId): ReturnType<ProjectileView["getProjectile"]>;
 }
 
 export interface ProjectileQueryContext<S extends object = object> {
@@ -26,10 +23,4 @@ export interface ProjectileContactContext<
     S extends object = object,
 > extends ProjectileCallbackContext<S> {
     readonly targetUnitId: Id;
-}
-
-export interface ProjectileServices {
-    readonly projectiles: ProjectileResources;
-    readonly settleDamage: DamageOperation;
-    readonly settleHealing: HealingOperation;
 }

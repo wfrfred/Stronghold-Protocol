@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { battlefieldView, getUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
-import { createProjectileDefinition } from "../../dist/core/tactical/battlefield/projectile/definition.js";
+import { createDefinition as createProjectileDefinition } from "../../dist/core/tactical/battlefield/projectile/definition.js";
 import { launchProjectile, getProjectile } from "../../dist/core/tactical/battlefield/projectile/operations.js";
 import { advanceProjectiles } from "../../dist/core/tactical/battlefield/projectile/settlement.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
@@ -108,21 +108,21 @@ test("explicit two-round attack consumption ends a 32-round profile after sixtee
 
 test("the final shot is sampled with its buff before consumption and its projectile keeps that released sample", () => {
   const f = ammoFixture(1);
-  const shell = f.resources.projectiles.register(createProjectileDefinition({
+  const shell = createProjectileDefinition({
     id: "ammo-cached-shell", initialize: () => ({}),
     acceptsContact: (_context, target) => target.id === 2,
     contact: (state, context) => { return f.resources.settleDamage(state, { sourceUnitId: 1, targetUnitId: 2, tick: context.tick, damageType: "TRUE", operands: createDamageOperands(context.projectile.cachedAtk) }, context.call).state; },
-  }));
+  });
   const attackPower = resolveAttackPower(1, battlefieldView(f.work));
   assert.equal(attackPower, 200);
-  const launched = launchProjectile(f.work, shell.ref, {
+  const launched = launchProjectile(f.work, shell, {
     source: 1, traceTarget: 2, position: [0, 0], destination: [1, 0], cachedAtk: attackPower,
     speedPerTick: 1, contactRange: { type: "SHAPES", geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.2 }] } }, stopDelayTicks: 0,
-  }, f.resources.projectiles, 0);
+  }, 0);
   f.work = consumeSkillAmmo(launched.state, 1, 0, f.resources).state;
   assert.equal(resolveAttackPower(1, battlefieldView(f.work)), 100);
   const projectile = getProjectile(f.work, launched.value);
   assert.equal(projectile.cachedAtk, 200);
-  f.work = advanceProjectiles(f.work, f.resources, 1);
+  f.work = advanceProjectiles(f.work, 1);
   assert.equal(getUnit(f.work, 2).vitality.hp, 800);
 });

@@ -79,7 +79,7 @@ export function createCombat(
     ): BattleState => {
         const actionResources: ActionStartResources = {
             completeAttack: resources.completeAttack,
-            projectileOperations: createProjectileOperations(resources.projectiles, tick),
+            projectileOperations: createProjectileOperations(tick),
         };
         const ids = [
             ...new Set([
