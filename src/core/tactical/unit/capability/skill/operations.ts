@@ -140,6 +140,7 @@ export function activate(
                     endsAtTick: sustain.type === "TIME" ? sustain.endsAtTick : null,
                 },
             ]);
+            battle = dispatch(battle, identity, "activated", active);
 
             if (previousSp !== null) {
                 battle = dispatch(battle, identity, "spPaid", {
@@ -153,6 +154,8 @@ export function activate(
 
             if (
                 current?.lifecycle === "PRESENT" &&
+                isSpatiallyPresent(current) &&
+                (!hasVitality(current) || current.vitality.hp > 0) &&
                 current.skill.active?.id === active.id &&
                 current.skill.active.status === "ACTIVE" &&
                 definition.onStart !== undefined
@@ -160,7 +163,6 @@ export function activate(
                 battle = definition.onStart(battle, current.skill.active);
             }
 
-            battle = dispatch(battle, identity, "activated", active);
             const after = query.get(battle, reference);
 
             if (
