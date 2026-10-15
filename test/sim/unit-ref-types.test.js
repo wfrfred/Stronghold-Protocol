@@ -12,7 +12,7 @@ test("Unit Refs preserve guard proofs, permit covariance and reject forged or st
     const path = join(directory, "refs.mts");
     try {
         writeFileSync(path, `
-import type { Unit, Ref } from ${source("unit/unit")};
+import type { Unit, Ref, Definition } from ${source("unit/unit")};
 import type { State as BattleState } from ${source("battle/state")};
 import * as units from ${source("unit/query")};
 import { hasLocomotion, type Locomotion } from ${source("unit/capability/locomotion/capability")};
@@ -42,6 +42,16 @@ const preserved = units.ref(known);
 type Preserved = Assert<Equal<typeof preserved, Ref<Unit & Locomotion & Vitality>>>;
 const current = units.get(battle, strong);
 type Current = Assert<Equal<typeof current, (Unit & Locomotion & Vitality) | undefined>>;
+const candidates = units.all(battle);
+type Candidates = Assert<Equal<typeof candidates, Ref<Unit>[]>>;
+type TickParameters = Assert<Equal<Parameters<NonNullable<Definition["onTick"]>>, [BattleState, Unit]>>;
+const tick: NonNullable<Definition["onTick"]> = (state, self) => {
+    const reference: Ref<Unit> = units.ref(self);
+    return state;
+};
+declare const tickById: (state: BattleState, unitId: number) => BattleState;
+// @ts-expect-error Unit tick callbacks receive the current Unit rather than its ID.
+const invalidTick: Definition = { id: "invalid", onTick: tickById };
 const locomotives = units.filter(battle, hasLocomotion);
 type Locomotives = Assert<Equal<typeof locomotives, Ref<Unit & Locomotion>[]>>;
 const skills = units.filter(battle, hasSkill);

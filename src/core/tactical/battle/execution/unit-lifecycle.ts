@@ -1,5 +1,6 @@
 import { closeLifetime } from "./lifetime.js";
 import type { Id } from "../../unit/unit.js";
+import * as units from "../../unit/query.js";
 import type { BattlefieldRemovalReason } from "../../battlefield/contract.js";
 import type { StoppedSkillActivation } from "../../unit/capability/skill/execution.js";
 import type { ActionExecutionSignal } from "../../unit/capability/action/process.js";
@@ -45,18 +46,18 @@ export function enterUnits(state: BattleState, unitIds: readonly Id[]): BattleSt
     return state;
 }
 
-export function advanceUnits(state: BattleState): BattleState {
-    const unitIds = [...state.battlefield.units.keys()];
+export function advanceUnits(battle: BattleState): BattleState {
+    const candidates = units.all(battle);
 
-    for (const unitId of unitIds) {
-        const unit = getUnit(state, unitId);
+    for (const ref of candidates) {
+        const self = units.get(battle, ref);
 
-        if (unit?.lifecycle === "PRESENT" && unit.definition.onTick !== undefined) {
-            state = unit.definition.onTick(state, unitId);
+        if (self?.lifecycle === "PRESENT" && self.definition.onTick !== undefined) {
+            battle = self.definition.onTick(battle, self);
         }
     }
 
-    return state;
+    return battle;
 }
 
 export function retireCombatUnit(

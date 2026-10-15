@@ -11,6 +11,10 @@ export function ref<U extends Unit>(unit: U): Ref<U> {
     return { id: unit.id } as Ref<U>;
 }
 
+export function all(battle: BattleState): Ref[] {
+    return [...battle.battlefield.units.values()].map(ref);
+}
+
 export function filter<U extends Unit>(
     battle: BattleState,
     guard: (unit: Unit) => unit is U,

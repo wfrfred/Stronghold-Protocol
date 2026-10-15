@@ -16,6 +16,21 @@ const unit = (id, capabilities = {}) => initialize({
 });
 const battle = (...values) => createBattleState(fixtureBattlefieldState(values));
 
+test("all Unit identities preserve collection order regardless of capabilities or tick callbacks", () => {
+    const initial = battle(
+        unit(8, { locomotion }),
+        unit(2, { vitality: { maxHp: 100 }, onTick: state => state }),
+        { ...unit(5), lifecycle: "LEAVING" },
+    );
+    const candidates = units.all(initial);
+
+    assert.deepEqual(candidates, [{ id: 8 }, { id: 2 }, { id: 5 }]);
+    assert.deepEqual(candidates.map(reference => Reflect.ownKeys(reference)), [["id"], ["id"], ["id"]]);
+    assert.strictEqual(units.get(initial, candidates[0]), initial.battlefield.units.get(8));
+    assert.equal(units.get(initial, candidates[2]).lifecycle, "LEAVING");
+    assert.deepEqual(units.all(battle()), []);
+});
+
 test("Unit filtering returns identities for matching capabilities in collection order", () => {
     const initial = battle(
         unit(8, { locomotion }),

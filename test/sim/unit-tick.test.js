@@ -56,16 +56,16 @@ function runtime(definitions, spawns = []) {
 
 test("Unit ticks pass the latest returned battle and preserve previous private state", () => {
     const trace = [];
-    const first = unit(0, { onTick(state, id) {
-        const current = getUnit(state, id);
-        state = updateUnit(state, { ...current, state: { phase: current.state.phase + 1 } });
+    const first = unit(0, { onTick(state, self) {
+        assert.strictEqual(self, getUnit(state, self.id));
+        state = updateUnit(state, { ...self, state: { phase: self.state.phase + 1 } });
         const other = getUnit(state, 1);
         return updateUnit(state, { ...other, state: { phase: 7 } });
     } });
-    const second = unit(1, { onTick(state, id) {
-        const current = getUnit(state, id);
-        trace.push([id, current.state.phase, getUnit(state, 0).state.phase]);
-        return updateUnit(state, { ...current, state: { phase: current.state.phase + 1 } });
+    const second = unit(1, { onTick(state, self) {
+        assert.strictEqual(self, getUnit(state, self.id));
+        trace.push([self.id, self.state.phase, getUnit(state, 0).state.phase]);
+        return updateUnit(state, { ...self, state: { phase: self.state.phase + 1 } });
     } });
     const before = createBattleState(fixtureBattlefieldState([first, second]));
     const after = advanceUnits(before);
@@ -81,16 +81,18 @@ test("Unit ticks pass the latest returned battle and preserve previous private s
 
 test("Unit ticks skip departing or removed units and defer units created by a tick callback", () => {
     const trace = [];
-    const created = unit(3, { onTick(state, id) { trace.push(id); return state; } });
-    const first = unit(0, { onTick(state, id) {
-        trace.push(id);
+    const created = unit(3, { onTick(state, self) { trace.push(self.id); return state; } });
+    const first = unit(0, { onTick(state, self) {
+        trace.push(self.id);
         if (getUnit(state, 1) === undefined) return state;
         state = removeUnit(state, 1, "SCRIPT");
+        state = updateUnit(state, { ...getUnit(state, 2), lifecycle: "LEAVING" });
         return registerUnit(state, created);
     } });
     const removed = unit(1, { onTick() { assert.fail("removed Unit tick"); } });
-    const leaving = { ...unit(2, { onTick() { assert.fail("departing Unit tick"); } }), lifecycle: "LEAVING" };
-    let state = createBattleState(fixtureBattlefieldState([first, removed, leaving]));
+    const departing = unit(2, { onTick() { assert.fail("newly departing Unit tick"); } });
+    const leaving = { ...unit(4, { onTick() { assert.fail("departing Unit tick"); } }), lifecycle: "LEAVING" };
+    let state = createBattleState(fixtureBattlefieldState([first, removed, departing, leaving, unit(5)]));
 
     state = advanceUnits(state);
     assert.deepEqual(trace, [0]);
@@ -113,13 +115,13 @@ test("Runtime advances Unit content once per Tick before Effect callbacks", () =
             original = getUnit(state, id);
             return install(state, unitRef(original), observer).state;
         },
-        onTick(state, id) {
-            const current = getUnit(state, id);
-            const phase = current.state.phase + 1;
+        onTick(state, self) {
+            assert.strictEqual(self, getUnit(state, self.id));
+            const phase = self.state.phase + 1;
             trace.push(["unit", state.tick, phase]);
             return updateUnit(state, {
-                ...current, state: { phase },
-                vitality: { ...current.vitality, hp: current.vitality.hp - 5 },
+                ...self, state: { phase },
+                vitality: { ...self.vitality, hp: self.vitality.hp - 5 },
             });
         },
     }]);
@@ -140,7 +142,7 @@ test("Factory-created enemies tick in their spawning Tick after entering", () =>
     const definition = createEnemy({
         id: "spawned", vitality: { maxHp: 100 }, locomotion,
         onEnter(state, id) { trace.push(["enter", state.tick, id]); return state; },
-        onTick(state, id) { trace.push(["tick", state.tick, id]); return state; },
+        onTick(state, self) { trace.push(["tick", state.tick, self.id]); return state; },
     });
     const battle = runtime([], [spawn(definition, 0)]);
     battle.step();
@@ -162,9 +164,8 @@ test("Operator and combat enemy definition factories retain the Unit tick callba
 test("Unit tick errors propagate without publishing an incomplete Tick", () => {
     const failure = new Error("boss phase failed");
     const battle = runtime([
-        { id: "first", vitality: { maxHp: 100 }, onTick(state, id) {
-            const current = getUnit(state, id);
-            return updateUnit(state, { ...current, vitality: { ...current.vitality, hp: 50 } });
+        { id: "first", vitality: { maxHp: 100 }, onTick(state, self) {
+            return updateUnit(state, { ...self, vitality: { ...self.vitality, hp: 50 } });
         } },
         { id: "failed", onTick() { throw failure; } },
     ]);
