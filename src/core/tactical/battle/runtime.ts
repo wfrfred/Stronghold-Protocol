@@ -141,7 +141,7 @@ export class BattleRuntime {
             actionExecution,
             projectiles: {
                 nextProjectileId: execution.nextProjectileId,
-                instances: view.projectileIds.map((id) => view.getProjectile(id)!),
+                instances: battlefield.projectiles.values(),
             },
             execution,
             units: view.unitIds.map((id) => copy(view.getUnit(id)!)),

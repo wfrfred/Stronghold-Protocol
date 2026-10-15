@@ -4,6 +4,7 @@ import { Effects } from "../../dist/core/tactical/unit/effect/effects.js";
 
 const instance = (id, definition, data) => ({
     id,
+    host: { id: 0 },
     definition,
     data,
     source: null,
@@ -104,6 +105,7 @@ test("Effects only stores instances, while JSON preserves their data and allocat
     assert.deepEqual(projected.effects, {
         instances: [{
             id: 0,
+            host: { id: 0 },
             definition: { id: "stored-only" },
             data: { charges: 3 },
             source: null,

@@ -46,7 +46,7 @@ test("hook dispatch checks each Effect against its current status immediately be
                 calls.push("first");
                 state = effects.setEnabled(
                     state,
-                    { type: "EFFECT", unitId: 2, effectId: 1 },
+                    { host: { id: 2 }, id: 1 },
                     enableSecond,
                     context.call,
                 );
@@ -84,7 +84,7 @@ test("finishing a pending Effect removes its Hook before that candidate can exec
                 calls.push("first");
                 state = effects.end(
                     state,
-                    { type: "EFFECT", unitId: 2, effectId: 1 },
+                    { host: { id: 2 }, id: 1 },
                     "EXPLICIT",
                     context.call,
                 );

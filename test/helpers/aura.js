@@ -35,8 +35,8 @@ export function auraEffect(
     } = {},
 ) {
     const selfOf = (state, context) =>
-        getUnit(state, context.ref.unitId)?.effects.values().find(
-            (effect) => effect.id === context.ref.effectId,
+        getUnit(state, context.ref.host.id)?.effects.values().find(
+            (effect) => effect.id === context.ref.id,
         );
     const save = (state, context, update) => {
         const current = selfOf(state, context);
@@ -47,7 +47,7 @@ export function auraEffect(
     const refresh = (state, context) => {
         let self = selfOf(state, context);
         if (self?.status !== "ACTIVE") return state;
-        const host = getUnit(state, context.ref.unitId);
+        const host = getUnit(state, context.ref.host.id);
         const selected = selectTargets(
             { battlefield: battlefieldView(state), host },
             {
@@ -78,7 +78,7 @@ export function auraEffect(
             const value = initialState(
                 {
                     ...context,
-                    unit: getUnit(state, context.ref.unitId),
+                    unit: getUnit(state, context.ref.host.id),
                     self: selfOf(state, context),
                 },
                 unitId,
@@ -88,8 +88,8 @@ export function auraEffect(
                 unitRef(getUnit(state, unitId)),
                 receiver,
                 {
-                    source: context.ref.unitId,
-                    scopes: bindLifetime ? [context.ref] : [],
+                    source: context.ref.host.id,
+                    scopes: bindLifetime ? [{ type: "EFFECT", ref: context.ref }] : [],
                     ...(value === undefined ? {} : { data: value }),
                 },
                 context.call,

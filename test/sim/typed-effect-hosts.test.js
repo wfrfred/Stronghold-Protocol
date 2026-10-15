@@ -80,7 +80,8 @@ test("Effect typed hosts retain capability requirements and private data inferen
     const path = join(directory, "contract.mts");
     writeFileSync(path, `
 import type { State as BattleState } from ${source("battle/state")};
-import type { Unit, Ref } from ${source("unit/unit")};
+import type { Unit } from ${source("unit/unit")};
+import type { Ref } from ${source("../common/ref")};
 import { ref } from ${source("unit/query")};
 import type { Locomotion } from ${source("unit/capability/locomotion/capability")};
 import type { Vitality } from ${source("unit/capability/vitality/capability")};

@@ -1225,8 +1225,8 @@ test('core vitality: fatal protection uses the rules remaining after reception h
       id: 'change-fatal-protection', stage: 'reception', priority: 0, enabled: () => true,
       invoke(state, context, pending) {
         if (installedInitially) {
-          state = effects.end(state, { type: 'EFFECT', unitId: 1,
-            effectId: context.unit.effects.values()[0].id });
+          state = effects.end(state, { host: { id: 1 },
+            id: context.unit.effects.values()[0].id });
         } else {
           state = effects.install(state, unitRef(context.unit), undeadable).state;
         }

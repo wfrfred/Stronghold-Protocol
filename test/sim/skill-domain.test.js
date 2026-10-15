@@ -184,7 +184,7 @@ for (const trigger of ["SKILL", "EFFECT", "TICK"]) {
       onTick(state, context) {
         if (context.tick !== 5 || context.self.data.renewed) return state;
         const next = setDeadline(setData(context.self, { renewed: true }), 10);
-        return effects.replaceEffect(state, { type: "EFFECT", unitId: 1, effectId: (next).id }, next);
+        return effects.replaceEffect(state, { host: { id: 1 }, id: (next).id }, next);
       },
       onEnd(state, context) { ended.push(context.reason); return state; },
     });
@@ -192,14 +192,14 @@ for (const trigger of ["SKILL", "EFFECT", "TICK"]) {
       const installedParent = effects.install(state, unitRef(getUnit(state, 1)), parent, {}, context.call);
       state = installedParent.state;
       parentRef = installedParent.value;
-      const installed = effects.install(state, unitRef(getUnit(state, 1)), dependent, { scopes: [{ type: "SKILL", unitId: 1, activationId: context.activationId }, parentRef, { type: "TICK", tick: 5 }] }, context.call);
+      const installed = effects.install(state, unitRef(getUnit(state, 1)), dependent, { scopes: [{ type: "SKILL", unitId: 1, activationId: context.activationId }, { type: "EFFECT", ref: parentRef }, { type: "TICK", tick: 5 }] }, context.call);
       dependentRef = installed.value;
       return { state: installed.state, value: { type: "ACTIVATED" } };
     } });
     let state = activateSkill(f.state, { unitId: 1, tick: 0 }, f.resources).state;
     state = effects.advance({ ...state, tick: 5 });
     assert.equal(deadline(get(state, dependentRef)), 10);
-    assert.deepEqual(get(state, dependentRef).scopes.filter(scope => scope.type !== "TICK"), [{ type: "SKILL", unitId: 1, activationId: 0 }, parentRef]);
+    assert.deepEqual(get(state, dependentRef).scopes.filter(scope => scope.type !== "TICK"), [{ type: "SKILL", unitId: 1, activationId: 0 }, { type: "EFFECT", ref: parentRef }]);
     if (trigger === "SKILL") state = finishSkill(state, 1, 6, f.resources);
     else if (trigger === "EFFECT") state = effects.end(state, parentRef, "DISPELLED");
     else state = effects.advance({ ...state, tick: 10 });

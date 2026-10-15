@@ -206,12 +206,12 @@ test("an Effect can own a deployment observer and remove it during source retire
         id: "deployment-talent", initialize: () => ({}),
         onInstall(state, context) {
             const ref = context.ref;
-            return addHook(state, ref.unitId, record("talent", (state, _view, fact) => {
+            return addHook(state, ref.host.id, record("talent", (state, _view, fact) => {
                 calls.push(fact.unit.id);
                 return state;
-            }, (view) => view.getUnit(ref.unitId)?.effects.get(ref.effectId)?.status === "ACTIVE"));
+            }, (view) => view.getUnit(ref.host.id)?.effects.get(ref.id)?.status === "ACTIVE"));
         },
-        onEnd(state, context) { return deleteHook(state, context.ref.unitId, "talent"); },
+        onEnd(state, context) { return deleteHook(state, context.ref.host.id, "talent"); },
     };
     const source = definition("source", { onEnter(state, id) { return install(state, unitRef(getUnit(state, id)), effect).state; } });
     const runtime = new BattleRuntime(input({

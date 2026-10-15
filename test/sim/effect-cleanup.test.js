@@ -62,6 +62,6 @@ test("effect cleanup: a replacement installed during end uses a new identity and
     ({ state: battle, value: old } = install(battle, value));
     battle = effect.end(battle, old);
     assert.equal(get(battle, old), undefined);
-    assert.notEqual(next.effectId, old.effectId);
+    assert.notEqual(next.id, old.id);
     assert.equal(get(battle, next).definition, replacement);
 });

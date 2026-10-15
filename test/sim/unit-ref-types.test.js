@@ -12,7 +12,8 @@ test("Unit Refs preserve guard proofs, permit covariance and reject forged or st
     const path = join(directory, "refs.mts");
     try {
         writeFileSync(path, `
-import type { Unit, Ref, Definition } from ${source("unit/unit")};
+import type { Unit, Definition } from ${source("unit/unit")};
+import type { Ref, Identity } from ${source("../common/ref")};
 import type { State as BattleState } from ${source("battle/state")};
 import * as units from ${source("unit/query")};
 import { hasLocomotion, type Locomotion } from ${source("unit/capability/locomotion/capability")};
@@ -59,6 +60,13 @@ type Skills = Assert<Equal<typeof skills, Ref<Unit & Skill>[]>>;
 const both = units.filter(battle, (unit): unit is Unit & Locomotion & Vitality =>
     hasLocomotion(unit) && hasVitality(unit));
 type Both = Assert<Equal<typeof both, Ref<Unit & Locomotion & Vitality>[]>>;
+type Address = Assert<Equal<Identity<Unit & Locomotion>, { readonly id: number }>>;
+interface HostedUnit extends Unit { readonly host: string }
+declare const hosted: HostedUnit;
+const hostedRef = units.ref(hosted);
+type HostedAddress = Assert<Equal<Identity<HostedUnit>, { readonly id: number }>>;
+// @ts-expect-error Business fields do not become identity fields.
+hostedRef.host;
 // @ts-expect-error An ordinary condition does not prove a Unit structure.
 units.filter(battle, unit => unit.id > 0);
 `);

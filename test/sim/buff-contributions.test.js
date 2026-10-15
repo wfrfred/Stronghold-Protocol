@@ -87,11 +87,11 @@ test("Buff contribution integration: the native Astesia DEF facet merges layers,
                 data: { stackCount: 1, defenseRatio },
             }).state;
         } else if (plan.type === "REFRESH") {
-            const address = { type: "EFFECT", unitId: 0, effectId: current.id };
+            const address = { host: { id: 0 }, id: current.id };
             const next = setDeadline(setData(current, {
                 ...current.data, stackCount: plan.stackCount,
             }), plan.expiresAtTick);
-            work = effects.replaceEffect(work, { type: "EFFECT", unitId: 0, effectId: (next).id }, next);
+            work = effects.replaceEffect(work, { host: { id: 0 }, id: (next).id }, next);
             work = refreshContribution(work, address, program, output);
         }
         return plan;
@@ -110,7 +110,7 @@ test("Buff contribution integration: the native Astesia DEF facet merges layers,
     assert.equal(getUnit(work, 0).effects.values().length, 1);
     assert.equal(first.getUnit(0).effects.values()[0].data.stackCount, 1);
     assert.equal(starts, 1);
-    const address = { type: "EFFECT", unitId: 0, effectId: instance.id };
+    const address = { host: { id: 0 }, id: instance.id };
     work = effects.setEnabled(work, address, false);
     apply(30, 0.8, 20, 3);
     assert.equal(effective(), 100);
@@ -196,7 +196,7 @@ test("Buff contribution integration: only effective layer growth resamples the r
             stackCount: plan.stackCount,
             sourceAttack: plan.reloadModifiers ? currentSourceAttack : current.data.sourceAttack,
         }), plan.expiresAtTick);
-        work = effects.replaceEffect(work, { type: "EFFECT", unitId: 0, effectId: (next).id }, next);
+        work = effects.replaceEffect(work, { host: { id: 0 }, id: (next).id }, next);
         work = refreshContribution(work, address, program, output);
         return plan;
     };

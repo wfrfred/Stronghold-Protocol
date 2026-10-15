@@ -52,7 +52,7 @@ const bare=initialize({id:2,position:[0,0],definition:{id:'bare'}});
 // @ts-expect-error required host capabilities must be present.
 install(battle,unitRef(bare),content);
 if(ref!==undefined) {
- const found=get(battle,ref,content);
+ const found=get(battle,ref);
  if(found!==undefined){
    const charges:number=found.data.charges;
    const typed:Effect<{charges:number},Vitality>=found;

@@ -45,7 +45,7 @@ const refresh = (stackCount, expiresAtTick, reloadModifiers) => ({
 });
 const instance = (view) => view.getUnit(0).effects.values()[0];
 const power = (view) => resolveAttackPower(0, view);
-const address = { type: "EFFECT", unitId: 0, effectId: 0 };
+const address = { host: { id: 0 }, id: 0 };
 
 test("buff expiry: a native STACK descriptor peels one layer and resets the caller's fixed lifetime", () => {
     const rule = compileBuffStacking(parseBuffStacking(native("sbell2_e_002_trait[interval]")));

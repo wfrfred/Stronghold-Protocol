@@ -1,4 +1,5 @@
-import { getProjectile, replaceProjectile } from "./operations.js";
+import { all, getProjectile, ref, replaceProjectile } from "./operations.js";
+import type { Ref } from "../../../common/ref.js";
 import { World, type WorldPosition } from "../../geometry/coordinate.js";
 import { rangeOverlapsHit } from "../../geometry/intersection.js";
 import {
@@ -13,12 +14,10 @@ import { hasHit } from "../../unit/capability/spatial/capability.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";
 import type { ProjectileQueryContext } from "./context.js";
 import type { Definition } from "./definition.js";
-import type {
-    ProjectileId,
-    Projectile,
-    ProjectileStopReason,
-    ProjectileView,
-} from "./projectile.js";
+import type { ProjectileId, Projectile, ProjectileStopReason } from "./projectile.js";
+import type { Projectiles } from "./projectiles.js";
+
+type StoredProjectile = ReturnType<Projectiles["values"]>[number];
 
 export type ProjectileSignal = {
     readonly projectileId: ProjectileId;
@@ -40,10 +39,7 @@ function projectileContext<S extends object>(
     return { projectile, tick, facts: battlefieldView(state), call };
 }
 
-function signalFacts(
-    projectile: NonNullable<ReturnType<ProjectileView["getProjectile"]>>,
-    tick: number,
-): Omit<ProjectileSignal, "type"> {
+function signalFacts(projectile: StoredProjectile, tick: number): Omit<ProjectileSignal, "type"> {
     return {
         projectileId: projectile.id,
         source: projectile.source,
@@ -52,10 +48,7 @@ function signalFacts(
     };
 }
 
-function inContactArea(
-    projectile: NonNullable<ReturnType<ProjectileView["getProjectile"]>>,
-    target: Unit,
-): boolean {
+function inContactArea(projectile: StoredProjectile, target: Unit): boolean {
     return (
         isSpatiallyPresent(target) &&
         hasHit(target) &&
@@ -80,9 +73,10 @@ function contact<S extends object>(
     }
 
     const candidates = [...battlefieldView(state).unitIds].sort((left, right) => left - right);
+    const reference = ref(projectile);
 
     for (const targetUnitId of candidates) {
-        const current = getProjectile(state, projectile.id, definition);
+        const current = getProjectile(state, reference);
         const target = getUnit(state, targetUnitId);
 
         if (current === undefined || current.progress.type === "STOPPED") {
@@ -108,7 +102,7 @@ function contact<S extends object>(
             ...projectileContext(state, contacted, tick, call),
             targetUnitId,
         });
-        const latest = getProjectile(state, projectile.id) ?? contacted;
+        const latest = getProjectile(state, reference) ?? contacted;
         state = appendEvents(state, [
             { ...signalFacts(latest, tick), type: "PROJECTILE_HIT", targetUnitId },
         ]);
@@ -119,19 +113,19 @@ function contact<S extends object>(
 
 export function stopProjectile(
     state: BattleState,
-    id: ProjectileId,
+    reference: Ref<StoredProjectile>,
     tick: number,
     reason: ProjectileStopReason = "EXPLICIT",
     call: CallContext = emptyCall,
 ): BattleState {
-    const current = getProjectile(state, id);
+    const current = getProjectile(state, reference);
 
     if (current === undefined || current.progress.type === "STOPPED") {
         return state;
     }
 
     return (
-        state.battlefield.projectiles.read(id, (projectile) => {
+        state.battlefield.projectiles.read(reference.id, (projectile) => {
             const stopped: Projectile<typeof projectile.state> = {
                 ...projectile,
                 progress: { type: "STOPPED", reason },
@@ -145,11 +139,11 @@ export function stopProjectile(
                     ? state
                     : stopped.definition.stop(state, projectileContext(state, stopped, tick, call));
 
-            if (getProjectile(state, id) === undefined) {
+            if (getProjectile(state, reference) === undefined) {
                 return state;
             }
 
-            const projectiles = state.battlefield.projectiles.remove(id);
+            const projectiles = state.battlefield.projectiles.remove(reference.id);
 
             return { ...state, battlefield: { ...state.battlefield, projectiles } };
         }) ?? state
@@ -158,17 +152,17 @@ export function stopProjectile(
 
 function advanceProjectile(
     state: BattleState,
-    id: ProjectileId,
+    reference: Ref<StoredProjectile>,
     tick: number,
     call: CallContext,
 ): BattleState {
     return (
-        state.battlefield.projectiles.read(id, (current) => {
+        state.battlefield.projectiles.read(reference.id, (current) => {
             if (current.lastAdvancedTick >= tick) {
                 return state;
             }
             if (current.expiresAtTick !== null && tick >= current.expiresAtTick) {
-                return stopProjectile(state, id, tick, "EXPIRED", call);
+                return stopProjectile(state, reference, tick, "EXPIRED", call);
             }
             switch (current.progress.type) {
                 case "STOPPED":
@@ -176,7 +170,7 @@ function advanceProjectile(
 
                 case "WAITING_TO_STOP":
                     return tick >= current.progress.targetTick
-                        ? stopProjectile(state, id, tick, "ARRIVED", call)
+                        ? stopProjectile(state, reference, tick, "ARRIVED", call)
                         : replaceProjectile(state, { ...current, lastAdvancedTick: tick });
 
                 case "FLYING": {
@@ -226,7 +220,7 @@ function advanceProjectile(
                         state = contact(state, advanced, advanced.definition, tick, call);
 
                         if (current.stopDelayTicks === 0) {
-                            state = stopProjectile(state, id, tick, "ARRIVED", call);
+                            state = stopProjectile(state, reference, tick, "ARRIVED", call);
                         }
                     }
 
@@ -244,13 +238,17 @@ export function advanceProjectiles(
     call: CallContext = emptyCall,
 ): BattleState {
     for (const id of stopIds) {
-        state = stopProjectile(state, id, tick, "EXPLICIT", call);
+        const projectile = state.battlefield.projectiles.get(id);
+
+        if (projectile !== undefined) {
+            state = stopProjectile(state, ref(projectile), tick, "EXPLICIT", call);
+        }
     }
 
-    const ids = [...battlefieldView(state).projectileIds].sort((left, right) => left - right);
+    const candidates = all(state).sort((left, right) => left.id - right.id);
 
-    for (const id of ids) {
-        state = advanceProjectile(state, id, tick, call);
+    for (const reference of candidates) {
+        state = advanceProjectile(state, reference, tick, call);
     }
 
     return state;

@@ -111,7 +111,7 @@ test("invincible reception leaves shield untouched and removing its effect remov
     assert.equal(canceled.value.hpLoss, 0);
     assert.equal(readShield(getUnit(canceled.state, 0)).layers, 1);
     const effect = getUnit(fixture.state, 0).effects.values().find(instance => instance.definition.id === "mudrock/shield");
-    const removed = end(fixture.state, { type: "EFFECT", unitId: 0, effectId: effect.id });
+    const removed = end(fixture.state, { host: { id: 0 }, id: effect.id });
     assert.equal(readShield(getUnit(removed, 0)), undefined);
     assert.equal(hit(removed, fixture.combat).value.hpLoss, 100);
 });

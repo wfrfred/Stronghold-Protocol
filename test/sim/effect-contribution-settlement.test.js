@@ -21,20 +21,20 @@ test("sequential lifecycle callbacks observe each capability change immediately"
         onDisable(state, ctx) {
             notices.push([
                 "disable",
-                ctx.ref.unitId,
-                getUnit(state, ctx.ref.unitId).vitality.hp,
-                resolveMaxHp(ctx.ref.unitId, battlefieldView(state)),
+                ctx.ref.host.id,
+                getUnit(state, ctx.ref.host.id).vitality.hp,
+                resolveMaxHp(ctx.ref.host.id, battlefieldView(state)),
             ]);
             return state;
         },
         onEnd(state, ctx) {
-            notices.push(["end", ctx.ref.unitId, ctx.unit.vitality.hp]);
+            notices.push(["end", ctx.ref.host.id, ctx.unit.vitality.hp]);
             return state;
         },
     });
     let parent;
     ({ state: battle, value: parent } = install(battle, content, 1));
-    battle = install(battle, content, 2, { scopes: [parent] }).state;
+    battle = install(battle, content, 2, { scopes: [{ type: "EFFECT", ref: parent }] }).state;
     const before = battlefieldView(battle);
     battle = effects.end(battle, parent);
     assert.deepEqual(notices, [

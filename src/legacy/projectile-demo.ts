@@ -151,7 +151,7 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
 
                         return {
                             state,
-                            value: { samples: { cachedAtk, projectileId: launched.value } },
+                            value: { samples: { cachedAtk, projectileId: launched.value.id } },
                         };
                     },
                 },

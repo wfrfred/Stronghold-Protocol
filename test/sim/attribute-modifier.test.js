@@ -222,8 +222,8 @@ test("attribute modifiers: native Mire percentages affect existing ASPD and norm
         {},
         {
             onEnable(state, ctx) {
-                const id = `${ctx.ref.effectId}`;
-                return transitionUnit(state, ctx.ref.unitId, (unit) => ({
+                const id = `${ctx.ref.id}`;
+                return transitionUnit(state, ctx.ref.host.id, (unit) => ({
                     ...unit,
                     action: setAttackSpeedContribution(unit.action, {
                         id,
@@ -236,8 +236,8 @@ test("attribute modifiers: native Mire percentages affect existing ASPD and norm
                 }));
             },
             onDisable(state, ctx) {
-                const id = `${ctx.ref.effectId}`;
-                return transitionUnit(state, ctx.ref.unitId, (unit) => ({
+                const id = `${ctx.ref.id}`;
+                return transitionUnit(state, ctx.ref.host.id, (unit) => ({
                     ...unit,
                     action: removeAttackSpeedContribution(unit.action, id),
                     locomotion: removeMoveSpeedContribution(unit.locomotion, id),
@@ -360,7 +360,7 @@ test("attribute modifiers: inspiration samples belong to the Effect input and re
         work,
         ref,
         setData(
-            getUnit(work, 1).effects.values().find((instance) => instance.id === ref.effectId),
+            getUnit(work, 1).effects.values().find((instance) => instance.id === ref.id),
             sampleInput(work),
         ),
     );

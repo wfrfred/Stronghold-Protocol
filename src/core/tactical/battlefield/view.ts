@@ -1,4 +1,6 @@
 import type { Unit } from "../unit/unit.js";
+import type { Ref } from "../../common/ref.js";
+import type { Projectiles } from "./projectile/projectiles.js";
 import { blockingUsedCapacity } from "./blocking/relations.js";
 import type { BattlefieldView } from "./contract.js";
 import { createNavigationFieldCache, type NavigationFieldProvider } from "./navigation/cache.js";
@@ -8,6 +10,8 @@ import {
     battlefieldOccupancyKey,
     navigationModifierSourceKey,
 } from "./storage/indexes.js";
+
+type StoredProjectile = ReturnType<Projectiles["values"]>[number];
 
 const fields: NavigationFieldProvider = createNavigationFieldCache();
 
@@ -30,7 +34,8 @@ export function view<U extends Unit>(
         get projectileIds() {
             return [...state.projectiles.keys()];
         },
-        getProjectile: (id) => state.projectiles.get(id),
+        getProjectile: <P extends StoredProjectile>(reference: Ref<P>) =>
+            state.projectiles.get(reference.id) as P | undefined,
         get mechanismIds() {
             return [...state.mechanisms.keys()];
         },

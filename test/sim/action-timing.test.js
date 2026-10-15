@@ -18,7 +18,7 @@ import { createLegacyCombatSpec } from '../../dist/legacy/combat.js';
 import { createDefinition } from '../../dist/core/tactical/unit/archetype/enemy.js';
 import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
 
-const ref = { type: 'EFFECT', unitId: 0, effectId: 0 };
+const ref = { host: { id: 0 }, id: 0 };
 const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} ≈ ${expected}`);
 const actor = (baseAttackTimeTicks = 30, recoveryTicks = 0) => unit(0, { action: actionDefinition(1, { baseAttackTimeTicks, recoveryTicks }) });
 const target = () => unit(1, { hp: 1e6 });
@@ -38,7 +38,7 @@ function tempo(speed = 100, time = modifier()) {
   };
 }
 const install = (state, definition, tick = 0, expires = null) => effects.install({ ...state, tick }, unitRef(getUnit(state, 0)), definition, { scopes: expires === null ? [] : [{ type: 'TICK', tick: expires }] }).state;
-const edit = (state, change) => refresh(effects.replaceEffect(state, { type: "EFFECT", unitId: 0, effectId: ref.effectId }, setData(get(state, ref), { ...get(state, ref).data, ...change })));
+const edit = (state, change) => refresh(effects.replaceEffect(state, { host: { id: 0 }, id: ref.id }, setData(get(state, ref), { ...get(state, ref).data, ...change })));
 function values(state) {
   const current = getUnit(state, 0);
   const context = { unit: current, battlefield: battlefieldView(state) };

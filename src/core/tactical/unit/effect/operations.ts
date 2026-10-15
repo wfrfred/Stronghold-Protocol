@@ -7,7 +7,8 @@ import {
     type Result,
 } from "../../battle/state.js";
 import { emptyCall, type CallContext } from "../../battle/execution/call.js";
-import type { Unit, Id, Ref as UnitRef } from "../unit.js";
+import type { Unit, Id } from "../unit.js";
+import type { Ref } from "../../../common/ref.js";
 import * as units from "../query.js";
 import { hasSkill } from "../capability/skill/capability.js";
 import type { Definition, Context } from "./definition.js";
@@ -16,7 +17,7 @@ import {
     key,
     type Effect,
     type Lifetime,
-    type Ref,
+    ref as effectRef,
     type Scope,
     type Status,
 } from "./effect.js";
@@ -32,31 +33,17 @@ export interface Initial<S extends object> {
     readonly enabled?: boolean;
 }
 
-export function get(battle: BattleState, ref: Ref): StoredEffect | undefined;
-export function get<S extends object, H extends object>(
-    battle: BattleState,
-    ref: Ref,
-    definition: Definition<S, H>,
-): Effect<S, H> | undefined;
-export function get<S extends object, H extends object>(
-    battle: BattleState,
-    ref: Ref,
-    definition?: Definition<S, H>,
-): StoredEffect | Effect<S, H> | undefined {
-    const effects = getUnit(battle, ref.unitId)?.effects;
-
-    return definition === undefined
-        ? effects?.get(ref.effectId)
-        : effects?.get(ref.effectId, definition);
+export function get<E extends StoredEffect>(battle: BattleState, ref: Ref<E>): E | undefined {
+    return units.get(battle, ref.host)?.effects.get(ref.id) as E | undefined;
 }
 
 export function install<S extends object, H extends object>(
     battle: BattleState,
-    host: UnitRef<Unit & NoInfer<H>>,
+    host: Ref<Unit & NoInfer<H>>,
     definition: Definition<S, H>,
     initial: Initial<NoInfer<S>> = {},
     call: CallContext = emptyCall,
-): Result<Ref | undefined> {
+): Result<Ref<Effect<S, H>> | undefined> {
     const unit = units.get(battle, host);
     const scopes = initial.scopes ?? [];
 
@@ -76,6 +63,7 @@ export function install<S extends object, H extends object>(
 
     const instance: Effect<S, H> = {
         id: unit.effects.nextId,
+        host,
         definition,
         data: initial.data ?? definition.initialize(),
         source: initial.source ?? null,
@@ -83,11 +71,11 @@ export function install<S extends object, H extends object>(
         enabled: initial.enabled ?? true,
         status: "INSTALLING",
     };
-    const ref: Ref = { type: "EFFECT", unitId: unit.id, effectId: instance.id };
+    const ref = effectRef(instance);
     battle = updateUnit(battle, { ...unit, effects: unit.effects.add(instance) });
 
     if (definition.onInstall !== undefined) {
-        battle = definition.onInstall(battle, createContext<S, H>(battle, ref, instance, call));
+        battle = definition.onInstall(battle, createContext<S, H>(battle, instance, call));
     }
     if (get(battle, ref)?.status === "INSTALLING") {
         battle = change(battle, ref, { status: "INACTIVE" });
@@ -102,14 +90,14 @@ export function install<S extends object, H extends object>(
 
 export function replaceEffect<S extends object, H extends object>(
     battle: BattleState,
-    ref: Ref,
-    effect: Effect<S, H>,
+    ref: Ref<Effect<S, H>>,
+    effect: NoInfer<Effect<S, H>>,
 ): BattleState {
-    if (ref.effectId !== effect.id) {
+    if (ref.id !== effect.id || ref.host.id !== effect.host.id) {
         throw new TypeError("effect identity mismatch");
     }
 
-    return transitionUnit(battle, ref.unitId, (unit) => {
+    return transitionUnit(battle, ref.host.id, (unit) => {
         const effects = unit.effects.replace(effect);
 
         return effects === unit.effects ? unit : { ...unit, effects };
@@ -118,7 +106,7 @@ export function replaceEffect<S extends object, H extends object>(
 
 export function setEnabled(
     battle: BattleState,
-    ref: Ref,
+    ref: Ref<StoredEffect>,
     enabled: boolean,
     call: CallContext = emptyCall,
 ): BattleState {
@@ -133,7 +121,11 @@ export function setEnabled(
     return updateStatus(battle, ref, call);
 }
 
-export function bindLifetime(battle: BattleState, ref: Ref, lifetime: Lifetime): Result<boolean> {
+export function bindLifetime(
+    battle: BattleState,
+    ref: Ref<StoredEffect>,
+    lifetime: Lifetime,
+): Result<boolean> {
     const instance = get(battle, ref);
 
     if (instance === undefined || instance.status === "ENDING" || !available(battle, lifetime)) {
@@ -152,7 +144,7 @@ export function bindLifetime(battle: BattleState, ref: Ref, lifetime: Lifetime):
 
 export function end(
     battle: BattleState,
-    ref: Ref,
+    ref: Ref<StoredEffect>,
     reason = "EXPLICIT",
     call: CallContext = emptyCall,
 ): BattleState {
@@ -162,38 +154,39 @@ export function end(
         return battle;
     }
 
-    const children = dependents(battlefieldView(battle).effectLifetimes, ref);
-    const host = getUnit(battle, ref.unitId)!;
+    const children = dependents(battlefieldView(battle).effectLifetimes, { type: "EFFECT", ref });
+    const host = units.get(battle, ref.host)!;
 
-    return host.effects.read(ref.effectId, (instance) => {
+    return host.effects.read(ref.id, (instance) => {
+        const initialHost = units.get(battle, instance.host)!;
         const definition = instance.definition;
         battle = change(battle, ref, { status: "ENDING" });
-        let ended = getUnit(battle, ref.unitId)!.effects.get(ref.effectId, definition)!;
-        const disabling = createContext(battle, ref, ended, call, host);
+        let ended = getUnit(battle, ref.host.id)!.effects.get(ref.id, definition)!;
+        const disabling = createContext(battle, ended, call, initialHost);
 
         if (instance.status === "ACTIVE" && definition.onDisable !== undefined) {
             battle = definition.onDisable(battle, disabling);
-            ended = getUnit(battle, ref.unitId)?.effects.get(ref.effectId, definition) ?? ended;
+            ended = getUnit(battle, ref.host.id)?.effects.get(ref.id, definition) ?? ended;
         }
 
         for (const child of children) {
             battle = end(battle, child, reason, call);
         }
 
-        ended = getUnit(battle, ref.unitId)?.effects.get(ref.effectId, definition) ?? ended;
-        const ending = { ...createContext(battle, ref, ended, call, host), reason };
+        ended = getUnit(battle, ref.host.id)?.effects.get(ref.id, definition) ?? ended;
+        const ending = { ...createContext(battle, ended, call, initialHost), reason };
 
         if (definition.onEnd !== undefined) {
             battle = definition.onEnd(battle, ending);
         }
 
-        battle = transitionUnit(battle, ref.unitId, (unit) => ({
+        battle = transitionUnit(battle, ref.host.id, (unit) => ({
             ...unit,
-            effects: unit.effects.remove(ref.effectId),
+            effects: unit.effects.remove(ref.id),
         }));
 
         if (definition.group !== undefined) {
-            battle = reconcileGroupActivity(battle, ref.unitId, definition.group.id, call);
+            battle = reconcileGroupActivity(battle, ref.host.id, definition.group.id, call);
         }
 
         return battle;
@@ -212,12 +205,7 @@ export function endDependents(
         const hosted = getUnit(battle, lifetime.unitId)?.effects.values() ?? [];
 
         for (const instance of hosted) {
-            battle = end(
-                battle,
-                { type: "EFFECT", unitId: lifetime.unitId, effectId: instance.id },
-                reason,
-                call,
-            );
+            battle = end(battle, effectRef(instance), reason, call);
         }
     }
 
@@ -229,29 +217,18 @@ export function endDependents(
 }
 
 export function advance(battle: BattleState, call: CallContext = emptyCall): BattleState {
-    const view = battlefieldView(battle);
-    const candidates = view.unitIds.flatMap((unitId) =>
-        view
-            .getUnit(unitId)!
-            .effects.values()
-            .map((instance): Ref => ({
-                type: "EFFECT",
-                unitId,
-                effectId: instance.id,
-            })),
-    );
+    const candidates = units
+        .all(battle)
+        .flatMap((host) => units.get(battle, host)!.effects.values().map(effectRef));
 
     for (const ref of candidates) {
         battle =
-            getUnit(battle, ref.unitId)?.effects.read(ref.effectId, (instance) => {
+            getUnit(battle, ref.host.id)?.effects.read(ref.id, (instance) => {
                 if (instance.status !== "ACTIVE" || instance.definition.onTick === undefined) {
                     return battle;
                 }
 
-                return instance.definition.onTick(
-                    battle,
-                    createContext(battle, ref, instance, call),
-                );
+                return instance.definition.onTick(battle, createContext(battle, instance, call));
             }) ?? battle;
 
         const current = get(battle, ref);
@@ -268,7 +245,7 @@ export function advance(battle: BattleState, call: CallContext = emptyCall): Bat
 export function validateScopes(battle: BattleState): void {
     for (const unitId of battlefieldView(battle).unitIds) {
         for (const instance of getUnit(battle, unitId)!.effects.values()) {
-            const ref: Ref = { type: "EFFECT", unitId, effectId: instance.id };
+            const ref = effectRef(instance);
 
             for (const scope of instance.scopes) {
                 if (scope.type === "TICK") {
@@ -286,18 +263,17 @@ export function validateScopes(battle: BattleState): void {
     }
 }
 
-function createContext<S extends object = object, H extends object = object>(
+function createContext<S extends object, H extends object>(
     battle: BattleState,
-    ref: Ref,
     instance: Effect<S, H>,
     call: CallContext,
-    host = getUnit(battle, ref.unitId)!,
+    host = units.get(battle, instance.host)!,
 ): Context<S, H> {
     return {
         tick: battle.tick,
-        ref,
+        ref: effectRef(instance),
         call,
-        unit: (getUnit(battle, ref.unitId) ?? host) as Unit & H,
+        unit: units.get(battle, instance.host) ?? host,
         self: instance,
     };
 }
@@ -326,7 +302,7 @@ function available(battle: BattleState, lifetime: Lifetime): boolean {
         }
 
         case "EFFECT": {
-            const instance = get(battle, lifetime);
+            const instance = get(battle, lifetime.ref);
 
             return instance !== undefined && instance.status !== "ENDING";
         }
@@ -335,7 +311,7 @@ function available(battle: BattleState, lifetime: Lifetime): boolean {
 
 function change(
     battle: BattleState,
-    ref: Ref,
+    ref: Ref<StoredEffect>,
     changes: {
         readonly status?: Status;
         readonly enabled?: boolean;
@@ -343,8 +319,8 @@ function change(
     },
 ): BattleState {
     return (
-        getUnit(battle, ref.unitId)?.effects.read(ref.effectId, (instance) =>
-            replaceEffect(battle, ref, { ...instance, ...changes }),
+        getUnit(battle, ref.host.id)?.effects.read(ref.id, (instance) =>
+            replaceEffect(battle, effectRef(instance), { ...instance, ...changes }),
         ) ?? battle
     );
 }
@@ -376,8 +352,8 @@ function shouldBeActive(battle: BattleState, instance: StoredEffect, unit: Unit)
     );
 }
 
-function updateStatus(battle: BattleState, ref: Ref, call: CallContext): BattleState {
-    const unit = getUnit(battle, ref.unitId);
+function updateStatus(battle: BattleState, ref: Ref<StoredEffect>, call: CallContext): BattleState {
+    const unit = getUnit(battle, ref.host.id);
     const instance = get(battle, ref);
 
     if (
@@ -397,8 +373,8 @@ function updateStatus(battle: BattleState, ref: Ref, call: CallContext): BattleS
 
     battle = change(battle, ref, { status: active ? "ACTIVE" : "INACTIVE" });
 
-    return getUnit(battle, ref.unitId)!.effects.read(ref.effectId, (current) => {
-        const context = createContext(battle, ref, current, call);
+    return getUnit(battle, ref.host.id)!.effects.read(ref.id, (current) => {
+        const context = createContext(battle, current, call);
         const callback = active ? current.definition.onEnable : current.definition.onDisable;
 
         return callback === undefined ? battle : callback(battle, context);
@@ -413,7 +389,7 @@ function reconcileGroupActivity(
 ): BattleState {
     const refs = (getUnit(battle, unitId)?.effects.values() ?? [])
         .filter((instance) => instance.definition.group?.id === groupId)
-        .map((instance): Ref => ({ type: "EFFECT", unitId, effectId: instance.id }));
+        .map(effectRef);
 
     for (const ref of refs) {
         if (get(battle, ref)?.status === "ACTIVE") {
@@ -429,19 +405,19 @@ function reconcileGroupActivity(
     return battle;
 }
 
-function wouldCycle(battle: BattleState, ref: Ref, lifetime: Lifetime): boolean {
+function wouldCycle(battle: BattleState, ref: Ref<StoredEffect>, lifetime: Lifetime): boolean {
     if (lifetime.type !== "EFFECT") {
         return false;
     }
 
-    const pending: Ref[] = [lifetime];
+    const pending: Ref<StoredEffect>[] = [lifetime.ref];
     const seen = new Set<string>();
 
     while (pending.length > 0) {
         const current = pending.pop()!;
-        const identity = key(current);
+        const identity = key({ type: "EFFECT", ref: current });
 
-        if (identity === key(ref)) {
+        if (identity === key({ type: "EFFECT", ref })) {
             return true;
         }
         if (seen.has(identity)) {
@@ -450,9 +426,12 @@ function wouldCycle(battle: BattleState, ref: Ref, lifetime: Lifetime): boolean 
 
         seen.add(identity);
         pending.push(
-            ...(get(battle, current)?.scopes.filter(
-                (scope): scope is Ref => scope.type === "EFFECT",
-            ) ?? []),
+            ...(get(battle, current)
+                ?.scopes.filter(
+                    (scope): scope is Extract<Lifetime, { type: "EFFECT" }> =>
+                        scope.type === "EFFECT",
+                )
+                .map((scope) => scope.ref) ?? []),
         );
     }
 

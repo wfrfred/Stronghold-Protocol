@@ -1111,7 +1111,9 @@ test('core battle publishes a completed tick only after all operations succeed',
       if (failureEnabled) { failures++; throw new Error('late-stage failure'); }
       return state;
     } };
-    const failingEffects = installFixtureEffect(initialize({ id: 99, definition: predefinedUnit, position: [8, 9] }), lifecycle).effects;
+    const failingDefinition = Object.freeze({ ...predefinedUnit, onEnter(state, unitId) {
+      return installEffect(state, unitRef(getUnit(state, unitId)), lifecycle).state;
+    } });
     const input = {
       ...withTimelineSpawns(base, [
         ...(reason === 'TIME_LIMIT' ? [source] : []),
@@ -1127,7 +1129,7 @@ test('core battle publishes a completed tick only after all operations succeed',
               region: createNavigationModifierRegion({ type: 'FIXED', position: [9, 7], range: [[0, 0]], direction: 'RIGHT' }) },
           ] } },
         { id: 2, alias: null, initiallyPresent: false,
-          creation: { type: 'UNIT', definition: predefinedUnit, position: Object.freeze([8, 9]), navigationModifiers: [], effects: failingEffects } },
+          creation: { type: 'UNIT', definition: failingDefinition, position: Object.freeze([8, 9]), navigationModifiers: [] } },
       ],
     };
     const runtime = new BattleRuntime(input), replay = new BattleRuntime(input);

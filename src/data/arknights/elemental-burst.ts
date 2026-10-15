@@ -1,5 +1,5 @@
 import { ref as unitRef } from "../../core/tactical/unit/query.js";
-import { setData } from "../../core/tactical/unit/effect/effect.js";
+import { ref as effectRef, setData } from "../../core/tactical/unit/effect/effect.js";
 import type { CombatResources } from "../../core/tactical/battle/resources.js";
 import {
     getUnit,
@@ -128,11 +128,7 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                             },
                             invoke: (state, context) => {
                                 const self = context.unit.effects.get(effectId, paralysis)!;
-                                const ref = {
-                                    type: "EFFECT" as const,
-                                    unitId: context.unit.id,
-                                    effectId,
-                                };
+                                const ref = effectRef(self);
                                 const remaining = self.data.remaining - 1;
                                 state = effects.replaceEffect(
                                     state,
@@ -338,7 +334,7 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                                 const typed = unit.effects.get(instance.id, weakness)!;
                                 state = effects.replaceEffect(
                                     state,
-                                    { type: "EFFECT", unitId: unit.id, effectId: typed.id },
+                                    effectRef(typed),
                                     setData(typed, { scaler }),
                                 );
 

@@ -89,17 +89,17 @@ function contributionBuff(id, amount, set, remove, callbacks) {
         {
             ...callbacks,
             onEnable(state, context) {
-                state = transitionUnit(state, context.ref.unitId, (unit) =>
+                state = transitionUnit(state, context.ref.host.id, (unit) =>
                     set(unit, {
-                        id: `${context.ref.unitId}:${context.ref.effectId}`,
+                        id: `${context.ref.host.id}:${context.ref.id}`,
                         value: [modifier({ finalAddition: context.self.data.amount })],
                     }),
                 );
                 return callbacks.onEnable ? callbacks.onEnable(state, context) : state;
             },
             onDisable(state, context) {
-                state = transitionUnit(state, context.ref.unitId, (unit) =>
-                    remove(unit, `${context.ref.unitId}:${context.ref.effectId}`),
+                state = transitionUnit(state, context.ref.host.id, (unit) =>
+                    remove(unit, `${context.ref.host.id}:${context.ref.id}`),
                 );
                 return callbacks.onDisable ? callbacks.onDisable(state, context) : state;
             },
@@ -110,10 +110,10 @@ function contributionBuff(id, amount, set, remove, callbacks) {
 export function refreshAttack(state, ref) {
     const instance = get(state, ref);
     if (instance?.status !== "ACTIVE") return state;
-    return transitionUnit(state, ref.unitId, (unit) => ({
+    return transitionUnit(state, ref.host.id, (unit) => ({
         ...unit,
         offense: setAttackContribution(unit.offense, {
-            id: `${ref.unitId}:${ref.effectId}`,
+            id: `${ref.host.id}:${ref.id}`,
             value: [modifier({ finalAddition: instance.data.amount })],
         }),
     }));
@@ -126,9 +126,9 @@ export function contributionEffect(
     callbacks = {},
 ) {
     let content;
-    const key = (ref) => `${ref.unitId}:${ref.effectId}`;
+    const key = (ref) => `${ref.host.id}:${ref.id}`;
     const publish = (state, context) =>
-        transitionUnit(state, context.ref.unitId, (unit) => ({
+        transitionUnit(state, context.ref.host.id, (unit) => ({
             ...unit,
             [capability]: set(unit[capability], {
                 id: key(context.ref),
@@ -141,7 +141,7 @@ export function contributionEffect(
                               .values()
                               .find(
                                   (effect) =>
-                                      effect.id === context.ref.effectId &&
+                                      effect.id === context.ref.id &&
                                       effect.definition === content,
                               );
                           return current === undefined ? [] : value(current, query);
@@ -159,7 +159,7 @@ export function contributionEffect(
             return callbacks.onEnable ? callbacks.onEnable(state, context) : state;
         },
         onDisable(state, context) {
-            state = transitionUnit(state, context.ref.unitId, (unit) => ({
+            state = transitionUnit(state, context.ref.host.id, (unit) => ({
                 ...unit,
                 [capability]: remove(unit[capability], key(context.ref)),
             }));
@@ -172,10 +172,10 @@ export function contributionEffect(
 export function refreshContribution(state, ref, content, { capability, set, value, group }) {
     const current = get(state, ref);
     if (current?.status !== "ACTIVE") return state;
-    return transitionUnit(state, ref.unitId, (unit) => ({
+    return transitionUnit(state, ref.host.id, (unit) => ({
         ...unit,
         [capability]: set(unit[capability], {
-            id: `${ref.unitId}:${ref.effectId}`,
+            id: `${ref.host.id}:${ref.id}`,
             ...(group === undefined
                 ? {}
                 : { group: typeof group === "function" ? group(current) : group }),

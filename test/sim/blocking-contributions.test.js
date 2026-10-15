@@ -50,7 +50,7 @@ const fixtures = JSON.parse(
     readFileSync(new URL("../fixtures/arknights/blocking_buffs.json", import.meta.url), "utf8"),
 );
 const fixture = (key) => fixtures.find((entry) => entry.node._buff.buffKey === key);
-const effectAddress = { type: "EFFECT", unitId: 0, effectId: 0 };
+const effectAddress = { host: { id: 0 }, id: 0 };
 
 const blocker = (capacity = 3) =>
     initialize({
@@ -90,8 +90,8 @@ const change = (work, effect, next, setting) => {
         work,
         effectAddress,
         setData(
-            getUnit(work, effectAddress.unitId).effects.values().find(
-                (instance) => instance.id === effectAddress.effectId,
+            getUnit(work, effectAddress.host.id).effects.values().find(
+                (instance) => instance.id === effectAddress.id,
             ),
             next,
         ),

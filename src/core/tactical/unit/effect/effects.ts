@@ -81,6 +81,9 @@ export class Effects {
         if (previous.definition !== effect.definition) {
             throw new TypeError("effect definition cannot change");
         }
+        if (previous.host.id !== effect.host.id) {
+            throw new TypeError("effect host cannot change");
+        }
         if (previous === effect) {
             return this;
         }

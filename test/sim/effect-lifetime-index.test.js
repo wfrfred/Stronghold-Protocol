@@ -18,19 +18,19 @@ test("scope index tracks remote dependencies and preserves captured indexes", ()
     let parent;
     ({ state: battle, value: parent } = install(battle, content, 1));
     let child;
-    ({ state: battle, value: child } = install(battle, content, 9, { scopes: [parent] }));
+    ({ state: battle, value: child } = install(battle, content, 9, { scopes: [{ type: "EFFECT", ref: parent }] }));
     let other;
-    ({ state: battle, value: other } = install(battle, content, 2, { scopes: [parent] }));
+    ({ state: battle, value: other } = install(battle, content, 2, { scopes: [{ type: "EFFECT", ref: parent }] }));
     const captured = battlefieldView(battle);
-    assert.deepEqual(dependents(battlefieldView(battle).effectLifetimes, parent), [other, child]);
+    assert.deepEqual(dependents(battlefieldView(battle).effectLifetimes, { type: "EFFECT", ref: parent }), [other, child]);
     battle = effects.end(battle, other);
-    assert.deepEqual(dependents(battlefieldView(battle).effectLifetimes, parent), [child]);
+    assert.deepEqual(dependents(battlefieldView(battle).effectLifetimes, { type: "EFFECT", ref: parent }), [child]);
     assert.equal(captured.effectLifetimes.dependents.get("EFFECT:1:0").size, 2);
     const unrelated = battlefieldView(battle).effectLifetimes;
     battle = transitionUnit(battle, 2, (current) => ({ ...current, position: [1, 0] }));
     assert.equal(battlefieldView(battle).effectLifetimes, unrelated);
     battle = effects.end(battle, parent);
-    assert.deepEqual(dependents(battlefieldView(battle).effectLifetimes, parent), []);
+    assert.deepEqual(dependents(battlefieldView(battle).effectLifetimes, { type: "EFFECT", ref: parent }), []);
     assert.deepEqual(getUnit(battle, 9).effects.values(), []);
 });
 
@@ -40,8 +40,8 @@ test("binding rejects scope cycles while sharing independent scopes", () => {
     let first;
     ({ state: battle, value: first } = install(battle, content, 1));
     let second;
-    ({ state: battle, value: second } = install(battle, content, 2, { scopes: [first] }));
-    assert.throws(() => effects.bindLifetime(battle, first, second), /cycle/);
+    ({ state: battle, value: second } = install(battle, content, 2, { scopes: [{ type: "EFFECT", ref: first }] }));
+    assert.throws(() => effects.bindLifetime(battle, first, { type: "EFFECT", ref: second }), /cycle/);
     const bound = effects.bindLifetime(battle, second, { type: "UNIT", unitId: 1 });
     battle = bound.state;
     assert.equal(bound.value, true);

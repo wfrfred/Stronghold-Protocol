@@ -1,11 +1,11 @@
 import type { CallContext } from "../../battle/execution/call.js";
 import type { Unit, Id } from "../../unit/unit.js";
-import type { ProjectileId, Projectile, ProjectileView } from "./projectile.js";
+import type { Projectile, ProjectileView } from "./projectile.js";
 
 export interface ProjectileFacts {
     readonly unitIds: readonly Id[];
     getUnit(id: Id): Unit | undefined;
-    getProjectile(id: ProjectileId): ReturnType<ProjectileView["getProjectile"]>;
+    getProjectile: ProjectileView["getProjectile"];
 }
 
 export interface ProjectileQueryContext<S extends object = object> {

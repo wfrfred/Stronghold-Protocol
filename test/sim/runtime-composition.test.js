@@ -35,6 +35,7 @@ import {
 import { createDefinition as createProjectileDefinition } from "../../dist/core/tactical/battlefield/projectile/definition.js";
 import {
     getProjectile,
+    ref as projectileRef,
     replaceProjectile,
 } from "../../dist/core/tactical/battlefield/projectile/operations.js";
 import { stopProjectile } from "../../dist/core/tactical/battlefield/projectile/settlement.js";
@@ -123,7 +124,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
     const attempts = [];
     const reports = [];
     const rejected = [];
-    const auraAddress = { type: "EFFECT", unitId: 0, effectId: 0 };
+    let auraAddress;
     let aura;
 
     const registerBuff = (id, addition) => ({
@@ -149,7 +150,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                 })),
             );
             const id = `effect:${context.self.id}`;
-            return transitionUnit(state, context.ref.unitId, (unit) => {
+            return transitionUnit(state, context.ref.host.id, (unit) => {
                 const next = ({ ...unit, offense: setAttackContribution(unit.offense, {
                     id,
                     value: [modifier.create({ finalAddition: addition })],
@@ -159,7 +160,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
         },
         onDisable(state, context) {
             const id = `effect:${context.self.id}`;
-            return transitionUnit(state, context.ref.unitId, (unit) => {
+            return transitionUnit(state, context.ref.host.id, (unit) => {
                 const next = ({ ...unit, offense: removeAttackContribution(unit.offense, id) });
                 return next;
             });
@@ -178,14 +179,14 @@ function scenario({ failure = null, cancelled = false } = {}) {
         onInstall(state, context) {
             state = receiverOutput.onInstall(state, context);
             const ref = context.ref;
-            return transitionUnit(state, ref.unitId, (unit) =>
+            return transitionUnit(state, ref.host.id, (unit) =>
                 ({ ...unit, vitality: setDamageHook(unit.vitality, {
-                    id: `receiver:${ref.effectId}`,
+                    id: `receiver:${ref.id}`,
                     stage: "reception",
                     priority: 0,
                     enabled: (invocation) =>
                         invocation.unit.effects.values().find(
-                            (instance) => instance.id === ref.effectId,
+                            (instance) => instance.id === ref.id,
                         )?.status === "ACTIVE",
                     invoke(state, invocation, pending) {
                         assert.ok(getEffect(state, auraAddress).data.remaining > 0);
@@ -212,7 +213,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                                 state,
                                 {
                                     sourceUnitId: 0,
-                                    targetUnitId: ref.unitId,
+                                    targetUnitId: ref.host.id,
                                     power: 4,
                                     ignoreHealFree: false,
                                     tick: invocation.tick,
@@ -222,11 +223,11 @@ function scenario({ failure = null, cancelled = false } = {}) {
                         } else {
                             const installed = installEffect(
                                 state,
-                                unitRef(getUnit(state, ref.unitId)),
+                                unitRef(getUnit(state, ref.host.id)),
                                 marker,
                                 {
                                     source: 0,
-                                    scopes: [ref],
+                                    scopes: [{ type: "EFFECT", ref }],
                                 },
                                 invocation.call,
                             );
@@ -237,7 +238,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                         attempts.push({
                             address: ref,
                             quota: { remaining: quota.remaining, consumed: quota.consumed },
-                            marked: marked(getUnit(state, ref.unitId)),
+                            marked: marked(getUnit(state, ref.host.id)),
                         });
                         return {
                             state,
@@ -259,7 +260,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
             );
         },
         onEnd(state, context) {
-            return transitionUnit(state, context.ref.unitId, (unit) =>
+            return transitionUnit(state, context.ref.host.id, (unit) =>
                 ({ ...unit, vitality: removeDamageHook(unit.vitality, `receiver:${context.self.id}`) }),
             );
         },
@@ -267,6 +268,10 @@ function scenario({ failure = null, cancelled = false } = {}) {
     aura = {
         id: "combined-aura",
         initialize: () => ({ remaining: 3, consumed: 0, receivers: [] }),
+        onInstall(state, context) {
+            auraAddress = context.ref;
+            return state;
+        },
         onTick(state, context) {
             if (context.tick >= 3) {
                 return endEffect(state, context.ref, "AURA_FINISHED", context.call);
@@ -288,8 +293,8 @@ function scenario({ failure = null, cancelled = false } = {}) {
                     unitRef(getUnit(state, unitId)),
                     receiver,
                     {
-                        source: context.ref.unitId,
-                        scopes: [context.ref],
+                        source: context.ref.host.id,
+                        scopes: [{ type: "EFFECT", ref: context.ref }],
                     },
                     context.call,
                 );
@@ -317,7 +322,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
             unit.id === context.projectile.traceTarget && !marked(unit),
         contact: (state, context) => {
             scopes.push(context);
-            const current = getProjectile(state, context.projectile.id, shell);
+            const current = getProjectile(state, projectileRef(context.projectile));
             state = replaceProjectile(state, {
                 ...current,
                 state: { contacts: current.state.contacts + 1 },
@@ -337,7 +342,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
             reports.push(damaged.value);
             state = stopProjectile(
                 state,
-                context.projectile.id,
+                projectileRef(context.projectile),
                 context.tick,
                 "EXPLICIT",
                 context.call,
@@ -408,7 +413,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
             stopDelayTicks: 0,
             expiresAtTick: null,
         });
-        launches.push({ id: launched.value, executionId: context.executionId, targetUnitId });
+        launches.push({ id: launched.value.id, executionId: context.executionId, targetUnitId });
         return launched.state;
     };
     const runtime = new BattleRuntime(
@@ -561,7 +566,7 @@ test("runtime composition: late exceptions and invalid settlement propagate with
         );
         assert.deepEqual(failed.attempts, [
             {
-                address: { type: "EFFECT", unitId: 1, effectId: 0 },
+                address: { host: { id: 1 }, id: 0 },
                 quota: { remaining: 2, consumed: 1 },
                 marked: true,
             },
@@ -612,7 +617,7 @@ test("runtime composition: a successful battle preserves identities, snapshots a
     assert.deepEqual(effect(after, 1, run.receiver).data, { starts: 1, enables: 1, uses: 1 });
     assert.equal(effect(after, 1, run.marker).id, 1);
     assert.deepEqual(effect(after, 1, run.marker).scopes, [
-        { type: "EFFECT", unitId: 1, effectId: 0 },
+        { type: "EFFECT", ref: { host: { id: 1 }, id: 0 } },
     ]);
     assert.equal(after.units.find((unit) => unit.id === 1).effects.nextId, 2);
     assert.equal(before.units.find((unit) => unit.id === 1).effects.nextId, 1);

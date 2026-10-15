@@ -2,15 +2,9 @@ import type { WorldPosition } from "../geometry/coordinate.js";
 import type { Effects } from "./effect/effects.js";
 import type { State as BattleState } from "../battle/state.js";
 import type { BattlefieldRemovalReason } from "../battlefield/contract.js";
+import type { Identified } from "../../common/ref.js";
 
 export type Id = number;
-
-declare const unitType: unique symbol;
-
-export interface Ref<out U extends Unit = Unit> {
-    readonly id: Id;
-    readonly [unitType]: U;
-}
 
 export type DefinitionId = string;
 
@@ -28,7 +22,7 @@ export interface Departure {
     readonly reason: BattlefieldRemovalReason;
 }
 
-export interface Unit {
+export interface Unit extends Identified<{ readonly id: Id }> {
     readonly id: Id;
     readonly lifecycle: Lifecycle;
     readonly definition: Definition;

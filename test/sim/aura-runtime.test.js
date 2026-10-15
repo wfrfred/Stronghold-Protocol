@@ -109,7 +109,7 @@ test("aura runtime: predefined, deployment and spawning join before the same tic
     const starts = [];
     const receiver = attackEffect("registration-receiver", {
         onInstall: (state, context) => {
-            starts.push([context.ref.unitId, context.tick]);
+            starts.push([context.ref.host.id, context.tick]);
             return state;
         },
     });
@@ -203,7 +203,7 @@ test("aura runtime: movement departure is observed at the next aura tick", () =>
     let before;
     const receiver = attackEffect("moving-receiver", {
         onEnable: (state, context) => {
-            if (context.ref.unitId === 2) {
+            if (context.ref.host.id === 2) {
                 const view = battlefieldView(state);
                 before = { units: view.unitIds.map((id) => view.getUnit(id)) };
             }
@@ -260,7 +260,7 @@ test("aura runtime: callback failure propagates the original error without publi
                 context.ref,
                 setData(context.self, (current) => ({ ...current, starts: 1 })),
             );
-            if (context.ref.unitId === 2) {
+            if (context.ref.host.id === 2) {
                 attempts.push(context.ref);
                 throw failure;
             }

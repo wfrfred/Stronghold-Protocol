@@ -21,7 +21,7 @@ function fixture(content = {}) {
   const disabled = [];
   const owned = effectDefinition("skill-owned-on-receiver", {}, {
     onDisable(state, context) {
-      disabled.push(context.ref.effectId);
+      disabled.push(context.ref.id);
       return content.disable?.(state, context) ?? state;
     },
   });

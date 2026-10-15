@@ -1,6 +1,8 @@
-import type { Id as UnitId } from "../unit.js";
+import type { Id as UnitId, Unit } from "../unit.js";
 import type { ActionExecutionId } from "../capability/action/process.js";
 import type { Definition } from "./definition.js";
+import type { Effects } from "./effects.js";
+import type { Identified, Ref } from "../../../common/ref.js";
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 
 export type Id = number;
@@ -9,22 +11,30 @@ export type Lifetime =
     | { readonly type: "UNIT"; readonly unitId: UnitId }
     | { readonly type: "ACTION"; readonly executionId: ActionExecutionId }
     | { readonly type: "SKILL"; readonly unitId: UnitId; readonly activationId: number }
-    | { readonly type: "EFFECT"; readonly unitId: UnitId; readonly effectId: Id };
-
-export type Ref = Extract<Lifetime, { type: "EFFECT" }>;
+    | { readonly type: "EFFECT"; readonly ref: Ref<StoredEffect> };
 
 export type Scope = Lifetime | { readonly type: "TICK"; readonly tick: number };
 
 export type Status = "INSTALLING" | "INACTIVE" | "ACTIVE" | "ENDING";
 
-export interface Effect<S extends object = object, H extends object = object> {
+type StoredEffect = ReturnType<Effects["values"]>[number];
+
+export interface Effect<S extends object = object, H extends object = object> extends Identified<{
+    readonly host: Ref<Unit & H>;
     readonly id: Id;
+}> {
+    readonly id: Id;
+    readonly host: Ref<Unit & H>;
     readonly definition: Definition<S, H>;
     readonly data: S;
     readonly source: UnitId | null;
     readonly scopes: readonly Scope[];
     readonly enabled: boolean;
     readonly status: Status;
+}
+
+export function ref<E extends StoredEffect>(effect: E): Ref<E> {
+    return { host: effect.host, id: effect.id } as Ref<E>;
 }
 
 export function setData<S extends object, H extends object>(
@@ -74,7 +84,7 @@ export function key(scope: Scope): string {
             return `SKILL:${scope.unitId}:${scope.activationId}`;
 
         case "EFFECT":
-            return `EFFECT:${scope.unitId}:${scope.effectId}`;
+            return `EFFECT:${scope.ref.host.id}:${scope.ref.id}`;
 
         case "TICK":
             return `TICK:${scope.tick}`;

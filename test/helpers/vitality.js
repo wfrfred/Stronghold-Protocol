@@ -44,7 +44,7 @@ export function setSelf(state, context, self, next) {
         ? state
         : effects.replaceEffect(
               state,
-              { type: "EFFECT", unitId: unit.id, effectId: current.id },
+              { host: current.host, id: current.id },
               setData(current, next),
           );
 }
@@ -59,17 +59,17 @@ function hookEffect(domain, id, initial, entries, callbacks = {}) {
     content = definition(id, initial, {
         ...callbacks,
         onInstall(state, context) {
-            state = transitionUnit(state, context.ref.unitId, (unit) =>
+            state = transitionUnit(state, context.ref.host.id, (unit) =>
                 entries.reduce(
                     (unit, entry, index) => ({
                         ...unit,
                         vitality: domain.setHook(unit.vitality, {
-                            id: `${context.ref.unitId}:${context.ref.effectId}:${index}`,
+                            id: `${context.ref.host.id}:${context.ref.id}:${index}`,
                             stage: entry.stage,
                             priority: entry.priority ?? 0,
                             enabled(invocation) {
                                 const self = invocation.unit.effects.get(
-                                    context.ref.effectId,
+                                    context.ref.id,
                                     content,
                                 );
                                 return (
@@ -81,7 +81,7 @@ function hookEffect(domain, id, initial, entries, callbacks = {}) {
                                 return entry.invoke(
                                     state,
                                     invocation,
-                                    invocation.unit.effects.get(context.ref.effectId, content),
+                                    invocation.unit.effects.get(context.ref.id, content),
                                     input,
                                 );
                             },
@@ -93,13 +93,13 @@ function hookEffect(domain, id, initial, entries, callbacks = {}) {
             return callbacks.onInstall ? callbacks.onInstall(state, context) : state;
         },
         onEnd(state, context) {
-            state = transitionUnit(state, context.ref.unitId, (unit) =>
+            state = transitionUnit(state, context.ref.host.id, (unit) =>
                 entries.reduce(
                     (unit, _entry, index) => ({
                         ...unit,
                         vitality: domain.removeHook(
                             unit.vitality,
-                            `${context.ref.unitId}:${context.ref.effectId}:${index}`,
+                            `${context.ref.host.id}:${context.ref.id}:${index}`,
                         ),
                     }),
                     unit,

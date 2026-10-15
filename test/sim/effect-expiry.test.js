@@ -76,7 +76,7 @@ test("effect deadlines: layered content renews the same identity and ends only a
     }));
     for (let tick = 0; tick < 6; tick++) battle = effect.advance(at(battle, tick));
     assert.equal(get(battle, ref).data.layers, 1);
-    assert.equal(get(battle, ref).id, ref.effectId);
+    assert.equal(get(battle, ref).id, ref.id);
     battle = effect.advance(at(battle, 6));
     assert.equal(get(battle, ref), undefined);
 });

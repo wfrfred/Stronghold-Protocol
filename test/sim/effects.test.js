@@ -81,8 +81,8 @@ test("effects: updates share immutable values and container queries pair a defin
     assert.equal(current.data.nested, nested);
     assert.equal(old.data.count, 1);
     assert.equal(current.data.count, 2);
-    assert.equal(getUnit(battle, 0).effects.get(ref.effectId, value), current);
-    assert.equal(getUnit(battle, 0).effects.get(ref.effectId, other), undefined);
+    assert.equal(getUnit(battle, 0).effects.get(ref.id, value), current);
+    assert.equal(getUnit(battle, 0).effects.get(ref.id, other), undefined);
 });
 
 test("effects: disabling withdraws output while preserving private state and identity", () => {
@@ -117,7 +117,7 @@ test("effects: disabling withdraws output while preserving private state and ide
     battle = effect.setEnabled(battle, ref, true);
     assert.equal(attack(), 130);
     assert.deepEqual(seen, ["install", "enable", "disable", "enable"]);
-    assert.equal(get(battle, ref).id, ref.effectId);
+    assert.equal(get(battle, ref).id, ref.id);
 });
 
 test("effects: content explicitly refreshes a static contribution after changing private state", () => {

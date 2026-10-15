@@ -35,7 +35,7 @@ import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
 import * as modifier from "../../dist/core/tactical/unit/contribution/value.js";
 import { contributionEffect, refreshContribution, effectFixtureWork } from "../helpers/effects.js";
 
-const address = { type: "EFFECT", unitId: 0, effectId: 0 };
+const address = { host: { id: 0 }, id: 0 };
 const fixture = (name) =>
     JSON.parse(
         readFileSync(new URL(`../fixtures/arknights/${name}.json`, import.meta.url), "utf8"),
@@ -176,8 +176,8 @@ const changeSpeed = (work, program, next) => {
         work,
         address,
         setData(
-            getUnit(work, address.unitId).effects.values().find(
-                (instance) => instance.id === address.effectId,
+            getUnit(work, address.host.id).effects.values().find(
+                (instance) => instance.id === address.id,
             ),
             next,
         ),

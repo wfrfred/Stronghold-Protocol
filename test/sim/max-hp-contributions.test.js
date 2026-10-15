@@ -58,9 +58,9 @@ test("MaxHP outputs coordinate each setter before its lifecycle callback", () =>
     const observed = [];
     let battle = effectFixtureWork(receiver());
     const content = maxHpBuff("hp", 100, {
-        onEnable: (state, ctx) => { observed.push(["enabled", getUnit(state, ctx.ref.unitId).vitality.hp]); return state; },
-        onDisable: (state, ctx) => { observed.push(["disabled", getUnit(state, ctx.ref.unitId).vitality.hp]); return state; },
-        onEnd: (state, ctx) => { observed.push(["ended", getUnit(state, ctx.ref.unitId).vitality.hp]); return state; },
+        onEnable: (state, ctx) => { observed.push(["enabled", getUnit(state, ctx.ref.host.id).vitality.hp]); return state; },
+        onDisable: (state, ctx) => { observed.push(["disabled", getUnit(state, ctx.ref.host.id).vitality.hp]); return state; },
+        onEnd: (state, ctx) => { observed.push(["ended", getUnit(state, ctx.ref.host.id).vitality.hp]); return state; },
     });
     const before = battlefieldView(battle);
     const installed = install(battle, content);
@@ -69,7 +69,7 @@ test("MaxHP outputs coordinate each setter before its lifecycle callback", () =>
     assert.deepEqual(pair(battle), [100, 200]);
     battle = effects.setEnabled(battle, ref, false);
     assert.deepEqual(pair(battle), [50, 100]);
-    const current = getUnit(battle, ref.unitId).effects.values().find(effect => effect.id === ref.effectId);
+    const current = getUnit(battle, ref.host.id).effects.values().find(effect => effect.id === ref.id);
     battle = effects.replaceEffect(battle, ref, setData(current, { amount: 200 }));
     battle = effects.setEnabled(battle, ref, true);
     assert.deepEqual(pair(battle), [150, 300]);

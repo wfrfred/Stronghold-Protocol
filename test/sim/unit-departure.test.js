@@ -67,12 +67,12 @@ function fixture() {
         {
             onInstall(state, ctx) {
                 const ref = ctx.ref;
-                return transitionUnit(state, ref.unitId, (unit) =>
+                return transitionUnit(state, ref.host.id, (unit) =>
                     ({ ...unit, vitality: setHook(unit.vitality, {
                         id: "consume",
                         stage: "reception",
                         priority: 0,
-                        enabled: context => context.unit.effects.values().find(effect => effect.id === ref.effectId)?.status === "ACTIVE",
+                        enabled: context => context.unit.effects.values().find(effect => effect.id === ref.id)?.status === "ACTIVE",
                         invoke(state, context, value) {
                             const current = get(state, ref);
                             state = effects.replaceEffect(state, ref, setData(current, { consumed: current.data.consumed + 1 }));
@@ -82,7 +82,7 @@ function fixture() {
                 );
             },
             onEnd(state, ctx) {
-                return transitionUnit(state, ctx.ref.unitId, (unit) => ({ ...unit, vitality: removeHook(unit.vitality, "consume") }));
+                return transitionUnit(state, ctx.ref.host.id, (unit) => ({ ...unit, vitality: removeHook(unit.vitality, "consume") }));
             },
         },
     );

@@ -49,17 +49,17 @@ test("effect lifetimes: parent ending cascades across Units and shared descendan
     let b;
     ({ state: battle, value: b } = install(battle, value, 1, {
         data: { name: "left" },
-        scopes: [a],
+        scopes: [{ type: "EFFECT", ref: a }],
     }));
     let c;
     ({ state: battle, value: c } = install(battle, value, 2, {
         data: { name: "right" },
-        scopes: [a],
+        scopes: [{ type: "EFFECT", ref: a }],
     }));
     let d;
     ({ state: battle, value: d } = install(battle, value, 2, {
         data: { name: "shared" },
-        scopes: [b, c],
+        scopes: [{ type: "EFFECT", ref: b }, { type: "EFFECT", ref: c }],
     }));
     battle = effect.end(battle, a, "DISPELLED");
     assert.deepEqual(new Set(trace), new Set(["parent", "left", "right", "shared"]));
@@ -132,7 +132,7 @@ test("effect lifetimes: a closed parent cannot admit a remote dependent during t
                     unitRef(getUnit(state, 1)),
                     child,
                     {
-                        scopes: [context.ref],
+                        scopes: [{ type: "EFFECT", ref: context.ref }],
                     },
                     context.call,
                 );
@@ -261,7 +261,7 @@ test("effect lifetimes: terminal hook cleanup cannot recreate a host killed by a
                 );
             },
             onEnd(state, context) {
-                const host = getUnit(state, context.ref.unitId);
+                const host = getUnit(state, context.ref.host.id);
                 return host === undefined
                     ? state
                     : updateUnit(state, ({ ...host, vitality: removeHook(host.vitality, "parent-hook") }));
@@ -291,7 +291,7 @@ test("effect lifetimes: terminal hook cleanup cannot recreate a host killed by a
     let battle = effectFixtureWork(unit(0), unit(1));
     let ref;
     ({ state: battle, value: ref } = install(battle, parent, 0));
-    battle = install(battle, child, 1, { scopes: [ref] }).state;
+    battle = install(battle, child, 1, { scopes: [{ type: "EFFECT", ref }] }).state;
 
     battle = effect.end(battle, ref);
 

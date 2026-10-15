@@ -1,7 +1,8 @@
-import type { Unit, Id } from "../../unit/unit.js";
-import { key, type Ref, type Lifetime } from "../../unit/effect/effect.js";
+import type { Unit } from "../../unit/unit.js";
+import { key, ref as effectRef, type Lifetime } from "../../unit/effect/effect.js";
+import type { Ref } from "../../../common/ref.js";
 
-type RefBucket = ReadonlyMap<string, Ref>;
+type RefBucket = ReadonlyMap<string, Ref<StoredEffect>>;
 
 type StoredEffect = ReturnType<Unit["effects"]["values"]>[number];
 
@@ -24,17 +25,13 @@ function relationKeys(instance: StoredEffect | undefined): readonly string[] {
           ];
 }
 
-function effectRef(unitId: Id, effectId: number): Ref {
-    return { type: "EFFECT", unitId, effectId };
-}
-
 export function project(units: Iterable<Unit>): Index {
-    const dependents = new Map<string, Map<string, Ref>>();
+    const dependents = new Map<string, Map<string, Ref<StoredEffect>>>();
 
     for (const unit of units) {
         for (const instance of unit.effects.values()) {
-            const ref = effectRef(unit.id, instance.id);
-            const id = key(ref);
+            const ref = effectRef(instance);
+            const id = key({ type: "EFFECT", ref });
 
             for (const key of relationKeys(instance)) {
                 let bucket = dependents.get(key);
@@ -54,9 +51,9 @@ export function project(units: Iterable<Unit>): Index {
 
 export function derive(index: Index, transitions: readonly UnitTransition[]): Index {
     let dependents: Map<string, RefBucket> | undefined;
-    const editedBuckets = new Map<string, Map<string, Ref>>();
+    const editedBuckets = new Map<string, Map<string, Ref<StoredEffect>>>();
 
-    const editBucket = (key: string): Map<string, Ref> => {
+    const editBucket = (key: string): Map<string, Ref<StoredEffect>> => {
         let bucket = editedBuckets.get(key);
 
         if (bucket === undefined) {
@@ -68,7 +65,6 @@ export function derive(index: Index, transitions: readonly UnitTransition[]): In
         return bucket;
     };
     const changeRelations = (
-        unitId: Id,
         before: StoredEffect | undefined,
         after: StoredEffect | undefined,
     ): void => {
@@ -81,8 +77,8 @@ export function derive(index: Index, transitions: readonly UnitTransition[]): In
             return;
         }
 
-        const ref = effectRef(unitId, (after ?? before)!.id);
-        const id = key(ref);
+        const ref = effectRef((after ?? before)!);
+        const id = key({ type: "EFFECT", ref });
         const beforeKeys = relationKeys(before);
         const afterKeys = relationKeys(after);
 
@@ -106,15 +102,14 @@ export function derive(index: Index, transitions: readonly UnitTransition[]): In
             continue;
         }
 
-        const unitId = (nextUnit ?? previousUnit)!.id;
         const previousById = new Map(previousInstances?.map((instance) => [instance.id, instance]));
 
         for (const instance of nextInstances ?? []) {
-            changeRelations(unitId, previousById.get(instance.id), instance);
+            changeRelations(previousById.get(instance.id), instance);
             previousById.delete(instance.id);
         }
         for (const instance of previousById.values()) {
-            changeRelations(unitId, instance, undefined);
+            changeRelations(instance, undefined);
         }
     }
 
@@ -131,8 +126,8 @@ export function derive(index: Index, transitions: readonly UnitTransition[]): In
     return dependents === undefined ? index : { dependents };
 }
 
-export function dependents(index: Index, lifetime: Lifetime): readonly Ref[] {
+export function dependents(index: Index, lifetime: Lifetime): readonly Ref<StoredEffect>[] {
     return [...(index.dependents.get(key(lifetime))?.values() ?? [])].sort(
-        (left, right) => left.unitId - right.unitId || left.effectId - right.effectId,
+        (left, right) => left.host.id - right.host.id || left.id - right.id,
     );
 }

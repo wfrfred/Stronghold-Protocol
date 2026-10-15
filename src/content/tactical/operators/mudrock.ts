@@ -168,7 +168,7 @@ function shieldEffect(
                     priority: 100,
                     enabled: () => true,
                     invoke(state, context, pending) {
-                        const shield = get(state, ref, definition);
+                        const shield = get(state, ref);
 
                         if (pending.cancellation !== null || shield?.status !== "ACTIVE") {
                             return { state, value: { value: pending } };

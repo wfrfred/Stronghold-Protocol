@@ -16,18 +16,18 @@ test("effect values: local no-ops and replacements retain the input version", ()
     const value = definition("identity", { charges: 2 });
     const installed = install(effectFixtureWork(host()), value);
     const { state, value: ref } = installed;
-    const self = get(state, ref, value);
-    assert.equal(get(state, ref, definition("identity")), undefined);
+    const self = get(state, ref);
+    assert.equal(getUnit(state, ref.host.id).effects.get(ref.id, definition("identity")), undefined);
     assert.equal(setData(self, self.data), self);
     assert.equal(setDeadline(self, null), self);
     assert.equal(replaceEffect(state, ref, self), state);
     const unit = getUnit(state, 0);
     const changed = replaceEffect(state, ref, setData(self, { charges: 1 }));
-    assert.equal(get(state, ref, value).data.charges, 2);
-    assert.equal(get(changed, ref, value).data.charges, 1);
+    assert.equal(get(state, ref).data.charges, 2);
+    assert.equal(get(changed, ref).data.charges, 1);
     assert.equal(getUnit(state, 0), unit);
-    assert.throws(() => replaceEffect(state, { ...ref, effectId: 9 }, self), TypeError);
-    assert.equal(replaceEffect(state, { ...ref, effectId: 9 }, { ...self, id: 9 }), state);
+    assert.throws(() => replaceEffect(state, { ...ref, id: 9 }, self), TypeError);
+    assert.equal(replaceEffect(state, { ...ref, id: 9 }, { ...self, id: 9 }), state);
 });
 
 test("effect values: deadline updates preserve lifetime constraints and reject invalid time", () => {

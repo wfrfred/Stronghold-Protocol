@@ -80,8 +80,8 @@ test("ordinary end policies decide each receiver against current state", () => {
     const marker = definition("retention-marker");
     const receiver = attackEffect("retention", {
         onEnd(state, ctx) {
-            trace.push(["end", ctx.ref.unitId]);
-            return ctx.ref.unitId === 1
+            trace.push(["end", ctx.ref.host.id]);
+            return ctx.ref.host.id === 1
                 ? effects.install(state, unitRef(getUnit(state, 2)), marker, {}, ctx.call).state
                 : state;
         },
@@ -167,7 +167,7 @@ test("reenabling refreshes departed receivers before restoring child outputs", (
     const enabled = [];
     const receiver = attackEffect("resume", {
         onEnable: (state, ctx) => {
-            enabled.push(ctx.ref.unitId);
+            enabled.push(ctx.ref.host.id);
             return state;
         },
     });
@@ -193,8 +193,8 @@ test("nested installation can disable an aura before later receivers enter", () 
     const starts = [];
     const receiver = attackEffect("nested-stop", {
         onInstall(state, ctx) {
-            starts.push(ctx.ref.unitId);
-            return effects.setEnabled(state, ctx.self.scopes[0], false, ctx.call);
+            starts.push(ctx.ref.host.id);
+            return effects.setEnabled(state, ctx.self.scopes[0].ref, false, ctx.call);
         },
     });
     let battle = effectFixtureWork(auraUnit(0), auraUnit(1), auraUnit(2));
@@ -210,8 +210,8 @@ test("nested child installation ending the aura does not revive parent or child"
     const starts = [];
     const receiver = attackEffect("nested-end", {
         onInstall(state, ctx) {
-            starts.push(ctx.ref.unitId);
-            return effects.end(state, ctx.self.scopes[0], "EXPLICIT", ctx.call);
+            starts.push(ctx.ref.host.id);
+            return effects.end(state, ctx.self.scopes[0].ref, "EXPLICIT", ctx.call);
         },
     });
     let battle = effectFixtureWork(auraUnit(0), auraUnit(1), auraUnit(2));

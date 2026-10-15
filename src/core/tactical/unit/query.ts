@@ -1,6 +1,7 @@
 import type { BattlefieldView } from "../battlefield/contract.js";
 import type { State as BattleState } from "../battle/state.js";
-import type { Unit, Ref } from "./unit.js";
+import type { Unit } from "./unit.js";
+import type { Ref } from "../../common/ref.js";
 
 export interface Context {
     readonly unit: Unit;
@@ -11,7 +12,7 @@ export function ref<U extends Unit>(unit: U): Ref<U> {
     return { id: unit.id } as Ref<U>;
 }
 
-export function all(battle: BattleState): Ref[] {
+export function all(battle: BattleState): Ref<Unit>[] {
     return [...battle.battlefield.units.values()].map(ref);
 }
 
