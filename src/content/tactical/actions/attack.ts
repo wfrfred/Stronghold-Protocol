@@ -11,7 +11,6 @@ import {
     type State as BattleState,
 } from "../../../core/tactical/battle/state.js";
 import { CombatResources } from "../../../core/tactical/battle/resources.js";
-import { recover } from "../../../core/tactical/unit/capability/skill/sp.js";
 import type { Unit } from "../../../core/tactical/unit/unit.js";
 import * as units from "../../../core/tactical/unit/query.js";
 import { ref, setState, type Action } from "../../../core/tactical/unit/action/action.js";
@@ -19,10 +18,7 @@ import type { Definition as ActionDefinition } from "../../../core/tactical/unit
 import * as actions from "../../../core/tactical/unit/action/operations.js";
 import type { Action as ActionCapability } from "../../../core/tactical/unit/capability/action/capability.js";
 import { isSpatiallyPresent } from "../../../core/tactical/unit/capability/presence/capability.js";
-import { beforeRelease } from "../../../core/tactical/unit/capability/action/release.js";
-import { consume, check } from "../../../core/tactical/unit/capability/skill/ammo.js";
-import { ref as activationRef } from "../../../core/tactical/unit/capability/skill/activation.js";
-import { hasSkill } from "../../../core/tactical/unit/capability/skill/capability.js";
+import { beforeRelease, released } from "../../../core/tactical/unit/capability/action/release.js";
 import { resolveAttackPower } from "../../../core/tactical/unit/capability/offense/query.js";
 import { resolveDamage } from "../../../core/tactical/unit/capability/vitality/damage/settlement.js";
 import {
@@ -67,7 +63,7 @@ export interface FollowUp {
     readonly operation: Operation;
 }
 
-export interface Definition {
+export interface Configuration {
     readonly id: string;
     readonly intervalTicks: number;
     readonly speed?: number;
@@ -77,12 +73,19 @@ export interface Definition {
     readonly windupTicks?: number;
     readonly recoveryTicks?: number;
     readonly markerId?: string;
-    readonly ammoPerAction?: number;
-    readonly output?: (battle: BattleState, self: Action<State>) => BattleState;
-    readonly onEnd?: ActionDefinition<State>["onEnd"];
 }
 
-export interface State {
+export interface Definition<S extends object = object> extends Configuration {
+    readonly output?: (battle: BattleState, self: Action<State<S>>) => BattleState;
+    readonly afterOutput?: (battle: BattleState, self: Action<State<S>>) => BattleState;
+    readonly onEnd?: ActionDefinition<State<S>>["onEnd"];
+}
+
+export interface StatefulDefinition<S extends object> extends Definition<S> {
+    readonly initialize: (battle: BattleState, source: Ref<Unit & ActionCapability>) => S;
+}
+
+export interface State<S extends object = object> {
     readonly target: Ref<Unit>;
     readonly bindings: Readonly<Record<string, readonly Ref<Unit>[]>>;
     readonly releaseAtTick: number;
@@ -90,14 +93,18 @@ export interface State {
     readonly released: boolean;
     readonly previousReadyAtTick: number;
     readonly cooldownAdjusted: boolean;
-    readonly activationId: number | null;
+    readonly data: S;
 }
 
-export interface Attack extends ActionDefinition<State> {
-    readonly attack: Definition;
+export interface Attack<S extends object = object> extends ActionDefinition<State<S>> {
+    readonly attack: Configuration;
 }
 
-export function isAttack(value: unknown): value is Attack {
+export interface Stored extends Pick<ActionDefinition, "id" | "intervalTicks" | "speed"> {
+    readonly attack: Configuration;
+}
+
+export function isAttack(value: unknown): value is Stored {
     return typeof value === "object" && value !== null && "attack" in value;
 }
 
@@ -114,7 +121,7 @@ function sourcePresent(battle: BattleState, source: Ref<Unit>): boolean {
 export function chooseTargets(
     battle: BattleState,
     source: Ref<Unit & ActionCapability>,
-    definition: Definition,
+    definition: Configuration,
 ): State["bindings"] {
     const unit = units.get(battle, source);
 
@@ -201,10 +208,16 @@ function apply(
 }
 
 export function create(definition: Definition, resources = new CombatResources()): Attack {
+    return createWithState({ ...definition, initialize: () => ({}) }, resources);
+}
+
+export function createWithState<S extends object>(
+    definition: StatefulDefinition<S>,
+    resources = new CombatResources(),
+): Attack<S> {
     assertPositiveNumber(definition.intervalTicks, "attack interval");
     assertNonnegativeSafeInteger(definition.windupTicks ?? 0, "attack windup");
     assertNonnegativeSafeInteger(definition.recoveryTicks ?? 0, "attack recovery");
-    assertNonnegativeSafeInteger(definition.ammoPerAction ?? 1, "attack ammunition consumption");
 
     function copyOperation(operation: Operation): Operation {
         assertNonnegativeNumber(operation.power, "attack operation power");
@@ -241,11 +254,24 @@ export function create(definition: Definition, resources = new CombatResources()
         followUps: Object.freeze(followUps),
     });
 
-    const attack: Attack = {
+    const configuration: Configuration = Object.freeze({
+        id: definition.id,
+        intervalTicks: definition.intervalTicks,
+        triggerBindingId: definition.triggerBindingId,
+        targetGroups: definition.targetGroups,
+        followUps: Object.freeze(followUps),
+        ...(definition.speed === undefined ? {} : { speed: definition.speed }),
+        ...(definition.windupTicks === undefined ? {} : { windupTicks: definition.windupTicks }),
+        ...(definition.recoveryTicks === undefined
+            ? {}
+            : { recoveryTicks: definition.recoveryTicks }),
+        ...(definition.markerId === undefined ? {} : { markerId: definition.markerId }),
+    });
+    const attack: Attack<S> = {
         id: definition.id,
         intervalTicks: definition.intervalTicks,
         speed: definition.speed ?? 100,
-        attack: definition,
+        attack: configuration,
         start(battle, source) {
             const unit = units.get(battle, source);
             const bindings = chooseTargets(battle, source, definition);
@@ -268,7 +294,7 @@ export function create(definition: Definition, resources = new CombatResources()
                     previousReadyAtTick:
                         unit.action.cooldowns.get(definition.id)?.readyAtTick ?? battle.tick,
                     cooldownAdjusted: false,
-                    activationId: hasSkill(unit) ? (unit.skill.active?.id ?? null) : null,
+                    data: definition.initialize(battle, source),
                 },
             };
         },
@@ -307,8 +333,8 @@ export function create(definition: Definition, resources = new CombatResources()
 
             if (!self.state.released && battle.tick >= self.state.releaseAtTick) {
                 battle = actions.replace(battle, setState(self, { ...self.state, released: true }));
-                const released = beforeRelease(battle, identity);
-                battle = released.state;
+                const permission = beforeRelease(battle, identity);
+                battle = permission.state;
                 const current = actions.get(battle, identity);
 
                 if (current?.status !== "RUNNING" || !sourcePresent(battle, current.source)) {
@@ -317,7 +343,7 @@ export function create(definition: Definition, resources = new CombatResources()
                         value: true,
                     };
                 }
-                if (released.value.type === "INTERRUPT") {
+                if (permission.value.type === "INTERRUPT") {
                     const source = units.get(battle, self.source);
                     const cooldown = source?.action.cooldowns.get(definition.id);
 
@@ -330,7 +356,7 @@ export function create(definition: Definition, resources = new CombatResources()
                                     ...cooldown,
                                     readyAtTick: Math.max(
                                         cooldown.readyAtTick,
-                                        battle.tick + released.value.recoveryTicks,
+                                        battle.tick + permission.value.recoveryTicks,
                                     ),
                                 }),
                             },
@@ -350,11 +376,7 @@ export function create(definition: Definition, resources = new CombatResources()
                     },
                 ]);
 
-                const recovering = units.get(battle, self.source);
-
-                if (recovering !== undefined && hasSkill(recovering)) {
-                    battle = recover(battle, units.ref(recovering), "ACTION").state;
-                }
+                battle = released(battle, identity);
 
                 const output = actions.get(battle, identity);
 
@@ -370,26 +392,26 @@ export function create(definition: Definition, resources = new CombatResources()
                 } else {
                     for (const group of definition.targetGroups) {
                         for (const operation of group.operations) {
-                            for (const target of self.state.bindings[group.id] ?? []) {
+                            for (const target of output.state.bindings[group.id] ?? []) {
                                 if (actions.get(battle, identity)?.status !== "RUNNING") {
                                     return { state: battle, value: true };
                                 }
 
-                                battle = apply(battle, self.source, target, operation, resources);
+                                battle = apply(battle, output.source, target, operation, resources);
                             }
                         }
                     }
                     for (const followUp of definition.followUps ?? []) {
                         for (const target of followUp.receiver.type === "SOURCE"
-                            ? [self.source]
-                            : (self.state.bindings[followUp.receiver.bindingId] ?? [])) {
+                            ? [output.source]
+                            : (output.state.bindings[followUp.receiver.bindingId] ?? [])) {
                             if (actions.get(battle, identity)?.status !== "RUNNING") {
                                 return { state: battle, value: true };
                             }
 
                             battle = apply(
                                 battle,
-                                self.source,
+                                output.source,
                                 target,
                                 followUp.operation,
                                 resources,
@@ -398,21 +420,14 @@ export function create(definition: Definition, resources = new CombatResources()
                     }
                 }
 
-                if (actions.get(battle, identity)?.status !== "RUNNING") {
+                const completed = actions.get(battle, identity);
+
+                if (completed?.status !== "RUNNING") {
                     return { state: battle, value: true };
                 }
 
-                const source = units.get(battle, self.source);
-
-                if (
-                    source !== undefined &&
-                    hasSkill(source) &&
-                    source.skill.active !== null &&
-                    source.skill.active.id === self.state.activationId
-                ) {
-                    const activation = activationRef(source.skill.active);
-                    battle = consume(battle, activation, definition.ammoPerAction ?? 1).state;
-                    battle = check(battle, activation);
+                if (definition.afterOutput !== undefined) {
+                    battle = definition.afterOutput(battle, completed);
                 }
             }
 

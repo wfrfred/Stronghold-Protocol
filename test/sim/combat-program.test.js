@@ -15,7 +15,7 @@ import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/off
 import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import { definition as createSkillDefinition } from "../helpers/skill.js";
-import { activate } from "../../dist/core/tactical/unit/capability/skill/operations.js";
+import { activate, enter as enterSkill } from "../../dist/core/tactical/unit/capability/skill/operations.js";
 
 const targeting = {
     type: "DAMAGE",
@@ -246,7 +246,7 @@ test("ACTION recovery callbacks may cancel the releasing attack before its outpu
             },
         }],
     } };
-    const original = battle(configured, unit(1));
+    const original = enterSkill(battle(configured, unit(1)), unitRef(configured));
     const result = start(original, attack);
     assert.equal(getUnit(result.state, 0).skill.sp.value, 1);
     assert.equal(getUnit(result.state, 1).vitality.hp, 100);

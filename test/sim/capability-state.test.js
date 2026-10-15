@@ -99,6 +99,12 @@ test("local hook registration retains progress and changes only its registration
             action.setBeforeReleaseHook,
             action.removeBeforeReleaseHook,
         ],
+        [
+            action.initialize(),
+            "released",
+            action.setReleasedHook,
+            action.removeReleasedHook,
+        ],
     ];
     for (const [initial, field, set, remove] of registrations) {
         const added = set(initial, hook);

@@ -2,7 +2,7 @@ import { Definitions } from "../core/tactical/unit/action/definitions.js";
 import {
     create as createAttack,
     isAttack,
-    type Attack,
+    type Configuration as AttackConfiguration,
 } from "../content/tactical/actions/attack.js";
 import type { Input } from "../core/tactical/battle/contract.js";
 import { CombatResources } from "../core/tactical/battle/resources.js";
@@ -55,16 +55,16 @@ export function createTacticalMechanicsDemo(
     const maxTicks = (scenario === "SKILL" ? 120 : 60) * TICKS_PER_SECOND;
     const elementType = scenario === "SKILL" ? null : ELEMENT_SCENARIOS[scenario];
     const sourceDefinition = source.definition;
-    const action = sourceDefinition.action.definitions.read<Attack | null>(
+    const action = sourceDefinition.action.definitions.read<AttackConfiguration | null>(
         "normal-attack",
-        (current) => (isAttack(current) ? current : null),
+        (current) => (isAttack(current) ? current.attack : null),
     );
 
     if (action === undefined || action === null) {
         throw new TypeError("mechanics demo requires an ordinary attack");
     }
 
-    const group = action.attack.targetGroups[0];
+    const group = action.targetGroups[0];
     const definition =
         scenario === "SKILL"
             ? operator.createDefinition({
@@ -78,7 +78,7 @@ export function createTacticalMechanicsDemo(
                       definitions: Definitions.empty().add(
                           createAttack(
                               {
-                                  ...action.attack,
+                                  ...action,
                                   targetGroups: [
                                       {
                                           ...group,

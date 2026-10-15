@@ -26,6 +26,20 @@ export interface Hook {
     ) => Result<Directive>;
 }
 
+export interface ReleasedHook {
+    readonly id: string;
+    readonly enabled: (
+        battle: BattleState,
+        self: Unit & Action,
+        action: Ref<StoredAction>,
+    ) => boolean;
+    readonly invoke: (
+        battle: BattleState,
+        self: Unit & Action,
+        action: Ref<StoredAction>,
+    ) => BattleState;
+}
+
 export function beforeRelease(battle: BattleState, ref: Ref<StoredAction>): Result<Directive> {
     const action = actions.get(battle, ref);
     const source = action === undefined ? undefined : units.get(battle, action.source);
@@ -61,4 +75,32 @@ export function beforeRelease(battle: BattleState, ref: Ref<StoredAction>): Resu
     }
 
     return { state: battle, value: { type: "CONTINUE" } };
+}
+
+export function released(battle: BattleState, ref: Ref<StoredAction>): BattleState {
+    const action = actions.get(battle, ref);
+    const source = action === undefined ? undefined : units.get(battle, action.source);
+
+    if (action?.status !== "RUNNING" || source?.lifecycle !== "PRESENT") {
+        return battle;
+    }
+
+    const candidates = source.action.released.map(({ id }) => id);
+
+    for (const id of candidates) {
+        const currentAction = actions.get(battle, ref);
+        const current =
+            currentAction === undefined ? undefined : units.get(battle, currentAction.source);
+        const candidate = current?.action.released.find((entry) => entry.id === id);
+
+        if (
+            currentAction?.status === "RUNNING" &&
+            current?.lifecycle === "PRESENT" &&
+            candidate?.enabled(battle, current, ref)
+        ) {
+            battle = candidate.invoke(battle, current, ref);
+        }
+    }
+
+    return battle;
 }

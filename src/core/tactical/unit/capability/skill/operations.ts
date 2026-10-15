@@ -8,6 +8,8 @@ import * as contribution from "../../contribution/contribution.js";
 import * as modifier from "../../contribution/value.js";
 import { isSpatiallyPresent } from "../presence/capability.js";
 import { hasVitality } from "../vitality/capability.js";
+import { hasAction, setReleasedHook } from "../action/capability.js";
+import type { ReleasedHook } from "../action/release.js";
 import { setHook as setDamageHook, type ReceivedHook } from "../vitality/damage/hook.js";
 import { hasSkill, type Skill, type Stored } from "./capability.js";
 import {
@@ -30,6 +32,13 @@ const hitRecovery: ReceivedHook = {
         event.pending.cancellation === null && event.request.ignoreForSp !== true,
     invoke: (battle, target) =>
         hasSkill(target) ? sp.recover(battle, units.ref(target), "HIT").state : battle,
+};
+
+const actionRecovery: ReleasedHook = {
+    id: "@skill/action-recovery",
+    enabled: () => true,
+    invoke: (battle, source) =>
+        hasSkill(source) ? sp.recover(battle, units.ref(source), "ACTION").state : battle,
 };
 
 export type Outcome<T extends StoredActivation = StoredActivation> =
@@ -329,8 +338,22 @@ export function enter(battle: BattleState, host: Ref<Unit & Stored>): BattleStat
 
             const current = units.get(battle, units.ref(self));
 
-            return current !== undefined && self.definition.skill.onEnter !== undefined
-                ? self.definition.skill.onEnter(battle, current)
+            if (
+                current !== undefined &&
+                hasAction(current) &&
+                self.definition.skill.sp?.recovery.type === "ACTION"
+            ) {
+                const updated = {
+                    ...current,
+                    action: setReleasedHook(current.action, actionRecovery),
+                };
+                battle = query.replace(battle, updated);
+            }
+
+            const entered = units.get(battle, units.ref(self));
+
+            return entered !== undefined && self.definition.skill.onEnter !== undefined
+                ? self.definition.skill.onEnter(battle, entered)
                 : battle;
         }) ?? battle;
     const current = units.get(battle, host);

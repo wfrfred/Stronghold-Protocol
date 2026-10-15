@@ -6,7 +6,7 @@ import type { Definitions } from "../../action/definitions.js";
 import type { State as CooldownState } from "../../action/cooldown.js";
 import * as contribution from "../../contribution/contribution.js";
 import * as hook from "../../hook/hook.js";
-import type { Hook as ReleaseHook } from "./release.js";
+import type { Hook as ReleaseHook, ReleasedHook } from "./release.js";
 
 export interface Definition {
     readonly definitions: Definitions;
@@ -28,6 +28,7 @@ export interface State {
     readonly speed: readonly contribution.Contribution<contribution.Input<Context>>[];
     readonly rules: readonly Rule[];
     readonly beforeRelease: readonly ReleaseHook[];
+    readonly released: readonly ReleasedHook[];
 }
 
 export interface Action {
@@ -50,7 +51,14 @@ export function createDefinition(definition: Definition): Definition {
 }
 
 export function initialize(): State {
-    return { cooldowns: new Map(), interval: [], speed: [], rules: [], beforeRelease: [] };
+    return {
+        cooldowns: new Map(),
+        interval: [],
+        speed: [],
+        rules: [],
+        beforeRelease: [],
+        released: [],
+    };
 }
 
 export function setRule(state: State, rule: Rule): State {
@@ -75,6 +83,18 @@ export function removeBeforeReleaseHook(state: State, id: string): State {
     const beforeRelease = hook.remove(state.beforeRelease, id);
 
     return beforeRelease === state.beforeRelease ? state : { ...state, beforeRelease };
+}
+
+export function setReleasedHook(state: State, entry: ReleasedHook): State {
+    const released = hook.set(state.released, entry);
+
+    return released === state.released ? state : { ...state, released };
+}
+
+export function removeReleasedHook(state: State, id: string): State {
+    const released = hook.remove(state.released, id);
+
+    return released === state.released ? state : { ...state, released };
 }
 
 function updateContributions(

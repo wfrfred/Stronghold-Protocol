@@ -4,8 +4,9 @@ import { ref as actionRef } from "../../../core/tactical/unit/action/action.js";
 import {
     create as createAttack,
     type Attack,
-    type Definition as AttackConfiguration,
+    type Configuration as AttackConfiguration,
 } from "../actions/attack.js";
+import { create as createSkillAttack, type State as SkillAttackState } from "../actions/skill.js";
 import { selectTargets } from "../../../core/tactical/unit/targeting/select.js";
 import { resolveHealing } from "../../../core/tactical/unit/capability/vitality/healing/settlement.js";
 import { resolveDamage } from "../../../core/tactical/unit/capability/vitality/damage/settlement.js";
@@ -37,7 +38,6 @@ import {
     type Definition as SkillDefinition,
 } from "../../../core/tactical/unit/capability/skill/capability.js";
 import { finish } from "../../../core/tactical/unit/capability/skill/operations.js";
-import { ref as activationRef } from "../../../core/tactical/unit/capability/skill/activation.js";
 import { stun } from "../effects/stun.js";
 import { healFree } from "../effects/protection.js";
 import {
@@ -320,7 +320,7 @@ export function create(
     profile: Profile,
     combat: CombatResources,
     options: { readonly direction?: Direction; readonly recoveryTicks?: number } = {},
-): { readonly definition: Definition; readonly action: Attack } {
+): { readonly definition: Definition; readonly action: Attack<SkillAttackState> } {
     if (
         profile.id !== "char_311_mudrok" ||
         profile.skill.definition.id !== "skchr_mudrok_2" ||
@@ -353,7 +353,7 @@ export function create(
     const healRatio = value(profile.skill.blackboard, "hp_ratio");
     const stunChance = value(profile.skill.blackboard, "buff_prob");
     const stunTicks = secondsToTicks(value(profile.skill.blackboard, "stun"));
-    const action = createAttack(
+    const action = createSkillAttack(
         {
             ...activeConfiguration,
             markerId: "mudrock/s2",
@@ -416,14 +416,9 @@ export function create(
                 return state;
             },
             onEnd(state, self) {
-                const unit = getUnit(state, self.source.id);
-
-                return unit !== undefined &&
-                    hasSkill(unit) &&
-                    self.state.activationId !== null &&
-                    unit.skill.active?.id === self.state.activationId
-                    ? finish(state, activationRef(unit.skill.active))
-                    : state;
+                return self.state.data.activation === null
+                    ? state
+                    : finish(state, self.state.data.activation);
             },
         },
         combat,

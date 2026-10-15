@@ -12,7 +12,7 @@ import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/state.
 import { createDefinition as createProjectileDefinition } from "../../dist/core/tactical/battlefield/projectile/definition.js";
 import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
 import { createDefinition } from "../../dist/core/tactical/unit/archetype/operator.js";
-import { create as createAttack } from "../../dist/content/tactical/actions/attack.js";
+import { create as createAttack } from "../../dist/content/tactical/actions/skill.js";
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
 import { ref as actionRef, setState } from "../../dist/core/tactical/unit/action/action.js";
 import * as actions from "../../dist/core/tactical/unit/action/operations.js";
@@ -22,6 +22,9 @@ import { ref as activationRef } from "../../dist/core/tactical/unit/capability/s
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
 import { setHook, removeHook } from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
+import { unit as fixtureUnit, battle as fixtureBattle, actionDefinition } from "../helpers/action-fixture.js";
+import { definition as skillDefinition } from "../helpers/skill.js";
+import { activate } from "../../dist/core/tactical/unit/capability/skill/operations.js";
 
 const hit = createShapeGeometry({
   shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.1 }],
@@ -128,6 +131,28 @@ function source(runtime) {
 function damageEvents(step) {
   return step.events.filter(({ type }) => type === "DAMAGE");
 }
+
+test("skill attack snapshots its output callback and ammunition cost when created", () => {
+  const trace = [];
+  const configuration = {
+    ...actionDefinition(7).attack,
+    afterOutput(state) { trace.push("original"); return state; },
+    ammoPerAction: 1,
+  };
+  const attack = createAttack(configuration);
+  const skill = skillDefinition({
+    activation: { trigger: "MANUAL", sustain: { type: "AMMO", amount: 3 }, initialize: () => ({}) },
+  });
+  const actor = fixtureUnit(0, { action: attack, skill });
+  let state = fixtureBattle(actor, fixtureUnit(1));
+  state = activate(state, unitRef(actor)).state;
+  configuration.afterOutput = current => { trace.push("replacement"); return current; };
+  configuration.ammoPerAction = 3;
+  state = actions.start(state, unitRef(actor), attack).state;
+  assert.deepEqual(trace, ["original"]);
+  assert.equal(getUnit(state, 1).vitality.hp, 93);
+  assert.equal(getUnit(state, 0).skill.active.sustain.remaining, 2);
+});
 
 
 test("ammo runtime: the final ordinary attack buffs every target before ending the skill", () => {
