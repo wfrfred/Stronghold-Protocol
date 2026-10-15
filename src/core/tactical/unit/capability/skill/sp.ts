@@ -318,7 +318,7 @@ export function modify(
 
 export function advance(battle: BattleState, ref: Ref<Unit & Stored>): BattleState {
     const advanced = query.read(battle, ref, (self) => {
-        if (!available(self) || self.skill.sp === null) {
+        if (self.lifecycle !== "PRESENT" || self.skill.sp === null) {
             return { state: battle, pulses: 0 };
         }
 
@@ -347,6 +347,7 @@ export function advance(battle: BattleState, ref: Ref<Unit & Stored>): BattleSta
 
             if (
                 previous !== null &&
+                available(self) &&
                 state.value < capacity &&
                 allowsRecovery(battle, self, "TIME")
             ) {

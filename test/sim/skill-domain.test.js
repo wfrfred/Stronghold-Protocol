@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { getUnit } from "../../dist/core/tactical/battle/state.js";
+import { getUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
 import * as skills from "../../dist/core/tactical/unit/capability/skill/operations.js";
 import * as sp from "../../dist/core/tactical/unit/capability/skill/sp.js";
 import { initialize as initializeSkill, removeRule } from "../../dist/core/tactical/unit/capability/skill/capability.js";
@@ -118,6 +118,69 @@ test("recovery restrictions pause the natural timer and do not accumulate missed
     assert.equal(read(state).sp.value, 0);
     state = skills.advance(at(state, 218), f.ref);
     assert.equal(read(state).sp.value, 1);
+});
+
+test("a zero-HP host preserves its natural remainder while advancing the paused clock", () => {
+    const unit = initialize({ id: 1, position: [0, 0], definition: {
+        id: "reviving-host", vitality: { maxHp: 100 }, skill: definition({ sp: resource() }),
+    } });
+    const reference = ref(unit);
+    let state = sp.advance(at(effectFixtureWork(unit), 12), reference);
+    const before = state;
+    let current = getUnit(state, 1);
+    state = updateUnit(state, { ...current, vitality: { ...current.vitality, hp: 0 } });
+    state = sp.advance(at(state, 200), reference);
+    assert.equal(read(state).sp.value, 0);
+    assert.equal(read(state).sp.lastTick, 200);
+    assert.equal(read(state).sp.recovery.remainingTicks, 18);
+    assert.throws(() => sp.advance(at(state, 199), reference), /earlier tick/);
+    current = getUnit(state, 1);
+    state = updateUnit(state, { ...current, vitality: { ...current.vitality, hp: 100 } });
+    state = sp.advance(at(state, 217), reference);
+    assert.equal(read(state).sp.value, 0);
+    assert.equal(read(state).sp.recovery.remainingTicks, 1);
+    state = sp.advance(at(state, 218), reference);
+    assert.equal(read(state).sp.value, 1);
+    assert.equal(read(before).sp.lastTick, 12);
+    assert.equal(read(before).sp.recovery.remainingTicks, 18);
+});
+
+test("a paused zero-HP host still applies natural speed changes and zero-rate invalidation", () => {
+    const unit = initialize({ id: 1, position: [0, 0], definition: {
+        id: "paused-speed-host", vitality: { maxHp: 100 }, skill: definition({ sp: resource() }),
+    } });
+    const reference = ref(unit);
+    let state = sp.advance(at(effectFixtureWork(unit), 12), reference);
+    const current = getUnit(state, 1);
+    state = updateUnit(state, { ...current, vitality: { ...current.vitality, hp: 0 } });
+    state = change(state, skill => ({ ...skill, sp: sp.setContribution(skill.sp, "recoverySpeed", {
+        id: "double", value: [value({ finalScaler: 2 })],
+    }) }));
+    state = sp.advance(at(state, 100), reference);
+    assert.deepEqual(read(state).sp.recovery, { periodTicks: 15, remainingTicks: 3 });
+    assert.equal(read(state).sp.lastTick, 100);
+    state = change(state, skill => ({ ...skill, sp: sp.setContribution(skill.sp, "recoveryMultiplier", {
+        id: "zero", value: [value({ finalScaler: 0 })],
+    }) }));
+    state = sp.advance(at(state, 200), reference);
+    assert.equal(read(state).sp.recovery, null);
+    assert.equal(read(state).sp.lastTick, 200);
+    state = change(state, skill => ({ ...skill, sp: sp.removeContribution(skill.sp, "recoveryMultiplier", "zero") }));
+    state = sp.advance(at(state, 300), reference);
+    assert.deepEqual(read(state).sp.recovery, { periodTicks: 15, remainingTicks: 15 });
+    assert.equal(read(state).sp.value, 0);
+    assert.equal(read(state).sp.lastTick, 300);
+});
+
+test("natural advancement supports a host without Vitality and leaves a LEAVING host unchanged", () => {
+    const f = fixture({ sp: resource() });
+    const state = sp.advance(at(f.state, 30), f.ref);
+    assert.equal(read(state).sp.value, 1);
+    assert.equal(read(state).sp.lastTick, 30);
+    const current = getUnit(state, 1);
+    const leaving = at(updateUnit(state, { ...current, lifecycle: "LEAVING" }), 200);
+    assert.equal(sp.advance(leaving, f.ref), leaving);
+    assert.equal(read(leaving).sp.lastTick, 30);
 });
 
 test("a long natural advance stops its timer when the first pulse fills SP", () => {
