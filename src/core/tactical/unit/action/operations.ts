@@ -98,9 +98,26 @@ export function start<S extends object>(
 
     const latest = units.get(battle, source);
 
-    if (latest?.lifecycle !== "PRESENT" || !isSpatiallyPresent(latest)) {
+    if (
+        latest?.lifecycle !== "PRESENT" ||
+        !isSpatiallyPresent(latest) ||
+        (hasVitality(latest) && latest.vitality.hp <= 0)
+    ) {
         return reject("SOURCE_UNAVAILABLE");
     }
+    if (isCasting(battle, source, definition.id)) {
+        return reject("CASTING");
+    }
+    if (!latest.action.rules.every((rule) => rule.allows(battle, latest, definition.id))) {
+        return reject("RULE");
+    }
+
+    const latestPeriod = resolveInterval(battle, source, definition)!;
+    const latestCooldown = latest.action.cooldowns.get(definition.id);
+    const acceptedCooldown =
+        latestCooldown === undefined
+            ? cooldown.initialize(latestPeriod, battle.tick)
+            : cooldown.resizeKeepingProgress(latestCooldown, latestPeriod, battle.tick);
 
     const self: Action<S> = {
         id: battle.actions.nextId,
@@ -111,7 +128,7 @@ export function start<S extends object>(
         state: initialized.value,
     };
     const cooldowns = new Map(latest.action.cooldowns);
-    cooldowns.set(definition.id, cooldown.reset(resized, battle.tick));
+    cooldowns.set(definition.id, cooldown.reset(acceptedCooldown, battle.tick));
     battle = updateUnit(battle, { ...latest, action: { ...latest.action, cooldowns } });
     battle = { ...battle, actions: battle.actions.add(self) };
     const reference = ref(self);

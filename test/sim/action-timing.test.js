@@ -98,6 +98,26 @@ test("action timing: complete cooldown refresh preserves progress at the contrib
     assert.equal(getUnit(started.state, 0).action.cooldowns.get(definition.id).readyAtTick, 30);
 });
 
+test("action timing: starting uses contributions and cooldowns from the returned battle", () => {
+    const sibling = program("sibling");
+    const definition = program("changed-on-start", {
+        start(state, source) {
+            state = contribute(state, "speed", { addition: 100 });
+            state = actions.resetCooldown(state, source, sibling.id);
+            return { state, value: {} };
+        },
+    });
+    const initial = battle(unit(0, {
+        action: { definitions: Definitions.empty().add(definition).add(sibling) },
+    }));
+    const started = actions.start(initial, unitRef(getUnit(initial, 0)), definition);
+    assert.equal(started.value.type, "STARTED");
+    const current = getUnit(started.state, 0);
+    assert.deepEqual(current.action.cooldowns.get(definition.id), { periodTicks: 15, readyAtTick: 15 });
+    assert.deepEqual(current.action.cooldowns.get(sibling.id), { periodTicks: 15, readyAtTick: 15 });
+    assert.equal(getUnit(initial, 0).action.cooldowns.size, 0);
+});
+
 test("action timing: a period change does not rescale an accepted private casting budget", () => {
     const definition = program("casting", {
         start: (state) => ({ state, value: { finishAtTick: state.tick + 20, observed: 0 } }),
