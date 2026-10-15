@@ -45,7 +45,9 @@ import { advanceMovement } from '../../dist/core/tactical/battle/steps/movement.
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { createBattleState, appendEvents, getUnit, registerUnit } from '../../dist/core/tactical/battle/state.js';
 import { initialize } from '../../dist/core/tactical/unit/initialize.js';
-import { createActionDefinition } from '../../dist/core/tactical/unit/capability/action/capability.js';
+import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js';
+import { setState as setActionState } from '../../dist/core/tactical/unit/action/action.js';
+import { replace as replaceAction } from '../../dist/core/tactical/unit/action/operations.js';
 import { install as installEffect } from '../../dist/core/tactical/unit/effect/operations.js';
 import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
 
@@ -1178,7 +1180,7 @@ test('core battle propagates nested settlement errors without publishing battlef
       assert.equal(getUnit(state, 1).vitality.hp, 93);
       assert.equal(getUnit(state, 2).definition.id, 'nested-created');
       assert.equal(state.execution.nextUnitId, 3);
-      assert.equal(state.actionExecutions.executions.length, 1);
+      assert.equal(state.actions.size, 1);
       assert.ok(state.events.some(event => event.type === 'DAMAGE'));
       assert.deepEqual(observedRuntime.snapshot(), observedSnapshot);
       assert.equal(observedRuntime.navigationMaps, observedMaps);
@@ -1187,34 +1189,27 @@ test('core battle propagates nested settlement errors without publishing battlef
       return state;
     },
   };
-  const action = createActionDefinition({
-    triggerBindingId: 'primary', baseAttackTimeTicks: 10, recoveryTicks: 0,
-    targetGroups: [{ id: 'primary', targeting: {
-      type: 'DAMAGE', scope: { type: 'BLOCKER' }, canTargetAir: true,
-      includeBlockingRelations: false, preferBlockingRelations: false,
-      ignoreTargetFree: false, ignoreInvisible: false, maxTargets: 1,
-    }, operations: [{ type: 'DAMAGE', power: 1, damageType: 'TRUE' }] }], followUps: [],
-  });
+  const action = {
+    id: 'nested-action', intervalTicks: 10, speed: 100,
+    start: state => ({ state, value: { entered: false } }),
+    step(state, self) {
+      if (self.state.entered) return { state, value: false };
+      state = replaceAction(state, setActionState(self, { entered: true }));
+      const unit = initialize({ id: state.execution.nextUnitId, position: [2, 0], definition: {
+        id: 'nested-created', vitality: { maxHp: 10 },
+      } });
+      state = registerUnit(state, unit);
+      state = { ...state, execution: { ...state.execution, nextUnitId: unit.id + 1 } };
+      state = appendEvents(state, [{ type: 'UNIT_DEPLOYED', unitId: unit.id, position: unit.position, tick: state.tick }]);
+      state = installEffect(state, unitRef(getUnit(state, 1)), effect, { source: 0 }).state;
+      return { state, value: false };
+    },
+  };
   const input = deploymentBattleInput({ initialUnits: [
-    { definition: { id: 'nested-action-source', vitality: { maxHp: 100 }, action: { normalAction: action } }, position: [0, 0] },
+    { definition: { id: 'nested-action-source', vitality: { maxHp: 100 }, action: { definitions: Definitions.empty().add(action) } }, position: [0, 0] },
     { definition: { id: 'nested-target', vitality: { maxHp: 100 } }, position: [1, 0] },
   ] });
-  const compileAction = definition => ({
-    definition, bind: () => new Map([['primary', [1]]]), program: [
-      { type: 'EXECUTE', run: (state, context) => {
-        const unit = initialize({ id: state.execution.nextUnitId, position: [2, 0], definition: {
-          id: 'nested-created', vitality: { maxHp: 10 },
-        } });
-        state = registerUnit(state, unit);
-        state = { ...state, execution: { ...state.execution, nextUnitId: unit.id + 1 } };
-        state = appendEvents(state, [{ type: 'UNIT_DEPLOYED', unitId: unit.id, position: unit.position, tick: context.tick }]);
-        state = installEffect(state, unitRef(getUnit(state, 1)), effect, { source: 0 }, context.call).state;
-        return { state, value: undefined };
-      } },
-      { type: 'WAIT', resolve: () => ({ type: 'FOR_TICKS', ticks: 2 }), allowNewAction: false },
-    ],
-  });
-  const runtime = new BattleRuntime(input, { combat: resources, compileAction });
+  const runtime = new BattleRuntime(input, { combat: resources });
   const before = runtime.snapshot();
   observedRuntime = runtime;
   observedSnapshot = before;
@@ -1224,14 +1219,14 @@ test('core battle propagates nested settlement errors without publishing battlef
   assert.equal(runtime.result, null);
 
   fail = false;
-  const expected = new BattleRuntime(input, { combat: resources, compileAction });
+  const expected = new BattleRuntime(input, { combat: resources });
   observedRuntime = expected;
   observedSnapshot = expected.snapshot();
   observedMaps = expected.navigationMaps;
   expected.step();
   assert.equal(observations, 2);
   assert.equal(expected.snapshot().execution.nextUnitId, 3);
-  assert.equal(expected.snapshot().actionExecution.executions.length, 1);
+  assert.equal(expected.snapshot().actions.instances.length, 1);
   assert.equal(expected.snapshot().units.find(unit => unit.id === 1).vitality.hp, 93);
 });
 

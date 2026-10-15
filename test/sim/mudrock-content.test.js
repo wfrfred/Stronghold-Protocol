@@ -14,8 +14,8 @@ import {
 import { enterUnits } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
 import { advance, end, install } from "../../dist/core/tactical/unit/effect/operations.js";
 import { activateSkill, advanceSkill, finishSkill } from "../../dist/core/tactical/unit/capability/skill/execution.js";
-import { startAction } from "../../dist/core/tactical/unit/capability/action/execution.js";
-import { cancelActionExecution, resumeActionExecution } from "../../dist/core/tactical/unit/capability/action/process.js";
+import { start, cancel } from "../../dist/core/tactical/unit/action/operations.js";
+import { advance as advanceAction } from "../../dist/core/tactical/unit/action/advance.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import { canMove } from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
 import { initialize as initializeTargetable, setRule as setTargetingRule } from "../../dist/core/tactical/unit/capability/targetable/capability.js";
@@ -184,15 +184,18 @@ test("S2 immediately overrides normal attack and recovery cooldown, heals once, 
         enemy(3, [1, 0], { spatial: { layer: "AIR" } }), enemy(4, [5, 0])]);
     let ready = sp(hp(fixture.state, 1000), 5);
     ready = save(ready, {
-        action: { ...getUnit(ready, 0).action, readyAtTick: 10000, recoveryUntilTick: 10000 },
+        action: { ...getUnit(ready, 0).action, cooldowns: new Map([
+            ["normal-attack", { readyAtTick: 10000, periodTicks: 60 }],
+            [fixture.action.id, { readyAtTick: 10000, periodTicks: 60 }],
+        ]) },
         offense: setAttackContribution(getUnit(ready, 0).offense, { id: "test/attack", value: [modifier({ addition: 100 })] }),
     });
     const active = advanceSkill(ready, 0, 0, fixture.combat);
     assert.equal(getUnit(active, 0).skill.active.endsAtTick, null);
-    assert.equal(getUnit(active, 0).action.readyAtTick, 0);
-    assert.equal(getUnit(active, 0).action.recoveryUntilTick, 0);
-    assert.equal(fixture.definition.skill.activeAction, fixture.action.definition);
-    const executed = startAction(active, { sourceUnitId: 0, compiled: fixture.action, tick: 0, mayStart: true }, fixture.combat);
+    assert.equal(getUnit(active, 0).action.cooldowns.get("normal-attack").readyAtTick, 0);
+    assert.equal(getUnit(active, 0).action.cooldowns.get(fixture.action.id).readyAtTick, 0);
+    assert.equal(fixture.definition.skill.activeAction, fixture.action.id);
+    const executed = start(active, unitRef(getUnit(active, 0)), fixture.action).state;
     const amount = (fixture.prepared.attributes.attack + 100) * 2.1;
     approximate(getUnit(executed, 1).vitality.hp, 10000 - amount);
     approximate(getUnit(executed, 2).vitality.hp, 10000 - amount);
@@ -209,29 +212,29 @@ test("S2 immediately overrides normal attack and recovery cooldown, heals once, 
     const rng = createRng(ready.execution.rngState);
     rng.chance(0.3); rng.chance(0.3);
     assert.equal(executed.execution.rngState, rng.state());
-    assert.equal(canMove(getUnit(executed, 1)), false);
-    assert.equal(canMove(getUnit(executed, 2)), false);
+    assert.equal(canMove(executed, getUnit(executed, 1)), false);
+    assert.equal(canMove(executed, getUnit(executed, 2)), false);
     const expired = advance({ ...executed, tick: 18 });
-    assert.equal(canMove(getUnit(expired, 1)), true);
-    assert.equal(canMove(getUnit(expired, 2)), true);
+    assert.equal(canMove(expired, getUnit(expired, 1)), true);
+    assert.equal(canMove(expired, getUnit(expired, 2)), true);
 });
 
 test("S2 stays active through configured recovery and finishes on completion or cancellation", () => {
     for (const cancellation of [false, true]) {
         const fixture = setup({}, [enemy(1, [1, 0])], { recoveryTicks: 2 });
         let state = activateSkill(sp(fixture.state, 5), { unitId: 0, tick: 0, trigger: "AUTO" }, fixture.combat).state;
-        state = startAction(state, { sourceUnitId: 0, compiled: fixture.action, tick: 0, mayStart: true }, fixture.combat);
+        state = start(state, unitRef(getUnit(state, 0)), fixture.action).state;
         assert.notEqual(getUnit(state, 0).skill.active, null);
-        assert.equal(state.actionExecutions.executions.length, 1);
+        assert.equal(state.actions.size, 1);
         if (cancellation) {
-            state = cancelActionExecution({ ...state, tick: 1 }, { executionId: 0, tick: 1 }, undefined).state;
+            state = cancel({ ...state, tick: 1 }, { id: 0 });
         } else {
-            state = resumeActionExecution({ ...state, tick: 1 }, { executionId: 0, segments: fixture.action.program, tick: 1 }, fixture.combat).state;
+            state = advanceAction({ ...state, tick: 1 }, { id: 0 });
             assert.notEqual(getUnit(state, 0).skill.active, null);
-            state = resumeActionExecution({ ...state, tick: 2 }, { executionId: 0, segments: fixture.action.program, tick: 2 }, fixture.combat).state;
+            state = advanceAction({ ...state, tick: 2 }, { id: 0 });
         }
         assert.equal(getUnit(state, 0).skill.active, null);
-        assert.equal(state.actionExecutions.executions.length, 0);
+        assert.equal(state.actions.size, 0);
         assert.equal(state.events.filter(event => event.type === "SKILL_FINISHED").length, 1);
         assert.equal(readShield(getUnit(state, 0)).layers, 1);
     }
@@ -247,16 +250,16 @@ test("Mudrock content explicitly rejects unsupported module Y, another character
 test("an old S2 recovery cannot close a newer skill activation", () => {
     const fixture = setup({}, [enemy(1, [1, 0])], { recoveryTicks: 2 });
     let state = activateSkill(sp(fixture.state, 5), { unitId: 0, tick: 0, trigger: "AUTO" }, fixture.combat).state;
-    state = startAction(state, { sourceUnitId: 0, compiled: fixture.action, tick: 0, mayStart: true }, fixture.combat);
+    state = start(state, unitRef(getUnit(state, 0)), fixture.action).state;
     assert.equal(getUnit(state, 0).skill.active.id, 0);
     state = finishSkill({ ...state, tick: 1 }, 0, 1, fixture.combat);
     assert.ok(getUnit(state, 0).effects.values().every(effect => effect.definition.id !== "mudrock/skill-attack"));
     state = activateSkill(sp(state, 5), { unitId: 0, tick: 1, trigger: "AUTO" }, fixture.combat).state;
     assert.equal(getUnit(state, 0).skill.active.id, 1);
-    state = resumeActionExecution(state, { executionId: 0, segments: fixture.action.program, tick: 1 }, fixture.combat).state;
+    state = advanceAction(state, { id: 0 });
     const before = state;
-    state = resumeActionExecution({ ...state, tick: 2 }, { executionId: 0, segments: fixture.action.program, tick: 2 }, fixture.combat).state;
-    assert.equal(state.actionExecutions.executions.length, 0);
+    state = advanceAction({ ...state, tick: 2 }, { id: 0 });
+    assert.equal(state.actions.size, 0);
     assert.equal(getUnit(state, 0).skill.active.id, 1);
     assert.equal(getUnit(before, 0).skill.active.id, 1);
     assert.deepEqual(state.events.filter(event => event.type === "SKILL_FINISHED").map(event => event.activationId), [0]);

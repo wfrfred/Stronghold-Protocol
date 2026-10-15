@@ -1,89 +1,64 @@
 import { assertNonnegativeSafeInteger } from "../../../../common/assert.js";
-import {
-    battlefieldView,
-    getUnit,
-    transitionUnit,
-    type State as BattleState,
-    type Result,
-} from "../../../battle/state.js";
-import { emptyCall, type CallContext } from "../../../battle/execution/call.js";
-import type { BattlefieldView } from "../../../battlefield/contract.js";
-import type { Hook } from "../../hook/hook.js";
-import type { Unit, Id } from "../../unit.js";
-import { hasAction, type Action } from "./capability.js";
+import type { Ref } from "../../../../common/ref.js";
+import type { State as BattleState, Result } from "../../../battle/state.js";
+import type { Actions } from "../../action/actions.js";
+import * as actions from "../../action/operations.js";
+import type { Unit } from "../../unit.js";
+import * as units from "../../query.js";
+import type { Action } from "./capability.js";
 
-export type ActionReleaseDirective =
+type StoredAction = ReturnType<Actions["values"]>[number];
+
+export type Directive =
     { readonly type: "CONTINUE" } | { readonly type: "INTERRUPT"; readonly recoveryTicks: number };
 
-export interface ActionReleaseContext {
-    readonly battlefield: BattlefieldView;
-    readonly unit: Unit & Action;
-    readonly tick: number;
-    readonly call: CallContext;
+export interface Hook {
+    readonly id: string;
+    readonly enabled: (
+        battle: BattleState,
+        self: Unit & Action,
+        action: Ref<StoredAction>,
+    ) => boolean;
+    readonly invoke: (
+        battle: BattleState,
+        self: Unit & Action,
+        action: Ref<StoredAction>,
+    ) => Result<Directive>;
 }
 
-export type ActionReleaseHook = Hook<
-    BattleState,
-    ActionReleaseContext,
-    void,
-    ActionReleaseDirective
->;
+export function beforeRelease(battle: BattleState, ref: Ref<StoredAction>): Result<Directive> {
+    const action = actions.get(battle, ref);
+    const source = action === undefined ? undefined : units.get(battle, action.source);
 
-export function beforeActionRelease(
-    state: BattleState,
-    unitId: Id,
-    tick: number,
-    call: CallContext = emptyCall,
-): Result<boolean> {
-    const unit = getUnit(state, unitId);
-
-    if (unit === undefined || !hasAction(unit)) {
-        return { state, value: false };
+    if (action?.status !== "RUNNING" || source?.lifecycle !== "PRESENT") {
+        return { state: battle, value: { type: "CONTINUE" } };
     }
 
-    const candidates = unit.action.beforeRelease;
+    const candidates = source.action.beforeRelease;
 
     for (const candidate of candidates) {
-        const current = getUnit(state, unitId);
+        const currentAction = actions.get(battle, ref);
+        const current =
+            currentAction === undefined ? undefined : units.get(battle, currentAction.source);
 
         if (
-            current === undefined ||
-            !hasAction(current) ||
-            !current.action.beforeRelease.includes(candidate)
+            currentAction?.status !== "RUNNING" ||
+            current?.lifecycle !== "PRESENT" ||
+            !current.action.beforeRelease.includes(candidate) ||
+            !candidate.enabled(battle, current, ref)
         ) {
             continue;
         }
 
-        const context: ActionReleaseContext = {
-            battlefield: battlefieldView(state),
-            tick,
-            unit: current,
-            call,
-        };
+        const invoked = candidate.invoke(battle, current, ref);
+        battle = invoked.state;
 
-        if (!candidate.enabled(context)) {
-            continue;
+        if (invoked.value.type === "INTERRUPT") {
+            assertNonnegativeSafeInteger(invoked.value.recoveryTicks, "action release recovery");
+
+            return { state: battle, value: invoked.value };
         }
-
-        const invoked = candidate.invoke(state, context, undefined);
-        state = invoked.state;
-        const directive = invoked.value;
-
-        if (directive.type === "CONTINUE") {
-            continue;
-        }
-
-        assertNonnegativeSafeInteger(directive.recoveryTicks, "action release recovery");
-        const recoveryUntilTick = tick + directive.recoveryTicks;
-        assertNonnegativeSafeInteger(recoveryUntilTick, "action release recovery deadline");
-        state = transitionUnit(state, unitId, (current) => {
-            return !hasAction(current) || current.action.recoveryUntilTick >= recoveryUntilTick
-                ? current
-                : { ...current, action: { ...current.action, recoveryUntilTick } };
-        });
-
-        return { state, value: true };
     }
 
-    return { state, value: false };
+    return { state: battle, value: { type: "CONTINUE" } };
 }

@@ -7,7 +7,6 @@ import {
 } from "../../../../common/assert.js";
 import { TICKS_PER_SECOND } from "../../../tick.js";
 import type { Unit, Definition as UnitDefinition } from "../../unit.js";
-import type { ActionDefinition } from "../action/capability.js";
 
 export type SkillActivationMode = "MANUAL" | "AUTO" | "PASSIVE";
 
@@ -24,7 +23,7 @@ export interface Definition {
     readonly durationTicks: number | null;
     readonly ammo?: number;
     readonly ammoPerAttack?: number;
-    readonly activeAction?: ActionDefinition;
+    readonly activeAction?: string;
 }
 
 export interface SkillActivation {

@@ -125,7 +125,7 @@ test("starting a new tick clears temporary facts without changing retained state
                 assert.equal(state.closedLifetimes.size, 0);
                 if (state.tick === 0) {
                     state = removeUnit(state, 1, "SCRIPT");
-                    state = closeLifetime(state, { type: "ACTION", executionId: 99 });
+                    state = closeLifetime(state, { type: "SKILL", unitId: 0, activationId: 99 });
                     state = appendEvents(state, [{ type: "ROUTE_COMPLETED", unitId: 1, tick: 0 }]);
                 }
                 returned.push(state);

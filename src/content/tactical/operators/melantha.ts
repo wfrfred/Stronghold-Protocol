@@ -1,3 +1,5 @@
+import { Definitions } from "../../../core/tactical/unit/action/definitions.js";
+import { create as createAttack } from "../actions/attack.js";
 import { ref as unitRef } from "../../../core/tactical/unit/query.js";
 import type { Profile } from "../../../data/arknights/operator.js";
 import { getUnit, updateUnit } from "../../../core/tactical/battle/state.js";
@@ -25,6 +27,7 @@ export interface Definition extends OperatorDefinition {
     readonly offense: Offense["definition"]["offense"];
     readonly skill: SkillDefinition;
     readonly profile: Profile;
+    readonly direction: Direction;
 }
 
 function attackBonus(id: string, amount: number): EffectDefinition<object, Offense> {
@@ -91,6 +94,7 @@ export function create(
     return {
         id: profile.id,
         profile,
+        direction,
         deployable: createDeployableDefinition({
             cost: profile.attributes.cost,
             redeployTicks: secondsToTicks(profile.attributes.respawnTime),
@@ -109,39 +113,49 @@ export function create(
         hit: { geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.25 }] } },
         blocker: { capacity: profile.attributes.blockCapacity, geometry: { radius: 0.70709997 } },
         action: {
-            attackSpeed: profile.attributes.attackSpeed,
-            normalAction: {
-                triggerBindingId: "primary",
-                baseAttackTimeTicks: secondsToTicks(profile.attributes.baseAttackTime),
-                recoveryTicks: 0,
-                followUps: [],
-                targetGroups: [
+            definitions: Definitions.empty().add(
+                createAttack(
                     {
-                        id: "primary",
-                        targeting: {
-                            type: "DAMAGE",
-                            scope: {
-                                type: "RANGE",
-                                geometry: { type: "GRID", offsets: profile.range, direction },
-                            },
-                            canTargetAir: false,
-                            includeBlockingRelations: true,
-                            preferBlockingRelations: true,
-                            ignoreTargetFree: false,
-                            ignoreInvisible: false,
-                            maxTargets: 1,
-                        },
-                        operations: [
+                        id: "normal-attack",
+                        speed: profile.attributes.attackSpeed,
+                        triggerBindingId: "primary",
+                        intervalTicks: secondsToTicks(profile.attributes.baseAttackTime),
+                        recoveryTicks: 0,
+                        followUps: [],
+                        targetGroups: [
                             {
-                                type: "DAMAGE",
-                                power: profile.attributes.attack,
-                                powerSource: "SOURCE_ATTACK",
-                                damageType: "PHYSICAL",
+                                id: "primary",
+                                targeting: {
+                                    type: "DAMAGE",
+                                    scope: {
+                                        type: "RANGE",
+                                        geometry: {
+                                            type: "GRID",
+                                            offsets: profile.range,
+                                            direction,
+                                        },
+                                    },
+                                    canTargetAir: false,
+                                    includeBlockingRelations: true,
+                                    preferBlockingRelations: true,
+                                    ignoreTargetFree: false,
+                                    ignoreInvisible: false,
+                                    maxTargets: 1,
+                                },
+                                operations: [
+                                    {
+                                        type: "DAMAGE",
+                                        power: profile.attributes.attack,
+                                        powerSource: "SOURCE_ATTACK",
+                                        damageType: "PHYSICAL",
+                                    },
+                                ],
                             },
                         ],
                     },
-                ],
-            },
+                    combat,
+                ),
+            ),
         },
         skill: skill.definition,
         onEnter(state, unitId) {

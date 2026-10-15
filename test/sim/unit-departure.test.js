@@ -2,12 +2,8 @@ import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { fixtureBattlefieldState as fixtureBattlefield } from "../helpers/battlefield.js";
-import { createActionDefinition } from "../../dist/core/tactical/unit/capability/action/capability.js";
-import {
-    acceptActionExecution,
-    createActionExecutionState,
-} from "../../dist/core/tactical/unit/capability/action/process.js";
-import { getActionExecution } from "../../dist/core/tactical/unit/capability/action/internal/executions.js";
+import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
+import * as actions from "../../dist/core/tactical/unit/action/operations.js";
 import { create as createBattlefield } from "../../dist/core/tactical/battlefield/state.js";
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
 import { createNavigationModifierDefinition } from "../../dist/core/tactical/battlefield/navigation/modifier.js";
@@ -256,41 +252,16 @@ test("effect terminal callback can retire its host and settle remote Action and 
             return state;
         },
     });
-    const action = createActionDefinition({
-        triggerBindingId: "primary",
-        baseAttackTimeTicks: 1,
-        recoveryTicks: 0,
-        targetGroups: [
-            {
-                id: "primary",
-                targeting: {
-                    type: "DAMAGE",
-                    scope: { type: "BLOCKER" },
-                    canTargetAir: true,
-                    includeBlockingRelations: false,
-                    preferBlockingRelations: false,
-                    ignoreTargetFree: false,
-                    ignoreInvisible: false,
-                    maxTargets: 1,
-                },
-                operations: [{ type: "DAMAGE", power: 1, damageType: "TRUE" }],
-            },
-        ],
-        followUps: [],
-    });
-    const accepted = acceptActionExecution(createActionExecutionState(), {
-        sourceUnitId: 0,
-        definition: action,
-        inputTargetUnitId: 1,
-        bindings: new Map([["primary", [1]]]),
-        tick: 0,
-    });
-    const executions = accepted.state;
+    const action = {
+        id: "owned-action", intervalTicks: 1, speed: 100,
+        start: state => ({ state, value: {} }),
+        step: state => ({ state, value: false }),
+    };
     const units = [
         initialize({
             id: 0,
             position: [0, 0],
-            definition: { id: "source", vitality: { maxHp: 100 }, skill },
+            definition: { id: "source", vitality: { maxHp: 100 }, skill, action: { definitions: Definitions.empty().add(action) } },
         }),
         initialize({
             id: 1,
@@ -298,13 +269,17 @@ test("effect terminal callback can retire its host and settle remote Action and 
             definition: { id: "receiver", vitality: { maxHp: 100 } },
         }),
     ];
-    let battle = createBattleState(fixtureBattlefield(units), undefined, executions);
+    let battle = createBattleState(fixtureBattlefield(units));
     battle = activateSkill(battle, { unitId: 0, tick: 0 }, resources).state;
+    const started = actions.start(battle, unitRef(getUnit(battle, 0)), action);
+    battle = started.state;
+    assert.equal(started.value.type, "STARTED");
     const actionDependent = definition(
         "action-dependent",
         {},
         {
-            onEnd: state => {
+            onEnd: (state, context) => {
+                assert.equal(context.reason, "DEATH");
                 trace.push("action-effect");
                 return state;
             },
@@ -321,7 +296,7 @@ test("effect terminal callback can retire its host and settle remote Action and 
         },
     );
     battle = effects.install(battle, unitRef(getUnit(battle, 1)), actionDependent, {
-        scopes: [{ type: "ACTION", executionId: 0 }],
+        scopes: [{ type: "ACTION", ref: started.value.ref }],
     }).state;
     battle = effects.install(battle, unitRef(getUnit(battle, 1)), skillDependent, {
         scopes: [{ type: "SKILL", unitId: 0, activationId: 0 }],
@@ -341,7 +316,7 @@ test("effect terminal callback can retire its host and settle remote Action and 
                 }, resources, ctx.call).state;
                 trace.push("after-damage");
                 assert.equal(getUnit(state, 0), undefined);
-                assert.equal(getActionExecution(state.actionExecutions, 0), undefined);
+                assert.equal(actions.get(state, started.value.ref), undefined);
                 return state;
             },
         },

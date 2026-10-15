@@ -1,108 +1,239 @@
-import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
-import * as effects from '../../dist/core/tactical/unit/effect/operations.js';
-import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
-import assert from 'node:assert/strict';
-import { test } from 'node:test';
-import { unit, actionDefinition, assertData } from '../helpers/action-fixture.js';
-import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
-import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
-import { createLegacyCombatSpec } from '../../dist/legacy/combat.js';
-import { compileAction } from '../../dist/core/tactical/unit/capability/action/compile.js';
-import { createDefinition } from '../../dist/core/tactical/unit/archetype/enemy.js';
-import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
-import { getUnit, updateUnit } from '../../dist/core/tactical/battle/state.js';
+import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
+import { ref as actionRef } from "../../dist/core/tactical/unit/action/action.js";
+import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
+import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { unit } from "../helpers/action-fixture.js";
+import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
+import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
+import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
+import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
+import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
+import { getUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
+import { removeUnitWithEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
+import { setState } from "../../dist/core/tactical/unit/action/action.js";
+import * as actions from "../../dist/core/tactical/unit/action/operations.js";
 
 function spec(initialUnits) {
-  return { ...createLegacyCombatSpec({ rows: 1, columns: 8, operators: [], enemies: [], maxTicks: 20, seed: 17 }),
-    initialUnits: initialUnits.map(value => ({ definition: value.definition, position: value.position })),
-    schedule: { type: 'TIMELINE', spawns: [{ definition: createDefinition({ id: 'future', vitality: { maxHp: 1 }, locomotion: { moveSpeedPerTick: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } } }),
-      route: createRouteDefinition({ pathMotionMode: 'WALK', startPosition: [0, 7], endPosition: [0, 1], spawnOffset: [0, 0], spawnRandomRange: [0, 0], checkpoints: [], allowDiagonalMove: false, visitEveryTileCenter: false, visitEveryNodeCenter: false, visitEveryCheckPoint: true }),
-      tick: 19, timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 }, alwaysCheckCurrentPoint: true, notCountInTotal: false }] },
-  };
+    return {
+        ...createLegacyCombatSpec({
+            rows: 1,
+            columns: 8,
+            operators: [],
+            enemies: [],
+            maxTicks: 20,
+            seed: 17,
+        }),
+        initialUnits: initialUnits.map((value) => ({
+            definition: value.definition,
+            position: value.position,
+        })),
+        schedule: {
+            type: "TIMELINE",
+            spawns: [
+                {
+                    definition: createDefinition({
+                        id: "future",
+                        vitality: { maxHp: 1 },
+                        locomotion: {
+                            moveSpeedPerTick: 0,
+                            steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 },
+                        },
+                    }),
+                    route: createRouteDefinition({
+                        pathMotionMode: "WALK",
+                        startPosition: [0, 7],
+                        endPosition: [0, 1],
+                        spawnOffset: [0, 0],
+                        spawnRandomRange: [0, 0],
+                        checkpoints: [],
+                        allowDiagonalMove: false,
+                        visitEveryTileCenter: false,
+                        visitEveryNodeCenter: false,
+                        visitEveryCheckPoint: true,
+                    }),
+                    tick: 19,
+                    timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 },
+                    alwaysCheckCurrentPoint: true,
+                    notCountInTotal: false,
+                },
+            ],
+        },
+    };
 }
-
-function delayed(compiled, ticks) {
-  return { ...compiled, program: [{ type: 'WAIT', allowNewAction: false, blockingMovement: true, resolve: () => ({ type: 'FOR_TICKS', ticks }) }, { type: 'RELEASE', markerId: 'normal' }, ...compiled.program] };
-}
-
-test('action runtime: delayed actions preserve ordinary same-tick order and data-only progress', () => {
-  const first = unit(0, { action: actionDefinition(7) });
-  const instant = unit(1, { side: 'ALLY', action: actionDefinition(3) });
-  const resources = new CombatResources();
-  const runtime = new BattleRuntime(spec([first, instant, unit(2)]), { combat: resources,
-    compileAction: (definition, services) => definition === first.definition.action.normalAction ? delayed(compileAction(definition, services), 2) : compileAction(definition, services),
-  });
-  const one = runtime.step();
-  const snapshot = runtime.snapshot();
-  assert.deepEqual(one.events.filter(event => event.type === 'ACTION').map(event => event.sourceUnitId), [0, 1]);
-  assert.deepEqual(one.events.filter(event => event.type === 'DAMAGE').map(event => [event.sourceUnitId, event.amount]), [[1, 3]]);
-  assert.equal(snapshot.actionExecution.executions.length, 1);
-  assertData(assert, snapshot.actionExecution);
-  const saved = JSON.stringify(snapshot);
-  assert.deepEqual(JSON.parse(saved).actionExecution, snapshot.actionExecution);
-  assert.equal(runtime.step().events.some(event => event.type === 'ACTION_RELEASED'), false);
-  const three = runtime.step();
-  assert.deepEqual(three.events.filter(event => event.type === 'DAMAGE').map(event => event.amount), [7]);
-  assert.equal(runtime.snapshot().actionExecution.executions.length, 0);
-  assert.equal(snapshot.units.find(value => value.id === 2).vitality.hp, 97);
-  assert.equal(JSON.stringify(snapshot), saved);
+const program = (id, extra = {}) => ({
+    id,
+    intervalTicks: 10,
+    speed: 100,
+    start: (state) => ({ state, value: { count: 0 } }),
+    step: (state) => ({ state, value: false }),
+    ...extra,
 });
 
-test('action runtime: a cancellation command precedes release and preserves sibling progress', () => {
-  const runtime = new BattleRuntime(spec([unit(0, { action: true }), unit(1, { side: 'ALLY', action: true }), unit(2)]), {
-    compileAction: (definition, resources) => delayed(compileAction(definition, resources), 1),
-  });
-  runtime.step();
-  const second = runtime.step([{ type: 'CANCEL_ACTION_EXECUTION', executionId: 0 }]);
-  assert.deepEqual(second.events.filter(event => event.type === 'ACTION_RELEASED').map(event => event.sourceUnitId), [1]);
-  assert.deepEqual(second.events.filter(event => event.type === 'DAMAGE').map(event => event.sourceUnitId), [1]);
-  assert.equal(runtime.snapshot().actionExecution.executions.length, 0);
+test("action runtime: a newly registered instance first executes once and retained snapshots stay immutable", () => {
+    const definition = program("progress", {
+        step(state, self) {
+            state = actions.replace(state, setState(self, { count: self.state.count + 1 }));
+            return { state, value: false };
+        },
+    });
+    const runtime = new BattleRuntime(spec([unit(0, { action: definition }), unit(1)]));
+    runtime.step();
+    const first = runtime.snapshot(),
+        retained = first.actions.instances[0];
+    assert.equal(retained.state.count, 1);
+    assert.equal(retained.definition, definition);
+    runtime.step();
+    assert.equal(runtime.snapshot().actions.instances[0].state.count, 2);
+    assert.equal(retained.state.count, 1);
 });
 
-test('action runtime: a throwing successor leaves the published Tick untouched', () => {
-  const runtime = new BattleRuntime(spec([unit(0, { action: true }), unit(1)]), {
-    compileAction: (definition, resources) => ({ ...compileAction(definition, resources), program: [
-      { type: 'WAIT', allowNewAction: false, resolve: () => ({ type: 'FOR_TICKS', ticks: 1 }) },
-      { type: 'EXECUTE', run: state => ({ state: updateUnit(state, { ...getUnit(state, 1), position: [3, 0] }), value: { samples: { changed: 1 } } }) },
-      { type: 'EXECUTE', run: () => { throw new Error('continuation failed'); } },
-    ] }),
-  });
-  runtime.step();
-  const before = runtime.snapshot();
-  assert.throws(() => runtime.step(), /continuation failed/);
-  assert.deepEqual(runtime.snapshot(), before);
+test("action runtime: an immediately finished definition starts once in one automatic scheduling pass", () => {
+    let starts = 0;
+    const definition = program("instant", {
+        intervalTicks: 1,
+        start(state) {
+            starts++;
+            return { state, value: {} };
+        },
+        step: (state) => ({ state, value: true }),
+    });
+    const runtime = new BattleRuntime(spec([unit(0, { action: definition }), unit(1)]));
+    assert.equal(
+        runtime.step().events.filter((event) => event.type === "ACTION_FINISHED").length,
+        1,
+    );
+    assert.equal(starts, 1);
+    assert.equal(runtime.snapshot().actions.instances.length, 0);
+    runtime.step();
+    assert.equal(starts, 2);
 });
 
-test('action runtime: ending an Action-owned Effect may settle nested host death before propagating an error', () => {
-  const resources = new CombatResources();
-  const terminal = { id: 'terminal-action-effect', initialize: () => ({}), onEnd: (state, context) => {
-    state = resolveDamage(state, { sourceUnitId: 0, targetUnitId: context.unit.id, tick: context.tick, damageType: 'TRUE', operands: createDamageOperands(100) }, resources, context.call).state;
-    assert.equal(getUnit(state, context.unit.id), undefined);
-    throw new Error('terminal finish failed');
-  } };
-  const rt = new BattleRuntime(spec([unit(0, { action: true }), unit(1)]), { combat: resources, compileAction: (definition, ports) => ({
-    ...compileAction(definition, ports), program: [
-      { type: 'EXECUTE', run: (state, context) => ({ state: effects.install(state, unitRef(getUnit(state, 1)), terminal, { scopes: [{ type: 'ACTION', executionId: context.executionId }] }, context.call).state, value: undefined }) },
-      { type: 'WAIT', allowNewAction: false, resolve: () => ({ type: 'FOR_TICKS', ticks: 1 }) },
-    ],
-  }) });
-  rt.step();
-  const before = rt.snapshot();
-  assert.throws(() => rt.step(), /terminal finish failed/);
-  assert.deepEqual(rt.snapshot(), before);
+test("action runtime: cancellation commands complete before a delayed release without disturbing its peer", () => {
+    const definition = program("delayed", {
+        start: (state) => ({ state, value: { releaseAtTick: state.tick + 1 } }),
+        step(state, self) {
+            if (state.tick < self.state.releaseAtTick) return { state, value: false };
+            state = updateUnit(state, {
+                ...getUnit(state, 2),
+                vitality: { ...getUnit(state, 2).vitality, hp: getUnit(state, 2).vitality.hp - 7 },
+            });
+            return { state, value: true };
+        },
+    });
+    const runtime = new BattleRuntime(
+        spec([
+            unit(0, { action: definition }),
+            unit(1, { side: "ALLY", action: definition }),
+            unit(2),
+        ]),
+    );
+    runtime.step();
+    const first = runtime.snapshot();
+    const cancelled = runtime.step([
+        { type: "CANCEL_ACTION_EXECUTION", executionId: first.actions.instances[0].id },
+    ]);
+    assert.equal(cancelled.events.filter((event) => event.type === "ACTION_CANCELLED").length, 1);
+    assert.equal(cancelled.events.filter((event) => event.type === "ACTION_FINISHED").length, 1);
+    assert.equal(runtime.snapshot().units.find((value) => value.id === 2).vitality.hp, 93);
+    assert.equal(first.units.find((value) => value.id === 2).vitality.hp, 100);
 });
 
-test('action runtime: a waiting execution blocks routed movement until that execution completes', () => {
-  const initial = spec([unit(0)]);
-  const mover = unit(1, { action: true, side: 'ENEMY', locomotion: { moveSpeedPerTick: 0.1, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } }, blockable: { weight: 1 } });
-  const route = createRouteDefinition({ pathMotionMode: 'WALK', startPosition: [0, 7], endPosition: [0, 1], spawnOffset: [0, 0], spawnRandomRange: [0, 0], checkpoints: [], allowDiagonalMove: false, visitEveryTileCenter: false, visitEveryNodeCenter: false, visitEveryCheckPoint: true });
-  initial.schedule = { ...initial.schedule, spawns: [{ definition: mover.definition, route, tick: 0, timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 }, alwaysCheckCurrentPoint: true, notCountInTotal: false }, ...initial.schedule.spawns] };
-  const rt = new BattleRuntime(initial, { compileAction: (definition, ports) => delayed(compileAction(definition, ports), 2) });
-  rt.step();
-  const first = rt.snapshot().units.find(value => value.id === 1).position;
-  rt.step();
-  assert.deepEqual(rt.snapshot().units.find(value => value.id === 1).position, first);
-  rt.step();
-  assert.notDeepEqual(rt.snapshot().units.find(value => value.id === 1).position, first);
+test("action runtime: nested departure removes a later candidate before its next step", () => {
+    const resources = new CombatResources(),
+        trace = [];
+    const definition = program("nested", {
+        step(state, self) {
+            if (state.tick === 0) return { state, value: false };
+            trace.push(self.source.id);
+            if (self.source.id === 0)
+                state = removeUnitWithEffects(state, 1, "SCRIPT", resources, state.tick);
+            return { state, value: false };
+        },
+    });
+    const runtime = new BattleRuntime(
+        spec([
+            unit(0, { action: definition }),
+            unit(1, { side: "ALLY", action: definition }),
+            unit(2),
+        ]),
+        { combat: resources },
+    );
+    runtime.step();
+    runtime.step();
+    assert.deepEqual(trace, [0]);
+    assert.equal(
+        runtime.snapshot().units.some((value) => value.id === 1),
+        false,
+    );
+});
+
+test("action runtime: a late exception publishes neither progressed action state nor domain changes", () => {
+    const failure = new Error("continuation failed");
+    const definition = program("failure", {
+        step(state, self) {
+            if (state.tick === 0) return { state, value: false };
+            state = actions.replace(state, setState(self, { count: 9 }));
+            state = updateUnit(state, { ...getUnit(state, 1), position: [3, 0] });
+            throw failure;
+        },
+    });
+    const runtime = new BattleRuntime(spec([unit(0, { action: definition }), unit(1)]));
+    runtime.step();
+    const before = runtime.snapshot();
+    assert.throws(
+        () => runtime.step(),
+        (error) => error === failure,
+    );
+    assert.deepEqual(runtime.snapshot(), before);
+    assert.equal(before.actions.instances[0].state.count, 0);
+});
+
+test("action runtime: dependency cleanup can finish nested host death before a thrown end callback", () => {
+    const resources = new CombatResources(),
+        failure = new Error("terminal finish failed");
+    let observedDeparture = false;
+    const dependency = {
+        id: "terminal-dependency",
+        initialize: () => ({}),
+        onEnd(state, context) {
+            state = resolveDamage(
+                state,
+                {
+                    sourceUnitId: 0,
+                    targetUnitId: context.unit.id,
+                    tick: state.tick,
+                    damageType: "TRUE",
+                    operands: createDamageOperands(100),
+                },
+                resources,
+                context.call,
+            ).state;
+            observedDeparture = getUnit(state, context.unit.id) === undefined;
+            throw failure;
+        },
+    };
+    const definition = program("terminal", {
+        step(state, self) {
+            if (state.tick === 0)
+                state = effects.install(state, unitRef(getUnit(state, 1)), dependency, {
+                    scopes: [{ type: "ACTION", ref: actionRef(self) }],
+                }).state;
+            return { state, value: state.tick > 0 };
+        },
+    });
+    const runtime = new BattleRuntime(spec([unit(0, { action: definition }), unit(1)]), {
+        combat: resources,
+    });
+    runtime.step();
+    const before = runtime.snapshot();
+    assert.throws(
+        () => runtime.step(),
+        (error) => error === failure,
+    );
+    assert.equal(observedDeparture, true);
+    assert.deepEqual(runtime.snapshot(), before);
+    assert.equal(before.units.find((value) => value.id === 1).vitality.hp, 100);
 });

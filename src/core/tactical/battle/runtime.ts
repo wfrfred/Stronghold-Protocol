@@ -5,8 +5,7 @@ import { create as createBattlefield } from "../battlefield/state.js";
 import { view as createBattlefieldView } from "../battlefield/view.js";
 import type { NavigationMaps } from "../battlefield/navigation/map.js";
 import { copy } from "../unit/snapshot.js";
-import type { compileAction } from "../unit/capability/action/compile.js";
-import { createActionExecutionState } from "../unit/capability/action/process.js";
+import { Actions } from "../unit/action/actions.js";
 import {
     predefinedIdsForAlias,
     reconcilePredefinedPresence,
@@ -14,7 +13,7 @@ import {
 } from "./steps/predefined.js";
 import type { Input, Command, Result, Snapshot, Step } from "./contract.js";
 import { CombatResources } from "./resources.js";
-import { createCombat } from "./steps/combat.js";
+import { prepare as prepareCombat, advance as advanceCombat } from "./steps/combat.js";
 import { advanceSpawning } from "./steps/spawning.js";
 import { resolveDeploymentCommands } from "./deployment/operations.js";
 import { advanceMovement, advanceRouteCommands } from "./steps/movement.js";
@@ -39,14 +38,12 @@ import {
 
 export interface BattleResources {
     readonly combat?: CombatResources;
-    readonly compileAction?: typeof compileAction;
 }
 
 export type { Input, Command, Event, Result, Snapshot, Step } from "./contract.js";
 
 export class BattleRuntime {
     readonly #input: Input;
-    readonly #combat: ReturnType<typeof createCombat>;
     readonly #combatResources: CombatResources;
     #state: State;
 
@@ -71,11 +68,10 @@ export class BattleRuntime {
 
         this.#input = input;
         this.#combatResources = (resources.combat ?? new CombatResources()).seal();
-        this.#combat = createCombat(this.#combatResources, resources.compileAction);
         const scheduleDefinition = createSpawnScheduleDefinition(input.schedule);
 
         const battlefield = createBattlefield({ map: this.#input.map });
-        const actionExecution = createActionExecutionState();
+        const actions = Actions.empty();
         let initial = createBattleState(
             battlefield,
             {
@@ -87,7 +83,7 @@ export class BattleRuntime {
                 nextNavigationModifierId: 0,
                 nextProjectileId: 0,
             },
-            actionExecution,
+            actions,
             0,
             initializeDeployment(input.deployment?.definition),
             createSpawnScheduleExecution(scheduleDefinition),
@@ -123,7 +119,7 @@ export class BattleRuntime {
             battlefield,
             tick: tickIndex,
             schedule,
-            actionExecutions: actionExecution,
+            actions,
             deployment,
             predefinedPresence,
             execution,
@@ -138,7 +134,7 @@ export class BattleRuntime {
             tickIndex,
             spawning: snapshotSchedule(schedule),
             predefinedPresence,
-            actionExecution,
+            actions: actions.toJSON(),
             projectiles: {
                 nextProjectileId: execution.nextProjectileId,
                 instances: battlefield.projectiles.values(),
@@ -174,7 +170,7 @@ export class BattleRuntime {
         state = advanceDeployment(state, tick);
         state = advancePredefined(state, this.#input.predefines, commands, tick, resources);
 
-        state = this.#combat.prepare(state, commands, tick);
+        state = prepareCombat(state, commands);
 
         state = resolveDeploymentCommands(state, commands, resources);
 
@@ -190,7 +186,7 @@ export class BattleRuntime {
 
         state = advanceRouteCommands(state, commands, tick);
 
-        state = this.#combat.advance(state, tick);
+        state = advanceCombat(state, resources);
 
         state = advanceProjectiles(state, tick, commands);
 
@@ -199,8 +195,6 @@ export class BattleRuntime {
             tick,
             {
                 routeMoveMultiplier: this.#input.routeMoveMultiplier,
-                movementAllowed: (unitId) =>
-                    this.#combat.allowsMovement(state.actionExecutions, unitId),
             },
             resources,
         );

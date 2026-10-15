@@ -17,7 +17,7 @@ import {
     type LegacyUnitInfo,
     type LegacyVisualEvent,
 } from "./tactical-demo-presentation.js";
-import { createTacticalProjectileResources } from "./projectile-demo.js";
+import { createTacticalProjectileDemo } from "./projectile-demo.js";
 import { hasAllegiance } from "../core/tactical/unit/capability/allegiance/capability.js";
 import { hasSkill } from "../core/tactical/unit/capability/skill/capability.js";
 import {
@@ -300,13 +300,16 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
 
     const resources =
         content?.resources ?? (mechanics === null ? {} : { combat: mechanics.combat });
-    const createRuntime = () =>
-        new BattleRuntime(
-            spec,
+
+    const createRuntime = () => {
+        const projectile =
             projectileActions && !contentScene
-                ? createTacticalProjectileResources(options.combatScenario === "PROJECTILE_CACHED")
-                : resources,
-        );
+                ? createTacticalProjectileDemo(spec, options.combatScenario === "PROJECTILE_CACHED")
+                : null;
+
+        return new BattleRuntime(projectile?.input ?? spec, projectile?.resources ?? resources);
+    };
+
     let runtime = createRuntime();
     let snapshot = runtime.snapshot();
     let knownUnits = new Set<number>();
@@ -526,7 +529,7 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
             elementType: mechanics?.elementType ?? null,
             element: elementStats(),
             blockingCount: snapshot.blockingRelations.length,
-            activeActionCount: snapshot.actionExecution.executions.length,
+            activeActionCount: snapshot.actions.instances.length,
             projectileCount: snapshot.projectiles.instances.length,
             projectileActions,
             sourcePresent: snapshot.units.some(

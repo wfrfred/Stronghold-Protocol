@@ -1,3 +1,6 @@
+import { CombatResources } from "../core/tactical/battle/resources.js";
+import { Definitions } from "../core/tactical/unit/action/definitions.js";
+import { create as createAttack } from "../content/tactical/actions/attack.js";
 import { assertFiniteNumber, assertPositiveSafeInteger } from "../core/common/assert.js";
 import { BattleRuntime } from "../core/tactical/battle/runtime.js";
 import type { Input } from "../core/tactical/battle/contract.js";
@@ -127,7 +130,7 @@ function rejectContent(definition: Record<string, unknown>): void {
     }
 }
 
-function operatorDefinition(value: unknown, direction: Direction) {
+function operatorDefinition(value: unknown, direction: Direction, combat: CombatResources) {
     const definition = record(value, "operator definition");
     const stats = record(definition.stats, "operator stats");
     rejectContent(definition);
@@ -139,68 +142,79 @@ function operatorDefinition(value: unknown, direction: Direction) {
         throw new TypeError("canHitFly must be boolean when specified");
     }
 
-    return operator.createDefinition({
-        id: stringField(definition.chessId, "chessId"),
-        vitality: { maxHp: numberField(stats.maxHp, "maxHp") },
-        offense: { attack: numberField(stats.atk, "attack") },
-        allegiance: { side: "ALLY" },
-        spatial: { layer: "GROUND" },
-        hit: {
-            geometry: {
-                shapes: [{ type: "CIRCLE", offset: [0, 0], radius: LEGACY_OPERATOR_HIT_RADIUS }],
+    return {
+        ...operator.createDefinition({
+            id: stringField(definition.chessId, "chessId"),
+            vitality: { maxHp: numberField(stats.maxHp, "maxHp") },
+            offense: { attack: numberField(stats.atk, "attack") },
+            allegiance: { side: "ALLY" },
+            spatial: { layer: "GROUND" },
+            hit: {
+                geometry: {
+                    shapes: [
+                        { type: "CIRCLE", offset: [0, 0], radius: LEGACY_OPERATOR_HIT_RADIUS },
+                    ],
+                },
             },
-        },
-        defense: {
-            defense: numberField(stats.def, "defense"),
-            resistance: numberField(stats.res, "resistance"),
-        },
-        blocker: {
-            capacity: numberField(stats.blockCnt, "block capacity"),
-            geometry: { radius: 0.70709997 },
-        },
-        action: {
-            attackSpeed: timing.attackSpeed,
-            normalAction: {
-                triggerBindingId: "primary",
-                baseAttackTimeTicks: timing.baseAttackTimeTicks,
-                recoveryTicks: 0,
-                targetGroups: [
-                    {
-                        id: "primary",
-                        targeting: {
-                            type: "DAMAGE",
-                            scope: {
-                                type: "RANGE",
-                                geometry: {
-                                    type: "GRID",
-                                    offsets: attackRange(definition.rangeGrid),
-                                    direction,
+            defense: {
+                defense: numberField(stats.def, "defense"),
+                resistance: numberField(stats.res, "resistance"),
+            },
+            blocker: {
+                capacity: numberField(stats.blockCnt, "block capacity"),
+                geometry: { radius: 0.70709997 },
+            },
+            action: {
+                definitions: Definitions.empty().add(
+                    createAttack(
+                        {
+                            id: "normal-attack",
+                            speed: timing.attackSpeed,
+                            triggerBindingId: "primary",
+                            intervalTicks: timing.baseAttackTimeTicks,
+                            recoveryTicks: 0,
+                            targetGroups: [
+                                {
+                                    id: "primary",
+                                    targeting: {
+                                        type: "DAMAGE",
+                                        scope: {
+                                            type: "RANGE",
+                                            geometry: {
+                                                type: "GRID",
+                                                offsets: attackRange(definition.rangeGrid),
+                                                direction,
+                                            },
+                                        },
+                                        canTargetAir,
+                                        includeBlockingRelations: true,
+                                        preferBlockingRelations: true,
+                                        ignoreTargetFree: false,
+                                        ignoreInvisible: false,
+                                        maxTargets: 1,
+                                    },
+                                    operations: [
+                                        {
+                                            type: "DAMAGE",
+                                            power: numberField(stats.atk, "attack"),
+                                            powerSource: "SOURCE_ATTACK",
+                                            damageType: damageType(definition.dmgType),
+                                        },
+                                    ],
                                 },
-                            },
-                            canTargetAir,
-                            includeBlockingRelations: true,
-                            preferBlockingRelations: true,
-                            ignoreTargetFree: false,
-                            ignoreInvisible: false,
-                            maxTargets: 1,
+                            ],
+                            followUps: [],
                         },
-                        operations: [
-                            {
-                                type: "DAMAGE",
-                                power: numberField(stats.atk, "attack"),
-                                powerSource: "SOURCE_ATTACK",
-                                damageType: damageType(definition.dmgType),
-                            },
-                        ],
-                    },
-                ],
-                followUps: [],
+                        combat,
+                    ),
+                ),
             },
-        },
-    });
+        }),
+        direction,
+    };
 }
 
-function enemyDefinition(value: unknown) {
+function enemyDefinition(value: unknown, combat: CombatResources) {
     const definition = record(value, "enemy definition");
     const stats = record(definition.stats, "enemy stats");
     rejectContent(definition);
@@ -240,49 +254,60 @@ function enemyDefinition(value: unknown) {
         },
         blockable: { weight: numberField(stats.blockCnt, "block weight") },
         action: {
-            attackSpeed: timing.attackSpeed,
-            normalAction: {
-                triggerBindingId: "primary",
-                baseAttackTimeTicks: timing.baseAttackTimeTicks,
-                recoveryTicks: applyWay === "RANGED" ? Math.ceil(0.35 * TICKS_PER_SECOND) : 0,
-                targetGroups: [
+            definitions: Definitions.empty().add(
+                createAttack(
                     {
-                        id: "primary",
-                        targeting: {
-                            type: "DAMAGE",
-                            scope:
-                                applyWay === "MELEE"
-                                    ? { type: "BLOCKER" }
-                                    : {
-                                          type: "RANGE",
-                                          geometry: {
-                                              type: "SHAPES",
-                                              geometry: {
-                                                  shapes: [
-                                                      { type: "CIRCLE", offset: [0, 0], radius },
-                                                  ],
-                                              },
-                                          },
-                                      },
-                            canTargetAir: true,
-                            includeBlockingRelations: true,
-                            preferBlockingRelations: true,
-                            ignoreTargetFree: false,
-                            ignoreInvisible: false,
-                            maxTargets: 1,
-                        },
-                        operations: [
+                        id: "normal-attack",
+                        speed: timing.attackSpeed,
+                        triggerBindingId: "primary",
+                        intervalTicks: timing.baseAttackTimeTicks,
+                        recoveryTicks:
+                            applyWay === "RANGED" ? Math.ceil(0.35 * TICKS_PER_SECOND) : 0,
+                        targetGroups: [
                             {
-                                type: "DAMAGE",
-                                power: numberField(stats.atk, "attack"),
-                                powerSource: "SOURCE_ATTACK",
-                                damageType: damageType(stats.dmgType),
+                                id: "primary",
+                                targeting: {
+                                    type: "DAMAGE",
+                                    scope:
+                                        applyWay === "MELEE"
+                                            ? { type: "BLOCKER" }
+                                            : {
+                                                  type: "RANGE",
+                                                  geometry: {
+                                                      type: "SHAPES",
+                                                      geometry: {
+                                                          shapes: [
+                                                              {
+                                                                  type: "CIRCLE",
+                                                                  offset: [0, 0],
+                                                                  radius,
+                                                              },
+                                                          ],
+                                                      },
+                                                  },
+                                              },
+                                    canTargetAir: true,
+                                    includeBlockingRelations: true,
+                                    preferBlockingRelations: true,
+                                    ignoreTargetFree: false,
+                                    ignoreInvisible: false,
+                                    maxTargets: 1,
+                                },
+                                operations: [
+                                    {
+                                        type: "DAMAGE",
+                                        power: numberField(stats.atk, "attack"),
+                                        powerSource: "SOURCE_ATTACK",
+                                        damageType: damageType(stats.dmgType),
+                                    },
+                                ],
                             },
                         ],
+                        followUps: [],
                     },
-                ],
-                followUps: [],
-            },
+                    combat,
+                ),
+            ),
         },
     });
 }
@@ -311,13 +336,16 @@ function combatMap(options: LegacyCombatOptions): BattlefieldMap {
     );
 }
 
-export function createLegacyCombatSpec(options: LegacyCombatOptions) {
+export function createLegacyCombatSpec(
+    options: LegacyCombatOptions,
+    combat = new CombatResources(),
+) {
     const initialUnits = options.operators.map((operator) => ({
-        definition: operatorDefinition(operator.definition, operator.direction ?? "RIGHT"),
+        definition: operatorDefinition(operator.definition, operator.direction ?? "RIGHT", combat),
         position: Tile.center(operator.position),
     }));
     const spawns = options.enemies.map((enemy) => ({
-        definition: enemyDefinition(enemy.definition),
+        definition: enemyDefinition(enemy.definition, combat),
         route: enemy.route,
         tick: enemy.tick ?? 0,
         timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 },
@@ -339,5 +367,7 @@ export function createLegacyCombatSpec(options: LegacyCombatOptions) {
 }
 
 export function createLegacyCombatBattle(options: LegacyCombatOptions): BattleRuntime {
-    return new BattleRuntime(createLegacyCombatSpec(options));
+    const combat = new CombatResources();
+
+    return new BattleRuntime(createLegacyCombatSpec(options, combat), { combat });
 }

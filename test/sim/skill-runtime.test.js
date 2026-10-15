@@ -11,7 +11,8 @@ import { createLegacyCombatSpec } from '../../dist/legacy/combat.js';
 import { createDefinition } from '../../dist/core/tactical/unit/archetype/operator.js';
 import { createDefinition as createSkillDefinition } from '../../dist/core/tactical/unit/capability/skill/capability.js';
 import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
-import { compileAction } from '../../dist/core/tactical/unit/capability/action/compile.js';
+import { create as createAttack } from '../../dist/content/tactical/actions/attack.js';
+import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js';
 import { initialize } from '../../dist/core/tactical/unit/initialize.js';
 import { createBattleState, getUnit } from '../../dist/core/tactical/battle/state.js';
 import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
@@ -19,29 +20,32 @@ import { setDamageReceptionRule } from '../../dist/core/tactical/unit/capability
 
 const geometry = createShapeGeometry({ shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 5 }] });
 const hit = createShapeGeometry({ shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.1 }] });
-function action(maxTargets = 1) {
-  return {
-    triggerBindingId: 'main', baseAttackTimeTicks: 1, recoveryTicks: 0, followUps: [],
+function action(maxTargets = 1, extra = {}, resources) {
+  return createAttack({
+    id: 'normal', triggerBindingId: 'main', intervalTicks: 1, recoveryTicks: 0, followUps: [],
     targetGroups: [{ id: 'main', targeting: {
       type: 'DAMAGE', scope: { type: 'RANGE', geometry: { type: 'SHAPES', geometry } },
       canTargetAir: true, includeBlockingRelations: false, preferBlockingRelations: false,
       ignoreTargetFree: false, ignoreInvisible: false, maxTargets,
     }, operations: [{ type: 'DAMAGE', power: 1, damageType: 'TRUE', powerSource: 'SOURCE_ATTACK' }] }],
-  };
+    ...extra,
+  }, resources);
 }
-function actor(skill) {
+function actor(skill, { attackTargets = 1, windupTicks = 0, resources } = {}) {
+  let definitions = Definitions.empty().add(action(attackTargets, { windupTicks }, resources));
+  if (skill.activeAction !== undefined) definitions = definitions.add(action(2, { id: skill.activeAction, windupTicks }, resources));
   return createDefinition({
     id: 'skill-actor', vitality: { maxHp: 100000 }, offense: { attack: 100 },
     defense: { defense: 0, resistance: 0 }, allegiance: { side: 'ALLY' },
     spatial: { layer: 'GROUND' }, hit: { geometry: hit },
-    blocker: { capacity: 0, geometry: { radius: 0.1 } }, action: { normalAction: action() }, skill,
+    blocker: { capacity: 0, geometry: { radius: 0.1 } }, action: { definitions, select: (battle, self) => ({ state: battle, value: [self.skill.active !== null ? self.definition.skill.activeAction ?? 'normal' : 'normal'] }) }, skill,
   });
 }
 function target() {
   return { id: 'target', vitality: { maxHp: 100000 }, defense: { defense: 0, resistance: 0 },
     allegiance: { side: 'ENEMY' }, spatial: { layer: 'GROUND' }, hit: { geometry: hit } };
 }
-function scenario(skill, { targets = 1, content, compile } = {}) {
+function scenario(skill, { targets = 1, attackTargets = 1, windupTicks = 0, content } = {}) {
   const resources = new CombatResources();
   const buff = attackBuff('skill/attack', 100);
   const fault = { enabled: false };
@@ -54,7 +58,7 @@ function scenario(skill, { targets = 1, content, compile } = {}) {
     return { state: installed.state, value: { type: 'ACTIVATED' } };
   }) });
   const base = createLegacyCombatSpec({ rows: 1, columns: 8, operators: [], enemies: [], maxTicks: 200, seed: 7 });
-  const definition = actor(skill);
+  const definition = actor(skill, { attackTargets, windupTicks, resources });
   const runtime = new BattleRuntime({ ...base,
     initialUnits: [{ definition, position: [0, 0] },
       ...Array.from({ length: targets }, (_, index) => ({ definition: target(), position: [index + 1, 0] }))],
@@ -68,7 +72,7 @@ function scenario(skill, { targets = 1, content, compile } = {}) {
       timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 }, alwaysCheckCurrentPoint: true,
       notCountInTotal: false,
     }] },
-  }, { combat: resources, ...(compile === undefined ? {} : { compileAction: compile }) });
+  }, { combat: resources });
   return { runtime, resources, fault };
 }
 function skill(overrides = {}) {
@@ -105,7 +109,7 @@ test('skill runtime: TIME gives integer pulses and AUTO starts at full SP', () =
 });
 
 test('skill runtime: active action is selected from current facts and returns to normal targeting', () => {
-  const { runtime } = scenario(skill({ activeAction: action(2) }), { targets: 2 });
+  const { runtime } = scenario(skill({ activeAction: 'active' }), { targets: 2 });
   assert.equal(runtime.step([{ type: 'ACTIVATE_SKILL', unitId: 0 }]).events.filter(({ type }) => type === 'DAMAGE').length, 2);
   runtime.step(); runtime.step();
   assert.equal(runtime.step().events.filter(({ type }) => type === 'DAMAGE').length, 1);
@@ -113,13 +117,7 @@ test('skill runtime: active action is selected from current facts and returns to
 
 test('skill runtime: ATTACK recovery counts a multi-target release once, before projectile contact', () => {
   const definition = skill({ spRecovery: 'ATTACK', initialSp: 0, spCost: 10 });
-  const { runtime } = scenario(definition, { targets: 2, compile: (definition, resources) => ({
-    ...compileAction(definition, resources), program: [
-      { type: 'WAIT', resolve: () => ({ type: 'FOR_TICKS', ticks: 2 }) },
-      { type: 'RELEASE', markerId: 'attack' },
-      ...compileAction(definition, resources).program,
-    ],
-  }) });
+  const { runtime } = scenario(definition, { targets: 2, attackTargets: 2, windupTicks: 2 });
   runtime.step();
   assert.equal(source(runtime).skill.sp, 0);
   runtime.step();
@@ -129,12 +127,7 @@ test('skill runtime: ATTACK recovery counts a multi-target release once, before 
 });
 
 test('skill runtime: cancelled windup earns no ATTACK SP', () => {
-  const { runtime } = scenario(skill({ spRecovery: 'ATTACK', initialSp: 0 }), {
-    compile: (definition, resources) => ({ ...compileAction(definition, resources), program: [
-      { type: 'WAIT', resolve: () => ({ type: 'FOR_TICKS', ticks: 2 }) },
-      { type: 'RELEASE', markerId: 'attack' }, ...compileAction(definition, resources).program,
-    ] }),
-  });
+  const { runtime } = scenario(skill({ spRecovery: 'ATTACK', initialSp: 0 }), { windupTicks: 2 });
   runtime.step();
   runtime.step([{ type: 'CANCEL_ACTION_EXECUTION', executionId: 0 }]);
   assert.equal(source(runtime).skill.sp, 0);

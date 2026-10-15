@@ -1,7 +1,6 @@
 import type { SkillExecutionResources } from "../../unit/capability/skill/execution.js";
 import type { BattlefieldChange } from "../../battlefield/contract.js";
 import { canMove, hasRoutedLocomotion } from "../../unit/capability/locomotion/capability.js";
-import { hasAction } from "../../unit/capability/action/capability.js";
 import { stepRoutedUnit } from "../../unit/capability/locomotion/step.js";
 import * as units from "../../unit/query.js";
 import type { Id } from "../../unit/unit.js";
@@ -46,10 +45,8 @@ export function advanceMovement(
     tick: number,
     {
         routeMoveMultiplier,
-        movementAllowed,
     }: {
         readonly routeMoveMultiplier: number;
-        readonly movementAllowed?: (unitId: Id) => boolean;
     },
     resources: SkillExecutionResources,
 ): BattleState {
@@ -71,11 +68,7 @@ export function advanceMovement(
             fieldCache: battlefield.fieldCache,
             moveMultiplier: routeMoveMultiplier,
             queryContext: { unit, battlefield },
-            movementAllowed:
-                (movementAllowed?.(unitId) ?? true) &&
-                canMove(unit) &&
-                battlefield.blockerOf(unitId) === undefined &&
-                (!hasAction(unit) || tick >= unit.action.recoveryUntilTick),
+            movementAllowed: canMove(state, unit) && battlefield.blockerOf(unitId) === undefined,
             waitTickAllowed: true,
             routeAdvanceAllowed: true,
             rngState: execution.rngState,

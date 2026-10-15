@@ -1,3 +1,9 @@
+import { Definitions } from "../core/tactical/unit/action/definitions.js";
+import {
+    create as createAttack,
+    isAttack,
+    type Attack,
+} from "../content/tactical/actions/attack.js";
 import type { Input } from "../core/tactical/battle/contract.js";
 import { CombatResources } from "../core/tactical/battle/resources.js";
 import type { BattlefieldMap } from "../core/tactical/battlefield/map/map.js";
@@ -42,15 +48,23 @@ export function createTacticalMechanicsDemo(
     readonly combat: CombatResources;
     readonly elementType: ElementType | null;
 } {
-    const base = createTacticalCombatDemoSpec(map, route, data, seed, "PROJECTILE");
+    const combat = new CombatResources();
+    const base = createTacticalCombatDemoSpec(map, route, data, seed, "PROJECTILE", combat);
     const source = base.initialUnits[0]!;
     const spawn = base.schedule.spawns[0]!;
-    const combat = new CombatResources();
     const maxTicks = (scenario === "SKILL" ? 120 : 60) * TICKS_PER_SECOND;
     const elementType = scenario === "SKILL" ? null : ELEMENT_SCENARIOS[scenario];
     const sourceDefinition = source.definition;
-    const action = sourceDefinition.action.normalAction;
-    const group = action.targetGroups[0];
+    const action = sourceDefinition.action.definitions.read<Attack | null>(
+        "normal-attack",
+        (current) => (isAttack(current) ? current : null),
+    );
+
+    if (action === undefined || action === null) {
+        throw new TypeError("mechanics demo requires an ordinary attack");
+    }
+
+    const group = action.attack.targetGroups[0];
     const definition =
         scenario === "SKILL"
             ? operator.createDefinition({
@@ -62,22 +76,27 @@ export function createTacticalMechanicsDemo(
                   ...sourceDefinition,
                   action: {
                       ...sourceDefinition.action,
-                      normalAction: {
-                          ...action,
-                          targetGroups: [
+                      definitions: Definitions.empty().add(
+                          createAttack(
                               {
-                                  ...group,
-                                  operations: [
-                                      ...group.operations,
+                                  ...action.attack,
+                                  targetGroups: [
                                       {
-                                          type: "ELEMENT_DAMAGE",
-                                          elementType: ELEMENT_SCENARIOS[scenario],
-                                          power: 400,
+                                          ...group,
+                                          operations: [
+                                              ...group.operations,
+                                              {
+                                                  type: "ELEMENT_DAMAGE",
+                                                  elementType: ELEMENT_SCENARIOS[scenario],
+                                                  power: 400,
+                                              },
+                                          ],
                                       },
                                   ],
                               },
-                          ],
-                      },
+                              combat,
+                          ),
+                      ),
                   },
               });
 

@@ -40,7 +40,7 @@ test("functional battlefield views reuse fields after unrelated changes and acro
     assert.notEqual(changed.battlefield, initial.battlefield);
     assert.equal(changed.battlefield.navigationMaps.WALK, initial.battlefield.navigationMaps.WALK);
     assert.equal(field(changed), first);
-    const nextTick = createBattleState(changed.battlefield, changed.execution, changed.actionExecutions, 1);
+    const nextTick = createBattleState(changed.battlefield, changed.execution, changed.actions, 1);
     assert.equal(field(nextTick), first, "a new Tick retains geometry memoization");
     assert.equal(JSON.stringify(initial), before);
 

@@ -1,3 +1,5 @@
+import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
+import { create as createAttack } from "../../dist/content/tactical/actions/attack.js";
 import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import { resolveHealing } from "../../dist/core/tactical/unit/capability/vitality/healing/settlement.js";
 import { initialize as initializeVitality } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
@@ -62,14 +64,14 @@ test("native attack buff data compiles, registers and changes ordinary attacks t
   const actor = {
     id: "native-skill-actor", vitality: { maxHp: 1000 }, offense: { attack: 100 },
     allegiance: { side: "ALLY" }, spatial: { layer: "GROUND" }, skill: compiled.definition,
-    action: { normalAction: {
-      triggerBindingId: "target", baseAttackTimeTicks: 30, recoveryTicks: 0, followUps: [],
+    action: { definitions: Definitions.empty().add(createAttack({ id: "normal",
+      triggerBindingId: "target", intervalTicks: 30, recoveryTicks: 0, followUps: [],
       targetGroups: [{ id: "target", targeting: {
         type: "DAMAGE", scope: { type: "RANGE", geometry: { type: "SHAPES", geometry } },
         canTargetAir: true, includeBlockingRelations: false, preferBlockingRelations: false,
         ignoreTargetFree: false, ignoreInvisible: false, maxTargets: 1,
       }, operations: [{ type: "DAMAGE", powerSource: "SOURCE_ATTACK", power: 1, damageType: "TRUE" }] }],
-    } },
+    }, resources)) },
   };
   const target = {
     id: "stationary-content-target", vitality: { maxHp: 1000000 }, allegiance: { side: "ENEMY" },

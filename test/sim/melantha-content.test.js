@@ -10,8 +10,8 @@ import { enterUnits } from '../../dist/core/tactical/battle/execution/unit-lifec
 import { activateSkill, advanceSkill, finishSkill } from '../../dist/core/tactical/unit/capability/skill/execution.js';
 import { resolveAttackPower } from '../../dist/core/tactical/unit/capability/offense/query.js';
 import { fixtureBattlefieldState } from '../helpers/battlefield.js';
-import { compileAction } from '../../dist/core/tactical/unit/capability/action/compile.js';
-import { startAction } from '../../dist/core/tactical/unit/capability/action/execution.js';
+import { ref as unitRef } from '../../dist/core/tactical/unit/query.js';
+import { start as startAction } from '../../dist/core/tactical/unit/action/operations.js';
 
 const data = JSON.parse(readFileSync(new URL('../fixtures/arknights/main-mode-units.json', import.meta.url)));
 const profile = (fields = {}) => prepare(
@@ -70,7 +70,7 @@ test('explicit skill finish removes only skill output, preserving Melantha talen
 test('ordinary attacks read current talent and skill contributions instead of captured table attack', () => {
   const combat = new CombatResources();
   const definition = create(profile(), combat);
-  const compiled = compileAction(definition.action.normalAction, combat);
+  const attack = definition.action.definitions.values()[0];
   const receiver = initialize({ id: 1, position: [1, 0], definition: {
     id: 'receiver', vitality: { maxHp: 10000 }, defense: { defense: 0, resistance: 0 },
     allegiance: { side: 'ENEMY' }, spatial: { layer: 'GROUND' },
@@ -80,7 +80,7 @@ test('ordinary attacks read current talent and skill contributions instead of ca
   state = enterUnits(state, [0]);
   state = updateUnit(state, { ...getUnit(state, 0), skill: { ...getUnit(state, 0).skill, sp: 40 } });
   state = activateSkill(state, { unitId: 0, tick: 0 }, combat).state;
-  state = startAction(state, { sourceUnitId: 0, compiled, tick: 0, mayStart: true }, combat);
+  state = startAction(state, unitRef(getUnit(state, 0)), attack).state;
   const amount = state.events.find(event => event.type === 'DAMAGE').amount;
   assert.ok(Math.abs(amount - (738 + 25 + 65) * 1.58) < 1e-6);
   assert.equal(getUnit(state, 1).vitality.hp, 10000 - amount);

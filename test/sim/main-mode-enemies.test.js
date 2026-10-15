@@ -9,8 +9,9 @@ import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { createBattleState, getUnit, registerUnit } from '../../dist/core/tactical/battle/state.js';
 import { create as createBattlefield } from '../../dist/core/tactical/battlefield/state.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
-import { startAction } from '../../dist/core/tactical/unit/capability/action/execution.js';
-import { resumeActionExecution } from '../../dist/core/tactical/unit/capability/action/process.js';
+import { start as startAction } from '../../dist/core/tactical/unit/action/operations.js';
+import { ref as unitRef } from '../../dist/core/tactical/unit/query.js';
+import { advance as advanceAction } from '../../dist/core/tactical/unit/action/advance.js';
 import { advanceProjectiles } from '../../dist/core/tactical/battlefield/projectile/settlement.js';
 
 const fixture = JSON.parse(readFileSync(new URL('../fixtures/arknights/main-mode-units.json', import.meta.url), 'utf8'));
@@ -78,14 +79,14 @@ test('unimplemented enemy mechanisms are rejected at the table and content bound
 
 test('hound factory composes capabilities and attacks its retained blocker with pure state flow', () => {
   const resources = new CombatResources();
-  const { definition, action: compiled } = createHound(profile('enemy_1000_gopro'), resources, { windupTicks: 0, recoveryTicks: 0, hitRadius: 0.2 });
+  const { definition, action: attack } = createHound(profile('enemy_1000_gopro'), resources, { windupTicks: 0, recoveryTicks: 0, hitRadius: 0.2 });
   const hound = initialize({ id: 1, position: [2, 2.5], definition });
   assert.equal(hound.vitality.hp, 820);
   assert.equal(hound.locomotion.moveSpeed.length, 0);
   assert.equal(definition.locomotion.moveSpeedPerTick, 1.9 / 30);
   resources.seal();
   const before = registerUnit(registerUnit(emptyBattle(), guard(0, [2, 2])), hound);
-  const after = startAction(before, { sourceUnitId: 1, compiled, tick: 0, mayStart: true }, resources);
+  const after = startAction(before, unitRef(hound), attack).state;
   assert.equal(getUnit(after, 0).vitality.hp, 850);
   assert.equal(getUnit(before, 0).vitality.hp, 1000);
   assert.deepEqual(before.events, []);
@@ -95,19 +96,18 @@ test('hound factory composes capabilities and attacks its retained blocker with 
 test('crossbow uses explicit windup and arrow speed, then settles damage on contact', () => {
   const resources = new CombatResources();
   const projectileDefinition = createArrow(resources);
-  const { definition, action: compiled } = createCrossbowman(profile('enemy_1003_ncbow'), resources, {
+  const { definition, action: attack } = createCrossbowman(profile('enemy_1003_ncbow'), resources, {
     windupTicks: 1, recoveryTicks: 1, hitRadius: 0.2,
     projectile: { definition: projectileDefinition, speedPerSecond: 6, contactRadius: 0.1, stopDelayTicks: 0 },
   });
   resources.seal();
   const bow = initialize({ id: 1, position: [2, 3.5], definition });
   const before = registerUnit(registerUnit(emptyBattle(), guard(0, [2, 2], 0)), bow);
-  let state = startAction(before, { sourceUnitId: 1, compiled, tick: 0, mayStart: true }, resources);
+  const started = startAction(before, unitRef(bow), attack);
+  let state = started.state;
   assert.equal(state.battlefield.projectiles.size, 0);
   assert.equal(getUnit(state, 0).vitality.hp, 1000);
-  state = resumeActionExecution({ ...state, tick: 1 }, {
-    executionId: 0, segments: compiled.program, tick: 1,
-  }, resources).state;
+  state = advanceAction({ ...state, tick: 1 }, started.value.ref);
   assert.equal(state.battlefield.projectiles.size, 1);
   assert.equal(getUnit(state, 0).vitality.hp, 1000);
   for (let tick = 2; tick <= 10; tick++) {
@@ -131,7 +131,7 @@ test('different crossbow configurations share the registered arrow in one battle
   resources.seal();
   assert.equal(base.definition.offense.attack, 240);
   assert.equal(advanced.definition.offense.attack, 310);
-  assert.equal(base.action.program[0].resolve().ticks, 1);
-  assert.equal(advanced.action.program[0].resolve().ticks, 2);
+  assert.equal(base.action.attack.windupTicks, 1);
+  assert.equal(advanced.action.attack.windupTicks, 2);
   assert.strictEqual(base.definition.attackTiming.projectile.definition, advanced.definition.attackTiming.projectile.definition);
 });

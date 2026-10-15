@@ -1,3 +1,13 @@
+import type { CombatResources } from "../../../core/tactical/battle/resources.js";
+import { getUnit, updateUnit } from "../../../core/tactical/battle/state.js";
+import { ref as unitRef } from "../../../core/tactical/unit/query.js";
+import { isCasting } from "../../../core/tactical/unit/action/operations.js";
+import {
+    hasLocomotion,
+    setRule,
+} from "../../../core/tactical/unit/capability/locomotion/capability.js";
+import { Definitions } from "../../../core/tactical/unit/action/definitions.js";
+import { create as createAttack, type Attack } from "../actions/attack.js";
 import type { Profile } from "../../../data/arknights/enemy.js";
 import { perSecondToPerTick, secondsToTicks } from "../../../data/arknights/tick.js";
 import { assertNonnegativeSafeInteger, assertPositiveNumber } from "../../../core/common/assert.js";
@@ -16,12 +26,14 @@ export interface AttackTiming {
 
 export interface Definition extends CombatDefinition {
     readonly offense: OffenseDefinition;
+    readonly attack: Attack;
 }
 
 export function createDefinition(
     profile: Profile,
     timing: AttackTiming,
     scope: DamageTargetScope,
+    combat: CombatResources,
 ): Definition {
     if (profile.stunImmune) {
         throw new TypeError("this enemy content does not implement stun immunity");
@@ -34,9 +46,58 @@ export function createDefinition(
     assertNonnegativeSafeInteger(timing.recoveryTicks, "enemy attack recovery");
     assertPositiveNumber(timing.hitRadius, "enemy hit radius");
 
+    const attack = createAttack(
+        {
+            id: "normal-attack",
+            speed: profile.attackSpeed,
+            triggerBindingId: "primary",
+            intervalTicks: secondsToTicks(profile.baseAttackTime),
+            windupTicks: timing.windupTicks,
+            recoveryTicks: timing.recoveryTicks,
+            targetGroups: [
+                {
+                    id: "primary",
+                    targeting: {
+                        type: "DAMAGE",
+                        scope,
+                        canTargetAir: true,
+                        includeBlockingRelations: true,
+                        preferBlockingRelations: true,
+                        ignoreTargetFree: false,
+                        ignoreInvisible: false,
+                        maxTargets: 1,
+                    },
+                    operations: [
+                        {
+                            type: "DAMAGE",
+                            power: profile.attack,
+                            powerSource: "SOURCE_ATTACK",
+                            damageType: "PHYSICAL",
+                        },
+                    ],
+                },
+            ],
+            followUps: [],
+        },
+        combat,
+    );
+
     return {
         ...createCombatDefinition({
             id: profile.id,
+            onEnter(battle, unitId) {
+                const unit = getUnit(battle, unitId);
+
+                return unit === undefined || !hasLocomotion(unit)
+                    ? battle
+                    : updateUnit(battle, {
+                          ...unit,
+                          locomotion: setRule(unit.locomotion, {
+                              id: "attack-casting",
+                              allows: (current, self) => !isCasting(current, unitRef(self)),
+                          }),
+                      });
+            },
             vitality: { maxHp: profile.maxHp },
             offense: { attack: profile.attack },
             defense: { defense: profile.defense, resistance: profile.resistance },
@@ -53,39 +114,9 @@ export function createDefinition(
                 minimumMoveSpeedPerTick: perSecondToPerTick(0.1),
                 steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 },
             },
-            action: {
-                attackSpeed: profile.attackSpeed,
-                normalAction: {
-                    triggerBindingId: "primary",
-                    baseAttackTimeTicks: secondsToTicks(profile.baseAttackTime),
-                    recoveryTicks: timing.windupTicks + timing.recoveryTicks,
-                    targetGroups: [
-                        {
-                            id: "primary",
-                            targeting: {
-                                type: "DAMAGE",
-                                scope,
-                                canTargetAir: true,
-                                includeBlockingRelations: true,
-                                preferBlockingRelations: true,
-                                ignoreTargetFree: false,
-                                ignoreInvisible: false,
-                                maxTargets: 1,
-                            },
-                            operations: [
-                                {
-                                    type: "DAMAGE",
-                                    power: profile.attack,
-                                    powerSource: "SOURCE_ATTACK",
-                                    damageType: "PHYSICAL",
-                                },
-                            ],
-                        },
-                    ],
-                    followUps: [],
-                },
-            },
+            action: { definitions: Definitions.empty().add(attack) },
         }),
         offense: { attack: profile.attack },
+        attack,
     };
 }

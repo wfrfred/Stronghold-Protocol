@@ -1,229 +1,250 @@
-import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { battle, unit } from "../helpers/action-fixture.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
-import assert from 'node:assert/strict';
-import { test } from 'node:test';
-import { battle, unit, actionDefinition, assertData } from '../helpers/action-fixture.js';
-import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
-import { acceptActionExecution, createActionExecutionState, resumeActionExecution, cancelActionExecution, actionExecutionPermissions } from '../../dist/core/tactical/unit/capability/action/process.js';
-import { getUnit, battlefieldView, updateUnit, removeUnit } from '../../dist/core/tactical/battle/state.js';
-import { removeUnitWithEffects } from '../../dist/core/tactical/battle/execution/unit-lifecycle.js';
-import * as effects from '../../dist/core/tactical/unit/effect/operations.js';
-import { setAttackContribution, removeAttackContribution } from '../../dist/core/tactical/unit/capability/offense/capability.js';
-import { resolveAttackPower } from '../../dist/core/tactical/unit/capability/offense/query.js';
-import { create as modifier } from '../../dist/core/tactical/unit/contribution/value.js';
-import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
-import { createDefinition as createSkillDefinition } from '../../dist/core/tactical/unit/capability/skill/capability.js';
-import { activateSkill } from '../../dist/core/tactical/unit/capability/skill/execution.js';
+import { ref as actionRef, setState } from "../../dist/core/tactical/unit/action/action.js";
+import { advance } from "../../dist/core/tactical/unit/action/advance.js";
+import * as actions from "../../dist/core/tactical/unit/action/operations.js";
+import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
+import { getUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
+import { removeUnitWithEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
+import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
+import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 
-function accepted(state = battle(unit(0), unit(1)), options = {}) {
-  const result = acceptActionExecution(state.actionExecutions, {
-    sourceUnitId: 0, definition: actionDefinition(), inputTargetUnitId: 1,
-    bindings: new Map([['primary', [1]]]), tick: 0, ...options,
-  });
-  return { ...state, actionExecutions: result.state };
+const program = (id = "program", overrides = {}) => ({
+    id,
+    intervalTicks: 10,
+    speed: 100,
+    start: (state) => ({ state, value: { progress: 0 } }),
+    step: (state) => ({ state, value: false }),
+    ...overrides,
+});
+function accepted(definition, state = battle(unit(0, { action: definition }), unit(1))) {
+    const result = actions.start(state, unitRef(getUnit(state, 0)), definition);
+    assert.equal(result.value.type, "STARTED");
+    return result;
+}
+const ownedEffect = { id: "action-owned", initialize: () => ({}) };
+
+function installOwned(state, self, definition = ownedEffect) {
+    return effects.install(state, unitRef(getUnit(state, 1)), definition, {
+        scopes: [{ type: "ACTION", ref: actionRef(self) }],
+    }).state;
 }
 
-function resume(state, segments, tick = 0, resources = new CombatResources(), executionId = 0) {
-  return resumeActionExecution(state, { executionId, segments, tick }, resources);
-}
+test("action: private progress and sampled values survive immutable branches without replay", () => {
+    const definition = program("sample", {
+        start: (state) => ({
+            state,
+            value: {
+                released: false,
+                power: getUnit(state, 1).vitality.hp,
+                releaseAtTick: state.tick + 2,
+            },
+        }),
+        step(state, self) {
+            if (state.tick < self.state.releaseAtTick) return { state, value: false };
+            state = actions.replace(state, setState(self, { ...self.state, released: true }));
+            state = updateUnit(state, {
+                ...getUnit(state, 1),
+                vitality: { ...getUnit(state, 1).vitality, hp: self.state.power - 7 },
+            });
+            return { state, value: true };
+        },
+    });
+    const initial = battle(unit(0, { action: definition }), unit(1));
+    const started = accepted(definition, initial);
+    const retained = actions.get(started.state, started.value.ref);
+    const completed = advance({ ...started.state, tick: 2 }, started.value.ref);
+    assert.equal(getUnit(completed, 1).vitality.hp, 93);
+    assert.equal(actions.get(completed, started.value.ref), undefined);
+    assert.equal(retained.state.released, false);
+    assert.equal(getUnit(initial, 1).vitality.hp, 100);
+    assert.deepEqual(advance({ ...started.state, tick: 2 }, started.value.ref), completed);
+});
 
-const execute = run => ({ type: 'EXECUTE', run });
-const wait = ticks => ({ type: 'WAIT', resolve: () => ({ type: 'FOR_TICKS', ticks }) });
-const pass = (state, value) => ({ state, value });
-const bonus = {
-  id: 'action-owned-bonus', initialize: () => ({}),
-  onEnable: (state, context) => updateUnit(state, ({ ...context.unit, offense: setAttackContribution(context.unit.offense, {
-    id: `bonus/${context.self.id}`, value: [modifier({ finalAddition: 13 })],
-  }) })),
-  onDisable: (state, context) => updateUnit(state, ({ ...context.unit, offense: removeAttackContribution(context.unit.offense, `bonus/${context.self.id}`) })),
-};
+test("action: cancellation closes its dependencies once and retains preceding business", () => {
+    let ended = 0;
+    const dependency = {
+        ...ownedEffect,
+        onEnd: (state) => {
+            ended++;
+            return state;
+        },
+    };
+    const definition = program("owned", {
+        step(state, self) {
+            state = installOwned(state, self, dependency);
+            state = updateUnit(state, { ...getUnit(state, 1), position: [3, 0] });
+            return { state, value: false };
+        },
+    });
+    const started = accepted(definition);
+    const cancelled = actions.cancel({ ...started.state, tick: 1 }, started.value.ref, "SCRIPT");
+    assert.equal(ended, 1);
+    assert.deepEqual(getUnit(cancelled, 1).position, [3, 0]);
+    assert.deepEqual(getUnit(cancelled, 1).effects.values(), []);
+    assert.equal(getUnit(started.state, 1).effects.values().length, 1);
+    assert.equal(actions.cancel(cancelled, started.value.ref, "AGAIN"), cancelled);
+    assert.equal(ended, 1);
+});
 
-function installOwned(state, context, content = bonus, unitId = 1) {
-  return effects.install(state, unitRef(getUnit(state, unitId)), content, {
-    source: context.sourceUnitId, scopes: [{ type: 'ACTION', executionId: context.executionId }],
-  }, context.call).state;
-}
+test("action: different definitions share a source while their state and effects remain independent", () => {
+    const create = (id) =>
+        program(id, {
+            step(state, self) {
+                if (self.state.progress === 0) state = installOwned(state, self);
+                state = actions.replace(
+                    state,
+                    setState(self, { progress: self.state.progress + 1 }),
+                );
+                return { state, value: false };
+            },
+        });
+    const first = create("first"),
+        second = create("second");
+    const initial = battle(
+        unit(0, { action: { definitions: Definitions.empty().add(first).add(second) } }),
+        unit(1),
+    );
+    const a = accepted(first, initial),
+        b = accepted(second, a.state);
+    const cancelled = actions.cancel(b.state, a.value.ref, "SCRIPT");
+    assert.equal(actions.get(cancelled, a.value.ref), undefined);
+    assert.equal(actions.get(cancelled, b.value.ref).state.progress, 1);
+    assert.equal(getUnit(cancelled, 1).effects.values().length, 1);
+    assert.equal(getUnit(b.state, 1).effects.values().length, 2);
+});
 
-test('action process: immutable execution data preserves samples, consumed waits and absolute waits without replay', () => {
-  const samples = { power: 10 };
-  const initial = accepted(undefined, { samples });
-  const segments = [
-    execute((state, context) => pass(state, { samples: { power: context.samples.power + 1 } })),
-    { ...wait(2), blockingMovement: true, allowNewAction: false },
-    { type: 'RELEASE', markerId: 'first' },
-    { type: 'WAIT', resolve: context => ({ type: 'UNTIL_TICK', targetTick: context.tick + 2 }) },
-    { type: 'RELEASE', markerId: 'second' },
-  ];
-  const entered = resume(initial, segments);
-  const execution = entered.state.actionExecutions.executions[0];
-  assert.equal(execution.samples.power, 11);
-  assert.equal(execution.wait.remainingTicks, 2);
-  assert.deepEqual(actionExecutionPermissions(execution, segments), { blockingMovement: true, allowNewAction: false });
-  assertData(assert, entered.state.actionExecutions);
-  assert.equal(initial.actionExecutions.executions[0].samples, samples);
-  assert.equal(initial.actionExecutions.executions[0].cursor, 0);
-  const run = () => {
-    let state = entered.state;
-    for (const tick of [5, 5, 8, 8, 10, 10]) {
-      const result = resume(state, segments, tick);
-      state = result.state;
+test("action: private progress is visible to nested callbacks before their business executes", () => {
+    let observed;
+    const dependency = {
+        ...ownedEffect,
+        onInstall(state, context) {
+            observed = actions.get(state, currentRef).state.progress;
+            return state;
+        },
+    };
+    let currentRef;
+    const definition = program("visible", {
+        step(state, self) {
+            currentRef = actionRef(self);
+            state = actions.replace(state, setState(self, { progress: 1 }));
+            return { state: installOwned(state, self, dependency), value: true };
+        },
+    });
+    accepted(definition);
+    assert.equal(observed, 1);
+});
+
+test("action: normal finish and cancellation close dependencies before one terminal callback", () => {
+    for (const finish of [false, true]) {
+        const trace = [];
+        const dependency = {
+            ...ownedEffect,
+            onEnd: (state) => {
+                trace.push("effect");
+                return state;
+            },
+        };
+        const definition = program(`terminal-${finish}`, {
+            step: (state, self) => ({
+                state: installOwned(state, self, dependency),
+                value: finish,
+            }),
+            onEnd(state, self, end) {
+                trace.push(end.type);
+                return state;
+            },
+        });
+        const started = accepted(definition);
+        const state = finish
+            ? started.state
+            : actions.cancel(started.state, started.value.ref, "SCRIPT");
+        assert.deepEqual(trace, ["effect", finish ? "FINISHED" : "CANCELLED"]);
+        assert.equal(actions.get(state, started.value.ref), undefined);
+        assert.equal(
+            state.events.filter(
+                (event) => event.type === (finish ? "ACTION_FINISHED" : "ACTION_CANCELLED"),
+            ).length,
+            1,
+        );
     }
-    return { state, signals: state.events.filter(event => event.type.startsWith("ACTION_")) };
-  };
-  const actual = run();
-  assert.deepEqual(actual, run());
-  assert.deepEqual(actual.signals.map(signal => signal.type), ['ACTION_RELEASED', 'ACTION_RELEASED', 'ACTION_FINISHED']);
-  assert.deepEqual(actual.state.actionExecutions.executions, []);
-  assert.equal(execution.wait.remainingTicks, 2);
 });
 
-test('action process: cancellation ends owned effects while retaining an already completed damage prefix', () => {
-  const resources = new CombatResources();
-  const initial = accepted();
-  const segments = [execute((state, context) => {
-    state = installOwned(state, context);
-    state = resolveDamage(state, { sourceUnitId: 0, targetUnitId: 1, tick: context.tick, damageType: 'TRUE', operands: createDamageOperands(20) }, resources, context.call).state;
-    return pass(state, undefined);
-  }), wait(2), { type: 'RELEASE', markerId: 'never' }];
-  const waiting = resume(initial, segments, 0, resources);
-  assert.equal(resolveAttackPower(1, battlefieldView(waiting.state)), 23);
-  const cancelled = cancelActionExecution(waiting.state, { executionId: 0, tick: 1 });
-  assert.deepEqual(cancelled.value, { type: 'CANCELLED', reason: 'CANCELLED' });
-  assert.equal(getUnit(cancelled.state, 1).vitality.hp, 80);
-  assert.deepEqual(getUnit(cancelled.state, 1).effects.values(), []);
-  assert.equal(resolveAttackPower(1, battlefieldView(cancelled.state)), 10);
-  assert.equal(getUnit(initial, 1).vitality.hp, 100);
-  assert.equal(getUnit(waiting.state, 1).effects.values().length, 1);
-  assert.equal(cancelActionExecution(cancelled.state, { executionId: 0, tick: 1 }).state, cancelled.state);
-  assert.equal(cancelled.state.events.some(event => event.type === 'ACTION_RELEASED'), false);
+test("action: ENDING occupies the definition and repeated cancellation cannot reenter onEnd", () => {
+    let count = 0;
+    const definition = program("ending", {
+        onEnd(state, self) {
+            count++;
+            assert.equal(actions.get(state, actionRef(self)).status, "ENDING");
+            state = actions.cancel(state, actionRef(self), "REENTER");
+            const attempted = actions.start(state, self.source, definition);
+            assert.deepEqual(attempted.value, { type: "REJECTED", reason: "CASTING" });
+            return attempted.state;
+        },
+    });
+    const started = accepted(definition);
+    const state = actions.cancel(started.state, started.value.ref, "SCRIPT");
+    assert.equal(count, 1);
+    assert.equal(actions.get(state, started.value.ref), undefined);
 });
 
-test('action process: a following query and segment observe the preceding returned state', () => {
-  const resources = new CombatResources();
-  const initial = accepted();
-  let observed;
-  const result = resume(initial, [
-    execute((state, context) => pass(installOwned(state, context), { bindings: new Map([['primary', [1]]]) })),
-    execute((state, context) => {
-      const power = resolveAttackPower(1, battlefieldView(state));
-      state = resolveDamage(state, { sourceUnitId: 0, targetUnitId: context.bindings.get('primary')[0], tick: context.tick, damageType: 'TRUE', operands: createDamageOperands(power) }, resources, context.call).state;
-      return pass(state, undefined);
-    }),
-    execute(state => { observed = getUnit(state, 1).vitality.hp; return pass(state, undefined); }),
-  ], 0, resources);
-  assert.equal(observed, 77);
-  assert.equal(getUnit(result.state, 1).vitality.hp, 77);
-  assert.equal(getUnit(initial, 1).vitality.hp, 100);
+test("action: source departure completes nested cleanup while entered content continues", () => {
+    const resources = new CombatResources(),
+        trace = [];
+    const definition = program("depart", {
+        step(state, self) {
+            state = installOwned(state, self, {
+                ...ownedEffect,
+                onEnd: (state) => {
+                    trace.push("dependency");
+                    return state;
+                },
+            });
+            state = removeUnitWithEffects(state, self.source.id, "SCRIPT", resources, state.tick);
+            assert.equal(actions.get(state, actionRef(self)), undefined);
+            trace.push("returned");
+            state = updateUnit(state, { ...getUnit(state, 1), position: [4, 0] });
+            state = actions.replace(state, setState(self, { progress: 9 }));
+            return { state, value: true };
+        },
+        onEnd: (state) => {
+            trace.push("end");
+            return state;
+        },
+    });
+    const started = accepted(definition);
+    assert.deepEqual(trace, ["dependency", "end", "returned"]);
+    assert.equal(actions.get(started.state, started.value.ref), undefined);
+    assert.equal(getUnit(started.state, 0), undefined);
+    assert.deepEqual(getUnit(started.state, 1).position, [4, 0]);
+    assert.equal(
+        started.state.events.filter((event) => event.type === "ACTION_CANCELLED").length,
+        1,
+    );
+    assert.equal(
+        started.state.events.some((event) => event.type === "ACTION_FINISHED"),
+        false,
+    );
 });
 
-test('action process: concurrent executions own independent effects and finish independently', () => {
-  const resources = new CombatResources();
-  const initial = accepted(accepted());
-  const segments = [execute((state, context) => pass(installOwned(state, context), undefined)), wait(2)];
-  const first = resume(initial, segments, 0, resources);
-  const second = resume(first.state, segments, 0, resources, 1);
-  assert.equal(resolveAttackPower(1, battlefieldView(second.state)), 36);
-  const cancelled = cancelActionExecution(second.state, { executionId: 0, tick: 1 });
-  assert.equal(resolveAttackPower(1, battlefieldView(cancelled.state)), 23);
-  assert.deepEqual(cancelled.state.actionExecutions.executions.map(value => value.id), [1]);
-  const completed = resume(resume(cancelled.state, segments, 1, resources, 1).state, segments, 2, resources, 1);
-  assert.equal(resolveAttackPower(1, battlefieldView(completed.state)), 10);
-  assert.deepEqual(completed.state.actionExecutions.executions, []);
-});
-
-test('action process: normal finish and content cancellation retain the prefix and skip successors', () => {
-  for (const continuation of ['FINISH', 'CANCEL']) {
-    const initial = accepted();
-    let reached = false;
-    const result = resume(initial, [
-      execute((state, context) => { state = installOwned(state, context); return pass(updateUnit(state, { ...getUnit(state, 1), position: [3, 0] }), { continuation }); }),
-      execute(state => { reached = true; return pass(state, undefined); }),
-    ]);
-    assert.equal(reached, false);
-    assert.equal(result.value.type, continuation === 'FINISH' ? 'FINISHED' : 'CANCELLED');
-    assert.deepEqual(getUnit(result.state, 1).position, [3, 0]);
-    assert.deepEqual(result.state.actionExecutions.executions, []);
-    assert.deepEqual(getUnit(initial, 1).position, [1, 0]);
-  }
-});
-
-test('action process: an exception propagates and leaves the input state unchanged', () => {
-  const initial = accepted();
-  assert.throws(() => resume(initial, [
-    execute(state => pass(updateUnit(state, { ...getUnit(state, 1), position: [4, 0] }), undefined)),
-    execute(() => { throw new Error('successor failed'); }),
-  ]), /successor failed/);
-  assert.equal(initial.actionExecutions.executions[0].cursor, 0);
-  assert.deepEqual(getUnit(initial, 1).position, [1, 0]);
-  assert.deepEqual(initial.events, []);
-});
-
-test('action process: an entered segment completes after source departure and unentered successors cancel', () => {
-  const initial = accepted();
-  const observed = [];
-  const result = resume(initial, [
-    execute((state, context) => pass(installOwned(state, context), undefined)),
-    execute(state => {
-      state = removeUnit(state, 0, 'RETREAT');
-      observed.push('synchronous');
-      state = updateUnit(state, { ...getUnit(state, 1), position: [3, 0] });
-      return pass(state, undefined);
-    }), wait(1), execute(state => { observed.push('successor'); return pass(state, undefined); }),
-  ]);
-  assert.deepEqual(observed, ['synchronous']);
-  assert.deepEqual(result.value, { type: 'CANCELLED', reason: 'SOURCE_ABSENT' });
-  assert.deepEqual(getUnit(result.state, 1).position, [3, 0]);
-  assert.deepEqual(getUnit(result.state, 1).effects.values(), []);
-});
-
-test('action process: source absence before a later release retains earlier release signals', () => {
-  const result = resume(accepted(), [
-    { type: 'RELEASE', markerId: 'before' }, execute(state => pass(removeUnit(state, 0, 'RETREAT'), undefined)),
-    { type: 'RELEASE', markerId: 'after' },
-  ]);
-  assert.deepEqual(result.state.events.filter(event => event.type.startsWith("ACTION_")).map(event => event.type), ['ACTION_RELEASED', 'ACTION_CANCELLED']);
-});
-
-test('action process: a final entered segment may finish after removing its source', () => {
-  const result = resume(accepted(), [execute(state => pass(removeUnit(state, 0, 'RETREAT'), undefined))]);
-  assert.equal(result.value.type, 'FINISHED');
-  assert.equal(getUnit(result.state, 0), undefined);
-});
-
-test('action process: nested lifecycle removal cancels the execution before a successor can enter', () => {
-  const resources = new CombatResources();
-  let reached = false;
-  const result = resume(accepted(), [
-    execute((state, context) => {
-      state = installOwned(state, context);
-      state = removeUnitWithEffects(state, 0, 'SCRIPT', resources, context.tick, context.call);
-      return pass(state, undefined);
-    }), execute(state => { reached = true; return pass(state, undefined); }),
-  ], 0, resources);
-  assert.equal(reached, false);
-  assert.deepEqual(result.state.actionExecutions.executions, []);
-  assert.equal(getUnit(result.state, 0), undefined);
-  assert.deepEqual(getUnit(result.state, 1).effects.values(), []);
-});
-
-test('action process: attack completion cannot revive an execution cancelled by departure', () => {
-  const resources = new CombatResources();
-  const skill = createSkillDefinition({
-    id: 'depart-on-last-ammo', activation: 'MANUAL', spRecovery: 'NONE',
-    spCost: 0, initialSp: 0, durationTicks: null, ammo: 1,
-  });
-  resources.skills.register({
-    definition: skill,
-    activate: state => ({ state, value: { type: 'ACTIVATED' } }),
-    finish: (state, context) => removeUnitWithEffects(state, context.unitId, 'DEATH', resources, context.tick, context.call),
-  });
-  const active = activateSkill(battle(unit(0, { skill }), unit(1)), { unitId: 0, tick: 0 }, resources).state;
-  let reached = false;
-  const result = resume(accepted(active), [
-    execute(state => pass(state, undefined)), execute(state => { reached = true; return pass(state, undefined); }),
-  ], 2, resources);
-  assert.equal(reached, false);
-  assert.deepEqual(result.state.actionExecutions.executions, []);
-  assert.equal(result.state.events.filter(event => event.type === 'ACTION_CANCELLED').length, 1);
-  assert.equal(result.state.events.filter(event => event.type === 'SKILL_FINISHED').length, 1);
+test("action: a throwing program leaves its input progress, instances and target untouched", () => {
+    const failure = new Error("program failed");
+    const definition = program("failure", {
+        step(state, self) {
+            if (state.tick === 0) return { state, value: false };
+            state = actions.replace(state, setState(self, { progress: 7 }));
+            state = updateUnit(state, { ...getUnit(state, 1), position: [4, 0] });
+            throw failure;
+        },
+    });
+    const started = accepted(definition),
+        before = started.state;
+    assert.throws(
+        () => advance({ ...before, tick: 1 }, started.value.ref),
+        (error) => error === failure,
+    );
+    assert.equal(actions.get(before, started.value.ref).state.progress, 0);
+    assert.deepEqual(getUnit(before, 1).position, [1, 0]);
 });

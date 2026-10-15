@@ -1,4 +1,5 @@
 import * as registry from "../../hook/hook.js";
+import type { State as BattleState } from "../../../battle/state.js";
 import type { Context } from "../../query.js";
 import type { NavigationState } from "../../../battlefield/navigation/state.js";
 import type { RouteState } from "./route/state.js";
@@ -15,7 +16,7 @@ export interface Definition {
 
 export interface Rule {
     readonly id: string;
-    readonly allows: (unit: Unit) => boolean;
+    readonly allows: (battle: BattleState, unit: Unit) => boolean;
 }
 
 export interface State {
@@ -72,8 +73,8 @@ export function removeRule(state: State, id: string): State {
     return rules === state.rules ? state : { ...state, rules };
 }
 
-export function canMove(unit: Unit & Locomotion): boolean {
-    return unit.locomotion.rules.every((rule) => rule.allows(unit));
+export function canMove(battle: BattleState, unit: Unit & Locomotion): boolean {
+    return unit.locomotion.rules.every((rule) => rule.allows(battle, unit));
 }
 
 export function createRoutedLocomotionState(mainRoute: RouteControlState): RoutedLocomotionState {

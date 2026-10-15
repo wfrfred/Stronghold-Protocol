@@ -1,3 +1,5 @@
+import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js';
+import { create as createAttack } from '../../dist/content/tactical/actions/attack.js';
 import { Effects } from "../../dist/core/tactical/unit/effect/effects.js";
 import { initialize as initializeActionState } from "../../dist/core/tactical/unit/capability/action/capability.js";
 // Sim core: rng, grid/pathing, damage formulas, stat aggregation, buffs.
@@ -416,9 +418,9 @@ const catalogDefinition = () => Object.freeze({
     steeringParameters: Object.freeze({ steeringFactor: 1, maxSteeringForce: 100 }),
   }),
   allegiance: Object.freeze({ side: 'ALLY' }),
-  action: createActionCapabilityDefinition({ normalAction: {
+  action: createActionCapabilityDefinition({ definitions: Definitions.empty().add(createAttack({ id: 'normal', speed: 100,
     triggerBindingId: 'primary',
-    baseAttackTimeTicks: 3, recoveryTicks: 0, followUps: [],
+    intervalTicks: 3, recoveryTicks: 0, followUps: [],
     targetGroups: [{ id: 'primary',
       operations: [{ type: 'DAMAGE', power: 10, damageType: 'PHYSICAL' }],
       targeting: { type: 'DAMAGE', scope: { type: 'RANGE', geometry: {
@@ -426,7 +428,7 @@ const catalogDefinition = () => Object.freeze({
       } }, canTargetAir: false, includeBlockingRelations: false, preferBlockingRelations: false,
         ignoreTargetFree: false, ignoreInvisible: false, maxTargets: 1 },
     }],
-  } }),
+   })) }),
   spatial: Object.freeze({ layer: 'GROUND' }),
   hit: createHitDefinition({ geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.25 }] } }),
   blocker: createBlockerDefinition({ capacity: 2, geometry: { radius: 0.7 } }),
@@ -454,7 +456,7 @@ function catalogRoutedState() {
 test('core unit initialization uses prepared states and separates configuration from runtime-only capabilities', () => {
   const definition = catalogDefinition();
   const vitality = {...initializeVitalityState(definition.vitality), hp: 25};
-  const action = { ...initializeActionState(), readyAtTick: 9, recoveryUntilTick: 10 };
+  const action = { ...initializeActionState(), cooldowns: new Map([["normal", { periodTicks: 3, readyAtTick: 9 }]]) };
   const locomotion = catalogRoutedState();
   const unit = initialize({ id: 1, definition, position: [2, 0], tick: 17,
     states: { vitality, action, locomotion, spatialPresence: { present: false } } });
@@ -471,14 +473,14 @@ test('core unit initialization uses prepared states and separates configuration 
   assert.equal(resolveCapacity(unit.definition.blocker, unit.blocker), 2);
   assert.deepEqual(unit.blockable, { weight: 1, enabled: true });
 
-  const updated = { ...unit, vitality: { ...unit.vitality, hp: 0 }, action: { ...unit.action, readyAtTick: 99 } };
+  const updated = { ...unit, vitality: { ...unit.vitality, hp: 0 }, action: { ...unit.action, cooldowns: new Map([["normal", { periodTicks: 3, readyAtTick: 99 }]]) } };
   assert.equal(updated.vitality.hp, 0);
-  assert.equal(updated.action.readyAtTick, 99);
+  assert.equal(updated.action.cooldowns.get("normal").readyAtTick, 99);
   assert.equal(updated.locomotion, unit.locomotion);
   assert.equal(unit.vitality.hp, 25);
-  assert.equal(unit.action.readyAtTick, 9);
+  assert.equal(unit.action.cooldowns.get("normal").readyAtTick, 9);
   assert.equal(unit.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 9);
-  assert.equal(initialize({ id: 2, definition, position: [0, 0], tick: 17 }).action.readyAtTick, 17);
+  assert.equal(initialize({ id: 2, definition, position: [0, 0], tick: 17 }).action.cooldowns.size, 0);
 
   const bare = initialize({ id: 3, definition: Object.freeze({ id: 'presence_only' }),
     position: [0, 0], states: { spatialPresence: { present: false } } });
@@ -846,15 +848,15 @@ if (elementalReport.outcome === "REJECTED") {
 initializeOffenseState();
 initializeDefenseState();
 initializeLocomotionState();
-initializeActionState(7);
+initializeActionState();
 // @ts-expect-error offense state does not consume configuration.
 initializeOffenseState({ attack: 1 });
 // @ts-expect-error defense state does not consume configuration.
 initializeDefenseState({ defense: 1, resistance: 0 });
 // @ts-expect-error locomotion state does not consume configuration or context.
 initializeLocomotionState(enemyDefinition.locomotion, { tick: 7 });
-// @ts-expect-error action state consumes the tick directly.
-initializeActionState({}, { tick: 7 });
+// @ts-expect-error action state does not consume configuration or time.
+initializeActionState(7);
 type Distributed = Assert<Equal<InitializedUnit<EnemyProbe | DeviceProbe>, InitializedUnit<EnemyProbe> | InitializedUnit<DeviceProbe>>>;
 type OptionalHasNoRequiredCapabilities = Assert<Equal<RequiredKeys<InitializedUnit<OptionalProbe>>, 'id' | 'definition' | 'position' | 'effects' | 'lifecycle'>>;
 type WideHasNoRequiredCapabilities = Assert<Equal<RequiredKeys<InitializedUnit<UnitDefinition>>, 'id' | 'definition' | 'position' | 'effects' | 'lifecycle'>>;

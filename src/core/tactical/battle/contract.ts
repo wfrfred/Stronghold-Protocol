@@ -30,11 +30,9 @@ import type {
     Rejection as DeploymentRejection,
 } from "./deployment/operations.js";
 import type { SupportRelation } from "../battlefield/support/relations.js";
-import type {
-    ActionExecutionId,
-    ActionExecutionSignal,
-    ActionExecutionState,
-} from "../unit/capability/action/process.js";
+import type { Id as ActionId } from "../unit/action/action.js";
+import type { Signal as ActionSignal } from "../unit/action/event.js";
+import type { Actions } from "../unit/action/actions.js";
 import type { ProjectileId, ProjectileState } from "../battlefield/projectile/projectile.js";
 import type { ProjectileSignal } from "../battlefield/projectile/settlement.js";
 import type { ElementalSignal } from "../unit/capability/elemental/execution.js";
@@ -60,7 +58,7 @@ export type Command =
     | DeploymentCommand
     | { readonly type: "ACTIVATE_SKILL"; readonly unitId: Id }
     | { readonly type: "FINISH_SKILL"; readonly unitId: Id }
-    | { readonly type: "CANCEL_ACTION_EXECUTION"; readonly executionId: ActionExecutionId }
+    | { readonly type: "CANCEL_ACTION_EXECUTION"; readonly executionId: ActionId }
     | { readonly type: "STOP_PROJECTILE"; readonly projectileId: ProjectileId }
     | { readonly type: "TRIGGER_BRANCH"; readonly branchId: string; readonly isLoop: boolean };
 
@@ -72,7 +70,7 @@ export type Event =
           readonly tick: number;
       }
     | CombatEvent
-    | ActionExecutionSignal
+    | ActionSignal
     | ProjectileSignal
     | SkillSignal
     | ElementalSignal
@@ -118,7 +116,7 @@ export interface Snapshot {
     readonly spawning: SpawnScheduleState;
     readonly execution: BattleExecutionState;
     readonly predefinedPresence: readonly PredefinedPresence[];
-    readonly actionExecution: ActionExecutionState;
+    readonly actions: ReturnType<Actions["toJSON"]>;
     readonly projectiles: ProjectileState;
     readonly units: readonly Unit[];
     readonly blockingRelations: readonly BlockingRelation[];

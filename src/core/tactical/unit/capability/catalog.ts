@@ -123,7 +123,7 @@ export const configuredCapabilities: {
     vitality: initializeVitalityState,
     offense: () => initializeOffenseState(),
     defense: () => initializeDefenseState(),
-    action: (_definition, context) => initializeActionState(context.tick),
+    action: () => initializeActionState(),
     skill: initializeSkillState,
     elemental: initializeElementalState,
     allegiance: initializeAllegianceState,

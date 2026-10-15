@@ -1,3 +1,12 @@
+import { Definitions } from "../../../core/tactical/unit/action/definitions.js";
+import { clearCooldown, get as getAction } from "../../../core/tactical/unit/action/operations.js";
+import { ref as actionRef } from "../../../core/tactical/unit/action/action.js";
+import {
+    create as createAttack,
+    type Attack,
+    type Definition as AttackConfiguration,
+} from "../actions/attack.js";
+import { selectTargets } from "../../../core/tactical/unit/targeting/select.js";
 import { resolveHealing } from "../../../core/tactical/unit/capability/vitality/healing/settlement.js";
 import { resolveDamage } from "../../../core/tactical/unit/capability/vitality/damage/settlement.js";
 import { ref as unitRef } from "../../../core/tactical/unit/query.js";
@@ -16,13 +25,7 @@ import { gainUnitSkillSp } from "../../../core/tactical/battle/execution/skill-s
 import type { Direction } from "../../../core/tactical/geometry/direction.js";
 import type { Unit, Id } from "../../../core/tactical/unit/unit.js";
 import type { Definition as OperatorDefinition } from "../../../core/tactical/unit/archetype/operator.js";
-import {
-    hasAction,
-    type ActionDefinition,
-} from "../../../core/tactical/unit/capability/action/capability.js";
-import { compileAction } from "../../../core/tactical/unit/capability/action/compile.js";
-import type { CompiledAction } from "../../../core/tactical/unit/capability/action/compiled.js";
-import type { CompiledActionSegment } from "../../../core/tactical/unit/capability/action/process.js";
+import { hasAction } from "../../../core/tactical/unit/capability/action/capability.js";
 import type { Definition as OffenseDefinition } from "../../../core/tactical/unit/capability/offense/capability.js";
 import {
     createDefinition as createDeployableDefinition,
@@ -55,6 +58,7 @@ export interface Definition extends OperatorDefinition {
     readonly offense: OffenseDefinition;
     readonly skill: SkillDefinition;
     readonly profile: Profile;
+    readonly direction: Direction;
 }
 
 interface ShieldState {
@@ -114,7 +118,7 @@ function healSelf(
     unitId: Id,
     ratio: number,
     tick: number,
-    call: CallContext,
+    call?: CallContext,
 ): BattleState {
     const maxHp = resolveMaxHp(unitId, battlefieldView(state));
 
@@ -266,10 +270,12 @@ function attackDefinition(
     direction: Direction,
     skill: boolean,
     recoveryTicks: number,
-): ActionDefinition {
+): AttackConfiguration {
     return {
+        id: skill ? "mudrock/s2" : "normal-attack",
+        speed: profile.attributes.attackSpeed,
         triggerBindingId: "primary",
-        baseAttackTimeTicks: secondsToTicks(profile.attributes.baseAttackTime),
+        intervalTicks: secondsToTicks(profile.attributes.baseAttackTime),
         recoveryTicks,
         followUps: [],
         targetGroups: [
@@ -309,7 +315,7 @@ export function create(
     profile: Profile,
     combat: CombatResources,
     options: { readonly direction?: Direction; readonly recoveryTicks?: number } = {},
-): { readonly definition: Definition; readonly action: CompiledAction } {
+): { readonly definition: Definition; readonly action: Attack } {
     if (
         profile.id !== "char_311_mudrok" ||
         profile.skill.definition.id !== "skchr_mudrok_2" ||
@@ -332,56 +338,44 @@ export function create(
     }
 
     const shield = shieldEffect(profile);
-    const activeAction = attackDefinition(profile, direction, true, recoveryTicks);
-    const compiled = compileAction(activeAction, combat);
-    const targeting = compileTargeting(activeAction.targetGroups[0].targeting, ["DAMAGE"]);
+    const activeConfiguration = attackDefinition(profile, direction, true, recoveryTicks);
+    const normalAttack = createAttack(
+        attackDefinition(profile, direction, false, recoveryTicks),
+        combat,
+    );
+    const targeting = compileTargeting(activeConfiguration.targetGroups[0].targeting, ["DAMAGE"]);
     const attackScale = value(profile.skill.blackboard, "atk_scale");
     const healRatio = value(profile.skill.blackboard, "hp_ratio");
     const stunChance = value(profile.skill.blackboard, "buff_prob");
     const stunTicks = secondsToTicks(value(profile.skill.blackboard, "stun"));
-    const finishOnActionEnd: EffectDefinition<object> = {
-        id: "mudrock/skill-attack",
-        initialize: () => ({}),
-        onEnd: (state, context) =>
-            finishSkill(state, context.unit.id, context.tick, combat, context.call),
-    };
-    const program: CompiledActionSegment[] = [
-        { type: "RELEASE", markerId: "mudrock/s2" },
+    const action = createAttack(
         {
-            type: "EXECUTE",
-            run(state, context) {
-                const source = getUnit(state, context.sourceUnitId);
+            ...activeConfiguration,
+            markerId: "mudrock/s2",
+            output(state, self) {
+                const source = getUnit(state, self.source.id);
 
                 if (source === undefined || !hasSkill(source) || source.skill.active === null) {
-                    return { state, value: undefined };
+                    return state;
                 }
 
-                state = install(
-                    state,
-                    unitRef(source),
-                    finishOnActionEnd,
-                    {
-                        scopes: [
-                            { type: "ACTION", executionId: context.executionId },
-                            {
-                                type: "SKILL",
-                                unitId: source.id,
-                                activationId: source.skill.active.id,
-                            },
-                        ],
-                    },
-                    context.call,
-                ).state;
                 const power = resolveAttackPower(source.id, battlefieldView(state))!;
-                state = healSelf(state, source.id, healRatio, context.tick, context.call);
+                state = healSelf(state, source.id, healRatio, state.tick);
 
-                for (const targetId of context.bindings.get("primary") ?? []) {
+                for (const targetRef of self.state.bindings.primary ?? []) {
+                    if (getAction(state, actionRef(self))?.status !== "RUNNING") {
+                        return state;
+                    }
+
                     const battlefield = battlefieldView(state);
                     const currentSource = battlefield.getUnit(source.id);
-                    const target = battlefield.getUnit(targetId);
+                    const target = battlefield.getUnit(targetRef.id);
+
+                    if (currentSource?.lifecycle !== "PRESENT") {
+                        return state;
+                    }
 
                     if (
-                        currentSource === undefined ||
                         target === undefined ||
                         !targeting.accepts({ source: currentSource, battlefield }, target)
                     ) {
@@ -401,10 +395,9 @@ export function create(
                                 fixedPenetration: 0,
                                 proportionalPenetration: 0,
                             },
-                            tick: context.tick,
+                            tick: state.tick,
                         },
                         combat,
-                        context.call,
                     ).state;
                     const rng = createRng(state.execution.rngState);
                     const applyStun = rng.chance(stunChance);
@@ -412,61 +405,54 @@ export function create(
                     const survivor = getUnit(state, target.id);
 
                     if (applyStun && survivor !== undefined) {
-                        state = install(
-                            state,
-                            unitRef(survivor),
-                            stun,
-                            {
-                                source: source.id,
-                                scopes: [{ type: "TICK", tick: context.tick + stunTicks }],
-                            },
-                            context.call,
-                        ).state;
+                        state = install(state, unitRef(survivor), stun, {
+                            source: source.id,
+                            scopes: [{ type: "TICK", tick: state.tick + stunTicks }],
+                        }).state;
                     }
                 }
 
-                return { state, value: undefined };
+                return state;
+            },
+            onEnd(state, self) {
+                const unit = getUnit(state, self.source.id);
+
+                return unit !== undefined &&
+                    hasSkill(unit) &&
+                    self.state.activationId !== null &&
+                    unit.skill.active?.id === self.state.activationId
+                    ? finishSkill(state, unit.id, state.tick, combat)
+                    : state;
             },
         },
-        {
-            type: "WAIT",
-            resolve: () => ({ type: "FOR_TICKS", ticks: recoveryTicks }),
-            allowNewAction: false,
-        },
-    ];
+        combat,
+    );
     const skill = combat.skills.register({
-        definition: { ...profile.skill.definition, durationTicks: null, activeAction },
+        definition: { ...profile.skill.definition, durationTicks: null, activeAction: action.id },
         accepts({ unitId, battlefield }) {
             const source = battlefield.getUnit(unitId);
 
             return (
-                source !== undefined &&
-                (compiled.bind({ source, battlefield }).get("primary")?.length ?? 0) > 0
+                source !== undefined && selectTargets({ source, battlefield }, targeting).length > 0
             );
         },
-        activate(state, { unitId, tick }) {
+        activate(state, { unitId }) {
             const unit = getUnit(state, unitId);
 
             if (unit === undefined || !hasAction(unit)) {
                 return { state, value: { type: "REJECTED", reason: "host absent" } };
             }
 
-            return {
-                state: updateUnit(state, {
-                    ...unit,
-                    action: {
-                        ...unit.action,
-                        readyAtTick: tick,
-                        recoveryUntilTick: tick,
-                    },
-                }),
-                value: { type: "ACTIVATED" },
-            };
+            state = clearCooldown(state, unitRef(unit), normalAttack.id);
+            state = clearCooldown(state, unitRef(unit), action.id);
+
+            return { state, value: { type: "ACTIVATED" } };
         },
     });
     const definition: Definition = {
         id: profile.id,
         profile,
+        direction,
         deployable: createDeployableDefinition({
             cost: profile.attributes.cost,
             redeployTicks: secondsToTicks(profile.attributes.respawnTime),
@@ -482,8 +468,11 @@ export function create(
         hit: { geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.25 }] } },
         blocker: { capacity: profile.attributes.blockCapacity, geometry: { radius: 0.70709997 } },
         action: {
-            attackSpeed: profile.attributes.attackSpeed,
-            normalAction: attackDefinition(profile, direction, false, recoveryTicks),
+            definitions: Definitions.empty().add(normalAttack).add(action),
+            select: (battle, self) => ({
+                state: battle,
+                value: [hasSkill(self) && self.skill.active !== null ? action.id : normalAttack.id],
+            }),
         },
         skill: skill.definition,
         onEnter(state, unitId) {
@@ -500,5 +489,5 @@ export function create(
         },
     };
 
-    return { definition, action: { ...compiled, program } };
+    return { definition, action };
 }

@@ -1,107 +1,81 @@
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { battle, unit, actionDefinition } from "../helpers/action-fixture.js";
+import { battle, unit } from "../helpers/action-fixture.js";
 import { getUnit, advanceBattlefield } from "../../dist/core/tactical/battle/state.js";
 import { removeUnitWithEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
 import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
-import {
-    acceptActionExecution,
-    cancelActionExecution,
-    resumeActionExecution,
-} from "../../dist/core/tactical/unit/capability/action/process.js";
+import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
+import * as actions from "../../dist/core/tactical/unit/action/operations.js";
+import { advance as advanceAction } from "../../dist/core/tactical/unit/action/advance.js";
 import { install } from "../../dist/core/tactical/unit/effect/operations.js";
 import { advancePredefined } from "../../dist/core/tactical/battle/steps/predefined.js";
 import { instantiateUnitPlacement } from "../../dist/core/tactical/battle/creation/placement.js";
 
-for (const nested of ["cancel", "resume", "resume empty", "resume wait"]) {
+for (const nested of ["cancel", "advance", "advance complete", "advance waiting"]) {
     test(`sequential departure: a nested ${nested} cannot produce a second action outcome`, () => {
         const resources = new CombatResources();
-        let state = battle(unit(0), unit(1));
-        for (let index = 0; index < 2; index++) {
-            const accepted = acceptActionExecution(state.actionExecutions, {
-                sourceUnitId: 0,
-                definition: actionDefinition(),
-                inputTargetUnitId: 1,
-                bindings: new Map([["primary", [1]]]),
-                tick: 0,
-            });
-            state = { ...state, actionExecutions: accepted.state };
-        }
         let executions = 0;
+        let armed = false;
+        const first = {
+            id: "first", intervalTicks: 10, speed: 100,
+            start: state => ({ state, value: {} }),
+            step: state => ({ state, value: false }),
+        };
+        const second = {
+            id: "second", intervalTicks: 10, speed: 100,
+            start: state => ({ state, value: { finishAtTick: 100 } }),
+            step(state, self) {
+                if (armed) executions++;
+                return { state, value: armed && (nested === "advance complete" ||
+                    nested === "advance waiting" && state.tick >= self.state.finishAtTick) };
+            },
+        };
+        let state = battle(unit(0, { action: { definitions: Definitions.empty().add(first).add(second) } }), unit(1));
+        const acceptedFirst = actions.start(state, unitRef(getUnit(state, 0)), first);
+        const firstRef = acceptedFirst.value.ref;
+        const acceptedSecond = actions.start(acceptedFirst.state, unitRef(getUnit(state, 0)), second);
+        const secondRef = acceptedSecond.value.ref;
+        state = acceptedSecond.state;
+        armed = true;
         state = install(
             state,
             unitRef(getUnit(state, 1)),
             {
                 id: "nested-action-end",
                 initialize: () => ({}),
-                onEnd(state, context) {
-                    if (nested === "cancel") {
-                        return cancelActionExecution(
-                            state,
-                            { executionId: 1, tick: 0, reason: "CONTENT_CANCELLED" },
-                            context.call,
-                        ).state;
-                    }
-                    return resumeActionExecution(
-                        state,
-                        {
-                            executionId: 1,
-                            tick: 0,
-                            segments:
-                                nested === "resume"
-                                    ? [
-                                          {
-                                              type: "EXECUTE",
-                                              run(state) {
-                                                  executions++;
-                                                  return { state, value: undefined };
-                                              },
-                                          },
-                                      ]
-                                    : nested === "resume wait"
-                                      ? [
-                                            {
-                                                type: "WAIT",
-                                                resolve() {
-                                                    executions++;
-                                                    return { type: "FOR_TICKS", ticks: 100 };
-                                                },
-                                            },
-                                        ]
-                                      : [],
-                        },
-                        resources,
-                        context.call,
-                    ).state;
+                onEnd(state) {
+                    return nested === "cancel"
+                        ? actions.cancel(state, secondRef, "CONTENT_CANCELLED")
+                        : advanceAction(state, secondRef);
                 },
             },
-            { scopes: [{ type: "ACTION", executionId: 0 }] },
+            { scopes: [{ type: "ACTION", ref: firstRef }] },
         ).state;
         const before = state;
         state = removeUnitWithEffects(state, 0, "RETREAT", resources, 0);
         assert.equal(executions, 0);
-        assert.deepEqual(state.actionExecutions.executions, []);
+        assert.equal(state.actions.size, 0);
         assert.equal(
             state.events.filter(
-                (event) => event.executionId === 1 && event.type === "ACTION_CANCELLED",
+                event => event.executionId === secondRef.id && event.type === "ACTION_CANCELLED",
             ).length,
             1,
         );
         assert.equal(
             state.events.filter(
-                (event) => event.executionId === 1 && event.type === "ACTION_FINISHED",
+                event => event.executionId === secondRef.id && event.type === "ACTION_FINISHED",
             ).length,
             0,
         );
         assert.equal(
             state.events.filter(
-                (event) => event.executionId === 0 && event.type === "ACTION_CANCELLED",
+                event => event.executionId === firstRef.id && event.type === "ACTION_CANCELLED",
             ).length,
             1,
         );
         assert.equal(getUnit(state, 0), undefined);
-        assert.equal(before.actionExecutions.executions.length, 2);
+        assert.equal(before.actions.size, 2);
         assert.equal(getUnit(before, 0).lifecycle, "PRESENT");
     });
 }

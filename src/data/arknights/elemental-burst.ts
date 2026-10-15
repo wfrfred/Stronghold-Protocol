@@ -122,13 +122,13 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                         ...context.unit,
                         action: setBeforeReleaseHook(context.unit.action, {
                             id: `@effect/${effectId}/paralysis`,
-                            enabled: (context) => {
-                                const current = context.unit.effects.get(effectId, paralysis);
+                            enabled: (_battle, unit) => {
+                                const current = unit.effects.get(effectId, paralysis);
 
                                 return current?.status === "ACTIVE" && current.data.remaining > 0;
                             },
-                            invoke: (state, context) => {
-                                const self = context.unit.effects.get(effectId, paralysis)!;
+                            invoke: (state, unit) => {
+                                const self = unit.effects.get(effectId, paralysis)!;
                                 const ref = effectRef(self);
                                 const remaining = self.data.remaining - 1;
                                 state = effects.replaceEffect(
@@ -138,29 +138,23 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                                 );
 
                                 if (remaining === 0) {
-                                    state = effects.end(state, ref, "EXPLICIT", context.call);
+                                    state = effects.end(state, ref, "EXPLICIT");
                                 }
 
                                 const recoveryTicks = TICKS_PER_SECOND / 2;
 
-                                const current = getUnit(state, context.unit.id);
+                                const current = getUnit(state, unit.id);
 
                                 if (current !== undefined) {
-                                    state = effects.install(
-                                        state,
-                                        unitRef(current),
-                                        stun,
-                                        {
-                                            source: null,
-                                            scopes: [
-                                                {
-                                                    type: "TICK",
-                                                    tick: context.tick + recoveryTicks,
-                                                },
-                                            ],
-                                        },
-                                        context.call,
-                                    ).state;
+                                    state = effects.install(state, unitRef(current), stun, {
+                                        source: null,
+                                        scopes: [
+                                            {
+                                                type: "TICK",
+                                                tick: state.tick + recoveryTicks,
+                                            },
+                                        ],
+                                    }).state;
                                 }
 
                                 return { state, value: { type: "INTERRUPT", recoveryTicks } };

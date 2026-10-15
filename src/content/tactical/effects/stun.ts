@@ -4,6 +4,8 @@ import * as action from "../../../core/tactical/unit/capability/action/capabilit
 import * as blocker from "../../../core/tactical/unit/capability/blocking/blocker.js";
 import * as locomotion from "../../../core/tactical/unit/capability/locomotion/capability.js";
 import * as skill from "../../../core/tactical/unit/capability/skill/capability.js";
+import { cancelForUnit } from "../../../core/tactical/unit/action/operations.js";
+import { ref } from "../../../core/tactical/unit/query.js";
 
 export const stun: Definition<object> = {
     id: "control/stun",
@@ -12,7 +14,7 @@ export const stun: Definition<object> = {
         const id = `@effect/${self.id}/stun`;
         const rule = { id, allows: () => false };
 
-        return updateUnit(state, {
+        state = updateUnit(state, {
             ...unit,
             ...(action.hasAction(unit) ? { action: action.setRule(unit.action, rule) } : {}),
             ...(blocker.hasBlocker(unit) ? { blocker: blocker.setRule(unit.blocker, rule) } : {}),
@@ -23,6 +25,8 @@ export const stun: Definition<object> = {
                 ? { skill: skill.setRule(unit.skill, { id, allowsActivation: () => false }) }
                 : {}),
         });
+
+        return cancelForUnit(state, ref(unit), "INTERRUPTED");
     },
     onDisable(state, { unit, self }) {
         const id = `@effect/${self.id}/stun`;

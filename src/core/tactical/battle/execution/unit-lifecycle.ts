@@ -7,9 +7,8 @@ import {
     notifySkillFinished,
     type SkillExecutionResources,
 } from "../../unit/capability/skill/execution.js";
-import type { ActionExecutionSignal } from "../../unit/capability/action/process.js";
+import { cancelForUnit } from "../../unit/action/operations.js";
 import {
-    appendEvents,
     getMechanism,
     getUnit,
     removeUnit,
@@ -17,10 +16,6 @@ import {
     type State as BattleState,
 } from "../state.js";
 import { emptyCall, type CallContext } from "./call.js";
-import {
-    getActionExecution,
-    removeActionExecution,
-} from "../../unit/capability/action/internal/executions.js";
 import { refundUnit, recycleUnitCard } from "../deployment/deployment.js";
 
 export function enterUnits(state: BattleState, unitIds: readonly Id[]): BattleState {
@@ -76,31 +71,10 @@ export function removeUnitWithEffects(
 
     state = updateUnit(state, { ...unit, lifecycle: "LEAVING" });
     state = refundUnit(state, unit, reason, tick);
-    const actions = state.actionExecutions.executions.filter(
-        (action) => action.sourceUnitId === unitId,
-    );
     const stopped = stopSkillActivation(state, unitId, tick, resources);
     state = stopped.state;
-    const signals: ActionExecutionSignal[] = [];
+    state = cancelForUnit(state, units.ref(unit), "SOURCE_ABSENT", reason);
 
-    for (const action of actions) {
-        if (getActionExecution(state.actionExecutions, action.id) === undefined) {
-            continue;
-        }
-
-        state = {
-            ...state,
-            actionExecutions: removeActionExecution(state.actionExecutions, action.id),
-        };
-        state = closeLifetime(state, { type: "ACTION", executionId: action.id }, reason, call);
-        signals.push({
-            type: "ACTION_CANCELLED",
-            executionId: action.id,
-            sourceUnitId: unitId,
-            tick,
-            reason: "SOURCE_ABSENT",
-        });
-    }
     if (stopped.value !== null) {
         state = closeLifetime(
             state,
@@ -116,7 +90,6 @@ export function removeUnitWithEffects(
         state = notifySkillFinished(state, stopped.value, tick, call);
     }
 
-    state = appendEvents(state, signals);
     state = removeUnit(state, unitId, reason);
     state = recycleUnitCard(state, unit, reason, tick);
     const departure = { unit, reason };

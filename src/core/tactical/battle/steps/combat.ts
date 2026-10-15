@@ -1,139 +1,95 @@
-import { compileAction } from "../../unit/capability/action/compile.js";
-import { startAction } from "../../unit/capability/action/execution.js";
-import {
-    cancelActionExecution,
-    resumeActionExecution,
-    actionExecutionPermissions,
-    type ActionExecution,
-    type ActionExecutionState,
-    type CompiledActionSegment,
-} from "../../unit/capability/action/process.js";
-import type { CompiledAction } from "../../unit/capability/action/compiled.js";
-import { retireCombatUnit } from "../execution/unit-lifecycle.js";
-import { CombatResources } from "../resources.js";
-import { battlefieldView, getUnit, type State as BattleState } from "../state.js";
-import { emptyCall, type CallContext } from "../execution/call.js";
-import { hasAction, type ActionDefinition } from "../../unit/capability/action/capability.js";
+import * as actions from "../../unit/action/operations.js";
+import { advance as advanceAction } from "../../unit/action/advance.js";
+import { ref as actionRef } from "../../unit/action/action.js";
+import * as units from "../../unit/query.js";
+import { hasAction } from "../../unit/capability/action/capability.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";
 import { hasVitality } from "../../unit/capability/vitality/capability.js";
-import type { Id } from "../../unit/unit.js";
+import type { SkillExecutionResources } from "../../unit/capability/skill/execution.js";
+import { retireCombatUnit } from "../execution/unit-lifecycle.js";
+import type { State as BattleState } from "../state.js";
 import type { Command } from "../contract.js";
-import { hasSkill } from "../../unit/capability/skill/capability.js";
 
-export function createCombat(
-    resources = new CombatResources(),
-    compile: typeof compileAction = compileAction,
-) {
-    const compiledActions = new WeakMap<ActionDefinition, CompiledAction>();
+export function prepare(battle: BattleState, commands: readonly Command[]): BattleState {
+    for (const command of commands) {
+        if (command.type === "CANCEL_ACTION_EXECUTION") {
+            const self = battle.actions.get(command.executionId);
 
-    const compiledAction = (definition: ActionDefinition): CompiledAction => {
-        let compiled = compiledActions.get(definition);
-
-        if (compiled === undefined) {
-            compiled = compile(definition, resources);
-
-            if (compiled.definition !== definition) {
-                throw new TypeError("compiled action must retain its definition association");
-            }
-
-            compiledActions.set(definition, compiled);
-        }
-
-        return compiled;
-    };
-
-    const segmentsOf = (execution: ActionExecution): readonly CompiledActionSegment[] =>
-        compiledAction(execution.definition).program;
-    const forSource = (state: ActionExecutionState, unitId: Id): readonly ActionExecution[] =>
-        state.executions.filter((execution) => execution.sourceUnitId === unitId);
-    const mayStart = (state: ActionExecutionState, unitId: Id): boolean =>
-        forSource(state, unitId).every(
-            (execution) =>
-                actionExecutionPermissions(execution, segmentsOf(execution)).allowNewAction,
-        );
-
-    const prepare = (
-        state: BattleState,
-        commands: readonly Command[],
-        tick: number,
-        call: CallContext = emptyCall,
-    ): BattleState => {
-        for (const command of commands) {
-            if (command.type === "CANCEL_ACTION_EXECUTION") {
-                state = cancelActionExecution(
-                    state,
-                    { executionId: command.executionId, tick },
-                    call,
-                ).state;
+            if (self !== undefined) {
+                battle = actions.cancel(battle, actionRef(self), "CANCELLED");
             }
         }
+    }
 
-        return state;
-    };
+    return battle;
+}
 
-    const advance = (
-        state: BattleState,
-        tick: number,
-        call: CallContext = emptyCall,
-    ): BattleState => {
-        const ids = [
-            ...new Set([
-                ...battlefieldView(state).unitIds,
-                ...state.actionExecutions.executions.map(({ sourceUnitId }) => sourceUnitId),
-            ]),
-        ].sort((left, right) => left - right);
-
-        for (const id of ids) {
-            const unit = getUnit(state, id);
-
-            if (unit !== undefined && hasVitality(unit) && unit.vitality.hp <= 0) {
-                state = retireCombatUnit(state, id, resources, tick, call);
-            }
-        }
-        for (const id of ids) {
-            for (const execution of forSource(state.actionExecutions, id)) {
-                state = resumeActionExecution(
-                    state,
-                    { executionId: execution.id, segments: segmentsOf(execution), tick },
-                    resources,
-                    call,
-                ).state;
-            }
-
-            const unit = getUnit(state, id);
-
-            if (unit === undefined || !hasAction(unit) || !isSpatiallyPresent(unit)) {
-                continue;
-            }
-
-            state = startAction(
-                state,
-                {
-                    sourceUnitId: id,
-                    compiled: compiledAction(
-                        hasSkill(unit) && unit.skill.active !== null
-                            ? (unit.definition.skill.activeAction ??
-                                  unit.definition.action.normalAction)
-                            : unit.definition.action.normalAction,
-                    ),
-                    tick,
-                    mayStart: mayStart(state.actionExecutions, id),
-                },
-                resources,
-                call,
-            );
-        }
-
-        return state;
-    };
-
-    return {
-        prepare,
-        advance,
-        allowsMovement: (state: ActionExecutionState, unitId: Id) =>
-            forSource(state, unitId).every(
-                (execution) =>
-                    !actionExecutionPermissions(execution, segmentsOf(execution)).blockingMovement,
+export function advance(battle: BattleState, resources: SkillExecutionResources): BattleState {
+    const candidates = [
+        ...new Map(
+            [...units.all(battle), ...battle.actions.values().map((self) => self.source)].map(
+                (source) => [source.id, source],
             ),
-    };
+        ).values(),
+    ].sort((left, right) => left.id - right.id);
+    const instances = actions.all(battle);
+
+    for (const source of candidates) {
+        const unit = units.get(battle, source);
+
+        if (unit !== undefined && hasVitality(unit) && unit.vitality.hp <= 0) {
+            battle = retireCombatUnit(battle, source.id, resources, battle.tick);
+        }
+    }
+
+    for (const source of candidates) {
+        for (const reference of instances) {
+            const self = actions.get(battle, reference);
+
+            if (self?.source.id === source.id && self.startedAtTick < battle.tick) {
+                battle = advanceAction(battle, reference);
+            }
+        }
+
+        const unit = units.get(battle, source);
+
+        if (
+            unit === undefined ||
+            !hasAction(unit) ||
+            unit.lifecycle !== "PRESENT" ||
+            !isSpatiallyPresent(unit)
+        ) {
+            continue;
+        }
+
+        const reference = units.ref(unit);
+        battle = actions.refreshCooldowns(battle, reference);
+        const current = units.get(battle, reference)!;
+        const selected = current.definition.action.select?.(battle, current) ?? {
+            state: battle,
+            value: current.definition.action.definitions.values().map(({ id }) => id),
+        };
+        battle = selected.state;
+
+        for (const id of new Set(selected.value)) {
+            const latest = units.get(battle, reference);
+
+            if (latest?.lifecycle !== "PRESENT") {
+                break;
+            }
+
+            const started = latest.definition.action.definitions.read(
+                id,
+                (definition) => actions.start(battle, reference, definition).state,
+            );
+
+            if (started === undefined) {
+                throw new RangeError(`unknown selected action definition ${id}`);
+            }
+
+            battle = started;
+        }
+    }
+
+    return battle;
 }

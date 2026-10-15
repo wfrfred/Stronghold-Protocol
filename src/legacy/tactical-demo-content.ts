@@ -6,7 +6,6 @@ import {
     createRouteDefinition,
     type RouteDefinition,
 } from "../core/tactical/unit/capability/locomotion/route/definition.js";
-import { compileAction } from "../core/tactical/unit/capability/action/compile.js";
 import { prepare as prepareOperator, type Configuration } from "../data/arknights/operator.js";
 import { prepare as prepareEnemy } from "../data/arknights/enemy.js";
 import { TICKS_PER_SECOND } from "../core/tactical/tick.js";
@@ -97,13 +96,7 @@ export function createTacticalContentDemo(
             },
         },
     );
-    const actions = [defender.action, hound.action, crossbowman.action];
-    const resources: BattleResources = {
-        combat,
-        compileAction: (definition, registered) =>
-            actions.find((action) => action.definition === definition) ??
-            compileAction(definition, registered),
-    };
+    const resources: BattleResources = { combat };
     const firstLane = createRouteDefinition({
         ...route,
         allowDiagonalMove: false,

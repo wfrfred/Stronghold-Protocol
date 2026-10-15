@@ -9,15 +9,15 @@ import { createLegacyCombatSpec } from '../../dist/legacy/combat.js';
 import { createBattleState, battlefieldView, getUnit } from '../../dist/core/tactical/battle/state.js';
 import { initialize } from '../../dist/core/tactical/unit/initialize.js';
 import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
-import { createActionDefinition } from '../../dist/core/tactical/unit/capability/action/capability.js';
-import { compileAction } from '../../dist/core/tactical/unit/capability/action/compile.js';
+import { create as createAttack, chooseTargets } from '../../dist/content/tactical/actions/attack.js';
+import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js';
+import { start } from '../../dist/core/tactical/unit/action/operations.js';
+import { ref as unitRef } from '../../dist/core/tactical/unit/query.js';
 import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
 import { createDefinition as createSkillDefinition } from '../../dist/core/tactical/unit/capability/skill/capability.js';
 import { activateSkill, advanceSkill } from '../../dist/core/tactical/unit/capability/skill/execution.js';
 import { gainUnitSkillSp } from '../../dist/core/tactical/battle/execution/skill-sp.js';
 import { canGainSp } from '../../dist/core/tactical/unit/capability/skill/capability.js';
-import { canAct } from '../../dist/core/tactical/unit/capability/action/capability.js';
-import { canMove } from '../../dist/core/tactical/unit/capability/locomotion/capability.js';
 import { setHealingReceptionRule } from '../../dist/core/tactical/unit/capability/vitality/capability.js';
 import { resolveDefense } from '../../dist/core/tactical/unit/capability/defense/query.js';
 import { resolveAttackPower } from '../../dist/core/tactical/unit/capability/offense/query.js';
@@ -33,20 +33,20 @@ import { effectFixtureWork } from '../helpers/effects.js';
 
 const range = createShapeGeometry({ shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 20 }] });
 const hit = createShapeGeometry({ shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.1 }] });
-function action(interval = 1) {
-  return createActionDefinition({ triggerBindingId: 'primary', baseAttackTimeTicks: interval, recoveryTicks: 0,
+function action(interval = 1, supplied) {
+  return createAttack({ id: 'normal-attack', triggerBindingId: 'primary', intervalTicks: interval, recoveryTicks: 0,
     targetGroups: [{ id: 'primary', targeting: {
       type: 'DAMAGE', scope: { type: 'RANGE', geometry: { type: 'SHAPES', geometry: range } },
       canTargetAir: true, includeBlockingRelations: false, preferBlockingRelations: false,
       ignoreTargetFree: false, ignoreInvisible: false, maxTargets: 1,
-    }, operations: [{ type: 'DAMAGE', power: 1, damageType: 'TRUE' }] }], followUps: [] });
+    }, operations: [{ type: 'DAMAGE', power: 1, damageType: 'TRUE' }] }], followUps: [] }, supplied);
 }
 function definition(receiver = 'CHARACTER', overrides = {}, elementOptions = {}) {
   return { id: `element-${receiver}`, vitality: { maxHp: 100000 },
     defense: { defense: 500, resistance: 50 }, offense: { attack: 100 },
     allegiance: { side: receiver === 'CHARACTER' ? 'ALLY' : 'ENEMY' },
     spatial: { layer: 'GROUND' }, hit: { geometry: hit },
-    action: { normalAction: action() },
+    action: { definitions: Definitions.empty().add(action()) },
     elemental: createArknightsElementalDefinition({ receiver, ...elementOptions }), ...overrides };
 }
 function unit(receiver = 'CHARACTER', overrides = {}, elementOptions = {}) {
@@ -252,36 +252,33 @@ test('elemental burst callbacks receive the current battlefield on begin and rec
   assert.equal(getUnit(recovered, 1).elemental.ep.BURN, 500);
 });
 
-test('elemental compiled actions select EP receivers without Vitality', () => {
+test('elemental attacks select EP receivers without Vitality', () => {
   const supplied = resources();
-  const healingAction = createActionDefinition({ triggerBindingId: 'primary', baseAttackTimeTicks: 30, recoveryTicks: 0,
+  const healingAction = createAttack({ id: 'healing', triggerBindingId: 'primary', intervalTicks: 30,
     targetGroups: [{ id: 'primary', targeting: { type: 'HEAL', geometry: { type: 'SHAPES', geometry: range },
       includeSelf: false, ignoreAllyTargetFree: false, ignoreHealFree: false, maxTargets: 1 },
-    operations: [{ type: 'ELEMENT_HEAL', power: 100 }] }], followUps: [] });
-  const healer = initialize({ id: 0, position: [0, 0], definition: definition('CHARACTER', { action: { normalAction: healingAction } }) });
+      operations: [{ type: 'ELEMENT_HEAL', power: 100 }] }],
+  }, supplied);
+  const damageAction = createAttack({ ...action().attack, id: 'damage', targetGroups: [{ ...action().attack.targetGroups[0],
+    operations: [{ type: 'ELEMENT_DAMAGE', elementType: 'NEURAL', power: 100 }] }],
+  }, supplied);
+  const healer = initialize({ id: 0, position: [0, 0], definition: definition('CHARACTER', {
+    action: { definitions: Definitions.empty().add(healingAction).add(damageAction) },
+  }) });
   const { vitality: omitted, ...receiverDefinition } = definition('CHARACTER');
   let receiver = initialize({ id: 1, position: [1, 0], definition: receiverDefinition });
   let work = effectFixtureWork(healer, receiver);
   work = element(work, 'BURN', supplied, 0, 200).state;
-  const compiled = compileAction(healingAction, supplied);
-  const bindings = compiled.bind({ source: healer, battlefield: battlefieldView(work) });
-  assert.deepEqual(bindings.get('primary'), [1]);
-  work = compiled.program[0].run(work, { sourceUnitId: 0, executionId: 0, acceptedAtTick: 0,
-    inputTargetUnitId: 1, tick: 0, bindings, samples: {}, call: {} }).state;
+  assert.deepEqual(chooseTargets(work, unitRef(healer), healingAction.attack).primary.map(ref => ref.id), [1]);
+  work = start(work, unitRef(healer), healingAction).state;
   receiver = getUnit(work, 1);
   assert.equal('vitality' in receiver, false);
   assert.equal(receiver.elemental.ep.BURN, 900);
   assert.equal(work.events.filter(event => event.type === 'ELEMENT_HEAL').length, 1);
-
-  const damageAction = createActionDefinition({ ...action(), targetGroups: [{ ...action().targetGroups[0],
-    operations: [{ type: 'ELEMENT_DAMAGE', elementType: 'NEURAL', power: 100 }] }] });
   const hostileReceiver = { ...receiver, allegiance: { side: 'ENEMY' } };
   work = effectFixtureWork(healer, hostileReceiver);
-  const damaging = compileAction(damageAction, supplied);
-  const damageBindings = damaging.bind({ source: healer, battlefield: battlefieldView(work) });
-  assert.deepEqual(damageBindings.get('primary'), [1]);
-  work = damaging.program[0].run(work, { sourceUnitId: 0, executionId: 1, acceptedAtTick: 0,
-    inputTargetUnitId: 1, tick: 0, bindings: damageBindings, samples: {}, call: {} }).state;
+  assert.deepEqual(chooseTargets(work, unitRef(healer), damageAction.attack).primary.map(ref => ref.id), [1]);
+  work = start(work, unitRef(healer), damageAction).state;
   assert.equal(getUnit(work, 1).elemental.ep.NEURAL, 900);
 });
 
@@ -293,31 +290,26 @@ function route() {
 function spawn(definition, tick) {
   return { definition, route: route(), tick, timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 }, alwaysCheckCurrentPoint: true, notCountInTotal: false };
 }
-function battle(receiver, type, { moving = false, content, targetStates, prepare } = {}) {
+function battle(receiver, type, { moving = false, targetStates, prepare } = {}) {
   const supplied = resources();
   prepare?.(supplied);
-  const caster = definition('CHARACTER', { id: 'caster', allegiance: { side: 'ALLY' }, action: { normalAction: action(10000) } });
+  const casterAttack = createAttack({ ...action(10000).attack,
+    targetGroups: [{ ...action().attack.targetGroups[0], operations: [
+      { type: 'ELEMENT_DAMAGE', elementType: type, power: 1000 },
+      ...action().attack.targetGroups[0].operations,
+    ] }],
+  }, supplied);
+  const caster = definition('CHARACTER', { id: 'caster', allegiance: { side: 'ALLY' },
+    action: { definitions: Definitions.empty().add(casterAttack) } });
   const victim = definition(receiver, { id: 'victim', allegiance: { side: 'ENEMY' },
+    action: { definitions: Definitions.empty().add(action(1, supplied)) },
     ...(moving ? { locomotion: { moveSpeedPerTick: 0.001, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } }, blockable: { weight: 1 } } : {}) });
   const base = createLegacyCombatSpec({ rows: 1, columns: 8, operators: [], enemies: [], maxTicks: 600, seed: 7 });
   const keepOpen = { id: 'future', vitality: { maxHp: 1 }, locomotion: { moveSpeedPerTick: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } } };
   const runtime = new BattleRuntime({ ...base,
     initialUnits: [{ definition: caster, position: [0, 0] }, ...(moving ? [] : [{ definition: victim, position: [1, 0], ...(targetStates === undefined ? {} : { states: targetStates(supplied, victim) }) }])],
     schedule: { type: 'TIMELINE', spawns: [...(moving ? [spawn(victim, 0)] : []), spawn(keepOpen, 599)] },
-  }, { combat: supplied, compileAction: (selected, services) => {
-    const compiled = compileAction(selected, services);
-    if (selected === caster.action.normalAction) {
-      return { ...compiled, program: [{ type: 'EXECUTE', run: (state, context) => {
-        if (content === undefined) {
-          state = resolveElementDamage(state, { type, power: 1000, sourceUnitId: context.sourceUnitId, targetUnitId: 1, tick: context.tick }, supplied, context.call).state;
-        } else {
-          state = content(state, context, supplied);
-        }
-        return { state, value: undefined };
-      } }, ...compiled.program] };
-    }
-    return { ...compiled, program: [{ type: 'RELEASE', markerId: 'normal' }, ...compiled.program] };
-  } });
+  }, { combat: supplied });
   return { runtime, supplied };
 }
 function victim(runtime) { return runtime.snapshot().units.find(entry => entry.id === 1); }
@@ -326,8 +318,6 @@ test('elemental runtime: character neural stun prevents ordinary attacks and rou
   const { runtime } = battle('CHARACTER', 'NEURAL', { moving: true });
   const first = runtime.step();
   assert.equal(first.events.filter(event => event.type === 'DAMAGE' && event.sourceUnitId === 1).length, 0);
-  assert.equal(canAct(victim(runtime)), false);
-  assert.equal(canMove(victim(runtime)), false);
   const frozenPosition = [...victim(runtime).position];
   for (let tick = 1; tick < 300; tick++) {
     const step = runtime.step();
@@ -335,8 +325,6 @@ test('elemental runtime: character neural stun prevents ordinary attacks and rou
     assert.deepEqual(victim(runtime).position, frozenPosition);
   }
   const restored = runtime.step();
-  assert.equal(canAct(victim(runtime)), true);
-  assert.equal(canMove(victim(runtime)), true);
   assert.equal(restored.events.some(event => event.type === 'DAMAGE' && event.sourceUnitId === 1), true);
   assert.notDeepEqual(victim(runtime).position, frozenPosition);
 });

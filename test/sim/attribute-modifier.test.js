@@ -1,3 +1,5 @@
+import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js';
+import { create as createAttack } from '../../dist/content/tactical/actions/attack.js';
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
@@ -20,10 +22,10 @@ import {
 } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import {
-    setAttackSpeedContribution,
-    removeAttackSpeedContribution,
+    setSpeedContribution,
+    removeSpeedContribution,
 } from "../../dist/core/tactical/unit/capability/action/capability.js";
-import { resolveAttackSpeed } from "../../dist/core/tactical/unit/capability/action/timing.js";
+import { resolveSpeed } from "../../dist/core/tactical/unit/capability/action/timing.js";
 import {
     setMoveSpeedContribution,
     removeMoveSpeedContribution,
@@ -225,7 +227,7 @@ test("attribute modifiers: native Mire percentages affect existing ASPD and norm
                 const id = `${ctx.ref.id}`;
                 return transitionUnit(state, ctx.ref.host.id, (unit) => ({
                     ...unit,
-                    action: setAttackSpeedContribution(unit.action, {
+                    action: setSpeedContribution(unit.action, {
                         id,
                         value: [sampled.get("ATTACK_SPEED")],
                     }),
@@ -239,7 +241,7 @@ test("attribute modifiers: native Mire percentages affect existing ASPD and norm
                 const id = `${ctx.ref.id}`;
                 return transitionUnit(state, ctx.ref.host.id, (unit) => ({
                     ...unit,
-                    action: removeAttackSpeedContribution(unit.action, id),
+                    action: removeSpeedContribution(unit.action, id),
                     locomotion: removeMoveSpeedContribution(unit.locomotion, id),
                 }));
             },
@@ -255,11 +257,9 @@ test("attribute modifiers: native Mire percentages affect existing ASPD and norm
                 minimumMoveSpeedPerTick: 0.1 / 30,
                 steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 },
             },
-            action: {
-                attackSpeed: 200,
-                normalAction: {
+            action: { definitions: Definitions.empty().add(createAttack({ id: 'normal', speed: 200,
                     triggerBindingId: "unused",
-                    baseAttackTimeTicks: 30,
+                    intervalTicks: 30,
                     recoveryTicks: 0,
                     targetGroups: [
                         {
@@ -278,18 +278,14 @@ test("attribute modifiers: native Mire percentages affect existing ASPD and norm
                         },
                     ],
                     followUps: [],
-                },
-            },
+                 })) },
         },
     });
     let installed = effectFixtureWork(unit);
     installed = effects.install(installed, unitRef(getUnit(installed, 0)), program).state;
     const receiver = getUnit(installed, 0);
     assert.equal(
-        resolveAttackSpeed(receiver.definition.action, receiver.action, {
-            unit: receiver,
-            battlefield: battlefieldView(installed),
-        }),
+        resolveSpeed(installed, unitRef(receiver), receiver.definition.action.definitions.values()[0]),
         190,
     );
     close(

@@ -1,7 +1,7 @@
 import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { battle, unit } from '../helpers/action-fixture.js';
+import { battle, unit, actionDefinition } from '../helpers/action-fixture.js';
 import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
 import { createDefinition as createProjectileDefinition } from '../../dist/core/tactical/battlefield/projectile/definition.js';
 import { all, ref, launchProjectile, getProjectile, replaceProjectile, resolveProjectileAttackPower } from '../../dist/core/tactical/battlefield/projectile/operations.js';
@@ -17,7 +17,8 @@ import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
 import { createLegacyCombatSpec } from '../../dist/legacy/combat.js';
 import { createDefinition } from '../../dist/core/tactical/unit/archetype/enemy.js';
 import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
-import { compileAction } from '../../dist/core/tactical/unit/capability/action/compile.js';
+import * as actions from '../../dist/core/tactical/unit/action/operations.js';
+import { setState } from '../../dist/core/tactical/unit/action/action.js';
 
 const contactRange = { type: 'SHAPES', geometry: createShapeGeometry({ shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.3 }] }) };
 const launchInput = {
@@ -45,36 +46,31 @@ const instances = state => all(state).map(reference => getProjectile(state, refe
 const findProjectile = (state, id) => instances(state).find(projectile => projectile.id === id);
 const damageEvents = state => state.events.filter(event => event.type === 'DAMAGE');
 
-function runtime(initialUnits, resources, buildProgram, maxTicks = 20) {
+function runtime(initialUnits, resources, maxTicks = 20) {
   return new BattleRuntime({ ...createLegacyCombatSpec({ rows: 1, columns: 8, operators: [], enemies: [], maxTicks, seed: 17 }),
     initialUnits: initialUnits.map(value => ({ definition: value.definition, position: value.position })),
     schedule: { type: 'TIMELINE', spawns: [{ definition: createDefinition({ id: 'future', vitality: { maxHp: 1 }, locomotion: { moveSpeedPerTick: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } } }),
       route: createRouteDefinition({ pathMotionMode: 'WALK', startPosition: [0, 7], endPosition: [0, 1], spawnOffset: [0, 0], spawnRandomRange: [0, 0], checkpoints: [], allowDiagonalMove: false, visitEveryTileCenter: false, visitEveryNodeCenter: false, visitEveryCheckPoint: true }),
       tick: 100, timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 }, alwaysCheckCurrentPoint: true, notCountInTotal: false }] },
-  }, { combat: resources, compileAction: (definition, services) => ({ ...compileAction(definition, services), program: buildProgram(definition, services) }) });
+  }, { combat: resources });
 }
 
-function actionLaunch(definition, services, overrides = {}, onLaunch = () => {}) {
-  return { type: 'EXECUTE', run: (state, context) => {
-    const launched = launchProjectile(state, definition, { ...launchInput, ...overrides }, context.tick);
+function actionLaunch(definition, overrides = {}, onLaunch = () => {}) {
+  return (state) => {
+    const launched = launchProjectile(state, definition, { ...launchInput, ...overrides }, state.tick);
     onLaunch(launched.value.id);
-    return { state: launched.state, value: { samples: { projectileId: launched.value.id } } };
-  } };
+    return launched.state;
+  };
 }
 
 test('projectile runtime: actions launch independent state and do not move on the release tick', () => {
   const resources = new CombatResources();
   const shell = program(resources);
-  const instant = unit(0, { action: true });
-  const deferred = unit(1, { side: 'ALLY', action: true });
   const observed = [];
-  const rt = runtime([instant, deferred, unit(2)], resources, definition => {
-    const release = actionLaunch(shell, resources, { traceTarget: 2, destination: [2, 0], stopDelayTicks: 1 }, id => observed.push(id));
-    return definition === instant.definition.action.normalAction ? [release] : [
-      { type: 'WAIT', allowNewAction: false, resolve: () => ({ type: 'FOR_TICKS', ticks: 1 }) },
-      { type: 'RELEASE', markerId: 'shell' }, release,
-    ];
-  });
+  const release = actionLaunch(shell, { traceTarget: 2, destination: [2, 0], stopDelayTicks: 1 }, id => observed.push(id));
+  const instant = unit(0, { action: actionDefinition(0, { output: release }, resources) });
+  const deferred = unit(1, { side: 'ALLY', action: actionDefinition(0, { windupTicks: 1, markerId: 'shell', output: release }, resources) });
+  const rt = runtime([instant, deferred, unit(2)], resources);
   const first = rt.step();
   assert.deepEqual(observed, [0]);
   assert.deepEqual(rt.snapshot().projectiles.instances.map(value => value.position), [[0, 0]]);
@@ -82,7 +78,7 @@ test('projectile runtime: actions launch independent state and do not move on th
   rt.step();
   assert.deepEqual(observed, [0, 1]);
   assert.deepEqual(rt.snapshot().projectiles.instances.map(value => value.position), [[1, 0], [0, 0]]);
-  assert.equal(rt.snapshot().actionExecution.executions.length, 0);
+  assert.equal(rt.snapshot().actions.instances.length, 0);
 });
 
 test('projectile runtime: missing trace targets preserve the last destination and query current receivers', () => {
@@ -137,7 +133,7 @@ test('projectile runtime: terminal battle freezes outstanding projectiles withou
   const resources = new CombatResources();
   let stops = 0;
   const shell = program(resources, { stop: state => { stops++; return state; } });
-  const rt = runtime([unit(0, { action: true }), unit(1)], resources, () => [actionLaunch(shell, resources, { destination: [100, 0], traceTarget: null })], 1);
+  const rt = runtime([unit(0, { action: actionDefinition(0, { output: actionLaunch(shell, { destination: [100, 0], traceTarget: null }) }, resources) }), unit(1)], resources, 1);
   rt.step();
   const snapshot = rt.snapshot();
   assert.equal(snapshot.projectiles.instances.length, 1);
@@ -355,11 +351,17 @@ test('projectile runtime: command stop callbacks see same-tick launches and a fa
       if (failing && context.projectile.id === 1) throw new Error('second stop failed');
       return state;
     } });
-    const rt = runtime([unit(0, { action: true }), unit(1)], resources, () => [
-      ...Array.from({ length: 3 }, () => actionLaunch(shell, resources, { traceTarget: null, destination: [100, 0] })),
-      { type: 'WAIT', allowNewAction: false, resolve: () => ({ type: 'FOR_TICKS', ticks: 1 }) },
-      actionLaunch(shell, resources, { traceTarget: null, destination: [100, 0] }),
-    ]);
+    const definition = {
+      id: 'launch-sequence', intervalTicks: 10, speed: 100,
+      start: state => ({ state, value: { emitted: false } }),
+      step(state, self) {
+        const count = self.state.emitted ? 1 : 3;
+        for (let index = 0; index < count; index++) state = actionLaunch(shell, { traceTarget: null, destination: [100, 0] })(state);
+        state = actions.replace(state, setState(self, { emitted: true }));
+        return { state, value: self.state.emitted };
+      },
+    };
+    const rt = runtime([unit(0, { action: definition }), unit(1)], resources);
     rt.step();
     return { rt, observed };
   };

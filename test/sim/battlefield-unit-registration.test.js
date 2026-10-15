@@ -1,3 +1,5 @@
+import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js';
+import { create as createAttack } from '../../dist/content/tactical/actions/attack.js';
 import { Effects } from "../../dist/core/tactical/unit/effect/effects.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -43,10 +45,9 @@ const definition = () => ({
     vitality: { maxHp: 100 },
     offense: { attack: 10 },
     defense: { defense: 20, resistance: 10 },
-    action: createActionCapabilityDefinition({
-        normalAction: {
+    action: createActionCapabilityDefinition({ definitions: Definitions.empty().add(createAttack({ id: 'normal', speed: 100,
             triggerBindingId: "primary",
-            baseAttackTimeTicks: 3,
+            intervalTicks: 3,
             recoveryTicks: 0,
             followUps: [],
             targetGroups: [
@@ -73,8 +74,7 @@ const definition = () => ({
                     },
                 },
             ],
-        },
-    }),
+         })) }),
     elemental: {
         receiver: "CHARACTER",
         maxEp: 1000,
@@ -177,7 +177,7 @@ test("battlefield transition preserves configured capability composition on upda
     }
     const updated = {
         ...unit,
-        action: { ...unit.action, readyAtTick: 7, recoveryUntilTick: 8 },
+        action: { ...unit.action, cooldowns: new Map([["normal", { periodTicks: 3, readyAtTick: 7 }]]) },
         spatialPresence: { present: false },
         occupancy: { claims: [] },
     };

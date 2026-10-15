@@ -1,3 +1,5 @@
+import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js';
+import { create as createAttack } from '../../dist/content/tactical/actions/attack.js';
 import { Effects } from "../../dist/core/tactical/unit/effect/effects.js";
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -1266,7 +1268,12 @@ const flatBattlefield = (rows = 1, columns = 5) => createFieldState({
 
 function projectionFacts(state) {
   return { ...state, projectiles: state.projectiles.values(), units: new Map([...state.units].map(([id, unit]) => [
-    id, { ...unit, effects: unit.effects.toJSON() },
+    id, { ...unit, effects: unit.effects.toJSON(), definition: unit.definition.action === undefined
+      ? unit.definition
+      : { ...unit.definition, action: { ...unit.definition.action,
+        definitions: unit.definition.action.definitions.values().map(({ start, step, onEnd, ...definition }) => definition),
+      } },
+    },
   ])) };
 }
 
@@ -1334,15 +1341,15 @@ const projectionUnit = (id, position, definition = {}, states = {}) => initializ
 test('core selective projection retains untouched collections, indexes and live navigation on nonspatial updates', () => {
   const h = battlefieldProjectionHarness();
   const routed = routedEnemyHarness({ speedPerTick: 0.1, checkpoints: [coreMove(4)] });
-  const definition = Object.freeze({ ...routed.enemy.definition, action: createActionCapabilityDefinition({ normalAction: {
-    triggerBindingId: 'normal', baseAttackTimeTicks: 30, recoveryTicks: 0, followUps: [],
+  const definition = Object.freeze({ ...routed.enemy.definition, action: createActionCapabilityDefinition({ definitions: Definitions.empty().add(createAttack({ id: 'normal', speed: 100,
+    triggerBindingId: 'normal', intervalTicks: 30, recoveryTicks: 0, followUps: [],
     targetGroups: [{ id: 'normal', operations: [{ type: 'DAMAGE', power: 10, damageType: 'PHYSICAL' }],
       targeting: { type: 'DAMAGE', scope: { type: 'RANGE', geometry: {
         type: 'SHAPES', geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 1 }] },
       } }, canTargetAir: false, includeBlockingRelations: false, preferBlockingRelations: false,
         ignoreTargetFree: false, ignoreInvisible: false, maxTargets: 1 },
     }],
-  } }) });
+   })) }) });
   h.commit([{ type: 'REGISTER_UNIT', unit: { ...routed.enemy, definition, action: initializeActionState() } }]);
   h.commit((state, index) => {
     const moved = stepRoutedEnemy(state.units.get(1), {
@@ -1357,7 +1364,7 @@ test('core selective projection retains untouched collections, indexes and live 
   const path = unit.locomotion.mainRoute.navigation.execution.activity.path;
   const field = h.branches[0].fieldCache.get(previous.navigationMaps.WALK, path.request);
   h.commit(state => [{ type: 'UPDATE_UNIT', unit: {
-    ...state.units.get(1), vitality: { ...state.units.get(1).vitality, hp: 90 }, action: { ...state.units.get(1).action, readyAtTick: 7, recoveryUntilTick: 4 },
+    ...state.units.get(1), vitality: { ...state.units.get(1).vitality, hp: 90 }, action: { ...state.units.get(1).action, cooldowns: new Map([["normal", { periodTicks: 30, readyAtTick: 7 }]]) },
   } }]);
   assert.notEqual(h.state.units, previous.units);
   assert.equal(h.state.mechanisms, previous.mechanisms);

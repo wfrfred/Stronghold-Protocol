@@ -1,3 +1,5 @@
+import { Definitions } from "../../../core/tactical/unit/action/definitions.js";
+import { create as createAttack, type Attack } from "../actions/attack.js";
 import { resolveDamage } from "../../../core/tactical/unit/capability/vitality/damage/settlement.js";
 import type { Profile } from "../../../data/arknights/enemy.js";
 import { perSecondToPerTick } from "../../../data/arknights/tick.js";
@@ -13,14 +15,10 @@ import {
     resolveProjectileAttackPower,
 } from "../../../core/tactical/battlefield/projectile/operations.js";
 import { hasAllegiance } from "../../../core/tactical/unit/capability/allegiance/capability.js";
-import { compileAction } from "../../../core/tactical/unit/capability/action/compile.js";
-import type { CompiledAction } from "../../../core/tactical/unit/capability/action/compiled.js";
-import type { CompiledActionSegment } from "../../../core/tactical/unit/capability/action/process.js";
 import { resolveAttackPower } from "../../../core/tactical/unit/capability/offense/query.js";
 import { hasVitality } from "../../../core/tactical/unit/capability/vitality/capability.js";
 import { createDamageOperands } from "../../../core/tactical/unit/capability/vitality/damage/contract.js";
 import type { Result as InitializedUnit } from "../../../core/tactical/unit/initialize.js";
-import { withTiming } from "./attack.js";
 import {
     createDefinition as createGroundDefinition,
     type AttackTiming as GroundAttackTiming,
@@ -61,7 +59,7 @@ export function createArrow(resources: CombatResources): ProjectileDefinition<ob
                 {
                     sourceUnitId: context.projectile.source,
                     targetUnitId: context.targetUnitId,
-                    tick: context.tick,
+                    tick: state.tick,
                     damageType: "PHYSICAL",
                     operands: createDamageOperands(
                         resolveProjectileAttackPower(state, context.projectile),
@@ -77,7 +75,7 @@ export function create(
     profile: Profile,
     combat: CombatResources,
     timing: AttackTiming,
-): { readonly definition: Definition; readonly action: CompiledAction } {
+): { readonly definition: Definition; readonly action: Attack } {
     if (profile.id !== "enemy_1003_ncbow" || profile.applyWay !== "RANGED") {
         throw new TypeError("Crossbowman content requires its ranged profile");
     }
@@ -87,8 +85,10 @@ export function create(
     assertPositiveNumber(projectile.contactRadius, "enemy arrow contact radius");
     assertNonnegativeSafeInteger(projectile.stopDelayTicks, "enemy arrow stop delay");
 
-    const definition: Definition = {
-        ...createGroundDefinition(profile, timing, {
+    const ground = createGroundDefinition(
+        profile,
+        timing,
+        {
             type: "RANGE",
             geometry: {
                 type: "SHAPES",
@@ -102,22 +102,20 @@ export function create(
                     ],
                 },
             },
-        }),
-        profile,
-        attackTiming: timing,
-    };
-    const action = compileAction(definition.action.normalAction, combat);
+        },
+        combat,
+    );
     const arrow = projectile.definition;
-    const program: CompiledActionSegment[] = [
+    const action = createAttack(
         {
-            type: "EXECUTE",
-            run: (state, context) => {
-                const source = getUnit(state, context.sourceUnitId);
-                const targetId = context.bindings.get(action.definition.triggerBindingId)?.[0];
-                const target = targetId === undefined ? undefined : getUnit(state, targetId);
+            ...ground.attack.attack,
+            output: (state, self) => {
+                const source = getUnit(state, self.source.id);
+                const targetId = self.state.target.id;
+                const target = getUnit(state, targetId);
 
                 if (source === undefined || target === undefined) {
-                    return { state, value: { continuation: "FINISH" } };
+                    return state;
                 }
 
                 const cachedAtk = resolveAttackPower(source.id, battlefieldView(state));
@@ -150,13 +148,21 @@ export function create(
                         },
                         stopDelayTicks: projectile.stopDelayTicks,
                     },
-                    context.tick,
+                    state.tick,
                 );
 
-                return { state: launched.state, value: undefined };
+                return launched.state;
             },
         },
-    ];
+        combat,
+    );
+    const definition: Definition = {
+        ...ground,
+        profile,
+        attackTiming: timing,
+        attack: action,
+        action: { definitions: Definitions.empty().add(action) },
+    };
 
-    return { definition, action: withTiming(action, timing, program) };
+    return { definition, action };
 }

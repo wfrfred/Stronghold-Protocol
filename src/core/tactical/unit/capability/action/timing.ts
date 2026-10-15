@@ -1,80 +1,77 @@
-import type { Context } from "../../query.js";
 import { assertFiniteNumber } from "../../../../common/assert.js";
+import type { Ref } from "../../../../common/ref.js";
+import { battlefieldView, type State as BattleState } from "../../../battle/state.js";
+import type { Unit } from "../../unit.js";
+import * as units from "../../query.js";
 import * as contribution from "../../contribution/contribution.js";
 import * as modifier from "../../contribution/value.js";
-import type { Definition, ActionDefinition, State } from "./capability.js";
+import type { Definition } from "../../action/definition.js";
+import type { Action } from "./capability.js";
 
-export function resolveAttackSpeed(definition: Definition, state: State, context: Context): number {
+type StoredDefinition = Pick<Definition, "intervalTicks" | "speed">;
+
+export function resolveSpeed(
+    battle: BattleState,
+    source: Ref<Unit & Action>,
+    definition: StoredDefinition,
+): number | undefined {
+    const unit = units.get(battle, source);
+
+    if (unit === undefined) {
+        return undefined;
+    }
+
+    const context = { unit, battlefield: battlefieldView(battle) };
+
     return Math.max(
         20,
         modifier.apply(
-            definition.attackSpeed ?? 100,
-            contribution.resolve(state.attackSpeed, (value) =>
+            definition.speed,
+            contribution.resolve(unit.action.speed, (value) =>
                 contribution.evaluate(value, context),
             ),
         ),
     );
 }
 
-export function resolveBaseAttackTime(
-    definition: ActionDefinition,
-    state: State,
-    context: Context,
-): number {
+export function resolveBaseInterval(
+    battle: BattleState,
+    source: Ref<Unit & Action>,
+    definition: StoredDefinition,
+): number | undefined {
+    const unit = units.get(battle, source);
+
+    if (unit === undefined) {
+        return undefined;
+    }
+
+    const context = { unit, battlefield: battlefieldView(battle) };
+
     return Math.max(
         0,
         modifier.apply(
-            definition.baseAttackTimeTicks,
-            contribution.resolve(state.baseAttackTime, (value) =>
+            definition.intervalTicks,
+            contribution.resolve(unit.action.interval, (value) =>
                 contribution.evaluate(value, context),
             ),
         ),
     );
 }
 
-export function resolveActionIntervalTicks(
-    definition: ActionDefinition,
-    capability: Definition,
-    state: State,
-    context: Context,
-): number {
-    const attackSpeed = Math.min(600, resolveAttackSpeed(capability, state, context));
-    const interval = resolveBaseAttackTime(definition, state, context) * (100 / attackSpeed);
-    assertFiniteNumber(interval, "effective action interval");
+export function resolveInterval(
+    battle: BattleState,
+    source: Ref<Unit & Action>,
+    definition: StoredDefinition,
+): number | undefined {
+    const interval = resolveBaseInterval(battle, source, definition);
+    const speed = resolveSpeed(battle, source, definition);
 
-    return Math.max(1, interval);
-}
-
-export function reconcileActionCooldown(state: State, intervalTicks: number, tick: number): State {
-    if (state.cooldownIntervalTicks === null || state.cooldownIntervalTicks === intervalTicks) {
-        return state;
+    if (interval === undefined || speed === undefined) {
+        return undefined;
     }
 
-    const remaining = Math.max(
-        0,
-        Math.min(1, (state.readyAtTick - tick) / state.cooldownIntervalTicks),
-    );
+    const periodTicks = interval * (100 / Math.min(600, speed));
+    assertFiniteNumber(periodTicks, "effective action interval");
 
-    return {
-        ...state,
-        readyAtTick: tick + remaining * intervalTicks,
-        cooldownIntervalTicks: intervalTicks,
-    };
-}
-
-export function beginActionCooldown(
-    state: State,
-    definition: ActionDefinition,
-    intervalTicks: number,
-    tick: number,
-): State {
-    const overdue = tick - state.readyAtTick;
-    const anchor = overdue >= 0 && overdue < 1 ? state.readyAtTick : tick;
-
-    return {
-        ...state,
-        readyAtTick: anchor + intervalTicks,
-        recoveryUntilTick: tick + definition.recoveryTicks,
-        cooldownIntervalTicks: intervalTicks,
-    };
+    return Math.max(1, periodTicks);
 }

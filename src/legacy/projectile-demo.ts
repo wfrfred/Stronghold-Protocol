@@ -1,3 +1,9 @@
+import type { Input } from "../core/tactical/battle/contract.js";
+import type { FragmentDefinition } from "../core/tactical/battle/schedule/definition.js";
+import type { Definition as UnitDefinition } from "../core/tactical/unit/unit.js";
+import { Definitions } from "../core/tactical/unit/action/definitions.js";
+import { hasActionDefinition } from "../core/tactical/unit/capability/action/capability.js";
+import { create as createAttack, isAttack } from "../content/tactical/actions/attack.js";
 import { resolveDamage } from "../core/tactical/unit/capability/vitality/damage/settlement.js";
 import { ref as unitRef } from "../core/tactical/unit/query.js";
 import { CombatResources } from "../core/tactical/battle/resources.js";
@@ -10,7 +16,6 @@ import {
 import { createDefinition as createProjectileDefinition } from "../core/tactical/battlefield/projectile/definition.js";
 import { createShapeGeometry, type RangeGeometry } from "../core/tactical/geometry/shape.js";
 import * as modifier from "../core/tactical/unit/contribution/value.js";
-import { compileAction } from "../core/tactical/unit/capability/action/compile.js";
 import { hasAllegiance } from "../core/tactical/unit/capability/allegiance/capability.js";
 import { install } from "../core/tactical/unit/effect/operations.js";
 import type { Definition } from "../core/tactical/unit/effect/definition.js";
@@ -25,7 +30,10 @@ import { healFree } from "../content/tactical/effects/protection.js";
 import { hasVitality } from "../core/tactical/unit/capability/vitality/capability.js";
 import { createDamageOperands } from "../core/tactical/unit/capability/vitality/damage/contract.js";
 
-export function createTacticalProjectileResources(cachedOnly = false): BattleResources {
+export function createTacticalProjectileDemo(
+    input: Input,
+    cachedOnly = false,
+): { readonly input: Input; readonly resources: BattleResources } {
     const resources = new CombatResources();
     const marker = { ...healFree, id: "contact-mark" };
     const boost: Definition<object, Offense> = {
@@ -101,73 +109,115 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
         },
     });
 
-    return {
-        combat: resources,
-        compileAction: (definition) => ({
-            ...compileAction(definition, resources),
-            program: [
-                {
-                    type: "WAIT",
-                    allowNewAction: false,
-                    resolve: () => ({ type: "FOR_TICKS", ticks: 6 }),
-                },
-                { type: "RELEASE", markerId: "demo-shell" },
-                {
-                    type: "EXECUTE",
-                    run: (state, context) => {
-                        const source = getUnit(state, context.sourceUnitId);
-                        const targetId = context.bindings.get(definition.triggerBindingId)?.[0];
-                        const target =
-                            targetId === undefined ? undefined : getUnit(state, targetId);
+    function transform<D extends UnitDefinition>(definition: D): D {
+        if (!hasActionDefinition(definition)) {
+            return definition;
+        }
 
-                        if (source === undefined || target === undefined) {
-                            return { state, value: { continuation: "CANCEL" } };
-                        }
+        let definitions = Definitions.empty();
 
-                        const cachedAtk = resolveAttackPower(source.id, battlefieldView(state));
+        for (const id of definition.action.definitions.keys()) {
+            definition.action.definitions.read(id, (current) => {
+                if (!isAttack(current)) {
+                    definitions = definitions.add(current);
 
-                        if (cachedAtk === undefined || !hasOffense(source)) {
-                            throw new Error("projectile demo source requires Offense capability");
-                        }
+                    return;
+                }
 
-                        const launched = launchProjectile(
-                            state,
-                            shell,
-                            {
+                const attack = createAttack(
+                    {
+                        ...current.attack,
+                        windupTicks: 6,
+                        recoveryTicks: 6,
+                        markerId: "demo-shell",
+                        output: (state, self) => {
+                            const source = getUnit(state, self.source.id);
+                            const targetId = self.state.target.id;
+                            const target = getUnit(state, targetId);
+
+                            if (source === undefined || target === undefined) {
+                                return state;
+                            }
+
+                            const cachedAtk = resolveAttackPower(source.id, battlefieldView(state));
+
+                            if (cachedAtk === undefined || !hasOffense(source)) {
+                                throw new Error(
+                                    "projectile demo source requires Offense capability",
+                                );
+                            }
+
+                            const launched = launchProjectile(
+                                state,
+                                shell,
+                                {
+                                    source: source.id,
+                                    traceTarget: target.id,
+                                    position: source.position,
+                                    destination: target.position,
+                                    cachedAtk,
+                                    speedPerTick: 0.12,
+                                    contactRange,
+                                    stopDelayTicks: 6,
+                                },
+                                state.tick,
+                            );
+                            state = install(launched.state, unitRef(source), boost, {
                                 source: source.id,
-                                traceTarget: target.id,
-                                position: source.position,
-                                destination: target.position,
-                                cachedAtk,
-                                speedPerTick: 0.12,
-                                contactRange,
-                                stopDelayTicks: 6,
-                            },
-                            context.tick,
-                        );
-                        state = install(
-                            launched.state,
-                            unitRef(source),
-                            boost,
-                            {
-                                source: source.id,
-                                scopes: [{ type: "TICK", tick: context.tick + 70 }],
-                            },
-                            context.call,
-                        ).state;
+                                scopes: [{ type: "TICK", tick: state.tick + 70 }],
+                            }).state;
 
-                        return {
-                            state,
-                            value: { samples: { cachedAtk, projectileId: launched.value.id } },
-                        };
+                            return state;
+                        },
                     },
-                },
-                {
-                    type: "WAIT",
-                    allowNewAction: false,
-                    resolve: () => ({ type: "FOR_TICKS", ticks: 6 }),
-                },
-            ],
-        }),
+                    resources,
+                );
+                definitions = definitions.add(attack);
+            });
+        }
+
+        return { ...definition, action: { ...definition.action, definitions } };
+    }
+
+    const fragment = (value: FragmentDefinition): FragmentDefinition => ({
+        ...value,
+        actions: value.actions.map((action) => ({
+            ...action,
+            spawn: { ...action.spawn, definition: transform(action.spawn.definition) },
+        })),
+    });
+    const schedule =
+        input.schedule.type === "TIMELINE"
+            ? {
+                  ...input.schedule,
+                  spawns: input.schedule.spawns.map((spawn) => ({
+                      ...spawn,
+                      definition: transform(spawn.definition),
+                  })),
+              }
+            : {
+                  ...input.schedule,
+                  waves: input.schedule.waves.map((wave) => ({
+                      ...wave,
+                      fragments: wave.fragments.map(fragment),
+                  })),
+                  branches: Object.fromEntries(
+                      Object.entries(input.schedule.branches).map(([id, branch]) => [
+                          id,
+                          { ...branch, phases: branch.phases.map(fragment) },
+                      ]),
+                  ),
+              };
+
+    return {
+        input: {
+            ...input,
+            schedule,
+            initialUnits: input.initialUnits.map((unit) => ({
+                ...unit,
+                definition: transform(unit.definition),
+            })),
+        },
+        resources: { combat: resources },
     };
 }

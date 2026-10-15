@@ -287,9 +287,7 @@ function available(battle: BattleState, lifetime: Lifetime): boolean {
             return getUnit(battle, lifetime.unitId)?.lifecycle === "PRESENT";
 
         case "ACTION":
-            return battle.actionExecutions.executions.some(
-                (execution) => execution.id === lifetime.executionId,
-            );
+            return battle.actions.get(lifetime.ref.id)?.status === "RUNNING";
 
         case "SKILL": {
             const unit = getUnit(battle, lifetime.unitId);

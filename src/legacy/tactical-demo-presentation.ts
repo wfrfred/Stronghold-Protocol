@@ -1,6 +1,5 @@
 import type { Event, Snapshot } from "../core/tactical/battle/contract.js";
 import type { DamageType } from "../core/tactical/unit/capability/vitality/damage/contract.js";
-import { hasActionDefinition } from "../core/tactical/unit/capability/action/capability.js";
 import { hasAllegiance } from "../core/tactical/unit/capability/allegiance/capability.js";
 import {
     hasElemental,
@@ -66,6 +65,7 @@ export interface LegacyUnitMetadata {
     readonly avatar: string;
     readonly skillIndex?: number;
     readonly animation?: LegacyUnitAnimation;
+    readonly direction?: Direction;
 }
 
 type LegacyElementType = "neural" | "erosion" | "burn" | "apoptosis";
@@ -184,21 +184,12 @@ function unitInfo(unit: Unit, data: LegacyData, supplied?: LegacyUnitMetadata): 
     const skillId = hasSkill(unit) ? unit.definition.skill.id : undefined;
     const skillIndex =
         supplied?.skillIndex ?? skills.find((skill) => skill.skillId === skillId)?.index;
-    let dir: Direction = "RIGHT";
-
-    if (hasActionDefinition(unit.definition)) {
-        const targeting = unit.definition.action.normalAction.targetGroups[0].targeting;
-
-        if (
-            targeting.type === "DAMAGE" &&
-            targeting.scope.type === "RANGE" &&
-            targeting.scope.geometry.type === "GRID"
-        ) {
-            dir = targeting.scope.geometry.direction;
-        } else if (targeting.type === "HEAL" && targeting.geometry.type === "GRID") {
-            dir = targeting.geometry.direction;
-        }
-    }
+    const direction = "direction" in unit.definition ? unit.definition.direction : undefined;
+    const dir: Direction =
+        supplied?.direction ??
+        (direction === "UP" || direction === "DOWN" || direction === "LEFT" || direction === "RIGHT"
+            ? direction
+            : "RIGHT");
 
     const facing =
         enemy && hasLocomotion(unit)
@@ -344,8 +335,8 @@ export class TacticalDemoPresentation {
         const resumableSources = new Set<Id>();
 
         if (this.#projectileActions) {
-            for (const execution of after.actionExecution.executions) {
-                resumableSources.add(execution.sourceUnitId);
+            for (const execution of after.actions.instances) {
+                resumableSources.add(execution.source.id);
             }
             for (const event of events) {
                 if (event.type === "ACTION_RELEASED" || event.type === "ACTION_CANCELLED") {

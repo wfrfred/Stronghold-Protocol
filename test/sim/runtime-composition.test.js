@@ -23,7 +23,9 @@ import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import { seededPlacement } from "../helpers/aura.js";
 import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
 import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
-import { compileAction } from "../../dist/core/tactical/unit/capability/action/compile.js";
+import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
+import { ref as actionRef, setState } from "../../dist/core/tactical/unit/action/action.js";
+import * as actions from "../../dist/core/tactical/unit/action/operations.js";
 import { install as installEffect, replaceEffect, end as endEffect } from "../../dist/core/tactical/unit/effect/operations.js";
 import * as modifier from "../../dist/core/tactical/unit/contribution/value.js";
 import { initialize as initializeVitalityState } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
@@ -71,35 +73,12 @@ function passive(id, hp = 100) {
     };
 }
 
-function actor(id) {
+function actor(id, program) {
     return createDefinition({
         ...passive(id),
         allegiance: { side: "ALLY" },
         blocker: { capacity: 0, geometry: { radius: 0.1 } },
-        action: {
-            normalAction: {
-                triggerBindingId: "primary",
-                baseAttackTimeTicks: 100,
-                recoveryTicks: 0,
-                targetGroups: [
-                    {
-                        id: "primary",
-                        targeting: {
-                            type: "DAMAGE",
-                            scope: { type: "RANGE", geometry: range },
-                            canTargetAir: true,
-                            includeBlockingRelations: false,
-                            preferBlockingRelations: false,
-                            ignoreTargetFree: false,
-                            ignoreInvisible: false,
-                            maxTargets: 1,
-                        },
-                        operations: [{ type: "DAMAGE", power: 10, damageType: "TRUE" }],
-                    },
-                ],
-                followUps: [],
-            },
-        },
+        action: { definitions: Definitions.empty().add(program) },
     });
 }
 
@@ -360,14 +339,33 @@ function scenario({ failure = null, cancelled = false } = {}) {
                 );
                 assert.equal(getUnit(state, 1).vitality.hp, 83);
                 assert.equal(marked(getUnit(state, 1)), true);
-                assert.equal(getUnit(state, 2).action.readyAtTick, 101);
+                assert.equal(getUnit(state, 2).action.cooldowns.get("launch").readyAtTick, 101);
                 throw new Error("late composition failure");
             }
             return state;
         },
     });
-    const primary = actor("primary-launcher");
-    const sibling = actor("later-launcher");
+    const program = primary => ({
+        id: "launch", intervalTicks: 100, speed: 100,
+        start: state => ({ state, value: { emitted: 0 } }),
+        step(state, self) {
+            if (self.state.emitted === 0) {
+                self = setState(self, { emitted: 1 });
+                state = actions.replace(state, self);
+                state = installation(state, self, scoped);
+                state = launch(state, self, primary ? 1 : 3);
+            }
+            if (primary && self.state.emitted === 1 && state.tick > self.startedAtTick) {
+                self = setState(self, { emitted: 2 });
+                state = actions.replace(state, self);
+                state = installation(state, self, pulse);
+                state = launch(state, self, 3);
+            }
+            return { state, value: state.tick >= self.startedAtTick + (primary ? 3 : 4) };
+        },
+    });
+    const primary = actor("primary-launcher", program(true));
+    const sibling = actor("later-launcher", program(false));
     const scheduled = {
         ...createEnemyDefinition({
             id: "managed-target",
@@ -394,16 +392,15 @@ function scenario({ failure = null, cancelled = false } = {}) {
     const installation = (state, context, program) =>
         installEffect(
             state,
-            unitRef(getUnit(state, context.sourceUnitId)),
+            unitRef(getUnit(state, context.source.id)),
             program,
             {
-                source: context.sourceUnitId,
-                scopes: [{ type: "ACTION", executionId: context.executionId }],
+                source: context.source.id,
+                scopes: [{ type: "ACTION", ref: actionRef(context) }],
             },
-            context.call,
         ).state;
     const launch = (state, context, targetUnitId) => {
-        const source = getUnit(state, context.sourceUnitId);
+        const source = getUnit(state, context.source.id);
         const target = getUnit(state, targetUnitId);
         const launched = launchProjectile(state, shell, {
             source: source.id,
@@ -415,8 +412,8 @@ function scenario({ failure = null, cancelled = false } = {}) {
             contactRange,
             stopDelayTicks: 0,
             expiresAtTick: null,
-        }, context.tick);
-        launches.push({ id: launched.value.id, executionId: context.executionId, targetUnitId });
+        }, state.tick);
+        launches.push({ id: launched.value.id, executionId: context.id, targetUnitId });
         return launched.state;
     };
     const runtime = new BattleRuntime(
@@ -451,7 +448,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                 {
                     definition: sibling,
                     position: [0, 2],
-                    states: { action: { ...initializeActionState(), readyAtTick: 1 } },
+                    states: { action: { ...initializeActionState(), cooldowns: new Map([["launch", { periodTicks: 100, readyAtTick: 1 }]]) } },
                 },
             ],
             initialMechanisms: [],
@@ -471,53 +468,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
         },
         {
             combat: resources,
-            compileAction: (definition, services) => {
-                const compiled = compileAction(definition, services);
-                const first = {
-                    type: "EXECUTE",
-                    run: (state, context) => {
-                        state = installation(state, context, scoped);
-                        state = launch(
-                            state,
-                            context,
-                            definition === primary.action.normalAction ? 1 : 3,
-                        );
-                        return { state, value: { samples: { emitted: 1 } } };
-                    },
-                };
-                return {
-                    ...compiled,
-                    program:
-                        definition === primary.action.normalAction
-                            ? [
-                                  first,
-                                  {
-                                      type: "WAIT",
-                                      resolve: () => ({ type: "FOR_TICKS", ticks: 1 }),
-                                  },
-                                  { type: "RELEASE", markerId: "secondary" },
-                                  {
-                                      type: "EXECUTE",
-                                      run: (state, context) => {
-                                          state = installation(state, context, pulse);
-                                          state = launch(state, context, 3);
-                                          return { state, value: { samples: { emitted: 2 } } };
-                                      },
-                                  },
-                                  {
-                                      type: "WAIT",
-                                      resolve: () => ({ type: "FOR_TICKS", ticks: 2 }),
-                                  },
-                              ]
-                            : [
-                                  first,
-                                  {
-                                      type: "WAIT",
-                                      resolve: () => ({ type: "FOR_TICKS", ticks: 4 }),
-                                  },
-                              ],
-                };
-            },
+
         },
     );
     return {
@@ -543,7 +494,7 @@ test("runtime composition: late exceptions and invalid settlement propagate with
         failed.runtime.step();
         const before = failed.runtime.snapshot();
         const maps = failed.runtime.navigationMaps;
-        assert.equal(before.actionExecution.nextExecutionId, 1);
+        assert.equal(before.actions.nextId, 1);
         assert.equal(before.projectiles.nextProjectileId, 1);
         assert.equal(before.execution.nextUnitId, 3);
         assert.equal(before.spawning.spawnedCount, 0);
@@ -598,8 +549,8 @@ test("runtime composition: a successful battle preserves identities, snapshots a
     assert.equal(after.spawning.cursor, 1);
     assert.equal(after.spawning.spawnedCount, 1);
     assert.deepEqual(after.spawning.managedFinalUnitIds, [3]);
-    assert.equal(after.actionExecution.nextExecutionId, 2);
-    assert.equal(after.actionExecution.executions[0].samples.emitted, 2);
+    assert.equal(after.actions.nextId, 2);
+    assert.equal(after.actions.instances[0].state.emitted, 2);
     assert.equal(after.projectiles.nextProjectileId, 3);
     assert.deepEqual(
         after.projectiles.instances.map((projectile) => projectile.id),
@@ -732,7 +683,7 @@ test("runtime composition: content conditions skip installation while cancelled 
     assert.equal(after.tickIndex, 2);
     assert.equal(after.execution.nextUnitId, 4);
     assert.equal(after.spawning.spawnedCount, 1);
-    assert.equal(after.actionExecution.nextExecutionId, 2);
+    assert.equal(after.actions.nextId, 2);
     assert.equal(after.projectiles.nextProjectileId, 3);
     assert.equal(effect(after, 0, run.aura).data.remaining, 2);
     assert.equal(effect(after, 0, run.aura).data.consumed, 1);
