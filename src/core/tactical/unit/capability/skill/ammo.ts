@@ -17,6 +17,7 @@ export interface Consumed<S extends object, A extends object> {
 
 export interface Replenished<S extends object, A extends object> {
     readonly ref: Ref<Activation<S, A>>;
+    readonly requested: number;
     readonly amount: number;
     readonly previous: Ammo;
     readonly current: Ammo;
@@ -145,6 +146,7 @@ function add(
             if (replenishing) {
                 battle = dispatch(battle, units.ref(self), "ammoReplenished", {
                     ref: activationRef(active),
+                    requested,
                     amount,
                     previous,
                     current,

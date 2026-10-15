@@ -52,8 +52,13 @@ test("an ammunition skill remains active indefinitely when no content consumes o
 });
 
 test("ordinary replenishment tracks a cumulative allowance independently of current ammunition", () => {
+    const reports = [];
     const f = loaded(3);
-    let state = ammo.consume(f.state, f.activation, 3).state;
+    let state = change(f.state, (skill) => ({ ...skill, ammoReplenished: [observe("allowance", (battle, _self, event) => {
+        reports.push(event);
+        return battle;
+    })] }));
+    state = ammo.consume(state, f.activation, 3).state;
     state = ammo.replenish(state, f.activation, 2).state;
     assert.deepEqual(query.get(state, f.activation).sustain, { type: "AMMO", initial: 3, remaining: 2, replenished: 2 });
     state = ammo.consume(state, f.activation, 2).state;
@@ -61,22 +66,63 @@ test("ordinary replenishment tracks a cumulative allowance independently of curr
     assert.equal(limited.value.amount, 1);
     assert.equal(remaining(limited.state), 1);
     assert.equal(query.get(limited.state, f.activation).sustain.replenished, 3);
+    assert.deepEqual(reports[1], {
+        ref: f.activation, requested: 5, amount: 1,
+        previous: { type: "AMMO", initial: 3, remaining: 0, replenished: 2 },
+        current: { type: "AMMO", initial: 3, remaining: 1, replenished: 3 },
+    });
     state = ammo.consume(limited.state, f.activation, 1).state;
     assert.equal(ammo.replenish(state, f.activation, 1).state, state);
+    assert.equal(reports.length, 2, "an exhausted allowance does not report ammunition replenished");
+});
+
+test("replenishment reports requested and actual quantities when current capacity truncates it", () => {
+    const reports = [];
+    const f = loaded(5);
+    let state = change(f.state, (skill) => ({ ...skill, ammoReplenished: [observe("capacity", (battle, _self, event) => {
+        reports.push(event);
+        return battle;
+    })] }));
+    state = ammo.consume(state, f.activation, 2).state;
+    const replenished = ammo.replenish(state, f.activation, 10);
+    assert.equal(replenished.value.amount, 2);
+    assert.deepEqual(reports, [{
+        ref: f.activation, requested: 10, amount: 2,
+        previous: { type: "AMMO", initial: 5, remaining: 3, replenished: 0 },
+        current: { type: "AMMO", initial: 5, remaining: 5, replenished: 2 },
+    }]);
+    assert.equal(remaining(state), 3);
+    const full = ammo.replenish(replenished.state, f.activation, 4);
+    assert.equal(full.value.amount, 0);
+    assert.equal(full.state, replenished.state);
+    assert.equal(reports.length, 1, "full ammunition does not report a replenishment");
 });
 
 test("content ammunition grants respect current capacity without consuming ordinary replenishment allowance", () => {
+    const reports = [];
     const f = loaded(3);
-    let state = ammo.consume(f.state, f.activation, 2).state;
+    let state = change(f.state, (skill) => ({ ...skill, ammoReplenished: [observe("ordinary", (battle, _self, event) => {
+        reports.push(event);
+        return battle;
+    })] }));
+    state = ammo.consume(state, f.activation, 2).state;
     const grant = ammo.grant(state, f.activation, 5);
     assert.equal(grant.value.amount, 2);
     state = grant.state;
     assert.equal(remaining(state), 3);
     assert.equal(query.get(state, f.activation).sustain.replenished, 0);
+    assert.deepEqual(reports, []);
     state = ammo.consume(state, f.activation, 3).state;
     state = ammo.replenish(state, f.activation, 3).state;
     assert.equal(remaining(state), 3);
     assert.equal(query.get(state, f.activation).sustain.replenished, 3);
+    assert.equal(reports.length, 1);
+    assert.equal(reports[0].requested, 3);
+    state = ammo.consume(state, f.activation, 3).state;
+    state = ammo.grant(state, f.activation, 2).state;
+    assert.equal(remaining(state), 2);
+    assert.equal(query.get(state, f.activation).sustain.replenished, 3);
+    assert.equal(reports.length, 1, "a grant after ordinary allowance exhaustion is still a distinct operation");
 });
 
 test("ammunition capacity contributions are sampled for each new activation", () => {
@@ -132,6 +178,39 @@ test("nested replenishment produces its own report and a later depletion check r
     assert.deepEqual(seen, [["consume", 1, 0], ["replenish", 1, 0, 1], ["after", 1, 0, 1]]);
     state = ammo.check(state, f.activation);
     assert.equal(query.get(state, f.activation).status, "ACTIVE");
+});
+
+test("nested replenishment retains each settled request and snapshot for later outer observers", () => {
+    const entered = [];
+    const observed = [];
+    const f = loaded(5);
+    let state = change(f.state, (skill) => ({ ...skill, ammoReplenished: [
+        observe("nested", (battle, _self, event) => {
+            entered.push(event);
+            if (event.requested !== 10) return battle;
+            battle = ammo.consume(battle, event.ref, 3).state;
+            return ammo.replenish(battle, event.ref, 8).state;
+        }),
+        observe("after", (battle, _self, event) => {
+            observed.push({ event, remaining: remaining(battle) });
+            return battle;
+        }),
+    ] }));
+    state = ammo.consume(state, f.activation, 4).state;
+    state = ammo.replenish(state, f.activation, 10).state;
+    assert.deepEqual(entered, [{
+        ref: f.activation, requested: 10, amount: 4,
+        previous: { type: "AMMO", initial: 5, remaining: 1, replenished: 0 },
+        current: { type: "AMMO", initial: 5, remaining: 5, replenished: 4 },
+    }, {
+        ref: f.activation, requested: 8, amount: 1,
+        previous: { type: "AMMO", initial: 5, remaining: 2, replenished: 4 },
+        current: { type: "AMMO", initial: 5, remaining: 3, replenished: 5 },
+    }]);
+    assert.equal(observed[0].event, entered[1]);
+    assert.equal(observed[1].event, entered[0]);
+    assert.deepEqual(observed.map(({ remaining }) => remaining), [3, 3]);
+    assert.equal(remaining(state), 3);
 });
 
 test("old activation references cannot consume or replenish a newly started activation", () => {
