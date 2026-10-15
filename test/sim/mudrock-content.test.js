@@ -1,3 +1,5 @@
+import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
+import { resolveHealing } from "../../dist/core/tactical/unit/capability/vitality/healing/settlement.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -55,9 +57,9 @@ function setup(configuration = {}, targets = [], options = {}) {
 const save = (state, fields) => updateUnit(state, { ...getUnit(state, 0), ...fields });
 const hp = (state, amount) => save(state, { vitality: { ...getUnit(state, 0).vitality, hp: amount } });
 const sp = (state, amount) => save(state, { skill: { ...getUnit(state, 0).skill, sp: amount } });
-const hit = (state, combat, sourceUnitId = 1, power = 100) => combat.settleDamage(state, {
+const hit = (state, combat, sourceUnitId = 1, power = 100) => resolveDamage(state, {
     sourceUnitId, targetUnitId: 0, damageType: "TRUE", operands: createDamageOperands(power), tick: state.tick,
-});
+}, combat);
 const approximate = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} != ${expected}`);
 const clearShield = (state, combat) => hit(state, combat).state;
 
@@ -73,7 +75,7 @@ test("entry installs one persistent shield container and preserves prior snapsho
         refund: { rate: 0.5, limit: "BASE_COST" },
     });
     assert.equal(getUnit(state, 0).deployable.refundAllowed, false);
-    const externalHealing = combat.settleHealing(state, {
+    const externalHealing = resolveHealing(state, {
         sourceUnitId: null, targetUnitId: 0, power: 100, ignoreHealFree: false, tick: state.tick,
     }).value;
     assert.equal(externalHealing.amount, 0);
@@ -95,7 +97,7 @@ test("shield cancels damage, consumes a layer, self-heals and retains normal HIT
     assert.equal(getUnit(result.state, 0).effects.values().find(instance => instance.definition.id === "mudrock/shield").status, "ACTIVE");
     assert.equal(getUnit(before, 0).vitality.hp, 1000);
     assert.deepEqual(readShield(getUnit(before, 0)), { layers: 1, timer: 270 });
-    const external = fixture.combat.settleHealing(result.state, {
+    const external = resolveHealing(result.state, {
         sourceUnitId: 1, targetUnitId: 0, power: 1000, ignoreHealFree: false, tick: 0,
     });
     assert.equal(external.value.amount, 0);

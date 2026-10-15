@@ -1,3 +1,4 @@
+import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { installFixtureEffect } from "../helpers/effects.js";
 import { create as createBattlefieldState, transition as transitionBattlefield } from "../../dist/core/tactical/battlefield/state.js";
@@ -1173,7 +1174,7 @@ test('core battle propagates nested settlement errors without publishing battlef
   const effect = {
     id: 'nested-failure-effect', initialize: () => ({}),
     onInstall: (state, context) => {
-      state = resources.settleDamage(state, { sourceUnitId: 0, targetUnitId: 1, damageType: 'TRUE', operands: createDamageOperands(7), tick: context.tick }, context.call).state;
+      state = resolveDamage(state, { sourceUnitId: 0, targetUnitId: 1, damageType: 'TRUE', operands: createDamageOperands(7), tick: context.tick }, resources, context.call).state;
       assert.equal(getUnit(state, 1).vitality.hp, 93);
       assert.equal(getUnit(state, 2).definition.id, 'nested-created');
       assert.equal(state.execution.nextUnitId, 3);

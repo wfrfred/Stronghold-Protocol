@@ -1,3 +1,5 @@
+import { launchProjectile } from "../../dist/core/tactical/battlefield/projectile/operations.js";
+import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { transitionUnit } from "../../dist/core/tactical/battle/state.js";
 import { setBeforeReleaseHook, removeBeforeReleaseHook } from "../../dist/core/tactical/unit/capability/action/capability.js";
@@ -72,10 +74,10 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, program } = {}) {
     id: "runtime-ammo-shell", initialize: () => ({}),
     acceptsContact: (_context, unit) => unit.allegiance?.side === "ENEMY",
     contact: (state, context) => {
-      return resources.settleDamage(state, {
+      return resolveDamage(state, {
         sourceUnitId: context.projectile.source, targetUnitId: context.targetUnitId,
         tick: context.tick, damageType: "TRUE", operands: createDamageOperands(context.projectile.cachedAtk),
-      }, context.call).state;
+      }, resources, context.call).state;
     },
   });
   const base = createLegacyCombatSpec({ rows: 1, columns: 8, operators: [], enemies: [], maxTicks: 20, seed: 7 });
@@ -194,11 +196,11 @@ test("ammo runtime: the last released projectile survives skill completion and r
       const actor = getUnit(state, context.sourceUnitId);
       const targetUnitId = context.bindings.get("main")[0];
       const target = getUnit(state, targetUnitId);
-      const launched = context.projectiles.launch(state, shell, {
+      const launched = launchProjectile(state, shell, {
         source: actor.id, traceTarget: targetUnitId, position: actor.position, destination: target.position,
         cachedAtk: resolveAttackPower(actor.id, battlefieldView(state)),
         speedPerTick: 1, contactRange: { type: "SHAPES", geometry: hit }, stopDelayTicks: 0,
-      });
+      }, context.tick);
       return { state: launched.state, value: undefined };
     } },
   ] });

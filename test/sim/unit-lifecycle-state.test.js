@@ -17,7 +17,9 @@ import { fixtureBattlefieldState as fixtureBattlefield } from "../helpers/battle
 const unit = (id, extra = {}) => initialize({ id, position: [0, id], definition: { id: `lifecycle-unit-${id}`, vitality: { maxHp: 100 }, ...extra } });
 
 test("departure callbacks observe LEAVING while old snapshots remain PRESENT", () => {
-  let state = createBattleState(fixtureBattlefield([unit(0)]));
+  const skill = createSkillDefinition({ id: "observe-departure", activation: "MANUAL", spRecovery: "NONE", spCost: 0, initialSp: 0, durationTicks: null });
+  const resources = new CombatResources();
+  let state = createBattleState(fixtureBattlefield([unit(0, { skill })]));
   const original = state;
   const trace = [];
   const observe = (state, stage) => {
@@ -28,10 +30,12 @@ test("departure callbacks observe LEAVING while old snapshots remain PRESENT", (
     assert.equal(getUnit(nested, 0), current);
     return nested;
   };
-  const resources = {
-    stopSkillActivation(state) { return { state: observe(state, "stop skill"), value: null }; },
-    notifySkillFinished() { assert.fail("no active skill"); },
-  };
+  resources.skills.register({
+    definition: skill,
+    activate: state => ({ state, value: { type: "ACTIVATED" } }),
+    finish: state => observe(state, "finish skill"),
+  });
+  state = activateSkill(state, { unitId: 0, tick: 0 }, resources).state;
   state = effects.install(state, unitRef(getUnit(state, 0)), {
     id: "departure-observer", initialize: () => ({}),
     onDisable: state => observe(state, "disable effect"),
@@ -39,7 +43,7 @@ test("departure callbacks observe LEAVING while old snapshots remain PRESENT", (
   }).state;
   const before = battlefieldView(state);
   state = removeUnitWithEffects(state, 0, "RETREAT", resources, 0);
-  assert.deepEqual(trace, [["stop skill", "LEAVING"], ["disable effect", "LEAVING"], ["end effect", "LEAVING"]]);
+  assert.deepEqual(trace, [["disable effect", "LEAVING"], ["end effect", "LEAVING"], ["finish skill", "LEAVING"]]);
   assert.equal(before.getUnit(0).lifecycle, "PRESENT");
   assert.equal(before.getUnit(0).effects.values()[0].status, "ACTIVE");
   assert.equal(getUnit(original, 0).lifecycle, "PRESENT");

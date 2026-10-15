@@ -1,3 +1,4 @@
+import type { SkillExecutionResources } from "../../unit/capability/skill/execution.js";
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import type {
     BattlefieldChange,
@@ -18,11 +19,7 @@ import {
 } from "../creation/placement.js";
 import type { BattleExecutionState } from "../execution/state.js";
 import type { Command } from "../contract.js";
-import {
-    enterUnits,
-    removeUnitWithEffects,
-    type UnitLifecycleResources,
-} from "../execution/unit-lifecycle.js";
+import { enterUnits, removeUnitWithEffects } from "../execution/unit-lifecycle.js";
 import { advanceBattlefield, battlefieldView, type State as BattleState } from "../state.js";
 
 export interface PredefinedUnitCreation extends UnitPlacementDefinition {
@@ -227,7 +224,7 @@ export function advancePredefined(
     definitions: readonly PredefinedDefinition[],
     commands: readonly Command[],
     tick: number,
-    resources: UnitLifecycleResources,
+    resources: SkillExecutionResources,
 ): BattleState {
     for (const command of commands) {
         if (command.type !== "APPEAR_PREDEFINED" && command.type !== "REMOVE_PREDEFINED") {

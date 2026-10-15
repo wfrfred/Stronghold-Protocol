@@ -24,15 +24,6 @@ export interface ProjectileLaunchInput<S extends object = object> {
     readonly initialState?: S;
 }
 
-export interface ProjectileOperations {
-    launch<S extends object>(
-        state: BattleState,
-        definition: Definition<S>,
-        input: ProjectileLaunchInput<NoInfer<S>>,
-    ): Result<Ref<Projectile<S>>>;
-    get<P extends StoredProjectile>(state: BattleState, reference: Ref<P>): P | undefined;
-}
-
 export function ref<P extends StoredProjectile>(projectile: P): Ref<P> {
     return { id: projectile.id } as Ref<P>;
 }
@@ -127,12 +118,5 @@ export function launchProjectile<S extends object>(
     return {
         state: { ...state, execution: { ...state.execution, nextProjectileId } },
         value: ref(projectile),
-    };
-}
-
-export function createProjectileOperations(tick: number): ProjectileOperations {
-    return {
-        get: getProjectile,
-        launch: (state, definition, input) => launchProjectile(state, definition, input, tick),
     };
 }

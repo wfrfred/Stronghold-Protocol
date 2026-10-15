@@ -1,3 +1,4 @@
+import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { battle, unit } from '../helpers/action-fixture.js';
@@ -28,10 +29,10 @@ function program(resources, { id = 'shell', cachedOnly = false, acceptsContact, 
   return createProjectileDefinition({
     id, initialize: () => ({ contacts: 0 }),
     acceptsContact: acceptsContact ?? ((_context, target) => target.allegiance?.side === 'ENEMY'),
-    contact: contact ?? ((state, context) => resources.settleDamage(state, {
+    contact: contact ?? ((state, context) => resolveDamage(state, {
       sourceUnitId: context.projectile.source, targetUnitId: context.targetUnitId, tick: context.tick,
       damageType: 'TRUE', operands: createDamageOperands(cachedOnly ? context.projectile.cachedAtk : resolveProjectileAttackPower(state, context.projectile)),
-    }, context.call).state),
+    }, resources, context.call).state),
     ...(stop === undefined ? {} : { stop }),
   });
 }
@@ -55,7 +56,7 @@ function runtime(initialUnits, resources, buildProgram, maxTicks = 20) {
 
 function actionLaunch(definition, services, overrides = {}, onLaunch = () => {}) {
   return { type: 'EXECUTE', run: (state, context) => {
-    const launched = context.projectiles.launch(state, definition, { ...launchInput, ...overrides });
+    const launched = launchProjectile(state, definition, { ...launchInput, ...overrides }, context.tick);
     onLaunch(launched.value.id);
     return { state: launched.state, value: { samples: { projectileId: launched.value.id } } };
   } };
@@ -104,10 +105,10 @@ test('projectile runtime: frozen candidate identities read latest eligibility an
     contact: (state, context) => {
       observed.push(context.targetUnitId);
       if (context.targetUnitId === 1) {
-        state = resources.settleDamage(state, { sourceUnitId: 0, targetUnitId: 2, tick: 1, damageType: 'TRUE', operands: createDamageOperands(1) }, context.call).state;
+        state = resolveDamage(state, { sourceUnitId: 0, targetUnitId: 2, tick: 1, damageType: 'TRUE', operands: createDamageOperands(1) }, resources, context.call).state;
         state = registerUnit(state, { ...unit(3), position: [1, 0] });
       }
-      return resources.settleDamage(state, { sourceUnitId: 0, targetUnitId: context.targetUnitId, tick: 1, damageType: 'TRUE', operands: createDamageOperands(10) }, context.call).state;
+      return resolveDamage(state, { sourceUnitId: 0, targetUnitId: context.targetUnitId, tick: 1, damageType: 'TRUE', operands: createDamageOperands(10) }, resources, context.call).state;
     },
   });
   const initial = launch(battle(unit(0), unit(1), { ...unit(2), position: [1.2, 0] }), resources, shell).state;
@@ -181,7 +182,7 @@ test('projectile runtime: immutable copies replay arrival and stop without mutat
 test('projectile runtime: a stop callback exception exposes no partial result or input mutation', () => {
   const resources = new CombatResources();
   const shell = program(resources, { stop: (state, context) => {
-    state = resources.settleDamage(state, { sourceUnitId: 0, targetUnitId: 1, tick: context.tick, damageType: 'TRUE', operands: createDamageOperands(10) }, context.call).state;
+    state = resolveDamage(state, { sourceUnitId: 0, targetUnitId: 1, tick: context.tick, damageType: 'TRUE', operands: createDamageOperands(10) }, resources, context.call).state;
     throw new Error('stop failed');
   } });
   const initial = launch(battle(unit(0), unit(1)), resources, shell).state;
@@ -350,7 +351,7 @@ test('projectile runtime: command stop callbacks see same-tick launches and a fa
     const observed = [];
     const shell = program(resources, { stop: (state, context) => {
       observed.push([context.projectile.id, getUnit(state, 1).vitality.hp, findProjectile(state, 3)?.progress.type]);
-      state = resources.settleDamage(state, { sourceUnitId: 0, targetUnitId: 1, tick: context.tick, damageType: 'TRUE', operands: createDamageOperands(1) }, context.call).state;
+      state = resolveDamage(state, { sourceUnitId: 0, targetUnitId: 1, tick: context.tick, damageType: 'TRUE', operands: createDamageOperands(1) }, resources, context.call).state;
       if (failing && context.projectile.id === 1) throw new Error('second stop failed');
       return state;
     } });

@@ -1,3 +1,4 @@
+import type { SkillExecutionResources } from "../../unit/capability/skill/execution.js";
 import { evaluateDeployment } from "../../battlefield/deployment/query.js";
 import type { SupportRelation } from "../../battlefield/support/relations.js";
 import { Tile, type TilePosition } from "../../geometry/coordinate.js";
@@ -12,11 +13,7 @@ import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js
 import { instantiateUnitPlacement } from "../creation/placement.js";
 import type { Unit, Id } from "../../unit/unit.js";
 import type { Command } from "../contract.js";
-import {
-    enterUnits,
-    removeUnitWithEffects,
-    type UnitLifecycleResources,
-} from "../execution/unit-lifecycle.js";
+import { enterUnits, removeUnitWithEffects } from "../execution/unit-lifecycle.js";
 import {
     advanceBattlefield,
     appendEvents,
@@ -183,7 +180,7 @@ export function deploy(state: BattleState, request: DeployRequest): Result<Deplo
 export function retreat(
     state: BattleState,
     unitId: Id,
-    resources: UnitLifecycleResources,
+    resources: SkillExecutionResources,
 ): BattleState {
     if (getUnit(state, unitId) === undefined) {
         throw new RangeError(`unknown retreat unit ${unitId}`);
@@ -251,7 +248,7 @@ export function relocate(
 export function resolveDeploymentCommands(
     state: BattleState,
     commands: readonly Command[],
-    resources: UnitLifecycleResources,
+    resources: SkillExecutionResources,
 ): BattleState {
     for (const command of commands) {
         if (command.type === "DEPLOY_UNIT") {

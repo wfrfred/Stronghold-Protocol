@@ -19,6 +19,8 @@ import type { Context, Hook, FormulaStage, AmountStage } from "./hook.js";
 import type { Hook as RegisteredHook } from "../../../hook/hook.js";
 import { hookScope, type Result } from "../hook.js";
 import { gainUnitSkillSp } from "../../../../battle/execution/skill-sp.js";
+import { retireCombatUnit } from "../../../../battle/execution/unit-lifecycle.js";
+import type { SkillExecutionResources } from "../../skill/execution.js";
 import {
     battlefieldView,
     appendEvents,
@@ -27,15 +29,6 @@ import {
     type State as BattleState,
     type Result as Settlement,
 } from "../../../../battle/state.js";
-
-export interface Resources {
-    readonly retireUnit: (
-        battle: BattleState,
-        unitId: Id,
-        tick: number,
-        call?: CallContext,
-    ) => BattleState;
-}
 
 export function calculateDamage(
     power: number,
@@ -64,7 +57,7 @@ export function calculateDamage(
 export function resolveDamage(
     state: BattleState,
     request: DamageRequest,
-    resources: Resources,
+    resources: SkillExecutionResources,
     call: CallContext = emptyCall,
 ): Settlement<DamageReport> {
     const policy = request.receptionPolicy ?? NORMAL_DAMAGE_RECEPTION;
@@ -297,7 +290,7 @@ export function resolveDamage(
         hasVitality(afterReactions) &&
         afterReactions.vitality.hp <= 0
     ) {
-        state = resources.retireUnit(state, request.targetUnitId, request.tick, call);
+        state = retireCombatUnit(state, request.targetUnitId, resources, request.tick, call);
     }
 
     return { state, value: result };

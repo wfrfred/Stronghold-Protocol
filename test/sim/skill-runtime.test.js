@@ -1,3 +1,4 @@
+import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { attackBuff } from "../helpers/effects.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
@@ -148,8 +149,8 @@ test('skill runtime: HIT SP counts zero damage but respects cancellation and ign
       id: 'test-cancel-reception', cancel: () => ({ stage: 'RECEPTION', reason: 'INVINCIBLE' }),
     }) };
     let work = createBattleState(fixtureBattlefield({ unitIds: [0], getUnit: () => receiver, blockerOf: () => undefined, blockedBy: () => [] }));
-    work = resources.settleDamage(work, { sourceUnitId: null, targetUnitId: 0,
-      damageType: 'TRUE', operands: createDamageOperands(0), tick: 0, ignoreForSp }).state;
+    work = resolveDamage(work, { sourceUnitId: null, targetUnitId: 0,
+      damageType: 'TRUE', operands: createDamageOperands(0), tick: 0, ignoreForSp }, resources).state;
     assert.equal(getUnit(work, 0).skill.sp, expected);
     assert.equal(getUnit(work, 0).vitality.hp, 100000);
   }

@@ -1,8 +1,12 @@
+import { resolveDamage } from "../core/tactical/unit/capability/vitality/damage/settlement.js";
 import { ref as unitRef } from "../core/tactical/unit/query.js";
 import { CombatResources } from "../core/tactical/battle/resources.js";
 import type { BattleResources } from "../core/tactical/battle/runtime.js";
 import { battlefieldView, getUnit, updateUnit } from "../core/tactical/battle/state.js";
-import { resolveProjectileAttackPower } from "../core/tactical/battlefield/projectile/operations.js";
+import {
+    launchProjectile,
+    resolveProjectileAttackPower,
+} from "../core/tactical/battlefield/projectile/operations.js";
 import { createDefinition as createProjectileDefinition } from "../core/tactical/battlefield/projectile/definition.js";
 import { createShapeGeometry, type RangeGeometry } from "../core/tactical/geometry/shape.js";
 import * as modifier from "../core/tactical/unit/contribution/value.js";
@@ -78,7 +82,7 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
                 ).state;
             }
 
-            return resources.settleDamage(
+            return resolveDamage(
                 state,
                 {
                     sourceUnitId: context.projectile.source,
@@ -91,6 +95,7 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
                             : resolveProjectileAttackPower(state, context.projectile),
                     ),
                 },
+                resources,
                 context.call,
             ).state;
         },
@@ -118,9 +123,6 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
                         if (source === undefined || target === undefined) {
                             return { state, value: { continuation: "CANCEL" } };
                         }
-                        if (context.projectiles === undefined) {
-                            throw new Error("projectile demo requires a launch operation");
-                        }
 
                         const cachedAtk = resolveAttackPower(source.id, battlefieldView(state));
 
@@ -128,16 +130,21 @@ export function createTacticalProjectileResources(cachedOnly = false): BattleRes
                             throw new Error("projectile demo source requires Offense capability");
                         }
 
-                        const launched = context.projectiles.launch(state, shell, {
-                            source: source.id,
-                            traceTarget: target.id,
-                            position: source.position,
-                            destination: target.position,
-                            cachedAtk,
-                            speedPerTick: 0.12,
-                            contactRange,
-                            stopDelayTicks: 6,
-                        });
+                        const launched = launchProjectile(
+                            state,
+                            shell,
+                            {
+                                source: source.id,
+                                traceTarget: target.id,
+                                position: source.position,
+                                destination: target.position,
+                                cachedAtk,
+                                speedPerTick: 0.12,
+                                contactRange,
+                                stopDelayTicks: 6,
+                            },
+                            context.tick,
+                        );
                         state = install(
                             launched.state,
                             unitRef(source),

@@ -7,11 +7,8 @@ import {
 } from "../../../battle/state.js";
 import { emptyCall, type CallContext } from "../../../battle/execution/call.js";
 import { canAct, hasAction } from "./capability.js";
-import {
-    acceptActionExecution,
-    resumeActionExecution,
-    type ActionExecutionResources,
-} from "./process.js";
+import { acceptActionExecution, resumeActionExecution } from "./process.js";
+import type { SkillExecutionResources } from "../skill/execution.js";
 import { isSpatiallyPresent } from "../presence/capability.js";
 import {
     beginActionCooldown,
@@ -29,12 +26,10 @@ export interface ActionStartRequest {
     readonly mayStart: boolean;
 }
 
-export type ActionStartResources = ActionExecutionResources;
-
 export function startAction(
     state: BattleState,
     request: ActionStartRequest,
-    resources: ActionStartResources,
+    resources: SkillExecutionResources,
     call: CallContext = emptyCall,
 ): BattleState {
     const { sourceUnitId, compiled, tick, mayStart } = request;

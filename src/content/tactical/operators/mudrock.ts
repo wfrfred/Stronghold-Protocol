@@ -1,3 +1,5 @@
+import { resolveHealing } from "../../../core/tactical/unit/capability/vitality/healing/settlement.js";
+import { resolveDamage } from "../../../core/tactical/unit/capability/vitality/damage/settlement.js";
 import { ref as unitRef } from "../../../core/tactical/unit/query.js";
 import type { Profile } from "../../../data/arknights/operator.js";
 import { secondsToTicks } from "../../../data/arknights/tick.js";
@@ -112,14 +114,13 @@ function healSelf(
     unitId: Id,
     ratio: number,
     tick: number,
-    combat: CombatResources,
     call: CallContext,
 ): BattleState {
     const maxHp = resolveMaxHp(unitId, battlefieldView(state));
 
     return maxHp === undefined
         ? state
-        : combat.settleHealing(
+        : resolveHealing(
               state,
               {
                   sourceUnitId: unitId,
@@ -132,10 +133,7 @@ function healSelf(
           ).state;
 }
 
-function shieldEffect(
-    profile: Profile,
-    combat: CombatResources,
-): EffectDefinition<ShieldState, Vitality> {
+function shieldEffect(profile: Profile): EffectDefinition<ShieldState, Vitality> {
     const talent = profile.talents.find((talent) => talent.key === "1");
 
     if (talent === undefined) {
@@ -182,14 +180,7 @@ function shieldEffect(
                                     layers: shield.data.layers - 1,
                                 }),
                             );
-                            state = healSelf(
-                                state,
-                                unit.id,
-                                healRatio,
-                                context.tick,
-                                combat,
-                                context.call,
-                            );
+                            state = healSelf(state, unit.id, healRatio, context.tick, context.call);
                             state = gainUnitSkillSp(state, unit.id, "EXTERNAL", extraSp);
 
                             return {
@@ -340,7 +331,7 @@ export function create(
         throw new RangeError("Mudrock recoveryTicks must be a nonnegative integer");
     }
 
-    const shield = shieldEffect(profile, combat);
+    const shield = shieldEffect(profile);
     const activeAction = attackDefinition(profile, direction, true, recoveryTicks);
     const compiled = compileAction(activeAction, combat);
     const targeting = compileTargeting(activeAction.targetGroups[0].targeting, ["DAMAGE"]);
@@ -382,7 +373,7 @@ export function create(
                     context.call,
                 ).state;
                 const power = resolveAttackPower(source.id, battlefieldView(state))!;
-                state = healSelf(state, source.id, healRatio, context.tick, combat, context.call);
+                state = healSelf(state, source.id, healRatio, context.tick, context.call);
 
                 for (const targetId of context.bindings.get("primary") ?? []) {
                     const battlefield = battlefieldView(state);
@@ -397,7 +388,7 @@ export function create(
                         continue;
                     }
 
-                    state = combat.settleDamage(
+                    state = resolveDamage(
                         state,
                         {
                             sourceUnitId: source.id,
@@ -412,6 +403,7 @@ export function create(
                             },
                             tick: context.tick,
                         },
+                        combat,
                         context.call,
                     ).state;
                     const rng = createRng(state.execution.rngState);

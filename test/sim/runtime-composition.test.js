@@ -1,3 +1,5 @@
+import { resolveHealing } from "../../dist/core/tactical/unit/capability/vitality/healing/settlement.js";
+import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { setData as setEffectData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { initialize as initializeActionState } from "../../dist/core/tactical/unit/capability/action/capability.js";
@@ -34,6 +36,7 @@ import {
 } from "../../dist/core/tactical/battle/state.js";
 import { createDefinition as createProjectileDefinition } from "../../dist/core/tactical/battlefield/projectile/definition.js";
 import {
+    launchProjectile,
     getProjectile,
     ref as projectileRef,
     replaceProjectile,
@@ -209,7 +212,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                         );
                         if (cancelled) {
                             rejected.push({ type: "SKIPPED", reason: "CONTENT_CONDITION" });
-                            state = resources.settleHealing(
+                            state = resolveHealing(
                                 state,
                                 {
                                     sourceUnitId: 0,
@@ -327,7 +330,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                 ...current,
                 state: { contacts: current.state.contacts + 1 },
             });
-            const damaged = resources.settleDamage(
+            const damaged = resolveDamage(
                 state,
                 {
                     sourceUnitId: context.projectile.source,
@@ -336,7 +339,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                     operands: createDamageOperands(context.projectile.cachedAtk),
                     tick: context.tick,
                 },
-                context.call,
+                resources, context.call,
             );
             state = damaged.state;
             reports.push(damaged.value);
@@ -402,7 +405,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
     const launch = (state, context, targetUnitId) => {
         const source = getUnit(state, context.sourceUnitId);
         const target = getUnit(state, targetUnitId);
-        const launched = context.projectiles.launch(state, shell, {
+        const launched = launchProjectile(state, shell, {
             source: source.id,
             traceTarget: targetUnitId,
             position: source.position,
@@ -412,7 +415,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
             contactRange,
             stopDelayTicks: 0,
             expiresAtTick: null,
-        });
+        }, context.tick);
         launches.push({ id: launched.value.id, executionId: context.executionId, targetUnitId });
         return launched.state;
     };

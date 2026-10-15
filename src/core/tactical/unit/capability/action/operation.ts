@@ -1,3 +1,10 @@
+import { resolveDamage } from "../vitality/damage/settlement.js";
+import {
+    resolveElementDamage,
+    resolveElementHeal,
+    type ElementalExecutionResources,
+} from "../elemental/execution.js";
+import { resolveHealing } from "../vitality/healing/settlement.js";
 import { assertNonnegativeNumber } from "../../../../common/assert.js";
 import type { ElementType } from "../elemental/capability.js";
 import type { QueryPurpose } from "../../targeting/query.js";
@@ -6,7 +13,7 @@ import { createDamageOperands, type DamageType } from "../vitality/damage/contra
 import { battlefieldView, type State as BattleState } from "../../../battle/state.js";
 import type { CallContext } from "../../../battle/execution/call.js";
 import type { Id } from "../../unit.js";
-import type { ActionResources } from "./resources.js";
+import type { SkillExecutionResources } from "../skill/execution.js";
 
 export type Definition =
     | {
@@ -54,7 +61,10 @@ export interface Context {
 
 export type Program = (state: BattleState, context: Context) => BattleState;
 
-export function compile(definition: Definition, resources: ActionResources): Program {
+export function compile(
+    definition: Definition,
+    resources: ElementalExecutionResources & SkillExecutionResources,
+): Program {
     switch (definition.type) {
         case "DAMAGE": {
             const readPower =
@@ -71,7 +81,7 @@ export function compile(definition: Definition, resources: ActionResources): Pro
                     return state;
                 }
 
-                return resources.settleDamage(
+                return resolveDamage(
                     state,
                     {
                         sourceUnitId,
@@ -80,6 +90,7 @@ export function compile(definition: Definition, resources: ActionResources): Pro
                         damageType: definition.damageType,
                         operands: createDamageOperands(power),
                     },
+                    resources,
                     call,
                 ).state;
             };
@@ -87,7 +98,7 @@ export function compile(definition: Definition, resources: ActionResources): Pro
 
         case "ELEMENT_DAMAGE":
             return (state, { sourceUnitId, targetUnitId, tick, call }) => {
-                return resources.settleElementDamage(
+                return resolveElementDamage(
                     state,
                     {
                         sourceUnitId,
@@ -96,27 +107,24 @@ export function compile(definition: Definition, resources: ActionResources): Pro
                         type: definition.elementType,
                         power: definition.power,
                     },
+                    resources,
                     call,
                 ).state;
             };
 
         case "ELEMENT_HEAL":
-            return (state, { sourceUnitId, targetUnitId, tick, call }) => {
-                return resources.settleElementHeal(
-                    state,
-                    {
-                        sourceUnitId,
-                        targetUnitId,
-                        tick,
-                        power: definition.power,
-                    },
-                    call,
-                ).state;
+            return (state, { sourceUnitId, targetUnitId, tick }) => {
+                return resolveElementHeal(state, {
+                    sourceUnitId,
+                    targetUnitId,
+                    tick,
+                    power: definition.power,
+                }).state;
             };
 
         case "HEAL":
             return (state, { sourceUnitId, targetUnitId, tick, call }) => {
-                return resources.settleHealing(
+                return resolveHealing(
                     state,
                     {
                         sourceUnitId,

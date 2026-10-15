@@ -11,7 +11,6 @@ import { create as createBattlefield } from '../../dist/core/tactical/battlefiel
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { startAction } from '../../dist/core/tactical/unit/capability/action/execution.js';
 import { resumeActionExecution } from '../../dist/core/tactical/unit/capability/action/process.js';
-import { createProjectileOperations } from '../../dist/core/tactical/battlefield/projectile/operations.js';
 import { advanceProjectiles } from '../../dist/core/tactical/battlefield/projectile/settlement.js';
 
 const fixture = JSON.parse(readFileSync(new URL('../fixtures/arknights/main-mode-units.json', import.meta.url), 'utf8'));
@@ -103,14 +102,12 @@ test('crossbow uses explicit windup and arrow speed, then settles damage on cont
   resources.seal();
   const bow = initialize({ id: 1, position: [2, 3.5], definition });
   const before = registerUnit(registerUnit(emptyBattle(), guard(0, [2, 2], 0)), bow);
-  let state = startAction(before, { sourceUnitId: 1, compiled, tick: 0, mayStart: true }, {
-    projectileOperations: createProjectileOperations(0),
-  });
+  let state = startAction(before, { sourceUnitId: 1, compiled, tick: 0, mayStart: true }, resources);
   assert.equal(state.battlefield.projectiles.size, 0);
   assert.equal(getUnit(state, 0).vitality.hp, 1000);
   state = resumeActionExecution({ ...state, tick: 1 }, {
     executionId: 0, segments: compiled.program, tick: 1,
-  }, { projectileOperations: createProjectileOperations(1) }).state;
+  }, resources).state;
   assert.equal(state.battlefield.projectiles.size, 1);
   assert.equal(getUnit(state, 0).vitality.hp, 1000);
   for (let tick = 2; tick <= 10; tick++) {

@@ -4,13 +4,14 @@ import { compileTargeting } from "../../targeting/compile.js";
 import { resolveMaxHp } from "../vitality/query.js";
 import type { ActionDefinition, TargetBindingId } from "./capability.js";
 import * as operation from "./operation.js";
-import type { ActionResources } from "./resources.js";
+import type { ElementalExecutionResources } from "../elemental/execution.js";
+import type { SkillExecutionResources } from "../skill/execution.js";
 import type { CompiledAction } from "./compiled.js";
 import type { ActionExecutionContext, CompiledActionSegment } from "./process.js";
 
 export function compileAction(
     definition: ActionDefinition,
-    resources: ActionResources,
+    resources: ElementalExecutionResources & SkillExecutionResources,
     compile: (definition: operation.Definition) => operation.Program = (definition) =>
         operation.compile(definition, resources),
 ): CompiledAction {

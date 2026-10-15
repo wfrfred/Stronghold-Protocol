@@ -19,7 +19,7 @@ import type { Unit } from ${source("tactical/unit/unit")};
 import type { Projectile } from ${source("tactical/battlefield/projectile/projectile")};
 import type { Projectiles } from ${source("tactical/battlefield/projectile/projectiles")};
 import { createDefinition } from ${source("tactical/battlefield/projectile/definition")};
-import { all, ref, getProjectile, launchProjectile, replaceProjectile, createProjectileOperations, type ProjectileLaunchInput } from ${source("tactical/battlefield/projectile/operations")};
+import { all, ref, getProjectile, launchProjectile, replaceProjectile, type ProjectileLaunchInput } from ${source("tactical/battlefield/projectile/operations")};
 import { stopProjectile } from ${source("tactical/battlefield/projectile/settlement")};
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
 type Assert<T extends true> = T;
@@ -48,9 +48,6 @@ const candidates = all(battle);
 type Candidates = Assert<Equal<typeof candidates, Ref<Stored>[]>>;
 const fromView = battlefieldView(battle).getProjectile(known);
 type FromView = Assert<Equal<typeof fromView, Projectile<{ charges: number }> | undefined>>;
-const operations = createProjectileOperations(0);
-const fromOperations = operations.get(battle, known);
-type FromOperations = Assert<Equal<typeof fromOperations, Projectile<{ charges: number }> | undefined>>;
 stopProjectile(battle, weaker, 1);
 // @ts-expect-error
 const forged: Ref<Projectile<{ charges: number }>> = { id: 0 };

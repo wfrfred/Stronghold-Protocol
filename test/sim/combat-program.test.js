@@ -1,3 +1,4 @@
+import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -14,6 +15,7 @@ import { createDamageOperands } from '../../dist/core/tactical/unit/capability/v
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
 import { createLegacyCombatSpec } from '../../dist/legacy/combat.js';
 import { setHook } from '../../dist/core/tactical/unit/capability/vitality/damage/hook.js';
+import { setHook as setHealingHook } from '../../dist/core/tactical/unit/capability/vitality/healing/hook.js';
 import { removeUnitWithEffects } from '../../dist/core/tactical/battle/execution/unit-lifecycle.js';
 import * as effects from '../../dist/core/tactical/unit/effect/operations.js';
 import { canAct, setRule } from '../../dist/core/tactical/unit/capability/action/capability.js';
@@ -26,19 +28,29 @@ function runtime(units, resources, compile) {
   return new BattleRuntime({ ...createLegacyCombatSpec({ rows: 1, columns: 8, operators: [], enemies: [], maxTicks: 10, seed: 17 }), initialUnits: units.map(value => ({ definition: value.definition, position: value.position, effects: value.effects, states: { vitality: value.vitality, ...(value.action === undefined ? {} : { action: value.action }) } })) }, { combat: resources, compileAction: compile });
 }
 
-test('combat program: compiled operations use pure settlement ports and observe prior returned state', () => {
+test('combat program: compiled operations call domain settlements and observe prior returned state', () => {
   const definition = actionDefinition();
   const action = { ...definition, targetGroups: definition.targetGroups.map(group => ({ ...group, operations: [{ type: 'DAMAGE', powerSource: 'SOURCE_ATTACK', power: 1, damageType: 'PHYSICAL' }] })), followUps: [{ receiver: { type: 'SOURCE' }, operation: { type: 'HEAL', power: 5, ignoreHealFree: false } }] };
-  const initial = battle(unit(0, { action: true }), unit(1));
   const calls = [];
-  const compiled = compileAction(action, {
-    settleDamage: (state, request) => {
-      calls.push({ request });
-      const target = getUnit(state, 1);
-      return { state: updateUnit(state, { ...target, vitality: { ...target.vitality, hp: target.vitality.hp - request.operands.power } }), value: undefined };
-    },
-    settleHealing: (state, request) => { calls.push({ request, targetHp: getUnit(state, 1).vitality.hp }); return { state, value: undefined }; },
-  });
+  const source = unit(0, { action: true });
+  const target = unit(1);
+  const initial = battle(
+    { ...source, vitality: setHealingHook(source.vitality, {
+      id: 'observe-healing', stage: 'reception', priority: 0, enabled: () => true,
+      invoke(state, context, pending) {
+        calls.push({ request: context.request, targetHp: getUnit(state, 1).vitality.hp });
+        return { state, value: { value: pending } };
+      },
+    }) },
+    { ...target, vitality: setHook(target.vitality, {
+      id: 'observe-damage', stage: 'reception', priority: 0, enabled: () => true,
+      invoke(state, context, pending) {
+        calls.push({ request: context.request });
+        return { state, value: { value: pending } };
+      },
+    }) },
+  );
+  const compiled = compileAction(action, new CombatResources());
   const bindings = compiled.bind({ source: getUnit(initial, 0), battlefield: battlefieldView(initial) });
   let state = initial;
   for (const segment of compiled.program) state = segment.run(state, context(bindings)).state;
@@ -123,7 +135,7 @@ test('combat program: lethal retaliation removes the source before a later unsam
   ] })) }) });
   const target = ({ ...unit(1), vitality: setHook(unit(1).vitality, { id: 'retaliation', stage: 'reaction', priority: 0, enabled: ctx => ctx.request.targetUnitId === ctx.unit.id,
     invoke: (state, ctx, input) => {
-      const damage = resources.settleDamage(state, { sourceUnitId: 1, targetUnitId: 0, tick: ctx.tick, damageType: 'TRUE', operands: createDamageOperands(10) }, ctx.call);
+      const damage = resolveDamage(state, { sourceUnitId: 1, targetUnitId: 0, tick: ctx.tick, damageType: 'TRUE', operands: createDamageOperands(10) }, resources, ctx.call);
       return { state: damage.state, value: undefined };
     },
   }) });

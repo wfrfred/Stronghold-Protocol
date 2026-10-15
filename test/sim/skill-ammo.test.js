@@ -1,3 +1,4 @@
+import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { attackBuff } from "../helpers/effects.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
@@ -112,7 +113,7 @@ test("the final shot is sampled with its buff before consumption and its project
   const shell = createProjectileDefinition({
     id: "ammo-cached-shell", initialize: () => ({}),
     acceptsContact: (_context, target) => target.id === 2,
-    contact: (state, context) => { return f.resources.settleDamage(state, { sourceUnitId: 1, targetUnitId: 2, tick: context.tick, damageType: "TRUE", operands: createDamageOperands(context.projectile.cachedAtk) }, context.call).state; },
+    contact: (state, context) => { return resolveDamage(state, { sourceUnitId: 1, targetUnitId: 2, tick: context.tick, damageType: "TRUE", operands: createDamageOperands(context.projectile.cachedAtk) }, f.resources, context.call).state; },
   });
   const attackPower = resolveAttackPower(1, battlefieldView(f.work));
   assert.equal(attackPower, 200);

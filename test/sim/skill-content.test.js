@@ -1,3 +1,5 @@
+import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
+import { resolveHealing } from "../../dist/core/tactical/unit/capability/vitality/healing/settlement.js";
 import { initialize as initializeVitality } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -148,7 +150,7 @@ function instantDamageFixture(automatic = false, withTarget = true) {
       assert.deepEqual(context.battlefield.blockedBy(1), []);
       assert.equal(context.battlefield.blockerOf(2), undefined);
       for (const damageType of ["PHYSICAL", "ARTS"]) {
-        const settled = resources.settleDamage(state, { sourceUnitId: 1, targetUnitId: 2, damageType, operands: createDamageOperands(330), tick: context.tick }, context.call);
+        const settled = resolveDamage(state, { sourceUnitId: 1, targetUnitId: 2, damageType, operands: createDamageOperands(330), tick: context.tick }, resources, context.call);
         state = settled.state;
         reports.push(settled.value);
       }
@@ -187,7 +189,7 @@ test("instant healing uses the current activation tick and returns the settled h
   const definition = createSkillDefinition({ id: "instant-heal-port", activation: "MANUAL", spRecovery: "TIME", spCost: 0, initialSp: 0, durationTicks: 0 });
   let report;
   resources.skills.register({ definition, activate: (state, context) => {
-    const healed = resources.settleHealing(state, { sourceUnitId: 1, targetUnitId: 1, power: 30, ignoreHealFree: false, tick: context.tick }, context.call);
+    const healed = resolveHealing(state, { sourceUnitId: 1, targetUnitId: 1, power: 30, ignoreHealFree: false, tick: context.tick }, context.call);
     report = healed.value;
     return { state: healed.state, value: { type: "ACTIVATED" } };
   } });

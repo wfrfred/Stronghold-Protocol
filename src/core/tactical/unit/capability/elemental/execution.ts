@@ -60,21 +60,6 @@ export type ElementDamageReport =
     | { readonly outcome: "APPLIED"; readonly amount: number; readonly burst: null }
     | { readonly outcome: "BURST"; readonly amount: number; readonly burst: ElementalBurst };
 
-export type ElementDamageOperation = (
-    state: BattleState,
-    request: ElementDamageRequest & { readonly targetUnitId: Id },
-    call?: CallContext,
-) => Result<ElementDamageReport>;
-
-export type ElementHealOperation = (
-    state: BattleState,
-    request: ElementHealRequest & {
-        readonly targetUnitId: Id;
-        readonly sourceUnitId: Id | null;
-    },
-    call?: CallContext,
-) => Result<ElementHealReport>;
-
 export type ElementHealReport = {
     readonly amount: number;
 } & (

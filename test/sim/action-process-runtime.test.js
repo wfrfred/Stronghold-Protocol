@@ -1,3 +1,4 @@
+import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import * as effects from '../../dist/core/tactical/unit/effect/operations.js';
 import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
@@ -76,7 +77,7 @@ test('action runtime: a throwing successor leaves the published Tick untouched',
 test('action runtime: ending an Action-owned Effect may settle nested host death before propagating an error', () => {
   const resources = new CombatResources();
   const terminal = { id: 'terminal-action-effect', initialize: () => ({}), onEnd: (state, context) => {
-    state = resources.settleDamage(state, { sourceUnitId: 0, targetUnitId: context.unit.id, tick: context.tick, damageType: 'TRUE', operands: createDamageOperands(100) }, context.call).state;
+    state = resolveDamage(state, { sourceUnitId: 0, targetUnitId: context.unit.id, tick: context.tick, damageType: 'TRUE', operands: createDamageOperands(100) }, resources, context.call).state;
     assert.equal(getUnit(state, context.unit.id), undefined);
     throw new Error('terminal finish failed');
   } };

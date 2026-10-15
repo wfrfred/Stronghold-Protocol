@@ -1,3 +1,4 @@
+import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -64,7 +65,7 @@ for (const reason of ["DEATH", "RETREAT", "SCRIPT"]) {
     const f = fixture();
     let state = activateSkill(f.work, { unitId: 0, tick: 0 }, f.resources).state;
     const before = battlefieldView(state);
-    state = reason === "DEATH" ? f.resources.settleDamage(state, sourceDamage()).state : removeUnitWithEffects(state, 0, reason, f.resources, 1);
+    state = reason === "DEATH" ? resolveDamage(state, sourceDamage(), f.resources).state : removeUnitWithEffects(state, 0, reason, f.resources, 1);
     assert.equal(getUnit(state, 0), undefined);
     assert.equal(state.removedUnits.find(value => value.unitId === 0).reason, reason);
     assert.deepEqual(getUnit(state, 1).effects.values(), []);
@@ -98,7 +99,7 @@ test("skill finish can install a hook before nested damage", () => {
   const f = fixture({ finish(state, context, resources) {
     const installed = effects.install(state, unitRef(getUnit(state, 1)), observer, {}, context.call);
     assert.ok(installed.value);
-    return resources.settleDamage(installed.state, { sourceUnitId: 0, targetUnitId: 1, damageType: "TRUE", operands: createDamageOperands(1), tick: context.tick }, context.call).state;
+    return resolveDamage(installed.state, { sourceUnitId: 0, targetUnitId: 1, damageType: "TRUE", operands: createDamageOperands(1), tick: context.tick }, resources, context.call).state;
   } });
   let state = activateSkill(f.work, { unitId: 0, tick: 0 }, f.resources).state;
   state = removeUnitWithEffects(state, 0, "SCRIPT", f.resources, 1);
@@ -110,7 +111,7 @@ test("activation continues after self-death, but late dependencies are rejected 
   const observed = [];
   const f = fixture({ activate(state, context, installOwned, resources) {
     state = installOwned(state, context).state;
-    state = resources.settleDamage(state, sourceDamage(100, context.tick), context.call).state;
+    state = resolveDamage(state, sourceDamage(100, context.tick), resources, context.call).state;
     assert.equal(getUnit(state, 0), undefined);
     observed.push("continued");
     state = installOwned(state, context, false).state;
@@ -134,7 +135,7 @@ test("activation continues after self-death, but late dependencies are rejected 
 test("refusal after self-death preserves independent remote effects", () => {
   const independent = effectDefinition("independent-after-refusal");
   const f = fixture({ activate(state, context, installOwned, resources) {
-    state = resources.settleDamage(state, sourceDamage(100, context.tick), context.call).state;
+    state = resolveDamage(state, sourceDamage(100, context.tick), resources, context.call).state;
     state = installOwned(state, context, false).state;
     const installed = effects.install(state, unitRef(getUnit(state, 1)), independent, { source: context.unitId, scopes: [] }, context.call);
     assert.ok(installed.value);
@@ -171,7 +172,7 @@ test("departure callback errors propagate without publishing their prefix", () =
 
 test("self-death during activation publishes one finish and no late start", () => {
   const f = fixture({ activate(state, context, installOwned, resources) {
-    state = resources.settleDamage(state, sourceDamage(100, context.tick), context.call).state;
+    state = resolveDamage(state, sourceDamage(100, context.tick), resources, context.call).state;
     state = installOwned(state, context, false).state;
     return { state, value: { type: "ACTIVATED" } };
   } });
@@ -186,7 +187,7 @@ test("self-death during activation publishes one finish and no late start", () =
 test("failed departure cleanup does not publish self-death or allocated identities", () => {
   const f = fixture({ activate(state, context, installOwned, resources) {
     state = installOwned(state, context).state;
-    state = resources.settleDamage(state, sourceDamage(100, context.tick), context.call).state;
+    state = resolveDamage(state, sourceDamage(100, context.tick), resources, context.call).state;
     return { state: installOwned(state, context, false).state, value: { type: "ACTIVATED" } };
   }, disable() { throw new Error("late skill cleanup failed"); } });
   const battle = runtime(f);

@@ -15,19 +15,9 @@ import { emptyCall, type CallContext } from "../../../battle/execution/call.js";
 import type { Id } from "../../unit.js";
 import { isSpatiallyPresent } from "../presence/capability.js";
 import { canAct, hasAction, type ActionDefinition, type TargetBindingId } from "./capability.js";
-import type { ProjectileOperations } from "../../../battlefield/projectile/operations.js";
 import { gainUnitSkillSp } from "../../../battle/execution/skill-sp.js";
 import { beforeActionRelease } from "./release.js";
-
-export interface ActionExecutionResources {
-    readonly projectileOperations?: ProjectileOperations;
-    readonly completeAttack?: (
-        state: BattleState,
-        unitId: Id,
-        tick: number,
-        call?: CallContext,
-    ) => BattleState;
-}
+import { consumeSkillAmmo, type SkillExecutionResources } from "../skill/execution.js";
 
 export type ActionExecutionId = number;
 
@@ -78,7 +68,6 @@ export interface ActionExecutionContext {
     readonly tick: number;
     readonly bindings: ReadonlyMap<TargetBindingId, readonly Id[]>;
     readonly samples: ActionExecutionSamples;
-    readonly projectiles?: ProjectileOperations;
 }
 
 export interface ActionExecutionStepResult {
@@ -208,7 +197,6 @@ function contextFor(
     execution: ActionExecution,
     tick: number,
     call: CallContext,
-    projectiles?: ProjectileOperations,
 ): ActionExecutionContext {
     return {
         sourceUnitId: execution.sourceUnitId,
@@ -219,7 +207,6 @@ function contextFor(
         call,
         bindings: new Map(Object.entries(execution.bindings)),
         samples: execution.samples,
-        ...(projectiles === undefined ? {} : { projectiles }),
     };
 }
 
@@ -311,7 +298,7 @@ function waitComplete(wait: ActionExecutionWait, tick: number): boolean {
 export function resumeActionExecution(
     state: BattleState,
     request: ActionExecutionResumeRequest,
-    resources: ActionExecutionResources,
+    resources: SkillExecutionResources,
     call: CallContext = emptyCall,
 ): Result<ActionExecutionResult> {
     const { executionId, segments, tick } = request;
@@ -379,7 +366,7 @@ export function resumeActionExecution(
             case "EXECUTE": {
                 const advanced: Result<ActionExecutionStepResult | undefined> = segment.run(
                     state,
-                    contextFor(execution, tick, call, resources.projectileOperations),
+                    contextFor(execution, tick, call),
                 );
                 state = advanced.state;
                 const result = advanced.value;
@@ -396,8 +383,14 @@ export function resumeActionExecution(
                     .slice(releaseIndex + 1)
                     .some(({ type }) => type === "EXECUTE");
 
-                if (outputStarted && !previousOutput && resources.completeAttack !== undefined) {
-                    state = resources.completeAttack(state, execution.sourceUnitId, tick, call);
+                if (outputStarted && !previousOutput) {
+                    state = consumeSkillAmmo(
+                        state,
+                        execution.sourceUnitId,
+                        tick,
+                        resources,
+                        call,
+                    ).state;
                     current = getActionExecution(state.actionExecutions, executionId);
 
                     if (current === undefined) {
@@ -436,12 +429,7 @@ export function resumeActionExecution(
             case "WAIT": {
                 const wait =
                     execution.wait === null
-                        ? enterWait(
-                              segment.resolve(
-                                  contextFor(execution, tick, call, resources.projectileOperations),
-                              ),
-                              tick,
-                          )
+                        ? enterWait(segment.resolve(contextFor(execution, tick, call)), tick)
                         : advanceWait(execution.wait, tick);
 
                 if (!waitComplete(wait, tick)) {

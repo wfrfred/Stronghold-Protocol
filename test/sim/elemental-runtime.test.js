@@ -189,7 +189,7 @@ test('elemental healing receives every EP bar independently from HP healing and 
   let work = effectFixtureWork(receiver);
   work = element(work, 'BURN', supplied, 0, 200).state;
   work = element(work, 'NEURAL', supplied, 0, 80).state;
-  const hp = supplied.settleHealing(work, { sourceUnitId: null, targetUnitId: 1, power: 100, tick: 0 });
+  const hp = resolveHealing(work, { sourceUnitId: null, targetUnitId: 1, power: 100, tick: 0 });
   work = hp.state;
   assert.equal(hp.value.amount, 0);
   const healed = resolveElementHeal(work, { power: 100, sourceUnitId: null, targetUnitId: 1, tick: 0 });

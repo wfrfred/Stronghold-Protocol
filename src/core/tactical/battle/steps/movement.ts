@@ -1,3 +1,4 @@
+import type { SkillExecutionResources } from "../../unit/capability/skill/execution.js";
 import type { BattlefieldChange } from "../../battlefield/contract.js";
 import { canMove, hasRoutedLocomotion } from "../../unit/capability/locomotion/capability.js";
 import { hasAction } from "../../unit/capability/action/capability.js";
@@ -6,7 +7,7 @@ import * as units from "../../unit/query.js";
 import type { Id } from "../../unit/unit.js";
 import { changeAlternativeRoutes } from "./route-control.js";
 import type { Command, Event } from "../contract.js";
-import { removeUnitWithEffects, type UnitLifecycleResources } from "../execution/unit-lifecycle.js";
+import { removeUnitWithEffects } from "../execution/unit-lifecycle.js";
 import {
     advanceBattlefield,
     appendEvents,
@@ -50,7 +51,7 @@ export function advanceMovement(
         readonly routeMoveMultiplier: number;
         readonly movementAllowed?: (unitId: Id) => boolean;
     },
-    resources: UnitLifecycleResources,
+    resources: SkillExecutionResources,
 ): BattleState {
     const battlefield = battlefieldView(state);
     let execution = state.execution;

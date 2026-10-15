@@ -1,3 +1,4 @@
+import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { fixtureBattlefieldState as fixtureBattlefield } from "../helpers/battlefield.js";
@@ -52,13 +53,13 @@ function fixture() {
         definition: skill,
         activate: state => ({ state, value: { type: "ACTIVATED" } }),
         finish: (state, context) => {
-            return resources.settleDamage(state, {
+            return resolveDamage(state, {
                 sourceUnitId: null,
                 targetUnitId: 2,
                 damageType: "TRUE",
                 operands: createDamageOperands(1),
                 tick: context.tick,
-            }, context.call).state;
+            }, resources, context.call).state;
         },
     });
     const counter = definition(
@@ -331,13 +332,13 @@ test("effect terminal callback can retire its host and settle remote Action and 
         {
             onEnd(state, ctx) {
                 trace.push("effect");
-                state = resources.settleDamage(state, {
+                state = resolveDamage(state, {
                     sourceUnitId: null,
                     targetUnitId: 0,
                     damageType: "TRUE",
                     operands: createDamageOperands(100),
                     tick: 1,
-                }, ctx.call).state;
+                }, resources, ctx.call).state;
                 trace.push("after-damage");
                 assert.equal(getUnit(state, 0), undefined);
                 assert.equal(getActionExecution(state.actionExecutions, 0), undefined);

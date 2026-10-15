@@ -1,3 +1,4 @@
+import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -16,10 +17,10 @@ function fixture({ durationTicks = 0, reject = false, finishDuringActivation = f
     id: "event-order", activation: "MANUAL", spRecovery: "NONE",
     spCost: 1, initialSp: 1, durationTicks,
   });
-  const damage = (state, tick, amount, call) => resources.settleDamage(state, {
+  const damage = (state, tick, amount, call) => resolveDamage(state, {
     sourceUnitId: 1, targetUnitId: 2, tick, damageType: "TRUE",
     operands: createDamageOperands(amount),
-  }, call).state;
+  }, resources, call).state;
   const dependent = {
     id: "event-order-dependent", initialize: () => ({}),
     onEnd: (state, context) => damage(state, context.tick, 2, context.call),

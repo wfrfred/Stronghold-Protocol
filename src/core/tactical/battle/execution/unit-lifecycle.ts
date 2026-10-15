@@ -2,7 +2,11 @@ import { closeLifetime } from "./lifetime.js";
 import type { Id } from "../../unit/unit.js";
 import * as units from "../../unit/query.js";
 import type { BattlefieldRemovalReason } from "../../battlefield/contract.js";
-import type { StoppedSkillActivation } from "../../unit/capability/skill/execution.js";
+import {
+    stopSkillActivation,
+    notifySkillFinished,
+    type SkillExecutionResources,
+} from "../../unit/capability/skill/execution.js";
 import type { ActionExecutionSignal } from "../../unit/capability/action/process.js";
 import {
     appendEvents,
@@ -11,7 +15,6 @@ import {
     removeUnit,
     updateUnit,
     type State as BattleState,
-    type Result,
 } from "../state.js";
 import { emptyCall, type CallContext } from "./call.js";
 import {
@@ -19,20 +22,6 @@ import {
     removeActionExecution,
 } from "../../unit/capability/action/internal/executions.js";
 import { refundUnit, recycleUnitCard } from "../deployment/deployment.js";
-
-export interface UnitLifecycleResources {
-    readonly stopSkillActivation: (
-        state: BattleState,
-        unitId: Id,
-        tick: number,
-    ) => Result<StoppedSkillActivation | null>;
-    readonly notifySkillFinished: (
-        state: BattleState,
-        activation: StoppedSkillActivation,
-        tick: number,
-        call?: CallContext,
-    ) => BattleState;
-}
 
 export function enterUnits(state: BattleState, unitIds: readonly Id[]): BattleState {
     for (const unitId of unitIds) {
@@ -63,7 +52,7 @@ export function advanceUnits(battle: BattleState): BattleState {
 export function retireCombatUnit(
     state: BattleState,
     unitId: Id,
-    resources: UnitLifecycleResources,
+    resources: SkillExecutionResources,
     tick: number,
     call: CallContext = emptyCall,
 ): BattleState {
@@ -74,7 +63,7 @@ export function removeUnitWithEffects(
     state: BattleState,
     unitId: Id,
     reason: BattlefieldRemovalReason,
-    resources: UnitLifecycleResources,
+    resources: SkillExecutionResources,
     tick: number,
     call: CallContext = emptyCall,
 ): BattleState {
@@ -90,7 +79,7 @@ export function removeUnitWithEffects(
     const actions = state.actionExecutions.executions.filter(
         (action) => action.sourceUnitId === unitId,
     );
-    const stopped = resources.stopSkillActivation(state, unitId, tick);
+    const stopped = stopSkillActivation(state, unitId, tick, resources);
     state = stopped.state;
     const signals: ActionExecutionSignal[] = [];
 
@@ -124,7 +113,7 @@ export function removeUnitWithEffects(
     state = closeLifetime(state, lifetime, reason, call);
 
     if (stopped.value !== null) {
-        state = resources.notifySkillFinished(state, stopped.value, tick, call);
+        state = notifySkillFinished(state, stopped.value, tick, call);
     }
 
     state = appendEvents(state, signals);

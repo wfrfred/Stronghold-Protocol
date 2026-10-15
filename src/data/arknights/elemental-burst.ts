@@ -1,3 +1,4 @@
+import { resolveDamage } from "../../core/tactical/unit/capability/vitality/damage/settlement.js";
 import { ref as unitRef } from "../../core/tactical/unit/query.js";
 import { ref as effectRef, setData } from "../../core/tactical/unit/effect/effect.js";
 import type { CombatResources } from "../../core/tactical/battle/resources.js";
@@ -184,7 +185,7 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                 damage: NonNullable<typeof profile.burstDamage>,
                 ignoreForSp: boolean,
             ): BattleState => {
-                return resources.settleDamage(
+                return resolveDamage(
                     state,
                     {
                         sourceUnitId: null,
@@ -194,6 +195,7 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                         ignoreForSp,
                         tick: context.tick,
                     },
+                    resources,
                     context.call,
                 ).state;
             };

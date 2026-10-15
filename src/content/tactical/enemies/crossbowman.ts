@@ -1,3 +1,4 @@
+import { resolveDamage } from "../../../core/tactical/unit/capability/vitality/damage/settlement.js";
 import type { Profile } from "../../../data/arknights/enemy.js";
 import { perSecondToPerTick } from "../../../data/arknights/tick.js";
 import { assertNonnegativeSafeInteger, assertPositiveNumber } from "../../../core/common/assert.js";
@@ -7,7 +8,10 @@ import {
     createDefinition as createProjectileDefinition,
     type Definition as ProjectileDefinition,
 } from "../../../core/tactical/battlefield/projectile/definition.js";
-import { resolveProjectileAttackPower } from "../../../core/tactical/battlefield/projectile/operations.js";
+import {
+    launchProjectile,
+    resolveProjectileAttackPower,
+} from "../../../core/tactical/battlefield/projectile/operations.js";
 import { hasAllegiance } from "../../../core/tactical/unit/capability/allegiance/capability.js";
 import { compileAction } from "../../../core/tactical/unit/capability/action/compile.js";
 import type { CompiledAction } from "../../../core/tactical/unit/capability/action/compiled.js";
@@ -52,7 +56,7 @@ export function createArrow(resources: CombatResources): ProjectileDefinition<ob
             hasVitality(target) &&
             target.vitality.hp > 0,
         contact: (state, context) =>
-            resources.settleDamage(
+            resolveDamage(
                 state,
                 {
                     sourceUnitId: context.projectile.source,
@@ -63,6 +67,7 @@ export function createArrow(resources: CombatResources): ProjectileDefinition<ob
                         resolveProjectileAttackPower(state, context.projectile),
                     ),
                 },
+                resources,
                 context.call,
             ).state,
     });
@@ -117,33 +122,36 @@ export function create(
 
                 const cachedAtk = resolveAttackPower(source.id, battlefieldView(state));
 
-                if (cachedAtk === undefined || context.projectiles === undefined) {
-                    throw new Error(
-                        "enemy arrow action requires Offense and projectile operations",
-                    );
+                if (cachedAtk === undefined) {
+                    throw new Error("enemy arrow action requires Offense");
                 }
 
-                const launched = context.projectiles.launch(state, arrow, {
-                    source: source.id,
-                    traceTarget: target.id,
-                    position: source.position,
-                    destination: target.position,
-                    cachedAtk,
-                    speedPerTick: perSecondToPerTick(projectile.speedPerSecond),
-                    contactRange: {
-                        type: "SHAPES",
-                        geometry: {
-                            shapes: [
-                                {
-                                    type: "CIRCLE",
-                                    offset: [0, 0],
-                                    radius: projectile.contactRadius,
-                                },
-                            ],
+                const launched = launchProjectile(
+                    state,
+                    arrow,
+                    {
+                        source: source.id,
+                        traceTarget: target.id,
+                        position: source.position,
+                        destination: target.position,
+                        cachedAtk,
+                        speedPerTick: perSecondToPerTick(projectile.speedPerSecond),
+                        contactRange: {
+                            type: "SHAPES",
+                            geometry: {
+                                shapes: [
+                                    {
+                                        type: "CIRCLE",
+                                        offset: [0, 0],
+                                        radius: projectile.contactRadius,
+                                    },
+                                ],
+                            },
                         },
+                        stopDelayTicks: projectile.stopDelayTicks,
                     },
-                    stopDelayTicks: projectile.stopDelayTicks,
-                });
+                    context.tick,
+                );
 
                 return { state: launched.state, value: undefined };
             },

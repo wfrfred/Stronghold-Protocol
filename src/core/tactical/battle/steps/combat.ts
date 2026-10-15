@@ -1,5 +1,5 @@
 import { compileAction } from "../../unit/capability/action/compile.js";
-import { startAction, type ActionStartResources } from "../../unit/capability/action/execution.js";
+import { startAction } from "../../unit/capability/action/execution.js";
 import {
     cancelActionExecution,
     resumeActionExecution,
@@ -18,7 +18,6 @@ import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js
 import { hasVitality } from "../../unit/capability/vitality/capability.js";
 import type { Id } from "../../unit/unit.js";
 import type { Command } from "../contract.js";
-import { createProjectileOperations } from "../../battlefield/projectile/operations.js";
 import { hasSkill } from "../../unit/capability/skill/capability.js";
 
 export function createCombat(
@@ -77,10 +76,6 @@ export function createCombat(
         tick: number,
         call: CallContext = emptyCall,
     ): BattleState => {
-        const actionResources: ActionStartResources = {
-            completeAttack: resources.completeAttack,
-            projectileOperations: createProjectileOperations(tick),
-        };
         const ids = [
             ...new Set([
                 ...battlefieldView(state).unitIds,
@@ -100,7 +95,7 @@ export function createCombat(
                 state = resumeActionExecution(
                     state,
                     { executionId: execution.id, segments: segmentsOf(execution), tick },
-                    actionResources,
+                    resources,
                     call,
                 ).state;
             }
@@ -124,7 +119,7 @@ export function createCombat(
                     tick,
                     mayStart: mayStart(state.actionExecutions, id),
                 },
-                actionResources,
+                resources,
                 call,
             );
         }

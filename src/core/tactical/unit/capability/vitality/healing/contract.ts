@@ -1,6 +1,4 @@
-import type { CallContext } from "../../../../battle/execution/call.js";
 import type { Id } from "../../../unit.js";
-import type { State as BattleState, Result } from "../../../../battle/state.js";
 
 export interface HealingRequest {
     readonly tick: number;
@@ -25,9 +23,3 @@ export interface HealingReport {
     readonly amount: number;
     readonly cancellation: HealingCancellation | null;
 }
-
-export type HealingOperation = (
-    state: BattleState,
-    request: HealingRequest,
-    call?: CallContext,
-) => Result<HealingReport>;

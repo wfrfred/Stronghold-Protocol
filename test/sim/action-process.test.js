@@ -1,3 +1,4 @@
+import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -11,6 +12,8 @@ import { setAttackContribution, removeAttackContribution } from '../../dist/core
 import { resolveAttackPower } from '../../dist/core/tactical/unit/capability/offense/query.js';
 import { create as modifier } from '../../dist/core/tactical/unit/contribution/value.js';
 import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
+import { createDefinition as createSkillDefinition } from '../../dist/core/tactical/unit/capability/skill/capability.js';
+import { activateSkill } from '../../dist/core/tactical/unit/capability/skill/execution.js';
 
 function accepted(state = battle(unit(0), unit(1)), options = {}) {
   const result = acceptActionExecution(state.actionExecutions, {
@@ -79,7 +82,7 @@ test('action process: cancellation ends owned effects while retaining an already
   const initial = accepted();
   const segments = [execute((state, context) => {
     state = installOwned(state, context);
-    state = resources.settleDamage(state, { sourceUnitId: 0, targetUnitId: 1, tick: context.tick, damageType: 'TRUE', operands: createDamageOperands(20) }, context.call).state;
+    state = resolveDamage(state, { sourceUnitId: 0, targetUnitId: 1, tick: context.tick, damageType: 'TRUE', operands: createDamageOperands(20) }, resources, context.call).state;
     return pass(state, undefined);
   }), wait(2), { type: 'RELEASE', markerId: 'never' }];
   const waiting = resume(initial, segments, 0, resources);
@@ -103,7 +106,7 @@ test('action process: a following query and segment observe the preceding return
     execute((state, context) => pass(installOwned(state, context), { bindings: new Map([['primary', [1]]]) })),
     execute((state, context) => {
       const power = resolveAttackPower(1, battlefieldView(state));
-      state = resources.settleDamage(state, { sourceUnitId: 0, targetUnitId: context.bindings.get('primary')[0], tick: context.tick, damageType: 'TRUE', operands: createDamageOperands(power) }, context.call).state;
+      state = resolveDamage(state, { sourceUnitId: 0, targetUnitId: context.bindings.get('primary')[0], tick: context.tick, damageType: 'TRUE', operands: createDamageOperands(power) }, resources, context.call).state;
       return pass(state, undefined);
     }),
     execute(state => { observed = getUnit(state, 1).vitality.hp; return pass(state, undefined); }),
@@ -205,11 +208,22 @@ test('action process: nested lifecycle removal cancels the execution before a su
 
 test('action process: attack completion cannot revive an execution cancelled by departure', () => {
   const resources = new CombatResources();
+  const skill = createSkillDefinition({
+    id: 'depart-on-last-ammo', activation: 'MANUAL', spRecovery: 'NONE',
+    spCost: 0, initialSp: 0, durationTicks: null, ammo: 1,
+  });
+  resources.skills.register({
+    definition: skill,
+    activate: state => ({ state, value: { type: 'ACTIVATED' } }),
+    finish: (state, context) => removeUnitWithEffects(state, context.unitId, 'DEATH', resources, context.tick, context.call),
+  });
+  const active = activateSkill(battle(unit(0, { skill }), unit(1)), { unitId: 0, tick: 0 }, resources).state;
   let reached = false;
-  const result = resume(accepted(), [
+  const result = resume(accepted(active), [
     execute(state => pass(state, undefined)), execute(state => { reached = true; return pass(state, undefined); }),
-  ], 2, { completeAttack: (state, id, tick, call) => removeUnitWithEffects(state, id, 'DEATH', resources, tick, call) });
+  ], 2, resources);
   assert.equal(reached, false);
   assert.deepEqual(result.state.actionExecutions.executions, []);
   assert.equal(result.state.events.filter(event => event.type === 'ACTION_CANCELLED').length, 1);
+  assert.equal(result.state.events.filter(event => event.type === 'SKILL_FINISHED').length, 1);
 });
