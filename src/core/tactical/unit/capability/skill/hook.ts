@@ -32,18 +32,16 @@ export function dispatch<S extends object, A extends object, K extends Key>(
     event: Events<S, A>[K],
 ): BattleState {
     const unit = units.get(battle, host);
-    const candidates = unit?.skill[key] as readonly Hook<S, A, Events<S, A>[K]>[] | undefined;
+    const entries = unit?.skill[key] as readonly Hook<S, A, Events<S, A>[K]>[] | undefined;
+    const candidates = entries?.map(({ id }) => id) ?? [];
 
-    for (const candidate of candidates ?? []) {
+    for (const id of candidates) {
         const current = units.get(battle, host);
         const registered = current?.skill[key] as
             readonly Hook<S, A, Events<S, A>[K]>[] | undefined;
+        const candidate = registered?.find((entry) => entry.id === id);
 
-        if (
-            current !== undefined &&
-            registered?.includes(candidate) &&
-            candidate.enabled(battle, current, event)
-        ) {
+        if (current !== undefined && candidate?.enabled(battle, current, event)) {
             battle = candidate.invoke(battle, current, event);
         }
     }

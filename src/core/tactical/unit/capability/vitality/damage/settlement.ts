@@ -308,17 +308,20 @@ function notifyReceived(battle: BattleState, event: Received): BattleState {
         return battle;
     }
 
-    const candidates = unit.vitality.damageHooks.filter((hook) => hook.stage === "received");
+    const candidates = unit.vitality.damageHooks
+        .filter((hook) => hook.stage === "received")
+        .map(({ id }) => id);
 
-    for (const hook of candidates) {
+    for (const id of candidates) {
         const current = getUnit(battle, unit.id);
 
-        if (
-            current !== undefined &&
-            hasVitality(current) &&
-            current.vitality.damageHooks.includes(hook) &&
-            hook.enabled(battle, current, event)
-        ) {
+        if (current === undefined || !hasVitality(current)) {
+            continue;
+        }
+
+        const hook = current.vitality.damageHooks.find((entry) => entry.id === id);
+
+        if (hook?.stage === "received" && hook.enabled(battle, current, event)) {
             battle = hook.invoke(battle, current, event);
         }
     }
@@ -354,18 +357,22 @@ function callHooks<V>(
         .flatMap((entry) => {
             const hook = select(entry);
 
-            return hook === undefined ? [] : [{ entry, hook }];
+            return hook === undefined ? [] : [{ id: entry.id, priority: hook.priority }];
         })
-        .sort((left, right) => right.hook.priority - left.hook.priority);
+        .sort((left, right) => right.priority - left.priority)
+        .map(({ id }) => id);
 
-    for (const { entry, hook } of candidates) {
+    for (const id of candidates) {
         const current = getUnit(battle, unit.id);
 
-        if (
-            current === undefined ||
-            !hasVitality(current) ||
-            !current.vitality.damageHooks.includes(entry)
-        ) {
+        if (current === undefined || !hasVitality(current)) {
+            continue;
+        }
+
+        const entry = current.vitality.damageHooks.find((candidate) => candidate.id === id);
+        const hook = entry === undefined ? undefined : select(entry);
+
+        if (hook === undefined) {
             continue;
         }
 

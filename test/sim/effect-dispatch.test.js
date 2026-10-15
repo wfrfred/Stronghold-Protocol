@@ -118,7 +118,7 @@ test("finishing a pending Effect removes its Hook before that candidate can exec
     assert.equal(getUnit(battle, 2).vitality.damageHooks.length, 1);
 });
 
-test("removed registrations stay absent even when replaced under the same id during nested damage", () => {
+test("selected Hook IDs use current replacements while nested damage retains the existing call candidate range", () => {
     const calls = [];
     const resources = new CombatResources();
     let nested = false;
@@ -158,9 +158,9 @@ test("removed registrations stay absent even when replaced under the same id dur
     const initialSettlement = resolveDamage(battle, request(100));
     battle = initialSettlement.state;
     const initial = initialSettlement.value;
-    assert.deepEqual(calls, ["first", "nested-first"]);
-    assert.equal(initial.hpLoss, 100);
-    assert.equal(getUnit(battle, 2).vitality.hp, 890);
+    assert.deepEqual(calls, ["first", "nested-first", "replacement", "replacement"]);
+    assert.equal(initial.hpLoss, 200);
+    assert.equal(getUnit(battle, 2).vitality.hp, 780);
     assert.deepEqual(source.vitality.damageHooks, [first, old]);
     calls.length = 0;
     const later = resolveDamage(battle, request(100));

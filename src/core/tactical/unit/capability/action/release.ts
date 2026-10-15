@@ -34,18 +34,18 @@ export function beforeRelease(battle: BattleState, ref: Ref<StoredAction>): Resu
         return { state: battle, value: { type: "CONTINUE" } };
     }
 
-    const candidates = source.action.beforeRelease;
+    const candidates = source.action.beforeRelease.map(({ id }) => id);
 
-    for (const candidate of candidates) {
+    for (const id of candidates) {
         const currentAction = actions.get(battle, ref);
         const current =
             currentAction === undefined ? undefined : units.get(battle, currentAction.source);
+        const candidate = current?.action.beforeRelease.find((entry) => entry.id === id);
 
         if (
             currentAction?.status !== "RUNNING" ||
             current?.lifecycle !== "PRESENT" ||
-            !current.action.beforeRelease.includes(candidate) ||
-            !candidate.enabled(battle, current, ref)
+            !candidate?.enabled(battle, current, ref)
         ) {
             continue;
         }

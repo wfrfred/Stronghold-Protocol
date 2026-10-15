@@ -161,18 +161,22 @@ function callHooks<V>(
         .flatMap((entry) => {
             const hook = select(entry);
 
-            return hook === undefined ? [] : [{ entry, hook }];
+            return hook === undefined ? [] : [{ id: entry.id, priority: hook.priority }];
         })
-        .sort((left, right) => right.hook.priority - left.hook.priority);
+        .sort((left, right) => right.priority - left.priority)
+        .map(({ id }) => id);
 
-    for (const { entry, hook } of candidates) {
+    for (const id of candidates) {
         const current = getUnit(battle, unit.id);
 
-        if (
-            current === undefined ||
-            !hasVitality(current) ||
-            !current.vitality.healingHooks.includes(entry)
-        ) {
+        if (current === undefined || !hasVitality(current)) {
+            continue;
+        }
+
+        const entry = current.vitality.healingHooks.find((candidate) => candidate.id === id);
+        const hook = entry === undefined ? undefined : select(entry);
+
+        if (hook === undefined) {
             continue;
         }
 

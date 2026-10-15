@@ -206,3 +206,41 @@ test("action release: a thrown hook preserves the caller's private state", () =>
     assert.throws(() => beforeRelease(installed.state, started.value.ref), /release failed/);
     assert.equal(effects.get(installed.state, installed.value).data.attempts, 0);
 });
+
+test("action release: selected IDs invoke their current replacement while new IDs wait", () => {
+    const started = initial();
+    const seen = [];
+    let registered = false;
+    const later = {
+        id: "later", enabled: () => true,
+        invoke(state) { seen.push("later"); return { state, value: CONTINUE }; },
+    };
+    const replacement = {
+        id: "version", enabled: () => true,
+        invoke(state) { seen.push("replacement"); return { state, value: CONTINUE }; },
+    };
+    const first = {
+        id: "first", enabled: () => true,
+        invoke(state) {
+            seen.push("first");
+            if (!registered) {
+                registered = true;
+                state = transitionUnit(state, 0, (current) => ({ ...current,
+                    action: setBeforeReleaseHook(setBeforeReleaseHook(current.action, replacement), later),
+                }));
+            }
+            return { state, value: CONTINUE };
+        },
+    };
+    const state = transitionUnit(started.state, 0, (current) => ({ ...current,
+        action: setBeforeReleaseHook(setBeforeReleaseHook(current.action, first), {
+            id: "version", enabled: () => true,
+            invoke: () => assert.fail("the selected registration has a new version"),
+        }),
+    }));
+    const dispatched = beforeRelease(state, started.value.ref);
+    assert.deepEqual(dispatched.value, CONTINUE);
+    assert.deepEqual(seen, ["first", "replacement"]);
+    beforeRelease(dispatched.state, started.value.ref);
+    assert.deepEqual(seen, ["first", "replacement", "first", "replacement", "later"]);
+});
