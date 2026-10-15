@@ -202,7 +202,7 @@ test("action: source departure completes nested cleanup while entered content co
                     return state;
                 },
             });
-            state = removeUnitWithEffects(state, self.source.id, "SCRIPT", resources, state.tick);
+            state = removeUnitWithEffects(state, self.source.id, "SCRIPT");
             assert.equal(actions.get(state, actionRef(self)), undefined);
             trace.push("returned");
             state = updateUnit(state, { ...getUnit(state, 1), position: [4, 0] });

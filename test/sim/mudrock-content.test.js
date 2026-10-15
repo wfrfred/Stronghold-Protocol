@@ -1,3 +1,4 @@
+import { ref as activationRef } from "../../dist/core/tactical/unit/capability/skill/activation.js";
 import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import { resolveHealing } from "../../dist/core/tactical/unit/capability/vitality/healing/settlement.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
@@ -13,7 +14,7 @@ import {
 } from "../../dist/core/tactical/battle/state.js";
 import { enterUnits } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
 import { advance, end, install } from "../../dist/core/tactical/unit/effect/operations.js";
-import { activateSkill, advanceSkill, finishSkill } from "../../dist/core/tactical/unit/capability/skill/execution.js";
+import { activate as activateSkill, advance as advanceSkill, finish as finishSkill } from "../../dist/core/tactical/unit/capability/skill/operations.js";
 import { start, cancel } from "../../dist/core/tactical/unit/action/operations.js";
 import { advance as advanceAction } from "../../dist/core/tactical/unit/action/advance.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
@@ -56,10 +57,10 @@ function setup(configuration = {}, targets = [], options = {}) {
 }
 const save = (state, fields) => updateUnit(state, { ...getUnit(state, 0), ...fields });
 const hp = (state, amount) => save(state, { vitality: { ...getUnit(state, 0).vitality, hp: amount } });
-const sp = (state, amount) => save(state, { skill: { ...getUnit(state, 0).skill, sp: amount } });
+const sp = (state, amount) => save(state, { skill: { ...getUnit(state, 0).skill, sp: { ...getUnit(state, 0).skill.sp, value: amount } } });
 const hit = (state, combat, sourceUnitId = 1, power = 100) => resolveDamage(state, {
     sourceUnitId, targetUnitId: 0, damageType: "TRUE", operands: createDamageOperands(power), tick: state.tick,
-}, combat);
+});
 const approximate = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} != ${expected}`);
 const clearShield = (state, combat) => hit(state, combat).state;
 
@@ -92,7 +93,7 @@ test("shield cancels damage, consumes a layer, self-heals and retains normal HIT
     assert.deepEqual(result.value.cancellation, { stage: "RECEPTION", reason: "MUDROCK_SHIELD" });
     assert.deepEqual(result.value.resourceConsumptions, [{ ownerUnitId: 0, resourceId: "mudrock/shield", resource: "SHIELD_LAYER", amount: 1 }]);
     approximate(getUnit(result.state, 0).vitality.hp, 1000 + fixture.prepared.attributes.maxHp * 0.2);
-    assert.equal(getUnit(result.state, 0).skill.sp, 1);
+    assert.equal(getUnit(result.state, 0).skill.sp.value, 1);
     assert.deepEqual(readShield(getUnit(result.state, 0)), { layers: 0, timer: 270 });
     assert.equal(getUnit(result.state, 0).effects.values().find(instance => instance.definition.id === "mudrock/shield").status, "ACTIVE");
     assert.equal(getUnit(before, 0).vitality.hp, 1000);
@@ -144,7 +145,7 @@ test("module X healing and bonus SP use the selected talent and dynamic max HP",
     state = hp(state, 1000);
     const result = hit(state, fixture.combat);
     approximate(getUnit(result.state, 0).vitality.hp, 1000 + (fixture.prepared.attributes.maxHp + 1000) * 0.25);
-    assert.equal(getUnit(result.state, 0).skill.sp, 3);
+    assert.equal(getUnit(result.state, 0).skill.sp.value, 3);
     assert.deepEqual(battlefieldView(result.state).blockingRelations, [{ blockerUnitId: 0, blockedUnitId: 1 }]);
     assert.equal(hit(result.state, fixture.combat).value.hpLoss, 85);
 });
@@ -171,9 +172,9 @@ test("S2 does not consume SP without an eligible ground target in its range", ()
         }) }]) {
         const fixture = setup({}, [receiver]);
         const ready = sp(fixture.state, 5);
-        const result = activateSkill(ready, { unitId: 0, tick: 0, trigger: "AUTO" }, fixture.combat);
+        const result = activateSkill({ ...ready, tick: 0 }, unitRef(getUnit(ready, 0)), "AUTO" );
         assert.deepEqual(result.value, { type: "REJECTED", reason: "CONDITION" });
-        assert.equal(getUnit(result.state, 0).skill.sp, 5);
+        assert.equal(getUnit(result.state, 0).skill.sp.value, 5);
         assert.equal(getUnit(result.state, 0).skill.active, null);
         assert.equal(result.state.events.some(event => event.type === "SKILL_ACTIVATED"), false);
     }
@@ -190,11 +191,11 @@ test("S2 immediately overrides normal attack and recovery cooldown, heals once, 
         ]) },
         offense: setAttackContribution(getUnit(ready, 0).offense, { id: "test/attack", value: [modifier({ addition: 100 })] }),
     });
-    const active = advanceSkill(ready, 0, 0, fixture.combat);
-    assert.equal(getUnit(active, 0).skill.active.endsAtTick, null);
+    const active = advanceSkill({ ...ready, tick: 0 }, unitRef(getUnit(ready, 0)));
+    assert.equal(getUnit(active, 0).skill.active.sustain.type, "INFINITE");
     assert.equal(getUnit(active, 0).action.cooldowns.get("normal-attack").readyAtTick, 0);
     assert.equal(getUnit(active, 0).action.cooldowns.get(fixture.action.id).readyAtTick, 0);
-    assert.equal(fixture.definition.skill.activeAction, fixture.action.id);
+    assert.deepEqual(fixture.definition.action.select(active, getUnit(active, 0)).value, [fixture.action.id]);
     const executed = start(active, unitRef(getUnit(active, 0)), fixture.action).state;
     const amount = (fixture.prepared.attributes.attack + 100) * 2.1;
     approximate(getUnit(executed, 1).vitality.hp, 10000 - amount);
@@ -203,12 +204,12 @@ test("S2 immediately overrides normal attack and recovery cooldown, heals once, 
     assert.equal(getUnit(executed, 4).vitality.hp, 10000);
     approximate(getUnit(executed, 0).vitality.hp, 1000 + fixture.prepared.attributes.maxHp * 0.05);
     assert.equal(getUnit(executed, 0).skill.active, null);
-    assert.equal(getUnit(executed, 0).skill.sp, 0);
+    assert.equal(getUnit(executed, 0).skill.sp.value, 0);
     assert.equal(executed.events.filter(event => event.type === "HEAL").length, 1);
     assert.equal(executed.events.filter(event => event.type === "DAMAGE").length, 2);
     assert.equal(executed.events.filter(event => event.type === "SKILL_FINISHED").length, 1);
     assert.equal(getUnit(active, 1).vitality.hp, 10000);
-    assert.equal(getUnit(ready, 0).skill.sp, 5);
+    assert.equal(getUnit(ready, 0).skill.sp.value, 5);
     const rng = createRng(ready.execution.rngState);
     rng.chance(0.3); rng.chance(0.3);
     assert.equal(executed.execution.rngState, rng.state());
@@ -222,7 +223,7 @@ test("S2 immediately overrides normal attack and recovery cooldown, heals once, 
 test("S2 stays active through configured recovery and finishes on completion or cancellation", () => {
     for (const cancellation of [false, true]) {
         const fixture = setup({}, [enemy(1, [1, 0])], { recoveryTicks: 2 });
-        let state = activateSkill(sp(fixture.state, 5), { unitId: 0, tick: 0, trigger: "AUTO" }, fixture.combat).state;
+        let state = activateSkill({ ...sp(fixture.state, 5), tick: 0 }, unitRef(getUnit(sp(fixture.state, 5), 0)), "AUTO" ).state;
         state = start(state, unitRef(getUnit(state, 0)), fixture.action).state;
         assert.notEqual(getUnit(state, 0).skill.active, null);
         assert.equal(state.actions.size, 1);
@@ -249,12 +250,12 @@ test("Mudrock content explicitly rejects unsupported module Y, another character
 
 test("an old S2 recovery cannot close a newer skill activation", () => {
     const fixture = setup({}, [enemy(1, [1, 0])], { recoveryTicks: 2 });
-    let state = activateSkill(sp(fixture.state, 5), { unitId: 0, tick: 0, trigger: "AUTO" }, fixture.combat).state;
+    let state = activateSkill({ ...sp(fixture.state, 5), tick: 0 }, unitRef(getUnit(sp(fixture.state, 5), 0)), "AUTO" ).state;
     state = start(state, unitRef(getUnit(state, 0)), fixture.action).state;
     assert.equal(getUnit(state, 0).skill.active.id, 0);
-    state = finishSkill({ ...state, tick: 1 }, 0, 1, fixture.combat);
+    state = finishSkill({ ...{ ...state, tick: 1 }, tick: 1 }, activationRef(getUnit({ ...state, tick: 1 }, 0).skill.active));
     assert.ok(getUnit(state, 0).effects.values().every(effect => effect.definition.id !== "mudrock/skill-attack"));
-    state = activateSkill(sp(state, 5), { unitId: 0, tick: 1, trigger: "AUTO" }, fixture.combat).state;
+    state = activateSkill({ ...sp(state, 5), tick: 1 }, unitRef(getUnit(sp(state, 5), 0)), "AUTO" ).state;
     assert.equal(getUnit(state, 0).skill.active.id, 1);
     state = advanceAction(state, { id: 0 });
     const before = state;

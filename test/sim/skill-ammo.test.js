@@ -1,130 +1,174 @@
-import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
-import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
-import { attackBuff } from "../helpers/effects.js";
-import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
-import { battlefieldView, getUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
-import { createDefinition as createProjectileDefinition } from "../../dist/core/tactical/battlefield/projectile/definition.js";
-import { launchProjectile, getProjectile } from "../../dist/core/tactical/battlefield/projectile/operations.js";
-import { advanceProjectiles } from "../../dist/core/tactical/battlefield/projectile/settlement.js";
-import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
-import { createDefinition as createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
-import { activateSkill, advanceSkill, consumeSkillAmmo } from "../../dist/core/tactical/unit/capability/skill/execution.js";
-import { spendSkillAmmo } from "../../dist/core/tactical/unit/capability/skill/ammo.js";
-import { gainSkillSp } from "../../dist/core/tactical/unit/capability/skill/sp.js";
-import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
-import { initialize } from "../../dist/core/tactical/unit/initialize.js";
-import { parseArknightsSkillLevel } from "../../dist/data/arknights/skill-definition.js";
-import { effectFixtureWork } from "../helpers/effects.js";
+import { getUnit } from "../../dist/core/tactical/battle/state.js";
+import * as skills from "../../dist/core/tactical/unit/capability/skill/operations.js";
+import * as ammo from "../../dist/core/tactical/unit/capability/skill/ammo.js";
+import * as query from "../../dist/core/tactical/unit/capability/skill/query.js";
+import { create as value } from "../../dist/core/tactical/unit/contribution/value.js";
+import { fixture, at, change, currentRef } from "../helpers/skill.js";
 
-const ash = {
-  skillId: "skchr_ash_2",
-  levels: [{
-    skillType: "MANUAL", durationType: "AMMO", duration: -1,
-    spData: { spType: "INCREASE_WITH_TIME", spCost: 30, initSp: 0, maxChargeTime: 1, increment: 1 },
-    blackboard: [{ key: "base_attack_time", value: -0.8, valueStr: null }, { key: "ash_s_2[atk_scale].atk_scale", value: 1.5, valueStr: null }],
-  }],
-};
-
-function ammoFixture(ammo = 31, ammoPerAttack = 1) {
-  const resources = new CombatResources();
-  const definition = parseArknightsSkillLevel(ash, 1, ammo, ammoPerAttack).definition;
-  const buff = attackBuff("ammo-fixture-attack", 100);
-  resources.skills.register({ definition, activate: (state, context) => {
-    const installed = effects.install(state, unitRef(getUnit(state, context.unitId)), buff, { source: 1, scopes: [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }] });
-    assert.ok(installed.value);
-    return { state: installed.state, value: { type: "ACTIVATED" } };
-  } });
-  const unit = initialize({ id: 1, position: [0, 0], definition: { id: "ammo-caster", skill: definition, offense: { attack: 100 } } });
-  const enemy = initialize({ id: 2, position: [1, 0], definition: { id: "ammo-target", vitality: { maxHp: 1000 }, hit: { geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.2 }] } } } });
-  let work = effectFixtureWork(unit, enemy);
-  work = updateUnit(work, { ...unit, skill: gainSkillSp(unit.skill, definition, "EXTERNAL", 30).state });
-  work = activateSkill(work, { unitId: 1, tick: 0 }, resources).state;
-  return { resources, definition, work };
+function loaded(amount = 3, overrides = {}) {
+    const f = fixture({ sp: null, activation: {
+        trigger: "MANUAL", sustain: { type: "AMMO", amount }, initialize: () => ({}), ...overrides,
+    } });
+    const started = skills.activate(f.state, f.ref);
+    return { ...f, state: started.state, activation: started.value.ref };
 }
+const remaining = (battle) => getUnit(battle, 1).skill.active.sustain.remaining;
+const observe = (id, invoke) => ({ id, enabled: () => true, invoke });
 
-test("native AMMO duration values require explicit content counts and never become time deadlines", () => {
-  const ashDefinition = parseArknightsSkillLevel(ash, 1, 31).definition;
-  assert.equal(ashDefinition.ammo, 31);
-  assert.equal(ashDefinition.ammoPerAttack, 1);
-  assert.equal(ashDefinition.durationTicks, null);
-  const aurora = { ...ash, skillId: "skchr_aurora_2", levels: [{ ...ash.levels[0], duration: 0, spData: { ...ash.levels[0].spData, spCost: 26, initSp: 8 }, blackboard: [{ key: "atk", value: 0.3, valueStr: null }] }] };
-  assert.equal(parseArknightsSkillLevel(aurora, 1, 9).definition.durationTicks, null);
-  const chen = { ...ash, skillId: "skchr_chen2_3", levels: [{ ...ash.levels[0], spData: { ...ash.levels[0].spData, spCost: 70, initSp: 15 }, blackboard: [{ key: "attack@trigger_time", value: 32, valueStr: null }] }] };
-  const chenDefinition = parseArknightsSkillLevel(chen, 1, 32, 2).definition;
-  assert.equal(chenDefinition.ammo, 32);
-  assert.equal(chenDefinition.ammoPerAttack, 2);
-  assert.throws(() => parseArknightsSkillLevel(ash), /explicit ammunition count/);
-  assert.throws(() => parseArknightsSkillLevel(ash, 1, 0), /positive safe integer/);
-  assert.throws(() => createSkillDefinition({ ...ashDefinition, durationTicks: 30 }), /end by ammunition/);
+test("ammunition spending preserves input versions and consumes the full requested amount", () => {
+    const f = loaded(3);
+    const first = ammo.consume(f.state, f.activation, 2);
+    assert.equal(first.value.amount, 2);
+    assert.equal(remaining(first.state), 1);
+    assert.equal(remaining(f.state), 3);
+    const final = ammo.consume(first.state, f.activation, 2);
+    assert.equal(final.value.amount, 2);
+    assert.equal(remaining(final.state), -1);
+    assert.equal(query.get(final.state, f.activation).status, "ACTIVE");
+    assert.throws(() => ammo.consume(first.state, f.activation, 0), /positive.*integer/);
+    assert.throws(() => ammo.consume(first.state, f.activation, 0.5), /integer/);
 });
 
-test("pure ammunition spending preserves snapshots and clamps the final consumption to what remains", () => {
-  const f = ammoFixture(3);
-  const initial = getUnit(f.work, 1).skill;
-  const first = spendSkillAmmo(initial, 2);
-  assert.deepEqual(first.result, { type: "APPLIED", amount: 2, remainingAmmo: 1 });
-  assert.equal(initial.active.remainingAmmo, 3);
-  const final = spendSkillAmmo(first.state, 2);
-  assert.deepEqual(final.result, { type: "APPLIED", amount: 1, remainingAmmo: 0 });
-  assert.throws(() => spendSkillAmmo(initial, 0), /positive safe integer/);
-  assert.equal(spendSkillAmmo({ ...initial, active: null }).result.reason, "INACTIVE");
-  const { remainingAmmo, ...activeWithoutAmmo } = initial.active;
-  assert.equal(remainingAmmo, 3);
-  assert.equal(spendSkillAmmo({ ...initial, active: activeWithoutAmmo }).result.reason, "NO_AMMO");
+test("ammunition depletion does not end an activation until an explicit check", () => {
+    const f = loaded(1);
+    let state = ammo.consume(f.state, f.activation, 3).state;
+    assert.equal(remaining(state), -2);
+    assert.equal(state.events.filter(({ type }) => type === "SKILL_FINISHED").length, 0);
+    state = skills.advance(at(state, 10000), f.ref);
+    assert.equal(remaining(state), -2);
+    state = ammo.check(state, f.activation);
+    assert.equal(getUnit(state, 1).skill.active, null);
+    assert.equal(state.events.filter(({ type }) => type === "SKILL_FINISHED").length, 1);
+    assert.equal(ammo.check(state, f.activation), state);
 });
 
-test("Ash's 31-round profile remains active indefinitely without attacks and ends on its 31st consumption", () => {
-  const f = ammoFixture();
-  let work = f.work;
-  work = advanceSkill(work, 1, 10000, f.resources);
-  assert.equal(getUnit(work, 1).skill.active.remainingAmmo, 31);
-  assert.equal(getUnit(work, 1).skill.sp, 0);
-  for (let i = 1; i <= 30; i++) {
-    const consumed = consumeSkillAmmo(work, 1, 10000 + i, f.resources);
-    work = consumed.state;
-    assert.equal(work.events.filter(event => event.type === "SKILL_FINISHED").length, 0);
-  }
-  assert.equal(getUnit(work, 1).skill.active.remainingAmmo, 1);
-  const final = consumeSkillAmmo(work, 1, 10031, f.resources);
-  work = final.state;
-  assert.equal(final.value.amount, 1);
-  assert.deepEqual(final.state.events.filter(event => event.type === "SKILL_FINISHED").map(event => event.type), ["SKILL_FINISHED"]);
-  assert.equal(getUnit(work, 1).skill.active, null);
-  assert.equal(resolveAttackPower(1, battlefieldView(work)), 100);
-  assert.equal(consumeSkillAmmo(work, 1, 10031, f.resources).value.reason, "INACTIVE");
+test("an ammunition skill remains active indefinitely when no content consumes or checks ammunition", () => {
+    const f = loaded(31);
+    const state = skills.advance(at(f.state, 10000), f.ref);
+    assert.equal(remaining(state), 31);
+    assert.deepEqual(query.get(state, f.activation).sustain, { type: "AMMO", initial: 31, remaining: 31, replenished: 0 });
 });
 
-test("explicit two-round attack consumption ends a 32-round profile after sixteen attacks", () => {
-  const f = ammoFixture(32, 2);
-  let work = f.work;
-  for (let i = 1; i <= 16; i++) {
-    const consumed = consumeSkillAmmo(work, 1, i, f.resources);
-    work = consumed.state;
-    assert.equal(consumed.value.amount, 2);
-  }
-  assert.equal(getUnit(work, 1).skill.active, null);
+test("ordinary replenishment tracks a cumulative allowance independently of current ammunition", () => {
+    const f = loaded(3);
+    let state = ammo.consume(f.state, f.activation, 3).state;
+    state = ammo.replenish(state, f.activation, 2).state;
+    assert.deepEqual(query.get(state, f.activation).sustain, { type: "AMMO", initial: 3, remaining: 2, replenished: 2 });
+    state = ammo.consume(state, f.activation, 2).state;
+    const limited = ammo.replenish(state, f.activation, 5);
+    assert.equal(limited.value.amount, 1);
+    assert.equal(remaining(limited.state), 1);
+    assert.equal(query.get(limited.state, f.activation).sustain.replenished, 3);
+    state = ammo.consume(limited.state, f.activation, 1).state;
+    assert.equal(ammo.replenish(state, f.activation, 1).state, state);
 });
 
-test("the final shot is sampled with its buff before consumption and its projectile keeps that released sample", () => {
-  const f = ammoFixture(1);
-  const shell = createProjectileDefinition({
-    id: "ammo-cached-shell", initialize: () => ({}),
-    acceptsContact: (_context, target) => target.id === 2,
-    contact: (state, context) => { return resolveDamage(state, { sourceUnitId: 1, targetUnitId: 2, tick: context.tick, damageType: "TRUE", operands: createDamageOperands(context.projectile.cachedAtk) }, f.resources, context.call).state; },
-  });
-  const attackPower = resolveAttackPower(1, battlefieldView(f.work));
-  assert.equal(attackPower, 200);
-  const launched = launchProjectile(f.work, shell, {
-    source: 1, traceTarget: 2, position: [0, 0], destination: [1, 0], cachedAtk: attackPower,
-    speedPerTick: 1, contactRange: { type: "SHAPES", geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.2 }] } }, stopDelayTicks: 0,
-  }, 0);
-  f.work = consumeSkillAmmo(launched.state, 1, 0, f.resources).state;
-  assert.equal(resolveAttackPower(1, battlefieldView(f.work)), 100);
-  const projectile = getProjectile(f.work, launched.value);
-  assert.equal(projectile.cachedAtk, 200);
-  f.work = advanceProjectiles(f.work, 1);
-  assert.equal(getUnit(f.work, 2).vitality.hp, 800);
+test("content ammunition grants respect current capacity without consuming ordinary replenishment allowance", () => {
+    const f = loaded(3);
+    let state = ammo.consume(f.state, f.activation, 2).state;
+    const grant = ammo.grant(state, f.activation, 5);
+    assert.equal(grant.value.amount, 2);
+    state = grant.state;
+    assert.equal(remaining(state), 3);
+    assert.equal(query.get(state, f.activation).sustain.replenished, 0);
+    state = ammo.consume(state, f.activation, 3).state;
+    state = ammo.replenish(state, f.activation, 3).state;
+    assert.equal(remaining(state), 3);
+    assert.equal(query.get(state, f.activation).sustain.replenished, 3);
+});
+
+test("ammunition capacity contributions are sampled for each new activation", () => {
+    const f = loaded(3);
+    let state = change(f.state, (skill) => ({ ...skill, sustain: {
+        ...skill.sustain, ammo: [{ id: "bonus", value: [value({ finalAddition: 2 })] }],
+    } }));
+    assert.equal(remaining(state), 3);
+    assert.equal(query.get(state, f.activation).sustain.initial, 3);
+    state = skills.finish(state, f.activation);
+    state = skills.activate(state, f.ref).state;
+    assert.equal(remaining(state), 5);
+    assert.equal(query.get(state, currentRef(state)).sustain.initial, 5);
+});
+
+test("consumption Hooks report the complete consumed amount and settled negative remainder", () => {
+    const seen = [];
+    const f = loaded(1);
+    let state = change(f.state, (skill) => ({ ...skill, ammoConsumed: [observe("consumer", (battle, _self, event) => {
+        seen.push(event);
+        return battle;
+    })] }));
+    state = ammo.consume(state, f.activation, 3).state;
+    assert.equal(seen.length, 1);
+    assert.deepEqual(seen[0].ref, f.activation);
+    assert.equal(seen[0].amount, 3);
+    assert.equal(seen[0].previous.remaining, 1);
+    assert.equal(seen[0].current.remaining, -2);
+    state = skills.finish(state, f.activation);
+    assert.equal(seen.length, 1);
+});
+
+test("nested replenishment produces its own report and a later depletion check reads latest ammunition", () => {
+    const seen = [];
+    const f = loaded(1);
+    let state = change(f.state, (skill) => ({ ...skill,
+        ammoConsumed: [
+            observe("refill", (battle, _self, event) => {
+                seen.push(["consume", event.previous.remaining, event.current.remaining]);
+                return ammo.replenish(battle, event.ref, 1).state;
+            }),
+            observe("after", (battle, _self, event) => {
+                seen.push(["after", event.previous.remaining, event.current.remaining, remaining(battle)]);
+                return battle;
+            }),
+        ],
+        ammoReplenished: [observe("replenished", (battle, _self, event) => {
+            seen.push(["replenish", event.amount, event.previous.remaining, event.current.remaining]);
+            return battle;
+        })],
+    }));
+    state = ammo.consume(state, f.activation, 1).state;
+    assert.deepEqual(seen, [["consume", 1, 0], ["replenish", 1, 0, 1], ["after", 1, 0, 1]]);
+    state = ammo.check(state, f.activation);
+    assert.equal(query.get(state, f.activation).status, "ACTIVE");
+});
+
+test("old activation references cannot consume or replenish a newly started activation", () => {
+    const f = loaded(3);
+    let state = skills.finish(f.state, f.activation);
+    const started = skills.activate(state, f.ref);
+    state = started.state;
+    assert.equal(started.value.ref.id, f.activation.id + 1);
+    assert.equal(query.get(state, f.activation), undefined);
+    assert.equal(ammo.consume(state, f.activation, 1).state, state);
+    assert.equal(ammo.replenish(state, f.activation, 1).state, state);
+    assert.equal(ammo.check(state, f.activation), state);
+    assert.equal(remaining(state), 3);
+});
+
+test("consumption remains settled when its Hook ends the observed activation", () => {
+    let report;
+    const f = loaded(1);
+    let state = change(f.state, (skill) => ({ ...skill, ammoConsumed: [observe("end", (battle, _self, event) => {
+        report = event;
+        return skills.finish(battle, event.ref);
+    })] }));
+    const consumed = ammo.consume(state, f.activation, 3);
+    assert.equal(consumed.value.amount, 3);
+    assert.equal(report.current.remaining, -2);
+    assert.equal(getUnit(consumed.state, 1).skill.active, null);
+    assert.equal(consumed.state.events.filter(({ type }) => type === "SKILL_FINISHED").length, 1);
+});
+
+test("a consumption Hook can replace its activation without a later check ending the replacement", () => {
+    const f = loaded(3);
+    let state = change(f.state, (skill) => ({ ...skill, ammoConsumed: [observe("restart", (battle, _self, event) => {
+        battle = skills.finish(battle, event.ref);
+        return skills.activate(battle, f.ref).state;
+    })] }));
+    state = ammo.consume(state, f.activation, 3).state;
+    assert.equal(getUnit(state, 1).skill.active.id, 1);
+    assert.equal(remaining(state), 3);
+    assert.equal(ammo.check(state, f.activation), state);
 });

@@ -1,5 +1,6 @@
 import type { Id as UnitId, Unit } from "../unit.js";
 import type { Actions } from "../action/actions.js";
+import type { Stored as SkillActivation } from "../capability/skill/activation.js";
 import type { Definition } from "./definition.js";
 import type { Effects } from "./effects.js";
 import type { Identified, Ref } from "../../../common/ref.js";
@@ -10,7 +11,7 @@ export type Id = number;
 export type Lifetime =
     | { readonly type: "UNIT"; readonly unitId: UnitId }
     | { readonly type: "ACTION"; readonly ref: Ref<ReturnType<Actions["values"]>[number]> }
-    | { readonly type: "SKILL"; readonly unitId: UnitId; readonly activationId: number }
+    | { readonly type: "SKILL"; readonly ref: Ref<SkillActivation> }
     | { readonly type: "EFFECT"; readonly ref: Ref<StoredEffect> };
 
 export type Scope = Lifetime | { readonly type: "TICK"; readonly tick: number };
@@ -81,7 +82,7 @@ export function key(scope: Scope): string {
             return `ACTION:${scope.ref.id}`;
 
         case "SKILL":
-            return `SKILL:${scope.unitId}:${scope.activationId}`;
+            return `SKILL:${scope.ref.host.id}:${scope.ref.id}`;
 
         case "EFFECT":
             return `EFFECT:${scope.ref.host.id}:${scope.ref.id}`;

@@ -10,7 +10,7 @@ import { emptyCall, type CallContext } from "../../battle/execution/call.js";
 import type { Unit, Id } from "../unit.js";
 import type { Ref } from "../../../common/ref.js";
 import * as units from "../query.js";
-import { hasSkill } from "../capability/skill/capability.js";
+import { get as getActivation } from "../capability/skill/query.js";
 import type { Definition, Context } from "./definition.js";
 import {
     deadline,
@@ -290,13 +290,7 @@ function available(battle: BattleState, lifetime: Lifetime): boolean {
             return battle.actions.get(lifetime.ref.id)?.status === "RUNNING";
 
         case "SKILL": {
-            const unit = getUnit(battle, lifetime.unitId);
-
-            return (
-                unit !== undefined &&
-                hasSkill(unit) &&
-                unit.skill.active?.id === lifetime.activationId
-            );
+            return getActivation(battle, lifetime.ref)?.status === "ACTIVE";
         }
 
         case "EFFECT": {

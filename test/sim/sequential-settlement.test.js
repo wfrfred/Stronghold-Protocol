@@ -53,7 +53,7 @@ for (const nested of ["cancel", "advance", "advance complete", "advance waiting"
             { scopes: [{ type: "ACTION", ref: firstRef }] },
         ).state;
         const before = state;
-        state = removeUnitWithEffects(state, 0, "RETREAT", resources, 0);
+        state = removeUnitWithEffects(state, 0, "RETREAT");
         assert.equal(executions, 0);
         assert.equal(state.actions.size, 0);
         assert.equal(
@@ -121,16 +121,10 @@ test("sequential predefined commands allocate after all earlier callback results
             },
         },
     ];
-    const advanced = advancePredefined(
-        { ...state, predefinedPresence: [{ definitionId: 0, source: { type: "UNIT", unitId: 0 } }] },
-        definitions,
-        [
+    const advanced = advancePredefined({ ...state, predefinedPresence: [{ definitionId: 0, source: { type: "UNIT", unitId: 0 } }] }, definitions, [
             { type: "REMOVE_PREDEFINED", definitionId: 0, reason: "SCRIPT" },
             { type: "APPEAR_PREDEFINED", definitionId: 1 },
-        ],
-        0,
-        resources,
-    );
+        ], 0);
     assert.deepEqual([...advanced.battlefield.units.keys()], [1, 2]);
     assert.equal(getUnit(advanced, 1).definition.id, "callback-child");
     assert.equal(getUnit(advanced, 2).definition.id, "predefined-child");

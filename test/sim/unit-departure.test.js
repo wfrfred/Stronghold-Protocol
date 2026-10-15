@@ -10,7 +10,6 @@ import { createNavigationModifierDefinition } from "../../dist/core/tactical/bat
 import { createDefinition as createDeployableDefinition } from "../../dist/core/tactical/unit/capability/deployable/capability.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { addCard } from "../../dist/core/tactical/battle/deployment/deployment.js";
 import { resolveDeploymentCommands } from "../../dist/core/tactical/battle/deployment/operations.js";
 import {
@@ -25,7 +24,8 @@ import {
 } from "../../dist/core/tactical/battle/state.js";
 import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import { createDefinition as createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
-import { activateSkill } from "../../dist/core/tactical/unit/capability/skill/execution.js";
+import { activate } from "../../dist/core/tactical/unit/capability/skill/operations.js";
+import { ref as activationRef } from "../../dist/core/tactical/unit/capability/skill/activation.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { get } from "../../dist/core/tactical/unit/effect/operations.js";
 import { definition } from "../helpers/effects.js";
@@ -36,26 +36,21 @@ import {
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 
 function fixture() {
-    const resources = new CombatResources();
     const skill = createSkillDefinition({
         id: "departing-counter-skill",
-        activation: "MANUAL",
-        spRecovery: "NONE",
-        spCost: 0,
-        initialSp: 0,
-        durationTicks: null,
-    });
-    resources.skills.register({
-        definition: skill,
-        activate: state => ({ state, value: { type: "ACTIVATED" } }),
-        finish: (state, context) => {
-            return resolveDamage(state, {
+        initialize: () => ({}),
+        sp: null,
+        activation: {
+            trigger: "MANUAL",
+            sustain: { type: "INFINITE" },
+            initialize: () => ({}),
+            onEnd: state => resolveDamage(state, {
                 sourceUnitId: null,
                 targetUnitId: 2,
                 damageType: "TRUE",
                 operands: createDamageOperands(1),
-                tick: context.tick,
-            }, resources, context.call).state;
+                tick: state.tick,
+            }).state,
         },
     });
     const counter = definition(
@@ -103,14 +98,14 @@ function fixture() {
         supportRelations: [],
     };
     let work = createBattleState(fixtureBattlefield(battlefield), undefined);
-    for (const id of [0, 1]) work = activateSkill(work, { unitId: id, tick: 0 }, resources).state;
+    for (const id of [0, 1]) work = activate(work, unitRef(getUnit(work, id))).state;
     work = effects.install(work, unitRef(getUnit(work, 2)), counter).state;
-    return { battlefield: work.battlefield, resources, execution: work.execution };
+    return { battlefield: work.battlefield, execution: work.execution };
 }
 
 for (const domain of ["deployment", "predefined"]) {
     test(`${domain}: successive departures share effect updates from skill finish damage`, () => {
-        const { battlefield, resources, execution } = fixture();
+        const { battlefield, execution } = fixture();
         const before = battlefieldView(createBattleState(battlefield));
         let state = createBattleState(battlefield, execution, undefined, 1);
         if (domain === "deployment") {
@@ -120,7 +115,6 @@ for (const domain of ["deployment", "predefined"]) {
                     { type: "RETREAT_UNIT", unitId: 0 },
                     { type: "RETREAT_UNIT", unitId: 1 },
                 ],
-                resources,
             );
         } else {
             state = advancePredefined(
@@ -134,7 +128,6 @@ for (const domain of ["deployment", "predefined"]) {
                     { type: "REMOVE_PREDEFINED", definitionId: 11, reason: "SCRIPT" },
                 ],
                 1,
-                resources,
             );
         }
 
@@ -164,8 +157,7 @@ for (const domain of ["deployment", "predefined"]) {
             })),
         );
         const battlefield = createBattlefield({ map });
-        const resources = new CombatResources();
-        const definition = Object.freeze({
+            const definition = Object.freeze({
             id: "transient-placement",
             deployable: createDeployableDefinition({ cost: 0, redeployTicks: 0, slots: 1, buildableType: "ALL" }),
             vitality: Object.freeze({ maxHp: 100 }),
@@ -197,7 +189,6 @@ for (const domain of ["deployment", "predefined"]) {
                     { type: "RETREAT_UNIT", unitId: 0 },
                     { type: "DEPLOY_UNIT", cardId: 1, tilePosition: [0, 0], playerSide: "SIDE_A" },
                 ],
-                resources,
             );
         } else {
             state = advancePredefined(
@@ -220,7 +211,6 @@ for (const domain of ["deployment", "predefined"]) {
                     { type: "REMOVE_PREDEFINED", definitionId: 10, reason: "SCRIPT" },
                 ],
                 0,
-                resources,
             );
         }
 
@@ -234,22 +224,19 @@ for (const domain of ["deployment", "predefined"]) {
 }
 
 test("effect terminal callback can retire its host and settle remote Action and Skill dependencies immediately", () => {
-    const resources = new CombatResources();
     const trace = [];
     const skill = createSkillDefinition({
         id: "nested-skill",
-        activation: "MANUAL",
-        spRecovery: "NONE",
-        spCost: 0,
-        initialSp: 0,
-        durationTicks: null,
-    });
-    resources.skills.register({
-        definition: skill,
-        activate: state => ({ state, value: { type: "ACTIVATED" } }),
-        finish: state => {
-            trace.push("skill");
-            return state;
+        initialize: () => ({}),
+        sp: null,
+        activation: {
+            trigger: "MANUAL",
+            sustain: { type: "INFINITE" },
+            initialize: () => ({}),
+            onEnd: state => {
+                trace.push("skill");
+                return state;
+            },
         },
     });
     const action = {
@@ -270,7 +257,7 @@ test("effect terminal callback can retire its host and settle remote Action and 
         }),
     ];
     let battle = createBattleState(fixtureBattlefield(units));
-    battle = activateSkill(battle, { unitId: 0, tick: 0 }, resources).state;
+    battle = activate(battle, unitRef(getUnit(battle, 0))).state;
     const started = actions.start(battle, unitRef(getUnit(battle, 0)), action);
     battle = started.state;
     assert.equal(started.value.type, "STARTED");
@@ -299,7 +286,7 @@ test("effect terminal callback can retire its host and settle remote Action and 
         scopes: [{ type: "ACTION", ref: started.value.ref }],
     }).state;
     battle = effects.install(battle, unitRef(getUnit(battle, 1)), skillDependent, {
-        scopes: [{ type: "SKILL", unitId: 0, activationId: 0 }],
+        scopes: [{ type: "SKILL", ref: activationRef(getUnit(battle, 0).skill.active) }],
     }).state;
     const content = definition(
         "nested-death",
@@ -307,13 +294,13 @@ test("effect terminal callback can retire its host and settle remote Action and 
         {
             onEnd(state, ctx) {
                 trace.push("effect");
-                state = resolveDamage(state, {
+                state = resolveDamage({ ...state, tick: 1 }, {
                     sourceUnitId: null,
                     targetUnitId: 0,
                     damageType: "TRUE",
                     operands: createDamageOperands(100),
                     tick: 1,
-                }, resources, ctx.call).state;
+                }, ctx.call).state;
                 trace.push("after-damage");
                 assert.equal(getUnit(state, 0), undefined);
                 assert.equal(actions.get(state, started.value.ref), undefined);

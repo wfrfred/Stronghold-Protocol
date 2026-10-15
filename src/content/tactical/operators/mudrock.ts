@@ -21,7 +21,7 @@ import {
 } from "../../../core/tactical/battle/state.js";
 import type { CombatResources } from "../../../core/tactical/battle/resources.js";
 import type { CallContext } from "../../../core/tactical/battle/execution/call.js";
-import { gainUnitSkillSp } from "../../../core/tactical/battle/execution/skill-sp.js";
+import { modify } from "../../../core/tactical/unit/capability/skill/sp.js";
 import type { Direction } from "../../../core/tactical/geometry/direction.js";
 import type { Unit, Id } from "../../../core/tactical/unit/unit.js";
 import type { Definition as OperatorDefinition } from "../../../core/tactical/unit/archetype/operator.js";
@@ -36,7 +36,8 @@ import {
     hasSkill,
     type Definition as SkillDefinition,
 } from "../../../core/tactical/unit/capability/skill/capability.js";
-import { finishSkill } from "../../../core/tactical/unit/capability/skill/execution.js";
+import { finish } from "../../../core/tactical/unit/capability/skill/operations.js";
+import { ref as activationRef } from "../../../core/tactical/unit/capability/skill/activation.js";
 import { stun } from "../effects/stun.js";
 import { healFree } from "../effects/protection.js";
 import {
@@ -185,7 +186,11 @@ function shieldEffect(profile: Profile): EffectDefinition<ShieldState, Vitality>
                                 }),
                             );
                             state = healSelf(state, unit.id, healRatio, context.tick, context.call);
-                            state = gainUnitSkillSp(state, unit.id, "EXTERNAL", extraSp);
+                            const current = getUnit(state, unit.id);
+
+                            if (current !== undefined && hasSkill(current)) {
+                                state = modify(state, unitRef(current), extraSp).state;
+                            }
 
                             return {
                                 state,
@@ -382,23 +387,19 @@ export function create(
                         continue;
                     }
 
-                    state = resolveDamage(
-                        state,
-                        {
-                            sourceUnitId: source.id,
-                            targetUnitId: target.id,
-                            damageType: "PHYSICAL",
-                            operands: {
-                                power,
-                                attackScale,
-                                attackAddition: 0,
-                                fixedPenetration: 0,
-                                proportionalPenetration: 0,
-                            },
-                            tick: state.tick,
+                    state = resolveDamage(state, {
+                        sourceUnitId: source.id,
+                        targetUnitId: target.id,
+                        damageType: "PHYSICAL",
+                        operands: {
+                            power,
+                            attackScale,
+                            attackAddition: 0,
+                            fixedPenetration: 0,
+                            proportionalPenetration: 0,
                         },
-                        combat,
-                    ).state;
+                        tick: state.tick,
+                    }).state;
                     const rng = createRng(state.execution.rngState);
                     const applyStun = rng.chance(stunChance);
                     state = { ...state, execution: { ...state.execution, rngState: rng.state() } };
@@ -421,34 +422,37 @@ export function create(
                     hasSkill(unit) &&
                     self.state.activationId !== null &&
                     unit.skill.active?.id === self.state.activationId
-                    ? finishSkill(state, unit.id, state.tick, combat)
+                    ? finish(state, activationRef(unit.skill.active))
                     : state;
             },
         },
         combat,
     );
-    const skill = combat.skills.register({
-        definition: { ...profile.skill.definition, durationTicks: null, activeAction: action.id },
-        accepts({ unitId, battlefield }) {
-            const source = battlefield.getUnit(unitId);
+    const skill: SkillDefinition = {
+        ...profile.skill.definition,
+        activation: {
+            ...profile.skill.definition.activation!,
+            sustain: { type: "INFINITE" },
+            accepts(battle, source) {
+                return (
+                    selectTargets({ source, battlefield: battlefieldView(battle) }, targeting)
+                        .length > 0
+                );
+            },
+            onStart(state, self) {
+                const unit = getUnit(state, self.host.id);
 
-            return (
-                source !== undefined && selectTargets({ source, battlefield }, targeting).length > 0
-            );
+                if (unit === undefined || !hasAction(unit)) {
+                    return state;
+                }
+
+                state = clearCooldown(state, unitRef(unit), normalAttack.id);
+                state = clearCooldown(state, unitRef(unit), action.id);
+
+                return state;
+            },
         },
-        activate(state, { unitId }) {
-            const unit = getUnit(state, unitId);
-
-            if (unit === undefined || !hasAction(unit)) {
-                return { state, value: { type: "REJECTED", reason: "host absent" } };
-            }
-
-            state = clearCooldown(state, unitRef(unit), normalAttack.id);
-            state = clearCooldown(state, unitRef(unit), action.id);
-
-            return { state, value: { type: "ACTIVATED" } };
-        },
-    });
+    };
     const definition: Definition = {
         id: profile.id,
         profile,
@@ -474,7 +478,7 @@ export function create(
                 value: [hasSkill(self) && self.skill.active !== null ? action.id : normalAttack.id],
             }),
         },
-        skill: skill.definition,
+        skill,
         onEnter(state, unitId) {
             const unit = getUnit(state, unitId);
 

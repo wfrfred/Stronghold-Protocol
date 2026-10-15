@@ -14,10 +14,9 @@ import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js
 import { start } from '../../dist/core/tactical/unit/action/operations.js';
 import { ref as unitRef } from '../../dist/core/tactical/unit/query.js';
 import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
-import { createDefinition as createSkillDefinition } from '../../dist/core/tactical/unit/capability/skill/capability.js';
-import { activateSkill, advanceSkill } from '../../dist/core/tactical/unit/capability/skill/execution.js';
-import { gainUnitSkillSp } from '../../dist/core/tactical/battle/execution/skill-sp.js';
-import { canGainSp } from '../../dist/core/tactical/unit/capability/skill/capability.js';
+import { definition as createSkillDefinition } from '../helpers/skill.js';
+import { activate as activateSkill, advance as advanceSkill } from '../../dist/core/tactical/unit/capability/skill/operations.js';
+import { recover } from '../../dist/core/tactical/unit/capability/skill/sp.js';
 import { setHealingReceptionRule } from '../../dist/core/tactical/unit/capability/vitality/capability.js';
 import { resolveDefense } from '../../dist/core/tactical/unit/capability/defense/query.js';
 import { resolveAttackPower } from '../../dist/core/tactical/unit/capability/offense/query.js';
@@ -125,26 +124,25 @@ test('elemental execution: burn resistance loss remains during recovery and expi
 
 test('elemental execution: character necrosis settles fifteen magical pulses, drains SP and blocks recovery and activation until recovery ends', () => {
   const supplied = resources();
-  const skill = createSkillDefinition({ id: 'necrosis-sp', activation: 'MANUAL', spRecovery: 'TIME', spCost: 30, initialSp: 20, durationTicks: 30 });
-  supplied.skills.register({ definition: skill, activate: state => ({ state, value: { type: 'ACTIVATED' } }) });
+  const skill = createSkillDefinition({ id: 'necrosis-sp', sp: { initial: 20, capacity: 30, requirement: 30, recovery: { type: 'TIME', intervalTicks: 30 } } });
   let work = effectFixtureWork(unit('CHARACTER', { skill }));
   work = element(work, 'NECROSIS', supplied).state;
   assert.equal(getUnit(work, 1).vitality.hp, 100000);
-  assert.equal(activateSkill(work, { unitId: 1, tick: 0 }, supplied).value.type, 'REJECTED');
-  work = gainUnitSkillSp(work, 1, 'TIME', 3);
-  assert.equal(getUnit(work, 1).skill.sp, 20);
+  assert.equal(activateSkill(work, unitRef(getUnit(work, 1))).value.type, 'REJECTED');
+  work = recover(work, unitRef(getUnit(work, 1)), 'TIME', 3).state;
+  assert.equal(getUnit(work, 1).skill.sp.value, 20);
   work = advance(work, 30, supplied);
   assert.equal(getUnit(work, 1).vitality.hp, 99950);
-  assert.equal(getUnit(work, 1).skill.sp, 19);
-  work = advanceSkill(work, 1, 30, supplied);
-  assert.equal(getUnit(work, 1).skill.sp, 19);
+  assert.equal(getUnit(work, 1).skill.sp.value, 19);
+  work = advanceSkill(work, unitRef(getUnit(work, 1)));
+  assert.equal(getUnit(work, 1).skill.sp.value, 19);
   work = advance(work, 450, supplied);
   assert.equal(getUnit(work, 1).vitality.hp, 99250);
-  assert.equal(getUnit(work, 1).skill.sp, 5);
+  assert.equal(getUnit(work, 1).skill.sp.value, 5);
   assert.equal(work.events.filter(event => event.type === 'DAMAGE').length, 15);
-  assert.equal(canGainSp(getUnit(work, 1)), true);
-  work = gainUnitSkillSp(work, 1, 'TIME', 3);
-  assert.equal(getUnit(work, 1).skill.sp, 8);
+  assert.equal(recover(work, unitRef(getUnit(work, 1)), 'TIME', 0).value.type, 'APPLIED');
+  work = recover(work, unitRef(getUnit(work, 1)), 'TIME', 3).state;
+  assert.equal(getUnit(work, 1).skill.sp.value, 8);
 });
 
 test('elemental execution: enemy necrosis damage is elemental and its attack reduction fades before full recovery', () => {
@@ -171,7 +169,7 @@ test('elemental HP damage ignores physical defense, magic resistance, source att
     const source = initialize({ id: 0, position: [0, 0], definition: { id: 'element-source', offense: { attack: 10000 } } });
     const boosted = ({ ...source, offense: setAttackContribution(source.offense, { id: 'attack-buff', value: [modifier({ multiplier: 100 })] }) });
     const input = effectFixtureWork(boosted, unit('ENEMY', { defense: { defense: 100000, resistance: 99 } }, { damageResistance, elementResistance: 100 }));
-    const result = resolveDamage(input, { sourceUnitId: 0, targetUnitId: 1, damageType: 'ELEMENTAL', operands: createDamageOperands(100), tick: 0 }, supplied);
+    const result = resolveDamage(input, { sourceUnitId: 0, targetUnitId: 1, damageType: 'ELEMENTAL', operands: createDamageOperands(100), tick: 0 });
     assert.equal(result.value.hpLoss, expected);
     assert.equal(result.value.formulaDamage, expected);
     assert.equal(calculateDamage(100, 'ELEMENTAL', { defense: 100000, resistance: 99 }, damageResistance), expected);

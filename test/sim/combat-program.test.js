@@ -14,8 +14,8 @@ import { create as modifier } from "../../dist/core/tactical/unit/contribution/v
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
-import { createDefinition as createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
-import { activateSkill } from "../../dist/core/tactical/unit/capability/skill/execution.js";
+import { definition as createSkillDefinition } from "../helpers/skill.js";
+import { activate } from "../../dist/core/tactical/unit/capability/skill/operations.js";
 
 const targeting = {
     type: "DAMAGE",
@@ -156,18 +156,13 @@ test("ordinary attack: lethal retaliation invalidates a later unsampled source a
             priority: 0,
             enabled: (context) => context.request.targetUnitId === context.unit.id,
             invoke(state, context) {
-                state = resolveDamage(
-                    state,
-                    {
+                state = resolveDamage(state, {
                         sourceUnitId: 1,
                         targetUnitId: 0,
                         tick: context.tick,
                         damageType: "TRUE",
                         operands: createDamageOperands(10),
-                    },
-                    resources,
-                    context.call,
-                ).state;
+                    }, context.call).state;
                 return { state, value: undefined };
             },
         }),
@@ -225,21 +220,37 @@ test("action: generic non-attack programs do not earn attack SP or consume skill
     };
     const skill = createSkillDefinition({
         id: "unrelated-skill",
-        activation: "MANUAL",
-        spRecovery: "ATTACK",
-        spCost: 0,
-        initialSp: 0,
-        durationTicks: null,
-        ammo: 3,
-    });
-    resources.skills.register({
-        definition: skill,
-        activate: (state) => ({ state, value: { type: "ACTIVATED" } }),
+        sp: { initial: 0, capacity: 0, requirement: 0, recovery: { type: "ACTION", amount: 1 } },
+        activation: { trigger: "MANUAL", sustain: { type: "AMMO", amount: 3 }, initialize: () => ({}) },
     });
     let state = battle(unit(0, { action: definition, skill }), unit(1));
-    state = activateSkill(state, { unitId: 0, tick: 0 }, resources).state;
+    state = activate(state, unitRef(getUnit(state, 0))).state;
     const result = start(state, definition);
-    assert.equal(getUnit(result.state, 0).skill.active.remainingAmmo, 3);
-    assert.equal(getUnit(result.state, 0).skill.sp, 0);
+    assert.equal(getUnit(result.state, 0).skill.active.sustain.remaining, 3);
+    assert.equal(getUnit(result.state, 0).skill.sp.value, 0);
     assert.equal(resolveAttackPower(0, battlefieldView(result.state)), 10);
+});
+
+test("ACTION recovery callbacks may cancel the releasing attack before its output", () => {
+    const attack = actionDefinition(20);
+    const skill = createSkillDefinition({
+        sp: { initial: 0, capacity: 1, requirement: 1, recovery: { type: "ACTION", amount: 1 } },
+    });
+    const source = unit(0, { action: attack, skill });
+    const configured = { ...source, skill: {
+        ...source.skill,
+        spRecovered: [{
+            id: "cancel-release", enabled: () => true,
+            invoke(state) {
+                return actions.cancel(state, actions.all(state)[0], "CANCELLED");
+            },
+        }],
+    } };
+    const original = battle(configured, unit(1));
+    const result = start(original, attack);
+    assert.equal(getUnit(result.state, 0).skill.sp.value, 1);
+    assert.equal(getUnit(result.state, 1).vitality.hp, 100);
+    assert.equal(result.state.actions.size, 0);
+    assert.equal(result.state.events.filter(event => event.type === "ACTION_RELEASED").length, 1);
+    assert.equal(getUnit(original, 0).skill.sp.value, 0);
 });

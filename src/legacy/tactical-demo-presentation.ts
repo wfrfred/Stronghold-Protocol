@@ -163,7 +163,7 @@ function skillActive(unit: Unit, animation?: LegacyUnitAnimation["skill"]): bool
     return (
         animation !== "ATTACK" &&
         hasSkill(unit) &&
-        unit.definition.skill.activation !== "PASSIVE" &&
+        unit.definition.skill.activation?.trigger !== "PASSIVE" &&
         (!hasVitality(unit) || unit.vitality.hp > 0) &&
         unit.skill.active !== null
     );
@@ -269,15 +269,17 @@ function unitTuple(
     if (!dead && hasSkill(unit)) {
         const definition = unit.definition.skill;
         const active = unit.skill.active;
-        sp = unit.skill.sp;
-        spMax = definition.spCost;
+        sp = unit.skill.sp?.value ?? 0;
+        spMax = definition.sp?.requirement ?? 0;
 
         if (active !== null) {
-            if (active.remainingAmmo !== undefined && definition.ammo !== undefined) {
-                sp = spMax * (active.remainingAmmo / Math.max(1, definition.ammo));
-            } else if (active.endsAtTick !== null && active.endsAtTick > active.startedAtTick) {
-                const remaining = Math.max(0, active.endsAtTick - snapshot.tickIndex);
-                sp = spMax * (remaining / (active.endsAtTick - active.startedAtTick));
+            const sustain = active.sustain;
+
+            if (sustain.type === "AMMO") {
+                sp = spMax * (Math.max(0, sustain.remaining) / Math.max(1, sustain.initial));
+            } else if (sustain.type === "TIME" && sustain.endsAtTick > active.startedAtTick) {
+                const remaining = Math.max(0, sustain.endsAtTick - snapshot.tickIndex);
+                sp = spMax * (remaining / (sustain.endsAtTick - active.startedAtTick));
             }
         }
     }
@@ -420,7 +422,7 @@ export class TacticalDemoPresentation {
                     if (
                         unit !== undefined &&
                         hasSkill(unit) &&
-                        unit.definition.skill.activation === "PASSIVE"
+                        unit.definition.skill.activation?.trigger === "PASSIVE"
                     ) {
                         break;
                     }

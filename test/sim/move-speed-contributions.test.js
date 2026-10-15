@@ -361,7 +361,7 @@ test("move speed: live contributions read phase facts without storing final spee
     const fullHp = h.unit;
     h.work = updateUnit(h.work, { ...fullHp, vitality: { ...fullHp.vitality, hp: 50 } });
     const initial = createBattleState(h.work.battlefield, h.execution);
-    const moved = advanceMovement(initial, 0, { routeMoveMultiplier: 0.5 }, resources);
+    const moved = advanceMovement(initial, 0, { routeMoveMultiplier: 0.5 });
     close(getUnit(moved, 0).position[0], 0.125);
     assert.equal(getUnit(moved, 0).definition.locomotion.moveSpeedPerTick, 0.5);
     assert.equal(fullHp.vitality.hp, 100);

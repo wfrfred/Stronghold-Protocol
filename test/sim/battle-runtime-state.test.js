@@ -92,13 +92,11 @@ test("nested predefined entry and departure keep the latest presence bindings", 
             id: "parent",
             onEnter(state) {
                 observations.push(state.predefinedPresence.map(binding => binding.definitionId));
-                return advancePredefined(state, definitions,
-                    [{ type: "APPEAR_PREDEFINED", definitionId: 2 }], state.tick, resources);
+                return advancePredefined(state, definitions, [{ type: "APPEAR_PREDEFINED", definitionId: 2 }], state.tick);
             },
             onLeave(state) {
                 observations.push(state.predefinedPresence.map(binding => binding.definitionId));
-                return advancePredefined(state, definitions,
-                    [{ type: "APPEAR_PREDEFINED", definitionId: 3 }], state.tick, resources);
+                return advancePredefined(state, definitions, [{ type: "APPEAR_PREDEFINED", definitionId: 3 }], state.tick);
             },
         }),
         predefined(2, { id: "entry-child" }),
@@ -125,7 +123,7 @@ test("starting a new tick clears temporary facts without changing retained state
                 assert.equal(state.closedLifetimes.size, 0);
                 if (state.tick === 0) {
                     state = removeUnit(state, 1, "SCRIPT");
-                    state = closeLifetime(state, { type: "SKILL", unitId: 0, activationId: 99 });
+                    state = closeLifetime(state, { type: "SKILL", ref: { host: { id: 0 }, id: 99 } });
                     state = appendEvents(state, [{ type: "ROUTE_COMPLETED", unitId: 1, tick: 0 }]);
                 }
                 returned.push(state);

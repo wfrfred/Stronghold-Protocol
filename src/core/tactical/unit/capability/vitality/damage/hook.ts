@@ -1,7 +1,8 @@
 import type { State as BattleState } from "../../../../battle/state.js";
 import * as hook from "../../../hook/hook.js";
-import type { State } from "../capability.js";
+import type { State, Vitality } from "../capability.js";
 import type { Context as VitalityContext, Result } from "../hook.js";
+import type { Unit } from "../../../unit.js";
 import type { DamageOperands, DamageReport, DamageRequest, PendingDamage } from "./contract.js";
 
 export type Context = VitalityContext<DamageRequest>;
@@ -40,7 +41,19 @@ export interface ReactionHook extends hook.Hook<
     readonly priority: number;
 }
 
-export type Hook = FormulaHook | AmountHook | ReactionHook;
+export interface Received {
+    readonly request: DamageRequest;
+    readonly pending: PendingDamage;
+}
+
+export interface ReceivedHook {
+    readonly id: string;
+    readonly stage: "received";
+    readonly enabled: (battle: BattleState, self: Unit & Vitality, event: Received) => boolean;
+    readonly invoke: (battle: BattleState, self: Unit & Vitality, event: Received) => BattleState;
+}
+
+export type Hook = FormulaHook | AmountHook | ReactionHook | ReceivedHook;
 
 export function setHook(state: State, entry: Hook): State {
     const damageHooks = hook.set(state.damageHooks, entry);

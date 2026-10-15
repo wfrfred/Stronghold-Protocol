@@ -7,7 +7,8 @@ import {
     updateUnit,
     type State as BattleState,
 } from "../../core/tactical/battle/state.js";
-import { drainUnitSkillSp } from "../../core/tactical/battle/execution/skill-sp.js";
+import { modify } from "../../core/tactical/unit/capability/skill/sp.js";
+import { hasSkill } from "../../core/tactical/unit/capability/skill/capability.js";
 import * as modifier from "../../core/tactical/unit/contribution/value.js";
 import { TICKS_PER_SECOND } from "../../core/tactical/tick.js";
 import type { Definition } from "../../core/tactical/unit/effect/definition.js";
@@ -189,7 +190,6 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
                         ignoreForSp,
                         tick: context.tick,
                     },
-                    resources,
                     context.call,
                 ).state;
             };
@@ -289,11 +289,15 @@ export function registerArknightsElementalBursts(resources: CombatResources): vo
 
                     for (let second = previousSeconds + 1; second <= completedSeconds; second++) {
                         if (profile.spDrainPerSecond > 0) {
-                            state = drainUnitSkillSp(
-                                state,
-                                context.burst.targetUnitId,
-                                profile.spDrainPerSecond,
-                            ).state;
+                            const target = getUnit(state, context.burst.targetUnitId);
+
+                            if (target !== undefined && hasSkill(target)) {
+                                state = modify(
+                                    state,
+                                    unitRef(target),
+                                    -profile.spDrainPerSecond,
+                                ).state;
+                            }
                         }
                         if (profile.damagePerSecond !== null) {
                             state = hurt(state, context, profile.damagePerSecond, true);

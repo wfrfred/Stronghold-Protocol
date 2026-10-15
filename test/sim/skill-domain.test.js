@@ -1,241 +1,280 @@
-import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
-import { battlefieldView, getUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
-import { definition as effectDefinition, effectFixtureWork } from "../helpers/effects.js";
-import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
-import { deadline, setDeadline, setData } from "../../dist/core/tactical/unit/effect/effect.js";
-import { get } from "../../dist/core/tactical/unit/effect/operations.js";
-import { createDefinition as createSkillDefinition, validateState as validateSkillState, initialize as initializeSkillState } from "../../dist/core/tactical/unit/capability/skill/capability.js";
-import { activateSkill, advanceSkill, finishSkill } from "../../dist/core/tactical/unit/capability/skill/execution.js";
-import { drainSkillSp, gainSkillSp, spendSkillSp } from "../../dist/core/tactical/unit/capability/skill/sp.js";
+import { getUnit } from "../../dist/core/tactical/battle/state.js";
+import * as skills from "../../dist/core/tactical/unit/capability/skill/operations.js";
+import * as sp from "../../dist/core/tactical/unit/capability/skill/sp.js";
+import { initialize as initializeSkill, removeRule } from "../../dist/core/tactical/unit/capability/skill/capability.js";
+import { create as value } from "../../dist/core/tactical/unit/contribution/value.js";
 import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { ref } from "../../dist/core/tactical/unit/query.js";
+import { effectFixtureWork } from "../helpers/effects.js";
+import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
+import { start as startAction } from "../../dist/core/tactical/unit/action/operations.js";
+import { fixture, definition, at, change, currentRef } from "../helpers/skill.js";
 
-function fixture(options = {}, content = {}) {
-  const resources = new CombatResources();
-  const definition = createSkillDefinition({ id: "skill-domain-fixture", activation: "MANUAL", spRecovery: "TIME", spCost: 2, initialSp: 2, durationTicks: 30, ...options });
-  resources.skills.register({ definition, activate: state => ({ state, value: { type: "ACTIVATED" } }), ...content });
-  const unit = initialize({ id: 1, position: [0, 0], definition: { id: "skilled-unit", skill: definition } });
-  return { resources, definition, unit, state: effectFixtureWork(unit) };
-}
-function setSp(state, definition, amount) {
-  const unit = getUnit(state, 1);
-  return updateUnit(state, { ...unit, skill: gainSkillSp(unit.skill, definition, "EXTERNAL", amount).state });
-}
-
-test("skill definitions retain identity and initial SP is deployment-only", () => {
-  const f = fixture({ initialSp: 1, maxCharges: 2 });
-  assert.equal(f.unit.definition.skill, f.definition);
-  assert.equal(createSkillDefinition(f.definition), f.definition);
-  assert.equal(initializeSkillState(f.definition, { tick: 90 }).sp, 1);
-  assert.equal(initializeSkillState(f.definition, { tick: 90 }).lastAdvancedTick, 90);
-  assert.equal(spendSkillSp(f.unit.skill, f.definition, 1).state.sp, 0);
-  assert.throws(() => createSkillDefinition({ ...f.definition, initialSp: 5 }), /capacity/);
-  assert.equal(validateSkillState(f.unit.skill), undefined);
-  assert.throws(() => validateSkillState({ ...f.unit.skill, sp: 0.5 }), /integer/);
-  assert.throws(() => initializeSkillState({ ...f.definition, initialSp: 0.5 }), /integer/);
+const resource = (overrides = {}) => ({
+    initial: 0, capacity: 6, requirement: 3, cost: 3,
+    recovery: { type: "TIME", intervalTicks: 30 }, ...overrides,
 });
-for (const source of ["TIME", "ATTACK", "HIT"]) {
-  test(`${source} SP accepts its base source and preserves charge capacity`, () => {
-    const f = fixture({ spRecovery: source, spCost: 3, initialSp: 0, maxCharges: 2 });
-    const gained = gainSkillSp(f.unit.skill, f.definition, source, 5);
-    const capped = gainSkillSp(gained.state, f.definition, source, 10);
-    assert.equal(gained.state.sp, 5);
-    assert.deepEqual(capped.result, { type: "APPLIED", amount: 1 });
-    assert.equal(capped.state.sp, 6);
-    assert.equal(gainSkillSp(capped.state, f.definition, source).result.reason, "FULL");
-    assert.equal(gainSkillSp(gained.state, f.definition, source === "ATTACK" ? "HIT" : "ATTACK").result.reason, "WRONG_SOURCE");
-    assert.equal(spendSkillSp(gained.state, f.definition).state.sp, 2);
-    assert.equal(spendSkillSp({ ...gained.state, sp: 2 }, f.definition).result.reason, "INSUFFICIENT_SP");
-    assert.throws(() => gainSkillSp(gained.state, f.definition, source, 0.5), /integer/);
-  });
-}
+const read = (battle) => getUnit(battle, 1).skill;
+const observe = (id, invoke) => ({ id, enabled: () => true, invoke });
 
-test("time SP preserves partial progress while full and returns a new state", () => {
-  const f = fixture({ initialSp: 0 });
-  const before = battlefieldView(f.state);
-  let state = advanceSkill(f.state, 1, 15, f.resources);
-  assert.equal(getUnit(state, 1).skill.spRecoveryProgressTicks, 15);
-  state = setSp(state, f.definition, 2);
-  state = advanceSkill(state, 1, 100, f.resources);
-  assert.equal(getUnit(state, 1).skill.spRecoveryProgressTicks, 15);
-  const full = getUnit(state, 1);
-  state = updateUnit(state, { ...full, skill: spendSkillSp(full.skill, f.definition).state });
-  state = advanceSkill(state, 1, 114, f.resources);
-  assert.equal(getUnit(state, 1).skill.sp, 0);
-  state = advanceSkill(state, 1, 115, f.resources);
-  assert.equal(getUnit(state, 1).skill.sp, 1);
-  assert.equal(getUnit(state, 1).skill.spRecoveryProgressTicks, 0);
-  assert.equal(before.getUnit(1).skill.spRecoveryProgressTicks, 0);
+test("skill definitions are shared and deployments initialize independent private state", () => {
+    const f = fixture({ initialize: () => ({ count: 0 }), sp: resource({ initial: 1 }) });
+    assert.equal(f.unit.definition.skill, f.definition);
+    const another = initializeSkill(f.definition, 90);
+    assert.deepEqual(another.data, { count: 0 });
+    assert.notEqual(another.data, f.unit.skill.data);
+    assert.equal(another.sp.value, 1);
+    assert.equal(another.sp.lastTick, 90);
+    assert.throws(() => definition({ sp: resource({ initial: 7 }) }), /capacity/);
+    assert.throws(() => definition({ sp: resource({ initial: 0.5 }) }), /integer/);
 });
 
-test("active duration locks every SP source and resumes its preserved clock", () => {
-  const f = fixture({ initialSp: 0, spCost: 1 });
-  let state = advanceSkill(f.state, 1, 15, f.resources);
-  state = setSp(state, f.definition, 1);
-  const started = activateSkill(state, { unitId: 1, tick: 15 }, f.resources);
-  state = started.state;
-  assert.equal(started.value.type, "ACTIVATED");
-  for (const source of ["TIME", "ATTACK", "HIT", "EXTERNAL"]) assert.equal(gainSkillSp(getUnit(state, 1).skill, f.definition, source).result.reason, "LOCKED");
-  state = advanceSkill(state, 1, 44, f.resources);
-  assert.equal(getUnit(state, 1).skill.spRecoveryProgressTicks, 15);
-  const ended = advanceSkill(state, 1, 45, f.resources);
-  state = ended;
-  assert.equal(ended.events.at(-1).type, "SKILL_FINISHED");
-  assert.equal(getUnit(state, 1).skill.active, null);
-  state = advanceSkill(state, 1, 60, f.resources);
-  assert.equal(getUnit(state, 1).skill.sp, 1);
-});
-
-test("normal refusals preserve the input version and allocate no activation", () => {
-  const f = fixture({ initialSp: 0 });
-  assert.equal(activateSkill(f.state, { unitId: 1, tick: 0 }, f.resources).value.reason, "INSUFFICIENT_SP");
-  assert.equal(activateSkill(f.state, { unitId: 1, tick: 0, trigger: "AUTO" }, f.resources).value.reason, "WRONG_TRIGGER");
-  const refused = fixture({}, { accepts: () => false, activate: () => assert.fail("must not run") });
-  const result = activateSkill(refused.state, { unitId: 1, tick: 0 }, refused.resources);
-  assert.equal(result.value.reason, "CONDITION");
-  assert.equal(result.state, refused.state);
-  assert.equal(getUnit(result.state, 1).skill.nextActivationId, 0);
-});
-
-test("instant AUTO activation occurs once per advancement tick", () => {
-  const f = fixture({ activation: "AUTO", durationTicks: 0, spCost: 1, initialSp: 2, maxCharges: 2 });
-  const first = advanceSkill(f.state, 1, 0, f.resources);
-  assert.deepEqual(first.events.map(event => event.type), ["SKILL_ACTIVATED", "SKILL_FINISHED"]);
-  assert.equal(getUnit(first, 1).skill.sp, 1);
-  const repeated = advanceSkill(first, 1, 0, f.resources);
-  assert.equal(repeated.events.length, first.events.length);
-  assert.equal(getUnit(repeated, 1).skill.nextActivationId, 1);
-  const next = advanceSkill(repeated, 1, 1, f.resources);
-  assert.equal(next.events.at(-2).type, "SKILL_ACTIVATED");
-  assert.equal(getUnit(next, 1).skill.sp, 0);
-  assert.equal(getUnit(f.state, 1).skill.sp, 2);
-});
-
-test("passive skills activate once; unlimited skills require explicit ending", () => {
-  const passive = fixture({ activation: "PASSIVE", spRecovery: "NONE", spCost: 0, initialSp: 0, durationTicks: 0 });
-  const first = advanceSkill(passive.state, 1, 0, passive.resources);
-  const later = advanceSkill(first, 1, 30, passive.resources);
-  assert.equal(later.events.length, first.events.length);
-  assert.equal(getUnit(later, 1).skill.nextActivationId, 1);
-  const unlimited = fixture({ durationTicks: null });
-  let state = activateSkill(unlimited.state, { unitId: 1, tick: 0 }, unlimited.resources).state;
-  state = advanceSkill(state, 1, 1000, unlimited.resources);
-  assert.equal(getUnit(state, 1).skill.active.endsAtTick, null);
-  assert.equal(getUnit(finishSkill(state, 1, 1000, unlimited.resources), 1).skill.active, null);
-});
-
-for (const scoped of [false, true]) {
-  test(`content refusal retains its prefix and identity allocation, refunds SP, closes scopes (${scoped})`, () => {
-    const definition = effectDefinition("rejected-prefix");
-    const f = fixture({}, { activate(state, context) {
-      const installed = effects.install(state, unitRef(getUnit(state, 1)), definition, { source: 1, scopes: scoped ? [{ type: "SKILL", unitId: 1, activationId: context.activationId }] : [] }, context.call);
-      assert.ok(installed.value);
-      return { state: installed.state, value: { type: "REJECTED", reason: "content prerequisite" } };
-    } });
-    const rejected = activateSkill(f.state, { unitId: 1, tick: 0 }, f.resources);
-    const unit = getUnit(rejected.state, 1);
-    assert.equal(rejected.value.reason, "CONTENT_REJECTED");
-    assert.equal(unit.effects.values().length, scoped ? 0 : 1);
-    assert.equal(unit.effects.nextId, 1);
-    assert.equal(unit.skill.sp, 2);
-    assert.equal(unit.skill.nextActivationId, 1);
-    assert.equal(unit.skill.active, null);
-    assert.equal(getUnit(f.state, 1).effects.nextId, 0);
-  });
-}
-
-test("zero-duration activation closes its scope before finish content; closed binding is refused", () => {
-  const definition = effectDefinition("zero-duration");
-  const observed = [];
-  let independent;
-  const f = fixture({ durationTicks: 0 }, {
-    activate(state, context) {
-      state = effects.install(state, unitRef(getUnit(state, 1)), definition, { scopes: [{ type: "SKILL", unitId: 1, activationId: context.activationId }] }, context.call).state;
-      const installed = effects.install(state, unitRef(getUnit(state, 1)), definition, {}, context.call);
-      independent = installed.value;
-      return { state: installed.state, value: { type: "ACTIVATED" } };
-    },
-    finish(state, context) {
-      const unit = getUnit(state, 1);
-      observed.push({ active: unit.skill.active, effects: unit.effects.values().length });
-      const rebound = effects.bindLifetime(state, independent, { type: "SKILL", unitId: 1, activationId: context.activationId });
-      assert.equal(rebound.value, false);
-      const rejected = effects.install(rebound.state, unitRef(unit), definition, { scopes: [{ type: "SKILL", unitId: 1, activationId: context.activationId }] }, context.call);
-      assert.equal(rejected.value, undefined);
-      return rejected.state;
-    },
-  });
-  const activated = activateSkill(f.state, { unitId: 1, tick: 0 }, f.resources);
-  assert.deepEqual(activated.state.events.map(event => event.type), ["SKILL_ACTIVATED", "SKILL_FINISHED"]);
-  assert.deepEqual(observed, [{ active: null, effects: 1 }]);
-  assert.deepEqual(get(activated.state, independent).scopes, []);
-  assert.equal(getUnit(activated.state, 1).effects.nextId, 2);
-});
-
-for (const trigger of ["SKILL", "EFFECT", "TICK"]) {
-  test(`combined scopes: renewed time keeps other constraints until ${trigger} closes`, () => {
-    const parent = effectDefinition(`parent-${trigger}`);
-    let parentRef;
-    let dependentRef;
-    const ended = [];
-    const dependent = effectDefinition(`dependent-${trigger}`, { renewed: false }, {
-      onTick(state, context) {
-        if (context.tick !== 5 || context.self.data.renewed) return state;
-        const next = setDeadline(setData(context.self, { renewed: true }), 10);
-        return effects.replaceEffect(state, { host: { id: 1 }, id: (next).id }, next);
-      },
-      onEnd(state, context) { ended.push(context.reason); return state; },
+for (const source of ["TIME", "ACTION", "HIT"]) {
+    test(`${source} recovery caps capacity and preserves ordinary charge budgets`, () => {
+        const recovery = source === "TIME" ? { type: source, intervalTicks: 30 } : { type: source, amount: 1 };
+        const f = fixture({ sp: resource({ recovery }) });
+        const gained = sp.recover(f.state, f.ref, source, 5);
+        assert.equal(read(gained.state).sp.value, 5);
+        assert.equal(read(sp.recover(gained.state, f.ref, source, 10).state).sp.value, 6);
+        const paid = sp.pay(gained.state, f.ref);
+        assert.equal(read(paid.state).sp.value, 2);
+        const refused = sp.pay(paid.state, f.ref);
+        assert.equal(refused.value.type, "REJECTED");
+        assert.equal(refused.state, paid.state);
+        assert.equal(sp.recover(gained.state, f.ref, source === "ACTION" ? "HIT" : "ACTION").value.type, "REJECTED");
+        assert.throws(() => sp.recover(gained.state, f.ref, source, 0.5), /integer/);
     });
-    const f = fixture({}, { activate(state, context) {
-      const installedParent = effects.install(state, unitRef(getUnit(state, 1)), parent, {}, context.call);
-      state = installedParent.state;
-      parentRef = installedParent.value;
-      const installed = effects.install(state, unitRef(getUnit(state, 1)), dependent, { scopes: [{ type: "SKILL", unitId: 1, activationId: context.activationId }, { type: "EFFECT", ref: parentRef }, { type: "TICK", tick: 5 }] }, context.call);
-      dependentRef = installed.value;
-      return { state: installed.state, value: { type: "ACTIVATED" } };
-    } });
-    let state = activateSkill(f.state, { unitId: 1, tick: 0 }, f.resources).state;
-    state = effects.advance({ ...state, tick: 5 });
-    assert.equal(deadline(get(state, dependentRef)), 10);
-    assert.deepEqual(get(state, dependentRef).scopes.filter(scope => scope.type !== "TICK"), [{ type: "SKILL", unitId: 1, activationId: 0 }, { type: "EFFECT", ref: parentRef }]);
-    if (trigger === "SKILL") state = finishSkill(state, 1, 6, f.resources);
-    else if (trigger === "EFFECT") state = effects.end(state, parentRef, "DISPELLED");
-    else state = effects.advance({ ...state, tick: 10 });
-    assert.equal(get(state, dependentRef), undefined);
-    assert.equal(getUnit(state, 1).skill.active === null, trigger === "SKILL");
-    assert.equal(get(state, parentRef) === undefined, trigger === "EFFECT");
-    assert.deepEqual(ended, [trigger === "SKILL" ? "SKILL_FINISHED" : trigger === "EFFECT" ? "DISPELLED" : "EXPIRED"]);
-    effects.advance({ ...state, tick: 100 });
-    assert.equal(ended.length, 1);
-  });
 }
 
-test("callback failure propagates without changing its input", () => {
-  const failure = new Error("content failed");
-  const f = fixture({}, { activate: () => { throw failure; } });
-  const before = battlefieldView(f.state);
-  assert.throws(() => activateSkill(f.state, { unitId: 1, tick: 0 }, f.resources), error => error === failure);
-  assert.equal(before.getUnit(1).skill.sp, 2);
-  assert.equal(getUnit(f.state, 1).skill.active, null);
+test("capacity, activation requirement and payment are separate numeric facts", () => {
+    const f = fixture({ sp: resource({ initial: 5, capacity: 10, requirement: 5, cost: 2 }) });
+    const activated = skills.activate(f.state, f.ref);
+    assert.equal(activated.value.type, "ACTIVATED");
+    assert.equal(read(activated.state).sp.value, 3);
+    assert.equal(read(f.state).sp.value, 5);
 });
 
-test("dead or absent units do not activate or accumulate time SP", () => {
-  const f = fixture({ initialSp: 0 });
-  const unit = initialize({ id: 1, position: [0, 0], definition: { id: "dead-skilled", skill: f.definition, vitality: { maxHp: 100 } } });
-  const state = effectFixtureWork({ ...unit, vitality: { ...unit.vitality, hp: 0 } });
-  assert.equal(activateSkill(state, { unitId: 1, tick: 0 }, f.resources).value.reason, "UNAVAILABLE");
-  assert.equal(getUnit(advanceSkill(state, 1, 300, f.resources), 1).skill.sp, 0);
-  assert.equal(advanceSkill(state, 9, 0, f.resources), state);
+test("payment needs no Activation and ignores recovery and activation Rules", () => {
+    const f = fixture({ sp: resource({ initial: 5 }), activation: null });
+    let state = change(f.state, (skill) => ({ ...skill, rules: [{
+        id: "blocked", allowsActivation: () => false, allowsRecovery: () => false,
+    }] }));
+    state = sp.pay(state, f.ref, 3).state;
+    assert.equal(read(state).sp.value, 2);
+    assert.equal(read(state).active, null);
+    assert.equal(read(state).nextActivationId, 0);
 });
 
-test("SP drain applies during active skills and finish callbacks see the inactive skill", () => {
-  let observed;
-  const f = fixture({}, { finish(state, context) { observed = context.battlefield.getUnit(1).skill.active; return state; } });
-  const started = activateSkill(f.state, { unitId: 1, tick: 0 }, f.resources);
-  assert.equal(drainSkillSp({ ...getUnit(started.state, 1).skill, sp: 2 }, 5).result.amount, 2);
-  const ended = finishSkill(started.state, 1, 30, f.resources);
-  assert.equal(observed, null);
-  assert.equal(finishSkill(ended, 1, 30, f.resources), ended);
+test("recovery Rules block ordinary positive modification, but not drains, payment or explicit force", () => {
+    const f = fixture({ sp: resource({ initial: 4 }) });
+    const state = change(f.state, (skill) => ({ ...skill, rules: [{ id: "block", allowsRecovery: () => false }] }));
+    assert.equal(sp.recover(state, f.ref, "TIME", 1).state, state);
+    assert.equal(sp.modify(state, f.ref, 1).state, state);
+    assert.equal(read(sp.modify(state, f.ref, -2).state).sp.value, 2);
+    assert.equal(read(sp.pay(state, f.ref, 3).state).sp.value, 1);
+    assert.equal(read(sp.modify(state, f.ref, 20, true).state).sp.value, 6);
+    assert.equal(read(sp.modify(state, f.ref, -20, true).state).sp.value, 0);
+});
+
+test("active recovery is a removable default Rule and payment remains legal during activation", () => {
+    const f = fixture({ sp: resource({ initial: 6 }) });
+    let state = skills.activate(f.state, f.ref).state;
+    assert.equal(read(state).sp.value, 3);
+    assert.equal(sp.recover(state, f.ref, "TIME", 1).value.type, "REJECTED");
+    state = sp.pay(state, f.ref, 1).state;
+    assert.equal(read(state).sp.value, 2);
+    state = change(state, (skill) => removeRule(skill, "@skill/active-recovery"));
+    state = sp.recover(state, f.ref, "TIME", 1).state;
+    assert.equal(read(state).sp.value, 3);
+    assert.equal(read(state).active.status, "ACTIVE");
+});
+
+test("natural SP pauses while full and resumes the saved remainder without a backlog", () => {
+    const f = fixture({ sp: resource({ capacity: 2, requirement: 2, cost: 2 }) });
+    let state = skills.advance(at(f.state, 15), f.ref);
+    assert.equal(read(state).sp.recovery.remainingTicks, 15);
+    state = sp.modify(state, f.ref, 2).state;
+    state = skills.advance(at(state, 100), f.ref);
+    assert.equal(read(state).sp.recovery.remainingTicks, 15);
+    state = sp.pay(state, f.ref, 2).state;
+    state = skills.advance(at(state, 114), f.ref);
+    assert.equal(read(state).sp.value, 0);
+    state = skills.advance(at(state, 115), f.ref);
+    assert.equal(read(state).sp.value, 1);
+    assert.equal(read(f.state).sp.recovery.remainingTicks, 30);
+});
+
+test("recovery restrictions pause the natural timer and do not accumulate missed periods", () => {
+    const f = fixture({ sp: resource() });
+    let state = skills.advance(at(f.state, 12), f.ref);
+    state = change(state, (skill) => ({ ...skill, rules: [{ id: "block", allowsRecovery: () => false }] }));
+    state = skills.advance(at(state, 200), f.ref);
+    assert.equal(read(state).sp.value, 0);
+    assert.equal(read(state).sp.recovery.remainingTicks, 18);
+    state = change(state, (skill) => ({ ...skill, rules: skill.rules.filter(({ id }) => id !== "block") }));
+    state = skills.advance(at(state, 217), f.ref);
+    assert.equal(read(state).sp.value, 0);
+    state = skills.advance(at(state, 218), f.ref);
+    assert.equal(read(state).sp.value, 1);
+});
+
+test("a long natural advance stops its timer when the first pulse fills SP", () => {
+    const f = fixture({ sp: resource({ initial: 1, capacity: 2, requirement: 2, cost: 2 }) });
+    let state = skills.advance(at(f.state, 15), f.ref);
+    assert.equal(read(state).sp.recovery.remainingTicks, 15);
+    state = skills.advance(at(state, 100), f.ref);
+    assert.equal(read(state).sp.value, 2);
+    assert.equal(read(state).sp.recovery.remainingTicks, 30);
+    state = sp.pay(state, f.ref, 2).state;
+    state = skills.advance(at(state, 129), f.ref);
+    assert.equal(read(state).sp.value, 0);
+    state = skills.advance(at(state, 130), f.ref);
+    assert.equal(read(state).sp.value, 1);
+});
+
+test("natural speed changes preserve absolute elapsed time instead of a completion fraction", () => {
+    const f = fixture({ sp: resource() });
+    let state = skills.advance(at(f.state, 12), f.ref);
+    state = change(state, (skill) => ({ ...skill, sp: { ...skill.sp, recoverySpeed: [
+        { id: "double", value: [value({ finalScaler: 2 })] },
+    ] } }));
+    state = skills.advance(state, f.ref);
+    assert.equal(read(state).sp.recovery.periodTicks, 15);
+    assert.equal(read(state).sp.recovery.remainingTicks, 3);
+    state = skills.advance(at(state, 15), f.ref);
+    assert.equal(read(state).sp.value, 1);
+});
+
+test("zero natural speed invalidates the timer and resumption starts a full period", () => {
+    const f = fixture({ sp: resource() });
+    let state = skills.advance(at(f.state, 12), f.ref);
+    state = change(state, (skill) => ({ ...skill, sp: { ...skill.sp, recoveryMultiplier: [
+        { id: "zero", value: [value({ finalScaler: 0 })] },
+    ] } }));
+    state = skills.advance(state, f.ref);
+    assert.equal(read(state).sp.recovery, null);
+    state = change(at(state, 100), (skill) => ({ ...skill, sp: { ...skill.sp, recoveryMultiplier: [] } }));
+    state = skills.advance(state, f.ref);
+    assert.equal(read(state).sp.recovery.remainingTicks, 30);
+    state = skills.advance(at(state, 129), f.ref);
+    assert.equal(read(state).sp.value, 0);
+    state = skills.advance(at(state, 130), f.ref);
+    assert.equal(read(state).sp.value, 1);
+});
+
+test("SP Hooks keep settled reports across nested payment and dispatch only their own business", () => {
+    const seen = [];
+    const f = fixture({ sp: resource({ initial: 9, capacity: 20, requirement: 10 }) });
+    let state = change(f.state, (skill) => ({ ...skill,
+        spRecovered: [
+            observe("nested", (battle, self, event) => {
+                seen.push(["first", event.previous, event.current]);
+                return sp.pay(battle, ref(self), 11).state;
+            }),
+            observe("after", (battle, _self, event) => {
+                seen.push(["after", event.previous, event.current, read(battle).sp.value]);
+                return battle;
+            }),
+        ],
+        spPaid: [observe("payment", (battle, _self, event) => {
+            seen.push(["paid", event.previous, event.current]);
+            return battle;
+        })],
+        spModified: [observe("not-modification", () => assert.fail("wrong resource notification"))],
+    }));
+    state = sp.recover(state, f.ref, "TIME", 2).state;
+    assert.deepEqual(seen, [["first", 9, 11], ["paid", 11, 0], ["after", 9, 11, 0]]);
+    assert.equal(read(state).sp.value, 0);
+});
+
+test("persistent data survives activations and activation data is initialized independently", () => {
+    const f = fixture({ initialize: () => ({ count: 0 }), sp: null,
+        activation: { trigger: "MANUAL", sustain: { type: "INFINITE" }, initialize: () => ({ count: 0 }) },
+    });
+    let state = skills.activate(f.state, f.ref).state;
+    state = change(state, (skill) => ({ ...skill, data: { count: 7 } }));
+    state = skills.finish(state, currentRef(state));
+    state = skills.activate(state, f.ref).state;
+    assert.deepEqual(read(state).data, { count: 7 });
+    assert.deepEqual(read(state).active.data, { count: 0 });
+    assert.equal(read(state).active.id, 1);
+});
+
+test("normal activation refusal allocates no identity and preserves the input state", () => {
+    const f = fixture({ sp: resource() });
+    const rejected = skills.activate(f.state, f.ref);
+    assert.equal(rejected.value.type, "REJECTED");
+    assert.equal(rejected.state, f.state);
+    assert.equal(read(rejected.state).nextActivationId, 0);
+    assert.equal(skills.activate(f.state, f.ref, "AUTO").value.type, "REJECTED");
+});
+
+test("definition admission rejects before payment and activation allocation", () => {
+    const f = fixture({ activation: {
+        trigger: "MANUAL", sustain: { type: "INFINITE" }, initialize: () => ({}),
+        accepts: () => false, onStart: () => assert.fail("rejected content must not run"),
+    } });
+    const rejected = skills.activate(f.state, f.ref);
+    assert.equal(rejected.value.type, "REJECTED");
+    assert.equal(rejected.state, f.state);
+    assert.equal(read(rejected.state).sp.value, 2);
+    assert.equal(read(rejected.state).nextActivationId, 0);
+});
+
+test("dead and leaving hosts cannot activate or recover natural SP", () => {
+    const skill = definition({ sp: resource() });
+    const initial = initialize({ id: 1, position: [0, 0], definition: { id: "dead", skill, vitality: { maxHp: 100 } } });
+    for (const unit of [
+        { ...initial, vitality: { ...initial.vitality, hp: 0 } },
+        { ...initial, lifecycle: "LEAVING" },
+    ]) {
+        const state = effectFixtureWork(unit);
+        assert.equal(skills.activate(state, ref(unit)).value.type, "REJECTED");
+        assert.equal(read(skills.advance(at(state, 300), ref(unit))).sp.value, 0);
+    }
+});
+
+test("TIME ends at its deadline and INFINITE requires an explicit end", () => {
+    const f = fixture();
+    let state = skills.activate(f.state, f.ref).state;
+    assert.deepEqual(read(state).active.sustain, { type: "TIME", endsAtTick: 30 });
+    state = skills.advance(at(state, 29), f.ref);
+    assert.ok(read(state).active);
+    state = skills.advance(at(state, 30), f.ref);
+    assert.equal(read(state).active, null);
+    const infinite = fixture({ activation: {
+        trigger: "MANUAL", sustain: { type: "INFINITE" }, initialize: () => ({}),
+    } });
+    state = skills.activate(infinite.state, infinite.ref).state;
+    state = skills.advance(at(state, 1000), infinite.ref);
+    assert.equal(read(state).active.sustain.type, "INFINITE");
+    assert.equal(read(skills.finish(state, currentRef(state))).active, null);
+});
+
+test("a deployment passive can have a finite TIME duration without natural reactivation", () => {
+    const f = fixture({ sp: null, activation: {
+        trigger: "PASSIVE", sustain: { type: "TIME", durationTicks: 3 }, initialize: () => ({}),
+    } });
+    let state = skills.enter(f.state, f.ref);
+    assert.equal(read(state).active.sustain.endsAtTick, 3);
+    state = skills.advance(at(state, 3), f.ref);
+    assert.equal(read(state).active, null);
+    state = skills.advance(at(state, 30), f.ref);
+    assert.equal(read(state).active, null);
+    assert.equal(read(state).nextActivationId, 1);
+});
+
+test("generic Action scheduling does not itself award ACTION SP", () => {
+    const action = { id: "reload-like", intervalTicks: 30, speed: 100,
+        start: (battle) => ({ state: battle, value: {} }),
+        step: (battle) => ({ state: battle, value: true }),
+    };
+    const unit = initialize({ id: 1, position: [0, 0], definition: {
+        id: "actor", skill: definition({ sp: resource({ recovery: { type: "ACTION", amount: 1 } }) }),
+        action: { definitions: Definitions.empty().add(action) },
+    } });
+    const battle = startAction(effectFixtureWork(unit), ref(unit), action).state;
+    assert.equal(read(battle).sp.value, 0);
 });

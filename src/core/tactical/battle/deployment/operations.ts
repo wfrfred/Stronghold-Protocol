@@ -1,4 +1,3 @@
-import type { SkillExecutionResources } from "../../unit/capability/skill/execution.js";
 import { evaluateDeployment } from "../../battlefield/deployment/query.js";
 import type { SupportRelation } from "../../battlefield/support/relations.js";
 import { Tile, type TilePosition } from "../../geometry/coordinate.js";
@@ -177,16 +176,12 @@ export function deploy(state: BattleState, request: DeployRequest): Result<Deplo
     return { state, value: { type: "DEPLOYED", cardId: value.id, unitId: placed.unit.id } };
 }
 
-export function retreat(
-    state: BattleState,
-    unitId: Id,
-    resources: SkillExecutionResources,
-): BattleState {
+export function retreat(state: BattleState, unitId: Id): BattleState {
     if (getUnit(state, unitId) === undefined) {
         throw new RangeError(`unknown retreat unit ${unitId}`);
     }
 
-    return removeUnitWithEffects(state, unitId, "RETREAT", resources, state.tick);
+    return removeUnitWithEffects(state, unitId, "RETREAT");
 }
 
 export function relocate(
@@ -248,7 +243,6 @@ export function relocate(
 export function resolveDeploymentCommands(
     state: BattleState,
     commands: readonly Command[],
-    resources: SkillExecutionResources,
 ): BattleState {
     for (const command of commands) {
         if (command.type === "DEPLOY_UNIT") {
@@ -266,7 +260,7 @@ export function resolveDeploymentCommands(
                 ]);
             }
         } else if (command.type === "RETREAT_UNIT") {
-            state = retreat(state, command.unitId, resources);
+            state = retreat(state, command.unitId);
         } else if (command.type === "RELOCATE_UNIT") {
             state = relocate(state, command);
         }

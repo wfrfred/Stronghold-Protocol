@@ -1176,7 +1176,7 @@ test('core battle propagates nested settlement errors without publishing battlef
   const effect = {
     id: 'nested-failure-effect', initialize: () => ({}),
     onInstall: (state, context) => {
-      state = resolveDamage(state, { sourceUnitId: 0, targetUnitId: 1, damageType: 'TRUE', operands: createDamageOperands(7), tick: context.tick }, resources, context.call).state;
+      state = resolveDamage(state, { sourceUnitId: 0, targetUnitId: 1, damageType: 'TRUE', operands: createDamageOperands(7), tick: context.tick }, context.call).state;
       assert.equal(getUnit(state, 1).vitality.hp, 93);
       assert.equal(getUnit(state, 2).definition.id, 'nested-created');
       assert.equal(state.execution.nextUnitId, 3);
@@ -2272,7 +2272,7 @@ test('core visibility: movement reads one navigation projection before following
   assert.deepEqual(viewBattlefield(battlefield).navigationMaps.WALK.cells.map(cell => cell.passable), [true, false, true, true, true]);
 
   const initial = createBattleState(battlefield, execution);
-  const moved = advanceMovement(initial, 0, { routeMoveMultiplier: 1 }, new CombatResources());
+  const moved = advanceMovement(initial, 0, { routeMoveMultiplier: 1 });
 
   const view = battlefieldView(moved);
   assert.deepEqual(view.unitIds.map(id => view.getUnit(id).position), [[2, 0], [2, 0]]);

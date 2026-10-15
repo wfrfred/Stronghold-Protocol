@@ -1,9 +1,8 @@
 import {
     createDefinition as createSkillDefinition,
-    type SkillActivationMode,
     type Definition as SkillDefinition,
-    type SkillSpRecovery,
 } from "../../core/tactical/unit/capability/skill/capability.js";
+import type { Recovery } from "../../core/tactical/unit/capability/skill/sp.js";
 import { TICKS_PER_SECOND } from "../../core/tactical/tick.js";
 import { parseBlackboard, type ArknightsBlackboardEntry } from "./blackboard.js";
 import { secondsToTicks } from "./tick.js";
@@ -30,7 +29,7 @@ function number(value: unknown, name: string): number {
     return value;
 }
 
-function activation(value: unknown): SkillActivationMode {
+function activation(value: unknown): NonNullable<SkillDefinition["activation"]>["trigger"] {
     switch (value) {
         case "PASSIVE":
         case 0:
@@ -49,7 +48,7 @@ function activation(value: unknown): SkillActivationMode {
     }
 }
 
-function spRecovery(value: unknown): SkillSpRecovery {
+function spRecovery(value: unknown): Recovery["type"] {
     switch (value) {
         case "INCREASE_WITH_TIME":
         case 1:
@@ -57,7 +56,7 @@ function spRecovery(value: unknown): SkillSpRecovery {
 
         case "INCREASE_WHEN_ATTACK":
         case 2:
-            return "ATTACK";
+            return "ACTION";
 
         case "INCREASE_WHEN_TAKEN_DAMAGE":
         case 4:
@@ -76,7 +75,6 @@ export function parseArknightsSkillLevel(
     value: unknown,
     level = 1,
     ammo?: number,
-    ammoPerAttack = 1,
 ): ArknightsSkillLevel {
     const skill = object(value, "skill record");
 
@@ -118,31 +116,47 @@ export function parseArknightsSkillLevel(
     if (increment < 0 || (recovery === "TIME" && increment === 0)) {
         throw new RangeError("skill SP increment must enable its recovery mode");
     }
-    if ((recovery === "ATTACK" || recovery === "HIT") && increment !== 1) {
-        throw new TypeError(
-            "nonstandard attack or hit SP increments require dedicated skill content",
-        );
-    }
     if (duration < 0 && duration !== -1) {
         throw new RangeError("skill duration must be nonnegative or unlimited");
+    }
+
+    let recoveryDefinition: Recovery;
+
+    if (recovery === "TIME") {
+        recoveryDefinition = { type: "TIME", intervalTicks: TICKS_PER_SECOND / increment };
+    } else if (recovery === "NONE") {
+        recoveryDefinition = { type: "NONE" };
+    } else {
+        recoveryDefinition = { type: recovery, amount: increment };
+    }
+
+    let sustain: NonNullable<SkillDefinition["activation"]>["sustain"];
+
+    if (ammo !== undefined) {
+        sustain = { type: "AMMO", amount: ammo };
+    } else if (duration === -1) {
+        sustain = { type: "INFINITE" };
+    } else {
+        sustain = { type: "TIME", durationTicks: secondsToTicks(duration, "skill duration") };
     }
 
     return Object.freeze({
         definition: createSkillDefinition({
             id: skill.skillId,
-            activation: activation(selected.skillType),
-            spRecovery: recovery,
-            spCost: number(sp.spCost, "skill SP cost"),
-            initialSp: number(sp.initSp, "skill initial SP"),
-            maxCharges: number(sp.maxChargeTime, "skill maximum charges"),
-            ...(recovery === "TIME"
-                ? { spRecoveryIntervalTicks: TICKS_PER_SECOND / increment }
-                : {}),
-            durationTicks:
-                ammunitionMode || duration === -1
-                    ? null
-                    : secondsToTicks(duration, "skill duration"),
-            ...(ammo === undefined ? {} : { ammo, ammoPerAttack }),
+            initialize: () => ({}),
+            sp: {
+                initial: number(sp.initSp, "skill initial SP"),
+                capacity:
+                    number(sp.spCost, "skill SP cost") *
+                    number(sp.maxChargeTime, "skill maximum charges"),
+                requirement: number(sp.spCost, "skill SP cost"),
+                recovery: recoveryDefinition,
+            },
+            activation: {
+                trigger: activation(selected.skillType),
+                initialize: () => ({}),
+                sustain,
+            },
         }),
         level,
         blackboard: parseBlackboard(selected.blackboard, "skill blackboard"),

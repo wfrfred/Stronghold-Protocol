@@ -58,14 +58,14 @@ test("settlement invariants: invalid final damage preserves its input despite pr
             },
         ]);
         let battle = workFor(unit(1), attach(unit(2), content));
-        assert.throws(() => resolveDamage(battle, damageRequest(), resources), RangeError);
+        assert.throws(() => resolveDamage(battle, damageRequest()), RangeError);
         assert.equal(getUnit(battle, 2).vitality.hp, 200);
         assert.equal(getUnit(battle, 2).effects.values()[0].data.uses, 0);
         assert.equal(getUnit(battle, 2).vitality.hp, 200);
         assert.equal(reactions, 0);
         malformed = false;
         let valid = battle;
-        const reportSettlement = resolveDamage(valid, damageRequest(), resources);
+        const reportSettlement = resolveDamage(valid, damageRequest());
         valid = reportSettlement.state;
         const report = reportSettlement.value;
         assert.equal(getUnit(valid, 2).vitality.hp, 180);
@@ -88,7 +88,7 @@ test("settlement invariants: invalid final healing preserves its input despite p
                         ...current,
                         uses: current.uses + 1,
                     }));
-                    state = resolveDamage(state, damageRequest(10), resources, context.call).state;
+                    state = resolveDamage(state, damageRequest(10), context.call).state;
                     return {
                         state,
                         value: { value: { ...pending, amount: malformed ? invalid : 30 } },
@@ -172,7 +172,7 @@ test("settlement invariants: cancelled damage cannot publish nonfinite formula o
                 stage === "reception"
                     ? workFor(unit(1), attach(unit(2), bad))
                     : workFor(attach(unit(1), bad), attach(unit(2), repair));
-            assert.throws(() => resolveDamage(battle, damageRequest(), resources), RangeError);
+            assert.throws(() => resolveDamage(battle, damageRequest()), RangeError);
             assert.equal(getUnit(battle, 2).vitality.hp, 200);
             assert.deepEqual(battle.events, []);
             assert.equal(reactions, 0);
@@ -207,7 +207,7 @@ test("settlement invariants: signed intermediate modifiers can resolve to valid 
     target = attach(target, reception(healingEffect, "signed-healing", -20, 100));
     target = attach(target, reception(healingEffect, "restored-healing", 30, 0));
     let damagedBattle = workFor(source, target);
-    const damageSettlement = resolveDamage(damagedBattle, damageRequest(), resources);
+    const damageSettlement = resolveDamage(damagedBattle, damageRequest());
     damagedBattle = damageSettlement.state;
     const damage = damageSettlement.value;
     let healedBattle = workFor(source, target);
@@ -224,7 +224,7 @@ test("settlement invariants: signed intermediate modifiers can resolve to valid 
 test("settlement invariants: zero amounts remain valid and negative source healing is normalized", () => {
     const resources = new CombatResources();
     let battle = workFor(unit(1), unit(2));
-    const damageSettlement = resolveDamage(battle, damageRequest(0), resources);
+    const damageSettlement = resolveDamage(battle, damageRequest(0));
     battle = damageSettlement.state;
     const damage = damageSettlement.value;
     const healingSettlement = resolveHealing(battle, healingRequest(0));

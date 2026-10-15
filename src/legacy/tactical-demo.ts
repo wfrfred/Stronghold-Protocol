@@ -440,26 +440,26 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
         }
 
         const { skill } = source;
-        const { spCost } = source.definition.skill;
+        const spCost = source.definition.skill.sp?.requirement ?? 0;
         const active = skill.active;
 
         return {
-            sp: skill.sp,
+            sp: skill.sp?.value ?? 0,
             maxSp: spCost,
             active: active !== null,
             remainingTicks:
-                active?.endsAtTick == null
-                    ? 0
-                    : Math.max(0, active.endsAtTick - snapshot.tickIndex),
-            remainingAmmo: active?.remainingAmmo,
-            ready: active === null && skill.sp >= spCost && snapshot.result === null,
+                active?.sustain.type === "TIME"
+                    ? Math.max(0, active.sustain.endsAtTick - snapshot.tickIndex)
+                    : 0,
+            remainingAmmo: active?.sustain.type === "AMMO" ? active.sustain.remaining : undefined,
+            ready: active === null && (skill.sp?.value ?? 0) >= spCost && snapshot.result === null,
         };
     }
 
     function manualSkillUnit() {
         return snapshot.units
             .filter(hasSkill)
-            .find((unit) => unit.definition.skill.activation === "MANUAL");
+            .find((unit) => unit.definition.skill.activation?.trigger === "MANUAL");
     }
 
     function contentStats() {
@@ -479,8 +479,8 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
             return {
                 hp: unit.vitality.hp,
                 maxHp: unit.definition.vitality.maxHp,
-                sp: unit.skill.sp,
-                maxSp: unit.definition.skill.spCost,
+                sp: unit.skill.sp?.value ?? 0,
+                maxSp: unit.definition.skill.sp?.requirement ?? 0,
                 ...(shield === undefined
                     ? {}
                     : { shieldLayers: shield.layers, shieldTimerTicks: shield.timer }),

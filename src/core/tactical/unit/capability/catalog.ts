@@ -65,6 +65,7 @@ import {
     initialize as initializeSkillState,
     type Definition as SkillDefinition,
     type State as SkillState,
+    type Stored as StoredSkill,
 } from "./skill/capability.js";
 
 export interface CapabilityInitializationContext {
@@ -77,7 +78,7 @@ interface CapabilityConfigurations {
     readonly offense: OffenseDefinition;
     readonly defense: DefenseDefinition;
     readonly action: ActionCapabilityDefinition;
-    readonly skill: SkillDefinition;
+    readonly skill: StoredSkill["definition"]["skill"];
     readonly elemental: ElementalDefinition;
     readonly allegiance: AllegianceDefinition;
     readonly spatial: SpatialDefinition;
@@ -103,7 +104,7 @@ export type CapabilityStates = {
     readonly offense: OffenseState;
     readonly defense: DefenseState;
     readonly action: ActionState;
-    readonly skill: SkillState;
+    readonly skill: StoredSkill["skill"];
     readonly elemental: ElementalState;
     readonly allegiance: AllegianceState;
     readonly spatial: SpatialState;
@@ -124,7 +125,7 @@ export const configuredCapabilities: {
     offense: () => initializeOffenseState(),
     defense: () => initializeDefenseState(),
     action: () => initializeActionState(),
-    skill: initializeSkillState,
+    skill: (config, context) => initializeSkillState(config as SkillDefinition, context.tick),
     elemental: initializeElementalState,
     allegiance: initializeAllegianceState,
     spatial: initializeSpatialState,
@@ -138,11 +139,13 @@ type CapabilityKey = keyof CapabilityStates;
 
 type CapabilityState<K extends CapabilityKey> = CapabilityStates[K];
 
-type SelectedCapabilityState<K extends CapabilityKey, S> = K extends "locomotion"
-    ? NonNullable<S> extends RoutedLocomotionState
-        ? RoutedLocomotionState
-        : CapabilityState<K>
-    : CapabilityState<K>;
+type SelectedCapabilityState<K extends CapabilityKey, S> = K extends "skill"
+    ? NonNullable<S>
+    : K extends "locomotion"
+      ? NonNullable<S> extends RoutedLocomotionState
+          ? RoutedLocomotionState
+          : CapabilityState<K>
+      : CapabilityState<K>;
 
 export type SelectedCapabilityStates<S extends object> = {
     readonly [K in keyof S as K extends CapabilityKey ? K : never]: K extends CapabilityKey
@@ -155,7 +158,11 @@ export type RuntimeCapabilitiesFor<D extends UnitDefinition> = {
         K in ConfiguredCapabilityKey as [D] extends [Readonly<Record<K, CapabilityConfig<K>>>]
             ? K
             : never
-    ]: CapabilityState<K>;
+    ]: K extends "skill"
+        ? D extends { readonly skill: SkillDefinition<infer S, infer A> }
+            ? SkillState<S, A>
+            : never
+        : CapabilityState<K>;
 };
 
 export type PreparedCapabilityStates<D extends UnitDefinition> = Partial<

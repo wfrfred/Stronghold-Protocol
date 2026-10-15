@@ -82,7 +82,7 @@ test("deployment binds its Card and snapshots field COST independently of later 
         id: "later-discount", value: [modifier({ finalAddition: -18 })],
     }));
     assert.equal(cards.resolveCost(getCard(state, 0)), 2);
-    state = retreat(state, field.id, resources);
+    state = retreat(state, field.id);
     assert.equal(state.deployment.dp, 90);
     assert.equal(getCard(state, 0).costStage, 1);
     assert.equal(getCard(state, 0).cooldown, null);
@@ -97,7 +97,7 @@ test("deployment binds its Card and snapshots field COST independently of later 
 test("return cooldown and cost penalty follow departure; death refunds no DP", () => {
     let { state, value } = deployUnit(fixture([{ unit: definition() }]));
     assert.equal(getCard(state, 0).cooldown, null);
-    state = retreat(at(state, 5), value.unitId, resources);
+    state = retreat(at(state, 5), value.unitId);
     assert.equal(state.deployment.dp, 95);
     assert.deepEqual(getCard(state, 0).cooldown, { readyAtTick: 8, durationTicks: 3 });
     reject(state, request(), "COOLDOWN");
@@ -105,13 +105,13 @@ test("return cooldown and cost penalty follow departure; death refunds no DP", (
     assert.equal(state.deployment.dp, 80);
     assert.equal(getUnit(state, value.unitId).deployable.cost, 15);
 
-    state = removeUnitWithEffects(at(state, 10), value.unitId, "DEATH", resources, 10);
+    state = removeUnitWithEffects(at(state, 10), value.unitId, "DEATH");
     assert.equal(state.deployment.dp, 80);
     assert.equal(getCard(state, 0).costStage, 2);
     assert.deepEqual(getCard(state, 0).cooldown, { readyAtTick: 13, durationTicks: 3 });
     ({ state, value } = deployUnit(at(state, 13)));
     assert.equal(getUnit(state, value.unitId).deployable.cost, 20);
-    state = retreat(state, value.unitId, resources);
+    state = retreat(state, value.unitId);
     assert.equal(getCard(state, 0).costStage, 2);
 });
 
@@ -120,7 +120,7 @@ test("two Cards of the same definition have separate active limits, cooldowns an
     let state = fixture([{ unit }, { unit }]);
     const first = deployUnit(state, 0, 0);
     const second = deployUnit(first.state, 1, 1);
-    state = retreat(at(second.state, 2), first.value.unitId, resources);
+    state = retreat(at(second.state, 2), first.value.unitId);
     assert.equal(getCard(state, 0).definition.unit, getCard(state, 1).definition.unit);
     assert.equal(getCard(state, 0).costStage, 1);
     assert.equal(getCard(state, 1).costStage, 0);
@@ -176,8 +176,8 @@ test("queued supply permits deploying remaining stock while returned Units recha
     });
     const first = deployUnit(fixture([{ unit, supply: supply({ recharge: "QUEUED" }) }]), 0, 0);
     const second = deployUnit(first.state, 0, 1);
-    let state = retreat(at(second.state, 1), first.value.unitId, resources);
-    state = retreat(at(state, 2), second.value.unitId, resources);
+    let state = retreat(at(second.state, 1), first.value.unitId);
+    state = retreat(at(state, 2), second.value.unitId);
     assert.equal(getCard(state, 0).stock, 1);
     assert.equal(getCard(state, 0).pendingReturns, 2);
     assert.equal(getCard(state, 0).cooldown.readyAtTick, 5);
@@ -209,9 +209,9 @@ test("preset Units without a Card do not recycle; refund eligibility is a separa
         fixtureBattlefieldState([ordinary, refundable]), undefined, undefined, 0,
         initializeDeployment(budget({ initialDp: 20 })),
     );
-    state = retreat(state, ordinary.id, resources);
+    state = retreat(state, ordinary.id);
     assert.equal(state.deployment.dp, 20);
-    state = retreat(state, refundable.id, resources);
+    state = retreat(state, refundable.id);
     assert.equal(state.deployment.dp, 25);
     assert.deepEqual(state.deployment.cards, []);
     assert.equal(state.execution.nextCardId, 0);
@@ -222,7 +222,7 @@ test("entry-triggered death recycles its Card before the Unit departure callback
     const unit = definition({
         onEnter(state, id) {
             calls.push("entered");
-            return removeUnitWithEffects(state, id, "DEATH", resources, state.tick);
+            return removeUnitWithEffects(state, id, "DEATH");
         },
         onLeave(state, departure) {
             calls.push("left");
@@ -255,7 +255,7 @@ test("zero-cooldown departure can redeploy synchronously without overwriting the
         },
     });
     const first = deployUnit(fixture([{ unit }]));
-    const next = retreat(first.state, first.value.unitId, resources);
+    const next = retreat(first.state, first.value.unitId);
     assert.equal(replacementId, 1);
     assert.equal(getUnit(next, first.value.unitId), undefined);
     assert.equal(getUnit(next, replacementId).deployable.cost, 15);

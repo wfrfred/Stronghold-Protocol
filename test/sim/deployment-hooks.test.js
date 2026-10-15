@@ -168,7 +168,7 @@ test("a deployment remains observable when its entry callback immediately remove
         }));
     } });
     const incoming = definition("immediate-exit", {
-        onEnter(state, id) { return removeUnitWithEffects(state, id, "SCRIPT", resources, state.tick); },
+        onEnter(state, id) { return removeUnitWithEffects(state, id, "SCRIPT"); },
         onLeave(state, departure) { calls.push(["left", departure.unit.id]); return state; },
     });
     const runtime = new BattleRuntime(input({

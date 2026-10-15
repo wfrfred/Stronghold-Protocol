@@ -273,18 +273,13 @@ test("effect lifetimes: terminal hook cleanup cannot recreate a host killed by a
         {},
         {
             onEnd(state, context) {
-                return resolveDamage(
-                    state,
-                    {
+                return resolveDamage(state, {
                         sourceUnitId: null,
                         targetUnitId: 0,
                         damageType: "TRUE",
                         operands: createDamageOperands(100),
                         tick: context.tick,
-                    },
-                    resources,
-                    context.call,
-                ).state;
+                    }, context.call).state;
             },
         },
     );

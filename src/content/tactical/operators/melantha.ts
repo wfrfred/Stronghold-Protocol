@@ -6,6 +6,7 @@ import { getUnit, updateUnit } from "../../../core/tactical/battle/state.js";
 import type { CombatResources } from "../../../core/tactical/battle/resources.js";
 import type { Definition as OperatorDefinition } from "../../../core/tactical/unit/archetype/operator.js";
 import type { Definition as SkillDefinition } from "../../../core/tactical/unit/capability/skill/capability.js";
+import { ref as activationRef } from "../../../core/tactical/unit/capability/skill/activation.js";
 import {
     createDefinition as createDeployableDefinition,
     type Definition as DeployableDefinition,
@@ -65,31 +66,26 @@ export function create(
         ?.blackboard.find((entry) => entry.key === "atk")?.value;
     const talent = attackBonus("melantha/attack-talent", talentBonus ?? 0);
     const skillEffect = attackBonus("melantha/attack-up", skillBonus);
-    const skill = combat.skills.register({
-        definition: profile.skill.definition,
-        activate(state, context) {
-            const unit = getUnit(state, context.unitId);
+    const skill: SkillDefinition = {
+        ...profile.skill.definition,
+        activation: {
+            ...profile.skill.definition.activation!,
+            onStart(state, self) {
+                const unit = getUnit(state, self.host.id);
 
-            if (unit === undefined || !hasOffense(unit)) {
-                return { state, value: { type: "REJECTED", reason: "host absent" } };
-            }
+                if (unit === undefined || !hasOffense(unit)) {
+                    return state;
+                }
 
-            const result = install(
-                state,
-                unitRef(unit),
-                skillEffect,
-                {
+                const result = install(state, unitRef(unit), skillEffect, {
                     source: unit.id,
-                    scopes: [
-                        { type: "SKILL", unitId: unit.id, activationId: context.activationId },
-                    ],
-                },
-                context.call,
-            );
+                    scopes: [{ type: "SKILL", ref: activationRef(self) }],
+                });
 
-            return { state: result.state, value: { type: "ACTIVATED" } };
+                return result.state;
+            },
         },
-    });
+    };
 
     return {
         id: profile.id,
@@ -157,7 +153,7 @@ export function create(
                 ),
             ),
         },
-        skill: skill.definition,
+        skill,
         onEnter(state, unitId) {
             const unit = getUnit(state, unitId);
 

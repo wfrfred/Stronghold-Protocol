@@ -18,7 +18,7 @@ import type { State as BattleState } from ${source("battle/state")};
 import * as units from ${source("unit/query")};
 import { hasLocomotion, type Locomotion } from ${source("unit/capability/locomotion/capability")};
 import { hasVitality, type Vitality } from ${source("unit/capability/vitality/capability")};
-import { hasSkill, type Skill } from ${source("unit/capability/skill/capability")};
+import { hasSkill, type Stored as StoredSkill } from ${source("unit/capability/skill/capability")};
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
 type Assert<T extends true> = T;
 declare const battle: BattleState;
@@ -56,7 +56,7 @@ const invalidTick: Definition = { id: "invalid", onTick: tickById };
 const locomotives = units.filter(battle, hasLocomotion);
 type Locomotives = Assert<Equal<typeof locomotives, Ref<Unit & Locomotion>[]>>;
 const skills = units.filter(battle, hasSkill);
-type Skills = Assert<Equal<typeof skills, Ref<Unit & Skill>[]>>;
+type Skills = Assert<Equal<typeof skills, Ref<Unit & StoredSkill>[]>>;
 const both = units.filter(battle, (unit): unit is Unit & Locomotion & Vitality =>
     hasLocomotion(unit) && hasVitality(unit));
 type Both = Assert<Equal<typeof both, Ref<Unit & Locomotion & Vitality>[]>>;

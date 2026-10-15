@@ -168,11 +168,11 @@ export class BattleRuntime {
 
         state = advanceBattlefield(state, [{ type: "EXPIRE_NAVIGATION_MODIFIERS", tick }]);
         state = advanceDeployment(state, tick);
-        state = advancePredefined(state, this.#input.predefines, commands, tick, resources);
+        state = advancePredefined(state, this.#input.predefines, commands, tick);
 
         state = prepareCombat(state, commands);
 
-        state = resolveDeploymentCommands(state, commands, resources);
+        state = resolveDeploymentCommands(state, commands);
 
         state = advanceSpawning(state, commands, tick);
 
@@ -182,22 +182,17 @@ export class BattleRuntime {
 
         state = advanceElements(state, tick, resources);
 
-        state = advanceSkills(state, commands, tick, resources);
+        state = advanceSkills(state, commands);
 
         state = advanceRouteCommands(state, commands, tick);
 
-        state = advanceCombat(state, resources);
+        state = advanceCombat(state);
 
         state = advanceProjectiles(state, tick, commands);
 
-        state = advanceMovement(
-            state,
-            tick,
-            {
-                routeMoveMultiplier: this.#input.routeMoveMultiplier,
-            },
-            resources,
-        );
+        state = advanceMovement(state, tick, {
+            routeMoveMultiplier: this.#input.routeMoveMultiplier,
+        });
 
         state = {
             ...state,

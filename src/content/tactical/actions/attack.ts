@@ -11,7 +11,7 @@ import {
     type State as BattleState,
 } from "../../../core/tactical/battle/state.js";
 import { CombatResources } from "../../../core/tactical/battle/resources.js";
-import { gainUnitSkillSp } from "../../../core/tactical/battle/execution/skill-sp.js";
+import { recover } from "../../../core/tactical/unit/capability/skill/sp.js";
 import type { Unit } from "../../../core/tactical/unit/unit.js";
 import * as units from "../../../core/tactical/unit/query.js";
 import { ref, setState, type Action } from "../../../core/tactical/unit/action/action.js";
@@ -20,7 +20,8 @@ import * as actions from "../../../core/tactical/unit/action/operations.js";
 import type { Action as ActionCapability } from "../../../core/tactical/unit/capability/action/capability.js";
 import { isSpatiallyPresent } from "../../../core/tactical/unit/capability/presence/capability.js";
 import { beforeRelease } from "../../../core/tactical/unit/capability/action/release.js";
-import { consumeSkillAmmo } from "../../../core/tactical/unit/capability/skill/execution.js";
+import { consume, check } from "../../../core/tactical/unit/capability/skill/ammo.js";
+import { ref as activationRef } from "../../../core/tactical/unit/capability/skill/activation.js";
 import { hasSkill } from "../../../core/tactical/unit/capability/skill/capability.js";
 import { resolveAttackPower } from "../../../core/tactical/unit/capability/offense/query.js";
 import { resolveDamage } from "../../../core/tactical/unit/capability/vitality/damage/settlement.js";
@@ -76,6 +77,7 @@ export interface Definition {
     readonly windupTicks?: number;
     readonly recoveryTicks?: number;
     readonly markerId?: string;
+    readonly ammoPerAction?: number;
     readonly output?: (battle: BattleState, self: Action<State>) => BattleState;
     readonly onEnd?: ActionDefinition<State>["onEnd"];
 }
@@ -157,17 +159,13 @@ function apply(
 
             return power === undefined
                 ? battle
-                : resolveDamage(
-                      battle,
-                      {
-                          sourceUnitId,
-                          targetUnitId,
-                          tick,
-                          damageType: operation.damageType,
-                          operands: createDamageOperands(power),
-                      },
-                      resources,
-                  ).state;
+                : resolveDamage(battle, {
+                      sourceUnitId,
+                      targetUnitId,
+                      tick,
+                      damageType: operation.damageType,
+                      operands: createDamageOperands(power),
+                  }).state;
         }
 
         case "HEAL":
@@ -206,6 +204,7 @@ export function create(definition: Definition, resources = new CombatResources()
     assertPositiveNumber(definition.intervalTicks, "attack interval");
     assertNonnegativeSafeInteger(definition.windupTicks ?? 0, "attack windup");
     assertNonnegativeSafeInteger(definition.recoveryTicks ?? 0, "attack recovery");
+    assertNonnegativeSafeInteger(definition.ammoPerAction ?? 1, "attack ammunition consumption");
 
     function copyOperation(operation: Operation): Operation {
         assertNonnegativeNumber(operation.power, "attack operation power");
@@ -341,7 +340,6 @@ export function create(definition: Definition, resources = new CombatResources()
                     return { state: actions.cancel(battle, identity, "INTERRUPTED"), value: true };
                 }
 
-                battle = gainUnitSkillSp(battle, self.source.id, "ATTACK");
                 battle = appendEvents(battle, [
                     {
                         type: "ACTION_RELEASED",
@@ -352,8 +350,23 @@ export function create(definition: Definition, resources = new CombatResources()
                     },
                 ]);
 
+                const recovering = units.get(battle, self.source);
+
+                if (recovering !== undefined && hasSkill(recovering)) {
+                    battle = recover(battle, units.ref(recovering), "ACTION").state;
+                }
+
+                const output = actions.get(battle, identity);
+
+                if (output?.status !== "RUNNING" || !sourcePresent(battle, output.source)) {
+                    return {
+                        state: actions.cancel(battle, identity, "SOURCE_ABSENT"),
+                        value: true,
+                    };
+                }
+
                 if (definition.output !== undefined) {
-                    battle = definition.output(battle, current);
+                    battle = definition.output(battle, output);
                 } else {
                     for (const group of definition.targetGroups) {
                         for (const operation of group.operations) {
@@ -394,9 +407,12 @@ export function create(definition: Definition, resources = new CombatResources()
                 if (
                     source !== undefined &&
                     hasSkill(source) &&
-                    source.skill.active?.id === self.state.activationId
+                    source.skill.active !== null &&
+                    source.skill.active.id === self.state.activationId
                 ) {
-                    battle = consumeSkillAmmo(battle, source.id, battle.tick, resources).state;
+                    const activation = activationRef(source.skill.active);
+                    battle = consume(battle, activation, definition.ammoPerAction ?? 1).state;
+                    battle = check(battle, activation);
                 }
             }
 

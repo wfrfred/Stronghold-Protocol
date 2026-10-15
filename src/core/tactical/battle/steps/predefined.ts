@@ -1,4 +1,3 @@
-import type { SkillExecutionResources } from "../../unit/capability/skill/execution.js";
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import type {
     BattlefieldChange,
@@ -224,7 +223,6 @@ export function advancePredefined(
     definitions: readonly PredefinedDefinition[],
     commands: readonly Command[],
     tick: number,
-    resources: SkillExecutionResources,
 ): BattleState {
     for (const command of commands) {
         if (command.type !== "APPEAR_PREDEFINED" && command.type !== "REMOVE_PREDEFINED") {
@@ -246,7 +244,7 @@ export function advancePredefined(
 
         for (const change of transition.changes) {
             if (change.type === "REMOVE_UNIT") {
-                state = removeUnitWithEffects(state, change.unitId, change.reason, resources, tick);
+                state = removeUnitWithEffects(state, change.unitId, change.reason);
             } else {
                 state = advanceBattlefield(state, [change]);
             }

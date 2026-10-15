@@ -88,7 +88,7 @@ if (hasOffense(initializedOperator)) {
 }
 if (hasSkill(initializedEnemy)) {
   const id: string = initializedEnemy.definition.skill.id;
-  const sp: number = initializedEnemy.skill.sp;
+  const sp: number = initializedEnemy.skill.sp?.value ?? 0;
 }
 if (snapshot.locomotion !== undefined) { const route: RouteControlState = snapshot.locomotion.mainRoute; }
 install(battle, unitRef(staticOperatorUnit), healthAttack);

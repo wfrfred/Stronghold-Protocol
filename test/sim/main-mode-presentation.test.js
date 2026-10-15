@@ -1,3 +1,4 @@
+import { definition as skillDefinition } from "../helpers/skill.js";
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
@@ -10,10 +11,9 @@ const unit = (id, definitionId, side = 'ALLY', skill, fields = {}) => initialize
   id, position: [id + 1, 4], definition: {
     id: definitionId, allegiance: { side }, spatial: { layer: 'GROUND' },
     vitality: { maxHp: 1000 },
-    ...(skill === undefined ? {} : { skill: {
-      id: skill, activation: 'MANUAL', spRecovery: 'TIME', spCost: 10,
-      initialSp: 0, durationTicks: 30,
-    } }), ...fields,
+    ...(skill === undefined ? {} : { skill: skillDefinition({
+      id: skill, sp: { initial: 0, capacity: 10, requirement: 10, recovery: { type: 'TIME', intervalTicks: 30 } },
+    }) }), ...fields,
   },
 });
 const snapshot = (units, fields = {}) => ({
@@ -134,7 +134,7 @@ test('an attack skill projects one skill attack without a toggle that interrupts
   ]), [['atk', 0, 2, 'none']]);
 
   const active = { ...mudrock, skill: { ...mudrock.skill,
-    active: { id: 0, startedAtTick: 0, endsAtTick: null }, nextActivationId: 1,
+    active: { host: { id: 0 }, id: 0, startedAtTick: 0, status: "ACTIVE", sustain: { type: "INFINITE" }, data: {} }, nextActivationId: 1,
   } };
   const presented = view.units(snapshot([active], { tickIndex: 2 }))[0];
   assert.equal(presented.info.skillActive, false);
@@ -148,7 +148,7 @@ test('a buff skill keeps its status but only actual actions project attack event
   });
   const melantha = unit(1, 'char_208_melan', 'ALLY', 'skcom_atk_up[1]');
   const active = { ...melantha, skill: { ...melantha.skill,
-    active: { id: 0, startedAtTick: 0, endsAtTick: 30 }, nextActivationId: 1,
+    active: { host: { id: 1 }, id: 0, startedAtTick: 0, status: "ACTIVE", sustain: { type: "TIME", endsAtTick: 30 }, data: {} }, nextActivationId: 1,
   } };
   const after = snapshot([active]);
   assert.deepEqual(view.advance(after, [

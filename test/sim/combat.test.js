@@ -1,3 +1,5 @@
+import { definition as skillDefinition } from "../helpers/skill.js";
+import { enter as enterSkill } from "../../dist/core/tactical/unit/capability/skill/operations.js";
 import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js';
 import { create as createAttack } from '../../dist/content/tactical/actions/attack.js';
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
@@ -368,8 +370,8 @@ test('core combat: damage formulas retain the 5% floor and immutable vitality tr
   const resources = new CombatResources();
   const request = power => ({ sourceUnitId: null, targetUnitId: 0, tick: 0,
     damageType: 'TRUE', operands: createDamageOperands(power) });
-  const harmless = resolveDamage(state, request(0), resources);
-  const lethal = resolveDamage(state, request(1000), resources);
+  const harmless = resolveDamage(state, request(0));
+  const lethal = resolveDamage(state, request(1000));
 
   assert.equal(getUnit(harmless.state, 0), unit);
   assert.equal(lethal.value.hpLoss, 7);
@@ -1152,7 +1154,7 @@ test('core protection effects: withdrawing one source retains the other source a
       battlefield: battlefieldView(state), ignoreHealFree: false });
     if (effect === untargetable) return selectTargets({ source, battlefield: battlefieldView(state) },
       compileTargeting(damageTargeting(), ['DAMAGE'])).length === 0;
-    const resolved = resolveDamage(state, request, new CombatResources());
+    const resolved = resolveDamage(state, request);
     return effect === invincible ? resolved.value.cancellation?.reason === 'INVINCIBLE'
       : resolved.value.fatalProtection;
   };
@@ -1181,35 +1183,35 @@ test('core protection effects: withdrawing one source retains the other source a
 
 test('core vitality: invincibility is decided before HIT SP and obeys the damage reception policy', () => {
   const observed = [];
-  const protectedTarget = actionUnit(1, 'ALLY', [1, 0], { effects: [invincible], skill: {
-    id: 'hit-sp', activation: 'MANUAL', spRecovery: 'HIT', spCost: 10,
-    initialSp: 0, durationTicks: null,
-  } });
+  const protectedTarget = actionUnit(1, 'ALLY', [1, 0], { effects: [invincible], skill: skillDefinition({
+    id: 'hit-sp', sp: { initial: 0, capacity: 10, requirement: 10, recovery: { type: 'HIT', amount: 1 } },
+    activation: { trigger: 'MANUAL', sustain: { type: 'INFINITE' }, initialize: () => ({}) },
+  }) });
   const target = { ...protectedTarget, vitality: setDamageHook(protectedTarget.vitality, {
     id: 'observe-reception', stage: 'reception', priority: 0, enabled: () => true,
     invoke(state, context, pending) {
-      observed.push({ sp: context.unit.skill.sp, cancellation: pending.cancellation?.reason });
+      observed.push({ sp: context.unit.skill.sp.value, cancellation: pending.cancellation?.reason });
       return { state, value: { value: pending } };
     },
   }) };
-  const state = createBattleState(fixtureBattlefieldState([target]));
+  const state = enterSkill(createBattleState(fixtureBattlefieldState([target])), unitRef(target));
   const request = { sourceUnitId: null, targetUnitId: 1, tick: 0,
     damageType: 'TRUE', operands: createDamageOperands(10) };
-  const blocked = resolveDamage(state, request, new CombatResources());
+  const blocked = resolveDamage(state, request);
   const allowed = resolveDamage(state, { ...request, receptionPolicy: {
     considerInvincibility: false, skipModifierEvents: false,
-  } }, new CombatResources());
+  } });
 
   assert.equal(blocked.value.cancellation.reason, 'INVINCIBLE');
   assert.equal(blocked.value.hpLoss, 0);
-  assert.equal(getUnit(blocked.state, 1).skill.sp, 0);
+  assert.equal(getUnit(blocked.state, 1).skill.sp.value, 0);
   assert.equal(allowed.value.cancellation, null);
   assert.equal(allowed.value.hpLoss, 10);
-  assert.equal(getUnit(allowed.state, 1).skill.sp, 1);
+  assert.equal(getUnit(allowed.state, 1).skill.sp.value, 1);
   assert.deepEqual(observed, [
     { sp: 0, cancellation: 'INVINCIBLE' }, { sp: 1, cancellation: undefined },
   ]);
-  assert.equal(target.skill.sp, 0);
+  assert.equal(target.skill.sp.value, 0);
   assert.equal(target.vitality.hp, 100);
 });
 
@@ -1232,7 +1234,7 @@ test('core vitality: fatal protection uses the rules remaining after reception h
     }) };
     const state = createBattleState(fixtureBattlefieldState([target]));
     const resolved = resolveDamage(state, { sourceUnitId: null, targetUnitId: 1, tick: 0,
-      damageType: 'TRUE', operands: createDamageOperands(1000) }, new CombatResources());
+      damageType: 'TRUE', operands: createDamageOperands(1000) });
 
     assert.equal(resolved.value.fatalProtection, !installedInitially);
     assert.equal(resolved.value.deathOccurred, installedInitially);

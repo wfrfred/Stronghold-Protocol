@@ -27,7 +27,7 @@ test('main-mode content runs deterministic shield, skill, blocking and projectil
   let triggeredMelantha = false;
   while (first.result === null) {
     const guard = first.snapshot().units.find(unit => unit.id === 1);
-    const commands = !triggeredMelantha && guard?.skill.sp >= guard?.definition.skill.spCost
+    const commands = !triggeredMelantha && (guard?.skill.sp?.value ?? 0) >= (guard?.definition.skill.sp?.requirement ?? Infinity)
       ? [{ type: 'ACTIVATE_SKILL', unitId: 1 }] : [];
     if (commands.length) triggeredMelantha = true;
     const step = first.step(commands);

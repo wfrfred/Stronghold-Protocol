@@ -76,7 +76,7 @@ test('the demo ends the beta skill naturally and resumes SP recovery', async () 
   demo.nextSkillReady();
   demo.command('ACTIVATE_SKILL');
   const active = demo.snapshot().units.find(unit => unit.id === 0).skill.active;
-  while (demo.time < active.endsAtTick / 30 + 2) demo.step();
+  while (demo.time < active.sustain.endsAtTick / 30 + 2) demo.step();
   assert.equal(demo.stats().skill.active, false);
   assert.ok(demo.stats().skill.sp > 0);
   assert.equal(events.filter(event => event.type === 'DAMAGE').at(-1).amount, 312);

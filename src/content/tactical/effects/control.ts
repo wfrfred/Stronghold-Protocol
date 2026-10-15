@@ -1,27 +1,32 @@
-import { updateUnit } from "../../../core/tactical/battle/state.js";
 import type { Definition } from "../../../core/tactical/unit/effect/definition.js";
 import * as skill from "../../../core/tactical/unit/capability/skill/capability.js";
+import { read, replace } from "../../../core/tactical/unit/capability/skill/query.js";
+import { ref } from "../../../core/tactical/unit/query.js";
 
 export const silence: Definition<object> = {
     id: "control/silence",
     initialize: () => ({}),
     onEnable(state, { unit, self }) {
         return skill.hasSkill(unit)
-            ? updateUnit(state, {
-                  ...unit,
-                  skill: skill.setRule(unit.skill, {
-                      id: `@effect/${self.id}/silence`,
-                      allowsActivation: () => false,
+            ? (read(state, ref(unit), (host) =>
+                  replace(state, {
+                      ...host,
+                      skill: skill.setRule(host.skill, {
+                          id: `@effect/${self.id}/silence`,
+                          allowsActivation: () => false,
+                      }),
                   }),
-              })
+              ) ?? state)
             : state;
     },
     onDisable(state, { unit, self }) {
         return skill.hasSkill(unit)
-            ? updateUnit(state, {
-                  ...unit,
-                  skill: skill.removeRule(unit.skill, `@effect/${self.id}/silence`),
-              })
+            ? (read(state, ref(unit), (host) =>
+                  replace(state, {
+                      ...host,
+                      skill: skill.removeRule(host.skill, `@effect/${self.id}/silence`),
+                  }),
+              ) ?? state)
             : state;
     },
 };
@@ -31,21 +36,25 @@ export const blockSpRecovery: Definition<object> = {
     initialize: () => ({}),
     onEnable(state, { unit, self }) {
         return skill.hasSkill(unit)
-            ? updateUnit(state, {
-                  ...unit,
-                  skill: skill.setRule(unit.skill, {
-                      id: `@effect/${self.id}/sp-recovery`,
-                      allowsSpGain: () => false,
+            ? (read(state, ref(unit), (host) =>
+                  replace(state, {
+                      ...host,
+                      skill: skill.setRule(host.skill, {
+                          id: `@effect/${self.id}/sp-recovery`,
+                          allowsRecovery: () => false,
+                      }),
                   }),
-              })
+              ) ?? state)
             : state;
     },
     onDisable(state, { unit, self }) {
         return skill.hasSkill(unit)
-            ? updateUnit(state, {
-                  ...unit,
-                  skill: skill.removeRule(unit.skill, `@effect/${self.id}/sp-recovery`),
-              })
+            ? (read(state, ref(unit), (host) =>
+                  replace(state, {
+                      ...host,
+                      skill: skill.removeRule(host.skill, `@effect/${self.id}/sp-recovery`),
+                  }),
+              ) ?? state)
             : state;
     },
 };

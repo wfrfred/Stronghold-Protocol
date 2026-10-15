@@ -149,7 +149,7 @@ test("action runtime: nested departure removes a later candidate before its next
             if (state.tick === 0) return { state, value: false };
             trace.push(self.source.id);
             if (self.source.id === 0)
-                state = removeUnitWithEffects(state, 1, "SCRIPT", resources, state.tick);
+                state = removeUnitWithEffects(state, 1, "SCRIPT");
             return { state, value: false };
         },
     });
@@ -199,18 +199,13 @@ test("action runtime: dependency cleanup can finish nested host death before a t
         id: "terminal-dependency",
         initialize: () => ({}),
         onEnd(state, context) {
-            state = resolveDamage(
-                state,
-                {
+            state = resolveDamage(state, {
                     sourceUnitId: 0,
                     targetUnitId: context.unit.id,
                     tick: state.tick,
                     damageType: "TRUE",
                     operands: createDamageOperands(100),
-                },
-                resources,
-                context.call,
-            ).state;
+                }, context.call).state;
             observedDeparture = getUnit(state, context.unit.id) === undefined;
             throw failure;
         },

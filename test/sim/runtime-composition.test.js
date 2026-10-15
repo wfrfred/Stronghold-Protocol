@@ -309,17 +309,13 @@ function scenario({ failure = null, cancelled = false } = {}) {
                 ...current,
                 state: { contacts: current.state.contacts + 1 },
             });
-            const damaged = resolveDamage(
-                state,
-                {
+            const damaged = resolveDamage(state, {
                     sourceUnitId: context.projectile.source,
                     targetUnitId: context.targetUnitId,
                     damageType: "TRUE",
                     operands: createDamageOperands(context.projectile.cachedAtk),
                     tick: context.tick,
-                },
-                resources, context.call,
-            );
+                }, context.call);
             state = damaged.state;
             reports.push(damaged.value);
             state = stopProjectile(

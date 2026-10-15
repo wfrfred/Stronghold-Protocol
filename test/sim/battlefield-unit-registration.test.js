@@ -1,3 +1,4 @@
+import { definition as skillDefinition } from "../helpers/skill.js";
 import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js';
 import { create as createAttack } from '../../dist/content/tactical/actions/attack.js';
 import { Effects } from "../../dist/core/tactical/unit/effect/effects.js";
@@ -84,14 +85,10 @@ const definition = () => ({
         immune: false,
         burstDurationsTicks: { NEURAL: 300, EROSION: 300, BURN: 300, NECROSIS: 450 },
     },
-    skill: {
+    skill: skillDefinition({
         id: "paired-skill",
-        activation: "MANUAL",
-        spRecovery: "TIME",
-        spCost: 10,
-        initialSp: 0,
-        durationTicks: 30,
-    },
+        sp: { initial: 0, capacity: 10, requirement: 10, recovery: { type: "TIME", intervalTicks: 30 } },
+    }),
     allegiance: { side: "ALLY" },
     spatial: { layer: "GROUND" },
     hit: { geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.25 }] } },

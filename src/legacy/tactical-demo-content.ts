@@ -89,7 +89,7 @@ export function createTacticalContentDemo(
             recoveryTicks: 6,
             hitRadius: 0.2,
             projectile: {
-                definition: createArrow(combat),
+                definition: createArrow(),
                 speedPerSecond: 6,
                 contactRadius: 0.15,
                 stopDelayTicks: 0,

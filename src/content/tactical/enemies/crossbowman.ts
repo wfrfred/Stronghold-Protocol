@@ -43,7 +43,7 @@ export interface Definition extends GroundDefinition {
 
 export type Enemy = InitializedUnit<Definition>;
 
-export function createArrow(resources: CombatResources): ProjectileDefinition<object> {
+export function createArrow(): ProjectileDefinition<object> {
     return createProjectileDefinition({
         id: "main-mode-crossbow-arrow",
         initialize: () => ({}),
@@ -65,7 +65,6 @@ export function createArrow(resources: CombatResources): ProjectileDefinition<ob
                         resolveProjectileAttackPower(state, context.projectile),
                     ),
                 },
-                resources,
                 context.call,
             ).state,
     });

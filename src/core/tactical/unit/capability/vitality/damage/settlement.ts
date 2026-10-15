@@ -15,12 +15,10 @@ import {
     type PendingDamage,
     NORMAL_DAMAGE_RECEPTION,
 } from "./contract.js";
-import type { Context, Hook, FormulaStage, AmountStage } from "./hook.js";
+import type { Context, Hook, FormulaStage, AmountStage, Received } from "./hook.js";
 import type { Hook as RegisteredHook } from "../../../hook/hook.js";
 import { hookScope, type Result } from "../hook.js";
-import { gainUnitSkillSp } from "../../../../battle/execution/skill-sp.js";
 import { retireCombatUnit } from "../../../../battle/execution/unit-lifecycle.js";
-import type { SkillExecutionResources } from "../../skill/execution.js";
 import {
     battlefieldView,
     appendEvents,
@@ -57,7 +55,6 @@ export function calculateDamage(
 export function resolveDamage(
     state: BattleState,
     request: DamageRequest,
-    resources: SkillExecutionResources,
     call: CallContext = emptyCall,
 ): Settlement<DamageReport> {
     const policy = request.receptionPolicy ?? NORMAL_DAMAGE_RECEPTION;
@@ -177,8 +174,8 @@ export function resolveDamage(
             };
         }
 
-        if (pending.cancellation === null && request.ignoreForSp !== true) {
-            state = gainUnitSkillSp(state, request.targetUnitId, "HIT");
+        if (pending.cancellation === null) {
+            state = notifyReceived(state, { request, pending });
         }
 
         const applied = applyAmountHooks(
@@ -290,7 +287,7 @@ export function resolveDamage(
         hasVitality(afterReactions) &&
         afterReactions.vitality.hp <= 0
     ) {
-        state = retireCombatUnit(state, request.targetUnitId, resources, request.tick, call);
+        state = retireCombatUnit(state, request.targetUnitId, call);
     }
 
     return { state, value: result };
@@ -302,6 +299,31 @@ function formulaPower(operands: DamageOperands): number {
         operands.power * operands.attackScale +
             (operands.attackScale > 0 ? operands.attackAddition : 0),
     );
+}
+
+function notifyReceived(battle: BattleState, event: Received): BattleState {
+    const unit = getUnit(battle, event.request.targetUnitId);
+
+    if (unit === undefined || !hasVitality(unit)) {
+        return battle;
+    }
+
+    const candidates = unit.vitality.damageHooks.filter((hook) => hook.stage === "received");
+
+    for (const hook of candidates) {
+        const current = getUnit(battle, unit.id);
+
+        if (
+            current !== undefined &&
+            hasVitality(current) &&
+            current.vitality.damageHooks.includes(hook) &&
+            hook.enabled(battle, current, event)
+        ) {
+            battle = hook.invoke(battle, current, event);
+        }
+    }
+
+    return battle;
 }
 
 interface StageHook<V> extends RegisteredHook<

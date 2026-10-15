@@ -44,7 +44,7 @@ test("operator profiles use selected phase attributes, explicit table identity a
     });
     assert.deepEqual(prepared.range, [[0, 0], [0, 1]]);
     assert.equal(prepared.skill.definition.id, "skchr_mudrok_2");
-    assert.equal(prepared.skill.definition.spCost, 5);
+    assert.equal(prepared.skill.definition.sp.requirement, 5);
     assert.equal(blackboard(prepared.skill.blackboard).atk_scale, 2.1);
     assert.equal(prepared.skillRange.length, fixture.ranges["x-4"].grids.length);
     assert.deepEqual(prepared.moduleTrait, []);
@@ -102,7 +102,7 @@ test("skill unlock, common upgrades and mastery gates follow the selected charac
     assert.throws(() => profile(mudrock, { ...base, elite: 0, level: 50, skillLevel: 1 }), /skill is locked/);
     assert.throws(() => profile(mudrock, { ...base, elite: 1, level: 80, skillLevel: 8 }), /higher elite/);
     const mastery = profile(mudrock, { ...base, skillLevel: 10 });
-    assert.equal(mastery.skill.definition.spCost, 4);
+    assert.equal(mastery.skill.definition.sp.requirement, 4);
     assert.equal(blackboard(mastery.skill.blackboard).atk_scale, 2.7);
     const common = { elite: 0, level: 40, potential: 1, skillIndex: 0, skillLevel: 4, trust: 0 };
     assert.equal(profile(melantha, common).skill.level, 4);

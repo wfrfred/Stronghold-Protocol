@@ -36,7 +36,7 @@ import type { Actions } from "../unit/action/actions.js";
 import type { ProjectileId, ProjectileState } from "../battlefield/projectile/projectile.js";
 import type { ProjectileSignal } from "../battlefield/projectile/settlement.js";
 import type { ElementalSignal } from "../unit/capability/elemental/execution.js";
-import type { SkillSignal } from "../unit/capability/skill/execution.js";
+import type { Signal as SkillSignal } from "../unit/capability/skill/operations.js";
 
 /** Shared creation data. Keep this input unchanged for the runtime lifetime. */
 export interface Input {

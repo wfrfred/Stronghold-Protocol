@@ -1,4 +1,3 @@
-import type { SkillExecutionResources } from "../../unit/capability/skill/execution.js";
 import type { BattlefieldChange } from "../../battlefield/contract.js";
 import { canMove, hasRoutedLocomotion } from "../../unit/capability/locomotion/capability.js";
 import { stepRoutedUnit } from "../../unit/capability/locomotion/step.js";
@@ -48,7 +47,6 @@ export function advanceMovement(
     }: {
         readonly routeMoveMultiplier: number;
     },
-    resources: SkillExecutionResources,
 ): BattleState {
     const battlefield = battlefieldView(state);
     let execution = state.execution;
@@ -111,7 +109,7 @@ export function advanceMovement(
     state = advanceBattlefield(state, changes);
 
     for (const unitId of completed) {
-        state = removeUnitWithEffects(state, unitId, "SCRIPT", resources, tick);
+        state = removeUnitWithEffects(state, unitId, "SCRIPT");
     }
 
     return state;

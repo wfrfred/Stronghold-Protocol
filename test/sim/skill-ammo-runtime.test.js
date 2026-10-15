@@ -8,7 +8,6 @@ import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
-import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
 import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/state.js";
 import { createDefinition as createProjectileDefinition } from "../../dist/core/tactical/battlefield/projectile/definition.js";
 import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
@@ -19,6 +18,7 @@ import { ref as actionRef, setState } from "../../dist/core/tactical/unit/action
 import * as actions from "../../dist/core/tactical/unit/action/operations.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { createDefinition as createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
+import { ref as activationRef } from "../../dist/core/tactical/unit/capability/skill/activation.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
 import { setHook, removeHook } from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
@@ -31,11 +31,6 @@ const range = createShapeGeometry({
 });
 
 function scenario({ ammo = 1, targets = 1, interrupt = false, windupTicks = 0, output, actionProgram, hideAfterDamage = false } = {}) {
-  const resources = new CombatResources();
-  const skill = createSkillDefinition({
-    id: "runtime-ammo-skill", activation: "MANUAL", spRecovery: "TIME",
-    spCost: 1, initialSp: 1, durationTicks: null, ammo,
-  });
   const buff = attackBuff("runtime-ammo-attack", 100, {
     onInstall: (state, context) => {
       if (hideAfterDamage) state = transitionUnit(state, context.unit.id, current => ({
@@ -64,23 +59,29 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, windupTicks = 0, o
       return state;
     },
   });
-  resources.skills.register({ definition: skill, activate: (state, context) => {
-    const installed = effects.install(state, unitRef(getUnit(state, context.unitId)), buff, {
-      source: context.unitId, scopes: [{ type: "SKILL", unitId: context.unitId, activationId: context.activationId }],
-    });
-    assert.ok(installed.value);
-    return { state: installed.state, value: { type: "ACTIVATED" } };
-  } });
+  const skill = createSkillDefinition({
+    id: "runtime-ammo-skill", initialize: () => ({}),
+    sp: { initial: 1, capacity: 1, requirement: 1, recovery: { type: "TIME", intervalTicks: 30 } },
+    activation: { trigger: "MANUAL", sustain: { type: "AMMO", amount: ammo }, initialize: () => ({}),
+      onStart: (state, self) => {
+        const installed = effects.install(state, self.host, buff, {
+          source: self.host.id, scopes: [{ type: "SKILL", ref: activationRef(self) }],
+        });
+        assert.ok(installed.value);
+        return installed.state;
+      },
+    },
+  });
   const normal = createAttack({
-    id: "normal", triggerBindingId: "main", intervalTicks: 100, windupTicks,
+    id: "normal", triggerBindingId: "main", intervalTicks: 100, windupTicks, ammoPerAction: 1,
     targetGroups: [{ id: "main", targeting: {
       type: "DAMAGE", scope: { type: "RANGE", geometry: { type: "SHAPES", geometry: range } },
       canTargetAir: true, includeBlockingRelations: false, preferBlockingRelations: false,
       ignoreTargetFree: false, ignoreInvisible: false, maxTargets: targets,
     }, operations: [{ type: "DAMAGE", power: 1, damageType: "TRUE", powerSource: "SOURCE_ATTACK" }] }],
-    ...(output === undefined ? {} : { output: (state, self) => output(state, self, resources, shell) }),
-  }, resources);
-  const action = actionProgram === undefined ? normal : actionProgram(normal, resources);
+    ...(output === undefined ? {} : { output: (state, self) => output(state, self, shell) }),
+  });
+  const action = actionProgram === undefined ? normal : actionProgram(normal);
   const definition = createDefinition({
     id: "ammo-actor", vitality: { maxHp: 10000 }, offense: { attack: 100 },
     defense: { defense: 0, resistance: 0 }, allegiance: { side: "ALLY" },
@@ -99,7 +100,7 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, windupTicks = 0, o
       return resolveDamage(state, {
         sourceUnitId: context.projectile.source, targetUnitId: context.targetUnitId,
         tick: context.tick, damageType: "TRUE", operands: createDamageOperands(context.projectile.cachedAtk),
-      }, resources, context.call).state;
+      }, context.call).state;
     },
   });
   const base = createLegacyCombatSpec({ rows: 1, columns: 8, operators: [], enemies: [], maxTicks: 20, seed: 7 });
@@ -116,7 +117,7 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, windupTicks = 0, o
       timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 }, alwaysCheckCurrentPoint: true,
       notCountInTotal: false,
     }] },
-  }, { combat: resources });
+  });
   return runtime;
 }
 
@@ -147,13 +148,13 @@ test("ammo runtime: preparation and delayed release preserve ammunition until ou
   const runtime = scenario({ ammo: 3, windupTicks: 2 });
   const started = runtime.step([{ type: "ACTIVATE_SKILL", unitId: 0 }]);
   assert.deepEqual(damageEvents(started), []);
-  assert.equal(source(runtime).skill.active.remainingAmmo, 3);
+  assert.equal(source(runtime).skill.active.sustain.remaining, 3);
   const waiting = runtime.step();
   assert.equal(waiting.events.some(({ type }) => type === "ACTION_RELEASED"), false);
-  assert.equal(source(runtime).skill.active.remainingAmmo, 3);
+  assert.equal(source(runtime).skill.active.sustain.remaining, 3);
   const released = runtime.step();
   assert.deepEqual(damageEvents(released).map(({ amount }) => amount), [200]);
-  assert.equal(source(runtime).skill.active.remainingAmmo, 2);
+  assert.equal(source(runtime).skill.active.sustain.remaining, 2);
 });
 
 test("ammo runtime: hiding the source after damage still pays for the sampled activation", () => {
@@ -175,10 +176,10 @@ test("ammo runtime: cancellation during windup spends no ammunition", () => {
   const cancelled = runtime.step([{ type: "CANCEL_ACTION_EXECUTION", executionId }]);
   assert.deepEqual(cancelled.events.filter(({ type }) => type === "ACTION_CANCELLED").map(({ reason }) => reason), ["CANCELLED"]);
   assert.deepEqual(damageEvents(cancelled), []);
-  assert.equal(source(runtime).skill.active.remainingAmmo, 3);
+  assert.equal(source(runtime).skill.active.sustain.remaining, 3);
   assert.deepEqual(runtime.snapshot().actions.instances, []);
   assert.equal(runtime.step().events.some(({ type }) => type === "ACTION_RELEASED"), false);
-  assert.equal(source(runtime).skill.active.remainingAmmo, 3);
+  assert.equal(source(runtime).skill.active.sustain.remaining, 3);
 });
 
 test("ammo runtime: release interruption cancels windup without spending ammunition", () => {
@@ -189,13 +190,13 @@ test("ammo runtime: release interruption cancels windup without spending ammunit
   assert.deepEqual(interrupted.events.filter(({ type }) => type === "ACTION_CANCELLED").map(({ reason }) => reason), ["INTERRUPTED"]);
   assert.equal(interrupted.events.some(({ type }) => type === "ACTION_RELEASED"), false);
   assert.deepEqual(damageEvents(interrupted), []);
-  assert.equal(source(runtime).skill.active.remainingAmmo, 3);
+  assert.equal(source(runtime).skill.active.sustain.remaining, 3);
   assert.ok(source(runtime).action.cooldowns.get("normal").readyAtTick >= 17);
   assert.deepEqual(runtime.snapshot().actions.instances, []);
 });
 
 test("ammo runtime: a content-defined follow-up preserves one ammunition payment across ticks", () => {
-  const runtime = scenario({ ammo: 3, targets: 2, actionProgram: (normal, resources) => ({
+  const runtime = scenario({ ammo: 3, targets: 2, actionProgram: (normal) => ({
     ...normal,
     start(state, source) {
       const initialized = normal.start(state, source);
@@ -210,23 +211,23 @@ test("ammo runtime: a content-defined follow-up preserves one ammunition payment
       }
       for (const target of self.state.bindings.main) {
         state = resolveDamage(state, { sourceUnitId: self.source.id, targetUnitId: target.id,
-          tick: state.tick, damageType: "TRUE", operands: createDamageOperands(resolveAttackPower(self.source.id, battlefieldView(state))) }, resources).state;
+          tick: state.tick, damageType: "TRUE", operands: createDamageOperands(resolveAttackPower(self.source.id, battlefieldView(state))) }).state;
       }
       return { state, value: true };
     },
   }) });
   const first = runtime.step([{ type: "ACTIVATE_SKILL", unitId: 0 }]);
   assert.deepEqual(damageEvents(first).map(({ amount }) => amount), [200, 200]);
-  assert.equal(source(runtime).skill.active.remainingAmmo, 2);
+  assert.equal(source(runtime).skill.active.sustain.remaining, 2);
   const followUp = runtime.step();
   assert.deepEqual(damageEvents(followUp).map(({ amount }) => amount), [200, 200]);
-  assert.equal(source(runtime).skill.active.remainingAmmo, 2);
+  assert.equal(source(runtime).skill.active.sustain.remaining, 2);
   assert.equal(followUp.events.filter(({ type }) => type === "ACTION_FINISHED").length, 1);
   assert.deepEqual(runtime.snapshot().actions.instances, []);
 });
 
 test("ammo runtime: the last released projectile survives skill completion and retains buffed attack", () => {
-  const runtime = scenario({ output: (state, self, resources, shell) => {
+  const runtime = scenario({ output: (state, self, shell) => {
     const actor = getUnit(state, self.source.id);
     const targetUnitId = self.state.bindings.main[0].id;
     const target = getUnit(state, targetUnitId);

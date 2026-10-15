@@ -1,20 +1,13 @@
-import {
-    activateSkill,
-    advanceSkill,
-    finishSkill,
-    type SkillExecutionResources,
-} from "../../unit/capability/skill/execution.js";
+import { activate, advance, operate } from "../../unit/capability/skill/operations.js";
+import { ref as activationRef } from "../../unit/capability/skill/activation.js";
+import { hasSkill } from "../../unit/capability/skill/capability.js";
+import * as units from "../../unit/query.js";
 import type { Command } from "../contract.js";
-import { battlefieldView, type State as BattleState } from "../state.js";
+import { getUnit, type State as BattleState } from "../state.js";
 
-export function advanceSkills(
-    state: BattleState,
-    commands: readonly Command[],
-    tick: number,
-    resources: SkillExecutionResources,
-): BattleState {
-    for (const id of battlefieldView(state).unitIds) {
-        state = advanceSkill(state, id, tick, resources);
+export function advanceSkills(state: BattleState, commands: readonly Command[]): BattleState {
+    for (const ref of units.filter(state, hasSkill)) {
+        state = advance(state, ref);
     }
 
     for (const command of commands) {
@@ -22,10 +15,17 @@ export function advanceSkills(
             continue;
         }
 
-        state =
-            command.type === "ACTIVATE_SKILL"
-                ? activateSkill(state, { unitId: command.unitId, tick }, resources).state
-                : finishSkill(state, command.unitId, tick, resources);
+        const unit = getUnit(state, command.unitId);
+
+        if (unit === undefined || !hasSkill(unit)) {
+            continue;
+        }
+
+        if (command.type === "ACTIVATE_SKILL") {
+            state = activate(state, units.ref(unit)).state;
+        } else if (unit.skill.active !== null) {
+            state = operate(state, activationRef(unit.skill.active), "STOP").state;
+        }
     }
 
     return state;

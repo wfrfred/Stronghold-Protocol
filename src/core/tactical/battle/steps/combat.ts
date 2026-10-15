@@ -5,7 +5,6 @@ import * as units from "../../unit/query.js";
 import { hasAction } from "../../unit/capability/action/capability.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";
 import { hasVitality } from "../../unit/capability/vitality/capability.js";
-import type { SkillExecutionResources } from "../../unit/capability/skill/execution.js";
 import { retireCombatUnit } from "../execution/unit-lifecycle.js";
 import type { State as BattleState } from "../state.js";
 import type { Command } from "../contract.js";
@@ -24,7 +23,7 @@ export function prepare(battle: BattleState, commands: readonly Command[]): Batt
     return battle;
 }
 
-export function advance(battle: BattleState, resources: SkillExecutionResources): BattleState {
+export function advance(battle: BattleState): BattleState {
     const candidates = [
         ...new Map(
             [...units.all(battle), ...battle.actions.values().map((self) => self.source)].map(
@@ -38,7 +37,7 @@ export function advance(battle: BattleState, resources: SkillExecutionResources)
         const unit = units.get(battle, source);
 
         if (unit !== undefined && hasVitality(unit) && unit.vitality.hp <= 0) {
-            battle = retireCombatUnit(battle, source.id, resources, battle.tick);
+            battle = retireCombatUnit(battle, source.id);
         }
     }
 
