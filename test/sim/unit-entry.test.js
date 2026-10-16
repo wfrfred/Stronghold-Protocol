@@ -95,7 +95,7 @@ test('predefined appearances and deployment initialize once; relocation does not
   assert.deepEqual(runtime.snapshot().units.find(unit => unit.id === 1).position, [1, 0]);
 });
 
-test('factory inference keeps callable static content in immutable definitions', async () => {
+test('unit initialization exposes callable optional callbacks and selected capability state', async () => {
   const { default: ts } = await import('typescript');
   const directory = mkdtempSync(join(tmpdir(), 'stronghold-entry-types-'));
   const module = JSON.stringify(fileURLToPath(new URL('../../src/core/tactical/unit/initialize.js', import.meta.url)));
@@ -108,8 +108,10 @@ const unit = initialize(battle, { id: 0, position: [0, 0], definition: {
   id: 'typed-content', vitality: { maxHp: 100 },
   onEnter: (state: import(${JSON.stringify(fileURLToPath(new URL('../../src/core/tactical/battle/state.js', import.meta.url)))}).State, _id: number) => state,
 } }).value;
-declare const state: Parameters<typeof unit.definition.onEnter>[0];
-unit.definition.onEnter(state, unit.id);
+if (unit.definition.onEnter !== undefined) {
+  const state: Parameters<typeof unit.definition.onEnter>[0] = battle;
+  unit.definition.onEnter(state, unit.id);
+}
 const hp: number = unit.vitality.hp;
 `);
     const program = ts.createProgram([path], {
