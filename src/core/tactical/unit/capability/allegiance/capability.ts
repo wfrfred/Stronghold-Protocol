@@ -25,12 +25,5 @@ export function initialize(battle: BattleState, definition: Definition): Result<
 }
 
 export function areHostile(left: Unit & Allegiance, right: Unit & Allegiance): boolean {
-    switch (left.allegiance.side) {
-        case "ALLY":
-        case "NEUTRAL":
-            return right.allegiance.side === "ENEMY";
-
-        case "ENEMY":
-            return right.allegiance.side === "ALLY" || right.allegiance.side === "NEUTRAL";
-    }
+    return (left.allegiance.side === "ENEMY") !== (right.allegiance.side === "ENEMY");
 }
