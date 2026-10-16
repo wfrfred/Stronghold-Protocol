@@ -770,14 +770,14 @@ test('core unit updates preserve definition identity and fail atomically while p
   assert.deepEqual(viewBattlefield(runtime).unitsAt([0, 2]).map(value => value.id), [1]);
 });
 
-test('catalog products and core initializers preserve capability composition, definition unions and guard context', async () => {
+test('catalog products and core initializers expose standard capability pairs and preserve guard context', async () => {
   const { default: ts } = await import('typescript');
   const directory = mkdtempSync(join(tmpdir(), 'stronghold-unit-types-'));
   const sourceModule = name => JSON.stringify(fileURLToPath(
     new URL(`../../src/core/tactical/unit/${name}.js`, import.meta.url)));
   const imports = `
 import { initialize as initializeUnit } from ${sourceModule('initialize')};
-import type { Product } from ${sourceModule('capability/catalog')};
+import type { Definitions as CapabilityDefinitions, Product } from ${sourceModule('capability/catalog')};
 import { initializeRoutedEnemy, type RoutedEnemySpawn } from ${sourceModule('../battle/creation/enemy')};
 import { stepRoutedEnemy, type RoutedEnemyStepContext } from ${sourceModule('../../../legacy/enemy')};
 import type { Unit, Definition as UnitDefinition } from ${sourceModule('unit')};
@@ -807,12 +807,10 @@ type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B 
 type Assert<T extends true> = T;
 type RequiredKeys<T> = { [K in keyof T]-?: {} extends Pick<T, K> ? never : K }[keyof T];
 interface EnemyProbe extends EnemyDefinition { readonly kind: 'enemy'; readonly enemyCode: 17; }
-interface DeviceProbe extends UnitDefinition { readonly kind: 'device'; readonly deviceCode: 29; }
 interface OptionalProbe extends UnitDefinition { readonly vitality?: VitalityDefinition; }
 declare const enemyDefinition: EnemyProbe;
 declare const enemySpawn: RoutedEnemySpawn<EnemyProbe>;
 declare const enemyStepContext: RoutedEnemyStepContext;
-declare const unionDefinition: EnemyProbe | DeviceProbe;
 declare const routed: RoutedLocomotionState;
 declare const battlefieldMap: BattlefieldMap;
 declare const execution: BattleExecutionState;
@@ -820,8 +818,7 @@ declare const battleState: BattleState;
 declare const projectileDefinition: ProjectileDefinition<{ readonly charges: number }>;
 declare const projectileInput: ProjectileLaunchInput<{ readonly charges: number }>;
 declare const typedProjectile: Projectile<{ readonly charges: number }>;
-declare const placement: { readonly definition: EnemyProbe & { readonly occupancy: Readonly<Record<string, never>> }; readonly position: readonly [number, number]; readonly claims: readonly OccupancyState['claims'][number][] }
-  | { readonly definition: DeviceProbe; readonly position: readonly [number, number] };
+declare const placement: { readonly definition: EnemyProbe & { readonly occupancy: Readonly<Record<string, never>> }; readonly position: readonly [number, number]; readonly claims: readonly OccupancyState['claims'][number][] };
 `;
   const compile = (name, source) => {
     const path = join(directory, `${name}.mts`);
@@ -860,9 +857,10 @@ initializeDefenseState({ defense: 1, resistance: 0 });
 initializeLocomotionState(enemyDefinition.locomotion, { tick: 7 });
 // @ts-expect-error a tick is not a BattleState.
 initializeActionState(7);
-type Distributed = Assert<Equal<Product<EnemyProbe | DeviceProbe>, Product<EnemyProbe> | Product<DeviceProbe>>>;
 type EnemyCapabilities = Assert<Product<EnemyProbe> extends Vitality & Locomotion ? true : false>;
-type ProductDefinition = Assert<Equal<Product<EnemyProbe>['definition'], ImmutableData<EnemyProbe>>>;
+type ProductDefinition = Assert<Equal<Product<EnemyProbe>['definition'], Pick<CapabilityDefinitions, 'vitality' | 'locomotion' | 'spatialPresence'>>>;
+type StandardDefinition = Assert<Equal<Product<{ readonly vitality: { readonly maxHp: 100 } }>['definition']['vitality'], CapabilityDefinitions['vitality']>>;
+type ExtraDefinitionFields = Assert<Equal<Extract<keyof Product<EnemyProbe>['definition'], 'kind' | 'enemyCode'>, never>>;
 type EmptyDefinitions = Assert<Product<{ readonly occupancy: {}; readonly targetable: {} }> extends Occupancy & Targetable ? true : false>;
 type OptionalProduct = Assert<Equal<keyof Product<OptionalProbe>, 'definition'>>;
 type MetadataIsNotCapability = Assert<Equal<keyof Product<{ readonly label: string }>, 'definition'>>;
@@ -875,21 +873,19 @@ const enemy = initializeUnit(battleState, { id: 1, definition: enemyDefinition, 
 const baseUnit: Unit = enemy;
 const instanceId: number = baseUnit.id;
 const contentId: string = baseUnit.definition.id;
-const plainDefinition: ImmutableData<EnemyProbe> = enemy.definition;
+const plainDefinition: UnitDefinition & Product<EnemyProbe>['definition'] = enemy.definition;
 const acceptedDefinition: typeof enemy.definition = enemyDefinition;
 type PlainUnit = Assert<Equal<typeof enemy, Unit & Product<EnemyProbe>>>;
 const routedEnemy = initializeRoutedEnemy(battleState, enemySpawn).value.enemy;
-const spawnedCode: 17 = routedEnemy.definition.enemyCode;
+const spawnedContentId: string = routedEnemy.definition.id;
 routedEnemy.locomotion.mainRoute.route.definition;
 const movedEnemy = stepRoutedEnemy(routedEnemy, enemyStepContext).enemy;
-const movedCode: 17 = movedEnemy.definition.enemyCode;
+const movedContentId: string = movedEnemy.definition.id;
 movedEnemy.locomotion.mainRoute.route.definition;
-const union = initializeUnit(battleState, { id: 2, definition: unionDefinition, position: [0, 0] }).value;
-type UnionUnit = Assert<Equal<typeof union, Unit & Product<EnemyProbe | DeviceProbe>>>;
 const placed = instantiateUnitPlacement(battleState, placement).value;
-const placedDefinition: ImmutableData<typeof placement['definition']> = placed.unit.definition;
+const placedDefinition: UnitDefinition & Product<typeof placement['definition']>['definition'] = placed.unit.definition;
 const acceptedPlacementDefinition: typeof placed.unit.definition = placement.definition;
-type ExpectedPlacement = (Unit & Product<EnemyProbe> & Occupancy) | (Unit & Product<DeviceProbe>);
+type ExpectedPlacement = Unit & Product<EnemyProbe> & Occupancy;
 type PlacementCapabilities = Assert<typeof placed.unit extends ExpectedPlacement ? true : false>;
 type PlacementInput = Assert<ExpectedPlacement extends typeof placed.unit ? true : false>;
 const normalizedPlacement = createUnitPlacementDefinition(placement);
@@ -903,8 +899,6 @@ const requiredPlaced = instantiateUnitPlacement(battleState, requiredPlacement).
 requiredPlaced.unit.occupancy.claims;
 const requiredOccupancy: Occupancy = requiredPlaced.unit;
 type NormalizedPlacementFields = Assert<Equal<keyof typeof requiredPlacement, 'definition' | 'position' | 'claims' | 'navigationModifiers' | 'effects'>>;
-if (union.definition.kind === 'enemy') { const code: 17 = union.definition.enemyCode; }
-else { const code: 29 = union.definition.deviceCode; }
 const ordinaryLocomotion: LocomotionState = enemy.locomotion;
 declare const guarded: Unit & {
   readonly definition: ImmutableData<EnemyProbe>;
@@ -943,12 +937,13 @@ battleState.battlefield.projectiles.replace(typedProjectile);
       ['mutable-definition', `initializeUnit(battleState, { id: 1, definition: { id: 'mutable', vitality: { maxHp: 10 } }, position: [0, 0] }).value.definition.vitality.maxHp = 99;`],
       ['unconfigured', `initializeUnit(battleState, { id: 1, definition: { id: 'bare' }, position: [0, 0] }).value.locomotion.moving;`],
       ['invalid-offense-config', `initializeUnit(battleState, { id: 1, definition: { id: 'invalid', offense: { attack: [] } }, position: [0, 0] });`],
+      ['extra-definition-field', `initializeUnit(battleState, { id: 1, definition: enemyDefinition, position: [0, 0] }).value.definition.enemyCode;`],
+      ['routed-extra-definition-field', `initializeRoutedEnemy(battleState, enemySpawn).value.enemy.definition.enemyCode;`],
       ['optional', `declare const optionalDefinition: OptionalProbe; initializeUnit(battleState, { id: 1, definition: optionalDefinition, position: [0, 0] }).value.vitality.hp;`],
       ['wide', `declare const wideDefinition: UnitDefinition; initializeUnit(battleState, { id: 1, definition: wideDefinition, position: [0, 0] }).value.locomotion.moving;`],
       ['base-unit-definition', `declare const unit: Unit; unit.definition.vitality.maxHp;`],
       ['missing-route-refinement', `initializeUnit(battleState, { id: 1, definition: enemyDefinition, position: [0, 0] }).value.locomotion.mainRoute;`],
       ['optional-normalized-occupancy', `declare const optionalPlacement: UnitPlacementDefinition<EnemyProbe>; instantiateUnitPlacement(battleState, createUnitPlacementDefinition(optionalPlacement)).value.unit.occupancy.claims;`],
-      ['normalized-union-occupancy', `instantiateUnitPlacement(battleState, createUnitPlacementDefinition(placement)).value.unit.occupancy.claims;`],
       ['normalized-unknown-field', `createUnitPlacementDefinition({ definition: enemyDefinition, position: [0, 0], extra: 31 }).extra;`],
     ]) {
       const diagnostics = compile(name, source);

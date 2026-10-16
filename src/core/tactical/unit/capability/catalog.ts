@@ -1,4 +1,3 @@
-import type { ImmutableData } from "../../../common/immutable-data.js";
 import * as action from "./action/capability.js";
 import * as allegiance from "./allegiance/capability.js";
 import * as blockable from "./blocking/blockable.js";
@@ -44,12 +43,10 @@ export type States = {
     readonly [K in keyof typeof initializers]: ReturnType<(typeof initializers)[K]>["value"];
 };
 
-export type Product<D> = D extends unknown
-    ? {
-          readonly definition: ImmutableData<D>;
-      } & {
-          readonly [
-              K in keyof States as D extends Readonly<Record<K, Definitions[K]>> ? K : never
-          ]: States[K];
-      }
-    : never;
+type SelectedKeys<D> = {
+    [K in keyof States]: D extends Readonly<Record<K, Definitions[K]>> ? K : never;
+}[keyof States];
+
+export type Product<D> = {
+    readonly definition: Pick<Definitions, SelectedKeys<D>>;
+} & Pick<States, SelectedKeys<D>>;

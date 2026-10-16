@@ -30,7 +30,11 @@ export interface RoutedEnemyInitialization<D extends Definition = Definition> {
 export function initializeRoutedEnemy<D extends Definition>(
     battle: BattleState,
     spawn: RoutedEnemySpawn<D>,
-): Result<RoutedEnemyInitialization<D>> {
+): Result<RoutedEnemyInitialization<D>>;
+export function initializeRoutedEnemy(
+    battle: BattleState,
+    spawn: RoutedEnemySpawn,
+): Result<RoutedEnemyInitialization> {
     assertNonnegativeSafeInteger(spawn.id, "enemy id");
 
     const rng = createRng(battle.execution.rngState);
