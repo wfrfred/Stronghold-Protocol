@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { battle, unit, actionDefinition, geometry } from "../helpers/action-fixture.js";
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
+import { createWithState } from "../../dist/content/tactical/actions/attack.js";
 import * as actions from "../../dist/core/tactical/unit/action/operations.js";
 import { advance } from "../../dist/core/tactical/unit/action/advance.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
@@ -29,6 +30,27 @@ const targeting = {
 };
 const group = (operations) => ({ id: "primary", targeting, operations });
 const start = (state, definition) => actions.start(state, unitRef(getUnit(state, 0)), definition);
+
+test("ordinary attack: phase correction samples the cooldown returned by its startup callback", () => {
+    const definition = createWithState({
+        ...actionDefinition().attack,
+        initialize: state => ({ state, value: {} }),
+        start(state, source, self) {
+            return { state: actions.clearCooldown(state, source, self.definition.id), value: {} };
+        },
+    });
+    let initial = { ...battle(unit(0, { action: definition }), unit(1)), tick: 10 };
+    const source = unitRef(getUnit(initial, 0));
+    const current = actions.getState(initial, source, definition);
+    initial = actions.replaceState(initial, source, {
+        ...current, cooldown: { ...current.cooldown, readyAtTick: 9.75 },
+    });
+    const started = start(initial, definition);
+    assert.equal(started.value.type, "STARTED");
+    assert.equal(actions.getState(started.state, source, definition).cooldown.readyAtTick, 20);
+    assert.equal(actions.getState(initial, source, definition).cooldown.readyAtTick, 9.75);
+    assert.equal(getUnit(started.state, 1).vitality.hp, 93);
+});
 
 test("ordinary attack: domain settlements observe each preceding returned battle state", () => {
     const observed = [];

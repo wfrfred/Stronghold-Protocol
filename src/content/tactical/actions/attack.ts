@@ -319,6 +319,7 @@ export function createWithState<P extends object, E extends object>(
 
             const releaseAtTick = battle.tick + (definition.windupTicks ?? 0);
             const initialized = definition.start(battle, source, self);
+            const current = actions.getState(initialized.state, source, self.definition);
 
             return {
                 state: initialized.state,
@@ -328,7 +329,7 @@ export function createWithState<P extends object, E extends object>(
                     releaseAtTick,
                     finishAtTick: releaseAtTick + (definition.recoveryTicks ?? 0),
                     released: false,
-                    previousReadyAtTick: self.cooldown.readyAtTick,
+                    previousReadyAtTick: current?.cooldown.readyAtTick ?? initialized.state.tick,
                     cooldownAdjusted: false,
                     data: initialized.value,
                 },

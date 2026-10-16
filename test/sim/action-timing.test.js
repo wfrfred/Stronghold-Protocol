@@ -120,6 +120,31 @@ test("action timing: starting uses contributions and cooldowns from the returned
     assert.equal(getUnit(initial, 0).action.states.get(definition.id).cooldown.readyAtTick, 0);
 });
 
+test("action timing: startup rejects a cooldown introduced by its callback and retains its settled changes", () => {
+    const definition = program("blocked-on-start", {
+        initialize: state => ({ state, value: { attempts: 0 } }),
+        start(state, source, self) {
+            state = actions.replaceState(state, source, {
+                ...self,
+                data: { attempts: self.data.attempts + 1 },
+                cooldown: { ...self.cooldown, readyAtTick: 100 },
+            });
+            return { state, value: {} };
+        },
+        step: () => assert.fail("a rejected startup cannot advance"),
+    });
+    const initial = battle(unit(0, { action: definition }));
+    const source = unitRef(getUnit(initial, 0));
+    const rejected = actions.start(initial, source, definition);
+    assert.deepEqual(rejected.value, { type: "REJECTED", reason: "COOLDOWN" });
+    assert.equal(rejected.state.actions.size, 0);
+    assert.equal(rejected.state.actions.nextId, initial.actions.nextId);
+    assert.equal(actions.getState(rejected.state, source, definition).cooldown.readyAtTick, 100);
+    assert.deepEqual(actions.getState(rejected.state, source, definition).data, { attempts: 1 });
+    assert.equal(actions.getState(initial, source, definition).cooldown.readyAtTick, 0);
+    assert.deepEqual(actions.getState(initial, source, definition).data, { attempts: 0 });
+});
+
 test("action timing: a period change does not rescale an accepted private casting budget", () => {
     const definition = program("casting", {
         start: (state) => ({ state, value: { finishAtTick: state.tick + 20, observed: 0 } }),

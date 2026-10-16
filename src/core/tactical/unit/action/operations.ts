@@ -146,6 +146,10 @@ export function start<P extends object, E extends object>(
         battle.tick,
     );
 
+    if (cooldown.remaining(acceptedCooldown, battle.tick) > 0) {
+        return reject("COOLDOWN");
+    }
+
     const self: Action<P, E> = {
         id: battle.actions.nextId,
         source,
