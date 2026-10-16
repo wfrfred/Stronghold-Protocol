@@ -28,7 +28,7 @@ import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js
 import { ref as actionRef, setState } from "../../dist/core/tactical/unit/action/action.js";
 import * as actions from "../../dist/core/tactical/unit/action/operations.js";
 import { install as installEffect, replaceEffect, end as endEffect } from "../../dist/core/tactical/unit/effect/operations.js";
-import * as modifier from "../../dist/core/tactical/unit/contribution/value.js";
+import * as modifier from "../../dist/core/tactical/unit/contribution/attribute.js";
 import { initialize as initializeVitalityState } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";

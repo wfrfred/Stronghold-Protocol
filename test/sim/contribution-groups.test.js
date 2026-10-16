@@ -12,7 +12,7 @@ import {
 import { setDefenseContribution } from "../../dist/core/tactical/unit/capability/defense/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { resolveDefense } from "../../dist/core/tactical/unit/capability/defense/query.js";
-import { create } from "../../dist/core/tactical/unit/contribution/value.js";
+import { create } from "../../dist/core/tactical/unit/contribution/attribute.js";
 import { effectFixtureWork } from "../helpers/effects.js";
 const base = (id) =>
     initialize({

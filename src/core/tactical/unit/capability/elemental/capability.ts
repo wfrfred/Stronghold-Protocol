@@ -8,10 +8,9 @@ import type { State as BattleState, Result } from "../../../battle/state.js";
 import type { Unit, Definition as UnitDefinition } from "../../unit.js";
 import * as registry from "../../hook/hook.js";
 import * as contribution from "../../contribution/contribution.js";
-import type { Value } from "../../contribution/value.js";
+import type { Modifier } from "../../contribution/attribute.js";
 import type { Burst, Definition as BurstDefinition } from "./burst.js";
-import type { Events, Hook, Key } from "./hook.js";
-import type { DamageRequest } from "./operations.js";
+import type { DamageHook, Events, Hook, Key } from "./hook.js";
 import type { Rule } from "./rule.js";
 
 export const ELEMENT_TYPES = Object.freeze(["NEURAL", "EROSION", "BURN", "NECROSIS"] as const);
@@ -21,11 +20,7 @@ export type Type = (typeof ELEMENT_TYPES)[number];
 export type Values = Readonly<Record<Type, number>>;
 
 export type Input =
-    readonly Value[] | ((battle: BattleState, self: Unit & Elemental) => readonly Value[]);
-
-export type DamageInput =
-    | readonly Value[]
-    | ((battle: BattleState, self: Unit & Elemental, request: DamageRequest) => readonly Value[]);
+    readonly Modifier[] | ((battle: BattleState, self: Unit & Elemental) => readonly Modifier[]);
 
 export interface Definition {
     readonly maxEp: number;
@@ -49,7 +44,7 @@ export interface State {
     readonly elementResistance: readonly contribution.Contribution<Input>[];
     readonly damageResistance: readonly contribution.Contribution<Input>[];
     readonly burstRecoverySpeed: readonly contribution.Contribution<Input>[];
-    readonly damage: readonly contribution.Contribution<DamageInput>[];
+    readonly receiving: readonly DamageHook[];
     readonly rules: readonly Rule[];
     readonly received: readonly Hook<Events["received"]>[];
     readonly damaged: readonly Hook<Events["damaged"]>[];
@@ -123,7 +118,7 @@ export function initialize(battle: BattleState, definition: Definition): Result<
             elementResistance: [],
             damageResistance: [],
             burstRecoverySpeed: [],
-            damage: [],
+            receiving: [],
             rules: [],
             received: [],
             damaged: [],
@@ -150,19 +145,16 @@ export function removeContribution(state: State, key: Parameter, id: string): St
     return entries === state[key] ? state : { ...state, [key]: entries };
 }
 
-export function setDamageContribution(
-    state: State,
-    entry: contribution.Contribution<DamageInput>,
-): State {
-    const damage = contribution.set(state.damage, entry);
+export function setDamageHook(state: State, hook: DamageHook): State {
+    const receiving = registry.set(state.receiving, hook);
 
-    return damage === state.damage ? state : { ...state, damage };
+    return receiving === state.receiving ? state : { ...state, receiving };
 }
 
-export function removeDamageContribution(state: State, id: string): State {
-    const damage = contribution.remove(state.damage, id);
+export function removeDamageHook(state: State, id: string): State {
+    const receiving = registry.remove(state.receiving, id);
 
-    return damage === state.damage ? state : { ...state, damage };
+    return receiving === state.receiving ? state : { ...state, receiving };
 }
 
 export function setRule(state: State, rule: Rule): State {

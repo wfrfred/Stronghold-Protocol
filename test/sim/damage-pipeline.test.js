@@ -13,7 +13,7 @@ import {
     view,
 } from "../helpers/vitality.js";
 import { contributionEffect } from "../helpers/effects.js";
-import * as modifier from "../../dist/core/tactical/unit/contribution/value.js";
+import * as modifier from "../../dist/core/tactical/unit/contribution/attribute.js";
 import {
     setAttackContribution,
     removeAttackContribution,

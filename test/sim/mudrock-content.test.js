@@ -24,7 +24,7 @@ import { initialize as initializeTargetable, setRule as setTargetingRule } from 
 import { invincible } from "../../dist/content/tactical/effects/protection.js";
 import { setAttackContribution } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { setMaxHpContribution } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
-import { create as modifier } from "../../dist/core/tactical/unit/contribution/value.js";
+import { create as modifier } from "../../dist/core/tactical/unit/contribution/attribute.js";
 import { createRng } from "../../dist/core/common/rng.js";
 import { fixtureBattlefieldState } from "../helpers/battlefield.js";
 

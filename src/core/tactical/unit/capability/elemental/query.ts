@@ -3,7 +3,7 @@ import { updateUnit, type State as BattleState } from "../../../battle/state.js"
 import type { Unit } from "../../unit.js";
 import * as units from "../../query.js";
 import * as contribution from "../../contribution/contribution.js";
-import * as modifier from "../../contribution/value.js";
+import * as attribute from "../../contribution/attribute.js";
 import { hasAllegiance } from "../allegiance/capability.js";
 import { isSpatiallyPresent } from "../presence/capability.js";
 import { hasVitality } from "../vitality/capability.js";
@@ -78,11 +78,11 @@ function resolve(
         parameter === "recoverySpeed"
             ? self.definition.elemental.recoveryPerSecond
             : self.definition.elemental[parameter];
-    const value = modifier.apply(
+    const value = attribute.apply(
         base,
-        contribution.resolve(self.elemental[parameter], (input) =>
-            typeof input === "function" ? input(battle, self) : input,
-        ),
+        contribution
+            .resolve(self.elemental[parameter])
+            .flatMap((input) => (typeof input === "function" ? input(battle, self) : input)),
     );
 
     if (parameter === "maxEp") {

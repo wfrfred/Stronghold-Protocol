@@ -6,7 +6,7 @@ import {
 } from "../../../../common/assert.js";
 import type { BlockGeometry } from "../../../geometry/shape.js";
 import * as contribution from "../../contribution/contribution.js";
-import * as modifier from "../../contribution/value.js";
+import * as attribute from "../../contribution/attribute.js";
 import type { Unit } from "../../unit.js";
 
 export interface Definition {
@@ -20,7 +20,7 @@ export interface Rule {
 }
 
 export interface State {
-    readonly capacity: readonly contribution.Contribution[];
+    readonly capacity: readonly contribution.Contribution<readonly attribute.Modifier[]>[];
     readonly geometry: BlockGeometry;
     readonly rules: readonly Rule[];
 }
@@ -69,15 +69,18 @@ export function canBlock(unit: Unit & Blocker): boolean {
 function changeCapacityContributions(
     state: State,
     transition: (
-        entries: readonly contribution.Contribution[],
-    ) => readonly contribution.Contribution[],
+        entries: readonly contribution.Contribution<readonly attribute.Modifier[]>[],
+    ) => readonly contribution.Contribution<readonly attribute.Modifier[]>[],
 ): State {
     const capacity = transition(state.capacity);
 
     return capacity === state.capacity ? state : { ...state, capacity };
 }
 
-export function setCapacityContribution(state: State, entry: contribution.Contribution): State {
+export function setCapacityContribution(
+    state: State,
+    entry: contribution.Contribution<readonly attribute.Modifier[]>,
+): State {
     return changeCapacityContributions(state, (entries) => contribution.set(entries, entry));
 }
 
@@ -88,7 +91,7 @@ export function removeCapacityContribution(state: State, id: string): State {
 export function resolveCapacity(definition: Definition, state: State): number {
     const value = Math.max(
         0,
-        modifier.apply(definition.capacity, contribution.resolve(state.capacity)),
+        attribute.apply(definition.capacity, contribution.resolve(state.capacity).flat()),
     );
     const lower = Math.floor(value);
 

@@ -38,7 +38,7 @@ import { resolveHealing } from '../../dist/core/tactical/unit/capability/vitalit
 import { canReceiveHealing } from '../../dist/core/tactical/unit/capability/vitality/healing/reception.js';
 import { setHook as setDamageHook } from '../../dist/core/tactical/unit/capability/vitality/damage/hook.js';
 import * as contribution from '../../dist/core/tactical/unit/contribution/contribution.js';
-import * as modifier from '../../dist/core/tactical/unit/contribution/value.js';
+import * as modifier from '../../dist/core/tactical/unit/contribution/attribute.js';
 
 import { createBattleState, battlefieldView, getUnit, updateUnit } from '../../dist/core/tactical/battle/state.js';
 

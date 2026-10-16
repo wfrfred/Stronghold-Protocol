@@ -11,7 +11,7 @@ import { getUnit, updateUnit, battlefieldView } from "../../dist/core/tactical/b
 import { setHook } from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
 import { setHook as setHealingHook } from "../../dist/core/tactical/unit/capability/vitality/healing/hook.js";
 import { setAttackContribution } from "../../dist/core/tactical/unit/capability/offense/capability.js";
-import { create as modifier } from "../../dist/core/tactical/unit/contribution/value.js";
+import { create as modifier } from "../../dist/core/tactical/unit/contribution/attribute.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";

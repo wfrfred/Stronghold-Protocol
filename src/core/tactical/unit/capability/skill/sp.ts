@@ -9,14 +9,32 @@ import { TICKS_PER_SECOND } from "../../../tick.js";
 import type { Unit } from "../../unit.js";
 import * as units from "../../query.js";
 import * as contribution from "../../contribution/contribution.js";
-import * as modifier from "../../contribution/value.js";
+import * as attribute from "../../contribution/attribute.js";
 import { hasVitality } from "../vitality/capability.js";
 import type { Skill } from "./capability.js";
-import type { Input } from "./input.js";
+import * as modifier from "./modifier.js";
 import * as query from "./query.js";
 import { dispatch } from "./hook.js";
 
 export type Source = "TIME" | "ACTION" | "HIT" | "EXTERNAL";
+
+export type Input =
+    | readonly attribute.Modifier[]
+    | ((battle: BattleState, self: Unit & Skill) => readonly attribute.Modifier[]);
+
+export type { Modifier } from "./modifier.js";
+
+export interface Inputs {
+    readonly capacity: modifier.Modifier;
+    readonly requirement: modifier.Modifier;
+    readonly cost: modifier.Modifier;
+    readonly recoverySpeed: Input;
+    readonly recoveryMultiplier: Input;
+}
+
+type Contributions = {
+    readonly [K in keyof Inputs]: readonly contribution.Contribution<Inputs[K]>[];
+};
 
 export type Recovery =
     | { readonly type: "TIME"; readonly intervalTicks: number }
@@ -36,15 +54,10 @@ export interface Timer {
     readonly remainingTicks: number;
 }
 
-export interface State {
+export interface State extends Contributions {
     readonly value: number;
     readonly recovery: Timer | null;
     readonly lastTick: number;
-    readonly capacity: readonly contribution.Contribution<Input>[];
-    readonly requirement: readonly contribution.Contribution<Input>[];
-    readonly cost: readonly contribution.Contribution<Input>[];
-    readonly recoverySpeed: readonly contribution.Contribution<Input>[];
-    readonly recoveryMultiplier: readonly contribution.Contribution<Input>[];
 }
 
 export interface Recovered {
@@ -76,21 +89,26 @@ export type Outcome =
               "UNAVAILABLE" | "NO_SP" | "RULE" | "WRONG_SOURCE" | "FULL" | "INSUFFICIENT_SP";
       };
 
-export type Parameter =
-    "capacity" | "requirement" | "cost" | "recoverySpeed" | "recoveryMultiplier";
+export type Parameter = keyof Inputs;
 
-export function setContribution(
-    state: State,
-    key: Parameter,
-    entry: contribution.Contribution<Input>,
-): State {
+type Setting = {
+    [K in Parameter]: [state: State, key: K, entry: contribution.Contribution<Inputs[K]>];
+}[Parameter];
+
+export function setContribution(...[state, key, entry]: Setting): State {
+    if (key === "recoverySpeed" || key === "recoveryMultiplier") {
+        const updated = contribution.set(state[key], entry);
+
+        return updated === state[key] ? state : { ...state, [key]: updated };
+    }
+
     const updated = contribution.set(state[key], entry);
 
     return updated === state[key] ? state : { ...state, [key]: updated };
 }
 
 export function removeContribution(state: State, key: Parameter, id: string): State {
-    const updated = contribution.remove(state[key], id);
+    const updated = contribution.remove<Inputs[Parameter]>(state[key], id);
 
     return updated === state[key] ? state : { ...state, [key]: updated };
 }
@@ -411,24 +429,26 @@ function resolve(battle: BattleState, self: Unit & Skill, key: Parameter): numbe
             base = definition[key];
     }
 
-    const value = Math.max(
-        0,
-        modifier.apply(
-            base,
-            contribution.resolve(state[key], (input) =>
-                typeof input === "function" ? input(battle, self) : input,
-            ),
-        ),
-    );
-
     if (key === "recoverySpeed" || key === "recoveryMultiplier") {
-        return value;
+        return Math.max(
+            0,
+            attribute.apply(
+                base,
+                contribution
+                    .resolve(state[key])
+                    .flatMap((input) =>
+                        typeof input === "function" ? input(battle, self) : input,
+                    ),
+            ),
+        );
     }
 
-    const integer = Math.ceil(value);
-    assertNonnegativeSafeInteger(integer, `skill resolved SP ${key}`);
+    const value = Math.ceil(
+        Math.max(0, modifier.apply(battle, self, base, contribution.resolve(state[key]))),
+    );
+    assertNonnegativeSafeInteger(value, `skill resolved SP ${key}`);
 
-    return integer;
+    return value;
 }
 
 function allowsRecovery(battle: BattleState, self: Unit & Skill, source: Source): boolean {

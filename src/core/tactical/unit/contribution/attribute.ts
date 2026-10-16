@@ -1,13 +1,15 @@
 import { assertFiniteNumber } from "../../../common/assert.js";
 
-export interface Value {
+export interface Modifier {
     readonly addition: number;
     readonly multiplier: number;
     readonly finalAddition: number;
     readonly finalScaler: number;
 }
 
-export function create(input: Partial<Value> = {}): Value {
+export type Input<C> = readonly Modifier[] | ((context: C) => readonly Modifier[]);
+
+export function create(input: Partial<Modifier> = {}): Modifier {
     const { addition = 0, multiplier = 0, finalAddition = 0, finalScaler = 1 } = input;
     const normalized = { addition, multiplier, finalAddition, finalScaler };
 
@@ -18,7 +20,11 @@ export function create(input: Partial<Value> = {}): Value {
     return Object.freeze(normalized);
 }
 
-export function apply(base: number, modifiers: Iterable<Value>): number {
+export function evaluate<C>(input: Input<C>, context: C): readonly Modifier[] {
+    return typeof input === "function" ? input(context) : input;
+}
+
+export function apply(base: number, modifiers: Iterable<Modifier>): number {
     let addition = 0;
     let multiplier = 0;
     let finalAddition = 0;
@@ -33,7 +39,7 @@ export function apply(base: number, modifiers: Iterable<Value>): number {
 
     const value = ((base + addition) * Math.max(0, 1 + multiplier) + finalAddition) * finalScaler;
 
-    assertFiniteNumber(value, "resolved numeric value");
+    assertFiniteNumber(value, "resolved attribute value");
 
     return value;
 }

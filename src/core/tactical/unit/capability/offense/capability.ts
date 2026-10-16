@@ -2,7 +2,7 @@ import type { State as BattleState, Result } from "../../../battle/state.js";
 import type { Context } from "../../query.js";
 import { assertNonnegativeNumber } from "../../../../common/assert.js";
 import * as contribution from "../../contribution/contribution.js";
-import * as modifier from "../../contribution/value.js";
+import * as attribute from "../../contribution/attribute.js";
 import type { Unit, Definition as UnitDefinition } from "../../unit.js";
 
 export interface Definition {
@@ -10,7 +10,7 @@ export interface Definition {
 }
 
 export interface State {
-    readonly attack: readonly contribution.Contribution<contribution.Input<Context>>[];
+    readonly attack: readonly contribution.Contribution<attribute.Input<Context>>[];
 }
 
 export interface Offense {
@@ -53,7 +53,7 @@ function changeAttackContributions(
 
 export function setAttackContribution(
     state: State,
-    entry: contribution.Contribution<contribution.Input<Context>>,
+    entry: contribution.Contribution<attribute.Input<Context>>,
 ): State {
     return changeAttackContributions(state, (entries) => contribution.set(entries, entry));
 }
@@ -65,9 +65,11 @@ export function removeAttackContribution(state: State, id: string): State {
 export function resolveAttack(definition: Definition, state: State, context: Context): number {
     return Math.max(
         0,
-        modifier.apply(
+        attribute.apply(
             definition.attack,
-            contribution.resolve(state.attack, (value) => contribution.evaluate(value, context)),
+            contribution
+                .resolve(state.attack)
+                .flatMap((value) => attribute.evaluate(value, context)),
         ),
     );
 }

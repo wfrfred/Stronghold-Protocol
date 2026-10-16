@@ -10,7 +10,7 @@ import * as action from "../../dist/core/tactical/unit/capability/action/capabil
 import * as vitality from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import * as damage from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
 import * as healing from "../../dist/core/tactical/unit/capability/vitality/healing/hook.js";
-import { create } from "../../dist/core/tactical/unit/contribution/value.js";
+import { create } from "../../dist/core/tactical/unit/contribution/attribute.js";
 
 const entries = [
     [
@@ -64,8 +64,8 @@ const entries = [
 ];
 
 test("local contribution updates share untouched state and leave earlier versions stable", () => {
-    const entry = { id: "bonus", value: [create({ addition: 10 })] };
     for (const [initial, field, set, remove] of entries) {
+        const entry = { id: "bonus", value: field === "volume" ? 10 : [create({ addition: 10 })] };
         const added = set(initial, entry);
         assert.equal(initial[field].length, 0, field);
         assert.equal(added[field][0], entry, field);

@@ -1,8 +1,7 @@
 import type { State as BattleState, Result } from "../../../battle/state.js";
-import { assertPositiveSafeInteger } from "../../../../common/assert.js";
+import { assertPositiveSafeInteger, assertSafeInteger } from "../../../../common/assert.js";
 import * as registry from "../../hook/hook.js";
 import * as contribution from "../../contribution/contribution.js";
-import * as modifier from "../../contribution/value.js";
 import type { Unit } from "../../unit.js";
 
 export interface Definition {
@@ -15,7 +14,7 @@ export interface Rule {
 }
 
 export interface State {
-    readonly volume: readonly contribution.Contribution[];
+    readonly volume: readonly contribution.Contribution<number>[];
     readonly rules: readonly Rule[];
 }
 
@@ -52,7 +51,12 @@ export function canBeBlocked(unit: Unit & Blockable): boolean {
     return unit.blockable.rules.every((rule) => rule.allows(unit));
 }
 
-export function setVolumeContribution(state: State, entry: contribution.Contribution): State {
+export function setVolumeContribution(
+    state: State,
+    entry: contribution.Contribution<number>,
+): State {
+    assertSafeInteger(entry.value, "blocking volume addition");
+
     const volume = contribution.set(state.volume, entry);
 
     return volume === state.volume ? state : { ...state, volume };
@@ -65,11 +69,10 @@ export function removeVolumeContribution(state: State, id: string): State {
 }
 
 export function resolveVolume(definition: Definition, state: State): number {
-    const value = Math.max(
+    return Math.max(
         1,
-        modifier.apply(definition.volume, contribution.resolve(state.volume)),
+        contribution
+            .resolve(state.volume)
+            .reduce((volume, addition) => volume + addition, definition.volume),
     );
-    const lower = Math.floor(value);
-
-    return value - lower === 0.5 ? lower + (lower % 2) : Math.round(value);
 }

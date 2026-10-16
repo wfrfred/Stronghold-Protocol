@@ -17,7 +17,7 @@ import { initialize as initializeUnit } from "../helpers/unit.js";
 import { create as createBattlefield } from "../../dist/core/tactical/battlefield/state.js";
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
 import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
-import { create as modifier } from "../../dist/core/tactical/unit/contribution/value.js";
+import { create as modifier } from "../../dist/core/tactical/unit/contribution/attribute.js";
 import { fixtureBattlefieldState } from "../helpers/battlefield.js";
 
 const tile = createTile({

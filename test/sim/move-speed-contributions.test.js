@@ -33,7 +33,7 @@ import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { copy } from "../../dist/core/tactical/unit/snapshot.js";
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
-import * as modifier from "../../dist/core/tactical/unit/contribution/value.js";
+import * as modifier from "../../dist/core/tactical/unit/contribution/attribute.js";
 import { contributionEffect, refreshContribution, effectFixtureWork } from "../helpers/effects.js";
 
 const address = { host: { id: 0 }, id: 0 };

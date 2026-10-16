@@ -1,5 +1,5 @@
 import { assertFiniteNumber, assertNonnegativeSafeInteger } from "../../core/common/assert.js";
-import * as modifier from "../../core/tactical/unit/contribution/value.js";
+import * as attribute from "../../core/tactical/unit/contribution/attribute.js";
 import { TICKS_PER_SECOND } from "../../core/tactical/tick.js";
 
 const attributes = {
@@ -42,7 +42,7 @@ export interface ModifierInput {
 
 export interface CompiledAttributeModifier {
     readonly attributeType: ModifierAttribute;
-    readonly sample: (input: ModifierInput) => modifier.Value | undefined;
+    readonly sample: (input: ModifierInput) => attribute.Modifier | undefined;
 }
 
 function enumKey<T extends Record<string, number>>(
@@ -116,7 +116,7 @@ function finalScaler(value: number): number {
 function sampleValue(
     definition: AttributeModifier,
     input: ModifierInput,
-): modifier.Value | undefined {
+): attribute.Modifier | undefined {
     const { attributeType, formulaItem } = definition;
     const raw = definition.loadFromBlackboard
         ? (input.blackboard.get(attributeType.toLowerCase()) ?? definition.value)
@@ -133,20 +133,20 @@ function sampleValue(
 
     switch (formulaItem) {
         case "ADDITION":
-            return modifier.create({ addition: source === undefined ? value : source + value });
+            return attribute.create({ addition: source === undefined ? value : source + value });
 
         case "MULTIPLIER":
-            return modifier.create(
+            return attribute.create(
                 source === undefined ? { multiplier: value } : { addition: source * value },
             );
 
         case "FINAL_ADDITION":
-            return modifier.create({
+            return attribute.create({
                 finalAddition: source === undefined ? value : source + value,
             });
 
         case "FINAL_SCALER":
-            return modifier.create(
+            return attribute.create(
                 source === undefined
                     ? { finalScaler: finalScaler(value) }
                     : { finalAddition: source * finalScaler(value) },
@@ -154,18 +154,21 @@ function sampleValue(
     }
 }
 
-function normalizeValue(attribute: ModifierAttribute, value: modifier.Value): modifier.Value {
+function normalizeValue(
+    attributeType: ModifierAttribute,
+    value: attribute.Modifier,
+): attribute.Modifier {
     let scale = 1;
 
-    if (attribute === "BASE_ATTACK_TIME") {
+    if (attributeType === "BASE_ATTACK_TIME") {
         scale = TICKS_PER_SECOND;
-    } else if (attribute === "MOVE_SPEED") {
+    } else if (attributeType === "MOVE_SPEED") {
         scale = 1 / TICKS_PER_SECOND;
     }
 
     return scale === 1
         ? value
-        : modifier.create({
+        : attribute.create({
               ...value,
               addition: value.addition * scale,
               finalAddition: value.finalAddition * scale,

@@ -5,7 +5,8 @@ import * as contribution from "../../contribution/contribution.js";
 import type { State as BattleState, Result } from "../../../battle/state.js";
 import type { Activation, Definition as ActivationDefinition } from "./activation.js";
 import type { Events, Hook, Key } from "./hook.js";
-import type { Input } from "./input.js";
+import type { Input as AmmoInput } from "./ammo.js";
+import type { Modifier } from "./modifier.js";
 import type { Rule } from "./rule.js";
 import type { Instance } from "./instance.js";
 import * as sp from "./sp.js";
@@ -195,37 +196,58 @@ export function removeEndedHook(state: State, id: string): State {
     return removeHook(state, "ended", id);
 }
 
-export function setSustainContribution(
+export function setAmmoContribution(
     state: State,
-    entry: contribution.Contribution<Input>,
+    entry: contribution.Contribution<AmmoInput>,
 ): State {
     const current = state.sustain;
 
-    if (current === null || current.type === "INFINITE") {
+    if (current?.type !== "AMMO") {
         return state;
     }
 
-    const updated =
-        current.type === "TIME"
-            ? { ...current, duration: contribution.set(current.duration, entry) }
-            : { ...current, ammo: contribution.set(current.ammo, entry) };
+    const ammo = contribution.set(current.ammo, entry);
 
-    return { ...state, sustain: updated };
+    return ammo === current.ammo ? state : { ...state, sustain: { ...current, ammo } };
 }
 
-export function removeSustainContribution(state: State, id: string): State {
+export function removeAmmoContribution(state: State, id: string): State {
     const current = state.sustain;
 
-    if (current === null || current.type === "INFINITE") {
+    if (current?.type !== "AMMO") {
         return state;
     }
 
-    const updated =
-        current.type === "TIME"
-            ? { ...current, duration: contribution.remove(current.duration, id) }
-            : { ...current, ammo: contribution.remove(current.ammo, id) };
+    const ammo = contribution.remove(current.ammo, id);
 
-    return { ...state, sustain: updated };
+    return ammo === current.ammo ? state : { ...state, sustain: { ...current, ammo } };
+}
+
+export function setDurationContribution(
+    state: State,
+    entry: contribution.Contribution<Modifier>,
+): State {
+    const current = state.sustain;
+
+    if (current?.type !== "TIME") {
+        return state;
+    }
+
+    const duration = contribution.set(current.duration, entry);
+
+    return duration === current.duration ? state : { ...state, sustain: { ...current, duration } };
+}
+
+export function removeDurationContribution(state: State, id: string): State {
+    const current = state.sustain;
+
+    if (current?.type !== "TIME") {
+        return state;
+    }
+
+    const duration = contribution.remove(current.duration, id);
+
+    return duration === current.duration ? state : { ...state, sustain: { ...current, duration } };
 }
 
 export function validateState(state: State): void {

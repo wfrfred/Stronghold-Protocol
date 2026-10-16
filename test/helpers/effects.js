@@ -16,7 +16,7 @@ import {
     setMaxHpContribution,
     removeMaxHpContribution,
 } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
-import { create as modifier } from "../../dist/core/tactical/unit/contribution/value.js";
+import { create as modifier } from "../../dist/core/tactical/unit/contribution/attribute.js";
 
 export function effectFixtureWork(...units) {
     const byId = new Map(units.map((unit) => [unit.id, unit]));

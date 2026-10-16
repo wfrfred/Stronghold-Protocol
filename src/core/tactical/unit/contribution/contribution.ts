@@ -1,13 +1,9 @@
-import type { Value } from "./value.js";
-
-export type Input<C> = readonly Value[] | ((context: C) => readonly Value[]);
-
 export interface Group {
     readonly id: string;
     readonly priority: number;
 }
 
-export interface Contribution<V = readonly Value[]> {
+export interface Contribution<V> {
     readonly id: string;
     readonly value: V;
     readonly group?: Group;
@@ -51,19 +47,7 @@ export function remove<V>(
     return updated.length === entries.length ? entries : updated;
 }
 
-export function evaluate<C>(input: Input<C>, context: C): readonly Value[] {
-    return typeof input === "function" ? input(context) : input;
-}
-
-export function resolve(entries: readonly Contribution[]): readonly Value[];
-export function resolve<V>(
-    entries: readonly Contribution<V>[],
-    read: (value: V) => readonly Value[],
-): readonly Value[];
-export function resolve<V>(
-    entries: readonly Contribution<V>[],
-    read?: (value: V) => readonly Value[],
-): readonly Value[] {
+export function resolve<V>(entries: readonly Contribution<V>[]): readonly V[] {
     const ordered = [...entries].sort((a, b) => {
         if (a.id === b.id) {
             return 0;
@@ -85,13 +69,11 @@ export function resolve<V>(
         }
     }
 
-    const values: Value[] = [];
+    const values: V[] = [];
 
     for (const entry of ordered) {
         if (entry.group === undefined || winners.get(entry.group.id) === entry) {
-            values.push(
-                ...(read === undefined ? (entry.value as readonly Value[]) : read(entry.value)),
-            );
+            values.push(entry.value);
         }
     }
 

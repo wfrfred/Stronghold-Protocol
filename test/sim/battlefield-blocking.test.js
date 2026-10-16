@@ -7,7 +7,7 @@ import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
 import { initialize } from "../helpers/unit.js";
 import { setCapacityContribution, setRule, removeRule } from '../../dist/core/tactical/unit/capability/blocking/blocker.js';
 import { setVolumeContribution } from '../../dist/core/tactical/unit/capability/blocking/blockable.js';
-import * as modifier from '../../dist/core/tactical/unit/contribution/value.js';
+import * as modifier from '../../dist/core/tactical/unit/contribution/attribute.js';
 
 const create = units => {
   let battlefield = createFieldState({
@@ -159,11 +159,11 @@ test('capacity changes retain fitting old relations and fill restored capacity u
   assert.equal(view(battlefield).blockingUsedCapacity(10), 3);
 
   battlefield = transitionBattlefield(battlefield, [update(battlefield, 20, unit => ({
-    ...unit, blockable: setVolumeContribution(unit.blockable, { id: 'volume', value: [modifier.create({ addition: 2 })] }),
+    ...unit, blockable: setVolumeContribution(unit.blockable, { id: 'volume', value: 2 }),
   }))]).state;
   assert.deepEqual(view(battlefield).blockedBy(10), [22]);
   battlefield = transitionBattlefield(battlefield, [update(battlefield, 20, unit => ({
-    ...unit, blockable: setVolumeContribution(unit.blockable, { id: 'volume', value: [modifier.create()] }),
+    ...unit, blockable: setVolumeContribution(unit.blockable, { id: 'volume', value: 0 }),
   }))]).state;
   assert.deepEqual(view(battlefield).blockedBy(10), [22, 20]);
   assert.equal(view(battlefield).blockingUsedCapacity(10), 3);

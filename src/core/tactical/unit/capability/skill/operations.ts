@@ -5,7 +5,6 @@ import { closeLifetime } from "../../../battle/execution/lifetime.js";
 import * as units from "../../query.js";
 import type { Unit } from "../../unit.js";
 import * as contribution from "../../contribution/contribution.js";
-import * as modifier from "../../contribution/value.js";
 import { isSpatiallyPresent } from "../presence/capability.js";
 import { hasVitality } from "../vitality/capability.js";
 import { hasAction, setReleasedHook } from "../action/capability.js";
@@ -21,6 +20,8 @@ import * as instance from "./instance.js";
 import { read } from "./internal/read.js";
 import type { Instance } from "./instance.js";
 import * as sp from "./sp.js";
+import { resolveCapacity as resolveAmmoCapacity } from "./ammo.js";
+import * as modifier from "./modifier.js";
 
 const hitRecovery: ReceivedHook = {
     id: "@skill/hit-recovery",
@@ -399,36 +400,31 @@ function initialSustain<S extends object, A extends object>(
 ): SustainState {
     const definition = self.definition.activation!.sustain;
     const contributions = self.state.sustain;
-    const entries = [];
-
-    if (contributions?.type === "TIME") {
-        entries.push(...contributions.duration);
-    } else if (contributions?.type === "AMMO") {
-        entries.push(...contributions.ammo);
-    }
 
     if (definition.type === "INFINITE") {
         return { type: "INFINITE" };
     }
 
-    const base = definition.type === "TIME" ? definition.durationTicks : definition.amount;
-    const budget = Math.max(
-        0,
-        Math.ceil(
-            modifier.apply(
-                base,
-                contribution.resolve(entries, (input) =>
-                    typeof input === "function" ? input(battle, unit) : input,
-                ),
-            ),
-        ),
-    );
-    assertNonnegativeSafeInteger(budget, "skill sustain budget");
-
     if (definition.type === "AMMO") {
+        const entries = contributions?.type === "AMMO" ? contributions.ammo : [];
+        const budget = resolveAmmoCapacity(
+            definition.amount,
+            contribution
+                .resolve(entries)
+                .map((input) => (typeof input === "function" ? input(battle, unit) : input)),
+        );
+
         return { type: "AMMO", initial: budget, remaining: budget, replenished: 0 };
     }
 
+    const entries = contributions?.type === "TIME" ? contributions.duration : [];
+    const budget = Math.ceil(
+        Math.max(
+            0,
+            modifier.apply(battle, unit, definition.durationTicks, contribution.resolve(entries)),
+        ),
+    );
+    assertNonnegativeSafeInteger(budget, "skill sustain budget");
     const endsAtTick = battle.tick + budget;
     assertNonnegativeSafeInteger(endsAtTick, "skill ending tick");
 

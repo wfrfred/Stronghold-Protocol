@@ -4,7 +4,7 @@ import { battlefieldView, type State as BattleState } from "../../../battle/stat
 import type { Unit } from "../../unit.js";
 import * as units from "../../query.js";
 import * as contribution from "../../contribution/contribution.js";
-import * as modifier from "../../contribution/value.js";
+import * as attribute from "../../contribution/attribute.js";
 import type { Definition } from "../../action/definition.js";
 import type { Action } from "./capability.js";
 
@@ -25,11 +25,11 @@ export function resolveSpeed(
 
     return Math.max(
         20,
-        modifier.apply(
+        attribute.apply(
             definition.speed,
-            contribution.resolve(unit.action.speed, (value) =>
-                contribution.evaluate(value, context),
-            ),
+            contribution
+                .resolve(unit.action.speed)
+                .flatMap((value) => attribute.evaluate(value, context)),
         ),
     );
 }
@@ -49,11 +49,11 @@ export function resolveBaseInterval(
 
     return Math.max(
         0,
-        modifier.apply(
+        attribute.apply(
             definition.intervalTicks,
-            contribution.resolve(unit.action.interval, (value) =>
-                contribution.evaluate(value, context),
-            ),
+            contribution
+                .resolve(unit.action.interval)
+                .flatMap((value) => attribute.evaluate(value, context)),
         ),
     );
 }

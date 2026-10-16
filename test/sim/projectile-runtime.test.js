@@ -11,7 +11,7 @@ import { getUnit, updateUnit, removeUnit, registerUnit, battlefieldView } from '
 import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
 import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { setAttackContribution } from '../../dist/core/tactical/unit/capability/offense/capability.js';
-import { create as modifier } from '../../dist/core/tactical/unit/contribution/value.js';
+import { create as modifier } from '../../dist/core/tactical/unit/contribution/attribute.js';
 import { transition } from '../../dist/core/tactical/battlefield/state.js';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
 import { createLegacyCombatSpec } from '../../dist/legacy/combat.js';

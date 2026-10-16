@@ -1,7 +1,7 @@
 import type { State as BattleState, Result } from "../../../battle/state.js";
 import { preserveHpRatio } from "./max-hp.js";
 import * as contribution from "../../contribution/contribution.js";
-import * as modifier from "../../contribution/value.js";
+import * as attribute from "../../contribution/attribute.js";
 import type { Unit, Definition as UnitDefinition } from "../../unit.js";
 import type { Hook as DamageHook } from "./damage/hook.js";
 import type { Hook as HealingHook } from "./healing/hook.js";
@@ -16,7 +16,7 @@ export interface Definition {
 
 export interface State {
     readonly hp: number;
-    readonly maxHp: readonly contribution.Contribution[];
+    readonly maxHp: readonly contribution.Contribution<readonly attribute.Modifier[]>[];
     readonly damageHooks: readonly DamageHook[];
     readonly healingHooks: readonly HealingHook[];
     readonly damageReceptionRules: readonly DamageReceptionRule[];
@@ -108,8 +108,8 @@ function changeMaxHpContributions(
     definition: Definition,
     state: State,
     transition: (
-        entries: readonly contribution.Contribution[],
-    ) => readonly contribution.Contribution[],
+        entries: readonly contribution.Contribution<readonly attribute.Modifier[]>[],
+    ) => readonly contribution.Contribution<readonly attribute.Modifier[]>[],
 ): State {
     const maxHp = transition(state.maxHp);
 
@@ -119,7 +119,7 @@ function changeMaxHpContributions(
 export function setMaxHpContribution(
     definition: Definition,
     state: State,
-    entry: contribution.Contribution,
+    entry: contribution.Contribution<readonly attribute.Modifier[]>,
 ): State {
     return changeMaxHpContributions(definition, state, (entries) =>
         contribution.set(entries, entry),
@@ -133,5 +133,5 @@ export function removeMaxHpContribution(definition: Definition, state: State, id
 }
 
 export function resolveMaxHp(definition: Definition, state: State): number {
-    return Math.max(1, modifier.apply(definition.maxHp, contribution.resolve(state.maxHp)));
+    return Math.max(1, attribute.apply(definition.maxHp, contribution.resolve(state.maxHp).flat()));
 }

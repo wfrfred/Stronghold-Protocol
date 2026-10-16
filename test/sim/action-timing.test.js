@@ -15,7 +15,7 @@ import {
 } from "../../dist/core/tactical/unit/capability/action/capability.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { getUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
-import { create as modifier } from "../../dist/core/tactical/unit/contribution/value.js";
+import { create as modifier } from "../../dist/core/tactical/unit/contribution/attribute.js";
 import { setState } from "../../dist/core/tactical/unit/action/action.js";
 import { advance } from "../../dist/core/tactical/unit/action/advance.js";
 

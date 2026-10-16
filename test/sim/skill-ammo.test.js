@@ -4,7 +4,7 @@ import { getUnit } from "../../dist/core/tactical/battle/state.js";
 import * as skills from "../../dist/core/tactical/unit/capability/skill/operations.js";
 import * as ammo from "../../dist/core/tactical/unit/capability/skill/ammo.js";
 import * as query from "../../dist/core/tactical/unit/capability/skill/query.js";
-import { create as value } from "../../dist/core/tactical/unit/contribution/value.js";
+import { setAmmoContribution, removeAmmoContribution } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { fixture, at, change, currentRef } from "../helpers/skill.js";
 
 function loaded(amount = 3, overrides = {}) {
@@ -127,15 +127,52 @@ test("content ammunition grants respect current capacity without consuming ordin
 
 test("ammunition capacity contributions are sampled for each new activation", () => {
     const f = loaded(3);
-    let state = change(f.state, (skill) => ({ ...skill, sustain: {
-        ...skill.sustain, ammo: [{ id: "bonus", value: [value({ finalAddition: 2 })] }],
-    } }));
+    let state = change(f.state, (skill) => setAmmoContribution(skill, {
+        id: "bonus", value: { addition: 2, ratio: 0 },
+    }));
     assert.equal(remaining(state), 3);
     assert.equal(query.get(state, f.activation).sustain.initial, 3);
     state = skills.finish(state, f.activation);
     state = skills.activate(state, f.ref).state;
     assert.equal(remaining(state), 5);
     assert.equal(query.get(state, currentRef(state)).sustain.initial, 5);
+});
+
+test("ammunition capacity adds fixed counts after rounding only the original proportional bonus", () => {
+    assert.equal(ammo.resolveCapacity(10, [
+        { addition: 2, ratio: 0 },
+        { addition: 0, ratio: 0.5 },
+    ]), 17);
+    assert.equal(ammo.resolveCapacity(10, [
+        { addition: 0, ratio: 0.15 },
+        { addition: 0, ratio: 0.1 },
+    ]), 12);
+    assert.equal(ammo.resolveCapacity(10, [{ addition: 0, ratio: 0.35 }]), 14);
+    assert.equal(ammo.resolveCapacity(10, [{ addition: 0, ratio: -0.25 }]), 8);
+    assert.equal(ammo.resolveCapacity(10, [{ addition: 0, ratio: -0.35 }]), 6);
+    assert.equal(ammo.resolveCapacity(10, [{ addition: -20, ratio: 0 }]), 1);
+    assert.equal(ammo.resolveCapacity(0, []), 1);
+});
+
+test("ammunition modifiers resolve live inputs and exclusive sources only when the next activation starts", () => {
+    const f = loaded(10);
+    const weak = { id: "weak", group: { id: "capacity", priority: 1 },
+        value: { addition: 0, ratio: 0.2 } };
+    const strong = { id: "strong", group: { id: "capacity", priority: 2 },
+        value: (battle) => ({ addition: battle.tick, ratio: 0.5 }) };
+    let state = change(f.state, (skill) => setAmmoContribution(setAmmoContribution(skill, weak), strong));
+    state = at(state, 2);
+    assert.equal(remaining(state), 10);
+    state = skills.activate(skills.finish(state, f.activation), f.ref).state;
+    assert.equal(remaining(state), 17);
+    const current = currentRef(state);
+    state = change(state, (skill) => removeAmmoContribution(skill, "strong"));
+    assert.equal(remaining(state), 17);
+    state = skills.activate(skills.finish(state, current), f.ref).state;
+    assert.equal(remaining(state), 12);
+    const before = getUnit(state, 1).skill;
+    assert.equal(removeAmmoContribution(before, "missing"), before);
+    assert.equal(setAmmoContribution(before, weak), before);
 });
 
 test("consumption Hooks report the complete consumed amount and settled negative remainder", () => {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as cards from "../../dist/core/tactical/battle/deployment/card.js";
-import { create as value } from "../../dist/core/tactical/unit/contribution/value.js";
+import { create as value } from "../../dist/core/tactical/unit/contribution/attribute.js";
 
 const definition = (cost = 10, redeployTicks = 30) => ({
     id: "deployable",

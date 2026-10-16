@@ -6,7 +6,7 @@ import type { RouteState } from "./route/state.js";
 import type { Unit } from "../../unit.js";
 import { createSteeringState, type SteeringParameters, type SteeringState } from "./steering.js";
 import * as contribution from "../../contribution/contribution.js";
-import * as modifier from "../../contribution/value.js";
+import * as attribute from "../../contribution/attribute.js";
 
 export interface Definition {
     readonly moveSpeedPerTick: number;
@@ -21,7 +21,7 @@ export interface Rule {
 
 export interface State {
     readonly moving: boolean;
-    readonly moveSpeed: readonly contribution.Contribution<contribution.Input<Context>>[];
+    readonly moveSpeed: readonly contribution.Contribution<attribute.Input<Context>>[];
     readonly steering: SteeringState;
     readonly rules: readonly Rule[];
 }
@@ -104,7 +104,7 @@ function changeMoveSpeedContributions(
 
 export function setMoveSpeedContribution(
     state: State,
-    entry: contribution.Contribution<contribution.Input<Context>>,
+    entry: contribution.Contribution<attribute.Input<Context>>,
 ): State {
     return changeMoveSpeedContributions(state, (entries) => contribution.set(entries, entry));
 }
@@ -116,9 +116,11 @@ export function removeMoveSpeedContribution(state: State, id: string): State {
 export function resolveMoveSpeed(definition: Definition, state: State, context: Context): number {
     return Math.max(
         definition.minimumMoveSpeedPerTick ?? 0,
-        modifier.apply(
+        attribute.apply(
             definition.moveSpeedPerTick,
-            contribution.resolve(state.moveSpeed, (value) => contribution.evaluate(value, context)),
+            contribution
+                .resolve(state.moveSpeed)
+                .flatMap((value) => attribute.evaluate(value, context)),
         ),
     );
 }

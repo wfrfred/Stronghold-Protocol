@@ -40,7 +40,7 @@ import {
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { resolveMaxHp } from "../../dist/core/tactical/unit/capability/vitality/query.js";
 import * as contribution from "../../dist/core/tactical/unit/contribution/contribution.js";
-import * as modifier from "../../dist/core/tactical/unit/contribution/value.js";
+import * as modifier from "../../dist/core/tactical/unit/contribution/attribute.js";
 import {
     compileAttributeModifiers,
     parseAttributeModifiers,
@@ -285,7 +285,7 @@ test("blocking volume: independent Effect contributions release targets and clea
     const original = h.state;
     const setting = {
         capability: "blockable", set: setVolumeContribution, remove: removeVolumeContribution,
-        value: () => [modifier.create({ addition: 1 })],
+        value: () => 1,
     };
     const first = contributionEffect("larger-a", {}, setting);
     const second = contributionEffect("larger-b", {}, setting);
@@ -316,13 +316,46 @@ test("blocking volume: independent Effect contributions release targets and clea
     assert.deepEqual(original.units.get(1).blockable.volume, []);
 });
 
-test("blocking volume: zero and negative modifiers still consume one capacity while Rules control eligibility", () => {
+test("blocking volume: integer additions honor exclusive groups and restore the remaining candidate", () => {
+    const h = battlefield([blocker(4), enemy(1), enemy(2)]);
+    const original = h.state.units.get(1);
+    const replace = (state) => h.commit([{ type: "UPDATE_UNIT", unit: {
+        ...h.state.units.get(1), blockable: state,
+    } }]);
+    let state = setVolumeContribution(original.blockable, { id: "independent", value: 1 });
+    state = setVolumeContribution(state, {
+        id: "lower", value: 1, group: { id: "size", priority: 1 },
+    });
+    state = setVolumeContribution(state, {
+        id: "higher", value: 2, group: { id: "size", priority: 2 },
+    });
+    replace(state);
+    assert.equal(resolveVolume(original.definition.blockable, state), 4);
+    assert.deepEqual(h.blocked(), [1]);
+    const fallback = removeVolumeContribution(state, "higher");
+    replace(fallback);
+    assert.equal(resolveVolume(original.definition.blockable, fallback), 3);
+    assert.deepEqual(h.blocked(), [1, 2]);
+    assert.equal(resolveVolume(original.definition.blockable, state), 4);
+    assert.equal(resolveVolume(original.definition.blockable, original.blockable), 1);
+    assert.equal(resolveVolume(original.definition.blockable, removeVolumeContribution(fallback, "lower")), 2);
+});
+
+test("blocking volume: only integer additions are accepted", () => {
+    const state = enemy(1).blockable;
+    for (const value of [0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+        assert.throws(() => setVolumeContribution(state, { id: "invalid", value }), RangeError);
+    }
+    assert.equal(resolveVolume({ volume: 2 }, setVolumeContribution(state, { id: "zero", value: 0 })), 2);
+});
+
+test("blocking volume: negative additions still consume one capacity while Rules control eligibility", () => {
     const h = battlefield([blocker(1), enemy(1, 2)]);
     assert.deepEqual(h.blocked(), []);
-    for (const value of [modifier.create({ finalScaler: 0 }), modifier.create({ addition: -10 })]) {
+    for (const value of [-2, -10]) {
         const unit = h.state.units.get(1);
         h.commit([{ type: "UPDATE_UNIT", unit: {
-            ...unit, blockable: setVolumeContribution(unit.blockable, entry("reduced", value)),
+            ...unit, blockable: setVolumeContribution(unit.blockable, { id: "reduced", value }),
         } }]);
         const current = h.state.units.get(1);
         assert.equal(resolveVolume(current.definition.blockable, current.blockable), 1);
@@ -369,8 +402,8 @@ test("blocking volume: equivalent contribution changes leave the blocking projec
     const changed = {
         ...unit,
         blockable: setVolumeContribution(
-            setVolumeContribution(unit.blockable, entry("positive", modifier.create({ addition: 1 }))),
-            entry("negative", modifier.create({ addition: -1 })),
+            setVolumeContribution(unit.blockable, { id: "positive", value: 1 }),
+            { id: "negative", value: -1 },
         ),
     };
     const result = h.commit([{ type: "UPDATE_UNIT", unit: changed }]);

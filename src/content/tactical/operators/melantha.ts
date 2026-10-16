@@ -22,7 +22,7 @@ import {
 } from "../../../core/tactical/unit/capability/offense/capability.js";
 import type { Definition as EffectDefinition } from "../../../core/tactical/unit/effect/definition.js";
 import { install } from "../../../core/tactical/unit/effect/operations.js";
-import { create as modifier } from "../../../core/tactical/unit/contribution/value.js";
+import * as attribute from "../../../core/tactical/unit/contribution/attribute.js";
 import type { Direction } from "../../../core/tactical/geometry/direction.js";
 import { createBlockGeometry } from "../../../core/tactical/geometry/shape.js";
 import { secondsToTicks } from "../../../data/arknights/tick.js";
@@ -47,7 +47,7 @@ function attackBonus(id: string, amount: number): EffectDefinition<object, Offen
                 ...unit,
                 offense: setAttackContribution(unit.offense, {
                     id: `effect/${self.id}/attack`,
-                    value: [modifier({ multiplier: amount })],
+                    value: [attribute.create({ multiplier: amount })],
                 }),
             }),
         onDisable: (state, { unit, self }) =>

@@ -8,8 +8,6 @@ import { appendEvents, type State as BattleState, type Result } from "../../../b
 import { closeLifetime } from "../../../battle/execution/lifetime.js";
 import * as units from "../../query.js";
 import type { Unit } from "../../unit.js";
-import * as contribution from "../../contribution/contribution.js";
-import * as modifier from "../../contribution/value.js";
 import {
     ELEMENT_TYPES,
     elementValues,
@@ -19,7 +17,7 @@ import {
     type Values,
 } from "./capability.js";
 import { ref as burstRef, type Burst, type End } from "./burst.js";
-import { dispatch, type Damaged, type Healed } from "./hook.js";
+import { dispatch, receive, type Damaged, type Healed } from "./hook.js";
 import * as query from "./query.js";
 
 export interface DamageRequest {
@@ -106,61 +104,65 @@ export function damage(
         return { state: battle, value: { type: "REJECTED", reason: "TARGET_ABSENT" } };
     }
 
-    const identity = units.ref(self);
-    const maximum = query.resolveMaxEp(battle, identity)!;
+    const identity: Ref<Unit & Elemental> = units.ref(self);
     const resistance = query.resolveElementResistance(battle, identity)!;
-    const power = Math.max(
-        0,
-        modifier.apply(
-            request.power * (1 - resistance / 100),
-            contribution.resolve(self.elemental.damage, (input) =>
-                typeof input === "function" ? input(battle, self, request) : input,
-            ),
-        ),
-    );
-    const previous = Math.min(maximum, Math.max(0, self.elemental.ep[request.type]));
-    const amount = Math.min(previous, power);
+    const reception = receive(battle, identity, {
+        request,
+        amount: request.power * (1 - resistance / 100),
+    });
+    battle = reception.state;
+
+    const rejection = query.damageRejection(battle, target, request);
+
+    if (rejection !== undefined) {
+        return { state: battle, value: { type: "REJECTED", reason: rejection } };
+    }
+
+    const currentSelf = units.get(battle, identity)!;
+    const maximum = query.resolveMaxEp(battle, identity)!;
+    const previous = Math.min(maximum, Math.max(0, currentSelf.elemental.ep[request.type]));
+    const amount = Math.min(previous, reception.value);
 
     if (amount === 0) {
         return { state: battle, value: { type: "APPLIED", amount: 0, burst: null } };
     }
 
     const current = previous - amount;
-    const definition = self.definition.elemental.bursts[request.type];
+    const definition = currentSelf.definition.elemental.bursts[request.type];
     const burst: Burst | null =
         current > 0
             ? null
             : {
                   host: identity,
-                  id: self.elemental.nextBurstId,
+                  id: currentSelf.elemental.nextBurstId,
                   type: request.type,
                   source: request.source,
                   startedAtTick: battle.tick,
                   status: "ACTIVE",
                   remainingTicks: definition.durationTicks,
               };
-    const nextBurstId = self.elemental.nextBurstId + (burst === null ? 0 : 1);
+    const nextBurstId = currentSelf.elemental.nextBurstId + (burst === null ? 0 : 1);
     assertNonnegativeSafeInteger(nextBurstId, "element burst allocation progress");
 
     const ep =
         burst === null
-            ? Object.freeze({ ...normalizedEp(self, maximum), [request.type]: current })
+            ? Object.freeze({ ...normalizedEp(currentSelf, maximum), [request.type]: current })
             : elementValues(0);
     battle = query.replace(battle, {
-        ...self,
+        ...currentSelf,
         elemental: {
-            ...self.elemental,
+            ...currentSelf.elemental,
             ep,
             burst,
             nextBurstId,
-            lastAdvancedTick: burst === null ? self.elemental.lastAdvancedTick : battle.tick,
+            lastAdvancedTick: burst === null ? currentSelf.elemental.lastAdvancedTick : battle.tick,
         },
     });
     battle = appendEvents(battle, [
         {
             type: "ELEMENT_DAMAGE",
             sourceUnitId: request.source?.id ?? null,
-            targetUnitId: self.id,
+            targetUnitId: currentSelf.id,
             elementType: request.type,
             amount,
             ep: current,

@@ -31,7 +31,7 @@ import { createDefinition as createActionCapabilityDefinition, hasAction } from 
 import { areHostile, hasAllegiance } from '../../dist/core/tactical/unit/capability/allegiance/capability.js';
 import { hasBlocker, resolveCapacity } from '../../dist/core/tactical/unit/capability/blocking/blocker.js';
 import { hasBlockable } from '../../dist/core/tactical/unit/capability/blocking/blockable.js';
-import * as modifier from '../../dist/core/tactical/unit/contribution/value.js';
+import * as modifier from '../../dist/core/tactical/unit/contribution/attribute.js';
 import { createHitDefinition, hasHit, hasSpatial } from '../../dist/core/tactical/unit/capability/spatial/capability.js';
 import { initialize as initializeTargetableState, hasTargetable, setRule as setTargetableRule, removeRule as removeTargetableRule, allowsTarget } from '../../dist/core/tactical/unit/capability/targetable/capability.js';
 import { setHealingReceptionRule, removeHealingReceptionRule } from '../../dist/core/tactical/unit/capability/vitality/capability.js';

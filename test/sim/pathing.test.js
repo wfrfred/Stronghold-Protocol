@@ -63,7 +63,7 @@ import { getDefaultSource, hasGeneratedData } from '../../server/sim/simdata.js'
 import { makeBattle, flatStage, enemyRec } from '../helpers/battleHarness.js';
 import { remainingDistance } from '../../server/sim/ai.js';
 import * as contribution from '../../dist/core/tactical/unit/contribution/contribution.js';
-import * as modifier from '../../dist/core/tactical/unit/contribution/value.js';
+import * as modifier from '../../dist/core/tactical/unit/contribution/attribute.js';
 
 const REAL = { skip: !hasGeneratedData() && 'no generated data' };
 const NORMAL = { r0: 9, r1: 12, c0: 0, c1: 10 };
@@ -1543,7 +1543,7 @@ test('core selective and full projection preserve relation history and reacquire
   const mutations = [
     unit => ({ ...unit, allegiance: { side: 'ALLY' } }),
     unit => ({ ...unit, spatial: { layer: 'AIR' } }),
-    unit => ({ ...unit, blockable: blockable.setVolumeContribution(unit.blockable, { id: 'larger', value: [modifier.create({ addition: 2 })] }) }),
+    unit => ({ ...unit, blockable: blockable.setVolumeContribution(unit.blockable, { id: 'larger', value: 2 }) }),
     unit => ({ ...unit, blockable: blockable.setRule(unit.blockable, unblockableRule) }),
   ];
   for (const mutate of mutations) {

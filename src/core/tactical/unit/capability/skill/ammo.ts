@@ -1,12 +1,48 @@
-import { assertPositiveSafeInteger } from "../../../../common/assert.js";
+import {
+    assertFiniteNumber,
+    assertNonnegativeSafeInteger,
+    assertPositiveSafeInteger,
+    assertSafeInteger,
+} from "../../../../common/assert.js";
 import type { Ref } from "../../../../common/ref.js";
 import type { State as BattleState, Result } from "../../../battle/state.js";
+import type { Unit } from "../../unit.js";
 import * as units from "../../query.js";
 import { ref as activationRef, type Activation } from "./activation.js";
+import type { Skill } from "./capability.js";
 import { dispatch } from "./hook.js";
 import { finish } from "./operations.js";
 import * as query from "./query.js";
 import type { Ammo } from "./sustain.js";
+
+export interface Modifier {
+    readonly addition: number;
+    readonly ratio: number;
+}
+
+export type Input = Modifier | ((battle: BattleState, self: Unit & Skill) => Modifier);
+
+export function resolveCapacity(base: number, modifiers: Iterable<Modifier>): number {
+    assertNonnegativeSafeInteger(base, "skill base ammunition capacity");
+    let addition = 0;
+    let ratio = 0;
+
+    for (const modifier of modifiers) {
+        assertSafeInteger(modifier.addition, "skill ammunition capacity addition");
+        assertFiniteNumber(modifier.ratio, "skill ammunition capacity ratio");
+        addition += modifier.addition;
+        ratio += modifier.ratio;
+    }
+
+    const scaled = base * ratio;
+    assertFiniteNumber(scaled, "skill proportional ammunition capacity");
+    const lower = Math.floor(scaled);
+    const rounded = scaled - lower === 0.5 ? lower + Math.abs(lower % 2) : Math.round(scaled);
+    const capacity = Math.max(1, base + addition + rounded);
+    assertPositiveSafeInteger(capacity, "skill ammunition capacity");
+
+    return capacity;
+}
 
 export interface Consumed {
     readonly ref: Ref<Activation>;

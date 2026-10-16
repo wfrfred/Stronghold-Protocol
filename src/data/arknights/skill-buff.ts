@@ -1,6 +1,6 @@
 import { get as getUnit, ref as unitRef } from "../../core/tactical/unit/query.js";
 import { updateUnit } from "../../core/tactical/battle/state.js";
-import * as modifier from "../../core/tactical/unit/contribution/value.js";
+import * as attribute from "../../core/tactical/unit/contribution/attribute.js";
 import type { Definition } from "../../core/tactical/unit/effect/definition.js";
 import { install } from "../../core/tactical/unit/effect/operations.js";
 import {
@@ -35,7 +35,7 @@ export function compileArknightsAttackBuffSkill(value: unknown, level: number): 
                 ...context.unit,
                 offense: setAttackContribution(context.unit.offense, {
                     id: `@effect/${context.self.id}/attack`,
-                    value: [modifier.create({ multiplier: context.self.data.attackIncrease })],
+                    value: [attribute.create({ multiplier: context.self.data.attackIncrease })],
                 }),
             });
         },

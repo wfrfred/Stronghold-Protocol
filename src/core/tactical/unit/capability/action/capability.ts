@@ -9,6 +9,7 @@ import type { Definitions } from "../../action/definitions.js";
 import type { State as ActionState } from "../../action/state.js";
 import * as cooldown from "../../action/cooldown.js";
 import * as contribution from "../../contribution/contribution.js";
+import type * as attribute from "../../contribution/attribute.js";
 import * as hook from "../../hook/hook.js";
 import type { Hook as ReleaseHook, ReleasedHook } from "./release.js";
 import { period } from "./timing.js";
@@ -33,8 +34,8 @@ export interface Rule {
 
 export interface State {
     readonly states: ReadonlyMap<DefinitionId, StoredState>;
-    readonly interval: readonly contribution.Contribution<contribution.Input<Context>>[];
-    readonly speed: readonly contribution.Contribution<contribution.Input<Context>>[];
+    readonly interval: readonly contribution.Contribution<attribute.Input<Context>>[];
+    readonly speed: readonly contribution.Contribution<attribute.Input<Context>>[];
     readonly rules: readonly Rule[];
     readonly beforeRelease: readonly ReleaseHook[];
     readonly released: readonly ReleasedHook[];
@@ -138,7 +139,7 @@ function updateContributions(
 
 export function setIntervalContribution(
     state: State,
-    entry: contribution.Contribution<contribution.Input<Context>>,
+    entry: contribution.Contribution<attribute.Input<Context>>,
 ): State {
     return updateContributions(state, "interval", (entries) => contribution.set(entries, entry));
 }
@@ -149,7 +150,7 @@ export function removeIntervalContribution(state: State, id: string): State {
 
 export function setSpeedContribution(
     state: State,
-    entry: contribution.Contribution<contribution.Input<Context>>,
+    entry: contribution.Contribution<attribute.Input<Context>>,
 ): State {
     return updateContributions(state, "speed", (entries) => contribution.set(entries, entry));
 }

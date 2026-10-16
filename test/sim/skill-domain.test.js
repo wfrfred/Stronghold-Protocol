@@ -4,14 +4,15 @@ import { test } from "node:test";
 import { getUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
 import * as skills from "../../dist/core/tactical/unit/capability/skill/operations.js";
 import * as sp from "../../dist/core/tactical/unit/capability/skill/sp.js";
-import { initialize as initializeSkill, removeRule } from "../../dist/core/tactical/unit/capability/skill/capability.js";
-import { create as value } from "../../dist/core/tactical/unit/contribution/value.js";
+import { initialize as initializeSkill, removeRule, setDurationContribution, removeDurationContribution } from "../../dist/core/tactical/unit/capability/skill/capability.js";
+import { create as value } from "../../dist/core/tactical/unit/contribution/attribute.js";
 import { initialize } from "../helpers/unit.js";
 import { ref } from "../../dist/core/tactical/unit/query.js";
 import { effectFixtureWork } from "../helpers/effects.js";
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
 import { start as startAction } from "../../dist/core/tactical/unit/action/operations.js";
 import { fixture, definition, at, change, currentRef } from "../helpers/skill.js";
+import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 
 const resource = (overrides = {}) => ({
     initial: 0, capacity: 6, requirement: 3, cost: 3,
@@ -19,6 +20,113 @@ const resource = (overrides = {}) => ({
 });
 const read = (battle) => getUnit(battle, 1).skill;
 const observe = (id, invoke) => ({ id, enabled: () => true, invoke });
+
+function parameterEffect(id, modifiers) {
+    return {
+        id,
+        initialize: () => ({}),
+        onEnable: (battle, context) => change(battle, (skill) => ({
+            ...skill,
+            sp: Object.entries(modifiers).reduce((state, [key, value]) =>
+                sp.setContribution(state, key, { id: `${context.self.id}/${key}`, value }), skill.sp),
+        })),
+        onDisable: (battle, context) => change(battle, (skill) => ({
+            ...skill,
+            sp: Object.keys(modifiers).reduce((state, key) =>
+                sp.removeContribution(state, key, `${context.self.id}/${key}`), skill.sp),
+        })),
+    };
+}
+
+test("SP capacity can be replaced during activation and restored by ending its owning Effect", () => {
+    const f = fixture({ sp: resource({ initial: 10, capacity: 10, requirement: 10, cost: 10 }) });
+    const effect = parameterEffect("coin-capacity", {
+        capacity: { priority: 0, apply: (_battle, self, current) => self.skill.active === null ? current : 20 },
+    });
+    const installed = effects.install(f.state, f.ref, effect);
+    assert.equal(sp.resolveCapacity(installed.state, f.ref), 10);
+    let state = skills.activate(installed.state, f.ref).state;
+    assert.equal(read(state).sp.value, 0);
+    assert.equal(sp.resolveCapacity(state, f.ref), 20);
+    state = effects.end(state, installed.value, "REMOVED");
+    assert.equal(sp.resolveCapacity(state, f.ref), 10);
+    assert.equal(read(state).sp.capacity.length, 0);
+});
+
+test("a Fever-style Effect independently removes the SP requirement and payment and restores both", () => {
+    const f = fixture({ sp: resource({ initial: 0, capacity: 10, requirement: 10, cost: 10 }) });
+    const effect = parameterEffect("fever-permission", {
+        requirement: { priority: 0, apply: () => 0 },
+        cost: { priority: 0, apply: () => 0 },
+    });
+    assert.equal(skills.activate(f.state, f.ref).value.type, "REJECTED");
+    const installed = effects.install(f.state, f.ref, effect);
+    const started = skills.activate(installed.state, f.ref);
+    assert.equal(started.value.type, "ACTIVATED");
+    assert.equal(read(started.state).sp.value, 0);
+    assert.equal(sp.resolveCapacity(started.state, f.ref), 10);
+    let state = skills.finish(started.state, started.value.ref);
+    state = effects.end(state, installed.value, "REMOVED");
+    assert.equal(sp.resolveRequirement(state, f.ref), 10);
+    assert.equal(sp.resolveCost(state, f.ref), 10);
+    assert.equal(skills.activate(state, f.ref).value.type, "REJECTED");
+});
+
+test("SP parameter programs use explicit order and exclusive sources while default payment follows requirement", () => {
+    const f = fixture({ sp: resource({ capacity: 10, cost: undefined }) });
+    let state = change(f.state, (skill) => ({ ...skill, sp: sp.setContribution(
+        sp.setContribution(skill.sp, "capacity", {
+            id: "z-add", value: { priority: 0, apply: (_battle, _self, current) => current + 2 },
+        }), "capacity", {
+            id: "a-scale", value: { priority: 1, apply: (_battle, _self, current) => current * 2 },
+        },
+    ) }));
+    assert.equal(sp.resolveCapacity(state, f.ref), 24);
+    state = change(state, (skill) => ({ ...skill, sp: sp.setContribution(
+        sp.setContribution(skill.sp, "requirement", {
+            id: "weak", group: { id: "requirement", priority: 1 },
+            value: { priority: 0, apply: () => 4 },
+        }), "requirement", {
+            id: "strong", group: { id: "requirement", priority: 2 },
+            value: { priority: 0, apply: () => 5 },
+        },
+    ) }));
+    assert.equal(sp.resolveRequirement(state, f.ref), 5);
+    assert.equal(sp.resolveCost(state, f.ref), 5);
+    state = change(state, (skill) => ({ ...skill, sp: sp.setContribution(skill.sp, "cost", {
+        id: "discount", value: { priority: 0, apply: (_battle, _self, current) => current / 2 },
+    }) }));
+    assert.equal(sp.resolveCost(state, f.ref), 3);
+    state = change(state, (skill) => ({ ...skill, sp: sp.removeContribution(skill.sp, "requirement", "strong") }));
+    assert.equal(sp.resolveRequirement(state, f.ref), 4);
+    assert.equal(sp.resolveCost(state, f.ref), 2);
+});
+
+test("a charged duration program samples all prepayment charges when the activation begins", () => {
+    const f = fixture({
+        sp: resource({ initial: 10, capacity: 10, requirement: 2, cost: undefined }),
+        activation: {
+            trigger: "MANUAL", sustain: { type: "TIME", durationTicks: 120 }, initialize: () => ({}),
+            onStart: (battle, self) => sp.modify(battle, self.host, -getUnit(battle, self.host.id).skill.sp.value).state,
+        },
+    });
+    const entry = {
+        id: "charged-duration",
+        value: { priority: 0, apply: (_battle, self, current) =>
+            current * (1 + Math.floor(self.skill.sp.value / self.definition.skill.sp.requirement) * 0.4) },
+    };
+    let state = change(at(f.state, 7), (skill) => setDurationContribution(skill, entry));
+    const started = skills.activate(state, f.ref);
+    assert.equal(started.value.type, "ACTIVATED");
+    assert.equal(read(started.state).sp.value, 0);
+    assert.equal(read(started.state).active.sustain.endsAtTick, 367);
+    state = change(started.state, (skill) => removeDurationContribution(skill, entry.id));
+    assert.equal(read(state).active.sustain.endsAtTick, 367);
+    state = skills.finish(state, started.value.ref);
+    state = sp.modify(state, f.ref, 10).state;
+    state = skills.activate(state, f.ref).state;
+    assert.equal(read(state).active.sustain.endsAtTick, 127);
+});
 
 test("skill definitions are shared and deployments initialize independent private state", () => {
     const f = fixture({ initialize: () => ({ count: 0 }), sp: resource({ initial: 1 }) });

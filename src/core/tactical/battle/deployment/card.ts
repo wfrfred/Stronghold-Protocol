@@ -3,7 +3,7 @@ import type { BattlefieldRemovalReason } from "../../battlefield/contract.js";
 import type { Deployable } from "../../unit/capability/deployable/capability.js";
 import type { Occupancy } from "../../unit/capability/occupancy/capability.js";
 import * as contribution from "../../unit/contribution/contribution.js";
-import * as modifier from "../../unit/contribution/value.js";
+import * as attribute from "../../unit/contribution/attribute.js";
 import type { Definition as UnitDefinition } from "../../unit/unit.js";
 import type { UnitNavigationModifierPlacement } from "../creation/placement.js";
 
@@ -38,8 +38,10 @@ export interface Card {
     readonly cooldown: Cooldown | null;
     readonly pendingReturns: number;
     readonly costStage: number;
-    readonly costContributions: readonly contribution.Contribution[];
-    readonly redeployContributions: readonly contribution.Contribution[];
+    readonly costContributions: readonly contribution.Contribution<readonly attribute.Modifier[]>[];
+    readonly redeployContributions: readonly contribution.Contribution<
+        readonly attribute.Modifier[]
+    >[];
 }
 
 export const operatorSupply: Supply = {
@@ -95,13 +97,14 @@ export function create(
 export function resolveBaseCost(card: Card): number {
     const addition = contribution
         .resolve(card.costContributions)
+        .flat()
         .reduce((sum, value) => sum + value.addition, 0);
 
     return Math.max(0, Math.floor(card.definition.unit.deployable.cost + addition));
 }
 
 export function resolveCost(card: Card): number {
-    const penalty: modifier.Value = {
+    const penalty: attribute.Modifier = {
         addition: 0,
         multiplier: 0.5 * card.costStage,
         finalAddition: 0,
@@ -111,8 +114,8 @@ export function resolveCost(card: Card): number {
     return Math.max(
         0,
         Math.floor(
-            modifier.apply(card.definition.unit.deployable.cost, [
-                ...contribution.resolve(card.costContributions),
+            attribute.apply(card.definition.unit.deployable.cost, [
+                ...contribution.resolve(card.costContributions).flat(),
                 penalty,
             ]),
         ),
@@ -123,9 +126,9 @@ export function resolveRedeployTicks(card: Card): number {
     return Math.max(
         0,
         Math.ceil(
-            modifier.apply(
+            attribute.apply(
                 card.definition.unit.deployable.redeployTicks,
-                contribution.resolve(card.redeployContributions),
+                contribution.resolve(card.redeployContributions).flat(),
             ),
         ),
     );
@@ -232,7 +235,10 @@ export function reduceCooldown(card: Card, ticks: number, tick: number): Card {
     };
 }
 
-export function setCostContribution(card: Card, entry: contribution.Contribution): Card {
+export function setCostContribution(
+    card: Card,
+    entry: contribution.Contribution<readonly attribute.Modifier[]>,
+): Card {
     const costContributions = contribution.set(card.costContributions, entry);
 
     return costContributions === card.costContributions ? card : { ...card, costContributions };
@@ -244,7 +250,10 @@ export function removeCostContribution(card: Card, id: string): Card {
     return costContributions === card.costContributions ? card : { ...card, costContributions };
 }
 
-export function setRedeployContribution(card: Card, entry: contribution.Contribution): Card {
+export function setRedeployContribution(
+    card: Card,
+    entry: contribution.Contribution<readonly attribute.Modifier[]>,
+): Card {
     const redeployContributions = contribution.set(card.redeployContributions, entry);
 
     return redeployContributions === card.redeployContributions

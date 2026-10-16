@@ -29,7 +29,8 @@ import type { Context, Definition } from ${module("unit/effect/definition")};
 import { install, replaceEffect, get } from ${module("unit/effect/operations")};
 import { setData, type Effect } from ${module("unit/effect/effect")};
 import { Effects } from ${module("unit/effect/effects")};
-import type { Contribution, Input } from ${module("unit/contribution/contribution")};
+import type { Contribution } from ${module("unit/contribution/contribution")};
+import type { Modifier, Input } from ${module("unit/contribution/attribute")};
 import { ref as unitRef, type Context as QueryContext } from ${module("unit/query")};
 const host=initialize(battle, {id:1,position:[0,0],definition:{id:'host',vitality:{maxHp:100}}}).value;
 const content: Definition<{charges:number},Vitality> = {
@@ -110,9 +111,9 @@ canBeBlocked(bare);
 capabilityHost.blocker.enabled;
 // @ts-expect-error eligibility is expressed through Rules.
 capabilityHost.blockable.enabled;
-const fixed:Contribution={id:'fixed',value:[]};
+const fixed:Contribution<readonly Modifier[]>={id:'fixed',value:[]};
 const dynamic:Contribution<Input<QueryContext>>={id:'dynamic',value:()=>[]};
-setVolumeContribution(capabilityHost.blockable,fixed);
+setVolumeContribution(capabilityHost.blockable,{id:'volume',value:1});
 // @ts-expect-error blocking volume requires settled static values.
 setVolumeContribution(capabilityHost.blockable,dynamic);
 const vitality=setMaxHpContribution(capabilityHost.definition.vitality,capabilityHost.vitality,fixed);

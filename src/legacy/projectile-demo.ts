@@ -14,7 +14,7 @@ import {
 } from "../core/tactical/battlefield/projectile/operations.js";
 import { createDefinition as createProjectileDefinition } from "../core/tactical/battlefield/projectile/definition.js";
 import { createShapeGeometry, type RangeGeometry } from "../core/tactical/geometry/shape.js";
-import * as modifier from "../core/tactical/unit/contribution/value.js";
+import * as attribute from "../core/tactical/unit/contribution/attribute.js";
 import { hasAllegiance } from "../core/tactical/unit/capability/allegiance/capability.js";
 import { install } from "../core/tactical/unit/effect/operations.js";
 import type { Definition } from "../core/tactical/unit/effect/definition.js";
@@ -42,7 +42,7 @@ export function createTacticalProjectileDemo(
                 ...context.unit,
                 offense: setAttackContribution(context.unit.offense, {
                     id: `@effect/${context.self.id}/attack`,
-                    value: [modifier.create({ addition: 60 })],
+                    value: [attribute.create({ addition: 60 })],
                     group: { id: "demo-attack-boost", priority: 1 },
                 }),
             });

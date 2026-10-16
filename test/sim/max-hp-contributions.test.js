@@ -14,7 +14,7 @@ import {
     removeMaxHpContribution,
 } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import { resolveMaxHp } from "../../dist/core/tactical/unit/capability/vitality/query.js";
-import { create } from "../../dist/core/tactical/unit/contribution/value.js";
+import { create } from "../../dist/core/tactical/unit/contribution/attribute.js";
 import { effectFixtureWork, install, maxHpBuff, at } from "../helpers/effects.js";
 const bonus = (amount) => create({ finalAddition: amount });
 const receiver = (hp = 50) => {

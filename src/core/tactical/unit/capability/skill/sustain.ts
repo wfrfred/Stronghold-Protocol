@@ -1,5 +1,6 @@
 import type { Contribution } from "../../contribution/contribution.js";
-import type { Input } from "./input.js";
+import type { Input as AmmoInput } from "./ammo.js";
+import type { Modifier } from "./modifier.js";
 
 export type Definition =
     | { readonly type: "TIME"; readonly durationTicks: number }
@@ -17,8 +18,8 @@ export type State =
     { readonly type: "TIME"; readonly endsAtTick: number } | Ammo | { readonly type: "INFINITE" };
 
 export type Contributions =
-    | { readonly type: "TIME"; readonly duration: readonly Contribution<Input>[] }
-    | { readonly type: "AMMO"; readonly ammo: readonly Contribution<Input>[] }
+    | { readonly type: "TIME"; readonly duration: readonly Contribution<Modifier>[] }
+    | { readonly type: "AMMO"; readonly ammo: readonly Contribution<AmmoInput>[] }
     | { readonly type: "INFINITE" };
 
 export function initialize(definition: Definition): Contributions {

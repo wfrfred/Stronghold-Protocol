@@ -9,7 +9,8 @@ import {
   hasElemental,
   initialize as initializeElementalState,
   setContribution,
-  setDamageContribution,
+  setDamageHook,
+  removeDamageHook,
   setHook,
   removeHook,
   setRule,
@@ -25,7 +26,7 @@ import { initialize } from "../helpers/unit.js";
 import { get, ref } from '../../dist/core/tactical/unit/query.js';
 import { transitionUnit } from '../../dist/core/tactical/battle/state.js';
 import { retireCombatUnit } from '../../dist/core/tactical/battle/execution/unit-lifecycle.js';
-import { create as modifier } from '../../dist/core/tactical/unit/contribution/value.js';
+import { create as modifier } from '../../dist/core/tactical/unit/contribution/attribute.js';
 import * as effects from '../../dist/core/tactical/unit/effect/operations.js';
 import { effectFixtureWork } from '../helpers/effects.js';
 
@@ -160,14 +161,135 @@ test('received Hook may remove the host before settlement without publishing dam
   assert.equal(result.state.events.some(event => event.type === 'ELEMENT_DAMAGE'), false);
 });
 
-test('request-specific damage contributions can reduce one element without changing common resistance', () => {
+test('request-specific damage Hooks can reduce one element without changing common resistance', () => {
   const f = fixture();
-  const battle = change(f.battle, f.target, state => setDamageContribution(state, {
+  const battle = change(f.battle, f.target, state => setDamageHook(state, {
     id: 'erosion-reduction',
-    value: (_battle, _self, input) => [modifier({ finalScaler: input.type === 'EROSION' ? 0.5 : 1 })],
+    enabled: () => true,
+    invoke: (current, _self, event) => ({ state: current, value: event.amount * (event.request.type === 'EROSION' ? 0.5 : 1) }),
   }));
   assert.equal(elemental.damage(battle, f.target, request('EROSION')).value.amount, 50);
   assert.equal(elemental.damage(battle, f.target, request('BURN')).value.amount, 100);
+});
+
+const epShield = (id, budget) => ({
+  id,
+  initialize: () => ({ remaining: budget }),
+  onEnable(battle, context) {
+    const address = context.ref;
+    return change(battle, address.host, state => setDamageHook(state, {
+      id: `shield/${address.id}`,
+      enabled: current => {
+        const self = effects.get(current, address);
+        return self?.status === 'ACTIVE' && self.data.remaining > 0;
+      },
+      invoke(current, _host, event) {
+        const self = effects.get(current, address);
+        const blocked = Math.min(event.amount, self.data.remaining);
+        current = effects.replaceEffect(current, address, {
+          ...self,
+          data: { remaining: self.data.remaining - blocked },
+        });
+        return { state: current, value: event.amount - blocked };
+      },
+    }));
+  },
+  onDisable(battle, context) {
+    return change(battle, context.ref.host, state => removeDamageHook(state, `shield/${context.ref.id}`));
+  },
+});
+
+test('Effects compose EP shields after resistance, retain their own budgets and unregister on disable', () => {
+  const f = fixture({ elementResistance: 50 });
+  const first = effects.install(f.battle, f.target, epShield('first-shield', 30));
+  const second = effects.install(first.state, f.target, epShield('second-shield', 40));
+  const original = second.state;
+  let result = elemental.damage(original, f.target, request());
+  assert.equal(result.value.amount, 0);
+  assert.equal(effects.get(result.state, first.value).data.remaining, 0);
+  assert.equal(effects.get(result.state, second.value).data.remaining, 20);
+  assert.equal(effects.get(original, first.value).data.remaining, 30);
+  assert.equal(get(result.state, f.target).elemental.ep.BURN, 1000);
+  result = elemental.damage(result.state, f.target, request());
+  assert.equal(result.value.amount, 30);
+  assert.equal(get(result.state, f.target).elemental.ep.BURN, 970);
+  const disabled = effects.setEnabled(original, first.value, false);
+  result = elemental.damage(disabled, f.target, request());
+  assert.equal(result.value.amount, 10);
+  assert.equal(effects.get(result.state, first.value).data.remaining, 30);
+  assert.equal(effects.get(result.state, second.value).data.remaining, 0);
+});
+
+test('nested EP damage consumes a shared Effect shield before the outer reception continues', () => {
+  const f = fixture();
+  const prepared = change(f.battle, f.target, state => setDamageHook(state, {
+    id: 'nested-damage',
+    enabled: () => true,
+    invoke(battle, self, event) {
+      if (event.request.power === 100) {
+        battle = elemental.damage(battle, ref(self), request('BURN', 60)).state;
+      }
+      return { state: battle, value: event.amount };
+    },
+  }));
+  const installed = effects.install(prepared, f.target, epShield('shared-shield', 100));
+  const result = elemental.damage(installed.state, f.target, request());
+  assert.equal(result.value.amount, 60);
+  assert.equal(effects.get(result.state, installed.value).data.remaining, 0);
+  assert.equal(get(result.state, f.target).elemental.ep.BURN, 940);
+  assert.deepEqual(result.state.events.filter(event => event.type === 'ELEMENT_DAMAGE').map(event => event.amount), [60]);
+});
+
+test('EP reception rereads Hook registrations and nested damage uses fresh candidates and current bars', () => {
+  const f = fixture();
+  const seen = [];
+  const reduction = id => ({
+    id,
+    enabled: () => true,
+    invoke: (battle, _self, event) => {
+      seen.push([id, event.request.power]);
+      return { state: battle, value: event.amount / 2 };
+    },
+  });
+  let battle = change(f.battle, f.target, state => setDamageHook(state, {
+    id: 'first',
+    enabled: () => true,
+    invoke(current, self, event) {
+      seen.push(['first', event.request.power]);
+      if (event.request.power === 100) {
+        current = change(current, ref(self), state => setDamageHook(setDamageHook(state, reduction('second')), reduction('third')));
+        current = elemental.damage(current, ref(self), request('BURN', 10)).state;
+      }
+      return { state: current, value: event.amount };
+    },
+  }));
+  battle = change(battle, f.target, state => setDamageHook(state, {
+    id: 'second',
+    enabled: () => false,
+    invoke: () => { throw new Error('stale Hook'); },
+  }));
+  const result = elemental.damage(battle, f.target, request());
+  assert.deepEqual(seen, [['first', 100], ['first', 10], ['second', 10], ['third', 10], ['second', 100]]);
+  assert.equal(result.value.amount, 50);
+  assert.equal(get(result.state, f.target).elemental.ep.BURN, 947.5);
+});
+
+test('EP reception stops when a damage Hook removes the host', () => {
+  const f = fixture();
+  let battle = change(f.battle, f.target, state => setDamageHook(state, {
+    id: 'leave',
+    enabled: () => true,
+    invoke: (current, self, event) => ({ state: retireCombatUnit(current, self.id), value: event.amount }),
+  }));
+  battle = change(battle, f.target, state => setDamageHook(state, {
+    id: 'unreachable',
+    enabled: () => true,
+    invoke: () => { throw new Error('removed host'); },
+  }));
+  const result = elemental.damage(battle, f.target, request());
+  assert.equal(result.value.type, 'REJECTED');
+  assert.equal(get(result.state, f.target), undefined);
+  assert.equal(result.state.events.some(event => event.type === 'ELEMENT_DAMAGE'), false);
 });
 
 test('burstStarted precedes damage observers and onStart rereads after nested cancellation', () => {

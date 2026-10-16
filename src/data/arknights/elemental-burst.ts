@@ -39,7 +39,7 @@ import { hasSkill } from "../../core/tactical/unit/capability/skill/capability.j
 import { modify } from "../../core/tactical/unit/capability/skill/sp.js";
 import { createDamageOperands } from "../../core/tactical/unit/capability/vitality/damage/contract.js";
 import { resolveDamage } from "../../core/tactical/unit/capability/vitality/damage/settlement.js";
-import * as modifier from "../../core/tactical/unit/contribution/value.js";
+import * as attribute from "../../core/tactical/unit/contribution/attribute.js";
 import { stun } from "../../content/tactical/effects/stun.js";
 import { silence, blockSpRecovery } from "../../content/tactical/effects/control.js";
 import type { ArknightsElementalBurstProfile } from "./elemental.js";
@@ -63,13 +63,13 @@ export function create(id: string, profile: ArknightsElementalBurstProfile): Def
             if (self.data.defense !== 0) {
                 defense = setDefenseContribution(defense, {
                     id: `@effect/${self.id}/defense`,
-                    value: [modifier.create({ addition: -self.data.defense })],
+                    value: [attribute.create({ addition: -self.data.defense })],
                 });
             }
             if (self.data.resistance !== 0) {
                 defense = setResistanceContribution(defense, {
                     id: `@effect/${self.id}/resistance`,
-                    value: [modifier.create({ addition: -self.data.resistance })],
+                    value: [attribute.create({ addition: -self.data.resistance })],
                 });
             }
 
@@ -142,7 +142,7 @@ export function create(id: string, profile: ArknightsElementalBurstProfile): Def
                       ...unit,
                       offense: setAttackContribution(unit.offense, {
                           id: `@effect/${self.id}/attack`,
-                          value: [modifier.create({ finalScaler: self.data.scaler })],
+                          value: [attribute.create({ finalScaler: self.data.scaler })],
                       }),
                   })
                 : battle,
@@ -221,7 +221,7 @@ export function create(id: string, profile: ArknightsElementalBurstProfile): Def
                         ...host,
                         offense: setAttackContribution(host.offense, {
                             id: `@effect/${self.id}/attack`,
-                            value: [modifier.create({ finalScaler: scaler })],
+                            value: [attribute.create({ finalScaler: scaler })],
                         }),
                     });
                 }

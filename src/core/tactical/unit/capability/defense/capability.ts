@@ -2,7 +2,7 @@ import type { State as BattleState, Result } from "../../../battle/state.js";
 import type { Context } from "../../query.js";
 import { assertNonnegativeNumber } from "../../../../common/assert.js";
 import * as contribution from "../../contribution/contribution.js";
-import * as modifier from "../../contribution/value.js";
+import * as attribute from "../../contribution/attribute.js";
 import type { Unit, Definition as UnitDefinition } from "../../unit.js";
 
 export interface Parameters {
@@ -13,8 +13,8 @@ export interface Parameters {
 export type Definition = Parameters;
 
 export interface State {
-    readonly defense: readonly contribution.Contribution<contribution.Input<Context>>[];
-    readonly resistance: readonly contribution.Contribution<contribution.Input<Context>>[];
+    readonly defense: readonly contribution.Contribution<attribute.Input<Context>>[];
+    readonly resistance: readonly contribution.Contribution<attribute.Input<Context>>[];
 }
 
 export interface Defense {
@@ -70,7 +70,7 @@ function updateContributions(
 
 export function setDefenseContribution(
     state: State,
-    entry: contribution.Contribution<contribution.Input<Context>>,
+    entry: contribution.Contribution<attribute.Input<Context>>,
 ): State {
     return updateContributions(state, "defense", (entries) => contribution.set(entries, entry));
 }
@@ -81,7 +81,7 @@ export function removeDefenseContribution(state: State, id: string): State {
 
 export function setResistanceContribution(
     state: State,
-    entry: contribution.Contribution<contribution.Input<Context>>,
+    entry: contribution.Contribution<attribute.Input<Context>>,
 ): State {
     return updateContributions(state, "resistance", (entries) => contribution.set(entries, entry));
 }
@@ -98,22 +98,22 @@ export function resolveParameters(
     return {
         defense: Math.max(
             0,
-            modifier.apply(
+            attribute.apply(
                 definition.defense,
-                contribution.resolve(state.defense, (value) =>
-                    contribution.evaluate(value, context),
-                ),
+                contribution
+                    .resolve(state.defense)
+                    .flatMap((value) => attribute.evaluate(value, context)),
             ),
         ),
         resistance: Math.min(
             100,
             Math.max(
                 0,
-                modifier.apply(
+                attribute.apply(
                     definition.resistance,
-                    contribution.resolve(state.resistance, (value) =>
-                        contribution.evaluate(value, context),
-                    ),
+                    contribution
+                        .resolve(state.resistance)
+                        .flatMap((value) => attribute.evaluate(value, context)),
                 ),
             ),
         ),

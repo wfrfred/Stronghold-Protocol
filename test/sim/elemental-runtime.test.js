@@ -19,7 +19,7 @@ import { recover } from '../../dist/core/tactical/unit/capability/skill/sp.js';
 import { setHealingReceptionRule } from '../../dist/core/tactical/unit/capability/vitality/capability.js';
 import { resolveDefense } from '../../dist/core/tactical/unit/capability/defense/query.js';
 import { resolveAttackPower } from '../../dist/core/tactical/unit/capability/offense/query.js';
-import { create as modifier } from '../../dist/core/tactical/unit/contribution/value.js';
+import { create as modifier } from '../../dist/core/tactical/unit/contribution/attribute.js';
 import { calculateDamage, resolveDamage } from '../../dist/core/tactical/unit/capability/vitality/damage/settlement.js';
 import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
 import { resolveHealing } from '../../dist/core/tactical/unit/capability/vitality/healing/settlement.js';

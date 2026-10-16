@@ -1,7 +1,7 @@
 import { effectFixtureWork as workFor } from "../helpers/effects.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import * as modifier from "../../dist/core/tactical/unit/contribution/value.js";
+import * as modifier from "../../dist/core/tactical/unit/contribution/attribute.js";
 import * as contribution from "../../dist/core/tactical/unit/contribution/contribution.js";
 import { initialize } from "../helpers/unit.js";
 import { copy } from "../../dist/core/tactical/unit/snapshot.js";
@@ -68,9 +68,9 @@ test("contributions: group priority and ID ties are independent of insertion ord
         { id: "strong", group: { id: "shared", priority: 3 }, value: [value(30)] },
         { id: "independent", value: [value(5)] },
     ];
-    assert.deepEqual(contribution.resolve(entries), [value(5), value(30)]);
+    assert.deepEqual(contribution.resolve(entries), [[value(5)], [value(30)]]);
     const fallback = contribution.remove(entries, "strong");
-    assert.deepEqual(contribution.resolve(fallback), [value(10), value(5)]);
+    assert.deepEqual(contribution.resolve(fallback), [[value(10)], [value(5)]]);
     assert.deepEqual(contribution.resolve([...fallback].reverse()), contribution.resolve(fallback));
     assert.equal(fallback.length, 3);
 });
@@ -95,12 +95,36 @@ test("contributions: winners alone evaluate and effective modifiers follow ID or
         },
         { id: "a", group: { id: "shared", priority: 1 }, value: [value(3)] },
     ];
+    const selected = contribution.resolve(entries);
+    assert.deepEqual(calls, []);
+    assert.equal(selected[0], entries[2].value);
+    assert.equal(selected[1], entries[0].value);
     assert.deepEqual(
-        contribution.resolve(entries, (input) => contribution.evaluate(input, context)),
+        selected.flatMap((input) => modifier.evaluate(input, context)),
         [value(3), value(7)],
     );
     assert.deepEqual(calls, [context]);
-    assert.equal(contribution.evaluate(entries[2].value, context), entries[2].value);
+    assert.equal(modifier.evaluate(entries[2].value, context), entries[2].value);
+});
+
+test("contributions: selection preserves domain payloads without interpreting or flattening them", () => {
+    const budget = { fixed: 2, ratio: 0.5 };
+    const entries = contribution.set(
+        contribution.set([], { id: "budget", value: budget }),
+        { id: "pending", value: ["first", "second"] },
+    );
+    const resolved = contribution.resolve(entries);
+    assert.equal(resolved[0], budget);
+    assert.equal(resolved[1], entries[1].value);
+    assert.deepEqual(resolved, [budget, ["first", "second"]]);
+
+    const volumes = [
+        { id: "weak", value: 1, group: { id: "volume", priority: 1 } },
+        { id: "strong", value: 3, group: { id: "volume", priority: 2 } },
+        { id: "independent", value: -1 },
+    ];
+    assert.deepEqual(contribution.resolve(volumes), [-1, 3]);
+    assert.equal(contribution.resolve(volumes).reduce((sum, value) => sum + value, 0), 2);
 });
 
 test("contributions: capability set, remove and replacement preserve prior snapshots", () => {
