@@ -84,13 +84,13 @@ test("ordinary attack: domain settlements observe each preceding returned battle
                 id: "observe-heal",
                 stage: "reception",
                 priority: 0,
-                enabled: () => true,
+                accepts: () => true,
                 invoke(state, context, pending) {
                     observed.push({
                         request: context.request,
                         targetHp: getUnit(state, 1).vitality.hp,
                     });
-                    return { state, value: { value: pending } };
+                    return { state, value: pending };
                 },
             }),
         },
@@ -100,10 +100,10 @@ test("ordinary attack: domain settlements observe each preceding returned battle
                 id: "observe-damage",
                 stage: "reception",
                 priority: 0,
-                enabled: () => true,
+                accepts: () => true,
                 invoke(state, context, pending) {
                     observed.push({ request: context.request });
-                    return { state, value: { value: pending } };
+                    return { state, value: pending };
                 },
             }),
         },
@@ -173,16 +173,16 @@ test("ordinary attack: lethal retaliation invalidates a later unsampled source a
             id: "retaliation",
             stage: "reaction",
             priority: 0,
-            enabled: (context) => context.request.targetUnitId === context.unit.id,
+            accepts: (_battle, context) => context.request.targetUnitId === context.host.id,
             invoke(state, context) {
                 state = resolveDamage(state, {
                         sourceUnitId: 1,
                         targetUnitId: 0,
-                        tick: context.tick,
+                        tick: context.request.tick,
                         damageType: "TRUE",
                         operands: createDamageOperands(10),
-                    }, context.call).state;
-                return { state, value: undefined };
+                    }).state;
+                return { state, value: {} };
             },
         }),
     });
@@ -260,9 +260,9 @@ test("ACTION recovery callbacks may cancel the releasing attack before its outpu
     const configured = { ...source, skill: {
         ...source.skill,
         spRecovered: [{
-            id: "cancel-release", enabled: () => true,
+            id: "cancel-release",
             invoke(state) {
-                return actions.cancel(state, actions.all(state)[0], "CANCELLED");
+                return { state: actions.cancel(state, actions.all(state)[0], "CANCELLED"), value: undefined };
             },
         }],
     } };

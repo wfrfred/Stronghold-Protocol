@@ -1,5 +1,4 @@
 import type { State as BattleState } from "../../battle/state.js";
-import type { CallContext } from "../../battle/execution/call.js";
 import type { Unit } from "../unit.js";
 import type { Effect } from "./effect.js";
 import type { Ref } from "../../../common/ref.js";
@@ -14,7 +13,6 @@ export interface Context<S extends object, H extends object = object> {
     readonly ref: Ref<Effect<S, H>>;
     readonly unit: Unit & H;
     readonly self: Effect<S, H>;
-    readonly call: CallContext;
 }
 
 export interface EndContext<S extends object, H extends object = object> extends Context<S, H> {

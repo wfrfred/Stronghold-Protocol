@@ -135,9 +135,9 @@ export function setHook<K extends Key>(state: State, key: K, hook: Hook<Events[K
 }
 
 export function removeHook(state: State, key: Key, id: string): State {
-    const hooks = state[key].filter((hook) => hook.id !== id);
+    const hooks = registry.remove<State[Key][number]>(state[key], id);
 
-    return hooks.length === state[key].length ? state : { ...state, [key]: hooks };
+    return hooks === state[key] ? state : { ...state, [key]: hooks };
 }
 
 export function setSpRecoveredHook(state: State, hook: Hook<Events["spRecovered"]>): State {

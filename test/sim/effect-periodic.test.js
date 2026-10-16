@@ -127,9 +127,8 @@ test("effect time: a new Effect waits for the next advance while ended candidate
                     unitRef(getUnit(state, context.unit.id)),
                     newborn,
                     {},
-                    context.call,
                 ).state;
-                return effect.end(state, later, "EXPLICIT", context.call);
+                return effect.end(state, later, "EXPLICIT");
             },
         },
     );

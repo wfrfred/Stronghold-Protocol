@@ -106,7 +106,7 @@ test("effect lifetimes: a closing host rejects a new dependent before its instal
         {},
         {
             onEnd(state, context) {
-                const result = effect.install(state, unitRef(context.unit), child, {}, context.call);
+                const result = effect.install(state, unitRef(context.unit), child, {});
                 installed = result.value;
                 return result.state;
             },
@@ -134,7 +134,6 @@ test("effect lifetimes: a closed parent cannot admit a remote dependent during t
                     {
                         scopes: [{ type: "EFFECT", ref: context.ref }],
                     },
-                    context.call,
                 );
                 accepted = result.value;
                 return result.state;
@@ -171,7 +170,7 @@ test("effect lifetimes: each subsequent terminal callback sees preceding state c
                     ...receiver,
                     vitality: { ...receiver.vitality, hp: 30 },
                 });
-                return effect.end(state, later, "EXPLICIT", context.call);
+                return effect.end(state, later, "EXPLICIT");
             },
         },
     );
@@ -188,8 +187,8 @@ test("effect lifetimes: ending the same instance in its disable callback remains
     const value = attackBuff("terminal", 20, {
         onDisable(state, context) {
             calls.push("disable");
-            state = effect.setEnabled(state, context.ref, true, context.call);
-            return effect.end(state, context.ref, "NESTED", context.call);
+            state = effect.setEnabled(state, context.ref, true);
+            return effect.end(state, context.ref, "NESTED");
         },
         onEnd: (state) => {
             calls.push("end");
@@ -253,7 +252,7 @@ test("effect lifetimes: terminal hook cleanup cannot recreate a host killed by a
                         id: "parent-hook",
                         stage: "reaction",
                         priority: 0,
-                        enabled: () => true,
+                        accepts: () => true,
                         invoke(state) {
                             return { state, value: {} };
                         },
@@ -279,7 +278,7 @@ test("effect lifetimes: terminal hook cleanup cannot recreate a host killed by a
                         damageType: "TRUE",
                         operands: createDamageOperands(100),
                         tick: context.tick,
-                    }, context.call).state;
+                    }).state;
             },
         },
     );

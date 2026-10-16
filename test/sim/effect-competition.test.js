@@ -117,7 +117,7 @@ test("effect groups: a stronger rule installed during withdrawal supersedes the 
     const weak = attackBuff("weak", 10, {
         group: group(1),
         onDisable(state, context) {
-            const installed = effect.install(state, unitRef(context.unit), replacement, {}, context.call);
+            const installed = effect.install(state, unitRef(context.unit), replacement, {});
             replacementRef = installed.value;
             return installed.state;
         },

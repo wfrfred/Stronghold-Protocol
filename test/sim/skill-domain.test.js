@@ -7,7 +7,7 @@ import * as sp from "../../dist/core/tactical/unit/capability/skill/sp.js";
 import { initialize as initializeSkill, removeRule, setDurationContribution, removeDurationContribution } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { create as value } from "../../dist/core/tactical/unit/contribution/attribute.js";
 import { initialize } from "../helpers/unit.js";
-import { ref } from "../../dist/core/tactical/unit/query.js";
+import { get as getHookHost, ref } from "../../dist/core/tactical/unit/query.js";
 import { effectFixtureWork } from "../helpers/effects.js";
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
 import { start as startAction } from "../../dist/core/tactical/unit/action/operations.js";
@@ -19,7 +19,7 @@ const resource = (overrides = {}) => ({
     recovery: { type: "TIME", intervalTicks: 30 }, ...overrides,
 });
 const read = (battle) => getUnit(battle, 1).skill;
-const observe = (id, invoke) => ({ id, enabled: () => true, invoke });
+const observe = (id, invoke) => ({ id, invoke });
 
 function parameterEffect(id, modifiers) {
     return {
@@ -341,20 +341,22 @@ test("SP Hooks keep settled reports across nested payment and dispatch only thei
     const f = fixture({ sp: resource({ initial: 9, capacity: 20, requirement: 10 }) });
     let state = change(f.state, (skill) => ({ ...skill,
         spRecovered: [
-            observe("nested", (battle, self, event) => {
+            observe("nested", (battle, { host, event }) => {
+                const self = getHookHost(battle, host);
+
                 seen.push(["first", event.previous, event.current]);
-                return sp.pay(battle, ref(self), 11).state;
+                return { state: sp.pay(battle, ref(self), 11).state, value: undefined };
             }),
-            observe("after", (battle, _self, event) => {
+            observe("after", (battle, { event }) => {
                 seen.push(["after", event.previous, event.current, read(battle).sp.value]);
-                return battle;
+                return { state: battle, value: undefined };
             }),
         ],
-        spPaid: [observe("payment", (battle, _self, event) => {
+        spPaid: [observe("payment", (battle, { event }) => {
             seen.push(["paid", event.previous, event.current]);
-            return battle;
+            return { state: battle, value: undefined };
         })],
-        spModified: [observe("not-modification", () => assert.fail("wrong resource notification"))],
+        spModified: [observe("not-modification", () => ({ state: assert.fail("wrong resource notification"), value: undefined }))],
     }));
     state = sp.recover(state, f.ref, "TIME", 2).state;
     assert.deepEqual(seen, [["first", 9, 11], ["paid", 11, 0], ["after", 9, 11, 0]]);

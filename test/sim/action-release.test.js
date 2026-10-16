@@ -35,10 +35,9 @@ function releaseEffect(id, data, invoke) {
                 ...current,
                 action: setBeforeReleaseHook(current.action, {
                     id: `release/${ref.id}`,
-                    enabled: (battle, unit) =>
-                        unit.effects.get(ref.id, definition)?.status === "ACTIVE",
-                    invoke: (battle, unit, action) =>
-                        invoke(battle, { unit, action }, effects.get(battle, ref), ref),
+                    accepts: (battle) => effects.get(battle, ref)?.status === "ACTIVE",
+                    invoke: (battle, context, current) =>
+                        invoke(battle, { unit: getUnit(battle, context.source.id), action: context.action }, effects.get(battle, ref), ref, current),
                 }),
             }));
         },
@@ -213,15 +212,15 @@ test("action release: selected IDs invoke their current replacement while new ID
     const seen = [];
     let registered = false;
     const later = {
-        id: "later", enabled: () => true,
+        id: "later", accepts: () => true,
         invoke(state) { seen.push("later"); return { state, value: CONTINUE }; },
     };
     const replacement = {
-        id: "version", enabled: () => true,
+        id: "version", accepts: () => true,
         invoke(state) { seen.push("replacement"); return { state, value: CONTINUE }; },
     };
     const first = {
-        id: "first", enabled: () => true,
+        id: "first", accepts: () => true,
         invoke(state) {
             seen.push("first");
             if (!registered) {
@@ -235,7 +234,7 @@ test("action release: selected IDs invoke their current replacement while new ID
     };
     const state = transitionUnit(started.state, 0, (current) => ({ ...current,
         action: setBeforeReleaseHook(setBeforeReleaseHook(current.action, first), {
-            id: "version", enabled: () => true,
+            id: "version", accepts: () => true,
             invoke: () => assert.fail("the selected registration has a new version"),
         }),
     }));
@@ -244,4 +243,44 @@ test("action release: selected IDs invoke their current replacement while new ID
     assert.deepEqual(seen, ["first", "replacement"]);
     beforeRelease(dispatched.state, started.value.ref);
     assert.deepEqual(seen, ["first", "replacement", "first", "replacement", "later"]);
+});
+
+
+test("action release: hooks share fixed identities and receive the preceding state and directive", () => {
+    const started = initial();
+    let fixed;
+    const directive = { type: "CONTINUE" };
+    let state = transitionUnit(started.state, 0, (unit) => ({ ...unit,
+        action: setBeforeReleaseHook(unit.action, {
+            id: "first",
+            invoke(state, context, current) {
+                fixed = context;
+                assert.deepEqual(current, CONTINUE);
+                assert.equal(context.action, started.value.ref);
+                return { state: transitionUnit(state, 0, unit => ({ ...unit,
+                    vitality: { ...unit.vitality, hp: 75 },
+                })), value: directive };
+            },
+        }),
+    }));
+    state = transitionUnit(state, 0, (unit) => ({ ...unit,
+        action: setBeforeReleaseHook(unit.action, {
+            id: "second",
+            accepts(state, context, current) {
+                assert.equal(context, fixed);
+                assert.equal(current, directive);
+                assert.equal(getUnit(state, context.source.id).vitality.hp, 75);
+                return true;
+            },
+            invoke(state, context, current) {
+                assert.equal(context, fixed);
+                assert.equal(current, directive);
+                return { state, value: { type: "INTERRUPT", recoveryTicks: 2 } };
+            },
+        }),
+    }));
+    const result = beforeRelease(state, started.value.ref);
+    assert.deepEqual(result.value, { type: "INTERRUPT", recoveryTicks: 2 });
+    assert.equal(getUnit(result.state, 0).vitality.hp, 75);
+    assert.equal(getUnit(started.state, 0).vitality.hp, 100);
 });

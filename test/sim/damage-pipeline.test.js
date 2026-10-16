@@ -40,12 +40,12 @@ test("damage pipeline: fatal reactions return the current life state before depa
     const rescue = damageEffect("fatal-rescue", {}, [{
         stage: "reaction",
         invoke(state, context, _self, report) {
-            if (report.deathOccurred && report.request.targetUnitId === context.unit.id) {
-                state = transitionUnit(state, context.unit.id, unit => ({
+            if (report.deathOccurred && report.request.targetUnitId === context.host.id) {
+                state = transitionUnit(state, context.host.id, unit => ({
                     ...unit, vitality: { ...unit.vitality, hp: 50 },
                 }));
             }
-            return { state, value: undefined };
+            return { state, value: {} };
         },
     }]);
     const initial = workFor(unit(1), attach(unit(2, { hp: 100 }), rescue));
@@ -301,7 +301,7 @@ test("damage pipeline: independent formula, output and reaction hooks all execut
                 state = setSelf(state, context, self, (current) => ({
                     reports: current.reports + 1,
                 }));
-                reactions.push(context.unit.id);
+                reactions.push(context.host.id);
 
                 return { state, value: {} };
             },
@@ -332,7 +332,7 @@ test("damage pipeline: independent formula, output and reaction hooks all execut
                 stage: "reaction",
                 priority: 1000,
                 invoke: (state, context) => {
-                    reactions.push(context.unit.id);
+                    reactions.push(context.host.id);
 
                     return { state, value: {} };
                 },
@@ -454,10 +454,10 @@ test("damage pipeline: nested damage and healing observe consumption and latest 
         {
             stage: "reaction",
             invoke(state, context, self, report) {
-                if (report.request.sourceUnitId !== context.unit.id || self.data.charges === 0)
+                if (report.request.sourceUnitId !== context.host.id || self.data.charges === 0)
                     return { state, value: {} };
                 state = setSelf(state, context, self, { charges: 0 });
-                state = resolveDamage(state, request(40, { sourceUnitId: 2, targetUnitId: 1, tick: context.tick }), context.call).state;
+                state = resolveDamage(state, request(40, { sourceUnitId: 2, targetUnitId: 1, tick: context.request.tick })).state;
                 state = resolveHealing(
                     state,
                     {
@@ -465,13 +465,12 @@ test("damage pipeline: nested damage and healing observe consumption and latest 
                         targetUnitId: 2,
                         power: 10,
                         ignoreHealFree: false,
-                        tick: context.tick,
+                        tick: context.request.tick,
                     },
-                    context.call,
                 ).state;
                 state = setSelf(state, context, self, (current) => ({
                     ...current,
-                    observedSourceHp: getUnit(state, context.unit.id).vitality.hp,
+                    observedSourceHp: getUnit(state, context.host.id).vitality.hp,
                     observedTargetHp: getUnit(state, 2).vitality.hp,
                 }));
 

@@ -5,6 +5,7 @@ import type { Actions } from "../../action/actions.js";
 import * as actions from "../../action/operations.js";
 import type { Unit } from "../../unit.js";
 import * as units from "../../query.js";
+import * as hook from "../../hook/hook.js";
 import type { Action } from "./capability.js";
 
 type StoredAction = ReturnType<Actions["values"]>[number];
@@ -12,95 +13,67 @@ type StoredAction = ReturnType<Actions["values"]>[number];
 export type Directive =
     { readonly type: "CONTINUE" } | { readonly type: "INTERRUPT"; readonly recoveryTicks: number };
 
-export interface Hook {
-    readonly id: string;
-    readonly enabled: (
-        battle: BattleState,
-        self: Unit & Action,
-        action: Ref<StoredAction>,
-    ) => boolean;
-    readonly invoke: (
-        battle: BattleState,
-        self: Unit & Action,
-        action: Ref<StoredAction>,
-    ) => Result<Directive>;
+export interface Context {
+    readonly source: Ref<Unit & Action>;
+    readonly action: Ref<StoredAction>;
 }
 
-export interface ReleasedHook {
-    readonly id: string;
-    readonly enabled: (
-        battle: BattleState,
-        self: Unit & Action,
-        action: Ref<StoredAction>,
-    ) => boolean;
-    readonly invoke: (
-        battle: BattleState,
-        self: Unit & Action,
-        action: Ref<StoredAction>,
-    ) => BattleState;
-}
+export type Hook = hook.Hook<Context, Directive>;
+
+export type ReleasedHook = hook.Hook<Context, void>;
 
 export function beforeRelease(battle: BattleState, ref: Ref<StoredAction>): Result<Directive> {
     const action = actions.get(battle, ref);
-    const source = action === undefined ? undefined : units.get(battle, action.source);
 
-    if (action?.status !== "RUNNING" || source?.lifecycle !== "PRESENT") {
+    if (action === undefined) {
         return { state: battle, value: { type: "CONTINUE" } };
     }
 
-    const candidates = source.action.beforeRelease.map(({ id }) => id);
+    const context: Context = { action: ref, source: action.source };
+    const result = hook.dispatch<Context, Directive>(
+        battle,
+        context,
+        { type: "CONTINUE" },
+        {
+            candidates: (current) =>
+                units.get(current, context.source)?.action.beforeRelease.map(({ id }) => id) ?? [],
+            find: (current, id) =>
+                units
+                    .get(current, context.source)
+                    ?.action.beforeRelease.find((entry) => entry.id === id),
+            stop: (current, directive) =>
+                directive.type === "INTERRUPT" || !running(current, context),
+        },
+    );
 
-    for (const id of candidates) {
-        const currentAction = actions.get(battle, ref);
-        const current =
-            currentAction === undefined ? undefined : units.get(battle, currentAction.source);
-        const candidate = current?.action.beforeRelease.find((entry) => entry.id === id);
-
-        if (
-            currentAction?.status !== "RUNNING" ||
-            current?.lifecycle !== "PRESENT" ||
-            !candidate?.enabled(battle, current, ref)
-        ) {
-            continue;
-        }
-
-        const invoked = candidate.invoke(battle, current, ref);
-        battle = invoked.state;
-
-        if (invoked.value.type === "INTERRUPT") {
-            assertNonnegativeSafeInteger(invoked.value.recoveryTicks, "action release recovery");
-
-            return { state: battle, value: invoked.value };
-        }
+    if (result.value.type === "INTERRUPT") {
+        assertNonnegativeSafeInteger(result.value.recoveryTicks, "action release recovery");
     }
 
-    return { state: battle, value: { type: "CONTINUE" } };
+    return result;
 }
 
 export function released(battle: BattleState, ref: Ref<StoredAction>): BattleState {
     const action = actions.get(battle, ref);
-    const source = action === undefined ? undefined : units.get(battle, action.source);
 
-    if (action?.status !== "RUNNING" || source?.lifecycle !== "PRESENT") {
+    if (action === undefined) {
         return battle;
     }
 
-    const candidates = source.action.released.map(({ id }) => id);
+    const context: Context = { action: ref, source: action.source };
 
-    for (const id of candidates) {
-        const currentAction = actions.get(battle, ref);
-        const current =
-            currentAction === undefined ? undefined : units.get(battle, currentAction.source);
-        const candidate = current?.action.released.find((entry) => entry.id === id);
+    return hook.dispatch(battle, context, undefined, {
+        candidates: (current) =>
+            units.get(current, context.source)?.action.released.map(({ id }) => id) ?? [],
+        find: (current, id) =>
+            units.get(current, context.source)?.action.released.find((entry) => entry.id === id),
+        stop: (current) => !running(current, context),
+    }).state;
+}
 
-        if (
-            currentAction?.status === "RUNNING" &&
-            current?.lifecycle === "PRESENT" &&
-            candidate?.enabled(battle, current, ref)
-        ) {
-            battle = candidate.invoke(battle, current, ref);
-        }
-    }
-
-    return battle;
+function running(battle: BattleState, context: Context): boolean {
+    return (
+        actions.get(battle, context.action)?.status === "RUNNING" &&
+        units.get(battle, context.source)?.lifecycle === "PRESENT"
+    );
 }

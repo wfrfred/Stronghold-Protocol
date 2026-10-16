@@ -26,17 +26,34 @@ import * as modifier from "./modifier.js";
 const hitRecovery: ReceivedHook = {
     id: "@skill/hit-recovery",
     stage: "received",
-    enabled: (_battle, _target, event) =>
+    accepts: (_battle, { event }) =>
         event.pending.cancellation === null && event.request.ignoreForSp !== true,
-    invoke: (battle, target) =>
-        hasSkill(target) ? sp.recover(battle, units.ref(target), "HIT").state : battle,
+    invoke: (battle, { host }) => {
+        const target = units.get(battle, host);
+
+        return {
+            state:
+                target !== undefined && hasSkill(target)
+                    ? sp.recover(battle, units.ref(target), "HIT").state
+                    : battle,
+            value: undefined,
+        };
+    },
 };
 
 const actionRecovery: ReleasedHook = {
     id: "@skill/action-recovery",
-    enabled: () => true,
-    invoke: (battle, source) =>
-        hasSkill(source) ? sp.recover(battle, units.ref(source), "ACTION").state : battle,
+    invoke: (battle, { source }) => {
+        const unit = units.get(battle, source);
+
+        return {
+            state:
+                unit !== undefined && hasSkill(unit)
+                    ? sp.recover(battle, units.ref(unit), "ACTION").state
+                    : battle,
+            value: undefined,
+        };
+    },
 };
 
 export type Outcome<T extends Activation = Activation> =

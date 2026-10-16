@@ -1,7 +1,43 @@
-export interface Hook<S, C, I, O> {
+import type { State as BattleState, Result } from "../../battle/state.js";
+
+export interface Hook<C, T> {
     readonly id: string;
-    readonly enabled: (context: C) => boolean;
-    readonly invoke: (state: S, context: C, input: I) => { readonly state: S; readonly value: O };
+    readonly accepts?: (battle: BattleState, context: C, current: T) => boolean;
+    readonly invoke: (battle: BattleState, context: C, current: T) => Result<T>;
+}
+
+export interface DispatchOptions<C, T> {
+    readonly candidates: (battle: BattleState) => readonly string[];
+    readonly find: (battle: BattleState, id: string) => Hook<C, T> | undefined;
+    readonly stop?: (battle: BattleState, current: T) => boolean;
+}
+
+export function dispatch<C, T>(
+    battle: BattleState,
+    context: C,
+    initial: T,
+    options: DispatchOptions<C, T>,
+): Result<T> {
+    let current = initial;
+    const candidates = [...options.candidates(battle)];
+
+    for (const id of candidates) {
+        if (options.stop?.(battle, current)) {
+            break;
+        }
+
+        const hook = options.find(battle, id);
+
+        if (hook === undefined || hook.accepts?.(battle, context, current) === false) {
+            continue;
+        }
+
+        const result = hook.invoke(battle, context, current);
+        battle = result.state;
+        current = result.value;
+    }
+
+    return { state: battle, value: current };
 }
 
 export function set<T extends { readonly id: string }>(

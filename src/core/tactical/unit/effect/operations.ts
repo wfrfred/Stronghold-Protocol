@@ -6,7 +6,6 @@ import {
     type State as BattleState,
     type Result,
 } from "../../battle/state.js";
-import { emptyCall, type CallContext } from "../../battle/execution/call.js";
 import type { Unit, Id } from "../unit.js";
 import type { Ref } from "../../../common/ref.js";
 import * as units from "../query.js";
@@ -43,7 +42,6 @@ export function install<S extends object, H extends object>(
     host: Ref<Unit & NoInfer<H>>,
     definition: Definition<S, H>,
     initial: Initial<NoInfer<S>> = {},
-    call: CallContext = emptyCall,
 ): Result<Ref<Effect<S, H>> | undefined> {
     const unit = units.get(battle, host);
     const scopes = initial.scopes ?? [];
@@ -76,14 +74,14 @@ export function install<S extends object, H extends object>(
     battle = updateUnit(battle, { ...unit, effects: unit.effects.add(instance) });
 
     if (definition.onInstall !== undefined) {
-        battle = definition.onInstall(battle, createContext<S, H>(battle, instance, call));
+        battle = definition.onInstall(battle, createContext<S, H>(battle, instance));
     }
     if (get(battle, ref)?.status === "INSTALLING") {
         battle = change(battle, ref, { status: "INACTIVE" });
         battle =
             definition.group === undefined
-                ? updateStatus(battle, ref, call)
-                : reconcileGroupActivity(battle, unit.id, definition.group.id, call);
+                ? updateStatus(battle, ref)
+                : reconcileGroupActivity(battle, unit.id, definition.group.id);
     }
 
     return { state: battle, value: ref };
@@ -109,7 +107,6 @@ export function setEnabled(
     battle: BattleState,
     ref: Ref<StoredEffect>,
     enabled: boolean,
-    call: CallContext = emptyCall,
 ): BattleState {
     const instance = get(battle, ref);
 
@@ -119,7 +116,7 @@ export function setEnabled(
 
     battle = change(battle, ref, { enabled });
 
-    return updateStatus(battle, ref, call);
+    return updateStatus(battle, ref);
 }
 
 export function bindLifetime(
@@ -143,12 +140,7 @@ export function bindLifetime(
     return { state: battle, value: true };
 }
 
-export function end(
-    battle: BattleState,
-    ref: Ref<StoredEffect>,
-    reason = "EXPLICIT",
-    call: CallContext = emptyCall,
-): BattleState {
+export function end(battle: BattleState, ref: Ref<StoredEffect>, reason = "EXPLICIT"): BattleState {
     const instance = get(battle, ref);
 
     if (instance === undefined || instance.status === "ENDING") {
@@ -163,7 +155,7 @@ export function end(
         const definition = instance.definition;
         battle = change(battle, ref, { status: "ENDING" });
         let ended = getUnit(battle, ref.host.id)!.effects.get(ref.id, definition)!;
-        const disabling = createContext(battle, ended, call, initialHost);
+        const disabling = createContext(battle, ended, initialHost);
 
         if (instance.status === "ACTIVE" && definition.onDisable !== undefined) {
             battle = definition.onDisable(battle, disabling);
@@ -171,11 +163,11 @@ export function end(
         }
 
         for (const child of children) {
-            battle = end(battle, child, reason, call);
+            battle = end(battle, child, reason);
         }
 
         ended = getUnit(battle, ref.host.id)?.effects.get(ref.id, definition) ?? ended;
-        const ending = { ...createContext(battle, ended, call, initialHost), reason };
+        const ending = { ...createContext(battle, ended, initialHost), reason };
 
         if (definition.onEnd !== undefined) {
             battle = definition.onEnd(battle, ending);
@@ -187,7 +179,7 @@ export function end(
         }));
 
         if (definition.group !== undefined) {
-            battle = reconcileGroupActivity(battle, ref.host.id, definition.group.id, call);
+            battle = reconcileGroupActivity(battle, ref.host.id, definition.group.id);
         }
 
         return battle;
@@ -198,7 +190,6 @@ export function endDependents(
     battle: BattleState,
     lifetime: Lifetime,
     reason = "SCOPE_CLOSED",
-    call: CallContext = emptyCall,
 ): BattleState {
     const roots = dependents(battlefieldView(battle).effectLifetimes, lifetime);
 
@@ -206,18 +197,18 @@ export function endDependents(
         const hosted = getUnit(battle, lifetime.unitId)?.effects.values() ?? [];
 
         for (const instance of hosted) {
-            battle = end(battle, effectRef(instance), reason, call);
+            battle = end(battle, effectRef(instance), reason);
         }
     }
 
     for (const ref of roots) {
-        battle = end(battle, ref, reason, call);
+        battle = end(battle, ref, reason);
     }
 
     return battle;
 }
 
-export function advance(battle: BattleState, call: CallContext = emptyCall): BattleState {
+export function advance(battle: BattleState): BattleState {
     const candidates = units
         .all(battle)
         .flatMap((host) => units.get(battle, host)!.effects.values().map(effectRef));
@@ -229,14 +220,14 @@ export function advance(battle: BattleState, call: CallContext = emptyCall): Bat
                     return battle;
                 }
 
-                return instance.definition.onTick(battle, createContext(battle, instance, call));
+                return instance.definition.onTick(battle, createContext(battle, instance));
             }) ?? battle;
 
         const current = get(battle, ref);
         const expires = current === undefined ? null : deadline(current);
 
         if (expires !== null && expires <= battle.tick) {
-            battle = end(battle, ref, "EXPIRED", call);
+            battle = end(battle, ref, "EXPIRED");
         }
     }
 
@@ -267,13 +258,11 @@ export function validateScopes(battle: BattleState): void {
 function createContext<S extends object, H extends object>(
     battle: BattleState,
     instance: Effect<S, H>,
-    call: CallContext,
     host = units.get(battle, instance.host)!,
 ): Context<S, H> {
     return {
         tick: battle.tick,
         ref: effectRef(instance),
-        call,
         unit: units.get(battle, instance.host) ?? host,
         self: instance,
     };
@@ -348,7 +337,7 @@ function shouldBeActive(battle: BattleState, instance: StoredEffect, unit: Unit)
     );
 }
 
-function updateStatus(battle: BattleState, ref: Ref<StoredEffect>, call: CallContext): BattleState {
+function updateStatus(battle: BattleState, ref: Ref<StoredEffect>): BattleState {
     const unit = getUnit(battle, ref.host.id);
     const instance = get(battle, ref);
 
@@ -370,31 +359,26 @@ function updateStatus(battle: BattleState, ref: Ref<StoredEffect>, call: CallCon
     battle = change(battle, ref, { status: active ? "ACTIVE" : "INACTIVE" });
 
     return getUnit(battle, ref.host.id)!.effects.read(ref.id, (current) => {
-        const context = createContext(battle, current, call);
+        const context = createContext(battle, current);
         const callback = active ? current.definition.onEnable : current.definition.onDisable;
 
         return callback === undefined ? battle : callback(battle, context);
     })!;
 }
 
-function reconcileGroupActivity(
-    battle: BattleState,
-    unitId: Id,
-    groupId: string,
-    call: CallContext,
-): BattleState {
+function reconcileGroupActivity(battle: BattleState, unitId: Id, groupId: string): BattleState {
     const refs = (getUnit(battle, unitId)?.effects.values() ?? [])
         .filter((instance) => instance.definition.group?.id === groupId)
         .map(effectRef);
 
     for (const ref of refs) {
         if (get(battle, ref)?.status === "ACTIVE") {
-            battle = updateStatus(battle, ref, call);
+            battle = updateStatus(battle, ref);
         }
     }
     for (const ref of refs) {
         if (get(battle, ref)?.status === "INACTIVE") {
-            battle = updateStatus(battle, ref, call);
+            battle = updateStatus(battle, ref);
         }
     }
 

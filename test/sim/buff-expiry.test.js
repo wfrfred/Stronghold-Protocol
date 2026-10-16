@@ -144,7 +144,7 @@ function harness({ stackCount = 3, maxValidStackCnt = -1 } = {}) {
                     { stackCount: ctx.self.data.stackCount, expiresAtTick: deadline(ctx.self) },
                     ctx.self.data.lifetimeTicks, ctx.tick,
                 );
-                if (plan.type === "FINISH") return effects.end(state, ctx.ref, "EXPIRED", ctx.call);
+                if (plan.type === "FINISH") return effects.end(state, ctx.ref, "EXPIRED");
                 const next = setDeadline(setData(ctx.self, {
                     ...ctx.self.data,
                     stackCount: plan.stackCount,

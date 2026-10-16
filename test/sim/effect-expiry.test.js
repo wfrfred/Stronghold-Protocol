@@ -55,7 +55,7 @@ test("effect deadlines: layered content renews the same identity and ends only a
                 if (context.tick < context.self.data.deadline) return state;
                 const layers = context.self.data.layers - 1;
                 if (layers === 0) {
-                    return effect.end(state, context.ref, "LAYERS_EXHAUSTED", context.call);
+                    return effect.end(state, context.ref, "LAYERS_EXHAUSTED");
                 }
                 const deadline = context.tick + 2;
                 return effect.replaceEffect(

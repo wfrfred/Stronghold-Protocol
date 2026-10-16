@@ -39,7 +39,6 @@ test("effect installation: a nested weaker rule does not enable its parent befor
                 unitRef(context.unit),
                 child,
                 {},
-                context.call,
             ));
             assert.equal(get(state, context.ref).status, "INSTALLING");
             state = effect.replaceEffect(
@@ -74,8 +73,8 @@ for (const grouped of [false, true]) {
             onInstall(state, context) {
                 assert.equal(context.self.status, "INSTALLING");
                 trace.push("install begin");
-                state = effect.setEnabled(state, context.ref, false, context.call);
-                state = effect.setEnabled(state, context.ref, true, context.call);
+                state = effect.setEnabled(state, context.ref, false);
+                state = effect.setEnabled(state, context.ref, true);
                 state = effect.replaceEffect(
                     state,
                     context.ref,
@@ -111,7 +110,7 @@ test("effect installation: an independent child enables while its parent finishe
         onInstall(state, context) {
             assert.equal(context.self.status, "INSTALLING");
             trace.push("install begin");
-            state = effect.install(state, unitRef(context.unit), child, {}, context.call).state;
+            state = effect.install(state, unitRef(context.unit), child, {}).state;
             assert.equal(get(state, context.ref).status, "INSTALLING");
             state = effect.replaceEffect(
                 state,
@@ -140,7 +139,7 @@ test("effect installation: ending during installation never publishes the effect
         onInstall(state, context) {
             assert.equal(context.self.status, "INSTALLING");
             trace.push("install");
-            state = effect.end(state, context.ref, "NOT_APPLICABLE", context.call);
+            state = effect.end(state, context.ref, "NOT_APPLICABLE");
             assert.equal(get(state, context.ref), undefined);
             return state;
         },
@@ -175,13 +174,13 @@ test("effect installation: closing the host from a nested installation never ena
         {},
         {
             onInstall(state, context) {
-                return closeLifetime(state, { type: "UNIT", unitId: 0 }, "RETREAT", context.call);
+                return closeLifetime(state, { type: "UNIT", unitId: 0 }, "RETREAT");
             },
         },
     );
     const parent = attackBuff("parent", 100, {
         onInstall(state, context) {
-            state = effect.install(state, unitRef(context.unit), child, {}, context.call).state;
+            state = effect.install(state, unitRef(context.unit), child, {}).state;
             assert.equal(get(state, context.ref), undefined);
             return state;
         },

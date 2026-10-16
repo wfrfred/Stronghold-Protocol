@@ -1,8 +1,6 @@
-import type { State as BattleState } from "../../../../battle/state.js";
 import * as hook from "../../../hook/hook.js";
-import type { State, Vitality } from "../capability.js";
-import type { Context as VitalityContext, Result } from "../hook.js";
-import type { Unit } from "../../../unit.js";
+import type { State } from "../capability.js";
+import type { Context as VitalityContext, Control } from "../hook.js";
 import type { DamageOperands, DamageReport, DamageRequest, PendingDamage } from "./contract.js";
 
 export type Context = VitalityContext<DamageRequest>;
@@ -11,32 +9,21 @@ export type FormulaStage = "sourceFormula" | "targetFormula";
 
 export type AmountStage = "output" | "reception" | "skippedReception";
 
-export interface FormulaHook extends hook.Hook<
-    BattleState,
-    Context,
-    DamageOperands,
-    Result<DamageOperands>
-> {
+export interface FormulaHook extends hook.Hook<Context, DamageOperands & Control> {
     readonly stage: FormulaStage;
     readonly priority: number;
 }
 
-export interface AmountHook extends hook.Hook<
-    BattleState,
-    Context,
-    PendingDamage,
-    Result<PendingDamage>
-> {
+export interface AmountHook extends hook.Hook<Context, PendingDamage & Control> {
     readonly stage: AmountStage;
     readonly priority: number;
 }
 
-export interface ReactionHook extends hook.Hook<
-    BattleState,
-    Context,
-    DamageReport,
-    undefined | { readonly stopDispatch?: boolean }
-> {
+export interface ReactionContext extends Context {
+    readonly report: DamageReport;
+}
+
+export interface ReactionHook extends hook.Hook<ReactionContext, Control> {
     readonly stage: "reaction";
     readonly priority: number;
 }
@@ -46,11 +33,13 @@ export interface Received {
     readonly pending: PendingDamage;
 }
 
-export interface ReceivedHook {
-    readonly id: string;
+export interface ReceivedContext {
+    readonly host: Context["host"];
+    readonly event: Received;
+}
+
+export interface ReceivedHook extends hook.Hook<ReceivedContext, void> {
     readonly stage: "received";
-    readonly enabled: (battle: BattleState, self: Unit & Vitality, event: Received) => boolean;
-    readonly invoke: (battle: BattleState, self: Unit & Vitality, event: Received) => BattleState;
 }
 
 export type Hook = FormulaHook | AmountHook | ReactionHook | ReceivedHook;

@@ -8,7 +8,6 @@ import {
     getUnit,
     type State as BattleState,
 } from "../../battle/state.js";
-import { emptyCall, type CallContext } from "../../battle/execution/call.js";
 import type { Unit, Id } from "../../unit/unit.js";
 import { hasHit } from "../../unit/capability/spatial/capability.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";
@@ -34,9 +33,8 @@ function projectileContext<S extends object>(
     state: BattleState,
     projectile: Projectile<S>,
     tick: number,
-    call: CallContext,
 ): ProjectileQueryContext<S> {
-    return { projectile, tick, facts: battlefieldView(state), call };
+    return { projectile, tick, facts: battlefieldView(state) };
 }
 
 function signalFacts(projectile: StoredProjectile, tick: number): Omit<ProjectileSignal, "type"> {
@@ -66,7 +64,6 @@ function contact<S extends object>(
     projectile: Projectile<S>,
     definition: Definition<S>,
     tick: number,
-    call: CallContext,
 ): BattleState {
     if (definition.contact === undefined) {
         return state;
@@ -89,7 +86,7 @@ function contact<S extends object>(
         ) {
             continue;
         }
-        if (!definition.acceptsContact(projectileContext(state, current, tick, call), target)) {
+        if (!definition.acceptsContact(projectileContext(state, current, tick), target)) {
             continue;
         }
 
@@ -99,7 +96,7 @@ function contact<S extends object>(
         };
         state = replaceProjectile(state, contacted);
         state = definition.contact(state, {
-            ...projectileContext(state, contacted, tick, call),
+            ...projectileContext(state, contacted, tick),
             targetUnitId,
         });
         const latest = getProjectile(state, reference) ?? contacted;
@@ -116,7 +113,6 @@ export function stopProjectile(
     reference: Ref<StoredProjectile>,
     tick: number,
     reason: ProjectileStopReason = "EXPLICIT",
-    call: CallContext = emptyCall,
 ): BattleState {
     const current = getProjectile(state, reference);
 
@@ -137,7 +133,7 @@ export function stopProjectile(
             state =
                 stopped.definition.stop === undefined
                     ? state
-                    : stopped.definition.stop(state, projectileContext(state, stopped, tick, call));
+                    : stopped.definition.stop(state, projectileContext(state, stopped, tick));
 
             if (getProjectile(state, reference) === undefined) {
                 return state;
@@ -154,7 +150,6 @@ function advanceProjectile(
     state: BattleState,
     reference: Ref<StoredProjectile>,
     tick: number,
-    call: CallContext,
 ): BattleState {
     return (
         state.battlefield.projectiles.read(reference.id, (current) => {
@@ -162,7 +157,7 @@ function advanceProjectile(
                 return state;
             }
             if (current.expiresAtTick !== null && tick >= current.expiresAtTick) {
-                return stopProjectile(state, reference, tick, "EXPIRED", call);
+                return stopProjectile(state, reference, tick, "EXPIRED");
             }
             switch (current.progress.type) {
                 case "STOPPED":
@@ -170,7 +165,7 @@ function advanceProjectile(
 
                 case "WAITING_TO_STOP":
                     return tick >= current.progress.targetTick
-                        ? stopProjectile(state, reference, tick, "ARRIVED", call)
+                        ? stopProjectile(state, reference, tick, "ARRIVED")
                         : replaceProjectile(state, { ...current, lastAdvancedTick: tick });
 
                 case "FLYING": {
@@ -217,10 +212,10 @@ function advanceProjectile(
                         state = appendEvents(state, [
                             { ...signalFacts(advanced, tick), type: "PROJECTILE_REACHED" },
                         ]);
-                        state = contact(state, advanced, advanced.definition, tick, call);
+                        state = contact(state, advanced, advanced.definition, tick);
 
                         if (current.stopDelayTicks === 0) {
-                            state = stopProjectile(state, reference, tick, "ARRIVED", call);
+                            state = stopProjectile(state, reference, tick, "ARRIVED");
                         }
                     }
 
@@ -235,20 +230,19 @@ export function advanceProjectiles(
     state: BattleState,
     tick: number,
     stopIds: readonly ProjectileId[] = [],
-    call: CallContext = emptyCall,
 ): BattleState {
     for (const id of stopIds) {
         const projectile = state.battlefield.projectiles.get(id);
 
         if (projectile !== undefined) {
-            state = stopProjectile(state, ref(projectile), tick, "EXPLICIT", call);
+            state = stopProjectile(state, ref(projectile), tick, "EXPLICIT");
         }
     }
 
     const candidates = all(state).sort((left, right) => left.id - right.id);
 
     for (const reference of candidates) {
-        state = advanceProjectile(state, reference, tick, call);
+        state = advanceProjectile(state, reference, tick);
     }
 
     return state;

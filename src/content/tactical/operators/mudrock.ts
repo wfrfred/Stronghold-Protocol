@@ -24,7 +24,6 @@ import {
     updateUnit,
     type State as BattleState,
 } from "../../../core/tactical/battle/state.js";
-import type { CallContext } from "../../../core/tactical/battle/execution/call.js";
 import { modify } from "../../../core/tactical/unit/capability/skill/sp.js";
 import type { Direction } from "../../../core/tactical/geometry/direction.js";
 import { createBlockGeometry } from "../../../core/tactical/geometry/shape.js";
@@ -121,28 +120,18 @@ function hasSarkazTag(unit: Unit | undefined): boolean {
     );
 }
 
-function healSelf(
-    state: BattleState,
-    unitId: Id,
-    ratio: number,
-    tick: number,
-    call?: CallContext,
-): BattleState {
+function healSelf(state: BattleState, unitId: Id, ratio: number, tick: number): BattleState {
     const maxHp = resolveMaxHp(unitId, battlefieldView(state));
 
     return maxHp === undefined
         ? state
-        : resolveHealing(
-              state,
-              {
-                  sourceUnitId: unitId,
-                  targetUnitId: unitId,
-                  power: maxHp * ratio,
-                  ignoreHealFree: true,
-                  tick,
-              },
-              call,
-          ).state;
+        : resolveHealing(state, {
+              sourceUnitId: unitId,
+              targetUnitId: unitId,
+              power: maxHp * ratio,
+              ignoreHealFree: true,
+              tick,
+          }).state;
 }
 
 function shieldEffect(profile: Profile): EffectDefinition<ShieldState, Vitality> {
@@ -176,12 +165,12 @@ function shieldEffect(profile: Profile): EffectDefinition<ShieldState, Vitality>
                     id: `${SHIELD_ID}/${self.id}`,
                     stage: "reception",
                     priority: 100,
-                    enabled: () => true,
+                    accepts: () => true,
                     invoke(state, context, pending) {
                         const shield = get(state, ref);
 
                         if (pending.cancellation !== null || shield?.status !== "ACTIVE") {
-                            return { state, value: { value: pending } };
+                            return { state, value: pending };
                         }
                         if (shield.data.layers > 0) {
                             state = replaceEffect(
@@ -192,7 +181,7 @@ function shieldEffect(profile: Profile): EffectDefinition<ShieldState, Vitality>
                                     layers: shield.data.layers - 1,
                                 }),
                             );
-                            state = healSelf(state, unit.id, healRatio, context.tick, context.call);
+                            state = healSelf(state, unit.id, healRatio, context.request.tick);
                             const current = getUnit(state, unit.id);
 
                             if (current !== undefined && hasSkill(current)) {
@@ -202,46 +191,42 @@ function shieldEffect(profile: Profile): EffectDefinition<ShieldState, Vitality>
                             return {
                                 state,
                                 value: {
-                                    value: {
-                                        ...pending,
-                                        amount: 0,
-                                        cancellation: {
-                                            stage: "RECEPTION",
-                                            reason: "MUDROCK_SHIELD",
-                                        },
-                                        consumptions: [
-                                            ...pending.consumptions,
-                                            {
-                                                ownerUnitId: unit.id,
-                                                resourceId: SHIELD_ID,
-                                                resource: "SHIELD_LAYER",
-                                                amount: 1,
-                                            },
-                                        ],
+                                    ...pending,
+                                    amount: 0,
+                                    cancellation: {
+                                        stage: "RECEPTION",
+                                        reason: "MUDROCK_SHIELD",
                                     },
+                                    consumptions: [
+                                        ...pending.consumptions,
+                                        {
+                                            ownerUnitId: unit.id,
+                                            resourceId: SHIELD_ID,
+                                            resource: "SHIELD_LAYER",
+                                            amount: 1,
+                                        },
+                                    ],
                                 },
                             };
                         }
 
                         const sourceId = context.request.sourceUnitId;
                         const sarkazScale = hasSarkazTag(
-                            sourceId === null ? undefined : context.battlefield.getUnit(sourceId),
+                            sourceId === null ? undefined : getUnit(state, sourceId),
                         )
                             ? 1 - sarkazResistance
                             : 1;
                         const blockingScale =
                             sourceId !== null &&
-                            context.battlefield.blockedBy(unit.id).includes(sourceId)
+                            battlefieldView(state).blockedBy(unit.id).includes(sourceId)
                                 ? blockedDamageScale
                                 : 1;
 
                         return {
                             state,
                             value: {
-                                value: {
-                                    ...pending,
-                                    amount: pending.amount * sarkazScale * blockingScale,
-                                },
+                                ...pending,
+                                amount: pending.amount * sarkazScale * blockingScale,
                             },
                         };
                     },

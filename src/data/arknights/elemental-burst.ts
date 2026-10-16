@@ -94,13 +94,17 @@ export function create(id: string, profile: ArknightsElementalBurstProfile): Def
                 ...unit,
                 action: setBeforeReleaseHook(unit.action, {
                     id: `@effect/${effectId}/paralysis`,
-                    enabled: (_battle, host) => {
-                        const current = host.effects.get(effectId, paralysis);
+                    accepts: (battle, context) => {
+                        const current = units
+                            .get(battle, context.source)
+                            ?.effects.get(effectId, paralysis);
 
                         return current?.status === "ACTIVE" && current.data.remaining > 0;
                     },
-                    invoke: (battle, host) => {
-                        const self = host.effects.get(effectId, paralysis)!;
+                    invoke: (battle, context) => {
+                        const self = units
+                            .get(battle, context.source)!
+                            .effects.get(effectId, paralysis)!;
                         const ref = effectRef(self);
                         const remaining = self.data.remaining - 1;
                         battle = effects.replaceEffect(battle, ref, setData(self, { remaining }));

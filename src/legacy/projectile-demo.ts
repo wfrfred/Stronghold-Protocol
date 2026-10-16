@@ -76,33 +76,23 @@ export function createTacticalProjectileDemo(
             const target = context.facts.getUnit(context.targetUnitId);
 
             if (target !== undefined) {
-                state = install(
-                    state,
-                    unitRef(target),
-                    marker,
-                    {
-                        source: context.projectile.source,
-                        scopes: [{ type: "TICK", tick: context.tick + 45 }],
-                    },
-                    context.call,
-                ).state;
+                state = install(state, unitRef(target), marker, {
+                    source: context.projectile.source,
+                    scopes: [{ type: "TICK", tick: context.tick + 45 }],
+                }).state;
             }
 
-            return resolveDamage(
-                state,
-                {
-                    sourceUnitId: context.projectile.source,
-                    targetUnitId: context.targetUnitId,
-                    tick: context.tick,
-                    damageType: "ARTS",
-                    operands: createDamageOperands(
-                        cachedOnly
-                            ? context.projectile.cachedAtk
-                            : resolveProjectileAttackPower(state, context.projectile),
-                    ),
-                },
-                context.call,
-            ).state;
+            return resolveDamage(state, {
+                sourceUnitId: context.projectile.source,
+                targetUnitId: context.targetUnitId,
+                tick: context.tick,
+                damageType: "ARTS",
+                operands: createDamageOperands(
+                    cachedOnly
+                        ? context.projectile.cachedAtk
+                        : resolveProjectileAttackPower(state, context.projectile),
+                ),
+            }).state;
         },
     });
 

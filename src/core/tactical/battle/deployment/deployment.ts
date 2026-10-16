@@ -7,7 +7,9 @@ import type { BattlefieldRemovalReason } from "../../battlefield/contract.js";
 import { hasDeployable, resolveRefund } from "../../unit/capability/deployable/capability.js";
 import type { Deployed } from "../../unit/capability/deployable/hook.js";
 import type { Unit } from "../../unit/unit.js";
-import { battlefieldView, getUnit, type State as BattleState, type Result } from "../state.js";
+import type { State as BattleState, Result } from "../state.js";
+import * as units from "../../unit/query.js";
+import * as hook from "../../unit/hook/hook.js";
 import * as card from "./card.js";
 
 export interface Definition {
@@ -181,26 +183,27 @@ export function recycleUnitCard(
 }
 
 export function notifyDeployed(state: BattleState, deployed: Deployed): BattleState {
-    const candidates = [...state.battlefield.units.values()].flatMap((unit) =>
-        hasDeployable(unit)
-            ? unit.deployable.deployedHooks.map(({ id }) => ({ unitId: unit.id, id }))
-            : [],
+    const candidates = new Map(
+        units
+            .filter(state, hasDeployable)
+            .flatMap((ref) =>
+                units
+                    .get(state, ref)!
+                    .deployable.deployedHooks.map(
+                        ({ id }) => [JSON.stringify([ref.id, id]), { ref, id }] as const,
+                    ),
+            ),
     );
 
-    for (const { unitId, id } of candidates) {
-        const unit = getUnit(state, unitId);
+    return hook.dispatch(state, deployed, undefined, {
+        candidates: () => [...candidates.keys()],
+        find: (current, key) => {
+            const candidate = candidates.get(key)!;
+            const unit = units.get(current, candidate.ref);
 
-        if (unit?.lifecycle !== "PRESENT" || !hasDeployable(unit)) {
-            continue;
-        }
-
-        const entry = unit.deployable.deployedHooks.find((current) => current.id === id);
-        const view = battlefieldView(state);
-
-        if (entry?.enabled(view)) {
-            state = entry.invoke(state, view, deployed).state;
-        }
-    }
-
-    return state;
+            return unit?.lifecycle === "PRESENT"
+                ? unit.deployable.deployedHooks.find((entry) => entry.id === candidate.id)
+                : undefined;
+        },
+    }).state;
 }

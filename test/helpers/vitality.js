@@ -39,7 +39,7 @@ export function request(power = 100, overrides = {}) {
 }
 
 export function setSelf(state, context, self, next) {
-    const unit = getUnit(state, context.unit.id);
+    const unit = getUnit(state, context.host.id);
     const current = unit && unit.effects.get(self.id, self.definition);
     return current === undefined
         ? state
@@ -51,7 +51,7 @@ export function setSelf(state, context, self, next) {
 }
 
 export function current(state, context, self) {
-    const unit = getUnit(state, context.unit.id);
+    const unit = getUnit(state, context.host.id);
     return unit && unit.effects.get(self.id, self.definition);
 }
 
@@ -68,22 +68,19 @@ function hookEffect(domain, id, initial, entries, callbacks = {}) {
                             id: `${context.ref.host.id}:${context.ref.id}:${index}`,
                             stage: entry.stage,
                             priority: entry.priority ?? 0,
-                            enabled(invocation) {
-                                const self = invocation.unit.effects.get(
-                                    context.ref.id,
-                                    content,
-                                );
+                            accepts(state, invocation, input) {
+                                const self = getUnit(state, invocation.host.id)?.effects.get(context.ref.id, content);
                                 return (
                                     self?.status === "ACTIVE" &&
-                                    (entry.enabled?.(invocation, self) ?? true)
+                                    (entry.accepts?.(state, invocation, self, input) ?? true)
                                 );
                             },
                             invoke(state, invocation, input) {
                                 return entry.invoke(
                                     state,
                                     invocation,
-                                    invocation.unit.effects.get(context.ref.id, content),
-                                    input,
+                                    getUnit(state, invocation.host.id).effects.get(context.ref.id, content),
+                                    entry.stage === "reaction" ? invocation.report : input,
                                 );
                             },
                         }),
@@ -126,9 +123,9 @@ export function barrier(id = "barrier", remainingAmount = 500, priority = 0) {
             stage: "reception",
             priority,
             invoke(state, context, self, pending) {
-                if (pending.cancellation !== null) return { state, value: { value: pending } };
+                if (pending.cancellation !== null) return { state, value: pending };
                 const absorbed = Math.min(pending.amount, self.data.remainingAmount);
-                if (absorbed <= 0) return { state, value: { value: pending } };
+                if (absorbed <= 0) return { state, value: pending };
                 state = setSelf(state, context, self, (state) => ({
                     ...state,
                     remainingAmount: state.remainingAmount - absorbed,
@@ -136,20 +133,18 @@ export function barrier(id = "barrier", remainingAmount = 500, priority = 0) {
                 return {
                     state,
                     value: {
-                        value: {
                             ...pending,
                             amount: pending.amount - absorbed,
                             consumptions: [
                                 ...pending.consumptions,
                                 {
-                                    ownerUnitId: context.unit.id,
-                                    resourceId: `${context.unit.id}:${self.id}`,
+                                    ownerUnitId: context.host.id,
+                                    resourceId: `${context.host.id}:${self.id}`,
                                     resource: "barrier",
                                     amount: absorbed,
                                 },
                             ],
                         },
-                    },
                 };
             },
         },

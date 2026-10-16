@@ -1206,10 +1206,10 @@ test('core vitality: invincibility is decided before HIT SP and obeys the damage
     activation: { trigger: 'MANUAL', sustain: { type: 'INFINITE' }, initialize: () => ({}) },
   }) });
   const target = { ...protectedTarget, vitality: setDamageHook(protectedTarget.vitality, {
-    id: 'observe-reception', stage: 'reception', priority: 0, enabled: () => true,
+    id: 'observe-reception', stage: 'reception', priority: 0, accepts: () => true,
     invoke(state, context, pending) {
-      observed.push({ sp: context.unit.skill.sp.value, cancellation: pending.cancellation?.reason });
-      return { state, value: { value: pending } };
+      observed.push({ sp: getUnit(state, context.host.id).skill.sp.value, cancellation: pending.cancellation?.reason });
+      return { state, value: pending };
     },
   }) };
   const state = enterSkill(createBattleState(fixtureBattlefieldState([target])), unitRef(target));
@@ -1239,15 +1239,15 @@ test('core vitality: fatal protection uses the rules remaining after reception h
       effects: installedInitially ? [undeadable] : [],
     });
     const target = { ...original, vitality: setDamageHook(original.vitality, {
-      id: 'change-fatal-protection', stage: 'reception', priority: 0, enabled: () => true,
+      id: 'change-fatal-protection', stage: 'reception', priority: 0, accepts: () => true,
       invoke(state, context, pending) {
         if (installedInitially) {
           state = effects.end(state, { host: { id: 1 },
-            id: context.unit.effects.values()[0].id });
+            id: getUnit(state, context.host.id).effects.values()[0].id });
         } else {
-          state = effects.install(state, unitRef(context.unit), undeadable).state;
+          state = effects.install(state, context.host, undeadable).state;
         }
-        return { state, value: { value: pending } };
+        return { state, value: pending };
       },
     }) };
     const state = createBattleState(fixtureBattlefieldState([target]));

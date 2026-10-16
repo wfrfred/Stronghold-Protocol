@@ -50,7 +50,6 @@ test("effect cleanup: a replacement installed during end uses a new identity and
                     unitRef(context.unit),
                     replacement,
                     {},
-                    context.call,
                 );
                 next = installed.value;
                 return installed.state;

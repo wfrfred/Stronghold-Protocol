@@ -146,7 +146,7 @@ test("effects: ending withdraws outputs before terminal business and repeated en
         },
         onEnd(state, context) {
             seen.push(["end", context.reason, resolveAttackPower(0, battlefieldView(state))]);
-            return effect.end(state, context.ref, "REENTRANT", context.call);
+            return effect.end(state, context.ref, "REENTRANT");
         },
     });
     let battle = effectFixtureWork(unit());
@@ -202,7 +202,7 @@ test("effects: a callback sees termination when a nested operation ends its inst
         {},
         {
             onTick(state, context) {
-                state = effect.end(state, context.ref, "EXPLICIT", context.call);
+                state = effect.end(state, context.ref, "EXPLICIT");
                 seen.push(context.self.status);
                 assert.equal(get(state, context.ref), undefined);
                 return state;

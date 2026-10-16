@@ -54,19 +54,15 @@ export function createArrow(): ProjectileDefinition<object> {
             hasVitality(target) &&
             target.vitality.hp > 0,
         contact: (state, context) =>
-            resolveDamage(
-                state,
-                {
-                    sourceUnitId: context.projectile.source,
-                    targetUnitId: context.targetUnitId,
-                    tick: state.tick,
-                    damageType: "PHYSICAL",
-                    operands: createDamageOperands(
-                        resolveProjectileAttackPower(state, context.projectile),
-                    ),
-                },
-                context.call,
-            ).state,
+            resolveDamage(state, {
+                sourceUnitId: context.projectile.source,
+                targetUnitId: context.targetUnitId,
+                tick: state.tick,
+                damageType: "PHYSICAL",
+                operands: createDamageOperands(
+                    resolveProjectileAttackPower(state, context.projectile),
+                ),
+            }).state,
     });
 }
 

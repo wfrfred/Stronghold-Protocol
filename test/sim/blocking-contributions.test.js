@@ -447,7 +447,7 @@ test("blocking capacity: native stack renewal and terminal cleanup update real b
                     ctx.tick,
                 );
                 if (plan.type === "FINISH")
-                    return effects.end(state, ctx.ref, "EXPIRED", ctx.call);
+                    return effects.end(state, ctx.ref, "EXPIRED");
                 else {
                     const next = setDeadline(
                         setData(ctx.self, (current) => ({

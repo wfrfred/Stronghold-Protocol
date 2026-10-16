@@ -1,4 +1,3 @@
-import type { CallContext } from "../../battle/execution/call.js";
 import type { Unit, Id } from "../../unit/unit.js";
 import type { Projectile, ProjectileView } from "./projectile.js";
 
@@ -12,7 +11,6 @@ export interface ProjectileQueryContext<S extends object = object> {
     readonly projectile: Projectile<S>;
     readonly tick: number;
     readonly facts: ProjectileFacts;
-    readonly call: CallContext;
 }
 
 export type ProjectileCallbackContext<S extends object = object> = ProjectileQueryContext<S>;

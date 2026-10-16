@@ -203,7 +203,7 @@ test("action runtime: dependency cleanup can finish nested host death before a t
                     tick: state.tick,
                     damageType: "TRUE",
                     operands: createDamageOperands(100),
-                }, context.call).state;
+                }).state;
             observedDeparture = getUnit(state, context.unit.id) === undefined;
             throw failure;
         },

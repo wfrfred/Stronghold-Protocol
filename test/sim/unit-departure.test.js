@@ -64,11 +64,11 @@ function fixture() {
                         id: "consume",
                         stage: "reception",
                         priority: 0,
-                        enabled: context => context.unit.effects.values().find(effect => effect.id === ref.id)?.status === "ACTIVE",
+                        accepts: (battle, context) => getUnit(battle, context.host.id)?.effects.values().find(effect => effect.id === ref.id)?.status === "ACTIVE",
                         invoke(state, context, value) {
                             const current = get(state, ref);
                             state = effects.replaceEffect(state, ref, setData(current, { consumed: current.data.consumed + 1 }));
-                            return { state, value: { value } };
+                            return { state, value };
                         },
                     }) }),
                 );
@@ -301,7 +301,7 @@ test("effect terminal callback can retire its host and settle remote Action and 
                     damageType: "TRUE",
                     operands: createDamageOperands(100),
                     tick: 1,
-                }, ctx.call).state;
+                }).state;
                 trace.push("after-damage");
                 assert.equal(getUnit(state, 0), undefined);
                 assert.equal(actions.get(state, started.value.ref), undefined);

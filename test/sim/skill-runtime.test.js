@@ -167,10 +167,10 @@ test('skill runtime: HIT recovery precedes reception Hooks even when they subseq
   const definition = actor(skill({ recovery: { type: 'HIT', amount: 2 }, initial: 0, cost: 10 }));
   let receiver = initialize({ id: 0, definition, position: [0, 0] });
   receiver = { ...receiver, vitality: setHook(receiver.vitality, {
-    id: 'late-shield', stage: 'reception', priority: 0, enabled: () => true,
+    id: 'late-shield', stage: 'reception', priority: 0, accepts: () => true,
     invoke(battle, context, pending) {
-      assert.equal(getUnit(battle, context.unit.id).skill.sp.value, 2);
-      return { state: battle, value: { value: { ...pending, cancellation: { stage: 'RECEPTION', reason: 'SHIELD' } } } };
+      assert.equal(getUnit(battle, context.host.id).skill.sp.value, 2);
+      return { state: battle, value: { ...pending, cancellation: { stage: 'RECEPTION', reason: 'SHIELD' } } };
     },
   }) };
   let battle = createBattleState(fixtureBattlefield([receiver]));

@@ -1,29 +1,22 @@
-import type { State as BattleState } from "../../../../battle/state.js";
 import * as hook from "../../../hook/hook.js";
 import type { State } from "../capability.js";
-import type { Context as VitalityContext, Result } from "../hook.js";
+import type { Context as VitalityContext, Control } from "../hook.js";
 import type { HealingReport, HealingRequest, PendingHealing } from "./contract.js";
 
 export type Context = VitalityContext<HealingRequest>;
 
 export type Stage = "output" | "reception" | "skippedReception";
 
-export interface AmountHook extends hook.Hook<
-    BattleState,
-    Context,
-    PendingHealing,
-    Result<PendingHealing>
-> {
+export interface AmountHook extends hook.Hook<Context, PendingHealing & Control> {
     readonly stage: Stage;
     readonly priority: number;
 }
 
-export interface ReactionHook extends hook.Hook<
-    BattleState,
-    Context,
-    HealingReport,
-    undefined | { readonly stopDispatch?: boolean }
-> {
+export interface ReactionContext extends Context {
+    readonly report: HealingReport;
+}
+
+export interface ReactionHook extends hook.Hook<ReactionContext, Control> {
     readonly stage: "reaction";
     readonly priority: number;
 }

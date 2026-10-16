@@ -15,7 +15,7 @@ function loaded(amount = 3, overrides = {}) {
     return { ...f, state: started.state, activation: started.value.ref };
 }
 const remaining = (battle) => getUnit(battle, 1).skill.active.sustain.remaining;
-const observe = (id, invoke) => ({ id, enabled: () => true, invoke });
+const observe = (id, invoke) => ({ id, invoke });
 
 test("ammunition spending preserves input versions and consumes the full requested amount", () => {
     const f = loaded(3);
@@ -54,9 +54,9 @@ test("an ammunition skill remains active indefinitely when no content consumes o
 test("ordinary replenishment tracks a cumulative allowance independently of current ammunition", () => {
     const reports = [];
     const f = loaded(3);
-    let state = change(f.state, (skill) => ({ ...skill, ammoReplenished: [observe("allowance", (battle, _self, event) => {
+    let state = change(f.state, (skill) => ({ ...skill, ammoReplenished: [observe("allowance", (battle, { event }) => {
         reports.push(event);
-        return battle;
+        return { state: battle, value: undefined };
     })] }));
     state = ammo.consume(state, f.activation, 3).state;
     state = ammo.replenish(state, f.activation, 2).state;
@@ -79,9 +79,9 @@ test("ordinary replenishment tracks a cumulative allowance independently of curr
 test("replenishment reports requested and actual quantities when current capacity truncates it", () => {
     const reports = [];
     const f = loaded(5);
-    let state = change(f.state, (skill) => ({ ...skill, ammoReplenished: [observe("capacity", (battle, _self, event) => {
+    let state = change(f.state, (skill) => ({ ...skill, ammoReplenished: [observe("capacity", (battle, { event }) => {
         reports.push(event);
-        return battle;
+        return { state: battle, value: undefined };
     })] }));
     state = ammo.consume(state, f.activation, 2).state;
     const replenished = ammo.replenish(state, f.activation, 10);
@@ -101,9 +101,9 @@ test("replenishment reports requested and actual quantities when current capacit
 test("content ammunition grants respect current capacity without consuming ordinary replenishment allowance", () => {
     const reports = [];
     const f = loaded(3);
-    let state = change(f.state, (skill) => ({ ...skill, ammoReplenished: [observe("ordinary", (battle, _self, event) => {
+    let state = change(f.state, (skill) => ({ ...skill, ammoReplenished: [observe("ordinary", (battle, { event }) => {
         reports.push(event);
-        return battle;
+        return { state: battle, value: undefined };
     })] }));
     state = ammo.consume(state, f.activation, 2).state;
     const grant = ammo.grant(state, f.activation, 5);
@@ -178,9 +178,9 @@ test("ammunition modifiers resolve live inputs and exclusive sources only when t
 test("consumption Hooks report the complete consumed amount and settled negative remainder", () => {
     const seen = [];
     const f = loaded(1);
-    let state = change(f.state, (skill) => ({ ...skill, ammoConsumed: [observe("consumer", (battle, _self, event) => {
+    let state = change(f.state, (skill) => ({ ...skill, ammoConsumed: [observe("consumer", (battle, { event }) => {
         seen.push(event);
-        return battle;
+        return { state: battle, value: undefined };
     })] }));
     state = ammo.consume(state, f.activation, 3).state;
     assert.equal(seen.length, 1);
@@ -197,18 +197,18 @@ test("nested replenishment produces its own report and a later depletion check r
     const f = loaded(1);
     let state = change(f.state, (skill) => ({ ...skill,
         ammoConsumed: [
-            observe("refill", (battle, _self, event) => {
+            observe("refill", (battle, { event }) => {
                 seen.push(["consume", event.previous.remaining, event.current.remaining]);
-                return ammo.replenish(battle, event.ref, 1).state;
+                return { state: ammo.replenish(battle, event.ref, 1).state, value: undefined };
             }),
-            observe("after", (battle, _self, event) => {
+            observe("after", (battle, { event }) => {
                 seen.push(["after", event.previous.remaining, event.current.remaining, remaining(battle)]);
-                return battle;
+                return { state: battle, value: undefined };
             }),
         ],
-        ammoReplenished: [observe("replenished", (battle, _self, event) => {
+        ammoReplenished: [observe("replenished", (battle, { event }) => {
             seen.push(["replenish", event.amount, event.previous.remaining, event.current.remaining]);
-            return battle;
+            return { state: battle, value: undefined };
         })],
     }));
     state = ammo.consume(state, f.activation, 1).state;
@@ -222,15 +222,15 @@ test("nested replenishment retains each settled request and snapshot for later o
     const observed = [];
     const f = loaded(5);
     let state = change(f.state, (skill) => ({ ...skill, ammoReplenished: [
-        observe("nested", (battle, _self, event) => {
+        observe("nested", (battle, { event }) => {
             entered.push(event);
-            if (event.requested !== 10) return battle;
+            if (event.requested !== 10) return { state: battle, value: undefined };
             battle = ammo.consume(battle, event.ref, 3).state;
-            return ammo.replenish(battle, event.ref, 8).state;
+            return { state: ammo.replenish(battle, event.ref, 8).state, value: undefined };
         }),
-        observe("after", (battle, _self, event) => {
+        observe("after", (battle, { event }) => {
             observed.push({ event, remaining: remaining(battle) });
-            return battle;
+            return { state: battle, value: undefined };
         }),
     ] }));
     state = ammo.consume(state, f.activation, 4).state;
@@ -266,9 +266,9 @@ test("old activation references cannot consume or replenish a newly started acti
 test("consumption remains settled when its Hook ends the observed activation", () => {
     let report;
     const f = loaded(1);
-    let state = change(f.state, (skill) => ({ ...skill, ammoConsumed: [observe("end", (battle, _self, event) => {
+    let state = change(f.state, (skill) => ({ ...skill, ammoConsumed: [observe("end", (battle, { event }) => {
         report = event;
-        return skills.finish(battle, event.ref);
+        return { state: skills.finish(battle, event.ref), value: undefined };
     })] }));
     const consumed = ammo.consume(state, f.activation, 3);
     assert.equal(consumed.value.amount, 3);
@@ -279,9 +279,9 @@ test("consumption remains settled when its Hook ends the observed activation", (
 
 test("a consumption Hook can replace its activation without a later check ending the replacement", () => {
     const f = loaded(3);
-    let state = change(f.state, (skill) => ({ ...skill, ammoConsumed: [observe("restart", (battle, _self, event) => {
+    let state = change(f.state, (skill) => ({ ...skill, ammoConsumed: [observe("restart", (battle, { event }) => {
         battle = skills.finish(battle, event.ref);
-        return skills.activate(battle, f.ref).state;
+        return { state: skills.activate(battle, f.ref).state, value: undefined };
     })] }));
     state = ammo.consume(state, f.activation, 3).state;
     assert.equal(getUnit(state, 1).skill.active.id, 1);

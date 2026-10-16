@@ -7,7 +7,7 @@ import { getUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
 import { initialize } from "../helpers/unit.js";
 import { effectFixtureWork } from "../helpers/effects.js";
 
-const hook = (id, invoke, enabled = () => true) => ({ id, stage: "received", enabled, invoke });
+const hook = (id, invoke, enabled = () => true) => ({ id, stage: "received", accepts: enabled, invoke });
 const change = (battle, transform) => {
     const unit = getUnit(battle, 0);
     return updateUnit(battle, { ...unit, vitality: transform(unit.vitality) });
@@ -23,16 +23,16 @@ const damage = (battle, power = 1) => resolveDamage(battle, {
 for (const enabled of [true, false]) {
     test(`received dispatch uses a replacement's current enabled=${enabled} and program`, () => {
         const seen = [];
-        const replacement = hook("B", battle => { seen.push("new B"); return battle; }, (_battle, self, event) => {
-            seen.push(["new enabled", self.vitality.hp, event.pending.amount]);
+        const replacement = hook("B", battle => { seen.push("new B"); return {state: battle, value: undefined}; }, (battle, {host, event}) => {
+            seen.push(["new enabled", getUnit(battle, host.id).vitality.hp, event.pending.amount]);
             return enabled;
         });
         const state = fixture([
             hook("A", battle => {
                 seen.push("A");
-                return change(battle, vitality => setHook({ ...vitality, hp: 90 }, replacement));
+                return {state: change(battle, vitality => setHook({ ...vitality, hp: 90 }, replacement)), value: undefined};
             }),
-            hook("B", battle => { seen.push("old B"); return battle; }, () => {
+            hook("B", battle => { seen.push("old B"); return {state: battle, value: undefined}; }, () => {
                 seen.push("old enabled");
                 return !enabled;
             }),
@@ -49,14 +49,14 @@ test("received dispatch skips a removed ID and a replacement in a different stag
     const state = fixture([
         hook("A", battle => {
             seen.push("A");
-            return change(battle, vitality => setHook(removeHook(vitality, "B"), {
-                id: "C", stage: "reaction", priority: 0, enabled: () => false,
+            return {state: change(battle, vitality => setHook(removeHook(vitality, "B"), {
+                id: "C", stage: "reaction", priority: 0, accepts: () => false,
                 invoke: () => { throw new Error("inactive replacement must not run"); },
-            }));
+            })), value: undefined};
         }),
-        hook("B", battle => { seen.push("B"); return battle; }),
-        hook("C", battle => { seen.push("old C"); return battle; }),
-        hook("D", battle => { seen.push("D"); return battle; }),
+        hook("B", battle => { seen.push("B"); return {state: battle, value: undefined}; }),
+        hook("C", battle => { seen.push("old C"); return {state: battle, value: undefined}; }),
+        hook("D", battle => { seen.push("D"); return {state: battle, value: undefined}; }),
     ]);
     damage(state);
     assert.deepEqual(seen, ["A", "D"]);
@@ -64,10 +64,10 @@ test("received dispatch skips a removed ID and a replacement in a different stag
 
 test("received dispatch defers a newly registered ID until a later dispatch", () => {
     const seen = [];
-    const added = hook("C", battle => { seen.push("C"); return battle; });
+    const added = hook("C", battle => { seen.push("C"); return {state: battle, value: undefined}; });
     let state = fixture([
-        hook("A", battle => { seen.push("A"); return change(battle, vitality => setHook(vitality, added)); }),
-        hook("B", battle => { seen.push("B"); return battle; }),
+        hook("A", battle => { seen.push("A"); return {state: change(battle, vitality => setHook(vitality, added)), value: undefined}; }),
+        hook("B", battle => { seen.push("B"); return {state: battle, value: undefined}; }),
     ]);
     state = damage(state);
     assert.deepEqual(seen, ["A", "B"]);
@@ -77,15 +77,15 @@ test("received dispatch defers a newly registered ID until a later dispatch", ()
 
 test("nested received dispatch independently selects current IDs", () => {
     const seen = [];
-    const added = hook("C", (battle, _self, event) => { seen.push(["C", event.pending.amount]); return battle; });
+    const added = hook("C", (battle, {event}) => { seen.push(["C", event.pending.amount]); return {state: battle, value: undefined}; });
     const state = fixture([
-        hook("A", (battle, _self, event) => {
+        hook("A", (battle, {event}) => {
             seen.push(["A", event.pending.amount]);
-            if (event.pending.amount !== 1) return battle;
+            if (event.pending.amount !== 1) return {state: battle, value: undefined};
             battle = change(battle, vitality => setHook(vitality, added));
-            return damage(battle, 2);
+            return {state: damage(battle, 2), value: undefined};
         }),
-        hook("B", (battle, _self, event) => { seen.push(["B", event.pending.amount]); return battle; }),
+        hook("B", (battle, {event}) => { seen.push(["B", event.pending.amount]); return {state: battle, value: undefined}; }),
     ]);
     const settled = damage(state);
     assert.deepEqual(seen, [["A", 1], ["A", 2], ["B", 2], ["C", 2], ["B", 1]]);

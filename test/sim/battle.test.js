@@ -1177,7 +1177,7 @@ test('core battle propagates nested settlement errors without publishing battlef
   const effect = {
     id: 'nested-failure-effect', initialize: () => ({}),
     onInstall: (state, context) => {
-      state = resolveDamage(state, { sourceUnitId: 0, targetUnitId: 1, damageType: 'TRUE', operands: createDamageOperands(7), tick: context.tick }, context.call).state;
+      state = resolveDamage(state, { sourceUnitId: 0, targetUnitId: 1, damageType: 'TRUE', operands: createDamageOperands(7), tick: context.tick }).state;
       assert.equal(getUnit(state, 1).vitality.hp, 93);
       assert.equal(getUnit(state, 2).definition.id, 'nested-created');
       assert.equal(state.execution.nextUnitId, 3);

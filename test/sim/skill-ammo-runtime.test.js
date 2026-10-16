@@ -39,17 +39,17 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, windupTicks = 0, o
       if (hideAfterDamage) state = transitionUnit(state, context.unit.id, current => ({
         ...current, vitality: setHook(current.vitality, {
           id: "hide-after-damage", stage: "reaction", priority: 0,
-          enabled: context => context.request.sourceUnitId === context.unit.id,
-          invoke: (state, context, report) => {
-            assert.equal(report.hpLoss, 200);
-            return { state: transitionUnit(state, context.unit.id, current => ({
+          accepts: (_state, context) => context.request.sourceUnitId === context.host.id,
+          invoke: (state, context, current) => {
+            assert.equal(context.report.hpLoss, 200);
+            return { state: transitionUnit(state, context.host.id, current => ({
               ...current, spatialPresence: { present: false },
-            })), value: undefined };
+            })), value: current };
           },
         }),
       }));
       if (interrupt) state = transitionUnit(state, context.unit.id, current => ({ ...current, action: setBeforeReleaseHook(current.action, {
-        id: "ammo-interrupt", enabled: () => true,
+        id: "ammo-interrupt", accepts: () => true,
         invoke: state => ({ state, value: { type: "INTERRUPT", recoveryTicks: 15 } }),
       }) }));
       return state;
@@ -103,7 +103,7 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, windupTicks = 0, o
       return resolveDamage(state, {
         sourceUnitId: context.projectile.source, targetUnitId: context.targetUnitId,
         tick: context.tick, damageType: "TRUE", operands: createDamageOperands(context.projectile.cachedAtk),
-      }, context.call).state;
+      }).state;
     },
   });
   const base = createLegacyCombatSpec({ rows: 1, columns: 8, operators: [], enemies: [], maxTicks: 20, seed: 7 });

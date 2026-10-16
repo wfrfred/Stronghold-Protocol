@@ -2,6 +2,7 @@ import type { Ref } from "../../../../common/ref.js";
 import type { State as BattleState, Result } from "../../../battle/state.js";
 import { assertNonnegativeNumber } from "../../../../common/assert.js";
 import * as units from "../../query.js";
+import * as hooks from "../../hook/hook.js";
 import type { Unit } from "../../unit.js";
 import type { Elemental, Values } from "./capability.js";
 import type { Burst, End } from "./burst.js";
@@ -9,19 +10,11 @@ import type { DamageRequest, HealRequest } from "./operations.js";
 import { damageRejection } from "./query.js";
 
 export interface Receiving {
+    readonly host: Ref<Unit & Elemental>;
     readonly request: DamageRequest;
-    readonly amount: number;
 }
 
-export interface DamageHook {
-    readonly id: string;
-    readonly enabled: (battle: BattleState, self: Unit & Elemental, event: Receiving) => boolean;
-    readonly invoke: (
-        battle: BattleState,
-        self: Unit & Elemental,
-        event: Receiving,
-    ) => Result<number>;
-}
+export type DamageHook = hooks.Hook<Receiving, number>;
 
 export interface Damaged {
     readonly request: DamageRequest;
@@ -48,38 +41,41 @@ export interface Events {
 
 export type Key = keyof Events;
 
-export interface Hook<E> {
-    readonly id: string;
-    readonly enabled: (battle: BattleState, self: Unit & Elemental, event: E) => boolean;
-    readonly invoke: (battle: BattleState, self: Unit & Elemental, event: E) => BattleState;
+export interface Context<E> {
+    readonly host: Ref<Unit & Elemental>;
+    readonly event: E;
 }
+
+export type Hook<E> = hooks.Hook<Context<E>, void>;
 
 export function receive(
     battle: BattleState,
     host: Ref<Unit & Elemental>,
-    event: Receiving,
+    request: DamageRequest,
+    amount: number,
 ): Result<number> {
-    const candidates = units.get(battle, host)?.elemental.receiving.map(({ id }) => id) ?? [];
-    let amount = event.amount;
+    return hooks.dispatch<Receiving, number>(battle, { host, request }, amount, {
+        candidates: (current) =>
+            units.get(current, host)?.elemental.receiving.map(({ id }) => id) ?? [],
+        find: (current, id) => {
+            const entry = units
+                .get(current, host)
+                ?.elemental.receiving.find((candidate) => candidate.id === id);
 
-    for (const id of candidates) {
-        if (damageRejection(battle, host, event.request) !== undefined) {
-            break;
-        }
+            return entry === undefined
+                ? undefined
+                : {
+                      ...entry,
+                      invoke: (state, context, pending) => {
+                          const result = entry.invoke(state, context, pending);
+                          assertNonnegativeNumber(result.value, "pending element damage");
 
-        const current = units.get(battle, host)!;
-        const entry = current.elemental.receiving.find((candidate) => candidate.id === id);
-        const pending = { request: event.request, amount };
-
-        if (entry?.enabled(battle, current, pending)) {
-            const result = entry.invoke(battle, current, pending);
-            assertNonnegativeNumber(result.value, "pending element damage");
-            battle = result.state;
-            amount = result.value;
-        }
-    }
-
-    return { state: battle, value: amount };
+                          return result;
+                      },
+                  };
+        },
+        stop: (current) => damageRejection(current, host, request) !== undefined,
+    });
 }
 
 export function dispatch<K extends Key>(
@@ -88,19 +84,13 @@ export function dispatch<K extends Key>(
     key: K,
     event: Events[K],
 ): BattleState {
-    const initial = units.get(battle, host)?.elemental[key] as
-        readonly Hook<Events[K]>[] | undefined;
-    const candidates = initial?.map(({ id }) => id) ?? [];
+    return hooks.dispatch(battle, { host, event }, undefined, {
+        candidates: (current) => units.get(current, host)?.elemental[key].map(({ id }) => id) ?? [],
+        find: (current, id) => {
+            const entries = units.get(current, host)?.elemental[key] as
+                readonly Hook<Events[K]>[] | undefined;
 
-    for (const id of candidates) {
-        const current = units.get(battle, host);
-        const entries = current?.elemental[key] as readonly Hook<Events[K]>[] | undefined;
-        const entry = entries?.find((candidate) => candidate.id === id);
-
-        if (current !== undefined && entry?.enabled(battle, current, event)) {
-            battle = entry.invoke(battle, current, event);
-        }
-    }
-
-    return battle;
+            return entries?.find((entry) => entry.id === id);
+        },
+    }).state;
 }

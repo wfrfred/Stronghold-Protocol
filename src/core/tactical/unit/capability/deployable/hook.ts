@@ -1,5 +1,3 @@
-import type { State as BattleState } from "../../../battle/state.js";
-import type { BattlefieldView } from "../../../battlefield/contract.js";
 import type { Unit } from "../../unit.js";
 import * as hook from "../../hook/hook.js";
 import type { Deployable, State } from "./capability.js";
@@ -9,7 +7,7 @@ export interface Deployed {
     readonly kind: "MANUAL" | "INITIAL" | "AUTOMATIC" | "MOVE";
 }
 
-export type DeployedHook = hook.Hook<BattleState, BattlefieldView, Deployed, undefined>;
+export type DeployedHook = hook.Hook<Deployed, void>;
 
 export function setHook(state: State, entry: DeployedHook): State {
     const deployedHooks = hook.set(state.deployedHooks, entry);

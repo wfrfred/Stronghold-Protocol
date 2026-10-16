@@ -277,7 +277,7 @@ test('invincibility observes incoming EP damage, permits EP healing and removes 
   const seen = [];
   let work = element(effectFixtureWork(unit()), 'BURN', 0, 200).state;
   work = transitionUnit(work, 1, current => ({ ...current, elemental: setElementalHook(current.elemental, 'received', {
-    id: 'received', enabled: () => true, invoke: (battle, _self, event) => { seen.push(event.request.power); return battle; },
+    id: 'received', invoke: (battle, { event }) => { seen.push(event.request.power); return { state: battle, value: undefined }; },
   }) }));
   const installed = effects.install(work, unitRef(getUnit(work, 1)), invincible);
   const denied = element(installed.state, 'BURN', 0, 100);
@@ -404,7 +404,7 @@ test('elemental runtime: nested burst damage failure publishes neither EP progre
       const target = initialize({ id: 1, position: [1, 0], definition: selected });
       const changed = ({ ...target, vitality: setHook(target.vitality, {
         id: 'elemental-fault', stage: 'reception', priority: 100,
-        enabled: () => true,
+        accepts: () => true,
         invoke: () => { throw new Error('nested burst failed'); },
       }) });
       return { vitality: changed.vitality };

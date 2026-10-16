@@ -106,10 +106,7 @@ export function damage(
 
     const identity: Ref<Unit & Elemental> = units.ref(self);
     const resistance = query.resolveElementResistance(battle, identity)!;
-    const reception = receive(battle, identity, {
-        request,
-        amount: request.power * (1 - resistance / 100),
-    });
+    const reception = receive(battle, identity, request, request.power * (1 - resistance / 100));
     battle = reception.state;
 
     const rejection = query.damageRejection(battle, target, request);

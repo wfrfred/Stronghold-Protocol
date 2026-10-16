@@ -167,8 +167,8 @@ function scenario({ failure = null, cancelled = false } = {}) {
                     id: `receiver:${ref.id}`,
                     stage: "reception",
                     priority: 0,
-                    enabled: (invocation) =>
-                        invocation.unit.effects.values().find(
+                    accepts: (battle, invocation) =>
+                        getUnit(battle, invocation.host.id)?.effects.values().find(
                             (instance) => instance.id === ref.id,
                         )?.status === "ACTIVE",
                     invoke(state, invocation, pending) {
@@ -199,9 +199,8 @@ function scenario({ failure = null, cancelled = false } = {}) {
                                     targetUnitId: ref.host.id,
                                     power: 4,
                                     ignoreHealFree: false,
-                                    tick: invocation.tick,
+                                    tick: invocation.request.tick,
                                 },
-                                invocation.call,
                             ).state;
                         } else {
                             const installed = installEffect(
@@ -212,7 +211,6 @@ function scenario({ failure = null, cancelled = false } = {}) {
                                     source: 0,
                                     scopes: [{ type: "EFFECT", ref }],
                                 },
-                                invocation.call,
                             );
                             assert.ok(installed.value);
                             state = installed.state;
@@ -226,7 +224,6 @@ function scenario({ failure = null, cancelled = false } = {}) {
                         return {
                             state,
                             value: {
-                                value: {
                                     ...pending,
                                     amount:
                                         fault.enabled && failure === "invalid-damage"
@@ -236,7 +233,6 @@ function scenario({ failure = null, cancelled = false } = {}) {
                                         ? { stage: "RECEPTION", reason: "BLOCKED" }
                                         : null,
                                 },
-                            },
                         };
                     },
                 }) }),
@@ -257,7 +253,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
         },
         onTick(state, context) {
             if (context.tick >= 3) {
-                return endEffect(state, context.ref, "AURA_FINISHED", context.call);
+                return endEffect(state, context.ref, "AURA_FINISHED");
             }
             for (const unitId of battlefieldView(state).unitIds) {
                 const self = getEffect(state, context.ref);
@@ -279,8 +275,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                         source: context.ref.host.id,
                         scopes: [{ type: "EFFECT", ref: context.ref }],
                     },
-                    context.call,
-                );
+                                    );
                 state = installed.state;
                 const ref = installed.value;
                 assert.ok(ref);
@@ -316,7 +311,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                     damageType: "TRUE",
                     operands: createDamageOperands(context.projectile.cachedAtk),
                     tick: context.tick,
-                }, context.call);
+                });
             state = damaged.state;
             reports.push(damaged.value);
             state = stopProjectile(
@@ -324,8 +319,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                 projectileRef(context.projectile),
                 context.tick,
                 "EXPLICIT",
-                context.call,
-            );
+                            );
             if (fault.enabled && failure === "late-projectile") {
                 const auraState = getUnit(state, 0).effects.values().find(
                     (instance) => instance.definition === aura,

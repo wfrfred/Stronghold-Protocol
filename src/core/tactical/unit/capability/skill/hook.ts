@@ -1,6 +1,7 @@
 import type { Ref } from "../../../../common/ref.js";
 import type { State as BattleState } from "../../../battle/state.js";
 import * as units from "../../query.js";
+import * as hooks from "../../hook/hook.js";
 import type { Unit } from "../../unit.js";
 import type { Activation, End } from "./activation.js";
 import type { Consumed, Replenished } from "./ammo.js";
@@ -19,11 +20,12 @@ export interface Events {
 
 export type Key = keyof Events;
 
-export interface Hook<E> {
-    readonly id: string;
-    readonly enabled: (battle: BattleState, self: Unit & Skill, event: E) => boolean;
-    readonly invoke: (battle: BattleState, self: Unit & Skill, event: E) => BattleState;
+export interface Context<E> {
+    readonly host: Ref<Unit & Skill>;
+    readonly event: E;
 }
+
+export type Hook<E> = hooks.Hook<Context<E>, void>;
 
 export function dispatch<K extends Key>(
     battle: BattleState,
@@ -31,19 +33,13 @@ export function dispatch<K extends Key>(
     key: K,
     event: Events[K],
 ): BattleState {
-    const unit = units.get(battle, host);
-    const entries = unit?.skill[key] as readonly Hook<Events[K]>[] | undefined;
-    const candidates = entries?.map(({ id }) => id) ?? [];
+    return hooks.dispatch(battle, { host, event }, undefined, {
+        candidates: (current) => units.get(current, host)?.skill[key].map(({ id }) => id) ?? [],
+        find: (current, id) => {
+            const entries = units.get(current, host)?.skill[key] as
+                readonly Hook<Events[K]>[] | undefined;
 
-    for (const id of candidates) {
-        const current = units.get(battle, host);
-        const registered = current?.skill[key] as readonly Hook<Events[K]>[] | undefined;
-        const candidate = registered?.find((entry) => entry.id === id);
-
-        if (current !== undefined && candidate?.enabled(battle, current, event)) {
-            battle = candidate.invoke(battle, current, event);
-        }
-    }
-
-    return battle;
+            return entries?.find((entry) => entry.id === id);
+        },
+    }).state;
 }

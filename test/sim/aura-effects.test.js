@@ -82,7 +82,7 @@ test("ordinary end policies decide each receiver against current state", () => {
         onEnd(state, ctx) {
             trace.push(["end", ctx.ref.host.id]);
             return ctx.ref.host.id === 1
-                ? effects.install(state, unitRef(getUnit(state, 2)), marker, {}, ctx.call).state
+                ? effects.install(state, unitRef(getUnit(state, 2)), marker, {}).state
                 : state;
         },
     });
@@ -97,7 +97,6 @@ test("ordinary end policies decide each receiver against current state", () => {
                         unitRef(getUnit(state, unitId)),
                         receiver,
                         {},
-                        ctx.call,
                     );
                     state = installed.state;
                     state = effects.replaceEffect(
@@ -117,7 +116,7 @@ test("ordinary end policies decide each receiver against current state", () => {
                         (value) => value.definition === marker,
                     );
                     trace.push(["decide", binding.unitId, keep]);
-                    if (!keep) state = effects.end(state, binding.ref, "EXPLICIT", ctx.call);
+                    if (!keep) state = effects.end(state, binding.ref, "EXPLICIT");
                 }
                 return state;
             },
@@ -194,7 +193,7 @@ test("nested installation can disable an aura before later receivers enter", () 
     const receiver = attackEffect("nested-stop", {
         onInstall(state, ctx) {
             starts.push(ctx.ref.host.id);
-            return effects.setEnabled(state, ctx.self.scopes[0].ref, false, ctx.call);
+            return effects.setEnabled(state, ctx.self.scopes[0].ref, false);
         },
     });
     let battle = effectFixtureWork(auraUnit(0), auraUnit(1), auraUnit(2));
@@ -211,7 +210,7 @@ test("nested child installation ending the aura does not revive parent or child"
     const receiver = attackEffect("nested-end", {
         onInstall(state, ctx) {
             starts.push(ctx.ref.host.id);
-            return effects.end(state, ctx.self.scopes[0].ref, "EXPLICIT", ctx.call);
+            return effects.end(state, ctx.self.scopes[0].ref, "EXPLICIT");
         },
     });
     let battle = effectFixtureWork(auraUnit(0), auraUnit(1), auraUnit(2));

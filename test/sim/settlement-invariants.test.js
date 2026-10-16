@@ -41,10 +41,10 @@ test("settlement invariants: invalid final damage preserves its input despite pr
                         ...current,
                         uses: current.uses + 1,
                     }));
-                    state = resolveHealing(state, healingRequest(10), context.call).state;
+                    state = resolveHealing(state, healingRequest(10)).state;
                     return {
                         state,
-                        value: { value: { ...pending, amount: malformed ? invalid : 30 } },
+                        value: { ...pending, amount: malformed ? invalid : 30 },
                     };
                 },
             },
@@ -88,10 +88,10 @@ test("settlement invariants: invalid final healing preserves its input despite p
                         ...current,
                         uses: current.uses + 1,
                     }));
-                    state = resolveDamage(state, damageRequest(10), context.call).state;
+                    state = resolveDamage(state, damageRequest(10)).state;
                     return {
                         state,
-                        value: { value: { ...pending, amount: malformed ? invalid : 30 } },
+                        value: { ...pending, amount: malformed ? invalid : 30 },
                     };
                 },
             },
@@ -134,9 +134,7 @@ test("settlement invariants: cancelled damage cannot publish nonfinite formula o
                     invoke(state, _context, _self, value) {
                         return {
                             state,
-                            value: {
-                                value:
-                                    stage === "sourceFormula"
+                            value: stage === "sourceFormula"
                                         ? { ...value, power: invalid }
                                         : {
                                               ...value,
@@ -146,7 +144,6 @@ test("settlement invariants: cancelled damage cannot publish nonfinite formula o
                                                   reason: "BLOCKED",
                                               },
                                           },
-                            },
                         };
                     },
                 },
@@ -164,7 +161,7 @@ test("settlement invariants: cancelled damage cannot publish nonfinite formula o
                     stage: "reception",
                     invoke(state, _context, _self, pending) {
                         repaired = true;
-                        return { state, value: { value: { ...pending, amount: 0 } } };
+                        return { state, value: { ...pending, amount: 0 } };
                     },
                 },
             ]);
@@ -187,7 +184,7 @@ test("settlement invariants: signed intermediate modifiers can resolve to valid 
         {
             stage: "output",
             invoke(state, _context, _self, pending) {
-                return { state, value: { value: { ...pending, amount: -40 } } };
+                return { state, value: { ...pending, amount: -40 } };
             },
         },
     ]);
@@ -197,7 +194,7 @@ test("settlement invariants: signed intermediate modifiers can resolve to valid 
                 stage: "reception",
                 priority,
                 invoke(state, _context, _self, pending) {
-                    return { state, value: { value: { ...pending, amount } } };
+                    return { state, value: { ...pending, amount } };
                 },
             },
         ]);
@@ -249,9 +246,7 @@ test("settlement invariants: cancelled healing rejects a nonfinite final hook am
             invoke(state, _context, _self, pending) {
                 return {
                     state,
-                    value: {
-                        value: { ...pending, amount: NaN, cancellation: { reason: "BLOCKED" } },
-                    },
+                    value: { ...pending, amount: NaN, cancellation: { reason: "BLOCKED" } },
                 };
             },
         },

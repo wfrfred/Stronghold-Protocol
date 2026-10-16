@@ -65,7 +65,7 @@ export function auraEffect(
                 bindings: current.bindings.filter((item) => item !== binding),
             }));
             for (const ref of binding.refs)
-                state = effects.end(state, ref, "AURA_LEFT", context.call);
+                state = effects.end(state, ref, "AURA_LEFT");
         }
         for (const unitId of selected) {
             self = selfOf(state, context);
@@ -92,7 +92,6 @@ export function auraEffect(
                     scopes: bindLifetime ? [{ type: "EFFECT", ref: context.ref }] : [],
                     ...(value === undefined ? {} : { data: value }),
                 },
-                context.call,
             );
             state = installed.state;
             const ref = installed.value;
@@ -105,7 +104,7 @@ export function auraEffect(
                 ),
             }));
             if (self.status !== "ACTIVE")
-                state = effects.setEnabled(state, ref, false, context.call);
+                state = effects.setEnabled(state, ref, false);
         }
         return state;
     };
@@ -128,7 +127,7 @@ export function auraEffect(
                 if (self?.status !== "ACTIVE") return state;
                 for (const binding of self.data.bindings) {
                     for (const ref of binding.refs)
-                        state = effects.setEnabled(state, ref, true, context.call);
+                        state = effects.setEnabled(state, ref, true);
                 }
                 return state;
             },
@@ -136,7 +135,7 @@ export function auraEffect(
                 if (context.self.status === "ENDING") return state;
                 for (const binding of context.self.data.bindings) {
                     for (const ref of binding.refs)
-                        state = effects.setEnabled(state, ref, false, context.call);
+                        state = effects.setEnabled(state, ref, false);
                 }
                 return state;
             },

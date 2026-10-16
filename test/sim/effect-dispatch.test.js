@@ -20,11 +20,11 @@ import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality
 import { resolveHealing } from "../../dist/core/tactical/unit/capability/vitality/healing/settlement.js";
 
 function damageHook(id, stage, invoke, priority = 0, enabled = () => true) {
-    return { id, stage, priority, enabled, invoke };
+    return { id, stage, priority, accepts: enabled, invoke };
 }
 
 function healingHook(id, stage, invoke, priority = 0, enabled = () => true) {
-    return { id, stage, priority, enabled, invoke };
+    return { id, stage, priority, accepts: enabled, invoke };
 }
 
 const healRequest = (power = 10, overrides = {}) => ({
@@ -48,9 +48,8 @@ test("hook dispatch checks each Effect against its current status immediately be
                     state,
                     { host: { id: 2 }, id: 1 },
                     enableSecond,
-                    context.call,
                 );
-                return { state, value: { value: pending } };
+                return { state, value: pending };
             },
         },
     ]);
@@ -59,7 +58,7 @@ test("hook dispatch checks each Effect against its current status immediately be
             stage: "reception",
             invoke(state, _context, _self, pending) {
                 calls.push("second");
-                return { state, value: { value: pending } };
+                return { state, value: pending };
             },
         },
     ]);
@@ -86,9 +85,8 @@ test("finishing a pending Effect removes its Hook before that candidate can exec
                     state,
                     { host: { id: 2 }, id: 1 },
                     "EXPLICIT",
-                    context.call,
                 );
-                return { state, value: { value: pending } };
+                return { state, value: pending };
             },
         },
     ]);
@@ -100,7 +98,7 @@ test("finishing a pending Effect removes its Hook before that candidate can exec
                 stage: "reception",
                 invoke(state, _context, _self, pending) {
                     calls.push("second");
-                    return { state, value: { value: pending } };
+                    return { state, value: pending };
                 },
             },
         ],
@@ -118,18 +116,18 @@ test("finishing a pending Effect removes its Hook before that candidate can exec
     assert.equal(getUnit(battle, 2).vitality.damageHooks.length, 1);
 });
 
-test("selected Hook IDs use current replacements while nested damage retains the existing call candidate range", () => {
+test("selected Hook IDs use current replacements while nested damage independently selects the latest candidates", () => {
     const calls = [];
 
     let nested = false;
     let changed = false;
     const replacement = damageHook("second", "sourceFormula", (state, _context, input) => {
         calls.push("replacement");
-        return { state, value: { value: { ...input, power: input.power * 2 } } };
+        return { state, value: { ...input, power: input.power * 2 } };
     });
     const added = damageHook("third", "sourceFormula", (state, _context, input) => {
         calls.push("added");
-        return { state, value: { value: { ...input, power: input.power * 3 } } };
+        return { state, value: { ...input, power: input.power * 3 } };
     });
     const first = damageHook(
         "first",
@@ -142,25 +140,25 @@ test("selected Hook IDs use current replacements while nested damage retains the
                     ({ ...value, vitality: damage.setHook(damage.setHook(damage.removeHook(value.vitality, "second"), replacement), added) }),
                 );
                 nested = true;
-                state = resolveDamage(state, request(10), context.call).state;
+                state = resolveDamage(state, request(10)).state;
                 nested = false;
             }
-            return { state, value: { value: input } };
+            return { state, value: input };
         },
         10,
     );
     const old = damageHook("second", "sourceFormula", (state, _context, input) => {
         calls.push("removed");
-        return { state, value: { value: input } };
+        return { state, value: input };
     });
     const source = ({ ...unit(1, { hp: 1000 }), vitality: damage.setHook(damage.setHook(unit(1, { hp: 1000 }).vitality, first), old) });
     let battle = workFor(source, unit(2, { hp: 1000 }));
     const initialSettlement = resolveDamage(battle, request(100));
     battle = initialSettlement.state;
     const initial = initialSettlement.value;
-    assert.deepEqual(calls, ["first", "nested-first", "replacement", "replacement"]);
+    assert.deepEqual(calls, ["first", "nested-first", "replacement", "added", "replacement"]);
     assert.equal(initial.hpLoss, 200);
-    assert.equal(getUnit(battle, 2).vitality.hp, 780);
+    assert.equal(getUnit(battle, 2).vitality.hp, 740);
     assert.deepEqual(source.vitality.damageHooks, [first, old]);
     calls.length = 0;
     const later = resolveDamage(battle, request(100));
@@ -169,17 +167,17 @@ test("selected Hook IDs use current replacements while nested damage retains the
     assert.deepEqual(calls, ["first", "replacement", "added"]);
 });
 
-test("damage and healing share the active receiver candidates across direct nested operations", () => {
+test("nested healing independently selects its latest receiver candidates", () => {
     const calls = [];
 
     let changed = false;
     const originalHealing = healingHook("original", "reception", (state, _context, pending) => {
         calls.push("original-healing");
-        return { state, value: { value: pending } };
+        return { state, value: pending };
     });
     const newHealing = healingHook("new", "reception", (state, _context, pending) => {
         calls.push("new-healing");
-        return { state, value: { value: pending } };
+        return { state, value: pending };
     });
     const first = damageHook("damage", "reception", (state, context, pending) => {
         calls.push("damage");
@@ -188,43 +186,43 @@ test("damage and healing share the active receiver candidates across direct nest
             state = transitionUnit(state, 2, (value) =>
                 ({ ...value, vitality: healing.setHook(healing.removeHook(value.vitality, "original"), newHealing) }),
             );
-            state = resolveHealing(state, healRequest(), context.call).state;
+            state = resolveHealing(state, healRequest()).state;
         }
-        return { state, value: { value: pending } };
+        return { state, value: pending };
     });
     const receiver = ({ ...unit(2, { hp: 500, maxHp: 1000 }), vitality: healing.setHook(damage.setHook(unit(2, { hp: 500, maxHp: 1000 }).vitality, first), originalHealing) });
     let battle = workFor(unit(1), receiver);
     battle = resolveDamage(battle, request(100)).state;
-    assert.deepEqual(calls, ["damage"]);
+    assert.deepEqual(calls, ["damage", "new-healing"]);
     assert.equal(getUnit(battle, 2).vitality.hp, 410);
     battle = resolveHealing(battle, healRequest()).state;
-    assert.deepEqual(calls, ["damage", "new-healing"]);
+    assert.deepEqual(calls, ["damage", "new-healing", "new-healing"]);
     assert.equal(getUnit(battle, 2).vitality.hp, 420);
 });
 
-test("nested damage shares a healing receiver enumeration without admitting newly registered damage hooks", () => {
+test("nested damage admits hooks registered before its own dispatch", () => {
     const calls = [];
 
     let changed = false;
     const late = damageHook("late", "reception", (state, _context, pending) => {
         calls.push("late-damage");
-        return { state, value: { value: pending } };
+        return { state, value: pending };
     });
     const first = healingHook("healing", "reception", (state, context, pending) => {
         calls.push("healing");
         if (!changed) {
             changed = true;
             state = transitionUnit(state, 2, (value) => ({ ...value, vitality: damage.setHook(value.vitality, late) }));
-            state = resolveDamage(state, request(10), context.call).state;
+            state = resolveDamage(state, request(10)).state;
         }
-        return { state, value: { value: pending } };
+        return { state, value: pending };
     });
     let battle = workFor(unit(1), ({ ...unit(2, { hp: 500, maxHp: 1000 }), vitality: healing.setHook(unit(2, { hp: 500, maxHp: 1000 }).vitality, first) }));
     battle = resolveHealing(battle, healRequest(20)).state;
-    assert.deepEqual(calls, ["healing"]);
+    assert.deepEqual(calls, ["healing", "late-damage"]);
     assert.equal(getUnit(battle, 2).vitality.hp, 510);
     battle = resolveDamage(battle, request(10)).state;
-    assert.deepEqual(calls, ["healing", "late-damage"]);
+    assert.deepEqual(calls, ["healing", "late-damage", "late-damage"]);
 });
 
 test("cancellation and stopping this Hook stage are separate decisions", () => {
@@ -237,22 +235,19 @@ test("cancellation and stopping this Hook stage are separate decisions", () => {
                 calls.push("cancel");
                 return {
                     state,
-                    value: {
-                        value: {
+                    value: { ...({
                             ...pending,
                             cancellation: { stage: "RECEPTION", reason: "BLOCKED" },
-                        },
-                        stopDispatch,
-                    },
+                        }), stopDispatch },
                 };
             },
             10,
         );
         const after = damageHook("after", "reception", (state, _context, pending) => {
             calls.push(pending.cancellation.reason);
-            return { state, value: { value: pending } };
+            return { state, value: pending };
         });
-        const react = damageHook("reaction", "reaction", (state, _context, report) => {
+        const react = damageHook("reaction", "reaction", (state, {report}, current) => {
             calls.push(`reaction:${report.hpLoss}`);
 
             return { state, value: {} };
@@ -305,12 +300,11 @@ test("nested operations read already changed Effect state and inherit the enclos
                     state = setSelf(state, context, self, { ready: false });
                     state = resolveHealing(
                         state,
-                        { sourceUnitId: 1, targetUnitId: 2, power: 10, tick: context.tick },
-                        context.call,
-                    ).state;
-                    state = resolveDamage(state, request(5, { tick: context.tick }), context.call).state;
+                        { sourceUnitId: 1, targetUnitId: 2, power: 10, tick: context.request.tick },
+                        ).state;
+                    state = resolveDamage(state, request(5, { tick: context.request.tick })).state;
                 }
-                return { state, value: { value: pending } };
+                return { state, value: pending };
             },
         },
     ]);
@@ -336,7 +330,7 @@ test("invincibility cancels reception while allowing ordinary observation and re
             stage: "reception",
             invoke(state, _context, _self, pending) {
                 calls.push(pending.cancellation.reason);
-                return { state, value: { value: pending } };
+                return { state, value: pending };
             },
         },
         {
@@ -361,11 +355,11 @@ test("skipping modifier events selects the dedicated reception stage and suppres
     const calls = [];
     let target = ({ ...unit(2), vitality: damage.setHook(unit(2).vitality, damageHook("ordinary", "reception", (state, _context, value) => {
             calls.push("ordinary");
-            return { state, value: { value } };
+            return { state, value };
         })) });
     target = ({ ...target, vitality: damage.setHook(target.vitality, damageHook("skipped", "skippedReception", (state, _context, value) => {
             calls.push("skipped");
-            return { state, value: { value: { ...value, amount: value.amount / 2 } } };
+            return { state, value: { ...value, amount: value.amount / 2 } };
         })) });
     target = ({ ...target, vitality: damage.setHook(target.vitality, damageHook("reaction", "reaction", (state) => {
             calls.push("reaction");
@@ -389,7 +383,7 @@ test("healing hooks resolve output and reception before notifying each participa
             stage: "output",
             invoke(state, _context, _self, pending) {
                 calls.push("output");
-                return { state, value: { value: { ...pending, amount: pending.amount * 2 } } };
+                return { state, value: { ...pending, amount: pending.amount * 2 } };
             },
         },
         {
@@ -406,7 +400,7 @@ test("healing hooks resolve output and reception before notifying each participa
             stage: "reception",
             invoke(state, _context, _self, pending) {
                 calls.push("reception");
-                return { state, value: { value: { ...pending, amount: pending.amount + 5 } } };
+                return { state, value: { ...pending, amount: pending.amount + 5 } };
             },
         },
         {
@@ -437,7 +431,7 @@ test("healing cancellation stays visible to reception and reaction while ignoreH
             stage: "reception",
             invoke(state, _context, _self, pending) {
                 calls.push(pending.cancellation?.reason ?? "accepted");
-                return { state, value: { value: pending } };
+                return { state, value: pending };
             },
         },
         {
@@ -464,15 +458,15 @@ test("healing uses the dedicated skipped stage and suppresses output and reactio
     const calls = [];
     const source = ({ ...unit(1), vitality: healing.setHook(unit(1).vitality, healingHook("output", "output", (state, _context, value) => {
             calls.push("output");
-            return { state, value: { value: { ...value, amount: value.amount * 2 } } };
+            return { state, value: { ...value, amount: value.amount * 2 } };
         })) });
     let target = ({ ...unit(2, { hp: 500, maxHp: 1000 }), vitality: healing.setHook(unit(2, { hp: 500, maxHp: 1000 }).vitality, healingHook("ordinary", "reception", (state, _context, value) => {
             calls.push("ordinary");
-            return { state, value: { value } };
+            return { state, value };
         })) });
     target = ({ ...target, vitality: healing.setHook(target.vitality, healingHook("skipped", "skippedReception", (state, _context, value) => {
             calls.push("skipped");
-            return { state, value: { value: { ...value, amount: value.amount / 2 } } };
+            return { state, value: { ...value, amount: value.amount / 2 } };
         })) });
     target = ({ ...target, vitality: healing.setHook(target.vitality, healingHook("reaction", "reaction", (state) => {
             calls.push("reaction");

@@ -33,7 +33,7 @@ function program({ id = 'shell', cachedOnly = false, acceptsContact, contact, st
     contact: contact ?? ((state, context) => resolveDamage(state, {
       sourceUnitId: context.projectile.source, targetUnitId: context.targetUnitId, tick: context.tick,
       damageType: 'TRUE', operands: createDamageOperands(cachedOnly ? context.projectile.cachedAtk : resolveProjectileAttackPower(state, context.projectile)),
-    }, context.call).state),
+    }).state),
     ...(stop === undefined ? {} : { stop }),
   });
 }
@@ -101,10 +101,10 @@ test('projectile runtime: frozen candidate identities read latest eligibility an
     contact: (state, context) => {
       observed.push(context.targetUnitId);
       if (context.targetUnitId === 1) {
-        state = resolveDamage(state, { sourceUnitId: 0, targetUnitId: 2, tick: 1, damageType: 'TRUE', operands: createDamageOperands(1) }, context.call).state;
+        state = resolveDamage(state, { sourceUnitId: 0, targetUnitId: 2, tick: 1, damageType: 'TRUE', operands: createDamageOperands(1) }).state;
         state = registerUnit(state, { ...unit(3), position: [1, 0] });
       }
-      return resolveDamage(state, { sourceUnitId: 0, targetUnitId: context.targetUnitId, tick: 1, damageType: 'TRUE', operands: createDamageOperands(10) }, context.call).state;
+      return resolveDamage(state, { sourceUnitId: 0, targetUnitId: context.targetUnitId, tick: 1, damageType: 'TRUE', operands: createDamageOperands(10) }).state;
     },
   });
   const initial = launch(battle(unit(0), unit(1), { ...unit(2), position: [1.2, 0] }), shell).state;
@@ -148,7 +148,7 @@ test('projectile runtime: hit history is published before contact and synchronou
   const shell = program({
     contact: (state, context) => {
       assert.deepEqual(getProjectile(state, ref(context.projectile)).hitUnitIds, [1]);
-      state = stopProjectile(state, ref(context.projectile), context.tick, 'EXPLICIT', context.call);
+      state = stopProjectile(state, ref(context.projectile), context.tick, 'EXPLICIT');
       observed.push(['successor', getProjectile(state, ref(context.projectile))]);
       return state;
     },
@@ -178,7 +178,7 @@ test('projectile runtime: immutable copies replay arrival and stop without mutat
 test('projectile runtime: a stop callback exception exposes no partial result or input mutation', () => {
 
   const shell = program({ stop: (state, context) => {
-    state = resolveDamage(state, { sourceUnitId: 0, targetUnitId: 1, tick: context.tick, damageType: 'TRUE', operands: createDamageOperands(10) }, context.call).state;
+    state = resolveDamage(state, { sourceUnitId: 0, targetUnitId: 1, tick: context.tick, damageType: 'TRUE', operands: createDamageOperands(10) }).state;
     throw new Error('stop failed');
   } });
   const initial = launch(battle(unit(0), unit(1)), shell).state;
@@ -347,7 +347,7 @@ test('projectile runtime: command stop callbacks see same-tick launches and a fa
     const observed = [];
     const shell = program({ stop: (state, context) => {
       observed.push([context.projectile.id, getUnit(state, 1).vitality.hp, findProjectile(state, 3)?.progress.type]);
-      state = resolveDamage(state, { sourceUnitId: 0, targetUnitId: 1, tick: context.tick, damageType: 'TRUE', operands: createDamageOperands(1) }, context.call).state;
+      state = resolveDamage(state, { sourceUnitId: 0, targetUnitId: 1, tick: context.tick, damageType: 'TRUE', operands: createDamageOperands(1) }).state;
       if (failing && context.projectile.id === 1) throw new Error('second stop failed');
       return state;
     } });
@@ -388,7 +388,7 @@ test('projectile callbacks: nested launches and peer stops survive the outer sto
       observations.push(context.projectile.id);
       if (context.projectile.id !== 0) return state;
       const launched = launchProjectile(state, child, input, context.tick);
-      return stopProjectile(launched.state, ref(findProjectile(launched.state, 1)), context.tick, 'EXPLICIT', context.call);
+      return stopProjectile(launched.state, ref(findProjectile(launched.state, 1)), context.tick, 'EXPLICIT');
     },
   });
   const first = launchProjectile(battle(), parent, input, 0);

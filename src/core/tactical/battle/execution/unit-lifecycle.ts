@@ -16,7 +16,6 @@ import {
     updateUnit,
     type State as BattleState,
 } from "../state.js";
-import { emptyCall, type CallContext } from "./call.js";
 import { refundUnit, recycleUnitCard } from "../deployment/deployment.js";
 
 export function enterUnits(state: BattleState, unitIds: readonly Id[]): BattleState {
@@ -50,19 +49,14 @@ export function advanceUnits(battle: BattleState): BattleState {
     return battle;
 }
 
-export function retireCombatUnit(
-    state: BattleState,
-    unitId: Id,
-    call: CallContext = emptyCall,
-): BattleState {
-    return removeUnitWithEffects(state, unitId, "DEATH", call);
+export function retireCombatUnit(state: BattleState, unitId: Id): BattleState {
+    return removeUnitWithEffects(state, unitId, "DEATH");
 }
 
 export function removeUnitWithEffects(
     state: BattleState,
     unitId: Id,
     reason: BattlefieldRemovalReason,
-    call: CallContext = emptyCall,
 ): BattleState {
     const lifetime = { type: "UNIT" as const, unitId };
     const unit = getUnit(state, unitId);
@@ -90,7 +84,7 @@ export function removeUnitWithEffects(
         state = cancelBurst(state, burstRef(elementalHost.elemental.burst), reason);
     }
 
-    state = closeLifetime(state, lifetime, reason, call);
+    state = closeLifetime(state, lifetime, reason);
 
     state = removeUnit(state, unitId, reason);
     state = recycleUnitCard(state, unit, reason, state.tick);
