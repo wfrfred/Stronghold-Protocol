@@ -316,6 +316,30 @@ test("blocking volume: independent Effect contributions release targets and clea
     assert.deepEqual(original.units.get(1).blockable.volume, []);
 });
 
+test("blocking volume: zero and negative modifiers still consume one capacity while Rules control eligibility", () => {
+    const h = battlefield([blocker(1), enemy(1, 2)]);
+    assert.deepEqual(h.blocked(), []);
+    for (const value of [modifier.create({ finalScaler: 0 }), modifier.create({ addition: -10 })]) {
+        const unit = h.state.units.get(1);
+        h.commit([{ type: "UPDATE_UNIT", unit: {
+            ...unit, blockable: setVolumeContribution(unit.blockable, entry("reduced", value)),
+        } }]);
+        const current = h.state.units.get(1);
+        assert.equal(resolveVolume(current.definition.blockable, current.blockable), 1);
+        assert.equal(canBeBlocked(current), true);
+        assert.deepEqual(h.blocked(), [1]);
+        assert.equal(battlefieldView(h.work()).blockingUsedCapacity(0), 1);
+    }
+    h.commit([{ type: "REGISTER_UNIT", unit: enemy(2) }]);
+    assert.deepEqual(h.blocked(), [1]);
+    const unit = h.state.units.get(1);
+    h.commit([{ type: "UPDATE_UNIT", unit: {
+        ...unit, blockable: setRule(unit.blockable, { id: "unblockable", allows: () => false }),
+    } }]);
+    assert.equal(canBeBlocked(h.state.units.get(1)), false);
+    assert.deepEqual(h.blocked(), [2]);
+});
+
 test("blocking eligibility: overlapping rules release and reacquire targets independently of volume", () => {
     const h = battlefield([blocker(), enemy(1), enemy(2)]);
     const original = h.state.units.get(1);

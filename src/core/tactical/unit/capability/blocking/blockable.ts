@@ -66,7 +66,7 @@ export function removeVolumeContribution(state: State, id: string): State {
 
 export function resolveVolume(definition: Definition, state: State): number {
     const value = Math.max(
-        0,
+        1,
         modifier.apply(definition.volume, contribution.resolve(state.volume)),
     );
     const lower = Math.floor(value);
