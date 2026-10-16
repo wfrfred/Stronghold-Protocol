@@ -4,7 +4,7 @@ import * as vitality from "../../../core/tactical/unit/capability/vitality/capab
 import * as elemental from "../../../core/tactical/unit/capability/elemental/capability.js";
 import * as targetable from "../../../core/tactical/unit/capability/targetable/capability.js";
 
-export const invincible: Definition<object> = {
+export const invincible: Definition<object, targetable.Targetable> = {
     id: "protection/invincible",
     initialize: () => ({}),
     onEnable(state, { unit, self }) {
@@ -12,14 +12,10 @@ export const invincible: Definition<object> = {
 
         return updateUnit(state, {
             ...unit,
-            targetable: targetable.setRule(
-                targetable.hasTargetable(unit) ? unit.targetable : targetable.initialize(),
-                {
-                    id,
-                    allows: ({ selector }) =>
-                        selector.type !== "DAMAGE" || selector.ignoreTargetFree,
-                },
-            ),
+            targetable: targetable.setRule(unit.targetable, {
+                id,
+                allows: ({ selector }) => selector.type !== "DAMAGE" || selector.ignoreTargetFree,
+            }),
             ...(elemental.hasElemental(unit)
                 ? {
                       elemental: elemental.setRule(unit.elemental, {
@@ -46,9 +42,7 @@ export const invincible: Definition<object> = {
 
         return updateUnit(state, {
             ...unit,
-            ...(targetable.hasTargetable(unit)
-                ? { targetable: targetable.removeRule(unit.targetable, id) }
-                : {}),
+            targetable: targetable.removeRule(unit.targetable, id),
             ...(elemental.hasElemental(unit)
                 ? { elemental: elemental.removeRule(unit.elemental, id) }
                 : {}),

@@ -89,11 +89,10 @@ test("sequential predefined commands allocate after all earlier callback results
         initialize: () => ({}),
         onEnd(state, context) {
             const created = instantiateUnitPlacement(
+                state,
                 { definition: { id: "callback-child" }, position: [1, 0] },
-                state.execution,
-                context.tick,
             );
-            return advanceBattlefield({ ...state, execution: created.execution }, created.changes);
+            return advanceBattlefield(created.state, created.value.changes);
         },
     }).state;
     const before = state;

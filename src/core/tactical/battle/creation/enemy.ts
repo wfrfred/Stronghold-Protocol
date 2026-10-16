@@ -1,6 +1,5 @@
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
-import { createRng, type Seed } from "../../../common/rng.js";
-import type { NavigationRequestId } from "../../battlefield/navigation/request.js";
+import { createRng } from "../../../common/rng.js";
 import type { RouteDefinition } from "../../unit/capability/locomotion/route/definition.js";
 import { createRouteExecution } from "../../unit/capability/locomotion/route/execution.js";
 import { initializeRouteSpawn } from "../../unit/capability/locomotion/route/spawn.js";
@@ -13,33 +12,34 @@ import { createRoutedLocomotionState } from "../../unit/capability/locomotion/ca
 import type { Definition, RoutedEnemy } from "../../unit/archetype/enemy.js";
 import type { Id } from "../../unit/unit.js";
 import { initialize } from "../../unit/initialize.js";
+import type { Result, State as BattleState } from "../state.js";
 
 export interface RoutedEnemySpawn<D extends Definition = Definition> {
     readonly id: Id;
-    readonly tick: number;
     readonly definition: D;
     readonly route: RouteDefinition;
     readonly timing: RouteTiming;
     readonly alwaysCheckCurrentPoint: boolean;
-    readonly rngState: Seed;
-    readonly nextNavigationRequestId: NavigationRequestId;
 }
 
 export interface RoutedEnemyInitialization<D extends Definition = Definition> {
     readonly enemy: RoutedEnemy<D>;
     readonly signals: readonly LocatedRouteSignal[];
-    readonly rngState: Seed;
-    readonly nextNavigationRequestId: NavigationRequestId;
 }
 
 export function initializeRoutedEnemy<D extends Definition>(
+    battle: BattleState,
     spawn: RoutedEnemySpawn<D>,
-): RoutedEnemyInitialization<D> {
+): Result<RoutedEnemyInitialization<D>> {
     assertNonnegativeSafeInteger(spawn.id, "enemy id");
 
-    const rng = createRng(spawn.rngState);
+    const rng = createRng(battle.execution.rngState);
     const location = initializeRouteSpawn(spawn.route, rng);
-    const execution = createRouteExecution(rng, spawn.nextNavigationRequestId, spawn.tick);
+    const execution = createRouteExecution(
+        rng,
+        battle.execution.nextNavigationRequestId,
+        battle.tick,
+    );
     const initial = initializeRouteControl(
         spawn.route,
         spawn.timing,
@@ -49,21 +49,20 @@ export function initializeRoutedEnemy<D extends Definition>(
         execution,
     );
 
-    const states = {
-        spatialPresence: { present: initial.present },
-        locomotion: createRoutedLocomotionState(initial.control),
-    };
-    const enemy = initialize<Definition, typeof states>({
+    battle = { ...battle, execution: { ...battle.execution, ...execution.state() } };
+    const initialized = initialize(battle, {
         id: spawn.id,
         definition: spawn.definition,
         position: initial.position,
-        tick: spawn.tick,
-        states,
     });
+    const enemy = {
+        ...initialized.value,
+        spatialPresence: { present: initial.present },
+        locomotion: createRoutedLocomotionState(initialized.value.locomotion, initial.control),
+    };
 
     return {
-        enemy: enemy as RoutedEnemy<D>,
-        signals: initial.signals,
-        ...execution.state(),
+        state: initialized.state,
+        value: { enemy, signals: initial.signals },
     };
 }

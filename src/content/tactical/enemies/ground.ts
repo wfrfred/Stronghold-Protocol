@@ -1,4 +1,5 @@
 import type { Definition as ElementalDefinition } from "../../../core/tactical/unit/capability/elemental/capability.js";
+import type { Definition as TargetableDefinition } from "../../../core/tactical/unit/capability/targetable/capability.js";
 import { createArknightsElementalDefinition } from "../../../data/arknights/elemental.js";
 import { getUnit, updateUnit } from "../../../core/tactical/battle/state.js";
 import { ref as unitRef } from "../../../core/tactical/unit/query.js";
@@ -27,6 +28,7 @@ export interface AttackTiming {
 
 export interface Definition extends CombatDefinition {
     readonly elemental: ElementalDefinition;
+    readonly targetable: TargetableDefinition;
     readonly offense: OffenseDefinition;
     readonly attack: Attack;
 }
@@ -118,6 +120,7 @@ export function createDefinition(
             action: { definitions: Definitions.empty().add(attack) },
         }),
         elemental,
+        targetable: {},
         offense: { attack: profile.attack },
         attack,
     };

@@ -1,11 +1,7 @@
 import { evaluateDeployment } from "../../battlefield/deployment/query.js";
 import type { SupportRelation } from "../../battlefield/support/relations.js";
 import { Tile, type TilePosition } from "../../geometry/coordinate.js";
-import {
-    hasDeployable,
-    initialize as initializeDeployable,
-    type Deployable,
-} from "../../unit/capability/deployable/capability.js";
+import { hasDeployable, type Deployable } from "../../unit/capability/deployable/capability.js";
 import { hasDefinition as hasTileBindingDefinition } from "../../unit/capability/tile-binding/capability.js";
 import { hasOccupancy, type Occupancy } from "../../unit/capability/occupancy/capability.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";
@@ -124,56 +120,54 @@ export function deploy(state: BattleState, request: DeployRequest): Result<Deplo
         return reject(decision.reason);
     }
 
-    const deployable = {
-        ...initializeDeployable(definition.deployable),
-        cardId: value.id,
-        cost,
-        refundLimit:
-            definition.deployable.refund.limit === "DEPLOYMENT_COST"
-                ? cost
-                : card.resolveBaseCost(value),
-        refundAllowed: true,
-    };
-    const placed = instantiateUnitPlacement(
-        {
-            definition,
-            position: Tile.center(request.tilePosition),
-            states: {
-                deployable,
-                occupancy: { claims: [{ position: request.tilePosition, slot, type: "PRESENT" }] },
-            },
-            ...(value.definition.navigationModifiers === undefined
-                ? {}
-                : { navigationModifiers: value.definition.navigationModifiers }),
+    const placed = instantiateUnitPlacement(state, {
+        definition,
+        position: Tile.center(request.tilePosition),
+        claims: [{ position: request.tilePosition, slot, type: "PRESENT" }],
+        ...(value.definition.navigationModifiers === undefined
+            ? {}
+            : { navigationModifiers: value.definition.navigationModifiers }),
+    });
+    state = placed.state;
+    const unit = {
+        ...placed.value.unit,
+        deployable: {
+            ...placed.value.unit.deployable,
+            cardId: value.id,
+            cost,
+            refundLimit:
+                definition.deployable.refund.limit === "DEPLOYMENT_COST"
+                    ? cost
+                    : card.resolveBaseCost(value),
+            refundAllowed: true,
         },
-        state.execution,
-        state.tick,
-    );
+    };
     state = updateCard(state, card.advance(card.consume(value, state.tick), state.tick));
     state = {
         ...state,
-        execution: placed.execution,
         deployment: changeDp(state.deployment, -cost, state.tick),
     };
     state = advanceBattlefield(state, [
-        ...placed.changes,
+        ...placed.value.changes.map((change) =>
+            change.type === "REGISTER_UNIT" ? { ...change, unit } : change,
+        ),
         {
             type: "SET_SUPPORT_RELATIONS",
-            relations: supportsAfterPlacement(state, placed.unit.id, decision.supportUnitId),
+            relations: supportsAfterPlacement(state, unit.id, decision.supportUnitId),
         },
     ]);
     state = appendEvents(state, [
         {
             type: "UNIT_DEPLOYED",
-            unitId: placed.unit.id,
-            position: placed.unit.position,
+            unitId: unit.id,
+            position: unit.position,
             tick: state.tick,
         },
     ]);
-    state = enterUnits(state, [placed.unit.id]);
-    state = notifyDeployed(state, { unit: placed.unit, kind: "MANUAL" });
+    state = enterUnits(state, [unit.id]);
+    state = notifyDeployed(state, { unit, kind: "MANUAL" });
 
-    return { state, value: { type: "DEPLOYED", cardId: value.id, unitId: placed.unit.id } };
+    return { state, value: { type: "DEPLOYED", cardId: value.id, unitId: unit.id } };
 }
 
 export function retreat(state: BattleState, unitId: Id): BattleState {

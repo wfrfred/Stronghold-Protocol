@@ -1,3 +1,4 @@
+import type { State as BattleState, Result } from "../../../battle/state.js";
 import type { Context } from "../../query.js";
 import { assertNonnegativeNumber } from "../../../../common/assert.js";
 import * as contribution from "../../contribution/contribution.js";
@@ -44,12 +45,17 @@ export function createDefinition(definition: Definition): Definition {
     return Object.freeze({ defense: definition.defense, resistance: definition.resistance });
 }
 
-export function initialize(): State {
+export const initialize: (battle: BattleState, definition: Definition) => Result<State> = (
+    battle,
+) => {
     return {
-        defense: [],
-        resistance: [],
+        state: battle,
+        value: {
+            defense: [],
+            resistance: [],
+        },
     };
-}
+};
 
 function updateContributions(
     state: State,

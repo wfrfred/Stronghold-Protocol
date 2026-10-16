@@ -1,3 +1,4 @@
+import type { State as BattleState, Result } from "../../../battle/state.js";
 import type { Unit } from "../../unit.js";
 
 export type Side = "ALLY" | "ENEMY" | "NEUTRAL";
@@ -19,8 +20,8 @@ export function hasAllegiance<U extends Unit>(unit: U): unit is U & Allegiance {
     return "allegiance" in unit && "allegiance" in unit.definition;
 }
 
-export function initialize(definition: Definition): State {
-    return definition;
+export function initialize(battle: BattleState, definition: Definition): Result<State> {
+    return { state: battle, value: definition };
 }
 
 export function areHostile(left: Unit, right: Unit): boolean {

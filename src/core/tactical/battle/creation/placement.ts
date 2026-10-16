@@ -7,16 +7,17 @@ import type { WorldPosition } from "../../geometry/coordinate.js";
 import { Direction } from "../../geometry/direction.js";
 import { RangeGrid } from "../../geometry/range.js";
 import * as initialization from "../../unit/initialize.js";
+import type { Product } from "../../unit/capability/catalog.js";
 import type { Unit, Definition } from "../../unit/unit.js";
 import type { ImmutableData } from "../../../common/immutable-data.js";
-import {
-    selectCapabilityStates,
-    type CapabilityStates,
-    type SelectedCapabilityStates,
-    type PreparedCapabilityStates,
-} from "../../unit/capability/catalog.js";
-import type { BattleExecutionState } from "../execution/state.js";
 import type { Effects } from "../../unit/effect/effects.js";
+import {
+    hasOccupancy,
+    validateState as validateOccupancy,
+    type Occupancy,
+    type OccupancyClaim,
+} from "../../unit/capability/occupancy/capability.js";
+import type { Result, State as BattleState } from "../state.js";
 
 export interface UnitNavigationModifierPlacement {
     readonly definition: NavigationModifierDefinition;
@@ -28,22 +29,14 @@ export interface UnitPlacementDefinition<D extends Definition = Definition> {
     readonly definition: D;
     readonly position: WorldPosition;
     readonly navigationModifiers?: readonly UnitNavigationModifierPlacement[];
-    readonly states?: Partial<CapabilityStates>;
+    readonly claims?: readonly OccupancyClaim[];
     readonly effects?: Effects;
 }
 
 export interface UnitPlacementInstantiation<U extends Unit = Unit> {
     readonly unit: U;
-    readonly execution: BattleExecutionState;
     readonly changes: readonly BattlefieldChange[];
 }
-
-type PlacedUnit<P extends UnitPlacementDefinition> = P extends unknown
-    ? initialization.Result<
-          P["definition"],
-          P extends { readonly states: infer S extends object } ? S : object
-      >
-    : never;
 
 type NormalizedUnitPlacement<P extends UnitPlacementDefinition> = P extends unknown
     ? {
@@ -51,11 +44,8 @@ type NormalizedUnitPlacement<P extends UnitPlacementDefinition> = P extends unkn
           readonly position: WorldPosition;
           readonly navigationModifiers: readonly UnitNavigationModifierPlacement[];
           readonly effects?: Effects;
-      } & (P extends { readonly states: infer S extends object }
-          ? { readonly states: SelectedCapabilityStates<S> }
-          : "states" extends keyof P
-            ? Pick<UnitPlacementDefinition, "states">
-            : object)
+          readonly claims?: readonly OccupancyClaim[];
+      }
     : never;
 
 export function createUnitPlacementDefinition<P extends UnitPlacementDefinition>(
@@ -85,11 +75,7 @@ export function createUnitPlacementDefinition(
 
     return Object.freeze({
         definition: placement.definition,
-        ...(placement.states === undefined
-            ? {}
-            : {
-                  states: Object.freeze(selectCapabilityStates(placement.states)),
-              }),
+        ...(placement.claims === undefined ? {} : { claims: placement.claims }),
         position: placement.position,
         ...(placement.effects === undefined ? {} : { effects: placement.effects }),
         navigationModifiers: Object.freeze(navigationModifiers),
@@ -107,27 +93,39 @@ function nextIdentity(value: number, name: string): number {
 }
 
 export function instantiateUnitPlacement<P extends UnitPlacementDefinition>(
+    battle: BattleState,
     placement: P,
-    execution: BattleExecutionState,
-    tick: number,
-): UnitPlacementInstantiation<PlacedUnit<P>>;
+): Result<UnitPlacementInstantiation<Unit & Product<P["definition"]>>>;
 export function instantiateUnitPlacement(
+    battle: BattleState,
     placement: UnitPlacementDefinition,
-    execution: BattleExecutionState,
-    tick: number,
-): UnitPlacementInstantiation {
-    const nextUnitId = nextIdentity(execution.nextUnitId, "unit");
-    const unit = initialization.initialize<Definition, PreparedCapabilityStates<Definition>>({
-        id: execution.nextUnitId,
+): Result<UnitPlacementInstantiation> {
+    const id = battle.execution.nextUnitId;
+    const nextUnitId = nextIdentity(id, "unit");
+    battle = { ...battle, execution: { ...battle.execution, nextUnitId } };
+    const initialized = initialization.initialize(battle, {
+        id,
         definition: placement.definition,
         position: placement.position,
-        tick,
-        states: placement.states ?? {},
         ...(placement.effects === undefined ? {} : { effects: placement.effects }),
     });
+    battle = initialized.state;
+    let unit: Unit = initialized.value;
+
+    if (placement.claims !== undefined) {
+        if (!hasOccupancy(unit)) {
+            throw new TypeError("unit placement claims require occupancy capability");
+        }
+
+        const occupancy = { claims: placement.claims };
+        validateOccupancy(occupancy);
+        const occupied: Unit & Occupancy = { ...unit, occupancy };
+        unit = occupied;
+    }
+
     const changes: BattlefieldChange[] = [{ type: "REGISTER_UNIT", unit }];
     const source: NavigationModifierSource = Object.freeze({ type: "UNIT", unitId: unit.id });
-    let nextNavigationModifierId = execution.nextNavigationModifierId;
+    let nextNavigationModifierId = battle.execution.nextNavigationModifierId;
 
     for (const contribution of placement.navigationModifiers ?? []) {
         const followingId = nextIdentity(nextNavigationModifierId, "navigation modifier");
@@ -152,8 +150,7 @@ export function instantiateUnitPlacement(
     }
 
     return {
-        unit,
-        execution: { ...execution, nextUnitId, nextNavigationModifierId },
-        changes,
+        state: { ...battle, execution: { ...battle.execution, nextNavigationModifierId } },
+        value: { unit, changes },
     };
 }

@@ -1,3 +1,4 @@
+import type { State as BattleState, Result } from "../../../battle/state.js";
 import { assertPositiveSafeInteger } from "../../../../common/assert.js";
 import type { Unit } from "../../unit.js";
 
@@ -27,6 +28,6 @@ export function createDefinition(definition: Definition): Definition {
     return Object.freeze({ ...definition });
 }
 
-export function initialize(definition: Definition): State {
-    return { weight: definition.weight, enabled: true };
+export function initialize(battle: BattleState, definition: Definition): Result<State> {
+    return { state: battle, value: { weight: definition.weight, enabled: true } };
 }

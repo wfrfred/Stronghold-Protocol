@@ -1,249 +1,55 @@
-import type { Unit, Definition as UnitDefinition } from "../unit.js";
-import {
-    initialize as initializeActionState,
-    type Definition as ActionCapabilityDefinition,
-    type State as ActionState,
-} from "./action/capability.js";
-import {
-    initialize as initializeAllegianceState,
-    type Definition as AllegianceDefinition,
-    type State as AllegianceState,
-} from "./allegiance/capability.js";
-import {
-    initialize as initializeBlockableState,
-    type Definition as BlockableDefinition,
-    type State as BlockableState,
-} from "./blocking/blockable.js";
-import {
-    initialize as initializeBlockerState,
-    type Definition as BlockerDefinition,
-    type State as BlockerState,
-} from "./blocking/blocker.js";
-import {
-    initialize as initializeDefenseState,
-    type Definition as DefenseDefinition,
-    type State as DefenseState,
-} from "./defense/capability.js";
-import {
-    initialize as initializeDeployableState,
-    type Definition as DeployableDefinition,
-    type State as DeployableState,
-} from "./deployable/capability.js";
-import {
-    initialize as initializeLocomotionState,
-    type Definition as LocomotionDefinition,
-    type State as LocomotionState,
-    type RoutedLocomotionState,
-} from "./locomotion/capability.js";
-import type { State as SpatialPresenceState } from "./presence/capability.js";
-import type { State as OccupancyState } from "./occupancy/capability.js";
-import {
-    initialize as initializeOffenseState,
-    type Definition as OffenseDefinition,
-    type State as OffenseState,
-} from "./offense/capability.js";
-import {
-    initializeHitState,
-    initializeSpatialState,
-    type HitDefinition,
-    type HitState,
-    type SpatialDefinition,
-    type SpatialState,
-} from "./spatial/capability.js";
-import type { State as TargetableState } from "./targetable/capability.js";
-import {
-    initialize as initializeVitalityState,
-    type Definition as VitalityDefinition,
-    type State as VitalityState,
-} from "./vitality/capability.js";
-import {
-    initialize as initializeElementalState,
-    type Definition as ElementalDefinition,
-    type State as ElementalState,
-} from "./elemental/capability.js";
-import {
-    initialize as initializeSkillState,
-    type Definition as SkillDefinition,
-    type State as SkillState,
-    type Stored as StoredSkill,
-} from "./skill/capability.js";
+import type { ImmutableData } from "../../../common/immutable-data.js";
+import * as action from "./action/capability.js";
+import * as allegiance from "./allegiance/capability.js";
+import * as blockable from "./blocking/blockable.js";
+import * as blocker from "./blocking/blocker.js";
+import * as defense from "./defense/capability.js";
+import * as deployable from "./deployable/capability.js";
+import * as elemental from "./elemental/capability.js";
+import * as locomotion from "./locomotion/capability.js";
+import * as occupancy from "./occupancy/capability.js";
+import * as offense from "./offense/capability.js";
+import * as presence from "./presence/capability.js";
+import * as skill from "./skill/capability.js";
+import * as spatial from "./spatial/capability.js";
+import * as targetable from "./targetable/capability.js";
+import * as tileBinding from "./tile-binding/capability.js";
+import * as vitality from "./vitality/capability.js";
 
-export interface CapabilityInitializationContext {
-    readonly tick: number;
-}
+export const initializers = {
+    deployable: deployable.initialize,
+    vitality: vitality.initialize,
+    offense: offense.initialize,
+    defense: defense.initialize,
+    action: action.initialize,
+    skill: skill.initialize,
+    elemental: elemental.initialize,
+    allegiance: allegiance.initialize,
+    spatial: spatial.initializeSpatialState,
+    hit: spatial.initializeHitState,
+    blocker: blocker.initialize,
+    blockable: blockable.initialize,
+    locomotion: locomotion.initialize,
+    spatialPresence: presence.initialize,
+    occupancy: occupancy.initialize,
+    targetable: targetable.initialize,
+    tileBinding: tileBinding.initialize,
+} as const;
 
-interface CapabilityConfigurations {
-    readonly deployable: DeployableDefinition;
-    readonly vitality: VitalityDefinition;
-    readonly offense: OffenseDefinition;
-    readonly defense: DefenseDefinition;
-    readonly action: ActionCapabilityDefinition;
-    readonly skill: StoredSkill["definition"]["skill"];
-    readonly elemental: ElementalDefinition;
-    readonly allegiance: AllegianceDefinition;
-    readonly spatial: SpatialDefinition;
-    readonly hit: HitDefinition;
-    readonly blocker: BlockerDefinition;
-    readonly blockable: BlockableDefinition;
-    readonly locomotion: LocomotionDefinition;
-}
-
-interface RuntimeCapabilityStates {
-    readonly targetable: TargetableState;
-    readonly spatialPresence: SpatialPresenceState;
-    readonly occupancy: OccupancyState;
-}
-
-export type ConfiguredCapabilityKey = keyof CapabilityConfigurations;
-
-type CapabilityConfig<K extends ConfiguredCapabilityKey> = CapabilityConfigurations[K];
-
-export type CapabilityStates = {
-    readonly deployable: DeployableState;
-    readonly vitality: VitalityState;
-    readonly offense: OffenseState;
-    readonly defense: DefenseState;
-    readonly action: ActionState;
-    readonly skill: StoredSkill["skill"];
-    readonly elemental: ElementalState;
-    readonly allegiance: AllegianceState;
-    readonly spatial: SpatialState;
-    readonly hit: HitState;
-    readonly blocker: BlockerState;
-    readonly blockable: BlockableState;
-    readonly locomotion: LocomotionState;
-} & RuntimeCapabilityStates;
-
-export const configuredCapabilities: {
-    readonly [K in ConfiguredCapabilityKey]: (
-        config: CapabilityConfig<K>,
-        context: CapabilityInitializationContext,
-    ) => CapabilityStates[K];
-} = {
-    deployable: initializeDeployableState,
-    vitality: initializeVitalityState,
-    offense: () => initializeOffenseState(),
-    defense: () => initializeDefenseState(),
-    action: () => initializeActionState(),
-    skill: (config, context) => initializeSkillState(config as SkillDefinition, context.tick),
-    elemental: (definition, context) => initializeElementalState(definition, context.tick),
-    allegiance: initializeAllegianceState,
-    spatial: initializeSpatialState,
-    hit: initializeHitState,
-    blocker: initializeBlockerState,
-    blockable: initializeBlockableState,
-    locomotion: () => initializeLocomotionState(),
+export type Definitions = {
+    readonly [K in keyof typeof initializers]: Parameters<(typeof initializers)[K]>[1];
 };
 
-type CapabilityKey = keyof CapabilityStates;
-
-type CapabilityState<K extends CapabilityKey> = CapabilityStates[K];
-
-type SelectedCapabilityState<K extends CapabilityKey, S> = K extends "skill"
-    ? NonNullable<S>
-    : K extends "locomotion"
-      ? NonNullable<S> extends RoutedLocomotionState
-          ? RoutedLocomotionState
-          : CapabilityState<K>
-      : CapabilityState<K>;
-
-export type SelectedCapabilityStates<S extends object> = {
-    readonly [K in keyof S as K extends CapabilityKey ? K : never]: K extends CapabilityKey
-        ? SelectedCapabilityState<K, S[K]>
-        : never;
+export type States = {
+    readonly [K in keyof typeof initializers]: ReturnType<(typeof initializers)[K]>["value"];
 };
 
-export type RuntimeCapabilitiesFor<D extends UnitDefinition> = {
-    readonly [
-        K in ConfiguredCapabilityKey as [D] extends [Readonly<Record<K, CapabilityConfig<K>>>]
-            ? K
-            : never
-    ]: K extends "skill"
-        ? D extends { readonly skill: SkillDefinition<infer S, infer A> }
-            ? SkillState<S, A>
-            : never
-        : CapabilityState<K>;
-};
-
-export type PreparedCapabilityStates<D extends UnitDefinition> = Partial<
-    RuntimeCapabilitiesFor<D> & RuntimeCapabilityStates
->;
-
-const configuredKeys = Object.keys(configuredCapabilities) as ConfiguredCapabilityKey[];
-const capabilityKeys: readonly CapabilityKey[] = [
-    ...configuredKeys,
-    "spatialPresence",
-    "occupancy",
-    "targetable",
-];
-
-function hasCapabilityState(unit: Unit, key: ConfiguredCapabilityKey): boolean {
-    return key in unit && Reflect.get(unit, key) !== undefined;
-}
-
-export function assertUnitCapabilityPairing(unit: Unit): void {
-    for (const key of configuredKeys) {
-        const configured = key in unit.definition;
-
-        if (configured !== hasCapabilityState(unit, key)) {
-            throw new TypeError(`capability ${key} configuration and state must be paired`);
-        }
-    }
-}
-
-export function assertUnitCapabilityComposition(previous: Unit, unit: Unit): void {
-    for (const key of configuredKeys) {
-        if (hasCapabilityState(previous, key) !== hasCapabilityState(unit, key)) {
-            throw new TypeError(`capability ${key} state cannot be added or removed during update`);
-        }
-    }
-}
-
-function initializeCapability<K extends ConfiguredCapabilityKey>(
-    key: K,
-    config: CapabilityConfig<K>,
-    context: CapabilityInitializationContext,
-): CapabilityState<K> {
-    return configuredCapabilities[key](config, context);
-}
-
-export function selectCapabilityStates<S extends object>(source: S): SelectedCapabilityStates<S> {
-    const states: Record<string, unknown> = {};
-
-    for (const key of capabilityKeys) {
-        const state: unknown = Reflect.get(source, key);
-
-        if (state !== undefined) {
-            states[key] = state;
-        }
-    }
-
-    return states as SelectedCapabilityStates<S>;
-}
-
-export function initializeUnitCapabilities(
-    definition: UnitDefinition,
-    context: CapabilityInitializationContext,
-    prepared: Partial<CapabilityStates>,
-): object {
-    const states: Record<string, unknown> = selectCapabilityStates(prepared);
-
-    for (const key of configuredKeys) {
-        if (!(key in definition)) {
-            if (key in states) {
-                throw new TypeError(`prepared capability ${key} requires configuration`);
-            }
-
-            continue;
-        }
-        if (key in states) {
-            continue;
-        }
-
-        const config = Reflect.get(definition, key) as CapabilityConfig<typeof key>;
-
-        states[key] = initializeCapability(key, config, context);
-    }
-
-    return states;
-}
+export type Product<D> = D extends unknown
+    ? {
+          readonly definition: ImmutableData<D>;
+      } & {
+          readonly [
+              K in keyof States as D extends Readonly<Record<K, Definitions[K]>> ? K : never
+          ]: States[K];
+      }
+    : never;

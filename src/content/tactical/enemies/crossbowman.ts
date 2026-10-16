@@ -17,7 +17,8 @@ import { hasAllegiance } from "../../../core/tactical/unit/capability/allegiance
 import { resolveAttackPower } from "../../../core/tactical/unit/capability/offense/query.js";
 import { hasVitality } from "../../../core/tactical/unit/capability/vitality/capability.js";
 import { createDamageOperands } from "../../../core/tactical/unit/capability/vitality/damage/contract.js";
-import type { Result as InitializedUnit } from "../../../core/tactical/unit/initialize.js";
+import type { Unit } from "../../../core/tactical/unit/unit.js";
+import type { Product } from "../../../core/tactical/unit/capability/catalog.js";
 import {
     createDefinition as createGroundDefinition,
     type AttackTiming as GroundAttackTiming,
@@ -40,7 +41,7 @@ export interface Definition extends GroundDefinition {
     readonly attackTiming: AttackTiming;
 }
 
-export type Enemy = InitializedUnit<Definition>;
+export type Enemy = Unit & Product<Definition>;
 
 export function createArrow(): ProjectileDefinition<object> {
     return createProjectileDefinition({

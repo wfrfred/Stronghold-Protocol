@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
 import { createLegacyCombatSpec } from '../../dist/legacy/combat.js';
 import { battlefieldView, getUnit, transitionUnit } from '../../dist/core/tactical/battle/state.js';
-import { initialize } from '../../dist/core/tactical/unit/initialize.js';
+import { initialize, placement } from "../helpers/unit.js";
 import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { create as createAttack, chooseTargets } from '../../dist/content/tactical/actions/attack.js';
 import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js';
@@ -41,7 +41,7 @@ function action(interval = 1) {
     }, operations: [{ type: 'DAMAGE', power: 1, damageType: 'TRUE' }] }], followUps: [] });
 }
 function definition(receiver = 'CHARACTER', overrides = {}, elementOptions = {}) {
-  return { id: `element-${receiver}`, vitality: { maxHp: 100000 },
+  return { id: `element-${receiver}`, targetable: {}, spatialPresence: {}, vitality: { maxHp: 100000 },
     defense: { defense: 500, resistance: 50 }, offense: { attack: 100 },
     allegiance: { side: receiver === 'CHARACTER' ? 'ALLY' : 'ENEMY' },
     spatial: { layer: 'GROUND' }, hit: { geometry: hit },
@@ -364,7 +364,7 @@ function battle(receiver, type, { moving = false, targetStates } = {}) {
   const base = createLegacyCombatSpec({ rows: 1, columns: 8, operators: [], enemies: [], maxTicks: 600, seed: 7 });
   const keepOpen = { id: 'future', vitality: { maxHp: 1 }, locomotion: { moveSpeedPerTick: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } } };
   const runtime = new BattleRuntime({ ...base,
-    initialUnits: [{ definition: caster, position: [0, 0] }, ...(moving ? [] : [{ definition: victim, position: [1, 0], ...(targetStates === undefined ? {} : { states: targetStates(victim) }) }])],
+    initialUnits: [{ definition: caster, position: [0, 0] }, ...(moving ? [] : [placement({ definition: victim, position: [1, 0], ...(targetStates === undefined ? {} : { states: targetStates(victim) }) })])],
     schedule: { type: 'TIMELINE', spawns: [...(moving ? [spawn(victim, 0)] : []), spawn(keepOpen, 599)] },
   });
   return { runtime };

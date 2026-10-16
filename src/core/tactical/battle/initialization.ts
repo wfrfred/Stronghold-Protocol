@@ -13,11 +13,12 @@ export function initializeBattlefield(input: Input, state: BattleState): BattleS
     const initialMechanismIds: number[] = [];
 
     for (const placement of input.initialUnits) {
-        const instantiated = instantiateUnitPlacement(placement, state.execution, 0);
+        const initialized = instantiateUnitPlacement(state, placement);
+        state = initialized.state;
+        const instantiated = initialized.value;
 
         initialChanges.push(...instantiated.changes);
         initialUnitIds.push(instantiated.unit.id);
-        state = { ...state, execution: instantiated.execution };
     }
 
     for (const placement of input.initialMechanisms) {
@@ -38,6 +39,7 @@ export function initializeBattlefield(input: Input, state: BattleState): BattleS
     }
 
     const initialized = changePredefinedInstances(
+        state,
         input.predefines,
         state.predefinedPresence,
         input.predefines
@@ -46,18 +48,17 @@ export function initializeBattlefield(input: Input, state: BattleState): BattleS
                 type: "APPEAR_PREDEFINED",
                 definitionId: definition.id,
             })),
-        state.execution,
     );
+    state = initialized.state;
 
     state = {
         ...state,
-        execution: initialized.execution,
-        predefinedPresence: initialized.presence,
+        predefinedPresence: initialized.value.presence,
     };
-    state = advanceBattlefield(state, [...initialChanges, ...initialized.changes]);
+    state = advanceBattlefield(state, [...initialChanges, ...initialized.value.changes]);
     state = enterUnits(state, [
         ...initialUnitIds,
-        ...initialized.changes.flatMap((change) =>
+        ...initialized.value.changes.flatMap((change) =>
             change.type === "REGISTER_UNIT" ? [change.unit.id] : [],
         ),
     ]);

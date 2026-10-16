@@ -23,13 +23,13 @@ import { loadMovementScenario } from '../../dist/data/arknights/movement-scenari
 import { createTacticalCombatDemoSpec } from '../../dist/legacy/tactical-demo-combat.js';
 import { createTacticalDemo } from '../../dist/legacy/tactical-demo.js';
 import { createDefinition } from '../../dist/core/tactical/unit/archetype/operator.js';
-import { initialize } from '../../dist/core/tactical/unit/initialize.js';
+import { initialize } from "../helpers/unit.js";
 import { start as startAction } from "../../dist/core/tactical/unit/action/operations.js";
 
 import { compileTargeting } from "../../dist/core/tactical/unit/targeting/compile.js";
 import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { selectTargets } from '../../dist/core/tactical/unit/targeting/select.js';
-import { initialize as initializeTargetableState, setRule as setTargetableRule, allowsTarget } from '../../dist/core/tactical/unit/capability/targetable/capability.js';
+import { setRule as setTargetableRule, allowsTarget } from '../../dist/core/tactical/unit/capability/targetable/capability.js';
 import { invincible, undeadable, healFree } from '../../dist/content/tactical/effects/protection.js';
 import { invisible, camouflage, untargetable, allyUntargetable } from '../../dist/content/tactical/effects/visibility.js';
 import { installFixtureEffect } from '../helpers/effects.js';
@@ -417,7 +417,7 @@ test('core combat: snapshots share capabilities while immutable battlefield upda
     hit: { ...operator.hit, geometry: createShapeGeometry({ shapes: [
       { type: 'CIRCLE', offset: [0, 0], radius: 100 },
     ] }) },
-    targetable: setTargetableRule(operator.targetable ?? initializeTargetableState(),
+    targetable: setTargetableRule(operator.targetable,
       { id: 'changed-targeting', allows: () => false }),
     blocker: { ...operator.blocker, capacity: contribution.set([], { id: 'disabled-capacity', value: [modifier.create({ finalScaler: 0 })],
     }) },
@@ -1115,7 +1115,7 @@ const attackDefinition = (targetGroups, followUps = []) => createAttack({
 
 function actionUnit(id, side, position, { hp = 100, effects: initialEffects = [], action, skill } = {}) {
   const definition = createDefinition({
-    id: `action_unit_${id}`, vitality: { maxHp: 100 }, allegiance: { side },
+    id: `action_unit_${id}`, targetable: {}, vitality: { maxHp: 100 }, allegiance: { side },
     spatial: { layer: 'GROUND' }, hit: { geometry: {
       shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.1 }],
     } }, defense: { defense: 0, resistance: 0 },

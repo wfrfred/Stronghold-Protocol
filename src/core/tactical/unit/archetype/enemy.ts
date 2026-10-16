@@ -21,7 +21,10 @@ import type {
     Definition as LocomotionDefinition,
     RoutedLocomotion,
 } from "../capability/locomotion/capability.js";
-import type { SpatialPresence } from "../capability/presence/capability.js";
+import type {
+    SpatialPresence,
+    Definition as PresenceDefinition,
+} from "../capability/presence/capability.js";
 import {
     createHitDefinition,
     type HitDefinition,
@@ -32,7 +35,9 @@ import type {
     Vitality,
     Definition as VitalityDefinition,
 } from "../capability/vitality/capability.js";
-import type * as initialization from "../initialize.js";
+import type { Product } from "../capability/catalog.js";
+import type { Definition as TargetableDefinition } from "../capability/targetable/capability.js";
+import type { Definition as OccupancyDefinition } from "../capability/occupancy/capability.js";
 import {
     createDefinition as createElementalDefinition,
     type Definition as ElementalDefinition,
@@ -45,14 +50,17 @@ import {
 export interface Definition extends UnitDefinition {
     readonly vitality: VitalityDefinition;
     readonly locomotion: LocomotionDefinition;
+    readonly spatialPresence: PresenceDefinition;
     readonly skill?: SkillDefinition;
     readonly elemental?: ElementalDefinition;
+    readonly targetable?: TargetableDefinition;
+    readonly occupancy?: OccupancyDefinition;
 }
 
 export type Enemy = Unit & Vitality & Locomotion;
 
 export type RoutedEnemy<D extends Definition = Definition> = Enemy &
-    initialization.Result<D> &
+    Product<D> &
     RoutedLocomotion &
     SpatialPresence;
 
@@ -68,7 +76,9 @@ export interface CombatDefinition extends Definition {
 
 export type CombatRoutedEnemy = RoutedEnemy<CombatDefinition>;
 
-export function createDefinition(definition: Definition): Definition {
+export function createDefinition(
+    definition: Omit<Definition, "spatialPresence"> & Partial<Pick<Definition, "spatialPresence">>,
+): Definition {
     if (definition.id.length === 0) {
         throw new TypeError("enemy definition id must be nonempty");
     }
@@ -84,6 +94,9 @@ export function createDefinition(definition: Definition): Definition {
         ...(definition.onTick === undefined ? {} : { onTick: definition.onTick }),
         ...(definition.onLeave === undefined ? {} : { onLeave: definition.onLeave }),
         vitality: Object.freeze({ maxHp: definition.vitality.maxHp }),
+        spatialPresence: Object.freeze(definition.spatialPresence ?? {}),
+        ...(definition.targetable === undefined ? {} : { targetable: definition.targetable }),
+        ...(definition.occupancy === undefined ? {} : { occupancy: definition.occupancy }),
         locomotion: Object.freeze({
             moveSpeedPerTick: definition.locomotion.moveSpeedPerTick,
             minimumMoveSpeedPerTick,
@@ -98,7 +111,10 @@ export function createDefinition(definition: Definition): Definition {
     });
 }
 
-export function createCombatDefinition(definition: CombatDefinition): CombatDefinition {
+export function createCombatDefinition(
+    definition: Omit<CombatDefinition, "spatialPresence"> &
+        Partial<Pick<CombatDefinition, "spatialPresence">>,
+): CombatDefinition {
     return Object.freeze({
         ...createDefinition(definition),
         action: createActionCapabilityDefinition(definition.action),

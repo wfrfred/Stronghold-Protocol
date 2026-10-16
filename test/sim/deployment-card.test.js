@@ -1,3 +1,4 @@
+import { fixtureBattle } from "../helpers/unit.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
@@ -12,7 +13,7 @@ import { removeUnitWithEffects } from "../../dist/core/tactical/battle/execution
 import {
     createDefinition as createDeployable, initialize as initializeDeployable,
 } from "../../dist/core/tactical/unit/capability/deployable/capability.js";
-import { initialize as initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize as initializeUnit } from "../helpers/unit.js";
 import { create as createBattlefield } from "../../dist/core/tactical/battlefield/state.js";
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
 import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
@@ -26,7 +27,7 @@ const tile = createTile({
 const map = createBattlefieldMap(1, 8, Array(8).fill(tile));
 
 const definition = (fields = {}) => ({
-    id: "operator", vitality: { maxHp: 100 },
+    id: "operator", vitality: { maxHp: 100 }, occupancy: {},
     deployable: createDeployable({ cost: 10, redeployTicks: 3, slots: 1, buildableType: "ALL" }),
     ...fields,
 });
@@ -203,7 +204,7 @@ test("preset Units without a Card do not recycle; refund eligibility is a separa
     const ordinary = initializeUnit({ id: 10, definition: unit, position: [0, 0] });
     const refundable = initializeUnit({
         id: 11, definition: unit, position: [1, 0],
-        states: { deployable: { ...initializeDeployable(unit.deployable), refundAllowed: true } },
+        states: { deployable: { ...initializeDeployable(fixtureBattle(0), unit.deployable).value, refundAllowed: true } },
     });
     let state = createBattleState(
         fixtureBattlefieldState([ordinary, refundable]), undefined, undefined, 0,

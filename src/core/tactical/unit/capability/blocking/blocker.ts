@@ -1,3 +1,4 @@
+import type { State as BattleState, Result } from "../../../battle/state.js";
 import * as registry from "../../hook/hook.js";
 import { assertNonnegativeSafeInteger } from "../../../../common/assert.js";
 import { createBlockGeometry, type BlockGeometry } from "../../../geometry/shape.js";
@@ -42,12 +43,15 @@ export function createDefinition(definition: Definition): Definition {
     });
 }
 
-export function initialize(definition: Definition): State {
+export function initialize(battle: BattleState, definition: Definition): Result<State> {
     return {
-        capacity: [],
-        geometry: definition.geometry,
-        enabled: true,
-        rules: [],
+        state: battle,
+        value: {
+            capacity: [],
+            geometry: definition.geometry,
+            enabled: true,
+            rules: [],
+        },
     };
 }
 

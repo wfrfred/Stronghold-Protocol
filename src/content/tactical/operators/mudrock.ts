@@ -1,4 +1,6 @@
 import type { Definition as ElementalDefinition } from "../../../core/tactical/unit/capability/elemental/capability.js";
+import type { Definition as OccupancyDefinition } from "../../../core/tactical/unit/capability/occupancy/capability.js";
+import type { Definition as TargetableDefinition } from "../../../core/tactical/unit/capability/targetable/capability.js";
 import { createArknightsElementalDefinition } from "../../../data/arknights/elemental.js";
 import { Definitions } from "../../../core/tactical/unit/action/definitions.js";
 import { clearCooldown, get as getAction } from "../../../core/tactical/unit/action/operations.js";
@@ -58,6 +60,8 @@ import { compileTargeting } from "../../../core/tactical/unit/targeting/compile.
 export interface Definition extends OperatorDefinition {
     readonly elemental: ElementalDefinition;
     readonly deployable: DeployableDefinition;
+    readonly occupancy: OccupancyDefinition;
+    readonly targetable: TargetableDefinition;
     readonly offense: OffenseDefinition;
     readonly skill: SkillDefinition;
     readonly profile: Profile;
@@ -448,6 +452,8 @@ export function create(
         id: profile.id,
         profile,
         direction,
+        occupancy: {},
+        targetable: {},
         deployable: createDeployableDefinition({
             cost: profile.attributes.cost,
             redeployTicks: secondsToTicks(profile.attributes.respawnTime),

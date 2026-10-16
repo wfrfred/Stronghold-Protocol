@@ -22,7 +22,7 @@ import {
     getUnit,
     transitionUnit,
 } from "../../dist/core/tactical/battle/state.js";
-import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../helpers/unit.js";
 import { createDefinition as createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { activate } from "../../dist/core/tactical/unit/capability/skill/operations.js";
 import { ref as activationRef } from "../../dist/core/tactical/unit/capability/skill/activation.js";
@@ -158,7 +158,7 @@ for (const domain of ["deployment", "predefined"]) {
         );
         const battlefield = createBattlefield({ map });
             const definition = Object.freeze({
-            id: "transient-placement",
+            id: "transient-placement", occupancy: {},
             deployable: createDeployableDefinition({ cost: 0, redeployTicks: 0, slots: 1, buildableType: "ALL" }),
             vitality: Object.freeze({ maxHp: 100 }),
         });

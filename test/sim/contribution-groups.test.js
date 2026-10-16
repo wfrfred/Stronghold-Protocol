@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../helpers/unit.js";
 import {
     battlefieldView,
     transitionUnit,

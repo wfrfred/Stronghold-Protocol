@@ -1,5 +1,5 @@
 import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
-import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "./unit.js";
 import { transitionUnit, getUnit, battlefieldView } from "../../dist/core/tactical/battle/state.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import * as damage from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
@@ -19,6 +19,7 @@ export function unit(
         definition: {
             id: `vitality-${id}`,
             vitality: { maxHp },
+            targetable: {},
             offense: { attack },
             defense: { defense, resistance },
         },

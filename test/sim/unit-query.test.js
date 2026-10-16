@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as units from "../../dist/core/tactical/unit/query.js";
-import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../helpers/unit.js";
 import { hasLocomotion } from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
 import { hasVitality } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import { createBattleState, registerUnit, removeUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";

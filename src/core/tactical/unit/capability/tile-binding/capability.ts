@@ -1,5 +1,6 @@
 import type { BuildableType, HeightType } from "../../../battlefield/map/tile.js";
 import type { Unit, Definition as UnitDefinition } from "../../unit.js";
+import type { State as BattleState, Result } from "../../../battle/state.js";
 
 export interface Definition {
     readonly heightType: HeightType | null;
@@ -7,13 +8,22 @@ export interface Definition {
     readonly advancedBuildableMask: number | null;
 }
 
+export type State = Readonly<Record<string, never>>;
+
 export interface TileBinding {
     readonly definition: { readonly tileBinding: Definition };
+    readonly tileBinding: State;
 }
 
 export function hasTileBinding<U extends Unit>(unit: U): unit is U & TileBinding {
-    return hasDefinition(unit.definition);
+    return "tileBinding" in unit && hasDefinition(unit.definition);
 }
+
+export const initialize: (battle: BattleState, definition: Definition) => Result<State> = (
+    battle,
+) => {
+    return { state: battle, value: {} };
+};
 
 export function hasDefinition(
     definition: UnitDefinition,

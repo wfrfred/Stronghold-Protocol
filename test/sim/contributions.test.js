@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as modifier from "../../dist/core/tactical/unit/contribution/value.js";
 import * as contribution from "../../dist/core/tactical/unit/contribution/contribution.js";
-import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../helpers/unit.js";
 import { copy } from "../../dist/core/tactical/unit/snapshot.js";
 import {
     setAttackContribution,

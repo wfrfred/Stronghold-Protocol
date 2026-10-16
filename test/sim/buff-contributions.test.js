@@ -10,7 +10,7 @@ import {
 } from "../../dist/data/arknights/modifier.js";
 import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/state.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
-import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../helpers/unit.js";
 import {
     setAttackContribution,
     removeAttackContribution,

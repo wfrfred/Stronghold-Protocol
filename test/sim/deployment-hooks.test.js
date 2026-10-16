@@ -10,7 +10,7 @@ import { setHook, removeHook } from "../../dist/core/tactical/unit/capability/de
 import { createDefinition as createDeployable } from "../../dist/core/tactical/unit/capability/deployable/capability.js";
 import { removeUnitWithEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
 
-import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../helpers/unit.js";
 import { createDefinition as createEnemy } from "../../dist/core/tactical/unit/archetype/enemy.js";
 import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
 import { install } from "../../dist/core/tactical/unit/effect/operations.js";
@@ -41,7 +41,7 @@ const spawn = (definition, tick) => ({
     tick, definition, route, alwaysCheckCurrentPoint: true, notCountInTotal: false,
     timing: { waveStartedAtTick: tick, fragmentStartedAtTick: tick },
 });
-const definition = (id, fields = {}) => ({ id, vitality: { maxHp: 100 }, deployable: profile, ...fields });
+const definition = (id, fields = {}) => ({ id, vitality: { maxHp: 100 }, occupancy: {}, deployable: profile, ...fields });
 const unit = (id, fields = {}) => initialize({ id, definition: definition(`unit:${id}`, fields), position: [id, 0] });
 const deployment = (definitions) => ({
     definition: { initialDp: 0, maxDp: 99, dpRecoveryTicks: null, slotLimit: null },

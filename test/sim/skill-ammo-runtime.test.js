@@ -86,7 +86,7 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, windupTicks = 0, o
   });
   const action = actionProgram === undefined ? normal : actionProgram(normal);
   const definition = createDefinition({
-    id: "ammo-actor", vitality: { maxHp: 10000 }, offense: { attack: 100 },
+    id: "ammo-actor", spatialPresence: {}, vitality: { maxHp: 10000 }, offense: { attack: 100 },
     defense: { defense: 0, resistance: 0 }, allegiance: { side: "ALLY" },
     spatial: { layer: "GROUND" }, hit: { geometry: hit },
     blocker: { capacity: 0, geometry: { radius: 0.1 } }, skill,

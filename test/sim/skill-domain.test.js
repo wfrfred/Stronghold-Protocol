@@ -1,3 +1,4 @@
+import { fixtureBattle } from "../helpers/unit.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { getUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
@@ -5,7 +6,7 @@ import * as skills from "../../dist/core/tactical/unit/capability/skill/operatio
 import * as sp from "../../dist/core/tactical/unit/capability/skill/sp.js";
 import { initialize as initializeSkill, removeRule } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { create as value } from "../../dist/core/tactical/unit/contribution/value.js";
-import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../helpers/unit.js";
 import { ref } from "../../dist/core/tactical/unit/query.js";
 import { effectFixtureWork } from "../helpers/effects.js";
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
@@ -22,7 +23,7 @@ const observe = (id, invoke) => ({ id, enabled: () => true, invoke });
 test("skill definitions are shared and deployments initialize independent private state", () => {
     const f = fixture({ initialize: () => ({ count: 0 }), sp: resource({ initial: 1 }) });
     assert.equal(f.unit.definition.skill, f.definition);
-    const another = initializeSkill(f.definition, 90);
+    const another = initializeSkill(fixtureBattle(90), f.definition).value;
     assert.deepEqual(another.data, { count: 0 });
     assert.notEqual(another.data, f.unit.skill.data);
     assert.equal(another.sp.value, 1);

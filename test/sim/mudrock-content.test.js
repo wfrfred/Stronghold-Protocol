@@ -1,3 +1,4 @@
+import { fixtureBattle, fixtureDefinition } from "../helpers/unit.js";
 import { ref as activationRef } from "../../dist/core/tactical/unit/capability/skill/activation.js";
 import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import { resolveHealing } from "../../dist/core/tactical/unit/capability/vitality/healing/settlement.js";
@@ -8,7 +9,7 @@ import { test } from "node:test";
 import { prepare } from "../../dist/data/arknights/operator.js";
 import { create, readShield } from "../../dist/content/tactical/operators/mudrock.js";
 
-import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../helpers/unit.js";
 import {
     createBattleState, battlefieldView, getUnit, updateUnit,
 } from "../../dist/core/tactical/battle/state.js";
@@ -41,7 +42,7 @@ const profile = (fields = {}) => {
         });
 };
 const enemy = (id, position, fields = {}) => initialize({ id, position, definition: {
-    id: `enemy-${id}`, vitality: { maxHp: 10000 }, defense: { defense: 0, resistance: 0 },
+    id: `enemy-${id}`, targetable: {}, vitality: { maxHp: 10000 }, defense: { defense: 0, resistance: 0 },
     allegiance: { side: "ENEMY" }, spatial: { layer: "GROUND" },
     hit: { geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.1 }] } },
     locomotion: { moveSpeedPerTick: 0.1, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } },
@@ -167,7 +168,7 @@ test("Sarkaz resistance and module blocked-source reduction compose only for the
 
 test("S2 does not consume SP without an eligible ground target in its range", () => {
     for (const receiver of [enemy(1, [5, 0]), enemy(1, [1, 0], { spatial: { layer: "AIR" } }),
-        { ...enemy(1, [1, 0]), targetable: setTargetingRule(initializeTargetable(), {
+        { ...enemy(1, [1, 0]), targetable: setTargetingRule(initializeTargetable(fixtureBattle(0), fixtureDefinition("targetable")).value, {
             id: "not-selectable", allows: () => false,
         }) }]) {
         const fixture = setup({}, [receiver]);

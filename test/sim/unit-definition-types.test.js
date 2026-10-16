@@ -17,7 +17,7 @@ import { createDefinition as createEnemyDefinition, createCombatDefinition, type
 import { initialize as initializeUnit } from ${sourceModule('unit/initialize')};
 import { copy } from ${sourceModule('unit/snapshot')};
 import { hasOffense, type Offense, type Definition as OffenseDefinition, type State as OffenseState } from ${sourceModule('unit/capability/offense/capability')};
-import { hasSkill, type Definition as SkillDefinition, type State as SkillState } from ${sourceModule('unit/capability/skill/capability')};
+import { hasSkill, type Definition as SkillDefinition, type Stored as StoredSkill } from ${sourceModule('unit/capability/skill/capability')};
 import type { Definition as ElementalDefinition, State as ElementalState } from ${sourceModule('unit/capability/elemental/capability')};
 import type { Vitality, State as VitalityState } from ${sourceModule('unit/capability/vitality/capability')};
 import type { RoutedLocomotionState, RouteControlState } from ${sourceModule('unit/capability/locomotion/capability')};
@@ -47,15 +47,15 @@ const staticEnemy = {
 const operator = createDefinition(staticOperator);
 const combatEnemy = createCombatDefinition(staticCombatEnemy);
 const enemy = createEnemyDefinition(staticEnemy);
-const initializedOperator = initialize({ id: 1, definition: operator, position: [0, 0] });
-const initializedCombatEnemy = initializeUnit({ id: 2, definition: combatEnemy, position: [0, 0] });
-const initializedEnemy = initializeUnit({ id: 3, definition: enemy, position: [0, 0] });
-const staticOperatorUnit = initialize({ id: 4, definition: staticOperator, position: [0, 0] });
-const staticCombatEnemyUnit = initializeUnit({ id: 5, definition: staticCombatEnemy, position: [0, 0] });
-const staticEnemyUnit = initializeUnit({ id: 6, definition: staticEnemy, position: [0, 0] });
-const bareOperatorUnit = initialize({ id: 7, definition: operatorBase, position: [0, 0] });
+const initializedOperator = initialize(battle, { id: 1, definition: operator, position: [0, 0] }).value;
+const initializedCombatEnemy = initializeUnit(battle, { id: 2, definition: combatEnemy, position: [0, 0] }).value;
+const initializedEnemy = initializeUnit(battle, { id: 3, definition: enemy, position: [0, 0] }).value;
+const staticOperatorUnit = initialize(battle, { id: 4, definition: staticOperator, position: [0, 0] }).value;
+const staticCombatEnemyUnit = initializeUnit(battle, { id: 5, definition: staticCombatEnemy, position: [0, 0] }).value;
+const staticEnemyUnit = initializeUnit(battle, { id: 6, definition: staticEnemy, position: [0, 0] }).value;
+const bareOperatorUnit = initialize(battle, { id: 7, definition: operatorBase, position: [0, 0] }).value;
 declare const routed: RoutedLocomotionState;
-const preparedUnit = initializeUnit({ id: 8, definition: combatEnemy, position: [0, 0], states: { locomotion: routed } });
+const preparedUnit = { ...initializeUnit(battle, { id: 8, definition: combatEnemy, position: [0, 0] }).value, locomotion: routed };
 const snapshot = copy(preparedUnit);
 const healthAttack: Definition<{ bonus: number }, Vitality & Offense> = {
   id: 'health-attack',
@@ -75,7 +75,7 @@ const standardCombatEnemy: CombatDefinition = combatEnemy;
 const standardEnemy: EnemyDefinition = enemy;
 const offenseDefinitions: OffenseDefinition[] = [staticOperator.offense, staticCombatEnemy.offense];
 const offenseStates: OffenseState[] = [staticOperatorUnit.offense, staticCombatEnemyUnit.offense];
-const skillStates: SkillState[] = [staticOperatorUnit.skill, staticCombatEnemyUnit.skill, staticEnemyUnit.skill];
+const skillStates: StoredSkill["skill"][] = [staticOperatorUnit.skill, staticCombatEnemyUnit.skill, staticEnemyUnit.skill];
 const elementalStates: ElementalState[] = [staticOperatorUnit.elemental, staticCombatEnemyUnit.elemental, staticEnemyUnit.elemental];
 const vitalityStates: VitalityState[] = [initializedOperator.vitality, initializedCombatEnemy.vitality, initializedEnemy.vitality];
 const preparedRoute: RouteControlState = preparedUnit.locomotion.mainRoute;
@@ -100,7 +100,7 @@ install(battle, unitRef(staticOperatorUnit), healthAttack);
     "const requiredEnemySkill: SkillDefinition = enemy.skill;",
     "const requiredEnemyElemental: ElementalDefinition = enemy.elemental;",
     "const requiredOperatorOffenseState: OffenseState = initializedOperator.offense;",
-    "const requiredEnemySkillState: SkillState = initializedEnemy.skill;",
+    "const requiredEnemySkillState: StoredSkill['skill'] = initializedEnemy.skill;",
     "install(battle, unitRef(initializedOperator), healthAttack);",
     "install(battle, unitRef(bareOperatorUnit), healthAttack);",
   ];
@@ -146,10 +146,10 @@ declare const houndDefinition: HoundDefinition;
 declare const crossbowmanDefinition: CrossbowmanDefinition;
 declare const battle: BattleState;
 declare const base: Unit;
-const mudrock = initialize({ id: 0, position: [0, 0], definition: mudrockDefinition });
-const melantha = initialize({ id: 1, position: [0, 0], definition: melanthaDefinition });
-const hound = initialize({ id: 2, position: [0, 0], definition: houndDefinition });
-const crossbowman = initialize({ id: 3, position: [0, 0], definition: crossbowmanDefinition });
+const mudrock = initialize(battle, { id: 0, position: [0, 0], definition: mudrockDefinition }).value;
+const melantha = initialize(battle, { id: 1, position: [0, 0], definition: melanthaDefinition }).value;
+const hound = initialize(battle, { id: 2, position: [0, 0], definition: houndDefinition }).value;
+const crossbowman = initialize(battle, { id: 3, position: [0, 0], definition: crossbowmanDefinition }).value;
 const armed: readonly (Unit & Vitality & Offense)[] = [mudrock, melantha, hound, crossbowman];
 const next = { ...mudrock, vitality: { ...mudrock.vitality, hp: mudrock.vitality.hp - 1 } };
 updateUnit(battle, next);

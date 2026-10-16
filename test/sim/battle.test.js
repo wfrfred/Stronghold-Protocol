@@ -1,3 +1,4 @@
+import { fixtureBattle } from "../helpers/unit.js";
 import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { installFixtureEffect } from "../helpers/effects.js";
@@ -44,7 +45,7 @@ import { createPredefinedDefinition } from '../../dist/core/tactical/battle/step
 import { advanceMovement } from '../../dist/core/tactical/battle/steps/movement.js';
 
 import { createBattleState, appendEvents, getUnit, registerUnit } from '../../dist/core/tactical/battle/state.js';
-import { initialize } from '../../dist/core/tactical/unit/initialize.js';
+import { initialize } from "../helpers/unit.js";
 import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js';
 import { setState as setActionState } from '../../dist/core/tactical/unit/action/action.js';
 import { replace as replaceAction } from '../../dist/core/tactical/unit/action/operations.js';
@@ -1339,10 +1340,10 @@ test('raw enemy movement levels inherit only defined values and reject sparse, u
   const profile = slimeMovementProfile();
   const parseMovement = (value, level) => parseEnemyMovementDefinition(value, level, profile);
   assert.deepEqual(parseMovement(fixture, 0), {
-    id: 'enemy_1007_slime', vitality: { maxHp: 550 }, locomotion: { moveSpeedPerTick: 1 / 30, minimumMoveSpeedPerTick: 0.1 / 30, steeringParameters: profile.steeringParameters },
+    id: 'enemy_1007_slime', spatialPresence: {}, vitality: { maxHp: 550 }, locomotion: { moveSpeedPerTick: 1 / 30, minimumMoveSpeedPerTick: 0.1 / 30, steeringParameters: profile.steeringParameters },
   });
   assert.deepEqual(parseMovement(fixture, 1), {
-    id: 'enemy_1007_slime', vitality: { maxHp: 2050 }, locomotion: { moveSpeedPerTick: 1 / 30, minimumMoveSpeedPerTick: 0.1 / 30, steeringParameters: profile.steeringParameters },
+    id: 'enemy_1007_slime', spatialPresence: {}, vitality: { maxHp: 2050 }, locomotion: { moveSpeedPerTick: 1 / 30, minimumMoveSpeedPerTick: 0.1 / 30, steeringParameters: profile.steeringParameters },
   });
   assert.deepEqual(parseMovement({ ...fixture, Value: [...fixture.Value].reverse() }, 1), parseMovement(fixture, 1));
   const ignored = structuredClone(fixture);
@@ -2078,7 +2079,7 @@ function deploymentBattleInput(overrides = {}, cards = []) {
 }
 
 const deployableDefinition = (id = 'test_deployable') => Object.freeze({
-  id, deployable: createDeployableDefinition({ cost: 0, redeployTicks: 0, slots: 1, buildableType: 'ALL' }),
+  id, occupancy: {}, deployable: createDeployableDefinition({ cost: 0, redeployTicks: 0, slots: 1, buildableType: 'ALL' }),
   vitality: Object.freeze({ maxHp: 100 }), allegiance: Object.freeze({ side: 'ALLY' }),
   spatial: Object.freeze({ layer: 'GROUND' }),
   blocker: Object.freeze({ capacity: 1, geometry: Object.freeze({ radius: 0.7 }) }),
@@ -2125,11 +2126,11 @@ test('core battle deploys, relocates and retreats units with immutable occupancy
     range: [[0, 0]], direction: 'RIGHT',
   }];
   const initialInput = deploymentBattleInput({
-    initialUnits: [{ definition: Object.freeze({ id: 'reserved_home' }), position: [5, 0], states: { occupancy },
+    initialUnits: [{ definition: Object.freeze({ id: 'reserved_home', occupancy: {} }), position: [5, 0], claims: occupancy.claims,
       navigationModifiers: initialNavigationModifiers }],
   }, [{ unit: definition }]);
   const reserved = new BattleRuntime(initialInput);
-  assert.equal(reserved.snapshot().units[0].occupancy, occupancy);
+  assert.equal(reserved.snapshot().units[0].occupancy.claims, occupancy.claims);
   assert.deepEqual(reserved.snapshot().units[0].occupancy.claims,
     [{ position: [0, 5], slot: 'DEPLOYMENT', type: 'RESERVATION' }]);
   assert.deepEqual(initialInput.initialUnits[0].navigationModifiers[0].range, [[0, 0]]);
@@ -2211,7 +2212,7 @@ test('core visibility: commands from different domains execute in phase order be
   const spec = deploymentBattleInput({ predefines: [{
     id: 17, alias: null, initiallyPresent: true, creation: {
       type: 'UNIT', definition, position: [1, 0], navigationModifiers: [],
-      states: { occupancy: { claims: [{ position: [0, 1], slot: 'DEPLOYMENT', type: 'PRESENT' }] } },
+      claims: [{ position: [0, 1], slot: 'DEPLOYMENT', type: 'PRESENT' }],
     },
   }] }, [{ unit: definition }]);
   const runtime = new BattleRuntime(spec);
@@ -2255,12 +2256,21 @@ test('core visibility: movement reads one navigation projection before following
       allowDiagonalMove: false, visitEveryTileCenter: false,
       visitEveryNodeCenter: false, visitEveryCheckPoint: true,
     });
-    const spawned = initializeRoutedEnemy({
-      id, tick: 0, definition, route, timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 },
-      alwaysCheckCurrentPoint: true, rngState: execution.rngState, nextNavigationRequestId: execution.nextNavigationRequestId,
-    });
-    execution = { ...execution, rngState: spawned.rngState, nextNavigationRequestId: spawned.nextNavigationRequestId };
-    battlefield = transitionBattlefield(battlefield, [{ type: 'REGISTER_UNIT', unit: spawned.enemy }]).state;
+    const spawned = initializeRoutedEnemy(
+      fixtureBattle(0, {
+        rngState: execution.rngState,
+        nextNavigationRequestId: execution.nextNavigationRequestId,
+      }),
+      {
+        id,
+        definition,
+        route,
+        timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 },
+        alwaysCheckCurrentPoint: true,
+      },
+    );
+    execution = { ...execution, rngState: spawned.state.execution.rngState, nextNavigationRequestId: spawned.state.execution.nextNavigationRequestId };
+    battlefield = transitionBattlefield(battlefield, [{ type: 'REGISTER_UNIT', unit: spawned.value.enemy }]).state;
   }
 
   battlefield = transitionBattlefield(battlefield, [{ type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: createNavigationModifier({
@@ -2284,7 +2294,7 @@ test('core visibility: movement reads one navigation projection before following
 });
 
 test('core elevated support disables blocking without changing target layer and reports loss while retaining its occupant', () => {
-  const provider = Object.freeze({ id: 'platform_provider',
+  const provider = Object.freeze({ id: 'platform_provider', occupancy: {},
     tileBinding: createTileBindingDefinition({ buildableType: 'ALL', heightType: 'HIGHLAND' }),
   });
   const definition = deployableDefinition();
@@ -2294,10 +2304,10 @@ test('core elevated support disables blocking without changing target layer and 
   });
   const occupancy = { claims: [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }] };
   const recipe = createPredefinedDefinition({ id: 50, alias: 'test_platform', initiallyPresent: true, creation: {
-    type: 'UNIT', definition: provider, position: [1, 0], navigationModifiers: [], states: { occupancy },
+    type: 'UNIT', definition: provider, position: [1, 0], navigationModifiers: [], claims: occupancy.claims,
   } });
-  assert.equal(recipe.creation.states.occupancy, occupancy);
-  assert.deepEqual(recipe.creation.states.occupancy.claims, [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }]);
+  assert.equal(recipe.creation.claims, occupancy.claims);
+  assert.deepEqual(recipe.creation.claims, [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }]);
   const claims = [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }];
   const navigationModifiers = [{
     definition: createNavigationModifierDefinition({ id: 'platform_navigation',
@@ -2305,18 +2315,18 @@ test('core elevated support disables blocking without changing target layer and 
     range: [[0, 0]], direction: 'RIGHT',
   }];
   const hiddenRecipe = createPredefinedDefinition({ ...recipe, initiallyPresent: false,
-    creation: { ...recipe.creation, states: { occupancy: { claims } }, navigationModifiers } });
+    creation: { ...recipe.creation, claims, navigationModifiers } });
   const runtime = new BattleRuntime(deploymentBattleInput({
     initialUnits: [{ definition: enemyDefinition, position: [1, 0] }],
     predefines: [hiddenRecipe],
   }, [{ unit: definition }]));
-  assert.equal(hiddenRecipe.creation.states.occupancy.claims, claims);
+  assert.equal(hiddenRecipe.creation.claims, claims);
   assert.equal(hiddenRecipe.creation.navigationModifiers[0].definition, navigationModifiers[0].definition);
   assert.deepEqual(runtime.snapshot().predefinedPresence, []);
   runtime.step([{ type: 'APPEAR_PREDEFINED', definitionId: 50 }]);
   const platformId = runtime.snapshot().predefinedPresence[0].source.unitId;
   const platform = runtime.snapshot().units.find(unit => unit.id === platformId);
-  assert.equal(platform.occupancy, hiddenRecipe.creation.states.occupancy);
+  assert.equal(platform.occupancy.claims, hiddenRecipe.creation.claims);
   assert.deepEqual(platform.occupancy.claims, [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }]);
   assert.deepEqual(runtime.navigationMaps.WALK.cells.map(cell => cell.moveCost), [1, 1000, 1, 1, 1, 1]);
   assert.equal(runtime.snapshot().navigationModifiers.length, 1);

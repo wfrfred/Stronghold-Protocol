@@ -1,9 +1,5 @@
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import type { Unit, Id } from "../../unit/unit.js";
-import {
-    assertUnitCapabilityComposition,
-    assertUnitCapabilityPairing,
-} from "../../unit/capability/catalog.js";
 import { releaseBlockingRelations } from "../blocking/relations.js";
 import type { BattlefieldChange, BattlefieldRemovalReason } from "../contract.js";
 import type { MechanismId } from "../mechanism.js";
@@ -79,7 +75,6 @@ export function applyBattlefieldChanges<U extends Unit>(
         switch (change.type) {
             case "REGISTER_UNIT":
                 assertNonnegativeSafeInteger(change.unit.id, "unit id");
-                assertUnitCapabilityPairing(change.unit);
 
                 register(units.edit(), change.unit.id, change.unit, "unit");
                 registeredUnitIds.push(change.unit.id);
@@ -93,8 +88,6 @@ export function applyBattlefieldChanges<U extends Unit>(
                 if (previous.definition !== change.unit.definition) {
                     throw new RangeError("unit definition cannot change during update");
                 }
-
-                assertUnitCapabilityComposition(previous, change.unit);
 
                 units.edit().set(change.unit.id, change.unit);
                 updatedUnitIds.add(change.unit.id);

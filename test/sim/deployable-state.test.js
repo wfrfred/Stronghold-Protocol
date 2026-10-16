@@ -1,11 +1,11 @@
+import { fixtureBattle } from "../helpers/unit.js";
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { initialize } from '../../dist/core/tactical/unit/initialize.js';
-import { assertUnitCapabilityPairing } from '../../dist/core/tactical/unit/capability/catalog.js';
+import { initialize } from "../helpers/unit.js";
 import { createDefinition as createDeployableDefinition, initialize as initializeDeployable, hasDeployable } from '../../dist/core/tactical/unit/capability/deployable/capability.js';
 import { createDefinition as createOperator } from '../../dist/core/tactical/unit/archetype/operator.js';
 import { unit as actionUnit } from '../helpers/action-fixture.js';
@@ -19,25 +19,18 @@ test('deployable definitions initialize a paired capability without a Card', () 
   const unit = initialize({ id: 0, definition, position: [0, 0] });
   assert.equal(hasDeployable(unit), true);
   assert.equal(unit.definition.deployable, definition.deployable);
-  assert.deepEqual(unit.deployable, initializeDeployable(definition.deployable));
-  assert.doesNotThrow(() => assertUnitCapabilityPairing(unit));
+  assert.deepEqual(unit.deployable, initializeDeployable(fixtureBattle(0), definition.deployable).value);
 
   const other = initialize({ id: 1, definition: { id: 'enemy' }, position: [0, 0] });
   assert.equal(hasDeployable(other), false);
-  assert.doesNotThrow(() => assertUnitCapabilityPairing(other));
 });
 
-test('prepared deployable state preserves its Card association and requires configuration', () => {
-  const deployable = { ...initializeDeployable(definition.deployable), cardId: 17 };
-  const unit = initialize({ id: 0, definition, position: [0, 0], states: { deployable } });
-  assert.equal(unit.deployable, deployable);
-  assert.equal(unit.deployable.cardId, 17);
-  assert.deepEqual(deployable, { ...initializeDeployable(definition.deployable), cardId: 17 });
-  assert.throws(() => initialize({
-    id: 1, definition: { id: 'unconfigured' }, position: [0, 0], states: { deployable },
-  }), /prepared capability deployable requires configuration/);
-  const { deployable: _deployment, ...unpaired } = unit;
-  assert.throws(() => assertUnitCapabilityPairing(unpaired), /configuration and state must be paired/);
+test('deployable state is initialized before deployment associates a Card', () => {
+  const unit = initialize({ id: 0, definition, position: [0, 0] });
+  assert.equal(unit.deployable.cardId, null);
+  const deployed = { ...unit, deployable: { ...unit.deployable, cardId: 17 } };
+  assert.equal(deployed.deployable.cardId, 17);
+  assert.equal(unit.deployable.cardId, null);
 });
 
 test('operator content factories preserve an optional deployable capability', () => {
@@ -49,7 +42,7 @@ test('operator content factories preserve an optional deployable capability', ()
   const created = initialize({ id: 0, position: [0, 0], definition: operator });
   assert.equal(operator.deployable, definition.deployable);
   assert.equal(hasDeployable(created), true);
-  assert.deepEqual(created.deployable, initializeDeployable(definition.deployable));
+  assert.deepEqual(created.deployable, initializeDeployable(fixtureBattle(0), definition.deployable).value);
 });
 
 test('factory inference and the deployable guard retain capability and caller types', async () => {
@@ -67,18 +60,16 @@ const definition = { id: 'typed-deployable', deployable: {
   cost: 0, redeployTicks: 0, slots: 1, buildableType: 'MELEE' as const, advancedBuildableMask: 1,
   refund: { rate: 0.5, limit: 'BASE_COST' as const },
 } };
-const unit: Unit & Deployable = initialize({ id: 0, definition, position: [0, 0] });
-const prepared: Unit & Deployable = initialize({
-  id: 1, definition, position: [0, 0], states: { deployable: { ...initializeDeployable(definition.deployable), cardId: 17 } },
-});
-const cardId: number | null = prepared.deployable.cardId;
+declare const battle: import(${module('../../src/core/tactical/battle/state.js')}).State;
+const unit: Unit & Deployable = initialize(battle, { id: 0, definition, position: [0, 0] }).value;
+const cardId: number | null = unit.deployable.cardId;
 declare const unknownUnit: Unit & { readonly label: string };
 if (hasDeployable(unknownUnit)) {
   const guarded: Unit & Deployable = unknownUnit;
   const label: string = guarded === unknownUnit ? unknownUnit.label : '';
 }
 // @ts-expect-error deployable state requires a corresponding definition
-initialize({ id: 2, definition: { id: 'enemy' }, position: [0, 0], states: { deployable: { ...initializeDeployable(definition.deployable), cardId: 17 } } });
+initialize(battle, { id: 2, definition: { id: 'enemy' }, position: [0, 0], states: {} });
 `);
     const program = ts.createProgram([path], {
       noEmit: true, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.NodeNext,

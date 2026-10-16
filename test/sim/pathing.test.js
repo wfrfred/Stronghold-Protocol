@@ -1,3 +1,4 @@
+import { fixtureBattle, fixtureDefinition } from "../helpers/unit.js";
 import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js';
 import { create as createAttack } from '../../dist/content/tactical/actions/attack.js';
 import { Effects } from "../../dist/core/tactical/unit/effect/effects.js";
@@ -43,7 +44,7 @@ import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.
 import { initializeRoutedEnemy } from "../../dist/core/tactical/battle/creation/enemy.js";
 import { stepRoutedEnemy } from "../../dist/legacy/enemy.js";
 import { copy } from '../../dist/core/tactical/unit/snapshot.js';
-import { initialize } from '../../dist/core/tactical/unit/initialize.js';
+import { initialize } from "../helpers/unit.js";
 import { createDefinition as createActionCapabilityDefinition, initialize as initializeActionState } from '../../dist/core/tactical/unit/capability/action/capability.js';
 import { createDefinition as createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/tile-binding/capability.js';
 import { createSteeringParameters, createSteeringState, integrateSteering } from '../../dist/core/tactical/unit/capability/locomotion/steering.js';
@@ -749,16 +750,24 @@ function routedEnemyHarness({
     startPosition: [0, 0], endPosition: [0, 4], spawnOffset: [0, 0], spawnRandomRange: [0, 0],
     checkpoints: checkpoints ?? [coreMove(1), { type: 'WAIT_FOR_TICKS', durationTicks: 3 }], ...routeOverrides,
   }));
-  const initialized = initializeRoutedEnemy({
-    id: 1,
-    definition: createDefinition({ id: 'enemy_core_walker', vitality: { maxHp: 100 }, locomotion: {
-      moveSpeedPerTick: speedPerTick,
-      steeringParameters: createSteeringParameters({ steeringFactor: 2.5, maxSteeringForce: 4 }),
-    } }),
-    route, timing: createRouteTiming(timing), tick: initialTick,
-    alwaysCheckCurrentPoint, rngState: seed, nextNavigationRequestId: 0,
-  });
-  let enemy = initialized.enemy, rngState = initialized.rngState, nextNavigationRequestId = initialized.nextNavigationRequestId, tick = initialTick;
+  const initialized = initializeRoutedEnemy(
+    fixtureBattle(initialTick, { rngState: seed, nextNavigationRequestId: 0 }),
+    {
+      id: 1,
+      definition: createDefinition({
+        id: 'enemy_core_walker',
+        vitality: { maxHp: 100 },
+        locomotion: {
+          moveSpeedPerTick: speedPerTick,
+          steeringParameters: createSteeringParameters({ steeringFactor: 2.5, maxSteeringForce: 4 }),
+        },
+      }),
+      route,
+      timing: createRouteTiming(timing),
+      alwaysCheckCurrentPoint,
+    },
+  );
+  let enemy = initialized.value.enemy, rngState = initialized.state.execution.rngState, nextNavigationRequestId = initialized.state.execution.nextNavigationRequestId, tick = initialTick;
   let maps = Object.freeze({
     WALK: fieldMap(1, 5, Array.from({ length: 5 }, () => fieldCell())),
     FLY: fieldMap(1, 5, Array.from({ length: 5 }, () => fieldCell()), 'FLY'),
@@ -771,7 +780,7 @@ function routedEnemyHarness({
     get nextNavigationRequestId() { return nextNavigationRequestId; },
     get tick() { return tick; },
     get maps() { return maps; },
-    get initialSignals() { return initialized.signals; },
+    get initialSignals() { return initialized.value.signals; },
     trace,
     setMaps(next) { maps = next; },
     displace(position) { enemy = { ...enemy, position: Object.freeze([...position]) }; },
@@ -1096,17 +1105,25 @@ test('core routed enemy keeps one randomized goal across map changes, motion mod
   serialExpected.next();
   const secondX = -0.25 + serialExpected.next() * 0.5;
   serialExpected.next();
-  const second = initializeRoutedEnemy({
-    id: 2, definition: h.enemy.definition, route: h.enemy.locomotion.mainRoute.route.definition,
-    timing: h.enemy.locomotion.mainRoute.route.timing, tick: h.tick, alwaysCheckCurrentPoint: true,
-    rngState: savedRngState, nextNavigationRequestId: h.nextNavigationRequestId,
-  });
-  const secondRequest = routedEnemyRequest(second.enemy), secondGoal = second.enemy.locomotion.mainRoute.route.progress.checkpoint.goal;
+  const second = initializeRoutedEnemy(
+    fixtureBattle(h.tick, {
+      rngState: savedRngState,
+      nextNavigationRequestId: h.nextNavigationRequestId,
+    }),
+    {
+      id: 2,
+      definition: h.enemy.definition,
+      route: h.enemy.locomotion.mainRoute.route.definition,
+      timing: h.enemy.locomotion.mainRoute.route.timing,
+      alwaysCheckCurrentPoint: true,
+    },
+  );
+  const secondRequest = routedEnemyRequest(second.value.enemy), secondGoal = second.value.enemy.locomotion.mainRoute.route.progress.checkpoint.goal;
   assert.deepEqual(secondGoal.position, [2 + secondX, 0]);
   assert.equal(secondRequest.goal, secondGoal);
   assert.equal(secondRequest.id, 1);
-  assert.equal(second.rngState, serialExpected.state());
-  assert.equal(second.nextNavigationRequestId, 2);
+  assert.equal(second.state.execution.rngState, serialExpected.state());
+  assert.equal(second.state.execution.nextNavigationRequestId, 2);
   assert.equal(h.rngState, savedRngState);
   assert.equal(routedEnemyRequest(h.enemy), request);
   h.step({ moveMultiplier: 0 });
@@ -1335,7 +1352,7 @@ function battlefieldProjectionHarness(rows = 2, columns = 5,
 
 const projectionClaim = (column, type = 'PRESENT', slot = 'DEPLOYMENT') => ({ position: [0, column], type, slot });
 const projectionUnit = (id, position, definition = {}, states = {}) => initialize({
-  id, position, definition: Object.freeze({ id: `projection_unit_${id}`, ...definition }), states,
+  id, position, definition: Object.freeze({ id: `projection_unit_${id}`, spatialPresence: {}, ...definition }), states,
 });
 
 test('core selective projection retains untouched collections, indexes and live navigation on nonspatial updates', () => {
@@ -1350,7 +1367,7 @@ test('core selective projection retains untouched collections, indexes and live 
         ignoreTargetFree: false, ignoreInvisible: false, maxTargets: 1 },
     }],
    })) }) });
-  h.commit([{ type: 'REGISTER_UNIT', unit: { ...routed.enemy, definition, action: initializeActionState() } }]);
+  h.commit([{ type: 'REGISTER_UNIT', unit: { ...routed.enemy, definition, action: initializeActionState(fixtureBattle(0), fixtureDefinition("action")).value } }]);
   h.commit((state, index) => {
     const moved = stepRoutedEnemy(state.units.get(1), {
       tick: 0, maps: state.navigationMaps, fieldCache: h.branches[index].fieldCache,
@@ -2157,8 +2174,19 @@ test('core battlefield retains paths on commit and consumers rebind changed navi
   const alternativeRoute = { route: walker.locomotion.mainRoute.route, navigation: oldNavigation };
   walker.locomotion.alternativeRoute = alternativeRoute;
   const flyRoute = createRouteDefinition(coreRoute({ pathMotionMode: 'FLY', startPosition: [0, 0], endPosition: [0, 4], spawnOffset: [0, 0], spawnRandomRange: [0, 0] }));
-  const flyer = initializeRoutedEnemy({ id: 2, definition: walker.definition, route: flyRoute,
-    timing: walker.locomotion.mainRoute.route.timing, tick: h.tick, alwaysCheckCurrentPoint: true, rngState: h.rngState, nextNavigationRequestId: h.nextNavigationRequestId }).enemy;
+  const flyer = initializeRoutedEnemy(
+    fixtureBattle(h.tick, {
+      rngState: h.rngState,
+      nextNavigationRequestId: h.nextNavigationRequestId,
+    }),
+    {
+      id: 2,
+      definition: walker.definition,
+      route: flyRoute,
+      timing: walker.locomotion.mainRoute.route.timing,
+      alwaysCheckCurrentPoint: true,
+    },
+  ).value.enemy;
   const flyRequest = routedEnemyRequest(flyer);
   const flyField = viewBattlefield(runtime).fieldCache.get(viewBattlefield(runtime).navigationMaps.FLY, flyRequest);
   flyer.locomotion.mainRoute.navigation = bindNavigationPath(flyer.locomotion.mainRoute.navigation, createNavigationPath(flyRequest, flyField), flyer.position).state;
@@ -3053,10 +3081,18 @@ test('core original h07_02 teleport and patrol routes execute their unchanged fa
   function run(routeIndex, ticks) {
     const route = parseRouteDefinition(raw.routes[routeIndex]);
     assert.equal(route.visitEveryCheckPoint, false);
-    let { enemy, rngState, nextNavigationRequestId } = initializeRoutedEnemy({
-      id: 1, tick: 0, definition, route, rngState: 31, nextNavigationRequestId: 0,
-      alwaysCheckCurrentPoint: true, timing: createRouteTiming({ waveStartedAtTick: 0, fragmentStartedAtTick: 0 }),
-    });
+    const initialized = initializeRoutedEnemy(
+      fixtureBattle(0, { rngState: 31, nextNavigationRequestId: 0 }),
+      {
+        id: 1,
+        definition,
+        route,
+        alwaysCheckCurrentPoint: true,
+        timing: createRouteTiming({ waveStartedAtTick: 0, fragmentStartedAtTick: 0 }),
+      },
+    );
+    let { enemy } = initialized.value;
+    let { rngState, nextNavigationRequestId } = initialized.state.execution;
     const trace = [];
     for (let tick = 0; tick < ticks && enemy.locomotion.mainRoute.route.progress.phase !== 'COMPLETED'; tick++) {
       const moved = stepRoutedEnemy(enemy, { tick, maps, fieldCache, moveMultiplier: 1,

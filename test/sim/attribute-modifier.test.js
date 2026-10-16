@@ -31,7 +31,7 @@ import {
     removeMoveSpeedContribution,
 } from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
 import { resolveMoveSpeed as resolveMoveSpeedPerTick } from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
-import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../helpers/unit.js";
 import * as modifier from "../../dist/core/tactical/unit/contribution/value.js";
 import {
     definition,

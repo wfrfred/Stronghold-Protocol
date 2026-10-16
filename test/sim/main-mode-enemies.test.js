@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { prepare } from '../../dist/data/arknights/enemy.js';
 import { create as createHound } from '../../dist/content/tactical/enemies/hound.js';
 import { create as createCrossbowman, createArrow } from '../../dist/content/tactical/enemies/crossbowman.js';
-import { initialize } from '../../dist/core/tactical/unit/initialize.js';
+import { initialize } from "../helpers/unit.js";
 
 import { createBattleState, getUnit, registerUnit } from '../../dist/core/tactical/battle/state.js';
 import { create as createBattlefield } from '../../dist/core/tactical/battlefield/state.js';

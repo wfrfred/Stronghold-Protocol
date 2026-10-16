@@ -1,5 +1,6 @@
 import { createShapeGeometry, type HitGeometry } from "../../../geometry/shape.js";
 import type { Unit } from "../../unit.js";
+import type { State as BattleState, Result } from "../../../battle/state.js";
 
 export type SpatialLayer = "GROUND" | "AIR";
 
@@ -37,10 +38,16 @@ export function createHitDefinition(definition: HitDefinition): HitDefinition {
     return Object.freeze({ geometry: createShapeGeometry(definition.geometry) });
 }
 
-export function initializeSpatialState(definition: SpatialDefinition): SpatialState {
-    return { layer: definition.layer };
+export function initializeSpatialState(
+    battle: BattleState,
+    definition: SpatialDefinition,
+): Result<SpatialState> {
+    return { state: battle, value: { layer: definition.layer } };
 }
 
-export function initializeHitState(definition: HitDefinition): HitState {
-    return { geometry: definition.geometry };
+export function initializeHitState(
+    battle: BattleState,
+    definition: HitDefinition,
+): Result<HitState> {
+    return { state: battle, value: { geometry: definition.geometry } };
 }

@@ -12,9 +12,8 @@ import { create as createFieldState, transition as transitionBattlefield } from 
 import { view as viewBattlefield } from '../../dist/core/tactical/battlefield/view.js';
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
 import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
-import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../helpers/unit.js";
 import { copy } from "../../dist/core/tactical/unit/snapshot.js";
-import { configuredCapabilities } from "../../dist/core/tactical/unit/capability/catalog.js";
 import { createDefinition as createActionCapabilityDefinition } from "../../dist/core/tactical/unit/capability/action/capability.js";
 
 const map = () =>
@@ -35,6 +34,7 @@ const map = () =>
 
 const definition = () => ({
     id: "paired-capabilities",
+    targetable: {}, spatialPresence: {}, occupancy: {}, tileBinding: { heightType: null, buildableType: "ALL", advancedBuildableMask: null },
     deployable: {
         cost: 10,
         redeployTicks: 30,
@@ -99,36 +99,11 @@ const definition = () => ({
     },
 });
 
-test("battlefield transition rejects unpaired configured capabilities atomically at registration", () => {
+test("battlefield registration retains initialized capabilities and shared definitions", () => {
     let runtime = createFieldState({ map: map() });
     const unit = initialize({ id: 1, definition: definition(), position: [0, 0] });
-    const maps = viewBattlefield(runtime).navigationMaps;
-    for (const key of Object.keys(configuredCapabilities)) {
-        const missingState = { ...unit };
-        delete missingState[key];
-        const missingDefinition = { ...unit.definition };
-        delete missingDefinition[key];
-        const missingConfiguration = { ...unit, definition: missingDefinition };
-        for (const invalid of [
-            missingState,
-            missingConfiguration,
-            { ...unit, [key]: undefined },
-        ]) {
-            assert.throws(
-                () =>
-                    transitionBattlefield(runtime, [
-                        { type: "REGISTER_UNIT", unit: { ...unit, id: 2 } },
-                        { type: "REGISTER_UNIT", unit: invalid },
-                    ]),
-                new RegExp(`capability ${key} configuration and state must be paired`),
-            );
-            assert.deepEqual(viewBattlefield(runtime).unitIds, []);
-            assert.equal(viewBattlefield(runtime).navigationMaps, maps);
-            assert.deepEqual(viewBattlefield(runtime).unitsAt([0, 0]), []);
-        }
-    }
     runtime = transitionBattlefield(runtime, [{ type: "REGISTER_UNIT", unit }]).state;
-    assert.equal(viewBattlefield(runtime).getUnit(1).definition, unit.definition);
+    assert.equal(viewBattlefield(runtime).getUnit(1), unit);
     assert.deepEqual(
         viewBattlefield(runtime)
             .unitsAt([0, 0])
@@ -145,32 +120,6 @@ test("battlefield transition preserves configured capability composition on upda
         { type: "REGISTER_UNIT", unit },
         { type: "REGISTER_UNIT", unit: bare },
     ]).state;
-    const maps = viewBattlefield(runtime).navigationMaps;
-    for (const key of Object.keys(configuredCapabilities)) {
-        const missingState = { ...unit };
-        delete missingState[key];
-        for (const invalid of [
-            missingState,
-            { ...unit, [key]: undefined },
-            { ...bare, [key]: unit[key] },
-        ]) {
-            assert.throws(
-                () =>
-                    transitionBattlefield(runtime, [
-                        {
-                            type: "SET_POSITION_AND_RELEASE_BLOCKING",
-                            unitId: 1,
-                            position: [1, 0],
-                        },
-                        { type: "UPDATE_UNIT", unit: invalid },
-                    ]),
-                new RegExp(`capability ${key} state cannot be added or removed during update`),
-            );
-            assert.deepEqual(viewBattlefield(runtime).getUnit(1).position, [0, 0]);
-            assert.deepEqual(viewBattlefield(runtime).unitIds, [1, 2]);
-            assert.equal(viewBattlefield(runtime).navigationMaps, maps);
-        }
-    }
     const updated = {
         ...unit,
         action: { ...unit.action, cooldowns: new Map([["normal", { periodTicks: 3, readyAtTick: 7 }]]) },
@@ -180,9 +129,7 @@ test("battlefield transition preserves configured capability composition on upda
     runtime = transitionBattlefield(runtime, [{ type: "UPDATE_UNIT", unit: updated }]).state;
     assert.deepEqual(viewBattlefield(runtime).getUnit(1).action, updated.action);
     assert.deepEqual(viewBattlefield(runtime).unitsAt([0, 0]), []);
-    const restored = { ...updated };
-    delete restored.spatialPresence;
-    delete restored.occupancy;
+    const restored = { ...updated, spatialPresence: { present: true }, occupancy: { claims: [] } };
     runtime = transitionBattlefield(runtime, [{ type: "UPDATE_UNIT", unit: restored }]).state;
     assert.deepEqual(
         viewBattlefield(runtime)

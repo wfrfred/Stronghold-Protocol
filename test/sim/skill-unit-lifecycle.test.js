@@ -7,7 +7,7 @@ import { ref as activationRef } from "../../dist/core/tactical/unit/capability/s
 import * as query from "../../dist/core/tactical/unit/capability/skill/query.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
-import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../helpers/unit.js";
 import { definition as effectDefinition, effectFixtureWork } from "../helpers/effects.js";
 import { definition, at } from "../helpers/skill.js";
 

@@ -1,3 +1,4 @@
+import { fixtureBattle, fixtureDefinition } from "../helpers/unit.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as offense from "../../dist/core/tactical/unit/capability/offense/capability.js";
@@ -12,43 +13,43 @@ import { create } from "../../dist/core/tactical/unit/contribution/value.js";
 
 const entries = [
     [
-        offense.initialize(),
+        offense.initialize(fixtureBattle(0), fixtureDefinition("offense")).value,
         "attack",
         offense.setAttackContribution,
         offense.removeAttackContribution,
     ],
     [
-        defense.initialize(),
+        defense.initialize(fixtureBattle(0), fixtureDefinition("defense")).value,
         "defense",
         defense.setDefenseContribution,
         defense.removeDefenseContribution,
     ],
     [
-        defense.initialize(),
+        defense.initialize(fixtureBattle(0), fixtureDefinition("defense")).value,
         "resistance",
         defense.setResistanceContribution,
         defense.removeResistanceContribution,
     ],
     [
-        blocker.initialize({ capacity: 2, geometry: { radius: 0.5 } }),
+        blocker.initialize(fixtureBattle(0), { capacity: 2, geometry: { radius: 0.5 } }).value,
         "capacity",
         blocker.setCapacityContribution,
         blocker.removeCapacityContribution,
     ],
     [
-        locomotion.initialize(),
+        locomotion.initialize(fixtureBattle(0), fixtureDefinition("locomotion")).value,
         "moveSpeed",
         locomotion.setMoveSpeedContribution,
         locomotion.removeMoveSpeedContribution,
     ],
     [
-        action.initialize(),
+        action.initialize(fixtureBattle(0), fixtureDefinition("action")).value,
         "speed",
         action.setSpeedContribution,
         action.removeSpeedContribution,
     ],
     [
-        action.initialize(),
+        action.initialize(fixtureBattle(0), fixtureDefinition("action")).value,
         "interval",
         action.setIntervalContribution,
         action.removeIntervalContribution,
@@ -82,25 +83,25 @@ test("local hook registration retains progress and changes only its registration
     };
     const registrations = [
         [
-            vitality.initialize({ maxHp: 100 }),
+            vitality.initialize(fixtureBattle(0), { maxHp: 100 }).value,
             "damageHooks",
             damage.setHook,
             damage.removeHook,
         ],
         [
-            vitality.initialize({ maxHp: 100 }),
+            vitality.initialize(fixtureBattle(0), { maxHp: 100 }).value,
             "healingHooks",
             healing.setHook,
             healing.removeHook,
         ],
         [
-            action.initialize(),
+            action.initialize(fixtureBattle(0), fixtureDefinition("action")).value,
             "beforeRelease",
             action.setBeforeReleaseHook,
             action.removeBeforeReleaseHook,
         ],
         [
-            action.initialize(),
+            action.initialize(fixtureBattle(0), fixtureDefinition("action")).value,
             "released",
             action.setReleasedHook,
             action.removeReleasedHook,

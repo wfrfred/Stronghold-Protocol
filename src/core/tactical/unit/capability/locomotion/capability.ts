@@ -1,5 +1,5 @@
 import * as registry from "../../hook/hook.js";
-import type { State as BattleState } from "../../../battle/state.js";
+import type { State as BattleState, Result } from "../../../battle/state.js";
 import type { Context } from "../../query.js";
 import type { NavigationState } from "../../../battlefield/navigation/state.js";
 import type { RouteState } from "./route/state.js";
@@ -57,9 +57,14 @@ export function hasRoutedLocomotion<U extends Unit>(unit: U): unit is U & Routed
     return hasLocomotion(unit) && "mainRoute" in unit.locomotion;
 }
 
-export function initialize(): State {
-    return { moving: false, moveSpeed: [], steering: createSteeringState(), rules: [] };
-}
+export const initialize: (battle: BattleState, definition: Definition) => Result<State> = (
+    battle,
+) => {
+    return {
+        state: battle,
+        value: { moving: false, moveSpeed: [], steering: createSteeringState(), rules: [] },
+    };
+};
 
 export function setRule(state: State, rule: Rule): State {
     const rules = registry.set(state.rules, rule);
@@ -77,9 +82,12 @@ export function canMove(battle: BattleState, unit: Unit & Locomotion): boolean {
     return unit.locomotion.rules.every((rule) => rule.allows(battle, unit));
 }
 
-export function createRoutedLocomotionState(mainRoute: RouteControlState): RoutedLocomotionState {
+export function createRoutedLocomotionState(
+    state: State,
+    mainRoute: RouteControlState,
+): RoutedLocomotionState {
     return {
-        ...initialize(),
+        ...state,
         mainRoute,
         alternativeRoute: null,
     };

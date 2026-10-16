@@ -151,7 +151,7 @@ test("aura runtime: predefined, deployment and spawning join before the same tic
         },
     };
     const deployable = auraUnit(3, [0, 0], {
-        deployable: createDeployableDefinition({ cost: 0, redeployTicks: 0, slots: 1, buildableType: "ALL" }),
+        occupancy: {}, deployable: createDeployableDefinition({ cost: 0, redeployTicks: 0, slots: 1, buildableType: "ALL" }),
     }).definition;
     const runtime = new BattleRuntime(
         input(host, {

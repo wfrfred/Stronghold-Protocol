@@ -1,6 +1,7 @@
 import type { Attack } from "../actions/attack.js";
 import type { Profile } from "../../../data/arknights/enemy.js";
-import type { Result as InitializedUnit } from "../../../core/tactical/unit/initialize.js";
+import type { Unit } from "../../../core/tactical/unit/unit.js";
+import type { Product } from "../../../core/tactical/unit/capability/catalog.js";
 import {
     createDefinition as createGroundDefinition,
     type AttackTiming,
@@ -14,7 +15,7 @@ export interface Definition extends GroundDefinition {
     readonly attackTiming: AttackTiming;
 }
 
-export type Enemy = InitializedUnit<Definition>;
+export type Enemy = Unit & Product<Definition>;
 
 export function create(
     profile: Profile,

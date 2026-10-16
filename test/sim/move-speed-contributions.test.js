@@ -1,3 +1,4 @@
+import { fixtureBattle, placement } from "../helpers/unit.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
@@ -76,31 +77,31 @@ function harness({ speed = 0.25, minimum = 0, definition = route(), maps } = {})
             ),
         ),
     });
-    const initialized = initializeRoutedEnemy({
-        id: 0,
-        tick: 0,
-        definition: createDefinition({
-            id: "dynamic-mover",
-            vitality: { maxHp: 100 },
-            locomotion: {
-                moveSpeedPerTick: speed,
-                minimumMoveSpeedPerTick: minimum,
-                steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 },
-            },
-        }),
-        route: definition,
-        timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 },
-        alwaysCheckCurrentPoint: true,
-        rngState: 17,
-        nextNavigationRequestId: 0,
-    });
+    const initialized = initializeRoutedEnemy(
+        fixtureBattle(0, { rngState: 17, nextNavigationRequestId: 0 }),
+        {
+            id: 0,
+            definition: createDefinition({
+                id: "dynamic-mover",
+                vitality: { maxHp: 100 },
+                locomotion: {
+                    moveSpeedPerTick: speed,
+                    minimumMoveSpeedPerTick: minimum,
+                    steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 },
+                },
+            }),
+            route: definition,
+            timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 },
+            alwaysCheckCurrentPoint: true,
+        },
+    );
     let work = createBattleState(
-        transition(battlefield, [{ type: "REGISTER_UNIT", unit: initialized.enemy }]).state,
+        transition(battlefield, [{ type: "REGISTER_UNIT", unit: initialized.value.enemy }]).state,
     );
     let execution = {
-        rngState: initialized.rngState,
+        rngState: initialized.state.execution.rngState,
         nextUnitId: 1,
-        nextNavigationRequestId: initialized.nextNavigationRequestId,
+        nextNavigationRequestId: initialized.state.execution.nextNavigationRequestId,
         nextMechanismId: 0,
         nextNavigationModifierId: 0,
         nextProjectileId: 0,
@@ -463,7 +464,7 @@ test("move speed: the native Mire modifier slows actual movement and expiry rest
             seed: 17,
         }),
         initialUnits: [
-            {
+            placement({
                 definition: initial.definition,
                 position: initial.position,
                 effects: initial.effects,
@@ -471,7 +472,7 @@ test("move speed: the native Mire modifier slows actual movement and expiry rest
                     locomotion: initial.locomotion,
                     spatialPresence: initial.spatialPresence,
                 },
-            },
+            }),
         ],
         schedule: { type: "TIMELINE", spawns: [future] },
     };

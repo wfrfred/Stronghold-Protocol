@@ -8,7 +8,7 @@ import { applyBattlefieldChanges } from '../../dist/core/tactical/battlefield/st
 import {
   createBattlefieldState, settleBattlefieldState, settleBattlefieldStateFully,
 } from '../../dist/core/tactical/battlefield/storage/state.js';
-import { initialize } from '../../dist/core/tactical/unit/initialize.js';
+import { initialize } from "../helpers/unit.js";
 import { createDefinition as createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/tile-binding/capability.js';
 
 function projectionFacts(state) {

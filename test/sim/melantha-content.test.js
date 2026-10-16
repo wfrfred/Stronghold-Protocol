@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { prepare } from '../../dist/data/arknights/operator.js';
 import { create } from '../../dist/content/tactical/operators/melantha.js';
 
-import { initialize } from '../../dist/core/tactical/unit/initialize.js';
+import { initialize } from "../helpers/unit.js";
 import { createBattleState, battlefieldView, getUnit, updateUnit } from '../../dist/core/tactical/battle/state.js';
 import { enterUnits } from '../../dist/core/tactical/battle/execution/unit-lifecycle.js';
 import { activate as activateSkill, advance as advanceSkill, finish as finishSkill } from '../../dist/core/tactical/unit/capability/skill/operations.js';

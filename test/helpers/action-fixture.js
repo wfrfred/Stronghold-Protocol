@@ -5,7 +5,7 @@ import {
 import { createBattleState } from "../../dist/core/tactical/battle/state.js";
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
 import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
-import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "./unit.js";
 import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
 import { create as createAttack } from "../../dist/content/tactical/actions/attack.js";
@@ -69,6 +69,7 @@ export function unit(
     const definition = {
         id: `action-${id}`,
         vitality: { maxHp: hp },
+        targetable: {}, spatialPresence: {}, occupancy: {},
         offense: { attack: 10 },
         defense: { defense: 0, resistance: 0 },
         allegiance: { side },

@@ -2,8 +2,8 @@ import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { selectTargets } from "../../dist/core/tactical/unit/targeting/select.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
-import { selectCapabilityStates } from "../../dist/core/tactical/unit/capability/catalog.js";
-import { initialize as initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
+import { selectStates as selectCapabilityStates } from "../../dist/core/tactical/unit/snapshot.js";
+import { initialize as initializeUnit, placement } from "./unit.js";
 import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/state.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { definition, attackBuff, effectFixtureWork } from "./effects.js";
@@ -150,12 +150,12 @@ export function seededPlacement(effect, unit = auraUnit(0), scopes = []) {
         scopes,
     });
     const seeded = getUnit(installed.state, unit.id);
-    return {
+    return placement({
         definition: seeded.definition,
         position: seeded.position,
         effects: seeded.effects,
         states: selectCapabilityStates(seeded),
-    };
+    });
 }
 
 export function snapshotAttack(snapshot, unitId) {

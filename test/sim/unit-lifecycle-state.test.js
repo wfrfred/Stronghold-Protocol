@@ -5,7 +5,7 @@ import {
   advanceBattlefield, battlefieldView, createBattleState, getUnit, registerUnit, updateUnit,
 } from "../../dist/core/tactical/battle/state.js";
 import { enterUnits, removeUnitWithEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
-import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../helpers/unit.js";
 import { createDefinition as createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
 import { createMechanism, createMechanismDefinition } from "../../dist/core/tactical/battlefield/mechanism.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";

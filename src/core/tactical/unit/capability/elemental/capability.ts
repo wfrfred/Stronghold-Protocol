@@ -4,7 +4,7 @@ import {
     assertNonnegativeSafeInteger,
     assertPositiveNumber,
 } from "../../../../common/assert.js";
-import type { State as BattleState } from "../../../battle/state.js";
+import type { State as BattleState, Result } from "../../../battle/state.js";
 import type { Unit, Definition as UnitDefinition } from "../../unit.js";
 import * as registry from "../../hook/hook.js";
 import * as contribution from "../../contribution/contribution.js";
@@ -110,26 +110,27 @@ export function createDefinition(
     });
 }
 
-export function initialize(definition: Definition, tick = 0): State {
-    assertNonnegativeSafeInteger(tick, "elemental initialization tick");
-
+export function initialize(battle: BattleState, definition: Definition): Result<State> {
     return {
-        ep: elementValues(definition.maxEp),
-        burst: null,
-        nextBurstId: 0,
-        lastAdvancedTick: tick,
-        maxEp: [],
-        recoverySpeed: [],
-        elementResistance: [],
-        damageResistance: [],
-        burstRecoverySpeed: [],
-        damage: [],
-        rules: [],
-        received: [],
-        damaged: [],
-        healed: [],
-        burstStarted: [],
-        burstEnded: [],
+        state: battle,
+        value: {
+            ep: elementValues(definition.maxEp),
+            burst: null,
+            nextBurstId: 0,
+            lastAdvancedTick: battle.tick,
+            maxEp: [],
+            recoverySpeed: [],
+            elementResistance: [],
+            damageResistance: [],
+            burstRecoverySpeed: [],
+            damage: [],
+            rules: [],
+            received: [],
+            damaged: [],
+            healed: [],
+            burstStarted: [],
+            burstEnded: [],
+        },
     };
 }
 

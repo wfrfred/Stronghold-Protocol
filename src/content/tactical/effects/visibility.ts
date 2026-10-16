@@ -2,29 +2,27 @@ import { updateUnit } from "../../../core/tactical/battle/state.js";
 import type { Definition } from "../../../core/tactical/unit/effect/definition.js";
 import * as targetable from "../../../core/tactical/unit/capability/targetable/capability.js";
 
-function restriction(id: string, allows: targetable.Rule["allows"]): Definition<object> {
+function restriction(
+    id: string,
+    allows: targetable.Rule["allows"],
+): Definition<object, targetable.Targetable> {
     return {
         id,
         initialize: () => ({}),
         onEnable(state, { unit, self }) {
             return updateUnit(state, {
                 ...unit,
-                targetable: targetable.setRule(
-                    targetable.hasTargetable(unit) ? unit.targetable : targetable.initialize(),
-                    { id: `@effect/${self.id}/targeting`, allows },
-                ),
+                targetable: targetable.setRule(unit.targetable, {
+                    id: `@effect/${self.id}/targeting`,
+                    allows,
+                }),
             });
         },
         onDisable(state, { unit, self }) {
-            return targetable.hasTargetable(unit)
-                ? updateUnit(state, {
-                      ...unit,
-                      targetable: targetable.removeRule(
-                          unit.targetable,
-                          `@effect/${self.id}/targeting`,
-                      ),
-                  })
-                : state;
+            return updateUnit(state, {
+                ...unit,
+                targetable: targetable.removeRule(unit.targetable, `@effect/${self.id}/targeting`),
+            });
         },
     };
 }

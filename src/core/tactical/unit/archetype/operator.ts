@@ -23,8 +23,13 @@ import {
 } from "../capability/spatial/capability.js";
 import type { Definition as VitalityDefinition } from "../capability/vitality/capability.js";
 import type { Definition as DeployableDefinition } from "../capability/deployable/capability.js";
-import type { Definition as UnitDefinition } from "../unit.js";
+import type { Unit, Definition as UnitDefinition } from "../unit.js";
 import * as initialization from "../initialize.js";
+import type { Product } from "../capability/catalog.js";
+import type { Result, State as BattleState } from "../../battle/state.js";
+import type { Definition as TargetableDefinition } from "../capability/targetable/capability.js";
+import type { Definition as OccupancyDefinition } from "../capability/occupancy/capability.js";
+import type { Definition as PresenceDefinition } from "../capability/presence/capability.js";
 import {
     createDefinition as createElementalDefinition,
     type Definition as ElementalDefinition,
@@ -46,9 +51,12 @@ export interface Definition extends UnitDefinition {
     readonly skill?: SkillDefinition;
     readonly elemental?: ElementalDefinition;
     readonly deployable?: DeployableDefinition;
+    readonly targetable?: TargetableDefinition;
+    readonly occupancy?: OccupancyDefinition;
+    readonly spatialPresence?: PresenceDefinition;
 }
 
-export type Operator<D extends Definition = Definition> = initialization.Result<D>;
+export type Operator<D extends Definition = Definition> = Unit & Product<D>;
 
 export type Input<D extends Definition = Definition> = initialization.Input<D>;
 
@@ -65,6 +73,11 @@ export function createDefinition(definition: Definition): Definition {
         ...(definition.onTick === undefined ? {} : { onTick: definition.onTick }),
         ...(definition.onLeave === undefined ? {} : { onLeave: definition.onLeave }),
         ...(definition.deployable === undefined ? {} : { deployable: definition.deployable }),
+        ...(definition.targetable === undefined ? {} : { targetable: definition.targetable }),
+        ...(definition.occupancy === undefined ? {} : { occupancy: definition.occupancy }),
+        ...(definition.spatialPresence === undefined
+            ? {}
+            : { spatialPresence: definition.spatialPresence }),
         vitality: Object.freeze({ maxHp: definition.vitality.maxHp }),
         action: createActionCapabilityDefinition(definition.action),
         allegiance: definition.allegiance,
@@ -84,8 +97,11 @@ export function createDefinition(definition: Definition): Definition {
     });
 }
 
-export function initialize<D extends Definition>(input: Input<D>): Operator<D> {
+export function initialize<D extends Definition>(
+    battle: BattleState,
+    input: Input<D>,
+): Result<Operator<D>> {
     assertNonnegativeSafeInteger(input.id, "operator id");
 
-    return initialization.initialize(input);
+    return initialization.initialize(battle, input);
 }

@@ -1,6 +1,7 @@
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import type { BattlefieldRemovalReason } from "../../battlefield/contract.js";
 import type { Deployable } from "../../unit/capability/deployable/capability.js";
+import type { Occupancy } from "../../unit/capability/occupancy/capability.js";
 import * as contribution from "../../unit/contribution/contribution.js";
 import * as modifier from "../../unit/contribution/value.js";
 import type { Definition as UnitDefinition } from "../../unit/unit.js";
@@ -16,7 +17,7 @@ export interface Supply {
 }
 
 export interface Input {
-    readonly unit: UnitDefinition & Deployable["definition"];
+    readonly unit: UnitDefinition & Deployable["definition"] & Occupancy["definition"];
     readonly supply?: Supply;
     readonly navigationModifiers?: readonly UnitNavigationModifierPlacement[];
 }

@@ -1,3 +1,4 @@
+import type { State as BattleState, Result } from "../../../battle/state.js";
 import { preserveHpRatio } from "./max-hp.js";
 import * as contribution from "../../contribution/contribution.js";
 import * as modifier from "../../contribution/value.js";
@@ -40,15 +41,18 @@ export function hasVitalityDefinition(
     return "vitality" in definition;
 }
 
-export function initialize(definition: Definition): State {
+export function initialize(battle: BattleState, definition: Definition): Result<State> {
     return {
-        hp: definition.maxHp,
-        maxHp: [],
-        damageHooks: [],
-        healingHooks: [],
-        damageReceptionRules: [],
-        fatalProtectionRules: [],
-        healingReceptionRules: [],
+        state: battle,
+        value: {
+            hp: definition.maxHp,
+            maxHp: [],
+            damageHooks: [],
+            healingHooks: [],
+            damageReceptionRules: [],
+            fatalProtectionRules: [],
+            healingReceptionRules: [],
+        },
     };
 }
 

@@ -6,7 +6,7 @@ import {
     createBattleState, getUnit, registerUnit, removeUnit, updateUnit,
 } from "../../dist/core/tactical/battle/state.js";
 import { advanceUnits } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
-import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../helpers/unit.js";
 import {
     createDefinition as createEnemy, createCombatDefinition,
 } from "../../dist/core/tactical/unit/archetype/enemy.js";

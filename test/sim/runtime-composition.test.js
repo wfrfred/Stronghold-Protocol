@@ -1,3 +1,4 @@
+import { fixtureBattle, fixtureDefinition } from "../helpers/unit.js";
 import { resolveHealing } from "../../dist/core/tactical/unit/capability/vitality/healing/settlement.js";
 import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
@@ -19,7 +20,7 @@ import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
 import { createDefinition } from "../../dist/core/tactical/unit/archetype/operator.js";
 import { createDefinition as createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
-import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize, placement } from "../helpers/unit.js";
 import { seededPlacement } from "../helpers/aura.js";
 import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
 import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
@@ -427,25 +428,25 @@ function scenario({ failure = null, cancelled = false } = {}) {
                     aura,
                     initialize({ id: 0, definition: primary, position: [0, 0] }),
                 ),
-                {
+                placement({
                     definition: passive("first-target"),
                     position: [1, 0],
                     ...(cancelled
                         ? {
                               states: {
                                   vitality: {
-                                      ...initializeVitalityState({ maxHp: 100 }),
+                                      ...initializeVitalityState(fixtureBattle(0), { maxHp: 100 }).value,
                                       hp: 40,
                                   },
                               },
                           }
                         : {}),
-                },
-                {
+                }),
+                placement({
                     definition: sibling,
                     position: [0, 2],
-                    states: { action: { ...initializeActionState(), cooldowns: new Map([["launch", { periodTicks: 100, readyAtTick: 1 }]]) } },
-                },
+                    states: { action: { ...initializeActionState(fixtureBattle(0), fixtureDefinition("action")).value, cooldowns: new Map([["launch", { periodTicks: 100, readyAtTick: 1 }]]) } },
+                }),
             ],
             initialMechanisms: [],
             schedule: {

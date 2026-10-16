@@ -1,3 +1,4 @@
+import { fixtureBattle } from "../helpers/unit.js";
 // Player report after the 0.1.0 release (second batch, B5): "飞机可以被薄绿的技能拉走（难道不能拉动吗？原版我没印象了，你去复核下）".
 //
 // Verdict: real. Officially no push or pull moves the air units of this mode:
@@ -515,35 +516,45 @@ test('core movement overrides: fixed direction uses steering without a route col
 function coreDisplacedEnemy(checkpoints = [{
   type: 'MOVE', target: { position: [1, 6], reachOffset: [0.2, 0.1], randomizeReachOffset: true, reachDistance: 0.01 },
 }]) {
-  const initialized = initializeRoutedEnemy({
-    id: 1, tick: 0, rngState: 42, nextNavigationRequestId: 0,
-    alwaysCheckCurrentPoint: true,
-    definition: createDefinition({
-      id: 'enemy_displacement_boundary', vitality: { maxHp: 100 },
-      locomotion: { moveSpeedPerTick: 0.1, steeringParameters: coreSteeringParameters },
-    }),
-    route: createRouteDefinition({
-      pathMotionMode: 'WALK', startPosition: [1, 0], endPosition: [1, 7],
-      spawnOffset: [0.1, 0.05], spawnRandomRange: [0, 0], checkpoints,
-      allowDiagonalMove: true, visitEveryTileCenter: false, visitEveryNodeCenter: true,
-      visitEveryCheckPoint: true,
-    }),
-    timing: createRouteTiming({ waveStartedAtTick: 0, fragmentStartedAtTick: 0 }),
-  });
+  const initialized = initializeRoutedEnemy(
+    fixtureBattle(0, { rngState: 42, nextNavigationRequestId: 0 }),
+    {
+      id: 1,
+      alwaysCheckCurrentPoint: true,
+      definition: createDefinition({
+        id: 'enemy_displacement_boundary',
+        vitality: { maxHp: 100 },
+        locomotion: { moveSpeedPerTick: 0.1, steeringParameters: coreSteeringParameters },
+      }),
+      route: createRouteDefinition({
+        pathMotionMode: 'WALK',
+        startPosition: [1, 0],
+        endPosition: [1, 7],
+        spawnOffset: [0.1, 0.05],
+        spawnRandomRange: [0, 0],
+        checkpoints,
+        allowDiagonalMove: true,
+        visitEveryTileCenter: false,
+        visitEveryNodeCenter: true,
+        visitEveryCheckPoint: true,
+      }),
+      timing: createRouteTiming({ waveStartedAtTick: 0, fragmentStartedAtTick: 0 }),
+    },
+  );
   return {
     initialized,
     context: {
       tick: 0, moveMultiplier: 1, movementAllowed: true, waitTickAllowed: true, routeAdvanceAllowed: true,
       maps: { WALK: coreMotionMap(), FLY: coreMotionMap([], 'FLY') },
       fieldCache: createNavigationFieldCache(),
-      rngState: initialized.rngState, nextNavigationRequestId: initialized.nextNavigationRequestId,
+      rngState: initialized.state.execution.rngState, nextNavigationRequestId: initialized.state.execution.nextNavigationRequestId,
     },
   };
 }
 
 test('core forced displacement preserves the resolved route target, navigation context and deterministic inputs', () => {
   const { initialized, context } = coreDisplacedEnemy();
-  const walking = stepRoutedEnemy(initialized.enemy, context);
+  const walking = stepRoutedEnemy(initialized.value.enemy, context);
   const route = walking.enemy.locomotion.mainRoute;
   const goal = getNavigationRequest(route.navigation);
   const before = JSON.stringify(walking.enemy);
@@ -576,8 +587,8 @@ test('core forced displacement preserves the resolved route target, navigation c
 test('core forced motion substitutes self movement without suspending the route wait timer', () => {
   const { initialized, context } = coreDisplacedEnemy([{ type: 'WAIT_FOR_TICKS', durationTicks: 3 }]);
   const state = { lastVelocity: [0.05, 0] };
-  initialized.enemy.locomotion.steering = state;
-  const forced = stepRoutedEnemy(initialized.enemy, {
+  initialized.value.enemy.locomotion.steering = state;
+  const forced = stepRoutedEnemy(initialized.value.enemy, {
     ...context, movementAllowed: false,
     motionOverride: { type: 'DISPLACEMENT', displacement: [1, 0] },
   });
@@ -596,8 +607,8 @@ test('core forced motion substitutes self movement without suspending the route 
 
 test('core forced displacement outside the map resumes with budgeted recovery and preserved route facts', () => {
   const { initialized, context } = coreDisplacedEnemy();
-  initialized.enemy.locomotion.steering = { lastVelocity: [0.02, 0.04] };
-  const forced = stepRoutedEnemy(initialized.enemy, {
+  initialized.value.enemy.locomotion.steering = { lastVelocity: [0.02, 0.04] };
+  const forced = stepRoutedEnemy(initialized.value.enemy, {
     ...context, motionOverride: { type: 'DISPLACEMENT', displacement: [-1, 0] },
   });
   const control = forced.enemy.locomotion.mainRoute;

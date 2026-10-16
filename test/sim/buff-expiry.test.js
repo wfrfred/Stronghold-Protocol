@@ -15,7 +15,7 @@ import {
     removeAttackContribution,
 } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
-import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../helpers/unit.js";
 import {
     contributionEffect,
     refreshContribution,

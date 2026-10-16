@@ -4,7 +4,7 @@ import { create as createFieldState, transition as transitionBattlefield } from 
 import { view as viewBattlefield } from '../../dist/core/tactical/battlefield/view.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
-import { initialize } from '../../dist/core/tactical/unit/initialize.js';
+import { initialize } from "../helpers/unit.js";
 import { setCapacityContribution, setRule, removeRule } from '../../dist/core/tactical/unit/capability/blocking/blocker.js';
 import * as modifier from '../../dist/core/tactical/unit/contribution/value.js';
 
@@ -20,7 +20,7 @@ const create = units => {
 };
 const blocker = (id, position = [1, 1], capacity = 1, radius = 1) => initialize({
   id, position, definition: {
-    id: `blocker-${id}`, allegiance: { side: 'ALLY' }, vitality: { maxHp: 100 },
+    id: `blocker-${id}`, spatialPresence: {}, allegiance: { side: 'ALLY' }, vitality: { maxHp: 100 },
     blocker: { capacity, geometry: { radius } },
   },
 });

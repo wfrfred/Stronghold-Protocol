@@ -5,7 +5,7 @@ import { view } from '../../dist/core/tactical/battlefield/view.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
 import { createNavigationModifierDefinition } from '../../dist/core/tactical/battlefield/navigation/modifier.js';
-import { initialize } from '../../dist/core/tactical/unit/initialize.js';
+import { initialize } from "../helpers/unit.js";
 
 const initial = () => create({
   map: createBattlefieldMap(1, 3, Array.from({ length: 3 }, () => createTile({

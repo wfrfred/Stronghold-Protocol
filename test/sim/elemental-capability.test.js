@@ -1,3 +1,4 @@
+import { fixtureBattle } from "../helpers/unit.js";
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
@@ -20,7 +21,7 @@ import {
   getArknightsElementalBurstProfile,
   parseElementType,
 } from '../../dist/data/arknights/elemental.js';
-import { initialize } from '../../dist/core/tactical/unit/initialize.js';
+import { initialize } from "../helpers/unit.js";
 import { get, ref } from '../../dist/core/tactical/unit/query.js';
 import { transitionUnit } from '../../dist/core/tactical/battle/state.js';
 import { retireCombatUnit } from '../../dist/core/tactical/battle/execution/unit-lifecycle.js';
@@ -55,7 +56,7 @@ const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-8,
 
 test('Elemental owns immutable bars and initializes its clock without a recovery timer', () => {
   const definition = createElementalDefinition({ maxEp: 1000, bursts: simpleBursts() });
-  const state = initializeElementalState(definition, 7);
+  const state = initializeElementalState(fixtureBattle(7), definition).value;
   assert.deepEqual(state.ep, elementValues(1000));
   assert.equal(state.lastAdvancedTick, 7);
   assert.equal(state.burst, null);

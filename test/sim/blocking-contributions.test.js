@@ -1,3 +1,4 @@
+import { fixtureBattle } from "../helpers/unit.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { fixtureBattlefieldState as fixtureBattlefield } from "../helpers/battlefield.js";
 import { deadline, setData, setDeadline } from "../../dist/core/tactical/unit/effect/effect.js";
@@ -20,7 +21,7 @@ import {
     settleBattlefieldState,
     settleBattlefieldStateFully,
 } from "../../dist/core/tactical/battlefield/storage/state.js";
-import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../helpers/unit.js";
 import { copy } from "../../dist/core/tactical/unit/snapshot.js";
 import {
     createDefinition,
@@ -102,7 +103,7 @@ const entry = (id, value) => ({ id, value: [value] });
 
 test("blocking capacity: immutable updates retain sampled contributions and resolve ties to even after clamping", () => {
     const definition = createDefinition({ capacity: 3, geometry: { radius: 1 } });
-    const state = initializeBlockerState(definition);
+    const state = initializeBlockerState(fixtureBattle(0), definition).value;
     assert.equal(definition.capacity, 3);
     assert.deepEqual(state.capacity, []);
     assert.equal(resolveCapacity(definition, state), 3);

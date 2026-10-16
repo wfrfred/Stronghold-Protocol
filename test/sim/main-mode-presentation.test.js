@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { TacticalDemoPresentation } from '../../dist/legacy/tactical-demo-presentation.js';
-import { initialize } from '../../dist/core/tactical/unit/initialize.js';
+import { initialize } from "../helpers/unit.js";
 import { spineEntry } from '../../public/js/assets.js';
 
 const data = { lookup() {} };

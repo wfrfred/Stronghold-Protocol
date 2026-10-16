@@ -17,7 +17,7 @@ import type { State as BattleState } from ${source("tactical/battle/state")};
 import type { Unit } from ${source("tactical/unit/unit")};
 import { initialize } from ${source("tactical/unit/initialize")};
 import * as units from ${source("tactical/unit/query")};
-import { createDefinition, hasSkill, type Definition, type Skill, type Stored } from ${source("tactical/unit/capability/skill/capability")};
+import { createDefinition, initialize as initializeSkill, hasSkill, type Definition, type Skill, type Stored } from ${source("tactical/unit/capability/skill/capability")};
 import { ref, setData, type Activation, type Stored as StoredActivation } from ${source("tactical/unit/capability/skill/activation")};
 import { activate, cancel } from ${source("tactical/unit/capability/skill/operations")};
 import { get, replaceActivation } from ${source("tactical/unit/capability/skill/query")};
@@ -35,7 +35,12 @@ const definition: Definition<Persistent, Active> = createDefinition({
         onTick: (current, activation) => replaceActivation(current, setData(activation, { mode: "SECOND" })),
     },
 });
-const host = initialize({ id: 0, position: [0, 0], definition: { id: "typed-host", skill: definition } });
+const initialized = initialize(battle, { id: 0, position: [0, 0], definition: { id: "typed-host", skill: definition } }).value;
+const host = { ...initialized, skill: initializeSkill(battle, definition).value };
+// @ts-expect-error generic Unit assembly exposes the heterogeneous storage view.
+initialized.skill.data.count;
+// @ts-expect-error the erased input still requires the activation data initializer.
+initialize(battle, { id: 1, position: [0, 0], definition: { id: "invalid", skill: { id: "invalid", initialize: () => ({}), sp: null, activation: { trigger: "MANUAL", sustain: { type: "INFINITE" } } } } });
 const persistent: number = host.skill.data.count;
 const started = activate(battle, units.ref(host));
 if (started.value.type === "ACTIVATED") {

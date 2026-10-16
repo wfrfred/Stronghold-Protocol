@@ -4,7 +4,7 @@ import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality
 import { setHook, removeHook } from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import { getUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
-import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../helpers/unit.js";
 import { effectFixtureWork } from "../helpers/effects.js";
 
 const hook = (id, invoke, enabled = () => true) => ({ id, stage: "received", enabled, invoke });

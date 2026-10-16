@@ -4,7 +4,7 @@ import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { battlefieldView } from "../../dist/core/tactical/battle/state.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../helpers/unit.js";
 import * as effect from "../../dist/core/tactical/unit/effect/operations.js";
 import { get } from "../../dist/core/tactical/unit/effect/operations.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";

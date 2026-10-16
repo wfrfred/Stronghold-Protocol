@@ -7,7 +7,7 @@ import {
     validateScopes,
 } from "../../dist/core/tactical/unit/effect/operations.js";
 import { getUnit } from "../../dist/core/tactical/battle/state.js";
-import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../helpers/unit.js";
 import { definition, effectFixtureWork, install } from "../helpers/effects.js";
 
 const host = () => initialize({ id: 0, position: [0, 0], definition: { id: "values" } });

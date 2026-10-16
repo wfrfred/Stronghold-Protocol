@@ -1,64 +1,56 @@
 import { initializeRoutedEnemy } from "../creation/enemy.js";
 import { type RoutedEnemy } from "../../unit/archetype/enemy.js";
-import type { BattleExecutionState } from "../execution/state.js";
 import type { UnitRouteSignal } from "./route-control.js";
 import type { Id } from "../../unit/unit.js";
 import type { Command, Event } from "../contract.js";
-import { advanceBattlefield, appendEvents, type State as BattleState } from "../state.js";
+import {
+    advanceBattlefield,
+    appendEvents,
+    type State as BattleState,
+    type Result,
+} from "../state.js";
 import { advanceSpawnSchedule, recordScheduleSpawns } from "../schedule/runtime.js";
 import type { ScheduledEnemySpawn } from "../schedule/definition.js";
 import { enterUnits } from "../execution/unit-lifecycle.js";
 
 interface SpawnedEnemies {
-    readonly execution: BattleExecutionState;
     readonly enemies: readonly RoutedEnemy[];
     readonly signals: readonly UnitRouteSignal[];
 }
 
 function spawnEnemies(
+    state: BattleState,
     spawns: readonly ScheduledEnemySpawn[],
-    execution: BattleExecutionState,
-    tick: number,
-): SpawnedEnemies {
-    let { rngState, nextUnitId, nextNavigationRequestId } = execution;
+): Result<SpawnedEnemies> {
     const enemies: RoutedEnemy[] = [];
     const signals: UnitRouteSignal[] = [];
 
     for (const spawn of spawns) {
-        const initialized = initializeRoutedEnemy({
-            id: nextUnitId,
-            tick,
+        const id = state.execution.nextUnitId;
+        const nextUnitId = id + 1;
+
+        if (!Number.isSafeInteger(nextUnitId)) {
+            throw new RangeError("unit identity overflow");
+        }
+
+        state = { ...state, execution: { ...state.execution, nextUnitId } };
+        const initialized = initializeRoutedEnemy(state, {
+            id,
             definition: spawn.definition,
             route: spawn.route,
             timing: spawn.timing,
             alwaysCheckCurrentPoint: spawn.alwaysCheckCurrentPoint,
-            rngState,
-            nextNavigationRequestId,
         });
+        state = initialized.state;
+        const { enemy, signals: spawnedSignals } = initialized.value;
 
-        enemies.push(initialized.enemy);
-        signals.push(
-            ...initialized.signals.map((signal) => ({ ...signal, unitId: initialized.enemy.id })),
-        );
-        rngState = initialized.rngState;
-        nextNavigationRequestId = initialized.nextNavigationRequestId;
-
-        const nextIdentity = nextUnitId + 1;
-
-        if (!Number.isSafeInteger(nextIdentity)) {
-            throw new RangeError("unit identity overflow");
-        }
-
-        nextUnitId = nextIdentity;
+        enemies.push(enemy);
+        signals.push(...spawnedSignals.map((signal) => ({ ...signal, unitId: enemy.id })));
     }
 
     return {
-        enemies,
-        signals,
-        execution:
-            spawns.length === 0
-                ? execution
-                : { ...execution, rngState, nextUnitId, nextNavigationRequestId },
+        state,
+        value: { enemies, signals },
     };
 }
 
@@ -93,10 +85,11 @@ export function advanceSpawning(
         tick,
         triggers: commands.filter((command) => command.type === "TRIGGER_BRANCH"),
     });
-    const spawned = spawnEnemies(scheduled.spawns, state.execution, tick);
+    const initialized = spawnEnemies(state, scheduled.spawns);
+    state = initialized.state;
+    const spawned = initialized.value;
     state = {
         ...state,
-        execution: spawned.execution,
         schedule: recordScheduleSpawns(
             scheduled.state,
             scheduled.spawns,

@@ -2,7 +2,7 @@ import { assertNonnegativeSafeInteger } from "../../../../common/assert.js";
 import type { Definition as UnitDefinition, Unit } from "../../unit.js";
 import * as registry from "../../hook/hook.js";
 import * as contribution from "../../contribution/contribution.js";
-import type { State as BattleState } from "../../../battle/state.js";
+import type { State as BattleState, Result } from "../../../battle/state.js";
 import type {
     Activation,
     Definition as ActivationDefinition,
@@ -53,6 +53,7 @@ export interface Stored {
             readonly activation: {
                 readonly trigger: ActivationDefinition<object, object>["trigger"];
                 readonly sustain: sustain.Definition;
+                readonly initialize: (battle: BattleState, self: never) => object;
             } | null;
         };
     };
@@ -103,14 +104,20 @@ export function createDefinition<S extends object, A extends object>(
 }
 
 export function initialize<S extends object, A extends object>(
+    battle: BattleState,
     definition: Definition<S, A>,
-    tick = 0,
-): State<S, A> {
-    assertNonnegativeSafeInteger(tick, "skill initialization tick");
-
-    return {
+): Result<State<S, A>>;
+export function initialize(
+    battle: BattleState,
+    definition: Stored["definition"]["skill"],
+): Result<Stored["skill"]>;
+export function initialize(
+    battle: BattleState,
+    definition: Stored["definition"]["skill"],
+): Result<Stored["skill"]> {
+    const value: State = {
         data: definition.initialize(),
-        sp: definition.sp === null ? null : sp.initialize(definition.sp, tick),
+        sp: definition.sp === null ? null : sp.initialize(definition.sp, battle.tick),
         active: null,
         nextActivationId: 0,
         sustain:
@@ -131,6 +138,8 @@ export function initialize<S extends object, A extends object>(
         activated: [],
         ended: [],
     };
+
+    return { state: battle, value };
 }
 
 function allowsInactiveRecovery<S extends object, A extends object>(

@@ -1,3 +1,4 @@
+import { fixtureBattle, fixtureDefinition } from "../helpers/unit.js";
 import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js';
 import { create as createAttack } from '../../dist/content/tactical/actions/attack.js';
 import { Effects } from "../../dist/core/tactical/unit/effect/effects.js";
@@ -21,7 +22,8 @@ import { view as viewBattlefield } from '../../dist/core/tactical/battlefield/vi
 import { createMechanismDefinition } from '../../dist/core/tactical/battlefield/mechanism.js';
 import { createNavigationModifierDefinition, createNavigationModifier } from '../../dist/core/tactical/battlefield/navigation/modifier.js';
 import { hasSpatialPresence, isSpatiallyPresent } from '../../dist/core/tactical/unit/capability/presence/capability.js';
-import { initialize } from '../../dist/core/tactical/unit/initialize.js';
+import { initialize } from "../helpers/unit.js";
+import { initialize as initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
 import { initialize as initializeOffenseState } from '../../dist/core/tactical/unit/capability/offense/capability.js';
 import { copy } from '../../dist/core/tactical/unit/snapshot.js';
 import { hasVitality, initialize as initializeVitalityState } from '../../dist/core/tactical/unit/capability/vitality/capability.js';
@@ -256,8 +258,8 @@ const presenceBattlefield = () => createFieldState({
 });
 
 const presenceUnit = (id, position) => ({
-  effects:Effects.empty(), id, definition: Object.freeze({ id: `presence_${id}`, vitality: Object.freeze({ maxHp: 100 }) }), position: Object.freeze(position),
-  vitality: initializeVitalityState({maxHp:100}), spatialPresence: { present: true },
+  effects:Effects.empty(), id, definition: Object.freeze({ id: `presence_${id}`, vitality: Object.freeze({ maxHp: 100 }), spatialPresence: Object.freeze({}) }), position: Object.freeze(position),
+  vitality: initializeVitalityState(fixtureBattle(0), {maxHp:100}).value, spatialPresence: { present: true },
 });
 
 const presenceNavigationModifier = (id, source, region, costFloor = 1000) => createNavigationModifier({
@@ -391,27 +393,31 @@ test('core presence transitions preserve the original state when later settlemen
   assert.deepEqual(viewBattlefield(runtime).navigationModifiersAt([0, 2]), [1]);
 });
 
-test('core placement shares immutable prepared capability states', () => {
-  const states = { occupancy: { claims: [{ position: [0, 1], slot: 'DEPLOYMENT', type: 'RESERVATION' }] } };
-  const placement = { definition: { id: 'placement' }, position: [0, 0], states };
-  const execution = { rngState: 1, nextUnitId: 0, nextNavigationRequestId: 0, nextMechanismId: 0, nextNavigationModifierId: 0, nextProjectileId: 0, nextCardId: 0 };
-  const direct = instantiateUnitPlacement(placement, execution, 0).unit;
+test('core placement applies explicit claims to a declared occupancy capability', () => {
+  const claims = [{ position: [0, 1], slot: 'DEPLOYMENT', type: 'RESERVATION' }];
+  const placement = { definition: { id: 'placement', occupancy: {} }, position: [0, 0], claims };
+  const battle = fixtureBattle(17);
+  const direct = instantiateUnitPlacement(battle, placement).value.unit;
   const normalized = createUnitPlacementDefinition(placement);
-  const placed = instantiateUnitPlacement(normalized, execution, 0).unit;
-  assert.equal(direct.occupancy, states.occupancy);
-  assert.equal(normalized.states.occupancy, states.occupancy);
-  assert.equal(placed.occupancy, states.occupancy);
+  const placed = instantiateUnitPlacement(battle, normalized).value.unit;
+  assert.equal(direct.occupancy.claims, claims);
+  assert.equal(normalized.claims, claims);
+  assert.equal(placed.occupancy.claims, claims);
   assert.equal(placed.definition, placement.definition);
   assert.equal(placed.position, placement.position);
 
-  const nextOccupancy = { claims: [{ ...states.occupancy.claims[0], position: [0, 2] }] };
-  const next = instantiateUnitPlacement({ ...normalized, states: { occupancy: nextOccupancy } }, execution, 0).unit;
-  assert.equal(next.occupancy, nextOccupancy);
+  const nextClaims = [{ ...claims[0], position: [0, 2] }];
+  const next = instantiateUnitPlacement(battle, { ...normalized, claims: nextClaims }).value.unit;
+  assert.equal(next.occupancy.claims, nextClaims);
   assert.deepEqual(placed.occupancy.claims[0].position, [0, 1]);
+  assert.throws(() => instantiateUnitPlacement(battle, {
+    definition: { id: 'no-occupancy' }, position: [0, 0], claims,
+  }), /occupancy capability/);
 });
 
 const catalogDefinition = () => Object.freeze({
   id: 'catalog_unit',
+  spatialPresence: Object.freeze({}),
   vitality: Object.freeze({ maxHp: 100 }),
   locomotion: Object.freeze({
     moveSpeedPerTick: 0.1,
@@ -448,46 +454,40 @@ function catalogRoutedState() {
     createRouteTiming({ waveStartedAtTick: 0, fragmentStartedAtTick: 0 }), true);
   route.progress = { phase: 'CHECKPOINTS', checkpointIndex: 0,
     checkpoint: { type: 'WAIT', remainingTicks: 9 } };
-  const locomotion = createRoutedLocomotionState({ route, navigation: createNavigationState('WALK', [0, 0]) });
+  const locomotion = createRoutedLocomotionState(createLocomotionState(fixtureBattle(0), fixtureDefinition('locomotion')).value, { route, navigation: createNavigationState('WALK', [0, 0]) });
   locomotion.alternativeRoute = locomotion.mainRoute;
   return locomotion;
 }
 
-test('core unit initialization uses prepared states and separates configuration from runtime-only capabilities', () => {
-  const definition = catalogDefinition();
-  const vitality = {...initializeVitalityState(definition.vitality), hp: 25};
-  const action = { ...initializeActionState(), cooldowns: new Map([["normal", { periodTicks: 3, readyAtTick: 9 }]]) };
-  const locomotion = catalogRoutedState();
-  const unit = initialize({ id: 1, definition, position: [2, 0], tick: 17,
-    states: { vitality, action, locomotion, spatialPresence: { present: false } } });
-
+test('core unit initialization pairs every declared capability with its initializer state', () => {
+  const definition = { ...catalogDefinition(), spatialPresence: {}, occupancy: {}, targetable: {},
+    tileBinding: createTileBindingDefinition({ buildableType: 'ALL', heightType: null }) };
+  const battle = fixtureBattle(17);
+  const initialized = initializeUnit(battle, { id: 1, definition, position: [2, 0] });
+  const unit = initialized.value;
+  assert.equal(initialized.state, battle);
   assert.equal(unit.definition, definition);
-  assert.equal(unit.vitality, vitality);
-  assert.equal(unit.action, action);
-  assert.equal(unit.locomotion, locomotion);
-  assert.equal(hasRoutedLocomotion(unit), true);
-  assert.equal(unit.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 9);
-  assert.equal(unit.spatialPresence.present, false);
-  assert.equal(Object.hasOwn(unit, 'defense'), true);
+  assert.equal(unit.vitality.hp, 100);
+  assert.equal(unit.action.cooldowns.size, 0);
+  assert.equal(hasRoutedLocomotion(unit), false);
+  assert.equal(unit.spatialPresence.present, true);
+  assert.deepEqual(unit.occupancy.claims, []);
+  assert.deepEqual(unit.targetable.rules, []);
+  assert.deepEqual(unit.tileBinding, {});
   assert.deepEqual(unit.blocker, { capacity: [], geometry: { radius: 0.7 }, enabled: true, rules: [] });
   assert.equal(resolveCapacity(unit.definition.blocker, unit.blocker), 2);
   assert.deepEqual(unit.blockable, { weight: 1, enabled: true });
 
-  const updated = { ...unit, vitality: { ...unit.vitality, hp: 0 }, action: { ...unit.action, cooldowns: new Map([["normal", { periodTicks: 3, readyAtTick: 99 }]]) } };
-  assert.equal(updated.vitality.hp, 0);
-  assert.equal(updated.action.cooldowns.get("normal").readyAtTick, 99);
-  assert.equal(updated.locomotion, unit.locomotion);
-  assert.equal(unit.vitality.hp, 25);
-  assert.equal(unit.action.cooldowns.get("normal").readyAtTick, 9);
-  assert.equal(unit.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 9);
-  assert.equal(initialize({ id: 2, definition, position: [0, 0], tick: 17 }).action.cooldowns.size, 0);
-
-  const bare = initialize({ id: 3, definition: Object.freeze({ id: 'presence_only' }),
-    position: [0, 0], states: { spatialPresence: { present: false } } });
+  const next = initializeUnit(battle, { id: 2, definition, position: [0, 0] }).value;
+  assert.notEqual(next.vitality, unit.vitality);
+  assert.notEqual(next.action, unit.action);
+  assert.notEqual(next.targetable, unit.targetable);
+  const bare = initializeUnit(battle, {
+    id: 3, definition: { id: 'presence-only', spatialPresence: {} }, position: [0, 0],
+  }).value;
   assert.equal(hasSpatialPresence(bare), true);
+  assert.equal(bare.spatialPresence.present, true);
   assert.equal(hasVitality(bare), false);
-  assert.throws(() => initialize({ id: 4, definition: { id: 'bare' }, position: [0, 0],
-    states: { locomotion: createLocomotionState() } }));
 });
 
 test('core initialization and snapshots share immutable definitions', () => {
@@ -524,10 +524,11 @@ test('archetype definitions share passive configuration while current allegiance
   }
 });
 
-test('core prepared states retain capability values without rebuilding their fields', () => {
+test('core local state transitions retain capability values across snapshots', () => {
   const definition = { id: 'state-shapes', offense: { attack: 10 } };
-  const offense = { ...initializeOffenseState(), marker: 'retained' };
-  const unit = initialize({ id: 1, definition, position: [0, 0], states: { offense } });
+  const offense = { ...initializeOffenseState(fixtureBattle(0), fixtureDefinition("offense")).value, marker: 'retained' };
+  const original = initializeUnit(fixtureBattle(0), { id: 1, definition, position: [0, 0] }).value;
+  const unit = { ...original, offense };
   assert.equal(unit.offense, offense);
   assert.equal(unit.offense.marker, 'retained');
   assert.equal(copy(unit).offense, offense);
@@ -552,9 +553,9 @@ test('core capability guards inspect composition independently of shared snapsho
     if (key === 'locomotion') assert.equal(hasRoutedLocomotion(missingConfiguration), false);
   }
 
-  assert.equal(hasRoutedLocomotion({ ...unit, locomotion: createLocomotionState() }), false);
+  assert.equal(hasRoutedLocomotion({ ...unit, locomotion: createLocomotionState(fixtureBattle(0), fixtureDefinition("locomotion")).value }), false);
   assert.equal(hasRoutedLocomotion(unit), true);
-  const presence = { id: 2, definition: Object.freeze({ id: 'presence' }), position: [0, 0],
+  const presence = { id: 2, definition: Object.freeze({ id: 'presence', spatialPresence: {} }), position: [0, 0],
     spatialPresence: { present: false } };
   assert.deepEqual(copy(presence).spatialPresence, { present: false });
 
@@ -563,7 +564,7 @@ test('core capability guards inspect composition independently of shared snapsho
 
 test('core snapshots share capabilities and retain earlier values across immutable updates', () => {
   const unit = initialize({ id: 1, definition: catalogDefinition(), position: [2, 0],
-    states: { locomotion: catalogRoutedState(), spatialPresence: { present: true }, targetable: initializeTargetableState() } });
+    states: { locomotion: catalogRoutedState(), spatialPresence: { present: true }, targetable: initializeTargetableState(fixtureBattle(0), fixtureDefinition("targetable")).value } });
   const snapshot = copy({ ...unit, extension: 'outside-unit-state' });
   assert.equal(Object.hasOwn(snapshot, 'extension'), false);
   assert.equal(snapshot.definition, unit.definition);
@@ -672,9 +673,9 @@ test('core grid ranges rotate all four directions around continuous source posit
 test('core domain rules compose independently and preserve earlier unit states', () => {
   const definition = { id: 'rule_unit', vitality: { maxHp: 100 } };
   const first = initialize({ id: 1, definition, position: [0, 0],
-    states: { targetable: initializeTargetableState() } });
+    states: { targetable: initializeTargetableState(fixtureBattle(0), fixtureDefinition("targetable")).value } });
   const second = initialize({ id: 2, definition, position: [0, 0],
-    states: { targetable: initializeTargetableState() } });
+    states: { targetable: initializeTargetableState(fixtureBattle(0), fixtureDefinition("targetable")).value } });
   const source = { id: 3, definition: { id: 'query_source' }, position: [0, 0] };
   const selector = { type: 'HEAL', ignoreHealFree: false };
   const query = target => ({ source, target, battlefield: { getUnit: () => undefined },
@@ -758,25 +759,25 @@ test('core unit updates preserve definition identity and fail atomically while p
   const bare = initialize({ id: 2, definition: Object.freeze({ id: 'bare' }), position: [0, 0] });
   runtime = transitionBattlefield(runtime, [{ type: 'REGISTER_UNIT', unit: bare }]).state;
   assert.throws(() => transitionBattlefield(runtime, [{ type: 'UPDATE_UNIT', unit: {
-    ...bare, definition: Object.freeze({ ...bare.definition, vitality: { maxHp: 1 } }), vitality: initializeVitalityState({ maxHp: 1 }),
+    ...bare, definition: Object.freeze({ ...bare.definition, vitality: { maxHp: 1 } }), vitality: initializeVitalityState(fixtureBattle(0), { maxHp: 1 }).value,
   } }]));
 
   const hidden = { ...viewBattlefield(runtime).getUnit(1), spatialPresence: { present: false } };
   runtime = transitionBattlefield(runtime, [{ type: 'UPDATE_UNIT', unit: hidden }]).state;
   assert.deepEqual(viewBattlefield(runtime).unitsAt([0, 2]), []);
-  const restored = copy(viewBattlefield(runtime).getUnit(1));
-  delete restored.spatialPresence;
+  const restored = { ...viewBattlefield(runtime).getUnit(1), spatialPresence: { present: true } };
   runtime = transitionBattlefield(runtime, [{ type: 'UPDATE_UNIT', unit: restored }]).state;
   assert.deepEqual(viewBattlefield(runtime).unitsAt([0, 2]).map(value => value.id), [1]);
 });
 
-test('core initializer types preserve definition unions, prepared refinements and guard context', async () => {
+test('catalog products and core initializers preserve capability composition, definition unions and guard context', async () => {
   const { default: ts } = await import('typescript');
   const directory = mkdtempSync(join(tmpdir(), 'stronghold-unit-types-'));
   const sourceModule = name => JSON.stringify(fileURLToPath(
     new URL(`../../src/core/tactical/unit/${name}.js`, import.meta.url)));
   const imports = `
-import { initialize as initializeUnit, type Result as InitializedUnit } from ${sourceModule('initialize')};
+import { initialize as initializeUnit } from ${sourceModule('initialize')};
+import type { Product } from ${sourceModule('capability/catalog')};
 import { initializeRoutedEnemy, type RoutedEnemySpawn } from ${sourceModule('../battle/creation/enemy')};
 import { stepRoutedEnemy, type RoutedEnemyStepContext } from ${sourceModule('../../../legacy/enemy')};
 import type { Unit, Definition as UnitDefinition } from ${sourceModule('unit')};
@@ -786,8 +787,9 @@ import { initialize as initializeOffenseState } from ${sourceModule('capability/
 import { initialize as initializeDefenseState } from ${sourceModule('capability/defense/capability')};
 import { initialize as initializeActionState } from ${sourceModule('capability/action/capability')};
 import type { Definition as EnemyDefinition } from ${sourceModule('archetype/enemy')};
-import { hasVitality, type Definition as VitalityDefinition } from ${sourceModule('capability/vitality/capability')};
-import { initialize as initializeLocomotionState, hasRoutedLocomotion, type State as LocomotionState, type RoutedLocomotionState } from ${sourceModule('capability/locomotion/capability')};
+import { hasVitality, type Vitality, type Definition as VitalityDefinition } from ${sourceModule('capability/vitality/capability')};
+import { initialize as initializeLocomotionState, hasRoutedLocomotion, type Locomotion, type State as LocomotionState, type RoutedLocomotionState } from ${sourceModule('capability/locomotion/capability')};
+import type { Targetable } from ${sourceModule('capability/targetable/capability')};
 import { create as createBattlefieldState, transition } from ${sourceModule('../battlefield/state')};
 import { view } from ${sourceModule('../battlefield/view')};
 import type { BattlefieldView } from ${sourceModule('../battlefield/contract')};
@@ -818,7 +820,7 @@ declare const battleState: BattleState;
 declare const projectileDefinition: ProjectileDefinition<{ readonly charges: number }>;
 declare const projectileInput: ProjectileLaunchInput<{ readonly charges: number }>;
 declare const typedProjectile: Projectile<{ readonly charges: number }>;
-declare const placement: { readonly definition: EnemyProbe; readonly position: readonly [number, number]; readonly states: { readonly occupancy: OccupancyState } }
+declare const placement: { readonly definition: EnemyProbe & { readonly occupancy: Readonly<Record<string, never>> }; readonly position: readonly [number, number]; readonly claims: readonly OccupancyState['claims'][number][] }
   | { readonly definition: DeviceProbe; readonly position: readonly [number, number] };
 `;
   const compile = (name, source) => {
@@ -845,69 +847,65 @@ if (elementalReport.type === "APPLIED" && elementalReport.burst !== null) {
 if (elementalReport.type === "REJECTED") {
   const reason: string = elementalReport.reason;
 }
-initializeOffenseState();
-initializeDefenseState();
-initializeLocomotionState();
-initializeActionState();
-// @ts-expect-error offense state does not consume configuration.
+initializeOffenseState(battleState, { attack: 1 }).value.attack;
+initializeDefenseState(battleState, { defense: 1, resistance: 0 }).value.defense;
+initializeLocomotionState(battleState, enemyDefinition.locomotion).value.moving;
+declare const actionDefinition: Parameters<typeof initializeActionState>[1];
+initializeActionState(battleState, actionDefinition).value.cooldowns;
+// @ts-expect-error capability initialization requires the current BattleState.
 initializeOffenseState({ attack: 1 });
-// @ts-expect-error defense state does not consume configuration.
+// @ts-expect-error capability initialization requires the current BattleState.
 initializeDefenseState({ defense: 1, resistance: 0 });
-// @ts-expect-error locomotion state does not consume configuration or context.
+// @ts-expect-error clock-only context is not a BattleState.
 initializeLocomotionState(enemyDefinition.locomotion, { tick: 7 });
-// @ts-expect-error action state does not consume configuration or time.
+// @ts-expect-error a tick is not a BattleState.
 initializeActionState(7);
-type Distributed = Assert<Equal<InitializedUnit<EnemyProbe | DeviceProbe>, InitializedUnit<EnemyProbe> | InitializedUnit<DeviceProbe>>>;
-type OptionalHasNoRequiredCapabilities = Assert<Equal<RequiredKeys<InitializedUnit<OptionalProbe>>, 'id' | 'definition' | 'position' | 'effects' | 'lifecycle'>>;
-type WideHasNoRequiredCapabilities = Assert<Equal<RequiredKeys<InitializedUnit<UnitDefinition>>, 'id' | 'definition' | 'position' | 'effects' | 'lifecycle'>>;
-function initializeGeneric<D extends EnemyDefinition>(definition: D): InitializedUnit<D> {
-  return initializeUnit({ id: 0, definition, position: [0, 0] });
+type Distributed = Assert<Equal<Product<EnemyProbe | DeviceProbe>, Product<EnemyProbe> | Product<DeviceProbe>>>;
+type EnemyCapabilities = Assert<Product<EnemyProbe> extends Vitality & Locomotion ? true : false>;
+type ProductDefinition = Assert<Equal<Product<EnemyProbe>['definition'], ImmutableData<EnemyProbe>>>;
+type EmptyDefinitions = Assert<Product<{ readonly occupancy: {}; readonly targetable: {} }> extends Occupancy & Targetable ? true : false>;
+type OptionalProduct = Assert<Equal<keyof Product<OptionalProbe>, 'definition'>>;
+type MetadataIsNotCapability = Assert<Equal<keyof Product<{ readonly label: string }>, 'definition'>>;
+type OptionalHasNoRequiredCapabilities = Assert<Equal<RequiredKeys<Unit & Product<OptionalProbe>>, 'id' | 'definition' | 'position' | 'effects' | 'lifecycle'>>;
+type WideHasNoRequiredCapabilities = Assert<Equal<RequiredKeys<Unit & Product<UnitDefinition>>, 'id' | 'definition' | 'position' | 'effects' | 'lifecycle'>>;
+function initializeGeneric<D extends EnemyDefinition>(definition: D): Unit & Product<D> {
+  return initializeUnit(battleState, { id: 0, definition, position: [0, 0] }).value;
 }
-const enemy = initializeUnit({ id: 1, definition: enemyDefinition, position: [0, 0] });
+const enemy = initializeUnit(battleState, { id: 1, definition: enemyDefinition, position: [0, 0] }).value;
 const baseUnit: Unit = enemy;
 const instanceId: number = baseUnit.id;
 const contentId: string = baseUnit.definition.id;
-type PlainDefinition = Assert<Equal<typeof enemy.definition, ImmutableData<EnemyProbe>>>;
-type PlainUnit = Assert<Equal<typeof enemy, InitializedUnit<EnemyProbe>>>;
-const routedEnemy = initializeRoutedEnemy(enemySpawn).enemy;
+const plainDefinition: ImmutableData<EnemyProbe> = enemy.definition;
+const acceptedDefinition: typeof enemy.definition = enemyDefinition;
+type PlainUnit = Assert<Equal<typeof enemy, Unit & Product<EnemyProbe>>>;
+const routedEnemy = initializeRoutedEnemy(battleState, enemySpawn).value.enemy;
 const spawnedCode: 17 = routedEnemy.definition.enemyCode;
 routedEnemy.locomotion.mainRoute.route.definition;
 const movedEnemy = stepRoutedEnemy(routedEnemy, enemyStepContext).enemy;
 const movedCode: 17 = movedEnemy.definition.enemyCode;
 movedEnemy.locomotion.mainRoute.route.definition;
-const union = initializeUnit({ id: 2, definition: unionDefinition, position: [0, 0] });
-type UnionUnit = Assert<Equal<typeof union, InitializedUnit<EnemyProbe | DeviceProbe>>>;
-const placed = instantiateUnitPlacement(placement, execution, 0);
-type PlacementDefinition = Assert<Equal<typeof placed.unit.definition, ImmutableData<EnemyProbe | DeviceProbe>>>;
-type ExpectedPlacement = (InitializedUnit<EnemyProbe> & Occupancy) | InitializedUnit<DeviceProbe>;
+const union = initializeUnit(battleState, { id: 2, definition: unionDefinition, position: [0, 0] }).value;
+type UnionUnit = Assert<Equal<typeof union, Unit & Product<EnemyProbe | DeviceProbe>>>;
+const placed = instantiateUnitPlacement(battleState, placement).value;
+const placedDefinition: ImmutableData<typeof placement['definition']> = placed.unit.definition;
+const acceptedPlacementDefinition: typeof placed.unit.definition = placement.definition;
+type ExpectedPlacement = (Unit & Product<EnemyProbe> & Occupancy) | (Unit & Product<DeviceProbe>);
 type PlacementCapabilities = Assert<typeof placed.unit extends ExpectedPlacement ? true : false>;
 type PlacementInput = Assert<ExpectedPlacement extends typeof placed.unit ? true : false>;
 const normalizedPlacement = createUnitPlacementDefinition(placement);
-const normalizedPlaced = instantiateUnitPlacement(normalizedPlacement, execution, 0);
+const normalizedPlaced = instantiateUnitPlacement(battleState, normalizedPlacement).value;
 type NormalizedPlacementCapabilities = Assert<typeof normalizedPlaced.unit extends ExpectedPlacement ? true : false>;
 type NormalizedPlacementInput = Assert<ExpectedPlacement extends typeof normalizedPlaced.unit ? true : false>;
 const requiredPlacement = createUnitPlacementDefinition({
-  definition: unionDefinition, position: [0, 0], states: { occupancy: { claims: [] } }, extra: 31,
+  definition: { ...enemyDefinition, occupancy: {} }, position: [0, 0], claims: [], extra: 31,
 });
-const requiredPlaced = instantiateUnitPlacement(requiredPlacement, execution, 0);
+const requiredPlaced = instantiateUnitPlacement(battleState, requiredPlacement).value;
 requiredPlaced.unit.occupancy.claims;
-type RequiredPlacementCapabilities = Assert<typeof requiredPlaced.unit extends InitializedUnit<EnemyProbe | DeviceProbe> & Occupancy ? true : false>;
-type RequiredPlacementInput = Assert<InitializedUnit<EnemyProbe | DeviceProbe> & Occupancy extends typeof requiredPlaced.unit ? true : false>;
-type NormalizedPlacementFields = Assert<Equal<keyof typeof requiredPlacement, 'definition' | 'position' | 'states' | 'navigationModifiers' | 'effects'>>;
+const requiredOccupancy: Occupancy = requiredPlaced.unit;
+type NormalizedPlacementFields = Assert<Equal<keyof typeof requiredPlacement, 'definition' | 'position' | 'claims' | 'navigationModifiers' | 'effects'>>;
 if (union.definition.kind === 'enemy') { const code: 17 = union.definition.enemyCode; }
 else { const code: 29 = union.definition.deviceCode; }
-const prepared = initializeUnit({ id: 3, definition: enemyDefinition, position: [0, 0],
-  states: { locomotion: routed, spatialPresence: { present: false } } });
-type PreparedDefinition = Assert<Equal<typeof prepared.definition, ImmutableData<EnemyProbe>>>;
-type PreparedLocomotion = Assert<typeof prepared.locomotion extends RoutedLocomotionState ? true : false>;
-type PreparedLocomotionShape = Assert<RoutedLocomotionState extends typeof prepared.locomotion ? true : false>;
-prepared.locomotion.mainRoute.route.definition;
-prepared.spatialPresence.present;
-declare const optionalStates: Partial<{ locomotion: RoutedLocomotionState }>;
-const optionalPrepared = initializeUnit({ id: 4, definition: enemyDefinition, position: [0, 0], states: optionalStates });
-type OptionalPreparedLocomotion = Assert<typeof optionalPrepared.locomotion extends LocomotionState ? true : false>;
-type OptionalPreparedLocomotionShape = Assert<LocomotionState extends typeof optionalPrepared.locomotion ? true : false>;
-optionalPrepared.locomotion.moving;
+const ordinaryLocomotion: LocomotionState = enemy.locomotion;
 declare const guarded: Unit & {
   readonly definition: ImmutableData<EnemyProbe>;
   readonly extra: 23;
@@ -941,17 +939,16 @@ battleState.battlefield.projectiles.replace(typedProjectile);
       ['projectile-wrong-state-pairing', `battleState.battlefield.projectiles.replace({ ...typedProjectile, state: { charges: 'wrong' } });`],
       ['projectile-untyped-callback', `getProjectile(battleState, 0)!.definition.acceptsContact;`],
       ['projectile-erased-transition', `transition(createBattlefieldState({ map: battlefieldMap }), [{ type: 'REGISTER_PROJECTILE', projectile: typedProjectile }]);`],
-      ['state-extra-field', `initializeUnit({ id: 1, definition: { id: 'offense', offense: { attack: 1 } }, position: [0, 0], states: { offense: { ...initializeOffenseState(), marker: 'extra' as const } } }).offense.marker;`],
-      ['normalized-state-extra', `instantiateUnitPlacement(createUnitPlacementDefinition({ definition: { id: 'offense', offense: { attack: 1 } }, position: [0, 0], states: { offense: { ...initializeOffenseState(), marker: 'extra' as const } } }), execution, 0).unit.offense.marker;`],
-      ['mutable-definition', `initializeUnit({ id: 1, definition: { id: 'mutable', vitality: { maxHp: 10 } }, position: [0, 0] }).definition.vitality.maxHp = 99;`],
-      ['unconfigured', `initializeUnit({ id: 1, definition: { id: 'bare' }, position: [0, 0], states: { locomotion: routed } });`],
-      ['invalid-offense-config', `initializeUnit({ id: 1, definition: { id: 'invalid', offense: { attack: [] } }, position: [0, 0], states: { offense: initializeOffenseState() } });`],
-      ['optional', `declare const optionalDefinition: OptionalProbe; initializeUnit({ id: 1, definition: optionalDefinition, position: [0, 0] }).vitality.hp;`],
-      ['wide', `declare const wideDefinition: UnitDefinition; initializeUnit({ id: 1, definition: wideDefinition, position: [0, 0] }).locomotion.moving;`],
+      ['state-extra-field', `initializeUnit(battleState, { id: 1, definition: { id: 'offense', offense: { attack: 1 } }, position: [0, 0], states: { offense: initializeOffenseState(battleState, { attack: 1 }).value } });`],
+      ['mutable-definition', `initializeUnit(battleState, { id: 1, definition: { id: 'mutable', vitality: { maxHp: 10 } }, position: [0, 0] }).value.definition.vitality.maxHp = 99;`],
+      ['unconfigured', `initializeUnit(battleState, { id: 1, definition: { id: 'bare' }, position: [0, 0] }).value.locomotion.moving;`],
+      ['invalid-offense-config', `initializeUnit(battleState, { id: 1, definition: { id: 'invalid', offense: { attack: [] } }, position: [0, 0] });`],
+      ['optional', `declare const optionalDefinition: OptionalProbe; initializeUnit(battleState, { id: 1, definition: optionalDefinition, position: [0, 0] }).value.vitality.hp;`],
+      ['wide', `declare const wideDefinition: UnitDefinition; initializeUnit(battleState, { id: 1, definition: wideDefinition, position: [0, 0] }).value.locomotion.moving;`],
       ['base-unit-definition', `declare const unit: Unit; unit.definition.vitality.maxHp;`],
-      ['optional-refinement', `declare const optionalStates: Partial<{ locomotion: RoutedLocomotionState }>; initializeUnit({ id: 1, definition: enemyDefinition, position: [0, 0], states: optionalStates }).locomotion.mainRoute;`],
-      ['optional-normalized-occupancy', `declare const optionalPlacement: UnitPlacementDefinition<EnemyProbe>; instantiateUnitPlacement(createUnitPlacementDefinition(optionalPlacement), execution, 0).unit.occupancy.claims;`],
-      ['normalized-union-occupancy', `instantiateUnitPlacement(createUnitPlacementDefinition(placement), execution, 0).unit.occupancy.claims;`],
+      ['missing-route-refinement', `initializeUnit(battleState, { id: 1, definition: enemyDefinition, position: [0, 0] }).value.locomotion.mainRoute;`],
+      ['optional-normalized-occupancy', `declare const optionalPlacement: UnitPlacementDefinition<EnemyProbe>; instantiateUnitPlacement(battleState, createUnitPlacementDefinition(optionalPlacement)).value.unit.occupancy.claims;`],
+      ['normalized-union-occupancy', `instantiateUnitPlacement(battleState, createUnitPlacementDefinition(placement)).value.unit.occupancy.claims;`],
       ['normalized-unknown-field', `createUnitPlacementDefinition({ definition: enemyDefinition, position: [0, 0], extra: 31 }).extra;`],
     ]) {
       const diagnostics = compile(name, source);

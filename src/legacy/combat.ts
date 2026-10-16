@@ -144,6 +144,7 @@ function operatorDefinition(value: unknown, direction: Direction) {
 
     return {
         ...operator.createDefinition({
+            targetable: {},
             elemental: createArknightsElementalDefinition({ receiver: "CHARACTER" }),
             id: stringField(definition.chessId, "chessId"),
             vitality: { maxHp: numberField(stats.maxHp, "maxHp") },
@@ -231,6 +232,7 @@ function enemyDefinition(value: unknown) {
     const radius = numberField(stats.rangeRadius, "enemy range radius");
 
     return enemy.createCombatDefinition({
+        targetable: {},
         elemental: createArknightsElementalDefinition({ receiver: "ENEMY" }),
         id: stringField(definition.key, "enemy key"),
         vitality: { maxHp: numberField(stats.maxHp, "maxHp") },

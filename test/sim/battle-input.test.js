@@ -8,7 +8,7 @@ import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
 import { definition } from "../helpers/effects.js";
-import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../helpers/unit.js";
 import { seededPlacement } from "../helpers/aura.js";
 import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
 import { createNavigationModifierDefinition } from "../../dist/core/tactical/battlefield/navigation/modifier.js";

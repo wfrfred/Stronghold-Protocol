@@ -71,7 +71,7 @@ test('factory-created enemies enter after spawning and keep immutable old snapsh
 
 test('predefined appearances and deployment initialize once; relocation does not re-enter', () => {
   const trace = [];
-  const deployable = { ...markEntered(trace, 'deployed'), deployable: { cost: 0, redeployTicks: 0, slots: 1, buildableType: 'ALL', advancedBuildableMask: 1, refund: { rate: 0.5, limit: 'BASE_COST' } } };
+  const deployable = { ...markEntered(trace, 'deployed'), occupancy: {}, deployable: { cost: 0, redeployTicks: 0, slots: 1, buildableType: 'ALL', advancedBuildableMask: 1, refund: { rate: 0.5, limit: 'BASE_COST' } } };
   const runtime = new BattleRuntime(input({ deployment: {
     definition: { initialDp: 0, maxDp: 99, dpRecoveryTicks: null, slotLimit: null },
     cards: [{ unit: deployable }],
@@ -103,10 +103,11 @@ test('factory inference keeps callable static content in immutable definitions',
   try {
     writeFileSync(path, `
 import { initialize } from ${module};
-const unit = initialize({ id: 0, position: [0, 0], definition: {
+declare const battle: import(${JSON.stringify(fileURLToPath(new URL('../../src/core/tactical/battle/state.js', import.meta.url)))}).State;
+const unit = initialize(battle, { id: 0, position: [0, 0], definition: {
   id: 'typed-content', vitality: { maxHp: 100 },
   onEnter: (state: import(${JSON.stringify(fileURLToPath(new URL('../../src/core/tactical/battle/state.js', import.meta.url)))}).State, _id: number) => state,
-} });
+} }).value;
 declare const state: Parameters<typeof unit.definition.onEnter>[0];
 unit.definition.onEnter(state, unit.id);
 const hp: number = unit.vitality.hp;

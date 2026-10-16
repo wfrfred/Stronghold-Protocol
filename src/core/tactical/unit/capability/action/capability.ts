@@ -50,16 +50,21 @@ export function createDefinition(definition: Definition): Definition {
     return Object.freeze({ ...definition });
 }
 
-export function initialize(): State {
+export const initialize: (battle: BattleState, definition: Definition) => Result<State> = (
+    battle,
+) => {
     return {
-        cooldowns: new Map(),
-        interval: [],
-        speed: [],
-        rules: [],
-        beforeRelease: [],
-        released: [],
+        state: battle,
+        value: {
+            cooldowns: new Map(),
+            interval: [],
+            speed: [],
+            rules: [],
+            beforeRelease: [],
+            released: [],
+        },
     };
-}
+};
 
 export function setRule(state: State, rule: Rule): State {
     const rules = hook.set(state.rules, rule);

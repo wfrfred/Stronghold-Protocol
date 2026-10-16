@@ -1,63 +1,48 @@
 import type { WorldPosition } from "../geometry/coordinate.js";
-import type { ImmutableData } from "../../common/immutable-data.js";
-import {
-    initializeUnitCapabilities,
-    type SelectedCapabilityStates,
-    type CapabilityStates,
-    type PreparedCapabilityStates,
-    type RuntimeCapabilitiesFor,
-} from "./capability/catalog.js";
-import type { Unit, Definition, Id } from "./unit.js";
+import type { State as BattleState, Result } from "../battle/state.js";
+import { initializers, type Definitions, type Product } from "./capability/catalog.js";
 import { Effects } from "./effect/effects.js";
+import type { Unit, Definition, Id } from "./unit.js";
 
-export interface Input<D extends Definition = Definition> {
+export interface Input<D extends Definition & Partial<Definitions> = Definition> {
     readonly id: Id;
     readonly definition: D;
     readonly position: WorldPosition;
-    readonly tick?: number;
     readonly effects?: Effects;
-    readonly states?: never;
 }
 
-export type PreparedInput<D extends Definition, S extends PreparedCapabilityStates<D>> = Omit<
-    Input<D>,
-    "states"
-> & {
-    readonly states: S & Record<Exclude<keyof S, keyof PreparedCapabilityStates<D>>, never>;
-};
+export function initialize<D extends Definition & Partial<Definitions>>(
+    battle: BattleState,
+    input: Input<D>,
+): Result<Unit & Product<D>>;
+export function initialize(battle: BattleState, input: Input): Result<Unit> {
+    const states: Record<string, unknown> = {};
 
-type RuntimeCapabilitiesWithStates<D extends Definition, S extends object> = {
-    readonly [K in keyof RuntimeCapabilitiesFor<D>]: S extends Readonly<Record<K, unknown>>
-        ? SelectedCapabilityStates<S>[K & keyof SelectedCapabilityStates<S>]
-        : RuntimeCapabilitiesFor<D>[K];
-} & Omit<SelectedCapabilityStates<S>, keyof RuntimeCapabilitiesFor<D>>;
+    for (const key of Object.keys(initializers) as (keyof typeof initializers)[]) {
+        if (!(key in input.definition)) {
+            continue;
+        }
 
-export type Result<D extends Definition, S extends object = object> = D extends unknown
-    ? Omit<Unit, "definition"> & {
-          readonly definition: ImmutableData<D>;
-      } & RuntimeCapabilitiesWithStates<D, S>
-    : never;
+        const definition: unknown = Reflect.get(input.definition, key);
 
-export function initialize<D extends Definition>(input: Input<D>): Result<D>;
-export function initialize<D extends Definition, S extends PreparedCapabilityStates<D>>(
-    prepared: PreparedInput<D, S>,
-): Result<D, S>;
-export function initialize(
-    input: Omit<Input, "states"> & { readonly states?: Partial<CapabilityStates> },
-): Unit {
-    const { id, position, definition } = input;
-    const states = initializeUnitCapabilities(
-        definition,
-        { tick: input.tick ?? 0 },
-        input.states ?? {},
-    );
+        if (definition === undefined || definition === null) {
+            throw new TypeError(`capability ${key} requires a definition`);
+        }
+
+        const initialized = initializers[key](battle, definition as never);
+        battle = initialized.state;
+        states[key] = initialized.value;
+    }
 
     return {
-        id,
-        lifecycle: "PRESENT",
-        definition,
-        position,
-        effects: input.effects ?? Effects.empty(),
-        ...states,
+        state: battle,
+        value: {
+            id: input.id,
+            lifecycle: "PRESENT",
+            definition: input.definition,
+            position: input.position,
+            effects: input.effects ?? Effects.empty(),
+            ...states,
+        },
     };
 }

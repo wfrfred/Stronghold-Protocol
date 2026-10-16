@@ -6,7 +6,7 @@ import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality
 import { resolveHealing } from "../../dist/core/tactical/unit/capability/vitality/healing/settlement.js";
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import { getUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
-import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../helpers/unit.js";
 import { effectFixtureWork } from "../helpers/effects.js";
 
 const hook = (id, invoke, priority = 0, enabled = () => true, stage = "reception") => ({

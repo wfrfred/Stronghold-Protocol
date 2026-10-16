@@ -1,3 +1,4 @@
+import type { State as BattleState, Result } from "../../../battle/state.js";
 import type { BuildableType } from "../../../battlefield/map/tile.js";
 import type { Unit, Definition as UnitDefinition } from "../../unit.js";
 import type { DeployedHook } from "./hook.js";
@@ -33,13 +34,16 @@ export interface Deployable {
     readonly deployable: State;
 }
 
-export function initialize(definition: Definition): State {
+export function initialize(battle: BattleState, definition: Definition): Result<State> {
     return {
-        cardId: null,
-        cost: definition.cost,
-        refundLimit: definition.cost,
-        refundAllowed: false,
-        deployedHooks: [],
+        state: battle,
+        value: {
+            cardId: null,
+            cost: definition.cost,
+            refundLimit: definition.cost,
+            refundAllowed: false,
+            deployedHooks: [],
+        },
     };
 }
 

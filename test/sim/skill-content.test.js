@@ -1,3 +1,4 @@
+import { fixtureBattle } from "../helpers/unit.js";
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
 import { create as createAttack } from "../../dist/content/tactical/actions/attack.js";
 import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
@@ -9,7 +10,7 @@ import { battlefieldView, getUnit, updateUnit } from "../../dist/core/tactical/b
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import * as skills from "../../dist/core/tactical/unit/capability/skill/operations.js";
-import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "../helpers/unit.js";
 import { compileArknightsAttackBuffSkill } from "../../dist/data/arknights/skill-buff.js";
 import { parseArknightsSkillLevel } from "../../dist/data/arknights/skill-definition.js";
 import { createDefinition as createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
@@ -71,7 +72,7 @@ test("native attack buff data builds a shared Definition and changes attacks thr
     })) },
   };
   const target = {
-    id: "stationary-content-target", vitality: { maxHp: 1000000 }, allegiance: { side: "ENEMY" },
+    id: "stationary-content-target", spatialPresence: {}, vitality: { maxHp: 1000000 }, allegiance: { side: "ENEMY" },
     spatial: { layer: "GROUND" }, hit: { geometry },
     locomotion: { moveSpeedPerTick: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 } },
   };
@@ -206,7 +207,7 @@ test("instant healing uses the current activation tick and returns the settled h
       },
     },
   });
-  const unit = initialize({ id: 1, position: [0, 0], definition: { id: "heal-caster", skill: definition, vitality: { maxHp: 100 } }, states: { vitality: { ...initializeVitality({ maxHp: 100 }), hp: 50 } } });
+  const unit = initialize({ id: 1, position: [0, 0], definition: { id: "heal-caster", skill: definition, vitality: { maxHp: 100 } }, states: { vitality: { ...initializeVitality(fixtureBattle(0), { maxHp: 100 }).value, hp: 50 } } });
   let activatedState = effectFixtureWork(unit);
   activatedState = skills.activate({ ...activatedState, tick: 3 }, unitRef(getUnit(activatedState, 1))).state;
   assert.equal(getUnit(activatedState, 1).vitality.hp, 80);

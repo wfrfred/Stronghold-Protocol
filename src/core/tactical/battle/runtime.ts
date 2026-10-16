@@ -160,7 +160,7 @@ export class BattleRuntime {
 
         state = advanceBattlefield(state, [{ type: "EXPIRE_NAVIGATION_MODIFIERS", tick }]);
         state = advanceDeployment(state, tick);
-        state = advancePredefined(state, this.#input.predefines, commands, tick);
+        state = advancePredefined(state, this.#input.predefines, commands);
 
         state = prepareCombat(state, commands);
 

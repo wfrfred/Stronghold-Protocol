@@ -23,6 +23,7 @@ import type { Definition as UnitDefinition } from "../../core/tactical/unit/unit
 import {
     validateState as validateOccupancyState,
     type State as OccupancyState,
+    type Occupancy,
 } from "../../core/tactical/unit/capability/occupancy/capability.js";
 import type { Definition as VitalityDefinition } from "../../core/tactical/unit/capability/vitality/capability.js";
 import type { ArknightsPredefinedInstance } from "./level.js";
@@ -100,7 +101,8 @@ function unitDefinition(
     phase: Record<string, unknown>,
     profile: Extract<PredefinedPrefab, { readonly type: "UNIT" }>,
 ): UnitDefinition & { readonly vitality: VitalityDefinition } & TileBinding["definition"] &
-    Deployable["definition"] {
+    Deployable["definition"] &
+    Occupancy["definition"] {
     if (instance.inst.potentialRank !== 0 || instance.inst.favorPoint !== 0) {
         throw new TypeError("predefined unit potential and favor modifiers are not supported");
     }
@@ -150,6 +152,7 @@ function unitDefinition(
     return Object.freeze({
         id: instance.inst.characterKey,
         vitality: Object.freeze({ maxHp: maxHp! }),
+        occupancy: Object.freeze({}),
         tileBinding: createTileBindingDefinition(profile.tileBinding),
         deployable: createDeployableDefinition({
             ...profile.deployable,
@@ -201,7 +204,7 @@ export function parsePredefinedDefinition(
             type: "UNIT",
             definition,
             position,
-            states: { occupancy },
+            claims: occupancy.claims,
             navigationModifiers: [
                 {
                     definition: navigationModifierDefinition,

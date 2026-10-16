@@ -16,10 +16,14 @@ import {
     instantiateUnitPlacement,
     type UnitPlacementDefinition,
 } from "../creation/placement.js";
-import type { BattleExecutionState } from "../execution/state.js";
 import type { Command } from "../contract.js";
 import { enterUnits, removeUnitWithEffects } from "../execution/unit-lifecycle.js";
-import { advanceBattlefield, battlefieldView, type State as BattleState } from "../state.js";
+import {
+    advanceBattlefield,
+    battlefieldView,
+    type State as BattleState,
+    type Result,
+} from "../state.js";
 
 export interface PredefinedUnitCreation extends UnitPlacementDefinition {
     readonly type: "UNIT";
@@ -56,7 +60,6 @@ export type PredefinedCommand =
 
 interface PredefinedTransition {
     readonly presence: readonly PredefinedPresence[];
-    readonly execution: BattleExecutionState;
     readonly changes: readonly BattlefieldChange[];
 }
 
@@ -113,19 +116,17 @@ function nextIdentity(value: number): number {
 }
 
 export function changePredefinedInstances(
+    state: BattleState,
     definitions: readonly PredefinedDefinition[],
     initialPresence: readonly PredefinedPresence[],
     commands: readonly PredefinedCommand[],
-    initialExecution: BattleExecutionState,
-    tick = 0,
-): PredefinedTransition {
+): Result<PredefinedTransition> {
     if (commands.length === 0) {
-        return { presence: initialPresence, execution: initialExecution, changes: [] };
+        return { state, value: { presence: initialPresence, changes: [] } };
     }
 
     const presence = new Map(initialPresence.map((binding) => [binding.definitionId, binding]));
     const changes: BattlefieldChange[] = [];
-    let execution = initialExecution;
 
     for (const command of commands) {
         const definition = definitions.find((definition) => definition.id === command.definitionId);
@@ -161,12 +162,14 @@ export function changePredefinedInstances(
         let source: NavigationModifierSource;
 
         if (creation.type === "UNIT") {
-            const instantiated = instantiateUnitPlacement(creation, execution, tick);
+            const initialized = instantiateUnitPlacement(state, creation);
+            state = initialized.state;
+            const instantiated = initialized.value;
 
             source = Object.freeze({ type: "UNIT", unitId: instantiated.unit.id });
             changes.push(...instantiated.changes);
-            execution = instantiated.execution;
         } else {
+            let execution = state.execution;
             source = Object.freeze({ type: "MECHANISM", mechanismId: execution.nextMechanismId });
             changes.push({
                 type: "REGISTER_MECHANISM",
@@ -195,15 +198,19 @@ export function changePredefinedInstances(
                     nextNavigationModifierId: nextIdentity(execution.nextNavigationModifierId),
                 };
             }
+
+            state = { ...state, execution };
         }
 
         presence.set(command.definitionId, { definitionId: command.definitionId, source });
     }
 
     return {
-        presence: changes.length === 0 ? initialPresence : [...presence.values()],
-        execution,
-        changes,
+        state,
+        value: {
+            presence: changes.length === 0 ? initialPresence : [...presence.values()],
+            changes,
+        },
     };
 }
 
@@ -222,7 +229,6 @@ export function advancePredefined(
     state: BattleState,
     definitions: readonly PredefinedDefinition[],
     commands: readonly Command[],
-    tick: number,
 ): BattleState {
     for (const command of commands) {
         if (command.type !== "APPEAR_PREDEFINED" && command.type !== "REMOVE_PREDEFINED") {
@@ -230,19 +236,18 @@ export function advancePredefined(
         }
 
         const transition = changePredefinedInstances(
+            state,
             definitions,
             reconcilePredefinedPresence(state.predefinedPresence, battlefieldView(state)),
             [command],
-            state.execution,
-            tick,
         );
+        state = transition.state;
         state = {
             ...state,
-            execution: transition.execution,
-            predefinedPresence: transition.presence,
+            predefinedPresence: transition.value.presence,
         };
 
-        for (const change of transition.changes) {
+        for (const change of transition.value.changes) {
             if (change.type === "REMOVE_UNIT") {
                 state = removeUnitWithEffects(state, change.unitId, change.reason);
             } else {
@@ -252,7 +257,7 @@ export function advancePredefined(
 
         state = enterUnits(
             state,
-            transition.changes.flatMap((change) =>
+            transition.value.changes.flatMap((change) =>
                 change.type === "REGISTER_UNIT" ? [change.unit.id] : [],
             ),
         );

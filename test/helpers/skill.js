@@ -1,7 +1,7 @@
 import { getUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
 import { createDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { ref as activationRef } from "../../dist/core/tactical/unit/capability/skill/activation.js";
-import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { initialize } from "./unit.js";
 import { ref } from "../../dist/core/tactical/unit/query.js";
 import { effectFixtureWork } from "./effects.js";
 
