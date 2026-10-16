@@ -6,7 +6,6 @@ import { stun } from "../../dist/content/tactical/effects/stun.js";
 import { silence, blockSpRecovery } from "../../dist/content/tactical/effects/control.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { getUnit, battlefieldView, updateUnit } from "../../dist/core/tactical/battle/state.js";
-import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
 import * as actions from "../../dist/core/tactical/unit/action/operations.js";
 import { canBlock } from "../../dist/core/tactical/unit/capability/blocking/blocker.js";
 import { canMove } from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
@@ -22,9 +21,9 @@ const activationAllowed = (state) => {
 const recoveryAllowed = (state) => recover(state, unitRef(getUnit(state, 0)), "TIME", 0).value.type === "APPLIED";
 const actionAllowed = (battle, self) => self.action.rules.every(rule => rule.allows(battle, self, "normal"));
 
-function actor() {
+function actor(action = true) {
     return unit(0, {
-        action: true,
+        action,
         blocker: { capacity: 1, geometry: { radius: 2 } },
         locomotion: { moveSpeedPerTick: 1, steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 } },
         skill: skillDefinition({ id: "control-test", sp: { initial: 0, capacity: 10, requirement: 10, recovery: { type: "TIME", intervalTicks: 30 } } }),
@@ -93,13 +92,12 @@ test("stun interrupts a running Action through its complete cancellation operati
     let endings = 0;
     const program = {
         id: "held", intervalTicks: 30, speed: 100,
+        initialize: state => ({ state, value: {} }),
         start: state => ({ state, value: {} }),
         step: state => ({ state, value: false }),
         onEnd: state => { endings++; return state; },
     };
-    const source = actor();
-    const configured = { ...source, definition: { ...source.definition,
-        action: { definitions: Definitions.empty().add(program) } } };
+    const configured = actor(program);
     const started = actions.start(battle(configured), unitRef(configured), program);
     assert.equal(started.value.type, "STARTED");
     const stunned = effects.install(started.state, unitRef(configured), stun).state;

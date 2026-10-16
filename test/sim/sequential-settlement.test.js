@@ -19,11 +19,13 @@ for (const nested of ["cancel", "advance", "advance complete", "advance waiting"
         let armed = false;
         const first = {
             id: "first", intervalTicks: 10, speed: 100,
+            initialize: state => ({ state, value: {} }),
             start: state => ({ state, value: {} }),
             step: state => ({ state, value: false }),
         };
         const second = {
             id: "second", intervalTicks: 10, speed: 100,
+            initialize: state => ({ state, value: {} }),
             start: state => ({ state, value: { finishAtTick: 100 } }),
             step(state, self) {
                 if (armed) executions++;

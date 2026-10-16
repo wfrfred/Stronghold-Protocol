@@ -15,6 +15,7 @@ const program = (id = "program", overrides = {}) => ({
     id,
     intervalTicks: 10,
     speed: 100,
+    initialize: (state) => ({ state, value: {} }),
     start: (state) => ({ state, value: { progress: 0 } }),
     step: (state) => ({ state, value: false }),
     ...overrides,

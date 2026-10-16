@@ -153,6 +153,7 @@ test("release dispatch reads replacements for selected IDs and defers newly regi
 test("generic Action start and step do not implicitly emit a release or grant ACTION SP", () => {
     const definition = {
         id: "store-energy", intervalTicks: 30, speed: 100,
+        initialize: (state) => ({ state, value: {} }),
         start: (state) => ({ state, value: {} }),
         step: (state) => ({ state, value: true }),
     };

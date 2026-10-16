@@ -353,6 +353,7 @@ test('projectile runtime: command stop callbacks see same-tick launches and a fa
     } });
     const definition = {
       id: 'launch-sequence', intervalTicks: 10, speed: 100,
+      initialize: state => ({ state, value: {} }),
       start: state => ({ state, value: { emitted: false } }),
       step(state, self) {
         const count = self.state.emitted ? 1 : 3;

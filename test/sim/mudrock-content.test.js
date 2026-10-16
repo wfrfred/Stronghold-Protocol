@@ -186,16 +186,17 @@ test("S2 immediately overrides normal attack and recovery cooldown, heals once, 
         enemy(3, [1, 0], { spatial: { layer: "AIR" } }), enemy(4, [5, 0])]);
     let ready = sp(hp(fixture.state, 1000), 5);
     ready = save(ready, {
-        action: { ...getUnit(ready, 0).action, cooldowns: new Map([
-            ["normal-attack", { readyAtTick: 10000, periodTicks: 60 }],
-            [fixture.action.id, { readyAtTick: 10000, periodTicks: 60 }],
-        ]) },
+        action: { ...getUnit(ready, 0).action, states: new Map(
+            [...getUnit(ready, 0).action.states].map(([id, current]) => [id, {
+                ...current, cooldown: { readyAtTick: 10000, periodTicks: 60 },
+            }]),
+        ) },
         offense: setAttackContribution(getUnit(ready, 0).offense, { id: "test/attack", value: [modifier({ addition: 100 })] }),
     });
     const active = advanceSkill({ ...ready, tick: 0 }, unitRef(getUnit(ready, 0)));
     assert.equal(getUnit(active, 0).skill.active.sustain.type, "INFINITE");
-    assert.equal(getUnit(active, 0).action.cooldowns.get("normal-attack").readyAtTick, 0);
-    assert.equal(getUnit(active, 0).action.cooldowns.get(fixture.action.id).readyAtTick, 0);
+    assert.equal(getUnit(active, 0).action.states.get("normal-attack").cooldown.readyAtTick, 0);
+    assert.equal(getUnit(active, 0).action.states.get(fixture.action.id).cooldown.readyAtTick, 0);
     assert.deepEqual(fixture.definition.action.select(active, getUnit(active, 0)).value, [fixture.action.id]);
     const executed = start(active, unitRef(getUnit(active, 0)), fixture.action).state;
     const amount = (fixture.prepared.attributes.attack + 100) * 2.1;

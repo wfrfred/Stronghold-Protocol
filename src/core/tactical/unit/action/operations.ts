@@ -9,14 +9,16 @@ import { resolveInterval } from "../capability/action/timing.js";
 import { ref, type Action } from "./action.js";
 import type { Actions } from "./actions.js";
 import type { Definition, Id as DefinitionId } from "./definition.js";
+import type { State } from "./state.js";
 import * as cooldown from "./cooldown.js";
 import { advance } from "./advance.js";
 import { end } from "./internal/end.js";
+import { read } from "./internal/read.js";
 
 type StoredAction = ReturnType<Actions["values"]>[number];
 
-export type StartOutcome<S extends object> =
-    | { readonly type: "STARTED"; readonly ref: Ref<Action<S>> }
+export type StartOutcome<P extends object, E extends object> =
+    | { readonly type: "STARTED"; readonly ref: Ref<Action<P, E>> }
     | {
           readonly type: "REJECTED";
           readonly reason: "SOURCE_UNAVAILABLE" | "RULE" | "COOLDOWN" | "CASTING" | "CONDITION";
@@ -51,15 +53,42 @@ export function isCasting(
         );
 }
 
-export function start<S extends object>(
+export function getState<P extends object, E extends object>(
     battle: BattleState,
     source: Ref<Unit & ActionCapability>,
-    definition: Definition<S>,
-): Result<StartOutcome<S>> {
+    definition: Definition<P, E>,
+): State<P, E> | undefined {
+    const self = units.get(battle, source)?.action.states.get(definition.id);
+
+    return self?.definition === definition ? (self as State<P, E>) : undefined;
+}
+
+export function replaceState<P extends object, E extends object>(
+    battle: BattleState,
+    source: Ref<Unit & ActionCapability>,
+    self: State<P, E>,
+): BattleState {
+    const unit = units.get(battle, source);
+    const current = unit?.action.states.get(self.definition.id);
+
+    if (unit === undefined || current?.definition !== self.definition || current === self) {
+        return battle;
+    }
+
+    const states = new Map(unit.action.states).set(self.definition.id, self);
+
+    return updateUnit(battle, { ...unit, action: { ...unit.action, states } });
+}
+
+export function start<P extends object, E extends object>(
+    battle: BattleState,
+    source: Ref<Unit & ActionCapability>,
+    definition: Definition<P, E>,
+): Result<StartOutcome<P, E>> {
     const unit = units.get(battle, source);
     const reject = (
-        reason: Extract<StartOutcome<S>, { type: "REJECTED" }>["reason"],
-    ): Result<StartOutcome<S>> => ({ state: battle, value: { type: "REJECTED", reason } });
+        reason: Extract<StartOutcome<P, E>, { type: "REJECTED" }>["reason"],
+    ): Result<StartOutcome<P, E>> => ({ state: battle, value: { type: "REJECTED", reason } });
 
     if (
         unit?.lifecycle !== "PRESENT" ||
@@ -79,17 +108,14 @@ export function start<S extends object>(
     }
 
     const period = resolveInterval(battle, source, definition)!;
-    const current = unit.action.cooldowns.get(definition.id);
-    const resized =
-        current === undefined
-            ? cooldown.initialize(period, battle.tick)
-            : cooldown.resizeKeepingProgress(current, period, battle.tick);
+    const current = getState(battle, source, definition)!;
+    const resized = cooldown.resizeKeepingProgress(current.cooldown, period, battle.tick);
 
     if (cooldown.remaining(resized, battle.tick) > 0) {
         return reject("COOLDOWN");
     }
 
-    const initialized = definition.start(battle, source);
+    const initialized = definition.start(battle, source, current);
     battle = initialized.state;
 
     if (initialized.value === null) {
@@ -113,13 +139,14 @@ export function start<S extends object>(
     }
 
     const latestPeriod = resolveInterval(battle, source, definition)!;
-    const latestCooldown = latest.action.cooldowns.get(definition.id);
-    const acceptedCooldown =
-        latestCooldown === undefined
-            ? cooldown.initialize(latestPeriod, battle.tick)
-            : cooldown.resizeKeepingProgress(latestCooldown, latestPeriod, battle.tick);
+    const latestState = getState(battle, source, definition)!;
+    const acceptedCooldown = cooldown.resizeKeepingProgress(
+        latestState.cooldown,
+        latestPeriod,
+        battle.tick,
+    );
 
-    const self: Action<S> = {
+    const self: Action<P, E> = {
         id: battle.actions.nextId,
         source,
         definition,
@@ -127,16 +154,20 @@ export function start<S extends object>(
         status: "RUNNING",
         state: initialized.value,
     };
-    const cooldowns = new Map(latest.action.cooldowns);
-    cooldowns.set(definition.id, cooldown.reset(acceptedCooldown, battle.tick));
-    battle = updateUnit(battle, { ...latest, action: { ...latest.action, cooldowns } });
+    battle = replaceState(battle, source, {
+        ...latestState,
+        cooldown: cooldown.reset(acceptedCooldown, battle.tick),
+    });
     battle = { ...battle, actions: battle.actions.add(self) };
     const reference = ref(self);
 
     return { state: advance(battle, reference), value: { type: "STARTED", ref: reference } };
 }
 
-export function replace<S extends object>(battle: BattleState, self: Action<S>): BattleState {
+export function replace<P extends object, E extends object>(
+    battle: BattleState,
+    self: Action<P, E>,
+): BattleState {
     const current = battle.actions.get(self.id);
 
     if (current === undefined || current.status === "ENDING" || current === self) {
@@ -182,26 +213,21 @@ export function refreshCooldowns(
         return battle;
     }
 
-    const cooldowns = new Map(unit.action.cooldowns);
+    const states = new Map(unit.action.states);
     let changed = false;
 
     for (const definition of unit.definition.action.definitions.values()) {
         const period = resolveInterval(battle, source, definition)!;
-        const previous = cooldowns.get(definition.id);
-        const next =
-            previous === undefined
-                ? cooldown.initialize(period, battle.tick)
-                : cooldown.resizeKeepingProgress(previous, period, battle.tick);
+        const previous = states.get(definition.id)!;
+        const next = cooldown.resizeKeepingProgress(previous.cooldown, period, battle.tick);
 
-        if (next !== previous) {
-            cooldowns.set(definition.id, next);
+        if (next !== previous.cooldown) {
+            states.set(definition.id, { ...previous, cooldown: next });
             changed = true;
         }
     }
 
-    return changed
-        ? updateUnit(battle, { ...unit, action: { ...unit.action, cooldowns } })
-        : battle;
+    return changed ? updateUnit(battle, { ...unit, action: { ...unit.action, states } }) : battle;
 }
 
 function changeCooldown(
@@ -220,18 +246,16 @@ function changeCooldown(
     }
 
     battle = refreshCooldowns(battle, source);
-    const current = units.get(battle, source)!;
-    const previous = current.action.cooldowns.get(definitionId)!;
-    const next = change(previous, battle.tick);
 
-    if (previous === next) {
-        return battle;
-    }
+    return (
+        read(battle, source, definitionId, (current) => {
+            const next = change(current.cooldown, battle.tick);
 
-    const cooldowns = new Map(current.action.cooldowns);
-    cooldowns.set(definitionId, next);
-
-    return updateUnit(battle, { ...current, action: { ...current.action, cooldowns } });
+            return current.cooldown === next
+                ? battle
+                : replaceState(battle, source, { ...current, cooldown: next });
+        }) ?? battle
+    );
 }
 
 export function resetCooldown(

@@ -11,18 +11,15 @@ import { hasVitality } from "../vitality/capability.js";
 import { hasAction, setReleasedHook } from "../action/capability.js";
 import type { ReleasedHook } from "../action/release.js";
 import { setHook as setDamageHook, type ReceivedHook } from "../vitality/damage/hook.js";
-import { hasSkill, type Skill, type Stored } from "./capability.js";
-import {
-    ref as activationRef,
-    type Activation,
-    type Stored as StoredActivation,
-    type Trigger,
-    type End,
-} from "./activation.js";
+import { hasSkill, type Skill } from "./capability.js";
+import { ref as activationRef, type Activation, type Trigger, type End } from "./activation.js";
 import type { Operation } from "./rule.js";
 import type { State as SustainState } from "./sustain.js";
 import { dispatch } from "./hook.js";
 import * as query from "./query.js";
+import * as instance from "./instance.js";
+import { read } from "./internal/read.js";
+import type { Instance } from "./instance.js";
 import * as sp from "./sp.js";
 
 const hitRecovery: ReceivedHook = {
@@ -41,7 +38,7 @@ const actionRecovery: ReleasedHook = {
         hasSkill(source) ? sp.recover(battle, units.ref(source), "ACTION").state : battle,
 };
 
-export type Outcome<T extends StoredActivation = StoredActivation> =
+export type Outcome<T extends Activation = Activation> =
     | { readonly type: "ACTIVATED"; readonly ref: Ref<T> }
     | { readonly type: "REJECTED"; readonly reason: string };
 
@@ -55,69 +52,59 @@ export type Signal = {
     | { readonly type: "SKILL_FINISHED"; readonly end: End }
 );
 
-export function activate<S extends object, A extends object>(
-    battle: BattleState,
-    host: Ref<Unit & Skill<S, A>>,
-    trigger?: Trigger,
-): Result<Outcome<Activation<S, A>>>;
 export function activate(
     battle: BattleState,
-    host: Ref<Unit & Stored>,
-    trigger?: Trigger,
-): Result<Outcome>;
-export function activate(
-    battle: BattleState,
-    host: Ref<Unit & Stored>,
+    host: Ref<Unit & Skill>,
     trigger: Trigger = "MANUAL",
 ): Result<Outcome> {
     return (
-        query.read(battle, host, (self): Result<Outcome> => {
-            const definition = self.definition.skill.activation;
+        read(battle, host, (self, unit): Result<Outcome> => {
+            const definition = self.definition.activation;
             const reject = (reason: string): Result<Outcome> => ({
                 state: battle,
                 value: { type: "REJECTED", reason },
             });
 
             if (
-                self.lifecycle !== "PRESENT" ||
-                !isSpatiallyPresent(self) ||
-                (hasVitality(self) && self.vitality.hp <= 0)
+                unit.lifecycle !== "PRESENT" ||
+                !isSpatiallyPresent(unit) ||
+                (hasVitality(unit) && unit.vitality.hp <= 0)
             ) {
                 return reject("UNAVAILABLE");
             }
             if (definition === null) {
                 return reject("NO_ACTIVATION");
             }
-            if (self.skill.active !== null) {
+            if (self.state.active !== null) {
                 return reject("ACTIVE");
             }
             if (definition.trigger !== trigger) {
                 return reject("WRONG_TRIGGER");
             }
-            if (trigger === "PASSIVE" && self.skill.nextActivationId !== 0) {
+            if (trigger === "PASSIVE" && self.state.nextActivationId !== 0) {
                 return reject("ALREADY_ACTIVATED");
             }
             if (
-                !self.skill.rules.every((rule) => rule.allowsActivation?.(battle, self) ?? true) ||
+                !self.state.rules.every((rule) => rule.allowsActivation?.(battle, unit) ?? true) ||
                 !(definition.accepts?.(battle, self) ?? true)
             ) {
                 return reject("CONDITION");
             }
 
-            const identity = units.ref(self);
+            const identity = self.host;
             const requirement = sp.resolveRequirement(battle, identity) ?? 0;
             const cost = definition.cost?.(battle, self) ?? sp.resolveCost(battle, identity) ?? 0;
             assertNonnegativeSafeInteger(cost, "skill activation SP cost");
-            const previousSp = self.skill.sp;
+            const previousSp = self.state.sp;
 
             if ((previousSp?.value ?? 0) < requirement || (previousSp?.value ?? 0) < cost) {
                 return reject("INSUFFICIENT_SP");
             }
 
-            const sustain = initialSustain(battle, self);
+            const sustain = initialSustain(battle, self, unit);
             const active = {
                 host: identity,
-                id: self.skill.nextActivationId,
+                id: self.state.nextActivationId,
                 startedAtTick: battle.tick,
                 status: "ACTIVE" as const,
                 sustain,
@@ -126,10 +113,10 @@ export function activate(
             const nextActivationId = active.id + 1;
             assertNonnegativeSafeInteger(nextActivationId, "skill activation allocation progress");
 
-            battle = query.replace(battle, {
+            battle = instance.replace(battle, {
                 ...self,
-                skill: {
-                    ...self.skill,
+                state: {
+                    ...self.state,
                     sp:
                         previousSp === null
                             ? null
@@ -142,8 +129,8 @@ export function activate(
             battle = appendEvents(battle, [
                 {
                     type: "SKILL_ACTIVATED",
-                    unitId: self.id,
-                    skillId: self.definition.skill.id,
+                    unitId: self.host.id,
+                    skillId: self.definition.id,
                     activationId: active.id,
                     tick: battle.tick,
                     endsAtTick: sustain.type === "TIME" ? sustain.endsAtTick : null,
@@ -159,17 +146,18 @@ export function activate(
                 });
             }
 
-            const current = units.get(battle, identity);
+            const current = instance.get(battle, self.host, self.definition);
+            const host = units.get(battle, identity);
 
             if (
-                current?.lifecycle === "PRESENT" &&
-                isSpatiallyPresent(current) &&
-                (!hasVitality(current) || current.vitality.hp > 0) &&
-                current.skill.active?.id === active.id &&
-                current.skill.active.status === "ACTIVE" &&
+                host?.lifecycle === "PRESENT" &&
+                isSpatiallyPresent(host) &&
+                (!hasVitality(host) || host.vitality.hp > 0) &&
+                current?.state.active?.id === active.id &&
+                current.state.active.status === "ACTIVE" &&
                 definition.onStart !== undefined
             ) {
-                battle = definition.onStart(battle, current.skill.active);
+                battle = definition.onStart(battle, current.state.active);
             }
 
             const after = query.get(battle, reference);
@@ -187,53 +175,59 @@ export function activate(
     );
 }
 
-export function finish(battle: BattleState, reference: Ref<StoredActivation>): BattleState {
+export function finish(battle: BattleState, reference: Ref<Activation>): BattleState {
     return end(battle, reference, { type: "FINISHED" });
 }
 
 export function cancel(
     battle: BattleState,
-    reference: Ref<StoredActivation>,
+    reference: Ref<Activation>,
     reason = "CANCELLED",
 ): BattleState {
     return end(battle, reference, { type: "CANCELLED", reason });
 }
 
-function end(battle: BattleState, reference: Ref<StoredActivation>, ending: End): BattleState {
+function end(battle: BattleState, reference: Ref<Activation>, ending: End): BattleState {
     return (
-        query.read(battle, reference.host, (self) => {
-            const active = self.skill.active;
-            const definition = self.definition.skill.activation;
+        read(battle, reference.host, (self) => {
+            const active = self.state.active;
+            const definition = self.definition.activation;
 
             if (active?.id !== reference.id || active.status !== "ACTIVE" || definition === null) {
                 return battle;
             }
 
             const closing = { ...active, status: "ENDING" as const };
-            battle = query.replace(battle, { ...self, skill: { ...self.skill, active: closing } });
+            battle = instance.replace(battle, {
+                ...self,
+                state: { ...self.state, active: closing },
+            });
             battle = closeLifetime(
                 battle,
                 { type: "SKILL", ref: activationRef(closing) },
                 ending.type === "CANCELLED" ? ending.reason : "SKILL_FINISHED",
             );
-            const current = units.get(battle, active.host)?.skill.active;
+            const current = instance.get(battle, self.host, self.definition)?.state.active;
             const finished = current?.id === active.id ? current : closing;
 
             if (definition.onEnd !== undefined) {
                 battle = definition.onEnd(battle, finished, ending);
             }
 
-            const host = units.get(battle, active.host);
+            const host = instance.get(battle, self.host, self.definition);
 
-            if (host?.skill.active?.id === active.id) {
-                battle = query.replace(battle, { ...host, skill: { ...host.skill, active: null } });
+            if (host?.state.active?.id === active.id) {
+                battle = instance.replace(battle, {
+                    ...host,
+                    state: { ...host.state, active: null },
+                });
             }
 
             battle = appendEvents(battle, [
                 {
                     type: "SKILL_FINISHED",
-                    unitId: self.id,
-                    skillId: self.definition.skill.id,
+                    unitId: self.host.id,
+                    skillId: self.definition.id,
                     activationId: active.id,
                     tick: battle.tick,
                     end: ending,
@@ -247,20 +241,20 @@ function end(battle: BattleState, reference: Ref<StoredActivation>, ending: End)
 
 export function operate(
     battle: BattleState,
-    reference: Ref<StoredActivation>,
+    reference: Ref<Activation>,
     operation: Operation,
 ): Result<{ readonly type: "APPLIED" } | { readonly type: "REJECTED"; readonly reason: string }> {
     return (
-        query.read(battle, reference.host, (self) => {
-            const active = self.skill.active;
-            const definition = self.definition.skill.activation;
+        read(battle, reference.host, (self, unit) => {
+            const active = self.state.active;
+            const definition = self.definition.activation;
             const reject = (reason: string) => ({
                 state: battle,
                 value: { type: "REJECTED" as const, reason },
             });
 
             if (
-                self.lifecycle !== "PRESENT" ||
+                unit.lifecycle !== "PRESENT" ||
                 active?.id !== reference.id ||
                 active.status !== "ACTIVE" ||
                 definition === null
@@ -268,8 +262,8 @@ export function operate(
                 return reject("UNAVAILABLE");
             }
             if (
-                !self.skill.rules.every(
-                    (rule) => rule.allowsOperation?.(battle, self, operation) ?? true,
+                !self.state.rules.every(
+                    (rule) => rule.allowsOperation?.(battle, unit, operation) ?? true,
                 )
             ) {
                 return reject("CONDITION");
@@ -287,26 +281,26 @@ export function operate(
     );
 }
 
-export function advance(battle: BattleState, host: Ref<Unit & Stored>): BattleState {
+export function advance(battle: BattleState, host: Ref<Unit & Skill>): BattleState {
     battle = sp.advance(battle, host);
     battle =
-        query.read(battle, host, (self) =>
-            self.lifecycle === "PRESENT" && self.definition.skill.onTick !== undefined
-                ? self.definition.skill.onTick(battle, self)
+        read(battle, host, (self, unit) =>
+            unit.lifecycle === "PRESENT" && self.definition.onTick !== undefined
+                ? self.definition.onTick(battle, self)
                 : battle,
         ) ?? battle;
     battle =
-        query.read(battle, host, (self) => {
-            const active = self.skill.active;
+        read(battle, host, (self, unit) => {
+            const active = self.state.active;
 
-            if (self.lifecycle !== "PRESENT" || active?.status !== "ACTIVE") {
+            if (unit.lifecycle !== "PRESENT" || active?.status !== "ACTIVE") {
                 return battle;
             }
             if (active.sustain.type === "TIME" && active.sustain.endsAtTick <= battle.tick) {
                 return finish(battle, activationRef(active));
             }
 
-            return self.definition.skill.activation?.onTick?.(battle, active) ?? battle;
+            return self.definition.activation?.onTick?.(battle, active) ?? battle;
         }) ?? battle;
     const self = units.get(battle, host);
     const trigger = self?.definition.skill.activation?.trigger;
@@ -322,26 +316,23 @@ export function advance(battle: BattleState, host: Ref<Unit & Stored>): BattleSt
     return battle;
 }
 
-export function enter(battle: BattleState, host: Ref<Unit & Stored>): BattleState {
+export function enter(battle: BattleState, host: Ref<Unit & Skill>): BattleState {
     battle =
-        query.read(battle, host, (self) => {
-            if (self.lifecycle !== "PRESENT") {
+        read(battle, host, (self, unit) => {
+            if (unit.lifecycle !== "PRESENT") {
                 return battle;
             }
-            if (hasVitality(self) && self.definition.skill.sp?.recovery.type === "HIT") {
-                const updated = {
-                    ...self,
-                    vitality: setDamageHook(self.vitality, hitRecovery),
-                };
+            if (hasVitality(unit) && self.definition.sp?.recovery.type === "HIT") {
+                const updated = { ...unit, vitality: setDamageHook(unit.vitality, hitRecovery) };
                 battle = query.replace(battle, updated);
             }
 
-            const current = units.get(battle, units.ref(self));
+            const current = units.get(battle, self.host);
 
             if (
                 current !== undefined &&
                 hasAction(current) &&
-                self.definition.skill.sp?.recovery.type === "ACTION"
+                self.definition.sp?.recovery.type === "ACTION"
             ) {
                 const updated = {
                     ...current,
@@ -350,10 +341,10 @@ export function enter(battle: BattleState, host: Ref<Unit & Stored>): BattleStat
                 battle = query.replace(battle, updated);
             }
 
-            const entered = units.get(battle, units.ref(self));
+            const entered = instance.get(battle, self.host, self.definition);
 
-            return entered !== undefined && self.definition.skill.onEnter !== undefined
-                ? self.definition.skill.onEnter(battle, entered)
+            return entered !== undefined && self.definition.onEnter !== undefined
+                ? self.definition.onEnter(battle, entered)
                 : battle;
         }) ?? battle;
     const current = units.get(battle, host);
@@ -366,7 +357,7 @@ export function enter(battle: BattleState, host: Ref<Unit & Stored>): BattleStat
 
 export function extendTime(
     battle: BattleState,
-    reference: Ref<StoredActivation>,
+    reference: Ref<Activation>,
     ticks: number,
 ): BattleState {
     if (!Number.isSafeInteger(ticks)) {
@@ -374,12 +365,12 @@ export function extendTime(
     }
 
     return (
-        query.read(battle, reference.host, (self) => {
-            const active = self.skill.active;
+        read(battle, reference.host, (self, unit) => {
+            const active = self.state.active;
 
             if (
-                self.lifecycle !== "PRESENT" ||
-                (hasVitality(self) && self.vitality.hp <= 0) ||
+                unit.lifecycle !== "PRESENT" ||
+                (hasVitality(unit) && unit.vitality.hp <= 0) ||
                 active?.id !== reference.id ||
                 active.status !== "ACTIVE" ||
                 active.sustain.type !== "TIME"
@@ -390,10 +381,10 @@ export function extendTime(
             const endsAtTick = Math.max(battle.tick, active.sustain.endsAtTick + ticks);
             assertNonnegativeSafeInteger(endsAtTick, "skill ending tick");
 
-            return query.replace(battle, {
+            return instance.replace(battle, {
                 ...self,
-                skill: {
-                    ...self.skill,
+                state: {
+                    ...self.state,
                     active: { ...active, sustain: { type: "TIME", endsAtTick } },
                 },
             });
@@ -403,10 +394,11 @@ export function extendTime(
 
 function initialSustain<S extends object, A extends object>(
     battle: BattleState,
-    self: Unit & Skill<S, A>,
+    self: Instance<S, A>,
+    unit: Unit & Skill,
 ): SustainState {
-    const definition = self.definition.skill.activation!.sustain;
-    const contributions = self.skill.sustain;
+    const definition = self.definition.activation!.sustain;
+    const contributions = self.state.sustain;
     const entries = [];
 
     if (contributions?.type === "TIME") {
@@ -426,7 +418,7 @@ function initialSustain<S extends object, A extends object>(
             modifier.apply(
                 base,
                 contribution.resolve(entries, (input) =>
-                    typeof input === "function" ? input(battle, self) : input,
+                    typeof input === "function" ? input(battle, unit) : input,
                 ),
             ),
         ),

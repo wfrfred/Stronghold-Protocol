@@ -13,6 +13,7 @@ const program = (id, extra = {}) => ({
     id,
     intervalTicks: 10,
     speed: 100,
+    initialize: (state) => ({ state, value: {} }),
     start: (state) => ({ state, value: { count: 0 } }),
     step: (state) => ({ state, value: false }),
     ...extra,
@@ -147,7 +148,7 @@ test("action: cancellation preserves the accepted cooldown instead of resetting 
     const source = unitRef(getUnit(initial, 0)),
         started = actions.start(initial, source, definition);
     const cancelled = actions.cancel({ ...started.state, tick: 1 }, started.value.ref, "SCRIPT");
-    assert.equal(getUnit(cancelled, 0).action.cooldowns.get(definition.id).readyAtTick, 10);
+    assert.equal(getUnit(cancelled, 0).action.states.get(definition.id).cooldown.readyAtTick, 10);
     assert.deepEqual(actions.start(cancelled, source, definition).value, {
         type: "REJECTED",
         reason: "COOLDOWN",

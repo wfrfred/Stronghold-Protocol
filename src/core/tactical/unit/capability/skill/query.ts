@@ -2,53 +2,40 @@ import type { Ref } from "../../../../common/ref.js";
 import { updateUnit, type State as BattleState } from "../../../battle/state.js";
 import type { Unit } from "../../unit.js";
 import * as units from "../../query.js";
-import { hasSkill, type Skill, type Stored } from "./capability.js";
-import type { Activation, Stored as StoredActivation } from "./activation.js";
+import type { Definition, Skill } from "./capability.js";
+import type { Activation } from "./activation.js";
 
-export function get<T extends StoredActivation>(
+export function get<T extends Activation>(battle: BattleState, reference: Ref<T>): T | undefined;
+export function get<S extends object, A extends object>(
+    battle: BattleState,
+    reference: Ref<Activation>,
+    definition: Definition<S, A>,
+): Activation<A> | undefined;
+export function get<T extends Activation>(
     battle: BattleState,
     reference: Ref<T>,
-): T | undefined {
+    definition?: Skill["definition"]["skill"],
+): Activation | undefined {
     const self = units.get(battle, reference.host);
 
-    return self?.skill.active?.id === reference.id ? (self.skill.active as T) : undefined;
+    return self?.skill.active?.id === reference.id &&
+        (definition === undefined || self.definition.skill === definition)
+        ? self.skill.active
+        : undefined;
 }
 
-export function read<R>(
-    battle: BattleState,
-    host: Ref<Unit & Stored>,
-    reader: <S extends object, A extends object>(self: Unit & Skill<S, A>) => R,
-): R | undefined {
-    const self = units.get(battle, host);
-
-    return self === undefined || !hasSkill(self)
-        ? undefined
-        : reader(self as unknown as Unit & Skill);
-}
-
-export function replace<S extends object, A extends object>(
-    battle: BattleState,
-    self: Unit & Skill<S, A>,
-): BattleState {
-    const current = units.get(battle, units.ref(self));
-
-    if (current?.definition.skill !== self.definition.skill) {
-        return battle;
-    }
-
+export function replace(battle: BattleState, self: Unit & Skill): BattleState {
     return updateUnit(battle, self);
 }
 
-export function replaceActivation<S extends object, A extends object>(
+export function replaceActivation<A extends object>(
     battle: BattleState,
-    self: Activation<S, A>,
+    reference: Ref<Activation<A>>,
+    self: NoInfer<Activation<A>>,
 ): BattleState {
-    const host = units.get(battle, self.host);
+    const host = units.get(battle, reference.host);
 
-    if (host?.skill.active?.id !== self.id) {
-        return battle;
-    }
-    if (host.skill.active.status === "ENDING") {
+    if (host?.skill.active?.id !== reference.id || host.skill.active.status === "ENDING") {
         return battle;
     }
     if (self.status !== host.skill.active.status) {

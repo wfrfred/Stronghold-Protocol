@@ -17,6 +17,7 @@ const program = {
     id: "release",
     intervalTicks: 10,
     speed: 100,
+    initialize: (state) => ({ state, value: {} }),
     start: (state) => ({ state, value: {} }),
     step: (state) => ({ state, value: false }),
 };

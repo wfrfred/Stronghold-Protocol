@@ -1,12 +1,21 @@
 import type { Context } from "../../query.js";
 import type { State as BattleState, Result } from "../../../battle/state.js";
 import type { Unit, Definition as UnitDefinition } from "../../unit.js";
-import type { Id as DefinitionId } from "../../action/definition.js";
+import type {
+    Definition as ActionDefinition,
+    Id as DefinitionId,
+} from "../../action/definition.js";
 import type { Definitions } from "../../action/definitions.js";
-import type { State as CooldownState } from "../../action/cooldown.js";
+import type { State as ActionState } from "../../action/state.js";
+import * as cooldown from "../../action/cooldown.js";
 import * as contribution from "../../contribution/contribution.js";
 import * as hook from "../../hook/hook.js";
 import type { Hook as ReleaseHook, ReleasedHook } from "./release.js";
+import { period } from "./timing.js";
+
+type StoredState = Omit<ActionState, "definition"> & {
+    readonly definition: Pick<ActionDefinition, "id" | "intervalTicks" | "speed">;
+};
 
 export interface Definition {
     readonly definitions: Definitions;
@@ -23,7 +32,7 @@ export interface Rule {
 }
 
 export interface State {
-    readonly cooldowns: ReadonlyMap<DefinitionId, CooldownState>;
+    readonly states: ReadonlyMap<DefinitionId, StoredState>;
     readonly interval: readonly contribution.Contribution<contribution.Input<Context>>[];
     readonly speed: readonly contribution.Contribution<contribution.Input<Context>>[];
     readonly rules: readonly Rule[];
@@ -50,13 +59,28 @@ export function createDefinition(definition: Definition): Definition {
     return Object.freeze({ ...definition });
 }
 
-export const initialize: (battle: BattleState, definition: Definition) => Result<State> = (
-    battle,
-) => {
+export function initialize(battle: BattleState, definition: Definition): Result<State> {
+    const states = new Map<DefinitionId, StoredState>();
+
+    for (const id of definition.definitions.keys()) {
+        definition.definitions.read(id, (configured) => {
+            const initialized = configured.initialize(battle);
+            battle = initialized.state;
+            states.set(id, {
+                definition: configured,
+                data: initialized.value,
+                cooldown: cooldown.initialize(
+                    period(configured.intervalTicks, configured.speed),
+                    battle.tick,
+                ),
+            });
+        });
+    }
+
     return {
         state: battle,
         value: {
-            cooldowns: new Map(),
+            states,
             interval: [],
             speed: [],
             rules: [],
@@ -64,7 +88,7 @@ export const initialize: (battle: BattleState, definition: Definition) => Result
             released: [],
         },
     };
-};
+}
 
 export function setRule(state: State, rule: Rule): State {
     const rules = hook.set(state.rules, rule);

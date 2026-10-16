@@ -1,4 +1,4 @@
-import { fixtureBattle, fixtureDefinition } from "../helpers/unit.js";
+import { fixtureBattle } from "../helpers/unit.js";
 import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js';
 import { create as createAttack } from '../../dist/content/tactical/actions/attack.js';
 import { Effects } from "../../dist/core/tactical/unit/effect/effects.js";
@@ -1284,12 +1284,18 @@ const flatBattlefield = (rows = 1, columns = 5) => createFieldState({
 });
 
 function projectionFacts(state) {
+  const definitionFacts = ({ initialize, start, step, onEnd, ...definition }) => definition;
   return { ...state, projectiles: state.projectiles.values(), units: new Map([...state.units].map(([id, unit]) => [
     id, { ...unit, effects: unit.effects.toJSON(), definition: unit.definition.action === undefined
       ? unit.definition
       : { ...unit.definition, action: { ...unit.definition.action,
-        definitions: unit.definition.action.definitions.values().map(({ start, step, onEnd, ...definition }) => definition),
+        definitions: unit.definition.action.definitions.values().map(definitionFacts),
       } },
+      ...(unit.action === undefined ? {} : { action: { ...unit.action,
+        states: new Map([...unit.action.states].map(([id, current]) => [id, {
+          ...current, definition: definitionFacts(current.definition),
+        }])),
+      } }),
     },
   ])) };
 }
@@ -1367,7 +1373,7 @@ test('core selective projection retains untouched collections, indexes and live 
         ignoreTargetFree: false, ignoreInvisible: false, maxTargets: 1 },
     }],
    })) }) });
-  h.commit([{ type: 'REGISTER_UNIT', unit: { ...routed.enemy, definition, action: initializeActionState(fixtureBattle(0), fixtureDefinition("action")).value } }]);
+  h.commit([{ type: 'REGISTER_UNIT', unit: { ...routed.enemy, definition, action: initializeActionState(fixtureBattle(0), definition.action).value } }]);
   h.commit((state, index) => {
     const moved = stepRoutedEnemy(state.units.get(1), {
       tick: 0, maps: state.navigationMaps, fieldCache: h.branches[index].fieldCache,
@@ -1381,7 +1387,7 @@ test('core selective projection retains untouched collections, indexes and live 
   const path = unit.locomotion.mainRoute.navigation.execution.activity.path;
   const field = h.branches[0].fieldCache.get(previous.navigationMaps.WALK, path.request);
   h.commit(state => [{ type: 'UPDATE_UNIT', unit: {
-    ...state.units.get(1), vitality: { ...state.units.get(1).vitality, hp: 90 }, action: { ...state.units.get(1).action, cooldowns: new Map([["normal", { periodTicks: 30, readyAtTick: 7 }]]) },
+    ...state.units.get(1), vitality: { ...state.units.get(1).vitality, hp: 90 }, action: { ...state.units.get(1).action, states: new Map(state.units.get(1).action.states).set("normal", { ...state.units.get(1).action.states.get("normal"), cooldown: { periodTicks: 30, readyAtTick: 7 } }) },
   } }]);
   assert.notEqual(h.state.units, previous.units);
   assert.equal(h.state.mechanisms, previous.mechanisms);

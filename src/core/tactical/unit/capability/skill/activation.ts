@@ -1,7 +1,8 @@
 import type { Identified, Ref } from "../../../../common/ref.js";
 import type { State as BattleState } from "../../../battle/state.js";
 import type { Unit } from "../../unit.js";
-import type { Skill, Stored as StoredSkill } from "./capability.js";
+import type { Skill } from "./capability.js";
+import type { Instance } from "./instance.js";
 import type { Operation } from "./rule.js";
 import type { Definition as SustainDefinition, State as SustainState } from "./sustain.js";
 
@@ -13,27 +14,24 @@ export type End =
 export interface Definition<S extends object, A extends object> {
     readonly trigger: Trigger;
     readonly sustain: SustainDefinition;
-    readonly initialize: (battle: BattleState, self: Unit & Skill<S, A>) => A;
-    readonly accepts?: (battle: BattleState, self: Unit & Skill<S, A>) => boolean;
-    readonly cost?: (battle: BattleState, self: Unit & Skill<S, A>) => number;
-    readonly onStart?: (battle: BattleState, self: Activation<S, A>) => BattleState;
-    readonly onTick?: (battle: BattleState, self: Activation<S, A>) => BattleState;
+    readonly initialize: (battle: BattleState, self: Instance<S, A>) => A;
+    readonly accepts?: (battle: BattleState, self: Instance<S, A>) => boolean;
+    readonly cost?: (battle: BattleState, self: Instance<S, A>) => number;
+    readonly onStart?: (battle: BattleState, self: Activation<A>) => BattleState;
+    readonly onTick?: (battle: BattleState, self: Activation<A>) => BattleState;
     readonly onOperation?: (
         battle: BattleState,
-        self: Activation<S, A>,
+        self: Activation<A>,
         operation: Operation,
     ) => BattleState;
-    readonly onEnd?: (battle: BattleState, self: Activation<S, A>, end: End) => BattleState;
+    readonly onEnd?: (battle: BattleState, self: Activation<A>, end: End) => BattleState;
 }
 
-export interface Activation<
-    S extends object = object,
-    A extends object = object,
-> extends Identified<{
-    readonly host: Ref<Unit & Skill<S, A>>;
+export interface Activation<A extends object = object> extends Identified<{
+    readonly host: Ref<Unit & Skill>;
     readonly id: number;
 }> {
-    readonly host: Ref<Unit & Skill<S, A>>;
+    readonly host: Ref<Unit & Skill>;
     readonly id: number;
     readonly startedAtTick: number;
     readonly status: "ACTIVE" | "ENDING";
@@ -41,26 +39,14 @@ export interface Activation<
     readonly data: A;
 }
 
-export interface Stored extends Identified<{
-    readonly host: Ref<Unit & StoredSkill>;
-    readonly id: number;
-}> {
-    readonly host: Ref<Unit & StoredSkill>;
-    readonly id: number;
-    readonly startedAtTick: number;
-    readonly status: "ACTIVE" | "ENDING";
-    readonly sustain: SustainState;
-    readonly data: object;
-}
-
-export function ref<T extends Stored>(self: T): Ref<T> {
+export function ref<T extends Activation>(self: T): Ref<T> {
     return { host: self.host, id: self.id } as Ref<T>;
 }
 
-export function setData<S extends object, A extends object>(
-    self: Activation<S, A>,
+export function setData<A extends object>(
+    self: Activation<A>,
     next: NoInfer<A> | ((current: NoInfer<A>) => NoInfer<A>),
-): Activation<S, A> {
+): Activation<A> {
     const data = typeof next === "function" ? next(self.data) : next;
 
     return data === self.data ? self : { ...self, data };

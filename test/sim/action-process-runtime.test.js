@@ -67,6 +67,7 @@ const program = (id, extra = {}) => ({
     id,
     intervalTicks: 10,
     speed: 100,
+    initialize: (state) => ({ state, value: {} }),
     start: (state) => ({ state, value: { count: 0 } }),
     step: (state) => ({ state, value: false }),
     ...extra,

@@ -1192,6 +1192,7 @@ test('core battle propagates nested settlement errors without publishing battlef
   };
   const action = {
     id: 'nested-action', intervalTicks: 10, speed: 100,
+    initialize: state => ({ state, value: {} }),
     start: state => ({ state, value: { entered: false } }),
     step(state, self) {
       if (self.state.entered) return { state, value: false };

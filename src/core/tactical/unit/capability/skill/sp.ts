@@ -11,7 +11,7 @@ import * as units from "../../query.js";
 import * as contribution from "../../contribution/contribution.js";
 import * as modifier from "../../contribution/value.js";
 import { hasVitality } from "../vitality/capability.js";
-import type { Skill, Stored } from "./capability.js";
+import type { Skill } from "./capability.js";
 import type { Input } from "./input.js";
 import * as query from "./query.js";
 import { dispatch } from "./hook.js";
@@ -36,15 +36,15 @@ export interface Timer {
     readonly remainingTicks: number;
 }
 
-export interface State<S extends object = object, A extends object = object> {
+export interface State {
     readonly value: number;
     readonly recovery: Timer | null;
     readonly lastTick: number;
-    readonly capacity: readonly contribution.Contribution<Input<S, A>>[];
-    readonly requirement: readonly contribution.Contribution<Input<S, A>>[];
-    readonly cost: readonly contribution.Contribution<Input<S, A>>[];
-    readonly recoverySpeed: readonly contribution.Contribution<Input<S, A>>[];
-    readonly recoveryMultiplier: readonly contribution.Contribution<Input<S, A>>[];
+    readonly capacity: readonly contribution.Contribution<Input>[];
+    readonly requirement: readonly contribution.Contribution<Input>[];
+    readonly cost: readonly contribution.Contribution<Input>[];
+    readonly recoverySpeed: readonly contribution.Contribution<Input>[];
+    readonly recoveryMultiplier: readonly contribution.Contribution<Input>[];
 }
 
 export interface Recovered {
@@ -79,21 +79,17 @@ export type Outcome =
 export type Parameter =
     "capacity" | "requirement" | "cost" | "recoverySpeed" | "recoveryMultiplier";
 
-export function setContribution<S extends object, A extends object>(
-    state: State<S, A>,
+export function setContribution(
+    state: State,
     key: Parameter,
-    entry: contribution.Contribution<Input<S, A>>,
-): State<S, A> {
+    entry: contribution.Contribution<Input>,
+): State {
     const updated = contribution.set(state[key], entry);
 
     return updated === state[key] ? state : { ...state, [key]: updated };
 }
 
-export function removeContribution<S extends object, A extends object>(
-    state: State<S, A>,
-    key: Parameter,
-    id: string,
-): State<S, A> {
+export function removeContribution(state: State, key: Parameter, id: string): State {
     const updated = contribution.remove(state[key], id);
 
     return updated === state[key] ? state : { ...state, [key]: updated };
@@ -120,10 +116,7 @@ export function validateDefinition(definition: Definition): void {
     }
 }
 
-export function initialize<S extends object = object, A extends object = object>(
-    definition: Definition,
-    tick = 0,
-): State<S, A> {
+export function initialize(definition: Definition, tick = 0): State {
     validateDefinition(definition);
     assertNonnegativeSafeInteger(tick, "skill SP initialization tick");
 
@@ -145,34 +138,44 @@ export function initialize<S extends object = object, A extends object = object>
     };
 }
 
-export function resolveCapacity(battle: BattleState, ref: Ref<Unit & Stored>): number | undefined {
-    return query.read(battle, ref, (self) => resolve(battle, self, "capacity"));
+export function resolveCapacity(battle: BattleState, ref: Ref<Unit & Skill>): number | undefined {
+    const self = units.get(battle, ref);
+
+    return self === undefined ? undefined : resolve(battle, self, "capacity");
 }
 export function resolveRequirement(
     battle: BattleState,
-    ref: Ref<Unit & Stored>,
+    ref: Ref<Unit & Skill>,
 ): number | undefined {
-    return query.read(battle, ref, (self) => resolve(battle, self, "requirement"));
+    const self = units.get(battle, ref);
+
+    return self === undefined ? undefined : resolve(battle, self, "requirement");
 }
-export function resolveCost(battle: BattleState, ref: Ref<Unit & Stored>): number | undefined {
-    return query.read(battle, ref, (self) => resolve(battle, self, "cost"));
+export function resolveCost(battle: BattleState, ref: Ref<Unit & Skill>): number | undefined {
+    const self = units.get(battle, ref);
+
+    return self === undefined ? undefined : resolve(battle, self, "cost");
 }
 export function resolveRecoverySpeed(
     battle: BattleState,
-    ref: Ref<Unit & Stored>,
+    ref: Ref<Unit & Skill>,
 ): number | undefined {
-    return query.read(battle, ref, (self) => resolve(battle, self, "recoverySpeed"));
+    const self = units.get(battle, ref);
+
+    return self === undefined ? undefined : resolve(battle, self, "recoverySpeed");
 }
 export function resolveRecoveryMultiplier(
     battle: BattleState,
-    ref: Ref<Unit & Stored>,
+    ref: Ref<Unit & Skill>,
 ): number | undefined {
-    return query.read(battle, ref, (self) => resolve(battle, self, "recoveryMultiplier"));
+    const self = units.get(battle, ref);
+
+    return self === undefined ? undefined : resolve(battle, self, "recoveryMultiplier");
 }
 
 export function recover(
     battle: BattleState,
-    ref: Ref<Unit & Stored>,
+    ref: Ref<Unit & Skill>,
     source: Source,
     amount?: number,
 ): Result<Outcome> {
@@ -180,216 +183,204 @@ export function recover(
         assertNonnegativeSafeInteger(amount, "skill SP recovery amount");
     }
 
-    return (
-        query.read(battle, ref, (self): Result<Outcome> => {
-            if (!available(self)) {
-                return rejected(battle, "UNAVAILABLE");
-            }
+    const self = units.get(battle, ref);
 
-            const state = self.skill.sp;
-            const definition = self.definition.skill.sp;
+    if (self === undefined) {
+        return rejected(battle, "UNAVAILABLE");
+    }
 
-            if (state === null || definition === null) {
-                return rejected(battle, "NO_SP");
-            }
-            if (source !== "EXTERNAL" && definition.recovery.type !== source) {
-                return rejected(battle, "WRONG_SOURCE");
-            }
-            if (!allowsRecovery(battle, self, source)) {
-                return rejected(battle, "RULE");
-            }
+    if (!available(self)) {
+        return rejected(battle, "UNAVAILABLE");
+    }
 
-            const requested =
-                amount ??
-                ((source === "ACTION" || source === "HIT") && definition.recovery.type === source
-                    ? definition.recovery.amount
-                    : 1);
-            const capacity = resolve(battle, self, "capacity")!;
-            const gained = Math.min(requested, Math.max(0, capacity - state.value));
+    const state = self.skill.sp;
+    const definition = self.definition.skill.sp;
 
-            if (gained === 0 && requested !== 0) {
-                return rejected(battle, "FULL");
-            }
-            if (gained === 0) {
-                return applied(battle, 0);
-            }
+    if (state === null || definition === null) {
+        return rejected(battle, "NO_SP");
+    }
+    if (source !== "EXTERNAL" && definition.recovery.type !== source) {
+        return rejected(battle, "WRONG_SOURCE");
+    }
+    if (!allowsRecovery(battle, self, source)) {
+        return rejected(battle, "RULE");
+    }
 
-            const event: Recovered = {
-                source,
-                amount: gained,
-                previous: state.value,
-                current: state.value + gained,
-            };
-            battle = query.replace(battle, {
-                ...self,
-                skill: { ...self.skill, sp: { ...state, value: event.current } },
-            });
+    const requested =
+        amount ??
+        ((source === "ACTION" || source === "HIT") && definition.recovery.type === source
+            ? definition.recovery.amount
+            : 1);
+    const capacity = resolve(battle, self, "capacity")!;
+    const gained = Math.min(requested, Math.max(0, capacity - state.value));
 
-            return applied(dispatch(battle, units.ref(self), "spRecovered", event), gained);
-        }) ?? rejected(battle, "UNAVAILABLE")
-    );
+    if (gained === 0 && requested !== 0) {
+        return rejected(battle, "FULL");
+    }
+    if (gained === 0) {
+        return applied(battle, 0);
+    }
+
+    const event: Recovered = {
+        source,
+        amount: gained,
+        previous: state.value,
+        current: state.value + gained,
+    };
+    battle = query.replace(battle, {
+        ...self,
+        skill: { ...self.skill, sp: { ...state, value: event.current } },
+    });
+
+    return applied(dispatch(battle, units.ref(self), "spRecovered", event), gained);
 }
 
-export function pay(
-    battle: BattleState,
-    ref: Ref<Unit & Stored>,
-    amount?: number,
-): Result<Outcome> {
+export function pay(battle: BattleState, ref: Ref<Unit & Skill>, amount?: number): Result<Outcome> {
     if (amount !== undefined) {
         assertNonnegativeSafeInteger(amount, "skill SP payment amount");
     }
 
-    return (
-        query.read(battle, ref, (self): Result<Outcome> => {
-            if (!available(self)) {
-                return rejected(battle, "UNAVAILABLE");
-            }
+    const self = units.get(battle, ref);
 
-            const state = self.skill.sp;
+    if (self === undefined) {
+        return rejected(battle, "UNAVAILABLE");
+    }
 
-            if (state === null || self.definition.skill.sp === null) {
-                return rejected(battle, "NO_SP");
-            }
+    if (!available(self)) {
+        return rejected(battle, "UNAVAILABLE");
+    }
 
-            const cost = amount ?? resolve(battle, self, "cost")!;
+    const state = self.skill.sp;
 
-            if (state.value < cost) {
-                return rejected(battle, "INSUFFICIENT_SP");
-            }
+    if (state === null || self.definition.skill.sp === null) {
+        return rejected(battle, "NO_SP");
+    }
 
-            const event: Paid = {
-                amount: cost,
-                previous: state.value,
-                current: state.value - cost,
-            };
-            battle = query.replace(battle, {
-                ...self,
-                skill: { ...self.skill, sp: { ...state, value: event.current } },
-            });
+    const cost = amount ?? resolve(battle, self, "cost")!;
 
-            return applied(dispatch(battle, units.ref(self), "spPaid", event), cost);
-        }) ?? rejected(battle, "UNAVAILABLE")
-    );
+    if (state.value < cost) {
+        return rejected(battle, "INSUFFICIENT_SP");
+    }
+
+    const event: Paid = {
+        amount: cost,
+        previous: state.value,
+        current: state.value - cost,
+    };
+    battle = query.replace(battle, {
+        ...self,
+        skill: { ...self.skill, sp: { ...state, value: event.current } },
+    });
+
+    return applied(dispatch(battle, units.ref(self), "spPaid", event), cost);
 }
 
 export function modify(
     battle: BattleState,
-    ref: Ref<Unit & Stored>,
+    ref: Ref<Unit & Skill>,
     delta: number,
     forced = false,
 ): Result<Outcome> {
     assertSafeInteger(delta, "skill SP modification");
 
-    return (
-        query.read(battle, ref, (self): Result<Outcome> => {
-            if (!available(self)) {
-                return rejected(battle, "UNAVAILABLE");
-            }
+    const self = units.get(battle, ref);
 
-            const state = self.skill.sp;
+    if (self === undefined) {
+        return rejected(battle, "UNAVAILABLE");
+    }
 
-            if (state === null || self.definition.skill.sp === null) {
-                return rejected(battle, "NO_SP");
-            }
-            if (delta > 0 && !forced && !allowsRecovery(battle, self, "EXTERNAL")) {
-                return rejected(battle, "RULE");
-            }
+    if (!available(self)) {
+        return rejected(battle, "UNAVAILABLE");
+    }
 
-            const current = Math.min(
-                resolve(battle, self, "capacity")!,
-                Math.max(0, state.value + delta),
-            );
-            const amount = current - state.value;
+    const state = self.skill.sp;
 
-            if (amount === 0) {
-                return applied(battle, 0);
-            }
+    if (state === null || self.definition.skill.sp === null) {
+        return rejected(battle, "NO_SP");
+    }
+    if (delta > 0 && !forced && !allowsRecovery(battle, self, "EXTERNAL")) {
+        return rejected(battle, "RULE");
+    }
 
-            const event: Modified = { delta, amount, forced, previous: state.value, current };
-            battle = query.replace(battle, {
-                ...self,
-                skill: { ...self.skill, sp: { ...state, value: current } },
-            });
+    const current = Math.min(resolve(battle, self, "capacity")!, Math.max(0, state.value + delta));
+    const amount = current - state.value;
 
-            return applied(dispatch(battle, units.ref(self), "spModified", event), amount);
-        }) ?? rejected(battle, "UNAVAILABLE")
-    );
-}
+    if (amount === 0) {
+        return applied(battle, 0);
+    }
 
-export function advance(battle: BattleState, ref: Ref<Unit & Stored>): BattleState {
-    const advanced = query.read(battle, ref, (self) => {
-        if (self.lifecycle !== "PRESENT" || self.skill.sp === null) {
-            return { state: battle, pulses: 0 };
-        }
-
-        const state = self.skill.sp;
-        const definition = self.definition.skill.sp;
-
-        if (battle.tick < state.lastTick) {
-            throw new RangeError("skill SP cannot advance to an earlier tick");
-        }
-
-        const rate =
-            resolve(battle, self, "recoverySpeed")! * resolve(battle, self, "recoveryMultiplier")!;
-        let recovery: Timer | null = null;
-        let pulses = 0;
-
-        if (definition?.recovery.type === "TIME" && rate > 0) {
-            const periodTicks = TICKS_PER_SECOND / rate;
-            assertPositiveNumber(periodTicks, "skill effective SP recovery interval");
-            const previous = state.recovery;
-            let remainingTicks =
-                previous === null
-                    ? periodTicks
-                    : Math.max(0, periodTicks - (previous.periodTicks - previous.remainingTicks));
-
-            const capacity = resolve(battle, self, "capacity")!;
-
-            if (
-                previous !== null &&
-                available(self) &&
-                state.value < capacity &&
-                allowsRecovery(battle, self, "TIME")
-            ) {
-                remainingTicks -= battle.tick - state.lastTick;
-
-                if (remainingTicks <= 1e-8) {
-                    const available = Math.floor((-remainingTicks + 1e-8) / periodTicks) + 1;
-                    const capacityRemaining = capacity - state.value;
-                    pulses = Math.min(available, capacityRemaining);
-                    assertNonnegativeSafeInteger(pulses, "skill SP recovery pulses");
-                    remainingTicks =
-                        pulses === capacityRemaining
-                            ? periodTicks
-                            : Math.max(0, remainingTicks + pulses * periodTicks);
-                }
-            }
-
-            recovery = { periodTicks, remainingTicks };
-        }
-
-        const next = { ...state, recovery, lastTick: battle.tick };
-
-        return {
-            state: query.replace(battle, { ...self, skill: { ...self.skill, sp: next } }),
-            pulses,
-        };
+    const event: Modified = { delta, amount, forced, previous: state.value, current };
+    battle = query.replace(battle, {
+        ...self,
+        skill: { ...self.skill, sp: { ...state, value: current } },
     });
 
-    if (advanced === undefined) {
+    return applied(dispatch(battle, units.ref(self), "spModified", event), amount);
+}
+
+export function advance(battle: BattleState, ref: Ref<Unit & Skill>): BattleState {
+    const self = units.get(battle, ref);
+
+    if (self === undefined) {
+        return battle;
+    }
+    if (self.lifecycle !== "PRESENT" || self.skill.sp === null) {
         return battle;
     }
 
-    return advanced.pulses === 0
-        ? advanced.state
-        : recover(advanced.state, ref, "TIME", advanced.pulses).state;
+    const state = self.skill.sp;
+    const definition = self.definition.skill.sp;
+
+    if (battle.tick < state.lastTick) {
+        throw new RangeError("skill SP cannot advance to an earlier tick");
+    }
+
+    const rate =
+        resolve(battle, self, "recoverySpeed")! * resolve(battle, self, "recoveryMultiplier")!;
+    let recovery: Timer | null = null;
+    let pulses = 0;
+
+    if (definition?.recovery.type === "TIME" && rate > 0) {
+        const periodTicks = TICKS_PER_SECOND / rate;
+        assertPositiveNumber(periodTicks, "skill effective SP recovery interval");
+        const previous = state.recovery;
+        let remainingTicks =
+            previous === null
+                ? periodTicks
+                : Math.max(0, periodTicks - (previous.periodTicks - previous.remainingTicks));
+
+        const capacity = resolve(battle, self, "capacity")!;
+
+        if (
+            previous !== null &&
+            available(self) &&
+            state.value < capacity &&
+            allowsRecovery(battle, self, "TIME")
+        ) {
+            remainingTicks -= battle.tick - state.lastTick;
+
+            if (remainingTicks <= 1e-8) {
+                const available = Math.floor((-remainingTicks + 1e-8) / periodTicks) + 1;
+                const capacityRemaining = capacity - state.value;
+                pulses = Math.min(available, capacityRemaining);
+                assertNonnegativeSafeInteger(pulses, "skill SP recovery pulses");
+                remainingTicks =
+                    pulses === capacityRemaining
+                        ? periodTicks
+                        : Math.max(0, remainingTicks + pulses * periodTicks);
+            }
+        }
+
+        recovery = { periodTicks, remainingTicks };
+    }
+
+    const next = { ...state, recovery, lastTick: battle.tick };
+    battle = query.replace(battle, { ...self, skill: { ...self.skill, sp: next } });
+
+    return pulses === 0 ? battle : recover(battle, ref, "TIME", pulses).state;
 }
 
-function resolve<S extends object, A extends object>(
-    battle: BattleState,
-    self: Unit & Skill<S, A>,
-    key: Parameter,
-): number | undefined {
+function resolve(battle: BattleState, self: Unit & Skill, key: Parameter): number | undefined {
     const definition = self.definition.skill.sp;
     const state = self.skill.sp;
 
@@ -440,11 +431,7 @@ function resolve<S extends object, A extends object>(
     return integer;
 }
 
-function allowsRecovery<S extends object, A extends object>(
-    battle: BattleState,
-    self: Unit & Skill<S, A>,
-    source: Source,
-): boolean {
+function allowsRecovery(battle: BattleState, self: Unit & Skill, source: Source): boolean {
     return self.skill.rules.every((rule) => rule.allowsRecovery?.(battle, self, source) ?? true);
 }
 

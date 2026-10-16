@@ -122,7 +122,7 @@ test("battlefield transition preserves configured capability composition on upda
     ]).state;
     const updated = {
         ...unit,
-        action: { ...unit.action, cooldowns: new Map([["normal", { periodTicks: 3, readyAtTick: 7 }]]) },
+        action: { ...unit.action, states: new Map(unit.action.states).set("normal", { ...unit.action.states.get("normal"), cooldown: { periodTicks: 3, readyAtTick: 7 } }) },
         spatialPresence: { present: false },
         occupancy: { claims: [] },
     };

@@ -54,7 +54,11 @@ export function compileArknightsAttackBuffSkill(value: unknown, level: number): 
         ...parsed.definition,
         activation: {
             ...parsed.definition.activation!,
-            accepts: (_battle, self) => hasOffense(self),
+            accepts: (battle, self) => {
+                const host = getUnit(battle, self.host);
+
+                return host !== undefined && hasOffense(host);
+            },
             onStart: (state, self) => {
                 const unit = getUnit(state, self.host);
 

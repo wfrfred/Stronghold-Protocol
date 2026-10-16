@@ -27,24 +27,30 @@ export class Actions {
     }
 
     get(id: Id): StoredAction | undefined;
-    get<S extends object>(id: Id, definition: Definition<S>): Action<S> | undefined;
-    get<S extends object>(
+    get<P extends object, E extends object>(
         id: Id,
-        definition?: Definition<S>,
-    ): StoredAction | Action<S> | undefined {
+        definition: Definition<P, E>,
+    ): Action<P, E> | undefined;
+    get<P extends object, E extends object>(
+        id: Id,
+        definition?: Definition<P, E>,
+    ): StoredAction | Action<P, E> | undefined {
         const action = this.#entries.find((entry) => entry.id === id);
 
         if (definition === undefined) {
             return action;
         }
 
-        const restored: Action<S> | undefined =
-            action?.definition === definition ? (action as Action<S>) : undefined;
+        const restored: Action<P, E> | undefined =
+            action?.definition === definition ? (action as Action<P, E>) : undefined;
 
         return restored;
     }
 
-    read<R>(id: Id, reader: <S extends object>(action: Action<S>) => R): R | undefined {
+    read<R>(
+        id: Id,
+        reader: <P extends object, E extends object>(action: Action<P, E>) => R,
+    ): R | undefined {
         const action = this.#entries.find((entry) => entry.id === id);
 
         return action === undefined ? undefined : reader(action as Action);
@@ -58,7 +64,7 @@ export class Actions {
         return this.#entries.map(({ id }) => id);
     }
 
-    add<S extends object>(action: Action<S>): Actions {
+    add<P extends object, E extends object>(action: Action<P, E>): Actions {
         assertNonnegativeSafeInteger(action.id, "action identity");
         assertNonnegativeSafeInteger(action.startedAtTick, "action start tick");
 
@@ -75,7 +81,7 @@ export class Actions {
         return new Actions([...this.#entries, action], nextId);
     }
 
-    replace<S extends object>(action: Action<S>): Actions {
+    replace<P extends object, E extends object>(action: Action<P, E>): Actions {
         const index = this.#entries.findIndex((entry) => entry.id === action.id);
 
         if (index < 0) {

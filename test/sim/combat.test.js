@@ -68,13 +68,31 @@ function coreCombatRoute(startPosition = [1, 8], overrides = {}) {
   });
 }
 
+function unitFacts(unit) {
+  return unit.action === undefined ? unit : {
+    ...unit,
+    action: { ...unit.action, states: new Map([...unit.action.states].map(([id, state]) => {
+      const { initialize, start, step, onEnd, ...definition } = state.definition;
+      return [id, { ...state, definition }];
+    })) },
+  };
+}
+
+function eventFacts(event) {
+  return 'unit' in event ? { ...event, unit: unitFacts(event.unit) } : event;
+}
+
+function snapshotFacts(snapshot) {
+  return { ...snapshot, units: snapshot.units.map(unitFacts) };
+}
+
 function coreCombatTrace(options) {
   const battle = createLegacyCombatBattle({ rows: 3, columns: 10, ...options });
   const trace = [];
 
   while (battle.result === null) {
     const stepped = battle.step();
-    trace.push({ events: stepped.events, snapshot: battle.snapshot() });
+    trace.push({ events: stepped.events.map(eventFacts), snapshot: snapshotFacts(battle.snapshot()) });
   }
 
   return { battle, trace, events: trace.flatMap(step => step.events) };
@@ -136,11 +154,11 @@ test('core combat: the real m01 demonstration targets at range, blocks three dog
           blocked: before.blockingRelations.some(relation => relation.blockedUnitId === target.id),
         });
       }
-      events.push(...stepped.events);
+      events.push(...stepped.events.map(eventFacts));
       blockingObserved ||= battle.snapshot().blockingRelations.length > 0;
     }
 
-    return { result: battle.result, snapshot: battle.snapshot(), events, rangedAttacks, blockingObserved };
+    return { result: battle.result, snapshot: snapshotFacts(battle.snapshot()), events, rangedAttacks, blockingObserved };
   };
   const first = run(spec);
   const second = run(createTacticalCombatDemoSpec(movement.spec.map, movement.level.routes[0], data, 123));
@@ -395,7 +413,7 @@ test('core combat: snapshots share capabilities while immutable battlefield upda
   const operator = snapshot.units.find(unit => unit.id === 0);
   const sharedOperator = repeated.units.find(unit => unit.id === 0);
   const actionId = operator.definition.action.definitions.values()[0].id;
-  const readyAtTick = operator.action.cooldowns.get(actionId).readyAtTick;
+  const readyAtTick = operator.action.states.get(actionId).cooldown.readyAtTick;
   const hp = operator.vitality.hp;
   for (const key of ['action', 'allegiance', 'spatial', 'hit', 'effects', 'blocker', 'vitality']) {
     assert.equal(sharedOperator[key], operator[key], key);
@@ -411,7 +429,7 @@ test('core combat: snapshots share capabilities while immutable battlefield upda
   const previous = battlefieldView({ battlefield });
   const changed = {
     ...operator,
-    action: { ...operator.action, cooldowns: new Map(operator.action.cooldowns).set(actionId, { ...operator.action.cooldowns.get(actionId), readyAtTick: 999999 }) },
+    action: { ...operator.action, states: new Map(operator.action.states).set(actionId, { ...operator.action.states.get(actionId), cooldown: { ...operator.action.states.get(actionId).cooldown, readyAtTick: 999999 } }) },
     allegiance: { ...operator.allegiance, side: 'ENEMY' },
     spatial: { ...operator.spatial, layer: 'AIR' },
     hit: { ...operator.hit, geometry: createShapeGeometry({ shapes: [
@@ -427,7 +445,7 @@ test('core combat: snapshots share capabilities while immutable battlefield upda
   const draft = battlefieldView({ battlefield });
   assert.equal(draft.getUnit(0), changed);
   assert.deepEqual(draft.blockingRelations, []);
-  assert.equal(draft.getUnit(0).action.cooldowns.get(actionId).readyAtTick, 999999);
+  assert.equal(draft.getUnit(0).action.states.get(actionId).cooldown.readyAtTick, 999999);
   const targetingContext = target => ({ source: snapshot.units.find(unit => unit.id === 1),
     target, battlefield: draft, selector: operator.definition.action.definitions.values()[0].attack.targetGroups[0].targeting,
     purposes: ['DAMAGE'] });
@@ -436,7 +454,7 @@ test('core combat: snapshots share capabilities while immutable battlefield upda
 
   assert.equal(previous.getUnit(0), operator);
   assert.deepEqual(previous.blockingRelations, [{ blockerUnitId: 0, blockedUnitId: 1 }]);
-  assert.equal(operator.action.cooldowns.get(actionId).readyAtTick, readyAtTick);
+  assert.equal(operator.action.states.get(actionId).cooldown.readyAtTick, readyAtTick);
   assert.equal(operator.allegiance.side, 'ALLY');
   assert.equal(operator.spatial.layer, 'GROUND');
   assert.equal(operator.hit.geometry.shapes[0].radius, 0.25);
@@ -1353,7 +1371,7 @@ test('core action: shared query purposes gate mixed effects while source follow-
     assert.equal(stepped.events.find(event => event.type === 'DAMAGE').hp, 70);
     assert.equal(stepped.events.find(event => event.type === 'HEAL').amount, ignoreHealFree ? 15 : 0);
     assert.equal(stepped.units.find(unit => unit.id === 0).vitality.hp, ignoreHealFree ? 75 : 60);
-    assert.equal(stepped.units.find(unit => unit.id === 0).action.cooldowns.get('normal').readyAtTick, 3);
+    assert.equal(stepped.units.find(unit => unit.id === 0).action.states.get('normal').cooldown.readyAtTick, 3);
   }
 });
 

@@ -4,7 +4,6 @@ import * as action from "../../../core/tactical/unit/capability/action/capabilit
 import * as blocker from "../../../core/tactical/unit/capability/blocking/blocker.js";
 import * as locomotion from "../../../core/tactical/unit/capability/locomotion/capability.js";
 import * as skill from "../../../core/tactical/unit/capability/skill/capability.js";
-import { read, replace } from "../../../core/tactical/unit/capability/skill/query.js";
 import { cancelForUnit } from "../../../core/tactical/unit/action/operations.js";
 import { ref } from "../../../core/tactical/unit/query.js";
 
@@ -22,17 +21,10 @@ export const stun: Definition<object> = {
             ...(locomotion.hasLocomotion(unit)
                 ? { locomotion: locomotion.setRule(unit.locomotion, rule) }
                 : {}),
+            ...(skill.hasSkill(unit)
+                ? { skill: skill.setRule(unit.skill, { id, allowsActivation: () => false }) }
+                : {}),
         });
-
-        if (skill.hasSkill(unit)) {
-            state =
-                read(state, ref(unit), (host) =>
-                    replace(state, {
-                        ...host,
-                        skill: skill.setRule(host.skill, { id, allowsActivation: () => false }),
-                    }),
-                ) ?? state;
-        }
 
         return cancelForUnit(state, ref(unit), "INTERRUPTED");
     },
@@ -46,15 +38,9 @@ export const stun: Definition<object> = {
             ...(locomotion.hasLocomotion(unit)
                 ? { locomotion: locomotion.removeRule(unit.locomotion, id) }
                 : {}),
+            ...(skill.hasSkill(unit) ? { skill: skill.removeRule(unit.skill, id) } : {}),
         });
 
-        return skill.hasSkill(unit)
-            ? (read(state, ref(unit), (host) =>
-                  replace(state, {
-                      ...host,
-                      skill: skill.removeRule(host.skill, id),
-                  }),
-              ) ?? state)
-            : state;
+        return state;
     },
 };

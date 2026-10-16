@@ -70,7 +70,11 @@ export function resolveInterval(
         return undefined;
     }
 
-    const periodTicks = interval * (100 / Math.min(600, speed));
+    return period(interval, speed);
+}
+
+export function period(intervalTicks: number, speed: number): number {
+    const periodTicks = intervalTicks * (100 / Math.min(600, Math.max(20, speed)));
     assertFiniteNumber(periodTicks, "effective action interval");
 
     return Math.max(1, periodTicks);

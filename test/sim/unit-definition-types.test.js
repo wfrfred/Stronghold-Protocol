@@ -17,7 +17,7 @@ import { createDefinition as createEnemyDefinition, createCombatDefinition, type
 import { initialize as initializeUnit } from ${sourceModule('unit/initialize')};
 import { copy } from ${sourceModule('unit/snapshot')};
 import { hasOffense, type Offense, type Definition as OffenseDefinition, type State as OffenseState } from ${sourceModule('unit/capability/offense/capability')};
-import { hasSkill, type Definition as SkillDefinition, type Stored as StoredSkill } from ${sourceModule('unit/capability/skill/capability')};
+import { hasSkill, type Definition as SkillDefinition, type Skill } from ${sourceModule('unit/capability/skill/capability')};
 import type { Definition as ElementalDefinition, State as ElementalState } from ${sourceModule('unit/capability/elemental/capability')};
 import type { Vitality, State as VitalityState } from ${sourceModule('unit/capability/vitality/capability')};
 import type { RoutedLocomotionState, RouteControlState } from ${sourceModule('unit/capability/locomotion/capability')};
@@ -75,7 +75,7 @@ const standardCombatEnemy: CombatDefinition = combatEnemy;
 const standardEnemy: EnemyDefinition = enemy;
 const offenseDefinitions: OffenseDefinition[] = [staticOperator.offense, staticCombatEnemy.offense];
 const offenseStates: OffenseState[] = [staticOperatorUnit.offense, staticCombatEnemyUnit.offense];
-const skillStates: StoredSkill["skill"][] = [staticOperatorUnit.skill, staticCombatEnemyUnit.skill, staticEnemyUnit.skill];
+const skillStates: Skill["skill"][] = [staticOperatorUnit.skill, staticCombatEnemyUnit.skill, staticEnemyUnit.skill];
 const elementalStates: ElementalState[] = [staticOperatorUnit.elemental, staticCombatEnemyUnit.elemental, staticEnemyUnit.elemental];
 const vitalityStates: VitalityState[] = [initializedOperator.vitality, initializedCombatEnemy.vitality, initializedEnemy.vitality];
 const preparedRoute: RouteControlState = preparedUnit.locomotion.mainRoute;
@@ -100,7 +100,7 @@ install(battle, unitRef(staticOperatorUnit), healthAttack);
     "const requiredEnemySkill: SkillDefinition = enemy.skill;",
     "const requiredEnemyElemental: ElementalDefinition = enemy.elemental;",
     "const requiredOperatorOffenseState: OffenseState = initializedOperator.offense;",
-    "const requiredEnemySkillState: StoredSkill['skill'] = initializedEnemy.skill;",
+    "const requiredEnemySkillState: Skill['skill'] = initializedEnemy.skill;",
     "install(battle, unitRef(initializedOperator), healthAttack);",
     "install(battle, unitRef(bareOperatorUnit), healthAttack);",
   ];

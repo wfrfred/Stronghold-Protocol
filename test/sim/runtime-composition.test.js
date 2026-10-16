@@ -1,4 +1,4 @@
-import { fixtureBattle, fixtureDefinition } from "../helpers/unit.js";
+import { fixtureBattle } from "../helpers/unit.js";
 import { resolveHealing } from "../../dist/core/tactical/unit/capability/vitality/healing/settlement.js";
 import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
@@ -336,7 +336,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                 );
                 assert.equal(getUnit(state, 1).vitality.hp, 83);
                 assert.equal(marked(getUnit(state, 1)), true);
-                assert.equal(getUnit(state, 2).action.cooldowns.get("launch").readyAtTick, 101);
+                assert.equal(getUnit(state, 2).action.states.get("launch").cooldown.readyAtTick, 101);
                 throw new Error("late composition failure");
             }
             return state;
@@ -344,6 +344,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
     });
     const program = primary => ({
         id: "launch", intervalTicks: 100, speed: 100,
+        initialize: state => ({ state, value: {} }),
         start: state => ({ state, value: { emitted: 0 } }),
         step(state, self) {
             if (self.state.emitted === 0) {
@@ -363,6 +364,14 @@ function scenario({ failure = null, cancelled = false } = {}) {
     });
     const primary = actor("primary-launcher", program(true));
     const sibling = actor("later-launcher", program(false));
+    const siblingAction = initializeActionState(fixtureBattle(0), sibling.action).value;
+    const delayedSiblingAction = {
+        ...siblingAction,
+        states: new Map(siblingAction.states).set("launch", {
+            ...siblingAction.states.get("launch"),
+            cooldown: { periodTicks: 100, readyAtTick: 1 },
+        }),
+    };
     const scheduled = {
         ...createEnemyDefinition({
             id: "managed-target",
@@ -445,7 +454,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                 placement({
                     definition: sibling,
                     position: [0, 2],
-                    states: { action: { ...initializeActionState(fixtureBattle(0), fixtureDefinition("action")).value, cooldowns: new Map([["launch", { periodTicks: 100, readyAtTick: 1 }]]) } },
+                    states: { action: delayedSiblingAction },
                 }),
             ],
             initialMechanisms: [],

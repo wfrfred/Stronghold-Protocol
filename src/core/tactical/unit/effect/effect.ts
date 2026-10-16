@@ -1,7 +1,7 @@
 import type { Id as UnitId, Unit } from "../unit.js";
 import type { Actions } from "../action/actions.js";
 import type { Burst } from "../capability/elemental/burst.js";
-import type { Stored as SkillActivation } from "../capability/skill/activation.js";
+import type { Activation as SkillActivation } from "../capability/skill/activation.js";
 import type { Definition } from "./definition.js";
 import type { Effects } from "./effects.js";
 import type { Identified, Ref } from "../../../common/ref.js";

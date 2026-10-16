@@ -10,23 +10,25 @@ export type Status = "RUNNING" | "ENDING";
 
 type StoredAction = ReturnType<Actions["values"]>[number];
 
-export interface Action<S extends object = object> extends Identified<{ readonly id: Id }> {
+export interface Action<P extends object = object, E extends object = object> extends Identified<{
+    readonly id: Id;
+}> {
     readonly id: Id;
     readonly source: Ref<Unit & ActionCapability>;
-    readonly definition: Definition<S>;
+    readonly definition: Definition<P, E>;
     readonly startedAtTick: number;
     readonly status: Status;
-    readonly state: S;
+    readonly state: E;
 }
 
 export function ref<A extends StoredAction>(action: A): Ref<A> {
     return { id: action.id } as Ref<A>;
 }
 
-export function setState<S extends object>(
-    self: Action<S>,
-    next: NoInfer<S> | ((current: NoInfer<S>) => NoInfer<S>),
-): Action<S> {
+export function setState<P extends object, E extends object>(
+    self: Action<P, E>,
+    next: NoInfer<E> | ((current: NoInfer<E>) => NoInfer<E>),
+): Action<P, E> {
     const state = typeof next === "function" ? next(self.state) : next;
 
     return state === self.state ? self : { ...self, state };

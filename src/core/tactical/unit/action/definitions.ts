@@ -21,11 +21,14 @@ export class Definitions {
     }
 
     get(id: Id): StoredDefinition | undefined;
-    get<S extends object>(id: Id, definition: Definition<S>): Definition<S> | undefined;
-    get<S extends object>(
+    get<P extends object, E extends object>(
         id: Id,
-        definition?: Definition<S>,
-    ): StoredDefinition | Definition<S> | undefined {
+        definition: Definition<P, E>,
+    ): Definition<P, E> | undefined;
+    get<P extends object, E extends object>(
+        id: Id,
+        definition?: Definition<P, E>,
+    ): StoredDefinition | Definition<P, E> | undefined {
         const stored = this.#entries.find((entry) => entry.id === id);
 
         if (definition === undefined) {
@@ -35,7 +38,10 @@ export class Definitions {
         return stored === definition ? definition : undefined;
     }
 
-    read<R>(id: Id, reader: <S extends object>(definition: Definition<S>) => R): R | undefined {
+    read<R>(
+        id: Id,
+        reader: <P extends object, E extends object>(definition: Definition<P, E>) => R,
+    ): R | undefined {
         const definition = this.#entries.find((entry) => entry.id === id);
 
         return definition === undefined ? undefined : reader(definition as Definition);
@@ -49,7 +55,7 @@ export class Definitions {
         return this.#entries.map(({ id }) => id);
     }
 
-    add<S extends object>(definition: Definition<S>): Definitions {
+    add<P extends object, E extends object>(definition: Definition<P, E>): Definitions {
         if (definition.id.length === 0) {
             throw new TypeError("action definition identity must be nonempty");
         }

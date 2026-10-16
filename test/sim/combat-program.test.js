@@ -177,8 +177,8 @@ test("ordinary attack: no target rejects startup without an instance or a consum
     assert.deepEqual(result.value, { type: "REJECTED", reason: "CONDITION" });
     assert.equal(result.state, initial);
     assert.equal(actions.all(result.state).length, 0);
-    const cooldown = getUnit(result.state, 0).action.cooldowns.get(definition.id);
-    assert.ok(cooldown === undefined || cooldown.readyAtTick <= initial.tick);
+    const cooldown = getUnit(result.state, 0).action.states.get(definition.id).cooldown;
+    assert.ok(cooldown.readyAtTick <= initial.tick);
 });
 
 test("ordinary attack: a configured definition is shared while accepted progress belongs to its instance", () => {
@@ -212,6 +212,7 @@ test("action: generic non-attack programs do not earn attack SP or consume skill
         id: "non-attack",
         intervalTicks: 10,
         speed: 100,
+        initialize: state => ({ state, value: {} }),
         start: (state) => ({ state, value: {} }),
         step: (state) => ({ state, value: true }),
     };

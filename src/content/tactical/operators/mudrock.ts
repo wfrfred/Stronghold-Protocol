@@ -325,7 +325,7 @@ function attackDefinition(
 export function create(
     profile: Profile,
     options: { readonly direction?: Direction; readonly recoveryTicks?: number } = {},
-): { readonly definition: Definition; readonly action: Attack<SkillAttackState> } {
+): { readonly definition: Definition; readonly action: Attack<object, SkillAttackState> } {
     if (
         profile.id !== "char_311_mudrok" ||
         profile.skill.definition.id !== "skchr_mudrok_2" ||
@@ -427,8 +427,11 @@ export function create(
         activation: {
             ...profile.skill.definition.activation!,
             sustain: { type: "INFINITE" },
-            accepts(battle, source) {
+            accepts(battle, self) {
+                const source = getUnit(battle, self.host.id);
+
                 return (
+                    source !== undefined &&
                     selectTargets({ source, battlefield: battlefieldView(battle) }, targeting)
                         .length > 0
                 );

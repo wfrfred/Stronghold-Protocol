@@ -7,38 +7,37 @@ import type { Consumed, Replenished } from "./ammo.js";
 import type { Skill } from "./capability.js";
 import type { Recovered, Paid, Modified } from "./sp.js";
 
-export interface Events<S extends object, A extends object> {
+export interface Events {
     readonly spRecovered: Recovered;
     readonly spPaid: Paid;
     readonly spModified: Modified;
-    readonly ammoConsumed: Consumed<S, A>;
-    readonly ammoReplenished: Replenished<S, A>;
-    readonly activated: Activation<S, A>;
-    readonly ended: { readonly activation: Activation<S, A>; readonly end: End };
+    readonly ammoConsumed: Consumed;
+    readonly ammoReplenished: Replenished;
+    readonly activated: Activation;
+    readonly ended: { readonly activation: Activation; readonly end: End };
 }
 
-export type Key = keyof Events<object, object>;
+export type Key = keyof Events;
 
-export interface Hook<S extends object, A extends object, E> {
+export interface Hook<E> {
     readonly id: string;
-    readonly enabled: (battle: BattleState, self: Unit & Skill<S, A>, event: E) => boolean;
-    readonly invoke: (battle: BattleState, self: Unit & Skill<S, A>, event: E) => BattleState;
+    readonly enabled: (battle: BattleState, self: Unit & Skill, event: E) => boolean;
+    readonly invoke: (battle: BattleState, self: Unit & Skill, event: E) => BattleState;
 }
 
-export function dispatch<S extends object, A extends object, K extends Key>(
+export function dispatch<K extends Key>(
     battle: BattleState,
-    host: Ref<Unit & Skill<S, A>>,
+    host: Ref<Unit & Skill>,
     key: K,
-    event: Events<S, A>[K],
+    event: Events[K],
 ): BattleState {
     const unit = units.get(battle, host);
-    const entries = unit?.skill[key] as readonly Hook<S, A, Events<S, A>[K]>[] | undefined;
+    const entries = unit?.skill[key] as readonly Hook<Events[K]>[] | undefined;
     const candidates = entries?.map(({ id }) => id) ?? [];
 
     for (const id of candidates) {
         const current = units.get(battle, host);
-        const registered = current?.skill[key] as
-            readonly Hook<S, A, Events<S, A>[K]>[] | undefined;
+        const registered = current?.skill[key] as readonly Hook<Events[K]>[] | undefined;
         const candidate = registered?.find((entry) => entry.id === id);
 
         if (current !== undefined && candidate?.enabled(battle, current, event)) {

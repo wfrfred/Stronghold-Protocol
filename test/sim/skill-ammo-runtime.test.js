@@ -216,15 +216,15 @@ test("ammo runtime: release interruption cancels windup without spending ammunit
   assert.equal(interrupted.events.some(({ type }) => type === "ACTION_RELEASED"), false);
   assert.deepEqual(damageEvents(interrupted), []);
   assert.equal(source(runtime).skill.active.sustain.remaining, 3);
-  assert.ok(source(runtime).action.cooldowns.get("normal").readyAtTick >= 17);
+  assert.ok(source(runtime).action.states.get("normal").cooldown.readyAtTick >= 17);
   assert.deepEqual(runtime.snapshot().actions.instances, []);
 });
 
 test("ammo runtime: a content-defined follow-up preserves one ammunition payment across ticks", () => {
   const runtime = scenario({ ammo: 3, targets: 2, actionProgram: (normal) => ({
     ...normal,
-    start(state, source) {
-      const initialized = normal.start(state, source);
+    start(state, source, persistent) {
+      const initialized = normal.start(state, source, persistent);
       return { state: initialized.state, value: initialized.value === null ? null : { ...initialized.value, finishAtTick: state.tick + 1, emitted: 0 } };
     },
     step(state, self) {

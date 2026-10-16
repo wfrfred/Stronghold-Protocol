@@ -7,13 +7,14 @@ import {
 import {
     appendEvents,
     battlefieldView,
-    updateUnit,
     type State as BattleState,
+    type Result,
 } from "../../../core/tactical/battle/state.js";
 import type { Unit } from "../../../core/tactical/unit/unit.js";
 import * as units from "../../../core/tactical/unit/query.js";
 import { ref, setState, type Action } from "../../../core/tactical/unit/action/action.js";
 import type { Definition as ActionDefinition } from "../../../core/tactical/unit/action/definition.js";
+import type { State as ActionState } from "../../../core/tactical/unit/action/state.js";
 import * as actions from "../../../core/tactical/unit/action/operations.js";
 import type { Action as ActionCapability } from "../../../core/tactical/unit/capability/action/capability.js";
 import { isSpatiallyPresent } from "../../../core/tactical/unit/capability/presence/capability.js";
@@ -82,14 +83,22 @@ export interface Configuration {
     readonly markerId?: string;
 }
 
-export interface Definition<S extends object = object> extends Configuration {
-    readonly output?: (battle: BattleState, self: Action<State<S>>) => BattleState;
-    readonly afterOutput?: (battle: BattleState, self: Action<State<S>>) => BattleState;
-    readonly onEnd?: ActionDefinition<State<S>>["onEnd"];
+export interface Definition<
+    P extends object = object,
+    E extends object = object,
+> extends Configuration {
+    readonly output?: (battle: BattleState, self: Action<P, State<E>>) => BattleState;
+    readonly afterOutput?: (battle: BattleState, self: Action<P, State<E>>) => BattleState;
+    readonly onEnd?: ActionDefinition<P, State<E>>["onEnd"];
 }
 
-export interface StatefulDefinition<S extends object> extends Definition<S> {
-    readonly initialize: (battle: BattleState, source: Ref<Unit & ActionCapability>) => S;
+export interface StatefulDefinition<P extends object, E extends object> extends Definition<P, E> {
+    readonly initialize: (battle: BattleState) => Result<P>;
+    readonly start: (
+        battle: BattleState,
+        source: Ref<Unit & ActionCapability>,
+        self: ActionState<P, State<E>>,
+    ) => Result<E>;
 }
 
 export interface State<S extends object = object> {
@@ -103,7 +112,10 @@ export interface State<S extends object = object> {
     readonly data: S;
 }
 
-export interface Attack<S extends object = object> extends ActionDefinition<State<S>> {
+export interface Attack<
+    P extends object = object,
+    E extends object = object,
+> extends ActionDefinition<P, State<E>> {
     readonly attack: Configuration;
 }
 
@@ -228,10 +240,16 @@ function apply(
 }
 
 export function create(definition: Definition): Attack {
-    return createWithState({ ...definition, initialize: () => ({}) });
+    return createWithState({
+        ...definition,
+        initialize: (battle) => ({ state: battle, value: {} }),
+        start: (battle) => ({ state: battle, value: {} }),
+    });
 }
 
-export function createWithState<S extends object>(definition: StatefulDefinition<S>): Attack<S> {
+export function createWithState<P extends object, E extends object>(
+    definition: StatefulDefinition<P, E>,
+): Attack<P, E> {
     assertPositiveNumber(definition.intervalTicks, "attack interval");
     assertNonnegativeSafeInteger(definition.windupTicks ?? 0, "attack windup");
     assertNonnegativeSafeInteger(definition.recoveryTicks ?? 0, "attack recovery");
@@ -284,12 +302,13 @@ export function createWithState<S extends object>(definition: StatefulDefinition
             : { recoveryTicks: definition.recoveryTicks }),
         ...(definition.markerId === undefined ? {} : { markerId: definition.markerId }),
     });
-    const attack: Attack<S> = {
+    const attack: Attack<P, E> = {
         id: definition.id,
         intervalTicks: definition.intervalTicks,
         speed: definition.speed ?? 100,
         attack: configuration,
-        start(battle, source) {
+        initialize: definition.initialize,
+        start(battle, source, self) {
             const unit = units.get(battle, source);
             const bindings = chooseTargets(battle, source, definition);
             const target = bindings[definition.triggerBindingId]?.[0];
@@ -299,19 +318,19 @@ export function createWithState<S extends object>(definition: StatefulDefinition
             }
 
             const releaseAtTick = battle.tick + (definition.windupTicks ?? 0);
+            const initialized = definition.start(battle, source, self);
 
             return {
-                state: battle,
+                state: initialized.state,
                 value: {
                     target,
                     bindings,
                     releaseAtTick,
                     finishAtTick: releaseAtTick + (definition.recoveryTicks ?? 0),
                     released: false,
-                    previousReadyAtTick:
-                        unit.action.cooldowns.get(definition.id)?.readyAtTick ?? battle.tick,
+                    previousReadyAtTick: self.cooldown.readyAtTick,
                     cooldownAdjusted: false,
-                    data: definition.initialize(battle, source),
+                    data: initialized.value,
                 },
             };
         },
@@ -319,19 +338,16 @@ export function createWithState<S extends object>(definition: StatefulDefinition
             const identity = ref(self);
 
             if (!self.state.cooldownAdjusted) {
-                const source = units.get(battle, self.source);
-                const cooldown = source?.action.cooldowns.get(definition.id);
+                const persistent = actions.getState(battle, self.source, self.definition);
                 const overdue = self.startedAtTick - self.state.previousReadyAtTick;
 
-                if (source !== undefined && cooldown !== undefined && overdue >= 0 && overdue < 1) {
-                    battle = updateUnit(battle, {
-                        ...source,
-                        action: {
-                            ...source.action,
-                            cooldowns: new Map(source.action.cooldowns).set(definition.id, {
-                                ...cooldown,
-                                readyAtTick: self.state.previousReadyAtTick + cooldown.periodTicks,
-                            }),
+                if (persistent !== undefined && overdue >= 0 && overdue < 1) {
+                    battle = actions.replaceState(battle, self.source, {
+                        ...persistent,
+                        cooldown: {
+                            ...persistent.cooldown,
+                            readyAtTick:
+                                self.state.previousReadyAtTick + persistent.cooldown.periodTicks,
                         },
                     });
                 }
@@ -361,21 +377,17 @@ export function createWithState<S extends object>(definition: StatefulDefinition
                     };
                 }
                 if (permission.value.type === "INTERRUPT") {
-                    const source = units.get(battle, self.source);
-                    const cooldown = source?.action.cooldowns.get(definition.id);
+                    const persistent = actions.getState(battle, self.source, self.definition);
 
-                    if (source !== undefined && cooldown !== undefined) {
-                        battle = updateUnit(battle, {
-                            ...source,
-                            action: {
-                                ...source.action,
-                                cooldowns: new Map(source.action.cooldowns).set(definition.id, {
-                                    ...cooldown,
-                                    readyAtTick: Math.max(
-                                        cooldown.readyAtTick,
-                                        battle.tick + permission.value.recoveryTicks,
-                                    ),
-                                }),
+                    if (persistent !== undefined) {
+                        battle = actions.replaceState(battle, self.source, {
+                            ...persistent,
+                            cooldown: {
+                                ...persistent.cooldown,
+                                readyAtTick: Math.max(
+                                    persistent.cooldown.readyAtTick,
+                                    battle.tick + permission.value.recoveryTicks,
+                                ),
                             },
                         });
                     }
