@@ -12,7 +12,6 @@ import {
     advancePredefined,
 } from "./steps/predefined.js";
 import type { Input, Command, Result, Snapshot, Step } from "./contract.js";
-import { CombatResources } from "./resources.js";
 import { prepare as prepareCombat, advance as advanceCombat } from "./steps/combat.js";
 import { advanceSpawning } from "./steps/spawning.js";
 import { resolveDeploymentCommands } from "./deployment/operations.js";
@@ -36,18 +35,13 @@ import {
     initialize as initializeDeployment,
 } from "./deployment/deployment.js";
 
-export interface BattleResources {
-    readonly combat?: CombatResources;
-}
-
 export type { Input, Command, Event, Result, Snapshot, Step } from "./contract.js";
 
 export class BattleRuntime {
     readonly #input: Input;
-    readonly #combatResources: CombatResources;
     #state: State;
 
-    constructor(input: Input, resources: BattleResources = {}) {
+    constructor(input: Input) {
         assertPositiveSafeInteger(input.maxTicks, "battle tick budget");
         assertNonnegativeNumber(input.routeMoveMultiplier, "routeMoveMultiplier");
         assert(
@@ -67,7 +61,6 @@ export class BattleRuntime {
         }
 
         this.#input = input;
-        this.#combatResources = (resources.combat ?? new CombatResources()).seal();
         const scheduleDefinition = createSpawnScheduleDefinition(input.schedule);
 
         const battlefield = createBattlefield({ map: this.#input.map });
@@ -158,7 +151,6 @@ export class BattleRuntime {
         }
 
         const tick = this.#state.tick;
-        const resources = this.#combatResources;
         let state: State = {
             ...this.#state,
             events: [],
@@ -180,7 +172,7 @@ export class BattleRuntime {
 
         state = advanceEffects(state);
 
-        state = advanceElements(state, tick, resources);
+        state = advanceElements(state);
 
         state = advanceSkills(state, commands);
 

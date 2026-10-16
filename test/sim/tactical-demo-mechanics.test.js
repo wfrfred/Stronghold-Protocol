@@ -100,12 +100,12 @@ for (const type of ['NEURAL', 'EROSION', 'BURN', 'NECROSIS']) {
     const snapshot = demo.snapshot();
     const target = snapshot.units.find(unit => unit.id === 1);
     assert.deepEqual(target.position, [6, 5]);
-    assert.equal(target.elemental.recovery.type, type);
+    assert.equal(target.elemental.burst.type, type);
     assert.ok(demo.stats().elementDamageCount >= 3);
     assert.equal(demo.stats().elementBurstCount, 1);
     const duration = type === 'NECROSIS' ? 15 : type === 'EROSION' ? 8 : 10;
     assert.deepEqual(frames.at(-1).elem, [[
-      1, name, 1, target.elemental.recovery.endsAtTick / 30, duration,
+      1, name, 1, (snapshot.tickIndex + target.elemental.burst.remainingTicks) / 30, duration,
     ]]);
 
     demo.seek(0);

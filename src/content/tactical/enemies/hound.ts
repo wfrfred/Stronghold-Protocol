@@ -1,6 +1,5 @@
 import type { Attack } from "../actions/attack.js";
 import type { Profile } from "../../../data/arknights/enemy.js";
-import type { CombatResources } from "../../../core/tactical/battle/resources.js";
 import type { Result as InitializedUnit } from "../../../core/tactical/unit/initialize.js";
 import {
     createDefinition as createGroundDefinition,
@@ -19,7 +18,6 @@ export type Enemy = InitializedUnit<Definition>;
 
 export function create(
     profile: Profile,
-    combat: CombatResources,
     timing: AttackTiming,
 ): { readonly definition: Definition; readonly action: Attack } {
     if (profile.id !== "enemy_1000_gopro" || profile.applyWay !== "MELEE") {
@@ -27,7 +25,7 @@ export function create(
     }
 
     const definition: Definition = {
-        ...createGroundDefinition(profile, timing, { type: "BLOCKER" }, combat),
+        ...createGroundDefinition(profile, timing, { type: "BLOCKER" }),
         profile,
         attackTiming: timing,
     };

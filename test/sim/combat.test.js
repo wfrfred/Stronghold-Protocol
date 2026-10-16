@@ -25,7 +25,7 @@ import { createTacticalDemo } from '../../dist/legacy/tactical-demo.js';
 import { createDefinition } from '../../dist/core/tactical/unit/archetype/operator.js';
 import { initialize } from '../../dist/core/tactical/unit/initialize.js';
 import { start as startAction } from "../../dist/core/tactical/unit/action/operations.js";
-import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
+
 import { compileTargeting } from "../../dist/core/tactical/unit/targeting/compile.js";
 import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { selectTargets } from '../../dist/core/tactical/unit/targeting/select.js';
@@ -367,7 +367,7 @@ test('core combat: damage formulas retain the 5% floor and immutable vitality tr
     definition: { id: 'core_target', vitality: { maxHp: 7 }, defense: { defense: 0, resistance: 0 } },
   });
   const state = createBattleState(fixtureBattlefieldState([unit]));
-  const resources = new CombatResources();
+
   const request = power => ({ sourceUnitId: null, targetUnitId: 0, tick: 0,
     damageType: 'TRUE', operands: createDamageOperands(power) });
   const harmless = resolveDamage(state, request(0));

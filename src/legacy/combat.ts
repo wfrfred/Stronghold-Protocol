@@ -1,4 +1,4 @@
-import { CombatResources } from "../core/tactical/battle/resources.js";
+import { createArknightsElementalDefinition } from "../data/arknights/elemental.js";
 import { Definitions } from "../core/tactical/unit/action/definitions.js";
 import { create as createAttack } from "../content/tactical/actions/attack.js";
 import { assertFiniteNumber, assertPositiveSafeInteger } from "../core/common/assert.js";
@@ -130,7 +130,7 @@ function rejectContent(definition: Record<string, unknown>): void {
     }
 }
 
-function operatorDefinition(value: unknown, direction: Direction, combat: CombatResources) {
+function operatorDefinition(value: unknown, direction: Direction) {
     const definition = record(value, "operator definition");
     const stats = record(definition.stats, "operator stats");
     rejectContent(definition);
@@ -144,6 +144,7 @@ function operatorDefinition(value: unknown, direction: Direction, combat: Combat
 
     return {
         ...operator.createDefinition({
+            elemental: createArknightsElementalDefinition({ receiver: "CHARACTER" }),
             id: stringField(definition.chessId, "chessId"),
             vitality: { maxHp: numberField(stats.maxHp, "maxHp") },
             offense: { attack: numberField(stats.atk, "attack") },
@@ -166,47 +167,44 @@ function operatorDefinition(value: unknown, direction: Direction, combat: Combat
             },
             action: {
                 definitions: Definitions.empty().add(
-                    createAttack(
-                        {
-                            id: "normal-attack",
-                            speed: timing.attackSpeed,
-                            triggerBindingId: "primary",
-                            intervalTicks: timing.baseAttackTimeTicks,
-                            recoveryTicks: 0,
-                            targetGroups: [
-                                {
-                                    id: "primary",
-                                    targeting: {
-                                        type: "DAMAGE",
-                                        scope: {
-                                            type: "RANGE",
-                                            geometry: {
-                                                type: "GRID",
-                                                offsets: attackRange(definition.rangeGrid),
-                                                direction,
-                                            },
+                    createAttack({
+                        id: "normal-attack",
+                        speed: timing.attackSpeed,
+                        triggerBindingId: "primary",
+                        intervalTicks: timing.baseAttackTimeTicks,
+                        recoveryTicks: 0,
+                        targetGroups: [
+                            {
+                                id: "primary",
+                                targeting: {
+                                    type: "DAMAGE",
+                                    scope: {
+                                        type: "RANGE",
+                                        geometry: {
+                                            type: "GRID",
+                                            offsets: attackRange(definition.rangeGrid),
+                                            direction,
                                         },
-                                        canTargetAir,
-                                        includeBlockingRelations: true,
-                                        preferBlockingRelations: true,
-                                        ignoreTargetFree: false,
-                                        ignoreInvisible: false,
-                                        maxTargets: 1,
                                     },
-                                    operations: [
-                                        {
-                                            type: "DAMAGE",
-                                            power: numberField(stats.atk, "attack"),
-                                            powerSource: "SOURCE_ATTACK",
-                                            damageType: damageType(definition.dmgType),
-                                        },
-                                    ],
+                                    canTargetAir,
+                                    includeBlockingRelations: true,
+                                    preferBlockingRelations: true,
+                                    ignoreTargetFree: false,
+                                    ignoreInvisible: false,
+                                    maxTargets: 1,
                                 },
-                            ],
-                            followUps: [],
-                        },
-                        combat,
-                    ),
+                                operations: [
+                                    {
+                                        type: "DAMAGE",
+                                        power: numberField(stats.atk, "attack"),
+                                        powerSource: "SOURCE_ATTACK",
+                                        damageType: damageType(definition.dmgType),
+                                    },
+                                ],
+                            },
+                        ],
+                        followUps: [],
+                    }),
                 ),
             },
         }),
@@ -214,7 +212,7 @@ function operatorDefinition(value: unknown, direction: Direction, combat: Combat
     };
 }
 
-function enemyDefinition(value: unknown, combat: CombatResources) {
+function enemyDefinition(value: unknown) {
     const definition = record(value, "enemy definition");
     const stats = record(definition.stats, "enemy stats");
     rejectContent(definition);
@@ -233,6 +231,7 @@ function enemyDefinition(value: unknown, combat: CombatResources) {
     const radius = numberField(stats.rangeRadius, "enemy range radius");
 
     return enemy.createCombatDefinition({
+        elemental: createArknightsElementalDefinition({ receiver: "ENEMY" }),
         id: stringField(definition.key, "enemy key"),
         vitality: { maxHp: numberField(stats.maxHp, "maxHp") },
         offense: { attack: numberField(stats.atk, "attack") },
@@ -255,58 +254,54 @@ function enemyDefinition(value: unknown, combat: CombatResources) {
         blockable: { weight: numberField(stats.blockCnt, "block weight") },
         action: {
             definitions: Definitions.empty().add(
-                createAttack(
-                    {
-                        id: "normal-attack",
-                        speed: timing.attackSpeed,
-                        triggerBindingId: "primary",
-                        intervalTicks: timing.baseAttackTimeTicks,
-                        recoveryTicks:
-                            applyWay === "RANGED" ? Math.ceil(0.35 * TICKS_PER_SECOND) : 0,
-                        targetGroups: [
-                            {
-                                id: "primary",
-                                targeting: {
-                                    type: "DAMAGE",
-                                    scope:
-                                        applyWay === "MELEE"
-                                            ? { type: "BLOCKER" }
-                                            : {
-                                                  type: "RANGE",
+                createAttack({
+                    id: "normal-attack",
+                    speed: timing.attackSpeed,
+                    triggerBindingId: "primary",
+                    intervalTicks: timing.baseAttackTimeTicks,
+                    recoveryTicks: applyWay === "RANGED" ? Math.ceil(0.35 * TICKS_PER_SECOND) : 0,
+                    targetGroups: [
+                        {
+                            id: "primary",
+                            targeting: {
+                                type: "DAMAGE",
+                                scope:
+                                    applyWay === "MELEE"
+                                        ? { type: "BLOCKER" }
+                                        : {
+                                              type: "RANGE",
+                                              geometry: {
+                                                  type: "SHAPES",
                                                   geometry: {
-                                                      type: "SHAPES",
-                                                      geometry: {
-                                                          shapes: [
-                                                              {
-                                                                  type: "CIRCLE",
-                                                                  offset: [0, 0],
-                                                                  radius,
-                                                              },
-                                                          ],
-                                                      },
+                                                      shapes: [
+                                                          {
+                                                              type: "CIRCLE",
+                                                              offset: [0, 0],
+                                                              radius,
+                                                          },
+                                                      ],
                                                   },
                                               },
-                                    canTargetAir: true,
-                                    includeBlockingRelations: true,
-                                    preferBlockingRelations: true,
-                                    ignoreTargetFree: false,
-                                    ignoreInvisible: false,
-                                    maxTargets: 1,
-                                },
-                                operations: [
-                                    {
-                                        type: "DAMAGE",
-                                        power: numberField(stats.atk, "attack"),
-                                        powerSource: "SOURCE_ATTACK",
-                                        damageType: damageType(stats.dmgType),
-                                    },
-                                ],
+                                          },
+                                canTargetAir: true,
+                                includeBlockingRelations: true,
+                                preferBlockingRelations: true,
+                                ignoreTargetFree: false,
+                                ignoreInvisible: false,
+                                maxTargets: 1,
                             },
-                        ],
-                        followUps: [],
-                    },
-                    combat,
-                ),
+                            operations: [
+                                {
+                                    type: "DAMAGE",
+                                    power: numberField(stats.atk, "attack"),
+                                    powerSource: "SOURCE_ATTACK",
+                                    damageType: damageType(stats.dmgType),
+                                },
+                            ],
+                        },
+                    ],
+                    followUps: [],
+                }),
             ),
         },
     });
@@ -336,16 +331,13 @@ function combatMap(options: LegacyCombatOptions): BattlefieldMap {
     );
 }
 
-export function createLegacyCombatSpec(
-    options: LegacyCombatOptions,
-    combat = new CombatResources(),
-) {
+export function createLegacyCombatSpec(options: LegacyCombatOptions) {
     const initialUnits = options.operators.map((operator) => ({
-        definition: operatorDefinition(operator.definition, operator.direction ?? "RIGHT", combat),
+        definition: operatorDefinition(operator.definition, operator.direction ?? "RIGHT"),
         position: Tile.center(operator.position),
     }));
     const spawns = options.enemies.map((enemy) => ({
-        definition: enemyDefinition(enemy.definition, combat),
+        definition: enemyDefinition(enemy.definition),
         route: enemy.route,
         tick: enemy.tick ?? 0,
         timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 },
@@ -367,7 +359,5 @@ export function createLegacyCombatSpec(
 }
 
 export function createLegacyCombatBattle(options: LegacyCombatOptions): BattleRuntime {
-    const combat = new CombatResources();
-
-    return new BattleRuntime(createLegacyCombatSpec(options, combat), { combat });
+    return new BattleRuntime(createLegacyCombatSpec(options));
 }

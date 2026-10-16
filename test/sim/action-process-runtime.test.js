@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { unit } from "../helpers/action-fixture.js";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
-import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
+
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
 import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
 import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
@@ -142,8 +142,7 @@ test("action runtime: cancellation commands complete before a delayed release wi
 });
 
 test("action runtime: nested departure removes a later candidate before its next step", () => {
-    const resources = new CombatResources(),
-        trace = [];
+    const trace = [];
     const definition = program("nested", {
         step(state, self) {
             if (state.tick === 0) return { state, value: false };
@@ -159,7 +158,6 @@ test("action runtime: nested departure removes a later candidate before its next
             unit(1, { side: "ALLY", action: definition }),
             unit(2),
         ]),
-        { combat: resources },
     );
     runtime.step();
     runtime.step();
@@ -192,8 +190,7 @@ test("action runtime: a late exception publishes neither progressed action state
 });
 
 test("action runtime: dependency cleanup can finish nested host death before a thrown end callback", () => {
-    const resources = new CombatResources(),
-        failure = new Error("terminal finish failed");
+    const failure = new Error("terminal finish failed");
     let observedDeparture = false;
     const dependency = {
         id: "terminal-dependency",
@@ -219,9 +216,7 @@ test("action runtime: dependency cleanup can finish nested host death before a t
             return { state, value: state.tick > 0 };
         },
     });
-    const runtime = new BattleRuntime(spec([unit(0, { action: definition }), unit(1)]), {
-        combat: resources,
-    });
+    const runtime = new BattleRuntime(spec([unit(0, { action: definition }), unit(1)]));
     runtime.step();
     const before = runtime.snapshot();
     assert.throws(

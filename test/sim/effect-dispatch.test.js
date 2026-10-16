@@ -11,7 +11,7 @@ import {
     setSelf,
     stateOf,
 } from "../helpers/vitality.js";
-import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
+
 import { getUnit, transitionUnit } from "../../dist/core/tactical/battle/state.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import * as damage from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
@@ -65,7 +65,7 @@ test("hook dispatch checks each Effect against its current status immediately be
     ]);
     const target = attach(attach(unit(2), first), second);
     let battle = workFor(unit(1), target);
-    const resources = new CombatResources();
+
     battle = resolveDamage(battle, request()).state;
     assert.deepEqual(calls, ["first"]);
     enableSecond = true;
@@ -120,7 +120,7 @@ test("finishing a pending Effect removes its Hook before that candidate can exec
 
 test("selected Hook IDs use current replacements while nested damage retains the existing call candidate range", () => {
     const calls = [];
-    const resources = new CombatResources();
+
     let nested = false;
     let changed = false;
     const replacement = damageHook("second", "sourceFormula", (state, _context, input) => {
@@ -171,7 +171,7 @@ test("selected Hook IDs use current replacements while nested damage retains the
 
 test("damage and healing share the active receiver candidates across direct nested operations", () => {
     const calls = [];
-    const resources = new CombatResources();
+
     let changed = false;
     const originalHealing = healingHook("original", "reception", (state, _context, pending) => {
         calls.push("original-healing");
@@ -204,7 +204,7 @@ test("damage and healing share the active receiver candidates across direct nest
 
 test("nested damage shares a healing receiver enumeration without admitting newly registered damage hooks", () => {
     const calls = [];
-    const resources = new CombatResources();
+
     let changed = false;
     const late = damageHook("late", "reception", (state, _context, pending) => {
         calls.push("late-damage");
@@ -295,7 +295,7 @@ test("reaction stages run once per participant and can stop their own receiver e
 
 test("nested operations read already changed Effect state and inherit the enclosing event tick", () => {
     const uses = [];
-    const resources = new CombatResources();
+
     const content = damageEffect("once", { ready: true }, [
         {
             stage: "reception",

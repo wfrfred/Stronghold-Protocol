@@ -298,16 +298,13 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
         .filter((definition) => definition.creation.type === "UNIT")
         .map((definition) => definition.id);
 
-    const resources =
-        content?.resources ?? (mechanics === null ? {} : { combat: mechanics.combat });
-
     const createRuntime = () => {
         const projectile =
             projectileActions && !contentScene
                 ? createTacticalProjectileDemo(spec, options.combatScenario === "PROJECTILE_CACHED")
                 : null;
 
-        return new BattleRuntime(projectile?.input ?? spec, projectile?.resources ?? resources);
+        return new BattleRuntime(projectile?.input ?? spec);
     };
 
     let runtime = createRuntime();
@@ -491,7 +488,9 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
     }
 
     function elementStats() {
-        const target = snapshot.units.find(hasElemental);
+        const target = snapshot.units
+            .filter(hasElemental)
+            .find((unit) => hasAllegiance(unit) && unit.allegiance.side === "ENEMY");
         const type = mechanics?.elementType;
 
         if (target === undefined || type == null) {
@@ -501,10 +500,7 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
         return {
             remainingEp: target.elemental.ep[type],
             maxEp: target.definition.elemental.maxEp,
-            recoveryTicks: Math.max(
-                0,
-                (target.elemental.recovery?.endsAtTick ?? 0) - snapshot.tickIndex,
-            ),
+            recoveryTicks: target.elemental.burst?.remainingTicks ?? 0,
         };
     }
 

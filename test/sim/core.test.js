@@ -798,7 +798,8 @@ import { launchProjectile, getProjectile, type ProjectileLaunchInput } from ${so
 import type { Definition as ProjectileDefinition } from ${sourceModule('../battlefield/projectile/definition')};
 import type { Projectile } from ${sourceModule('../battlefield/projectile/projectile')};
 import type { State as BattleState } from ${sourceModule('../battle/state')};
-import type { ElementDamageReport } from ${sourceModule('capability/elemental/execution')};
+import { damage as damageElement } from ${sourceModule('capability/elemental/operations')};
+type ElementDamageOutcome = ReturnType<typeof damageElement>['value'];
 import type { Occupancy, State as OccupancyState } from ${sourceModule('capability/occupancy/capability')};
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
 type Assert<T extends true> = T;
@@ -837,13 +838,12 @@ declare const placement: { readonly definition: EnemyProbe; readonly position: r
 
   try {
     const positive = compile('positive', `
-declare const elementalReport: ElementDamageReport;
-if (elementalReport.outcome === "BURST") {
-  const targetId: number = elementalReport.burst.targetUnitId;
+declare const elementalReport: ElementDamageOutcome;
+if (elementalReport.type === "APPLIED" && elementalReport.burst !== null) {
+  const targetId: number = elementalReport.burst.host.id;
 }
-if (elementalReport.outcome === "REJECTED") {
+if (elementalReport.type === "REJECTED") {
   const reason: string = elementalReport.reason;
-  const amount: 0 = elementalReport.amount;
 }
 initializeOffenseState();
 initializeDefenseState();

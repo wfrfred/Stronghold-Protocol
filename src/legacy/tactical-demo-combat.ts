@@ -1,4 +1,3 @@
-import { CombatResources } from "../core/tactical/battle/resources.js";
 import type { BattlefieldMap } from "../core/tactical/battlefield/map/map.js";
 import type { RouteDefinition } from "../core/tactical/unit/capability/locomotion/route/definition.js";
 import { TICKS_PER_SECOND } from "../core/tactical/tick.js";
@@ -34,7 +33,6 @@ export function createTacticalCombatDemoSpec(
     data: LegacyData,
     seed: number,
     scenario: TacticalCombatScenario = "MIXED",
-    combat = new CombatResources(),
 ) {
     const operators: LegacyCombatOptions["operators"][number][] = [];
 
@@ -63,18 +61,15 @@ export function createTacticalCombatDemoSpec(
         applyWay: enemy.applyWay,
     };
 
-    return createLegacyCombatSpec(
-        {
-            map,
-            operators,
-            enemies: (scenario === "BLOCKING" ? [3, 3, 3] : [3, 11, 19]).map((seconds) => ({
-                definition: ordinaryEnemy,
-                route,
-                tick: seconds * TICKS_PER_SECOND,
-            })),
-            maxTicks: 45 * TICKS_PER_SECOND,
-            seed,
-        },
-        combat,
-    );
+    return createLegacyCombatSpec({
+        map,
+        operators,
+        enemies: (scenario === "BLOCKING" ? [3, 3, 3] : [3, 11, 19]).map((seconds) => ({
+            definition: ordinaryEnemy,
+            route,
+            tick: seconds * TICKS_PER_SECOND,
+        })),
+        maxTicks: 45 * TICKS_PER_SECOND,
+        seed,
+    });
 }

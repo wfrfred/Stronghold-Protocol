@@ -42,7 +42,7 @@ import { createDefinition as createDeployableDefinition } from '../../dist/core/
 import { createDefinition as createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/tile-binding/capability.js';
 import { createPredefinedDefinition } from '../../dist/core/tactical/battle/steps/predefined.js';
 import { advanceMovement } from '../../dist/core/tactical/battle/steps/movement.js';
-import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
+
 import { createBattleState, appendEvents, getUnit, registerUnit } from '../../dist/core/tactical/battle/state.js';
 import { initialize } from '../../dist/core/tactical/unit/initialize.js';
 import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js';
@@ -1172,7 +1172,7 @@ test('core battle propagates nested settlement errors without publishing battlef
   let observedSnapshot;
   let observedMaps;
   let observations = 0;
-  const resources = new CombatResources();
+
   const effect = {
     id: 'nested-failure-effect', initialize: () => ({}),
     onInstall: (state, context) => {
@@ -1209,7 +1209,7 @@ test('core battle propagates nested settlement errors without publishing battlef
     { definition: { id: 'nested-action-source', vitality: { maxHp: 100 }, action: { definitions: Definitions.empty().add(action) } }, position: [0, 0] },
     { definition: { id: 'nested-target', vitality: { maxHp: 100 } }, position: [1, 0] },
   ] });
-  const runtime = new BattleRuntime(input, { combat: resources });
+  const runtime = new BattleRuntime(input);
   const before = runtime.snapshot();
   observedRuntime = runtime;
   observedSnapshot = before;
@@ -1219,7 +1219,7 @@ test('core battle propagates nested settlement errors without publishing battlef
   assert.equal(runtime.result, null);
 
   fail = false;
-  const expected = new BattleRuntime(input, { combat: resources });
+  const expected = new BattleRuntime(input);
   observedRuntime = expected;
   observedSnapshot = expected.snapshot();
   observedMaps = expected.navigationMaps;

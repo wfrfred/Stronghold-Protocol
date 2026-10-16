@@ -3,12 +3,9 @@ import type { DamageType } from "../core/tactical/unit/capability/vitality/damag
 import { hasAllegiance } from "../core/tactical/unit/capability/allegiance/capability.js";
 import {
     hasElemental,
-    type ElementType,
+    type Type as ElementType,
 } from "../core/tactical/unit/capability/elemental/capability.js";
-import {
-    elementDamageRatio,
-    getCurrentElementType,
-} from "../core/tactical/unit/capability/elemental/query.js";
+import { damageRatio, currentType } from "../core/tactical/unit/capability/elemental/query.js";
 import {
     hasLocomotion,
     hasRoutedLocomotion,
@@ -470,10 +467,10 @@ export class TacticalDemoPresentation {
                     const removed = events.find(
                         (candidate) =>
                             candidate.type === "UNIT_REMOVED" &&
-                            candidate.unitId === event.burst.targetUnitId,
+                            candidate.unitId === event.burst.host.id,
                     );
                     const unit =
-                        after.units.find((unit) => unit.id === event.burst.targetUnitId) ??
+                        after.units.find((unit) => unit.id === event.burst.host.id) ??
                         (removed?.type === "UNIT_REMOVED" ? removed.unit : undefined);
 
                     if (unit !== undefined) {
@@ -524,6 +521,7 @@ export class TacticalDemoPresentation {
                 case "PROJECTILE_HIT":
                 case "PROJECTILE_STOPPED":
                 case "ELEMENT_RECOVERED":
+                case "ELEMENT_BURST_ENDED":
                 case "UNIT_DEPLOYED":
                 case "DEPLOYMENT_REJECTED":
                 case "UNIT_RELOCATED":
@@ -606,20 +604,21 @@ export class TacticalDemoPresentation {
                 continue;
             }
 
-            const recovery = unit.elemental.recovery;
+            const recovery = unit.elemental.burst;
 
             if (recovery !== null) {
                 gauges.push([
                     unit.id,
                     ELEMENT_TYPE[recovery.type],
                     1,
-                    recovery.endsAtTick / TICKS_PER_SECOND,
-                    (recovery.endsAtTick - recovery.startedAtTick) / TICKS_PER_SECOND,
+                    (snapshot.tickIndex + recovery.remainingTicks) / TICKS_PER_SECOND,
+                    unit.definition.elemental.bursts[recovery.type].durationTicks /
+                        TICKS_PER_SECOND,
                 ]);
                 continue;
             }
 
-            const type = getCurrentElementType(unit);
+            const type = currentType(unit);
 
             if (type === undefined) {
                 continue;
@@ -627,7 +626,7 @@ export class TacticalDemoPresentation {
 
             const fill = Math.min(
                 0.99,
-                Math.max(0.01, Math.floor(elementDamageRatio(unit) * 100 + 1e-9) / 100),
+                Math.max(0.01, Math.floor(damageRatio(unit) * 100 + 1e-9) / 100),
             );
             gauges.push([unit.id, ELEMENT_TYPE[type], fill, 0, 0]);
         }

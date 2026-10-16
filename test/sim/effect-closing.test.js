@@ -8,7 +8,7 @@ import {
     getUnit,
     updateUnit,
 } from "../../dist/core/tactical/battle/state.js";
-import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
+
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import {
@@ -241,7 +241,7 @@ test("effect lifetimes: closing a host never reenables its suppressed effects", 
 });
 
 test("effect lifetimes: terminal hook cleanup cannot recreate a host killed by a child's ending", () => {
-    const resources = new CombatResources();
+
     const parent = definition(
         "parent-hook",
         {},

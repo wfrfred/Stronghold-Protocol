@@ -3,7 +3,7 @@ import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
-import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
+
 import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/state.js";
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
 import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
@@ -82,16 +82,16 @@ function input(host, overrides = {}) {
 }
 
 test("aura runtime: a restored aura refreshes on its first tick without creating a source mechanism", () => {
-    const resources = new CombatResources();
+
     const receiver = attackEffect("initial-aura-receiver");
     const aura = auraEffect(receiver);
     const host = seededPlacement(aura);
-    const runtime = new BattleRuntime(input(host), { combat: resources });
+    const runtime = new BattleRuntime(input(host));
     const initial = runtime.snapshot();
     assert.deepEqual(initial.mechanisms, []);
     assert.equal(initial.units[0].effects.values()[0].definition, aura);
     assert.deepEqual(initial.units[0].effects.values()[0].data.bindings, []);
-    assert.equal(snapshotAttack(initial, 1, resources), 100);
+    assert.equal(snapshotAttack(initial, 1), 100);
     assert.deepEqual(host.effects.values()[0].data.bindings, []);
     runtime.step();
     const after = runtime.snapshot();
@@ -99,13 +99,13 @@ test("aura runtime: a restored aura refreshes on its first tick without creating
         after.units[0].effects.values()[0].data.bindings.map((binding) => binding.unitId),
         [1],
     );
-    assert.equal(snapshotAttack(after, 1, resources), 120);
+    assert.equal(snapshotAttack(after, 1), 120);
     assert.equal(after.units[1].effects.nextId, 1);
-    assert.equal(snapshotAttack(initial, 1, resources), 100);
+    assert.equal(snapshotAttack(initial, 1), 100);
 });
 
 test("aura runtime: predefined, deployment and spawning join before the same tick effect advance", () => {
-    const resources = new CombatResources();
+
     const starts = [];
     const receiver = attackEffect("registration-receiver", {
         onInstall: (state, context) => {
@@ -162,7 +162,6 @@ test("aura runtime: predefined, deployment and spawning join before the same tic
             },
             schedule: { type: "TIMELINE", spawns: [spawn({ tick: 0 })] },
         }),
-        { combat: resources },
     );
     assert.deepEqual(starts, []);
     runtime.step([
@@ -193,13 +192,13 @@ test("aura runtime: predefined, deployment and spawning join before the same tic
         [1, 2, 3, 4],
     );
     assert.deepEqual(
-        [1, 2, 3, 4].map((id) => snapshotAttack(after, id, resources)),
+        [1, 2, 3, 4].map((id) => snapshotAttack(after, id)),
         [120, 120, 120, 120],
     );
 });
 
 test("aura runtime: movement departure is observed at the next aura tick", () => {
-    const resources = new CombatResources();
+
     let before;
     const receiver = attackEffect("moving-receiver", {
         onEnable: (state, context) => {
@@ -216,7 +215,6 @@ test("aura runtime: movement departure is observed at the next aura tick", () =>
         input(host, {
             schedule: { type: "TIMELINE", spawns: [spawn({ tick: 0, speed: 1, wait: false })] },
         }),
-        { combat: resources },
     );
     let departed;
     for (let tick = 0; tick < 8 && departed === undefined; tick++) {
@@ -227,8 +225,8 @@ test("aura runtime: movement departure is observed at the next aura tick", () =>
     }
     assert.ok(before, "receiver entered the aura before departure");
     assert.ok(departed, "receiver moved out of the aura");
-    assert.equal(snapshotAttack(before, 2, resources), 120);
-    assert.equal(snapshotAttack(departed, 2, resources), 120);
+    assert.equal(snapshotAttack(before, 2), 120);
+    assert.equal(snapshotAttack(departed, 2), 120);
     assert.equal(
         departed.units[0].effects.values()[0].data.bindings.some(
             (binding) => binding.unitId === 2,
@@ -237,19 +235,19 @@ test("aura runtime: movement departure is observed at the next aura tick", () =>
     );
     runtime.step();
     const refreshed = runtime.snapshot();
-    assert.equal(snapshotAttack(refreshed, 2, resources), 100);
+    assert.equal(snapshotAttack(refreshed, 2), 100);
     assert.equal(
         refreshed.units[0].effects.values()[0].data.bindings.some(
             (binding) => binding.unitId === 2,
         ),
         false,
     );
-    assert.equal(snapshotAttack(departed, 2, resources), 120);
-    assert.equal(snapshotAttack(before, 2, resources), 120);
+    assert.equal(snapshotAttack(departed, 2), 120);
+    assert.equal(snapshotAttack(before, 2), 120);
 });
 
 test("aura runtime: callback failure propagates the original error without publishing the tick", () => {
-    const resources = new CombatResources();
+
     const failure = new Error("aura registration failed");
     const attempts = [];
     let receiver;
@@ -268,7 +266,7 @@ test("aura runtime: callback failure propagates the original error without publi
         },
     });
     const aura = auraEffect(receiver);
-    const runtime = new BattleRuntime(input(seededPlacement(aura)), { combat: resources });
+    const runtime = new BattleRuntime(input(seededPlacement(aura)));
     runtime.step();
     runtime.step();
     const before = runtime.snapshot();
@@ -281,10 +279,10 @@ test("aura runtime: callback failure propagates the original error without publi
 });
 
 test("aura runtime: source retirement ends remote bound buffs within the same step", () => {
-    const resources = new CombatResources();
+
     const receiver = attackEffect("retired-aura-receiver");
     const aura = auraEffect(receiver);
-    const runtime = new BattleRuntime(input(seededPlacement(aura)), { combat: resources });
+    const runtime = new BattleRuntime(input(seededPlacement(aura)));
     runtime.step();
     const before = runtime.snapshot();
     runtime.step([{ type: "RETREAT_UNIT", unitId: 0 }]);
@@ -293,6 +291,6 @@ test("aura runtime: source retirement ends remote bound buffs within the same st
         after.units.some((unit) => unit.id === 0),
         false,
     );
-    assert.equal(snapshotAttack(after, 1, resources), 100);
-    assert.equal(snapshotAttack(before, 1, resources), 120);
+    assert.equal(snapshotAttack(after, 1), 100);
+    assert.equal(snapshotAttack(before, 1), 120);
 });

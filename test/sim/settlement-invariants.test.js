@@ -9,7 +9,7 @@ import {
     healingEffect,
     setSelf,
 } from "../helpers/vitality.js";
-import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
+
 import { getUnit } from "../../dist/core/tactical/battle/state.js";
 import {
     resolveDamage,
@@ -30,7 +30,7 @@ const healingRequest = (power = 40) => ({
 
 test("settlement invariants: invalid final damage preserves its input despite preceding nested healing", () => {
     for (const invalid of [-1, NaN, Infinity]) {
-        const resources = new CombatResources();
+
         let malformed = true;
         let reactions = 0;
         const content = damageEffect("invalid-damage", { uses: 0 }, [
@@ -77,7 +77,7 @@ test("settlement invariants: invalid final damage preserves its input despite pr
 
 test("settlement invariants: invalid final healing preserves its input despite preceding synchronous damage", () => {
     for (const invalid of [-1, NaN, Infinity]) {
-        const resources = new CombatResources();
+
         let malformed = true;
         let reactions = 0;
         const content = healingEffect("invalid-healing", { uses: 0 }, [
@@ -124,7 +124,7 @@ test("settlement invariants: invalid final healing preserves its input despite p
 test("settlement invariants: cancelled damage cannot publish nonfinite formula or output values", () => {
     for (const stage of ["sourceFormula", "output", "reception"]) {
         for (const invalid of [NaN, Infinity]) {
-            const resources = new CombatResources();
+
             let reactions = 0;
             let repaired = false;
             const bad = damageEffect("nonfinite-report", {}, [
@@ -182,7 +182,7 @@ test("settlement invariants: cancelled damage cannot publish nonfinite formula o
 });
 
 test("settlement invariants: signed intermediate modifiers can resolve to valid final amounts", () => {
-    const resources = new CombatResources();
+
     const output = damageEffect("signed-output", {}, [
         {
             stage: "output",
@@ -222,7 +222,7 @@ test("settlement invariants: signed intermediate modifiers can resolve to valid 
 });
 
 test("settlement invariants: zero amounts remain valid and negative source healing is normalized", () => {
-    const resources = new CombatResources();
+
     let battle = workFor(unit(1), unit(2));
     const damageSettlement = resolveDamage(battle, damageRequest(0));
     battle = damageSettlement.state;

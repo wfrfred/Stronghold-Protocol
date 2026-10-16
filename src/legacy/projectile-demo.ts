@@ -6,8 +6,7 @@ import { hasActionDefinition } from "../core/tactical/unit/capability/action/cap
 import { create as createAttack, isAttack } from "../content/tactical/actions/attack.js";
 import { resolveDamage } from "../core/tactical/unit/capability/vitality/damage/settlement.js";
 import { ref as unitRef } from "../core/tactical/unit/query.js";
-import { CombatResources } from "../core/tactical/battle/resources.js";
-import type { BattleResources } from "../core/tactical/battle/runtime.js";
+
 import { battlefieldView, getUnit, updateUnit } from "../core/tactical/battle/state.js";
 import {
     launchProjectile,
@@ -33,8 +32,7 @@ import { createDamageOperands } from "../core/tactical/unit/capability/vitality/
 export function createTacticalProjectileDemo(
     input: Input,
     cachedOnly = false,
-): { readonly input: Input; readonly resources: BattleResources } {
-    const resources = new CombatResources();
+): { readonly input: Input } {
     const marker = { ...healFree, id: "contact-mark" };
     const boost: Definition<object, Offense> = {
         id: "post-launch-attack-boost",
@@ -123,54 +121,49 @@ export function createTacticalProjectileDemo(
                     return;
                 }
 
-                const attack = createAttack(
-                    {
-                        ...current.attack,
-                        windupTicks: 6,
-                        recoveryTicks: 6,
-                        markerId: "demo-shell",
-                        output: (state, self) => {
-                            const source = getUnit(state, self.source.id);
-                            const targetId = self.state.target.id;
-                            const target = getUnit(state, targetId);
+                const attack = createAttack({
+                    ...current.attack,
+                    windupTicks: 6,
+                    recoveryTicks: 6,
+                    markerId: "demo-shell",
+                    output: (state, self) => {
+                        const source = getUnit(state, self.source.id);
+                        const targetId = self.state.target.id;
+                        const target = getUnit(state, targetId);
 
-                            if (source === undefined || target === undefined) {
-                                return state;
-                            }
-
-                            const cachedAtk = resolveAttackPower(source.id, battlefieldView(state));
-
-                            if (cachedAtk === undefined || !hasOffense(source)) {
-                                throw new Error(
-                                    "projectile demo source requires Offense capability",
-                                );
-                            }
-
-                            const launched = launchProjectile(
-                                state,
-                                shell,
-                                {
-                                    source: source.id,
-                                    traceTarget: target.id,
-                                    position: source.position,
-                                    destination: target.position,
-                                    cachedAtk,
-                                    speedPerTick: 0.12,
-                                    contactRange,
-                                    stopDelayTicks: 6,
-                                },
-                                state.tick,
-                            );
-                            state = install(launched.state, unitRef(source), boost, {
-                                source: source.id,
-                                scopes: [{ type: "TICK", tick: state.tick + 70 }],
-                            }).state;
-
+                        if (source === undefined || target === undefined) {
                             return state;
-                        },
+                        }
+
+                        const cachedAtk = resolveAttackPower(source.id, battlefieldView(state));
+
+                        if (cachedAtk === undefined || !hasOffense(source)) {
+                            throw new Error("projectile demo source requires Offense capability");
+                        }
+
+                        const launched = launchProjectile(
+                            state,
+                            shell,
+                            {
+                                source: source.id,
+                                traceTarget: target.id,
+                                position: source.position,
+                                destination: target.position,
+                                cachedAtk,
+                                speedPerTick: 0.12,
+                                contactRange,
+                                stopDelayTicks: 6,
+                            },
+                            state.tick,
+                        );
+                        state = install(launched.state, unitRef(source), boost, {
+                            source: source.id,
+                            scopes: [{ type: "TICK", tick: state.tick + 70 }],
+                        }).state;
+
+                        return state;
                     },
-                    resources,
-                );
+                });
                 definitions = definitions.add(attack);
             });
         }
@@ -217,6 +210,5 @@ export function createTacticalProjectileDemo(
                 definition: transform(unit.definition),
             })),
         },
-        resources: { combat: resources },
     };
 }

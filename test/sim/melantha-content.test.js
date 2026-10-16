@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { prepare } from '../../dist/data/arknights/operator.js';
 import { create } from '../../dist/content/tactical/operators/melantha.js';
-import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
+
 import { initialize } from '../../dist/core/tactical/unit/initialize.js';
 import { createBattleState, battlefieldView, getUnit, updateUnit } from '../../dist/core/tactical/battle/state.js';
 import { enterUnits } from '../../dist/core/tactical/battle/execution/unit-lifecycle.js';
@@ -23,9 +23,9 @@ const profile = (fields = {}) => prepare(
 );
 
 test('Melantha uses main-mode level, potential, trust and talent, then a scoped skill contribution', () => {
-  const combat = new CombatResources();
+
   const prepared = profile();
-  const definition = create(prepared, combat);
+  const definition = create(prepared);
   const unit = initialize({ id: 0, position: [0, 0], definition });
   assert.deepEqual(definition.deployable, {
     cost: prepared.attributes.cost, redeployTicks: prepared.attributes.respawnTime * 30,
@@ -56,8 +56,8 @@ test('Melantha uses main-mode level, potential, trust and talent, then a scoped 
 });
 
 test('explicit skill finish removes only skill output, preserving Melantha talent', () => {
-  const combat = new CombatResources();
-  const definition = create(profile({ level: 1, potential: 1, trust: 0 }), combat);
+
+  const definition = create(profile({ level: 1, potential: 1, trust: 0 }));
   let state = createBattleState(fixtureBattlefieldState([initialize({ id: 0, position: [0, 0], definition })]));
   state = enterUnits(state, [0]);
   const before = resolveAttackPower(0, battlefieldView(state));
@@ -69,8 +69,8 @@ test('explicit skill finish removes only skill output, preserving Melantha talen
 });
 
 test('ordinary attacks read current talent and skill contributions instead of captured table attack', () => {
-  const combat = new CombatResources();
-  const definition = create(profile(), combat);
+
+  const definition = create(profile());
   const attack = definition.action.definitions.values()[0];
   const receiver = initialize({ id: 1, position: [1, 0], definition: {
     id: 'receiver', vitality: { maxHp: 10000 }, defense: { defense: 0, resistance: 0 },
@@ -88,8 +88,8 @@ test('ordinary attacks read current talent and skill contributions instead of ca
 });
 
 test('the ordinary ground block radius catches a target 0.6 units from Melantha', () => {
-  const combat = new CombatResources();
-  const definition = create(profile(), combat);
+
+  const definition = create(profile());
   const receiver = initialize({ id: 1, position: [0.6, 0], definition: {
     id: 'nearby-enemy', vitality: { maxHp: 1000 }, blockable: { weight: 1 },
     allegiance: { side: 'ENEMY' }, spatial: { layer: 'GROUND' },

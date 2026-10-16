@@ -24,7 +24,7 @@ const tile = createTile({
 });
 export const map = createBattlefieldMap(1, 32, Array(32).fill(tile));
 
-export function actionDefinition(power = 7, extra = {}, resources) {
+export function actionDefinition(power = 7, extra = {}) {
     const { baseAttackTimeTicks = 10, ...configuration } = extra;
     return createAttack(
         {
@@ -51,7 +51,6 @@ export function actionDefinition(power = 7, extra = {}, resources) {
             followUps: [],
             ...configuration,
         },
-        resources,
     );
 }
 

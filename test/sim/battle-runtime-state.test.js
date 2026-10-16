@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
-import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
+
 import { appendEvents, removeUnit } from "../../dist/core/tactical/battle/state.js";
 import { closeLifetime } from "../../dist/core/tactical/battle/execution/lifetime.js";
 import { advancePredefined } from "../../dist/core/tactical/battle/steps/predefined.js";
@@ -84,7 +84,7 @@ test("spawn entry observes recorded schedule progress before running content", (
 });
 
 test("nested predefined entry and departure keep the latest presence bindings", () => {
-    const resources = new CombatResources();
+
     const observations = [];
     let definitions;
     definitions = [
@@ -102,7 +102,7 @@ test("nested predefined entry and departure keep the latest presence bindings", 
         predefined(2, { id: "entry-child" }),
         predefined(3, { id: "departure-child" }),
     ];
-    const battle = new BattleRuntime(input({ predefines: definitions }), { combat: resources });
+    const battle = new BattleRuntime(input({ predefines: definitions }));
     battle.step([{ type: "APPEAR_PREDEFINED", definitionId: 1 }]);
     const first = battle.snapshot();
     assert.deepEqual(first.predefinedPresence.map(binding => binding.definitionId), [1, 2]);

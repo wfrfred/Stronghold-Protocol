@@ -4,7 +4,7 @@ import { deadline, setData, setDeadline } from "../../dist/core/tactical/unit/ef
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
+
 import {
     createBattleState,
     battlefieldView,

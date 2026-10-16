@@ -5,18 +5,17 @@ import {
     type Configuration as AttackConfiguration,
 } from "../content/tactical/actions/attack.js";
 import type { Input } from "../core/tactical/battle/contract.js";
-import { CombatResources } from "../core/tactical/battle/resources.js";
+
 import type { BattlefieldMap } from "../core/tactical/battlefield/map/map.js";
 import { TICKS_PER_SECOND } from "../core/tactical/tick.js";
 import * as enemy from "../core/tactical/unit/archetype/enemy.js";
 import * as operator from "../core/tactical/unit/archetype/operator.js";
-import type { ElementType } from "../core/tactical/unit/capability/elemental/capability.js";
+import type { Type as ElementType } from "../core/tactical/unit/capability/elemental/capability.js";
 import {
     createRouteDefinition,
     type RouteDefinition,
 } from "../core/tactical/unit/capability/locomotion/route/definition.js";
 import { createArknightsElementalDefinition } from "../data/arknights/elemental.js";
-import { registerArknightsElementalBursts } from "../data/arknights/elemental-burst.js";
 import { compileArknightsAttackBuffSkill } from "../data/arknights/skill-buff.js";
 import { createTacticalCombatDemoSpec } from "./tactical-demo-combat.js";
 import type { LegacyData } from "./tactical-demo-presentation.js";
@@ -45,11 +44,9 @@ export function createTacticalMechanicsDemo(
     rawSkill?: unknown,
 ): {
     readonly input: Input;
-    readonly combat: CombatResources;
     readonly elementType: ElementType | null;
 } {
-    const combat = new CombatResources();
-    const base = createTacticalCombatDemoSpec(map, route, data, seed, "PROJECTILE", combat);
+    const base = createTacticalCombatDemoSpec(map, route, data, seed, "PROJECTILE");
     const source = base.initialUnits[0]!;
     const spawn = base.schedule.spawns[0]!;
     const maxTicks = (scenario === "SKILL" ? 120 : 60) * TICKS_PER_SECOND;
@@ -76,32 +73,25 @@ export function createTacticalMechanicsDemo(
                   action: {
                       ...sourceDefinition.action,
                       definitions: Definitions.empty().add(
-                          createAttack(
-                              {
-                                  ...action,
-                                  targetGroups: [
-                                      {
-                                          ...group,
-                                          operations: [
-                                              ...group.operations,
-                                              {
-                                                  type: "ELEMENT_DAMAGE",
-                                                  elementType: ELEMENT_SCENARIOS[scenario],
-                                                  power: 400,
-                                              },
-                                          ],
-                                      },
-                                  ],
-                              },
-                              combat,
-                          ),
+                          createAttack({
+                              ...action,
+                              targetGroups: [
+                                  {
+                                      ...group,
+                                      operations: [
+                                          ...group.operations,
+                                          {
+                                              type: "ELEMENT_DAMAGE",
+                                              elementType: ELEMENT_SCENARIOS[scenario],
+                                              power: 400,
+                                          },
+                                      ],
+                                  },
+                              ],
+                          }),
                       ),
                   },
               });
-
-    if (elementType !== null) {
-        registerArknightsElementalBursts(combat);
-    }
 
     const target = enemy.createCombatDefinition({
         ...spawn.definition,
@@ -134,7 +124,6 @@ export function createTacticalMechanicsDemo(
             },
             maxTicks,
         },
-        combat,
         elementType,
     };
 }

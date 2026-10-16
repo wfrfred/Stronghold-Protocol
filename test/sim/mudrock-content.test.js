@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { prepare } from "../../dist/data/arknights/operator.js";
 import { create, readShield } from "../../dist/content/tactical/operators/mudrock.js";
-import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
+
 import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import {
     createBattleState, battlefieldView, getUnit, updateUnit,
@@ -48,24 +48,24 @@ const enemy = (id, position, fields = {}) => initialize({ id, position, definiti
     ...fields,
 } });
 function setup(configuration = {}, targets = [], options = {}) {
-    const combat = new CombatResources();
+
     const prepared = profile(configuration);
-    const content = create(prepared, combat, options);
+    const content = create(prepared, options);
     const unit = initialize({ id: 0, position: [0, 0], definition: content.definition });
     const initial = createBattleState(fixtureBattlefieldState([unit, ...targets]));
-    return { combat, prepared, ...content, initial, state: enterUnits(initial, [0]) };
+    return { prepared, ...content, initial, state: enterUnits(initial, [0]) };
 }
 const save = (state, fields) => updateUnit(state, { ...getUnit(state, 0), ...fields });
 const hp = (state, amount) => save(state, { vitality: { ...getUnit(state, 0).vitality, hp: amount } });
 const sp = (state, amount) => save(state, { skill: { ...getUnit(state, 0).skill, sp: { ...getUnit(state, 0).skill.sp, value: amount } } });
-const hit = (state, combat, sourceUnitId = 1, power = 100) => resolveDamage(state, {
+const hit = (state, sourceUnitId = 1, power = 100) => resolveDamage(state, {
     sourceUnitId, targetUnitId: 0, damageType: "TRUE", operands: createDamageOperands(power), tick: state.tick,
 });
 const approximate = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} != ${expected}`);
-const clearShield = (state, combat) => hit(state, combat).state;
+const clearShield = (state) => hit(state).state;
 
 test("entry installs one persistent shield container and preserves prior snapshots", () => {
-    const { initial, state, prepared, combat } = setup();
+    const { initial, state, prepared } = setup();
     assert.equal(readShield(getUnit(initial, 0)), undefined);
     assert.deepEqual(readShield(getUnit(state, 0)), { layers: 1, timer: 270 });
     assert.equal(getUnit(state, 0).effects.values().filter(instance => instance.definition.id === "mudrock/shield").length, 1);
@@ -88,7 +88,7 @@ test("entry installs one persistent shield container and preserves prior snapsho
 test("shield cancels damage, consumes a layer, self-heals and retains normal HIT recovery", () => {
     const fixture = setup({}, [enemy(1, [1, 0])]);
     const before = hp(fixture.state, 1000);
-    const result = hit(before, fixture.combat, 1, 5000);
+    const result = hit(before, 1, 5000);
     assert.equal(result.value.hpLoss, 0);
     assert.deepEqual(result.value.cancellation, { stage: "RECEPTION", reason: "MUDROCK_SHIELD" });
     assert.deepEqual(result.value.resourceConsumptions, [{ ownerUnitId: 0, resourceId: "mudrock/shield", resource: "SHIELD_LAYER", amount: 1 }]);
@@ -103,32 +103,32 @@ test("shield cancels damage, consumes a layer, self-heals and retains normal HIT
     });
     assert.equal(external.value.amount, 0);
     assert.equal(getUnit(external.state, 0).vitality.hp, getUnit(result.state, 0).vitality.hp);
-    const unshielded = hit(result.state, fixture.combat);
+    const unshielded = hit(result.state);
     assert.equal(unshielded.value.hpLoss, 100);
 });
 
 test("invincible reception leaves shield untouched and removing its effect removes the hook", () => {
     const fixture = setup({}, [enemy(1, [1, 0])]);
     const protectedState = install(fixture.state, unitRef(getUnit(fixture.state, 0)), invincible).state;
-    const canceled = hit(protectedState, fixture.combat);
+    const canceled = hit(protectedState);
     assert.equal(canceled.value.hpLoss, 0);
     assert.equal(readShield(getUnit(canceled.state, 0)).layers, 1);
     const effect = getUnit(fixture.state, 0).effects.values().find(instance => instance.definition.id === "mudrock/shield");
     const removed = end(fixture.state, { host: { id: 0 }, id: effect.id });
     assert.equal(readShield(getUnit(removed, 0)), undefined);
-    assert.equal(hit(removed, fixture.combat).value.hpLoss, 100);
+    assert.equal(hit(removed).value.hpLoss, 100);
 });
 
 test("shield recharge keeps its periodic clock while capped and zero layers remain installed", () => {
     const fixture = setup({}, [enemy(1, [1, 0])]);
-    let state = clearShield(fixture.state, fixture.combat);
+    let state = clearShield(fixture.state);
     state = advance({ ...state, tick: 269 });
     assert.deepEqual(readShield(getUnit(state, 0)), { layers: 0, timer: 1 });
     state = advance({ ...state, tick: 270 });
     assert.deepEqual(readShield(getUnit(state, 0)), { layers: 1, timer: 270 });
     state = advance({ ...state, tick: 1000 });
     assert.deepEqual(readShield(getUnit(state, 0)), { layers: 3, timer: 80 });
-    state = hit(state, fixture.combat).state;
+    state = hit(state).state;
     state = advance({ ...state, tick: 1080 });
     assert.deepEqual(readShield(getUnit(state, 0)), { layers: 3, timer: 270 });
     assert.equal(getUnit(state, 0).effects.values().filter(instance => instance.definition.id === "mudrock/shield").length, 1);
@@ -143,11 +143,11 @@ test("module X healing and bonus SP use the selected talent and dynamic max HP",
         id: "test/max-hp", value: [modifier({ addition: 1000 })],
     }) });
     state = hp(state, 1000);
-    const result = hit(state, fixture.combat);
+    const result = hit(state);
     approximate(getUnit(result.state, 0).vitality.hp, 1000 + (fixture.prepared.attributes.maxHp + 1000) * 0.25);
     assert.equal(getUnit(result.state, 0).skill.sp.value, 3);
     assert.deepEqual(battlefieldView(result.state).blockingRelations, [{ blockerUnitId: 0, blockedUnitId: 1 }]);
-    assert.equal(hit(result.state, fixture.combat).value.hpLoss, 85);
+    assert.equal(hit(result.state).value.hpLoss, 85);
 });
 
 test("Sarkaz resistance and module blocked-source reduction compose only for their source conditions", () => {
@@ -156,13 +156,13 @@ test("Sarkaz resistance and module blocked-source reduction compose only for the
         enemy(2, [5, 0], { profile: { tags: ["sarkaz"] } }),
         enemy(3, [6, 0]),
     ]);
-    const state = clearShield(fixture.state, fixture.combat);
-    approximate(hit(state, fixture.combat, 1).value.hpLoss, 59.5);
-    approximate(hit(state, fixture.combat, 2).value.hpLoss, 70);
-    approximate(hit(state, fixture.combat, 3).value.hpLoss, 100);
-    approximate(hit(state, fixture.combat, null).value.hpLoss, 100);
+    const state = clearShield(fixture.state);
+    approximate(hit(state, 1).value.hpLoss, 59.5);
+    approximate(hit(state, 2).value.hpLoss, 70);
+    approximate(hit(state, 3).value.hpLoss, 100);
+    approximate(hit(state, null).value.hpLoss, 100);
     const e1 = setup({ elite: 1, level: 80 }, [enemy(1, [1, 0], { profile: { tags: ["sarkaz"] } })]);
-    assert.equal(hit(clearShield(e1.state, e1.combat), e1.combat).value.hpLoss, 100);
+    assert.equal(hit(clearShield(e1.state)).value.hpLoss, 100);
 });
 
 test("S2 does not consume SP without an eligible ground target in its range", () => {
@@ -242,10 +242,10 @@ test("S2 stays active through configured recovery and finishes on completion or 
 });
 
 test("Mudrock content explicitly rejects unsupported module Y, another character and invalid recovery", () => {
-    const combat = new CombatResources();
-    assert.throws(() => create(profile({ module: { id: "uniequip_003_mudrok", level: 3 } }), combat), /only module X/);
-    assert.throws(() => create({ ...profile(), id: "char_208_melan" }, combat), /second skill/);
-    assert.throws(() => create(profile(), combat, { recoveryTicks: -1 }), /nonnegative integer/);
+
+    assert.throws(() => create(profile({ module: { id: "uniequip_003_mudrok", level: 3 } })), /only module X/);
+    assert.throws(() => create({ ...profile(), id: "char_208_melan" }), /second skill/);
+    assert.throws(() => create(profile(), { recoveryTicks: -1 }), /nonnegative integer/);
 });
 
 test("an old S2 recovery cannot close a newer skill activation", () => {

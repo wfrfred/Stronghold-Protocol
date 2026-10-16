@@ -8,7 +8,7 @@ import * as actions from "../../dist/core/tactical/unit/action/operations.js";
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
 import { getUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
 import { removeUnitWithEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
-import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
+
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 
 const program = (id = "program", overrides = {}) => ({
@@ -191,8 +191,7 @@ test("action: ENDING occupies the definition and repeated cancellation cannot re
 });
 
 test("action: source departure completes nested cleanup while entered content continues", () => {
-    const resources = new CombatResources(),
-        trace = [];
+    const trace = [];
     const definition = program("depart", {
         step(state, self) {
             state = installOwned(state, self, {

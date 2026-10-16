@@ -1,64 +1,211 @@
+import type { Ref } from "../../../../common/ref.js";
+import { updateUnit, type State as BattleState } from "../../../battle/state.js";
 import type { Unit } from "../../unit.js";
+import * as units from "../../query.js";
+import * as contribution from "../../contribution/contribution.js";
+import * as modifier from "../../contribution/value.js";
 import { hasAllegiance } from "../allegiance/capability.js";
 import { isSpatiallyPresent } from "../presence/capability.js";
 import { hasVitality } from "../vitality/capability.js";
-import { ELEMENT_TYPES, hasElemental, type ElementType } from "./capability.js";
+import {
+    ELEMENT_TYPES,
+    hasElemental,
+    type Elemental,
+    type Parameter,
+    type Type,
+} from "./capability.js";
+import type { Burst } from "./burst.js";
+import type { DamageRequest, HealRequest } from "./operations.js";
 
-export type ElementalRejection = "NO_ELEMENTAL" | "INACTIVE" | "NEUTRAL" | "RECOVERING" | "IMMUNE";
+export function get(battle: BattleState, reference: Ref<Burst>): Burst | undefined {
+    const burst = units.get(battle, reference.host)?.elemental.burst;
 
-export function elementalRejection(unit: Unit): ElementalRejection | undefined {
-    if (!hasElemental(unit)) {
-        return "NO_ELEMENTAL";
-    }
-    if (!isSpatiallyPresent(unit) || (hasVitality(unit) && unit.vitality.hp <= 0)) {
-        return "INACTIVE";
-    }
-    if (hasAllegiance(unit) && unit.allegiance.side === "NEUTRAL") {
-        return "NEUTRAL";
-    }
-    if (unit.elemental.recovery !== null) {
-        return "RECOVERING";
-    }
-
-    if (unit.elemental.immune) {
-        return "IMMUNE";
-    }
-
-    return undefined;
+    return burst?.id === reference.id ? burst : undefined;
 }
 
-export function canReceiveElementDamage(unit: Unit): boolean {
-    return elementalRejection(unit) === undefined;
+export function replace(battle: BattleState, self: Unit & Elemental): BattleState {
+    const current = units.get(battle, units.ref(self));
+
+    return current?.definition.elemental === self.definition.elemental
+        ? updateUnit(battle, self)
+        : battle;
 }
 
-export function canReceiveElementHeal(unit: Unit): boolean {
-    return elementalRejection(unit) === undefined;
+export function resolveMaxEp(battle: BattleState, host: Ref<Unit & Elemental>): number | undefined {
+    return resolve(battle, host, "maxEp");
 }
 
-export function getCurrentElementType(unit: Unit): ElementType | undefined {
-    if (!hasElemental(unit)) {
+export function resolveRecoverySpeed(
+    battle: BattleState,
+    host: Ref<Unit & Elemental>,
+): number | undefined {
+    return resolve(battle, host, "recoverySpeed");
+}
+
+export function resolveElementResistance(
+    battle: BattleState,
+    host: Ref<Unit & Elemental>,
+): number | undefined {
+    return resolve(battle, host, "elementResistance");
+}
+
+export function resolveDamageResistance(
+    battle: BattleState,
+    host: Ref<Unit & Elemental>,
+): number | undefined {
+    return resolve(battle, host, "damageResistance");
+}
+
+export function resolveBurstRecoverySpeed(
+    battle: BattleState,
+    host: Ref<Unit & Elemental>,
+): number | undefined {
+    return resolve(battle, host, "burstRecoverySpeed");
+}
+
+function resolve(
+    battle: BattleState,
+    host: Ref<Unit & Elemental>,
+    parameter: Parameter,
+): number | undefined {
+    const self = units.get(battle, host);
+
+    if (self === undefined || !hasElemental(self)) {
         return undefined;
     }
 
-    let selected: ElementType | undefined;
-    let minimum = unit.definition.elemental.maxEp;
+    const base =
+        parameter === "recoverySpeed"
+            ? self.definition.elemental.recoveryPerSecond
+            : self.definition.elemental[parameter];
+    const value = modifier.apply(
+        base,
+        contribution.resolve(self.elemental[parameter], (input) =>
+            typeof input === "function" ? input(battle, self) : input,
+        ),
+    );
+
+    if (parameter === "maxEp") {
+        return Math.max(1, value);
+    }
+    if (parameter === "elementResistance" || parameter === "damageResistance") {
+        return Math.min(95, Math.max(0, value));
+    }
+
+    return Math.max(0, value);
+}
+
+export function available(self: Unit): boolean {
+    return (
+        self.lifecycle === "PRESENT" &&
+        isSpatiallyPresent(self) &&
+        (!hasVitality(self) || self.vitality.hp > 0)
+    );
+}
+
+export function damageRejection(
+    battle: BattleState,
+    host: Ref<Unit>,
+    request: DamageRequest,
+): string | undefined {
+    const self = units.get(battle, host);
+
+    if (self === undefined) {
+        return "TARGET_ABSENT";
+    }
+    if (!hasElemental(self)) {
+        return "NO_ELEMENTAL";
+    }
+    if (!available(self)) {
+        return "INACTIVE";
+    }
+    if (self.elemental.burst !== null) {
+        return "RECOVERING";
+    }
+    if (hasAllegiance(self) && self.allegiance.side === "NEUTRAL") {
+        return "NEUTRAL";
+    }
+
+    return self.elemental.rules.every((rule) => rule.allowsDamage?.(battle, self, request) ?? true)
+        ? undefined
+        : "RULE";
+}
+
+export function healRejection(
+    battle: BattleState,
+    host: Ref<Unit>,
+    request: HealRequest,
+): string | undefined {
+    const self = units.get(battle, host);
+
+    if (self === undefined) {
+        return "TARGET_ABSENT";
+    }
+    if (!hasElemental(self)) {
+        return "NO_ELEMENTAL";
+    }
+    if (!available(self)) {
+        return "INACTIVE";
+    }
+    if (self.elemental.burst !== null) {
+        return "RECOVERING";
+    }
+
+    return self.elemental.rules.every((rule) => rule.allowsHeal?.(battle, self, request) ?? true)
+        ? undefined
+        : "RULE";
+}
+
+export function canReceiveDamage(
+    battle: BattleState,
+    host: Ref<Unit>,
+    request: DamageRequest,
+): boolean {
+    return damageRejection(battle, host, request) === undefined;
+}
+
+export function canReceiveHeal(
+    battle: BattleState,
+    host: Ref<Unit>,
+    request: HealRequest,
+): boolean {
+    return healRejection(battle, host, request) === undefined;
+}
+
+export function currentType(self: Unit, maxEp?: number): Type | undefined {
+    if (!hasElemental(self)) {
+        return undefined;
+    }
+
+    let selected: Type | undefined;
+    let minimum = maxEp ?? self.definition.elemental.maxEp;
 
     for (const type of ELEMENT_TYPES) {
-        if (unit.elemental.ep[type] < minimum) {
+        if (self.elemental.ep[type] < minimum) {
             selected = type;
-            minimum = unit.elemental.ep[type];
+            minimum = self.elemental.ep[type];
         }
     }
 
     return selected;
 }
 
-export function elementDamageRatio(unit: Unit): number {
-    const type = getCurrentElementType(unit);
-
-    if (type === undefined || !hasElemental(unit)) {
+export function damageRatio(self: Unit, maxEp?: number): number {
+    if (!hasElemental(self)) {
         return 0;
     }
 
-    return 1 - unit.elemental.ep[type] / unit.definition.elemental.maxEp;
+    const maximum = maxEp ?? self.definition.elemental.maxEp;
+    const type = currentType(self, maximum);
+
+    return type === undefined ? 0 : Math.min(1, Math.max(0, 1 - self.elemental.ep[type] / maximum));
+}
+
+export function resolveDamageRatio(
+    battle: BattleState,
+    host: Ref<Unit & Elemental>,
+): number | undefined {
+    const self = units.get(battle, host);
+
+    return self === undefined ? undefined : damageRatio(self, resolveMaxEp(battle, host));
 }

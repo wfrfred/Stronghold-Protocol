@@ -9,7 +9,7 @@ import {
 import { setHook, removeHook } from "../../dist/core/tactical/unit/capability/deployable/hook.js";
 import { createDefinition as createDeployable } from "../../dist/core/tactical/unit/capability/deployable/capability.js";
 import { removeUnitWithEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
-import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
+
 import { initialize } from "../../dist/core/tactical/unit/initialize.js";
 import { createDefinition as createEnemy } from "../../dist/core/tactical/unit/archetype/enemy.js";
 import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
@@ -158,7 +158,7 @@ test("entry precedes deployment observers; observer registrations survive succes
 });
 
 test("a deployment remains observable when its entry callback immediately removes the unit", () => {
-    const resources = new CombatResources();
+
     const calls = [];
     const bootstrap = definition("bootstrap", { onEnter(state) {
         return addHook(state, 0, record("observer", (state, view, fact) => {
@@ -174,7 +174,7 @@ test("a deployment remains observable when its entry callback immediately remove
     const runtime = new BattleRuntime(input({
         initialUnits: [{ definition: bootstrap, position: [7, 0] }],
         deployment: deployment([incoming]),
-    }), { combat: resources });
+    }));
     const step = runtime.step([deploy(0)]);
     assert.deepEqual(calls, [["left", 1], ["deployed", 1]]);
     assert.equal(runtime.snapshot().units.length, 1);

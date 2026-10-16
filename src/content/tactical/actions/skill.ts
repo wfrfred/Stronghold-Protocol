@@ -1,6 +1,6 @@
 import { assertPositiveSafeInteger } from "../../../core/common/assert.js";
 import type { Ref } from "../../../core/common/ref.js";
-import { CombatResources } from "../../../core/tactical/battle/resources.js";
+
 import { ref as actionRef } from "../../../core/tactical/unit/action/action.js";
 import { get as getAction } from "../../../core/tactical/unit/action/operations.js";
 import {
@@ -20,38 +20,35 @@ export interface Definition extends AttackDefinition<State> {
     readonly ammoPerAction?: number;
 }
 
-export function create(definition: Definition, resources = new CombatResources()): Attack<State> {
+export function create(definition: Definition): Attack<State> {
     const amount = definition.ammoPerAction ?? 1;
     const afterOutput = definition.afterOutput;
     assertPositiveSafeInteger(amount, "skill attack ammunition consumption");
 
-    return createWithState(
-        {
-            ...definition,
-            initialize(battle, source) {
-                const host = units.get(battle, source);
+    return createWithState({
+        ...definition,
+        initialize(battle, source) {
+            const host = units.get(battle, source);
 
-                return {
-                    activation:
-                        host !== undefined && hasSkill(host) && host.skill.active !== null
-                            ? ref(host.skill.active)
-                            : null,
-                };
-            },
-            afterOutput(battle, self) {
-                battle = afterOutput?.(battle, self) ?? battle;
-                const current = getAction(battle, actionRef(self));
-                const activation = current?.state.data.activation;
-
-                if (current?.status !== "RUNNING" || activation == null) {
-                    return battle;
-                }
-
-                battle = consume(battle, activation, amount).state;
-
-                return check(battle, activation);
-            },
+            return {
+                activation:
+                    host !== undefined && hasSkill(host) && host.skill.active !== null
+                        ? ref(host.skill.active)
+                        : null,
+            };
         },
-        resources,
-    );
+        afterOutput(battle, self) {
+            battle = afterOutput?.(battle, self) ?? battle;
+            const current = getAction(battle, actionRef(self));
+            const activation = current?.state.data.activation;
+
+            if (current?.status !== "RUNNING" || activation == null) {
+                return battle;
+            }
+
+            battle = consume(battle, activation, amount).state;
+
+            return check(battle, activation);
+        },
+    });
 }

@@ -10,7 +10,6 @@ import {
     updateUnit,
     type State as BattleState,
 } from "../../../core/tactical/battle/state.js";
-import { CombatResources } from "../../../core/tactical/battle/resources.js";
 import type { Unit } from "../../../core/tactical/unit/unit.js";
 import * as units from "../../../core/tactical/unit/query.js";
 import { ref, setState, type Action } from "../../../core/tactical/unit/action/action.js";
@@ -28,10 +27,18 @@ import {
 import { resolveHealing } from "../../../core/tactical/unit/capability/vitality/healing/settlement.js";
 import { resolveMaxHp } from "../../../core/tactical/unit/capability/vitality/query.js";
 import {
-    resolveElementDamage,
-    resolveElementHeal,
-} from "../../../core/tactical/unit/capability/elemental/execution.js";
-import type { ElementType } from "../../../core/tactical/unit/capability/elemental/capability.js";
+    damage as damageElement,
+    heal as healElement,
+} from "../../../core/tactical/unit/capability/elemental/operations.js";
+import {
+    hasElemental,
+    type Type as ElementType,
+} from "../../../core/tactical/unit/capability/elemental/capability.js";
+import {
+    canReceiveDamage,
+    canReceiveHeal,
+    resolveDamageRatio,
+} from "../../../core/tactical/unit/capability/elemental/query.js";
 import {
     createTargetingDefinition,
     type TargetingDefinition,
@@ -140,6 +147,31 @@ export function chooseTargets(
                     group.targeting,
                     group.operations.flatMap(purposes),
                     (target, query) => resolveMaxHp(target.id, query.battlefield)!,
+                    {
+                        allowsDamage: (target) =>
+                            group.operations.some(
+                                (operation) =>
+                                    operation.type === "ELEMENT_DAMAGE" &&
+                                    canReceiveDamage(battle, units.ref(target), {
+                                        source,
+                                        type: operation.elementType,
+                                        power: operation.power,
+                                    }),
+                            ),
+                        allowsHeal: (target) =>
+                            group.operations.some(
+                                (operation) =>
+                                    operation.type === "ELEMENT_HEAL" &&
+                                    canReceiveHeal(battle, units.ref(target), {
+                                        source,
+                                        power: operation.power,
+                                    }),
+                            ),
+                        damageRatio: (target) =>
+                            hasElemental(target)
+                                ? (resolveDamageRatio(battle, units.ref(target)) ?? 0)
+                                : 0,
+                    },
                 ),
             ).map(units.ref),
         ]),
@@ -151,7 +183,6 @@ function apply(
     source: Ref<Unit>,
     target: Ref<Unit>,
     operation: Operation,
-    resources: CombatResources,
 ): BattleState {
     const tick = battle.tick;
     const sourceUnitId = source.id;
@@ -185,36 +216,22 @@ function apply(
             }).state;
 
         case "ELEMENT_DAMAGE":
-            return resolveElementDamage(
-                battle,
-                {
-                    sourceUnitId,
-                    targetUnitId,
-                    tick,
-                    type: operation.elementType,
-                    power: operation.power,
-                },
-                resources,
-            ).state;
-
-        case "ELEMENT_HEAL":
-            return resolveElementHeal(battle, {
-                sourceUnitId,
-                targetUnitId,
-                tick,
+            return damageElement(battle, target, {
+                source,
+                type: operation.elementType,
                 power: operation.power,
             }).state;
+
+        case "ELEMENT_HEAL":
+            return healElement(battle, target, { source, power: operation.power }).state;
     }
 }
 
-export function create(definition: Definition, resources = new CombatResources()): Attack {
-    return createWithState({ ...definition, initialize: () => ({}) }, resources);
+export function create(definition: Definition): Attack {
+    return createWithState({ ...definition, initialize: () => ({}) });
 }
 
-export function createWithState<S extends object>(
-    definition: StatefulDefinition<S>,
-    resources = new CombatResources(),
-): Attack<S> {
+export function createWithState<S extends object>(definition: StatefulDefinition<S>): Attack<S> {
     assertPositiveNumber(definition.intervalTicks, "attack interval");
     assertNonnegativeSafeInteger(definition.windupTicks ?? 0, "attack windup");
     assertNonnegativeSafeInteger(definition.recoveryTicks ?? 0, "attack recovery");
@@ -397,7 +414,7 @@ export function createWithState<S extends object>(
                                     return { state: battle, value: true };
                                 }
 
-                                battle = apply(battle, output.source, target, operation, resources);
+                                battle = apply(battle, output.source, target, operation);
                             }
                         }
                     }
@@ -409,13 +426,7 @@ export function createWithState<S extends object>(
                                 return { state: battle, value: true };
                             }
 
-                            battle = apply(
-                                battle,
-                                output.source,
-                                target,
-                                followUp.operation,
-                                resources,
-                            );
+                            battle = apply(battle, output.source, target, followUp.operation);
                         }
                     }
                 }

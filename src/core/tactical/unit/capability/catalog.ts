@@ -126,7 +126,7 @@ export const configuredCapabilities: {
     defense: () => initializeDefenseState(),
     action: () => initializeActionState(),
     skill: (config, context) => initializeSkillState(config as SkillDefinition, context.tick),
-    elemental: initializeElementalState,
+    elemental: (definition, context) => initializeElementalState(definition, context.tick),
     allegiance: initializeAllegianceState,
     spatial: initializeSpatialState,
     hit: initializeHitState,

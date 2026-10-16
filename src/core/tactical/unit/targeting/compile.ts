@@ -10,11 +10,8 @@ import { areHostile, hasAllegiance } from "../capability/allegiance/capability.j
 import { isSpatiallyPresent } from "../capability/presence/capability.js";
 import { hasHit, hasSpatial } from "../capability/spatial/capability.js";
 import { allowsTarget } from "../capability/targetable/capability.js";
-import {
-    canReceiveElementDamage,
-    canReceiveElementHeal,
-    elementDamageRatio,
-} from "../capability/elemental/query.js";
+import { damageRatio } from "../capability/elemental/query.js";
+import { hasElemental } from "../capability/elemental/capability.js";
 import { hasVitality, type Vitality } from "../capability/vitality/capability.js";
 import { canReceiveHealing } from "../capability/vitality/healing/reception.js";
 import type { Unit, Id } from "../unit.js";
@@ -23,6 +20,29 @@ import type {
     HealingTargetingDefinition,
     TargetingDefinition,
 } from "./definition.js";
+
+export interface ElementalQueries {
+    readonly allowsDamage: (target: Unit, context: CombatTargetQueryContext) => boolean;
+    readonly allowsHeal: (target: Unit, context: CombatTargetQueryContext) => boolean;
+    readonly damageRatio: (target: Unit, context: CombatTargetQueryContext) => number;
+}
+
+function receivesElement(target: Unit): boolean {
+    return (
+        hasElemental(target) &&
+        target.lifecycle === "PRESENT" &&
+        isSpatiallyPresent(target) &&
+        (!hasVitality(target) || target.vitality.hp > 0) &&
+        target.elemental.burst === null
+    );
+}
+
+const localElements: ElementalQueries = {
+    allowsDamage: (target) =>
+        receivesElement(target) && (!hasAllegiance(target) || target.allegiance.side !== "NEUTRAL"),
+    allowsHeal: receivesElement,
+    damageRatio: (target) => damageRatio(target),
+};
 
 const staticMaxHp: HealingMaxHpProvider = (unit) => unit.definition.vitality.maxHp;
 
@@ -57,6 +77,7 @@ function compareDistance(context: CombatTargetQueryContext, left: Unit, right: U
 function compileDamageTargeting(
     definition: DamageTargetingDefinition,
     purposes: readonly QueryPurpose[],
+    elemental: ElementalQueries,
 ): CompiledTargeting<CombatTargetQueryContext> {
     const requiresHealingEligibility = purposes.includes("HEAL");
     const requiresElementDamage = purposes.includes("ELEMENT_DAMAGE");
@@ -91,8 +112,8 @@ function compileDamageTargeting(
                         target,
                         ignoreHealFree: false,
                     })) ||
-                (requiresElementDamage && !canReceiveElementDamage(target)) ||
-                (requiresElementHealing && !canReceiveElementHeal(target))
+                (requiresElementDamage && !elemental.allowsDamage(target, context)) ||
+                (requiresElementHealing && !elemental.allowsHeal(target, context))
             ) {
                 return false;
             }
@@ -137,6 +158,7 @@ function compileHealingTargeting(
     definition: HealingTargetingDefinition,
     purposes: readonly QueryPurpose[],
     maxHp: HealingMaxHpProvider = staticMaxHp,
+    elemental: ElementalQueries = localElements,
 ): CompiledTargeting<CombatTargetQueryContext> {
     const requiresHealingEligibility = purposes.includes("HEAL");
     const elementHealing = purposes.includes("ELEMENT_HEAL");
@@ -152,9 +174,9 @@ function compileHealingTargeting(
             (definition.includeSelf || target.id !== context.source.id) &&
             sameSide(context.source, target) &&
             (elementOnly
-                ? elementDamageRatio(target) > 0
+                ? elemental.damageRatio(target, context) > 0
                 : isActiveVitalUnit(target) && target.vitality.hp < maxHp(target, context)) &&
-            (!elementHealing || canReceiveElementHeal(target)) &&
+            (!elementHealing || elemental.allowsHeal(target, context)) &&
             allowsTarget({ ...context, target, selector: definition, purposes }) &&
             (!requiresHealingEligibility ||
                 canReceiveHealing({
@@ -171,7 +193,7 @@ function compileHealingTargeting(
 
         compare: (context, left, right) => {
             if (elementOnly) {
-                return elementDamageRatio(right) - elementDamageRatio(left);
+                return elemental.damageRatio(right, context) - elemental.damageRatio(left, context);
             }
             if (!hasVitality(left) || !hasVitality(right)) {
                 return 0;
@@ -190,12 +212,13 @@ export function compileTargeting(
     definition: TargetingDefinition,
     purposes: readonly QueryPurpose[],
     maxHp?: HealingMaxHpProvider,
+    elemental: ElementalQueries = localElements,
 ): CompiledTargeting<CombatTargetQueryContext> {
     switch (definition.type) {
         case "DAMAGE":
-            return compileDamageTargeting(definition, purposes);
+            return compileDamageTargeting(definition, purposes, elemental);
 
         case "HEAL":
-            return compileHealingTargeting(definition, purposes, maxHp);
+            return compileHealingTargeting(definition, purposes, maxHp, elemental);
     }
 }

@@ -77,13 +77,12 @@ const definition = () => ({
             ],
          })) }),
     elemental: {
-        receiver: "CHARACTER",
         maxEp: 1000,
-        recoveryPerTick: 0,
+        recoveryPerSecond: 0,
         elementResistance: 0,
         damageResistance: 0,
-        immune: false,
-        burstDurationsTicks: { NEURAL: 300, EROSION: 300, BURN: 300, NECROSIS: 450 },
+        burstRecoverySpeed: 1,
+        bursts: Object.fromEntries(["NEURAL", "EROSION", "BURN", "NECROSIS"].map(type => [type, { durationTicks: 300, onStart: battle => battle }])),
     },
     skill: skillDefinition({
         id: "paired-skill",

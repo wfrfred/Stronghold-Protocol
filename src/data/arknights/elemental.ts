@@ -1,12 +1,15 @@
 import {
     createDefinition as createElementalDefinition,
     type Definition as ElementalDefinition,
-    type ElementalReceiver,
-    type ElementType,
+    type Type,
 } from "../../core/tactical/unit/capability/elemental/capability.js";
-import { perSecondToPerTick, secondsToTicks } from "./tick.js";
+import type { Definition as BurstDefinition } from "../../core/tactical/unit/capability/elemental/burst.js";
+import { create as createBurstDefinition } from "./elemental-burst.js";
+import { secondsToTicks } from "./tick.js";
 
 const elements = { SANITY: "NEURAL", WATER: "EROSION", FIRE: "BURN", DARK: "NECROSIS" } as const;
+
+export type Receiver = "CHARACTER" | "ENEMY";
 
 export interface ArknightsElementalBurstProfile {
     readonly durationTicks: number;
@@ -29,13 +32,13 @@ export interface ArknightsElementalBurstProfile {
 }
 
 export interface ArknightsElementalOptions {
-    readonly receiver: ElementalReceiver;
+    readonly receiver: Receiver;
     readonly boss?: boolean;
     readonly maxEp?: number;
     readonly recoveryPerSecond?: number;
     readonly elementResistance?: number;
     readonly damageResistance?: number;
-    readonly immune?: boolean;
+    readonly burstRecoverySpeed?: number;
 }
 
 function profile(
@@ -63,58 +66,73 @@ function profile(
     });
 }
 
-const profiles: Readonly<
-    Record<ElementalReceiver, Readonly<Record<ElementType, ArknightsElementalBurstProfile>>>
-> = Object.freeze({
-    CHARACTER: Object.freeze({
-        NEURAL: profile({
-            durationTicks: secondsToTicks(10),
-            burstDamage: { type: "TRUE", power: 1000 },
-            stunTicks: secondsToTicks(10),
+const profiles: Readonly<Record<Receiver, Readonly<Record<Type, ArknightsElementalBurstProfile>>>> =
+    Object.freeze({
+        CHARACTER: Object.freeze({
+            NEURAL: profile({
+                durationTicks: secondsToTicks(10),
+                burstDamage: { type: "TRUE", power: 1000 },
+                stunTicks: secondsToTicks(10),
+            }),
+            EROSION: profile({
+                durationTicks: secondsToTicks(10),
+                burstDamage: { type: "PHYSICAL", power: 800 },
+                defReduction: 100,
+            }),
+            BURN: profile({
+                durationTicks: secondsToTicks(10),
+                burstDamage: { type: "ARTS", power: 1200 },
+                resReduction: 20,
+            }),
+            NECROSIS: profile({
+                durationTicks: secondsToTicks(15),
+                damagePerSecond: { type: "ARTS", power: 100 },
+                spDrainPerSecond: 1,
+                blocksSkill: true,
+                blocksSpRecovery: true,
+            }),
         }),
-        EROSION: profile({
-            durationTicks: secondsToTicks(10),
-            burstDamage: { type: "PHYSICAL", power: 800 },
-            defReduction: 100,
+        ENEMY: Object.freeze({
+            NEURAL: profile({
+                durationTicks: secondsToTicks(10),
+                burstDamage: { type: "ELEMENTAL", power: 6000 },
+                paralysisStacks: 3,
+            }),
+            EROSION: profile({
+                durationTicks: secondsToTicks(8),
+                burstDamage: { type: "ELEMENTAL", power: 5000 },
+                defReduction: 120,
+            }),
+            BURN: profile({
+                durationTicks: secondsToTicks(10),
+                burstDamage: { type: "ELEMENTAL", power: 7000 },
+                resReduction: 20,
+            }),
+            NECROSIS: profile({
+                durationTicks: secondsToTicks(15),
+                damagePerSecond: { type: "ELEMENTAL", power: 800 },
+                attackReductionRatio: 0.5,
+            }),
         }),
-        BURN: profile({
-            durationTicks: secondsToTicks(10),
-            burstDamage: { type: "ARTS", power: 1200 },
-            resReduction: 20,
-        }),
-        NECROSIS: profile({
-            durationTicks: secondsToTicks(15),
-            damagePerSecond: { type: "ARTS", power: 100 },
-            spDrainPerSecond: 1,
-            blocksSkill: true,
-            blocksSpRecovery: true,
-        }),
-    }),
-    ENEMY: Object.freeze({
-        NEURAL: profile({
-            durationTicks: secondsToTicks(10),
-            burstDamage: { type: "ELEMENTAL", power: 6000 },
-            paralysisStacks: 3,
-        }),
-        EROSION: profile({
-            durationTicks: secondsToTicks(8),
-            burstDamage: { type: "ELEMENTAL", power: 5000 },
-            defReduction: 120,
-        }),
-        BURN: profile({
-            durationTicks: secondsToTicks(10),
-            burstDamage: { type: "ELEMENTAL", power: 7000 },
-            resReduction: 20,
-        }),
-        NECROSIS: profile({
-            durationTicks: secondsToTicks(15),
-            damagePerSecond: { type: "ELEMENTAL", power: 800 },
-            attackReductionRatio: 0.5,
-        }),
-    }),
+    });
+
+function createBursts(receiver: Receiver): Readonly<Record<Type, BurstDefinition>> {
+    const selected = profiles[receiver];
+
+    return Object.freeze({
+        NEURAL: createBurstDefinition(`elemental/${receiver}/NEURAL`, selected.NEURAL),
+        EROSION: createBurstDefinition(`elemental/${receiver}/EROSION`, selected.EROSION),
+        BURN: createBurstDefinition(`elemental/${receiver}/BURN`, selected.BURN),
+        NECROSIS: createBurstDefinition(`elemental/${receiver}/NECROSIS`, selected.NECROSIS),
+    });
+}
+
+const bursts = Object.freeze({
+    CHARACTER: createBursts("CHARACTER"),
+    ENEMY: createBursts("ENEMY"),
 });
 
-export function parseElementType(value: unknown): ElementType {
+export function parseElementType(value: unknown): Type {
     for (const [index, key] of Object.keys(elements).entries()) {
         if (value === key || value === index + 1) {
             return elements[key as keyof typeof elements];
@@ -125,8 +143,8 @@ export function parseElementType(value: unknown): ElementType {
 }
 
 export function getArknightsElementalBurstProfile(
-    receiver: ElementalReceiver,
-    type: ElementType,
+    receiver: Receiver,
+    type: Type,
 ): ArknightsElementalBurstProfile {
     return profiles[receiver][type];
 }
@@ -134,21 +152,13 @@ export function getArknightsElementalBurstProfile(
 export function createArknightsElementalDefinition(
     options: ArknightsElementalOptions,
 ): ElementalDefinition {
-    const selected = profiles[options.receiver];
-
     return createElementalDefinition({
-        receiver: options.receiver,
         maxEp:
             options.maxEp ?? (options.receiver === "ENEMY" && options.boss === true ? 2000 : 1000),
-        recoveryPerTick: perSecondToPerTick(options.recoveryPerSecond ?? 0),
+        recoveryPerSecond: options.recoveryPerSecond ?? 0,
         elementResistance: options.elementResistance ?? 0,
         damageResistance: options.damageResistance ?? 0,
-        immune: options.immune ?? false,
-        burstDurationsTicks: {
-            NEURAL: selected.NEURAL.durationTicks,
-            EROSION: selected.EROSION.durationTicks,
-            BURN: selected.BURN.durationTicks,
-            NECROSIS: selected.NECROSIS.durationTicks,
-        },
+        burstRecoverySpeed: options.burstRecoverySpeed ?? 1,
+        bursts: bursts[options.receiver],
     });
 }

@@ -4,7 +4,6 @@ import { resolveDamage } from "../../../core/tactical/unit/capability/vitality/d
 import type { Profile } from "../../../data/arknights/enemy.js";
 import { perSecondToPerTick } from "../../../data/arknights/tick.js";
 import { assertNonnegativeSafeInteger, assertPositiveNumber } from "../../../core/common/assert.js";
-import type { CombatResources } from "../../../core/tactical/battle/resources.js";
 import { battlefieldView, getUnit } from "../../../core/tactical/battle/state.js";
 import {
     createDefinition as createProjectileDefinition,
@@ -72,7 +71,6 @@ export function createArrow(): ProjectileDefinition<object> {
 
 export function create(
     profile: Profile,
-    combat: CombatResources,
     timing: AttackTiming,
 ): { readonly definition: Definition; readonly action: Attack } {
     if (profile.id !== "enemy_1003_ncbow" || profile.applyWay !== "RANGED") {
@@ -84,77 +82,69 @@ export function create(
     assertPositiveNumber(projectile.contactRadius, "enemy arrow contact radius");
     assertNonnegativeSafeInteger(projectile.stopDelayTicks, "enemy arrow stop delay");
 
-    const ground = createGroundDefinition(
-        profile,
-        timing,
-        {
-            type: "RANGE",
+    const ground = createGroundDefinition(profile, timing, {
+        type: "RANGE",
+        geometry: {
+            type: "SHAPES",
             geometry: {
-                type: "SHAPES",
-                geometry: {
-                    shapes: [
-                        {
-                            type: "CIRCLE",
-                            offset: [0, 0],
-                            radius: profile.rangeRadius,
-                        },
-                    ],
-                },
-            },
-        },
-        combat,
-    );
-    const arrow = projectile.definition;
-    const action = createAttack(
-        {
-            ...ground.attack.attack,
-            output: (state, self) => {
-                const source = getUnit(state, self.source.id);
-                const targetId = self.state.target.id;
-                const target = getUnit(state, targetId);
-
-                if (source === undefined || target === undefined) {
-                    return state;
-                }
-
-                const cachedAtk = resolveAttackPower(source.id, battlefieldView(state));
-
-                if (cachedAtk === undefined) {
-                    throw new Error("enemy arrow action requires Offense");
-                }
-
-                const launched = launchProjectile(
-                    state,
-                    arrow,
+                shapes: [
                     {
-                        source: source.id,
-                        traceTarget: target.id,
-                        position: source.position,
-                        destination: target.position,
-                        cachedAtk,
-                        speedPerTick: perSecondToPerTick(projectile.speedPerSecond),
-                        contactRange: {
-                            type: "SHAPES",
-                            geometry: {
-                                shapes: [
-                                    {
-                                        type: "CIRCLE",
-                                        offset: [0, 0],
-                                        radius: projectile.contactRadius,
-                                    },
-                                ],
-                            },
-                        },
-                        stopDelayTicks: projectile.stopDelayTicks,
+                        type: "CIRCLE",
+                        offset: [0, 0],
+                        radius: profile.rangeRadius,
                     },
-                    state.tick,
-                );
-
-                return launched.state;
+                ],
             },
         },
-        combat,
-    );
+    });
+    const arrow = projectile.definition;
+    const action = createAttack({
+        ...ground.attack.attack,
+        output: (state, self) => {
+            const source = getUnit(state, self.source.id);
+            const targetId = self.state.target.id;
+            const target = getUnit(state, targetId);
+
+            if (source === undefined || target === undefined) {
+                return state;
+            }
+
+            const cachedAtk = resolveAttackPower(source.id, battlefieldView(state));
+
+            if (cachedAtk === undefined) {
+                throw new Error("enemy arrow action requires Offense");
+            }
+
+            const launched = launchProjectile(
+                state,
+                arrow,
+                {
+                    source: source.id,
+                    traceTarget: target.id,
+                    position: source.position,
+                    destination: target.position,
+                    cachedAtk,
+                    speedPerTick: perSecondToPerTick(projectile.speedPerSecond),
+                    contactRange: {
+                        type: "SHAPES",
+                        geometry: {
+                            shapes: [
+                                {
+                                    type: "CIRCLE",
+                                    offset: [0, 0],
+                                    radius: projectile.contactRadius,
+                                },
+                            ],
+                        },
+                    },
+                    stopDelayTicks: projectile.stopDelayTicks,
+                },
+                state.tick,
+            );
+
+            return launched.state;
+        },
+    });
     const definition: Definition = {
         ...ground,
         profile,

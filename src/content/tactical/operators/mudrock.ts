@@ -1,3 +1,5 @@
+import type { Definition as ElementalDefinition } from "../../../core/tactical/unit/capability/elemental/capability.js";
+import { createArknightsElementalDefinition } from "../../../data/arknights/elemental.js";
 import { Definitions } from "../../../core/tactical/unit/action/definitions.js";
 import { clearCooldown, get as getAction } from "../../../core/tactical/unit/action/operations.js";
 import { ref as actionRef } from "../../../core/tactical/unit/action/action.js";
@@ -20,7 +22,6 @@ import {
     updateUnit,
     type State as BattleState,
 } from "../../../core/tactical/battle/state.js";
-import type { CombatResources } from "../../../core/tactical/battle/resources.js";
 import type { CallContext } from "../../../core/tactical/battle/execution/call.js";
 import { modify } from "../../../core/tactical/unit/capability/skill/sp.js";
 import type { Direction } from "../../../core/tactical/geometry/direction.js";
@@ -55,6 +56,7 @@ import { get, install, replaceEffect } from "../../../core/tactical/unit/effect/
 import { compileTargeting } from "../../../core/tactical/unit/targeting/compile.js";
 
 export interface Definition extends OperatorDefinition {
+    readonly elemental: ElementalDefinition;
     readonly deployable: DeployableDefinition;
     readonly offense: OffenseDefinition;
     readonly skill: SkillDefinition;
@@ -318,7 +320,6 @@ function attackDefinition(
 
 export function create(
     profile: Profile,
-    combat: CombatResources,
     options: { readonly direction?: Direction; readonly recoveryTicks?: number } = {},
 ): { readonly definition: Definition; readonly action: Attack<SkillAttackState> } {
     if (
@@ -344,85 +345,79 @@ export function create(
 
     const shield = shieldEffect(profile);
     const activeConfiguration = attackDefinition(profile, direction, true, recoveryTicks);
-    const normalAttack = createAttack(
-        attackDefinition(profile, direction, false, recoveryTicks),
-        combat,
-    );
+    const normalAttack = createAttack(attackDefinition(profile, direction, false, recoveryTicks));
     const targeting = compileTargeting(activeConfiguration.targetGroups[0].targeting, ["DAMAGE"]);
     const attackScale = value(profile.skill.blackboard, "atk_scale");
     const healRatio = value(profile.skill.blackboard, "hp_ratio");
     const stunChance = value(profile.skill.blackboard, "buff_prob");
     const stunTicks = secondsToTicks(value(profile.skill.blackboard, "stun"));
-    const action = createSkillAttack(
-        {
-            ...activeConfiguration,
-            markerId: "mudrock/s2",
-            output(state, self) {
-                const source = getUnit(state, self.source.id);
+    const action = createSkillAttack({
+        ...activeConfiguration,
+        markerId: "mudrock/s2",
+        output(state, self) {
+            const source = getUnit(state, self.source.id);
 
-                if (source === undefined || !hasSkill(source) || source.skill.active === null) {
+            if (source === undefined || !hasSkill(source) || source.skill.active === null) {
+                return state;
+            }
+
+            const power = resolveAttackPower(source.id, battlefieldView(state))!;
+            state = healSelf(state, source.id, healRatio, state.tick);
+
+            for (const targetRef of self.state.bindings.primary ?? []) {
+                if (getAction(state, actionRef(self))?.status !== "RUNNING") {
                     return state;
                 }
 
-                const power = resolveAttackPower(source.id, battlefieldView(state))!;
-                state = healSelf(state, source.id, healRatio, state.tick);
+                const battlefield = battlefieldView(state);
+                const currentSource = battlefield.getUnit(source.id);
+                const target = battlefield.getUnit(targetRef.id);
 
-                for (const targetRef of self.state.bindings.primary ?? []) {
-                    if (getAction(state, actionRef(self))?.status !== "RUNNING") {
-                        return state;
-                    }
-
-                    const battlefield = battlefieldView(state);
-                    const currentSource = battlefield.getUnit(source.id);
-                    const target = battlefield.getUnit(targetRef.id);
-
-                    if (currentSource?.lifecycle !== "PRESENT") {
-                        return state;
-                    }
-
-                    if (
-                        target === undefined ||
-                        !targeting.accepts({ source: currentSource, battlefield }, target)
-                    ) {
-                        continue;
-                    }
-
-                    state = resolveDamage(state, {
-                        sourceUnitId: source.id,
-                        targetUnitId: target.id,
-                        damageType: "PHYSICAL",
-                        operands: {
-                            power,
-                            attackScale,
-                            attackAddition: 0,
-                            fixedPenetration: 0,
-                            proportionalPenetration: 0,
-                        },
-                        tick: state.tick,
-                    }).state;
-                    const rng = createRng(state.execution.rngState);
-                    const applyStun = rng.chance(stunChance);
-                    state = { ...state, execution: { ...state.execution, rngState: rng.state() } };
-                    const survivor = getUnit(state, target.id);
-
-                    if (applyStun && survivor !== undefined) {
-                        state = install(state, unitRef(survivor), stun, {
-                            source: source.id,
-                            scopes: [{ type: "TICK", tick: state.tick + stunTicks }],
-                        }).state;
-                    }
+                if (currentSource?.lifecycle !== "PRESENT") {
+                    return state;
                 }
 
-                return state;
-            },
-            onEnd(state, self) {
-                return self.state.data.activation === null
-                    ? state
-                    : finish(state, self.state.data.activation);
-            },
+                if (
+                    target === undefined ||
+                    !targeting.accepts({ source: currentSource, battlefield }, target)
+                ) {
+                    continue;
+                }
+
+                state = resolveDamage(state, {
+                    sourceUnitId: source.id,
+                    targetUnitId: target.id,
+                    damageType: "PHYSICAL",
+                    operands: {
+                        power,
+                        attackScale,
+                        attackAddition: 0,
+                        fixedPenetration: 0,
+                        proportionalPenetration: 0,
+                    },
+                    tick: state.tick,
+                }).state;
+                const rng = createRng(state.execution.rngState);
+                const applyStun = rng.chance(stunChance);
+                state = { ...state, execution: { ...state.execution, rngState: rng.state() } };
+                const survivor = getUnit(state, target.id);
+
+                if (applyStun && survivor !== undefined) {
+                    state = install(state, unitRef(survivor), stun, {
+                        source: source.id,
+                        scopes: [{ type: "TICK", tick: state.tick + stunTicks }],
+                    }).state;
+                }
+            }
+
+            return state;
         },
-        combat,
-    );
+        onEnd(state, self) {
+            return self.state.data.activation === null
+                ? state
+                : finish(state, self.state.data.activation);
+        },
+    });
     const skill: SkillDefinition = {
         ...profile.skill.definition,
         activation: {
@@ -449,6 +444,7 @@ export function create(
         },
     };
     const definition: Definition = {
+        elemental: createArknightsElementalDefinition({ receiver: "CHARACTER" }),
         id: profile.id,
         profile,
         direction,

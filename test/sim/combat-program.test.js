@@ -6,7 +6,7 @@ import * as actions from "../../dist/core/tactical/unit/action/operations.js";
 import { advance } from "../../dist/core/tactical/unit/action/advance.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { getUnit, updateUnit, battlefieldView } from "../../dist/core/tactical/battle/state.js";
-import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
+
 import { setHook } from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
 import { setHook as setHealingHook } from "../../dist/core/tactical/unit/capability/vitality/healing/hook.js";
 import { setAttackContribution } from "../../dist/core/tactical/unit/capability/offense/capability.js";
@@ -31,8 +31,7 @@ const group = (operations) => ({ id: "primary", targeting, operations });
 const start = (state, definition) => actions.start(state, unitRef(getUnit(state, 0)), definition);
 
 test("ordinary attack: domain settlements observe each preceding returned battle state", () => {
-    const resources = new CombatResources(),
-        observed = [];
+    const observed = [];
     const definition = actionDefinition(
         1,
         {
@@ -53,7 +52,6 @@ test("ordinary attack: domain settlements observe each preceding returned battle
                 },
             ],
         },
-        resources,
     );
     const source = unit(0, { action: definition }),
         target = unit(1);
@@ -134,7 +132,7 @@ test("ordinary attack: live source attack reads current contributions and fixed 
 });
 
 test("ordinary attack: lethal retaliation invalidates a later unsampled source attack", () => {
-    const resources = new CombatResources();
+
     const definition = actionDefinition(
         1,
         {
@@ -145,7 +143,6 @@ test("ordinary attack: lethal retaliation invalidates a later unsampled source a
                 ]),
             ],
         },
-        resources,
     );
     const target = unit(1);
     const initial = battle(unit(0, { hp: 10, action: definition }), {
@@ -210,7 +207,7 @@ test("action: a leaving source cannot start and an unrelated definition is a con
 });
 
 test("action: generic non-attack programs do not earn attack SP or consume skill ammunition", () => {
-    const resources = new CombatResources();
+
     const definition = {
         id: "non-attack",
         intervalTicks: 10,

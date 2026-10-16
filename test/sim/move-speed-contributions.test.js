@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
-import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
+
 import { advanceMovement } from "../../dist/core/tactical/battle/steps/movement.js";
 import { changeAlternativeRoutes } from "../../dist/core/tactical/battle/steps/route-control.js";
 import {
@@ -119,7 +119,7 @@ function harness({ speed = 0.25, minimum = 0, definition = route(), maps } = {})
         get execution() {
             return execution;
         },
-        step(resources, tick, controls = {}) {
+        step(tick, controls = {}) {
             const unit = getUnit(work, 0);
             const moved = stepRoutedUnit(unit, {
                 tick,
@@ -167,7 +167,7 @@ const output = {
 function movementEffect(value = modifier.create({ multiplier: -0.5 })) {
     return contributionEffect("movement-buff", { value }, output);
 }
-const install = (work, program, resources, expiresAtTick = null) =>
+const install = (work, program, expiresAtTick = null) =>
     effects.install(work, unitRef(getUnit(work, 0)), program, {
         scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }],
     });
@@ -185,7 +185,7 @@ const changeSpeed = (work, program, next) => {
     return refreshContribution(work, address, program, output);
 };
 
-function speed(work, resources) {
+function speed(work) {
     const unit = getUnit(work, 0);
     return resolveMoveSpeedPerTick(unit.definition.locomotion, unit.locomotion, {
         unit,
@@ -194,16 +194,16 @@ function speed(work, resources) {
 }
 
 test("move speed: normalized minimum, arithmetic and movement permission are separate", () => {
-    const resources = new CombatResources();
+
     const h = harness({ speed: 1 / 30, minimum: 0.1 / 30 });
     const program = movementEffect(modifier.create({ multiplier: -2 }));
-    h.work = install(h.work, program, resources).state;
-    close(speed(h.work, resources), 0.1 / 30);
-    const stopped = h.step(resources, 0, { moveMultiplier: 0 });
+    h.work = install(h.work, program).state;
+    close(speed(h.work), 0.1 / 30);
+    const stopped = h.step(0, { moveMultiplier: 0 });
     assert.deepEqual(stopped.unit.position, [0, 0]);
-    const denied = h.step(resources, 1, { movementAllowed: false });
+    const denied = h.step(1, { movementAllowed: false });
     assert.deepEqual(denied.unit.position, [0, 0]);
-    const moved = h.step(resources, 2, { moveMultiplier: 0.5 });
+    const moved = h.step(2, { moveMultiplier: 0.5 });
     close(moved.unit.position[0], 0.1 / 60);
     h.work = changeSpeed(h.work, program, (state) => ({
         ...state,
@@ -214,11 +214,11 @@ test("move speed: normalized minimum, arithmetic and movement permission are sep
             finalScaler: 2,
         }),
     }));
-    close(speed(h.work, resources), 8 / 30);
+    close(speed(h.work), 8 / 30);
 });
 
 test("move speed: lifecycle updates preserve shared snapshots, route samples and visits", () => {
-    const resources = new CombatResources();
+
     const program = movementEffect();
     const h = harness({
         definition: route({
@@ -235,19 +235,19 @@ test("move speed: lifecycle updates preserve shared snapshots, route samples and
             ],
         }),
     });
-    h.step(resources, 0);
+    h.step(0);
     const before = h.unit;
     const copied = copy(before);
     assert.equal(copied.locomotion, before.locomotion);
     const sample = before.locomotion.mainRoute.route.progress.checkpoint.goal;
     const cursor = before.locomotion.mainRoute.navigation.execution;
     const randomState = h.execution.rngState;
-    h.work = install(h.work, program, resources).state;
+    h.work = install(h.work, program).state;
     assert.equal(h.unit.locomotion.mainRoute, before.locomotion.mainRoute);
     assert.equal(h.unit.locomotion.mainRoute.route.progress.checkpoint.goal, sample);
-    close(speed(h.work, resources), 0.125);
+    close(speed(h.work), 0.125);
     h.work = effects.setEnabled(h.work, address, false);
-    close(speed(h.work, resources), 0.25);
+    close(speed(h.work), 0.25);
     h.work = effects.setEnabled(h.work, address, true);
     const participating = copy(h.unit);
     assert.equal(participating.locomotion, h.unit.locomotion);
@@ -261,41 +261,41 @@ test("move speed: lifecycle updates preserve shared snapshots, route samples and
 });
 
 test("move speed: in-flight acceleration, zero budget and restoration do not reset navigation", () => {
-    const resources = new CombatResources();
+
     const program = movementEffect();
     const h = harness();
-    h.step(resources, 0);
+    h.step(0);
     close(h.unit.position[0], 0.25);
     const request = getNavigationRequest(h.unit.locomotion.mainRoute.navigation);
     const randomState = h.execution.rngState;
-    h.work = install(h.work, program, resources).state;
-    h.step(resources, 1);
+    h.work = install(h.work, program).state;
+    h.step(1);
     close(h.unit.position[0], 0.375);
     h.work = changeSpeed(h.work, program, (state) => ({
         ...state,
         value: modifier.create({ multiplier: 1 }),
     }));
-    h.step(resources, 2);
+    h.step(2);
     close(h.unit.position[0], 0.875);
     h.work = changeSpeed(h.work, program, (state) => ({
         ...state,
         value: modifier.create({ multiplier: -1 }),
     }));
-    h.step(resources, 3);
+    h.step(3);
     close(h.unit.position[0], 0.875);
     h.work = effects.setEnabled(h.work, address, false);
-    h.step(resources, 4);
+    h.step(4);
     close(h.unit.position[0], 1.125);
     assert.equal(getNavigationRequest(h.unit.locomotion.mainRoute.navigation).id, request.id);
     assert.equal(h.execution.rngState, randomState);
 });
 
 test("move speed: main and alternative route share current contributions and one movement budget", () => {
-    const resources = new CombatResources();
+
     const program = movementEffect();
     const h = harness({ speed: 0.5 });
-    h.work = install(h.work, program, resources).state;
-    h.step(resources, 0);
+    h.work = install(h.work, program).state;
+    h.step(0);
     close(h.unit.position[0], 0.25);
     const main = h.unit.locomotion.mainRoute;
     h.reroute(
@@ -307,12 +307,12 @@ test("move speed: main and alternative route share current contributions and one
         },
         1,
     );
-    h.step(resources, 1);
+    h.step(1);
     close(h.unit.position[0], 0.5);
     assert.equal(h.unit.locomotion.mainRoute, main);
     h.reroute({ type: "CLEAR_ALTERNATIVE_ROUTE", unitId: 0 }, 2);
     h.work = effects.setEnabled(h.work, address, false);
-    h.step(resources, 2);
+    h.step(2);
     close(h.unit.position[0], 1);
     assert.equal(
         getNavigationRequest(h.unit.locomotion.mainRoute.navigation).id,
@@ -322,27 +322,27 @@ test("move speed: main and alternative route share current contributions and one
 });
 
 test("move speed: route WAIT consumes ticks independently of a speed contribution", () => {
-    const resources = new CombatResources();
+
     const program = movementEffect();
     const h = harness({
         definition: route({ checkpoints: [{ type: "WAIT_FOR_TICKS", durationTicks: 3 }] }),
     });
-    h.work = install(h.work, program, resources).state;
-    h.step(resources, 0);
+    h.work = install(h.work, program).state;
+    h.step(0);
     assert.equal(h.unit.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 2);
     h.work = effects.setEnabled(h.work, address, false);
-    h.step(resources, 1);
+    h.step(1);
     assert.equal(h.unit.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 1);
     h.work = effects.setEnabled(h.work, address, true);
-    h.step(resources, 2);
+    h.step(2);
     assert.equal(h.unit.locomotion.mainRoute.route.progress.phase, "END");
     assert.deepEqual(h.unit.position, [0, 0]);
-    h.step(resources, 3);
+    h.step(3);
     close(h.unit.position[0], 0.125);
 });
 
 test("move speed: live contributions read phase facts without storing final speed", () => {
-    const resources = new CombatResources();
+
     const program = contributionEffect(
         "live-move",
         {},
@@ -357,7 +357,7 @@ test("move speed: live contributions read phase facts without storing final spee
         },
     );
     const h = harness({ speed: 0.5 });
-    h.work = install(h.work, program, resources).state;
+    h.work = install(h.work, program).state;
     const fullHp = h.unit;
     h.work = updateUnit(h.work, { ...fullHp, vitality: { ...fullHp.vitality, hp: 50 } });
     const initial = createBattleState(h.work.battlefield, h.execution);
@@ -368,7 +368,7 @@ test("move speed: live contributions read phase facts without storing final spee
 });
 
 test("move speed: acceleration still follows the low-cost corridor and cannot cross unreachable barriers", () => {
-    const resources = new CombatResources();
+
     const program = movementEffect(modifier.create({ multiplier: 1 }));
     function maps(rows, expensive, blocked = []) {
         const cells = Array.from({ length: rows * 8 }, (_, index) => ({
@@ -399,7 +399,7 @@ test("move speed: acceleration still follows the low-cost corridor and cannot cr
         maps: navigation,
         definition: route({ startPosition: [1, 0], endPosition: [1, 7] }),
     });
-    h.work = install(h.work, program, resources).state;
+    h.work = install(h.work, program).state;
     const visited = [];
     for (
         let tick = 0;
@@ -410,16 +410,16 @@ test("move speed: acceleration still follows the low-cost corridor and cannot cr
             h.work = effects.setEnabled(h.work, address, false);
         }
         const previous = h.unit.position;
-        h.step(resources, tick);
+        h.step(tick);
         assert.ok(canTraverseNavigationSegment(navigation.WALK, previous, h.unit.position));
         visited.push(h.unit.position);
     }
     assert.equal(h.unit.locomotion.mainRoute.route.progress.phase, "COMPLETED");
     assert.ok(visited.some((position) => Math.abs(position[1] - 1) > 0.5));
     const unreachable = harness({ speed: 10, maps: maps(1, [], [3]) });
-    unreachable.work = install(unreachable.work, program, resources).state;
+    unreachable.work = install(unreachable.work, program).state;
     for (let tick = 0; tick < 3; tick++) {
-        unreachable.step(resources, tick);
+        unreachable.step(tick);
         assert.deepEqual(unreachable.unit.position, [0, 0]);
         assert.equal(
             unreachable.unit.locomotion.mainRoute.navigation.execution.activity.type,
@@ -440,10 +440,10 @@ test("move speed: the native Mire modifier slows actual movement and expiry rest
     assert.equal(raw.node._stackCnt, 1);
     const ratio = skill.blackboard.find((entry) => entry.key === "move_speed").value;
     assert.equal(ratio, -0.05);
-    const resources = new CombatResources();
+
     const program = movementEffect(modifier.create({ multiplier: ratio }));
     const h = harness({ speed: 0.2 });
-    h.work = install(h.work, program, resources, 2).state;
+    h.work = install(h.work, program, 2).state;
     const initial = h.unit;
     const future = {
         definition: initial.definition,
@@ -475,8 +475,8 @@ test("move speed: the native Mire modifier slows actual movement and expiry rest
         ],
         schedule: { type: "TIMELINE", spawns: [future] },
     };
-    const runtime = new BattleRuntime(spec, { combat: resources });
-    const reference = new BattleRuntime(spec, { combat: resources });
+    const runtime = new BattleRuntime(spec);
+    const reference = new BattleRuntime(spec);
     const before = runtime.snapshot();
     const positions = [];
     for (let tick = 0; tick < 4; tick++) {

@@ -10,6 +10,7 @@ import { emptyCall, type CallContext } from "../../battle/execution/call.js";
 import type { Unit, Id } from "../unit.js";
 import type { Ref } from "../../../common/ref.js";
 import * as units from "../query.js";
+import { get as getBurst } from "../capability/elemental/query.js";
 import { get as getActivation } from "../capability/skill/query.js";
 import type { Definition, Context } from "./definition.js";
 import {
@@ -292,6 +293,9 @@ function available(battle: BattleState, lifetime: Lifetime): boolean {
         case "SKILL": {
             return getActivation(battle, lifetime.ref)?.status === "ACTIVE";
         }
+
+        case "ELEMENTAL_BURST":
+            return getBurst(battle, lifetime.ref)?.status === "ACTIVE";
 
         case "EFFECT": {
             const instance = get(battle, lifetime.ref);

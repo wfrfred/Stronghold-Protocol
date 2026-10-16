@@ -1,6 +1,7 @@
 import { updateUnit } from "../../../core/tactical/battle/state.js";
 import type { Definition } from "../../../core/tactical/unit/effect/definition.js";
 import * as vitality from "../../../core/tactical/unit/capability/vitality/capability.js";
+import * as elemental from "../../../core/tactical/unit/capability/elemental/capability.js";
 import * as targetable from "../../../core/tactical/unit/capability/targetable/capability.js";
 
 export const invincible: Definition<object> = {
@@ -19,6 +20,14 @@ export const invincible: Definition<object> = {
                         selector.type !== "DAMAGE" || selector.ignoreTargetFree,
                 },
             ),
+            ...(elemental.hasElemental(unit)
+                ? {
+                      elemental: elemental.setRule(unit.elemental, {
+                          id,
+                          allowsDamage: () => false,
+                      }),
+                  }
+                : {}),
             ...(vitality.hasVitality(unit)
                 ? {
                       vitality: vitality.setDamageReceptionRule(unit.vitality, {
@@ -39,6 +48,9 @@ export const invincible: Definition<object> = {
             ...unit,
             ...(targetable.hasTargetable(unit)
                 ? { targetable: targetable.removeRule(unit.targetable, id) }
+                : {}),
+            ...(elemental.hasElemental(unit)
+                ? { elemental: elemental.removeRule(unit.elemental, id) }
                 : {}),
             ...(vitality.hasVitality(unit)
                 ? { vitality: vitality.removeDamageReceptionRule(unit.vitality, id) }

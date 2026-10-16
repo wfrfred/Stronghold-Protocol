@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
-import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
+
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
 import { definition } from "../helpers/effects.js";
 import { initialize } from "../../dist/core/tactical/unit/initialize.js";
@@ -129,7 +129,7 @@ function fixture({ spawnTick = 100 } = {}) {
         8,
         Array.from({ length: 8 }, () => tile),
     );
-    const resources = new CombatResources();
+
     const initial = definition("initial-state", { quota: { remaining: 3 }, marks: [1, 2] });
     const enemy = createDefinition({
         id: "scheduled-enemy",
@@ -240,13 +240,13 @@ function fixture({ spawnTick = 100 } = {}) {
         routeMoveMultiplier: 1,
         rngState: 17,
     };
-    return { fields, resources, effectDefinition: initial };
+    return { fields, effectDefinition: initial };
 }
 
 test("runtime allocates initial IDs, resolves creation references, and never reuses predefined instance IDs", () => {
-    const { fields, resources, effectDefinition } = fixture();
+    const { fields, effectDefinition } = fixture();
     const input = fields;
-    const runtime = new BattleRuntime(input, { combat: resources });
+    const runtime = new BattleRuntime(input);
     const initial = runtime.snapshot();
 
     assert.equal(initial.units[0].definition, fields.initialUnits[0].definition);
@@ -365,18 +365,18 @@ for (const scenario of [
     },
 ]) {
     test(`runtime rejects an unknown initial ${scenario.name} reference during initialization`, () => {
-        const { fields, resources } = fixture();
+        const { fields } = fixture();
         scenario.change(fields);
-        assert.throws(() => new BattleRuntime(fields, { combat: resources }), scenario.message);
+        assert.throws(() => new BattleRuntime(fields), scenario.message);
     });
 }
 
 test("one battle input replays allocations, seeded spawning and navigation deterministically", () => {
-    const { fields, resources } = fixture({ spawnTick: 0 });
+    const { fields } = fixture({ spawnTick: 0 });
     const input = fields;
     const runtimes = [
-        new BattleRuntime(input, { combat: resources }),
-        new BattleRuntime(input, { combat: resources }),
+        new BattleRuntime(input),
+        new BattleRuntime(input),
     ];
     const commands = [
         { type: "APPEAR_PREDEFINED", definitionId: 102 },

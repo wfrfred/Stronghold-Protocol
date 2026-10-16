@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
-import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
+
 import { createBattleState, getUnit } from "../../dist/core/tactical/battle/state.js";
 import { deploy, retreat } from "../../dist/core/tactical/battle/deployment/operations.js";
 import {
@@ -24,7 +24,7 @@ const tile = createTile({
     playerSideMask: "ALL", terrain: "NORMAL", mechanism: null,
 });
 const map = createBattlefieldMap(1, 8, Array(8).fill(tile));
-const resources = new CombatResources();
+
 const definition = (fields = {}) => ({
     id: "operator", vitality: { maxHp: 100 },
     deployable: createDeployable({ cost: 10, redeployTicks: 3, slots: 1, buildableType: "ALL" }),

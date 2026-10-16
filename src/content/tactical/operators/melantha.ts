@@ -1,9 +1,10 @@
+import type { Definition as ElementalDefinition } from "../../../core/tactical/unit/capability/elemental/capability.js";
+import { createArknightsElementalDefinition } from "../../../data/arknights/elemental.js";
 import { Definitions } from "../../../core/tactical/unit/action/definitions.js";
 import { create as createAttack } from "../actions/attack.js";
 import { ref as unitRef } from "../../../core/tactical/unit/query.js";
 import type { Profile } from "../../../data/arknights/operator.js";
 import { getUnit, updateUnit } from "../../../core/tactical/battle/state.js";
-import type { CombatResources } from "../../../core/tactical/battle/resources.js";
 import type { Definition as OperatorDefinition } from "../../../core/tactical/unit/archetype/operator.js";
 import type { Definition as SkillDefinition } from "../../../core/tactical/unit/capability/skill/capability.js";
 import { ref as activationRef } from "../../../core/tactical/unit/capability/skill/activation.js";
@@ -24,6 +25,7 @@ import type { Direction } from "../../../core/tactical/geometry/direction.js";
 import { secondsToTicks } from "../../../data/arknights/tick.js";
 
 export interface Definition extends OperatorDefinition {
+    readonly elemental: ElementalDefinition;
     readonly deployable: DeployableDefinition;
     readonly offense: Offense["definition"]["offense"];
     readonly skill: SkillDefinition;
@@ -51,11 +53,7 @@ function attackBonus(id: string, amount: number): EffectDefinition<object, Offen
     };
 }
 
-export function create(
-    profile: Profile,
-    combat: CombatResources,
-    direction: Direction = "RIGHT",
-): Definition {
+export function create(profile: Profile, direction: Direction = "RIGHT"): Definition {
     if (profile.id !== "char_208_melan" || profile.skill.definition.id !== "skcom_atk_up[1]") {
         throw new TypeError("Melantha content requires her first skill");
     }
@@ -98,6 +96,7 @@ export function create(
             buildableType: "MELEE",
             advancedBuildableMask: 1,
         }),
+        elemental: createArknightsElementalDefinition({ receiver: "CHARACTER" }),
         vitality: { maxHp: profile.attributes.maxHp },
         offense: { attack: profile.attributes.attack },
         defense: {
@@ -110,47 +109,44 @@ export function create(
         blocker: { capacity: profile.attributes.blockCapacity, geometry: { radius: 0.70709997 } },
         action: {
             definitions: Definitions.empty().add(
-                createAttack(
-                    {
-                        id: "normal-attack",
-                        speed: profile.attributes.attackSpeed,
-                        triggerBindingId: "primary",
-                        intervalTicks: secondsToTicks(profile.attributes.baseAttackTime),
-                        recoveryTicks: 0,
-                        followUps: [],
-                        targetGroups: [
-                            {
-                                id: "primary",
-                                targeting: {
-                                    type: "DAMAGE",
-                                    scope: {
-                                        type: "RANGE",
-                                        geometry: {
-                                            type: "GRID",
-                                            offsets: profile.range,
-                                            direction,
-                                        },
+                createAttack({
+                    id: "normal-attack",
+                    speed: profile.attributes.attackSpeed,
+                    triggerBindingId: "primary",
+                    intervalTicks: secondsToTicks(profile.attributes.baseAttackTime),
+                    recoveryTicks: 0,
+                    followUps: [],
+                    targetGroups: [
+                        {
+                            id: "primary",
+                            targeting: {
+                                type: "DAMAGE",
+                                scope: {
+                                    type: "RANGE",
+                                    geometry: {
+                                        type: "GRID",
+                                        offsets: profile.range,
+                                        direction,
                                     },
-                                    canTargetAir: false,
-                                    includeBlockingRelations: true,
-                                    preferBlockingRelations: true,
-                                    ignoreTargetFree: false,
-                                    ignoreInvisible: false,
-                                    maxTargets: 1,
                                 },
-                                operations: [
-                                    {
-                                        type: "DAMAGE",
-                                        power: profile.attributes.attack,
-                                        powerSource: "SOURCE_ATTACK",
-                                        damageType: "PHYSICAL",
-                                    },
-                                ],
+                                canTargetAir: false,
+                                includeBlockingRelations: true,
+                                preferBlockingRelations: true,
+                                ignoreTargetFree: false,
+                                ignoreInvisible: false,
+                                maxTargets: 1,
                             },
-                        ],
-                    },
-                    combat,
-                ),
+                            operations: [
+                                {
+                                    type: "DAMAGE",
+                                    power: profile.attributes.attack,
+                                    powerSource: "SOURCE_ATTACK",
+                                    damageType: "PHYSICAL",
+                                },
+                            ],
+                        },
+                    ],
+                }),
             ),
         },
         skill,

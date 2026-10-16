@@ -1,5 +1,3 @@
-import { CombatResources } from "../core/tactical/battle/resources.js";
-import type { BattleResources } from "../core/tactical/battle/runtime.js";
 import type { Input } from "../core/tactical/battle/contract.js";
 import type { BattlefieldMap } from "../core/tactical/battlefield/map/map.js";
 import {
@@ -49,7 +47,6 @@ export function createTacticalContentDemo(
     tables: Tables,
     configuration: ConfigurationInput = defaults,
 ) {
-    const combat = new CombatResources();
     const prepare = (id: string, skillId: string, selected: Configuration) =>
         prepareOperator({ id, record: tables.characters[id] }, tables.skills[skillId], selected, {
             ranges: tables.ranges,
@@ -63,18 +60,15 @@ export function createTacticalContentDemo(
         });
     const defender = mudrock.create(
         prepare("char_311_mudrok", "skchr_mudrok_2", configuration.mudrock),
-        combat,
     );
     const guard = melantha.create(
         prepare("char_208_melan", "skcom_atk_up[1]", configuration.melantha),
-        combat,
     );
     const profiles = tables.enemies.map((raw) =>
         prepareEnemy(raw, { level: configuration.enemyLevel }),
     );
     const hound = createHound(
         profiles.find((profile) => profile.id === "enemy_1000_gopro")!,
-        combat,
         {
             windupTicks: 4,
             recoveryTicks: 4,
@@ -83,7 +77,6 @@ export function createTacticalContentDemo(
     );
     const crossbowman = createCrossbowman(
         profiles.find((profile) => profile.id === "enemy_1003_ncbow")!,
-        combat,
         {
             windupTicks: 9,
             recoveryTicks: 6,
@@ -96,7 +89,6 @@ export function createTacticalContentDemo(
             },
         },
     );
-    const resources: BattleResources = { combat };
     const firstLane = createRouteDefinition({
         ...route,
         allowDiagonalMove: false,
@@ -184,5 +176,5 @@ export function createTacticalContentDemo(
         },
     };
 
-    return { input, resources, unitMetadata: (unit: Unit) => metadata[unit.definition.id] };
+    return { input, unitMetadata: (unit: Unit) => metadata[unit.definition.id] };
 }

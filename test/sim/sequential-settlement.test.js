@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { battle, unit } from "../helpers/action-fixture.js";
 import { getUnit, advanceBattlefield } from "../../dist/core/tactical/battle/state.js";
 import { removeUnitWithEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
-import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
+
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
 import * as actions from "../../dist/core/tactical/unit/action/operations.js";
 import { advance as advanceAction } from "../../dist/core/tactical/unit/action/advance.js";
@@ -14,7 +14,7 @@ import { instantiateUnitPlacement } from "../../dist/core/tactical/battle/creati
 
 for (const nested of ["cancel", "advance", "advance complete", "advance waiting"]) {
     test(`sequential departure: a nested ${nested} cannot produce a second action outcome`, () => {
-        const resources = new CombatResources();
+
         let executions = 0;
         let armed = false;
         const first = {
@@ -81,7 +81,7 @@ for (const nested of ["cancel", "advance", "advance complete", "advance waiting"
 }
 
 test("sequential predefined commands allocate after all earlier callback results", () => {
-    const resources = new CombatResources();
+
     let state = battle(unit(0));
     state = { ...state, execution: { ...state.execution, nextUnitId: 1 } };
     state = install(state, unitRef(getUnit(state, 0)), {

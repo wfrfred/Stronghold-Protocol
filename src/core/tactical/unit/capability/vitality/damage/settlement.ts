@@ -1,6 +1,8 @@
 import { emptyCall, type CallContext } from "../../../../battle/execution/call.js";
 import type { Parameters } from "../../defense/capability.js";
 import { hasElemental } from "../../elemental/capability.js";
+import { resolveDamageResistance } from "../../elemental/query.js";
+import { ref as unitRef } from "../../../query.js";
 import { hasVitality } from "../capability.js";
 import type { Id } from "../../../unit.js";
 import { receptionCancellation } from "./reception.js";
@@ -123,7 +125,7 @@ export function resolveDamage(
         formulaPower(operands),
         request.damageType,
         effectiveDefense,
-        hasElemental(current) ? current.definition.elemental.damageResistance : 0,
+        hasElemental(current) ? (resolveDamageResistance(state, unitRef(current)) ?? 0) : 0,
     );
 
     assertFiniteNumber(formulaDamage, "formula damage");

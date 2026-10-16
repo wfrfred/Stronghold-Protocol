@@ -26,7 +26,7 @@ import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/off
 import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import { resolveHealing } from "../../dist/core/tactical/unit/capability/vitality/healing/settlement.js";
-import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
+
 import {
     compose,
     multiplyAttackScale,
@@ -91,7 +91,7 @@ test("damage pipeline: numeric contributions retain four distinct positions and 
 });
 
 test("damage pipeline: dynamic low HP attack reads current state and stable prior snapshots", () => {
-    const resources = new CombatResources();
+
     const lowHp = contributionEffect(
         "low-hp",
         {},
@@ -448,7 +448,7 @@ test("damage pipeline: invincibility preserves shield resources and still notifi
 });
 
 test("damage pipeline: nested damage and healing observe consumption and latest HP", () => {
-    const resources = new CombatResources();
+
     const shield = barrier("source-shield", 30);
     const once = damageEffect("once", { charges: 1 }, [
         {

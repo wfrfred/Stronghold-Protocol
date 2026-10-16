@@ -15,7 +15,7 @@ import { get as getEffect } from "../../dist/core/tactical/unit/effect/operation
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
-import { CombatResources } from "../../dist/core/tactical/battle/resources.js";
+
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
 import { createDefinition } from "../../dist/core/tactical/unit/archetype/operator.js";
 import { createDefinition as createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
@@ -99,7 +99,7 @@ function effect(snapshot, unitId, ref) {
 }
 
 function scenario({ failure = null, cancelled = false } = {}) {
-    const resources = new CombatResources();
+
     const fault = { enabled: failure !== null };
     const launches = [];
     const scopes = [];
@@ -462,14 +462,9 @@ function scenario({ failure = null, cancelled = false } = {}) {
                 ],
             },
         },
-        {
-            combat: resources,
-
-        },
     );
     return {
         runtime,
-        resources,
         fault,
         launches,
         attempts,

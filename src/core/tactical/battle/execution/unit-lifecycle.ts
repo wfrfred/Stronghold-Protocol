@@ -5,6 +5,9 @@ import type { BattlefieldRemovalReason } from "../../battlefield/contract.js";
 import { cancel, enter } from "../../unit/capability/skill/operations.js";
 import { ref as activationRef } from "../../unit/capability/skill/activation.js";
 import { hasSkill } from "../../unit/capability/skill/capability.js";
+import { cancel as cancelBurst } from "../../unit/capability/elemental/operations.js";
+import { ref as burstRef } from "../../unit/capability/elemental/burst.js";
+import { hasElemental } from "../../unit/capability/elemental/capability.js";
 import { cancelForUnit } from "../../unit/action/operations.js";
 import {
     getMechanism,
@@ -77,6 +80,16 @@ export function removeUnitWithEffects(
     }
 
     state = cancelForUnit(state, units.ref(unit), "SOURCE_ABSENT", reason);
+    const elementalHost = getUnit(state, unitId);
+
+    if (
+        elementalHost !== undefined &&
+        hasElemental(elementalHost) &&
+        elementalHost.elemental.burst !== null
+    ) {
+        state = cancelBurst(state, burstRef(elementalHost.elemental.burst), reason);
+    }
+
     state = closeLifetime(state, lifetime, reason, call);
 
     state = removeUnit(state, unitId, reason);

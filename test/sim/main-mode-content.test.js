@@ -11,7 +11,7 @@ const json = value => JSON.parse(JSON.stringify(value));
 const level = parseLevelDefinition(JSON.parse(readFileSync(new URL('../fixtures/arknights/level_act1autochess_m01.json', import.meta.url))), { consumeTileBlackboard: (_context, entry) => ['isValidHand', 'previewNotAlloed'].includes(entry.key) });
 const create = (tables, configuration) => {
   const prepared = createTacticalContentDemo(level.map, level.routes[0], tables, configuration);
-  return { ...prepared, runtime: new BattleRuntime(prepared.input, prepared.resources) };
+  return { ...prepared, runtime: new BattleRuntime(prepared.input) };
 };
 
 test('main-mode content runs deterministic shield, skill, blocking and projectile settlement end to end', () => {

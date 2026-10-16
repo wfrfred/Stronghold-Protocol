@@ -2,7 +2,7 @@ import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { battle, unit, actionDefinition } from '../helpers/action-fixture.js';
-import { CombatResources } from '../../dist/core/tactical/battle/resources.js';
+
 import { createDefinition as createProjectileDefinition } from '../../dist/core/tactical/battlefield/projectile/definition.js';
 import { all, ref, launchProjectile, getProjectile, replaceProjectile, resolveProjectileAttackPower } from '../../dist/core/tactical/battlefield/projectile/operations.js';
 import { advanceProjectiles, stopProjectile } from '../../dist/core/tactical/battlefield/projectile/settlement.js';
@@ -26,7 +26,7 @@ const launchInput = {
   speedPerTick: 1, contactRange, stopDelayTicks: 0,
 };
 
-function program(resources, { id = 'shell', cachedOnly = false, acceptsContact, contact, stop } = {}) {
+function program({ id = 'shell', cachedOnly = false, acceptsContact, contact, stop } = {}) {
   return createProjectileDefinition({
     id, initialize: () => ({ contacts: 0 }),
     acceptsContact: acceptsContact ?? ((_context, target) => target.allegiance?.side === 'ENEMY'),
@@ -38,7 +38,7 @@ function program(resources, { id = 'shell', cachedOnly = false, acceptsContact, 
   });
 }
 
-function launch(state, resources, definition, overrides = {}, tick = 0) {
+function launch(state, definition, overrides = {}, tick = 0) {
   return launchProjectile(state, definition, { ...launchInput, ...overrides }, tick);
 }
 
@@ -46,13 +46,13 @@ const instances = state => all(state).map(reference => getProjectile(state, refe
 const findProjectile = (state, id) => instances(state).find(projectile => projectile.id === id);
 const damageEvents = state => state.events.filter(event => event.type === 'DAMAGE');
 
-function runtime(initialUnits, resources, maxTicks = 20) {
+function runtime(initialUnits, maxTicks = 20) {
   return new BattleRuntime({ ...createLegacyCombatSpec({ rows: 1, columns: 8, operators: [], enemies: [], maxTicks, seed: 17 }),
     initialUnits: initialUnits.map(value => ({ definition: value.definition, position: value.position })),
     schedule: { type: 'TIMELINE', spawns: [{ definition: createDefinition({ id: 'future', vitality: { maxHp: 1 }, locomotion: { moveSpeedPerTick: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } } }),
       route: createRouteDefinition({ pathMotionMode: 'WALK', startPosition: [0, 7], endPosition: [0, 1], spawnOffset: [0, 0], spawnRandomRange: [0, 0], checkpoints: [], allowDiagonalMove: false, visitEveryTileCenter: false, visitEveryNodeCenter: false, visitEveryCheckPoint: true }),
       tick: 100, timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 }, alwaysCheckCurrentPoint: true, notCountInTotal: false }] },
-  }, { combat: resources });
+  });
 }
 
 function actionLaunch(definition, overrides = {}, onLaunch = () => {}) {
@@ -64,13 +64,13 @@ function actionLaunch(definition, overrides = {}, onLaunch = () => {}) {
 }
 
 test('projectile runtime: actions launch independent state and do not move on the release tick', () => {
-  const resources = new CombatResources();
-  const shell = program(resources);
+
+  const shell = program();
   const observed = [];
   const release = actionLaunch(shell, { traceTarget: 2, destination: [2, 0], stopDelayTicks: 1 }, id => observed.push(id));
-  const instant = unit(0, { action: actionDefinition(0, { output: release }, resources) });
-  const deferred = unit(1, { side: 'ALLY', action: actionDefinition(0, { windupTicks: 1, markerId: 'shell', output: release }, resources) });
-  const rt = runtime([instant, deferred, unit(2)], resources);
+  const instant = unit(0, { action: actionDefinition(0, { output: release }) });
+  const deferred = unit(1, { side: 'ALLY', action: actionDefinition(0, { windupTicks: 1, markerId: 'shell', output: release }) });
+  const rt = runtime([instant, deferred, unit(2)]);
   const first = rt.step();
   assert.deepEqual(observed, [0]);
   assert.deepEqual(rt.snapshot().projectiles.instances.map(value => value.position), [[0, 0]]);
@@ -82,10 +82,10 @@ test('projectile runtime: actions launch independent state and do not move on th
 });
 
 test('projectile runtime: missing trace targets preserve the last destination and query current receivers', () => {
-  const resources = new CombatResources();
-  const shell = program(resources);
+
+  const shell = program();
   const initial = battle(unit(0), unit(1), { ...unit(2), position: [1.2, 0] });
-  const launched = launch(initial, resources, shell).state;
+  const launched = launch(initial, shell).state;
   const retreated = removeUnit(launched, 1, 'RETREAT');
   const reached = advanceProjectiles(retreated, 1);
   assert.deepEqual(damageEvents(reached).map(event => event.targetUnitId), [2]);
@@ -94,9 +94,9 @@ test('projectile runtime: missing trace targets preserve the last destination an
 });
 
 test('projectile runtime: frozen candidate identities read latest eligibility and ignore newly registered units', () => {
-  const resources = new CombatResources();
+
   const observed = [];
-  const shell = program(resources, {
+  const shell = program({
     acceptsContact: (_context, target) => target.allegiance?.side === 'ENEMY' && (target.id === 1 || target.vitality.hp < 100),
     contact: (state, context) => {
       observed.push(context.targetUnitId);
@@ -107,7 +107,7 @@ test('projectile runtime: frozen candidate identities read latest eligibility an
       return resolveDamage(state, { sourceUnitId: 0, targetUnitId: context.targetUnitId, tick: 1, damageType: 'TRUE', operands: createDamageOperands(10) }, context.call).state;
     },
   });
-  const initial = launch(battle(unit(0), unit(1), { ...unit(2), position: [1.2, 0] }), resources, shell).state;
+  const initial = launch(battle(unit(0), unit(1), { ...unit(2), position: [1.2, 0] }), shell).state;
   const reached = advanceProjectiles(initial, 1);
   assert.deepEqual(observed, [1, 2]);
   assert.equal(getUnit(reached, 2).vitality.hp, 89);
@@ -117,11 +117,11 @@ test('projectile runtime: frozen candidate identities read latest eligibility an
 
 test('projectile runtime: live source attack, cached-only attack and missing-source fallback remain distinct', () => {
   for (const missing of [false, true]) {
-    const resources = new CombatResources();
-    const live = program(resources, { id: 'live' });
-    const cached = program(resources, { id: 'cached', cachedOnly: true });
-    let state = launch(battle(unit(0), unit(1)), resources, live).state;
-    state = launch(state, resources, cached).state;
+
+    const live = program({ id: 'live' });
+    const cached = program({ id: 'cached', cachedOnly: true });
+    let state = launch(battle(unit(0), unit(1)), live).state;
+    state = launch(state, cached).state;
     state = updateUnit(state, ({ ...getUnit(state, 0), offense: setAttackContribution(getUnit(state, 0).offense, { id: 'bonus', value: [modifier({ addition: 10 })] }) }));
     if (missing) state = removeUnit(state, 0, 'RETREAT');
     const arrived = advanceProjectiles(state, 1);
@@ -130,10 +130,10 @@ test('projectile runtime: live source attack, cached-only attack and missing-sou
 });
 
 test('projectile runtime: terminal battle freezes outstanding projectiles without stop callbacks', () => {
-  const resources = new CombatResources();
+
   let stops = 0;
-  const shell = program(resources, { stop: state => { stops++; return state; } });
-  const rt = runtime([unit(0, { action: actionDefinition(0, { output: actionLaunch(shell, { destination: [100, 0], traceTarget: null }) }, resources) }), unit(1)], resources, 1);
+  const shell = program({ stop: state => { stops++; return state; } });
+  const rt = runtime([unit(0, { action: actionDefinition(0, { output: actionLaunch(shell, { destination: [100, 0], traceTarget: null }) }) }), unit(1)], 1);
   rt.step();
   const snapshot = rt.snapshot();
   assert.equal(snapshot.projectiles.instances.length, 1);
@@ -143,9 +143,9 @@ test('projectile runtime: terminal battle freezes outstanding projectiles withou
 });
 
 test('projectile runtime: hit history is published before contact and synchronous stop fallback observes it', () => {
-  const resources = new CombatResources();
+
   const observed = [];
-  const shell = program(resources, {
+  const shell = program({
     contact: (state, context) => {
       assert.deepEqual(getProjectile(state, ref(context.projectile)).hitUnitIds, [1]);
       state = stopProjectile(state, ref(context.projectile), context.tick, 'EXPLICIT', context.call);
@@ -154,7 +154,7 @@ test('projectile runtime: hit history is published before contact and synchronou
     },
     stop: (state, context) => { observed.push(['stop', context.projectile.hitUnitIds]); return state; },
   });
-  const initial = launch(battle(unit(0), unit(1)), resources, shell).state;
+  const initial = launch(battle(unit(0), unit(1)), shell).state;
   const arrived = advanceProjectiles(initial, 1);
   assert.deepEqual(observed, [['stop', [1]], ['successor', undefined]]);
   assert.deepEqual(instances(arrived), []);
@@ -162,9 +162,9 @@ test('projectile runtime: hit history is published before contact and synchronou
 });
 
 test('projectile runtime: immutable copies replay arrival and stop without mutating samples', () => {
-  const resources = new CombatResources();
-  const shell = program(resources);
-  const initial = launch(battle(unit(0), unit(1)), resources, shell, { stopDelayTicks: 1 }).state;
+
+  const shell = program();
+  const initial = launch(battle(unit(0), unit(1)), shell, { stopDelayTicks: 1 }).state;
   const arrived = advanceProjectiles(initial, 1);
   assert.deepEqual(advanceProjectiles(initial, 1), arrived);
   assert.equal(findProjectile(initial, 0).position[0], 0);
@@ -176,12 +176,12 @@ test('projectile runtime: immutable copies replay arrival and stop without mutat
 });
 
 test('projectile runtime: a stop callback exception exposes no partial result or input mutation', () => {
-  const resources = new CombatResources();
-  const shell = program(resources, { stop: (state, context) => {
+
+  const shell = program({ stop: (state, context) => {
     state = resolveDamage(state, { sourceUnitId: 0, targetUnitId: 1, tick: context.tick, damageType: 'TRUE', operands: createDamageOperands(10) }, context.call).state;
     throw new Error('stop failed');
   } });
-  const initial = launch(battle(unit(0), unit(1)), resources, shell).state;
+  const initial = launch(battle(unit(0), unit(1)), shell).state;
   assert.throws(() => advanceProjectiles(initial, 1), /stop failed/);
   assert.equal(getUnit(initial, 1).vitality.hp, 100);
   assert.equal(findProjectile(initial, 0).progress.type, 'FLYING');
@@ -189,8 +189,8 @@ test('projectile runtime: a stop callback exception exposes no partial result or
 });
 
 test('projectile runtime: ordered launches share immutable payloads and preserve input ID allocation', () => {
-  const resources = new CombatResources();
-  const shell = program(resources);
+
+  const shell = program();
   const input = { ...launchInput, source: null, traceTarget: null, destination: [100, 0], initialState: { contacts: 0, history: [1] } };
   const initial = battle();
   let state = initial;
@@ -211,31 +211,31 @@ test('projectile runtime: ordered launches share immutable payloads and preserve
 });
 
 test('projectile runtime: a retained pure launch function operates on explicit immutable branches', () => {
-  const resources = new CombatResources();
-  const shell = program(resources);
+
+  const shell = program();
   const initial = battle();
-  const first = launch(initial, resources, shell);
-  const sibling = launch(initial, resources, shell);
+  const first = launch(initial, shell);
+  const sibling = launch(initial, shell);
   assert.equal(first.value.id, 0);
   assert.deepEqual(sibling, first);
   assert.deepEqual(instances(initial), []);
-  const second = launch(first.state, resources, shell);
+  const second = launch(first.state, shell);
   assert.equal(second.value.id, 1);
   assert.equal(first.state.execution.nextProjectileId, 1);
 });
 
 test('projectile runtime: stop callbacks see peer progress while prior input snapshots remain stable', () => {
-  const resources = new CombatResources();
+
   const observed = [];
-  const shell = program(resources, { stop: (state, context) => {
+  const shell = program({ stop: (state, context) => {
     observed.push({ id: context.projectile.id, first: findProjectile(state, 0)?.progress.type, second: findProjectile(state, 1)?.progress.type });
     const current = getProjectile(state, ref(context.projectile));
     state = replaceProjectile(state, { ...current, state: { contacts: current.state.contacts + 1 } });
     assert.equal(getProjectile(state, ref(context.projectile)).state.contacts, 1);
     return state;
   } });
-  let initial = launch(battle(), resources, shell, { source: null, traceTarget: null }).state;
-  initial = launch(initial, resources, shell, { source: null, traceTarget: null, destination: [100, 0] }).state;
+  let initial = launch(battle(), shell, { source: null, traceTarget: null }).state;
+  initial = launch(initial, shell, { source: null, traceTarget: null, destination: [100, 0] }).state;
   const progressed = advanceProjectiles(initial, 1);
   assert.deepEqual(observed, [{ id: 0, first: 'STOPPED', second: 'FLYING' }]);
   assert.deepEqual(instances(progressed).map(value => [value.id, value.position]), [[1, [1, 0]]]);
@@ -247,11 +247,11 @@ test('projectile runtime: stop callbacks see peer progress while prior input sna
 });
 
 test('projectile runtime: ordered command stops complete before survivors advance', () => {
-  const resources = new CombatResources();
+
   const observed = [];
-  const shell = program(resources, { stop: (state, context) => { observed.push(context.projectile.id); return state; } });
+  const shell = program({ stop: (state, context) => { observed.push(context.projectile.id); return state; } });
   let state = battle();
-  for (let index = 0; index < 4; index++) state = launch(state, resources, shell, { source: null, traceTarget: null, destination: [100, 0] }).state;
+  for (let index = 0; index < 4; index++) state = launch(state, shell, { source: null, traceTarget: null, destination: [100, 0] }).state;
   const initial = state;
   state = advanceBattleProjectiles(state, 1, [2, 2, 999, 0].map(projectileId => ({ type: 'STOP_PROJECTILE', projectileId })));
   assert.deepEqual(observed, [2, 0]);
@@ -343,9 +343,9 @@ test('projectile definitions: heterogeneous callbacks retain pairing and equal n
 
 test('projectile runtime: command stop callbacks see same-tick launches and a failing Tick is not published', () => {
   const scenario = failing => {
-    const resources = new CombatResources();
+
     const observed = [];
-    const shell = program(resources, { stop: (state, context) => {
+    const shell = program({ stop: (state, context) => {
       observed.push([context.projectile.id, getUnit(state, 1).vitality.hp, findProjectile(state, 3)?.progress.type]);
       state = resolveDamage(state, { sourceUnitId: 0, targetUnitId: 1, tick: context.tick, damageType: 'TRUE', operands: createDamageOperands(1) }, context.call).state;
       if (failing && context.projectile.id === 1) throw new Error('second stop failed');
@@ -361,7 +361,7 @@ test('projectile runtime: command stop callbacks see same-tick launches and a fa
         return { state, value: self.state.emitted };
       },
     };
-    const rt = runtime([unit(0, { action: definition }), unit(1)], resources);
+    const rt = runtime([unit(0, { action: definition }), unit(1)]);
     rt.step();
     return { rt, observed };
   };
@@ -376,7 +376,6 @@ test('projectile runtime: command stop callbacks see same-tick launches and a fa
   assert.equal(control.rt.snapshot().units.find(value => value.id === 1).vitality.hp, 97);
   assert.deepEqual(control.rt.snapshot().projectiles.instances.map(value => value.id), [2]);
 });
-
 
 test('projectile callbacks: nested launches and peer stops survive the outer stop', () => {
   const observations = [];
