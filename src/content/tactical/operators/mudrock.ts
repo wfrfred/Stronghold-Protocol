@@ -27,6 +27,7 @@ import {
 import type { CallContext } from "../../../core/tactical/battle/execution/call.js";
 import { modify } from "../../../core/tactical/unit/capability/skill/sp.js";
 import type { Direction } from "../../../core/tactical/geometry/direction.js";
+import { createBlockGeometry } from "../../../core/tactical/geometry/shape.js";
 import type { Unit, Id } from "../../../core/tactical/unit/unit.js";
 import type { Definition as OperatorDefinition } from "../../../core/tactical/unit/archetype/operator.js";
 import { hasAction } from "../../../core/tactical/unit/capability/action/capability.js";
@@ -470,7 +471,10 @@ export function create(
         allegiance: { side: "ALLY" },
         spatial: { layer: "GROUND" },
         hit: { geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.25 }] } },
-        blocker: { capacity: profile.attributes.blockCapacity, geometry: { radius: 0.70709997 } },
+        blocker: {
+            capacity: profile.attributes.blockCapacity,
+            geometry: createBlockGeometry({ radius: 0.70709997 }),
+        },
         action: {
             definitions: Definitions.empty().add(normalAttack).add(action),
             select: (battle, self) => ({

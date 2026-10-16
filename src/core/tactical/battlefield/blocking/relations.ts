@@ -97,7 +97,7 @@ function reconcileBlockingRelations(
             continue;
         }
 
-        const capacity = (used.get(blocker.id) ?? 0) + blockedFacts.blockable.weight;
+        const capacity = (used.get(blocker.id) ?? 0) + blockedFacts.blockable.volume;
 
         if (capacity > blockerFacts.blocker.capacity) {
             continue;
@@ -126,7 +126,7 @@ export function blockingUsedCapacity(
         const blocked = readBlockableFacts(units.get(relation.blockedUnitId)!);
 
         if (blocked !== undefined) {
-            used += blocked.weight;
+            used += blocked.volume;
         }
     }
 
@@ -149,7 +149,7 @@ export function updateBlockingRelations(
         used.set(
             relation.blockerUnitId,
             (used.get(relation.blockerUnitId) ?? 0) +
-                readBlockableFacts(units.get(relation.blockedUnitId)!)!.weight,
+                readBlockableFacts(units.get(relation.blockedUnitId)!)!.volume,
         );
     }
 
@@ -172,7 +172,7 @@ export function updateBlockingRelations(
 
     const candidates = new Map<
         Id,
-        { weight: number; blockers: { blocker: (typeof blockers)[number]; distance: number }[] }
+        { volume: number; blockers: { blocker: (typeof blockers)[number]; distance: number }[] }
     >();
 
     const addCandidate = (blocker: (typeof blockers)[number], unitId: Id): void => {
@@ -186,7 +186,7 @@ export function updateBlockingRelations(
         if (
             blockable === undefined ||
             !hasAllegiance(blocked) ||
-            blockable.weight > blocker.remaining ||
+            blockable.volume > blocker.remaining ||
             !canBlockTarget(blocker.unit, blocked, readBlockingFacts(blocked))
         ) {
             return;
@@ -201,7 +201,7 @@ export function updateBlockingRelations(
         let candidate = candidates.get(unitId);
 
         if (candidate === undefined) {
-            candidate = { weight: blockable.weight, blockers: [] };
+            candidate = { volume: blockable.volume, blockers: [] };
             candidates.set(unitId, candidate);
         }
 
@@ -261,7 +261,7 @@ export function updateBlockingRelations(
                 left.distance - right.distance || left.blocker.unit.id - right.blocker.unit.id,
         );
         const chosen = candidate.blockers.find(
-            ({ blocker }) => blocker.remaining >= candidate.weight,
+            ({ blocker }) => blocker.remaining >= candidate.volume,
         )?.blocker;
 
         if (chosen === undefined) {
@@ -269,7 +269,7 @@ export function updateBlockingRelations(
         }
 
         additions.push({ blockerUnitId: chosen.unit.id, blockedUnitId: unitId });
-        chosen.remaining -= candidate.weight;
+        chosen.remaining -= candidate.volume;
 
         if (chosen.remaining === 0 && --available === 0) {
             break;

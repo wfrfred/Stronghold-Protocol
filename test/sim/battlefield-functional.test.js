@@ -44,7 +44,7 @@ test('pure transition maintains blocking before returning and preserves the prev
     allegiance: { side: 'ALLY' }, blocker: { capacity: 1, geometry: { radius: 1 } },
   });
   const enemy = unit(20, [1.25, 0], {
-    allegiance: { side: 'ENEMY' }, blockable: { weight: 1 }, spatial: { layer: 'GROUND' },
+    allegiance: { side: 'ENEMY' }, blockable: { volume: 1 }, spatial: { layer: 'GROUND' },
   });
   const before = transition(initial(), [register(blocker(10, 1)), register(blocker(11, 2)), register(enemy)]).state;
   const beforeView = view(before);

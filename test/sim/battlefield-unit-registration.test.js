@@ -92,7 +92,7 @@ const definition = () => ({
     spatial: { layer: "GROUND" },
     hit: { geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.25 }] } },
     blocker: { capacity: 1, geometry: { radius: 0.5 } },
-    blockable: { weight: 1 },
+    blockable: { volume: 1 },
     locomotion: {
         moveSpeedPerTick: 0.1,
         steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 },

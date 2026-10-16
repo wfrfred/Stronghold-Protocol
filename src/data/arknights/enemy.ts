@@ -285,7 +285,7 @@ export interface Profile {
     readonly moveSpeedPerSecond: number;
     readonly rangeRadius: number;
     readonly mass: number;
-    readonly blockWeight: number;
+    readonly blockVolume: number;
     readonly stunImmune: boolean;
     readonly tags: readonly string[];
     readonly applyWay: "MELEE" | "RANGED";
@@ -451,10 +451,10 @@ export function prepare(value: unknown, configuration: Configuration): Profile {
     assertPositiveNumber(maxHp, "enemy maxHp");
     assertPositiveNumber(baseAttackTime, "enemy baseAttackTime");
     const mass = numeric(attributes, "massLevel", 0);
-    const blockWeight = numeric(attributes, "blockCnt", 1);
+    const blockVolume = numeric(attributes, "blockCnt", 1);
     const lifePointReduce = numeric(fields, "lifePointReduce", 1);
     assertNonnegativeSafeInteger(mass, "enemy mass");
-    assertNonnegativeSafeInteger(blockWeight, "enemy block weight");
+    assertNonnegativeSafeInteger(blockVolume, "enemy block volume");
     assertNonnegativeSafeInteger(lifePointReduce, "enemy life point reduction");
 
     return {
@@ -471,7 +471,7 @@ export function prepare(value: unknown, configuration: Configuration): Profile {
         moveSpeedPerSecond: numeric(attributes, "moveSpeed"),
         rangeRadius: numeric(fields, "rangeRadius", 0),
         mass,
-        blockWeight,
+        blockVolume,
         stunImmune: flag(attributes, "stunImmune"),
         tags,
         applyWay: fields.applyWay,

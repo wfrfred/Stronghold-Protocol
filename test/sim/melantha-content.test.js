@@ -91,7 +91,7 @@ test('the ordinary ground block radius catches a target 0.6 units from Melantha'
 
   const definition = create(profile());
   const receiver = initialize({ id: 1, position: [0.6, 0], definition: {
-    id: 'nearby-enemy', vitality: { maxHp: 1000 }, blockable: { weight: 1 },
+    id: 'nearby-enemy', vitality: { maxHp: 1000 }, blockable: { volume: 1 },
     allegiance: { side: 'ENEMY' }, spatial: { layer: 'GROUND' },
     hit: { geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: .1 }] } },
   } });

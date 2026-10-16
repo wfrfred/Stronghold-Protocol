@@ -138,7 +138,7 @@ test("shield recharge keeps its periodic clock while capped and zero layers rema
 });
 
 test("module X healing and bonus SP use the selected talent and dynamic max HP", () => {
-    const fixture = setup({ potential: 6, module: { id: moduleX, level: 3 } }, [enemy(1, [0.6, 0], { blockable: { weight: 1 } })]);
+    const fixture = setup({ potential: 6, module: { id: moduleX, level: 3 } }, [enemy(1, [0.6, 0], { blockable: { volume: 1 } })]);
     let state = hp(fixture.state, 1000);
     state = save(state, { vitality: setMaxHpContribution(getUnit(state, 0).definition.vitality, getUnit(state, 0).vitality, {
         id: "test/max-hp", value: [modifier({ addition: 1000 })],
@@ -153,7 +153,7 @@ test("module X healing and bonus SP use the selected talent and dynamic max HP",
 
 test("Sarkaz resistance and module blocked-source reduction compose only for their source conditions", () => {
     const fixture = setup({ module: { id: moduleX, level: 1 } }, [
-        enemy(1, [0.6, 0], { blockable: { weight: 1 }, profile: { tags: ["sarkaz"] } }),
+        enemy(1, [0.6, 0], { blockable: { volume: 1 }, profile: { tags: ["sarkaz"] } }),
         enemy(2, [5, 0], { profile: { tags: ["sarkaz"] } }),
         enemy(3, [6, 0]),
     ]);

@@ -360,7 +360,7 @@ function battle(receiver, type, { moving = false, targetStates } = {}) {
     action: { definitions: Definitions.empty().add(casterAttack) } });
   const victim = definition(receiver, { id: 'victim', allegiance: { side: 'ENEMY' },
     action: { definitions: Definitions.empty().add(action(1)) },
-    ...(moving ? { locomotion: { moveSpeedPerTick: 0.001, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } }, blockable: { weight: 1 } } : {}) });
+    ...(moving ? { locomotion: { moveSpeedPerTick: 0.001, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } }, blockable: { volume: 1 } } : {}) });
   const base = createLegacyCombatSpec({ rows: 1, columns: 8, operators: [], enemies: [], maxTicks: 600, seed: 7 });
   const keepOpen = { id: 'future', vitality: { maxHp: 1 }, locomotion: { moveSpeedPerTick: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } } };
   const runtime = new BattleRuntime({ ...base,

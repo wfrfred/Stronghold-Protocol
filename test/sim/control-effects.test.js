@@ -31,7 +31,7 @@ function actor(action = true) {
 }
 
 test("stun composes four capabilities and overlapping instances withdraw only their own rules", () => {
-    const original = battle(actor(), unit(1, { blockable: { weight: 1 } }));
+    const original = battle(actor(), unit(1, { blockable: { volume: 1 } }));
     const first = effects.install(original, unitRef(getUnit(original, 0)), stun, { scopes: [{ type: "TICK", tick: 5 }] });
     const second = effects.install(first.state, unitRef(getUnit(first.state, 0)), stun);
     const host = getUnit(second.state, 0);

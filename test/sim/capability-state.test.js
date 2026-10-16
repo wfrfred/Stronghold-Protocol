@@ -4,6 +4,7 @@ import { test } from "node:test";
 import * as offense from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import * as defense from "../../dist/core/tactical/unit/capability/defense/capability.js";
 import * as blocker from "../../dist/core/tactical/unit/capability/blocking/blocker.js";
+import * as blockable from "../../dist/core/tactical/unit/capability/blocking/blockable.js";
 import * as locomotion from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
 import * as action from "../../dist/core/tactical/unit/capability/action/capability.js";
 import * as vitality from "../../dist/core/tactical/unit/capability/vitality/capability.js";
@@ -35,6 +36,12 @@ const entries = [
         "capacity",
         blocker.setCapacityContribution,
         blocker.removeCapacityContribution,
+    ],
+    [
+        blockable.initialize(fixtureBattle(0), { volume: 1 }).value,
+        "volume",
+        blockable.setVolumeContribution,
+        blockable.removeVolumeContribution,
     ],
     [
         locomotion.initialize(fixtureBattle(0), fixtureDefinition("locomotion")).value,

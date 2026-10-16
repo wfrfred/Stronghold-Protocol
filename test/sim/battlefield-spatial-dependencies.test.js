@@ -131,7 +131,7 @@ function blockingHarness() {
   }, { spatialPresence: { present: true } });
   const blocked = unit(2, [2, 0], {
     vitality: { maxHp: 100 }, allegiance: { side: 'ENEMY' },
-    blockable: { weight: 1 }, spatial: { layer: 'GROUND' },
+    blockable: { volume: 1 }, spatial: { layer: 'GROUND' },
   });
   h.commit(register([blocker, blocked]));
   assert.deepEqual(h.state.blockingRelations, [{ blockerUnitId: 1, blockedUnitId: 2 }]);
@@ -174,7 +174,7 @@ test('blocking acquisition preserves unit ID tie breaks, capacity and retained r
     allegiance: { side: 'ALLY' }, blocker: { capacity: 1, geometry: { radius: 1 } },
   });
   const blocked = id => unit(id, [1, 0], {
-    allegiance: { side: 'ENEMY' }, blockable: { weight: 1 },
+    allegiance: { side: 'ENEMY' }, blockable: { volume: 1 },
   });
   h.commit(register([blocker(10, 0), blocked(3), blocker(5, 2), blocked(2)]));
   const expected = [

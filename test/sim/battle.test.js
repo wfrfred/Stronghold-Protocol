@@ -2301,7 +2301,7 @@ test('core elevated support disables blocking without changing target layer and 
   const definition = deployableDefinition();
   const enemyDefinition = Object.freeze({ id: 'standing_enemy',
     vitality: Object.freeze({ maxHp: 100 }), allegiance: Object.freeze({ side: 'ENEMY' }),
-    spatial: Object.freeze({ layer: 'GROUND' }), blockable: Object.freeze({ weight: 1 }),
+    spatial: Object.freeze({ layer: 'GROUND' }), blockable: Object.freeze({ volume: 1 }),
   });
   const occupancy = { claims: [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }] };
   const recipe = createPredefinedDefinition({ id: 50, alias: 'test_platform', initiallyPresent: true, creation: {

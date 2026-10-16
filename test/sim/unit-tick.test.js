@@ -155,7 +155,7 @@ test("Operator and combat enemy definition factories retain the Unit tick callba
     const onTick = state => state;
     const base = combatUnit(0, { action: true }).definition;
     const operator = createOperator({ ...base, onTick, blocker: { capacity: 1, geometry: { radius: 0.5 } } });
-    const enemy = createCombatDefinition({ ...base, onTick, locomotion, blockable: { weight: 1 } });
+    const enemy = createCombatDefinition({ ...base, onTick, locomotion, blockable: { volume: 1 } });
 
     assert.equal(operator.onTick, onTick);
     assert.equal(enemy.onTick, onTick);

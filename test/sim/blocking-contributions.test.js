@@ -24,12 +24,19 @@ import {
 import { initialize } from "../helpers/unit.js";
 import { copy } from "../../dist/core/tactical/unit/snapshot.js";
 import {
-    createDefinition,
     initialize as initializeBlockerState,
     resolveCapacity,
     setCapacityContribution,
     removeCapacityContribution,
 } from "../../dist/core/tactical/unit/capability/blocking/blocker.js";
+import {
+    canBeBlocked,
+    resolveVolume,
+    setVolumeContribution,
+    removeVolumeContribution,
+    setRule,
+    removeRule,
+} from "../../dist/core/tactical/unit/capability/blocking/blockable.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { resolveMaxHp } from "../../dist/core/tactical/unit/capability/vitality/query.js";
 import * as contribution from "../../dist/core/tactical/unit/contribution/contribution.js";
@@ -64,14 +71,14 @@ const blocker = (capacity = 3) =>
             blocker: { capacity, geometry: { radius: 1 } },
         },
     });
-const enemy = (id, weight = 1) =>
+const enemy = (id, volume = 1) =>
     initialize({
         id,
         position: [0.25, 0],
         definition: {
             id: `blocked-${id}`,
             allegiance: { side: "ENEMY" },
-            blockable: { weight },
+            blockable: { volume },
         },
     });
 const capacityOf = (unit) => resolveCapacity(unit.definition.blocker, unit.blocker);
@@ -101,8 +108,29 @@ const change = (work, effect, next, setting) => {
 };
 const entry = (id, value) => ({ id, value: [value] });
 
+test("blocking initialization accepts plain definitions and validates them through unit initialization", () => {
+    const geometry = { radius: 1 };
+    const definition = { id: "both", blocker: { capacity: 3, geometry }, blockable: { volume: 2 } };
+    const unit = initialize({ id: 0, position: [0, 0], definition });
+    assert.equal(unit.definition, definition);
+    assert.equal(unit.blocker.geometry, geometry);
+    assert.deepEqual(unit.blocker, { capacity: [], geometry, rules: [] });
+    assert.deepEqual(unit.blockable, { volume: [], rules: [] });
+    for (const [capability, invalid] of [
+        ["blocker", { capacity: -1, geometry }],
+        ["blocker", { capacity: 1.5, geometry }],
+        ["blocker", { capacity: 1, geometry: { radius: -1 } }],
+        ["blockable", { volume: 0 }],
+        ["blockable", { volume: 1.5 }],
+    ]) {
+        assert.throws(() => initialize({
+            id: 0, position: [0, 0], definition: { id: "invalid", [capability]: invalid },
+        }), RangeError);
+    }
+});
+
 test("blocking capacity: immutable updates retain sampled contributions and resolve ties to even after clamping", () => {
-    const definition = createDefinition({ capacity: 3, geometry: { radius: 1 } });
+    const definition = { capacity: 3, geometry: { radius: 1 } };
     const state = initializeBlockerState(fixtureBattle(0), definition).value;
     assert.equal(definition.capacity, 3);
     assert.deepEqual(state.capacity, []);
@@ -252,6 +280,82 @@ function battlefield(units) {
     return h;
 }
 
+test("blocking volume: independent Effect contributions release targets and clean up by source", () => {
+    const h = battlefield([blocker(), enemy(1), enemy(2)]);
+    const original = h.state;
+    const setting = {
+        capability: "blockable", set: setVolumeContribution, remove: removeVolumeContribution,
+        value: () => [modifier.create({ addition: 1 })],
+    };
+    const first = contributionEffect("larger-a", {}, setting);
+    const second = contributionEffect("larger-b", {}, setting);
+    let result = effects.install(h.work(), unitRef(h.state.units.get(1)), first);
+    h.publish(result.state);
+    const firstRef = result.value;
+    assert.deepEqual(h.blocked(), [1, 2]);
+    result = effects.install(h.work(), unitRef(h.state.units.get(1)), second);
+    h.publish(result.state);
+    const secondRef = result.value;
+    const expanded = h.state.units.get(1);
+    assert.equal(resolveVolume(expanded.definition.blockable, expanded.blockable), 3);
+    assert.deepEqual(h.blocked(), [1]);
+    assert.equal(battlefieldView(h.work()).blockingUsedCapacity(0), 3);
+
+    h.publish(effects.end(h.work(), firstRef));
+    assert.deepEqual(h.blocked(), [1, 2]);
+    h.publish(effects.setEnabled(h.work(), secondRef, false));
+    assert.equal(resolveVolume(h.state.units.get(1).definition.blockable, h.state.units.get(1).blockable), 1);
+    h.publish(effects.setEnabled(h.work(), secondRef, true));
+    assert.equal(resolveVolume(h.state.units.get(1).definition.blockable, h.state.units.get(1).blockable), 2);
+    h.publish(effects.end(h.work(), secondRef));
+    const current = h.state.units.get(1);
+    assert.deepEqual(current.blockable.volume, []);
+    assert.equal(current.definition.blockable.volume, 1);
+    assert.equal(current.definition, expanded.definition);
+    assert.equal(resolveVolume(expanded.definition.blockable, expanded.blockable), 3);
+    assert.deepEqual(original.units.get(1).blockable.volume, []);
+});
+
+test("blocking eligibility: overlapping rules release and reacquire targets independently of volume", () => {
+    const h = battlefield([blocker(), enemy(1), enemy(2)]);
+    const original = h.state.units.get(1);
+    const first = { id: "first", allows: () => false };
+    const second = { id: "second", allows: () => false };
+    const change = (transition) => {
+        const unit = h.state.units.get(1);
+        h.commit([{ type: "UPDATE_UNIT", unit: { ...unit, blockable: transition(unit.blockable) } }]);
+    };
+    change(state => setRule(state, first));
+    assert.deepEqual(h.blocked(), [2]);
+    change(state => setRule(state, second));
+    change(state => removeRule(state, first.id));
+    assert.equal(canBeBlocked(h.state.units.get(1)), false);
+    assert.deepEqual(h.blocked(), [2]);
+    change(state => removeRule(state, second.id));
+    assert.equal(canBeBlocked(h.state.units.get(1)), true);
+    assert.deepEqual(h.blocked(), [2, 1]);
+    assert.equal(resolveVolume(original.definition.blockable, original.blockable), 1);
+    assert.deepEqual(original.blockable.rules, []);
+});
+
+test("blocking volume: equivalent contribution changes leave the blocking projection clean", () => {
+    const h = battlefield([blocker(), enemy(1)]);
+    const before = h.state;
+    const unit = before.units.get(1);
+    const changed = {
+        ...unit,
+        blockable: setVolumeContribution(
+            setVolumeContribution(unit.blockable, entry("positive", modifier.create({ addition: 1 }))),
+            entry("negative", modifier.create({ addition: -1 })),
+        ),
+    };
+    const result = h.commit([{ type: "UPDATE_UNIT", unit: changed }]);
+    assert.equal(result.dependencies.blocking, false);
+    assert.equal(h.state.blockingRelations, before.blockingRelations);
+    assert.equal(h.state.spatial, before.spatial);
+    assert.equal(h.state.navigationMaps, before.navigationMaps);
+});
+
 function nativeModifier(raw) {
     const description = raw.node._buff.attributes.attributeModifiers.find(
         (value) => value.attributeType === "BLOCK_CNT",
@@ -325,7 +429,7 @@ test("blocking capacity: native stack renewal and terminal cleanup update real b
     assert.equal(original.units.get(0).blocker.capacity.length, 0);
 });
 
-test("blocking capacity: native zero scaler releases weighted targets and restores capacity independently of their weight", () => {
+test("blocking capacity: native zero scaler releases weighted targets and restores capacity independently of their volume", () => {
     const raw = fixture("redace[taunt]");
     const compiled = nativeModifier(raw);
     const setting = output(() => [
@@ -355,7 +459,7 @@ test("blocking capacity: native zero scaler releases weighted targets and restor
     h.publish(finished);
     assert.deepEqual(h.blocked(), [1, 2]);
     assert.deepEqual(
-        [...h.state.units.values()].slice(1).map((unit) => unit.blockable.weight),
+        [...h.state.units.values()].slice(1).map((unit) => resolveVolume(unit.definition.blockable, unit.blockable)),
         [2, 1, 4],
     );
 });

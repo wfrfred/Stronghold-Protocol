@@ -253,7 +253,7 @@ function enemyDefinition(value: unknown) {
             defense: numberField(stats.def, "defense"),
             resistance: numberField(stats.res, "resistance"),
         },
-        blockable: { weight: numberField(stats.blockCnt, "block weight") },
+        blockable: { volume: numberField(stats.blockCnt, "block volume") },
         action: {
             definitions: Definitions.empty().add(
                 createAttack({

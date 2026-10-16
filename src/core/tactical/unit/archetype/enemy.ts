@@ -4,10 +4,7 @@ import {
     type Definition as ActionCapabilityDefinition,
 } from "../capability/action/capability.js";
 import type { Definition as AllegianceDefinition } from "../capability/allegiance/capability.js";
-import {
-    createDefinition as createBlockableDefinition,
-    type Definition as BlockableDefinition,
-} from "../capability/blocking/blockable.js";
+import type { Definition as BlockableDefinition } from "../capability/blocking/blockable.js";
 import {
     createDefinition as createDefenseDefinition,
     type Definition as DefenseDefinition,
@@ -125,6 +122,6 @@ export function createCombatDefinition(
         ...(definition.offense === undefined
             ? {}
             : { offense: createOffenseDefinition(definition.offense) }),
-        blockable: createBlockableDefinition(definition.blockable),
+        blockable: definition.blockable,
     });
 }

@@ -47,6 +47,8 @@ import { copy } from '../../dist/core/tactical/unit/snapshot.js';
 import { initialize } from "../helpers/unit.js";
 import { createDefinition as createActionCapabilityDefinition, initialize as initializeActionState } from '../../dist/core/tactical/unit/capability/action/capability.js';
 import { createDefinition as createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/tile-binding/capability.js';
+import * as blockable from '../../dist/core/tactical/unit/capability/blocking/blockable.js';
+import { setRule as setBlockerRule } from '../../dist/core/tactical/unit/capability/blocking/blocker.js';
 import { createSteeringParameters, createSteeringState, integrateSteering } from '../../dist/core/tactical/unit/capability/locomotion/steering.js';
 import { Grid, OBSTACLE_COST, bresenhamTiles } from '../../server/sim/grid.js';
 import { flowFieldForGrid, navigationMapFromGrid, waypointsForGrid } from '../../dist/legacy/navigation.js';
@@ -1285,6 +1287,7 @@ const flatBattlefield = (rows = 1, columns = 5) => createFieldState({
 
 function projectionFacts(state) {
   const definitionFacts = ({ initialize, start, step, onEnd, ...definition }) => definition;
+  const ruleFacts = (unit, rules) => rules.map(rule => ({ id: rule.id, allows: rule.allows(unit) }));
   return { ...state, projectiles: state.projectiles.values(), units: new Map([...state.units].map(([id, unit]) => [
     id, { ...unit, effects: unit.effects.toJSON(), definition: unit.definition.action === undefined
       ? unit.definition
@@ -1295,6 +1298,12 @@ function projectionFacts(state) {
         states: new Map([...unit.action.states].map(([id, current]) => [id, {
           ...current, definition: definitionFacts(current.definition),
         }])),
+      } }),
+      ...(unit.blocker === undefined ? {} : { blocker: { ...unit.blocker,
+        rules: ruleFacts(unit, unit.blocker.rules),
+      } }),
+      ...(unit.blockable === undefined ? {} : { blockable: { ...unit.blockable,
+        rules: ruleFacts(unit, unit.blockable.rules),
       } }),
     },
   ])) };
@@ -1468,7 +1477,7 @@ test('core selective and full projection release ground blocking when a blocker 
     vitality: { maxHp: 100 }, allegiance: { side: 'ALLY' }, blocker: { capacity: 1, geometry: { radius: 1 } },
   });
   const enemy = projectionUnit(11, [0.1, 0], {
-    vitality: { maxHp: 100 }, allegiance: { side: 'ENEMY' }, blockable: { weight: 1 },
+    vitality: { maxHp: 100 }, allegiance: { side: 'ENEMY' }, blockable: { volume: 1 },
     spatial: { layer: 'GROUND' },
   });
   const relations = [{ blockerUnitId: 10, blockedUnitId: 11 }];
@@ -1499,7 +1508,7 @@ test('core selective and full projection preserve relation history and reacquire
     vitality: { maxHp: 100 }, allegiance: { side: 'ALLY' }, blocker: { capacity: 2, geometry: { radius: 1 } },
   }, { spatialPresence: { present: true }, occupancy: { claims: [projectionClaim(1)] } });
   const enemy = projectionUnit(11, [1.1, 0], {
-    vitality: { maxHp: 100 }, allegiance: { side: 'ENEMY' }, blockable: { weight: 1 }, spatial: { layer: 'GROUND' },
+    vitality: { maxHp: 100 }, allegiance: { side: 'ENEMY' }, blockable: { volume: 1 }, spatial: { layer: 'GROUND' },
   }, { spatialPresence: { present: true } });
   const platform = projectionUnit(12, [1, 0], {
     tileBinding: createTileBindingDefinition({ buildableType: 'ALL', heightType: 'HIGHLAND' }),
@@ -1530,11 +1539,12 @@ test('core selective and full projection preserve relation history and reacquire
   h.commit(state => [{ type: 'UPDATE_UNIT', unit: { ...state.units.get(11), vitality: { ...state.units.get(11).vitality, hp: 0 } } }]);
   assert.deepEqual(h.state.blockingRelations, []);
   assert.ok(h.state.spatial.unitsByTile.get(9).has(11));
+  const unblockableRule = { id: 'unblockable', allows: () => false };
   const mutations = [
     unit => ({ ...unit, allegiance: { side: 'ALLY' } }),
     unit => ({ ...unit, spatial: { layer: 'AIR' } }),
-    unit => ({ ...unit, blockable: { weight: 3, enabled: true } }),
-    unit => ({ ...unit, blockable: { weight: 1, enabled: false } }),
+    unit => ({ ...unit, blockable: blockable.setVolumeContribution(unit.blockable, { id: 'larger', value: [modifier.create({ addition: 2 })] }) }),
+    unit => ({ ...unit, blockable: blockable.setRule(unit.blockable, unblockableRule) }),
   ];
   for (const mutate of mutations) {
     h.commit([{ type: 'UPDATE_UNIT', unit: enemy }, { type: 'SET_BLOCKING_RELATIONS', relations: blocking }]);
@@ -1543,7 +1553,7 @@ test('core selective and full projection preserve relation history and reacquire
   }
   for (const blockerState of [
     { ...blocker.blocker, capacity: contribution.set([], { id: 'capacity-zero', value: [modifier.create({ finalScaler: 0 })] }) },
-    { ...blocker.blocker, enabled: false },
+    setBlockerRule(blocker.blocker, { id: 'cannot-block', allows: () => false }),
   ]) {
     h.commit([{ type: 'UPDATE_UNIT', unit: enemy }, { type: 'UPDATE_UNIT', unit: blocker },
       { type: 'SET_BLOCKING_RELATIONS', relations: blocking }]);

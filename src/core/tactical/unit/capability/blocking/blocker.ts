@@ -1,7 +1,10 @@
 import type { State as BattleState, Result } from "../../../battle/state.js";
 import * as registry from "../../hook/hook.js";
-import { assertNonnegativeSafeInteger } from "../../../../common/assert.js";
-import { createBlockGeometry, type BlockGeometry } from "../../../geometry/shape.js";
+import {
+    assertNonnegativeNumber,
+    assertNonnegativeSafeInteger,
+} from "../../../../common/assert.js";
+import type { BlockGeometry } from "../../../geometry/shape.js";
 import * as contribution from "../../contribution/contribution.js";
 import * as modifier from "../../contribution/value.js";
 import type { Unit } from "../../unit.js";
@@ -13,13 +16,12 @@ export interface Definition {
 
 export interface Rule {
     readonly id: string;
-    readonly allows: (unit: Unit) => boolean;
+    readonly allows: (unit: Unit & Blocker) => boolean;
 }
 
 export interface State {
     readonly capacity: readonly contribution.Contribution[];
     readonly geometry: BlockGeometry;
-    readonly enabled: boolean;
     readonly rules: readonly Rule[];
 }
 
@@ -34,22 +36,15 @@ export function hasBlocker<U extends Unit>(unit: U): unit is U & Blocker {
     return "blocker" in unit && "blocker" in unit.definition;
 }
 
-export function createDefinition(definition: Definition): Definition {
-    assertNonnegativeSafeInteger(definition.capacity, "blocking capacity");
-
-    return Object.freeze({
-        capacity: definition.capacity,
-        geometry: createBlockGeometry(definition.geometry),
-    });
-}
-
 export function initialize(battle: BattleState, definition: Definition): Result<State> {
+    assertNonnegativeSafeInteger(definition.capacity, "blocking capacity");
+    assertNonnegativeNumber(definition.geometry.radius, "block radius");
+
     return {
         state: battle,
         value: {
             capacity: [],
             geometry: definition.geometry,
-            enabled: true,
             rules: [],
         },
     };
@@ -68,7 +63,7 @@ export function removeRule(state: State, id: string): State {
 }
 
 export function canBlock(unit: Unit & Blocker): boolean {
-    return unit.blocker.enabled && unit.blocker.rules.every((rule) => rule.allows(unit));
+    return unit.blocker.rules.every((rule) => rule.allows(unit));
 }
 
 function changeCapacityContributions(

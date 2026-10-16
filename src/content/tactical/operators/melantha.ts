@@ -24,6 +24,7 @@ import type { Definition as EffectDefinition } from "../../../core/tactical/unit
 import { install } from "../../../core/tactical/unit/effect/operations.js";
 import { create as modifier } from "../../../core/tactical/unit/contribution/value.js";
 import type { Direction } from "../../../core/tactical/geometry/direction.js";
+import { createBlockGeometry } from "../../../core/tactical/geometry/shape.js";
 import { secondsToTicks } from "../../../data/arknights/tick.js";
 
 export interface Definition extends OperatorDefinition {
@@ -112,7 +113,10 @@ export function create(profile: Profile, direction: Direction = "RIGHT"): Defini
         allegiance: { side: "ALLY" },
         spatial: { layer: "GROUND" },
         hit: { geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.25 }] } },
-        blocker: { capacity: profile.attributes.blockCapacity, geometry: { radius: 0.70709997 } },
+        blocker: {
+            capacity: profile.attributes.blockCapacity,
+            geometry: createBlockGeometry({ radius: 0.70709997 }),
+        },
         action: {
             definitions: Definitions.empty().add(
                 createAttack({

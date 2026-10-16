@@ -15,6 +15,7 @@ import { BLOCK_RADIUS } from '../../server/sim/constants.js';
 import { getDefaultSource } from '../../server/sim/simdata.js';
 import { createLegacyCombatBattle } from '../../dist/legacy/combat.js';
 import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
+import { resolveVolume } from '../../dist/core/tactical/unit/capability/blocking/blockable.js';
 
 const FRONT = 'test_front_a', BACK = 'test_back_a';
 const op = (id, blockCnt = 1) => chessRec({ id, stats: { atk: 0, blockCnt, maxHp: 1e6, respawnTime: 999 }, skill: null });
@@ -52,7 +53,7 @@ function coreBlockedBy(battle, id) {
   return battle.snapshot().blockingRelations.filter(relation => relation.blockerUnitId === id).map(relation => relation.blockedUnitId);
 }
 
-test('core blocking: enemy weight consumes capacity and oversized enemies cannot be held', () => {
+test('core blocking: enemy volume consumes capacity and oversized enemies cannot be held', () => {
   const route = coreBlockingRoute([1, 6], { spawnOffset: [-0.6, 0] });
   const battle = coreBlockingBattle(
     [{ definition: op(FRONT, 3), position: [1, 5] }],
@@ -61,9 +62,13 @@ test('core blocking: enemy weight consumes capacity and oversized enemies cannot
   battle.step();
 
   assert.deepEqual(coreBlockedBy(battle, 0), [1, 2]);
-  const used = coreBlockedBy(battle, 0).reduce((sum, id) => sum + coreBlockingUnit(battle, id).blockable.weight, 0);
+  const volume = id => {
+    const unit = coreBlockingUnit(battle, id);
+    return resolveVolume(unit.definition.blockable, unit.blockable);
+  };
+  const used = coreBlockedBy(battle, 0).reduce((sum, id) => sum + volume(id), 0);
   assert.equal(used, 3);
-  assert.equal(coreBlockingUnit(battle, 3).blockable.weight, 1);
+  assert.equal(volume(3), 1);
 
   const tooHeavy = coreBlockingBattle(
     [{ definition: op(FRONT, 1), position: [1, 5] }],

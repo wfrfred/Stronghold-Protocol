@@ -1,6 +1,10 @@
 import { World, type WorldPosition } from "../../geometry/coordinate.js";
 import { hasAllegiance, type Side } from "../../unit/capability/allegiance/capability.js";
-import { hasBlockable } from "../../unit/capability/blocking/blockable.js";
+import {
+    canBeBlocked,
+    hasBlockable,
+    resolveVolume,
+} from "../../unit/capability/blocking/blockable.js";
 import { canBlock, hasBlocker, resolveCapacity } from "../../unit/capability/blocking/blocker.js";
 import { hasTileBinding } from "../../unit/capability/tile-binding/capability.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";
@@ -17,7 +21,7 @@ export interface BlockerFacts {
 
 export interface BlockableFacts {
     readonly enabled: boolean;
-    readonly weight: number;
+    readonly volume: number;
 }
 
 export interface BlockingFacts {
@@ -31,7 +35,12 @@ export interface BlockingFacts {
 }
 
 export function readBlockableFacts(unit: Unit): BlockableFacts | undefined {
-    return hasBlockable(unit) ? unit.blockable : undefined;
+    return hasBlockable(unit)
+        ? {
+              enabled: canBeBlocked(unit),
+              volume: resolveVolume(unit.definition.blockable, unit.blockable),
+          }
+        : undefined;
 }
 
 export function readBlockingFacts(unit: Unit): BlockingFacts {
@@ -81,7 +90,7 @@ export function sameBlockingFacts(
         left.blocker?.capacity === right.blocker?.capacity &&
         left.blocker?.radius === right.blocker?.radius &&
         left.blockable?.enabled === right.blockable?.enabled &&
-        left.blockable?.weight === right.blockable?.weight &&
+        left.blockable?.volume === right.blockable?.volume &&
         left.side === right.side
     );
 }

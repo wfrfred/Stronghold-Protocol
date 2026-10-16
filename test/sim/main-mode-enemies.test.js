@@ -47,7 +47,7 @@ test('main-mode enemy levels inherit individual defined fields and apply stage o
   assert.equal(advanced.resistance, 30);
   assert.equal(advanced.baseAttackTime, 1.4);
   assert.equal(advanced.moveSpeedPerSecond, 1.1);
-  assert.equal(advanced.blockWeight, 1);
+  assert.equal(advanced.blockVolume, 1);
   assert.deepEqual(advanced.tags, ['infection']);
   assert.equal(rawEnemy('enemy_1000_gopro').Value[0].enemyData.attributes.maxHp.m_value, 820);
   assert.throws(() => profile('enemy_1000_gopro', 2), /exactly one level 2/);

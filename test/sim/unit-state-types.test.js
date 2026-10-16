@@ -22,7 +22,8 @@ import type { State as BattleState } from ${module("battle/state")};
 import type { Vitality } from ${module("unit/capability/vitality/capability")};
 import { setMaxHpContribution } from ${module("unit/capability/vitality/capability")};
 import { setAttackContribution, type Offense } from ${module("unit/capability/offense/capability")};
-import { setCapacityContribution, type Blocker } from ${module("unit/capability/blocking/blocker")};
+import { setCapacityContribution, canBlock, type Rule as BlockerRule, type Blocker } from ${module("unit/capability/blocking/blocker")};
+import { setVolumeContribution, canBeBlocked, type Rule as BlockableRule, type Blockable } from ${module("unit/capability/blocking/blockable")};
 import { setMoveSpeedContribution, type RoutedLocomotion, type RouteControlState } from ${module("unit/capability/locomotion/capability")};
 import type { Context, Definition } from ${module("unit/effect/definition")};
 import { install, replaceEffect, get } from ${module("unit/effect/operations")};
@@ -96,9 +97,24 @@ for(const stored of mixed.values()){
 }
 // @ts-expect-error an ID alone cannot claim a private data type.
 host.effects.get<{charges:number},Vitality>(0);
-declare const capabilityHost:Unit & Vitality & Offense & Blocker & RoutedLocomotion;
+declare const capabilityHost:Unit & Vitality & Offense & Blocker & Blockable & RoutedLocomotion;
+const blockerRule:BlockerRule={id:'blocker',allows:self=>self.blocker.capacity.length===0};
+const blockableRule:BlockableRule={id:'blockable',allows:self=>self.blockable.volume.length===0};
+canBlock(capabilityHost);
+canBeBlocked(capabilityHost);
+// @ts-expect-error blocking queries require the capability at the call boundary.
+canBlock(bare);
+// @ts-expect-error blockable queries require the capability at the call boundary.
+canBeBlocked(bare);
+// @ts-expect-error eligibility is expressed through Rules.
+capabilityHost.blocker.enabled;
+// @ts-expect-error eligibility is expressed through Rules.
+capabilityHost.blockable.enabled;
 const fixed:Contribution={id:'fixed',value:[]};
 const dynamic:Contribution<Input<QueryContext>>={id:'dynamic',value:()=>[]};
+setVolumeContribution(capabilityHost.blockable,fixed);
+// @ts-expect-error blocking volume requires settled static values.
+setVolumeContribution(capabilityHost.blockable,dynamic);
 const vitality=setMaxHpContribution(capabilityHost.definition.vitality,capabilityHost.vitality,fixed);
 const changed={...capabilityHost,vitality};
 const hp:number=changed.vitality.hp;

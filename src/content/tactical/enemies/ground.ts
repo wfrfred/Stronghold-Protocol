@@ -41,7 +41,7 @@ export function createDefinition(
     if (profile.stunImmune) {
         throw new TypeError("this enemy content does not implement stun immunity");
     }
-    if (profile.blockWeight === 0) {
+    if (profile.blockVolume === 0) {
         throw new TypeError("this enemy content requires a blockable ground unit");
     }
 
@@ -111,7 +111,7 @@ export function createDefinition(
                     shapes: [{ type: "CIRCLE", offset: [0, 0], radius: timing.hitRadius }],
                 },
             },
-            blockable: { weight: profile.blockWeight },
+            blockable: { volume: profile.blockVolume },
             locomotion: {
                 moveSpeedPerTick: perSecondToPerTick(profile.moveSpeedPerSecond),
                 minimumMoveSpeedPerTick: perSecondToPerTick(0.1),

@@ -6,6 +6,7 @@ import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/m
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
 import { initialize } from "../helpers/unit.js";
 import { setCapacityContribution, setRule, removeRule } from '../../dist/core/tactical/unit/capability/blocking/blocker.js';
+import { setVolumeContribution } from '../../dist/core/tactical/unit/capability/blocking/blockable.js';
 import * as modifier from '../../dist/core/tactical/unit/contribution/value.js';
 
 const create = units => {
@@ -24,10 +25,10 @@ const blocker = (id, position = [1, 1], capacity = 1, radius = 1) => initialize(
     blocker: { capacity, geometry: { radius } },
   },
 });
-const enemy = (id, position = [1.25, 1], weight = 1) => initialize({
+const enemy = (id, position = [1.25, 1], volume = 1) => initialize({
   id, position, definition: {
     id: `enemy-${id}`, allegiance: { side: 'ENEMY' }, vitality: { maxHp: 100 },
-    blockable: { weight }, spatial: { layer: 'GROUND' },
+    blockable: { volume }, spatial: { layer: 'GROUND' },
   },
 });
 const view = viewBattlefield;
@@ -140,7 +141,7 @@ test('one transition reconciles against final batch facts before returning any n
   assert.equal(published.blockerOf(20), 10);
 });
 
-test('capacity changes retain fitting old relations and fill restored capacity using blockable weight', () => {
+test('capacity changes retain fitting old relations and fill restored capacity using blockable volume', () => {
   let battlefield = create([blocker(10, [1, 1], 3), enemy(20, [1.25, 1], 2), enemy(21), enemy(22)]);
   assert.deepEqual(view(battlefield).blockedBy(10), [20, 21]);
   assert.equal(view(battlefield).blockingUsedCapacity(10), 3);
@@ -157,9 +158,13 @@ test('capacity changes retain fitting old relations and fill restored capacity u
   assert.deepEqual(view(battlefield).blockedBy(10), [20, 22]);
   assert.equal(view(battlefield).blockingUsedCapacity(10), 3);
 
-  battlefield = transitionBattlefield(battlefield, [update(battlefield, 20, unit => ({ ...unit, blockable: { ...unit.blockable, weight: 4 } }))]).state;
+  battlefield = transitionBattlefield(battlefield, [update(battlefield, 20, unit => ({
+    ...unit, blockable: setVolumeContribution(unit.blockable, { id: 'volume', value: [modifier.create({ addition: 2 })] }),
+  }))]).state;
   assert.deepEqual(view(battlefield).blockedBy(10), [22]);
-  battlefield = transitionBattlefield(battlefield, [update(battlefield, 20, unit => ({ ...unit, blockable: { ...unit.blockable, weight: 2 } }))]).state;
+  battlefield = transitionBattlefield(battlefield, [update(battlefield, 20, unit => ({
+    ...unit, blockable: setVolumeContribution(unit.blockable, { id: 'volume', value: [modifier.create()] }),
+  }))]).state;
   assert.deepEqual(view(battlefield).blockedBy(10), [22, 20]);
   assert.equal(view(battlefield).blockingUsedCapacity(10), 3);
 });
