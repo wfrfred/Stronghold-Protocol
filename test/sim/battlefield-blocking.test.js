@@ -60,6 +60,34 @@ test('advance acquires in target ID order, choosing the nearest available blocke
   assert.equal(view(nearest).blockerOf(21), undefined);
 });
 
+test('blocking uses current opposing sides and excludes units without allegiance', () => {
+  const withSide = (unit, side) => {
+    const { allegiance, ...definition } = unit.definition;
+    return initialize({
+      id: unit.id, position: unit.position,
+      definition: { ...definition, ...(side === undefined ? {} : { allegiance: { side } }) },
+    });
+  };
+  for (const [blockerSide, blockedSide, expected] of [
+    ['ALLY', 'NEUTRAL', false],
+    ['ENEMY', 'NEUTRAL', true],
+    ['NEUTRAL', 'ENEMY', true],
+    [undefined, 'ENEMY', false],
+    ['ALLY', undefined, false],
+  ]) {
+    const battlefield = create([
+      withSide(blocker(10), blockerSide), withSide(enemy(20), blockedSide),
+    ]);
+    assert.equal(view(battlefield).blockerOf(20), expected ? 10 : undefined,
+      `${blockerSide} → ${blockedSide}`);
+  }
+
+  let battlefield = create([blocker(10), enemy(20)]);
+  battlefield = transitionBattlefield(battlefield, [update(battlefield, 20,
+    unit => ({ ...unit, allegiance: { side: 'NEUTRAL' } }))]).state;
+  assert.equal(view(battlefield).blockerOf(20), undefined);
+});
+
 test('a newly registered closer blocker does not replace an existing legal relation', () => {
   let battlefield = create([blocker(10), enemy(20)]);
   const previous = view(battlefield);

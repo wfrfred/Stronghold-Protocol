@@ -28,7 +28,7 @@ import { initialize as initializeOffenseState } from '../../dist/core/tactical/u
 import { copy } from '../../dist/core/tactical/unit/snapshot.js';
 import { hasVitality, initialize as initializeVitalityState } from '../../dist/core/tactical/unit/capability/vitality/capability.js';
 import { createDefinition as createActionCapabilityDefinition, hasAction } from '../../dist/core/tactical/unit/capability/action/capability.js';
-import { hasAllegiance } from '../../dist/core/tactical/unit/capability/allegiance/capability.js';
+import { areHostile, hasAllegiance } from '../../dist/core/tactical/unit/capability/allegiance/capability.js';
 import { createDefinition as createBlockerDefinition, hasBlocker, resolveCapacity } from '../../dist/core/tactical/unit/capability/blocking/blocker.js';
 import { hasBlockable } from '../../dist/core/tactical/unit/capability/blocking/blockable.js';
 import * as modifier from '../../dist/core/tactical/unit/contribution/value.js';
@@ -522,6 +522,26 @@ test('archetype definitions share passive configuration while current allegiance
     assert.equal(changed.allegiance.side, 'ENEMY');
     assert.equal(changed.definition.allegiance.side, 'ALLY');
   }
+});
+
+test('core allegiance: opposing sides include enemies and neutral units and use current state', () => {
+  const units = ['ALLY', 'ENEMY', 'NEUTRAL'].map((side, id) => initialize({
+    id, position: [0, 0], definition: { id: `side-${side}`, allegiance: { side } },
+  }));
+  const expected = [
+    [false, true, false],
+    [true, false, true],
+    [false, true, false],
+  ];
+  for (const [leftIndex, left] of units.entries()) {
+    for (const [rightIndex, right] of units.entries()) {
+      assert.equal(areHostile(left, right), expected[leftIndex][rightIndex],
+        `${left.allegiance.side} → ${right.allegiance.side}`);
+    }
+  }
+  const changed = { ...units[0], allegiance: { side: 'ENEMY' } };
+  assert.equal(areHostile(changed, units[2]), true);
+  assert.equal(areHostile(units[0], units[2]), false);
 });
 
 test('core local state transitions retain capability values across snapshots', () => {

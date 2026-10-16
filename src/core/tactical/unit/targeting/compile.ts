@@ -105,6 +105,8 @@ function compileDamageTargeting(
                 !(elementOnly ? isSpatiallyPresent(target) : isActiveVitalUnit(target)) ||
                 !hasSpatial(target) ||
                 (target.spatial.layer === "AIR" && !definition.canTargetAir) ||
+                !hasAllegiance(context.source) ||
+                !hasAllegiance(target) ||
                 !areHostile(context.source, target) ||
                 (requiresHealingEligibility &&
                     !canReceiveHealing({

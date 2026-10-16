@@ -1,5 +1,9 @@
 import { World } from "../../geometry/coordinate.js";
-import { areHostileSides } from "../../unit/capability/allegiance/capability.js";
+import {
+    areHostile,
+    hasAllegiance,
+    type Allegiance,
+} from "../../unit/capability/allegiance/capability.js";
 import type { Unit, Id } from "../../unit/unit.js";
 import { hasBlocker } from "../../unit/capability/blocking/blocker.js";
 import type { SupportRelation } from "../support/relations.js";
@@ -50,12 +54,16 @@ function canBlockFrom(
     return isGroundBlocker(map, blocker);
 }
 
-function canBlockTarget(blocker: BlockingFacts, blocked: BlockingFacts): boolean {
+function canBlockTarget(
+    blocker: Unit & Allegiance,
+    blocked: Unit & Allegiance,
+    facts: BlockingFacts,
+): boolean {
     return (
-        blocked.blockable?.enabled === true &&
-        blocked.ground &&
-        blocked.active &&
-        areHostileSides(blocker.side, blocked.side)
+        facts.blockable?.enabled === true &&
+        facts.ground &&
+        facts.active &&
+        areHostile(blocker, blocked)
     );
 }
 
@@ -78,10 +86,12 @@ function reconcileBlockingRelations(
         if (
             blocker === undefined ||
             blocked === undefined ||
+            !hasAllegiance(blocker) ||
+            !hasAllegiance(blocked) ||
             blockerFacts?.blocker === undefined ||
             blockedFacts?.blockable === undefined ||
             !canBlockFrom(map, blocker.id, blockerFacts, units, supports) ||
-            !canBlockTarget(blockerFacts, blockedFacts) ||
+            !canBlockTarget(blocker, blocked, blockedFacts) ||
             blockedIds.has(blocked.id)
         ) {
             continue;
@@ -144,7 +154,7 @@ export function updateBlockingRelations(
     }
 
     const blockers = [...units.values()].flatMap((unit) => {
-        if (!hasBlocker(unit)) {
+        if (!hasBlocker(unit) || !hasAllegiance(unit)) {
             return [];
         }
 
@@ -175,8 +185,9 @@ export function updateBlockingRelations(
 
         if (
             blockable === undefined ||
+            !hasAllegiance(blocked) ||
             blockable.weight > blocker.remaining ||
-            !canBlockTarget(blocker.facts, readBlockingFacts(blocked))
+            !canBlockTarget(blocker.unit, blocked, readBlockingFacts(blocked))
         ) {
             return;
         }

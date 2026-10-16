@@ -1302,6 +1302,21 @@ test('core targeting: current hit geometry and spatial classification override d
   assert.equal(target.definition.spatial.layer, 'GROUND');
 });
 
+test('core targeting: enemies and neutral units select each other while allies and neutral units do not', () => {
+  const ally = actionUnit(0, 'ALLY', [0, 0]);
+  const enemy = actionUnit(1, 'ENEMY', [1, 0]);
+  const neutral = actionUnit(2, 'NEUTRAL', [2, 0]);
+  const battlefield = actionView([ally, enemy, neutral]);
+  const query = compileTargeting(damageTargeting({ maxTargets: 3 }), ['DAMAGE']);
+  const select = source => selectTargets({ source, battlefield }, query).map(unit => unit.id);
+
+  assert.deepEqual(select(ally), [1]);
+  assert.deepEqual(select(enemy), [0, 2]);
+  assert.deepEqual(select(neutral), [1]);
+  const unaffiliated = initialize({ id: 3, definition: { id: 'unaffiliated' }, position: [0, 0] });
+  assert.deepEqual(select(unaffiliated), []);
+});
+
 test('core targeting: hostile restrictions, friend restrictions and explicit blocking exceptions stay separate', () => {
   const source = actionUnit(0, 'ALLY', [0, 0]);
   const query = (target, overrides = {}, relations = []) => selectTargets({

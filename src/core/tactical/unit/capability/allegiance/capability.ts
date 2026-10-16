@@ -24,17 +24,13 @@ export function initialize(battle: BattleState, definition: Definition): Result<
     return { state: battle, value: definition };
 }
 
-export function areHostile(left: Unit, right: Unit): boolean {
-    if (!hasAllegiance(left) || !hasAllegiance(right)) {
-        return false;
+export function areHostile(left: Unit & Allegiance, right: Unit & Allegiance): boolean {
+    switch (left.allegiance.side) {
+        case "ALLY":
+        case "NEUTRAL":
+            return right.allegiance.side === "ENEMY";
+
+        case "ENEMY":
+            return right.allegiance.side === "ALLY" || right.allegiance.side === "NEUTRAL";
     }
-
-    return areHostileSides(left.allegiance.side, right.allegiance.side);
-}
-
-export function areHostileSides(leftSide: Side | undefined, rightSide: Side | undefined): boolean {
-    return (
-        (leftSide === "ALLY" && rightSide === "ENEMY") ||
-        (leftSide === "ENEMY" && rightSide === "ALLY")
-    );
 }
