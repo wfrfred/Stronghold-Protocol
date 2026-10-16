@@ -1,7 +1,7 @@
+import { damage as dealDamage, parameters } from "../helpers/vitality.js";
 import { fixtureBattle } from "../helpers/unit.js";
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
 import { create as createAttack } from "../../dist/content/tactical/actions/attack.js";
-import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import { resolveHealing } from "../../dist/core/tactical/unit/capability/vitality/healing/settlement.js";
 import { initialize as initializeVitality } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import assert from "node:assert/strict";
@@ -15,7 +15,6 @@ import { compileArknightsAttackBuffSkill } from "../../dist/data/arknights/skill
 import { parseArknightsSkillLevel } from "../../dist/data/arknights/skill-definition.js";
 import { createDefinition as createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import * as sp from "../../dist/core/tactical/unit/capability/skill/sp.js";
-import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import { effectFixtureWork } from "../helpers/effects.js";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
@@ -160,8 +159,7 @@ function instantDamageFixture(automatic = false, withTarget = true) {
     accepts: (battle) => (getUnit(battle, 2)?.vitality.hp ?? 0) > 0,
     onStart: (battle, self) => {
       for (const damageType of ["PHYSICAL", "ARTS"]) {
-        const settled = resolveDamage(battle, { sourceUnitId: self.host.id, targetUnitId: 2,
-          damageType, operands: createDamageOperands(330), tick: battle.tick });
+        const settled = dealDamage(battle, { source: { id: self.host.id }, target: { id: 2 }, parameters: parameters(330, damageType) });
         battle = settled.state;
         reports.push(settled.value);
       }
@@ -183,7 +181,7 @@ test("native Unsheathe level 1 metadata supports synchronous physical and arts d
   assert.equal(getUnit(f.work, 2).vitality.hp, 340);
   assert.equal(getUnit(f.work, 1).skill.active, null);
   assert.equal(f.reports.length, 2);
-  assert.ok(f.reports.every((report) => report.request.tick === 0));
+  assert.ok(f.reports.every((report) => report.kind === "APPLIED" && report.application.hpLoss === 330));
 });
 
 test("AUTO instant content keeps full SP when its required target is absent", () => {

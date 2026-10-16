@@ -9,7 +9,10 @@ import { isSpatiallyPresent } from "../presence/capability.js";
 import { hasVitality } from "../vitality/capability.js";
 import { hasAction, setReleasedHook } from "../action/capability.js";
 import type { ReleasedHook } from "../action/release.js";
-import { setHook as setDamageHook, type ReceivedHook } from "../vitality/damage/hook.js";
+import {
+    setHook as setDamageHook,
+    type ReceivingStartedHook,
+} from "../../../battle/damage/hook.js";
 import { hasSkill, type Skill } from "./capability.js";
 import { ref as activationRef, type Activation, type Trigger, type End } from "./activation.js";
 import type { Operation } from "./rule.js";
@@ -23,13 +26,12 @@ import * as sp from "./sp.js";
 import { resolveCapacity as resolveAmmoCapacity } from "./ammo.js";
 import * as modifier from "./modifier.js";
 
-const hitRecovery: ReceivedHook = {
+const hitRecovery: ReceivingStartedHook = {
     id: "@skill/hit-recovery",
-    stage: "received",
-    accepts: (_battle, { event }) =>
-        event.pending.cancellation === null && event.request.ignoreForSp !== true,
-    invoke: (battle, { host }) => {
-        const target = units.get(battle, host);
+    stage: "receivingStarted",
+    priority: 0,
+    invoke: (battle, { request }) => {
+        const target = units.get(battle, request.target);
 
         return {
             state:

@@ -28,10 +28,7 @@ export const invincible: Definition<object, targetable.Targetable> = {
                 ? {
                       vitality: vitality.setDamageReceptionRule(unit.vitality, {
                           id,
-                          cancel: ({ policy }) =>
-                              policy.considerInvincibility
-                                  ? { stage: "RECEPTION", reason: "INVINCIBLE" }
-                                  : null,
+                          allows: () => false,
                       }),
                   }
                 : {}),
@@ -50,33 +47,6 @@ export const invincible: Definition<object, targetable.Targetable> = {
                 ? { vitality: vitality.removeDamageReceptionRule(unit.vitality, id) }
                 : {}),
         });
-    },
-};
-
-export const undeadable: Definition<object> = {
-    id: "protection/undeadable",
-    initialize: () => ({}),
-    onEnable(state, { unit, self }) {
-        return vitality.hasVitality(unit)
-            ? updateUnit(state, {
-                  ...unit,
-                  vitality: vitality.setFatalProtectionRule(unit.vitality, {
-                      id: `@effect/${self.id}/undeadable`,
-                      protects: () => true,
-                  }),
-              })
-            : state;
-    },
-    onDisable(state, { unit, self }) {
-        return vitality.hasVitality(unit)
-            ? updateUnit(state, {
-                  ...unit,
-                  vitality: vitality.removeFatalProtectionRule(
-                      unit.vitality,
-                      `@effect/${self.id}/undeadable`,
-                  ),
-              })
-            : state;
     },
 };
 

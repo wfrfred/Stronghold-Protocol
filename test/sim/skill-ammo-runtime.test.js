@@ -1,5 +1,5 @@
+import { damage as dealDamage, parameters } from "../helpers/vitality.js";
 import { launchProjectile } from "../../dist/core/tactical/battlefield/projectile/operations.js";
-import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { transitionUnit } from "../../dist/core/tactical/battle/state.js";
 import { setBeforeReleaseHook, removeBeforeReleaseHook } from "../../dist/core/tactical/unit/capability/action/capability.js";
@@ -19,9 +19,8 @@ import * as actions from "../../dist/core/tactical/unit/action/operations.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { createDefinition as createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { ref as activationRef } from "../../dist/core/tactical/unit/capability/skill/activation.js";
-import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
-import { setHook, removeHook } from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
+import { setHook, removeHook } from "../../dist/core/tactical/battle/damage/hook.js";
 import { unit as fixtureUnit, battle as fixtureBattle, actionDefinition } from "../helpers/action-fixture.js";
 import { definition as skillDefinition } from "../helpers/skill.js";
 import { activate } from "../../dist/core/tactical/unit/capability/skill/operations.js";
@@ -38,11 +37,11 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, windupTicks = 0, o
     onInstall: (state, context) => {
       if (hideAfterDamage) state = transitionUnit(state, context.unit.id, current => ({
         ...current, vitality: setHook(current.vitality, {
-          id: "hide-after-damage", stage: "reaction", priority: 0,
-          accepts: (_state, context) => context.request.sourceUnitId === context.host.id,
+          id: "hide-after-damage", stage: "hpApplied", priority: 0,
+          accepts: (_state, event) => event.request.source?.id === context.unit.id,
           invoke: (state, context, current) => {
-            assert.equal(context.report.hpLoss, 200);
-            return { state: transitionUnit(state, context.host.id, current => ({
+            assert.equal(context.application.hpLoss, 200);
+            return { state: transitionUnit(state, context.request.source.id, current => ({
               ...current, spatialPresence: { present: false },
             })), value: current };
           },
@@ -100,10 +99,7 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, windupTicks = 0, o
     id: "runtime-ammo-shell", initialize: () => ({}),
     acceptsContact: (_context, unit) => unit.allegiance?.side === "ENEMY",
     contact: (state, context) => {
-      return resolveDamage(state, {
-        sourceUnitId: context.projectile.source, targetUnitId: context.targetUnitId,
-        tick: context.tick, damageType: "TRUE", operands: createDamageOperands(context.projectile.cachedAtk),
-      }).state;
+      return dealDamage(state, { source: { id: context.projectile.source }, target: { id: context.targetUnitId }, parameters: parameters(context.projectile.cachedAtk, "TRUE") }).state;
     },
   });
   const base = createLegacyCombatSpec({ rows: 1, columns: 8, operators: [], enemies: [], maxTicks: 20, seed: 7 });
@@ -235,8 +231,7 @@ test("ammo runtime: a content-defined follow-up preserves one ammunition payment
         return { state: actions.replace(state, setState(current, { ...current.state, emitted: 1 })), value: false };
       }
       for (const target of self.state.bindings.main) {
-        state = resolveDamage(state, { sourceUnitId: self.source.id, targetUnitId: target.id,
-          tick: state.tick, damageType: "TRUE", operands: createDamageOperands(resolveAttackPower(self.source.id, battlefieldView(state))) }).state;
+        state = dealDamage(state, { source: { id: self.source.id }, target: { id: target.id }, parameters: parameters(resolveAttackPower(self.source.id, battlefieldView(state)), "TRUE") }).state;
       }
       return { state, value: true };
     },

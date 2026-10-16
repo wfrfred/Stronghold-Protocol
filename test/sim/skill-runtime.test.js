@@ -1,4 +1,4 @@
-import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
+import { damage as dealDamage, parameters } from "../helpers/vitality.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { attackBuff } from "../helpers/effects.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
@@ -16,10 +16,8 @@ import { create as createAttack } from '../../dist/content/tactical/actions/atta
 import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js';
 import { initialize } from "../helpers/unit.js";
 import { createBattleState, getUnit } from '../../dist/core/tactical/battle/state.js';
-import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
 import { setDamageReceptionRule } from '../../dist/core/tactical/unit/capability/vitality/capability.js';
-import { setHook } from '../../dist/core/tactical/unit/capability/vitality/damage/hook.js';
-import { SKIPPED_DAMAGE_RECEPTION } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
+import { setHook } from '../../dist/core/tactical/battle/damage/hook.js';
 
 const geometry = createShapeGeometry({ shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 5 }] });
 const hit = createShapeGeometry({ shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.1 }] });
@@ -139,19 +137,19 @@ test('skill runtime: cancelled windup earns no ACTION SP', () => {
   assert.equal(source(runtime).skill.sp.value, 0);
 });
 
-test('skill runtime: HIT SP counts zero damage but respects cancellation and ignoreForSp', () => {
-  for (const [cancelReception, ignoreForSp, expected] of [[false, false, 1], [false, true, 0], [true, false, 0]]) {
+test('skill runtime: HIT SP requires positive damage and an eligible receiver', () => {
+  for (const [power, cancelReception, expected] of [[0, false, 0], [10, false, 1], [10, true, 0]]) {
     const definition = actor(skill({ recovery: { type: 'HIT', amount: 1 }, initial: 0 }));
     let receiver = initialize({ id: 0, definition, position: [0, 0] });
     if (cancelReception) receiver = { ...receiver, vitality: setDamageReceptionRule(receiver.vitality, {
-      id: 'test-cancel-reception', cancel: () => ({ stage: 'RECEPTION', reason: 'INVINCIBLE' }),
+      id: 'test-cancel-reception', allows: () => false,
     }) };
-    let work = createBattleState(fixtureBattlefield({ unitIds: [0], getUnit: () => receiver, blockerOf: () => undefined, blockedBy: () => [] }));
+    let work = createBattleState(fixtureBattlefield([receiver]));
     work = skills.enter(work, unitRef(receiver));
-    work = resolveDamage(work, { sourceUnitId: null, targetUnitId: 0,
-      damageType: 'TRUE', operands: createDamageOperands(0), tick: 0, ignoreForSp }).state;
-    assert.equal(getUnit(work, 0).skill.sp.value, expected);
-    assert.equal(getUnit(work, 0).vitality.hp, 100000);
+    const result = dealDamage(work, { source: null, target: unitRef(receiver), parameters: parameters(power, 'TRUE') });
+    assert.equal(result.value.kind, power > 0 && !cancelReception ? 'APPLIED' : 'REJECTED');
+    assert.equal(getUnit(result.state, 0).skill.sp.value, expected);
+    assert.equal(getUnit(result.state, 0).vitality.hp, 100000 - (power > 0 && !cancelReception ? power : 0));
   }
 });
 
@@ -167,24 +165,31 @@ test('skill runtime: HIT recovery precedes reception Hooks even when they subseq
   const definition = actor(skill({ recovery: { type: 'HIT', amount: 2 }, initial: 0, cost: 10 }));
   let receiver = initialize({ id: 0, definition, position: [0, 0] });
   receiver = { ...receiver, vitality: setHook(receiver.vitality, {
-    id: 'late-shield', stage: 'reception', priority: 0, accepts: () => true,
+    id: 'late-shield', stage: 'receiving', priority: 0, accepts: () => true,
     invoke(battle, context, pending) {
-      assert.equal(getUnit(battle, context.host.id).skill.sp.value, 2);
-      return { state: battle, value: { ...pending, cancellation: { stage: 'RECEPTION', reason: 'SHIELD' } } };
+      assert.equal(getUnit(battle, context.request.target.id).skill.sp.value, 2);
+      return { state: battle, value: { ...pending, cancellation: { reason: 'SHIELD' } } };
     },
   }) };
   let battle = createBattleState(fixtureBattlefield([receiver]));
   battle = skills.enter(battle, unitRef(receiver));
-  battle = resolveDamage(battle, { sourceUnitId: null, targetUnitId: 0, damageType: 'TRUE', operands: createDamageOperands(10), tick: 0 }).state;
+  battle = dealDamage(battle, { source: null, target: { id: 0 }, parameters: parameters(10, 'TRUE') }).state;
   assert.equal(getUnit(battle, 0).skill.sp.value, 2);
   assert.equal(getUnit(battle, 0).vitality.hp, 100000);
 });
 
-test('skill runtime: skipping modifier events still reaches the HIT recovery extension point', () => {
-  const receiver = initialize({ id: 0, position: [0, 0], definition: actor(skill({ recovery: { type: 'HIT', amount: 2 }, initial: 0, cost: 10 })) });
+test('skill runtime: each nested positive reception independently earns HIT SP', () => {
+  let receiver = initialize({ id: 0, position: [0, 0], definition: actor(skill({ recovery: { type: 'HIT', amount: 2 }, initial: 0, cost: 10 })) });
+  receiver = { ...receiver, vitality: setHook(receiver.vitality, {
+    id: 'nested-hit', stage: 'receiving', priority: 0,
+    accepts: (_battle, context) => context.request.parameters.attack.power === 10,
+    invoke(battle, context, pending) {
+      return { state: dealDamage(battle, { source: null, target: context.request.target, parameters: parameters(1, 'TRUE') }).state, value: pending };
+    },
+  }) };
   let battle = createBattleState(fixtureBattlefield([receiver]));
   battle = skills.enter(battle, unitRef(receiver));
-  battle = resolveDamage(battle, { sourceUnitId: null, targetUnitId: 0, damageType: 'TRUE',
-    operands: createDamageOperands(0), tick: 0, receptionPolicy: SKIPPED_DAMAGE_RECEPTION }).state;
-  assert.equal(getUnit(battle, 0).skill.sp.value, 2);
+  battle = dealDamage(battle, { source: null, target: unitRef(receiver), parameters: parameters(10, 'TRUE') }).state;
+  assert.equal(getUnit(battle, 0).skill.sp.value, 4);
+  assert.equal(getUnit(battle, 0).vitality.hp, 99989);
 });

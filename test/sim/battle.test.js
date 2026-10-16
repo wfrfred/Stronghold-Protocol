@@ -1,5 +1,5 @@
+import { damage as dealDamage, parameters } from "../helpers/vitality.js";
 import { fixtureBattle } from "../helpers/unit.js";
-import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { installFixtureEffect } from "../helpers/effects.js";
 import { create as createBattlefieldState, transition as transitionBattlefield } from "../../dist/core/tactical/battlefield/state.js";
@@ -50,7 +50,6 @@ import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js
 import { setState as setActionState } from '../../dist/core/tactical/unit/action/action.js';
 import { replace as replaceAction } from '../../dist/core/tactical/unit/action/operations.js';
 import { install as installEffect } from '../../dist/core/tactical/unit/effect/operations.js';
-import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
 
 const approx = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
 const guard = (o = {}) => chessRec({ id: 't_guard', profession: 'WARRIOR', stats: { atk: 300, blockCnt: 2 }, skill: null, ...o });
@@ -1177,7 +1176,7 @@ test('core battle propagates nested settlement errors without publishing battlef
   const effect = {
     id: 'nested-failure-effect', initialize: () => ({}),
     onInstall: (state, context) => {
-      state = resolveDamage(state, { sourceUnitId: 0, targetUnitId: 1, damageType: 'TRUE', operands: createDamageOperands(7), tick: context.tick }).state;
+      state = dealDamage(state, { source: { id: 0 }, target: { id: 1 }, parameters: parameters(7, 'TRUE') }).state;
       assert.equal(getUnit(state, 1).vitality.hp, 93);
       assert.equal(getUnit(state, 2).definition.id, 'nested-created');
       assert.equal(state.execution.nextUnitId, 3);

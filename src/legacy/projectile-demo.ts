@@ -1,10 +1,13 @@
 import type { Input } from "../core/tactical/battle/contract.js";
 import type { FragmentDefinition } from "../core/tactical/battle/schedule/definition.js";
-import type { Definition as UnitDefinition } from "../core/tactical/unit/unit.js";
+import type { Definition as UnitDefinition, Unit } from "../core/tactical/unit/unit.js";
 import { Definitions } from "../core/tactical/unit/action/definitions.js";
 import { hasActionDefinition } from "../core/tactical/unit/capability/action/capability.js";
 import { create as createAttack, isAttack } from "../content/tactical/actions/attack.js";
-import { resolveDamage } from "../core/tactical/unit/capability/vitality/damage/settlement.js";
+import { calculateDamage } from "../core/tactical/battle/damage/calculate.js";
+import { applyDamage } from "../core/tactical/battle/damage/apply.js";
+import type { DamageRequest } from "../core/tactical/battle/damage/contract.js";
+import type { Ref } from "../core/common/ref.js";
 import { ref as unitRef } from "../core/tactical/unit/query.js";
 
 import { battlefieldView, getUnit, updateUnit } from "../core/tactical/battle/state.js";
@@ -27,7 +30,6 @@ import {
 import { resolveAttackPower } from "../core/tactical/unit/capability/offense/query.js";
 import { healFree } from "../content/tactical/effects/protection.js";
 import { hasVitality } from "../core/tactical/unit/capability/vitality/capability.js";
-import { createDamageOperands } from "../core/tactical/unit/capability/vitality/damage/contract.js";
 
 export function createTacticalProjectileDemo(
     input: Input,
@@ -65,7 +67,7 @@ export function createTacticalProjectileDemo(
     });
     const shell = createProjectileDefinition({
         id: cachedOnly ? "cached-atk-shell" : "live-atk-shell",
-        initialize: () => ({}),
+        initialize: (): { readonly source: Ref<Unit> | null } => ({ source: null }),
         acceptsContact: (context, target) =>
             target.id === context.projectile.traceTarget &&
             hasAllegiance(target) &&
@@ -82,17 +84,29 @@ export function createTacticalProjectileDemo(
                 }).state;
             }
 
-            return resolveDamage(state, {
-                sourceUnitId: context.projectile.source,
-                targetUnitId: context.targetUnitId,
-                tick: context.tick,
-                damageType: "ARTS",
-                operands: createDamageOperands(
-                    cachedOnly
-                        ? context.projectile.cachedAtk
-                        : resolveProjectileAttackPower(state, context.projectile),
-                ),
-            }).state;
+            const receiver = getUnit(state, context.targetUnitId);
+
+            if (receiver === undefined || !hasVitality(receiver)) {
+                return state;
+            }
+
+            const request: DamageRequest = {
+                source: context.projectile.state.source,
+                target: unitRef(receiver),
+                parameters: {
+                    type: "ARTS",
+                    attack: {
+                        power: cachedOnly
+                            ? context.projectile.cachedAtk
+                            : resolveProjectileAttackPower(state, context.projectile),
+                        multiplier: 1,
+                        addition: 0,
+                    },
+                    penetration: { fixed: 0, proportional: 0 },
+                },
+            };
+
+            return applyDamage(request, calculateDamage(state, request)).state;
         },
     });
 
@@ -143,6 +157,7 @@ export function createTacticalProjectileDemo(
                                 speedPerTick: 0.12,
                                 contactRange,
                                 stopDelayTicks: 6,
+                                initialState: { source: unitRef(source) },
                             },
                             state.tick,
                         );

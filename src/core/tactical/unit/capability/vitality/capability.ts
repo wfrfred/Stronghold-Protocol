@@ -3,10 +3,11 @@ import { preserveHpRatio } from "./max-hp.js";
 import * as contribution from "../../contribution/contribution.js";
 import * as attribute from "../../contribution/attribute.js";
 import type { Unit, Definition as UnitDefinition } from "../../unit.js";
-import type { Hook as DamageHook } from "./damage/hook.js";
+import type {
+    Hook as DamageHook,
+    ReceptionRule as DamageReceptionRule,
+} from "../../../battle/damage/hook.js";
 import type { Hook as HealingHook } from "./healing/hook.js";
-import type { Rule as DamageReceptionRule } from "./damage/reception.js";
-import type { Rule as FatalProtectionRule } from "./damage/fatal-protection.js";
 import type { Rule as HealingReceptionRule } from "./healing/reception.js";
 import * as registry from "../../hook/hook.js";
 
@@ -20,7 +21,6 @@ export interface State {
     readonly damageHooks: readonly DamageHook[];
     readonly healingHooks: readonly HealingHook[];
     readonly damageReceptionRules: readonly DamageReceptionRule[];
-    readonly fatalProtectionRules: readonly FatalProtectionRule[];
     readonly healingReceptionRules: readonly HealingReceptionRule[];
 }
 
@@ -50,7 +50,6 @@ export function initialize(battle: BattleState, definition: Definition): Result<
             damageHooks: [],
             healingHooks: [],
             damageReceptionRules: [],
-            fatalProtectionRules: [],
             healingReceptionRules: [],
         },
     };
@@ -70,22 +69,6 @@ export function removeDamageReceptionRule(state: State, id: string): State {
     return damageReceptionRules === state.damageReceptionRules
         ? state
         : { ...state, damageReceptionRules };
-}
-
-export function setFatalProtectionRule(state: State, rule: FatalProtectionRule): State {
-    const fatalProtectionRules = registry.set(state.fatalProtectionRules, rule);
-
-    return fatalProtectionRules === state.fatalProtectionRules
-        ? state
-        : { ...state, fatalProtectionRules };
-}
-
-export function removeFatalProtectionRule(state: State, id: string): State {
-    const fatalProtectionRules = registry.remove(state.fatalProtectionRules, id);
-
-    return fatalProtectionRules === state.fatalProtectionRules
-        ? state
-        : { ...state, fatalProtectionRules };
 }
 
 export function setHealingReceptionRule(state: State, rule: HealingReceptionRule): State {

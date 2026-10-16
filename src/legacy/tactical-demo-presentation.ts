@@ -1,5 +1,5 @@
 import type { Event, Snapshot } from "../core/tactical/battle/contract.js";
-import type { DamageType } from "../core/tactical/unit/capability/vitality/damage/contract.js";
+import type { DamageType } from "../core/tactical/battle/damage/contract.js";
 import { hasAllegiance } from "../core/tactical/unit/capability/allegiance/capability.js";
 import {
     hasElemental,

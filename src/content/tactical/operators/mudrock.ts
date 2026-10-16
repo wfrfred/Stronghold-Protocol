@@ -13,7 +13,9 @@ import {
 import { create as createSkillAttack, type State as SkillAttackState } from "../actions/skill.js";
 import { selectTargets } from "../../../core/tactical/unit/targeting/select.js";
 import { resolveHealing } from "../../../core/tactical/unit/capability/vitality/healing/settlement.js";
-import { resolveDamage } from "../../../core/tactical/unit/capability/vitality/damage/settlement.js";
+import { calculateDamage } from "../../../core/tactical/battle/damage/calculate.js";
+import { applyDamage } from "../../../core/tactical/battle/damage/apply.js";
+import type { DamageRequest } from "../../../core/tactical/battle/damage/contract.js";
 import { ref as unitRef } from "../../../core/tactical/unit/query.js";
 import type { Profile } from "../../../data/arknights/operator.js";
 import { secondsToTicks } from "../../../data/arknights/tick.js";
@@ -48,10 +50,7 @@ import {
     type Vitality,
 } from "../../../core/tactical/unit/capability/vitality/capability.js";
 import { resolveMaxHp } from "../../../core/tactical/unit/capability/vitality/query.js";
-import {
-    removeHook,
-    setHook,
-} from "../../../core/tactical/unit/capability/vitality/damage/hook.js";
+import { removeHook, setHook } from "../../../core/tactical/battle/damage/hook.js";
 import type { Definition as EffectDefinition } from "../../../core/tactical/unit/effect/definition.js";
 import { setData } from "../../../core/tactical/unit/effect/effect.js";
 import { get, install, replaceEffect } from "../../../core/tactical/unit/effect/operations.js";
@@ -163,13 +162,17 @@ function shieldEffect(profile: Profile): EffectDefinition<ShieldState, Vitality>
                 ...unit,
                 vitality: setHook(unit.vitality, {
                     id: `${SHIELD_ID}/${self.id}`,
-                    stage: "reception",
+                    stage: "receiving",
                     priority: 100,
                     accepts: () => true,
                     invoke(state, context, pending) {
                         const shield = get(state, ref);
 
-                        if (pending.cancellation !== null || shield?.status !== "ACTIVE") {
+                        if (
+                            pending.cancellation !== null ||
+                            pending.amount <= 0 ||
+                            shield?.status !== "ACTIVE"
+                        ) {
                             return { state, value: pending };
                         }
                         if (shield.data.layers > 0) {
@@ -181,7 +184,7 @@ function shieldEffect(profile: Profile): EffectDefinition<ShieldState, Vitality>
                                     layers: shield.data.layers - 1,
                                 }),
                             );
-                            state = healSelf(state, unit.id, healRatio, context.request.tick);
+                            state = healSelf(state, unit.id, healRatio, state.tick);
                             const current = getUnit(state, unit.id);
 
                             if (current !== undefined && hasSkill(current)) {
@@ -192,25 +195,14 @@ function shieldEffect(profile: Profile): EffectDefinition<ShieldState, Vitality>
                                 state,
                                 value: {
                                     ...pending,
-                                    amount: 0,
                                     cancellation: {
-                                        stage: "RECEPTION",
                                         reason: "MUDROCK_SHIELD",
                                     },
-                                    consumptions: [
-                                        ...pending.consumptions,
-                                        {
-                                            ownerUnitId: unit.id,
-                                            resourceId: SHIELD_ID,
-                                            resource: "SHIELD_LAYER",
-                                            amount: 1,
-                                        },
-                                    ],
                                 },
                             };
                         }
 
-                        const sourceId = context.request.sourceUnitId;
+                        const sourceId = context.request.source?.id ?? null;
                         const sarkazScale = hasSarkazTag(
                             sourceId === null ? undefined : getUnit(state, sourceId),
                         )
@@ -369,24 +361,22 @@ export function create(
 
                 if (
                     target === undefined ||
+                    !hasVitality(target) ||
                     !targeting.accepts({ source: currentSource, battlefield }, target)
                 ) {
                     continue;
                 }
 
-                state = resolveDamage(state, {
-                    sourceUnitId: source.id,
-                    targetUnitId: target.id,
-                    damageType: "PHYSICAL",
-                    operands: {
-                        power,
-                        attackScale,
-                        attackAddition: 0,
-                        fixedPenetration: 0,
-                        proportionalPenetration: 0,
+                const request: DamageRequest = {
+                    source: unitRef(source),
+                    target: unitRef(target),
+                    parameters: {
+                        type: "PHYSICAL",
+                        attack: { power, multiplier: attackScale, addition: 0 },
+                        penetration: { fixed: 0, proportional: 0 },
                     },
-                    tick: state.tick,
-                }).state;
+                };
+                state = applyDamage(request, calculateDamage(state, request)).state;
                 const rng = createRng(state.execution.rngState);
                 const applyStun = rng.chance(stunChance);
                 state = { ...state, execution: { ...state.execution, rngState: rng.state() } };

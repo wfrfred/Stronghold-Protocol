@@ -8,7 +8,7 @@ import * as blockable from "../../dist/core/tactical/unit/capability/blocking/bl
 import * as locomotion from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
 import * as action from "../../dist/core/tactical/unit/capability/action/capability.js";
 import * as vitality from "../../dist/core/tactical/unit/capability/vitality/capability.js";
-import * as damage from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
+import * as damage from "../../dist/core/tactical/battle/damage/hook.js";
 import * as healing from "../../dist/core/tactical/unit/capability/vitality/healing/hook.js";
 import { create } from "../../dist/core/tactical/unit/contribution/attribute.js";
 
@@ -85,7 +85,7 @@ test("local hook registration retains progress and changes only its registration
         id: "hook",
         stage: "reception",
         priority: 0,
-        enabled: () => true,
+        accepts: () => true,
         invoke: (state, _context, value) => ({ state, value }),
     };
     const registrations = [
@@ -115,15 +115,16 @@ test("local hook registration retains progress and changes only its registration
         ],
     ];
     for (const [initial, field, set, remove] of registrations) {
-        const added = set(initial, hook);
-        assert.equal(added[field][0], hook, field);
+        const entry = field === "damageHooks" ? { ...hook, stage: "receiving" } : hook;
+        const added = set(initial, entry);
+        assert.equal(added[field][0], entry, field);
         assert.equal(initial[field].length, 0, field);
-        assert.equal(set(added, hook), added, field);
+        assert.equal(set(added, entry), added, field);
         assert.equal(remove(added, "missing"), added, field);
         for (const key of Object.keys(initial).filter((key) => key !== field)) {
             assert.equal(added[key], initial[key], `${field}: ${key}`);
         }
         assert.equal(remove(added, hook.id)[field].length, 0, field);
-        assert.equal(added[field][0], hook, field);
+        assert.equal(added[field][0], entry, field);
     }
 });

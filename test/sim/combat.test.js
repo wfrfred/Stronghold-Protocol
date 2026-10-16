@@ -1,3 +1,5 @@
+import { calculateDamage } from "../../dist/core/tactical/battle/damage/calculate.js";
+import { damage as dealDamage, parameters } from "../helpers/vitality.js";
 import { definition as skillDefinition } from "../helpers/skill.js";
 import { enter as enterSkill } from "../../dist/core/tactical/unit/capability/skill/operations.js";
 import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js';
@@ -13,8 +15,6 @@ import { makeBattle, chessRec, enemyRec } from '../helpers/battleHarness.js';
 import { ELEMENT } from '../../server/sim/constants.js';
 import { createLegacyCombatBattle, createLegacyCombatSpec } from '../../dist/legacy/combat.js';
 import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
-import { calculateDamage, resolveDamage } from '../../dist/core/tactical/unit/capability/vitality/damage/settlement.js';
-import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
 import { createBattlefieldMap, BattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
@@ -30,13 +30,13 @@ import { compileTargeting } from "../../dist/core/tactical/unit/targeting/compil
 import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { selectTargets } from '../../dist/core/tactical/unit/targeting/select.js';
 import { setRule as setTargetableRule, allowsTarget } from '../../dist/core/tactical/unit/capability/targetable/capability.js';
-import { invincible, undeadable, healFree } from '../../dist/content/tactical/effects/protection.js';
+import { invincible, healFree } from '../../dist/content/tactical/effects/protection.js';
 import { invisible, camouflage, untargetable, allyUntargetable } from '../../dist/content/tactical/effects/visibility.js';
 import { installFixtureEffect } from '../helpers/effects.js';
 import * as effects from '../../dist/core/tactical/unit/effect/operations.js';
 import { resolveHealing } from '../../dist/core/tactical/unit/capability/vitality/healing/settlement.js';
 import { canReceiveHealing } from '../../dist/core/tactical/unit/capability/vitality/healing/reception.js';
-import { setHook as setDamageHook } from '../../dist/core/tactical/unit/capability/vitality/damage/hook.js';
+import { setHook as setDamageHook } from '../../dist/core/tactical/battle/damage/hook.js';
 import * as contribution from '../../dist/core/tactical/unit/contribution/contribution.js';
 import * as modifier from '../../dist/core/tactical/unit/contribution/attribute.js';
 
@@ -374,11 +374,16 @@ test('core combat: air targeting follows unit data independently of the route mo
 });
 
 test('core combat: damage formulas retain the 5% floor and immutable vitality transitions', () => {
-  assert.equal(calculateDamage(1000, 'PHYSICAL', { defense: 300, resistance: 0 }), 700);
-  assert.equal(calculateDamage(1000, 'PHYSICAL', { defense: 2000, resistance: 0 }), 50);
-  assert.equal(calculateDamage(1000, 'ARTS', { defense: 0, resistance: 30 }), 700);
-  assert.equal(calculateDamage(1000, 'ARTS', { defense: 0, resistance: 100 }), 50);
-  assert.equal(calculateDamage(1000, 'TRUE', { defense: 9999, resistance: 100 }), 1000);
+  for (const [type, defense, resistance, expected] of [
+    ['PHYSICAL', 300, 0, 700], ['PHYSICAL', 2000, 0, 50],
+    ['ARTS', 0, 30, 700], ['ARTS', 0, 100, 50], ['TRUE', 9999, 100, 1000],
+  ]) {
+    const receiver = initialize({ id: 0, position: [0, 0], definition: {
+      id: 'formula-target', vitality: { maxHp: 5000 }, defense: { defense, resistance },
+    } });
+    const battle = createBattleState(fixtureBattlefieldState([receiver]));
+    assert.equal(calculateDamage(battle, { source: null, target: unitRef(receiver), parameters: parameters(1000, type) }).value.amount, expected);
+  }
 
   const unit = initialize({
     id: 0, position: [0, 0],
@@ -386,14 +391,14 @@ test('core combat: damage formulas retain the 5% floor and immutable vitality tr
   });
   const state = createBattleState(fixtureBattlefieldState([unit]));
 
-  const request = power => ({ sourceUnitId: null, targetUnitId: 0, tick: 0,
-    damageType: 'TRUE', operands: createDamageOperands(power) });
-  const harmless = resolveDamage(state, request(0));
-  const lethal = resolveDamage(state, request(1000));
+  const request = power => ({ source: null, target: unitRef(unit), parameters: parameters(power, 'TRUE') });
+  const harmless = dealDamage(state, request(0));
+  const lethal = dealDamage(state, request(1000));
 
   assert.equal(getUnit(harmless.state, 0), unit);
-  assert.equal(lethal.value.hpLoss, 7);
-  assert.equal(lethal.value.deathOccurred, true);
+  assert.equal(harmless.value.kind, 'REJECTED');
+  assert.equal(lethal.value.kind, 'APPLIED');
+  assert.equal(lethal.value.application.hpLoss, 7);
   assert.equal(getUnit(lethal.state, 0), undefined);
   assert.equal(lethal.state.removedUnits[0].unit.vitality.hp, 0);
   assert.equal(unit.vitality.hp, 7);
@@ -1164,20 +1169,18 @@ function actionView(units, relations = []) {
 test('core protection effects: withdrawing one source retains the other source and earlier snapshots', () => {
   const source = actionUnit(0, 'ALLY', [0, 0]);
   const target = actionUnit(1, 'ENEMY', [1, 0], { hp: 50 });
-  const request = { sourceUnitId: 0, targetUnitId: 1, tick: 0,
-    damageType: 'TRUE', operands: createDamageOperands(1000) };
+  const request = { source: unitRef(source), target: unitRef(target), parameters: parameters(1000, 'TRUE') };
   const restricted = (effect, state) => {
     const current = getUnit(state, 1);
     if (effect === healFree) return !canReceiveHealing({ source, target: current,
       battlefield: battlefieldView(state), ignoreHealFree: false });
     if (effect === untargetable) return selectTargets({ source, battlefield: battlefieldView(state) },
       compileTargeting(damageTargeting(), ['DAMAGE'])).length === 0;
-    const resolved = resolveDamage(state, request);
-    return effect === invincible ? resolved.value.cancellation?.reason === 'INVINCIBLE'
-      : resolved.value.fatalProtection;
+    const resolved = dealDamage(state, request);
+    return resolved.value.kind === 'REJECTED';
   };
 
-  for (const effect of [healFree, untargetable, invincible, undeadable]) {
+  for (const effect of [healFree, untargetable, invincible]) {
     let state = createBattleState(fixtureBattlefieldState([source, target]));
     const first = effects.install(state, unitRef(getUnit(state, 1)), effect);
     const second = effects.install(first.state, unitRef(getUnit(first.state, 1)), effect);
@@ -1199,66 +1202,64 @@ test('core protection effects: withdrawing one source retains the other source a
   }
 });
 
-test('core vitality: invincibility is decided before HIT SP and obeys the damage reception policy', () => {
+test('core vitality: invincibility rejects receiving before HIT SP and removing it restores reception', () => {
   const observed = [];
   const protectedTarget = actionUnit(1, 'ALLY', [1, 0], { effects: [invincible], skill: skillDefinition({
     id: 'hit-sp', sp: { initial: 0, capacity: 10, requirement: 10, recovery: { type: 'HIT', amount: 1 } },
     activation: { trigger: 'MANUAL', sustain: { type: 'INFINITE' }, initialize: () => ({}) },
   }) });
   const target = { ...protectedTarget, vitality: setDamageHook(protectedTarget.vitality, {
-    id: 'observe-reception', stage: 'reception', priority: 0, accepts: () => true,
+    id: 'observe-reception', stage: 'receiving', priority: 0,
     invoke(state, context, pending) {
-      observed.push({ sp: getUnit(state, context.host.id).skill.sp.value, cancellation: pending.cancellation?.reason });
+      observed.push(getUnit(state, context.request.target.id).skill.sp.value);
       return { state, value: pending };
     },
   }) };
   const state = enterSkill(createBattleState(fixtureBattlefieldState([target])), unitRef(target));
-  const request = { sourceUnitId: null, targetUnitId: 1, tick: 0,
-    damageType: 'TRUE', operands: createDamageOperands(10) };
-  const blocked = resolveDamage(state, request);
-  const allowed = resolveDamage(state, { ...request, receptionPolicy: {
-    considerInvincibility: false, skipModifierEvents: false,
-  } });
+  const request = { source: null, target: unitRef(target), parameters: parameters(10, 'TRUE') };
+  const blocked = dealDamage(state, request);
+  const protection = getUnit(state, 1).effects.values().find(effect => effect.definition === invincible);
+  const unprotected = effects.end(state, { host: unitRef(target), id: protection.id });
+  const allowed = dealDamage(unprotected, request);
 
-  assert.equal(blocked.value.cancellation.reason, 'INVINCIBLE');
-  assert.equal(blocked.value.hpLoss, 0);
+  assert.equal(blocked.value.kind, 'REJECTED');
   assert.equal(getUnit(blocked.state, 1).skill.sp.value, 0);
-  assert.equal(allowed.value.cancellation, null);
-  assert.equal(allowed.value.hpLoss, 10);
+  assert.equal(allowed.value.kind, 'APPLIED');
+  assert.equal(allowed.value.application.hpLoss, 10);
   assert.equal(getUnit(allowed.state, 1).skill.sp.value, 1);
-  assert.deepEqual(observed, [
-    { sp: 0, cancellation: 'INVINCIBLE' }, { sp: 1, cancellation: undefined },
-  ]);
+  assert.deepEqual(observed, [1]);
   assert.equal(target.skill.sp.value, 0);
   assert.equal(target.vitality.hp, 100);
 });
 
-test('core vitality: fatal protection uses the rules remaining after reception hooks', () => {
+test('core vitality: reception rereads healing restrictions and uses HP changed by nested healing', () => {
   for (const installedInitially of [false, true]) {
     const original = actionUnit(1, 'ENEMY', [1, 0], {
-      effects: installedInitially ? [undeadable] : [],
+      hp: 40, effects: installedInitially ? [healFree] : [],
     });
     const target = { ...original, vitality: setDamageHook(original.vitality, {
-      id: 'change-fatal-protection', stage: 'reception', priority: 0, accepts: () => true,
+      id: 'change-healing-restriction', stage: 'receiving', priority: 0,
       invoke(state, context, pending) {
         if (installedInitially) {
-          state = effects.end(state, { host: { id: 1 },
-            id: getUnit(state, context.host.id).effects.values()[0].id });
+          state = effects.end(state, { host: context.request.target,
+            id: getUnit(state, context.request.target.id).effects.values()[0].id });
         } else {
-          state = effects.install(state, context.host, undeadable).state;
+          state = effects.install(state, context.request.target, healFree).state;
         }
+        state = resolveHealing(state, { sourceUnitId: null, targetUnitId: context.request.target.id,
+          tick: state.tick, power: 30, ignoreHealFree: false }).state;
         return { state, value: pending };
       },
     }) };
     const state = createBattleState(fixtureBattlefieldState([target]));
-    const resolved = resolveDamage(state, { sourceUnitId: null, targetUnitId: 1, tick: 0,
-      damageType: 'TRUE', operands: createDamageOperands(1000) });
+    const resolved = dealDamage(state, { source: null, target: unitRef(target), parameters: parameters(60, 'TRUE') });
 
-    assert.equal(resolved.value.fatalProtection, !installedInitially);
-    assert.equal(resolved.value.deathOccurred, installedInitially);
-    assert.equal(resolved.value.hpLoss, installedInitially ? 100 : 99);
-    assert.equal(getUnit(resolved.state, 1)?.vitality.hp, installedInitially ? undefined : 1);
-    assert.equal(target.vitality.hp, 100);
+    assert.equal(resolved.value.kind, 'APPLIED');
+    assert.deepEqual(resolved.value.application, installedInitially
+      ? { hpBefore: 70, hpAfter: 10, hpLoss: 60 }
+      : { hpBefore: 40, hpAfter: 0, hpLoss: 40 });
+    assert.equal(getUnit(resolved.state, 1)?.vitality.hp, installedInitially ? 10 : undefined);
+    assert.equal(target.vitality.hp, 40);
   }
 });
 

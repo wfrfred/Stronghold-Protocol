@@ -37,8 +37,10 @@ import {
 } from "../../core/tactical/unit/capability/offense/capability.js";
 import { hasSkill } from "../../core/tactical/unit/capability/skill/capability.js";
 import { modify } from "../../core/tactical/unit/capability/skill/sp.js";
-import { createDamageOperands } from "../../core/tactical/unit/capability/vitality/damage/contract.js";
-import { resolveDamage } from "../../core/tactical/unit/capability/vitality/damage/settlement.js";
+import type { DamageRequest } from "../../core/tactical/battle/damage/contract.js";
+import { calculateDamage } from "../../core/tactical/battle/damage/calculate.js";
+import { applyDamage } from "../../core/tactical/battle/damage/apply.js";
+import { hasVitality } from "../../core/tactical/unit/capability/vitality/capability.js";
 import * as attribute from "../../core/tactical/unit/contribution/attribute.js";
 import { stun } from "../../content/tactical/effects/stun.js";
 import { silence, blockSpRecovery } from "../../content/tactical/effects/control.js";
@@ -196,7 +198,7 @@ export function create(id: string, profile: ArknightsElementalBurstProfile): Def
                     return battle;
                 }
                 if (profile.damagePerSecond !== null) {
-                    battle = hurt(battle, scope.ref, profile.damagePerSecond, true);
+                    battle = hurt(battle, scope.ref, profile.damagePerSecond);
                 }
 
                 unit = activeHost(battle, scope.ref);
@@ -310,9 +312,7 @@ export function create(id: string, profile: ArknightsElementalBurstProfile): Def
                 }
             }
 
-            return profile.burstDamage === null
-                ? battle
-                : hurt(battle, ref, profile.burstDamage, false);
+            return profile.burstDamage === null ? battle : hurt(battle, ref, profile.burstDamage);
         },
     });
 }
@@ -329,18 +329,23 @@ function hurt(
     battle: BattleState,
     ref: Ref<Burst>,
     damage: NonNullable<ArknightsElementalBurstProfile["burstDamage"]>,
-    ignoreForSp: boolean,
 ): BattleState {
-    if (activeHost(battle, ref) === undefined) {
+    const host = activeHost(battle, ref);
+
+    if (host === undefined || !hasVitality(host)) {
         return battle;
     }
 
-    return resolveDamage(battle, {
-        sourceUnitId: null,
-        targetUnitId: ref.host.id,
-        damageType: damage.type,
-        operands: createDamageOperands(damage.power),
-        ignoreForSp,
-        tick: battle.tick,
-    }).state;
+    const attack = { power: damage.power, multiplier: 1, addition: 0 };
+    const type = damage.type;
+    const request: DamageRequest = {
+        source: null,
+        target: units.ref(host),
+        parameters:
+            type === "PHYSICAL" || type === "ARTS"
+                ? { type, attack, penetration: { fixed: 0, proportional: 0 } }
+                : { type, attack },
+    };
+
+    return applyDamage(request, calculateDamage(battle, request)).state;
 }

@@ -1,3 +1,4 @@
+import { damage as dealDamage, parameters } from "../helpers/vitality.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { battle, unit, actionDefinition, geometry } from "../helpers/action-fixture.js";
@@ -8,13 +9,11 @@ import { advance } from "../../dist/core/tactical/unit/action/advance.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { getUnit, updateUnit, battlefieldView } from "../../dist/core/tactical/battle/state.js";
 
-import { setHook } from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
+import { setHook } from "../../dist/core/tactical/battle/damage/hook.js";
 import { setHook as setHealingHook } from "../../dist/core/tactical/unit/capability/vitality/healing/hook.js";
 import { setAttackContribution } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { create as modifier } from "../../dist/core/tactical/unit/contribution/attribute.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
-import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
-import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import { definition as createSkillDefinition } from "../helpers/skill.js";
 import { activate, enter as enterSkill } from "../../dist/core/tactical/unit/capability/skill/operations.js";
 
@@ -98,11 +97,11 @@ test("ordinary attack: domain settlements observe each preceding returned battle
             ...target,
             vitality: setHook(target.vitality, {
                 id: "observe-damage",
-                stage: "reception",
+                stage: "receiving",
                 priority: 0,
                 accepts: () => true,
                 invoke(state, context, pending) {
-                    observed.push({ request: context.request });
+                    observed.push({ request: context.request, tick: state.tick });
                     return { state, value: pending };
                 },
             }),
@@ -110,8 +109,8 @@ test("ordinary attack: domain settlements observe each preceding returned battle
     );
     const result = start({ ...initial, tick: 7 }, definition);
     assert.equal(result.value.type, "STARTED");
-    assert.equal(observed[0].request.operands.power, 10);
-    assert.equal(observed[0].request.tick, 7);
+    assert.equal(observed[0].request.parameters.attack.power, 10);
+    assert.equal(observed[0].tick, 7);
     assert.equal(observed[1].request.targetUnitId, 0);
     assert.equal(observed[1].targetHp, 90);
     assert.equal(getUnit(result.state, 1).vitality.hp, 90);
@@ -171,18 +170,12 @@ test("ordinary attack: lethal retaliation invalidates a later unsampled source a
         ...target,
         vitality: setHook(target.vitality, {
             id: "retaliation",
-            stage: "reaction",
+            stage: "hpApplied",
             priority: 0,
-            accepts: (_battle, context) => context.request.targetUnitId === context.host.id,
+            accepts: (_battle, context) => context.request.target.id === target.id,
             invoke(state, context) {
-                state = resolveDamage(state, {
-                        sourceUnitId: 1,
-                        targetUnitId: 0,
-                        tick: context.request.tick,
-                        damageType: "TRUE",
-                        operands: createDamageOperands(10),
-                    }).state;
-                return { state, value: {} };
+                state = dealDamage(state, { source: { id: 1 }, target: { id: 0 }, parameters: parameters(10, "TRUE") }).state;
+                return { state, value: undefined };
             },
         }),
     });

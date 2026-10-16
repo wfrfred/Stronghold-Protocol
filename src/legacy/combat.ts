@@ -6,7 +6,7 @@ import { BattleRuntime } from "../core/tactical/battle/runtime.js";
 import type { Input } from "../core/tactical/battle/contract.js";
 import { createBattlefieldMap, type BattlefieldMap } from "../core/tactical/battlefield/map/map.js";
 import { createTile } from "../core/tactical/battlefield/map/tile.js";
-import type { DamageType } from "../core/tactical/unit/capability/vitality/damage/contract.js";
+import type { DamageType } from "../core/tactical/battle/damage/contract.js";
 import { isTilePosition, Tile, type TilePosition } from "../core/tactical/geometry/coordinate.js";
 import type { Direction } from "../core/tactical/geometry/direction.js";
 import { RangeGrid } from "../core/tactical/geometry/range.js";

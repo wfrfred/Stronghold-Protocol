@@ -20,11 +20,10 @@ import type { Action as ActionCapability } from "../../../core/tactical/unit/cap
 import { isSpatiallyPresent } from "../../../core/tactical/unit/capability/presence/capability.js";
 import { beforeRelease, released } from "../../../core/tactical/unit/capability/action/release.js";
 import { resolveAttackPower } from "../../../core/tactical/unit/capability/offense/query.js";
-import { resolveDamage } from "../../../core/tactical/unit/capability/vitality/damage/settlement.js";
-import {
-    createDamageOperands,
-    type DamageType,
-} from "../../../core/tactical/unit/capability/vitality/damage/contract.js";
+import { calculateDamage } from "../../../core/tactical/battle/damage/calculate.js";
+import { applyDamage } from "../../../core/tactical/battle/damage/apply.js";
+import type { DamageRequest, DamageType } from "../../../core/tactical/battle/damage/contract.js";
+import { hasVitality } from "../../../core/tactical/unit/capability/vitality/capability.js";
 import { resolveHealing } from "../../../core/tactical/unit/capability/vitality/healing/settlement.js";
 import { resolveMaxHp } from "../../../core/tactical/unit/capability/vitality/query.js";
 import {
@@ -202,20 +201,28 @@ function apply(
 
     switch (operation.type) {
         case "DAMAGE": {
+            const receiver = units.get(battle, target);
             const power =
                 operation.powerSource === "SOURCE_ATTACK"
                     ? resolveAttackPower(sourceUnitId, battlefieldView(battle))
                     : operation.power;
 
-            return power === undefined
-                ? battle
-                : resolveDamage(battle, {
-                      sourceUnitId,
-                      targetUnitId,
-                      tick,
-                      damageType: operation.damageType,
-                      operands: createDamageOperands(power),
-                  }).state;
+            if (power === undefined || receiver === undefined || !hasVitality(receiver)) {
+                return battle;
+            }
+
+            const attack = { power, multiplier: 1, addition: 0 };
+            const type = operation.damageType;
+            const request: DamageRequest = {
+                source,
+                target: units.ref(receiver),
+                parameters:
+                    type === "PHYSICAL" || type === "ARTS"
+                        ? { type, attack, penetration: { fixed: 0, proportional: 0 } }
+                        : { type, attack },
+            };
+
+            return applyDamage(request, calculateDamage(battle, request)).state;
         }
 
         case "HEAL":

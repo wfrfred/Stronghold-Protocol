@@ -1,3 +1,4 @@
+import { damage as dealDamage, parameters } from "../helpers/vitality.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { closeLifetime } from "../../dist/core/tactical/battle/execution/lifetime.js";
 import assert from "node:assert/strict";
@@ -9,12 +10,10 @@ import {
     updateUnit,
 } from "../../dist/core/tactical/battle/state.js";
 
-import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
-import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import {
     removeHook,
     setHook,
-} from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
+} from "../../dist/core/tactical/battle/damage/hook.js";
 import * as effect from "../../dist/core/tactical/unit/effect/operations.js";
 import { get } from "../../dist/core/tactical/unit/effect/operations.js";
 import { effectFixtureWork, install, definition, attackBuff } from "../helpers/effects.js";
@@ -250,11 +249,11 @@ test("effect lifetimes: terminal hook cleanup cannot recreate a host killed by a
                     state,
                     ({ ...context.unit, vitality: setHook(context.unit.vitality, {
                         id: "parent-hook",
-                        stage: "reaction",
+                        stage: "completed",
                         priority: 0,
                         accepts: () => true,
                         invoke(state) {
-                            return { state, value: {} };
+                            return { state, value: undefined };
                         },
                     }) }),
                 );
@@ -272,13 +271,7 @@ test("effect lifetimes: terminal hook cleanup cannot recreate a host killed by a
         {},
         {
             onEnd(state, context) {
-                return resolveDamage(state, {
-                        sourceUnitId: null,
-                        targetUnitId: 0,
-                        damageType: "TRUE",
-                        operands: createDamageOperands(100),
-                        tick: context.tick,
-                    }).state;
+                return dealDamage(state, { source: null, target: { id: 0 }, parameters: parameters(100, "TRUE") }).state;
             },
         },
     );

@@ -1,4 +1,4 @@
-import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
+import { damage as dealDamage, parameters } from "../helpers/vitality.js";
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { battle, unit, actionDefinition } from '../helpers/action-fixture.js';
@@ -8,7 +8,6 @@ import { all, ref, launchProjectile, getProjectile, replaceProjectile, resolvePr
 import { advanceProjectiles, stopProjectile } from '../../dist/core/tactical/battlefield/projectile/settlement.js';
 import { advanceProjectiles as advanceBattleProjectiles } from '../../dist/core/tactical/battle/steps/projectiles.js';
 import { getUnit, updateUnit, removeUnit, registerUnit, battlefieldView } from '../../dist/core/tactical/battle/state.js';
-import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
 import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { setAttackContribution } from '../../dist/core/tactical/unit/capability/offense/capability.js';
 import { create as modifier } from '../../dist/core/tactical/unit/contribution/attribute.js';
@@ -30,10 +29,7 @@ function program({ id = 'shell', cachedOnly = false, acceptsContact, contact, st
   return createProjectileDefinition({
     id, initialize: () => ({ contacts: 0 }),
     acceptsContact: acceptsContact ?? ((_context, target) => target.allegiance?.side === 'ENEMY'),
-    contact: contact ?? ((state, context) => resolveDamage(state, {
-      sourceUnitId: context.projectile.source, targetUnitId: context.targetUnitId, tick: context.tick,
-      damageType: 'TRUE', operands: createDamageOperands(cachedOnly ? context.projectile.cachedAtk : resolveProjectileAttackPower(state, context.projectile)),
-    }).state),
+    contact: contact ?? ((state, context) => dealDamage(state, { source: { id: context.projectile.source }, target: { id: context.targetUnitId }, parameters: parameters(cachedOnly ? context.projectile.cachedAtk : resolveProjectileAttackPower(state, context.projectile), 'TRUE') }).state),
     ...(stop === undefined ? {} : { stop }),
   });
 }
@@ -101,10 +97,10 @@ test('projectile runtime: frozen candidate identities read latest eligibility an
     contact: (state, context) => {
       observed.push(context.targetUnitId);
       if (context.targetUnitId === 1) {
-        state = resolveDamage(state, { sourceUnitId: 0, targetUnitId: 2, tick: 1, damageType: 'TRUE', operands: createDamageOperands(1) }).state;
+        state = dealDamage(state, { source: { id: 0 }, target: { id: 2 }, parameters: parameters(1, 'TRUE') }).state;
         state = registerUnit(state, { ...unit(3), position: [1, 0] });
       }
-      return resolveDamage(state, { sourceUnitId: 0, targetUnitId: context.targetUnitId, tick: 1, damageType: 'TRUE', operands: createDamageOperands(10) }).state;
+      return dealDamage(state, { source: { id: 0 }, target: { id: context.targetUnitId }, parameters: parameters(10, 'TRUE') }).state;
     },
   });
   const initial = launch(battle(unit(0), unit(1), { ...unit(2), position: [1.2, 0] }), shell).state;
@@ -178,7 +174,7 @@ test('projectile runtime: immutable copies replay arrival and stop without mutat
 test('projectile runtime: a stop callback exception exposes no partial result or input mutation', () => {
 
   const shell = program({ stop: (state, context) => {
-    state = resolveDamage(state, { sourceUnitId: 0, targetUnitId: 1, tick: context.tick, damageType: 'TRUE', operands: createDamageOperands(10) }).state;
+    state = dealDamage(state, { source: { id: 0 }, target: { id: 1 }, parameters: parameters(10, 'TRUE') }).state;
     throw new Error('stop failed');
   } });
   const initial = launch(battle(unit(0), unit(1)), shell).state;
@@ -347,7 +343,7 @@ test('projectile runtime: command stop callbacks see same-tick launches and a fa
     const observed = [];
     const shell = program({ stop: (state, context) => {
       observed.push([context.projectile.id, getUnit(state, 1).vitality.hp, findProjectile(state, 3)?.progress.type]);
-      state = resolveDamage(state, { sourceUnitId: 0, targetUnitId: 1, tick: context.tick, damageType: 'TRUE', operands: createDamageOperands(1) }).state;
+      state = dealDamage(state, { source: { id: 0 }, target: { id: 1 }, parameters: parameters(1, 'TRUE') }).state;
       if (failing && context.projectile.id === 1) throw new Error('second stop failed');
       return state;
     } });

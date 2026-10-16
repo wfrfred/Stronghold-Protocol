@@ -2,9 +2,10 @@ import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { initialize } from "./unit.js";
 import { transitionUnit, getUnit, battlefieldView } from "../../dist/core/tactical/battle/state.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
-import * as damage from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
+import * as damageHooks from "../../dist/core/tactical/battle/damage/hook.js";
 import * as healing from "../../dist/core/tactical/unit/capability/vitality/healing/hook.js";
-import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
+import { calculateDamage } from "../../dist/core/tactical/battle/damage/calculate.js";
+import { applyDamage } from "../../dist/core/tactical/battle/damage/apply.js";
 import { definition, effectFixtureWork, installFixtureEffect } from "./effects.js";
 
 export { effectFixtureWork as workFor, installFixtureEffect as attach };
@@ -27,15 +28,24 @@ export function unit(
     return { ...value, vitality: { ...value.vitality, hp, ...vitality } };
 }
 
+export function parameters(power, type = "PHYSICAL", penetration = { fixed: 0, proportional: 0 }) {
+    const attack = { power, multiplier: 1, addition: 0 };
+    return type === "PHYSICAL" || type === "ARTS"
+        ? { type, attack, penetration }
+        : { type, attack };
+}
+
 export function request(power = 100, overrides = {}) {
     return {
-        sourceUnitId: 1,
-        targetUnitId: 2,
-        damageType: "PHYSICAL",
-        operands: createDamageOperands(power),
-        tick: 12,
+        source: { id: 1 },
+        target: { id: 2 },
+        parameters: parameters(power),
         ...overrides,
     };
+}
+
+export function damage(battle, request) {
+    return applyDamage(request, calculateDamage(battle, request));
 }
 
 export function setSelf(state, context, self, next) {
@@ -68,19 +78,21 @@ function hookEffect(domain, id, initial, entries, callbacks = {}) {
                             id: `${context.ref.host.id}:${context.ref.id}:${index}`,
                             stage: entry.stage,
                             priority: entry.priority ?? 0,
-                            accepts(state, invocation, input) {
+                            accepts(state, contextValue, input) {
+                                const invocation = { ...contextValue, host: context.ref.host };
                                 const self = getUnit(state, invocation.host.id)?.effects.get(context.ref.id, content);
                                 return (
                                     self?.status === "ACTIVE" &&
                                     (entry.accepts?.(state, invocation, self, input) ?? true)
                                 );
                             },
-                            invoke(state, invocation, input) {
+                            invoke(state, contextValue, input) {
+                                const invocation = { ...contextValue, host: context.ref.host };
                                 return entry.invoke(
                                     state,
                                     invocation,
                                     getUnit(state, invocation.host.id).effects.get(context.ref.id, content),
-                                    entry.stage === "reaction" ? invocation.report : input,
+                                    domain === healing && entry.stage === "reaction" ? invocation.report : input,
                                 );
                             },
                         }),
@@ -110,7 +122,7 @@ function hookEffect(domain, id, initial, entries, callbacks = {}) {
 }
 
 export function damageEffect(id, initial, entries, callbacks) {
-    return hookEffect(damage, id, initial, entries, callbacks);
+    return hookEffect(damageHooks, id, initial, entries, callbacks);
 }
 
 export function healingEffect(id, initial, entries, callbacks) {
@@ -120,7 +132,7 @@ export function healingEffect(id, initial, entries, callbacks) {
 export function barrier(id = "barrier", remainingAmount = 500, priority = 0) {
     return damageEffect(id, { remainingAmount }, [
         {
-            stage: "reception",
+            stage: "receiving",
             priority,
             invoke(state, context, self, pending) {
                 if (pending.cancellation !== null) return { state, value: pending };
@@ -133,18 +145,9 @@ export function barrier(id = "barrier", remainingAmount = 500, priority = 0) {
                 return {
                     state,
                     value: {
-                            ...pending,
-                            amount: pending.amount - absorbed,
-                            consumptions: [
-                                ...pending.consumptions,
-                                {
-                                    ownerUnitId: context.host.id,
-                                    resourceId: `${context.host.id}:${self.id}`,
-                                    resource: "barrier",
-                                    amount: absorbed,
-                                },
-                            ],
-                        },
+                        ...pending,
+                        amount: pending.amount - absorbed,
+                    },
                 };
             },
         },

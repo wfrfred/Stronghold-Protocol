@@ -1,5 +1,5 @@
 import type { Id } from "../../unit/unit.js";
-import type { DamageType } from "../../unit/capability/vitality/damage/contract.js";
+import type { DamageType, DamageCancellation } from "../damage/contract.js";
 
 export type CombatEvent =
     | {
@@ -14,7 +14,9 @@ export type CombatEvent =
           readonly targetUnitId: Id;
           readonly damageType: DamageType;
           readonly amount: number;
-          readonly hp: number;
+          readonly receivedAmount: number;
+          readonly cancellation: DamageCancellation | null;
+          readonly hp: number | null;
           readonly tick: number;
       }
     | {

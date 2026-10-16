@@ -1,198 +1,113 @@
 import { invincible, healFree } from "../../dist/content/tactical/effects/protection.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-    unit,
-    workFor,
-    attach,
-    request,
-    damageEffect,
-    healingEffect,
-    setSelf,
-    stateOf,
-} from "../helpers/vitality.js";
-
+import { unit, workFor, attach, request, damageEffect, healingEffect, setSelf, stateOf } from "../helpers/vitality.js";
 import { getUnit, transitionUnit } from "../../dist/core/tactical/battle/state.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
-import * as damage from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
+import * as damage from "../../dist/core/tactical/battle/damage/hook.js";
 import * as healing from "../../dist/core/tactical/unit/capability/vitality/healing/hook.js";
-import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
+import { calculateDamage } from "../../dist/core/tactical/battle/damage/calculate.js";
+import { applyDamage } from "../../dist/core/tactical/battle/damage/apply.js";
 import { resolveHealing } from "../../dist/core/tactical/unit/capability/vitality/healing/settlement.js";
 
-function damageHook(id, stage, invoke, priority = 0, enabled = () => true) {
-    return { id, stage, priority, accepts: enabled, invoke };
-}
-
-function healingHook(id, stage, invoke, priority = 0, enabled = () => true) {
-    return { id, stage, priority, accepts: enabled, invoke };
-}
-
-const healRequest = (power = 10, overrides = {}) => ({
-    sourceUnitId: 1,
-    targetUnitId: 2,
-    power,
-    tick: 12,
-    ...overrides,
-});
+const settle = (battle, input) => applyDamage(input, calculateDamage(battle, input));
+const damageHook = (id, stage, invoke, priority = 0, accepts = () => true) => ({ id, stage, priority, accepts, invoke });
+const healingHook = (id, stage, invoke, priority = 0, accepts = () => true) => ({ id, stage, priority, accepts, invoke });
+const healRequest = (power = 10, overrides = {}) => ({ sourceUnitId: 1, targetUnitId: 2, power, tick: 12, ...overrides });
+const withDamage = (unit, ...entries) => ({ ...unit, vitality: entries.reduce((state, entry) => damage.setHook(state, entry), unit.vitality) });
 
 test("hook dispatch checks each Effect against its current status immediately before invocation", () => {
     const calls = [];
     let enableSecond = false;
-    const first = damageEffect("first", {}, [
-        {
-            stage: "reception",
-            priority: 10,
-            invoke(state, context, _self, pending) {
-                calls.push("first");
-                state = effects.setEnabled(
-                    state,
-                    { host: { id: 2 }, id: 1 },
-                    enableSecond,
-                );
-                return { state, value: pending };
-            },
+    const first = damageEffect("first", {}, [{
+        stage: "receiving", priority: 10,
+        invoke(state, _context, _self, pending) {
+            calls.push("first");
+            return { state: effects.setEnabled(state, { host: { id: 2 }, id: 1 }, enableSecond), value: pending };
         },
-    ]);
-    const second = damageEffect("second", {}, [
-        {
-            stage: "reception",
-            invoke(state, _context, _self, pending) {
-                calls.push("second");
-                return { state, value: pending };
-            },
-        },
-    ]);
+    }]);
+    const second = damageEffect("second", {}, [{ stage: "receiving", invoke(state, _context, _self, pending) {
+        calls.push("second"); return { state, value: pending };
+    } }]);
     const target = attach(attach(unit(2), first), second);
     let battle = workFor(unit(1), target);
-
-    battle = resolveDamage(battle, request()).state;
+    battle = settle(battle, request()).state;
     assert.deepEqual(calls, ["first"]);
     enableSecond = true;
-    battle = resolveDamage(battle, request()).state;
+    battle = settle(battle, request()).state;
     assert.deepEqual(calls, ["first", "first", "second"]);
     assert.equal(target.effects.values()[1].status, "ACTIVE");
 });
 
 test("finishing a pending Effect removes its Hook before that candidate can execute", () => {
     const calls = [];
-    const first = damageEffect("end-second", {}, [
-        {
-            stage: "reception",
-            priority: 10,
-            invoke(state, context, _self, pending) {
-                calls.push("first");
-                state = effects.end(
-                    state,
-                    { host: { id: 2 }, id: 1 },
-                    "EXPLICIT",
-                );
-                return { state, value: pending };
-            },
+    const first = damageEffect("end-second", {}, [{ stage: "receiving", priority: 10,
+        invoke(state, _context, _self, pending) {
+            calls.push("first");
+            return { state: effects.end(state, { host: { id: 2 }, id: 1 }, "EXPLICIT"), value: pending };
         },
-    ]);
-    const second = damageEffect(
-        "ended",
-        {},
-        [
-            {
-                stage: "reception",
-                invoke(state, _context, _self, pending) {
-                    calls.push("second");
-                    return { state, value: pending };
-                },
-            },
-        ],
-        {
-            onEnd(state) {
-                calls.push("end");
-                return state;
-            },
-        },
-    );
-    let battle = workFor(unit(1), attach(attach(unit(2), first), second));
-    battle = resolveDamage(battle, request()).state;
+    }]);
+    const second = damageEffect("ended", {}, [{ stage: "receiving", invoke(state, _context, _self, pending) {
+        calls.push("second"); return { state, value: pending };
+    } }], { onEnd(state) { calls.push("end"); return state; } });
+    const result = settle(workFor(unit(1), attach(attach(unit(2), first), second)), request());
     assert.deepEqual(calls, ["first", "end"]);
-    assert.equal(getUnit(battle, 2).effects.values().length, 1);
-    assert.equal(getUnit(battle, 2).vitality.damageHooks.length, 1);
+    assert.equal(getUnit(result.state, 2).effects.values().length, 1);
+    assert.equal(getUnit(result.state, 2).vitality.damageHooks.length, 1);
 });
 
-test("selected Hook IDs use current replacements while nested damage independently selects the latest candidates", () => {
+test("selected Hook IDs use current replacements while nested damage selects its own latest candidates", () => {
     const calls = [];
-
     let nested = false;
     let changed = false;
-    const replacement = damageHook("second", "sourceFormula", (state, _context, input) => {
-        calls.push("replacement");
-        return { state, value: { ...input, power: input.power * 2 } };
+    const multiply = factor => (state, _context, input) => ({ state, value: { ...input, attack: { ...input.attack, power: input.attack.power * factor } } });
+    const replacement = damageHook("second", "sourceFormula", (state, context, input) => {
+        calls.push("replacement"); return multiply(2)(state, context, input);
     });
-    const added = damageHook("third", "sourceFormula", (state, _context, input) => {
-        calls.push("added");
-        return { state, value: { ...input, power: input.power * 3 } };
+    const added = damageHook("third", "sourceFormula", (state, context, input) => {
+        calls.push("added"); return multiply(3)(state, context, input);
     });
-    const first = damageHook(
-        "first",
-        "sourceFormula",
-        (state, context, input) => {
-            calls.push(nested ? "nested-first" : "first");
-            if (!changed) {
-                changed = true;
-                state = transitionUnit(state, 1, (value) =>
-                    ({ ...value, vitality: damage.setHook(damage.setHook(damage.removeHook(value.vitality, "second"), replacement), added) }),
-                );
-                nested = true;
-                state = resolveDamage(state, request(10)).state;
-                nested = false;
-            }
-            return { state, value: input };
-        },
-        10,
-    );
-    const old = damageHook("second", "sourceFormula", (state, _context, input) => {
-        calls.push("removed");
+    const first = damageHook("first", "sourceFormula", (state, _context, input) => {
+        calls.push(nested ? "nested-first" : "first");
+        if (!changed) {
+            changed = true;
+            state = transitionUnit(state, 1, value => withDamage({ ...value, vitality: damage.removeHook(value.vitality, "second") }, replacement, added));
+            nested = true;
+            state = settle(state, request(10)).state;
+            nested = false;
+        }
         return { state, value: input };
-    });
-    const source = ({ ...unit(1, { hp: 1000 }), vitality: damage.setHook(damage.setHook(unit(1, { hp: 1000 }).vitality, first), old) });
-    let battle = workFor(source, unit(2, { hp: 1000 }));
-    const initialSettlement = resolveDamage(battle, request(100));
-    battle = initialSettlement.state;
-    const initial = initialSettlement.value;
+    }, 10);
+    const old = damageHook("second", "sourceFormula", (state, _context, input) => { calls.push("removed"); return { state, value: input }; });
+    const source = withDamage(unit(1, { hp: 1000 }), first, old);
+    const initial = settle(workFor(source, unit(2, { hp: 1000 })), request(100));
     assert.deepEqual(calls, ["first", "nested-first", "replacement", "added", "replacement"]);
-    assert.equal(initial.hpLoss, 200);
-    assert.equal(getUnit(battle, 2).vitality.hp, 740);
+    assert.equal(initial.value.application.hpLoss, 200);
+    assert.equal(getUnit(initial.state, 2).vitality.hp, 740);
     assert.deepEqual(source.vitality.damageHooks, [first, old]);
     calls.length = 0;
-    const later = resolveDamage(battle, request(100));
-    battle = later.state;
-    assert.equal(later.value.hpLoss, 600);
+    const later = settle(initial.state, request(100));
+    assert.equal(later.value.application.hpLoss, 600);
     assert.deepEqual(calls, ["first", "replacement", "added"]);
 });
 
 test("nested healing independently selects its latest receiver candidates", () => {
     const calls = [];
-
     let changed = false;
-    const originalHealing = healingHook("original", "reception", (state, _context, pending) => {
-        calls.push("original-healing");
-        return { state, value: pending };
-    });
-    const newHealing = healingHook("new", "reception", (state, _context, pending) => {
-        calls.push("new-healing");
-        return { state, value: pending };
-    });
-    const first = damageHook("damage", "reception", (state, context, pending) => {
+    const originalHealing = healingHook("original", "reception", (state, _context, pending) => { calls.push("original-healing"); return { state, value: pending }; });
+    const newHealing = healingHook("new", "reception", (state, _context, pending) => { calls.push("new-healing"); return { state, value: pending }; });
+    const first = damageHook("damage", "receiving", (state, _context, pending) => {
         calls.push("damage");
         if (!changed) {
             changed = true;
-            state = transitionUnit(state, 2, (value) =>
-                ({ ...value, vitality: healing.setHook(healing.removeHook(value.vitality, "original"), newHealing) }),
-            );
+            state = transitionUnit(state, 2, value => ({ ...value, vitality: healing.setHook(healing.removeHook(value.vitality, "original"), newHealing) }));
             state = resolveHealing(state, healRequest()).state;
         }
         return { state, value: pending };
     });
-    const receiver = ({ ...unit(2, { hp: 500, maxHp: 1000 }), vitality: healing.setHook(damage.setHook(unit(2, { hp: 500, maxHp: 1000 }).vitality, first), originalHealing) });
-    let battle = workFor(unit(1), receiver);
-    battle = resolveDamage(battle, request(100)).state;
+    const value = withDamage(unit(2, { hp: 500, maxHp: 1000 }), first);
+    const receiver = { ...value, vitality: healing.setHook(value.vitality, originalHealing) };
+    let battle = settle(workFor(unit(1), receiver), request(100)).state;
     assert.deepEqual(calls, ["damage", "new-healing"]);
     assert.equal(getUnit(battle, 2).vitality.hp, 410);
     battle = resolveHealing(battle, healRequest()).state;
@@ -202,178 +117,82 @@ test("nested healing independently selects its latest receiver candidates", () =
 
 test("nested damage admits hooks registered before its own dispatch", () => {
     const calls = [];
-
     let changed = false;
-    const late = damageHook("late", "reception", (state, _context, pending) => {
-        calls.push("late-damage");
-        return { state, value: pending };
-    });
-    const first = healingHook("healing", "reception", (state, context, pending) => {
+    const late = damageHook("late", "receiving", (state, _context, pending) => { calls.push("late-damage"); return { state, value: pending }; });
+    const first = healingHook("healing", "reception", (state, _context, pending) => {
         calls.push("healing");
         if (!changed) {
             changed = true;
-            state = transitionUnit(state, 2, (value) => ({ ...value, vitality: damage.setHook(value.vitality, late) }));
-            state = resolveDamage(state, request(10)).state;
+            state = transitionUnit(state, 2, value => withDamage(value, late));
+            state = settle(state, request(10)).state;
         }
         return { state, value: pending };
     });
-    let battle = workFor(unit(1), ({ ...unit(2, { hp: 500, maxHp: 1000 }), vitality: healing.setHook(unit(2, { hp: 500, maxHp: 1000 }).vitality, first) }));
+    const value = unit(2, { hp: 500, maxHp: 1000 });
+    let battle = workFor(unit(1), { ...value, vitality: healing.setHook(value.vitality, first) });
     battle = resolveHealing(battle, healRequest(20)).state;
     assert.deepEqual(calls, ["healing", "late-damage"]);
     assert.equal(getUnit(battle, 2).vitality.hp, 510);
-    battle = resolveDamage(battle, request(10)).state;
+    battle = settle(battle, request(10)).state;
     assert.deepEqual(calls, ["healing", "late-damage", "late-damage"]);
 });
 
-test("cancellation and stopping this Hook stage are separate decisions", () => {
-    for (const stopDispatch of [false, true]) {
-        const calls = [];
-        const cancel = damageHook(
-            "cancel",
-            "reception",
-            (state, _context, pending) => {
-                calls.push("cancel");
-                return {
-                    state,
-                    value: { ...({
-                            ...pending,
-                            cancellation: { stage: "RECEPTION", reason: "BLOCKED" },
-                        }), stopDispatch },
-                };
-            },
-            10,
-        );
-        const after = damageHook("after", "reception", (state, _context, pending) => {
-            calls.push(pending.cancellation.reason);
-            return { state, value: pending };
-        });
-        const react = damageHook("reaction", "reaction", (state, {report}, current) => {
-            calls.push(`reaction:${report.hpLoss}`);
-
-            return { state, value: {} };
-        });
-        let target = ({ ...unit(2), vitality: damage.setHook(unit(2).vitality, cancel) });
-        target = ({ ...target, vitality: damage.setHook(damage.setHook(target.vitality, after), react) });
-        let battle = workFor(unit(1), target);
-        const reportSettlement = resolveDamage(battle, request());
-        battle = reportSettlement.state;
-        const report = reportSettlement.value;
-        assert.equal(report.hpLoss, 0);
-        assert.deepEqual(
-            calls,
-            stopDispatch ? ["cancel", "reaction:0"] : ["cancel", "BLOCKED", "reaction:0"],
-        );
-    }
-});
-
-test("reaction stages run once per participant and can stop their own receiver enumeration", () => {
+test("cancellation remains visible to later Receiving Hooks and Completed", () => {
     const calls = [];
-    const first = damageHook(
-        "first",
-        "reaction",
-        (state) => {
-            calls.push("first");
-            return { state, value: { stopDispatch: true } };
-        },
-        10,
-    );
-    const second = damageHook("second", "reaction", (state) => {
-        calls.push("second");
-
-        return { state, value: {} };
+    const cancel = damageHook("cancel", "receiving", (state, _context, pending) => {
+        calls.push("cancel");
+        return { state, value: { ...pending, cancellation: { reason: "BLOCKED" } } };
+    }, 10);
+    const after = damageHook("after", "receiving", (state, _context, pending) => {
+        calls.push(pending.cancellation.reason); return { state, value: pending };
     });
-    const self = ({ ...unit(1), vitality: damage.setHook(damage.setHook(unit(1).vitality, first), second) });
-    let battle = workFor(self);
-    battle = resolveDamage(battle, request(10, { targetUnitId: 1 })).state;
-    assert.deepEqual(calls, ["first"]);
+    const completed = damageHook("completed", "completed", (state, { outcome }) => {
+        calls.push(`completed:${outcome.kind}:${outcome.received.amount}`); return { state, value: undefined };
+    });
+    const result = settle(workFor(unit(1), withDamage(unit(2), cancel, after, completed)), request());
+    assert.equal(result.value.kind, "CANCELLED");
+    assert.deepEqual(calls, ["cancel", "BLOCKED", "completed:CANCELLED:100"]);
 });
 
-test("nested operations read already changed Effect state and inherit the enclosing event tick", () => {
+test("Completed enumerates each participant once when source and target are the same Unit", () => {
+    const calls = [];
+    const first = damageHook("first", "completed", state => { calls.push("first"); return { state, value: undefined }; }, 10);
+    const second = damageHook("second", "completed", state => { calls.push("second"); return { state, value: undefined }; });
+    settle(workFor(withDamage(unit(1), first, second)), request(10, { target: { id: 1 } }));
+    assert.deepEqual(calls, ["first", "second"]);
+});
+
+test("nested operations read changed Effect state and inherit the current battle tick", () => {
     const uses = [];
-
-    const content = damageEffect("once", { ready: true }, [
-        {
-            stage: "reception",
-            invoke(state, context, self, pending) {
-                uses.push(self.data.ready);
-                if (self.data.ready) {
-                    state = setSelf(state, context, self, { ready: false });
-                    state = resolveHealing(
-                        state,
-                        { sourceUnitId: 1, targetUnitId: 2, power: 10, tick: context.request.tick },
-                        ).state;
-                    state = resolveDamage(state, request(5, { tick: context.request.tick })).state;
-                }
-                return { state, value: pending };
-            },
-        },
-    ]);
-    let battle = workFor(unit(1), attach(unit(2, { hp: 500, maxHp: 1000 }), content));
-    battle = resolveDamage(battle, request(100, { tick: 42 })).state;
+    const content = damageEffect("once", { ready: true }, [{ stage: "receiving", invoke(state, context, self, pending) {
+        uses.push(self.data.ready);
+        if (self.data.ready) {
+            state = setSelf(state, context, self, { ready: false });
+            state = resolveHealing(state, healRequest(10, { tick: state.tick })).state;
+            state = settle(state, request(5)).state;
+        }
+        return { state, value: pending };
+    } }]);
+    const battle = { ...workFor(unit(1), attach(unit(2, { hp: 500, maxHp: 1000 }), content)), tick: 42 };
+    const result = settle(battle, request(100));
     assert.deepEqual(uses, [true, false]);
-    assert.deepEqual(stateOf(battle, 2, content), { ready: false });
-    assert.equal(getUnit(battle, 2).vitality.hp, 405);
-    assert.deepEqual(
-        battle.events.map((event) => [event.type, event.amount, event.tick]),
-        [
-            ["HEAL", 10, 42],
-            ["DAMAGE", 5, 42],
-            ["DAMAGE", 100, 42],
-        ],
-    );
+    assert.deepEqual(stateOf(result.state, 2, content), { ready: false });
+    assert.equal(getUnit(result.state, 2).vitality.hp, 405);
+    assert.deepEqual(result.state.events.map(event => [event.type, event.amount, event.tick]), [
+        ["HEAL", 10, 42], ["DAMAGE", 5, 42], ["DAMAGE", 100, 42],
+    ]);
 });
 
-test("invincibility cancels reception while allowing ordinary observation and reaction hooks", () => {
+test("invincibility rejects Receiving while preserving the Completed outcome", () => {
     const calls = [];
     const content = damageEffect("observe", {}, [
-        {
-            stage: "reception",
-            invoke(state, _context, _self, pending) {
-                calls.push(pending.cancellation.reason);
-                return { state, value: pending };
-            },
-        },
-        {
-            stage: "reaction",
-            invoke(state, _context, _self, report) {
-                calls.push(`reaction:${report.hpLoss}`);
-
-                return { state, value: {} };
-            },
-        },
+        { stage: "receivingStarted", invoke(state) { calls.push("started"); return { state, value: undefined }; } },
+        { stage: "receiving", invoke(state, _context, _self, pending) { calls.push("receiving"); return { state, value: pending }; } },
+        { stage: "completed", invoke(state, { outcome }) { calls.push(outcome.kind); return { state, value: undefined }; } },
     ]);
-    const target = attach(attach(unit(2), invincible), content);
-    let battle = workFor(unit(1), target);
-    const resultSettlement = resolveDamage(battle, request());
-    battle = resultSettlement.state;
-    const result = resultSettlement.value;
-    assert.equal(result.hpLoss, 0);
-    assert.deepEqual(calls, ["INVINCIBLE", "reaction:0"]);
-});
-
-test("skipping modifier events selects the dedicated reception stage and suppresses reactions", () => {
-    const calls = [];
-    let target = ({ ...unit(2), vitality: damage.setHook(unit(2).vitality, damageHook("ordinary", "reception", (state, _context, value) => {
-            calls.push("ordinary");
-            return { state, value };
-        })) });
-    target = ({ ...target, vitality: damage.setHook(target.vitality, damageHook("skipped", "skippedReception", (state, _context, value) => {
-            calls.push("skipped");
-            return { state, value: { ...value, amount: value.amount / 2 } };
-        })) });
-    target = ({ ...target, vitality: damage.setHook(target.vitality, damageHook("reaction", "reaction", (state) => {
-            calls.push("reaction");
-
-            return { state, value: {} };
-        })) });
-    let battle = workFor(unit(1), target);
-    const resultSettlement = resolveDamage(battle, request(100, {
-            receptionPolicy: { considerInvincibility: true, skipModifierEvents: true },
-        }));
-    battle = resultSettlement.state;
-    const result = resultSettlement.value;
-    assert.equal(result.hpLoss, 50);
-    assert.deepEqual(calls, ["skipped"]);
+    const result = settle(workFor(unit(1), attach(attach(unit(2), invincible), content)), request());
+    assert.deepEqual(result.value, { kind: "REJECTED" });
+    assert.deepEqual(calls, ["REJECTED"]);
 });
 
 test("healing hooks resolve output and reception before notifying each participant", () => {

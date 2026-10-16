@@ -1,6 +1,10 @@
 import { Definitions } from "../../../core/tactical/unit/action/definitions.js";
 import { create as createAttack, type Attack } from "../actions/attack.js";
-import { resolveDamage } from "../../../core/tactical/unit/capability/vitality/damage/settlement.js";
+import { calculateDamage } from "../../../core/tactical/battle/damage/calculate.js";
+import { applyDamage } from "../../../core/tactical/battle/damage/apply.js";
+import type { DamageRequest } from "../../../core/tactical/battle/damage/contract.js";
+import type { Ref } from "../../../core/common/ref.js";
+import * as units from "../../../core/tactical/unit/query.js";
 import type { Profile } from "../../../data/arknights/enemy.js";
 import { perSecondToPerTick } from "../../../data/arknights/tick.js";
 import { assertNonnegativeSafeInteger, assertPositiveNumber } from "../../../core/common/assert.js";
@@ -16,7 +20,6 @@ import {
 import { hasAllegiance } from "../../../core/tactical/unit/capability/allegiance/capability.js";
 import { resolveAttackPower } from "../../../core/tactical/unit/capability/offense/query.js";
 import { hasVitality } from "../../../core/tactical/unit/capability/vitality/capability.js";
-import { createDamageOperands } from "../../../core/tactical/unit/capability/vitality/damage/contract.js";
 import type { Unit } from "../../../core/tactical/unit/unit.js";
 import type { Product } from "../../../core/tactical/unit/capability/catalog.js";
 import {
@@ -26,10 +29,14 @@ import {
 } from "./ground.js";
 
 export interface Projectile {
-    readonly definition: ProjectileDefinition<object>;
+    readonly definition: ProjectileDefinition<ProjectileState>;
     readonly speedPerSecond: number;
     readonly contactRadius: number;
     readonly stopDelayTicks: number;
+}
+
+interface ProjectileState {
+    readonly source: Ref<Unit> | null;
 }
 
 export interface AttackTiming extends GroundAttackTiming {
@@ -43,26 +50,39 @@ export interface Definition extends GroundDefinition {
 
 export type Enemy = Unit & Product<Definition>;
 
-export function createArrow(): ProjectileDefinition<object> {
+export function createArrow(): ProjectileDefinition<ProjectileState> {
     return createProjectileDefinition({
         id: "main-mode-crossbow-arrow",
-        initialize: () => ({}),
+        initialize: (): ProjectileState => ({ source: null }),
         acceptsContact: (context, target) =>
             target.id === context.projectile.traceTarget &&
             hasAllegiance(target) &&
             target.allegiance.side === "ALLY" &&
             hasVitality(target) &&
             target.vitality.hp > 0,
-        contact: (state, context) =>
-            resolveDamage(state, {
-                sourceUnitId: context.projectile.source,
-                targetUnitId: context.targetUnitId,
-                tick: state.tick,
-                damageType: "PHYSICAL",
-                operands: createDamageOperands(
-                    resolveProjectileAttackPower(state, context.projectile),
-                ),
-            }).state,
+        contact: (state, context) => {
+            const target = getUnit(state, context.targetUnitId);
+
+            if (target === undefined || !hasVitality(target)) {
+                return state;
+            }
+
+            const request: DamageRequest = {
+                source: context.projectile.state.source,
+                target: units.ref(target),
+                parameters: {
+                    type: "PHYSICAL",
+                    attack: {
+                        power: resolveProjectileAttackPower(state, context.projectile),
+                        multiplier: 1,
+                        addition: 0,
+                    },
+                    penetration: { fixed: 0, proportional: 0 },
+                },
+            };
+
+            return applyDamage(request, calculateDamage(state, request)).state;
+        },
     });
 }
 
@@ -135,6 +155,7 @@ export function create(
                         },
                     },
                     stopDelayTicks: projectile.stopDelayTicks,
+                    initialState: { source: units.ref(source) },
                 },
                 state.tick,
             );

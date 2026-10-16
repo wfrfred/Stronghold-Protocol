@@ -1,4 +1,4 @@
-import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
+import { damage as dealDamage, parameters } from "../helpers/vitality.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { fixtureBattlefieldState as fixtureBattlefield } from "../helpers/battlefield.js";
@@ -32,8 +32,7 @@ import { definition } from "../helpers/effects.js";
 import {
     setHook,
     removeHook,
-} from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
-import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
+} from "../../dist/core/tactical/battle/damage/hook.js";
 
 function fixture() {
     const skill = createSkillDefinition({
@@ -44,13 +43,7 @@ function fixture() {
             trigger: "MANUAL",
             sustain: { type: "INFINITE" },
             initialize: () => ({}),
-            onEnd: state => resolveDamage(state, {
-                sourceUnitId: null,
-                targetUnitId: 2,
-                damageType: "TRUE",
-                operands: createDamageOperands(1),
-                tick: state.tick,
-            }).state,
+            onEnd: state => dealDamage(state, { source: null, target: { id: 2 }, parameters: parameters(1, "TRUE") }).state,
         },
     });
     const counter = definition(
@@ -62,9 +55,9 @@ function fixture() {
                 return transitionUnit(state, ref.host.id, (unit) =>
                     ({ ...unit, vitality: setHook(unit.vitality, {
                         id: "consume",
-                        stage: "reception",
+                        stage: "receiving",
                         priority: 0,
-                        accepts: (battle, context) => getUnit(battle, context.host.id)?.effects.values().find(effect => effect.id === ref.id)?.status === "ACTIVE",
+                        accepts: (battle, context) => getUnit(battle, context.request.target.id)?.effects.values().find(effect => effect.id === ref.id)?.status === "ACTIVE",
                         invoke(state, context, value) {
                             const current = get(state, ref);
                             state = effects.replaceEffect(state, ref, setData(current, { consumed: current.data.consumed + 1 }));
@@ -295,13 +288,7 @@ test("effect terminal callback can retire its host and settle remote Action and 
         {
             onEnd(state, ctx) {
                 trace.push("effect");
-                state = resolveDamage({ ...state, tick: 1 }, {
-                    sourceUnitId: null,
-                    targetUnitId: 0,
-                    damageType: "TRUE",
-                    operands: createDamageOperands(100),
-                    tick: 1,
-                }).state;
+                state = dealDamage({ ...state, tick: 1 }, { source: null, target: { id: 0 }, parameters: parameters(100, "TRUE") }).state;
                 trace.push("after-damage");
                 assert.equal(getUnit(state, 0), undefined);
                 assert.equal(actions.get(state, started.value.ref), undefined);

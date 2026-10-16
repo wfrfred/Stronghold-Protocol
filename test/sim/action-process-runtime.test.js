@@ -1,8 +1,7 @@
+import { damage as dealDamage, parameters } from "../helpers/vitality.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { ref as actionRef } from "../../dist/core/tactical/unit/action/action.js";
-import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
-import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { unit } from "../helpers/action-fixture.js";
@@ -197,13 +196,7 @@ test("action runtime: dependency cleanup can finish nested host death before a t
         id: "terminal-dependency",
         initialize: () => ({}),
         onEnd(state, context) {
-            state = resolveDamage(state, {
-                    sourceUnitId: 0,
-                    targetUnitId: context.unit.id,
-                    tick: state.tick,
-                    damageType: "TRUE",
-                    operands: createDamageOperands(100),
-                }).state;
+            state = dealDamage(state, { source: { id: 0 }, target: { id: context.unit.id }, parameters: parameters(100, "TRUE") }).state;
             observedDeparture = getUnit(state, context.unit.id) === undefined;
             throw failure;
         },

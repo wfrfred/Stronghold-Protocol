@@ -1,6 +1,6 @@
+import { damage as dealDamage, parameters } from "../helpers/vitality.js";
 import { fixtureBattle } from "../helpers/unit.js";
 import { resolveHealing } from "../../dist/core/tactical/unit/capability/vitality/healing/settlement.js";
-import { resolveDamage } from "../../dist/core/tactical/unit/capability/vitality/damage/settlement.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { setData as setEffectData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { initialize as initializeActionState } from "../../dist/core/tactical/unit/capability/action/capability.js";
@@ -11,7 +11,7 @@ import {
 import {
     setHook as setDamageHook,
     removeHook as removeDamageHook,
-} from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
+} from "../../dist/core/tactical/battle/damage/hook.js";
 import { get as getEffect } from "../../dist/core/tactical/unit/effect/operations.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -31,7 +31,6 @@ import { install as installEffect, replaceEffect, end as endEffect } from "../..
 import * as modifier from "../../dist/core/tactical/unit/contribution/attribute.js";
 import { initialize as initializeVitalityState } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
-import { createDamageOperands } from "../../dist/core/tactical/unit/capability/vitality/damage/contract.js";
 import {
     battlefieldView,
     getUnit,
@@ -165,10 +164,10 @@ function scenario({ failure = null, cancelled = false } = {}) {
             return transitionUnit(state, ref.host.id, (unit) =>
                 ({ ...unit, vitality: setDamageHook(unit.vitality, {
                     id: `receiver:${ref.id}`,
-                    stage: "reception",
+                    stage: "receiving",
                     priority: 0,
                     accepts: (battle, invocation) =>
-                        getUnit(battle, invocation.host.id)?.effects.values().find(
+                        getUnit(battle, ref.host.id)?.effects.values().find(
                             (instance) => instance.id === ref.id,
                         )?.status === "ACTIVE",
                     invoke(state, invocation, pending) {
@@ -199,7 +198,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                                     targetUnitId: ref.host.id,
                                     power: 4,
                                     ignoreHealFree: false,
-                                    tick: invocation.request.tick,
+                                    tick: state.tick,
                                 },
                             ).state;
                         } else {
@@ -230,7 +229,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                                             ? NaN
                                             : pending.amount,
                                     cancellation: cancelled
-                                        ? { stage: "RECEPTION", reason: "BLOCKED" }
+                                        ? { reason: "BLOCKED" }
                                         : null,
                                 },
                         };
@@ -305,13 +304,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                 ...current,
                 state: { contacts: current.state.contacts + 1 },
             });
-            const damaged = resolveDamage(state, {
-                    sourceUnitId: context.projectile.source,
-                    targetUnitId: context.targetUnitId,
-                    damageType: "TRUE",
-                    operands: createDamageOperands(context.projectile.cachedAtk),
-                    tick: context.tick,
-                });
+            const damaged = dealDamage(state, { source: { id: context.projectile.source }, target: { id: context.targetUnitId }, parameters: parameters(context.projectile.cachedAtk, "TRUE") });
             state = damaged.state;
             reports.push(damaged.value);
             state = stopProjectile(
@@ -640,8 +633,8 @@ test("runtime composition: a successful battle preserves identities, snapshots a
             [3, 17],
         ],
     );
-    assert.equal(run.reports.at(-1).formulaDamage, 18);
-    assert.equal(run.reports.at(-1).hpLoss, 17);
+    assert.equal(run.reports.at(-1).received.amount, 18);
+    assert.equal(run.reports.at(-1).application.hpLoss, 17);
     assert.equal(run.runtime.result.reason, "SCHEDULE_COMPLETED");
     assert.equal(run.runtime.result.spawnedCount, 1);
     assert.equal(run.runtime.result.unspawnedCount, 0);
@@ -664,8 +657,8 @@ test("runtime composition: content conditions skip installation while cancelled 
             reason: "CONTENT_CONDITION",
         },
     ]);
-    assert.equal(run.reports[0].hpLoss, 0);
-    assert.deepEqual(run.reports[0].cancellation, { stage: "RECEPTION", reason: "BLOCKED" });
+    assert.equal(run.reports[0].kind, "CANCELLED");
+    assert.deepEqual(run.reports[0].received.cancellation, { reason: "BLOCKED" });
     assert.deepEqual(
         reached.events
             .filter((event) => ["HEAL", "DAMAGE"].includes(event.type))

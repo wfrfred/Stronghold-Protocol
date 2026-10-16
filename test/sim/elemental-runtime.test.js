@@ -1,6 +1,8 @@
+import { calculateDamage } from "../../dist/core/tactical/battle/damage/calculate.js";
+import { damage as dealDamage, parameters } from "../helpers/vitality.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { setAttackContribution } from "../../dist/core/tactical/unit/capability/offense/capability.js";
-import { setHook } from "../../dist/core/tactical/unit/capability/vitality/damage/hook.js";
+import { setHook } from "../../dist/core/tactical/battle/damage/hook.js";
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
@@ -20,8 +22,6 @@ import { setHealingReceptionRule } from '../../dist/core/tactical/unit/capabilit
 import { resolveDefense } from '../../dist/core/tactical/unit/capability/defense/query.js';
 import { resolveAttackPower } from '../../dist/core/tactical/unit/capability/offense/query.js';
 import { create as modifier } from '../../dist/core/tactical/unit/contribution/attribute.js';
-import { calculateDamage, resolveDamage } from '../../dist/core/tactical/unit/capability/vitality/damage/settlement.js';
-import { createDamageOperands } from '../../dist/core/tactical/unit/capability/vitality/damage/contract.js';
 import { resolveHealing } from '../../dist/core/tactical/unit/capability/vitality/healing/settlement.js';
 import * as elemental from '../../dist/core/tactical/unit/capability/elemental/operations.js';
 import { get as getBurst } from '../../dist/core/tactical/unit/capability/elemental/query.js';
@@ -224,10 +224,10 @@ test('elemental HP damage ignores physical defense, magic resistance, source att
     const source = initialize({ id: 0, position: [0, 0], definition: { id: 'element-source', offense: { attack: 10000 } } });
     const boosted = ({ ...source, offense: setAttackContribution(source.offense, { id: 'attack-buff', value: [modifier({ multiplier: 100 })] }) });
     const input = effectFixtureWork(boosted, unit('ENEMY', { defense: { defense: 100000, resistance: 99 } }, { damageResistance, elementResistance: 100 }));
-    const result = resolveDamage(input, { sourceUnitId: 0, targetUnitId: 1, damageType: 'ELEMENTAL', operands: createDamageOperands(100), tick: 0 });
-    near(result.value.hpLoss, expected);
-    near(result.value.formulaDamage, expected);
-    assert.equal(calculateDamage(100, 'ELEMENTAL', { defense: 100000, resistance: 99 }, damageResistance), expected);
+    const result = dealDamage(input, { source: { id: 0 }, target: { id: 1 }, parameters: parameters(100, 'ELEMENTAL') });
+    near(result.value.application.hpLoss, expected);
+    near(result.value.received.amount, expected);
+    near(calculateDamage(input, { source: unitRef(boosted), target: { id: 1 }, parameters: parameters(100, 'ELEMENTAL') }).value.amount, expected);
     assert.deepEqual(getUnit(input, 1).elemental.ep, elementValues(1000));
   }
 });
@@ -238,8 +238,8 @@ test('HP elemental settlement and EP settlement read their distinct current cont
     setContribution(current.elemental, 'damageResistance', { id: 'hp-resistance', value: [modifier({ addition: 50 })] }),
     'elementResistance', { id: 'ep-resistance', value: [modifier({ addition: 100 })] },
   ) }));
-  const hp = resolveDamage(work, { sourceUnitId: null, targetUnitId: 1, damageType: 'ELEMENTAL', operands: createDamageOperands(100), tick: 0 });
-  assert.equal(hp.value.hpLoss, 50);
+  const hp = dealDamage(work, { source: null, target: { id: 1 }, parameters: parameters(100, 'ELEMENTAL') });
+  assert.equal(hp.value.application.hpLoss, 50);
   const ep = element(hp.state, 'BURN', 0, 100);
   near(ep.value.amount, 5);
   assert.equal(getUnit(ep.state, 1).vitality.hp, 99950);
@@ -403,7 +403,7 @@ test('elemental runtime: nested burst damage failure publishes neither EP progre
     targetStates: selected => {
       const target = initialize({ id: 1, position: [1, 0], definition: selected });
       const changed = ({ ...target, vitality: setHook(target.vitality, {
-        id: 'elemental-fault', stage: 'reception', priority: 100,
+        id: 'elemental-fault', stage: 'receiving', priority: 100,
         accepts: () => true,
         invoke: () => { throw new Error('nested burst failed'); },
       }) });
