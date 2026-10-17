@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initialize } from "../helpers/unit.js";
 import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/state.js";
-import { resolveMaxHp } from "../../dist/core/tactical/unit/capability/vitality/query.js";
+import { resolveMaxHp } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { effectFixtureWork, install, maxHpBuff } from "../helpers/effects.js";
 
@@ -11,7 +11,7 @@ test("sequential lifecycle callbacks observe each capability change immediately"
         const unit = initialize({
             id,
             position: [id, 0],
-            definition: { id: `host-${id}`, vitality: { maxHp: 100 } },
+            definition: { id: `host-${id}`, vitality: { maxHp: 100, defense: 0, resistance: 0 } },
         });
         return { ...unit, vitality: { ...unit.vitality, hp: 50 } };
     };
@@ -19,11 +19,12 @@ test("sequential lifecycle callbacks observe each capability change immediately"
     const notices = [];
     const content = maxHpBuff("hp", 100, {
         onDisable(state, ctx) {
+            const unit = getUnit(state, ctx.ref.host.id);
             notices.push([
                 "disable",
                 ctx.ref.host.id,
-                getUnit(state, ctx.ref.host.id).vitality.hp,
-                resolveMaxHp(ctx.ref.host.id, battlefieldView(state)),
+                unit.vitality.hp,
+                resolveMaxHp(unit.vitality, unit.definition.vitality),
             ]);
             return state;
         },

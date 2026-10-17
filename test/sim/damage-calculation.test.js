@@ -8,7 +8,7 @@ import { getUnit, transitionUnit } from "../../dist/core/tactical/battle/state.j
 import { calculateDamage } from "../../dist/core/tactical/battle/damage/calculate.js";
 import { applyDamage } from "../../dist/core/tactical/battle/damage/apply.js";
 import { leave } from "../../dist/core/tactical/battle/execution/unit.js";
-import { setDefenseContribution } from "../../dist/core/tactical/unit/capability/defense/capability.js";
+import { setDefenseContribution } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import { healing } from "../helpers/vitality.js";
 import { create as modifier } from "../../dist/core/tactical/unit/contribution/attribute.js";
 
@@ -119,7 +119,7 @@ test("damage calculation: the formula reads defense changed synchronously by a F
             return {
                 state: transitionUnit(state, context.target.id, target => ({
                     ...target,
-                    defense: setDefenseContribution(target.defense, {
+                    vitality: setDefenseContribution(target.vitality, {
                         id: "formula-defense", value: [modifier({ finalAddition: 80 })],
                     }),
                 })),
@@ -132,9 +132,9 @@ test("damage calculation: the formula reads defense changed synchronously by a F
     const calculated = calculateDamage(battle, input);
 
     assert.deepEqual(calculated.value, { type: "PHYSICAL", amount: 110 });
-    assert.equal(getUnit(calculated.state, 2).defense.defense.length, 1);
+    assert.equal(getUnit(calculated.state, 2).vitality.defense.length, 1);
     assert.equal(getUnit(calculated.state, 2).vitality.hp, 5000);
-    assert.equal(getUnit(battle, 2).defense.defense.length, 0);
+    assert.equal(getUnit(battle, 2).vitality.defense.length, 0);
     assert.equal(applyDamage(input, calculated).value.application.hpLoss, 110);
 });
 

@@ -523,7 +523,7 @@ function coreDisplacedEnemy(checkpoints = [{
       alwaysCheckCurrentPoint: true,
       definition: createDefinition({
         id: 'enemy_displacement_boundary',
-        vitality: { maxHp: 100 },
+        vitality: { maxHp: 100, defense: 0, resistance: 0 },
         locomotion: { moveSpeedPerTick: 0.1, steeringParameters: coreSteeringParameters },
       }),
       route: createRouteDefinition({

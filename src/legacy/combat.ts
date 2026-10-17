@@ -147,7 +147,11 @@ function operatorDefinition(value: unknown, direction: Direction) {
             targetable: {},
             elemental: createArknightsElementalDefinition({ receiver: "CHARACTER" }),
             id: stringField(definition.chessId, "chessId"),
-            vitality: { maxHp: numberField(stats.maxHp, "maxHp") },
+            vitality: {
+                maxHp: numberField(stats.maxHp, "maxHp"),
+                defense: numberField(stats.def, "defense"),
+                resistance: numberField(stats.res, "resistance"),
+            },
             offense: { attack: numberField(stats.atk, "attack") },
             allegiance: { side: "ALLY" },
             spatial: { layer: "GROUND" },
@@ -158,10 +162,7 @@ function operatorDefinition(value: unknown, direction: Direction) {
                     ],
                 },
             },
-            defense: {
-                defense: numberField(stats.def, "defense"),
-                resistance: numberField(stats.res, "resistance"),
-            },
+
             blocker: {
                 capacity: numberField(stats.blockCnt, "block capacity"),
                 geometry: { radius: 0.70709997 },
@@ -235,7 +236,11 @@ function enemyDefinition(value: unknown) {
         targetable: {},
         elemental: createArknightsElementalDefinition({ receiver: "ENEMY" }),
         id: stringField(definition.key, "enemy key"),
-        vitality: { maxHp: numberField(stats.maxHp, "maxHp") },
+        vitality: {
+            maxHp: numberField(stats.maxHp, "maxHp"),
+            defense: numberField(stats.def, "defense"),
+            resistance: numberField(stats.res, "resistance"),
+        },
         offense: { attack: numberField(stats.atk, "attack") },
         locomotion: {
             moveSpeedPerTick: (numberField(stats.moveSpeed, "move speed") * 0.5) / TICKS_PER_SECOND,
@@ -249,10 +254,7 @@ function enemyDefinition(value: unknown) {
                 shapes: [{ type: "CIRCLE", offset: [0, 0], radius: LEGACY_ENEMY_HIT_RADIUS }],
             },
         },
-        defense: {
-            defense: numberField(stats.def, "defense"),
-            resistance: numberField(stats.res, "resistance"),
-        },
+
         blockable: { volume: numberField(stats.blockCnt, "block volume") },
         action: {
             definitions: Definitions.empty().add(

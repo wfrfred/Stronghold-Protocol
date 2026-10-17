@@ -54,7 +54,7 @@ export function applyHealing(
 
     const target = units.get(battle, request.target)!;
     const hpBefore = target.vitality.hp;
-    const maxHp = resolveMaxHp(target.definition.vitality, target.vitality);
+    const maxHp = resolveMaxHp(target.vitality, target.definition.vitality);
     const amount = Math.max(0, Math.min(received.amount, maxHp - hpBefore));
     const hpAfter = hpBefore + amount;
     const application: ApplicationResult = { hpBefore, hpAfter, hpGain: hpAfter - hpBefore };

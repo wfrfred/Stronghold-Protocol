@@ -14,7 +14,7 @@ const change = (battle, transform) => {
     return updateUnit(battle, { ...unit, vitality: transform(unit.vitality) });
 };
 function fixture(hooks, hp = 100) {
-    const unit = initialize({ id: 0, position: [0, 0], definition: { id: "receiver", vitality: { maxHp: 100 } } });
+    const unit = initialize({ id: 0, position: [0, 0], definition: { id: "receiver", vitality: { maxHp: 100, defense: 0, resistance: 0 } } });
     return change(effectFixtureWork(unit), vitality => ({ ...vitality, hp, damageHooks: hooks }));
 }
 const damage = (battle, power = 1) => {

@@ -35,7 +35,7 @@ function spec(initialUnits) {
                 {
                     definition: createDefinition({
                         id: "future",
-                        vitality: { maxHp: 1 },
+                        vitality: { maxHp: 1, defense: 0, resistance: 0 },
                         locomotion: {
                             moveSpeedPerTick: 0,
                             steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 },

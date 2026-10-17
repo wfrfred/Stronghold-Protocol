@@ -12,7 +12,7 @@ import { hasHit, hasSpatial } from "../capability/spatial/capability.js";
 import { allowsTarget } from "../capability/targetable/capability.js";
 import { damageRatio } from "../capability/elemental/query.js";
 import { hasElemental } from "../capability/elemental/capability.js";
-import { hasVitality, type Vitality } from "../capability/vitality/capability.js";
+import { hasVitality, resolveMaxHp, type Vitality } from "../capability/vitality/capability.js";
 import type { Unit, Id } from "../unit.js";
 import type {
     DamageTargetingDefinition,
@@ -43,7 +43,8 @@ const localElements: ElementalQueries = {
     damageRatio: (target) => damageRatio(target),
 };
 
-const staticMaxHp: HealingMaxHpProvider = (unit) => unit.definition.vitality.maxHp;
+const effectiveMaxHp: HealingMaxHpProvider = (unit) =>
+    resolveMaxHp(unit.vitality, unit.definition.vitality);
 
 function isActiveVitalUnit(target: Unit): target is Unit & Vitality {
     return (
@@ -164,7 +165,7 @@ function compileDamageTargeting(
 function compileHealingTargeting(
     definition: HealingTargetingDefinition,
     purposes: readonly QueryPurpose[],
-    maxHp: HealingMaxHpProvider = staticMaxHp,
+    maxHp: HealingMaxHpProvider = effectiveMaxHp,
     elemental: ElementalQueries = localElements,
 ): CompiledTargeting<CombatTargetQueryContext> {
     const requiresHealingEligibility = purposes.includes("HEAL");

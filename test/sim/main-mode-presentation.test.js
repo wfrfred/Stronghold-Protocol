@@ -10,7 +10,7 @@ const data = { lookup() {} };
 const unit = (id, definitionId, side = 'ALLY', skill, fields = {}) => initialize({
   id, position: [id + 1, 4], definition: {
     id: definitionId, allegiance: { side }, spatial: { layer: 'GROUND' },
-    vitality: { maxHp: 1000 },
+    vitality: { maxHp: 1000, defense: 0, resistance: 0 },
     ...(skill === undefined ? {} : { skill: skillDefinition({
       id: skill, sp: { initial: 0, capacity: 10, requirement: 10, recovery: { type: 'TIME', intervalTicks: 30 } },
     }) }), ...fields,

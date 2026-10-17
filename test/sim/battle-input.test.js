@@ -110,7 +110,7 @@ const attached = (id, costFloor) => ({
     direction: "RIGHT",
 });
 const placement = (id, column, navigationModifiers = []) => ({
-    definition: { id, vitality: { maxHp: 100 } },
+    definition: { id, vitality: { maxHp: 100, defense: 0, resistance: 0 } },
     position: [column, 0],
     navigationModifiers,
 });
@@ -133,7 +133,7 @@ function fixture({ spawnTick = 100 } = {}) {
     const initial = definition("initial-state", { quota: { remaining: 3 }, marks: [1, 2] });
     const enemy = createDefinition({
         id: "scheduled-enemy",
-        vitality: { maxHp: 100 },
+        vitality: { maxHp: 100, defense: 0, resistance: 0 },
         locomotion: {
             moveSpeedPerTick: 0,
             steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 },

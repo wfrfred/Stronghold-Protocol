@@ -11,7 +11,7 @@ const unit = () =>
     initialize({
         id: 0,
         position: [0, 0],
-        definition: { id: "cleanup", vitality: { maxHp: 100 } },
+        definition: { id: "cleanup", vitality: { maxHp: 100, defense: 0, resistance: 0 } },
     });
 
 test("effect cleanup: terminal business sees the ending instance and ending immediately removes it", () => {

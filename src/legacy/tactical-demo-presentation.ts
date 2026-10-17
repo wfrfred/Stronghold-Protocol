@@ -150,7 +150,7 @@ function isFlying(unit: Unit): boolean {
 
 function maxHp(unit: Unit): number {
     if (hasVitality(unit)) {
-        return resolveVitalityMaxHp(unit.definition.vitality, unit.vitality);
+        return resolveVitalityMaxHp(unit.vitality, unit.definition.vitality);
     }
 
     return hasVitalityDefinition(unit.definition) ? unit.definition.vitality.maxHp : 0;

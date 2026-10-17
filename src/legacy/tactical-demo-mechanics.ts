@@ -95,7 +95,7 @@ export function createTacticalMechanicsDemo(
 
     const target = enemy.createCombatDefinition({
         ...spawn.definition,
-        vitality: { maxHp: 200_000 },
+        vitality: { ...spawn.definition.vitality, maxHp: 200_000 },
         locomotion: {
             ...spawn.definition.locomotion,
             moveSpeedPerTick: 0,

@@ -173,7 +173,7 @@ hound.skill;
 // @ts-expect-error a selected Capability requires its configuration and state together.
 const incomplete: Unit & Vitality = { ...base, vitality: mudrock.vitality };
 // @ts-expect-error a selected Capability cannot omit its runtime state.
-const absent: Unit & Vitality = { ...base, definition: { ...base.definition, vitality: { maxHp: 100 } } };
+const absent: Unit & Vitality = { ...base, definition: { ...base.definition, vitality: { maxHp: 100, defense: 0, resistance: 0 } } };
 `);
   try {
     const program = ts.createProgram([path], {

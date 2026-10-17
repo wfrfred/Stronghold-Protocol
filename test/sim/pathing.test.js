@@ -758,7 +758,7 @@ function routedEnemyHarness({
       id: 1,
       definition: createDefinition({
         id: 'enemy_core_walker',
-        vitality: { maxHp: 100 },
+        vitality: { maxHp: 100, defense: 0, resistance: 0 },
         locomotion: {
           moveSpeedPerTick: speedPerTick,
           steeringParameters: createSteeringParameters({ steeringFactor: 2.5, maxSteeringForce: 4 }),
@@ -1263,9 +1263,10 @@ test('core routed enemy supports full checkpoint flag combinations and rejects i
       assert.deepEqual(h.trace.flatMap(step => step.signals), []);
     }
   }
-  assert.throws(() => createDefinition({ id: 'enemy_bad', vitality: { maxHp: 0 }, locomotion: {
+  const invalid = createDefinition({ id: 'enemy_bad', vitality: { maxHp: -1, defense: 0, resistance: 0 }, locomotion: {
     moveSpeedPerTick: 1, steeringParameters: createSteeringParameters({ steeringFactor: 2.5, maxSteeringForce: 4 }),
-  } }), RangeError);
+  } });
+  assert.throws(() => initialize({ id: 1, position: [0, 0], definition: invalid }), RangeError);
   assert.throws(() => createSteeringParameters({ steeringFactor: Infinity, maxSteeringForce: 4 }), RangeError);
 });
 
@@ -1474,10 +1475,10 @@ test('core selective and full projection release ground blocking when a blocker 
     .map(passableMask => coreGround({ passableMask })));
   const h = battlefieldProjectionHarness(1, 4, map);
   const blocker = projectionUnit(10, [0, 0], {
-    vitality: { maxHp: 100 }, allegiance: { side: 'ALLY' }, blocker: { capacity: 1, geometry: { radius: 1 } },
+    vitality: { maxHp: 100, defense: 0, resistance: 0 }, allegiance: { side: 'ALLY' }, blocker: { capacity: 1, geometry: { radius: 1 } },
   });
   const enemy = projectionUnit(11, [0.1, 0], {
-    vitality: { maxHp: 100 }, allegiance: { side: 'ENEMY' }, blockable: { volume: 1 },
+    vitality: { maxHp: 100, defense: 0, resistance: 0 }, allegiance: { side: 'ENEMY' }, blockable: { volume: 1 },
     spatial: { layer: 'GROUND' },
   });
   const relations = [{ blockerUnitId: 10, blockedUnitId: 11 }];
@@ -1505,10 +1506,10 @@ test('core selective and full projection release ground blocking when a blocker 
 test('core selective and full projection preserve relation history and reacquire after same-position release', () => {
   const h = battlefieldProjectionHarness();
   const blocker = projectionUnit(10, [1, 0], {
-    vitality: { maxHp: 100 }, allegiance: { side: 'ALLY' }, blocker: { capacity: 2, geometry: { radius: 1 } },
+    vitality: { maxHp: 100, defense: 0, resistance: 0 }, allegiance: { side: 'ALLY' }, blocker: { capacity: 2, geometry: { radius: 1 } },
   }, { spatialPresence: { present: true }, occupancy: { claims: [projectionClaim(1)] } });
   const enemy = projectionUnit(11, [1.1, 0], {
-    vitality: { maxHp: 100 }, allegiance: { side: 'ENEMY' }, blockable: { volume: 1 }, spatial: { layer: 'GROUND' },
+    vitality: { maxHp: 100, defense: 0, resistance: 0 }, allegiance: { side: 'ENEMY' }, blockable: { volume: 1 }, spatial: { layer: 'GROUND' },
   }, { spatialPresence: { present: true } });
   const platform = projectionUnit(12, [1, 0], {
     tileBinding: createTileBindingDefinition({ buildableType: 'ALL', heightType: 'HIGHLAND' }),
@@ -3091,7 +3092,7 @@ test('core original h07_02 teleport and patrol routes execute their unchanged fa
   const map = parseBattlefieldMap(raw.mapData);
   const maps = { WALK: projectStaticNavigationMap(map, 'WALK', 0), FLY: projectStaticNavigationMap(map, 'FLY', 0) };
   const fieldCache = createNavigationFieldCache();
-  const definition = createDefinition({ id: 'enemy_route_fixture', vitality: { maxHp: 100 }, locomotion: {
+  const definition = createDefinition({ id: 'enemy_route_fixture', vitality: { maxHp: 100, defense: 0, resistance: 0 }, locomotion: {
     moveSpeedPerTick: 0.1, steeringParameters: createSteeringParameters({ steeringFactor: 10 / 30, maxSteeringForce: 100 / 900 }),
   } });
   function run(routeIndex, ticks) {

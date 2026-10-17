@@ -19,7 +19,7 @@ const battle = (...values) => createBattleState(fixtureBattlefieldState(values))
 test("all Unit identities preserve collection order regardless of capabilities or tick callbacks", () => {
     const initial = battle(
         unit(8, { locomotion }),
-        unit(2, { vitality: { maxHp: 100 }, onTick: state => state }),
+        unit(2, { vitality: { maxHp: 100, defense: 0, resistance: 0 }, onTick: state => state }),
         { ...unit(5), lifecycle: "LEAVING" },
     );
     const candidates = units.all(initial);
@@ -34,8 +34,8 @@ test("all Unit identities preserve collection order regardless of capabilities o
 test("Unit filtering returns identities for matching capabilities in collection order", () => {
     const initial = battle(
         unit(8, { locomotion }),
-        unit(2, { vitality: { maxHp: 100 } }),
-        unit(5, { locomotion, vitality: { maxHp: 100 } }),
+        unit(2, { vitality: { maxHp: 100, defense: 0, resistance: 0 } }),
+        unit(5, { locomotion, vitality: { maxHp: 100, defense: 0, resistance: 0 } }),
     );
     assert.deepEqual(units.filter(initial, hasLocomotion), [{ id: 8 }, { id: 5 }]);
     const combined = units.filter(initial, value => hasLocomotion(value) && hasVitality(value));
@@ -45,7 +45,7 @@ test("Unit filtering returns identities for matching capabilities in collection 
 });
 
 test("a Unit Ref reads the supplied battle version without retaining the old snapshot", () => {
-    const original = unit(3, { locomotion, vitality: { maxHp: 100 } });
+    const original = unit(3, { locomotion, vitality: { maxHp: 100, defense: 0, resistance: 0 } });
     const initial = battle(original);
     const reference = units.ref(original);
     const updated = { ...original, position: [4, 0], vitality: { ...original.vitality, hp: 60 } };
@@ -61,9 +61,9 @@ test("a Unit Ref reads the supplied battle version without retaining the old sna
 
 test("fixed Unit candidates read preceding updates, skip removal and defer new identities", () => {
     const initial = battle(
-        unit(0, { locomotion, vitality: { maxHp: 100 } }),
-        unit(1, { locomotion, vitality: { maxHp: 100 } }),
-        unit(2, { locomotion, vitality: { maxHp: 100 } }),
+        unit(0, { locomotion, vitality: { maxHp: 100, defense: 0, resistance: 0 } }),
+        unit(1, { locomotion, vitality: { maxHp: 100, defense: 0, resistance: 0 } }),
+        unit(2, { locomotion, vitality: { maxHp: 100, defense: 0, resistance: 0 } }),
     );
     const candidates = units.filter(initial, hasLocomotion);
     const observed = [];
@@ -77,7 +77,7 @@ test("fixed Unit candidates read preceding updates, skip removal and defer new i
             const second = units.get(current, candidates[1]);
             current = updateUnit(current, { ...second, vitality: { ...second.vitality, hp: 40 } });
             current = removeUnit(current, 2, "SCRIPT");
-            current = registerUnit(current, unit(3, { locomotion, vitality: { maxHp: 100 } }));
+            current = registerUnit(current, unit(3, { locomotion, vitality: { maxHp: 100, defense: 0, resistance: 0 } }));
         }
     }
 

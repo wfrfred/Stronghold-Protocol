@@ -12,10 +12,9 @@ import {
 } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import {
-    createDefinition as createDefenseDefinition,
     setResistanceContribution,
-} from "../../dist/core/tactical/unit/capability/defense/capability.js";
-import { resolveDefense } from "../../dist/core/tactical/unit/capability/defense/query.js";
+    resolveDefense,
+} from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import {
     battlefieldView,
     createBattleState,
@@ -28,7 +27,7 @@ import {
 const unit = (id, attack = 100) =>
     initialize({
         id,
-        definition: { id: `unit-${id}`, offense: { attack }, vitality: { maxHp: 100 } },
+        definition: { id: `unit-${id}`, offense: { attack }, vitality: { maxHp: 100, defense: 0, resistance: 0 } },
         position: [0, 0],
     });
 const value = (amount) => modifier.create({ finalAddition: amount });
@@ -175,14 +174,14 @@ test("contributions: sampled and dynamic defense values resolve without mutating
             const base = initialize({
                 id: 1,
                 position: [0, 0],
-                definition: { id: "defended", defense: { defense: 200, resistance: 30 } },
+                definition: { id: "defended", vitality: { maxHp: 100, defense: 200, resistance: 30 } },
             });
             const modifiers = [value(amount)];
             const entry = { id: "resistance", value: dynamic ? () => modifiers : modifiers };
-            const current = ({ ...base, defense: setResistanceContribution(base.defense, entry) });
+            const current = ({ ...base, vitality: setResistanceContribution(base.vitality, entry) });
             const view = battlefieldView(workFor(current));
-            assert.deepEqual(resolveDefense(1, view), { defense: 200, resistance: expected });
-            assert.equal(current.defense.resistance[0], entry);
-            assert.equal(base.definition.defense.resistance, 30);
+            assert.deepEqual(resolveDefense(current.vitality, current.definition.vitality, { unit: current, battlefield: view }), { defense: 200, resistance: expected });
+            assert.equal(current.vitality.resistance[0], entry);
+            assert.equal(base.definition.vitality.resistance, 30);
         }
 });

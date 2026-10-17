@@ -38,7 +38,6 @@ import {
     removeRule,
 } from "../../dist/core/tactical/unit/capability/blocking/blockable.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
-import { resolveMaxHp } from "../../dist/core/tactical/unit/capability/vitality/query.js";
 import * as contribution from "../../dist/core/tactical/unit/contribution/contribution.js";
 import * as modifier from "../../dist/core/tactical/unit/contribution/attribute.js";
 import {
@@ -67,7 +66,7 @@ const blocker = (capacity = 3) =>
         definition: {
             id: "capacity-holder",
             allegiance: { side: "ALLY" },
-            vitality: { maxHp: 100 },
+            vitality: { maxHp: 100, defense: 0, resistance: 0 },
             blocker: { capacity, geometry: { radius: 1 } },
         },
     });

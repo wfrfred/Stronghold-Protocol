@@ -15,7 +15,7 @@ export function auraUnit(id, position = [0, 0], extra = {}) {
         position,
         definition: {
             id: `aura-unit-${id}`,
-            vitality: { maxHp: 100 },
+            vitality: { maxHp: 100, defense: 0, resistance: 0 },
             offense: { attack: 100 },
             ...extra,
         },

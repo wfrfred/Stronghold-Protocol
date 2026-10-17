@@ -2,7 +2,6 @@ import * as action from "./action/capability.js";
 import * as allegiance from "./allegiance/capability.js";
 import * as blockable from "./blocking/blockable.js";
 import * as blocker from "./blocking/blocker.js";
-import * as defense from "./defense/capability.js";
 import * as deployable from "./deployable/capability.js";
 import * as elemental from "./elemental/capability.js";
 import * as locomotion from "./locomotion/capability.js";
@@ -19,7 +18,6 @@ export const initializers = {
     deployable: deployable.initialize,
     vitality: vitality.initialize,
     offense: offense.initialize,
-    defense: defense.initialize,
     action: action.initialize,
     skill: skill.initialize,
     elemental: elemental.initialize,

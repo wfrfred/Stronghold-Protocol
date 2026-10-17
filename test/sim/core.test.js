@@ -257,8 +257,8 @@ const presenceBattlefield = () => createFieldState({
 });
 
 const presenceUnit = (id, position) => ({
-  effects:Effects.empty(), id, definition: Object.freeze({ id: `presence_${id}`, vitality: Object.freeze({ maxHp: 100 }), spatialPresence: Object.freeze({}) }), position: Object.freeze(position),
-  vitality: initializeVitalityState(fixtureBattle(0), {maxHp:100}).value, spatialPresence: { present: true },
+  effects:Effects.empty(), id, definition: Object.freeze({ id: `presence_${id}`, vitality: Object.freeze({ maxHp: 100, defense: 0, resistance: 0 }), spatialPresence: Object.freeze({}) }), position: Object.freeze(position),
+  vitality: initializeVitalityState(fixtureBattle(0), { maxHp:100, defense: 0, resistance: 0 }).value, spatialPresence: { present: true },
 });
 
 const presenceNavigationModifier = (id, source, region, costFloor = 1000) => createNavigationModifier({
@@ -417,7 +417,7 @@ test('core placement applies explicit claims to a declared occupancy capability'
 const catalogDefinition = () => Object.freeze({
   id: 'catalog_unit',
   spatialPresence: Object.freeze({}),
-  vitality: Object.freeze({ maxHp: 100 }),
+  vitality: Object.freeze({ maxHp: 100, defense: 20, resistance: 10 }),
   locomotion: Object.freeze({
     moveSpeedPerTick: 0.1,
     steeringParameters: Object.freeze({ steeringFactor: 1, maxSteeringForce: 100 }),
@@ -438,7 +438,6 @@ const catalogDefinition = () => Object.freeze({
   hit: createHitDefinition({ geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.25 }] } }),
   blocker: { capacity: 2, geometry: { radius: 0.7 } },
   blockable: Object.freeze({ volume: 1 }),
-  defense: Object.freeze({ defense: 20, resistance: 10 }),
 });
 
 function catalogRoutedState() {
@@ -490,7 +489,7 @@ test('core unit initialization pairs every declared capability with its initiali
 });
 
 test('core initialization and snapshots share immutable definitions', () => {
-  const definition = { id: 'shared-definition', vitality: { maxHp: 100 }, metadata: { labels: ['a'] } };
+  const definition = { id: 'shared-definition', vitality: { maxHp: 100, defense: 0, resistance: 0 }, metadata: { labels: ['a'] } };
   const first = initialize({ id: 1, definition, position: [0, 0] });
   const second = initialize({ id: 2, definition, position: [1, 0] });
   const snapshot = copy(first);
@@ -499,7 +498,7 @@ test('core initialization and snapshots share immutable definitions', () => {
   assert.equal(snapshot.definition, definition);
   assert.equal(snapshot.definition.metadata.labels, definition.metadata.labels);
 
-  const revisedDefinition = { ...definition, vitality: { maxHp: 200 }, metadata: { labels: ['b'] } };
+  const revisedDefinition = { ...definition, vitality: { maxHp: 200, defense: 0, resistance: 0 }, metadata: { labels: ['b'] } };
   const revised = initialize({ id: 3, definition: revisedDefinition, position: [0, 0] });
   assert.equal(revised.definition, revisedDefinition);
   assert.equal(revised.vitality.hp, 200);
@@ -690,7 +689,7 @@ test('core grid ranges rotate all four directions around continuous source posit
 });
 
 test('core domain rules compose independently and preserve earlier unit states', () => {
-  const definition = { id: 'rule_unit', vitality: { maxHp: 100 } };
+  const definition = { id: 'rule_unit', vitality: { maxHp: 100, defense: 0, resistance: 0 } };
   const first = initialize({ id: 1, definition, position: [0, 0],
     states: { targetable: initializeTargetableState(fixtureBattle(0), fixtureDefinition("targetable")).value } });
   const second = initialize({ id: 2, definition, position: [0, 0],
@@ -779,7 +778,7 @@ test('core unit updates preserve definition identity and fail atomically while p
   const bare = initialize({ id: 2, definition: Object.freeze({ id: 'bare' }), position: [0, 0] });
   runtime = transitionBattlefield(runtime, [{ type: 'REGISTER_UNIT', unit: bare }]).state;
   assert.throws(() => transitionBattlefield(runtime, [{ type: 'UPDATE_UNIT', unit: {
-    ...bare, definition: Object.freeze({ ...bare.definition, vitality: { maxHp: 1 } }), vitality: initializeVitalityState(fixtureBattle(0), { maxHp: 1 }).value,
+    ...bare, definition: Object.freeze({ ...bare.definition, vitality: { maxHp: 1, defense: 0, resistance: 0 } }), vitality: initializeVitalityState(fixtureBattle(0), { maxHp: 1, defense: 0, resistance: 0 }).value,
   } }]));
 
   const hidden = { ...viewBattlefield(runtime).getUnit(1), spatialPresence: { present: false } };
@@ -804,7 +803,7 @@ import type { Unit, Definition as UnitDefinition } from ${sourceModule('unit')};
 import type { ImmutableData } from ${sourceModule('../../common/immutable-data')};
 import type { Ref } from ${sourceModule('../../common/ref')};
 import { initialize as initializeOffenseState } from ${sourceModule('capability/offense/capability')};
-import { initialize as initializeDefenseState } from ${sourceModule('capability/defense/capability')};
+import { initialize as initializeVitalityState } from ${sourceModule('capability/vitality/capability')};
 import { initialize as initializeActionState } from ${sourceModule('capability/action/capability')};
 import type { Definition as EnemyDefinition } from ${sourceModule('archetype/enemy')};
 import { hasVitality, type Vitality, type Definition as VitalityDefinition } from ${sourceModule('capability/vitality/capability')};
@@ -865,21 +864,21 @@ if (elementalReport.type === "REJECTED") {
   const reason: string = elementalReport.reason;
 }
 initializeOffenseState(battleState, { attack: 1 }).value.attack;
-initializeDefenseState(battleState, { defense: 1, resistance: 0 }).value.defense;
+initializeVitalityState(battleState, { maxHp: 100, defense: 1, resistance: 0 }).value.defense;
 initializeLocomotionState(battleState, enemyDefinition.locomotion).value.moving;
 declare const actionDefinition: Parameters<typeof initializeActionState>[1];
 initializeActionState(battleState, actionDefinition).value.states;
 // @ts-expect-error capability initialization requires the current BattleState.
 initializeOffenseState({ attack: 1 });
 // @ts-expect-error capability initialization requires the current BattleState.
-initializeDefenseState({ defense: 1, resistance: 0 });
+initializeVitalityState({ maxHp: 100, defense: 1, resistance: 0 });
 // @ts-expect-error clock-only context is not a BattleState.
 initializeLocomotionState(enemyDefinition.locomotion, { tick: 7 });
 // @ts-expect-error a tick is not a BattleState.
 initializeActionState(7);
 type EnemyCapabilities = Assert<Product<EnemyProbe> extends Vitality & Locomotion ? true : false>;
 type ProductDefinition = Assert<Equal<Product<EnemyProbe>['definition'], Pick<CapabilityDefinitions, 'vitality' | 'locomotion' | 'spatialPresence'>>>;
-type StandardDefinition = Assert<Equal<Product<{ readonly vitality: { readonly maxHp: 100 } }>['definition']['vitality'], CapabilityDefinitions['vitality']>>;
+type StandardDefinition = Assert<Equal<Product<{ readonly vitality: { readonly maxHp: 100; readonly defense: 0; readonly resistance: 0 } }>['definition']['vitality'], CapabilityDefinitions['vitality']>>;
 type ExtraDefinitionFields = Assert<Equal<Extract<keyof Product<EnemyProbe>['definition'], 'kind' | 'enemyCode'>, never>>;
 type EmptyDefinitions = Assert<Product<{ readonly occupancy: {}; readonly targetable: {} }> extends Occupancy & Targetable ? true : false>;
 type OptionalProduct = Assert<Equal<keyof Product<OptionalProbe>, 'definition'>>;
@@ -954,7 +953,7 @@ battleState.battlefield.projectiles.replace(typedProjectile);
       ['projectile-untyped-callback', `getProjectile(battleState, 0)!.definition.acceptsContact;`],
       ['projectile-erased-transition', `transition(createBattlefieldState({ map: battlefieldMap }), [{ type: 'REGISTER_PROJECTILE', projectile: typedProjectile }]);`],
       ['state-extra-field', `initializeUnit(battleState, { id: 1, definition: { id: 'offense', offense: { attack: 1 } }, position: [0, 0], states: { offense: initializeOffenseState(battleState, { attack: 1 }).value } });`],
-      ['mutable-definition', `initializeUnit(battleState, { id: 1, definition: { id: 'mutable', vitality: { maxHp: 10 } }, position: [0, 0] }).value.definition.vitality.maxHp = 99;`],
+      ['mutable-definition', `initializeUnit(battleState, { id: 1, definition: { id: 'mutable', vitality: { maxHp: 10, defense: 0, resistance: 0 } }, position: [0, 0] }).value.definition.vitality.maxHp = 99;`],
       ['unconfigured', `initializeUnit(battleState, { id: 1, definition: { id: 'bare' }, position: [0, 0] }).value.locomotion.moving;`],
       ['invalid-offense-config', `initializeUnit(battleState, { id: 1, definition: { id: 'invalid', offense: { attack: [] } }, position: [0, 0] });`],
       ['extra-definition-field', `initializeUnit(battleState, { id: 1, definition: enemyDefinition, position: [0, 0] }).value.definition.enemyCode;`],
@@ -1081,7 +1080,7 @@ test('core support allows a platform and occupant to coexist without treating th
     deploymentTile(), deploymentTile({ buildableType: 'NONE' }), deploymentTile(),
   ]) });
   const platform = deploymentUnit(1, [1, 0], {
-    vitality: Object.freeze({ maxHp: 100 }),
+    vitality: Object.freeze({ maxHp: 100, defense: 0, resistance: 0 }),
     tileBinding: createTileBindingDefinition({ buildableType: 'RANGED', heightType: 'HIGHLAND' }),
   }, [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }]);
   runtime = transitionBattlefield(runtime, [{ type: 'REGISTER_UNIT', unit: platform }]).state;

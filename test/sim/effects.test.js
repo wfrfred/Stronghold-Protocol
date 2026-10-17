@@ -25,7 +25,7 @@ const unit = (id = 0) =>
         position: [0, 0],
         definition: {
             id: `effect-unit-${id}`,
-            vitality: { maxHp: 100 },
+            vitality: { maxHp: 100, defense: 0, resistance: 0 },
             offense: { attack: 100 },
         },
     });

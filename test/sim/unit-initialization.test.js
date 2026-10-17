@@ -15,7 +15,7 @@ test("Unit initialization pairs every declared capability, including empty defin
     const battle = fixtureBattle();
     const definition = {
         id: "paired-empty-capabilities",
-        vitality: { maxHp: 100 }, targetable: {}, spatialPresence: {}, occupancy: {},
+        vitality: { maxHp: 100, defense: 0, resistance: 0 }, targetable: {}, spatialPresence: {}, occupancy: {},
         tileBinding: { heightType: null, buildableType: "ALL", advancedBuildableMask: null },
     };
     const result = initialize(battle, { id: 7, definition, position: [2, 0] });
@@ -75,7 +75,7 @@ test("Unit initialization threads each capability result through the next initia
             return { ...result, state: { ...result.state, execution: { ...result.state.execution, rngState: 29 } } };
         };
         const result = initialize(battle, {
-            id: 1, definition: { id: "threaded", vitality: { maxHp: 100 }, offense: { attack: 7 } }, position: [0, 0],
+            id: 1, definition: { id: "threaded", vitality: { maxHp: 100, defense: 0, resistance: 0 }, offense: { attack: 7 } }, position: [0, 0],
         });
         assert.deepEqual(trace, [["vitality", 17, 100], ["offense", 23, 7]]);
         assert.equal(result.state.execution.rngState, 29);
@@ -90,7 +90,7 @@ test("Unit initialization threads each capability result through the next initia
 
 test("generic Unit initialization cannot inject prepared states or override the battle clock", () => {
     const battle = fixtureBattle(19);
-    const definition = { id: "no-prepared-state", vitality: { maxHp: 100 }, elemental: elementalDefinition({ maxEp: 1000, bursts }) };
+    const definition = { id: "no-prepared-state", vitality: { maxHp: 100, defense: 0, resistance: 0 }, elemental: elementalDefinition({ maxEp: 1000, bursts }) };
     const result = initialize(battle, {
         id: 1, definition, position: [0, 0], tick: 900,
         states: { vitality: { hp: 1 }, occupancy: { claims: [{ position: [0, 0], slot: "DEPLOYMENT", type: "PRESENT" }] } },

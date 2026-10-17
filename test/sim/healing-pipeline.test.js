@@ -118,7 +118,7 @@ test("healing pipeline: Receiving MaxHP changes are applied before calculating a
     const resize = healingEffect("resize", {}, [entry("receiving", (state, _context, _self, pending) => ({
         state: change(state, 2, value => ({
             ...value,
-            vitality: setMaxHpContribution(value.definition.vitality, value.vitality, {
+            vitality: setMaxHpContribution(value.vitality, value.definition.vitality, {
                 id: "double-hp", value: [attribute.create({ multiplier: 1 })],
             }),
         })), value: pending,

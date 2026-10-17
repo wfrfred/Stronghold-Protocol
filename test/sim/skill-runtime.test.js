@@ -36,15 +36,14 @@ function actor(skill, { attackTargets = 1, windupTicks = 0, activeAction } = {})
   let definitions = Definitions.empty().add(action(attackTargets, { windupTicks }));
   if (activeAction !== undefined) definitions = definitions.add(action(2, { id: activeAction, windupTicks }));
   return createDefinition({
-    id: 'skill-actor', vitality: { maxHp: 100000 }, offense: { attack: 100 },
-    defense: { defense: 0, resistance: 0 }, allegiance: { side: 'ALLY' },
+    id: 'skill-actor', vitality: { maxHp: 100000, defense: 0, resistance: 0 }, offense: { attack: 100 },
+    allegiance: { side: 'ALLY' },
     spatial: { layer: 'GROUND' }, hit: { geometry: hit },
     blocker: { capacity: 0, geometry: { radius: 0.1 } }, action: { definitions, select: (battle, self) => ({ state: battle, value: [self.skill.active !== null ? activeAction ?? 'normal' : 'normal'] }) }, skill,
   });
 }
 function target() {
-  return { id: 'target', vitality: { maxHp: 100000 }, defense: { defense: 0, resistance: 0 },
-    allegiance: { side: 'ENEMY' }, spatial: { layer: 'GROUND' }, hit: { geometry: hit } };
+  return { id: 'target', vitality: { maxHp: 100000, defense: 0, resistance: 0 }, allegiance: { side: 'ENEMY' }, spatial: { layer: 'GROUND' }, hit: { geometry: hit } };
 }
 function scenario(skill, { targets = 1, attackTargets = 1, windupTicks = 0, content, activeAction } = {}) {
   const buff = attackBuff('skill/attack', 100);
@@ -65,7 +64,7 @@ function scenario(skill, { targets = 1, attackTargets = 1, windupTicks = 0, cont
     initialUnits: [{ definition, position: [0, 0] },
       ...Array.from({ length: targets }, (_, index) => ({ definition: target(), position: [index + 1, 0] }))],
     schedule: { type: 'TIMELINE', spawns: [{
-      definition: { id: 'future', vitality: { maxHp: 1 }, locomotion: {
+      definition: { id: 'future', vitality: { maxHp: 1, defense: 0, resistance: 0 }, locomotion: {
         moveSpeedPerTick: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 },
       } }, tick: 199,
       route: { pathMotionMode: 'WALK', startPosition: [0, 7], endPosition: [0, 7],

@@ -21,13 +21,13 @@ const create = units => {
 };
 const blocker = (id, position = [1, 1], capacity = 1, radius = 1) => initialize({
   id, position, definition: {
-    id: `blocker-${id}`, spatialPresence: {}, allegiance: { side: 'ALLY' }, vitality: { maxHp: 100 },
+    id: `blocker-${id}`, spatialPresence: {}, allegiance: { side: 'ALLY' }, vitality: { maxHp: 100, defense: 0, resistance: 0 },
     blocker: { capacity, geometry: { radius } },
   },
 });
 const enemy = (id, position = [1.25, 1], volume = 1) => initialize({
   id, position, definition: {
-    id: `enemy-${id}`, allegiance: { side: 'ENEMY' }, vitality: { maxHp: 100 },
+    id: `enemy-${id}`, allegiance: { side: 'ENEMY' }, vitality: { maxHp: 100, defense: 0, resistance: 0 },
     blockable: { volume }, spatial: { layer: 'GROUND' },
   },
 });

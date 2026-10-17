@@ -64,9 +64,8 @@ const contactRange = {
 function passive(id, hp = 100) {
     return {
         id,
-        vitality: { maxHp: hp },
+        vitality: { maxHp: hp, defense: 0, resistance: 0 },
         offense: { attack: 10 },
-        defense: { defense: 0, resistance: 0 },
         allegiance: { side: "ENEMY" },
         spatial: { layer: "GROUND" },
         hit: { geometry: hit },
@@ -360,7 +359,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
     const scheduled = {
         ...createEnemyDefinition({
             id: "managed-target",
-            vitality: { maxHp: 17 },
+            vitality: { maxHp: 17, defense: 0, resistance: 0 },
             locomotion: {
                 moveSpeedPerTick: 0,
                 steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 },
@@ -429,7 +428,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
                         ? {
                               states: {
                                   vitality: {
-                                      ...initializeVitalityState(fixtureBattle(0), { maxHp: 100 }).value,
+                                      ...initializeVitalityState(fixtureBattle(0), { maxHp: 100, defense: 0, resistance: 0 }).value,
                                       hp: 40,
                                   },
                               },

@@ -231,7 +231,7 @@ test("recovery restrictions pause the natural timer and do not accumulate missed
 
 test("a zero-HP host preserves its natural remainder while advancing the paused clock", () => {
     const unit = initialize({ id: 1, position: [0, 0], definition: {
-        id: "reviving-host", vitality: { maxHp: 100 }, skill: definition({ sp: resource() }),
+        id: "reviving-host", vitality: { maxHp: 100, defense: 0, resistance: 0 }, skill: definition({ sp: resource() }),
     } });
     const reference = ref(unit);
     let state = sp.advance(at(effectFixtureWork(unit), 12), reference);
@@ -256,7 +256,7 @@ test("a zero-HP host preserves its natural remainder while advancing the paused 
 
 test("a paused zero-HP host still applies natural speed changes and zero-rate invalidation", () => {
     const unit = initialize({ id: 1, position: [0, 0], definition: {
-        id: "paused-speed-host", vitality: { maxHp: 100 }, skill: definition({ sp: resource() }),
+        id: "paused-speed-host", vitality: { maxHp: 100, defense: 0, resistance: 0 }, skill: definition({ sp: resource() }),
     } });
     const reference = ref(unit);
     let state = sp.advance(at(effectFixtureWork(unit), 12), reference);
@@ -399,7 +399,7 @@ test("definition admission rejects before payment and activation allocation", ()
 
 test("dead and leaving hosts cannot activate or recover natural SP", () => {
     const skill = definition({ sp: resource() });
-    const initial = initialize({ id: 1, position: [0, 0], definition: { id: "dead", skill, vitality: { maxHp: 100 } } });
+    const initial = initialize({ id: 1, position: [0, 0], definition: { id: "dead", skill, vitality: { maxHp: 100, defense: 0, resistance: 0 } } });
     for (const unit of [
         { ...initial, vitality: { ...initial.vitality, hp: 0 } },
         { ...initial, lifecycle: "LEAVING" },

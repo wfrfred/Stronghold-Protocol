@@ -18,7 +18,7 @@ test("Effect installation resolves its typed host against the latest battle", ()
     const original = initialize({
         id: 1,
         position: [0, 0],
-        definition: { id: "typed-host", vitality: { maxHp: 100 } },
+        definition: { id: "typed-host", vitality: { maxHp: 100, defense: 0, resistance: 0 } },
     });
     const host = units.ref(original);
     const previous = effectFixtureWork(original);
@@ -48,7 +48,7 @@ test("Effect installation rejects a typed host that has left the battle", () => 
     const original = initialize({
         id: 1,
         position: [0, 0],
-        definition: { id: "departed-host", vitality: { maxHp: 100 } },
+        definition: { id: "departed-host", vitality: { maxHp: 100, defense: 0, resistance: 0 } },
     });
     const host = units.ref(original);
     const departed = removeUnit(effectFixtureWork(original), host.id);

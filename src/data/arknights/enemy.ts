@@ -228,7 +228,7 @@ export function createEnemyMovementContent(
 
     const definition = createDefinition({
         id,
-        vitality: { maxHp },
+        vitality: { defense: 0, resistance: 0, maxHp },
         locomotion: {
             moveSpeedPerTick: perSecondToPerTick(moveSpeed),
             minimumMoveSpeedPerTick: perSecondToPerTick(0.1),

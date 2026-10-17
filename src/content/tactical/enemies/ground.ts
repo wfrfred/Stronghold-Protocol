@@ -101,9 +101,13 @@ export function createDefinition(
                       });
             },
             elemental,
-            vitality: { maxHp: profile.maxHp },
+            vitality: {
+                maxHp: profile.maxHp,
+                defense: profile.defense,
+                resistance: profile.resistance,
+            },
             offense: { attack: profile.attack },
-            defense: { defense: profile.defense, resistance: profile.resistance },
+
             allegiance: { side: "ENEMY" },
             spatial: { layer: "GROUND" },
             hit: {

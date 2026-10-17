@@ -104,12 +104,13 @@ export function create(profile: Profile, direction: Direction = "RIGHT"): Defini
             advancedBuildableMask: 1,
         }),
         elemental: createArknightsElementalDefinition({ receiver: "CHARACTER" }),
-        vitality: { maxHp: profile.attributes.maxHp },
-        offense: { attack: profile.attributes.attack },
-        defense: {
+        vitality: {
+            maxHp: profile.attributes.maxHp,
             defense: profile.attributes.defense,
             resistance: profile.attributes.resistance,
         },
+        offense: { attack: profile.attributes.attack },
+
         allegiance: { side: "ALLY" },
         spatial: { layer: "GROUND" },
         hit: { geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.25 }] } },

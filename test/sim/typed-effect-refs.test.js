@@ -13,7 +13,7 @@ import { effectFixtureWork } from "../helpers/effects.js";
 const host = (id) => initialize({
     id,
     position: [0, 0],
-    definition: { id: `ref-host-${id}`, vitality: { maxHp: 100 } },
+    definition: { id: `ref-host-${id}`, vitality: { maxHp: 100, defense: 0, resistance: 0 } },
 });
 
 test("Effect references distinguish host-local identities and retrieve current heterogeneous values", () => {

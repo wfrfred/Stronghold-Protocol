@@ -16,7 +16,7 @@ import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js
 import * as actions from "../../dist/core/tactical/unit/action/operations.js";
 import { fixtureBattlefieldState as fixtureBattlefield } from "../helpers/battlefield.js";
 
-const unit = (id, extra = {}) => initialize({ id, position: [0, id], definition: { id: `lifecycle-unit-${id}`, vitality: { maxHp: 100 }, ...extra } });
+const unit = (id, extra = {}) => initialize({ id, position: [0, id], definition: { id: `lifecycle-unit-${id}`, vitality: { maxHp: 100, defense: 0, resistance: 0 }, ...extra } });
 
 for (const reason of ["DEATH", "RETREAT", "SCRIPT"]) {
   test(`${reason} retains Skill cancellation when Action cleanup tries to finish it`, () => {
@@ -321,7 +321,7 @@ test("factory-created enemies retain onLeave and call it only for an actual depa
     return state;
   };
   const definition = createEnemyDefinition({
-    id: "enemy-with-leave", vitality: { maxHp: 100 },
+    id: "enemy-with-leave", vitality: { maxHp: 100, defense: 0, resistance: 0 },
     locomotion: { moveSpeedPerTick: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 } },
     onLeave,
   });

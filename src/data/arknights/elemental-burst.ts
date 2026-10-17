@@ -23,13 +23,13 @@ import {
     type Action,
 } from "../../core/tactical/unit/capability/action/capability.js";
 import {
-    hasDefense,
+    hasVitality,
     setDefenseContribution,
     removeDefenseContribution,
     setResistanceContribution,
     removeResistanceContribution,
-    type Defense,
-} from "../../core/tactical/unit/capability/defense/capability.js";
+    type Vitality,
+} from "../../core/tactical/unit/capability/vitality/capability.js";
 import {
     hasOffense,
     setAttackContribution,
@@ -40,7 +40,6 @@ import { modify } from "../../core/tactical/unit/capability/skill/sp.js";
 import type { DamageRequest } from "../../core/tactical/battle/damage/contract.js";
 import { calculateDamage } from "../../core/tactical/battle/damage/calculate.js";
 import { applyDamage } from "../../core/tactical/battle/damage/apply.js";
-import { hasVitality } from "../../core/tactical/unit/capability/vitality/capability.js";
 import * as attribute from "../../core/tactical/unit/contribution/attribute.js";
 import { stun } from "../../content/tactical/effects/stun.js";
 import { silence, blockSpRecovery } from "../../content/tactical/effects/control.js";
@@ -53,37 +52,37 @@ interface Clock {
 }
 
 export function create(id: string, profile: ArknightsElementalBurstProfile): Definition {
-    const reduction: EffectDefinition<{ defense: number; resistance: number }, Defense> = {
+    const reduction: EffectDefinition<{ defense: number; resistance: number }, Vitality> = {
         id: `${id}/defense`,
         initialize: () => ({
             defense: profile.defReduction,
             resistance: profile.resReduction,
         }),
         onEnable: (battle, { unit, self }) => {
-            let defense = unit.defense;
+            let vitality = unit.vitality;
 
             if (self.data.defense !== 0) {
-                defense = setDefenseContribution(defense, {
+                vitality = setDefenseContribution(vitality, {
                     id: `@effect/${self.id}/defense`,
                     value: [attribute.create({ addition: -self.data.defense })],
                 });
             }
             if (self.data.resistance !== 0) {
-                defense = setResistanceContribution(defense, {
+                vitality = setResistanceContribution(vitality, {
                     id: `@effect/${self.id}/resistance`,
                     value: [attribute.create({ addition: -self.data.resistance })],
                 });
             }
 
-            return defense === unit.defense ? battle : updateUnit(battle, { ...unit, defense });
+            return vitality === unit.vitality ? battle : updateUnit(battle, { ...unit, vitality });
         },
         onDisable: (battle, { unit, self }) => {
-            const defense = removeResistanceContribution(
-                removeDefenseContribution(unit.defense, `@effect/${self.id}/defense`),
+            const vitality = removeResistanceContribution(
+                removeDefenseContribution(unit.vitality, `@effect/${self.id}/defense`),
                 `@effect/${self.id}/resistance`,
             );
 
-            return defense === unit.defense ? battle : updateUnit(battle, { ...unit, defense });
+            return vitality === unit.vitality ? battle : updateUnit(battle, { ...unit, vitality });
         },
     };
     const paralysis: EffectDefinition<{ remaining: number }, Action> = {
@@ -252,7 +251,7 @@ export function create(id: string, profile: ArknightsElementalBurstProfile): Def
             if (unit === undefined) {
                 return battle;
             }
-            if (hasDefense(unit) && (profile.defReduction !== 0 || profile.resReduction !== 0)) {
+            if (hasVitality(unit) && (profile.defReduction !== 0 || profile.resReduction !== 0)) {
                 battle = effects.install(battle, units.ref(unit), reduction, {
                     scopes: profile.defReduction > 0 ? [] : scopes,
                 }).state;

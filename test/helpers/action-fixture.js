@@ -68,10 +68,9 @@ export function unit(
                 : { definitions: Definitions.empty().add(action) };
     const definition = {
         id: `action-${id}`,
-        vitality: { maxHp: hp },
+        vitality: { maxHp: hp, defense: 0, resistance: 0 },
         targetable: {}, spatialPresence: {}, occupancy: {},
         offense: { attack: 10 },
-        defense: { defense: 0, resistance: 0 },
         allegiance: { side },
         spatial: { layer: "GROUND" },
         hit: { geometry: hit },

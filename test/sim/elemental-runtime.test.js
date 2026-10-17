@@ -19,7 +19,7 @@ import { definition as createSkillDefinition } from '../helpers/skill.js';
 import { activate as activateSkill, advance as advanceSkill } from '../../dist/core/tactical/unit/capability/skill/operations.js';
 import { recover } from '../../dist/core/tactical/unit/capability/skill/sp.js';
 import { setHook as setHealingHook } from '../../dist/core/tactical/battle/healing/hook.js';
-import { resolveDefense } from '../../dist/core/tactical/unit/capability/defense/query.js';
+import { resolveDefense } from '../../dist/core/tactical/unit/capability/vitality/capability.js';
 import { resolveAttackPower } from '../../dist/core/tactical/unit/capability/offense/query.js';
 import { create as modifier } from '../../dist/core/tactical/unit/contribution/attribute.js';
 import { healing } from '../helpers/vitality.js';
@@ -41,8 +41,8 @@ function action(interval = 1) {
     }, operations: [{ type: 'DAMAGE', power: 1, damageType: 'TRUE' }] }], followUps: [] });
 }
 function definition(receiver = 'CHARACTER', overrides = {}, elementOptions = {}) {
-  return { id: `element-${receiver}`, targetable: {}, spatialPresence: {}, vitality: { maxHp: 100000 },
-    defense: { defense: 500, resistance: 50 }, offense: { attack: 100 },
+  return { id: `element-${receiver}`, targetable: {}, spatialPresence: {}, vitality: { maxHp: 100000, defense: 500, resistance: 50 },
+    offense: { attack: 100 },
     allegiance: { side: receiver === 'CHARACTER' ? 'ALLY' : 'ENEMY' },
     spatial: { layer: 'GROUND' }, hit: { geometry: hit },
     action: { definitions: Definitions.empty().add(action()) },
@@ -59,7 +59,8 @@ function advance(work, tick) {
   return elemental.advance(work, unitRef(getUnit(work, 1)));
 }
 function defense(work) {
-  return resolveDefense(1, battlefieldView(work));
+  const unit = getUnit(work, 1);
+  return resolveDefense(unit.vitality, unit.definition.vitality, { unit, battlefield: battlefieldView(work) });
 }
 function power(work) {
   return resolveAttackPower(1, battlefieldView(work));
@@ -223,7 +224,7 @@ test('elemental HP damage ignores physical defense, magic resistance, source att
   for (const [damageResistance, expected] of [[0, 100], [50, 50], [100, 5], [1000, 5], [-50, 100]]) {
     const source = initialize({ id: 0, position: [0, 0], definition: { id: 'element-source', offense: { attack: 10000 } } });
     const boosted = ({ ...source, offense: setAttackContribution(source.offense, { id: 'attack-buff', value: [modifier({ multiplier: 100 })] }) });
-    const input = effectFixtureWork(boosted, unit('ENEMY', { defense: { defense: 100000, resistance: 99 } }, { damageResistance, elementResistance: 100 }));
+    const input = effectFixtureWork(boosted, unit('ENEMY', { vitality: { maxHp: 100000, defense: 100000, resistance: 99 } }, { damageResistance, elementResistance: 100 }));
     const result = dealDamage(input, { source: { id: 0 }, target: { id: 1 }, parameters: parameters(100, 'ELEMENTAL') });
     near(result.value.application.hpLoss, expected);
     near(result.value.received.amount, expected);
@@ -364,7 +365,7 @@ function battle(receiver, type, { moving = false, targetStates } = {}) {
     action: { definitions: Definitions.empty().add(action(1)) },
     ...(moving ? { locomotion: { moveSpeedPerTick: 0.001, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } }, blockable: { volume: 1 } } : {}) });
   const base = createLegacyCombatSpec({ rows: 1, columns: 8, operators: [], enemies: [], maxTicks: 600, seed: 7 });
-  const keepOpen = { id: 'future', vitality: { maxHp: 1 }, locomotion: { moveSpeedPerTick: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } } };
+  const keepOpen = { id: 'future', vitality: { maxHp: 1, defense: 0, resistance: 0 }, locomotion: { moveSpeedPerTick: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } } };
   const runtime = new BattleRuntime({ ...base,
     initialUnits: [{ definition: caster, position: [0, 0] }, ...(moving ? [] : [placement({ definition: victim, position: [1, 0], ...(targetStates === undefined ? {} : { states: targetStates(victim) }) })])],
     schedule: { type: 'TIMELINE', spawns: [...(moving ? [spawn(victim, 0)] : []), spawn(keepOpen, 599)] },

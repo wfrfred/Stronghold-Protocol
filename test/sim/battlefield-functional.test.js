@@ -14,7 +14,7 @@ const initial = () => create({
   }))),
 });
 const unit = (id, position = [1, 0], definition = {}) => initialize({
-  id, position, definition: { id: `functional-${id}`, vitality: { maxHp: 100 }, ...definition },
+  id, position, definition: { id: `functional-${id}`, vitality: { maxHp: 100, defense: 0, resistance: 0 }, ...definition },
 });
 const register = unit => ({ type: 'REGISTER_UNIT', unit });
 

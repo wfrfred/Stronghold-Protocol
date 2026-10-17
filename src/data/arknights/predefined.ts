@@ -151,7 +151,7 @@ function unitDefinition(
 
     return Object.freeze({
         id: instance.inst.characterKey,
-        vitality: Object.freeze({ maxHp: maxHp! }),
+        vitality: Object.freeze({ defense: 0, resistance: 0, maxHp: maxHp! }),
         occupancy: Object.freeze({}),
         tileBinding: createTileBindingDefinition(profile.tileBinding),
         deployable: createDeployableDefinition({

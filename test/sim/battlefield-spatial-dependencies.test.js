@@ -126,11 +126,11 @@ test('support ignores reservation changes while occupancy updates selectively', 
 function blockingHarness() {
   const h = projectionHarness();
   const blocker = unit(1, [1, 0], {
-    vitality: { maxHp: 100 }, allegiance: { side: 'ALLY' },
+    vitality: { maxHp: 100, defense: 0, resistance: 0 }, allegiance: { side: 'ALLY' },
     blocker: { capacity: 1, geometry: { radius: 1 } },
   }, { spatialPresence: { present: true } });
   const blocked = unit(2, [2, 0], {
-    vitality: { maxHp: 100 }, allegiance: { side: 'ENEMY' },
+    vitality: { maxHp: 100, defense: 0, resistance: 0 }, allegiance: { side: 'ENEMY' },
     blockable: { volume: 1 }, spatial: { layer: 'GROUND' },
   });
   h.commit(register([blocker, blocked]));

@@ -53,7 +53,7 @@ test("battle state: no-op updates retain identity and zero HP alone does not rem
     const first = initialize({
         id: 1,
         position: [0, 0],
-        definition: { id: "vitality", vitality: { maxHp: 100 } },
+        definition: { id: "vitality", vitality: { maxHp: 100, defense: 0, resistance: 0 } },
     });
     const initial = fixture(first);
     assert.equal(updateUnit(initial, first), initial);

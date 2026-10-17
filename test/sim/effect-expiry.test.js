@@ -10,7 +10,7 @@ const unit = () =>
     initialize({
         id: 0,
         position: [0, 0],
-        definition: { id: "expiry-unit", vitality: { maxHp: 100 } },
+        definition: { id: "expiry-unit", vitality: { maxHp: 100, defense: 0, resistance: 0 } },
     });
 
 test("effect deadlines: one time advance ticks the active Effect then ends it at the deadline", () => {

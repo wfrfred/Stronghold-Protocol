@@ -21,10 +21,9 @@ export function unit(
         position: [0, 0],
         definition: {
             id: `vitality-${id}`,
-            vitality: { maxHp },
+            vitality: { maxHp, defense, resistance },
             targetable: {},
             offense: { attack },
-            defense: { defense, resistance },
         },
     });
     return { ...value, vitality: { ...value.vitality, hp, ...vitality } };

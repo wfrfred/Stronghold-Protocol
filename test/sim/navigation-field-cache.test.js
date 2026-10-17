@@ -81,7 +81,7 @@ test("functional views use changed navigation content while retained Views keep 
 
 test("BattleRuntime movement reuses the field for a second enemy spawned on a later Tick", () => {
     const definition = createDefinition({
-        id: "cache-walker", vitality: { maxHp: 100 },
+        id: "cache-walker", vitality: { maxHp: 100, defense: 0, resistance: 0 },
         locomotion: {
             moveSpeedPerTick: 0.1,
             steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 },

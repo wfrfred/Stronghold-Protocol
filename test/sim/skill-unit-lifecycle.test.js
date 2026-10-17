@@ -40,8 +40,8 @@ function fixture(callbacks = {}) {
             return callbacks.end?.(battle, self, end) ?? battle;
         },
     } });
-    const source = initialize({ id: 0, position: [0, 0], definition: { id: "source", skill, vitality: { maxHp: 100 } } });
-    const receiver = initialize({ id: 1, position: [1, 0], definition: { id: "receiver", vitality: { maxHp: 100 } } });
+    const source = initialize({ id: 0, position: [0, 0], definition: { id: "source", skill, vitality: { maxHp: 100, defense: 0, resistance: 0 } } });
+    const receiver = initialize({ id: 1, position: [1, 0], definition: { id: "receiver", vitality: { maxHp: 100, defense: 0, resistance: 0 } } });
     return { state: effectFixtureWork(source, receiver), source: unitRef(source), ended, disabled };
 }
 

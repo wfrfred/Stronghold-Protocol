@@ -15,7 +15,7 @@ const unit = () =>
         position: [0, 0],
         definition: {
             id: "competition-unit",
-            vitality: { maxHp: 100 },
+            vitality: { maxHp: 100, defense: 0, resistance: 0 },
             offense: { attack: 100 },
         },
     });

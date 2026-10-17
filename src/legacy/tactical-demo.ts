@@ -33,7 +33,7 @@ import {
     type ConfigurationInput as ContentConfiguration,
 } from "./tactical-demo-content.js";
 import { readShield } from "../content/tactical/operators/mudrock.js";
-import { hasVitality } from "../core/tactical/unit/capability/vitality/capability.js";
+import { hasVitality, resolveMaxHp } from "../core/tactical/unit/capability/vitality/capability.js";
 
 interface LegacyView {
     setStage(stage: Record<string, unknown>): unknown;
@@ -475,7 +475,7 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
 
             return {
                 hp: unit.vitality.hp,
-                maxHp: unit.definition.vitality.maxHp,
+                maxHp: resolveMaxHp(unit.vitality, unit.definition.vitality),
                 sp: unit.skill.sp?.value ?? 0,
                 maxSp: unit.definition.skill.sp?.requirement ?? 0,
                 ...(shield === undefined

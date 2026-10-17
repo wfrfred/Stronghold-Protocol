@@ -43,8 +43,7 @@ const profile = (fields = {}) => {
         });
 };
 const enemy = (id, position, fields = {}) => initialize({ id, position, definition: {
-    id: `enemy-${id}`, targetable: {}, vitality: { maxHp: 10000 }, defense: { defense: 0, resistance: 0 },
-    allegiance: { side: "ENEMY" }, spatial: { layer: "GROUND" },
+    id: `enemy-${id}`, targetable: {}, vitality: { maxHp: 10000, defense: 0, resistance: 0 }, allegiance: { side: "ENEMY" }, spatial: { layer: "GROUND" },
     hit: { geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.1 }] } },
     locomotion: { moveSpeedPerTick: 0.1, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } },
     ...fields,
@@ -184,7 +183,7 @@ test("shield recharge keeps its periodic clock while capped and zero layers rema
 test("module X healing and bonus SP use the selected talent and dynamic max HP", () => {
     const fixture = setup({ potential: 6, module: { id: moduleX, level: 3 } }, [enemy(1, [0.6, 0], { blockable: { volume: 1 } })]);
     let state = hp(fixture.state, 1000);
-    state = save(state, { vitality: setMaxHpContribution(getUnit(state, 0).definition.vitality, getUnit(state, 0).vitality, {
+    state = save(state, { vitality: setMaxHpContribution(getUnit(state, 0).vitality, getUnit(state, 0).definition.vitality, {
         id: "test/max-hp", value: [modifier({ addition: 1000 })],
     }) });
     state = hp(state, 1000);

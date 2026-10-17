@@ -1,14 +1,10 @@
-import { assertNonnegativeSafeInteger, assertPositiveNumber } from "../../../common/assert.js";
+import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import {
     createDefinition as createActionCapabilityDefinition,
     type Definition as ActionCapabilityDefinition,
 } from "../capability/action/capability.js";
 import type { Definition as AllegianceDefinition } from "../capability/allegiance/capability.js";
 import type { Definition as BlockerDefinition } from "../capability/blocking/blocker.js";
-import {
-    createDefinition as createDefenseDefinition,
-    type Definition as DefenseDefinition,
-} from "../capability/defense/capability.js";
 import {
     createDefinition as createOffenseDefinition,
     type Definition as OffenseDefinition,
@@ -42,7 +38,6 @@ export interface Definition extends UnitDefinition {
     readonly allegiance: AllegianceDefinition;
     readonly spatial: SpatialDefinition;
     readonly hit: HitDefinition;
-    readonly defense: DefenseDefinition;
     readonly blocker: BlockerDefinition;
     readonly offense?: OffenseDefinition;
     readonly skill?: SkillDefinition;
@@ -62,8 +57,6 @@ export function createDefinition(definition: Definition): Definition {
         throw new TypeError("operator definition id must be nonempty");
     }
 
-    assertPositiveNumber(definition.vitality.maxHp, "operator maxHp");
-
     return Object.freeze({
         id: definition.id,
         ...(definition.onEnter === undefined ? {} : { onEnter: definition.onEnter }),
@@ -75,12 +68,11 @@ export function createDefinition(definition: Definition): Definition {
         ...(definition.spatialPresence === undefined
             ? {}
             : { spatialPresence: definition.spatialPresence }),
-        vitality: Object.freeze({ maxHp: definition.vitality.maxHp }),
+        vitality: Object.freeze({ ...definition.vitality }),
         action: createActionCapabilityDefinition(definition.action),
         allegiance: definition.allegiance,
         spatial: definition.spatial,
         hit: createHitDefinition(definition.hit),
-        defense: createDefenseDefinition(definition.defense),
         ...(definition.offense === undefined
             ? {}
             : { offense: createOffenseDefinition(definition.offense) }),

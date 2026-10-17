@@ -72,11 +72,11 @@ export function maxHpBuff(id = "max-hp-buff", amount = 100, callbacks = {}) {
         amount,
         (unit, entry) => ({
             ...unit,
-            vitality: setMaxHpContribution(unit.definition.vitality, unit.vitality, entry),
+            vitality: setMaxHpContribution(unit.vitality, unit.definition.vitality, entry),
         }),
         (unit, entryId) => ({
             ...unit,
-            vitality: removeMaxHpContribution(unit.definition.vitality, unit.vitality, entryId),
+            vitality: removeMaxHpContribution(unit.vitality, unit.definition.vitality, entryId),
         }),
         callbacks,
     );

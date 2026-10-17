@@ -29,7 +29,7 @@ const input = (fields = {}) => ({
   rngState: 123, ...fields,
 });
 const markEntered = (trace, id) => ({
-  id, vitality: { maxHp: 100 },
+  id, vitality: { maxHp: 100, defense: 0, resistance: 0 },
   onEnter(state, unitId) {
     const unit = getUnit(state, unitId);
     trace.push([id, unitId, unit.vitality.hp]);
@@ -79,7 +79,7 @@ test('predefined appearances and deployment initialize once; relocation does not
     id: 9, alias: null, initiallyPresent: true,
     creation: { type: 'UNIT', definition: markEntered(trace, 'predefined'), position: [2, 0] },
   }], schedule: { type: 'TIMELINE', spawns: [spawn(createEnemy({
-    id: 'later', vitality: { maxHp: 100 }, locomotion: {
+    id: 'later', vitality: { maxHp: 100, defense: 0, resistance: 0 }, locomotion: {
       moveSpeedPerTick: 0, minimumMoveSpeedPerTick: 0,
       steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 },
     },
@@ -105,7 +105,7 @@ test('unit initialization exposes callable optional callbacks and selected capab
 import { initialize } from ${module};
 declare const battle: import(${JSON.stringify(fileURLToPath(new URL('../../src/core/tactical/battle/state.js', import.meta.url)))}).State;
 const unit = initialize(battle, { id: 0, position: [0, 0], definition: {
-  id: 'typed-content', vitality: { maxHp: 100 },
+  id: 'typed-content', vitality: { maxHp: 100, defense: 0, resistance: 0 },
   onEnter: (state: import(${JSON.stringify(fileURLToPath(new URL('../../src/core/tactical/battle/state.js', import.meta.url)))}).State, _id: number) => state,
 } }).value;
 if (unit.definition.onEnter !== undefined) {

@@ -32,7 +32,7 @@ import { Effects } from ${module("unit/effect/effects")};
 import type { Contribution } from ${module("unit/contribution/contribution")};
 import type { Modifier, Input } from ${module("unit/contribution/attribute")};
 import { ref as unitRef, type Context as QueryContext } from ${module("unit/query")};
-const host=initialize(battle, {id:1,position:[0,0],definition:{id:'host',vitality:{maxHp:100}}}).value;
+const host=initialize(battle, {id:1,position:[0,0],definition:{id:'host',vitality: { maxHp: 100, defense: 0, resistance: 0 }}}).value;
 const content: Definition<{charges:number},Vitality> = {
  id:'shield',initialize:()=>({charges:2}),
  onTick(state,context) {
@@ -116,7 +116,7 @@ const dynamic:Contribution<Input<QueryContext>>={id:'dynamic',value:()=>[]};
 setVolumeContribution(capabilityHost.blockable,{id:'volume',value:1});
 // @ts-expect-error blocking volume requires settled static values.
 setVolumeContribution(capabilityHost.blockable,dynamic);
-const vitality=setMaxHpContribution(capabilityHost.definition.vitality,capabilityHost.vitality,fixed);
+const vitality=setMaxHpContribution(capabilityHost.vitality,capabilityHost.definition.vitality,fixed);
 const changed={...capabilityHost,vitality};
 const hp:number=changed.vitality.hp;
 const attack:number=changed.definition.offense.attack;
@@ -124,7 +124,7 @@ const maxHp:number=changed.definition.vitality.maxHp;
 const retainedRoute:RouteControlState=changed.locomotion.mainRoute;
 setAttackContribution(capabilityHost.offense,dynamic);
 // @ts-expect-error MaxHP cannot coordinate HP from a query-time closure.
-setMaxHpContribution(capabilityHost.definition.vitality,capabilityHost.vitality,dynamic);
+setMaxHpContribution(capabilityHost.vitality,capabilityHost.definition.vitality,dynamic);
 // @ts-expect-error blocking capacity requires settled static values.
 setCapacityContribution(capabilityHost.blocker,dynamic);
 const movement={
@@ -143,7 +143,7 @@ const crossCapability:Definition<{bonus:number},Vitality & Offense>={
   return state;
  },
 };
-const combined=initialize(battle, {id:3,position:[0,0],definition:{id:'combined',vitality:{maxHp:100},offense:{attack:20}}}).value;
+const combined=initialize(battle, {id:3,position:[0,0],definition:{id:'combined',vitality: { maxHp: 100, defense: 0, resistance: 0 },offense:{attack:20}}}).value;
 install(battle,unitRef(combined),crossCapability);
 // @ts-expect-error the concrete Effect requires both capability pairs.
 install(battle,unitRef(host),crossCapability);

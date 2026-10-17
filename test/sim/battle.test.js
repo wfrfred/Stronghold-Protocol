@@ -1099,7 +1099,7 @@ test('core battle publishes a completed tick only after all operations succeed',
       region: createNavigationModifierRegion({ type: 'FIXED', position: [9, 6], range: [[0, 0]], direction: 'RIGHT' }),
       expiresAtTick: 1,
     });
-    const predefinedUnit = Object.freeze({ id: 'late-failure-predefined', vitality: Object.freeze({ maxHp: 25 }) });
+    const predefinedUnit = Object.freeze({ id: 'late-failure-predefined', vitality: Object.freeze({ maxHp: 25, defense: 0, resistance: 0 }) });
     let failureEnabled = false;
     let failures = 0;
     let observedRuntime;
@@ -1197,7 +1197,7 @@ test('core battle propagates nested settlement errors without publishing battlef
       if (self.state.entered) return { state, value: false };
       state = replaceAction(state, setActionState(self, { entered: true }));
       const unit = initialize({ id: state.execution.nextUnitId, position: [2, 0], definition: {
-        id: 'nested-created', vitality: { maxHp: 10 },
+        id: 'nested-created', vitality: { maxHp: 10, defense: 0, resistance: 0 },
       } });
       state = registerUnit(state, unit);
       state = { ...state, execution: { ...state.execution, nextUnitId: unit.id + 1 } };
@@ -1207,8 +1207,8 @@ test('core battle propagates nested settlement errors without publishing battlef
     },
   };
   const input = deploymentBattleInput({ initialUnits: [
-    { definition: { id: 'nested-action-source', vitality: { maxHp: 100 }, action: { definitions: Definitions.empty().add(action) } }, position: [0, 0] },
-    { definition: { id: 'nested-target', vitality: { maxHp: 100 } }, position: [1, 0] },
+    { definition: { id: 'nested-action-source', vitality: { maxHp: 100, defense: 0, resistance: 0 }, action: { definitions: Definitions.empty().add(action) } }, position: [0, 0] },
+    { definition: { id: 'nested-target', vitality: { maxHp: 100, defense: 0, resistance: 0 } }, position: [1, 0] },
   ] });
   const runtime = new BattleRuntime(input);
   const before = runtime.snapshot();
@@ -1340,10 +1340,10 @@ test('raw enemy movement levels inherit only defined values and reject sparse, u
   const profile = slimeMovementProfile();
   const parseMovement = (value, level) => parseEnemyMovementDefinition(value, level, profile);
   assert.deepEqual(parseMovement(fixture, 0), {
-    id: 'enemy_1007_slime', spatialPresence: {}, vitality: { maxHp: 550 }, locomotion: { moveSpeedPerTick: 1 / 30, minimumMoveSpeedPerTick: 0.1 / 30, steeringParameters: profile.steeringParameters },
+    id: 'enemy_1007_slime', spatialPresence: {}, vitality: { maxHp: 550, defense: 0, resistance: 0 }, locomotion: { moveSpeedPerTick: 1 / 30, minimumMoveSpeedPerTick: 0.1 / 30, steeringParameters: profile.steeringParameters },
   });
   assert.deepEqual(parseMovement(fixture, 1), {
-    id: 'enemy_1007_slime', spatialPresence: {}, vitality: { maxHp: 2050 }, locomotion: { moveSpeedPerTick: 1 / 30, minimumMoveSpeedPerTick: 0.1 / 30, steeringParameters: profile.steeringParameters },
+    id: 'enemy_1007_slime', spatialPresence: {}, vitality: { maxHp: 2050, defense: 0, resistance: 0 }, locomotion: { moveSpeedPerTick: 1 / 30, minimumMoveSpeedPerTick: 0.1 / 30, steeringParameters: profile.steeringParameters },
   });
   assert.deepEqual(parseMovement({ ...fixture, Value: [...fixture.Value].reverse() }, 1), parseMovement(fixture, 1));
   const ignored = structuredClone(fixture);
@@ -2080,7 +2080,7 @@ function deploymentBattleInput(overrides = {}, cards = []) {
 
 const deployableDefinition = (id = 'test_deployable') => Object.freeze({
   id, occupancy: {}, deployable: createDeployableDefinition({ cost: 0, redeployTicks: 0, slots: 1, buildableType: 'ALL' }),
-  vitality: Object.freeze({ maxHp: 100 }), allegiance: Object.freeze({ side: 'ALLY' }),
+  vitality: Object.freeze({ maxHp: 100, defense: 0, resistance: 0 }), allegiance: Object.freeze({ side: 'ALLY' }),
   spatial: Object.freeze({ layer: 'GROUND' }),
   blocker: Object.freeze({ capacity: 1, geometry: Object.freeze({ radius: 0.7 }) }),
 });
@@ -2241,7 +2241,7 @@ test('core visibility: movement reads one navigation projection before following
     playerSideMask: 'ALL', terrain: 'NORMAL', mechanism: null,
   })));
   let battlefield = createBattlefieldState({ map });
-  const definition = createDefinition({ id: 'moving_effect_anchor', vitality: { maxHp: 100 }, locomotion: {
+  const definition = createDefinition({ id: 'moving_effect_anchor', vitality: { maxHp: 100, defense: 0, resistance: 0 }, locomotion: {
     moveSpeedPerTick: 1, steeringParameters: createSteeringParameters({ steeringFactor: 1, maxSteeringForce: 1 }),
   } });
   let execution = { rngState: 123, nextUnitId: 2, nextNavigationRequestId: 0, nextMechanismId: 0, nextNavigationModifierId: 1, nextProjectileId: 0, nextCardId: 0 };
@@ -2299,7 +2299,7 @@ test('core elevated support disables blocking without changing target layer and 
   });
   const definition = deployableDefinition();
   const enemyDefinition = Object.freeze({ id: 'standing_enemy',
-    vitality: Object.freeze({ maxHp: 100 }), allegiance: Object.freeze({ side: 'ENEMY' }),
+    vitality: Object.freeze({ maxHp: 100, defense: 0, resistance: 0 }), allegiance: Object.freeze({ side: 'ENEMY' }),
     spatial: Object.freeze({ layer: 'GROUND' }), blockable: Object.freeze({ volume: 1 }),
   });
   const occupancy = { claims: [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }] };

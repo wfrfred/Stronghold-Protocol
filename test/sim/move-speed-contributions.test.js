@@ -83,7 +83,7 @@ function harness({ speed = 0.25, minimum = 0, definition = route(), maps } = {})
             id: 0,
             definition: createDefinition({
                 id: "dynamic-mover",
-                vitality: { maxHp: 100 },
+                vitality: { maxHp: 100, defense: 0, resistance: 0 },
                 locomotion: {
                     moveSpeedPerTick: speed,
                     minimumMoveSpeedPerTick: minimum,

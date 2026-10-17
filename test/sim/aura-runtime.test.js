@@ -50,7 +50,7 @@ function spawn({ tick = 2, start = 4, end = 7, speed = 0, wait = true } = {}) {
         definition: {
             ...createDefinition({
                 id: "scheduled-receiver",
-                vitality: { maxHp: 100 },
+                vitality: { maxHp: 100, defense: 0, resistance: 0 },
                 locomotion: {
                     moveSpeedPerTick: speed,
                     steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 },

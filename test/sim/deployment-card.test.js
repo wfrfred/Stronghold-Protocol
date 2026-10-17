@@ -27,7 +27,7 @@ const tile = createTile({
 const map = createBattlefieldMap(1, 8, Array(8).fill(tile));
 
 const definition = (fields = {}) => ({
-    id: "operator", vitality: { maxHp: 100 }, occupancy: {},
+    id: "operator", vitality: { maxHp: 100, defense: 0, resistance: 0 }, occupancy: {},
     deployable: createDeployable({ cost: 10, redeployTicks: 3, slots: 1, buildableType: "ALL" }),
     ...fields,
 });

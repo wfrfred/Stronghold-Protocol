@@ -1,7 +1,7 @@
 import { assertNonnegativeNumber } from "../../../common/assert.js";
 import { battlefieldView, type Result, type State as BattleState } from "../state.js";
 import * as units from "../../unit/query.js";
-import { resolveDefense } from "../../unit/capability/defense/query.js";
+import { resolveDefense } from "../../unit/capability/vitality/capability.js";
 import { hasElemental } from "../../unit/capability/elemental/capability.js";
 import { resolveDamageResistance } from "../../unit/capability/elemental/query.js";
 import type { CalculatedDamage, DamageParameters, DamageRequest } from "./contract.js";
@@ -77,7 +77,11 @@ function formula(
 
     switch (parameters.type) {
         case "PHYSICAL": {
-            const defense = resolveDefense(request.target.id, battlefieldView(battle))!.defense;
+            const target = units.get(battle, request.target)!;
+            const defense = resolveDefense(target.vitality, target.definition.vitality, {
+                unit: target,
+                battlefield: battlefieldView(battle),
+            }).defense;
             const effective =
                 Math.max(0, defense - parameters.penetration.fixed) *
                 Math.max(0, 1 - parameters.penetration.proportional);
@@ -86,10 +90,11 @@ function formula(
         }
 
         case "ARTS": {
-            const resistance = resolveDefense(
-                request.target.id,
-                battlefieldView(battle),
-            )!.resistance;
+            const target = units.get(battle, request.target)!;
+            const resistance = resolveDefense(target.vitality, target.definition.vitality, {
+                unit: target,
+                battlefield: battlefieldView(battle),
+            }).resistance;
             const effective =
                 Math.max(0, resistance - parameters.penetration.fixed) *
                 Math.max(0, 1 - parameters.penetration.proportional);

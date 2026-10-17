@@ -25,7 +25,7 @@ const unit = (id) =>
         position: [0, 0],
         definition: {
             id: `scope-unit-${id}`,
-            vitality: { maxHp: 100 },
+            vitality: { maxHp: 100, defense: 0, resistance: 0 },
             offense: { attack: 100 },
         },
     });

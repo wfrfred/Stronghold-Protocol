@@ -85,15 +85,14 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, windupTicks = 0, o
   });
   const action = actionProgram === undefined ? normal : actionProgram(normal);
   const definition = createDefinition({
-    id: "ammo-actor", spatialPresence: {}, vitality: { maxHp: 10000 }, offense: { attack: 100 },
-    defense: { defense: 0, resistance: 0 }, allegiance: { side: "ALLY" },
+    id: "ammo-actor", spatialPresence: {}, vitality: { maxHp: 10000, defense: 0, resistance: 0 }, offense: { attack: 100 },
+    allegiance: { side: "ALLY" },
     spatial: { layer: "GROUND" }, hit: { geometry: hit },
     blocker: { capacity: 0, geometry: { radius: 0.1 } }, skill,
     action: { definitions: Definitions.empty().add(action) },
   });
   const receiver = {
-    id: "ammo-target", vitality: { maxHp: 10000 }, defense: { defense: 0, resistance: 0 },
-    allegiance: { side: "ENEMY" }, spatial: { layer: "GROUND" }, hit: { geometry: hit },
+    id: "ammo-target", vitality: { maxHp: 10000, defense: 0, resistance: 0 }, allegiance: { side: "ENEMY" }, spatial: { layer: "GROUND" }, hit: { geometry: hit },
   };
   const shell = createProjectileDefinition({
     id: "runtime-ammo-shell", initialize: () => ({}),
@@ -107,7 +106,7 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, windupTicks = 0, o
     initialUnits: [{ definition, position: [0, 0] },
       ...Array.from({ length: targets }, (_, index) => ({ definition: receiver, position: [index + 3, 0] }))],
     schedule: { type: "TIMELINE", spawns: [{
-      definition: { id: "future", vitality: { maxHp: 1 }, locomotion: {
+      definition: { id: "future", vitality: { maxHp: 1, defense: 0, resistance: 0 }, locomotion: {
         moveSpeedPerTick: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 },
       } }, tick: 19,
       route: { pathMotionMode: "WALK", startPosition: [0, 7], endPosition: [0, 7],

@@ -28,7 +28,7 @@ function input(overrides = {}) {
     return {
         map, initialUnits: [], predefines: [], initialMechanisms: [], initialNavigationModifiers: [],
         schedule: { type: "TIMELINE", spawns: [
-            spawn(createEnemy({ id: "later", vitality: { maxHp: 100 }, locomotion }), 100),
+            spawn(createEnemy({ id: "later", vitality: { maxHp: 100, defense: 0, resistance: 0 }, locomotion }), 100),
         ] },
         maxTicks: 10, routeMoveMultiplier: 1, rngState: 123,
         ...overrides,
@@ -65,7 +65,7 @@ test("initial entry receives the complete battle state and its returned facts pe
 test("spawn entry observes recorded schedule progress before running content", () => {
     let observed;
     const definition = createEnemy({
-        id: "spawned", vitality: { maxHp: 100 }, locomotion,
+        id: "spawned", vitality: { maxHp: 100, defense: 0, resistance: 0 }, locomotion,
         onEnter(state, id) {
             observed = state;
             assert.equal(state.schedule.cursor, 1);
@@ -150,7 +150,7 @@ test("a failed tick publishes neither schedule nor predefined or statistics chan
     let fail = true;
     let failedState;
     const definition = createEnemy({
-        id: "spawned", vitality: { maxHp: 100 }, locomotion,
+        id: "spawned", vitality: { maxHp: 100, defense: 0, resistance: 0 }, locomotion,
         onTick(state) {
             failedState = state;
             if (fail) throw failure;

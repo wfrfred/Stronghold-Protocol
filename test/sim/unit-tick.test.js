@@ -35,7 +35,7 @@ const spawn = (definition, tick) => ({
 function unit(id, definition = {}) {
     return {
         ...initialize({ id, position: [id, 0], definition: {
-            id: `tick-unit-${id}`, vitality: { maxHp: 100 }, ...definition,
+            id: `tick-unit-${id}`, vitality: { maxHp: 100, defense: 0, resistance: 0 }, ...definition,
         } }),
         state: { phase: 0 },
     };
@@ -46,7 +46,7 @@ function runtime(definitions, spawns = []) {
         map,
         schedule: { type: "TIMELINE", spawns: [
             ...spawns,
-            spawn(createEnemy({ id: "later", vitality: { maxHp: 100 }, locomotion }), 100),
+            spawn(createEnemy({ id: "later", vitality: { maxHp: 100, defense: 0, resistance: 0 }, locomotion }), 100),
         ] },
         initialUnits: definitions.map((definition, id) => ({ definition, position: [id, 0] })),
         predefines: [], initialMechanisms: [], initialNavigationModifiers: [],
@@ -109,7 +109,7 @@ test("Runtime advances Unit content once per Tick before Effect callbacks", () =
         return state;
     } };
     const battle = runtime([{
-        id: "boss", vitality: { maxHp: 100 },
+        id: "boss", vitality: { maxHp: 100, defense: 0, resistance: 0 },
         onEnter(state, id) {
             state = updateUnit(state, { ...getUnit(state, id), state: { phase: 0 } });
             original = getUnit(state, id);
@@ -140,7 +140,7 @@ test("Runtime advances Unit content once per Tick before Effect callbacks", () =
 test("Factory-created enemies tick in their spawning Tick after entering", () => {
     const trace = [];
     const definition = createEnemy({
-        id: "spawned", vitality: { maxHp: 100 }, locomotion,
+        id: "spawned", vitality: { maxHp: 100, defense: 0, resistance: 0 }, locomotion,
         onEnter(state, id) { trace.push(["enter", state.tick, id]); return state; },
         onTick(state, self) { trace.push(["tick", state.tick, self.id]); return state; },
     });
@@ -164,7 +164,7 @@ test("Operator and combat enemy definition factories retain the Unit tick callba
 test("Unit tick errors propagate without publishing an incomplete Tick", () => {
     const failure = new Error("boss phase failed");
     const battle = runtime([
-        { id: "first", vitality: { maxHp: 100 }, onTick(state, self) {
+        { id: "first", vitality: { maxHp: 100, defense: 0, resistance: 0 }, onTick(state, self) {
             return updateUnit(state, { ...self, vitality: { ...self.vitality, hp: 50 } });
         } },
         { id: "failed", onTick() { throw failure; } },

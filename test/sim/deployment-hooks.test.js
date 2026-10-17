@@ -32,7 +32,7 @@ const route = createRouteDefinition({
     visitEveryNodeCenter: false, visitEveryCheckPoint: true,
 });
 const enemy = (fields = {}) => createEnemy({
-    id: "enemy", vitality: { maxHp: 100 }, locomotion: {
+    id: "enemy", vitality: { maxHp: 100, defense: 0, resistance: 0 }, locomotion: {
         moveSpeedPerTick: 0, minimumMoveSpeedPerTick: 0,
         steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 },
     }, ...fields,
@@ -41,7 +41,7 @@ const spawn = (definition, tick) => ({
     tick, definition, route, alwaysCheckCurrentPoint: true, notCountInTotal: false,
     timing: { waveStartedAtTick: tick, fragmentStartedAtTick: tick },
 });
-const definition = (id, fields = {}) => ({ id, vitality: { maxHp: 100 }, occupancy: {}, deployable: profile, ...fields });
+const definition = (id, fields = {}) => ({ id, vitality: { maxHp: 100, defense: 0, resistance: 0 }, occupancy: {}, deployable: profile, ...fields });
 const unit = (id, fields = {}) => initialize({ id, definition: definition(`unit:${id}`, fields), position: [id, 0] });
 const deployment = (definitions) => ({
     definition: { initialDp: 0, maxDp: 99, dpRecoveryTicks: null, slotLimit: null },

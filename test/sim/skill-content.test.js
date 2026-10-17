@@ -59,7 +59,7 @@ test("native attack buff data builds a shared Definition and changes attacks thr
   const compiled = compileArknightsAttackBuffSkill(attackBuff, 1);
   const geometry = { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 2 }] };
   const actor = {
-    id: "native-skill-actor", vitality: { maxHp: 1000 }, offense: { attack: 100 },
+    id: "native-skill-actor", vitality: { maxHp: 1000, defense: 0, resistance: 0 }, offense: { attack: 100 },
     allegiance: { side: "ALLY" }, spatial: { layer: "GROUND" }, skill: compiled,
     action: { definitions: Definitions.empty().add(createAttack({ id: "normal",
       triggerBindingId: "target", intervalTicks: 30, recoveryTicks: 0, followUps: [],
@@ -71,7 +71,7 @@ test("native attack buff data builds a shared Definition and changes attacks thr
     })) },
   };
   const target = {
-    id: "stationary-content-target", spatialPresence: {}, vitality: { maxHp: 1000000 }, allegiance: { side: "ENEMY" },
+    id: "stationary-content-target", spatialPresence: {}, vitality: { maxHp: 1000000, defense: 0, resistance: 0 }, allegiance: { side: "ENEMY" },
     spatial: { layer: "GROUND" }, hit: { geometry },
     locomotion: { moveSpeedPerTick: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 } },
   };
@@ -167,7 +167,7 @@ function instantDamageFixture(automatic = false, withTarget = true) {
     },
   } });
   const unit = initialize({ id: 1, position: [0, 0], definition: { id: "instant-caster", skill: definition } });
-  const enemy = initialize({ id: 2, position: [1, 0], definition: { id: "instant-target", vitality: { maxHp: 1000 } } });
+  const enemy = initialize({ id: 2, position: [1, 0], definition: { id: "instant-target", vitality: { maxHp: 1000, defense: 0, resistance: 0 } } });
   let work = effectFixtureWork(unit, ...(withTarget ? [enemy] : []));
   work = sp.modify(work, unitRef(unit), 17).state;
   return { work, reports };
@@ -205,7 +205,7 @@ test("instant healing uses the current activation tick and returns the applied h
       },
     },
   });
-  const unit = initialize({ id: 1, position: [0, 0], definition: { id: "heal-caster", skill: definition, vitality: { maxHp: 100 } }, states: { vitality: { ...initializeVitality(fixtureBattle(0), { maxHp: 100 }).value, hp: 50 } } });
+  const unit = initialize({ id: 1, position: [0, 0], definition: { id: "heal-caster", skill: definition, vitality: { maxHp: 100, defense: 0, resistance: 0 } }, states: { vitality: { ...initializeVitality(fixtureBattle(0), { maxHp: 100, defense: 0, resistance: 0 }).value, hp: 50 } } });
   let activatedState = effectFixtureWork(unit);
   activatedState = skills.activate({ ...activatedState, tick: 3 }, unitRef(getUnit(activatedState, 1))).state;
   assert.equal(getUnit(activatedState, 1).vitality.hp, 80);

@@ -7,7 +7,7 @@ import {
 import { contributionEffect } from "../helpers/effects.js";
 import * as modifier from "../../dist/core/tactical/unit/contribution/attribute.js";
 import { setAttackContribution, removeAttackContribution } from "../../dist/core/tactical/unit/capability/offense/capability.js";
-import { setResistanceContribution, removeResistanceContribution } from "../../dist/core/tactical/unit/capability/defense/capability.js";
+import { setResistanceContribution, removeResistanceContribution } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { calculateDamage } from "../../dist/core/tactical/battle/damage/calculate.js";
 import { applyDamage } from "../../dist/core/tactical/battle/damage/apply.js";
@@ -79,7 +79,7 @@ test("damage pipeline: fixed penetration precedes proportional penetration", () 
 
 test("damage pipeline: resistance contributions clamp before penetration", () => {
     const effect = contributionEffect("resistance", {}, {
-        capability: "defense", set: setResistanceContribution, remove: removeResistanceContribution,
+        capability: "vitality", set: setResistanceContribution, remove: removeResistanceContribution,
         value: () => [modifier.create({ finalAddition: 70 })],
     });
     const target = attach(unit(2, { resistance: 80 }), effect);
@@ -88,7 +88,7 @@ test("damage pipeline: resistance contributions clamp before penetration", () =>
     assert.equal(calculated.value.amount, 550);
     const result = applyDamage(input, calculated);
     assert.equal(getUnit(result.state, 2).vitality.hp, 4450);
-    assert.equal(getUnit(result.state, 2).definition.defense.resistance, 80);
+    assert.equal(getUnit(result.state, 2).definition.vitality.resistance, 80);
 });
 
 test("damage pipeline: barrier before doubling takes 400 HP; doubling before barrier takes 900", () => {

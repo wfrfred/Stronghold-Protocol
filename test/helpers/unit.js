@@ -19,7 +19,7 @@ export function fixtureBattle(tick = 0, execution = {}) {
 export function fixtureDefinition(capability) {
     switch (capability) {
         case "offense": return { attack: 0 };
-        case "defense": return { defense: 0, resistance: 0 };
+        case "vitality": return { maxHp: 100, defense: 0, resistance: 0 };
         case "action": return { definitions: Definitions.empty() };
         case "locomotion": return {
             moveSpeedPerTick: 0,

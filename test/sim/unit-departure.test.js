@@ -77,7 +77,7 @@ function fixture() {
             position: [id, 0],
             definition: {
                 id: `departure-${id}`,
-                vitality: { maxHp: 100 },
+                vitality: { maxHp: 100, defense: 0, resistance: 0 },
                 ...(id < 2 ? { skill } : {}),
             },
         }),
@@ -153,7 +153,7 @@ for (const domain of ["deployment", "predefined"]) {
             const definition = Object.freeze({
             id: "transient-placement", occupancy: {},
             deployable: createDeployableDefinition({ cost: 0, redeployTicks: 0, slots: 1, buildableType: "ALL" }),
-            vitality: Object.freeze({ maxHp: 100 }),
+            vitality: Object.freeze({ maxHp: 100, defense: 0, resistance: 0 }),
         });
         const navigationModifiers = [
             {
@@ -242,12 +242,12 @@ test("effect terminal callback can retire its host and settle remote Action and 
         initialize({
             id: 0,
             position: [0, 0],
-            definition: { id: "source", vitality: { maxHp: 100 }, skill, action: { definitions: Definitions.empty().add(action) } },
+            definition: { id: "source", vitality: { maxHp: 100, defense: 0, resistance: 0 }, skill, action: { definitions: Definitions.empty().add(action) } },
         }),
         initialize({
             id: 1,
             position: [1, 0],
-            definition: { id: "receiver", vitality: { maxHp: 100 } },
+            definition: { id: "receiver", vitality: { maxHp: 100, defense: 0, resistance: 0 } },
         }),
     ];
     let battle = createBattleState(fixtureBattlefield(units));

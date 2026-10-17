@@ -12,8 +12,8 @@ import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import {
     setMaxHpContribution,
     removeMaxHpContribution,
+    resolveMaxHp,
 } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
-import { resolveMaxHp } from "../../dist/core/tactical/unit/capability/vitality/query.js";
 import { create } from "../../dist/core/tactical/unit/contribution/attribute.js";
 import { effectFixtureWork, install, maxHpBuff, at } from "../helpers/effects.js";
 const bonus = (amount) => create({ finalAddition: amount });
@@ -21,35 +21,38 @@ const receiver = (hp = 50) => {
     const unit = initialize({
         id: 1,
         position: [0, 0],
-        definition: { id: "host", vitality: { maxHp: 100 } },
+        definition: { id: "host", vitality: { maxHp: 100, defense: 0, resistance: 0 } },
     });
     return { ...unit, vitality: { ...unit.vitality, hp } };
 };
-const pair = (battle) => [getUnit(battle, 1).vitality.hp, resolveMaxHp(1, battlefieldView(battle))];
+const pair = (battle) => {
+    const unit = getUnit(battle, 1);
+    return [unit.vitality.hp, resolveMaxHp(unit.vitality, unit.definition.vitality)];
+};
 test("MaxHP: direct capability changes coordinate HP independently of Effects", () => {
     const initial = receiver();
     const installed = {
         ...initial,
-        vitality: setMaxHpContribution(initial.definition.vitality, initial.vitality, { id: "equipment", value: [bonus(100)] }),
+        vitality: setMaxHpContribution(initial.vitality, initial.definition.vitality, { id: "equipment", value: [bonus(100)] }),
     };
     assert.deepEqual(pair(effectFixtureWork(installed)), [100, 200]);
     const replaced = {
         ...installed,
-        vitality: setMaxHpContribution(installed.definition.vitality, installed.vitality, { id: "equipment", value: [bonus(200)] }),
+        vitality: setMaxHpContribution(installed.vitality, installed.definition.vitality, { id: "equipment", value: [bonus(200)] }),
     };
     assert.deepEqual(pair(effectFixtureWork(replaced)), [150, 300]);
     assert.equal(replaced.vitality.maxHp.length, 1);
     const removed = {
         ...replaced,
-        vitality: removeMaxHpContribution(replaced.definition.vitality, replaced.vitality, "equipment"),
+        vitality: removeMaxHpContribution(replaced.vitality, replaced.definition.vitality, "equipment"),
     };
     assert.deepEqual(pair(effectFixtureWork(removed)), [50, 100]);
-    assert.equal(removeMaxHpContribution(removed.definition.vitality, removed.vitality, "missing"), removed.vitality);
+    assert.equal(removeMaxHpContribution(removed.vitality, removed.definition.vitality, "missing"), removed.vitality);
     assert.deepEqual(pair(effectFixtureWork(initial)), [50, 100]);
     const originalDead = receiver(0);
     const dead = {
         ...originalDead,
-        vitality: setMaxHpContribution(originalDead.definition.vitality, originalDead.vitality, { id: "equipment", value: [bonus(100)] }),
+        vitality: setMaxHpContribution(originalDead.vitality, originalDead.definition.vitality, { id: "equipment", value: [bonus(100)] }),
     };
     assert.deepEqual(pair(effectFixtureWork(dead)), [0, 200]);
 });

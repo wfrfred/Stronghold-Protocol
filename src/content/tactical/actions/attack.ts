@@ -23,11 +23,13 @@ import { resolveAttackPower } from "../../../core/tactical/unit/capability/offen
 import { calculateDamage } from "../../../core/tactical/battle/damage/calculate.js";
 import { applyDamage } from "../../../core/tactical/battle/damage/apply.js";
 import type { DamageRequest, DamageType } from "../../../core/tactical/battle/damage/contract.js";
-import { hasVitality } from "../../../core/tactical/unit/capability/vitality/capability.js";
+import {
+    hasVitality,
+    resolveMaxHp,
+} from "../../../core/tactical/unit/capability/vitality/capability.js";
 import { calculateHealing } from "../../../core/tactical/battle/healing/calculate.js";
 import { applyHealing } from "../../../core/tactical/battle/healing/apply.js";
 import type { HealingRequest } from "../../../core/tactical/battle/healing/contract.js";
-import { resolveMaxHp } from "../../../core/tactical/unit/capability/vitality/query.js";
 import {
     damage as damageElement,
     heal as healElement,
@@ -159,7 +161,7 @@ export function chooseTargets(
                 compileTargeting(
                     group.targeting,
                     group.operations.flatMap(purposes),
-                    (target, query) => resolveMaxHp(target.id, query.battlefield)!,
+                    (target) => resolveMaxHp(target.vitality, target.definition.vitality),
                     {
                         allowsDamage: (target) =>
                             group.operations.some(

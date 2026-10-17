@@ -12,7 +12,7 @@ const unit = (id) =>
     initialize({
         id,
         position: [0, 0],
-        definition: { id: `periodic-${id}`, vitality: { maxHp: 100 } },
+        definition: { id: `periodic-${id}`, vitality: { maxHp: 100, defense: 0, resistance: 0 } },
     });
 
 test("effect time: content controls periodic intervals and state is visible before nested operations", () => {

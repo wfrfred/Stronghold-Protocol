@@ -27,6 +27,7 @@ import { initialize } from "../helpers/unit.js";
 import { start as startAction } from "../../dist/core/tactical/unit/action/operations.js";
 
 import { compileTargeting } from "../../dist/core/tactical/unit/targeting/compile.js";
+import { setMaxHpContribution } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { selectTargets } from '../../dist/core/tactical/unit/targeting/select.js';
 import { setRule as setTargetableRule, allowsTarget } from '../../dist/core/tactical/unit/capability/targetable/capability.js';
@@ -378,7 +379,7 @@ test('core combat: damage formulas retain the 5% floor and immutable vitality tr
     ['ARTS', 0, 30, 700], ['ARTS', 0, 100, 50], ['TRUE', 9999, 100, 1000],
   ]) {
     const receiver = initialize({ id: 0, position: [0, 0], definition: {
-      id: 'formula-target', vitality: { maxHp: 5000 }, defense: { defense, resistance },
+      id: 'formula-target', vitality: { maxHp: 5000, defense, resistance },
     } });
     const battle = createBattleState(fixtureBattlefieldState([receiver]));
     assert.equal(calculateDamage(battle, { source: null, target: unitRef(receiver), parameters: parameters(1000, type) }).value.amount, expected);
@@ -386,7 +387,7 @@ test('core combat: damage formulas retain the 5% floor and immutable vitality tr
 
   const unit = initialize({
     id: 0, position: [0, 0],
-    definition: { id: 'core_target', vitality: { maxHp: 7 }, defense: { defense: 0, resistance: 0 } },
+    definition: { id: 'core_target', vitality: { maxHp: 7, defense: 0, resistance: 0 } },
   });
   const state = createBattleState(fixtureBattlefieldState([unit]));
 
@@ -1137,11 +1138,10 @@ const attackDefinition = (targetGroups, followUps = []) => createAttack({
 
 function actionUnit(id, side, position, { hp = 100, effects: initialEffects = [], action, skill } = {}) {
   const definition = createDefinition({
-    id: `action_unit_${id}`, targetable: {}, vitality: { maxHp: 100 }, allegiance: { side },
+    id: `action_unit_${id}`, targetable: {}, vitality: { maxHp: 100, defense: 0, resistance: 0 }, allegiance: { side },
     spatial: { layer: 'GROUND' }, hit: { geometry: {
       shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.1 }],
-    } }, defense: { defense: 0, resistance: 0 },
-    blocker: { capacity: 0, geometry: { radius: 0 } },
+    } }, blocker: { capacity: 0, geometry: { radius: 0 } },
     ...(skill === undefined ? {} : { skill }),
     action: { definitions: Definitions.empty().add(action ?? attackDefinition([
       { id: 'primary', targeting: damageTargeting(), operations: [damageEffect(0)] },
@@ -1296,6 +1296,27 @@ test('core targeting: current hit geometry and spatial classification override d
   assert.equal(target.definition.hit.geometry.shapes[0].radius, 0.1);
   assert.deepEqual(select({ ...expanded, spatial: { layer: 'AIR' } }), []);
   assert.equal(target.definition.spatial.layer, 'GROUND');
+});
+
+test('core targeting: default healing eligibility and ordering use effective MaxHP', () => {
+  const source = actionUnit(0, 'ALLY', [0, 0]);
+  const base = actionUnit(1, 'ALLY', [1, 0]);
+  const enlarged = { ...base, vitality: {
+    ...setMaxHpContribution(base.vitality, base.definition.vitality, {
+      id: 'equipment', value: [modifier.create({ finalAddition: 300 })],
+    }), hp: 100,
+  } };
+  const ordinary = actionUnit(2, 'ALLY', [2, 0], { hp: 40 });
+  const flooredBase = actionUnit(3, 'ALLY', [3, 0]);
+  const floored = initialize({ id: 3, position: flooredBase.position, definition: {
+    ...flooredBase.definition, vitality: { maxHp: 0, defense: 0, resistance: 0 },
+  } });
+  const fractional = { ...floored, vitality: { ...floored.vitality, hp: 0.5 } };
+  const query = compileTargeting(healingTargeting({ maxTargets: 3 }), ['HEAL']);
+
+  assert.deepEqual(selectTargets({ source,
+    battlefield: actionView([source, enlarged, ordinary, fractional]),
+  }, query).map(unit => unit.id), [1, 2, 3]);
 });
 
 test('core targeting: enemies and neutral units select each other while allies and neutral units do not', () => {

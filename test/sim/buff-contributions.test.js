@@ -19,8 +19,8 @@ import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/off
 import {
     setDefenseContribution,
     removeDefenseContribution,
-} from "../../dist/core/tactical/unit/capability/defense/capability.js";
-import { resolveDefense } from "../../dist/core/tactical/unit/capability/defense/query.js";
+    resolveDefense,
+} from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import {
     contributionEffect,
     refreshContribution,
@@ -44,7 +44,7 @@ test("Buff contribution integration: the native Astesia DEF facet merges layers,
     );
     let starts = 0;
     const output = {
-        capability: "defense", set: setDefenseContribution,
+        capability: "vitality", set: setDefenseContribution,
         remove: removeDefenseContribution,
         value: (instance) => {
             const value = compiled.sample({
@@ -65,7 +65,7 @@ test("Buff contribution integration: the native Astesia DEF facet merges layers,
         initialize({
             id: 0,
             position: [0, 0],
-            definition: { id: "receiver", defense: { defense: 100, resistance: 0 } },
+            definition: { id: "receiver", vitality: { maxHp: 100, defense: 100, resistance: 0 } },
         }),
     );
     const original = battlefieldView(work);
@@ -96,7 +96,10 @@ test("Buff contribution integration: the native Astesia DEF facet merges layers,
         }
         return plan;
     };
-    const effective = () => resolveDefense(0, battlefieldView(work)).defense;
+    const effective = () => {
+        const unit = getUnit(work, 0);
+        return resolveDefense(unit.vitality, unit.definition.vitality, { unit, battlefield: battlefieldView(work) }).defense;
+    };
     apply(10, 0.2, 10, 0);
     close(effective(), 120);
     const first = battlefieldView(work);
@@ -126,7 +129,8 @@ test("Buff contribution integration: the native Astesia DEF facet merges layers,
     close(effective(), 200);
     work = effects.end(work, address);
     assert.equal(effective(), 100);
-    assert.equal(resolveDefense(0, original).defense, 100);
+    const originalUnit = original.getUnit(0);
+    assert.equal(resolveDefense(originalUnit.vitality, originalUnit.definition.vitality, { unit: originalUnit, battlefield: original }).defense, 100);
     assert.equal(starts, 1);
     instance = getUnit(work, 0).effects.values()[0];
     assert.equal(instance, undefined);

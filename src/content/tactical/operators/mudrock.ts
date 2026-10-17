@@ -52,9 +52,9 @@ import { stun } from "../effects/stun.js";
 import { healFree } from "../effects/protection.js";
 import {
     hasVitality,
+    resolveMaxHp,
     type Vitality,
 } from "../../../core/tactical/unit/capability/vitality/capability.js";
-import { resolveMaxHp } from "../../../core/tactical/unit/capability/vitality/query.js";
 import { removeHook, setHook } from "../../../core/tactical/battle/damage/hook.js";
 import type { Definition as EffectDefinition } from "../../../core/tactical/unit/effect/definition.js";
 import { setData } from "../../../core/tactical/unit/effect/effect.js";
@@ -126,12 +126,12 @@ function hasSarkazTag(unit: Unit | undefined): boolean {
 
 function healSelf(state: BattleState, unitId: Id, ratio: number): BattleState {
     const unit = getUnit(state, unitId);
-    const maxHp = resolveMaxHp(unitId, battlefieldView(state));
 
-    if (unit === undefined || !hasVitality(unit) || maxHp === undefined) {
+    if (unit === undefined || !hasVitality(unit)) {
         return state;
     }
 
+    const maxHp = resolveMaxHp(unit.vitality, unit.definition.vitality);
     const request: HealingRequest = {
         source: unitRef(unit),
         target: unitRef(unit),
@@ -448,9 +448,13 @@ export function create(
             buildableType: "MELEE",
             advancedBuildableMask: 1,
         }),
-        vitality: { maxHp: profile.attributes.maxHp },
+        vitality: {
+            maxHp: profile.attributes.maxHp,
+            defense: profile.attributes.defense,
+            resistance: profile.attributes.resistance,
+        },
         offense: { attack: profile.attributes.attack },
-        defense: { defense: profile.attributes.defense, resistance: profile.attributes.resistance },
+
         allegiance: { side: "ALLY" },
         spatial: { layer: "GROUND" },
         hit: { geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.25 }] } },

@@ -1,14 +1,10 @@
-import { assertNonnegativeNumber, assertPositiveNumber } from "../../../common/assert.js";
+import { assertNonnegativeNumber } from "../../../common/assert.js";
 import {
     createDefinition as createActionCapabilityDefinition,
     type Definition as ActionCapabilityDefinition,
 } from "../capability/action/capability.js";
 import type { Definition as AllegianceDefinition } from "../capability/allegiance/capability.js";
 import type { Definition as BlockableDefinition } from "../capability/blocking/blockable.js";
-import {
-    createDefinition as createDefenseDefinition,
-    type Definition as DefenseDefinition,
-} from "../capability/defense/capability.js";
 import {
     createDefinition as createOffenseDefinition,
     type Definition as OffenseDefinition,
@@ -66,7 +62,6 @@ export interface CombatDefinition extends Definition {
     readonly allegiance: AllegianceDefinition;
     readonly spatial: SpatialDefinition;
     readonly hit: HitDefinition;
-    readonly defense: DefenseDefinition;
     readonly blockable: BlockableDefinition;
     readonly offense?: OffenseDefinition;
 }
@@ -80,7 +75,6 @@ export function createDefinition(
         throw new TypeError("enemy definition id must be nonempty");
     }
 
-    assertPositiveNumber(definition.vitality.maxHp, "enemy maxHp");
     assertNonnegativeNumber(definition.locomotion.moveSpeedPerTick, "enemy moveSpeedPerTick");
     const minimumMoveSpeedPerTick = definition.locomotion.minimumMoveSpeedPerTick ?? 0;
     assertNonnegativeNumber(minimumMoveSpeedPerTick, "enemy minimumMoveSpeedPerTick");
@@ -90,7 +84,7 @@ export function createDefinition(
         ...(definition.onEnter === undefined ? {} : { onEnter: definition.onEnter }),
         ...(definition.onTick === undefined ? {} : { onTick: definition.onTick }),
         ...(definition.onLeave === undefined ? {} : { onLeave: definition.onLeave }),
-        vitality: Object.freeze({ maxHp: definition.vitality.maxHp }),
+        vitality: Object.freeze({ ...definition.vitality }),
         spatialPresence: Object.freeze(definition.spatialPresence ?? {}),
         ...(definition.targetable === undefined ? {} : { targetable: definition.targetable }),
         ...(definition.occupancy === undefined ? {} : { occupancy: definition.occupancy }),
@@ -118,7 +112,6 @@ export function createCombatDefinition(
         allegiance: definition.allegiance,
         spatial: definition.spatial,
         hit: createHitDefinition(definition.hit),
-        defense: createDefenseDefinition(definition.defense),
         ...(definition.offense === undefined
             ? {}
             : { offense: createOffenseDefinition(definition.offense) }),

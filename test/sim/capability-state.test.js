@@ -2,7 +2,6 @@ import { fixtureBattle, fixtureDefinition } from "../helpers/unit.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as offense from "../../dist/core/tactical/unit/capability/offense/capability.js";
-import * as defense from "../../dist/core/tactical/unit/capability/defense/capability.js";
 import * as blocker from "../../dist/core/tactical/unit/capability/blocking/blocker.js";
 import * as blockable from "../../dist/core/tactical/unit/capability/blocking/blockable.js";
 import * as locomotion from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
@@ -20,16 +19,16 @@ const entries = [
         offense.removeAttackContribution,
     ],
     [
-        defense.initialize(fixtureBattle(0), fixtureDefinition("defense")).value,
+        vitality.initialize(fixtureBattle(0), fixtureDefinition("vitality")).value,
         "defense",
-        defense.setDefenseContribution,
-        defense.removeDefenseContribution,
+        vitality.setDefenseContribution,
+        vitality.removeDefenseContribution,
     ],
     [
-        defense.initialize(fixtureBattle(0), fixtureDefinition("defense")).value,
+        vitality.initialize(fixtureBattle(0), fixtureDefinition("vitality")).value,
         "resistance",
-        defense.setResistanceContribution,
-        defense.removeResistanceContribution,
+        vitality.setResistanceContribution,
+        vitality.removeResistanceContribution,
     ],
     [
         blocker.initialize(fixtureBattle(0), { capacity: 2, geometry: { radius: 0.5 } }).value,
@@ -90,13 +89,13 @@ test("local hook registration retains progress and changes only its registration
     };
     const registrations = [
         [
-            vitality.initialize(fixtureBattle(0), { maxHp: 100 }).value,
+            vitality.initialize(fixtureBattle(0), { maxHp: 100, defense: 0, resistance: 0 }).value,
             "damageHooks",
             damage.setHook,
             damage.removeHook,
         ],
         [
-            vitality.initialize(fixtureBattle(0), { maxHp: 100 }).value,
+            vitality.initialize(fixtureBattle(0), { maxHp: 100, defense: 0, resistance: 0 }).value,
             "healingHooks",
             healing.setHook,
             healing.removeHook,
