@@ -7,7 +7,7 @@ import { createRng } from "../../dist/core/common/rng.js";
 import { getUnit, transitionUnit } from "../../dist/core/tactical/battle/state.js";
 import { calculateDamage } from "../../dist/core/tactical/battle/damage/calculate.js";
 import { applyDamage } from "../../dist/core/tactical/battle/damage/apply.js";
-import { removeUnitWithEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
+import { leave } from "../../dist/core/tactical/battle/execution/unit.js";
 import { setDefenseContribution } from "../../dist/core/tactical/unit/capability/defense/capability.js";
 import { healing } from "../helpers/vitality.js";
 import { create as modifier } from "../../dist/core/tactical/unit/contribution/attribute.js";
@@ -149,7 +149,7 @@ test("damage calculation: Formula removal rejects the result while retaining its
         } },
         { stage: "sourceFormula", priority: 100, invoke(state, context, _self, current) {
             return {
-                state: removeUnitWithEffects(state, context.target.id, "SCRIPT"),
+                state: leave(state, context.target.id, "SCRIPT"),
                 value: current,
             };
         } },

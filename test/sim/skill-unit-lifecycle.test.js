@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { getUnit } from "../../dist/core/tactical/battle/state.js";
-import { removeUnitWithEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
+import { leave } from "../../dist/core/tactical/battle/execution/unit.js";
 import * as skills from "../../dist/core/tactical/unit/capability/skill/operations.js";
 import { ref as activationRef } from "../../dist/core/tactical/unit/capability/skill/activation.js";
 import * as query from "../../dist/core/tactical/unit/capability/skill/query.js";
@@ -49,7 +49,7 @@ for (const reason of ["DEATH", "RETREAT", "SCRIPT"]) {
     test(`${reason} closes skill dependents once before removing the host`, () => {
         const f = fixture();
         const started = skills.activate(f.state, f.source);
-        const state = removeUnitWithEffects(at(started.state, 1), 0, reason);
+        const state = leave(at(started.state, 1), 0, reason);
         assert.equal(getUnit(state, 0), undefined);
         assert.deepEqual(getUnit(state, 1).effects.values(), []);
         assert.deepEqual(f.disabled, [0, 1]);
@@ -57,7 +57,7 @@ for (const reason of ["DEATH", "RETREAT", "SCRIPT"]) {
         assert.equal(state.events.filter(({ type }) => type === "SKILL_FINISHED").length, 1);
         assert.equal(getUnit(started.state, 0).skill.active.status, "ACTIVE");
         assert.equal(getUnit(started.state, 1).effects.values().length, 2);
-        assert.equal(removeUnitWithEffects(state, 0, reason), state);
+        assert.equal(leave(state, 0, reason), state);
         assert.equal(f.ended.length, 1);
     });
 }
@@ -66,7 +66,7 @@ test("entered start content continues after host departure and late lifetime dep
     const trace = [];
     const f = fixture({ start(battle, self, installOwned) {
         battle = installOwned(battle, self);
-        battle = removeUnitWithEffects(battle, self.host.id, "SCRIPT");
+        battle = leave(battle, self.host.id, "SCRIPT");
         trace.push("continued");
         assert.equal(query.get(battle, activationRef(self)), undefined);
         battle = installOwned(battle, self, false);
@@ -122,7 +122,7 @@ test("departure cleanup failures propagate without changing the input version", 
     const failure = new Error("cleanup failed");
     const f = fixture({ disable() { throw failure; } });
     const started = skills.activate(f.state, f.source);
-    assert.throws(() => removeUnitWithEffects(started.state, 0, "SCRIPT"), (error) => error === failure);
+    assert.throws(() => leave(started.state, 0, "SCRIPT"), (error) => error === failure);
     assert.equal(getUnit(started.state, 0).lifecycle, "PRESENT");
     assert.equal(getUnit(started.state, 0).skill.active.status, "ACTIVE");
     assert.equal(getUnit(started.state, 1).effects.values().length, 2);

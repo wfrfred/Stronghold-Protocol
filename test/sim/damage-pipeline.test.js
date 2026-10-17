@@ -13,7 +13,7 @@ import { calculateDamage } from "../../dist/core/tactical/battle/damage/calculat
 import { applyDamage } from "../../dist/core/tactical/battle/damage/apply.js";
 import { healing } from "../helpers/vitality.js";
 import { getUnit } from "../../dist/core/tactical/battle/state.js";
-import { retireCombatUnit } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
+import { leave } from "../../dist/core/tactical/battle/execution/unit.js";
 
 const settle = (battle, input) => applyDamage(input, calculateDamage(battle, input));
 const rule = (id, stage, transform, priority = 0, properties = {}) => damageEffect(id, {}, [{
@@ -243,7 +243,7 @@ test("damage pipeline: before-damage healing sets the HP baseline and after-dama
 test("damage pipeline: nested removal makes the outer application unavailable without duplicating death", () => {
     const removal = damageEffect("removal", {}, [{
         stage: "receiving", invoke(state, _context, _self, pending) {
-            return { state: retireCombatUnit(state, 2), value: pending };
+            return { state: leave(state, 2, "DEATH"), value: pending };
         },
     }]);
     const result = settle(workFor(unit(1), attach(unit(2), removal)), request(100));
@@ -259,7 +259,7 @@ test("damage pipeline: cancellation remains observable when a later hook removes
     }), 100);
     const removal = damageEffect("removal", {}, [{
         stage: "receiving", invoke(state, _context, _self, pending) {
-            return { state: retireCombatUnit(state, 2), value: pending };
+            return { state: leave(state, 2, "DEATH"), value: pending };
         },
     }]);
     const target = attach(attach(unit(2), cancellation), removal);

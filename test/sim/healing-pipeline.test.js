@@ -4,7 +4,7 @@ import { unit, workFor, attach, healingEffect, damage } from "../helpers/vitalit
 import { calculateHealing } from "../../dist/core/tactical/battle/healing/calculate.js";
 import { applyHealing } from "../../dist/core/tactical/battle/healing/apply.js";
 import { getUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
-import { retireCombatUnit } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
+import { leave } from "../../dist/core/tactical/battle/execution/unit.js";
 import { setMaxHpContribution } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import * as attribute from "../../dist/core/tactical/unit/contribution/attribute.js";
 
@@ -148,7 +148,7 @@ test("healing pipeline: HP Applied reactions change current HP without rewriting
 
 test("healing pipeline: source departure skips its later Hooks while sampled healing still applies", () => {
     const source = attach(unit(1), healingEffect("source", {}, [
-        entry("sourceFormula", (state, _context, _self, current) => ({ state: retireCombatUnit(state, 1), value: { ...current, multiplier: 2 } })),
+        entry("sourceFormula", (state, _context, _self, current) => ({ state: leave(state, 1, "DEATH"), value: { ...current, multiplier: 2 } })),
         entry("output", () => assert.fail("departed source cannot run Output")),
         entry("hpApplied", () => assert.fail("departed source cannot observe HP Applied")),
         entry("completed", () => assert.fail("departed source cannot observe Completed")),
@@ -187,7 +187,7 @@ test("healing pipeline: Apply rechecks target eligibility against the carried Ba
     const input = request();
     const initial = workFor(unit(1), unit(2, { hp: 50, maxHp: 100 }));
     const calculated = calculateHealing(initial, input);
-    const state = retireCombatUnit(calculated.state, 2);
+    const state = leave(calculated.state, 2, "DEATH");
     const result = applyHealing(input, { ...calculated, state });
     assert.deepEqual(result.value, { kind: "REJECTED" });
     assert.equal(getUnit(result.state, 2), undefined);
@@ -216,7 +216,7 @@ test("healing pipeline: cancellation does not stop later responses and stays obs
         entry("receiving", (state, _context, _self, pending) => ({ state, value: { ...pending, cancellation: { reason: "BLOCKED" } } }), 100),
         entry("receiving", (state, _context, _self, pending) => {
             seen.push(pending.cancellation.reason);
-            return { state: retireCombatUnit(state, 2), value: pending };
+            return { state: leave(state, 2, "DEATH"), value: pending };
         }),
         entry("hpApplied", () => assert.fail("cancelled healing cannot apply HP")),
     ]);

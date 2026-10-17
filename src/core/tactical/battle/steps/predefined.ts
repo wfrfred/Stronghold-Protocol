@@ -17,7 +17,7 @@ import {
     type UnitPlacementDefinition,
 } from "../creation/placement.js";
 import type { Command } from "../contract.js";
-import { enterUnits, removeUnitWithEffects } from "../execution/unit-lifecycle.js";
+import { enter, leave } from "../execution/unit.js";
 import {
     advanceBattlefield,
     battlefieldView,
@@ -249,13 +249,13 @@ export function advancePredefined(
 
         for (const change of transition.value.changes) {
             if (change.type === "REMOVE_UNIT") {
-                state = removeUnitWithEffects(state, change.unitId, change.reason);
+                state = leave(state, change.unitId, change.reason);
             } else {
                 state = advanceBattlefield(state, [change]);
             }
         }
 
-        state = enterUnits(
+        state = enter(
             state,
             transition.value.changes.flatMap((change) =>
                 change.type === "REGISTER_UNIT" ? [change.unit.id] : [],

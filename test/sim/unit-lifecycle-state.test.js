@@ -4,7 +4,7 @@ import { test } from "node:test";
 import {
   advanceBattlefield, battlefieldView, createBattleState, getUnit, registerUnit, updateUnit,
 } from "../../dist/core/tactical/battle/state.js";
-import { enterUnits, removeUnitWithEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
+import { enter, leave } from "../../dist/core/tactical/battle/execution/unit.js";
 import { initialize } from "../helpers/unit.js";
 import { createDefinition as createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
 import { createMechanism, createMechanismDefinition } from "../../dist/core/tactical/battlefield/mechanism.js";
@@ -79,7 +79,7 @@ for (const reason of ["DEATH", "RETREAT", "SCRIPT"]) {
       }, { scopes }).state;
     }
     const before = state;
-    state = removeUnitWithEffects({ ...state, tick: 1 }, 0, reason);
+    state = leave({ ...state, tick: 1 }, 0, reason);
     const expected = { type: "CANCELLED", reason };
     assert.deepEqual(programEnds, [expected]);
     assert.deepEqual(observedEnds, [expected]);
@@ -90,7 +90,7 @@ for (const reason of ["DEATH", "RETREAT", "SCRIPT"]) {
     assert.equal(getUnit(state, 0), undefined);
     assert.deepEqual(getUnit(state, 1).effects.values(), []);
     assert.equal(actions.get(state, started.value.ref), undefined);
-    assert.equal(removeUnitWithEffects(state, 0, reason), state);
+    assert.equal(leave(state, 0, reason), state);
     assert.equal(finish(state, activated.value.ref), state);
     assert.equal(getUnit(before, 0).skill.active.status, "ACTIVE");
     assert.equal(getUnit(before, 1).effects.values().length, 1);
@@ -111,7 +111,7 @@ test("departure callbacks observe LEAVING while old snapshots remain PRESENT", (
   const observe = (state, stage) => {
     const current = getUnit(state, 0);
     trace.push([stage, current.lifecycle]);
-    const nested = removeUnitWithEffects(state, 0, "DEATH");
+    const nested = leave(state, 0, "DEATH");
     assert.equal(nested, state);
     assert.equal(getUnit(nested, 0), current);
     return nested;
@@ -123,7 +123,7 @@ test("departure callbacks observe LEAVING while old snapshots remain PRESENT", (
     onEnd: state => observe(state, "end effect"),
   }).state;
   const before = battlefieldView(state);
-  state = removeUnitWithEffects(state, 0, "RETREAT");
+  state = leave(state, 0, "RETREAT");
   assert.equal(trace.length, 3);
   assert.deepEqual(new Map(trace), new Map([["disable effect", "LEAVING"], ["end effect", "LEAVING"], ["finish skill", "LEAVING"]]));
   assert.ok(trace.findIndex(([stage]) => stage === "disable effect") < trace.findIndex(([stage]) => stage === "end effect"));
@@ -143,7 +143,7 @@ test("skill finish sees LEAVING and cannot install dependencies on its departing
       trigger: "MANUAL", sustain: { type: "INFINITE" }, initialize: () => ({}),
       onEnd(state) {
         statuses.push(getUnit(state, 0).lifecycle);
-        state = removeUnitWithEffects(state, 0, "DEATH");
+        state = leave(state, 0, "DEATH");
         const rejected = effects.install(state, unitRef(getUnit(state, 1)), { id: "late-dependency", initialize: () => ({}), onInstall(state) { installations++; return state; } }, { scopes: [{ type: "UNIT", unitId: 0 }] });
         assert.equal(rejected.value, undefined);
         return rejected.state;
@@ -155,7 +155,7 @@ test("skill finish sees LEAVING and cannot install dependencies on its departing
   let installations = 0;
   state = activate(state, unitRef(getUnit(state, 0))).state;
   const before = battlefieldView(state);
-  state = removeUnitWithEffects({ ...state, tick: 1 }, 0, "SCRIPT");
+  state = leave({ ...state, tick: 1 }, 0, "SCRIPT");
   assert.deepEqual(statuses, ["LEAVING"]);
   assert.equal(installations, 0);
   assert.equal(getUnit(state, 1).effects.nextId, 0);
@@ -187,7 +187,7 @@ test("departure callbacks cannot start a new skill activation", () => {
       return attempted.state;
     },
   });
-  const state = removeUnitWithEffects(installed.state, 0, "RETREAT");
+  const state = leave(installed.state, 0, "RETREAT");
   assert.deepEqual(attempted.value, { type: "REJECTED", reason: "UNAVAILABLE" });
   assert.equal(activations, 0);
   assert.equal(getUnit(state, 0), undefined);
@@ -232,7 +232,7 @@ test("onLeave reads the pre-cleanup Unit after removal and passes its changes to
       assert.equal(departure.unit.effects.values()[0].status, "ACTIVE");
       const other = getUnit(state, 1);
       state = updateUnit(state, { ...other, vitality: { ...other.vitality, hp: 77 } });
-      return enterUnits(registerUnit(state, child), [child.id]);
+      return enter(registerUnit(state, child), [child.id]);
     },
   });
   const mechanism = createMechanism({
@@ -262,7 +262,7 @@ test("onLeave reads the pre-cleanup Unit after removal and passes its changes to
   }).state;
   departing = getUnit(state, 0);
   const before = state;
-  state = removeUnitWithEffects({ ...state, tick: 1 }, 0, "RETREAT");
+  state = leave({ ...state, tick: 1 }, 0, "RETREAT");
   assert.equal(trace.length, 6);
   assert.deepEqual(new Set(trace), new Set(["effect disable", "effect end", "skill finish", "unit leave", "new unit enter", "mechanism leave"]));
   assert.ok(trace.indexOf("effect disable") < trace.indexOf("effect end"));
@@ -306,7 +306,7 @@ test("mechanism leave responses keep their candidate IDs and reread current regi
   const original = createBattleState(fixtureBattlefield([unit(0)], {
     mechanismIds: [0, 1, 2], getMechanism: id => mechanisms[id],
   }));
-  const state = removeUnitWithEffects(original, 0, "SCRIPT");
+  const state = leave(original, 0, "SCRIPT");
   assert.deepEqual(trace, ["first", "activated observer"]);
   assert.deepEqual(battlefieldView(state).mechanismIds, [0, 2, 3]);
   assert.deepEqual(battlefieldView(original).mechanismIds, [0, 1, 2]);
@@ -329,7 +329,7 @@ test("factory-created enemies retain onLeave and call it only for an actual depa
   let state = createBattleState(fixtureBattlefield([
     initialize({ id: 0, position: [0, 0], definition }),
   ]));
-  state = removeUnitWithEffects(state, 0, "DEATH");
-  assert.equal(removeUnitWithEffects(state, 0, "DEATH"), state);
+  state = leave(state, 0, "DEATH");
+  assert.equal(leave(state, 0, "DEATH"), state);
   assert.equal(notifications, 1);
 });

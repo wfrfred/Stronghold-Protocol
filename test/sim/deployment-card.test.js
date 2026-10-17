@@ -9,7 +9,7 @@ import {
     addCard, advance, changeDp, getCard, initialize as initializeDeployment, updateCard,
 } from "../../dist/core/tactical/battle/deployment/deployment.js";
 import * as cards from "../../dist/core/tactical/battle/deployment/card.js";
-import { removeUnitWithEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
+import { leave } from "../../dist/core/tactical/battle/execution/unit.js";
 import {
     createDefinition as createDeployable, initialize as initializeDeployable,
 } from "../../dist/core/tactical/unit/capability/deployable/capability.js";
@@ -106,7 +106,7 @@ test("return cooldown and cost penalty follow departure; death refunds no DP", (
     assert.equal(state.deployment.dp, 80);
     assert.equal(getUnit(state, value.unitId).deployable.cost, 15);
 
-    state = removeUnitWithEffects(at(state, 10), value.unitId, "DEATH");
+    state = leave(at(state, 10), value.unitId, "DEATH");
     assert.equal(state.deployment.dp, 80);
     assert.equal(getCard(state, 0).costStage, 2);
     assert.deepEqual(getCard(state, 0).cooldown, { readyAtTick: 13, durationTicks: 3 });
@@ -223,7 +223,7 @@ test("entry-triggered death recycles its Card before the Unit departure callback
     const unit = definition({
         onEnter(state, id) {
             calls.push("entered");
-            return removeUnitWithEffects(state, id, "DEATH");
+            return leave(state, id, "DEATH");
         },
         onLeave(state, departure) {
             calls.push("left");

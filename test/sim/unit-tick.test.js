@@ -5,7 +5,7 @@ import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import {
     createBattleState, getUnit, registerUnit, removeUnit, updateUnit,
 } from "../../dist/core/tactical/battle/state.js";
-import { advanceUnits } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
+import { advance } from "../../dist/core/tactical/battle/execution/unit.js";
 import { initialize } from "../helpers/unit.js";
 import {
     createDefinition as createEnemy, createCombatDefinition,
@@ -68,7 +68,7 @@ test("Unit ticks pass the latest returned battle and preserve previous private s
         return updateUnit(state, { ...self, state: { phase: self.state.phase + 1 } });
     } });
     const before = createBattleState(fixtureBattlefieldState([first, second]));
-    const after = advanceUnits(before);
+    const after = advance(before);
 
     assert.deepEqual(trace, [[1, 7, 1]]);
     assert.equal(getUnit(after, 0).state.phase, 1);
@@ -94,10 +94,10 @@ test("Unit ticks skip departing or removed units and defer units created by a ti
     const leaving = { ...unit(4, { onTick() { assert.fail("departing Unit tick"); } }), lifecycle: "LEAVING" };
     let state = createBattleState(fixtureBattlefieldState([first, removed, departing, leaving, unit(5)]));
 
-    state = advanceUnits(state);
+    state = advance(state);
     assert.deepEqual(trace, [0]);
     assert.equal(getUnit(state, 3), created);
-    state = advanceUnits({ ...state, tick: 1 });
+    state = advance({ ...state, tick: 1 });
     assert.deepEqual(trace, [0, 0, 3]);
 });
 

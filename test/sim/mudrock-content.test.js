@@ -13,7 +13,7 @@ import { initialize } from "../helpers/unit.js";
 import {
     createBattleState, battlefieldView, getUnit, updateUnit,
 } from "../../dist/core/tactical/battle/state.js";
-import { enterUnits } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
+import { enter } from "../../dist/core/tactical/battle/execution/unit.js";
 import { advance, end, get, install, replaceEffect } from "../../dist/core/tactical/unit/effect/operations.js";
 import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { setHook, removeHook } from "../../dist/core/tactical/battle/damage/hook.js";
@@ -55,7 +55,7 @@ function setup(configuration = {}, targets = [], options = {}) {
     const content = create(prepared, options);
     const unit = initialize({ id: 0, position: [0, 0], definition: content.definition });
     const initial = createBattleState(fixtureBattlefieldState([unit, ...targets]));
-    return { prepared, ...content, initial, state: enterUnits(initial, [0]) };
+    return { prepared, ...content, initial, state: enter(initial, [0]) };
 }
 const save = (state, fields) => updateUnit(state, { ...getUnit(state, 0), ...fields });
 const hp = (state, amount) => save(state, { vitality: { ...getUnit(state, 0).vitality, hp: amount } });
@@ -82,7 +82,7 @@ test("entry installs one persistent shield container and preserves prior snapsho
     assert.equal(externalHealing.value.kind, "APPLIED");
     assert.equal(externalHealing.value.application.hpGain, 100);
     assert.equal(getUnit(externalHealing.state, 0).vitality.hp, 1100);
-    const enteredLate = enterUnits({ ...initial, tick: 100 }, [0]);
+    const enteredLate = enter({ ...initial, tick: 100 }, [0]);
     assert.deepEqual(readShield(getUnit(advance({ ...enteredLate, tick: 101 }), 0)), { layers: 1, timer: 269 });
 });
 

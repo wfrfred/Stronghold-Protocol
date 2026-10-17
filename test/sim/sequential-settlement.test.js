@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { battle, unit } from "../helpers/action-fixture.js";
 import { getUnit, advanceBattlefield } from "../../dist/core/tactical/battle/state.js";
-import { removeUnitWithEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
+import { leave } from "../../dist/core/tactical/battle/execution/unit.js";
 
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
 import * as actions from "../../dist/core/tactical/unit/action/operations.js";
@@ -55,7 +55,7 @@ for (const nested of ["cancel", "advance", "advance complete", "advance waiting"
             { scopes: [{ type: "ACTION", ref: firstRef }] },
         ).state;
         const before = state;
-        state = removeUnitWithEffects(state, 0, "RETREAT");
+        state = leave(state, 0, "RETREAT");
         assert.equal(executions, 0);
         assert.equal(state.actions.size, 0);
         assert.equal(

@@ -5,7 +5,7 @@ import * as units from "../../unit/query.js";
 import type { Id } from "../../unit/unit.js";
 import { changeAlternativeRoutes } from "./route-control.js";
 import type { Command, Event } from "../contract.js";
-import { removeUnitWithEffects } from "../execution/unit-lifecycle.js";
+import { leave } from "../execution/unit.js";
 import {
     advanceBattlefield,
     appendEvents,
@@ -109,7 +109,7 @@ export function advanceMovement(
     state = advanceBattlefield(state, changes);
 
     for (const unitId of completed) {
-        state = removeUnitWithEffects(state, unitId, "SCRIPT");
+        state = leave(state, unitId, "SCRIPT");
     }
 
     return state;

@@ -11,7 +11,7 @@ import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
 import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
 import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
 import { getUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
-import { removeUnitWithEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
+import { leave } from "../../dist/core/tactical/battle/execution/unit.js";
 import { setState } from "../../dist/core/tactical/unit/action/action.js";
 import * as actions from "../../dist/core/tactical/unit/action/operations.js";
 
@@ -148,7 +148,7 @@ test("action runtime: nested departure removes a later candidate before its next
             if (state.tick === 0) return { state, value: false };
             trace.push(self.source.id);
             if (self.source.id === 0)
-                state = removeUnitWithEffects(state, 1, "SCRIPT");
+                state = leave(state, 1, "SCRIPT");
             return { state, value: false };
         },
     });

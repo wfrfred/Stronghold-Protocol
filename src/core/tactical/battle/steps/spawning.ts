@@ -11,7 +11,7 @@ import {
 } from "../state.js";
 import { advanceSpawnSchedule, recordScheduleSpawns } from "../schedule/runtime.js";
 import type { ScheduledEnemySpawn } from "../schedule/definition.js";
-import { enterUnits } from "../execution/unit-lifecycle.js";
+import { enter } from "../execution/unit.js";
 
 interface SpawnedEnemies {
     readonly enemies: readonly RoutedEnemy[];
@@ -101,7 +101,7 @@ export function advanceSpawning(
         state,
         spawned.enemies.map((unit) => ({ type: "REGISTER_UNIT", unit })),
     );
-    state = enterUnits(
+    state = enter(
         state,
         spawned.enemies.map((unit) => unit.id),
     );

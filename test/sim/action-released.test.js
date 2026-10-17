@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { getUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
-import { removeUnitWithEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
+import { leave } from "../../dist/core/tactical/battle/execution/unit.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import * as actions from "../../dist/core/tactical/unit/action/operations.js";
 import { setState } from "../../dist/core/tactical/unit/action/action.js";
@@ -105,7 +105,7 @@ test("ACTION recovery can remove its host without continuing the released Action
     const f = fixture();
     const state = changeSkill(f.state, (skill) => setSpRecoveredHook(skill, hook("depart", (current, context) => {
         recovered = context.event;
-        return { state: removeUnitWithEffects(current, context.host.id, "SCRIPT"), value: undefined };
+        return { state: leave(current, context.host.id, "SCRIPT"), value: undefined };
     })));
     const started = actions.start(state, f.ref, f.definition);
     assert.deepEqual(recovered, { source: "ACTION", amount: 1, previous: 0, current: 1 });

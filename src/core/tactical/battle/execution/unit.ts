@@ -2,7 +2,7 @@ import { closeLifetime } from "./lifetime.js";
 import type { Id } from "../../unit/unit.js";
 import * as units from "../../unit/query.js";
 import type { BattlefieldRemovalReason } from "../../battlefield/contract.js";
-import { cancel, enter } from "../../unit/capability/skill/operations.js";
+import * as skills from "../../unit/capability/skill/operations.js";
 import { ref as activationRef } from "../../unit/capability/skill/activation.js";
 import { hasSkill } from "../../unit/capability/skill/capability.js";
 import { cancel as cancelBurst } from "../../unit/capability/elemental/operations.js";
@@ -18,12 +18,12 @@ import {
 } from "../state.js";
 import { refundUnit, recycleUnitCard } from "../deployment/deployment.js";
 
-export function enterUnits(state: BattleState, unitIds: readonly Id[]): BattleState {
+export function enter(state: BattleState, unitIds: readonly Id[]): BattleState {
     for (const unitId of unitIds) {
         let unit = getUnit(state, unitId);
 
         if (unit?.lifecycle === "PRESENT" && hasSkill(unit)) {
-            state = enter(state, units.ref(unit));
+            state = skills.enter(state, units.ref(unit));
             unit = getUnit(state, unitId);
         }
 
@@ -35,7 +35,7 @@ export function enterUnits(state: BattleState, unitIds: readonly Id[]): BattleSt
     return state;
 }
 
-export function advanceUnits(battle: BattleState): BattleState {
+export function advance(battle: BattleState): BattleState {
     const candidates = units.all(battle);
 
     for (const ref of candidates) {
@@ -49,11 +49,7 @@ export function advanceUnits(battle: BattleState): BattleState {
     return battle;
 }
 
-export function retireCombatUnit(state: BattleState, unitId: Id): BattleState {
-    return removeUnitWithEffects(state, unitId, "DEATH");
-}
-
-export function removeUnitWithEffects(
+export function leave(
     state: BattleState,
     unitId: Id,
     reason: BattlefieldRemovalReason,
@@ -70,7 +66,7 @@ export function removeUnitWithEffects(
     const current = getUnit(state, unitId);
 
     if (current !== undefined && hasSkill(current) && current.skill.active !== null) {
-        state = cancel(state, activationRef(current.skill.active), reason);
+        state = skills.cancel(state, activationRef(current.skill.active), reason);
     }
 
     state = cancelForUnit(state, units.ref(unit), "SOURCE_ABSENT", reason);

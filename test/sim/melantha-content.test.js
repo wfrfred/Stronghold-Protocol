@@ -7,7 +7,7 @@ import { create } from '../../dist/content/tactical/operators/melantha.js';
 
 import { initialize } from "../helpers/unit.js";
 import { createBattleState, battlefieldView, getUnit, updateUnit } from '../../dist/core/tactical/battle/state.js';
-import { enterUnits } from '../../dist/core/tactical/battle/execution/unit-lifecycle.js';
+import { enter } from '../../dist/core/tactical/battle/execution/unit.js';
 import { activate as activateSkill, advance as advanceSkill, finish as finishSkill } from '../../dist/core/tactical/unit/capability/skill/operations.js';
 import { resolveAttackPower } from '../../dist/core/tactical/unit/capability/offense/query.js';
 import { fixtureBattlefieldState } from '../helpers/battlefield.js';
@@ -35,7 +35,7 @@ test('Melantha uses main-mode level, potential, trust and talent, then a scoped 
   assert.equal(unit.deployable.refundAllowed, false);
   let state = createBattleState(fixtureBattlefieldState([unit]));
   const untouched = state;
-  state = enterUnits(state, [0]);
+  state = enter(state, [0]);
   const entered = state;
   const base = (738 + 25 + 65) * 1.08;
   assert.equal(resolveAttackPower(0, battlefieldView(state)), base);
@@ -59,7 +59,7 @@ test('explicit skill finish removes only skill output, preserving Melantha talen
 
   const definition = create(profile({ level: 1, potential: 1, trust: 0 }));
   let state = createBattleState(fixtureBattlefieldState([initialize({ id: 0, position: [0, 0], definition })]));
-  state = enterUnits(state, [0]);
+  state = enter(state, [0]);
   const before = resolveAttackPower(0, battlefieldView(state));
   state = updateUnit(state, { ...getUnit(state, 0), skill: { ...getUnit(state, 0).skill, sp: { ...getUnit(state, 0).skill.sp, value: 40 } } });
   state = activateSkill({ ...state, tick: 0  }, unitRef(getUnit(state, 0))).state;
@@ -78,7 +78,7 @@ test('ordinary attacks read current talent and skill contributions instead of ca
     hit: { geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: .1 }] } },
   } });
   let state = createBattleState(fixtureBattlefieldState([initialize({ id: 0, position: [0, 0], definition }), receiver]));
-  state = enterUnits(state, [0]);
+  state = enter(state, [0]);
   state = updateUnit(state, { ...getUnit(state, 0), skill: { ...getUnit(state, 0).skill, sp: { ...getUnit(state, 0).skill.sp, value: 40 } } });
   state = activateSkill({ ...state, tick: 0  }, unitRef(getUnit(state, 0))).state;
   state = startAction(state, unitRef(getUnit(state, 0)), attack).state;

@@ -8,7 +8,7 @@ import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js
 import { instantiateUnitPlacement } from "../creation/placement.js";
 import type { Unit, Id } from "../../unit/unit.js";
 import type { Command } from "../contract.js";
-import { enterUnits, removeUnitWithEffects } from "../execution/unit-lifecycle.js";
+import { enter, leave } from "../execution/unit.js";
 import {
     advanceBattlefield,
     appendEvents,
@@ -164,7 +164,7 @@ export function deploy(state: BattleState, request: DeployRequest): Result<Deplo
             tick: state.tick,
         },
     ]);
-    state = enterUnits(state, [unit.id]);
+    state = enter(state, [unit.id]);
     state = notifyDeployed(state, { unit, kind: "MANUAL" });
 
     return { state, value: { type: "DEPLOYED", cardId: value.id, unitId: unit.id } };
@@ -175,7 +175,7 @@ export function retreat(state: BattleState, unitId: Id): BattleState {
         throw new RangeError(`unknown retreat unit ${unitId}`);
     }
 
-    return removeUnitWithEffects(state, unitId, "RETREAT");
+    return leave(state, unitId, "RETREAT");
 }
 
 export function relocate(

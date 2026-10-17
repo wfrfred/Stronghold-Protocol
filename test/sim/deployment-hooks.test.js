@@ -8,7 +8,7 @@ import {
 } from "../../dist/core/tactical/battle/deployment/deployment.js";
 import { setHook, removeHook } from "../../dist/core/tactical/unit/capability/deployable/hook.js";
 import { createDefinition as createDeployable } from "../../dist/core/tactical/unit/capability/deployable/capability.js";
-import { removeUnitWithEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
+import { leave } from "../../dist/core/tactical/battle/execution/unit.js";
 
 import { initialize } from "../helpers/unit.js";
 import { createDefinition as createEnemy } from "../../dist/core/tactical/unit/archetype/enemy.js";
@@ -168,7 +168,7 @@ test("a deployment remains observable when its entry callback immediately remove
         }));
     } });
     const incoming = definition("immediate-exit", {
-        onEnter(state, id) { return removeUnitWithEffects(state, id, "SCRIPT"); },
+        onEnter(state, id) { return leave(state, id, "SCRIPT"); },
         onLeave(state, departure) { calls.push(["left", departure.unit.id]); return state; },
     });
     const runtime = new BattleRuntime(input({
@@ -247,7 +247,7 @@ test("deployment keeps its event snapshot after removal while observers read the
     let state = createBattleState(fixtureBattlefieldState([unit(0), deployed]));
     state = addHook(state, 0, record("remove", (state, context) => {
         assert.equal(context, fact);
-        return removeUnitWithEffects(state, context.unit.id, "SCRIPT");
+        return leave(state, context.unit.id, "SCRIPT");
     }));
     state = addHook(state, 0, record("observe", (state, context) => {
         assert.equal(context, fact);

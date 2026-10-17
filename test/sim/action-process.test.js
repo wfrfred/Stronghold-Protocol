@@ -7,7 +7,7 @@ import { advance } from "../../dist/core/tactical/unit/action/advance.js";
 import * as actions from "../../dist/core/tactical/unit/action/operations.js";
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
 import { getUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
-import { removeUnitWithEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
+import { leave } from "../../dist/core/tactical/battle/execution/unit.js";
 
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 
@@ -202,7 +202,7 @@ test("action: source departure completes nested cleanup while entered content co
                     return state;
                 },
             });
-            state = removeUnitWithEffects(state, self.source.id, "SCRIPT");
+            state = leave(state, self.source.id, "SCRIPT");
             assert.equal(actions.get(state, actionRef(self)), undefined);
             trace.push("returned");
             state = updateUnit(state, { ...getUnit(state, 1), position: [4, 0] });

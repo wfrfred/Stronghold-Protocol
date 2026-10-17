@@ -25,7 +25,7 @@ import {
 import { initialize } from "../helpers/unit.js";
 import { get, ref } from '../../dist/core/tactical/unit/query.js';
 import { transitionUnit } from '../../dist/core/tactical/battle/state.js';
-import { retireCombatUnit } from '../../dist/core/tactical/battle/execution/unit-lifecycle.js';
+import { leave } from '../../dist/core/tactical/battle/execution/unit.js';
 import { create as modifier } from '../../dist/core/tactical/unit/contribution/attribute.js';
 import * as effects from '../../dist/core/tactical/unit/effect/operations.js';
 import { effectFixtureWork } from '../helpers/effects.js';
@@ -154,7 +154,7 @@ test('received Hook may remove the host before settlement without publishing dam
   let damaged = false;
   let battle = change(f.battle, f.target, state => setHook(state, 'received', hook('remove-host', (current, { host }) => {
       const self = get(current, host);
-return { state: retireCombatUnit(current, self.id), value: undefined }; })));
+return { state: leave(current, self.id, "DEATH"), value: undefined }; })));
   battle = change(battle, f.target, state => setHook(state, 'damaged', hook('observe', (current) => { damaged = true; return { state: current, value: undefined }; })));
   const result = elemental.damage(battle, f.target, request('BURN', 1000));
   assert.equal(result.value.type, 'REJECTED');
@@ -281,7 +281,7 @@ test('EP reception stops when a damage Hook removes the host', () => {
   let battle = change(f.battle, f.target, state => setDamageHook(state, {
     id: 'leave',
     accepts: () => true,
-    invoke: (current, { host }, amount) => ({ state: retireCombatUnit(current, host.id), value: amount }),
+    invoke: (current, { host }, amount) => ({ state: leave(current, host.id, "DEATH"), value: amount }),
   }));
   battle = change(battle, f.target, state => setDamageHook(state, {
     id: 'unreachable',
@@ -345,7 +345,7 @@ test('normal completion reports FINISHED and host departure closes an active Bur
   let battle = elemental.finish(result.state, result.value.burst);
   assert.deepEqual(seen, [{ type: 'FINISHED' }]);
   result = elemental.damage(battle, f.target, request('BURN', 1000));
-  battle = retireCombatUnit(result.state, f.target.id);
+  battle = leave(result.state, f.target.id, "DEATH");
   assert.deepEqual(seen, [{ type: 'FINISHED' }, { type: 'CANCELLED', reason: 'DEATH' }]);
   assert.equal(get(battle, f.target), undefined);
   assert.equal(getBurst(battle, result.value.burst), undefined);
@@ -353,7 +353,7 @@ test('normal completion reports FINISHED and host departure closes an active Bur
 
 test('nested host departure during onEnd cannot resurrect the ending Unit or Burst', () => {
   let calls = 0;
-  const f = fixture({}, { onEnd: (battle, self) => { calls++; return retireCombatUnit(battle, self.host.id); } });
+  const f = fixture({}, { onEnd: (battle, self) => { calls++; return leave(battle, self.host.id, "DEATH"); } });
   const result = elemental.damage(f.battle, f.target, request('BURN', 1000));
   const ended = elemental.finish(result.state, result.value.burst);
   assert.equal(calls, 1);

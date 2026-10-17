@@ -5,7 +5,7 @@ import { instantiateNavigationModifierPlacement } from "./creation/navigation-mo
 import { changePredefinedInstances } from "./steps/predefined.js";
 import type { Input } from "./contract.js";
 import { advanceBattlefield, type State as BattleState } from "./state.js";
-import { enterUnits } from "./execution/unit-lifecycle.js";
+import { enter } from "./execution/unit.js";
 
 export function initializeBattlefield(input: Input, state: BattleState): BattleState {
     const initialChanges: BattlefieldChange[] = [];
@@ -56,7 +56,7 @@ export function initializeBattlefield(input: Input, state: BattleState): BattleS
         predefinedPresence: initialized.value.presence,
     };
     state = advanceBattlefield(state, [...initialChanges, ...initialized.value.changes]);
-    state = enterUnits(state, [
+    state = enter(state, [
         ...initialUnitIds,
         ...initialized.value.changes.flatMap((change) =>
             change.type === "REGISTER_UNIT" ? [change.unit.id] : [],

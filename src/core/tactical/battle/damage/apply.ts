@@ -3,7 +3,7 @@ import type { Ref } from "../../../common/ref.js";
 import type { Unit } from "../../unit/unit.js";
 import * as units from "../../unit/query.js";
 import { appendEvents, updateUnit, type Result, type State as BattleState } from "../state.js";
-import { retireCombatUnit } from "../execution/unit-lifecycle.js";
+import { leave } from "../execution/unit.js";
 import type {
     ApplicationResult,
     CalculatedDamage,
@@ -88,7 +88,7 @@ export function applyDamage(
     const current = units.get(battle, request.target);
 
     if (current?.lifecycle === "PRESENT" && current.vitality.hp <= 0) {
-        battle = retireCombatUnit(battle, request.target.id);
+        battle = leave(battle, request.target.id, "DEATH");
     }
 
     return complete(battle, request, damage, { kind: "APPLIED", received, application });

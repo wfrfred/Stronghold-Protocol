@@ -5,7 +5,7 @@ import * as units from "../../unit/query.js";
 import { hasAction } from "../../unit/capability/action/capability.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";
 import { hasVitality } from "../../unit/capability/vitality/capability.js";
-import { retireCombatUnit } from "../execution/unit-lifecycle.js";
+import { leave } from "../execution/unit.js";
 import type { State as BattleState } from "../state.js";
 import type { Command } from "../contract.js";
 
@@ -37,7 +37,7 @@ export function advance(battle: BattleState): BattleState {
         const unit = units.get(battle, source);
 
         if (unit !== undefined && hasVitality(unit) && unit.vitality.hp <= 0) {
-            battle = retireCombatUnit(battle, source.id);
+            battle = leave(battle, source.id, "DEATH");
         }
     }
 

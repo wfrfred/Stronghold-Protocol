@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { getUnit } from "../../dist/core/tactical/battle/state.js";
-import { removeUnitWithEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
+import { leave } from "../../dist/core/tactical/battle/execution/unit.js";
 import * as skills from "../../dist/core/tactical/unit/capability/skill/operations.js";
 import * as sp from "../../dist/core/tactical/unit/capability/skill/sp.js";
 import { ref as activationRef } from "../../dist/core/tactical/unit/capability/skill/activation.js";
@@ -164,7 +164,7 @@ test("creation notification precedes departure triggered by the activation payme
 
             assert.deepEqual(event, { amount: 2, previous: 2, current: 0 });
             trace.push("spPaid");
-            return { state: removeUnitWithEffects(battle, self.id, "RETREAT"), value: undefined };
+            return { state: leave(battle, self.id, "RETREAT"), value: undefined };
         })],
         ended: [hook("ended", (battle) => { trace.push("ended"); return { state: battle, value: undefined }; })],
     }));

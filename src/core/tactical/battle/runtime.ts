@@ -28,7 +28,7 @@ import {
 import { createSpawnScheduleDefinition } from "./schedule/definition.js";
 import { snapshotSchedule, createSpawnScheduleExecution } from "./schedule/state.js";
 import { initializeBattlefield } from "./initialization.js";
-import { advanceUnits } from "./execution/unit-lifecycle.js";
+import * as unit from "./execution/unit.js";
 import {
     addCard,
     advance as advanceDeployment,
@@ -168,7 +168,7 @@ export class BattleRuntime {
 
         state = advanceSpawning(state, commands, tick);
 
-        state = advanceUnits(state);
+        state = unit.advance(state);
 
         state = advanceEffects(state);
 
