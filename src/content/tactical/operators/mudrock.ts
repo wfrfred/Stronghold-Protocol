@@ -1,6 +1,9 @@
 import type { Definition as ElementalDefinition } from "../../../core/tactical/unit/capability/elemental/capability.js";
 import type { Definition as OccupancyDefinition } from "../../../core/tactical/unit/capability/occupancy/capability.js";
-import type { Definition as TargetableDefinition } from "../../../core/tactical/unit/capability/targetable/capability.js";
+import {
+    hasTargetable,
+    type Definition as TargetableDefinition,
+} from "../../../core/tactical/unit/capability/targetable/capability.js";
 import { createArknightsElementalDefinition } from "../../../data/arknights/elemental.js";
 import { Definitions } from "../../../core/tactical/unit/action/definitions.js";
 import { clearCooldown, get as getAction } from "../../../core/tactical/unit/action/operations.js";
@@ -12,7 +15,9 @@ import {
 } from "../actions/attack.js";
 import { create as createSkillAttack, type State as SkillAttackState } from "../actions/skill.js";
 import { selectTargets } from "../../../core/tactical/unit/targeting/select.js";
-import { resolveHealing } from "../../../core/tactical/unit/capability/vitality/healing/settlement.js";
+import { calculateHealing } from "../../../core/tactical/battle/healing/calculate.js";
+import { applyHealing } from "../../../core/tactical/battle/healing/apply.js";
+import type { HealingRequest } from "../../../core/tactical/battle/healing/contract.js";
 import { calculateDamage } from "../../../core/tactical/battle/damage/calculate.js";
 import { applyDamage } from "../../../core/tactical/battle/damage/apply.js";
 import type { DamageRequest } from "../../../core/tactical/battle/damage/contract.js";
@@ -119,18 +124,21 @@ function hasSarkazTag(unit: Unit | undefined): boolean {
     );
 }
 
-function healSelf(state: BattleState, unitId: Id, ratio: number, tick: number): BattleState {
+function healSelf(state: BattleState, unitId: Id, ratio: number): BattleState {
+    const unit = getUnit(state, unitId);
     const maxHp = resolveMaxHp(unitId, battlefieldView(state));
 
-    return maxHp === undefined
-        ? state
-        : resolveHealing(state, {
-              sourceUnitId: unitId,
-              targetUnitId: unitId,
-              power: maxHp * ratio,
-              ignoreHealFree: true,
-              tick,
-          }).state;
+    if (unit === undefined || !hasVitality(unit) || maxHp === undefined) {
+        return state;
+    }
+
+    const request: HealingRequest = {
+        source: unitRef(unit),
+        target: unitRef(unit),
+        parameters: { power: maxHp * ratio, multiplier: 1 },
+    };
+
+    return applyHealing(request, calculateHealing(state, request)).state;
 }
 
 function shieldEffect(profile: Profile): EffectDefinition<ShieldState, Vitality> {
@@ -184,7 +192,7 @@ function shieldEffect(profile: Profile): EffectDefinition<ShieldState, Vitality>
                                     layers: shield.data.layers - 1,
                                 }),
                             );
-                            state = healSelf(state, unit.id, healRatio, state.tick);
+                            state = healSelf(state, unit.id, healRatio);
                             const current = getUnit(state, unit.id);
 
                             if (current !== undefined && hasSkill(current)) {
@@ -344,7 +352,7 @@ export function create(
             }
 
             const power = resolveAttackPower(source.id, battlefieldView(state))!;
-            state = healSelf(state, source.id, healRatio, state.tick);
+            state = healSelf(state, source.id, healRatio);
 
             for (const targetRef of self.state.bindings.primary ?? []) {
                 if (getAction(state, actionRef(self))?.status !== "RUNNING") {
@@ -461,7 +469,7 @@ export function create(
         onEnter(state, unitId) {
             const unit = getUnit(state, unitId);
 
-            if (unit === undefined || !hasVitality(unit)) {
+            if (unit === undefined || !hasVitality(unit) || !hasTargetable(unit)) {
                 return state;
             }
 

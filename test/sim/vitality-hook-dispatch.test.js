@@ -1,15 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as damage from "../../dist/core/tactical/battle/damage/hook.js";
-import * as healing from "../../dist/core/tactical/unit/capability/vitality/healing/hook.js";
+import * as healing from "../../dist/core/tactical/battle/healing/hook.js";
 import { calculateDamage } from "../../dist/core/tactical/battle/damage/calculate.js";
 import { applyDamage } from "../../dist/core/tactical/battle/damage/apply.js";
-import { resolveHealing } from "../../dist/core/tactical/unit/capability/vitality/healing/settlement.js";
+import { calculateHealing } from "../../dist/core/tactical/battle/healing/calculate.js";
+import { applyHealing } from "../../dist/core/tactical/battle/healing/apply.js";
 import { getUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
 import { initialize } from "../helpers/unit.js";
 import { effectFixtureWork } from "../helpers/effects.js";
 
-const hook = (id, invoke, priority = 0, accepts = () => true, stage = "reception") => ({ id, stage, priority, accepts, invoke });
+const hook = (id, invoke, priority = 0, accepts = () => true, stage = "receiving") => ({ id, stage, priority, accepts, invoke });
 const change = (battle, transform) => {
     const unit = getUnit(battle, 0);
     return updateUnit(battle, { ...unit, vitality: transform(unit.vitality) });
@@ -22,23 +23,25 @@ const input = source => ({
     source, target: { id: 0 }, parameters: { type: "TRUE", attack: { power: 1, multiplier: 1, addition: 0 } },
 });
 const settleDamage = (battle, request = input(null)) => applyDamage(request, calculateDamage(battle, request));
+const healingRequest = (power = 1, source = null) => ({ source, target: { id: 0 }, parameters: { power, multiplier: 1 } });
+const heal = (battle, request) => applyHealing(request, calculateHealing(battle, request));
 const settle = (domain, battle) => domain === "damage" ? settleDamage(battle).state
-    : resolveHealing(battle, { sourceUnitId: null, targetUnitId: 0, power: 1, tick: battle.tick }).state;
+    : heal(battle, healingRequest()).state;
 
 for (const [domain, registry] of [["damage", damage], ["healing", healing]]) {
-    const stage = domain === "damage" ? "receiving" : "reception";
+    const stage = "receiving";
     for (const enabled of [true, false]) {
         test(`${domain} dispatch reads replacement enabled=${enabled} without reordering selected priorities`, () => {
             const seen = [];
             const replacement = hook("B", (state, _context, current) => { seen.push("new B"); return { state, value: current }; }, -10,
                 (battle, context) => {
-                    seen.push(["new enabled", getUnit(battle, domain === "damage" ? context.request.target.id : context.host.id).vitality.hp]);
+                    seen.push(["new enabled", getUnit(battle, context.request.target.id).vitality.hp]);
                     return enabled;
                 }, stage);
             const original = fixture(domain, [
                 hook("A", (state, _context, current) => {
                     seen.push("A");
-                    state = domain === "damage" ? resolveHealing(state, { sourceUnitId: null, targetUnitId: 0, power: 10, tick: state.tick }).state
+                    state = domain === "damage" ? heal(state, healingRequest(10)).state
                         : change(state, vitality => ({ ...vitality, hp: 60 }));
                     return { state: change(state, vitality => registry.setHook(vitality, replacement)), value: current };
                 }, 10, () => true, stage),
@@ -73,43 +76,30 @@ for (const domain of ["damage", "healing"]) {
     test(`${domain} notifications retain one result context while observing the latest battle`, () => {
         const contexts = [];
         const observed = [];
-        const stage = domain === "damage" ? "completed" : "reaction";
+        const stage = "completed";
         const initial = fixture(domain, [
             hook("first", (battle, context, current) => {
                 contexts.push(context);
-                observed.push([domain === "damage" ? context.outcome : context.report, getUnit(battle, 0).vitality.hp]);
-                battle = domain === "damage" ? resolveHealing(battle, { sourceUnitId: null, targetUnitId: 0, power: 21, tick: battle.tick }).state
+                observed.push([context.outcome, getUnit(battle, 0).vitality.hp]);
+                battle = domain === "damage" ? heal(battle, healingRequest(21)).state
                     : change(battle, vitality => ({ ...vitality, hp: 70 }));
                 return { state: battle, value: current };
             }, 10, () => true, stage),
             hook("second", (battle, context, current) => {
                 contexts.push(context);
-                observed.push([domain === "damage" ? context.outcome : context.report, getUnit(battle, 0).vitality.hp]);
+                observed.push([context.outcome, getUnit(battle, 0).vitality.hp]);
                 return { state: battle, value: current };
             }, 0, () => true, stage),
         ]);
         const settled = settle(domain, initial);
         assert.equal(contexts[0], contexts[1]);
         assert.equal(observed[0][0], observed[1][0]);
-        assert.equal(domain === "damage" ? observed[1][0].application.hpLoss : observed[1][0].amount, 1);
+        assert.equal(domain === "damage" ? observed[1][0].application.hpLoss : observed[1][0].application.hpGain, 1);
         assert.deepEqual(observed.map(([, hp]) => hp), [domain === "damage" ? 49 : 51, 70]);
         assert.equal(getUnit(settled, 0).vitality.hp, 70);
         assert.equal(getUnit(initial, 0).vitality.hp, 50);
     });
 }
-
-test("healing stopping a stage retains its state and value and still notifies reactions", () => {
-    const seen = [];
-    const initial = fixture("healing", [
-        hook("stop", (battle, _context, current) => ({ state: change(battle, vitality => ({ ...vitality, hp: 60 })), value: { ...current, amount: 0, stopDispatch: true } })),
-        hook("skipped", () => assert.fail("a stopped stage cannot invoke its next candidate")),
-        hook("reaction", (battle, context, current) => { seen.push(context.report.amount); return { state: battle, value: current }; }, 0, () => true, "reaction"),
-    ]);
-    const settled = settle("healing", initial);
-    assert.deepEqual(seen, [0]);
-    assert.equal(getUnit(settled, 0).vitality.hp, 60);
-    assert.equal(getUnit(initial, 0).vitality.hp, 50);
-});
 
 test("damage output threads numeric values independently from Receiving facts", () => {
     const seen = [];
@@ -158,14 +148,41 @@ test("source and target Formula Hooks thread Parameters while the original Reque
     assert.equal(getUnit(result.state, 0).vitality.hp, 50);
 });
 
-test("healing output stopping does not stop the reception stage", () => {
+test("healing output threads numeric values independently from Receiving facts", () => {
+    const seen = [];
     const initial = fixture("healing", [
-        hook("output", (battle, _context, current) => ({ state: battle, value: { ...current, amount: 4, stopDispatch: true } }), 0, () => true, "output"),
-        hook("reception", (battle, _context, current) => {
-            assert.equal(current.stopDispatch, false);
-            return { state: battle, value: { ...current, amount: 2 } };
+        hook("output", (battle, { request }, current) => {
+            seen.push(["output", request.parameters.power, current]); return { state: battle, value: 4 };
+        }, 10, () => true, "output"),
+        hook("output-next", (battle, _context, current) => ({ state: battle, value: current * 2 }), 0, () => true, "output"),
+        hook("receiving", (battle, { calculated }, pending) => {
+            assert.deepEqual(Object.keys(pending).sort(), ["amount", "cancellation"]);
+            seen.push(["receiving", calculated.amount, pending.amount]);
+            return { state: battle, value: { ...pending, amount: pending.amount - 1 } };
         }),
     ]);
-    const result = resolveHealing(initial, { sourceUnitId: 0, targetUnitId: 0, power: 1, tick: initial.tick });
-    assert.equal(result.value.amount, 2);
+    const result = heal(initial, healingRequest(1, { id: 0 }));
+    assert.deepEqual(seen, [["output", 1, 1], ["receiving", 8, 8]]);
+    assert.equal(result.value.received.amount, 7);
+    assert.equal(result.value.application.hpGain, 7);
+});
+
+test("healing dispatch fixes candidate IDs while newly registered entries join the next dispatch", () => {
+    const calls = [];
+    const later = hook("later", (battle, _context, current) => {
+        calls.push("later"); return { state: battle, value: current };
+    }, 100);
+    const initial = fixture("healing", [
+        hook("first", (battle, _context, current) => {
+            calls.push("first");
+            return { state: change(battle, vitality => healing.setHook(vitality, later)), value: current };
+        }),
+        hook("second", (battle, _context, current) => {
+            calls.push("second"); return { state: battle, value: current };
+        }),
+    ]);
+    const first = heal(initial, healingRequest());
+    assert.deepEqual(calls, ["first", "second"]);
+    heal(first.state, healingRequest());
+    assert.deepEqual(calls, ["first", "second", "later", "first", "second"]);
 });

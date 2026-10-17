@@ -30,6 +30,7 @@ import {
 import { resolveAttackPower } from "../core/tactical/unit/capability/offense/query.js";
 import { healFree } from "../content/tactical/effects/protection.js";
 import { hasVitality } from "../core/tactical/unit/capability/vitality/capability.js";
+import { hasTargetable } from "../core/tactical/unit/capability/targetable/capability.js";
 
 export function createTacticalProjectileDemo(
     input: Input,
@@ -75,9 +76,9 @@ export function createTacticalProjectileDemo(
             hasVitality(target) &&
             target.vitality.hp > 0,
         contact: (state, context) => {
-            const target = context.facts.getUnit(context.targetUnitId);
+            const target = getUnit(state, context.targetUnitId);
 
-            if (target !== undefined) {
+            if (target !== undefined && hasTargetable(target)) {
                 state = install(state, unitRef(target), marker, {
                     source: context.projectile.source,
                     scopes: [{ type: "TICK", tick: context.tick + 45 }],

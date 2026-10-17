@@ -1,6 +1,6 @@
 import { damage as dealDamage, parameters } from "../helpers/vitality.js";
 import { fixtureBattle } from "../helpers/unit.js";
-import { resolveHealing } from "../../dist/core/tactical/unit/capability/vitality/healing/settlement.js";
+import { healing } from "../helpers/vitality.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { setData as setEffectData } from "../../dist/core/tactical/unit/effect/effect.js";
 import { initialize as initializeActionState } from "../../dist/core/tactical/unit/capability/action/capability.js";
@@ -191,14 +191,12 @@ function scenario({ failure = null, cancelled = false } = {}) {
                         );
                         if (cancelled) {
                             rejected.push({ type: "SKIPPED", reason: "CONTENT_CONDITION" });
-                            state = resolveHealing(
+                            state = healing(
                                 state,
                                 {
-                                    sourceUnitId: 0,
-                                    targetUnitId: ref.host.id,
-                                    power: 4,
-                                    ignoreHealFree: false,
-                                    tick: state.tick,
+                                    source: { id: 0 },
+                                    target: ref.host,
+                                    parameters: { power: 4, multiplier: 1 },
                                 },
                             ).state;
                         } else {

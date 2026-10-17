@@ -18,11 +18,11 @@ import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/
 import { definition as createSkillDefinition } from '../helpers/skill.js';
 import { activate as activateSkill, advance as advanceSkill } from '../../dist/core/tactical/unit/capability/skill/operations.js';
 import { recover } from '../../dist/core/tactical/unit/capability/skill/sp.js';
-import { setHealingReceptionRule } from '../../dist/core/tactical/unit/capability/vitality/capability.js';
+import { setHook as setHealingHook } from '../../dist/core/tactical/battle/healing/hook.js';
 import { resolveDefense } from '../../dist/core/tactical/unit/capability/defense/query.js';
 import { resolveAttackPower } from '../../dist/core/tactical/unit/capability/offense/query.js';
 import { create as modifier } from '../../dist/core/tactical/unit/contribution/attribute.js';
-import { resolveHealing } from '../../dist/core/tactical/unit/capability/vitality/healing/settlement.js';
+import { healing } from '../helpers/vitality.js';
 import * as elemental from '../../dist/core/tactical/unit/capability/elemental/operations.js';
 import { get as getBurst } from '../../dist/core/tactical/unit/capability/elemental/query.js';
 import { elementValues, setRule, setContribution, setHook as setElementalHook } from '../../dist/core/tactical/unit/capability/elemental/capability.js';
@@ -248,16 +248,18 @@ test('HP elemental settlement and EP settlement read their distinct current cont
 
 test('elemental healing receives every EP bar independently from HP healing and refuses the shared burst lock', () => {
   let receiver = unit('CHARACTER');
-  receiver = { ...receiver, vitality: setHealingReceptionRule(receiver.vitality, {
-    id: 'hp-healing-refused', cancel: ({ ignoreHealFree }) => ignoreHealFree ? null : { reason: 'HEAL_FREE' },
+  receiver = { ...receiver, vitality: setHealingHook(receiver.vitality, {
+    id: 'hp-healing-refused', stage: 'receiving', priority: 0,
+    invoke: (state, _context, pending) => ({ state, value: { ...pending, cancellation: { reason: 'CONTENT_REJECTS_HEALING' } } }),
   }) };
   receiver = { ...receiver, vitality: { ...receiver.vitality, hp: 99000 } };
   let work = effectFixtureWork(receiver);
   work = element(work, 'BURN', 0, 200).state;
   work = element(work, 'NEURAL', 0, 80).state;
-  const hp = resolveHealing(work, { sourceUnitId: null, targetUnitId: 1, power: 100, tick: 0 });
+  const hp = healing(work, { source: null, target: { id: 1 }, parameters: { power: 100, multiplier: 1 } });
   work = hp.state;
-  assert.equal(hp.value.amount, 0);
+  assert.equal(hp.value.kind, 'CANCELLED');
+  assert.equal(hp.value.received.amount, 100);
   const healed = elemental.heal(work, unitRef(getUnit(work, 1)), { power: 100, source: null });
   work = healed.state;
   assert.equal(healed.value.type, 'APPLIED');

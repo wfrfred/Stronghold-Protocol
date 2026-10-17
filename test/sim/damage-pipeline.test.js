@@ -11,7 +11,7 @@ import { setResistanceContribution, removeResistanceContribution } from "../../d
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { calculateDamage } from "../../dist/core/tactical/battle/damage/calculate.js";
 import { applyDamage } from "../../dist/core/tactical/battle/damage/apply.js";
-import { resolveHealing } from "../../dist/core/tactical/unit/capability/vitality/healing/settlement.js";
+import { healing } from "../helpers/vitality.js";
 import { getUnit } from "../../dist/core/tactical/battle/state.js";
 import { retireCombatUnit } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
 
@@ -25,8 +25,8 @@ const scaleAttack = (factor) => (_context, value) => ({
 });
 const scaleReceived = (factor) => (_context, value) => ({ ...value, amount: value.amount * factor });
 const trueRequest = (power, overrides = {}) => request(power, { parameters: parameters(power, "TRUE"), ...overrides });
-const heal = (state, targetUnitId, power) => resolveHealing(state, {
-    sourceUnitId: null, targetUnitId, power, ignoreHealFree: false, tick: state.tick,
+const heal = (state, targetUnitId, power) => healing(state, {
+    source: null, target: { id: targetUnitId }, parameters: { power, multiplier: 1 },
 });
 
 test("damage pipeline: numeric contributions retain four distinct positions and clamp the direct multiplier", () => {
@@ -294,8 +294,7 @@ test("damage pipeline: lethal HP facts precede cleanup, and only surviving obser
     const result = settle(workFor(attach(unit(1), observer), attach(unit(2, { hp: 40, maxHp: 100 }), dying)), trueRequest(200));
     assert.equal(result.value.kind, "APPLIED");
     assert.deepEqual(result.value.application, { hpBefore: 40, hpAfter: 0, hpLoss: 40 });
-    assert.equal(healed.amount, 0);
-    assert.equal(healed.cancellation.reason, "TARGET_DEAD");
+    assert.deepEqual(healed, { kind: "REJECTED" });
     assert.deepEqual(calls, [["hpApplied", 0, 200, 40], "cleanup", ["completed", undefined, 200, 40]]);
     assert.equal(getUnit(result.state, 2), undefined);
     assert.equal(result.state.removedUnits.length, 1);

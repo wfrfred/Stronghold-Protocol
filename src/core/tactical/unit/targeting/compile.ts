@@ -13,7 +13,6 @@ import { allowsTarget } from "../capability/targetable/capability.js";
 import { damageRatio } from "../capability/elemental/query.js";
 import { hasElemental } from "../capability/elemental/capability.js";
 import { hasVitality, type Vitality } from "../capability/vitality/capability.js";
-import { canReceiveHealing } from "../capability/vitality/healing/reception.js";
 import type { Unit, Id } from "../unit.js";
 import type {
     DamageTargetingDefinition,
@@ -47,7 +46,12 @@ const localElements: ElementalQueries = {
 const staticMaxHp: HealingMaxHpProvider = (unit) => unit.definition.vitality.maxHp;
 
 function isActiveVitalUnit(target: Unit): target is Unit & Vitality {
-    return hasVitality(target) && target.vitality.hp > 0 && isSpatiallyPresent(target);
+    return (
+        hasVitality(target) &&
+        target.lifecycle === "PRESENT" &&
+        target.vitality.hp > 0 &&
+        isSpatiallyPresent(target)
+    );
 }
 
 function sameSide(source: Unit, target: Unit): boolean {
@@ -108,14 +112,14 @@ function compileDamageTargeting(
                 !hasAllegiance(context.source) ||
                 !hasAllegiance(target) ||
                 !areHostile(context.source, target) ||
-                (requiresHealingEligibility &&
-                    !canReceiveHealing({
-                        ...context,
-                        target,
-                        ignoreHealFree: false,
-                    })) ||
                 (requiresElementDamage && !elemental.allowsDamage(target, context)) ||
                 (requiresElementHealing && !elemental.allowsHeal(target, context))
+            ) {
+                return false;
+            }
+            if (
+                requiresHealingEligibility &&
+                !allowsTarget({ ...context, target, selector: definition, purposes })
             ) {
                 return false;
             }
@@ -127,7 +131,8 @@ function compileDamageTargeting(
             }
 
             return (
-                allowsTarget({ ...context, target, selector: definition, purposes }) &&
+                (requiresHealingEligibility ||
+                    allowsTarget({ ...context, target, selector: definition, purposes })) &&
                 hasHit(target) &&
                 rangeOverlapsHit(
                     definition.scope.geometry,
@@ -180,12 +185,6 @@ function compileHealingTargeting(
                 : isActiveVitalUnit(target) && target.vitality.hp < maxHp(target, context)) &&
             (!elementHealing || elemental.allowsHeal(target, context)) &&
             allowsTarget({ ...context, target, selector: definition, purposes }) &&
-            (!requiresHealingEligibility ||
-                canReceiveHealing({
-                    ...context,
-                    target,
-                    ignoreHealFree: definition.ignoreHealFree,
-                })) &&
             rangeOverlapsHit(
                 definition.geometry,
                 context.source.position,

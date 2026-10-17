@@ -34,8 +34,7 @@ import { hasBlockable } from '../../dist/core/tactical/unit/capability/blocking/
 import * as modifier from '../../dist/core/tactical/unit/contribution/attribute.js';
 import { createHitDefinition, hasHit, hasSpatial } from '../../dist/core/tactical/unit/capability/spatial/capability.js';
 import { initialize as initializeTargetableState, hasTargetable, setRule as setTargetableRule, removeRule as removeTargetableRule, allowsTarget } from '../../dist/core/tactical/unit/capability/targetable/capability.js';
-import { setHealingReceptionRule, removeHealingReceptionRule } from '../../dist/core/tactical/unit/capability/vitality/capability.js';
-import { canReceiveHealing } from '../../dist/core/tactical/unit/capability/vitality/healing/reception.js';
+import { setHook as setHealingHook, removeHook as removeHealingHook } from '../../dist/core/tactical/battle/healing/hook.js';
 import { createBlockGeometry, createRangeGeometry, createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { geometryContainsPosition, rangeContainsPosition, rangeOverlapsHit } from '../../dist/core/tactical/geometry/intersection.js';
 import { updateBlockingRelations } from '../../dist/core/tactical/battlefield/blocking/relations.js';
@@ -722,23 +721,24 @@ test('core domain rules compose independently and preserve earlier unit states',
   assert.deepEqual(first.targetable.rules, []);
   assert.equal(both.rules.length, 2);
 
-  const denyHealing = id => ({ id, cancel: context =>
-    context.ignoreHealFree ? null : { reason: 'SOURCE_REJECTS_HEALING' } });
-  const vitalityOne = setHealingReceptionRule(first.vitality, denyHealing('healer-a'));
-  const vitalityBoth = setHealingReceptionRule(vitalityOne, denyHealing('healer-b'));
-  const healing = vitality => canReceiveHealing({ source, target: { ...first, vitality },
-    battlefield: query(first).battlefield, ignoreHealFree: false });
-  const withdrawnOne = removeHealingReceptionRule(vitalityBoth, 'healer-a');
-  const withdrawnBoth = removeHealingReceptionRule(withdrawnOne, 'healer-b');
+  const denyHealing = id => ({ id, stage: 'receiving', priority: 0,
+    invoke: (state, _context, pending) => ({ state,
+      value: { ...pending, cancellation: { reason: 'CONTENT_REJECTS_HEALING' } } }) });
+  const healingA = denyHealing('healer-a');
+  const healingB = denyHealing('healer-b');
+  const vitalityOne = setHealingHook(first.vitality, healingA);
+  const vitalityBoth = setHealingHook(vitalityOne, healingB);
+  const withdrawnOne = removeHealingHook(vitalityBoth, 'healer-a');
+  const withdrawnBoth = removeHealingHook(withdrawnOne, 'healer-b');
 
-  assert.equal(healing(first.vitality), true);
-  assert.equal(healing(vitalityBoth), false);
-  assert.equal(healing(withdrawnOne), false);
-  assert.equal(healing(withdrawnBoth), true);
-  assert.equal(vitalityBoth.healingReceptionRules[0], vitalityOne.healingReceptionRules[0]);
-  assert.equal(removeHealingReceptionRule(vitalityBoth, 'missing'), vitalityBoth);
-  assert.equal(vitalityBoth.healingReceptionRules.length, 2);
-  assert.deepEqual(second.vitality.healingReceptionRules, []);
+  assert.deepEqual(vitalityBoth.healingHooks, [healingA, healingB]);
+  assert.deepEqual(withdrawnOne.healingHooks, [healingB]);
+  assert.deepEqual(withdrawnBoth.healingHooks, []);
+  assert.equal(vitalityBoth.healingHooks[0], vitalityOne.healingHooks[0]);
+  assert.equal(setHealingHook(vitalityBoth, healingB), vitalityBoth);
+  assert.equal(removeHealingHook(vitalityBoth, 'missing'), vitalityBoth);
+  assert.equal(vitalityBoth.healingHooks.length, 2);
+  assert.deepEqual(second.vitality.healingHooks, []);
 });
 
 test('core blocking uses current state radius and includes center-distance equality', () => {

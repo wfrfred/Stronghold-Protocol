@@ -50,30 +50,24 @@ export const invincible: Definition<object, targetable.Targetable> = {
     },
 };
 
-export const healFree: Definition<object> = {
+export const healFree: Definition<object, targetable.Targetable> = {
     id: "protection/heal-free",
     initialize: () => ({}),
     onEnable(state, { unit, self }) {
-        return vitality.hasVitality(unit)
-            ? updateUnit(state, {
-                  ...unit,
-                  vitality: vitality.setHealingReceptionRule(unit.vitality, {
-                      id: `@effect/${self.id}/heal-free`,
-                      cancel: ({ ignoreHealFree }) =>
-                          ignoreHealFree ? null : { reason: "HEAL_FREE" },
-                  }),
-              })
-            : state;
+        return updateUnit(state, {
+            ...unit,
+            targetable: targetable.setRule(unit.targetable, {
+                id: `@effect/${self.id}/heal-free`,
+                allows: ({ selector, purposes }) =>
+                    !purposes.includes("HEAL") ||
+                    (selector.type === "HEAL" && selector.ignoreHealFree),
+            }),
+        });
     },
     onDisable(state, { unit, self }) {
-        return vitality.hasVitality(unit)
-            ? updateUnit(state, {
-                  ...unit,
-                  vitality: vitality.removeHealingReceptionRule(
-                      unit.vitality,
-                      `@effect/${self.id}/heal-free`,
-                  ),
-              })
-            : state;
+        return updateUnit(state, {
+            ...unit,
+            targetable: targetable.removeRule(unit.targetable, `@effect/${self.id}/heal-free`),
+        });
     },
 };

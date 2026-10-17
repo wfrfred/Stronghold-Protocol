@@ -9,7 +9,7 @@ import { calculateDamage } from "../../dist/core/tactical/battle/damage/calculat
 import { applyDamage } from "../../dist/core/tactical/battle/damage/apply.js";
 import { removeUnitWithEffects } from "../../dist/core/tactical/battle/execution/unit-lifecycle.js";
 import { setDefenseContribution } from "../../dist/core/tactical/unit/capability/defense/capability.js";
-import { resolveHealing } from "../../dist/core/tactical/unit/capability/vitality/healing/settlement.js";
+import { healing } from "../helpers/vitality.js";
 import { create as modifier } from "../../dist/core/tactical/unit/contribution/attribute.js";
 
 test("damage calculation: independent candidates retain only the higher output branch before one application", () => {
@@ -25,8 +25,8 @@ test("damage calculation: independent candidates retain only the higher output b
                 formulaBudget: data.formulaBudget - cost,
                 formulaRolls: [...data.formulaRolls, roll],
             }));
-            state = resolveHealing(state, {
-                sourceUnitId: 1, targetUnitId: 1, power: cost * 10, tick: state.tick,
+            state = healing(state, {
+                source: { id: 1 }, target: { id: 1 }, parameters: { power: cost * 10, multiplier: 1 },
             }).state;
             return {
                 state: { ...state, execution: { ...state.execution, rngState: rng.state() } },
@@ -142,8 +142,8 @@ test("damage calculation: Formula removal rejects the result while retaining its
     const departure = damageEffect("formula-departure", { budget: 2 }, [
         { stage: "sourceFormula", priority: 200, invoke(state, context, self, current) {
             state = setSelf(state, context, self, data => ({ ...data, budget: data.budget - 1 }));
-            state = resolveHealing(state, {
-                sourceUnitId: 1, targetUnitId: 1, power: 10, tick: state.tick,
+            state = healing(state, {
+                source: { id: 1 }, target: { id: 1 }, parameters: { power: 10, multiplier: 1 },
             }).state;
             return { state, value: current };
         } },

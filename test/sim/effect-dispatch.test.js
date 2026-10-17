@@ -5,15 +5,17 @@ import { unit, workFor, attach, request, damageEffect, healingEffect, setSelf, s
 import { getUnit, transitionUnit } from "../../dist/core/tactical/battle/state.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import * as damage from "../../dist/core/tactical/battle/damage/hook.js";
-import * as healing from "../../dist/core/tactical/unit/capability/vitality/healing/hook.js";
+import * as healing from "../../dist/core/tactical/battle/healing/hook.js";
 import { calculateDamage } from "../../dist/core/tactical/battle/damage/calculate.js";
 import { applyDamage } from "../../dist/core/tactical/battle/damage/apply.js";
-import { resolveHealing } from "../../dist/core/tactical/unit/capability/vitality/healing/settlement.js";
+import { calculateHealing } from "../../dist/core/tactical/battle/healing/calculate.js";
+import { applyHealing } from "../../dist/core/tactical/battle/healing/apply.js";
 
 const settle = (battle, input) => applyDamage(input, calculateDamage(battle, input));
 const damageHook = (id, stage, invoke, priority = 0, accepts = () => true) => ({ id, stage, priority, accepts, invoke });
 const healingHook = (id, stage, invoke, priority = 0, accepts = () => true) => ({ id, stage, priority, accepts, invoke });
-const healRequest = (power = 10, overrides = {}) => ({ sourceUnitId: 1, targetUnitId: 2, power, tick: 12, ...overrides });
+const healRequest = (power = 10, overrides = {}) => ({ source: { id: 1 }, target: { id: 2 }, parameters: { power, multiplier: 1 }, ...overrides });
+const heal = (battle, input) => applyHealing(input, calculateHealing(battle, input));
 const withDamage = (unit, ...entries) => ({ ...unit, vitality: entries.reduce((state, entry) => damage.setHook(state, entry), unit.vitality) });
 
 test("hook dispatch checks each Effect against its current status immediately before invocation", () => {
@@ -94,14 +96,14 @@ test("selected Hook IDs use current replacements while nested damage selects its
 test("nested healing independently selects its latest receiver candidates", () => {
     const calls = [];
     let changed = false;
-    const originalHealing = healingHook("original", "reception", (state, _context, pending) => { calls.push("original-healing"); return { state, value: pending }; });
-    const newHealing = healingHook("new", "reception", (state, _context, pending) => { calls.push("new-healing"); return { state, value: pending }; });
+    const originalHealing = healingHook("original", "receiving", (state, _context, pending) => { calls.push("original-healing"); return { state, value: pending }; });
+    const newHealing = healingHook("new", "receiving", (state, _context, pending) => { calls.push("new-healing"); return { state, value: pending }; });
     const first = damageHook("damage", "receiving", (state, _context, pending) => {
         calls.push("damage");
         if (!changed) {
             changed = true;
             state = transitionUnit(state, 2, value => ({ ...value, vitality: healing.setHook(healing.removeHook(value.vitality, "original"), newHealing) }));
-            state = resolveHealing(state, healRequest()).state;
+            state = heal(state, healRequest()).state;
         }
         return { state, value: pending };
     });
@@ -110,7 +112,7 @@ test("nested healing independently selects its latest receiver candidates", () =
     let battle = settle(workFor(unit(1), receiver), request(100)).state;
     assert.deepEqual(calls, ["damage", "new-healing"]);
     assert.equal(getUnit(battle, 2).vitality.hp, 410);
-    battle = resolveHealing(battle, healRequest()).state;
+    battle = heal(battle, healRequest()).state;
     assert.deepEqual(calls, ["damage", "new-healing", "new-healing"]);
     assert.equal(getUnit(battle, 2).vitality.hp, 420);
 });
@@ -119,7 +121,7 @@ test("nested damage admits hooks registered before its own dispatch", () => {
     const calls = [];
     let changed = false;
     const late = damageHook("late", "receiving", (state, _context, pending) => { calls.push("late-damage"); return { state, value: pending }; });
-    const first = healingHook("healing", "reception", (state, _context, pending) => {
+    const first = healingHook("healing", "receiving", (state, _context, pending) => {
         calls.push("healing");
         if (!changed) {
             changed = true;
@@ -130,7 +132,7 @@ test("nested damage admits hooks registered before its own dispatch", () => {
     });
     const value = unit(2, { hp: 500, maxHp: 1000 });
     let battle = workFor(unit(1), { ...value, vitality: healing.setHook(value.vitality, first) });
-    battle = resolveHealing(battle, healRequest(20)).state;
+    battle = heal(battle, healRequest(20)).state;
     assert.deepEqual(calls, ["healing", "late-damage"]);
     assert.equal(getUnit(battle, 2).vitality.hp, 510);
     battle = settle(battle, request(10)).state;
@@ -168,7 +170,7 @@ test("nested operations read changed Effect state and inherit the current battle
         uses.push(self.data.ready);
         if (self.data.ready) {
             state = setSelf(state, context, self, { ready: false });
-            state = resolveHealing(state, healRequest(10, { tick: state.tick })).state;
+            state = heal(state, healRequest(10)).state;
             state = settle(state, request(5)).state;
         }
         return { state, value: pending };
@@ -195,107 +197,63 @@ test("invincibility rejects Receiving while preserving the Completed outcome", (
     assert.deepEqual(calls, ["REJECTED"]);
 });
 
-test("healing hooks resolve output and reception before notifying each participant", () => {
+test("healing hooks resolve numeric output and Receiving before notifying each participant", () => {
     const calls = [];
     const source = healingEffect("healing-output", {}, [
-        {
-            stage: "output",
-            invoke(state, _context, _self, pending) {
-                calls.push("output");
-                return { state, value: { ...pending, amount: pending.amount * 2 } };
-            },
-        },
-        {
-            stage: "reaction",
-            invoke(state, _context, _self, report) {
-                calls.push(`source:${report.amount}`);
-
-                return { state, value: {} };
-            },
-        },
+        { stage: "output", invoke(state, _context, _self, amount) {
+            calls.push("output"); return { state, value: amount * 2 };
+        } },
+        { stage: "completed", invoke(state, { outcome }) {
+            calls.push(`source:${outcome.application.hpGain}`); return { state, value: undefined };
+        } },
     ]);
-    const target = healingEffect("healing-reception", {}, [
-        {
-            stage: "reception",
-            invoke(state, _context, _self, pending) {
-                calls.push("reception");
-                return { state, value: { ...pending, amount: pending.amount + 5 } };
-            },
-        },
-        {
-            stage: "reaction",
-            invoke(state, _context, _self, report) {
-                calls.push(`target:${report.amount}`);
-
-                return { state, value: {} };
-            },
-        },
+    const target = healingEffect("healing-receiving", {}, [
+        { stage: "receiving", invoke(state, _context, _self, pending) {
+            calls.push("receiving"); return { state, value: { ...pending, amount: pending.amount + 5 } };
+        } },
+        { stage: "completed", invoke(state, { outcome }) {
+            calls.push(`target:${outcome.application.hpGain}`); return { state, value: undefined };
+        } },
     ]);
-    let battle = workFor(
-        attach(unit(1), source),
-        attach(unit(2, { hp: 990, maxHp: 1000 }), target),
-    );
-    const resultSettlement = resolveHealing(battle, healRequest(10));
-    battle = resultSettlement.state;
-    const result = resultSettlement.value;
-    assert.equal(result.amount, 10);
-    assert.deepEqual(calls, ["output", "reception", "target:10", "source:10"]);
-    assert.equal(getUnit(battle, 2).vitality.hp, 1000);
+    const result = heal(workFor(attach(unit(1), source), attach(unit(2, { hp: 990, maxHp: 1000 }), target)), healRequest(10));
+    assert.equal(result.value.received.amount, 25);
+    assert.equal(result.value.application.hpGain, 10);
+    assert.deepEqual(calls, ["output", "receiving", "target:10", "source:10"]);
+    assert.equal(getUnit(result.state, 2).vitality.hp, 1000);
 });
 
-test("healing cancellation stays visible to reception and reaction while ignoreHealFree changes the request rule", () => {
+test("healing cancellation stays visible to later Receiving Hooks and Completed", () => {
     const calls = [];
     const observer = healingEffect("observe-healing", {}, [
-        {
-            stage: "reception",
-            invoke(state, _context, _self, pending) {
-                calls.push(pending.cancellation?.reason ?? "accepted");
-                return { state, value: pending };
-            },
-        },
-        {
-            stage: "reaction",
-            invoke(state, _context, _self, report) {
-                calls.push(`reaction:${report.amount}`);
-
-                return { state, value: {} };
-            },
-        },
+        { stage: "receiving", priority: 10, invoke(state, _context, _self, pending) {
+            return { state, value: { ...pending, cancellation: { reason: "BLOCKED" } } };
+        } },
+        { stage: "receiving", invoke(state, _context, _self, pending) {
+            calls.push(pending.cancellation.reason); return { state, value: pending };
+        } },
+        { stage: "completed", invoke(state, { outcome }) {
+            calls.push(`completed:${outcome.kind}:${outcome.received.amount}`); return { state, value: undefined };
+        } },
     ]);
-    const target = attach(attach(unit(2, { hp: 500, maxHp: 1000 }), healFree), observer);
-    let battle = workFor(unit(1), target);
-    const cancelled = resolveHealing(battle, healRequest(10));
-    battle = cancelled.state;
-    assert.equal(cancelled.value.amount, 0);
-    const accepted = resolveHealing(battle, healRequest(10, { ignoreHealFree: true }));
-    battle = accepted.state;
-    assert.equal(accepted.value.amount, 10);
-    assert.deepEqual(calls, ["HEAL_FREE", "reaction:0", "accepted", "reaction:10"]);
+    const result = heal(workFor(unit(1), attach(unit(2, { hp: 500, maxHp: 1000 }), observer)), healRequest(10));
+    assert.equal(result.value.kind, "CANCELLED");
+    assert.equal(getUnit(result.state, 2).vitality.hp, 500);
+    assert.deepEqual(calls, ["BLOCKED", "completed:CANCELLED:10"]);
 });
 
-test("healing uses the dedicated skipped stage and suppresses output and reaction modifiers", () => {
+test("healing an explicitly referenced heal-free Unit uses the ordinary pipeline", () => {
     const calls = [];
-    const source = ({ ...unit(1), vitality: healing.setHook(unit(1).vitality, healingHook("output", "output", (state, _context, value) => {
-            calls.push("output");
-            return { state, value: { ...value, amount: value.amount * 2 } };
-        })) });
-    let target = ({ ...unit(2, { hp: 500, maxHp: 1000 }), vitality: healing.setHook(unit(2, { hp: 500, maxHp: 1000 }).vitality, healingHook("ordinary", "reception", (state, _context, value) => {
-            calls.push("ordinary");
-            return { state, value };
-        })) });
-    target = ({ ...target, vitality: healing.setHook(target.vitality, healingHook("skipped", "skippedReception", (state, _context, value) => {
-            calls.push("skipped");
-            return { state, value: { ...value, amount: value.amount / 2 } };
-        })) });
-    target = ({ ...target, vitality: healing.setHook(target.vitality, healingHook("reaction", "reaction", (state) => {
-            calls.push("reaction");
-
-            return { state, value: {} };
-        })) });
-    let battle = workFor(source, target);
-    const resultSettlement = resolveHealing(battle, healRequest(100, { skipModifierEvents: true }));
-    battle = resultSettlement.state;
-    const result = resultSettlement.value;
-    assert.equal(result.amount, 50);
-    assert.deepEqual(calls, ["skipped"]);
+    const observer = healingEffect("observe-heal-free", {}, [
+        { stage: "receiving", invoke(state, _context, _self, pending) {
+            calls.push("receiving"); return { state, value: pending };
+        } },
+        { stage: "completed", invoke(state, { outcome }) {
+            calls.push(`completed:${outcome.application.hpGain}`); return { state, value: undefined };
+        } },
+    ]);
+    const target = attach(attach(unit(2, { hp: 500, maxHp: 1000 }), healFree), observer);
+    const result = heal(workFor(unit(1), target), healRequest(10));
+    assert.equal(result.value.kind, "APPLIED");
+    assert.equal(getUnit(result.state, 2).vitality.hp, 510);
+    assert.deepEqual(calls, ["receiving", "completed:10"]);
 });

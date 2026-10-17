@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { calculateDamage } from "../../dist/core/tactical/battle/damage/calculate.js";
 import { applyDamage } from "../../dist/core/tactical/battle/damage/apply.js";
 import { setHook, removeHook } from "../../dist/core/tactical/battle/damage/hook.js";
-import { resolveHealing } from "../../dist/core/tactical/unit/capability/vitality/healing/settlement.js";
+import { healing } from "../helpers/vitality.js";
 import { getUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
 import { initialize } from "../helpers/unit.js";
 import { effectFixtureWork } from "../helpers/effects.js";
@@ -35,7 +35,7 @@ for (const enabled of [true, false]) {
         const state = fixture([
             hook("A", battle => {
                 seen.push("A");
-                battle = resolveHealing(battle, { sourceUnitId: null, targetUnitId: 0, power: 10, tick: battle.tick }).state;
+                battle = healing(battle, { source: null, target: { id: 0 }, parameters: { power: 10, multiplier: 1 } }).state;
                 return { state: change(battle, vitality => setHook(vitality, replacement)), value: undefined };
             }),
             hook("B", battle => { seen.push("old B"); return { state: battle, value: undefined }; }, () => {

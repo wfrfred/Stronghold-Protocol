@@ -2,7 +2,7 @@ import { damage as dealDamage, parameters } from "../helpers/vitality.js";
 import { fixtureBattle } from "../helpers/unit.js";
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
 import { create as createAttack } from "../../dist/content/tactical/actions/attack.js";
-import { resolveHealing } from "../../dist/core/tactical/unit/capability/vitality/healing/settlement.js";
+import { healing } from "../helpers/vitality.js";
 import { initialize as initializeVitality } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -193,13 +193,13 @@ test("AUTO instant content keeps full SP when its required target is absent", ()
   assert.equal(f.reports.length, 0);
 });
 
-test("instant healing uses the current activation tick and returns the settled healing report", () => {
+test("instant healing uses the current activation tick and returns the applied healing outcome", () => {
   let report;
   const definition = createSkillDefinition({ id: "instant-heal-port", initialize: () => ({}), sp: null,
     activation: { trigger: "MANUAL", sustain: { type: "TIME", durationTicks: 0 }, initialize: () => ({}),
       onStart: (battle, self) => {
-        const healed = resolveHealing(battle, { sourceUnitId: self.host.id, targetUnitId: self.host.id,
-          power: 30, ignoreHealFree: false, tick: battle.tick });
+        const healed = healing(battle, { source: self.host, target: self.host,
+          parameters: { power: 30, multiplier: 1 } });
         report = healed.value;
         return healed.state;
       },
@@ -209,5 +209,6 @@ test("instant healing uses the current activation tick and returns the settled h
   let activatedState = effectFixtureWork(unit);
   activatedState = skills.activate({ ...activatedState, tick: 3 }, unitRef(getUnit(activatedState, 1))).state;
   assert.equal(getUnit(activatedState, 1).vitality.hp, 80);
-  assert.equal(report.amount, 30);
+  assert.equal(report.kind, "APPLIED");
+  assert.equal(report.application.hpGain, 30);
 });

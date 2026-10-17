@@ -10,7 +10,7 @@ import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { getUnit, updateUnit, battlefieldView } from "../../dist/core/tactical/battle/state.js";
 
 import { setHook } from "../../dist/core/tactical/battle/damage/hook.js";
-import { setHook as setHealingHook } from "../../dist/core/tactical/unit/capability/vitality/healing/hook.js";
+import { setHook as setHealingHook } from "../../dist/core/tactical/battle/healing/hook.js";
 import { setAttackContribution } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { create as modifier } from "../../dist/core/tactical/unit/contribution/attribute.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
@@ -69,7 +69,7 @@ test("ordinary attack: domain settlements observe each preceding returned battle
             followUps: [
                 {
                     receiver: { type: "SOURCE" },
-                    operation: { type: "HEAL", power: 5, ignoreHealFree: false },
+                    operation: { type: "HEAL", power: 5 },
                 },
             ],
         },
@@ -81,7 +81,7 @@ test("ordinary attack: domain settlements observe each preceding returned battle
             ...source,
             vitality: setHealingHook(source.vitality, {
                 id: "observe-heal",
-                stage: "reception",
+                stage: "receiving",
                 priority: 0,
                 accepts: () => true,
                 invoke(state, context, pending) {
@@ -111,7 +111,7 @@ test("ordinary attack: domain settlements observe each preceding returned battle
     assert.equal(result.value.type, "STARTED");
     assert.equal(observed[0].request.parameters.attack.power, 10);
     assert.equal(observed[0].tick, 7);
-    assert.equal(observed[1].request.targetUnitId, 0);
+    assert.equal(observed[1].request.target.id, 0);
     assert.equal(observed[1].targetHp, 90);
     assert.equal(getUnit(result.state, 1).vitality.hp, 90);
     assert.equal(getUnit(initial, 1).vitality.hp, 100);

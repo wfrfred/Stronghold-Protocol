@@ -24,7 +24,9 @@ import { calculateDamage } from "../../../core/tactical/battle/damage/calculate.
 import { applyDamage } from "../../../core/tactical/battle/damage/apply.js";
 import type { DamageRequest, DamageType } from "../../../core/tactical/battle/damage/contract.js";
 import { hasVitality } from "../../../core/tactical/unit/capability/vitality/capability.js";
-import { resolveHealing } from "../../../core/tactical/unit/capability/vitality/healing/settlement.js";
+import { calculateHealing } from "../../../core/tactical/battle/healing/calculate.js";
+import { applyHealing } from "../../../core/tactical/battle/healing/apply.js";
+import type { HealingRequest } from "../../../core/tactical/battle/healing/contract.js";
 import { resolveMaxHp } from "../../../core/tactical/unit/capability/vitality/query.js";
 import {
     damage as damageElement,
@@ -54,7 +56,7 @@ export type Operation =
           readonly damageType: DamageType;
           readonly powerSource?: "SOURCE_ATTACK";
       }
-    | { readonly type: "HEAL"; readonly power: number; readonly ignoreHealFree: boolean }
+    | { readonly type: "HEAL"; readonly power: number }
     | { readonly type: "ELEMENT_DAMAGE"; readonly power: number; readonly elementType: ElementType }
     | { readonly type: "ELEMENT_HEAL"; readonly power: number };
 
@@ -195,9 +197,7 @@ function apply(
     target: Ref<Unit>,
     operation: Operation,
 ): BattleState {
-    const tick = battle.tick;
     const sourceUnitId = source.id;
-    const targetUnitId = target.id;
 
     switch (operation.type) {
         case "DAMAGE": {
@@ -225,14 +225,21 @@ function apply(
             return applyDamage(request, calculateDamage(battle, request)).state;
         }
 
-        case "HEAL":
-            return resolveHealing(battle, {
-                sourceUnitId,
-                targetUnitId,
-                tick,
-                power: operation.power,
-                ignoreHealFree: operation.ignoreHealFree,
-            }).state;
+        case "HEAL": {
+            const receiver = units.get(battle, target);
+
+            if (receiver === undefined || !hasVitality(receiver)) {
+                return battle;
+            }
+
+            const request: HealingRequest = {
+                source,
+                target: units.ref(receiver),
+                parameters: { power: operation.power, multiplier: 1 },
+            };
+
+            return applyHealing(request, calculateHealing(battle, request)).state;
+        }
 
         case "ELEMENT_DAMAGE":
             return damageElement(battle, target, {

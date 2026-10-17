@@ -34,8 +34,7 @@ import { invincible, healFree } from '../../dist/content/tactical/effects/protec
 import { invisible, camouflage, untargetable, allyUntargetable } from '../../dist/content/tactical/effects/visibility.js';
 import { installFixtureEffect } from '../helpers/effects.js';
 import * as effects from '../../dist/core/tactical/unit/effect/operations.js';
-import { resolveHealing } from '../../dist/core/tactical/unit/capability/vitality/healing/settlement.js';
-import { canReceiveHealing } from '../../dist/core/tactical/unit/capability/vitality/healing/reception.js';
+import { healing } from '../helpers/vitality.js';
 import { setHook as setDamageHook } from '../../dist/core/tactical/battle/damage/hook.js';
 import * as contribution from '../../dist/core/tactical/unit/contribution/contribution.js';
 import * as modifier from '../../dist/core/tactical/unit/contribution/attribute.js';
@@ -1130,7 +1129,7 @@ const healingTargeting = (overrides = {}) => ({
 });
 
 const damageEffect = power => ({ type: 'DAMAGE', power, damageType: 'TRUE' });
-const healEffect = (power, ignoreHealFree = false) => ({ type: 'HEAL', power, ignoreHealFree });
+const healEffect = power => ({ type: 'HEAL', power });
 
 const attackDefinition = (targetGroups, followUps = []) => createAttack({
   id: 'normal', intervalTicks: 3, speed: 100, triggerBindingId: targetGroups[0].id, targetGroups, followUps, recoveryTicks: 0,
@@ -1172,8 +1171,8 @@ test('core protection effects: withdrawing one source retains the other source a
   const request = { source: unitRef(source), target: unitRef(target), parameters: parameters(1000, 'TRUE') };
   const restricted = (effect, state) => {
     const current = getUnit(state, 1);
-    if (effect === healFree) return !canReceiveHealing({ source, target: current,
-      battlefield: battlefieldView(state), ignoreHealFree: false });
+    if (effect === healFree) return !allowsTarget({ source, target: current,
+      battlefield: battlefieldView(state), selector: { type: 'HEAL', ignoreHealFree: false }, purposes: ['HEAL'] });
     if (effect === untargetable) return selectTargets({ source, battlefield: battlefieldView(state) },
       compileTargeting(damageTargeting(), ['DAMAGE'])).length === 0;
     const resolved = dealDamage(state, request);
@@ -1232,7 +1231,7 @@ test('core vitality: invincibility rejects receiving before HIT SP and removing 
   assert.equal(target.vitality.hp, 100);
 });
 
-test('core vitality: reception rereads healing restrictions and uses HP changed by nested healing', () => {
+test('core vitality: nested direct healing ignores target selection restrictions and supplies the latest HP', () => {
   for (const installedInitially of [false, true]) {
     const original = actionUnit(1, 'ENEMY', [1, 0], {
       hp: 40, effects: installedInitially ? [healFree] : [],
@@ -1246,8 +1245,8 @@ test('core vitality: reception rereads healing restrictions and uses HP changed 
         } else {
           state = effects.install(state, context.request.target, healFree).state;
         }
-        state = resolveHealing(state, { sourceUnitId: null, targetUnitId: context.request.target.id,
-          tick: state.tick, power: 30, ignoreHealFree: false }).state;
+        state = healing(state, { source: null, target: context.request.target,
+          parameters: { power: 30, multiplier: 1 } }).state;
         return { state, value: pending };
       },
     }) };
@@ -1255,33 +1254,29 @@ test('core vitality: reception rereads healing restrictions and uses HP changed 
     const resolved = dealDamage(state, { source: null, target: unitRef(target), parameters: parameters(60, 'TRUE') });
 
     assert.equal(resolved.value.kind, 'APPLIED');
-    assert.deepEqual(resolved.value.application, installedInitially
-      ? { hpBefore: 70, hpAfter: 10, hpLoss: 60 }
-      : { hpBefore: 40, hpAfter: 0, hpLoss: 40 });
-    assert.equal(getUnit(resolved.state, 1)?.vitality.hp, installedInitially ? 10 : undefined);
+    assert.deepEqual(resolved.value.application, { hpBefore: 70, hpAfter: 10, hpLoss: 60 });
+    assert.equal(getUnit(resolved.state, 1).vitality.hp, 10);
     assert.equal(target.vitality.hp, 40);
   }
 });
 
-test('core vitality: healing eligibility is rechecked when a selected target gains a healing restriction', () => {
+test('core vitality: a selected target remains directly healable after gaining a selection restriction', () => {
   const source = actionUnit(0, 'ALLY', [0, 0]);
   const target = actionUnit(1, 'ALLY', [1, 0], { hp: 40 });
   let state = createBattleState(fixtureBattlefieldState([source, target]));
   const query = compileTargeting(healingTargeting(), ['HEAL']);
-  assert.deepEqual(selectTargets({ source, battlefield: battlefieldView(state) }, query)
-    .map(unit => unit.id), [1]);
-  state = effects.install(state, unitRef(getUnit(state, 1)), healFree).state;
-  const request = { sourceUnitId: 0, targetUnitId: 1, tick: 0, power: 30, ignoreHealFree: false };
-  const blocked = resolveHealing(state, request);
-  const allowed = resolveHealing(state, { ...request, ignoreHealFree: true });
+  const selected = selectTargets({ source, battlefield: battlefieldView(state) }, query);
+  assert.deepEqual(selected.map(unit => unit.id), [1]);
+  const selectedRef = unitRef(selected[0]);
+  state = effects.install(state, selectedRef, healFree).state;
+  const result = healing(state, { source: unitRef(source), target: selectedRef,
+    parameters: { power: 30, multiplier: 1 } });
 
   assert.deepEqual(selectTargets({ source, battlefield: battlefieldView(state) }, query), []);
-  assert.equal(blocked.value.cancellation.reason, 'HEAL_FREE');
-  assert.equal(blocked.value.amount, 0);
-  assert.equal(getUnit(blocked.state, 1).vitality.hp, 40);
-  assert.equal(allowed.value.cancellation, null);
-  assert.equal(allowed.value.amount, 30);
-  assert.equal(getUnit(allowed.state, 1).vitality.hp, 70);
+  assert.equal(result.value.kind, 'APPLIED');
+  assert.equal(result.value.application.hpGain, 30);
+  assert.equal(getUnit(result.state, 1).vitality.hp, 70);
+  assert.equal(getUnit(state, 1).vitality.hp, 40);
   assert.equal(target.vitality.hp, 40);
 });
 
@@ -1345,24 +1340,21 @@ test('core targeting: hostile restrictions, friend restrictions and explicit blo
   assert.deepEqual(selectFriend(isolated, { ignoreAllyTargetFree: true }), [2]);
 });
 
-test('core action: query and healing settlement ignore options have independent four-way behavior', () => {
+test('core action: healing target selection owns the heal-free exception', () => {
   for (const queryIgnore of [false, true]) {
-    for (const effectIgnore of [false, true]) {
-      const action = attackDefinition([{ id: 'heal', targeting: healingTargeting({ ignoreHealFree: queryIgnore }),
-        operations: [healEffect(30, effectIgnore)] }]);
-      const source = actionUnit(0, 'ALLY', [0, 0], { action });
-      const target = actionUnit(1, 'ALLY', [1, 0], { hp: 40, effects: [healFree] });
-      const before = JSON.stringify([source, target]);
-      const result = startSingleAction(source, source.definition.action.definitions.values()[0], {
-        battlefield: actionView([source, target]), tick: 0,
-      });
-      const heals = result.events.filter(event => event.type === 'HEAL');
+    const action = attackDefinition([{ id: 'heal', targeting: healingTargeting({ ignoreHealFree: queryIgnore }),
+      operations: [healEffect(30)] }]);
+    const source = actionUnit(0, 'ALLY', [0, 0], { action });
+    const target = actionUnit(1, 'ALLY', [1, 0], { hp: 40, effects: [healFree] });
+    const before = JSON.stringify([source, target]);
+    const result = startSingleAction(source, source.definition.action.definitions.values()[0], {
+      battlefield: actionView([source, target]), tick: 0,
+    });
+    const heals = result.events.filter(event => event.type === 'HEAL');
 
-      assert.equal(result.events.some(event => event.type === 'ACTION'), queryIgnore);
-      assert.deepEqual(heals.map(event => [event.amount, event.hp]),
-        queryIgnore ? [[effectIgnore ? 30 : 0, effectIgnore ? 70 : 40]] : []);
-      assert.equal(JSON.stringify([source, target]), before);
-    }
+    assert.equal(result.events.some(event => event.type === 'ACTION'), queryIgnore);
+    assert.deepEqual(heals.map(event => [event.amount, event.hp]), queryIgnore ? [[30, 70]] : []);
+    assert.equal(JSON.stringify([source, target]), before);
   }
 });
 
@@ -1376,19 +1368,17 @@ test('core action: shared query purposes gate mixed effects while source follow-
   });
   assert.deepEqual(result.events, []);
 
-  for (const ignoreHealFree of [false, true]) {
-    const source = actionUnit(0, 'ALLY', [0, 0], { hp: 60, effects: [healFree], action: attackDefinition([
-      { id: 'attack', targeting: damageTargeting(), operations: [damageEffect(10)] },
-    ], [{ receiver: { type: 'SOURCE' }, operation: healEffect(15, ignoreHealFree) }]) });
-    const stepped = startSingleAction(source, source.definition.action.definitions.values()[0], {
-      battlefield: actionView([source, target]), tick: 0,
-    });
-    assert.deepEqual(stepped.events.map(event => event.type), ['ACTION', 'ACTION_RELEASED', 'DAMAGE', 'HEAL', 'ACTION_FINISHED']);
-    assert.equal(stepped.events.find(event => event.type === 'DAMAGE').hp, 70);
-    assert.equal(stepped.events.find(event => event.type === 'HEAL').amount, ignoreHealFree ? 15 : 0);
-    assert.equal(stepped.units.find(unit => unit.id === 0).vitality.hp, ignoreHealFree ? 75 : 60);
-    assert.equal(stepped.units.find(unit => unit.id === 0).action.states.get('normal').cooldown.readyAtTick, 3);
-  }
+  const source = actionUnit(0, 'ALLY', [0, 0], { hp: 60, effects: [healFree], action: attackDefinition([
+    { id: 'attack', targeting: damageTargeting(), operations: [damageEffect(10)] },
+  ], [{ receiver: { type: 'SOURCE' }, operation: healEffect(15) }]) });
+  const stepped = startSingleAction(source, source.definition.action.definitions.values()[0], {
+    battlefield: actionView([source, target]), tick: 0,
+  });
+  assert.deepEqual(stepped.events.map(event => event.type), ['ACTION', 'ACTION_RELEASED', 'DAMAGE', 'HEAL', 'ACTION_FINISHED']);
+  assert.equal(stepped.events.find(event => event.type === 'DAMAGE').hp, 70);
+  assert.equal(stepped.events.find(event => event.type === 'HEAL').amount, 15);
+  assert.equal(stepped.units.find(unit => unit.id === 0).vitality.hp, 75);
+  assert.equal(stepped.units.find(unit => unit.id === 0).action.states.get('normal').cooldown.readyAtTick, 3);
 });
 
 test('core action: secondary target groups cannot trigger the action and use independent query purposes', () => {

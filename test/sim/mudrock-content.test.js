@@ -1,7 +1,7 @@
 import { damage as dealDamage, parameters } from "../helpers/vitality.js";
 import { fixtureBattle, fixtureDefinition } from "../helpers/unit.js";
 import { ref as activationRef } from "../../dist/core/tactical/unit/capability/skill/activation.js";
-import { resolveHealing } from "../../dist/core/tactical/unit/capability/vitality/healing/settlement.js";
+import { healing } from "../helpers/vitality.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -76,11 +76,12 @@ test("entry installs one persistent shield container and preserves prior snapsho
         refund: { rate: 0.5, limit: "BASE_COST" },
     });
     assert.equal(getUnit(state, 0).deployable.refundAllowed, false);
-    const externalHealing = resolveHealing(state, {
-        sourceUnitId: null, targetUnitId: 0, power: 100, ignoreHealFree: false, tick: state.tick,
-    }).value;
-    assert.equal(externalHealing.amount, 0);
-    assert.equal(externalHealing.cancellation.reason, "HEAL_FREE");
+    const externalHealing = healing(hp(state, 1000), {
+        source: null, target: { id: 0 }, parameters: { power: 100, multiplier: 1 },
+    });
+    assert.equal(externalHealing.value.kind, "APPLIED");
+    assert.equal(externalHealing.value.application.hpGain, 100);
+    assert.equal(getUnit(externalHealing.state, 0).vitality.hp, 1100);
     const enteredLate = enterUnits({ ...initial, tick: 100 }, [0]);
     assert.deepEqual(readShield(getUnit(advance({ ...enteredLate, tick: 101 }), 0)), { layers: 1, timer: 269 });
 });
@@ -97,11 +98,12 @@ test("shield cancels damage, consumes a layer, self-heals and retains normal HIT
     assert.equal(getUnit(result.state, 0).effects.values().find(instance => instance.definition.id === "mudrock/shield").status, "ACTIVE");
     assert.equal(getUnit(before, 0).vitality.hp, 1000);
     assert.deepEqual(readShield(getUnit(before, 0)), { layers: 1, timer: 270 });
-    const external = resolveHealing(result.state, {
-        sourceUnitId: 1, targetUnitId: 0, power: 1000, ignoreHealFree: false, tick: 0,
+    const external = healing(result.state, {
+        source: { id: 1 }, target: { id: 0 }, parameters: { power: 1000, multiplier: 1 },
     });
-    assert.equal(external.value.amount, 0);
-    assert.equal(getUnit(external.state, 0).vitality.hp, getUnit(result.state, 0).vitality.hp);
+    assert.equal(external.value.kind, "APPLIED");
+    assert.equal(external.value.application.hpGain, 1000);
+    assert.equal(getUnit(external.state, 0).vitality.hp, getUnit(result.state, 0).vitality.hp + 1000);
     const unshielded = hit(result.state);
     assert.equal(unshielded.value.application.hpLoss, 100);
 });

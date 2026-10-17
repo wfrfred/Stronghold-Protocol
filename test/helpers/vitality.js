@@ -3,7 +3,9 @@ import { initialize } from "./unit.js";
 import { transitionUnit, getUnit, battlefieldView } from "../../dist/core/tactical/battle/state.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import * as damageHooks from "../../dist/core/tactical/battle/damage/hook.js";
-import * as healing from "../../dist/core/tactical/unit/capability/vitality/healing/hook.js";
+import * as healingHooks from "../../dist/core/tactical/battle/healing/hook.js";
+import { calculateHealing } from "../../dist/core/tactical/battle/healing/calculate.js";
+import { applyHealing } from "../../dist/core/tactical/battle/healing/apply.js";
 import { calculateDamage } from "../../dist/core/tactical/battle/damage/calculate.js";
 import { applyDamage } from "../../dist/core/tactical/battle/damage/apply.js";
 import { definition, effectFixtureWork, installFixtureEffect } from "./effects.js";
@@ -46,6 +48,14 @@ export function request(power = 100, overrides = {}) {
 
 export function damage(battle, request) {
     return applyDamage(request, calculateDamage(battle, request));
+}
+
+export function healingParameters(power, multiplier = 1) {
+    return { power, multiplier };
+}
+
+export function healing(battle, request) {
+    return applyHealing(request, calculateHealing(battle, request));
 }
 
 export function setSelf(state, context, self, next) {
@@ -92,7 +102,7 @@ function hookEffect(domain, id, initial, entries, callbacks = {}) {
                                     state,
                                     invocation,
                                     getUnit(state, invocation.host.id).effects.get(context.ref.id, content),
-                                    domain === healing && entry.stage === "reaction" ? invocation.report : input,
+                                    input,
                                 );
                             },
                         }),
@@ -126,7 +136,7 @@ export function damageEffect(id, initial, entries, callbacks) {
 }
 
 export function healingEffect(id, initial, entries, callbacks) {
-    return hookEffect(healing, id, initial, entries, callbacks);
+    return hookEffect(healingHooks, id, initial, entries, callbacks);
 }
 
 export function barrier(id = "barrier", remainingAmount = 500, priority = 0) {

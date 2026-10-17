@@ -9,7 +9,7 @@ import * as locomotion from "../../dist/core/tactical/unit/capability/locomotion
 import * as action from "../../dist/core/tactical/unit/capability/action/capability.js";
 import * as vitality from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import * as damage from "../../dist/core/tactical/battle/damage/hook.js";
-import * as healing from "../../dist/core/tactical/unit/capability/vitality/healing/hook.js";
+import * as healing from "../../dist/core/tactical/battle/healing/hook.js";
 import { create } from "../../dist/core/tactical/unit/contribution/attribute.js";
 
 const entries = [
@@ -83,7 +83,7 @@ test("local contribution updates share untouched state and leave earlier version
 test("local hook registration retains progress and changes only its registration collection", () => {
     const hook = {
         id: "hook",
-        stage: "reception",
+        stage: "receiving",
         priority: 0,
         accepts: () => true,
         invoke: (state, _context, value) => ({ state, value }),
@@ -115,7 +115,7 @@ test("local hook registration retains progress and changes only its registration
         ],
     ];
     for (const [initial, field, set, remove] of registrations) {
-        const entry = field === "damageHooks" ? { ...hook, stage: "receiving" } : hook;
+        const entry = hook;
         const added = set(initial, entry);
         assert.equal(added[field][0], entry, field);
         assert.equal(initial[field].length, 0, field);

@@ -7,8 +7,7 @@ import type {
     Hook as DamageHook,
     ReceptionRule as DamageReceptionRule,
 } from "../../../battle/damage/hook.js";
-import type { Hook as HealingHook } from "./healing/hook.js";
-import type { Rule as HealingReceptionRule } from "./healing/reception.js";
+import type { Hook as HealingHook } from "../../../battle/healing/hook.js";
 import * as registry from "../../hook/hook.js";
 
 export interface Definition {
@@ -21,7 +20,6 @@ export interface State {
     readonly damageHooks: readonly DamageHook[];
     readonly healingHooks: readonly HealingHook[];
     readonly damageReceptionRules: readonly DamageReceptionRule[];
-    readonly healingReceptionRules: readonly HealingReceptionRule[];
 }
 
 export interface Vitality {
@@ -50,7 +48,6 @@ export function initialize(battle: BattleState, definition: Definition): Result<
             damageHooks: [],
             healingHooks: [],
             damageReceptionRules: [],
-            healingReceptionRules: [],
         },
     };
 }
@@ -69,22 +66,6 @@ export function removeDamageReceptionRule(state: State, id: string): State {
     return damageReceptionRules === state.damageReceptionRules
         ? state
         : { ...state, damageReceptionRules };
-}
-
-export function setHealingReceptionRule(state: State, rule: HealingReceptionRule): State {
-    const healingReceptionRules = registry.set(state.healingReceptionRules, rule);
-
-    return healingReceptionRules === state.healingReceptionRules
-        ? state
-        : { ...state, healingReceptionRules };
-}
-
-export function removeHealingReceptionRule(state: State, id: string): State {
-    const healingReceptionRules = registry.remove(state.healingReceptionRules, id);
-
-    return healingReceptionRules === state.healingReceptionRules
-        ? state
-        : { ...state, healingReceptionRules };
 }
 
 function changeMaxHpContributions(
