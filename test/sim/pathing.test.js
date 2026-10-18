@@ -282,8 +282,15 @@ test('core fields preserve directed search, target qualification and disconnecte
   const blocked = fieldMap(1, 3, [fieldCell(), fieldCell({ passable: false }), fieldCell()]);
   assert.deepEqual(build(blocked, [0, 1]).nodes, [null, null, null]);
   assert.deepEqual(distances(build(blocked, [0, 2])), [-1, -1, 0]);
-  assert.throws(() => build(map, [0, 3]), RangeError);
-  assert.throws(() => build(map, [-1, 0]), RangeError);
+  const bounded = fieldMap(2, 3, Array.from({ length: 6 }, () => fieldCell()));
+  for (const target of [[-1, 0], [2, 0], [0, -1], [0, 3], [-1, 3], [1, -1]]) {
+    const field = build(bounded, target);
+    assert.deepEqual(field.nodes, [null, null, null, null, null, null]);
+    assert.deepEqual(field.target, target);
+    assert.equal(field.rows, 2);
+    assert.equal(field.columns, 3);
+    assert.ok(Object.isFrozen(field) && Object.isFrozen(field.nodes) && Object.isFrozen(field.target));
+  }
 });
 
 test('core fields retain FIFO UP-RIGHT-DOWN-LEFT ties when smoothing cannot merge the hop', () => {

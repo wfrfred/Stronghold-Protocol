@@ -7,10 +7,6 @@ import { smooth } from "./smoothing.js";
 export function build(map: Map, target: TilePosition): Field {
     target = createTilePosition(target[0], target[1]);
 
-    if (!map.contains(target)) {
-        throw new RangeError("navigation field target is outside the map");
-    }
-
     const count = map.cells.length;
     const distances = new Array<number>(count).fill(-1);
     const successors = new Array<number>(count).fill(-1);
@@ -29,7 +25,7 @@ export function build(map: Map, target: TilePosition): Field {
 
     const targetIndex = target[0] * map.columns + target[1];
 
-    if (map.cells[targetIndex]!.passable) {
+    if (map.get(target)?.passable === true) {
         distances[targetIndex] = 0;
         enqueue(targetIndex);
     }
