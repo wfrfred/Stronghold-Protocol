@@ -5,8 +5,8 @@ import type {
     BattlefieldRuntimeOptions,
 } from "./contract.js";
 import type { BattlefieldMap } from "./map/map.js";
-import type { NavigationMaps } from "./navigation/map.js";
-import { projectStaticNavigationMap } from "./navigation/projection.js";
+import * as maps from "./map/navigation.js";
+import * as navigation from "./navigation/state.js";
 import { applyBattlefieldChanges } from "./storage/changes.js";
 import {
     createBattlefieldState,
@@ -16,7 +16,6 @@ import {
 
 export interface State<U extends Unit = Unit> extends BattlefieldState<U> {
     readonly map: BattlefieldMap;
-    readonly baseline: NavigationMaps;
 }
 
 export interface Result<U extends Unit = Unit> {
@@ -25,15 +24,14 @@ export interface Result<U extends Unit = Unit> {
 }
 
 export function create<U extends Unit = Unit>(options: BattlefieldRuntimeOptions): State<U> {
-    const baseline: NavigationMaps = {
-        WALK: projectStaticNavigationMap(options.map, "WALK", 0),
-        FLY: projectStaticNavigationMap(options.map, "FLY", 0),
-    };
+    const state = navigation.create({
+        WALK: maps.create(options.map, "WALK"),
+        FLY: maps.create(options.map, "FLY"),
+    });
 
     return {
         map: options.map,
-        baseline,
-        ...createBattlefieldState<U>(options.map, baseline),
+        ...createBattlefieldState<U>(options.map, state),
     };
 }
 
@@ -44,17 +42,17 @@ export function transition<U extends Unit>(
     const applied = applyBattlefieldChanges<U>(previous, changes);
     const settled = settleBattlefieldState<U>(
         previous.map,
-        previous.baseline,
         previous,
         applied.content,
         applied.dependencies,
     );
 
     return {
-        state:
-            settled.state === previous
-                ? previous
-                : { map: previous.map, baseline: previous.baseline, ...settled.state },
+        state: settled.state === previous ? previous : { map: previous.map, ...settled.state },
         facts: { ...applied.facts, ...settled.facts },
     };
+}
+
+export function setNavigation<U extends Unit>(state: State<U>, next: navigation.State): State<U> {
+    return state.navigation === next ? state : { ...state, navigation: next };
 }

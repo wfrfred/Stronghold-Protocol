@@ -264,9 +264,9 @@ test('projectile storage: rejected edits preserve input facts and navigation map
   const changed = replaceProjectile(initial, { ...projectile, position: [1, 0] });
   assert.throws(() => changed.battlefield.projectiles.remove(999), /unknown projectile/);
   assert.strictEqual(findProjectile(initial, 0), projectile);
-  assert.strictEqual(changed.battlefield.navigationMaps, initial.battlefield.navigationMaps);
+  assert.strictEqual(changed.battlefield.navigation, initial.battlefield.navigation);
   assert.strictEqual(changed.battlefield.spatial, initial.battlefield.spatial);
-  assert.strictEqual(transition(initial.battlefield, []).state.navigationMaps, initial.battlefield.navigationMaps);
+  assert.strictEqual(transition(initial.battlefield, []).state.navigation, initial.battlefield.navigation);
 });
 
 test('projectile definitions: shared identity needs no registration and each launch initializes its own state', () => {

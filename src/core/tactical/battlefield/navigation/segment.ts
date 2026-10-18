@@ -1,114 +1,102 @@
-import { World, type TilePosition, type WorldPosition } from "../../geometry/coordinate.js";
-import { NavigationMap, type NavigationCell } from "./map.js";
+import type { TilePosition } from "../../geometry/coordinate.js";
+import { Direction } from "../../geometry/direction.js";
+import type { Node } from "./field.js";
+import type { Map } from "./map.js";
 
-export function navigationSegmentCost(
-    map: NavigationMap,
-    from: WorldPosition,
-    to: WorldPosition,
-    acceptCell: (cell: NavigationCell, position: TilePosition) => boolean = () => true,
-): number | null {
-    let [row, col] = World.toTile(from);
-    const [endRow, endCol] = World.toTile(to);
+export function canSmooth(
+    map: Map,
+    nodes: readonly (Node | null)[],
+    from: TilePosition,
+    to: TilePosition,
+): boolean {
+    const steep = Math.abs(to[0] - from[0]) > Math.abs(to[1] - from[1]);
+    let [x0, y0]: TilePosition = steep ? from : [from[1], from[0]];
+    let [x1, y1]: TilePosition = steep ? to : [to[1], to[0]];
+    const reversed = x0 > x1;
 
-    const clear = (row: number, col: number): boolean => {
-        const cell = NavigationMap.get(map, [row, col]);
+    if (reversed) {
+        [x0, x1] = [x1, x0];
+        [y0, y1] = [y1, y0];
+    }
 
-        return cell !== undefined && cell.passable && acceptCell(cell, [row, col]);
+    const dx = x1 - x0;
+    const dy = Math.abs(y1 - y0);
+    const step = y0 < y1 ? 1 : -1;
+    let major: Direction = steep ? "UP" : "RIGHT";
+    let minor: Direction;
+
+    if (steep) {
+        minor = step > 0 ? "RIGHT" : "LEFT";
+    } else {
+        minor = step > 0 ? "UP" : "DOWN";
+    }
+
+    if (reversed) {
+        major = Direction.opposite(major);
+        minor = Direction.opposite(minor);
+    }
+
+    const position = (x: number, y: number): TilePosition => (steep ? [x, y] : [y, x]);
+
+    const clear = (position: TilePosition): boolean => {
+        const cell = map.get(position);
+
+        return (
+            cell !== undefined &&
+            nodes[position[0] * map.columns + position[1]] !== null &&
+            cell.passable &&
+            cell.cost < 1000
+        );
     };
 
-    if (!clear(row, col) || !clear(endRow, endCol)) {
-        return null;
-    }
+    const allows = (position: TilePosition, direction: Direction): boolean =>
+        map.get(position)?.departures[direction] === true;
 
-    const dx = to[0] - from[0];
-    const dy = to[1] - from[1];
-    const length = Math.abs(dx) + Math.abs(dy);
-    const rowStep = Math.sign(dy);
-    const colStep = Math.sign(dx);
-    const rowDirection = rowStep > 0 ? "UP" : "DOWN";
-    const colDirection = colStep > 0 ? "RIGHT" : "LEFT";
-    let time = 0;
-    let cost = 0;
-
-    while (row !== endRow || col !== endCol) {
-        const rowTime = row === endRow ? Infinity : (row + rowStep * 0.5 - from[1]) / dy;
-        const colTime = col === endCol ? Infinity : (col + colStep * 0.5 - from[0]) / dx;
-        const crossRow = rowTime <= colTime || Math.abs(rowTime - colTime) <= Number.EPSILON;
-        const crossCol = colTime <= rowTime || Math.abs(rowTime - colTime) <= Number.EPSILON;
-        const nextTime = Math.min(1, Math.max(time, Math.min(rowTime, colTime)));
-        cost += (nextTime - time) * length * NavigationMap.get(map, [row, col])!.moveCost;
-        time = nextTime;
-
-        if (crossRow && !NavigationMap.canDepart(map, [row, col], rowDirection)) {
-            return null;
-        }
-        if (crossCol && !NavigationMap.canDepart(map, [row, col], colDirection)) {
-            return null;
-        }
-        if (
-            crossRow &&
-            crossCol &&
-            (!clear(row + rowStep, col) ||
-                !clear(row, col + colStep) ||
-                !NavigationMap.canDepart(map, [row + rowStep, col], colDirection) ||
-                !NavigationMap.canDepart(map, [row, col + colStep], rowDirection))
-        ) {
-            return null;
-        }
-
-        if (crossRow) {
-            row += rowStep;
-        }
-        if (crossCol) {
-            col += colStep;
-        }
-        if (!clear(row, col)) {
-            return null;
-        }
-    }
-
-    return cost + (1 - time) * length * NavigationMap.get(map, [row, col])!.moveCost;
-}
-
-export function canTraverseNavigationSegment(
-    map: NavigationMap,
-    from: WorldPosition,
-    to: WorldPosition,
-): boolean {
-    return navigationSegmentCost(map, from, to) !== null;
-}
-
-export function canTraverseNavigationRecoverySegment(
-    map: NavigationMap,
-    from: WorldPosition,
-    to: WorldPosition,
-): boolean {
-    const [minimum, maximum] = NavigationMap.bounds(map);
-    const delta = World.difference(to, from);
-    let enter = 0;
-    let exit = 1;
-
-    for (const axis of [0, 1] as const) {
-        if (delta[axis] === 0) {
-            if (from[axis] < minimum[axis] || from[axis] > maximum[axis]) {
-                return true;
+    if (dy <= 1) {
+        for (let row = Math.min(from[0], to[0]); row <= Math.max(from[0], to[0]); row++) {
+            for (let col = Math.min(from[1], to[1]); col <= Math.max(from[1], to[1]); col++) {
+                if (!clear([row, col])) {
+                    return false;
+                }
             }
-        } else {
-            const first = (minimum[axis] - from[axis]) / delta[axis];
-            const last = (maximum[axis] - from[axis]) / delta[axis];
-            enter = Math.max(enter, Math.min(first, last));
-            exit = Math.min(exit, Math.max(first, last));
         }
     }
 
-    if (enter > exit) {
-        return true;
+    let error = -dx;
+    let y = y0;
+
+    for (let x = x0; x <= x1; x++) {
+        if (!clear(position(x, y)) || !allows(position(x, y), major)) {
+            return false;
+        }
+
+        error += 2 * dy;
+
+        if (x < x1 && error >= 0) {
+            if (!clear(position(x, y + step)) || !clear(position(x + 1, y))) {
+                return false;
+            }
+
+            if (reversed) {
+                if (
+                    !allows(position(x + 1, y + step), minor) ||
+                    !allows(position(x, y + step), minor) ||
+                    !allows(position(x + 1, y), major)
+                ) {
+                    return false;
+                }
+            } else if (
+                !allows(position(x, y), minor) ||
+                !allows(position(x + 1, y), minor) ||
+                !allows(position(x, y + step), major)
+            ) {
+                return false;
+            }
+
+            y += step;
+            error -= 2 * dx;
+        }
     }
 
-    const clipped = (time: number): WorldPosition => [
-        Math.max(minimum[0], Math.min(maximum[0], from[0] + delta[0] * time)),
-        Math.max(minimum[1], Math.min(maximum[1], from[1] + delta[1] * time)),
-    ];
-
-    return canTraverseNavigationSegment(map, clipped(enter), clipped(exit));
+    return true;
 }

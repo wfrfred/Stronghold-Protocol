@@ -133,7 +133,6 @@ export function createTacticalContentDemo(
             { definition: guard, position: [8, 3] },
         ],
         initialMechanisms: [],
-        initialNavigationModifiers: [],
         predefines: [],
         maxTicks: 80 * TICKS_PER_SECOND,
         routeMoveMultiplier: 1,

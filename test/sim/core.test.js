@@ -20,7 +20,7 @@ import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/m
 import { create as createFieldState, transition as transitionBattlefield } from '../../dist/core/tactical/battlefield/state.js';
 import { view as viewBattlefield } from '../../dist/core/tactical/battlefield/view.js';
 import { createMechanismDefinition } from '../../dist/core/tactical/battlefield/mechanism.js';
-import { createNavigationModifierDefinition, createNavigationModifier } from '../../dist/core/tactical/battlefield/navigation/modifier.js';
+
 import { hasSpatialPresence, isSpatiallyPresent } from '../../dist/core/tactical/unit/capability/presence/capability.js';
 import { initialize } from "../helpers/unit.js";
 import { initialize as initializeUnit } from "../../dist/core/tactical/unit/initialize.js";
@@ -42,7 +42,7 @@ import { projectUnitsByTile } from '../../dist/core/tactical/battlefield/storage
 import { initialize as createLocomotionState, createRoutedLocomotionState, hasLocomotion, hasRoutedLocomotion } from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
 import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
 import { createRouteState, createRouteTiming } from '../../dist/core/tactical/unit/capability/locomotion/route/state.js';
-import { createNavigationState } from '../../dist/core/tactical/battlefield/navigation/state.js';
+import { create as createNavigationState } from '../../dist/core/tactical/unit/capability/locomotion/tracking.js';
 import { createUnitPlacementDefinition, instantiateUnitPlacement } from '../../dist/core/tactical/battle/creation/placement.js';
 import { createDefinition as createDeployableDefinition } from '../../dist/core/tactical/unit/capability/deployable/capability.js';
 import { createDefinition as createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/tile-binding/capability.js';
@@ -261,13 +261,7 @@ const presenceUnit = (id, position) => ({
   vitality: initializeVitalityState(fixtureBattle(0), { maxHp:100, defense: 0, resistance: 0 }).value, spatialPresence: { present: true },
 });
 
-const presenceNavigationModifier = (id, source, region, costFloor = 1000) => createNavigationModifier({
-  id, source, region,
-  definition: createNavigationModifierDefinition({
-    id: `presence_effect_${id}`, WALK: { denyPassage: false, deniedDepartures: [], costFloor }, FLY: null,
-  }),
-  active: true, expiresAtTick: null,
-});
+
 
 test('core spatial presence preserves earlier unit values while removing only spatial membership', () => {
   let runtime = presenceBattlefield();
@@ -277,7 +271,7 @@ test('core spatial presence preserves earlier unit values while removing only sp
   assert.equal(hasSpatialPresence(bare), false);
   assert.equal(isSpatiallyPresent(bare), true);
   runtime = transitionBattlefield(runtime, [{ type: 'REGISTER_UNIT', unit }, { type: 'REGISTER_UNIT', unit: bare }]).state;
-  const baseline = viewBattlefield(runtime).navigationMaps;
+  const baseline = viewBattlefield(runtime).navigation;
   const hidden = { ...viewBattlefield(runtime).getUnit(1), spatialPresence: { present: false } };
   assert.equal(viewBattlefield(runtime).getUnit(1).spatialPresence.present, true);
   const result = transitionBattlefield(runtime, [{ type: 'UPDATE_UNIT', unit: hidden }]);
@@ -287,7 +281,7 @@ test('core spatial presence preserves earlier unit values while removing only sp
   assert.deepEqual(viewBattlefield(runtime).unitsAt([0, 2]).map(unit => unit.id), [2]);
   assert.equal(viewBattlefield(runtime).getUnit(1).definition, hidden.definition);
   assert.equal(viewBattlefield(runtime).getUnit(1).vitality.hp, 100);
-  assert.equal(viewBattlefield(runtime).navigationMaps, baseline);
+  assert.equal(viewBattlefield(runtime).navigation, baseline);
   const restored = { ...viewBattlefield(runtime).getUnit(1), spatialPresence: { present: true } };
   assert.equal(viewBattlefield(runtime).getUnit(1).spatialPresence.present, false);
   runtime = transitionBattlefield(runtime, [{ type: 'UPDATE_UNIT', unit: restored }]).state;
@@ -321,75 +315,22 @@ test('core removal facts share the latest unit while updates preserve retained b
   assert.equal(removed.facts.removedUnits[0].unit.vitality.hp, 20);
 });
 
-test('core hidden navigation modifier sources and anchors suspend contributions without removing effects', () => {
-  let runtime = presenceBattlefield();
-  const source = presenceUnit(1, [0, 0]), anchor = presenceUnit(2, [2, 0]);
-  const bare = { effects:Effects.empty(), id: 3, definition: Object.freeze({ id: 'bare' }), position: Object.freeze([4, 0]) };
-  const fixed = position => ({ type: 'FIXED', position, range: [[0, 0]], direction: 'RIGHT' });
-  runtime = transitionBattlefield(runtime, [
-    { type: 'REGISTER_UNIT', unit: source }, { type: 'REGISTER_UNIT', unit: anchor },
-    { type: 'REGISTER_UNIT', unit: bare },
-    { type: 'REGISTER_MECHANISM', mechanism: { id: 1, definition: createMechanismDefinition({ id: 'presence_mechanism' }), active: true } },
-    { type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: presenceNavigationModifier(1, { type: 'UNIT', unitId: 1 }, fixed([0, 1])) },
-    { type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: presenceNavigationModifier(2, { type: 'MECHANISM', mechanismId: 1 },
-      { type: 'FOLLOW_UNIT', unitId: 2, range: [[0, 0]], direction: 'RIGHT' }) },
-    { type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: presenceNavigationModifier(3, { type: 'UNIT', unitId: 3 }, fixed([0, 4]), 2000) },
-  ]).state;
-  const fly = viewBattlefield(runtime).navigationMaps.FLY;
-  assert.deepEqual(viewBattlefield(runtime).navigationMaps.WALK.cells.map(cell => cell.moveCost), [1, 1000, 1000, 1, 2000]);
-  const hiddenSource = { ...source, spatialPresence: { present: false } };
-  const hiddenAnchor = { ...anchor, spatialPresence: { present: false } };
-  const hidden = transitionBattlefield(runtime, [{ type: 'UPDATE_UNIT', unit: hiddenSource }, { type: 'UPDATE_UNIT', unit: hiddenAnchor }]);
-    runtime = hidden.state;
-  assert.deepEqual(hidden.facts.removedNavigationModifiers, []);
-  assert.deepEqual(hidden.facts.changedNavigationModes, ['WALK']);
-  assert.deepEqual(viewBattlefield(runtime).navigationModifierIds, [1, 2, 3]);
-  assert.equal(viewBattlefield(runtime).getNavigationModifier(1).active, true);
-  assert.deepEqual(viewBattlefield(runtime).navigationModifiersFrom({ type: 'UNIT', unitId: 1 }), [1]);
-  assert.deepEqual(viewBattlefield(runtime).navigationModifiersFollowing(2), [2]);
-  assert.deepEqual(viewBattlefield(runtime).navigationModifiersAt([0, 1]), []);
-  assert.deepEqual(viewBattlefield(runtime).navigationModifiersAt([0, 2]), []);
-  assert.deepEqual(viewBattlefield(runtime).navigationMaps.WALK.cells.map(cell => cell.moveCost), [1, 1, 1, 1, 2000]);
-  const dormant = viewBattlefield(runtime).navigationMaps;
-  runtime = transitionBattlefield(runtime, [{ type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 2, position: Object.freeze([3, 0]) }]).state;
-  assert.equal(viewBattlefield(runtime).navigationMaps, dormant);
-  assert.deepEqual(viewBattlefield(runtime).unitsAt([0, 3]), []);
-  const movedAnchor = { ...viewBattlefield(runtime).getUnit(2), spatialPresence: { present: true } };
-  runtime = transitionBattlefield(runtime, [{ type: 'UPDATE_UNIT', unit: source }, { type: 'UPDATE_UNIT', unit: movedAnchor }]).state;
-  assert.deepEqual(viewBattlefield(runtime).navigationModifiersAt([0, 3]), [2]);
-  assert.deepEqual(viewBattlefield(runtime).unitsAt([0, 3]).map(unit => unit.id), [2]);
-  assert.deepEqual(viewBattlefield(runtime).navigationMaps.WALK.cells.map(cell => cell.moveCost), [1, 1000, 1, 1000, 2000]);
-  assert.equal(viewBattlefield(runtime).navigationMaps.FLY, fly);
-  runtime = transitionBattlefield(runtime, [{ type: 'SET_MECHANISM_ACTIVE', mechanismId: 1, active: false }]).state;
-  const inactive = viewBattlefield(runtime).navigationMaps;
-  runtime = transitionBattlefield(runtime, [{ type: 'UPDATE_UNIT', unit: { ...movedAnchor, spatialPresence: { present: false } } }]).state;
-  runtime = transitionBattlefield(runtime, [{ type: 'UPDATE_UNIT', unit: movedAnchor }]).state;
-  assert.equal(viewBattlefield(runtime).navigationMaps, inactive);
-  assert.deepEqual(viewBattlefield(runtime).navigationModifiersAt([0, 3]), []);
-});
+
 
 test('core presence transitions preserve the original state when later settlement fails', () => {
-  let runtime = presenceBattlefield();
   const unit = presenceUnit(1, [2, 0]);
-  runtime = transitionBattlefield(runtime, [
-    { type: 'REGISTER_UNIT', unit },
-    { type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: presenceNavigationModifier(1, { type: 'UNIT', unitId: 1 },
-      { type: 'FOLLOW_UNIT', unitId: 1, range: [[0, 0]], direction: 'RIGHT' }) },
-  ]).state;
-  const maps = viewBattlefield(runtime).navigationMaps;
+  const runtime = transitionBattlefield(presenceBattlefield(), [{ type: 'REGISTER_UNIT', unit }]).state;
+  const navigation = viewBattlefield(runtime).navigation;
   assert.throws(() => {
-    let working = runtime;
-    const hidden = { ...viewBattlefield(working).getUnit(1), spatialPresence: { present: false } };
-    working = transitionBattlefield(working, [{ type: 'UPDATE_UNIT', unit: hidden }]).state;
+    const hidden = { ...unit, spatialPresence: { present: false } };
+    const working = transitionBattlefield(runtime, [{ type: 'UPDATE_UNIT', unit: hidden }]).state;
     assert.deepEqual(viewBattlefield(working).unitsAt([0, 2]), []);
-    assert.deepEqual(viewBattlefield(working).navigationModifiersAt([0, 2]), []);
-    assert.notEqual(viewBattlefield(working).navigationMaps, maps);
+    assert.equal(working.navigation, navigation);
     throw new Error('abort presence');
   }, /abort presence/);
-  assert.equal(viewBattlefield(runtime).navigationMaps, maps);
+  assert.equal(runtime.navigation, navigation);
   assert.equal(viewBattlefield(runtime).getUnit(1).spatialPresence.present, true);
   assert.deepEqual(viewBattlefield(runtime).unitsAt([0, 2]).map(unit => unit.id), [1]);
-  assert.deepEqual(viewBattlefield(runtime).navigationModifiersAt([0, 2]), [1]);
 });
 
 test('core placement applies explicit claims to a declared occupancy capability', () => {
@@ -764,7 +705,7 @@ test('core unit updates preserve definition identity and fail atomically while p
   let runtime = presenceBattlefield();
   const unit = initialize({ id: 1, definition: catalogDefinition(), position: [2, 0] });
   runtime = transitionBattlefield(runtime, [{ type: 'REGISTER_UNIT', unit }]).state;
-  const maps = viewBattlefield(runtime).navigationMaps;
+  const maps = viewBattlefield(runtime).navigation;
   for (const invalid of [{ ...unit, definition: Object.freeze({ ...unit.definition }) }]) {
     assert.throws(() => transitionBattlefield(runtime, [
       { type: 'SET_POSITION_AND_RELEASE_BLOCKING', unitId: 1, position: [3, 0] },
@@ -772,7 +713,7 @@ test('core unit updates preserve definition identity and fail atomically while p
     ]));
     assert.deepEqual(viewBattlefield(runtime).getUnit(1).position, [2, 0]);
     assert.deepEqual(viewBattlefield(runtime).unitsAt([0, 2]).map(value => value.id), [1]);
-    assert.equal(viewBattlefield(runtime).navigationMaps, maps);
+    assert.equal(viewBattlefield(runtime).navigation, maps);
   }
 
   const bare = initialize({ id: 2, definition: Object.freeze({ id: 'bare' }), position: [0, 0] });
@@ -917,7 +858,7 @@ const requiredPlacement = createUnitPlacementDefinition({
 const requiredPlaced = instantiateUnitPlacement(battleState, requiredPlacement).value;
 requiredPlaced.unit.occupancy.claims;
 const requiredOccupancy: Occupancy = requiredPlaced.unit;
-type NormalizedPlacementFields = Assert<Equal<keyof typeof requiredPlacement, 'definition' | 'position' | 'claims' | 'navigationModifiers' | 'effects'>>;
+type NormalizedPlacementFields = Assert<Equal<keyof typeof requiredPlacement, 'definition' | 'position' | 'claims' | 'effects'>>;
 const ordinaryLocomotion: LocomotionState = enemy.locomotion;
 declare const guarded: Unit & {
   readonly definition: ImmutableData<EnemyProbe>;
@@ -935,7 +876,7 @@ if (hasRoutedLocomotion(guarded)) {
 }
 const battlefield = createBattlefieldState({ map: battlefieldMap });
 const battlefieldView: BattlefieldView = view(battlefield);
-type RuleCache = Assert<Equal<Extract<keyof BattlefieldView['fieldCache'], 'invalidate' | 'clear'>, never>>;
+type HiddenFieldCache = Assert<Equal<Extract<keyof BattlefieldView, 'fieldCache' | 'navigationMaps'>, never>>;
 const projectileResult = launchProjectile(battleState, projectileDefinition, projectileInput, 0);
 type ProjectileIdentity = Assert<Equal<typeof projectileResult.value, Ref<Projectile<{ readonly charges: number }>>>>;
 type ProjectileState = Assert<Equal<typeof projectileResult.state, BattleState>>;
@@ -1014,7 +955,7 @@ test('core deployment uses buildability, side and terrain independently of navig
       ? { type: 'ALLOWED', supportUnitId: null }
       : { type: 'DENIED', reason: 'BUILDABLE_TYPE' });
   }
-  assert.equal(viewBattlefield(runtime).navigationMaps.WALK.cells[2].passable, false);
+  assert.equal(viewBattlefield(runtime).navigation.baseline.WALK.cells[2].passable, false);
   for (const [column, reason] of [[3, 'BUILDABLE_TYPE'], [4, 'PLAYER_SIDE'], [5, 'PLAYER_SIDE'],
     [6, 'BUILDABLE_TYPE'], [7, 'TERRAIN'], [8, 'OUTSIDE_MAP'], [-1, 'OUTSIDE_MAP']]) {
     assert.deepEqual(query('ALL', column), { type: 'DENIED', reason });
@@ -1112,37 +1053,4 @@ test('core support allows a platform and occupant to coexist without treating th
   assert.deepEqual(viewBattlefield(runtime).supportRelations, []);
   assert.equal(viewBattlefield(runtime).getUnit(2).id, 2);
   assert.deepEqual(viewBattlefield(runtime).occupancyAt([0, 1], 'DEPLOYMENT'), [2]);
-});
-
-test('core navigation definitions are shared while modifier updates retain earlier views', () => {
-  const definition = createNavigationModifierDefinition({
-    id: 'shared-navigation', WALK: { denyPassage: false, deniedDepartures: ['LEFT'], costFloor: 1000 }, FLY: null,
-  });
-  const placement = createUnitPlacementDefinition({ definition: { id: 'source' }, position: [0, 0],
-    navigationModifiers: [{ definition, range: [[0, 1]], direction: 'RIGHT' }] });
-  let runtime = presenceBattlefield();
-  const modifier = { ...presenceNavigationModifier(1, { type: 'UNIT', unitId: 1 },
-    { type: 'FIXED', position: [0, 1], range: [[0, 0]], direction: 'RIGHT' }), definition };
-  runtime = transitionBattlefield(runtime, [{ type: 'REGISTER_UNIT', unit: presenceUnit(1, [0, 0]) },
-    { type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: modifier }]).state;
-  const original = viewBattlefield(runtime);
-  const maps = original.navigationMaps;
-  assert.equal(placement.navigationModifiers[0].definition, definition);
-  assert.equal(original.getNavigationModifier(1), modifier);
-  assert.equal(original.getNavigationModifier(1).definition, definition);
-  assert.equal(maps.WALK.cells[1].passable, true);
-  assert.equal(maps.WALK.cells[1].moveCost, 1000);
-
-  const restricted = createNavigationModifierDefinition({ ...definition,
-    WALK: { ...definition.WALK, denyPassage: true, deniedDepartures: ['LEFT', 'RIGHT'] },
-  });
-  const replacement = { ...modifier, definition: restricted };
-  runtime = transitionBattlefield(runtime, [{ type: 'REMOVE_NAVIGATION_MODIFIER', navigationModifierId: 1 },
-    { type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: replacement }]).state;
-  assert.equal(viewBattlefield(runtime).getNavigationModifier(1), replacement);
-  assert.equal(viewBattlefield(runtime).navigationMaps.WALK.cells[1].passable, false);
-  assert.equal(original.getNavigationModifier(1), modifier);
-  assert.equal(original.navigationMaps, maps);
-  assert.equal(maps.WALK.cells[1].passable, true);
-  assert.deepEqual(definition.WALK.deniedDepartures, ['LEFT']);
 });

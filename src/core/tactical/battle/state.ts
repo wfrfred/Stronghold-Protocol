@@ -25,7 +25,7 @@ const defaultExecution: BattleExecutionState = {
     nextUnitId: 0,
     nextNavigationRequestId: 0,
     nextMechanismId: 0,
-    nextNavigationModifierId: 0,
+    nextOverlayId: 0,
     nextProjectileId: 0,
 };
 

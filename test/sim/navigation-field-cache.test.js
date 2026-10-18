@@ -1,126 +1,120 @@
-import { test } from "node:test";
-import assert from "node:assert/strict";
-import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
-import {
-    advanceBattlefield,
-    battlefieldView,
-    createBattleState,
-} from "../../dist/core/tactical/battle/state.js";
-import { create as createBattlefield } from "../../dist/core/tactical/battlefield/state.js";
-import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
-import { createNavigationModifierDefinition } from "../../dist/core/tactical/battlefield/navigation/modifier.js";
-import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
-import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { Map } from '../../dist/core/tactical/battlefield/navigation/map.js';
+import { create as createOverlay } from '../../dist/core/tactical/battlefield/navigation/overlay.js';
+import { create, setOverlay, removeOverlay, nextPoint } from '../../dist/core/tactical/battlefield/navigation/state.js';
 
-function map() {
-    return createBattlefieldMap(1, 4, Array.from({ length: 4 }, () => ({
-        heightType: "LOWLAND", buildableType: "ALL", passableMask: "ALL",
-        playerSideMask: "ALL", terrain: "NORMAL", mechanism: null,
-    })));
-}
-
-const request = { targetTile: [0, 3], options: { allowDiagonalMove: true } };
-
-function field(state, query = request) {
-    const view = battlefieldView(state);
-    return view.fieldCache.get(view.navigationMaps.WALK, query);
-}
-
-test("functional battlefield views reuse fields after unrelated changes and across Tick state creation", () => {
-    const initial = createBattleState(createBattlefield({ map: map() }));
-    const before = JSON.stringify(initial);
-    const first = field(initial);
-    assert.equal(field(initial), first, "new Views reuse the same field");
-    assert.equal(JSON.stringify(initial), before, "cache queries do not alter authority state");
-
-    const changed = advanceBattlefield(initial, [{
-        type: "REGISTER_MECHANISM",
-        mechanism: { id: 0, definition: { id: "unrelated" }, active: true },
-    }]);
-    assert.notEqual(changed.battlefield, initial.battlefield);
-    assert.equal(changed.battlefield.navigationMaps.WALK, initial.battlefield.navigationMaps.WALK);
-    assert.equal(field(changed), first);
-    const nextTick = createBattleState(changed.battlefield, changed.execution, changed.actions, 1);
-    assert.equal(field(nextTick), first, "a new Tick retains geometry memoization");
-    assert.equal(JSON.stringify(initial), before);
-
-    assert.notEqual(field(initial, { ...request, targetTile: [0, 2] }), first);
-    assert.notEqual(field(initial, { ...request, options: { allowDiagonalMove: false } }), first);
+const cell = (overrides = {}) => ({
+  passable: true, cost: 1,
+  departures: { UP: true, RIGHT: true, DOWN: true, LEFT: true },
+  ...overrides,
+});
+const baseline = (rows = 3, columns = 4, overrides = {}) => {
+  const cells = Array.from({ length: rows * columns }, (_, index) => cell(overrides[index]));
+  const map = new Map(rows, columns, cells);
+  return { WALK: map, FLY: map };
+};
+const overlay = (id, cells, overrides = {}) => createOverlay({
+  id, cells, denyPassage: false, denyDepartures: [], ...overrides,
 });
 
-test("functional views use changed navigation content while retained Views keep their cached fields", () => {
-    const initial = createBattleState(createBattlefield({ map: map() }));
-    const originalView = battlefieldView(initial);
-    const original = field(initial);
-    const before = JSON.stringify(initial);
-    const changed = advanceBattlefield(initial, [
-        { type: "REGISTER_MECHANISM", mechanism: { id: 0, definition: { id: "cost-source" }, active: true } },
-        {
-            type: "ADD_NAVIGATION_MODIFIER",
-            navigationModifier: {
-                id: 0,
-                definition: createNavigationModifierDefinition({
-                    id: "cost", WALK: { denyPassage: false, deniedDepartures: [], costFloor: 10 }, FLY: null,
-                }),
-                source: { type: "MECHANISM", mechanismId: 0 },
-                active: true, expiresAtTick: null,
-                region: { type: "FIXED", position: [0, 1], range: [[0, 0]], direction: "RIGHT" },
-            },
-        },
-    ]);
-    const restricted = field(changed);
-    assert.notEqual(restricted, original);
-    assert.equal(original.nodes[0].distance, 3);
-    assert.equal(restricted.nodes[0].distance, 12);
-    assert.equal(field(changed), restricted);
-    assert.equal(originalView.fieldCache.get(originalView.navigationMaps.WALK, request), original);
-    assert.equal(JSON.stringify(initial), before);
-    assert.equal(Object.isFrozen(original), true);
-    assert.throws(() => { original.nodes[0].distance = 0; }, TypeError);
+test('navigation queries preserve authority and return the same values with cold and warm caches', () => {
+  const state = create(baseline());
+  const before = JSON.stringify(state);
+  const cases = [
+    ['WALK', [0, 0], [3.2, 2.1]],
+    ['WALK', [0.4, 0.4], [3.2, 2.1]],
+    ['WALK', [3.1, 2.1], [3.2, 2.1]],
+    ['FLY', [0, 0], [3.2, 2.1]],
+    ['WALK', [-2, 0], [3, 2]],
+  ];
+  const cold = cases.map(args => nextPoint(state, ...args));
+  for (let pass = 0; pass < 5; pass++) {
+    for (let index = cases.length - 1; index >= 0; index--) {
+      assert.deepEqual(nextPoint(state, ...cases[index]), cold[index]);
+    }
+  }
+  assert.equal(JSON.stringify(state), before);
+  const recreated = create(baseline());
+  for (let index = 0; index < cases.length; index++) assert.deepEqual(nextPoint(recreated, ...cases[index]), cold[index]);
 });
 
-test("BattleRuntime movement reuses the field for a second enemy spawned on a later Tick", () => {
-    const definition = createDefinition({
-        id: "cache-walker", vitality: { maxHp: 100, defense: 0, resistance: 0 },
-        locomotion: {
-            moveSpeedPerTick: 0.1,
-            steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 },
-        },
-    });
-    const route = createRouteDefinition({
-        pathMotionMode: "WALK", startPosition: [0, 0], endPosition: [0, 3],
-        spawnOffset: [0, 0], spawnRandomRange: [0, 0], checkpoints: [],
-        allowDiagonalMove: true, visitEveryTileCenter: false,
-        visitEveryNodeCenter: false, visitEveryCheckPoint: true,
-    });
-    const input = {
-        map: map(), initialUnits: [], initialMechanisms: [], initialNavigationModifiers: [],
-        predefines: [], maxTicks: 10, routeMoveMultiplier: 1, rngState: 1,
-        schedule: {
-            type: "TIMELINE",
-            spawns: [0, 1].map(tick => ({
-                tick, definition, route, alwaysCheckCurrentPoint: true, notCountInTotal: false,
-                timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 },
-            })),
-        },
-    };
-    const before = JSON.stringify(input);
-    const runtime = new BattleRuntime(input);
-    runtime.step();
-    const firstTick = runtime.snapshot();
-    const firstActivity = firstTick.units[0].locomotion.mainRoute.navigation.execution.activity;
-    assert.equal(firstActivity.type, "FOLLOWING");
-    const firstPath = firstActivity.path;
+test('overlay replacement and removal update navigation without changing retained snapshots', () => {
+  const original = create(baseline(1, 4));
+  const before = JSON.stringify(original);
+  const wall = overlay(7, [[0, 1]], { denyPassage: true });
+  const blocked = setOverlay(original, 'WALK', wall);
+  assert.deepEqual(nextPoint(original, 'WALK', [0, 0], [3.2, 0]), [3.2, 0]);
+  assert.equal(nextPoint(blocked, 'WALK', [0, 0], [3.2, 0]), null);
+  assert.deepEqual(nextPoint(blocked, 'FLY', [0, 0], [3.2, 0]), [3.2, 0]);
+  assert.equal(original.overlays.WALK.length, 0);
+  assert.equal(blocked.overlays.WALK.length, 1);
 
-    runtime.step();
-    const secondTick = runtime.snapshot();
-    assert.equal(secondTick.units.length, 2);
-    const secondActivity = secondTick.units[1].locomotion.mainRoute.navigation.execution.activity;
-    assert.equal(secondActivity.type, "FOLLOWING");
-    assert.notEqual(secondActivity.path.request.id, firstPath.request.id);
-    assert.equal(secondActivity.path.field, firstPath.field, "movement consumes the shared View cache");
-    assert.equal(secondTick.units[0].locomotion.mainRoute.navigation.execution.activity.path.field, firstPath.field);
-    assert.ok(secondTick.units[0].position[0] > firstTick.units[0].position[0]);
-    assert.equal(firstTick.tickIndex, 1);
-    assert.equal(JSON.stringify(input), before);
+  const moved = setOverlay(blocked, 'WALK', overlay(7, [[0, 0]], { denyPassage: true }));
+  assert.equal(moved.overlays.WALK.length, 1);
+  assert.equal(nextPoint(moved, 'WALK', [0, 0], [3.2, 0]), null);
+  assert.deepEqual(nextPoint(moved, 'WALK', [1, 0], [3.2, 0]), [3.2, 0]);
+  const restored = removeOverlay(moved, 'WALK', { id: 7 });
+  assert.equal(restored.overlays.WALK.length, 0);
+  assert.deepEqual(nextPoint(restored, 'WALK', [0, 0], [3.2, 0]), [3.2, 0]);
+  assert.equal(removeOverlay(restored, 'WALK', { id: 7 }), restored);
+  assert.equal(nextPoint(blocked, 'WALK', [0, 0], [3.2, 0]), null);
+  assert.equal(JSON.stringify(original), before);
+});
+
+test('navigation creation isolates input records and validates mode invariants', () => {
+  const input = baseline(1, 2);
+  const state = create(input);
+  input.WALK = new Map(1, 2, [cell({ passable: false }), cell()]);
+  assert.deepEqual(nextPoint(state, 'WALK', [0, 0], [1, 0]), [1, 0]);
+  assert.ok(Object.isFrozen(state) && Object.isFrozen(state.baseline) && Object.isFrozen(state.overlays));
+  assert.ok(Object.isFrozen(state.overlays.WALK) && Object.isFrozen(state.overlays.FLY));
+  assert.throws(() => create({ WALK: baseline(1, 2).WALK, FLY: baseline(2, 1).FLY }), RangeError);
+  assert.throws(() => create({ WALK: baseline(1, 2).WALK, FLY: new Map(1, 2, [cell({ cost: 2 }), cell()]) }), RangeError);
+  assert.throws(() => setOverlay(state, 'FLY', overlay(1, [[0, 0]], { cost: 2 })), RangeError);
+});
+
+test('overlay registration owns its input containers and keeps mode identity independent', () => {
+  const original = create(baseline(1, 3));
+  const cells = [[0, 1]];
+  const denyDepartures = [];
+  const input = { id: 4, cells, denyPassage: true, denyDepartures };
+  const walk = setOverlay(original, 'WALK', input);
+  const both = setOverlay(walk, 'FLY', { ...input, cells: [[0, 2]] });
+  cells[0][1] = 0;
+  denyDepartures.push('RIGHT');
+  assert.deepEqual(walk.overlays.WALK[0].cells, [[0, 1]]);
+  assert.deepEqual(walk.overlays.WALK[0].denyDepartures, []);
+  assert.equal(nextPoint(both, 'WALK', [0, 0], [2, 0]), null);
+  assert.equal(nextPoint(both, 'FLY', [0, 0], [2, 0]), null);
+  const removedWalk = removeOverlay(both, 'WALK', { id: 4 });
+  assert.deepEqual(nextPoint(removedWalk, 'WALK', [0, 0], [2, 0]), [2, 0]);
+  assert.equal(nextPoint(removedWalk, 'FLY', [0, 0], [2, 0]), null);
+  assert.equal(both.overlays.WALK.length, 1);
+});
+
+test('navigation rejects unavailable fields while leaving arrival checks to its consumer', () => {
+  const state = create(baseline(1, 3, { 1: { passable: false } }));
+  assert.equal(nextPoint(state, 'WALK', [-1, 0], [2, 0]), null);
+  assert.equal(nextPoint(state, 'WALK', [0, 0], [3, 0]), null);
+  assert.equal(nextPoint(state, 'WALK', [0, 0], [1, 0]), null);
+  assert.equal(nextPoint(state, 'WALK', [0, 0], [2, 0]), null);
+  assert.deepEqual(nextPoint(state, 'WALK', [2.1, 0], [2.1, 0]), [2.1, 0]);
+});
+
+test('navigation follows a tile field from noncenter positions and preserves the exact last target', () => {
+  const state = create(baseline(3, 4, { 5: { passable: false } }));
+  const target = [3.2, 2.15];
+  assert.deepEqual(nextPoint(state, 'WALK', [0.49, 0.49], target), nextPoint(state, 'WALK', [0, 0], target));
+  assert.deepEqual(nextPoint(state, 'WALK', [2, 2], target), target, 'a next pointer to the target tile uses the precise world target');
+  assert.deepEqual(nextPoint(state, 'WALK', [3.1, 2], target), target);
+});
+
+
+test('navigation does not replace a field successor with a world-segment fallback', () => {
+  const state = create(baseline(5, 6, {
+    14: { passable: false }, 15: { passable: false }, 19: { passable: false },
+  }));
+  assert.deepEqual(nextPoint(state, 'WALK', [3, 0], [5, 4]), [5, 4]);
+  assert.deepEqual(nextPoint(state, 'WALK', [2.51, 0.49], [5, 4]), [5, 4]);
 });

@@ -271,8 +271,7 @@ test("a failed Tick publishes neither preceding deployments nor Card, DP and ide
     const failure = new Error("entry failed");
     const runtime = new BattleRuntime({
         map, schedule: { type: "TIMELINE", spawns: [] },
-        initialUnits: [], predefines: [], initialMechanisms: [], initialNavigationModifiers: [],
-        maxTicks: 3, routeMoveMultiplier: 1, rngState: 1,
+        initialUnits: [], predefines: [], initialMechanisms: [], maxTicks: 3, routeMoveMultiplier: 1, rngState: 1,
         deployment: {
             definition: budget(),
             cards: [{ unit: definition() }, { unit: definition({ onEnter() { throw failure; } }) }],

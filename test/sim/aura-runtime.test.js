@@ -73,7 +73,6 @@ function input(host, overrides = {}) {
         schedule: { type: "TIMELINE", spawns: [spawn()] },
         predefines: [],
         initialMechanisms: [],
-        initialNavigationModifiers: [],
         maxTicks: 10,
         routeMoveMultiplier: 1,
         rngState: 17,
@@ -147,8 +146,7 @@ test("aura runtime: predefined, deployment and spawning join before the same tic
             type: "UNIT",
             definition: auraUnit(2).definition,
             position: [3, 0],
-            navigationModifiers: [],
-        },
+            },
     };
     const deployable = auraUnit(3, [0, 0], {
         occupancy: {}, deployable: createDeployableDefinition({ cost: 0, redeployTicks: 0, slots: 1, buildableType: "ALL" }),

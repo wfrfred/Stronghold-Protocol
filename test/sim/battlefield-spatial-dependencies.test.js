@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
-import { projectStaticNavigationMap } from '../../dist/core/tactical/battlefield/navigation/projection.js';
+import { create as createMap } from '../../dist/core/tactical/battlefield/map/navigation.js';
+import { create as createNavigation } from '../../dist/core/tactical/battlefield/navigation/state.js';
 import { updateBlockingRelations } from '../../dist/core/tactical/battlefield/blocking/relations.js';
 import { applyBattlefieldChanges } from '../../dist/core/tactical/battlefield/storage/changes.js';
 import {
@@ -12,7 +13,7 @@ import { initialize } from "../helpers/unit.js";
 import { createDefinition as createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/tile-binding/capability.js';
 
 function projectionFacts(state) {
-  return { ...state, projectiles: state.projectiles.values(), units: new Map([...state.units].map(([id, unit]) => [
+  return { ...state, navigation: { baseline: Object.fromEntries(Object.entries(state.navigation.baseline).map(([mode, map]) => [mode, { rows: map.rows, columns: map.columns, cells: map.cells }])), overlays: state.navigation.overlays }, projectiles: state.projectiles.values(), units: new Map([...state.units].map(([id, unit]) => [
     id, { ...unit, effects: unit.effects.toJSON() },
   ])) };
 }
@@ -22,12 +23,12 @@ function projectionHarness() {
     heightType: 'LOWLAND', buildableType: 'ALL', passableMask: 'ALL',
     playerSideMask: 'ALL', terrain: 'NORMAL', mechanism: null,
   })));
-  const baseline = Object.freeze({
-    WALK: projectStaticNavigationMap(map, 'WALK', 0),
-    FLY: projectStaticNavigationMap(map, 'FLY', 0),
+  const navigation = createNavigation({
+    WALK: createMap(map, 'WALK'),
+    FLY: createMap(map, 'FLY'),
   });
   const branches = [settleBattlefieldState, settleBattlefieldStateFully].map(settle => ({
-    settle, state: createBattlefieldState(map, baseline),
+    settle, state: createBattlefieldState(map, navigation),
   }));
   return {
     map,
@@ -38,7 +39,7 @@ function projectionHarness() {
         const snapshot = structuredClone(projectionFacts(previous));
         const batch = typeof changes === 'function' ? changes(previous) : changes;
         const applied = applyBattlefieldChanges(previous, batch);
-        const settled = branch.settle(map, baseline, previous, applied.content, applied.dependencies);
+        const settled = branch.settle(map, previous, applied.content, applied.dependencies);
         assert.deepEqual(projectionFacts(previous), snapshot, 'settlement must preserve the prior state');
         branch.state = settled.state;
         return { ...applied.facts, ...settled.facts };
@@ -100,7 +101,7 @@ for (const scenario of supportCases) {
       assert.equal(h.state.spatial.unitsByTile, previous.spatial.unitsByTile);
       assert.notEqual(h.state.spatial.occupancyBySlot, previous.spatial.occupancyBySlot);
     }
-    assert.equal(h.state.navigationMaps, previous.navigationMaps);
+    assert.equal(h.state.navigation, previous.navigation);
   });
 }
 

@@ -1,181 +1,86 @@
-import { assertNonnegativeSafeInteger, assertPositiveSafeInteger } from "../../../common/assert.js";
-import type { TilePosition, WorldPosition } from "../../geometry/coordinate.js";
+import { assertPositiveSafeInteger } from "../../../common/assert.js";
+import type { TilePosition } from "../../geometry/coordinate.js";
 import { DIRECTIONS, type Direction } from "../../geometry/direction.js";
-import { createNavigationContentHash } from "./hash.js";
 
-export type PathMotionMode = "WALK" | "FLY";
-
-export type NavigationRevision = number;
-
-export interface NavigationCell {
+export interface Cell {
     readonly passable: boolean;
-    readonly moveCost: number;
+    readonly cost: number;
     readonly departures: Readonly<Record<Direction, boolean>>;
 }
 
-export interface NavigationMap {
+export class Map {
     readonly rows: number;
     readonly columns: number;
-    readonly pathMotionMode: PathMotionMode;
-    readonly revision: NavigationRevision;
-    readonly contentHash: number;
-    readonly cells: readonly NavigationCell[];
-}
+    readonly cells: readonly Cell[];
 
-export type NavigationMaps = Readonly<Record<PathMotionMode, NavigationMap>>;
+    constructor(rows: number, columns: number, cells: readonly Cell[]) {
+        assertPositiveSafeInteger(rows, "navigation row count");
+        assertPositiveSafeInteger(columns, "navigation column count");
+        assertPositiveSafeInteger(rows * columns, "navigation cell count");
 
-export const PathMotionMode = {
-    is(value: unknown): value is PathMotionMode {
-        return value === "WALK" || value === "FLY";
-    },
-};
-
-const immutableMaps = new WeakSet<NavigationMap>();
-const contentComparisons = new WeakMap<NavigationMap, WeakMap<NavigationMap, boolean>>();
-
-function isImmutable(map: NavigationMap): boolean {
-    if (immutableMaps.has(map)) {
-        return true;
-    }
-
-    if (
-        !Object.isFrozen(map) ||
-        !Object.isFrozen(map.cells) ||
-        !map.cells.every((cell) => Object.isFrozen(cell) && Object.isFrozen(cell.departures))
-    ) {
-        return false;
-    }
-
-    immutableMaps.add(map);
-
-    return true;
-}
-
-export const NavigationMap = {
-    sameContent(left: NavigationMap, right: NavigationMap): boolean {
-        if (left === right) {
-            return true;
+        if (cells.length !== rows * columns) {
+            throw new RangeError("navigation cells must match map dimensions");
         }
 
-        if (
-            left.rows !== right.rows ||
-            left.columns !== right.columns ||
-            left.pathMotionMode !== right.pathMotionMode ||
-            left.cells.length !== right.cells.length ||
-            left.contentHash !== right.contentHash
-        ) {
-            return false;
-        }
+        const copied: Cell[] = [];
 
-        const comparisons = contentComparisons.get(left);
-        const cached = comparisons?.get(right);
+        for (let index = 0; index < cells.length; index++) {
+            if (!Object.hasOwn(cells, index)) {
+                throw new RangeError(`missing navigation cell at index ${index}`);
+            }
 
-        if (cached !== undefined) {
-            return cached;
-        }
+            const cell = cells[index]!;
 
-        const same = left.cells.every((cell, index) => {
-            const other = right.cells[index]!;
-
-            return (
-                cell === other ||
-                (cell.passable === other.passable &&
-                    cell.moveCost === other.moveCost &&
-                    DIRECTIONS.every(
-                        (direction) => cell.departures[direction] === other.departures[direction],
-                    ))
+            assertPositiveSafeInteger(cell.cost, `navigation cost at index ${index}`);
+            copied.push(
+                Object.freeze({
+                    passable: cell.passable,
+                    cost: cell.cost,
+                    departures: Object.freeze({
+                        UP: cell.departures.UP,
+                        RIGHT: cell.departures.RIGHT,
+                        DOWN: cell.departures.DOWN,
+                        LEFT: cell.departures.LEFT,
+                    }),
+                }),
             );
-        });
-
-        if (isImmutable(left) && isImmutable(right)) {
-            const remembered = comparisons ?? new WeakMap<NavigationMap, boolean>();
-
-            remembered.set(right, same);
-            contentComparisons.set(left, remembered);
         }
 
-        return same;
-    },
+        this.rows = rows;
+        this.columns = columns;
+        this.cells = Object.freeze(copied);
+        Object.freeze(this);
+    }
 
-    bounds(map: NavigationMap): readonly [min: WorldPosition, max: WorldPosition] {
-        const margin = Number.EPSILON * Math.max(map.rows, map.columns);
-
-        return [
-            [-0.5 + margin, -0.5 + margin],
-            [map.columns - 0.5 - margin, map.rows - 0.5 - margin],
-        ];
-    },
-
-    contains(map: NavigationMap, position: TilePosition): boolean {
+    contains(position: TilePosition): boolean {
         const [row, col] = position;
 
-        return row >= 0 && row < map.rows && col >= 0 && col < map.columns;
-    },
-
-    get(map: NavigationMap, position: TilePosition): NavigationCell | undefined {
-        if (!NavigationMap.contains(map, position)) {
-            return undefined;
-        }
-
-        return map.cells[position[0] * map.columns + position[1]];
-    },
-
-    canDepart(map: NavigationMap, position: TilePosition, direction: Direction): boolean {
-        const cell = NavigationMap.get(map, position);
-
-        return cell !== undefined && cell.passable && cell.departures[direction];
-    },
-};
-
-export function createNavigationMap(map: Omit<NavigationMap, "contentHash">): NavigationMap {
-    assertPositiveSafeInteger(map.rows, "navigation row count");
-    assertPositiveSafeInteger(map.columns, "navigation column count");
-
-    if (!Number.isSafeInteger(map.rows * map.columns) || map.rows * map.columns > 0xffff_ffff) {
-        throw new RangeError("invalid navigation map dimensions");
+        return row >= 0 && row < this.rows && col >= 0 && col < this.columns;
     }
 
-    assertNonnegativeSafeInteger(map.revision, "navigation revision");
-
-    if (map.cells.length !== map.rows * map.columns) {
-        throw new RangeError("navigation cells must match map dimensions");
+    get(position: TilePosition): Cell | undefined {
+        return this.contains(position)
+            ? this.cells[position[0] * this.columns + position[1]]
+            : undefined;
     }
 
-    const cells: NavigationCell[] = [];
+    equals(other: Map): boolean {
+        return (
+            this === other ||
+            (this.rows === other.rows &&
+                this.columns === other.columns &&
+                this.cells.every((cell, index) => {
+                    const compared = other.cells[index]!;
 
-    for (let index = 0; index < map.cells.length; index++) {
-        if (!Object.hasOwn(map.cells, index)) {
-            throw new RangeError(`missing navigation cell at index ${index}`);
-        }
-
-        const cell = map.cells[index]!;
-
-        assertPositiveSafeInteger(cell.moveCost, `navigation cost at index ${index}`);
-
-        if (map.pathMotionMode === "FLY" && cell.moveCost !== 1) {
-            throw new RangeError("FLY navigation costs must be 1");
-        }
-
-        cells.push(
-            Object.freeze({
-                passable: cell.passable,
-                moveCost: cell.moveCost,
-                departures: Object.freeze({
-                    UP: cell.departures.UP,
-                    RIGHT: cell.departures.RIGHT,
-                    DOWN: cell.departures.DOWN,
-                    LEFT: cell.departures.LEFT,
-                }),
-            }),
+                    return (
+                        cell.passable === compared.passable &&
+                        cell.cost === compared.cost &&
+                        DIRECTIONS.every(
+                            (direction) =>
+                                cell.departures[direction] === compared.departures[direction],
+                        )
+                    );
+                }))
         );
     }
-
-    return Object.freeze({
-        rows: map.rows,
-        columns: map.columns,
-        pathMotionMode: map.pathMotionMode,
-        revision: map.revision,
-        contentHash: createNavigationContentHash(map.rows, map.columns, map.pathMotionMode, cells),
-        cells: Object.freeze(cells),
-    });
 }

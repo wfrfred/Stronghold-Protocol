@@ -355,7 +355,6 @@ export function createLegacyCombatSpec(options: LegacyCombatOptions) {
         schedule: { type: "TIMELINE", spawns },
         predefines: [],
         initialMechanisms: [],
-        initialNavigationModifiers: [],
         maxTicks: options.maxTicks ?? 600,
         routeMoveMultiplier: 1,
         rngState: options.seed ?? 1,

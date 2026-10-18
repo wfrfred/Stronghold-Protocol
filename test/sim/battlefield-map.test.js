@@ -77,7 +77,7 @@ test('battlefield versions share a map whose nested data is isolated from caller
     assert.equal(branch.map.tiles[0].mechanism.params.damagePerTick, 10);
     assert.deepEqual(branch.map.markers[0].position, [0, 0]);
     assert.equal(branch.map.blockEdges[0].blockMask, 'WALK_ONLY');
-    assert.equal(branch.navigationMaps.WALK.cells[0].passable, true);
+    assert.equal(branch.navigation.baseline.WALK.cells[0].passable, true);
   }
   assert.throws(() => { map.tiles[0].passableMask = 'NONE'; }, TypeError);
   assert.throws(() => { map.tiles[0].mechanism.params.damagePerTick = 999; }, TypeError);

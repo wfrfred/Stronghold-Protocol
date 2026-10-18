@@ -1,3 +1,5 @@
+import { hash as navigationHash } from "../core/tactical/battlefield/navigation/hash.js";
+import { apply as applyOverlays } from "../core/tactical/battlefield/navigation/apply.js";
 import { BattleRuntime, type Command, type Event } from "../core/tactical/battle/runtime.js";
 import type { BattlefieldMap } from "../core/tactical/battlefield/map/map.js";
 import { TICKS_PER_SECOND } from "../core/tactical/tick.js";
@@ -536,7 +538,9 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
             mechanisms: snapshot.mechanisms.length,
             spawnedCount: snapshot.spawning.spawnedCount,
             completedRouteCount: snapshot.completedRouteCount,
-            walkRevision: runtime.navigationMaps.WALK.revision,
+            walkHash: navigationHash(
+                applyOverlays(runtime.navigation.baseline.WALK, runtime.navigation.overlays.WALK),
+            ),
             result: runtime.result,
             seed,
         }),

@@ -13,7 +13,8 @@ import {
 } from "../../dist/core/tactical/battle/state.js";
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
 import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
-import { projectStaticNavigationMap } from "../../dist/core/tactical/battlefield/navigation/projection.js";
+import { create as createMap } from "../../dist/core/tactical/battlefield/map/navigation.js";
+import { create as createNavigation } from "../../dist/core/tactical/battlefield/navigation/state.js";
 import { applyBattlefieldChanges } from "../../dist/core/tactical/battlefield/storage/changes.js";
 import { deriveBattlefieldDependencies } from "../../dist/core/tactical/battlefield/storage/dependencies.js";
 import {
@@ -214,13 +215,13 @@ function battlefield(units) {
         mechanism: null,
     });
     const map = createBattlefieldMap(1, 1, [tile]);
-    const baseline = {
-        WALK: projectStaticNavigationMap(map, "WALK", 0),
-        FLY: projectStaticNavigationMap(map, "FLY", 0),
-    };
+    const navigation = createNavigation({
+        WALK: createMap(map, "WALK"),
+        FLY: createMap(map, "FLY"),
+    });
     const branches = [settleBattlefieldState, settleBattlefieldStateFully].map((settle) => ({
         settle,
-        state: createBattlefieldState(map, baseline),
+        state: createBattlefieldState(map, navigation),
     }));
     const commit = (changes) => {
         const results = branches.map((branch) => {
@@ -234,7 +235,6 @@ function battlefield(units) {
             );
             const settled = branch.settle(
                 map,
-                baseline,
                 previous,
                 applied.content,
                 applied.dependencies,
@@ -409,7 +409,7 @@ test("blocking volume: equivalent contribution changes leave the blocking projec
     assert.equal(result.dependencies.blocking, false);
     assert.equal(h.state.blockingRelations, before.blockingRelations);
     assert.equal(h.state.spatial, before.spatial);
-    assert.equal(h.state.navigationMaps, before.navigationMaps);
+    assert.equal(h.state.navigation, before.navigation);
 });
 
 function nativeModifier(raw) {
@@ -539,12 +539,10 @@ test("blocking capacity: replacing contribution entries without changing the res
         occupancy: false,
         support: false,
         blocking: false,
-        navigationModifierRelations: false,
-        navigationModifierCoverage: false,
     });
     assert.equal(h.state.blockingRelations, before.blockingRelations);
     assert.equal(h.state.spatial, before.spatial);
-    assert.equal(h.state.navigationMaps, before.navigationMaps);
+    assert.equal(h.state.navigation, before.navigation);
     const refreshed = ({ ...h.state.units.get(0), blocker: setCapacityContribution(h.state.units.get(0).blocker, entry("positive", modifier.create({ addition: 1.1 }))) });
     assert.equal(capacityOf(refreshed), 3);
     assert.equal(h.commit([{ type: "UPDATE_UNIT", unit: refreshed }]).dependencies.blocking, false);

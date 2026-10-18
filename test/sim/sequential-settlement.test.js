@@ -107,8 +107,7 @@ test("sequential predefined commands allocate after all earlier callback results
                 type: "UNIT",
                 definition: getUnit(state, 0).definition,
                 position: [0, 0],
-                navigationModifiers: [],
-            },
+                },
         },
         {
             id: 1,
@@ -118,8 +117,7 @@ test("sequential predefined commands allocate after all earlier callback results
                 type: "UNIT",
                 definition: { id: "predefined-child" },
                 position: [2, 0],
-                navigationModifiers: [],
-            },
+                },
         },
     ];
     const advanced = advancePredefined({ ...state, predefinedPresence: [{ definitionId: 0, source: { type: "UNIT", unitId: 0 } }] }, definitions, [

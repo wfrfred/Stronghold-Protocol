@@ -62,8 +62,7 @@ export function advanceMovement(
 
         const moved = stepRoutedUnit(unit, {
             tick,
-            maps: battlefield.navigationMaps,
-            fieldCache: battlefield.fieldCache,
+            navigation: battlefield.navigation,
             moveMultiplier: routeMoveMultiplier,
             queryContext: { unit, battlefield },
             movementAllowed: canMove(state, unit) && battlefield.blockerOf(unitId) === undefined,

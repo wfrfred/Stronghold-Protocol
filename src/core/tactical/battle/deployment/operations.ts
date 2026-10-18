@@ -124,9 +124,6 @@ export function deploy(state: BattleState, request: DeployRequest): Result<Deplo
         definition,
         position: Tile.center(request.tilePosition),
         claims: [{ position: request.tilePosition, slot, type: "PRESENT" }],
-        ...(value.definition.navigationModifiers === undefined
-            ? {}
-            : { navigationModifiers: value.definition.navigationModifiers }),
     });
     state = placed.state;
     const unit = {

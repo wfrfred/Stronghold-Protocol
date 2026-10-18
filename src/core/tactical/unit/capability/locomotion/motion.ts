@@ -1,5 +1,5 @@
 import { Tile, World, type WorldOffset, type WorldPosition } from "../../../geometry/coordinate.js";
-import { NavigationMap } from "../../../battlefield/navigation/map.js";
+import { Map } from "../../../battlefield/navigation/map.js";
 import {
     integrateSteeringDirection,
     type SteeringParameters,
@@ -18,11 +18,13 @@ export type MotionOverride =
       };
 
 export function getNavigationRecoveryTarget(
-    map: NavigationMap,
+    map: Map,
     position: WorldPosition,
     locatorOffset: WorldOffset,
 ): WorldPosition | null {
-    const [minimum, maximum] = NavigationMap.bounds(map);
+    const margin = Number.EPSILON * Math.max(map.rows, map.columns);
+    const minimum = [-0.5 + margin, -0.5 + margin] as const;
+    const maximum = [map.columns - 0.5 - margin, map.rows - 0.5 - margin] as const;
     const minX = Math.max(minimum[0], minimum[0] - locatorOffset[0]);
     const maxX = Math.min(maximum[0], maximum[0] - locatorOffset[0]);
     const minY = Math.max(minimum[1], minimum[1] - locatorOffset[1]);
@@ -41,19 +43,26 @@ export function getNavigationRecoveryTarget(
 export function reflectNavigationMovement(
     position: WorldPosition,
     nextPosition: WorldPosition,
-    map: NavigationMap,
+    map: Map,
+    target: WorldPosition | null = null,
 ): WorldPosition {
     const origin = World.toTile(position);
 
-    if (!NavigationMap.contains(map, origin)) {
+    if (!map.contains(origin)) {
         return nextPosition;
     }
 
     const destination = World.toTile(nextPosition);
+    const cell = map.get(destination);
+    const targetTile = target === null ? null : World.toTile(target);
 
     if (
         (destination[0] === origin[0] && destination[1] === origin[1]) ||
-        NavigationMap.get(map, destination)?.passable === true
+        (cell?.passable === true &&
+            (cell.cost < 1000 ||
+                (targetTile !== null &&
+                    destination[0] === targetTile[0] &&
+                    destination[1] === targetTile[1])))
     ) {
         return nextPosition;
     }

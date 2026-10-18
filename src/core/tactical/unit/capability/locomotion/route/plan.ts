@@ -4,7 +4,7 @@ import {
     type TilePosition,
     type WorldPosition,
 } from "../../../../geometry/coordinate.js";
-import type { NavigationGoal } from "../../../../battlefield/navigation/request.js";
+import type { NavigationGoal } from "./request.js";
 import { nextCheckpointIndex } from "./execution.js";
 import type { RouteState } from "./state.js";
 

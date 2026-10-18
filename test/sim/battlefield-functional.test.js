@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { create, transition } from '../../dist/core/tactical/battlefield/state.js';
+import { create, transition, setNavigation } from '../../dist/core/tactical/battlefield/state.js';
 import { view } from '../../dist/core/tactical/battlefield/view.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';
-import { createNavigationModifierDefinition } from '../../dist/core/tactical/battlefield/navigation/modifier.js';
+
+import { setOverlay, nextPoint } from '../../dist/core/tactical/battlefield/navigation/state.js';
 import { initialize } from "../helpers/unit.js";
 
 const initial = () => create({
@@ -56,36 +57,29 @@ test('pure transition maintains blocking before returning and preserves the prev
   assert.deepEqual(removed.facts.removedUnits.map(({ unitId }) => unitId), [10]);
 });
 
-test('navigation and spatial projections belong to each returned value', () => {
+test('navigation overlays and spatial projections belong to each returned value', () => {
   const owner = unit(1, [0, 0]);
-  const registered = transition(initial(), [
-    register(owner),
-    {
-      type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: {
-        id: 7,
-        definition: createNavigationModifierDefinition({
-          id: 'functional-wall', FLY: null,
-          WALK: { denyPassage: true, deniedDepartures: [], costFloor: 1 },
-        }),
-        source: { type: 'UNIT', unitId: 1 }, active: true, expiresAtTick: null,
-        region: { type: 'FOLLOW_UNIT', unitId: 1, range: [[0, 0]], direction: 'RIGHT' },
-      },
-    },
-  ]).state;
+  let registered = transition(initial(), [register(owner)]).state;
+  registered = setNavigation(registered, setOverlay(registered.navigation, 'WALK', {
+    id: 7, cells: [[0, 0]], denyPassage: true, denyDepartures: [],
+  }));
   const previous = view(registered);
   const moved = transition(registered, [{ type: 'UPDATE_UNIT', unit: { ...owner, position: [1, 0] } }]);
-  const next = view(moved.state);
+  assert.equal(moved.state.navigation, registered.navigation);
+  const replaced = setNavigation(moved.state, setOverlay(moved.state.navigation, 'WALK', {
+    id: 7, cells: [[0, 1]], denyPassage: true, denyDepartures: [],
+  }));
+  const next = view(replaced);
 
-  assert.deepEqual(moved.facts.changedNavigationModes, ['WALK']);
   assert.deepEqual(previous.unitsAt([0, 0]).map(unit => unit.id), [1]);
   assert.deepEqual(next.unitsAt([0, 1]).map(unit => unit.id), [1]);
-  assert.equal(previous.navigationMaps.WALK.cells[0].passable, false);
-  assert.equal(next.navigationMaps.WALK.cells[0].passable, true);
-  assert.equal(next.navigationMaps.WALK.cells[1].passable, false);
-  assert.deepEqual(previous.navigationModifiersAt([0, 0]), [7]);
-  assert.deepEqual(next.navigationModifiersAt([0, 1]), [7]);
-  assert.equal(moved.state.map, registered.map);
-  assert.equal(moved.state.baseline, registered.baseline);
+  assert.equal(nextPoint(previous.navigation, 'WALK', [0, 0], [0, 0]), null);
+  assert.deepEqual(nextPoint(next.navigation, 'WALK', [0, 0], [0, 0]), [0, 0]);
+  assert.deepEqual(nextPoint(previous.navigation, 'WALK', [2, 0], [1, 0]), [1, 0]);
+  assert.equal(nextPoint(next.navigation, 'WALK', [2, 0], [1, 0]), null);
+  assert.equal(replaced.map, registered.map);
+  assert.equal(replaced.navigation.baseline, registered.navigation.baseline);
+  assert.equal(setNavigation(replaced, replaced.navigation), replaced);
 });
 
 test('pure transition reports transient registrations and removals even when the final field is empty', () => {

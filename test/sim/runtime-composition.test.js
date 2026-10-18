@@ -478,7 +478,7 @@ test("runtime composition: late exceptions and invalid settlement propagate with
         const failed = scenario({ failure });
         failed.runtime.step();
         const before = failed.runtime.snapshot();
-        const maps = failed.runtime.navigationMaps;
+        const maps = failed.runtime.navigation;
         assert.equal(before.actions.nextId, 1);
         assert.equal(before.projectiles.nextProjectileId, 1);
         assert.equal(before.execution.nextUnitId, 3);
@@ -494,7 +494,7 @@ test("runtime composition: late exceptions and invalid settlement propagate with
             }[failure],
         );
         assert.deepEqual(failed.runtime.snapshot(), before);
-        assert.equal(failed.runtime.navigationMaps, maps);
+        assert.equal(failed.runtime.navigation, maps);
         assert.deepEqual(
             failed.launches.map((launch) => [launch.id, launch.executionId]),
             [

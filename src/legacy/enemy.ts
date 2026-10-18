@@ -1,6 +1,6 @@
 import type { Seed } from "../core/common/rng.js";
-import type { NavigationRequestId } from "../core/tactical/battlefield/navigation/request.js";
-import type { NavigationOutcome } from "../core/tactical/battlefield/navigation/state.js";
+import type { NavigationRequestId } from "../core/tactical/unit/capability/locomotion/route/request.js";
+import type { Outcome as NavigationOutcome } from "../core/tactical/unit/capability/locomotion/tracking.js";
 import type { Definition, RoutedEnemy } from "../core/tactical/unit/archetype/enemy.js";
 import type { LocatedRouteSignal } from "../core/tactical/unit/capability/locomotion/route-control.js";
 import { hasSpatialPresence } from "../core/tactical/unit/capability/presence/capability.js";

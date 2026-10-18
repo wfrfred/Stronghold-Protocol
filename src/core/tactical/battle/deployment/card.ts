@@ -5,7 +5,6 @@ import type { Occupancy } from "../../unit/capability/occupancy/capability.js";
 import * as contribution from "../../unit/contribution/contribution.js";
 import * as attribute from "../../unit/contribution/attribute.js";
 import type { Definition as UnitDefinition } from "../../unit/unit.js";
-import type { UnitNavigationModifierPlacement } from "../creation/placement.js";
 
 export type Id = number;
 
@@ -19,7 +18,6 @@ export interface Supply {
 export interface Input {
     readonly unit: UnitDefinition & Deployable["definition"] & Occupancy["definition"];
     readonly supply?: Supply;
-    readonly navigationModifiers?: readonly UnitNavigationModifierPlacement[];
 }
 
 export interface Definition extends Input {
@@ -81,9 +79,6 @@ export function create(
         definition: {
             unit: definition.unit,
             supply,
-            ...(definition.navigationModifiers === undefined
-                ? {}
-                : { navigationModifiers: definition.navigationModifiers }),
         },
         stock,
         cooldown: null,

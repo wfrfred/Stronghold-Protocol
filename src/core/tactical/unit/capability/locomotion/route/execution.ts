@@ -11,7 +11,7 @@ import {
     type NavigationOptions,
     type NavigationRequest,
     type NavigationRequestId,
-} from "../../../../battlefield/navigation/request.js";
+} from "./request.js";
 import type { RouteCheckpoint, RouteDefinition, RouteMoveTarget } from "./definition.js";
 import type { RouteMoveProgress, RouteProgress, RouteState } from "./state.js";
 

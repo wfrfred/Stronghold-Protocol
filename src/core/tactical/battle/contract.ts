@@ -2,14 +2,13 @@ import type { Seed } from "../../common/rng.js";
 import type { BattlefieldMap } from "../battlefield/map/map.js";
 import type { UnitPlacementDefinition } from "./creation/placement.js";
 import type { MechanismPlacementDefinition } from "./creation/mechanism.js";
-import type { NavigationModifierPlacementDefinition } from "./creation/navigation-modifier.js";
 import type { SpawnScheduleDefinition } from "./schedule/definition.js";
 import type { BattlefieldChangeResult } from "../battlefield/contract.js";
 import type { BlockingRelation } from "../battlefield/blocking/relations.js";
 import type { CombatEvent } from "./execution/event.js";
 import type { Mechanism } from "../battlefield/mechanism.js";
-import type { NavigationModifier } from "../battlefield/navigation/modifier.js";
-import type { NavigationOutcome } from "../battlefield/navigation/state.js";
+import type { State as NavigationState } from "../battlefield/navigation/state.js";
+import type { Outcome as NavigationOutcome } from "../unit/capability/locomotion/tracking.js";
 import type { WorldPosition } from "../geometry/coordinate.js";
 import type { RouteSignal } from "../unit/capability/locomotion/route/execution.js";
 import type { Unit, Id } from "../unit/unit.js";
@@ -46,7 +45,6 @@ export interface Input {
     readonly predefines: readonly PredefinedDefinition[];
     readonly initialUnits: readonly UnitPlacementDefinition[];
     readonly initialMechanisms: readonly MechanismPlacementDefinition[];
-    readonly initialNavigationModifiers: readonly NavigationModifierPlacementDefinition[];
     readonly maxTicks: number;
     readonly routeMoveMultiplier: number;
     readonly rngState: Seed;
@@ -122,7 +120,7 @@ export interface Snapshot {
     readonly blockingRelations: readonly BlockingRelation[];
     readonly supportRelations: readonly SupportRelation[];
     readonly mechanisms: readonly Mechanism[];
-    readonly navigationModifiers: readonly NavigationModifier[];
+    readonly navigation: NavigationState;
     readonly completedRouteCount: number;
     readonly result: Result | null;
 }

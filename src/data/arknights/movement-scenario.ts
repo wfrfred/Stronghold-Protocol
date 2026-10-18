@@ -259,7 +259,6 @@ export function loadMovementScenario(
             predefines: loaded.predefines,
             initialUnits: [],
             initialMechanisms: [],
-            initialNavigationModifiers: [],
             maxTicks: secondsToTicks(level.options.maxPlayTime),
             routeMoveMultiplier: level.options.moveMultiplier,
             rngState,

@@ -1,55 +1,50 @@
-import { deriveNavigationFieldQuery, type NavigationField } from "./field.js";
-import type { NavigationMap } from "./map.js";
-import { buildNavigationField } from "./pathfinding.js";
-import type { NavigationIntent } from "./request.js";
+import type { TilePosition } from "../../geometry/coordinate.js";
+import { apply } from "./apply.js";
+import type { Field } from "./field.js";
+import type { Map as NavigationMap } from "./map.js";
+import { build } from "./pathfinding.js";
+import type { MotionMode, State } from "./state.js";
 
-export interface NavigationFieldProvider {
-    get(
-        map: NavigationMap,
-        request: Pick<NavigationIntent, "targetTile" | "options">,
-    ): NavigationField;
+const maps = new WeakMap<State, Partial<Record<MotionMode, NavigationMap>>>();
+const fields = new WeakMap<NavigationMap, Map<string, Field>>();
+
+export function effectiveMap(state: State, mode: MotionMode): NavigationMap {
+    let modes = maps.get(state);
+    const cached = modes?.[mode];
+
+    if (cached !== undefined) {
+        return cached;
+    }
+
+    const map = apply(state.baseline[mode], state.overlays[mode]);
+
+    if (modes === undefined) {
+        modes = {};
+        maps.set(state, modes);
+    }
+
+    modes[mode] = map;
+
+    return map;
 }
 
-export interface NavigationFieldCache extends NavigationFieldProvider {
-    invalidate(map: NavigationMap): void;
-    clear(): void;
-}
+export function field(map: NavigationMap, target: TilePosition): Field {
+    let targets = fields.get(map);
+    const key = `${target[0]}:${target[1]}`;
+    const cached = targets?.get(key);
 
-export function createNavigationFieldCache(): NavigationFieldCache {
-    let maps = new WeakMap<NavigationMap, Map<string, NavigationField>>();
+    if (cached !== undefined) {
+        return cached;
+    }
 
-    return Object.freeze({
-        get(
-            map: NavigationMap,
-            request: Pick<NavigationIntent, "targetTile" | "options">,
-        ): NavigationField {
-            const query = deriveNavigationFieldQuery(request);
-            const key = `${query.targetTile[0]}:${query.targetTile[1]}:${query.allowDiagonalMove}`;
-            let fields = maps.get(map);
-            const cached = fields?.get(key);
+    const result = build(map, target);
 
-            if (cached !== undefined) {
-                return cached;
-            }
+    if (targets === undefined) {
+        targets = new Map();
+        fields.set(map, targets);
+    }
 
-            const field = buildNavigationField(map, query);
+    targets.set(key, result);
 
-            if (fields === undefined) {
-                fields = new Map();
-                maps.set(map, fields);
-            }
-
-            fields.set(key, field);
-
-            return field;
-        },
-
-        invalidate(map: NavigationMap): void {
-            maps.delete(map);
-        },
-
-        clear(): void {
-            maps = new WeakMap();
-        },
-    });
+    return result;
 }

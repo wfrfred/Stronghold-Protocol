@@ -1,11 +1,9 @@
 import type { TilePosition } from "../core/tactical/geometry/coordinate.js";
-import type { NavigationField } from "../core/tactical/battlefield/navigation/field.js";
-import {
-    createNavigationMap,
-    NavigationMap,
-    type PathMotionMode,
-} from "../core/tactical/battlefield/navigation/map.js";
-import { buildNavigationField } from "../core/tactical/battlefield/navigation/pathfinding.js";
+import type { Field } from "../core/tactical/battlefield/navigation/field.js";
+import { Map as NavigationMap } from "../core/tactical/battlefield/navigation/map.js";
+import type { MotionMode } from "../core/tactical/battlefield/navigation/state.js";
+import { Direction, DIRECTIONS } from "../core/tactical/geometry/direction.js";
+import { build } from "../core/tactical/battlefield/navigation/pathfinding.js";
 
 export interface LegacyGrid {
     readonly rows: number;
@@ -17,13 +15,12 @@ export interface LegacyGrid {
 }
 
 export interface LegacyNavigationOptions {
-    readonly pathMotionMode?: PathMotionMode;
+    readonly pathMotionMode?: MotionMode;
     readonly ignoreObstacles?: boolean;
-    readonly allowDiagonal?: boolean;
 }
 
 export interface LegacyFlowField {
-    readonly field: NavigationField;
+    readonly field: Field;
     readonly dest: number;
     readonly dist: readonly number[];
     readonly parent: readonly number[];
@@ -68,7 +65,7 @@ export function navigationMapFromGrid(
                     pathMotionMode === "FLY"
                         ? grid.flyPassable(row, col)
                         : grid.walkable(row, col, ignoreObstacles),
-                moveCost:
+                cost:
                     pathMotionMode === "WALK" && !ignoreObstacles && grid.isCrate(row, col)
                         ? 1000
                         : 1,
@@ -77,13 +74,7 @@ export function navigationMapFromGrid(
         }
     }
 
-    const map = createNavigationMap({
-        rows: grid.rows,
-        columns: grid.cols,
-        pathMotionMode,
-        revision: grid.version,
-        cells,
-    });
+    const map = new NavigationMap(grid.rows, grid.cols, cells);
     snapshot.maps.set(key, map);
 
     return map;
@@ -103,28 +94,57 @@ export function flowFieldForGrid(
         fields.set(map, mapFields);
     }
 
-    const allowDiagonalMove = options.allowDiagonal ?? true;
-    const key = `${targetRow}:${targetCol}:${allowDiagonalMove}`;
+    const key = `${targetRow}:${targetCol}`;
     const cached = mapFields.get(key);
 
     if (cached !== undefined) {
         return cached;
     }
 
-    const field = buildNavigationField(map, {
-        targetTile: [targetRow, targetCol],
-        allowDiagonalMove,
-    });
+    const field = build(map, [targetRow, targetCol]);
     const dist: number[] = [];
     const parent: number[] = [];
     const next: number[] = [];
 
-    for (const node of field.nodes) {
-        dist.push(node.type === "UNREACHABLE" ? -1 : node.distance);
-        parent.push(
-            node.type === "REACHABLE" ? node.rawNext[0] * map.columns + node.rawNext[1] : -1,
-        );
-        next.push(node.type === "REACHABLE" ? node.next[0] * map.columns + node.next[1] : -1);
+    for (const [index, node] of field.nodes.entries()) {
+        dist.push(node === null ? -1 : node.distance);
+        const nextPosition = node?.next;
+
+        next.push(nextPosition ? nextPosition[0] * map.columns + nextPosition[1] : -1);
+        let successor = -1;
+
+        if (node !== null && node.next !== null) {
+            const row = Math.floor(index / map.columns);
+            const col = index % map.columns;
+            const cell = map.cells[index]!;
+
+            for (const direction of DIRECTIONS) {
+                if (!cell.departures[direction]) {
+                    continue;
+                }
+
+                const [dr, dc] = Direction.vector(direction);
+                const position: TilePosition = [row + dr, col + dc];
+
+                if (!map.contains(position)) {
+                    continue;
+                }
+
+                const adjacent = position[0] * map.columns + position[1];
+                const candidate = field.nodes[adjacent];
+
+                if (
+                    candidate !== undefined &&
+                    candidate !== null &&
+                    candidate.distance + cell.cost === node.distance
+                ) {
+                    successor = adjacent;
+                    break;
+                }
+            }
+        }
+
+        parent.push(successor);
     }
 
     const result = Object.freeze({
@@ -133,7 +153,7 @@ export function flowFieldForGrid(
         dist: Object.freeze(dist),
         parent: Object.freeze(parent),
         next: Object.freeze(next),
-        version: map.revision,
+        version: grid.version,
     });
     mapFields.set(key, result);
 
@@ -150,10 +170,7 @@ export function waypointsForGrid(
 ): readonly TilePosition[] | null {
     const map = navigationMapFromGrid(grid, options);
 
-    if (
-        !NavigationMap.contains(map, [startRow, startCol]) ||
-        !NavigationMap.contains(map, [targetRow, targetCol])
-    ) {
+    if (!map.contains([startRow, startCol]) || !map.contains([targetRow, targetCol])) {
         return null;
     }
 

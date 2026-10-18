@@ -11,7 +11,8 @@ import { startColdWind, kjeragColdWind, activateTurrets, terrainAt, deviceOverri
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
 import { create as createFieldState, transition as transitionBattlefield } from '../../dist/core/tactical/battlefield/state.js';
 import { view as viewBattlefield } from '../../dist/core/tactical/battlefield/view.js';
-import { NavigationMap } from '../../dist/core/tactical/battlefield/navigation/map.js';
+import { apply as applyOverlays } from '../../dist/core/tactical/battlefield/navigation/apply.js';
+const navigationMap = (state, mode = 'WALK') => applyOverlays(state.baseline[mode], state.overlays[mode]);
 import { loadMovementScenario } from '../../dist/data/arknights/movement-scenario.js';
 import { createLevelDefinition, parseLevelContent } from '../../dist/data/arknights/level.js';
 import { resolvePredefinedSkillBlackboard } from '../../dist/data/arknights/skill.js';
@@ -1201,16 +1202,16 @@ test('core act1 m01 initializes all 12 raw crates without changing passage or FL
   const rawLevel = arknightsFixture('level_act1autochess_m01');
   const scenario = predefinedMovementScenario(rawLevel);
   const runtime = new BattleRuntime(scenario.spec);
-  const baseline = viewBattlefield(createFieldState({ map: scenario.spec.map })).navigationMaps;
+  const baseline = viewBattlefield(createFieldState({ map: scenario.spec.map })).navigation;
   const initial = runtime.snapshot();
   const crates = rawLevel.predefines.tokenInsts.filter(instance => instance.inst.characterKey === 'trap_1105_accrate');
   assert.equal(crates.length, 12);
   assert.equal(initial.units.length, 12);
-  assert.equal(initial.navigationModifiers.length, 12);
+
   assert.equal(initial.predefinedPresence.length, 12);
   assert.deepEqual(initial.mechanisms, []);
-  assert.deepEqual(runtime.navigationMaps.FLY, baseline.FLY);
-  assert.deepEqual(runtime.navigationMaps.WALK.cells.map(cell => cell.passable), baseline.WALK.cells.map(cell => cell.passable));
+  assert.deepEqual(runtime.navigation.baseline.FLY, baseline.baseline.FLY);
+  assert.deepEqual(navigationMap(runtime.navigation).cells.map(cell => cell.passable), navigationMap(baseline).cells.map(cell => cell.passable));
   for (const instance of crates) {
     const [definitionId] = runtime.predefinedIdsForAlias(instance.alias);
     const binding = initial.predefinedPresence.find(binding => binding.definitionId === definitionId);
@@ -1218,12 +1219,12 @@ test('core act1 m01 initializes all 12 raw crates without changing passage or FL
     assert.equal(unit.definition.id, 'trap_1105_accrate');
     assert.equal(unit.vitality.hp, 100);
     assert.deepEqual(unit.position, [instance.position.col, instance.position.row]);
-    const cell = NavigationMap.get(runtime.navigationMaps.WALK, [instance.position.row, instance.position.col]);
-    assert.equal(cell.moveCost, 1000);
-    assert.deepEqual(cell.departures, NavigationMap.get(baseline.WALK, [instance.position.row, instance.position.col]).departures);
-    const [effect] = initial.navigationModifiers.filter(effect => effect.source.type === 'UNIT' && effect.source.unitId === unit.id);
-    assert.equal(effect.region.type, 'FOLLOW_UNIT');
-    assert.equal(effect.region.unitId, unit.id);
+    const cell = navigationMap(runtime.navigation).get([instance.position.row, instance.position.col]);
+    assert.equal(cell.cost, 1000);
+    assert.deepEqual(cell.departures, navigationMap(baseline).get([instance.position.row, instance.position.col]).departures);
+    const [overlay] = initial.navigation.overlays.WALK.filter(entry => entry.cells.some(([row, col]) => row === instance.position.row && col === instance.position.col));
+    assert.equal(overlay.cost, 1000);
+    assert.ok(unit.effects.values().some(effect => effect.data.overlay?.id === overlay.id));
   }
   while (runtime.result === null) runtime.step();
   assert.equal(runtime.result.reason, 'SCHEDULE_COMPLETED');
@@ -1232,7 +1233,7 @@ test('core act1 m01 initializes all 12 raw crates without changing passage or FL
   assert.equal(runtime.result.unspawnedCount, 0);
   assert.deepEqual(runtime.result.remainingUnitIds, initial.units.map(unit => unit.id));
   assert.deepEqual(runtime.snapshot().units, initial.units);
-  assert.deepEqual(runtime.snapshot().navigationModifiers, initial.navigationModifiers);
+
 });
 
 test('core act1 m02 keeps hidden crate recipes out of the battlefield and applies appearance/removal with fresh identities', () => {
@@ -1241,50 +1242,51 @@ test('core act1 m02 keeps hidden crate recipes out of the battlefield and applie
   assert.equal(scenario.spec.predefines.length, 16);
   assert.ok(scenario.spec.predefines.every(definition => !definition.initiallyPresent));
   assert.deepEqual(runtime.snapshot().units, []);
-  assert.deepEqual(runtime.snapshot().navigationModifiers, []);
+
   assert.deepEqual(runtime.snapshot().predefinedPresence, []);
   const [definitionId] = runtime.predefinedIdsForAlias('trap_1105_accrate#001');
-  const originalMaps = runtime.navigationMaps;
-  const originalCell = NavigationMap.get(originalMaps.WALK, [12, 4]);
+  const originalMaps = runtime.navigation;
+  const originalCell = navigationMap(originalMaps).get([12, 4]);
   runtime.step([{ type: 'APPEAR_PREDEFINED', definitionId }]);
   const appeared = runtime.snapshot();
   const [unit] = appeared.units;
-  const [effect] = appeared.navigationModifiers;
+  const [overlay] = appeared.navigation.overlays.WALK;
   assert.deepEqual(unit.position, [4, 12]);
   assert.equal(unit.id, 0);
   assert.deepEqual(appeared.predefinedPresence, [{ definitionId, source: { type: 'UNIT', unitId: unit.id } }]);
-  assert.deepEqual(effect.source, { type: 'UNIT', unitId: unit.id });
-  assert.equal(effect.region.unitId, unit.id);
-  assert.equal(NavigationMap.get(runtime.navigationMaps.WALK, [12, 4]).moveCost, 1000);
-  assert.equal(NavigationMap.get(runtime.navigationMaps.WALK, [12, 4]).passable, originalCell.passable);
-  assert.equal(runtime.navigationMaps.WALK.revision, originalMaps.WALK.revision + 1);
-  assert.strictEqual(runtime.navigationMaps.FLY, originalMaps.FLY);
-  const appearedMaps = runtime.navigationMaps;
+  assert.deepEqual(overlay.cells, [[12, 4]]);
+  assert.equal(overlay.cost, 1000);
+  assert.equal(navigationMap(runtime.navigation).get([12, 4]).cost, 1000);
+  assert.equal(navigationMap(runtime.navigation).get([12, 4]).passable, originalCell.passable);
+  assert.strictEqual(runtime.navigation.baseline.FLY, originalMaps.baseline.FLY);
+  const appearedMaps = runtime.navigation;
   runtime.step([{ type: 'APPEAR_PREDEFINED', definitionId }]);
   assert.deepEqual(runtime.snapshot().units, appeared.units);
   assert.deepEqual(runtime.snapshot().execution, appeared.execution);
-  assert.strictEqual(runtime.navigationMaps, appearedMaps);
+  assert.strictEqual(runtime.navigation, appearedMaps);
   const external = runtime.snapshot();
   assert.equal(external.units[0].vitality, unit.vitality);
-  assert.equal(external.navigationModifiers[0], effect);
+
   assert.equal(external.predefinedPresence, appeared.predefinedPresence);
   const removed = runtime.step([{ type: 'REMOVE_PREDEFINED', definitionId, reason: 'SCRIPT' }]);
-  assert.deepEqual(removed.events, [{ type: 'UNIT_REMOVED', unitId: unit.id, reason: 'SCRIPT', tick: 2, unit: { ...unit, lifecycle: 'LEAVING' } }]);
+  const [departed] = removed.events;
+  assert.deepEqual(removed.events.map(({ unit, ...event }) => event), [{ type: 'UNIT_REMOVED', unitId: unit.id, reason: 'SCRIPT', tick: 2 }]);
+  assert.deepEqual(departed.unit.effects.values(), []);
+  assert.deepEqual({ ...departed.unit, effects: unit.effects }, { ...unit, lifecycle: 'LEAVING' });
   assert.deepEqual(runtime.snapshot().units, []);
-  assert.deepEqual(runtime.snapshot().navigationModifiers, []);
+
   assert.deepEqual(runtime.snapshot().predefinedPresence, []);
   assert.equal(appeared.units[0].vitality.hp, unit.definition.vitality.maxHp);
-  assert.equal(appeared.navigationModifiers[0].active, true);
+
   assert.deepEqual(appeared.predefinedPresence, [{ definitionId, source: { type: 'UNIT', unitId: unit.id } }]);
-  assert.deepEqual(NavigationMap.get(runtime.navigationMaps.WALK, [12, 4]), originalCell);
-  assert.equal(runtime.navigationMaps.WALK.revision, appearedMaps.WALK.revision + 1);
-  assert.strictEqual(runtime.navigationMaps.FLY, originalMaps.FLY);
-  const removedMaps = runtime.navigationMaps;
+  assert.deepEqual(navigationMap(runtime.navigation).get([12, 4]), originalCell);
+  assert.strictEqual(runtime.navigation.baseline.FLY, originalMaps.baseline.FLY);
+  const removedMaps = runtime.navigation;
   assert.deepEqual(runtime.step([{ type: 'REMOVE_PREDEFINED', definitionId, reason: 'SCRIPT' }]).events, []);
-  assert.strictEqual(runtime.navigationMaps, removedMaps);
+  assert.strictEqual(runtime.navigation, removedMaps);
   runtime.step([{ type: 'APPEAR_PREDEFINED', definitionId }]);
   assert.equal(runtime.snapshot().units[0].id, unit.id + 1);
-  assert.equal(runtime.snapshot().navigationModifiers[0].id, effect.id + 1);
+
   assert.deepEqual(runtime.snapshot().predefinedPresence[0].source, { type: 'UNIT', unitId: unit.id + 1 });
 });
 
@@ -1304,9 +1306,9 @@ test('core predefined aliases can name two real crate recipes at different posit
   assert.deepEqual(runtime.snapshot().predefinedPresence.map(binding => binding.definitionId), definitionIds);
   runtime.step([{ type: 'REMOVE_PREDEFINED', definitionId: definitionIds[0], reason: 'SCRIPT' }]);
   assert.deepEqual(runtime.snapshot().units.map(unit => unit.id), [1]);
-  assert.equal(runtime.snapshot().navigationModifiers.length, 1);
-  assert.equal(NavigationMap.get(runtime.navigationMaps.WALK, [12, 4]).moveCost, 1);
-  assert.equal(NavigationMap.get(runtime.navigationMaps.WALK, [12, 5]).moveCost, 1000);
+
+  assert.equal(navigationMap(runtime.navigation).get([12, 4]).cost, 1);
+  assert.equal(navigationMap(runtime.navigation).get([12, 5]).cost, 1000);
 });
 
 test('core act2 mire and tide controller prefabs initialize nonspatial mechanisms and supply the raw terrain parameters', () => {
@@ -1331,7 +1333,7 @@ test('core act2 mire and tide controller prefabs initialize nonspatial mechanism
     assert.ok(!('vitality' in mechanism));
     assert.equal(snapshot.units.length, 4);
     assert.ok(snapshot.units.every(unit => unit.definition.id === 'trap_1105_accrate'));
-    assert.equal(snapshot.navigationModifiers.length, 4);
+
     const controller = scenario.spec.predefines.find(definition => definition.creation.definition.id === controllerKey);
     assert.equal(controller.creation.type, 'MECHANISM');
     assert.ok(!('position' in controller.creation));
@@ -1473,19 +1475,19 @@ test('core failed command batches do not publish hidden recipes, battlefield pro
     const failed = new BattleRuntime(scenario.spec);
     const [definitionId] = failed.predefinedIdsForAlias('trap_1105_accrate#001');
     const before = failed.snapshot();
-    const maps = failed.navigationMaps;
+    const maps = failed.navigation;
     assert.throws(() => failed.step([
       { type: 'APPEAR_PREDEFINED', definitionId }, command,
     ]), error);
     assert.deepEqual(failed.snapshot(), before);
-    assert.strictEqual(failed.navigationMaps, maps);
+    assert.strictEqual(failed.navigation, maps);
   }
   const runtime = new BattleRuntime(scenario.spec);
   const [definitionId] = runtime.predefinedIdsForAlias('trap_1105_accrate#001');
   runtime.step([{ type: 'APPEAR_PREDEFINED', definitionId }]);
   assert.equal(runtime.snapshot().tickIndex, 1);
   assert.equal(runtime.snapshot().units[0].id, 0);
-  assert.equal(runtime.snapshot().navigationModifiers[0].id, 0);
+
 });
 
 test('core raw tile modes distinguish crates from platforms and require the referenced prefab mode', () => {
@@ -1533,9 +1535,9 @@ test('core real hidden platforms grant ranged deployment support while retaining
   }, movementCatalog, 123);
   const runtime = new BattleRuntime(scenario.spec);
   const [definitionId] = runtime.predefinedIdsForAlias(instance.alias);
-  const originalMaps = runtime.navigationMaps;
+  const originalMaps = runtime.navigation;
   const tile = [instance.position.row, instance.position.col];
-  const originalCell = NavigationMap.get(originalMaps.WALK, tile);
+  const originalCell = navigationMap(originalMaps).get(tile);
   runtime.step([{ type: 'APPEAR_PREDEFINED', definitionId }]);
   const appeared = runtime.snapshot();
   const platform = appeared.units.find(unit => unit.definition.id === 'trap_1106_achplat');
@@ -1546,9 +1548,9 @@ test('core real hidden platforms grant ranged deployment support while retaining
   });
   assert.equal(platform.deployable.refundAllowed, false);
   assert.deepEqual(platform.occupancy.claims, [{ position: tile, slot: 'SUPPORT', type: 'PRESENT' }]);
-  assert.equal(NavigationMap.get(runtime.navigationMaps.WALK, tile).passable, originalCell.passable);
-  assert.equal(NavigationMap.get(runtime.navigationMaps.WALK, tile).moveCost, 1000);
-  assert.equal(runtime.navigationMaps.FLY, originalMaps.FLY);
+  assert.equal(navigationMap(runtime.navigation).get(tile).passable, originalCell.passable);
+  assert.equal(navigationMap(runtime.navigation).get(tile).cost, 1000);
+  assert.equal(runtime.navigation.baseline.FLY, originalMaps.baseline.FLY);
 
   let field = createFieldState({ map: scenario.spec.map });
   field = transitionBattlefield(field, appeared.units.map(unit => ({ type: 'REGISTER_UNIT', unit }))).state;
@@ -1560,8 +1562,8 @@ test('core real hidden platforms grant ranged deployment support while retaining
 
   runtime.step([{ type: 'REMOVE_PREDEFINED', definitionId, reason: 'SCRIPT' }]);
   assert.equal(runtime.snapshot().units.some(unit => unit.id === platform.id), false);
-  assert.deepEqual(NavigationMap.get(runtime.navigationMaps.WALK, tile), originalCell);
-  assert.equal(runtime.navigationMaps.FLY, originalMaps.FLY);
+  assert.deepEqual(navigationMap(runtime.navigation).get(tile), originalCell);
+  assert.equal(runtime.navigation.baseline.FLY, originalMaps.baseline.FLY);
   field = transitionBattlefield(field, [{ type: 'REMOVE_UNIT', unitId: platform.id, reason: 'SCRIPT' }]).state;
   assert.deepEqual(viewBattlefield(field).occupancyAt(tile, 'SUPPORT'), []);
 });

@@ -21,9 +21,9 @@ import assert from 'node:assert/strict';
 import { makeBattle, chessRec, enemyRec, checkInvariants } from '../helpers/battleHarness.js';
 import { hasGeneratedData, getDefaultSource, spawnsFromTemplate } from '../../server/sim/simdata.js';
 import { PUSH_TILES, PULL_STOP_RADIUS } from '../../server/sim/constants.js';
-import { NavigationMap, createNavigationMap } from '../../dist/core/tactical/battlefield/navigation/map.js';
-import { createNavigationFieldCache } from '../../dist/core/tactical/battlefield/navigation/cache.js';
-import { getNavigationRequest } from '../../dist/core/tactical/battlefield/navigation/state.js';
+import { Map as NavigationMap } from '../../dist/core/tactical/battlefield/navigation/map.js';
+import { create as createNavigation } from '../../dist/core/tactical/battlefield/navigation/state.js';
+import { getRequest as getNavigationRequest } from '../../dist/core/tactical/unit/capability/locomotion/tracking.js';
 import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
 import { createRouteTiming } from '../../dist/core/tactical/unit/capability/locomotion/route/state.js';
 import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
@@ -444,20 +444,19 @@ test('守墓石像 (PRTS 天赋): the statue (无法被阻挡，自缚，失衡�
 });
 
 function coreMotionMap(blocked = [], mode = 'WALK') {
-  return createNavigationMap({
-    rows: 3, columns: 8, pathMotionMode: mode, revision: 0,
-    cells: Array.from({ length: 24 }, (_, index) => ({
-      passable: !blocked.includes(index), moveCost: 1,
-      departures: { UP: true, RIGHT: true, DOWN: true, LEFT: true },
-    })),
-  });
+  return new NavigationMap(3, 8, Array.from({ length: 24 }, (_, index) => ({
+    passable: !blocked.includes(index), cost: 1,
+    departures: { UP: true, RIGHT: true, DOWN: true, LEFT: true },
+  })));
 }
 
 const coreSteeringParameters = createSteeringParameters({ steeringFactor: 0.25, maxSteeringForce: 1 });
 
 test('core boundary recovery chooses a common interior target for actual position and locator', () => {
   const map = coreMotionMap(Array.from({ length: 24 }, (_, index) => index));
-  const [minimum, maximum] = NavigationMap.bounds(map);
+  const margin = Number.EPSILON * Math.max(map.rows, map.columns);
+  const minimum = [-0.5 + margin, -0.5 + margin];
+  const maximum = [map.columns - 0.5 - margin, map.rows - 0.5 - margin];
   const target = position => getNavigationRecoveryTarget(map, position, [0, 0]);
   assert.deepEqual(target([3, 1]), [3, 1]);
   assert.deepEqual(target([-1, 1]), [minimum[0], 1]);
@@ -545,8 +544,7 @@ function coreDisplacedEnemy(checkpoints = [{
     initialized,
     context: {
       tick: 0, moveMultiplier: 1, movementAllowed: true, waitTickAllowed: true, routeAdvanceAllowed: true,
-      maps: { WALK: coreMotionMap(), FLY: coreMotionMap([], 'FLY') },
-      fieldCache: createNavigationFieldCache(),
+      navigation: createNavigation({ WALK: coreMotionMap(), FLY: coreMotionMap([], 'FLY') }),
       rngState: initialized.state.execution.rngState, nextNavigationRequestId: initialized.state.execution.nextNavigationRequestId,
     },
   };

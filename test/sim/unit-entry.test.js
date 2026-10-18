@@ -25,7 +25,7 @@ const spawn = (definition, tick = 0) => ({
 });
 const input = (fields = {}) => ({
   map, schedule: { type: 'TIMELINE', spawns: [] }, initialUnits: [], predefines: [],
-  initialMechanisms: [], initialNavigationModifiers: [], maxTicks: 30, routeMoveMultiplier: 1,
+  initialMechanisms: [], maxTicks: 30, routeMoveMultiplier: 1,
   rngState: 123, ...fields,
 });
 const markEntered = (trace, id) => ({

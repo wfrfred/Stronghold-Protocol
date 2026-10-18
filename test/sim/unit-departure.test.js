@@ -6,7 +6,7 @@ import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js
 import * as actions from "../../dist/core/tactical/unit/action/operations.js";
 import { create as createBattlefield } from "../../dist/core/tactical/battlefield/state.js";
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
-import { createNavigationModifierDefinition } from "../../dist/core/tactical/battlefield/navigation/modifier.js";
+import { create as tileCost } from "../../dist/content/tactical/effects/tile-cost.js";
 import { createDefinition as createDeployableDefinition } from "../../dist/core/tactical/unit/capability/deployable/capability.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -136,7 +136,7 @@ for (const domain of ["deployment", "predefined"]) {
 }
 
 for (const domain of ["deployment", "predefined"]) {
-    test(`${domain}: creation then departure preserves removal facts and cleans attached navigation modifiers`, () => {
+    test(`${domain}: creation then departure preserves removal facts and cleans owned navigation overlays`, () => {
         const map = createBattlefieldMap(
             1,
             2,
@@ -150,25 +150,16 @@ for (const domain of ["deployment", "predefined"]) {
             })),
         );
         const battlefield = createBattlefield({ map });
-            const definition = Object.freeze({
+        const cost = tileCost("departure-cost", 10);
+        const definition = Object.freeze({
             id: "transient-placement", occupancy: {},
+            onEnter: (battle, id) => effects.install(battle, unitRef(getUnit(battle, id)), cost).state,
             deployable: createDeployableDefinition({ cost: 0, redeployTicks: 0, slots: 1, buildableType: "ALL" }),
             vitality: Object.freeze({ maxHp: 100, defense: 0, resistance: 0 }),
         });
-        const navigationModifiers = [
-            {
-                definition: createNavigationModifierDefinition({
-                    id: "transient-wall",
-                    FLY: null,
-                    WALK: { denyPassage: false, deniedDepartures: [], costFloor: 10 },
-                }),
-                range: [[0, 0]],
-                direction: "RIGHT",
-            },
-        ];
         let state = createBattleState(battlefield);
         if (domain === "deployment") {
-            state = addCard(state, { unit: definition, navigationModifiers }).state;
+            state = addCard(state, { unit: definition }).state;
             state = addCard(state, { unit: definition }).state;
             state = resolveDeploymentCommands(
                 state,
@@ -195,7 +186,6 @@ for (const domain of ["deployment", "predefined"]) {
                             type: "UNIT",
                             definition,
                             position: [0, 0],
-                            navigationModifiers,
                         },
                     }),
                 ],
@@ -211,7 +201,8 @@ for (const domain of ["deployment", "predefined"]) {
             state.removedUnits.map((unit) => unit.unitId),
             [0],
         );
-        assert.deepEqual(battlefieldView(state).navigationModifierIds, []);
+        assert.equal(state.battlefield.navigation.overlays.WALK.length, domain === "deployment" ? 1 : 0);
+        assert.ok(state.battlefield.navigation.overlays.WALK.every(overlay => overlay.id !== 0));
         assert.deepEqual(battlefieldView(state).unitIds, domain === "deployment" ? [1] : []);
     });
 }

@@ -5,7 +5,7 @@ import {
     type TilePosition,
     type WorldOffset,
 } from "../../../../geometry/coordinate.js";
-import type { PathMotionMode } from "../../../../battlefield/navigation/map.js";
+import type { MotionMode } from "../../../../battlefield/navigation/state.js";
 
 export interface RouteMoveTarget {
     readonly position: TilePosition;
@@ -56,7 +56,7 @@ export type RouteCheckpoint =
       };
 
 export interface RouteDefinition {
-    readonly pathMotionMode: PathMotionMode;
+    readonly pathMotionMode: MotionMode;
     readonly startPosition: TilePosition;
     readonly endPosition: TilePosition;
     readonly spawnOffset: WorldOffset;

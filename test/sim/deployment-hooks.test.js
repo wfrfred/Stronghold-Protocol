@@ -49,7 +49,7 @@ const deployment = (definitions) => ({
 });
 const input = (fields = {}) => ({
     map, schedule: { type: "TIMELINE", spawns: [spawn(enemy(), 1000)] }, initialUnits: [], predefines: [],
-    initialMechanisms: [], initialNavigationModifiers: [], maxTicks: 30, routeMoveMultiplier: 1,
+    initialMechanisms: [], maxTicks: 30, routeMoveMultiplier: 1,
     rngState: 1, ...fields,
 });
 const deploy = (cardId, column = 0) => ({

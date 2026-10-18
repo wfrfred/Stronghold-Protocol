@@ -1,18 +1,13 @@
+import { createTilePosition, type TilePosition } from "../../geometry/coordinate.js";
 import { Direction, DIRECTIONS } from "../../geometry/direction.js";
-import type { NavigationField, NavigationFieldNode, NavigationFieldQuery } from "./field.js";
-import { NavigationMap } from "./map.js";
-import { smoothNavigationField } from "./smoothing.js";
+import type { Field, Node } from "./field.js";
+import type { Map } from "./map.js";
+import { smooth } from "./smoothing.js";
 
-const MAX_FIELD_DISTANCE = Number.MAX_SAFE_INTEGER;
-const OVERFLOW_DISTANCE = Infinity;
+export function build(map: Map, target: TilePosition): Field {
+    target = createTilePosition(target[0], target[1]);
 
-export function buildRawNavigationField(
-    map: NavigationMap,
-    query: NavigationFieldQuery,
-): NavigationField {
-    const targetTile = Object.freeze([query.targetTile[0], query.targetTile[1]] as const);
-
-    if (!NavigationMap.contains(map, targetTile)) {
+    if (!map.contains(target)) {
         throw new RangeError("navigation field target is outside the map");
     }
 
@@ -32,7 +27,7 @@ export function buildRawNavigationField(
         inQueue[index] = true;
     };
 
-    const targetIndex = targetTile[0] * map.columns + targetTile[1];
+    const targetIndex = target[0] * map.columns + target[1];
 
     if (map.cells[targetIndex]!.passable) {
         distances[targetIndex] = 0;
@@ -69,8 +64,8 @@ export function buildRawNavigationField(
                 continue;
             }
 
-            const sum = distances[current]! + cell.moveCost;
-            const candidate = sum <= MAX_FIELD_DISTANCE ? sum : OVERFLOW_DISTANCE;
+            const sum = distances[current]! + cell.cost;
+            const candidate = sum <= Number.MAX_SAFE_INTEGER ? sum : Infinity;
 
             if (distances[neighbor]! >= 0 && candidate >= distances[neighbor]!) {
                 continue;
@@ -85,36 +80,37 @@ export function buildRawNavigationField(
         }
     }
 
-    const nodes: NavigationFieldNode[] = distances.map((distance, index) => {
-        if (distance > MAX_FIELD_DISTANCE) {
+    const nodes: (Node | null)[] = distances.map((distance, index) => {
+        if (distance > Number.MAX_SAFE_INTEGER) {
             throw new RangeError("navigation field distance exceeds safe integer range");
         }
         if (distance < 0) {
-            return Object.freeze({ type: "UNREACHABLE" });
+            return null;
         }
         if (index === targetIndex) {
-            return Object.freeze({ type: "TARGET", distance: 0 });
+            return { distance: 0, next: null };
         }
 
         const successor = successors[index]!;
-        const next = Object.freeze([
-            Math.floor(successor / map.columns),
-            successor % map.columns,
-        ] as const);
 
-        return Object.freeze({ type: "REACHABLE", distance, rawNext: next, next });
+        return {
+            distance,
+            next: createTilePosition(Math.floor(successor / map.columns), successor % map.columns),
+        };
     });
+
+    smooth(map, nodes);
+
+    for (const node of nodes) {
+        if (node !== null) {
+            Object.freeze(node);
+        }
+    }
 
     return Object.freeze({
-        map,
-        query: Object.freeze({ targetTile, allowDiagonalMove: query.allowDiagonalMove }),
+        rows: map.rows,
+        columns: map.columns,
+        target,
         nodes: Object.freeze(nodes),
     });
-}
-
-export function buildNavigationField(
-    map: NavigationMap,
-    query: NavigationFieldQuery,
-): NavigationField {
-    return smoothNavigationField(buildRawNavigationField(map, query));
 }

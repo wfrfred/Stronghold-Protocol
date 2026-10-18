@@ -1,5 +1,5 @@
 import { assertNonnegativeSafeInteger } from "../../../../../common/assert.js";
-import type { NavigationGoal } from "../../../../battlefield/navigation/request.js";
+import type { NavigationGoal } from "./request.js";
 import type { RouteDefinition } from "./definition.js";
 
 export interface RouteMoveProgress {

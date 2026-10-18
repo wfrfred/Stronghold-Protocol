@@ -1,11 +1,14 @@
-import { assertNonnegativeNumber, assertNonnegativeSafeInteger } from "../../../common/assert.js";
+import {
+    assertNonnegativeNumber,
+    assertNonnegativeSafeInteger,
+} from "../../../../../common/assert.js";
 import {
     createTilePosition,
     createWorldPosition,
     World,
     type TilePosition,
     type WorldPosition,
-} from "../../geometry/coordinate.js";
+} from "../../../../geometry/coordinate.js";
 
 export type NavigationRequestId = number;
 

@@ -49,8 +49,7 @@ function runtime(definitions, spawns = []) {
             spawn(createEnemy({ id: "later", vitality: { maxHp: 100, defense: 0, resistance: 0 }, locomotion }), 100),
         ] },
         initialUnits: definitions.map((definition, id) => ({ definition, position: [id, 0] })),
-        predefines: [], initialMechanisms: [], initialNavigationModifiers: [],
-        maxTicks: 10, routeMoveMultiplier: 1, rngState: 123,
+        predefines: [], initialMechanisms: [], maxTicks: 10, routeMoveMultiplier: 1, rngState: 123,
     });
 }
 

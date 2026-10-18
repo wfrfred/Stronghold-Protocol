@@ -7,8 +7,8 @@ import { Grid } from '../../server/sim/grid.js';
 import { getDefaultSource, hasGeneratedData } from '../../server/sim/simdata.js';
 import { GEO } from '../../shared/constants.js';
 import { flowFieldForGrid } from '../../dist/legacy/navigation.js';
-import { createNavigationMap } from '../../dist/core/tactical/battlefield/navigation/map.js';
-import { buildRawNavigationField, buildNavigationField } from '../../dist/core/tactical/battlefield/navigation/pathfinding.js';
+import { Map as NavigationMap } from '../../dist/core/tactical/battlefield/navigation/map.js';
+import { build } from '../../dist/core/tactical/battlefield/navigation/pathfinding.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const LEVELS = join(ROOT, '.cache', 'gamedata', 'levels', 'activities');
@@ -275,7 +275,7 @@ function dijkstraDistances(map, target) {
       if (Math.abs(dRow) + Math.abs(dCol) !== 1) continue;
       const direction = dRow === 1 ? 'UP' : dRow === -1 ? 'DOWN' : dCol === 1 ? 'RIGHT' : 'LEFT';
       if (!cell.departures[direction]) continue;
-      distance[source] = Math.min(distance[source], distance[current] + cell.moveCost);
+      distance[source] = Math.min(distance[source], distance[current] + cell.cost);
     }
   }
   return distance.map(value => Number.isFinite(value) ? value : -1);
@@ -296,7 +296,7 @@ function bellmanFordDistances(map, target) {
       const nextRow = row + dRow, nextCol = col + dCol;
       if (nextRow < 0 || nextRow >= map.rows || nextCol < 0 || nextCol >= map.columns) continue;
       const to = nextRow * map.columns + nextCol;
-      if (map.cells[to].passable) edges.push([from, to, map.cells[from].moveCost]);
+      if (map.cells[to].passable) edges.push([from, to, map.cells[from].cost]);
     }
   }
   for (let pass = 0; pass < map.cells.length; pass++) {
@@ -312,40 +312,36 @@ function bellmanFordDistances(map, target) {
   return distance.map(value => Number.isFinite(value) ? value : -1);
 }
 
-function assertFieldInvariants(field) {
-  const { map, query, nodes } = field;
-  const targetIndex = query.targetTile[0] * map.columns + query.targetTile[1];
+function assertFieldInvariants(field, map, target) {
+  const { nodes } = field;
+  const targetIndex = target[0] * map.columns + target[1];
   assert.equal(nodes.length, map.rows * map.columns);
-  assert.ok(Object.isFrozen(field) && Object.isFrozen(query) && Object.isFrozen(query.targetTile));
-  assert.ok(Object.isFrozen(nodes) && nodes.every(Object.isFrozen));
-  assert.equal(nodes.filter(node => node.type === 'TARGET').length, map.cells[targetIndex].passable ? 1 : 0);
-  if (!map.cells[targetIndex].passable) assert.ok(nodes.every(node => node.type === 'UNREACHABLE'));
+  assert.equal(field.rows, map.rows);
+  assert.equal(field.columns, map.columns);
+  assert.deepEqual(field.target, target);
+  assert.ok(Object.isFrozen(field) && Object.isFrozen(field.target));
+  assert.ok(Object.isFrozen(nodes) && nodes.every(node => node === null || Object.isFrozen(node)));
+  assert.equal(nodes.filter(node => node !== null && node.next === null).length, map.cells[targetIndex].passable ? 1 : 0);
+  assert.equal(Object.hasOwn(field, 'map'), false);
+  if (!map.cells[targetIndex].passable) assert.ok(nodes.every(node => node === null));
   for (let index = 0; index < nodes.length; index++) {
     const node = nodes[index];
-    if (node.type === 'UNREACHABLE') continue;
+    if (node === null) continue;
     assert.ok(map.cells[index].passable);
-    if (node.type === 'TARGET') {
+    assert.deepEqual(Object.keys(node).sort(), ['distance', 'next']);
+    if (node.next === null) {
       assert.equal(index, targetIndex);
       assert.equal(node.distance, 0);
       continue;
     }
-    assert.equal(node.type, 'REACHABLE');
-    assert.ok(Number.isInteger(node.distance) && node.distance > 0 && node.distance <= 0x7fffffff);
-    for (const next of [node.rawNext, node.next]) {
-      assert.ok(Object.isFrozen(next));
-      assert.ok(Number.isInteger(next[0]) && next[0] >= 0 && next[0] < map.rows);
-      assert.ok(Number.isInteger(next[1]) && next[1] >= 0 && next[1] < map.columns);
-      const successor = nodes[next[0] * map.columns + next[1]];
-      assert.notEqual(successor.type, 'UNREACHABLE');
-      assert.ok(successor.distance < node.distance);
-    }
-    const row = Math.floor(index / map.columns), col = index % map.columns;
-    const dRow = node.rawNext[0] - row, dCol = node.rawNext[1] - col;
-    assert.equal(Math.abs(dRow) + Math.abs(dCol), 1);
-    const direction = dRow === 1 ? 'UP' : dRow === -1 ? 'DOWN' : dCol === 1 ? 'RIGHT' : 'LEFT';
-    assert.ok(map.cells[index].departures[direction]);
-    assert.equal(node.distance, nodes[node.rawNext[0] * map.columns + node.rawNext[1]].distance + map.cells[index].moveCost);
-    if (!query.allowDiagonalMove) assert.ok(node.next[0] === row || node.next[1] === col);
+    assert.ok(Number.isSafeInteger(node.distance) && node.distance > 0);
+    const next = node.next;
+    assert.ok(Object.isFrozen(next));
+    assert.ok(Number.isInteger(next[0]) && next[0] >= 0 && next[0] < map.rows);
+    assert.ok(Number.isInteger(next[1]) && next[1] >= 0 && next[1] < map.columns);
+    const successor = nodes[next[0] * map.columns + next[1]];
+    assert.notEqual(successor, null);
+    assert.ok(successor.distance < node.distance);
   }
 }
 
@@ -355,34 +351,20 @@ test('core random directed weighted fields agree with independent Dijkstra and B
   const costs = [1, 2, 9, 1000, 1_000_000];
   for (let sample = 0; sample < 200; sample++) {
     const rows = 1 + Math.floor(random() * 7), columns = 1 + Math.floor(random() * 8);
-    const pathMotionMode = sample % 5 === 0 ? 'FLY' : 'WALK';
     const cells = Array.from({ length: rows * columns }, () => ({
       passable: random() >= 0.2,
-      moveCost: pathMotionMode === 'FLY' ? 1 : costs[Math.floor(random() * costs.length)],
+      cost: costs[Math.floor(random() * costs.length)],
       departures: { UP: random() >= 0.2, RIGHT: random() >= 0.2, DOWN: random() >= 0.2, LEFT: random() >= 0.2 },
     }));
-    const map = createNavigationMap({ rows, columns, pathMotionMode, revision: sample, cells });
+    const map = new NavigationMap(rows, columns, cells);
     const target = [Math.floor(random() * rows), Math.floor(random() * columns)];
-    const query = { targetTile: target, allowDiagonalMove: sample % 2 === 0 };
-    const input = JSON.stringify({ map, query });
-    const raw = buildRawNavigationField(map, query);
-    const rawSnapshot = JSON.stringify(raw);
-    const smooth = buildNavigationField(map, query);
-    assert.equal(JSON.stringify({ map, query }), input);
-    assert.equal(JSON.stringify(raw), rawSnapshot);
-    assertFieldInvariants(raw);
-    assertFieldInvariants(smooth);
-    const actual = raw.nodes.map(node => node.type === 'UNREACHABLE' ? -1 : node.distance);
+    const input = JSON.stringify({ map, target });
+    const field = build(map, target);
+    assert.equal(JSON.stringify({ map, target }), input);
+    assertFieldInvariants(field, map, target);
+    const actual = field.nodes.map(node => node === null ? -1 : node.distance);
     assert.deepEqual(actual, dijkstraDistances(map, target), `Dijkstra sample ${sample}`);
     assert.deepEqual(actual, bellmanFordDistances(map, target), `Bellman-Ford sample ${sample}`);
-    assert.deepEqual(smooth.nodes.map(node => node.type === 'UNREACHABLE' ? -1 : node.distance), actual, `smoothing sample ${sample}`);
-    for (let index = 0; index < raw.nodes.length; index++) {
-      const node = raw.nodes[index];
-      if (node.type !== 'REACHABLE') continue;
-      assert.deepEqual(node.next, node.rawNext);
-      assert.deepEqual(smooth.nodes[index].rawNext, node.rawNext);
-      const next = smooth.nodes[index].next;
-      assert.ok(actual[next[0] * columns + next[1]] < node.distance, `successor sample ${sample}, node ${index}`);
-    }
+    assert.deepEqual(build(map, target), field, `repeat build sample ${sample}`);
   }
 });

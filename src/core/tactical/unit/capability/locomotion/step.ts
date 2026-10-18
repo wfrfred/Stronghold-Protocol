@@ -1,22 +1,12 @@
 import { assertNonnegativeNumber } from "../../../../common/assert.js";
 import { createRng, type Seed } from "../../../../common/rng.js";
 import { createWorldOffset, World, type WorldPosition } from "../../../geometry/coordinate.js";
-import type { NavigationFieldProvider } from "../../../battlefield/navigation/cache.js";
-import { NavigationMap, type NavigationMaps } from "../../../battlefield/navigation/map.js";
-import {
-    canTraverseNavigationSegment,
-    canTraverseNavigationRecoverySegment,
-} from "../../../battlefield/navigation/segment.js";
-import {
-    isNavigationGoalReached,
-    type NavigationRequestId,
-} from "../../../battlefield/navigation/request.js";
-import {
-    getNavigationRequest,
-    markNavigationArrived,
-    queryNavigation,
-    type NavigationOutcome,
-} from "../../../battlefield/navigation/state.js";
+import * as navigation from "../../../battlefield/navigation/state.js";
+import { apply as applyOverlays } from "../../../battlefield/navigation/apply.js";
+import { canTraverse, canRecover } from "./segment.js";
+import { isNavigationGoalReached, type NavigationRequestId } from "./route/request.js";
+import * as tracking from "./tracking.js";
+import type { Outcome as NavigationOutcome } from "./tracking.js";
 import { createRouteExecution, tickRouteWait } from "./route/execution.js";
 import {
     isRouteCheckpointReady,
@@ -32,7 +22,6 @@ import {
 } from "./motion.js";
 import {
     advanceRouteControl,
-    bindRouteNavigation,
     enterRouteControl,
     completeRouteControl,
     isMovingRoute,
@@ -52,8 +41,7 @@ import type { Context } from "../../query.js";
 
 export interface RoutedLocomotionStepContext {
     readonly tick: number;
-    readonly maps: NavigationMaps;
-    readonly fieldCache: NavigationFieldProvider;
+    readonly navigation: navigation.State;
     readonly moveMultiplier: number;
     readonly queryContext: Context;
     readonly movementAllowed: boolean;
@@ -132,13 +120,14 @@ function isMoveCheckpointReached(
         return false;
     }
 
-    const request = getNavigationRequest(control.navigation)!;
-    const map = context.maps[control.navigation.pathMotionMode];
-    const tile = World.toTile(locator);
-    const field = context.fieldCache.get(map, request);
+    const request = tracking.getRequest(control.navigation)!;
     const reachable =
-        NavigationMap.get(map, tile)?.passable === true &&
-        field.nodes[tile[0] * map.columns + tile[1]]?.type !== "UNREACHABLE";
+        navigation.nextPoint(
+            context.navigation,
+            control.navigation.pathMotionMode,
+            locator,
+            request.goal.position,
+        ) !== null;
 
     return isRouteMoveCheckpointReached(route, locator, reachable);
 }
@@ -186,14 +175,14 @@ export function stepRoutedLocomotion(
     }
 
     function reportArrival(control: RouteControlState): RouteControlState {
-        const request = getNavigationRequest(control.navigation)!;
+        const request = tracking.getRequest(control.navigation)!;
 
         if (!arrived.has(request.id)) {
             outcomes.push({ type: "ARRIVED", requestId: request.id });
             arrived.add(request.id);
         }
 
-        const navigation = markNavigationArrived(control.navigation);
+        const navigation = tracking.arrive(control.navigation);
 
         return navigation === control.navigation ? control : { ...control, navigation };
     }
@@ -216,7 +205,6 @@ export function stepRoutedLocomotion(
                 break;
             }
 
-            control = bindRouteNavigation(control, position, context);
             const activity = control.navigation.execution.activity;
 
             if (activity.type !== "FOLLOWING" && activity.type !== "UNREACHABLE") {
@@ -231,14 +219,14 @@ export function stepRoutedLocomotion(
                 break;
             }
 
-            const next = queryNavigation(control.navigation, position);
+            const next = tracking.query(control.navigation, context.navigation, position);
 
             if (next.state !== control.navigation) {
                 control = { ...control, navigation: next.state };
             }
 
             outcomes.push(...next.outcomes);
-            const decision = next.selection.decision;
+            const decision = next.decision;
 
             if (control.route.progress.phase === "CHECKPOINTS") {
                 if (decision.type === "ARRIVAL_CANDIDATE") {
@@ -289,7 +277,7 @@ export function stepRoutedLocomotion(
             return control;
         }
 
-        const request = getNavigationRequest(control.navigation)!;
+        const request = tracking.getRequest(control.navigation)!;
         const reached = isNavigationGoalReached(request, routeLocator(control, position));
 
         if (reached) {
@@ -332,11 +320,11 @@ export function stepRoutedLocomotion(
     }
 
     let active = alternative ?? main;
-    const map = context.maps[active.navigation.pathMotionMode];
+    const mode = active.navigation.pathMotionMode;
+    const map = applyOverlays(context.navigation.baseline[mode], context.navigation.overlays[mode]);
     const locator = routeLocator(active, position);
     const recovering =
-        !NavigationMap.contains(map, World.toTile(position)) ||
-        !NavigationMap.contains(map, World.toTile(locator));
+        !map.contains(World.toTile(position)) || !map.contains(World.toTile(locator));
 
     if (context.motionOverride !== undefined) {
         if (
@@ -375,9 +363,7 @@ export function stepRoutedLocomotion(
         const pending =
             active.route.progress.phase === "CHECKPOINTS" &&
             active.route.progress.checkpoint.type === "NOT_ENTERED";
-        const traverse = recovering
-            ? canTraverseNavigationRecoverySegment
-            : canTraverseNavigationSegment;
+        const traverse = recovering ? canRecover : canTraverse;
         const permitted = (destination: WorldPosition): boolean =>
             traverse(map, position, destination) &&
             traverse(map, routeLocator(active, position), routeLocator(active, destination));
@@ -406,7 +392,7 @@ export function stepRoutedLocomotion(
                 );
                 const destination = recovering
                     ? movement.position
-                    : reflectNavigationMovement(position, movement.position, map);
+                    : reflectNavigationMovement(position, movement.position, map, target);
 
                 if (permitted(destination)) {
                     moving = destination[0] !== position[0] || destination[1] !== position[1];

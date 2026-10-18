@@ -1,7 +1,7 @@
 import * as registry from "../../hook/hook.js";
 import type { State as BattleState, Result } from "../../../battle/state.js";
 import type { Context } from "../../query.js";
-import type { NavigationState } from "../../../battlefield/navigation/state.js";
+import type { State as NavigationState } from "./tracking.js";
 import type { RouteState } from "./route/state.js";
 import type { Unit } from "../../unit.js";
 import { createSteeringState, type SteeringParameters, type SteeringState } from "./steering.js";

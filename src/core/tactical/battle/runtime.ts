@@ -1,9 +1,9 @@
-import { advanceBattlefield, battlefieldView, createBattleState, type State } from "./state.js";
+import { battlefieldView, createBattleState, type State } from "./state.js";
 import { advance as advanceEffects, validateScopes } from "../unit/effect/operations.js";
 import { assert, assertNonnegativeNumber, assertPositiveSafeInteger } from "../../common/assert.js";
 import { create as createBattlefield } from "../battlefield/state.js";
 import { view as createBattlefieldView } from "../battlefield/view.js";
-import type { NavigationMaps } from "../battlefield/navigation/map.js";
+import type { State as NavigationState } from "../battlefield/navigation/state.js";
 import { copy } from "../unit/snapshot.js";
 import { Actions } from "../unit/action/actions.js";
 import {
@@ -73,7 +73,7 @@ export class BattleRuntime {
                 nextUnitId: 0,
                 nextNavigationRequestId: 0,
                 nextMechanismId: 0,
-                nextNavigationModifierId: 0,
+                nextOverlayId: 0,
                 nextProjectileId: 0,
             },
             actions,
@@ -91,8 +91,8 @@ export class BattleRuntime {
         this.#state = initialized;
     }
 
-    get navigationMaps(): NavigationMaps {
-        return this.#state.battlefield.navigationMaps;
+    get navigation(): NavigationState {
+        return this.#state.battlefield.navigation;
     }
 
     predefinedIdsForAlias(alias: string): readonly number[] {
@@ -137,9 +137,7 @@ export class BattleRuntime {
             blockingRelations: view.blockingRelations,
             supportRelations: view.supportRelations,
             mechanisms: view.mechanismIds.map((id) => view.getMechanism(id)!),
-            navigationModifiers: view.navigationModifierIds.map((id) =>
-                view.getNavigationModifier(id)!,
-            ),
+            navigation: this.#state.battlefield.navigation,
             completedRouteCount,
             result,
         };
@@ -158,7 +156,6 @@ export class BattleRuntime {
             closedLifetimes: new Set(),
         };
 
-        state = advanceBattlefield(state, [{ type: "EXPIRE_NAVIGATION_MODIFIERS", tick }]);
         state = advanceDeployment(state, tick);
         state = advancePredefined(state, this.#input.predefines, commands);
 

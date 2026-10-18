@@ -6,12 +6,6 @@ import type {
 } from "../../battlefield/contract.js";
 import type { MechanismDefinition } from "../../battlefield/mechanism.js";
 import {
-    createNavigationModifierRegion,
-    type NavigationModifierDefinition,
-    type NavigationModifierSource,
-    type NavigationModifierRegion,
-} from "../../battlefield/navigation/modifier.js";
-import {
     createUnitPlacementDefinition,
     instantiateUnitPlacement,
     type UnitPlacementDefinition,
@@ -32,11 +26,11 @@ export interface PredefinedUnitCreation extends UnitPlacementDefinition {
 export interface PredefinedMechanismCreation {
     readonly type: "MECHANISM";
     readonly definition: MechanismDefinition;
-    readonly navigationModifiers: readonly {
-        readonly definition: NavigationModifierDefinition;
-        readonly region: Extract<NavigationModifierRegion, { readonly type: "FIXED" }>;
-    }[];
 }
+
+export type Source =
+    | { readonly type: "UNIT"; readonly unitId: number }
+    | { readonly type: "MECHANISM"; readonly mechanismId: number };
 
 export interface PredefinedDefinition {
     readonly id: number;
@@ -47,7 +41,7 @@ export interface PredefinedDefinition {
 
 export interface PredefinedPresence {
     readonly definitionId: number;
-    readonly source: NavigationModifierSource;
+    readonly source: Source;
 }
 
 export type PredefinedCommand =
@@ -78,21 +72,7 @@ export function createPredefinedDefinition(definition: PredefinedDefinition): Pr
                       type: creation.type,
                       ...createUnitPlacementDefinition(creation),
                   })
-                : Object.freeze({
-                      ...creation,
-                      navigationModifiers: Object.freeze(
-                          creation.navigationModifiers.map((navigationModifier) => {
-                              const region = createNavigationModifierRegion(
-                                  navigationModifier.region,
-                              ) as typeof navigationModifier.region;
-
-                              return Object.freeze({
-                                  definition: navigationModifier.definition,
-                                  region,
-                              });
-                          }),
-                      ),
-                  }),
+                : Object.freeze({ ...creation }),
     });
 }
 
@@ -159,7 +139,7 @@ export function changePredefinedInstances(
         }
 
         const creation = definition.creation;
-        let source: NavigationModifierSource;
+        let source: Source;
 
         if (creation.type === "UNIT") {
             const initialized = instantiateUnitPlacement(state, creation);
@@ -180,24 +160,6 @@ export function changePredefinedInstances(
                 },
             });
             execution = { ...execution, nextMechanismId: nextIdentity(execution.nextMechanismId) };
-
-            for (const contribution of creation.navigationModifiers) {
-                changes.push({
-                    type: "ADD_NAVIGATION_MODIFIER",
-                    navigationModifier: {
-                        id: execution.nextNavigationModifierId,
-                        definition: contribution.definition,
-                        source,
-                        active: true,
-                        region: contribution.region,
-                        expiresAtTick: null,
-                    },
-                });
-                execution = {
-                    ...execution,
-                    nextNavigationModifierId: nextIdentity(execution.nextNavigationModifierId),
-                };
-            }
 
             state = { ...state, execution };
         }

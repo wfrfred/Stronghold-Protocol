@@ -1,14 +1,5 @@
 import { World, type WorldOffset, type WorldPosition } from "../../../geometry/coordinate.js";
-import type { NavigationFieldProvider } from "../../../battlefield/navigation/cache.js";
-import { NavigationMap, type NavigationMaps } from "../../../battlefield/navigation/map.js";
-import { createNavigationPath } from "../../../battlefield/navigation/path.js";
-import {
-    bindNavigationPath,
-    clearNavigationRequest,
-    createNavigationState,
-    getNavigationRequest,
-    startNavigationRequest,
-} from "../../../battlefield/navigation/state.js";
+import * as tracking from "./tracking.js";
 import type { RouteDefinition } from "./route/definition.js";
 import {
     advanceRoute,
@@ -31,11 +22,6 @@ export interface RouteControlTransition {
     readonly position: WorldPosition;
     readonly present: boolean;
     readonly signals: readonly LocatedRouteSignal[];
-}
-
-export interface RouteNavigationContext {
-    readonly maps: NavigationMaps;
-    readonly fieldCache: NavigationFieldProvider;
 }
 
 export function isMovingRoute(route: Readonly<RouteState>): boolean {
@@ -67,9 +53,9 @@ function applyTransition(
     let navigation = control.navigation;
 
     if (transition.request !== undefined) {
-        navigation = startNavigationRequest(navigation, transition.request);
+        navigation = tracking.start(navigation, transition.request);
     } else if (transition.state !== control.route && !isMovingRoute(transition.state)) {
-        navigation = clearNavigationRequest(navigation);
+        navigation = tracking.clear(navigation);
     }
 
     return {
@@ -103,7 +89,7 @@ export function advanceRouteControl(
 
 export function completeRouteControl(control: RouteControlState): RouteControlState {
     const route = completeRoute(control.route);
-    const navigation = clearNavigationRequest(control.navigation);
+    const navigation = tracking.clear(control.navigation);
 
     return route === control.route && navigation === control.navigation
         ? control
@@ -122,39 +108,12 @@ export function initializeRouteControl(
     return enterRouteControl(
         {
             route: createRouteState(definition, timing, alwaysCheckCurrentPoint),
-            navigation: createNavigationState(definition.pathMotionMode, locatorOffset),
+            navigation: tracking.create(definition.pathMotionMode, locatorOffset),
         },
         position,
         present,
         execution,
     );
-}
-
-export function bindRouteNavigation(
-    control: RouteControlState,
-    position: WorldPosition,
-    context: RouteNavigationContext,
-): RouteControlState {
-    const navigation = control.navigation;
-    const activity = navigation.execution.activity;
-    const map = context.maps[navigation.pathMotionMode];
-
-    if (
-        (activity.type === "FOLLOWING" || activity.type === "UNREACHABLE") &&
-        NavigationMap.sameContent(activity.path.field.map, map)
-    ) {
-        return control;
-    }
-
-    const request = getNavigationRequest(navigation);
-
-    if (request === null) {
-        throw new Error("moving route requires a navigation request");
-    }
-
-    const path = createNavigationPath(request, context.fieldCache.get(map, request));
-
-    return { ...control, navigation: bindNavigationPath(navigation, path, position).state };
 }
 
 export function routeLocator(control: RouteControlState, position: WorldPosition): WorldPosition {

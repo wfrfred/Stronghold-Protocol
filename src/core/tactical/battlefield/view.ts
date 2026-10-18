@@ -3,28 +3,17 @@ import type { Ref } from "../../common/ref.js";
 import type { Projectiles } from "./projectile/projectiles.js";
 import { blockingUsedCapacity } from "./blocking/relations.js";
 import type { BattlefieldView } from "./contract.js";
-import { createNavigationFieldCache, type NavigationFieldProvider } from "./navigation/cache.js";
 import type { State } from "./state.js";
-import {
-    battlefieldTileKey,
-    battlefieldOccupancyKey,
-    navigationModifierSourceKey,
-} from "./storage/indexes.js";
+import { battlefieldTileKey, battlefieldOccupancyKey } from "./storage/indexes.js";
 
 type StoredProjectile = ReturnType<Projectiles["values"]>[number];
 
-const fields: NavigationFieldProvider = createNavigationFieldCache();
-
-export function view<U extends Unit>(
-    state: State<U>,
-    fieldProvider: NavigationFieldProvider = fields,
-): BattlefieldView<U> {
+export function view<U extends Unit>(state: State<U>): BattlefieldView<U> {
     const map = state.map;
 
     return {
         map,
-        navigationMaps: state.navigationMaps,
-        fieldCache: fieldProvider,
+        navigation: state.navigation,
         effectLifetimes: state.effectLifetimes,
         blockingRelations: state.blockingRelations,
         supportRelations: state.supportRelations,
@@ -40,10 +29,6 @@ export function view<U extends Unit>(
             return [...state.mechanisms.keys()];
         },
         getMechanism: (id) => state.mechanisms.get(id),
-        get navigationModifierIds() {
-            return [...state.navigationModifiers.keys()];
-        },
-        getNavigationModifier: (id) => state.navigationModifiers.get(id),
         getUnit: (id) => state.units.get(id),
         unitsAt: (position) => {
             const key = battlefieldTileKey(map, position);
@@ -72,20 +57,5 @@ export function view<U extends Unit>(
             state.supportRelations
                 .filter((relation) => relation.supportUnitId === id)
                 .map((relation) => relation.supportedUnitId),
-        navigationModifiersAt: (position) => {
-            const key = battlefieldTileKey(map, position);
-
-            return key === undefined
-                ? []
-                : [...(state.spatial.navigationModifiersByTile.get(key) ?? [])];
-        },
-        navigationModifiersFrom: (source) => [
-            ...(state.spatial.navigationModifiersBySource.get(
-                navigationModifierSourceKey(source),
-            ) ?? []),
-        ],
-        navigationModifiersFollowing: (unitId) => [
-            ...(state.spatial.navigationModifiersByAnchor.get(unitId) ?? []),
-        ],
     };
 }

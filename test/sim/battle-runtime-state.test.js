@@ -26,8 +26,7 @@ const spawn = (definition, tick) => ({
 });
 function input(overrides = {}) {
     return {
-        map, initialUnits: [], predefines: [], initialMechanisms: [], initialNavigationModifiers: [],
-        schedule: { type: "TIMELINE", spawns: [
+        map, initialUnits: [], predefines: [], initialMechanisms: [], schedule: { type: "TIMELINE", spawns: [
             spawn(createEnemy({ id: "later", vitality: { maxHp: 100, defense: 0, resistance: 0 }, locomotion }), 100),
         ] },
         maxTicks: 10, routeMoveMultiplier: 1, rngState: 123,
@@ -36,7 +35,7 @@ function input(overrides = {}) {
 }
 const predefined = (id, definition, initiallyPresent = false) => ({
     id, alias: null, initiallyPresent,
-    creation: { type: "UNIT", definition, position: [id, 0], navigationModifiers: [] },
+    creation: { type: "UNIT", definition, position: [id, 0], },
 });
 
 test("initial entry receives the complete battle state and its returned facts persist", () => {

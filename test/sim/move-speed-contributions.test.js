@@ -18,10 +18,10 @@ import { initializeRoutedEnemy } from "../../dist/core/tactical/battle/creation/
 import { create, transition } from "../../dist/core/tactical/battlefield/state.js";
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
 import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
-import { createNavigationMap } from "../../dist/core/tactical/battlefield/navigation/map.js";
-import { createNavigationFieldCache } from "../../dist/core/tactical/battlefield/navigation/cache.js";
-import { canTraverseNavigationSegment } from "../../dist/core/tactical/battlefield/navigation/segment.js";
-import { getNavigationRequest } from "../../dist/core/tactical/battlefield/navigation/state.js";
+import { Map as NavigationMap } from "../../dist/core/tactical/battlefield/navigation/map.js";
+import { create as createNavigation } from "../../dist/core/tactical/battlefield/navigation/state.js";
+import { canTraverse as canTraverseNavigationSegment } from "../../dist/core/tactical/unit/capability/locomotion/segment.js";
+import { getRequest as getNavigationRequest } from "../../dist/core/tactical/unit/capability/locomotion/tracking.js";
 import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
 import { resolveMoveSpeed as resolveMoveSpeedPerTick } from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
 import {
@@ -103,10 +103,9 @@ function harness({ speed = 0.25, minimum = 0, definition = route(), maps } = {})
         nextUnitId: 1,
         nextNavigationRequestId: initialized.state.execution.nextNavigationRequestId,
         nextMechanismId: 0,
-        nextNavigationModifierId: 0,
+        nextOverlayId: 0,
         nextProjectileId: 0,
     };
-    const fieldCache = createNavigationFieldCache();
     return {
         get work() {
             return work;
@@ -124,8 +123,7 @@ function harness({ speed = 0.25, minimum = 0, definition = route(), maps } = {})
             const unit = getUnit(work, 0);
             const moved = stepRoutedUnit(unit, {
                 tick,
-                maps: maps ?? battlefieldView(work).navigationMaps,
-                fieldCache,
+                navigation: maps ? createNavigation(maps) : battlefieldView(work).navigation,
                 moveMultiplier: 1,
                 movementAllowed: true,
                 routeAdvanceAllowed: true,
@@ -374,24 +372,12 @@ test("move speed: acceleration still follows the low-cost corridor and cannot cr
     function maps(rows, expensive, blocked = []) {
         const cells = Array.from({ length: rows * 8 }, (_, index) => ({
             passable: !blocked.includes(index),
-            moveCost: expensive.includes(index) ? 1000 : 1,
+            cost: expensive.includes(index) ? 1000 : 1,
             departures: { UP: true, RIGHT: true, DOWN: true, LEFT: true },
         }));
         return {
-            WALK: createNavigationMap({
-                rows,
-                columns: 8,
-                pathMotionMode: "WALK",
-                revision: 0,
-                cells,
-            }),
-            FLY: createNavigationMap({
-                rows,
-                columns: 8,
-                pathMotionMode: "FLY",
-                revision: 0,
-                cells: cells.map((cell) => ({ ...cell, moveCost: 1 })),
-            }),
+            WALK: new NavigationMap(rows, 8, cells),
+            FLY: new NavigationMap(rows, 8, cells.map(cell => ({ ...cell, cost: 1 }))),
         };
     }
     const navigation = maps(3, [10, 11, 12, 13]);

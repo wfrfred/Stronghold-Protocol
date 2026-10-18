@@ -8,9 +8,10 @@ import {
     type PredefinedDefinition,
 } from "../../core/tactical/battle/steps/predefined.js";
 import { createMechanismDefinition } from "../../core/tactical/battlefield/mechanism.js";
-import { createNavigationModifierDefinition } from "../../core/tactical/battlefield/navigation/modifier.js";
-import { Tile, createTileOffset } from "../../core/tactical/geometry/coordinate.js";
-import { RangeGrid } from "../../core/tactical/geometry/range.js";
+import { Tile } from "../../core/tactical/geometry/coordinate.js";
+import { create as tileCost } from "../../content/tactical/effects/tile-cost.js";
+import { install } from "../../core/tactical/unit/effect/operations.js";
+import * as units from "../../core/tactical/unit/query.js";
 import {
     createDefinition as createDeployableDefinition,
     type Deployable,
@@ -149,8 +150,17 @@ function unitDefinition(
         throw new RangeError("predefined unit level is outside attribute keyframes");
     }
 
+    const navigation = tileCost(`${profile.prefabKey}:tile-navigation`, profile.walkCostFloor);
+
+    const onEnter: NonNullable<UnitDefinition["onEnter"]> = (battle, unitId) => {
+        const unit = battle.battlefield.units.get(unitId);
+
+        return unit === undefined ? battle : install(battle, units.ref(unit), navigation).state;
+    };
+
     return Object.freeze({
         id: instance.inst.characterKey,
+        onEnter,
         vitality: Object.freeze({ defense: 0, resistance: 0, maxHp: maxHp! }),
         occupancy: Object.freeze({}),
         tileBinding: createTileBindingDefinition(profile.tileBinding),
@@ -179,16 +189,10 @@ export function parsePredefinedDefinition(
             creation: {
                 type: "MECHANISM",
                 definition: createMechanismDefinition({ id: instance.inst.characterKey }),
-                navigationModifiers: [],
             },
         });
     }
 
-    const navigationModifierDefinition = createNavigationModifierDefinition({
-        id: `${profile.prefabKey}:tile-navigation`,
-        WALK: { denyPassage: false, deniedDepartures: [], costFloor: profile.walkCostFloor },
-        FLY: null,
-    });
     const definition = unitDefinition(instance, phase, profile);
     const position = Tile.center(instance.position);
     const occupancy: OccupancyState = {
@@ -205,13 +209,6 @@ export function parsePredefinedDefinition(
             definition,
             position,
             claims: occupancy.claims,
-            navigationModifiers: [
-                {
-                    definition: navigationModifierDefinition,
-                    range: RangeGrid.create([createTileOffset(0, 0)]),
-                    direction: instance.direction,
-                },
-            ],
         },
     });
 }

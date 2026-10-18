@@ -140,7 +140,6 @@ export function compileLevelMovementFragment(
             predefines: [],
             initialUnits: [],
             initialMechanisms: [],
-            initialNavigationModifiers: [],
             maxTicks: secondsToTicks(level.options.maxPlayTime),
             routeMoveMultiplier: level.options.moveMultiplier,
             rngState: options.rngState,

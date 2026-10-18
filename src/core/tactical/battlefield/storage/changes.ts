@@ -3,7 +3,6 @@ import type { Unit, Id } from "../../unit/unit.js";
 import { releaseBlockingRelations } from "../blocking/relations.js";
 import type { BattlefieldChange, BattlefieldRemovalReason } from "../contract.js";
 import type { MechanismId } from "../mechanism.js";
-import type { NavigationModifierId } from "../navigation/modifier.js";
 import type { BattlefieldContent } from "./state.js";
 import type { BattlefieldDependencyChanges } from "./dependencies.js";
 import { validateSupportRelations } from "../support/relations.js";
@@ -49,7 +48,6 @@ export function applyBattlefieldChanges<U extends Unit>(
     let blockingRelations = previous.blockingRelations;
     let supportRelations = previous.supportRelations;
     const mechanisms = copyOnWriteMap(previous.mechanisms);
-    const navigationModifiers = copyOnWriteMap(previous.navigationModifiers);
     const removedUnits: {
         unitId: Id;
         reason: BattlefieldRemovalReason;
@@ -57,19 +55,8 @@ export function applyBattlefieldChanges<U extends Unit>(
     }[] = [];
     const registeredUnitIds: Id[] = [];
     const removedMechanisms: { mechanismId: MechanismId; reason: BattlefieldRemovalReason }[] = [];
-    const removedNavigationModifiers = new Set<NavigationModifierId>();
     const updatedUnitIds = new Set<Id>();
-    const updatedMechanismIds = new Set<MechanismId>();
-    const updatedNavigationModifierIds = new Set<NavigationModifierId>();
     let unitMembershipChanged = false;
-    let navigationModifierMembershipChanged = false;
-
-    const removeNavigationModifier = (id: NavigationModifierId): void => {
-        navigationModifiers.edit().delete(id);
-        updatedNavigationModifierIds.add(id);
-        navigationModifierMembershipChanged = true;
-        removedNavigationModifiers.add(id);
-    };
 
     for (const change of changes) {
         switch (change.type) {
@@ -122,25 +109,12 @@ export function applyBattlefieldChanges<U extends Unit>(
                 unitMembershipChanged = true;
                 removedUnits.push({ unitId: change.unitId, reason: change.reason, unit });
 
-                for (const navigationModifier of navigationModifiers.value.values()) {
-                    const ownedOrAnchoredByUnit =
-                        (navigationModifier.source.type === "UNIT" &&
-                            navigationModifier.source.unitId === change.unitId) ||
-                        (navigationModifier.region.type === "FOLLOW_UNIT" &&
-                            navigationModifier.region.unitId === change.unitId);
-
-                    if (ownedOrAnchoredByUnit) {
-                        removeNavigationModifier(navigationModifier.id);
-                    }
-                }
-
                 break;
             }
 
             case "REGISTER_MECHANISM":
                 assertNonnegativeSafeInteger(change.mechanism.id, "mechanism id");
                 register(mechanisms.edit(), change.mechanism.id, change.mechanism, "mechanism");
-                updatedMechanismIds.add(change.mechanism.id);
                 break;
 
             case "UPDATE_MECHANISM": {
@@ -151,7 +125,6 @@ export function applyBattlefieldChanges<U extends Unit>(
                 }
 
                 mechanisms.edit().set(change.mechanism.id, change.mechanism);
-                updatedMechanismIds.add(change.mechanism.id);
                 break;
             }
 
@@ -160,88 +133,15 @@ export function applyBattlefieldChanges<U extends Unit>(
                     ...requireEntry(mechanisms.value, change.mechanismId, "mechanism"),
                     active: change.active,
                 });
-                updatedMechanismIds.add(change.mechanismId);
                 break;
 
             case "REMOVE_MECHANISM":
                 requireEntry(mechanisms.value, change.mechanismId, "mechanism");
                 mechanisms.edit().delete(change.mechanismId);
-                updatedMechanismIds.add(change.mechanismId);
                 removedMechanisms.push({
                     mechanismId: change.mechanismId,
                     reason: change.reason,
                 });
-
-                for (const navigationModifier of navigationModifiers.value.values()) {
-                    if (
-                        navigationModifier.source.type === "MECHANISM" &&
-                        navigationModifier.source.mechanismId === change.mechanismId
-                    ) {
-                        removeNavigationModifier(navigationModifier.id);
-                    }
-                }
-
-                break;
-
-            case "ADD_NAVIGATION_MODIFIER":
-                assertNonnegativeSafeInteger(
-                    change.navigationModifier.id,
-                    "navigation modifier id",
-                );
-                register(
-                    navigationModifiers.edit(),
-                    change.navigationModifier.id,
-                    change.navigationModifier,
-                    "navigation modifier",
-                );
-                updatedNavigationModifierIds.add(change.navigationModifier.id);
-                navigationModifierMembershipChanged = true;
-                break;
-
-            case "SET_NAVIGATION_MODIFIER_ACTIVE":
-                navigationModifiers.edit().set(change.navigationModifierId, {
-                    ...requireEntry(
-                        navigationModifiers.value,
-                        change.navigationModifierId,
-                        "navigation modifier",
-                    ),
-                    active: change.active,
-                });
-                updatedNavigationModifierIds.add(change.navigationModifierId);
-                break;
-
-            case "SET_NAVIGATION_MODIFIER_REGION":
-                navigationModifiers.edit().set(change.navigationModifierId, {
-                    ...requireEntry(
-                        navigationModifiers.value,
-                        change.navigationModifierId,
-                        "navigation modifier",
-                    ),
-                    region: change.region,
-                });
-                updatedNavigationModifierIds.add(change.navigationModifierId);
-                break;
-
-            case "REMOVE_NAVIGATION_MODIFIER":
-                requireEntry(
-                    navigationModifiers.value,
-                    change.navigationModifierId,
-                    "navigation modifier",
-                );
-                removeNavigationModifier(change.navigationModifierId);
-                break;
-
-            case "EXPIRE_NAVIGATION_MODIFIERS":
-                assertNonnegativeSafeInteger(change.tick, "navigation modifier expiry tick");
-
-                for (const navigationModifier of navigationModifiers.value.values()) {
-                    if (
-                        navigationModifier.expiresAtTick !== null &&
-                        navigationModifier.expiresAtTick <= change.tick
-                    ) {
-                        removeNavigationModifier(navigationModifier.id);
-                    }
-                }
 
                 break;
         }
@@ -249,10 +149,7 @@ export function applyBattlefieldChanges<U extends Unit>(
 
     const dependencies: BattlefieldDependencyChanges = {
         updatedUnitIds,
-        updatedMechanismIds,
-        updatedNavigationModifierIds,
         unitMembershipChanged,
-        navigationModifierMembershipChanged,
     };
 
     return {
@@ -260,7 +157,6 @@ export function applyBattlefieldChanges<U extends Unit>(
             units: units.value,
             projectiles: previous.projectiles,
             mechanisms: mechanisms.value,
-            navigationModifiers: navigationModifiers.value,
             blockingRelations,
             supportRelations,
         },
@@ -269,7 +165,6 @@ export function applyBattlefieldChanges<U extends Unit>(
             registeredUnitIds,
             removedUnits,
             removedMechanisms,
-            removedNavigationModifiers: [...removedNavigationModifiers],
         },
     };
 }

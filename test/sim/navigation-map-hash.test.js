@@ -1,219 +1,124 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
-import { create as createFieldState, transition as transitionBattlefield } from '../../dist/core/tactical/battlefield/state.js';
-import { view as viewBattlefield } from '../../dist/core/tactical/battlefield/view.js';
-import { createNavigationMap, NavigationMap } from '../../dist/core/tactical/battlefield/navigation/map.js';
-import { createNavigationModifierDefinition } from '../../dist/core/tactical/battlefield/navigation/modifier.js';
-import { projectNavigationMaps, projectStaticNavigationMap } from '../../dist/core/tactical/battlefield/navigation/projection.js';
+import { Map } from '../../dist/core/tactical/battlefield/navigation/map.js';
+import { hash } from '../../dist/core/tactical/battlefield/navigation/hash.js';
+import { create as createOverlay } from '../../dist/core/tactical/battlefield/navigation/overlay.js';
+import { apply } from '../../dist/core/tactical/battlefield/navigation/apply.js';
 
 const cell = (overrides = {}) => ({
-  passable: true, moveCost: 1,
+  passable: true, cost: 1,
   departures: { UP: true, RIGHT: true, DOWN: true, LEFT: true },
   ...overrides,
 });
-const fields = (overrides = {}) => ({
-  rows: 2, columns: 2, pathMotionMode: 'WALK', revision: 0,
-  cells: Array.from({ length: 4 }, () => cell()),
-  ...overrides,
-});
-const tile = (overrides = {}) => ({
-  heightType: 'LOWLAND', buildableType: 'ALL', passableMask: 'ALL',
-  playerSideMask: 'ALL', terrain: 'NORMAL', mechanism: null,
-  ...overrides,
-});
-const flatMap = (rows = 1, columns = 3) => createBattlefieldMap(
-  rows, columns, Array.from({ length: rows * columns }, () => tile()),
-);
-const baselineMaps = map => ({
-  WALK: projectStaticNavigationMap(map, 'WALK', 0),
-  FLY: projectStaticNavigationMap(map, 'FLY', 0),
-});
-const modifier = (id, positions, walk = {}, fly = null) => ({
-  definition: createNavigationModifierDefinition({
-    id,
-    WALK: walk === null ? null : { denyPassage: false, deniedDepartures: [], costFloor: 1, ...walk },
-    FLY: fly === null ? null : { denyPassage: false, deniedDepartures: [], ...fly },
-  }),
-  positions,
+const map = (cells = Array.from({ length: 4 }, () => cell()), rows = 2, columns = 2) => new Map(rows, columns, cells);
+const overlay = (id, overrides = {}) => createOverlay({
+  id, cells: [[0, 1]], denyPassage: false, denyDepartures: [], ...overrides,
 });
 
-test('navigation content hashes are deterministic, serializable and independent of revision', () => {
-  const input = fields();
-  const first = createNavigationMap(input);
-  const again = createNavigationMap(fields({ revision: 91 }));
-  const suppliedHash = createNavigationMap({ ...fields(), contentHash: 0xffff_ffff });
+test('navigation maps own immutable cells and compare their full contents', () => {
+  const cells = Array.from({ length: 4 }, () => cell());
+  const first = map(cells);
+  const equal = map();
+  const initialHash = hash(first);
+  assert.equal(first.equals(equal), true);
+  assert.equal(first.equals(first), true);
+  assert.equal(hash(equal), initialHash);
+  assert.ok(Object.isFrozen(first));
+  assert.ok(Object.isFrozen(first.cells));
+  assert.ok(first.cells.every(item => Object.isFrozen(item) && Object.isFrozen(item.departures)));
 
-  assert.equal(typeof first.contentHash, 'number');
-  assert.ok(Number.isInteger(first.contentHash));
-  assert.ok(first.contentHash >= 0 && first.contentHash <= 0xffff_ffff);
-  assert.equal(again.contentHash, first.contentHash);
-  assert.equal(suppliedHash.contentHash, first.contentHash);
-  assert.equal(NavigationMap.sameContent(first, again), true);
-  assert.equal(NavigationMap.sameContent(first, first), true);
-  assert.equal(JSON.parse(JSON.stringify(first)).contentHash, first.contentHash);
-
-  input.cells[0].passable = false;
-  input.cells[1].departures.LEFT = false;
-  assert.equal(first.cells[0].passable, true);
-  assert.equal(first.cells[1].departures.LEFT, true);
-  assert.equal(first.contentHash, again.contentHash);
+  cells[0].passable = false;
+  cells[1].departures.LEFT = false;
+  cells[2].cost = 900;
+  cells.pop();
+  assert.equal(first.equals(equal), true);
+  assert.equal(hash(first), initialHash);
+  assert.throws(() => { first.cells[0].cost = 2; }, TypeError);
+  assert.equal(first.contains([0, 0]), true);
+  assert.equal(first.contains([-1, 0]), false);
+  assert.equal(first.contains([2, 0]), false);
+  assert.equal(first.get([0, 1]), first.cells[1]);
+  assert.equal(first.get([0, 2]), undefined);
 });
 
-test('navigation hashes include dimensions, motion mode and all cell properties', () => {
-  const unchanged = createNavigationMap(fields());
-  const different = [
-    ['passability', fields({ cells: [cell({ passable: false }), cell(), cell(), cell()] })],
-    ['cost', fields({ cells: [cell({ moveCost: 2 }), cell(), cell(), cell()] })],
-    ['dimensions', fields({ rows: 1, columns: 4 })],
-    ['motion mode', fields({ pathMotionMode: 'FLY' })],
+test('navigation hashes depend on dimensions, cell positions and every cell property', () => {
+  const original = map();
+  const changed = [
+    ['passability', map([cell({ passable: false }), cell(), cell(), cell()])],
+    ['cost', map([cell({ cost: 2 }), cell(), cell(), cell()])],
+    ['dimensions', map(undefined, 1, 4)],
     ...['UP', 'RIGHT', 'DOWN', 'LEFT'].map(direction => [
-      `${direction} departure`, fields({ cells: [cell({
-        departures: { ...cell().departures, [direction]: false },
-      }), cell(), cell(), cell()] }),
+      `${direction} departure`, map([cell({ departures: { ...cell().departures, [direction]: false } }), cell(), cell(), cell()]),
     ]),
   ];
-
-  for (const [property, input] of different) {
-    const changed = createNavigationMap(input);
-    assert.notEqual(changed.contentHash, unchanged.contentHash, property);
-    assert.equal(NavigationMap.sameContent(changed, unchanged), false, property);
+  assert.ok(Number.isInteger(hash(original)));
+  for (const [property, other] of changed) {
+    assert.equal(original.equals(other), false, property);
+    assert.equal(other.equals(original), false, property);
+    assert.notEqual(hash(original), hash(other), property);
   }
-
-  const atStart = createNavigationMap(fields({ cells: [cell({ moveCost: 7 }), cell(), cell(), cell()] }));
-  const atEnd = createNavigationMap(fields({ cells: [cell(), cell(), cell(), cell({ moveCost: 7 })] }));
-  assert.notEqual(atStart.contentHash, atEnd.contentHash, 'cell position');
-  assert.equal(NavigationMap.sameContent(atStart, atEnd), false);
+  const atStart = map([cell({ cost: 7 }), cell(), cell(), cell()]);
+  const atEnd = map([cell(), cell(), cell(), cell({ cost: 7 })]);
+  assert.equal(atStart.equals(atEnd), false);
+  assert.notEqual(hash(atStart), hash(atEnd));
 });
 
-test('navigation hashes distinguish the full safe integer cost rather than its low 32 bits', () => {
+test('navigation hashes retain all safe-integer cost bits', () => {
   const costs = [1, 0x1_0000_0001, 0x2_0000_0001, Number.MAX_SAFE_INTEGER];
-  const maps = costs.map(moveCost => createNavigationMap(fields({
-    cells: [cell({ moveCost }), cell(), cell(), cell()],
-  })));
+  const maps = costs.map(cost => map([cell({ cost }), cell(), cell(), cell()]));
+  assert.equal(new Set(maps.map(hash)).size, costs.length);
+  for (let index = 1; index < maps.length; index++) assert.equal(maps[0].equals(maps[index]), false);
+});
 
-  assert.equal(new Set(maps.map(map => map.contentHash)).size, costs.length);
-  for (let index = 1; index < maps.length; index++) {
-    assert.equal(NavigationMap.sameContent(maps[0], maps[index]), false);
+test('navigation map construction validates dimensions, dense cells and positive safe costs', () => {
+  for (const [rows, columns] of [[0, 1], [1, 0], [-1, 1], [1.5, 1], [Number.MAX_SAFE_INTEGER, 2]]) {
+    assert.throws(() => new Map(rows, columns, []), RangeError);
+  }
+  assert.throws(() => new Map(1, 2, [cell()]), RangeError);
+  assert.throws(() => new Map(1, 3, [cell(), , cell()]), RangeError);
+  for (const cost of [0, -1, 1.5, Infinity, NaN, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => new Map(1, 1, [cell({ cost })]), RangeError);
   }
 });
 
-test('factory, static projection and dynamic projection agree on final navigation content', () => {
-  const staticMap = createBattlefieldMap(1, 3, [
-    tile(), tile({ terrain: 'HOLE' }), tile({ passableMask: 'FLY_ONLY' }),
-  ], [], [{ position: [0, 0], direction: 'RIGHT', blockMask: 'WALK_ONLY' }]);
-  const baseline = baselineMaps(flatMap());
-  const restrictions = [
-    modifier('hole', [[0, 1]], { costFloor: 1_000_000 }),
-    modifier('walk-blocked', [[0, 2]], { denyPassage: true }),
-    modifier('edge-right', [[0, 0]], { deniedDepartures: ['RIGHT'] }),
-    modifier('edge-left', [[0, 1]], { deniedDepartures: ['LEFT'] }),
+test('overlay application combines restrictions independently of identity and order', () => {
+  const base = map();
+  const overlays = [
+    overlay(1, { cost: 17 }),
+    overlay(2, { denyPassage: true, denyDepartures: ['LEFT'] }),
+    overlay(3, { cost: 3, denyDepartures: ['UP'] }),
   ];
-  const projected = projectNavigationMaps(baseline, restrictions, baseline).maps;
-
-  for (const mode of ['WALK', 'FLY']) {
-    const fromStatic = projectStaticNavigationMap(staticMap, mode, 17);
-    const fromFactory = createNavigationMap({ ...fromStatic, revision: 99 });
-    assert.deepEqual(projected[mode].cells, fromStatic.cells);
-    assert.equal(projected[mode].contentHash, fromStatic.contentHash);
-    assert.equal(fromFactory.contentHash, fromStatic.contentHash);
-    assert.equal(NavigationMap.sameContent(projected[mode], fromStatic), true);
-    assert.equal(NavigationMap.sameContent(fromFactory, projected[mode]), true);
-  }
+  const before = JSON.stringify({ base, overlays });
+  const first = apply(base, overlays);
+  const reordered = apply(base, [...overlays].reverse());
+  const renamed = apply(base, overlays.map((value, index) => createOverlay({ ...value, id: 100 + index })));
+  const duplicated = apply(base, [...overlays, ...overlays]);
+  assert.equal(first.equals(reordered), true);
+  assert.equal(first.equals(renamed), true);
+  assert.equal(first.equals(duplicated), true);
+  assert.equal(hash(first), hash(reordered));
+  assert.deepEqual(first.cells[1], cell({ passable: false, cost: 17, departures: { UP: false, RIGHT: true, DOWN: true, LEFT: false } }));
+  assert.equal(JSON.stringify({ base, overlays }), before);
+  assert.equal(apply(base, []).equals(base), true);
+  assert.equal(base.cells[1].cost, 1);
 });
 
-test('modifier identity, source, order and intermediate revisions do not affect final hashes', () => {
-  const map = flatMap();
-  let first = createFieldState({ map });
-  let second = createFieldState({ map });
-  const registerSources = ids => ids.map(id => ({
-    type: 'REGISTER_MECHANISM', mechanism: { id, definition: { id: `source-${id}` }, active: true },
-  }));
-  const addition = (id, sourceId, projected) => ({
-    type: 'ADD_NAVIGATION_MODIFIER', navigationModifier: {
-      id, definition: projected.definition,
-      source: { type: 'MECHANISM', mechanismId: sourceId },
-      active: true, expiresAtTick: null,
-      region: { type: 'FIXED', position: projected.positions[0], range: [[0, 0]], direction: 'RIGHT' },
-    },
-  });
-  first = transitionBattlefield(first, registerSources([1, 2])).state;
-  second = transitionBattlefield(second, registerSources([7, 8])).state;
-  first = transitionBattlefield(first, [addition(1, 1, modifier('cost-first', [[0, 1]], { costFloor: 17 }))]).state;
-  first = transitionBattlefield(first, [addition(2, 2, modifier('block-second', [[0, 1]], { denyPassage: true }))]).state;
-  second = transitionBattlefield(second, [
-    addition(90, 8, modifier('another-block', [[0, 1]], { denyPassage: true })),
-    addition(91, 7, modifier('another-cost', [[0, 1]], { costFloor: 17 })),
-  ]).state;
-
-  const firstView = viewBattlefield(first);
-  const secondView = viewBattlefield(second);
-  assert.notEqual(firstView.navigationMaps.WALK.revision, secondView.navigationMaps.WALK.revision);
-  assert.deepEqual(firstView.navigationMaps.WALK.cells, secondView.navigationMaps.WALK.cells);
-  assert.equal(firstView.navigationMaps.WALK.contentHash, secondView.navigationMaps.WALK.contentHash);
-  assert.equal(NavigationMap.sameContent(firstView.navigationMaps.WALK, secondView.navigationMaps.WALK), true);
-  assert.equal(firstView.navigationMaps.FLY.contentHash, secondView.navigationMaps.FLY.contentHash);
+test('overlay application clips cells and never lifts baseline restrictions', () => {
+  const base = map([cell({ passable: false, cost: 10, departures: { ...cell().departures, RIGHT: false } }), cell(), cell(), cell()]);
+  const result = apply(base, [overlay(1, { cells: [[-1, 0], [0, 0], [9, 9]], cost: 3 })]);
+  assert.equal(result.equals(base), true);
+  const maximum = apply(base, [overlay(2, { cost: Number.MAX_SAFE_INTEGER })]);
+  assert.equal(maximum.cells[1].cost, Number.MAX_SAFE_INTEGER);
 });
 
-test('dynamic projection hashes final restrictions and restores content after A to B to A prime', () => {
-  const baseline = baselineMaps(flatMap());
-  const originalHashes = { WALK: baseline.WALK.contentHash, FLY: baseline.FLY.contentHash };
-  const restrictions = [
-    modifier('large-cost', [[0, 1]], { costFloor: 0x1_0000_0001 }, { deniedDepartures: ['UP'] }),
-    modifier('masked-cost', [[0, 1]], { costFloor: 3 }),
-    modifier('walk-edge', [[0, 0]], { deniedDepartures: ['RIGHT'] }),
-  ];
-  const changed = projectNavigationMaps(baseline, restrictions, baseline).maps;
-  const reordered = projectNavigationMaps(baseline, restrictions.slice().reverse(), baseline).maps;
-  const restored = projectNavigationMaps(baseline, [], changed, restrictions).maps;
-
-  for (const mode of ['WALK', 'FLY']) {
-    assert.notEqual(changed[mode].contentHash, originalHashes[mode]);
-    assert.equal(changed[mode].contentHash, reordered[mode].contentHash);
-    assert.equal(changed[mode].contentHash, createNavigationMap(changed[mode]).contentHash);
-    assert.notEqual(restored[mode], baseline[mode]);
-    assert.equal(restored[mode].revision, 2);
-    assert.equal(restored[mode].contentHash, originalHashes[mode]);
-    assert.equal(NavigationMap.sameContent(restored[mode], baseline[mode]), true);
-    assert.equal(baseline[mode].contentHash, originalHashes[mode]);
-    assert.equal(baseline[mode].cells[1].moveCost, 1);
-  }
-
-  const maximumCost = [modifier('maximum-cost', [[0, 1]], { costFloor: Number.MAX_SAFE_INTEGER })];
-  const maximum = projectNavigationMaps(baseline, maximumCost, changed, restrictions).maps.WALK;
-  assert.equal(maximum.cells[1].moveCost, Number.MAX_SAFE_INTEGER);
-  assert.equal(maximum.contentHash, createNavigationMap(maximum).contentHash);
-});
-
-test('matching hashes cannot make different navigation content equivalent', () => {
-  const original = createNavigationMap(fields());
-  const changed = createNavigationMap(fields({ cells: [cell({ passable: false }), cell(), cell(), cell()] }));
-  const collision = Object.freeze({ ...changed, contentHash: original.contentHash });
-
-  assert.equal(collision.contentHash, original.contentHash);
-  assert.equal(NavigationMap.sameContent(original, collision), false);
-  assert.equal(NavigationMap.sameContent(collision, original), false);
-  assert.equal(NavigationMap.sameContent(original, collision), false);
-});
-
-test('content comparison does not retain stale answers for mutable or shallow-frozen maps', () => {
-  const original = createNavigationMap(fields());
-  for (const shallowFrozen of [false, true]) {
-    const mutable = structuredClone(original);
-    if (shallowFrozen) Object.freeze(mutable);
-    assert.equal(NavigationMap.sameContent(original, mutable), true);
-
-    mutable.cells[0].moveCost = 2;
-    assert.equal(NavigationMap.sameContent(original, mutable), false);
-    mutable.cells[0].moveCost = 1;
-    assert.equal(NavigationMap.sameContent(original, mutable), true);
-
-    mutable.cells[1].departures.DOWN = false;
-    assert.equal(NavigationMap.sameContent(original, mutable), false);
-    mutable.cells[1].departures.DOWN = true;
-    assert.equal(NavigationMap.sameContent(original, mutable), true);
-
-    mutable.cells[2] = cell({ passable: false });
-    assert.equal(NavigationMap.sameContent(original, mutable), false);
-  }
+test('overlay construction isolates mutable arrays and coordinates', () => {
+  const cells = [[0, 1]];
+  const denyDepartures = ['LEFT'];
+  const value = createOverlay({ id: 1, cells, denyPassage: false, denyDepartures, cost: 2 });
+  cells[0][1] = 0;
+  cells.push([1, 1]);
+  denyDepartures.push('RIGHT');
+  assert.deepEqual(value.cells, [[0, 1]]);
+  assert.deepEqual(value.denyDepartures, ['LEFT']);
+  assert.ok(Object.isFrozen(value) && Object.isFrozen(value.cells) && Object.isFrozen(value.cells[0]) && Object.isFrozen(value.denyDepartures));
 });
