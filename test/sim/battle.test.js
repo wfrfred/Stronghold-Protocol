@@ -3,7 +3,7 @@ import { fixtureBattle } from "../helpers/unit.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { installFixtureEffect } from "../helpers/effects.js";
 import { create as createBattlefieldState, transition as transitionBattlefield } from "../../dist/core/tactical/battlefield/state.js";
-import { apply as applyOverlays } from '../../dist/core/tactical/battlefield/navigation/apply.js';
+import { apply as applyOverlays } from '../../dist/core/tactical/battlefield/navigation/overlay.js';
 import { setOverlay } from '../../dist/core/tactical/battlefield/navigation/state.js';
 import { setNavigation } from '../../dist/core/tactical/battlefield/state.js';
 import { view as viewBattlefield } from "../../dist/core/tactical/battlefield/view.js";

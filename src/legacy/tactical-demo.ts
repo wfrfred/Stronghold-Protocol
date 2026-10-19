@@ -1,5 +1,5 @@
-import { hash as navigationHash } from "../core/tactical/battlefield/navigation/hash.js";
-import { apply as applyOverlays } from "../core/tactical/battlefield/navigation/apply.js";
+import { hash as navigationHash } from "../core/tactical/battlefield/navigation/map.js";
+import { apply as applyOverlays } from "../core/tactical/battlefield/navigation/overlay.js";
 import { BattleRuntime, type Command, type Event } from "../core/tactical/battle/runtime.js";
 import type { BattlefieldMap } from "../core/tactical/battlefield/map/map.js";
 import { TICKS_PER_SECOND } from "../core/tactical/tick.js";

@@ -1,8 +1,7 @@
 import type { TilePosition } from "../../geometry/coordinate.js";
-import { apply } from "./apply.js";
-import type { Field } from "./field.js";
+import { build, type Field } from "./field.js";
 import type { Map as NavigationMap } from "./map.js";
-import { build } from "./pathfinding.js";
+import { apply } from "./overlay.js";
 import type { MotionMode, State } from "./state.js";
 
 const maps = new WeakMap<State, Partial<Record<MotionMode, NavigationMap>>>();

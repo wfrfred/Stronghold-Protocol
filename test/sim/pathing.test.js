@@ -13,8 +13,7 @@ import {
 import { finishBattleEvents } from '../../dist/core/tactical/battle/events.js';
 import { createMechanismDefinition, createMechanism } from '../../dist/core/tactical/battlefield/mechanism.js';
 import { Map as NavigationMap } from '../../dist/core/tactical/battlefield/navigation/map.js';
-import { apply } from '../../dist/core/tactical/battlefield/navigation/apply.js';
-import { create as createOverlay } from '../../dist/core/tactical/battlefield/navigation/overlay.js';
+import { apply, create as createOverlay } from '../../dist/core/tactical/battlefield/navigation/overlay.js';
 import { create as createNavigation, setOverlay, removeOverlay, nextPoint } from '../../dist/core/tactical/battlefield/navigation/state.js';
 import { createNavigationRequest } from '../../dist/core/tactical/unit/capability/locomotion/route/request.js';
 import { create as createNavigationState, setMotionMode as setNavigationMotionMode, query as queryNavigation, getRequest } from '../../dist/core/tactical/unit/capability/locomotion/tracking.js';
@@ -42,7 +41,7 @@ import { setRule as setBlockerRule } from '../../dist/core/tactical/unit/capabil
 import { createSteeringParameters, createSteeringState, integrateSteering } from '../../dist/core/tactical/unit/capability/locomotion/steering.js';
 import { Grid, OBSTACLE_COST, bresenhamTiles } from '../../server/sim/grid.js';
 import { flowFieldForGrid, navigationMapFromGrid, waypointsForGrid } from '../../dist/legacy/navigation.js';
-import { build } from '../../dist/core/tactical/battlefield/navigation/pathfinding.js';
+import { build } from '../../dist/core/tactical/battlefield/navigation/field.js';
 import { canTraverse as canTraverseNavigationSegment } from '../../dist/core/tactical/unit/capability/locomotion/segment.js';
 import { getDefaultSource, hasGeneratedData } from '../../server/sim/simdata.js';
 import { makeBattle, flatStage, enemyRec } from '../helpers/battleHarness.js';

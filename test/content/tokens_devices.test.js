@@ -11,7 +11,7 @@ import { startColdWind, kjeragColdWind, activateTurrets, terrainAt, deviceOverri
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
 import { create as createFieldState, transition as transitionBattlefield } from '../../dist/core/tactical/battlefield/state.js';
 import { view as viewBattlefield } from '../../dist/core/tactical/battlefield/view.js';
-import { apply as applyOverlays } from '../../dist/core/tactical/battlefield/navigation/apply.js';
+import { apply as applyOverlays } from '../../dist/core/tactical/battlefield/navigation/overlay.js';
 const navigationMap = (state, mode = 'WALK') => applyOverlays(state.baseline[mode], state.overlays[mode]);
 import { loadMovementScenario } from '../../dist/data/arknights/movement-scenario.js';
 import { createLevelDefinition, parseLevelContent } from '../../dist/data/arknights/level.js';

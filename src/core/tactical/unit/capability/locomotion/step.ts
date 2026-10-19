@@ -2,7 +2,7 @@ import { assertNonnegativeNumber } from "../../../../common/assert.js";
 import { createRng, type Seed } from "../../../../common/rng.js";
 import { createWorldOffset, World, type WorldPosition } from "../../../geometry/coordinate.js";
 import * as navigation from "../../../battlefield/navigation/state.js";
-import { apply as applyOverlays } from "../../../battlefield/navigation/apply.js";
+import { apply as applyOverlays } from "../../../battlefield/navigation/overlay.js";
 import { canTraverse, canRecover } from "./segment.js";
 import { isNavigationGoalReached, type NavigationRequestId } from "./route/request.js";
 import * as tracking from "./tracking.js";

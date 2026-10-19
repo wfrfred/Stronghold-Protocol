@@ -5,7 +5,7 @@ import {
     type WorldPosition,
 } from "../../../geometry/coordinate.js";
 import * as navigation from "../../../battlefield/navigation/state.js";
-import { apply } from "../../../battlefield/navigation/apply.js";
+import { apply } from "../../../battlefield/navigation/overlay.js";
 import {
     isNavigationGoalReached,
     type NavigationRequest,

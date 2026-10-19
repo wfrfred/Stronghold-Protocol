@@ -1,9 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Map } from '../../dist/core/tactical/battlefield/navigation/map.js';
-import { hash } from '../../dist/core/tactical/battlefield/navigation/hash.js';
-import { create as createOverlay } from '../../dist/core/tactical/battlefield/navigation/overlay.js';
-import { apply } from '../../dist/core/tactical/battlefield/navigation/apply.js';
+import { Map, hash } from '../../dist/core/tactical/battlefield/navigation/map.js';
+import { create as createOverlay, apply } from '../../dist/core/tactical/battlefield/navigation/overlay.js';
 
 const cell = (overrides = {}) => ({
   passable: true, cost: 1,

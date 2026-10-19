@@ -1,9 +1,8 @@
 import type { TilePosition } from "../core/tactical/geometry/coordinate.js";
-import type { Field } from "../core/tactical/battlefield/navigation/field.js";
+import { build, type Field } from "../core/tactical/battlefield/navigation/field.js";
 import { Map as NavigationMap } from "../core/tactical/battlefield/navigation/map.js";
 import type { MotionMode } from "../core/tactical/battlefield/navigation/state.js";
 import { Direction, DIRECTIONS } from "../core/tactical/geometry/direction.js";
-import { build } from "../core/tactical/battlefield/navigation/pathfinding.js";
 
 export interface LegacyGrid {
     readonly rows: number;
