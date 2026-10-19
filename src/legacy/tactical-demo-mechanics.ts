@@ -11,10 +11,7 @@ import { TICKS_PER_SECOND } from "../core/tactical/tick.js";
 import * as enemy from "../core/tactical/unit/archetype/enemy.js";
 import * as operator from "../core/tactical/unit/archetype/operator.js";
 import type { Type as ElementType } from "../core/tactical/unit/capability/elemental/capability.js";
-import {
-    createRouteDefinition,
-    type RouteDefinition,
-} from "../core/tactical/unit/capability/locomotion/route/definition.js";
+import { createInput, type Input as RouteInput } from "../core/tactical/battle/creation/route.js";
 import { createArknightsElementalDefinition } from "../data/arknights/elemental.js";
 import { compileArknightsAttackBuffSkill } from "../data/arknights/skill-buff.js";
 import { createTacticalCombatDemoSpec } from "./tactical-demo-combat.js";
@@ -37,7 +34,7 @@ export function isTacticalMechanicsScenario(
 
 export function createTacticalMechanicsDemo(
     map: BattlefieldMap,
-    route: RouteDefinition,
+    route: RouteInput,
     data: LegacyData,
     seed: number,
     scenario: TacticalMechanicsScenario,
@@ -105,7 +102,7 @@ export function createTacticalMechanicsDemo(
             ? {}
             : { elemental: createArknightsElementalDefinition({ receiver: "ENEMY" }) }),
     });
-    const targetRoute = createRouteDefinition({
+    const targetRoute = createInput({
         ...route,
         startPosition: [5, 6],
         endPosition: [5, 7],

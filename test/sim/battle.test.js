@@ -8,7 +8,6 @@ import { setOverlay } from '../../dist/core/tactical/battlefield/navigation/stat
 import { setNavigation } from '../../dist/core/tactical/battlefield/state.js';
 import { view as viewBattlefield } from "../../dist/core/tactical/battlefield/view.js";
 import { battlefieldView } from "../../dist/core/tactical/battle/state.js";
-import { getRequest as getNavigationRequest } from "../../dist/core/tactical/unit/capability/locomotion/tracking.js";
 // Battle-level rules: DP & redeploy, pathing around crates, FLY checkpoints, leaks/results, time limit, unite & boss
 // fields, shared boss pool, wire format, determinism, robustness, deployment order.
 import { test } from 'node:test';
@@ -31,7 +30,7 @@ import { createSpawnScheduleDefinition } from "../../dist/core/tactical/battle/s
 import { createSteeringParameters } from '../../dist/core/tactical/unit/capability/locomotion/steering.js';
 import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
 import { initializeRoutedEnemy } from "../../dist/core/tactical/battle/creation/enemy.js";
-import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
+import { createInput as createRouteDefinition, normalize as normalizeRoute } from '../../dist/core/tactical/battle/creation/route.js';
 import { TICKS_PER_SECOND } from '../../dist/core/tactical/tick.js';
 import { secondsToTicks } from '../../dist/data/arknights/tick.js';
 import { parseLevelContent, parseLevelDefinition } from '../../dist/data/arknights/level.js';
@@ -688,10 +687,11 @@ test('core raw 01 slime fragment preserves map, route flags and stats; spawns at
   assert.equal(first.spawning.cursor, 1);
   assert.equal(first.spawning.spawnedCount, 1);
   assert.deepEqual(first.spawning.managedFinalUnitIds, [0]);
-  assert.deepEqual(first.execution, { rngState: expectedRng.state(), nextUnitId: 1, nextNavigationRequestId: 1, nextMechanismId: 0, nextOverlayId: 0, nextProjectileId: 0, nextCardId: 0 });
+  assert.deepEqual(first.execution, { rngState: expectedRng.state(), nextUnitId: 1, nextMechanismId: 0, nextOverlayId: 0, nextProjectileId: 0, nextCardId: 0 });
   assert.equal(first.units[0].vitality.hp, 550);
-  assert.equal(getNavigationRequest(first.units[0].locomotion.mainRoute.navigation).id, 0);
-  assert.deepEqual(first.units[0].locomotion.mainRoute.route.timing, { waveStartedAtTick: 0, fragmentStartedAtTick: 0 });
+  assert.equal(first.units[0].route.main.phase.type, 'END');
+  assert.strictEqual(first.units[0].route.main.definition, first.units[0].definition.route);
+  assert.equal('timing' in first.units[0].route.main, false);
   assert.equal(first.units[0].position[1], 9);
   approx(10 - first.units[0].position[0], 0.5 * 10 / TICKS_PER_SECOND ** 2);
   while (runtime.snapshot().tickIndex < 240) runtime.step();
@@ -705,12 +705,9 @@ test('core raw 01 slime fragment preserves map, route flags and stats; spawns at
   assert.equal(second.spawning.cursor, 2);
   assert.equal(second.spawning.spawnedCount, 2);
   assert.deepEqual(second.spawning.managedFinalUnitIds, [0, 1]);
-  assert.deepEqual(second.execution, { rngState: expectedRng.state(), nextUnitId: 2, nextNavigationRequestId: 2, nextMechanismId: 0, nextOverlayId: 0, nextProjectileId: 0, nextCardId: 0 });
-  assert.deepEqual(second.units.map(unit => getNavigationRequest(unit.locomotion.mainRoute.navigation).id), [0, 1]);
-  assert.deepEqual(second.units.map(unit => unit.locomotion.mainRoute.route.timing), [
-    { waveStartedAtTick: 0, fragmentStartedAtTick: 0 },
-    { waveStartedAtTick: 0, fragmentStartedAtTick: 0 },
-  ]);
+  assert.deepEqual(second.execution, { rngState: expectedRng.state(), nextUnitId: 2, nextMechanismId: 0, nextOverlayId: 0, nextProjectileId: 0, nextCardId: 0 });
+  assert.deepEqual(second.units.map(unit => unit.route.main.phase.type), ['END', 'END']);
+  for (const unit of second.units) assert.strictEqual(unit.route.main.definition, unit.definition.route);
   const { spec: forceLimited } = slimeMovementFragment(rawLevel, [0], createSteeringParameters({
     steeringFactor: 100 / 30, maxSteeringForce: 0.3 / 900,
   }));
@@ -741,7 +738,6 @@ test('core raw 01 movement fragment replays every tick and completes routes with
   assert.deepEqual(first.snapshot().units, []);
   assert.deepEqual(events.filter(event => event.type === 'ROUTE_COMPLETED').map(event => event.unitId), [0, 1]);
   assert.deepEqual(events.filter(event => event.type === 'UNIT_REMOVED').map(event => [event.unitId, event.reason]), [[0, 'SCRIPT'], [1, 'SCRIPT']]);
-  assert.deepEqual(events.filter(event => event.type === 'NAVIGATION' && event.outcome.type === 'ARRIVED').map(event => event.outcome.requestId), [0, 1]);
   assert.deepEqual(simulateBattle(spec), first.result);
   const finished = first.snapshot();
   assert.deepEqual(first.step(), { events: [], result: first.result });
@@ -759,8 +755,8 @@ test('core battle snapshots share immutable values and retain the published tick
   const repeated = runtime.snapshot();
   const unit = before.units[0];
   const position = unit.position;
-  const routeProgress = unit.locomotion.mainRoute.route.progress;
-  const navigation = unit.locomotion.mainRoute.navigation;
+  const routeProgress = unit.route.main.phase;
+  const routeDefinition = unit.route.main.definition;
   const x = position[0];
   assert.equal(repeated.units[0].definition, unit.definition);
   assert.equal(repeated.units[0].position, position);
@@ -771,7 +767,7 @@ test('core battle snapshots share immutable values and retain the published tick
   assert.equal(repeated.blockingRelations, before.blockingRelations);
   assert.equal(repeated.supportRelations, before.supportRelations);
   assert.equal(repeated.spawning.managedFinalUnitIds, before.spawning.managedFinalUnitIds);
-  assert.equal(unit.locomotion.mainRoute.route.timing.fragmentStartedAtTick, 0);
+  assert.strictEqual(routeDefinition, unit.definition.route);
 
   assert.deepEqual(runtime.step(), replica.step());
   const current = runtime.snapshot();
@@ -781,8 +777,8 @@ test('core battle snapshots share immutable values and retain the published tick
   assert.equal(before.units[0].position, position);
   assert.equal(position[0], x);
   assert.ok(current.units[0].position[0] < x);
-  assert.equal(before.units[0].locomotion.mainRoute.route.progress, routeProgress);
-  assert.equal(before.units[0].locomotion.mainRoute.navigation, navigation);
+  assert.equal(before.units[0].route.main.phase, routeProgress);
+  assert.equal(before.units[0].route.main.definition, routeDefinition);
   assert.equal(before.execution.nextUnitId, 1);
   assert.deepEqual(before.spawning.managedFinalUnitIds, [0]);
   assert.equal(before.completedRouteCount, 0);
@@ -792,10 +788,10 @@ test('core battle initializes all route waits at the birth tick and replays thei
   const { spec } = slimeMovementFragment();
   const spawn = spec.schedule.spawns[0];
   const definition = createDefinition({ ...spawn.definition,
-    locomotion: { ...spawn.definition.locomotion, moveSpeedPerTick: 0 },
+    locomotion: { ...spawn.definition.locomotion, moveSpeedPerTick: 0, minimumMoveSpeedPerTick: 0 },
   });
   const cases = [
-    [{ type: 'WAIT_FOR_TICKS', durationTicks: 3 }, 7],
+    [{ type: 'WAIT_FOR_TICKS', durationTicks: 3 }, 8],
     [{ type: 'WAIT_FOR_PLAY_TICK', targetPlayTick: 10 }, 10],
     [{ type: 'WAIT_CURRENT_WAVE_TICKS', targetElapsedTicks: 10 }, 12],
     [{ type: 'WAIT_CURRENT_FRAGMENT_TICKS', targetElapsedTicks: 10 }, 13],
@@ -815,17 +811,14 @@ test('core battle initializes all route waits at the birth tick and replays thei
         assert.deepEqual(snapshot.units, []);
         continue;
       }
-      const unit = snapshot.units[0], progress = unit.locomotion.mainRoute.route.progress;
-      assert.deepEqual(unit.locomotion.mainRoute.route.timing, { waveStartedAtTick: 2, fragmentStartedAtTick: 3 });
+      const unit = snapshot.units[0], progress = unit.route.main.phase;
+      assert.equal('timing' in unit.route.main, false);
       assert.deepEqual(unit.position, [10, 9]);
       if (tick < deadline) {
-        assert.equal(progress.phase, 'CHECKPOINTS');
-        assert.equal(progress.checkpoint.remainingTicks, deadline - tick);
-        assert.equal(snapshot.execution.nextNavigationRequestId, 0);
+        assert.equal(progress.type, 'CHECKPOINT');
+        assert.equal(progress.checkpointState.deadlineTick, deadline);
       } else {
-        assert.equal(progress.phase, 'END');
-        assert.equal(getNavigationRequest(snapshot.units[0].locomotion.mainRoute.navigation).id, 0);
-        assert.equal(snapshot.execution.nextNavigationRequestId, 1);
+        assert.equal(progress.type, 'END');
       }
     }
     assert.equal(runtime.result.reason, 'TIME_LIMIT');
@@ -846,7 +839,7 @@ test('core route absolute waits retain birth timing after the scheduler enters a
       checkpoints: [{ type, targetElapsedTicks: 8 }],
     });
     const definition = createDefinition({ ...action.spawn.definition,
-      locomotion: { ...action.spawn.definition.locomotion, moveSpeedPerTick: 0 },
+      locomotion: { ...action.spawn.definition.locomotion, moveSpeedPerTick: 0, minimumMoveSpeedPerTick: 0 },
     });
     const runtime = new BattleRuntime({ ...spec, maxTicks: 16, schedule: { ...schedule, waves: [
       { ...firstWave, fragments: [{ ...fragment, actions: [{ ...action,
@@ -857,15 +850,15 @@ test('core route absolute waits retain birth timing after the scheduler enters a
       const tick = runtime.snapshot().tickIndex;
       runtime.step();
       if (tick < 5) continue;
-      const snapshot = runtime.snapshot(), state = snapshot.units[0].locomotion.mainRoute.route;
+      const snapshot = runtime.snapshot(), state = snapshot.units[0].route.main;
       assert.equal(snapshot.spawning.waveIndex, 1);
       assert.equal(snapshot.spawning.waveStartedAtTick, 5);
       assert.equal(snapshot.spawning.fragmentStartedAtTick, tick < 7 ? 5 : 7);
-      assert.deepEqual(state.timing, { waveStartedAtTick: 0, fragmentStartedAtTick: 5 });
+      assert.deepEqual(state.definition.checkpoints, [{ type: 'WAIT_UNTIL', tick: deadline }]);
       if (tick < deadline) {
-        assert.equal(state.progress.checkpoint.remainingTicks, deadline - tick);
+        assert.equal(state.phase.checkpointState.deadlineTick, deadline);
       } else {
-        assert.equal(state.progress.phase, 'END');
+        assert.equal(state.phase.type, 'END');
       }
     }
     assert.deepEqual(runtime.snapshot().spawning.managedFinalUnitIds, [0]);
@@ -876,13 +869,13 @@ test('core patrol stays registered and pending in the spawn schedule through det
   const { spec } = slimeMovementFragment();
   const spawn = spec.schedule.spawns[0];
   const route = createRouteDefinition({ ...spawn.route, visitEveryCheckPoint: true, checkpoints: [10, 9].map(column => ({
-    type: 'PATROL_MOVE', target: { position: [9, column], reachOffset: [0, 0], randomizeReachOffset: false, reachDistance: 0 },
+    type: 'PATROL_MOVE', target: { position: [9, column], reachOffset: [0, 0] },
   })) });
   const definition = createDefinition({ ...spawn.definition,
     locomotion: { ...spawn.definition.locomotion, moveSpeedPerTick: 4 },
   });
   const input = { ...withTimelineSpawns(spec, [{ ...spawn, tick: 0, definition, route, alwaysCheckCurrentPoint: true }]), maxTicks: 24 };
-  const runtime = new BattleRuntime(input), replay = new BattleRuntime(input), events = [];
+  const runtime = new BattleRuntime(input), replay = new BattleRuntime(input), events = [], positions = [];
   while (runtime.result === null) {
     const step = runtime.step();
     assert.deepEqual(step, replay.step());
@@ -890,13 +883,15 @@ test('core patrol stays registered and pending in the spawn schedule through det
     const snapshot = runtime.snapshot();
     assert.deepEqual(snapshot, replay.snapshot());
     assert.deepEqual(snapshot.spawning.managedFinalUnitIds, [0]);
-    assert.equal(snapshot.units[0].locomotion.mainRoute.route.progress.phase, 'CHECKPOINTS');
+    assert.equal(snapshot.units[0].route.main.phase.type, 'CHECKPOINT');
+    positions.push(snapshot.units[0].position[0]);
   }
   assert.deepEqual(runtime.result, {
     reason: 'TIME_LIMIT', elapsedTicks: 24, spawnedCount: 1, completedRouteCount: 0, remainingUnitIds: [0], unspawnedCount: 0,
   });
   assert.deepEqual(events.filter(event => event.type === 'ROUTE_COMPLETED' || event.type === 'UNIT_REMOVED'), []);
-  assert.ok(runtime.snapshot().execution.nextNavigationRequestId > 4);
+  assert.ok(positions.filter((position, index) => index > 0 && position !== positions[index - 1]).length > 4);
+  assert.ok(runtime.snapshot().units[0].definition.route.checkpoints.some(checkpoint => checkpoint.type === 'GOTO'));
 });
 
 test('core absolute wait overflow does not publish same-tick spawns, identities or RNG', () => {
@@ -914,7 +909,7 @@ test('core absolute wait overflow does not publish same-tick spawns, identities 
   ]), initialMechanisms: [{ definition: mechanism.definition, active: mechanism.active }],  });
   while (runtime.snapshot().tickIndex < 5) runtime.step();
   const before = runtime.snapshot(), maps = runtime.navigation;
-  assert.throws(() => runtime.step(), /route wait target tick overflow/);
+  assert.throws(() => runtime.step(), /route wait deadline/);
   assert.deepEqual(runtime.snapshot(), before);
   assert.equal(runtime.navigation, maps);
 });
@@ -975,81 +970,82 @@ test('core birth and same-tick route signals record each instruction position ra
   assert.deepEqual(runtime.step().events.filter(event => event.type === 'ROUTE'), []);
 });
 
-test('core alternative route commands preserve resolved main targets, continue main waits and retain earlier snapshots', () => {
+test('core alternative route commands preserve main deadlines, targets and earlier snapshots', () => {
   const waiting = new BattleRuntime(routeCommandBattle([{ type: 'WAIT_FOR_TICKS', durationTicks: 12 }]));
   waiting.step();
-  const waitRoute = createRouteDefinition({ ...waiting.snapshot().units[0].locomotion.mainRoute.route.definition,
-    checkpoints: [{ type: 'WAIT_FOR_TICKS', durationTicks: 30 }] });
-  waiting.step([{ type: 'SET_ALTERNATIVE_ROUTE', unitId: 0, route: waitRoute, alwaysCheckCurrentPoint: true }]);
+  const waitRoute = { ...waiting.snapshot().units[0].definition.route,
+    checkpoints: [{ type: 'WAIT', tick: 30 }] };
+  waiting.step([{ type: 'SET_ALTERNATIVE_ROUTE', unitId: 0, route: waitRoute }]);
   const active = waiting.snapshot().units[0];
-  assert.equal(active.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 10);
-  assert.equal(active.locomotion.alternativeRoute.route.progress.checkpoint.remainingTicks, 29);
+  assert.equal(active.route.main.phase.checkpointState.deadlineTick, 12);
+  assert.equal(active.route.alternative.phase.checkpointState.deadlineTick, 31);
   const snapshot = waiting.snapshot();
-  assert.equal(snapshot.units[0].locomotion, active.locomotion);
+  assert.equal(snapshot.units[0].route, active.route);
   assert.equal(snapshot.units[0].spatialPresence, active.spatialPresence);
   waiting.step();
-  assert.equal(waiting.snapshot().units[0].locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 9);
-  assert.equal(snapshot.units[0].locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 10);
-  assert.equal(snapshot.units[0].locomotion.alternativeRoute.route.progress.checkpoint.remainingTicks, 29);
+  assert.strictEqual(waiting.snapshot().units[0].route.main, active.route.main);
+  assert.equal(snapshot.units[0].route.alternative.phase.checkpointState.deadlineTick, 31);
   waiting.step([{ type: 'CLEAR_ALTERNATIVE_ROUTE', unitId: 0 }]);
-  assert.equal(waiting.snapshot().units[0].locomotion.alternativeRoute, null);
-  assert.equal(waiting.snapshot().units[0].locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 8);
-  assert.equal(snapshot.units[0].locomotion.alternativeRoute.route.progress.checkpoint.remainingTicks, 29);
+  assert.equal(waiting.snapshot().units[0].route.alternative, null);
+  assert.equal(waiting.snapshot().units[0].route.main.phase.checkpointState.deadlineTick, 12);
+  assert.equal(snapshot.units[0].route.alternative.phase.checkpointState.deadlineTick, 31);
 
   const input = routeCommandBattle([{ type: 'MOVE', target: {
-    position: [9, 8], reachOffset: [0.25, 0], randomizeReachOffset: true, reachDistance: 0,
+    position: [9, 8], reachOffset: [0.25, 0],
   } }]);
   const runtime = new BattleRuntime(input), replay = new BattleRuntime(input);
   assert.deepEqual(runtime.step(), replay.step());
-  const main = runtime.snapshot().units[0].locomotion.mainRoute;
+  const main = runtime.snapshot().units[0].route.main;
   const originalRng = runtime.snapshot().execution.rngState;
-  const route = createRouteDefinition({ ...main.route.definition, startPosition: [100, 100], endPosition: [9, 10],
-    spawnOffset: [100, 100], spawnRandomRange: [100, 100],
-    checkpoints: [{ type: 'WAIT_FOR_TICKS', durationTicks: 3 }] });
+  const route = { ...main.definition, startPosition: [100, 100], endPosition: [9, 10],
+    checkpoints: [{ type: 'WAIT', tick: 3 }] };
   for (let tick = 1; tick < 10; tick++) {
-    const commands = tick === 1 ? [{ type: 'SET_ALTERNATIVE_ROUTE', unitId: 0, route, alwaysCheckCurrentPoint: true }] : [];
+    const commands = tick === 1 ? [{ type: 'SET_ALTERNATIVE_ROUTE', unitId: 0, route }] : [];
     assert.deepEqual(runtime.step(commands), replay.step(commands));
     assert.deepEqual(runtime.snapshot(), replay.snapshot());
     const unit = runtime.snapshot().units[0];
-    assert.deepEqual(unit.locomotion.mainRoute.route.progress, main.route.progress);
+    assert.strictEqual(unit.route.main, main);
     assert.deepEqual(unit.position, [10, 9]);
     assert.equal(runtime.snapshot().execution.rngState, originalRng);
   }
-  assert.equal(runtime.snapshot().units[0].locomotion.alternativeRoute.route.progress.phase, 'COMPLETED');
+  assert.equal(runtime.snapshot().units[0].route.alternative.phase.type, 'COMPLETED');
   const clear = [{ type: 'CLEAR_ALTERNATIVE_ROUTE', unitId: 0 }];
   assert.deepEqual(runtime.step(clear), replay.step(clear));
   assert.deepEqual(runtime.snapshot(), replay.snapshot());
-  assert.equal(runtime.snapshot().units[0].locomotion.alternativeRoute, null);
-  assert.deepEqual(runtime.snapshot().units[0].locomotion.mainRoute.route.progress, main.route.progress);
+  assert.equal(runtime.snapshot().units[0].route.alternative, null);
+  assert.strictEqual(runtime.snapshot().units[0].route.main, main);
 });
 
-test('core alternative route commands preserve hidden presence and emit ordered one-time teleport signals', () => {
+test('core alternative route commands execute pending teleport instructions during advancement', () => {
   const runtime = new BattleRuntime(routeCommandBattle([
     { type: 'DISAPPEAR' }, { type: 'WAIT_FOR_TICKS', durationTicks: 30 },
   ]));
   runtime.step();
   assert.equal(runtime.snapshot().units[0].spatialPresence.present, false);
-  const main = runtime.snapshot().units[0].locomotion.mainRoute;
-  const route = createRouteDefinition({ ...main.route.definition, checkpoints: [{ type: 'WAIT_FOR_TICKS', durationTicks: 30 }] });
-  runtime.step([{ type: 'SET_ALTERNATIVE_ROUTE', unitId: 0, route, alwaysCheckCurrentPoint: true }]);
+  const main = runtime.snapshot().units[0].route.main;
+  const route = { ...main.definition, checkpoints: [{ type: 'WAIT', tick: 30 }] };
+  runtime.step([{ type: 'SET_ALTERNATIVE_ROUTE', unitId: 0, route }]);
   assert.equal(runtime.snapshot().units[0].spatialPresence.present, false);
-  const teleport = createRouteDefinition({ ...route, checkpoints: [
-    { type: 'APPEAR_AT_POS', position: [9, 7], reachOffset: [0, 0] },
-    { type: 'WAIT_FOR_TICKS', durationTicks: 30 },
-  ] });
-  const step = runtime.step([
-    { type: 'SET_ALTERNATIVE_ROUTE', unitId: 0, route: teleport, alwaysCheckCurrentPoint: true },
-    { type: 'CLEAR_ALTERNATIVE_ROUTE', unitId: 0 },
-  ]);
+  const teleport = { ...route, checkpoints: [
+    { type: 'APPEAR_AT_POS', position: [9, 7], offset: [0, 0] },
+    { type: 'WAIT', tick: 30 },
+  ] };
+  const step = runtime.step([{ type: 'SET_ALTERNATIVE_ROUTE', unitId: 0, route: teleport }]);
   assert.deepEqual(step.events.filter(event => event.type === 'ROUTE'), [
     { type: 'ROUTE', unitId: 0, signal: { type: 'APPEAR_AT_POS', position: [7, 9] }, position: [7, 9], tick: 2 },
   ]);
+  assert.equal(runtime.snapshot().units[0].spatialPresence.present, true);
+  assert.deepEqual(runtime.snapshot().units[0].position, [7, 9]);
+  const cleared = runtime.step([{ type: 'CLEAR_ALTERNATIVE_ROUTE', unitId: 0 }]);
   const unit = runtime.snapshot().units[0];
-  assert.equal(unit.spatialPresence.present, true);
-  assert.deepEqual(unit.position, [7, 9]);
-  assert.equal(unit.locomotion.alternativeRoute, null);
-  assert.equal(unit.locomotion.mainRoute.route.progress.checkpointIndex, main.route.progress.checkpointIndex);
-  assert.deepEqual(runtime.step().events.filter(event => event.type === 'ROUTE'), []);
+  assert.equal(unit.route.alternative, null);
+  assert.strictEqual(unit.route.main, main);
+  assert.deepEqual(cleared.events.filter(event => event.type === 'ROUTE'), []);
+  const skipped = runtime.step([
+    { type: 'SET_ALTERNATIVE_ROUTE', unitId: 0, route: teleport },
+    { type: 'CLEAR_ALTERNATIVE_ROUTE', unitId: 0 },
+  ]);
+  assert.deepEqual(skipped.events.filter(event => event.type === 'ROUTE'), []);
 });
 
 test('core failed alternative route commands do not publish same-tick births, RNG or navigation identities', () => {
@@ -1062,9 +1058,9 @@ test('core failed alternative route commands do not publish same-tick births, RN
   runtime.step();
   const before = runtime.snapshot(), maps = runtime.navigation;
   const route = createRouteDefinition({ ...spawn.route, checkpoints: [{ type: 'MOVE', target: {
-    position: [9, 8], reachOffset: [0.25, 0], randomizeReachOffset: true, reachDistance: 0,
+    position: [9, 8], reachOffset: [0.25, 0],
   } }] });
-  const command = { type: 'SET_ALTERNATIVE_ROUTE', unitId: 0, route, alwaysCheckCurrentPoint: true };
+  const command = { type: 'SET_ALTERNATIVE_ROUTE', unitId: 0, route: normalizeRoute(route, spawn.timing, route.spawnOffset, true) };
   assert.throws(() => runtime.step([command, { type: 'CLEAR_ALTERNATIVE_ROUTE', unitId: 999 }]), /unknown alternative route unit/);
   assert.deepEqual(runtime.snapshot(), before);
   assert.equal(runtime.navigation, maps);
@@ -1072,7 +1068,7 @@ test('core failed alternative route commands do not publish same-tick births, RN
     creation: { type: 'UNIT', definition: Object.freeze({ id: 'fixed' }), position: [10, 9], },
   }] });
   const fixedBefore = fixed.snapshot();
-  assert.throws(() => fixed.step([{ ...command, unitId: 0 }]), /no routed locomotion/);
+  assert.throws(() => fixed.step([{ ...command, unitId: 0 }]), /unit has no route/);
   assert.deepEqual(fixed.snapshot(), fixedBefore);
 });
 
@@ -1135,7 +1131,6 @@ test('core battle publishes a completed tick only after all operations succeed',
     assert.equal(expected.events.filter(event => event.type === 'ENEMY_SPAWNED').length, 1);
     assert.equal(expected.events.filter(event => event.type === 'UNIT_REMOVED').length, 2);
     assert.notEqual(expectedSnapshot.execution.rngState, before.execution.rngState);
-    assert.ok(expectedSnapshot.execution.nextNavigationRequestId > before.execution.nextNavigationRequestId);
     assert.ok(expectedSnapshot.execution.nextUnitId > before.execution.nextUnitId);
     assert.ok(expectedSnapshot.execution.nextMechanismId > before.execution.nextMechanismId);
 
@@ -1249,9 +1244,9 @@ test('core schedule removal feedback advances the next wave only on the next tic
 
 test('core independent runtimes preserve every tick, event and RNG transition', () => {
   const input = routeCommandBattle([
-    { type: 'MOVE', target: { position: [9, 8], reachOffset: [0.25, 0.25], randomizeReachOffset: true, reachDistance: 0.05 } },
+    { type: 'MOVE', target: { position: [9, 8], reachOffset: [0.25, 0.25] } },
     { type: 'WAIT_FOR_TICKS', durationTicks: 2 },
-    { type: 'MOVE', target: { position: [9, 6], reachOffset: [0.25, 0.25], randomizeReachOffset: true, reachDistance: 0.05 } },
+    { type: 'MOVE', target: { position: [9, 6], reachOffset: [0.25, 0.25] } },
   ], { speed: 1 / 5, maxTicks: 100 });
   const runtime = new BattleRuntime(input), replay = new BattleRuntime(input);
   for (let tick = 0; runtime.result === null; tick++) {
@@ -1311,12 +1306,9 @@ test('core fragment binds wave and fragment starts and preserves original action
   ]);
   const units = runtime.snapshot().units;
   assert.deepEqual(units.map(unit => unit.id), [0, 1]);
-  assert.equal(units[0].locomotion.mainRoute.route.definition, level.routes[0]);
-  assert.equal(units[1].locomotion.mainRoute.route.definition, level.routes[1]);
-  assert.deepEqual(units.map(unit => unit.locomotion.mainRoute.route.timing), [
-    { waveStartedAtTick: 0, fragmentStartedAtTick: 90 },
-    { waveStartedAtTick: 0, fragmentStartedAtTick: 90 },
-  ]);
+  assert.deepEqual(units.map(unit => unit.definition.route.startPosition), level.routes.slice(0, 2).map(route => route.startPosition));
+  for (const unit of units) assert.strictEqual(unit.route.main.definition, unit.definition.route);
+  assert.deepEqual(units.map(unit => unit.definition.route.checkpoints), [[], []]);
 });
 
 test('raw enemy movement levels inherit only defined values and reject sparse, unknown and invalid entries', () => {
@@ -1859,7 +1851,8 @@ test('battle schedule completion can leave unmanaged live units, and branch comm
   const spawned = triggered.step([{ type: 'TRIGGER_BRANCH', branchId: 'extra', isLoop: false }]);
   assert.deepEqual(triggered.spawnCounts, { spawnedCount: 1, unspawnedCount: 1 });
   assert.deepEqual(spawned.events.filter(event => event.type === 'ENEMY_SPAWNED'), [{ type: 'ENEMY_SPAWNED', unitId: 0, tick: 1 }]);
-  assert.equal(triggered.snapshot().units[0].locomotion.mainRoute.route.definition, branches.level.extraRoutes[0]);
+  assert.deepEqual(triggered.snapshot().units[0].definition.route.startPosition, branches.level.extraRoutes[0].startPosition);
+  assert.strictEqual(triggered.snapshot().units[0].route.main.definition, triggered.snapshot().units[0].definition.route);
 });
 
 test('raw 01 dragon branch waits for an explicit trigger and uses its own actual flying prefab and extra route', () => {
@@ -1883,9 +1876,10 @@ test('raw 01 dragon branch waits for an explicit trigger and uses its own actual
   assert.equal(dragon.definition.id, 'enemy_9012_acloon');
   assert.equal(dragon.definition.locomotion.steeringParameters.steeringFactor, 8 / 30);
   assert.equal(dragon.definition.locomotion.steeringParameters.maxSteeringForce, 10 / 900);
-  assert.equal(dragon.locomotion.mainRoute.route.definition, scenario.level.extraRoutes[0]);
-  assert.equal(dragon.locomotion.mainRoute.navigation.pathMotionMode, 'FLY');
-  assert.deepEqual(dragon.locomotion.mainRoute.route.timing, { waveStartedAtTick: 0, fragmentStartedAtTick: 0 });
+  assert.deepEqual(dragon.definition.route.startPosition, scenario.level.extraRoutes[0].startPosition);
+  assert.strictEqual(dragon.route.main.definition, dragon.definition.route);
+  assert.equal(dragon.definition.route.pathMotionMode, 'FLY');
+  assert.equal('timing' in dragon.route.main, false);
   assert.deepEqual(runtime.snapshot().spawning.managedWaveUnitIds, [0]);
   assert.deepEqual(runtime.snapshot().spawning.managedFinalUnitIds, [0, 1]);
   assert.equal(runtime.step([{ type: 'TRIGGER_BRANCH', branchId: 'dragon', isLoop: false }])
@@ -1908,8 +1902,7 @@ test('core blocked enemies at their route end stay in combat until their blocker
   const route = createRouteDefinition({
     pathMotionMode: 'WALK', startPosition: [0, 0], endPosition: [0, 0],
     spawnOffset: [0, 0], spawnRandomRange: [0, 0], checkpoints: [],
-    allowDiagonalMove: false, visitEveryTileCenter: false,
-    visitEveryNodeCenter: false, visitEveryCheckPoint: true,
+    visitEveryCheckPoint: true,
   });
   const runtime = createLegacyCombatBattle({
     rows: 1, columns: 5, maxTicks: 20,
@@ -1924,7 +1917,7 @@ test('core blocked enemies at their route end stay in combat until their blocker
   assert.deepEqual(held.units.map(unit => unit.id), [0, 1]);
   assert.deepEqual(held.blockingRelations, [{ blockerUnitId: 0, blockedUnitId: 1 }]);
   assert.deepEqual(held.spawning.managedFinalUnitIds, [1]);
-  assert.equal(held.units[1].locomotion.mainRoute.route.progress.phase, 'COMPLETED');
+  assert.equal(held.units[1].route.main.phase.type, 'COMPLETED');
   assert.equal(held.units[0].vitality.hp, 1);
   for (let tick = 1; tick < 3; tick++) {
     const waiting = runtime.step();
@@ -1950,8 +1943,7 @@ test('core blocked route waits can teleport away, release their blocker and resu
       { type: 'WAIT_FOR_TICKS', durationTicks: 2 },
       { type: 'APPEAR_AT_POS', position: [0, 3], reachOffset: [0, 0] },
     ],
-    allowDiagonalMove: false, visitEveryTileCenter: false,
-    visitEveryNodeCenter: false, visitEveryCheckPoint: true,
+    visitEveryCheckPoint: true,
   });
   const runtime = createLegacyCombatBattle({
     rows: 1, columns: 5, maxTicks: 20,
@@ -1960,15 +1952,18 @@ test('core blocked route waits can teleport away, release their blocker and resu
   });
   runtime.step();
   assert.deepEqual(runtime.snapshot().blockingRelations, [{ blockerUnitId: 0, blockedUnitId: 1 }]);
-  assert.equal(runtime.snapshot().units[1].locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 1);
+  assert.equal(runtime.snapshot().units[1].route.main.phase.checkpointState.deadlineTick, 2);
+  const stillWaiting = runtime.step();
+  assert.deepEqual(stillWaiting.events.filter(event => event.type === 'ROUTE'), []);
+  assert.deepEqual(runtime.snapshot().blockingRelations, [{ blockerUnitId: 0, blockedUnitId: 1 }]);
   const teleported = runtime.step();
   assert.deepEqual(teleported.events.filter(event => event.type === 'ROUTE'), [
-    { type: 'ROUTE', unitId: 1, signal: { type: 'APPEAR_AT_POS', position: [3, 0] }, position: [3, 0], tick: 1 },
+    { type: 'ROUTE', unitId: 1, signal: { type: 'APPEAR_AT_POS', position: [3, 0] }, position: [3, 0], tick: 2 },
   ]);
-  assert.deepEqual(runtime.snapshot().units[1].position, [3, 0]);
+  assert.ok(runtime.snapshot().units[1].position[0] > 3);
   assert.deepEqual(runtime.snapshot().blockingRelations, []);
   assert.equal(teleported.result, null);
-  for (let tick = 2; tick <= 4; tick++) {
+  for (let tick = 3; tick <= 5; tick++) {
     const moving = runtime.step();
     assert.equal(moving.events.some(event => event.type === 'ACTION' && event.sourceUnitId === 1), false);
     assert.deepEqual(runtime.snapshot().blockingRelations, []);
@@ -1983,8 +1978,7 @@ test('core same-position alternative disappearance and appearance replace an exi
     pathMotionMode: 'WALK', startPosition: [0, 1], endPosition: [0, 4],
     spawnOffset: [0.4, 0], spawnRandomRange: [0, 0],
     checkpoints: [{ type: 'WAIT_FOR_TICKS', durationTicks: 30 }],
-    allowDiagonalMove: false, visitEveryTileCenter: false,
-    visitEveryNodeCenter: false, visitEveryCheckPoint: true,
+    visitEveryCheckPoint: true,
   });
   const source = createLegacyCombatBattle({
     rows: 1, columns: 5, maxTicks: 20,
@@ -2012,18 +2006,23 @@ test('core same-position alternative disappearance and appearance replace an exi
   runtime.step();
   const before = runtime.snapshot();
   assert.deepEqual(before.blockingRelations, [{ blockerUnitId: 0, blockedUnitId: 1 }]);
-  const hidden = createRouteDefinition({ ...route, checkpoints: [{ type: 'DISAPPEAR' }] });
-  const appeared = createRouteDefinition({ ...route, checkpoints: [
+  const hidden = normalizeRoute(createRouteDefinition({ ...route, checkpoints: [{ type: 'DISAPPEAR' }] }),
+    { waveStartedAtTick: 0, fragmentStartedAtTick: 0 }, route.spawnOffset, true);
+  const appeared = normalizeRoute(createRouteDefinition({ ...route, checkpoints: [
     { type: 'APPEAR_AT_POS', position: [0, 1], reachOffset: [0.4, 0] },
     { type: 'WAIT_FOR_TICKS', durationTicks: 30 },
-  ] });
-  const step = runtime.step([
+  ] }), { waveStartedAtTick: 0, fragmentStartedAtTick: 0 }, route.spawnOffset, true);
+  const disappeared = runtime.step([
     { type: 'APPEAR_PREDEFINED', definitionId: 99 },
-    { type: 'SET_ALTERNATIVE_ROUTE', unitId: 1, route: hidden, alwaysCheckCurrentPoint: true },
-    { type: 'SET_ALTERNATIVE_ROUTE', unitId: 1, route: appeared, alwaysCheckCurrentPoint: true },
+    { type: 'SET_ALTERNATIVE_ROUTE', unitId: 1, route: hidden },
   ]);
+  assert.deepEqual(disappeared.events.filter(event => event.type === 'ROUTE').map(event => [event.signal.type, event.position]), [
+    ['DISAPPEAR', [1.4, 0]],
+  ]);
+  assert.deepEqual(runtime.snapshot().blockingRelations, []);
+  const step = runtime.step([{ type: 'SET_ALTERNATIVE_ROUTE', unitId: 1, route: appeared }]);
   assert.deepEqual(step.events.filter(event => event.type === 'ROUTE').map(event => [event.signal.type, event.position]), [
-    ['DISAPPEAR', [1.4, 0]], ['APPEAR_AT_POS', [1.4, 0]],
+    ['APPEAR_AT_POS', [1.4, 0]],
   ]);
   const after = runtime.snapshot();
   assert.deepEqual(after.units.find(unit => unit.id === 1).position, before.units[1].position);

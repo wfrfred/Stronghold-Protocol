@@ -14,7 +14,7 @@ import { readFileSync } from 'node:fs';
 import { makeBattle, chessRec, enemyRec } from '../helpers/battleHarness.js';
 import { ELEMENT } from '../../server/sim/constants.js';
 import { createLegacyCombatBattle, createLegacyCombatSpec } from '../../dist/legacy/combat.js';
-import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
+import { createInput as createRouteDefinition } from '../../dist/core/tactical/battle/creation/route.js';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
 import { createBattlefieldMap, BattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createTile } from '../../dist/core/tactical/battlefield/map/tile.js';

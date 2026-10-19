@@ -12,7 +12,7 @@ import { initialize } from "../helpers/unit.js";
 import { seededPlacement } from "../helpers/aura.js";
 import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
 
-import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
+import { createInput as createRouteDefinition } from "../../dist/core/tactical/battle/creation/route.js";
 
 test("runtime accepts the battle contract Input directly with factory-owned maps and creation references", async () => {
     const { default: ts } = await import("typescript");
@@ -51,7 +51,6 @@ new BattleRuntime(without${index});
     .join("")}
 ${[
     "nextUnitId",
-    "nextNavigationRequestId",
     "nextMechanismId",
     "nextOverlayId",
     "nextProjectileId",
@@ -222,7 +221,6 @@ test("runtime allocates initial IDs, resolves creation references, and never reu
         rngState: 17,
         nextCardId: 0,
         nextUnitId: 3,
-        nextNavigationRequestId: 0,
         nextMechanismId: 3,
         nextOverlayId: 0,
         nextProjectileId: 0,

@@ -11,7 +11,7 @@ import {
     createDefinition as createEnemy, createCombatDefinition,
 } from "../../dist/core/tactical/unit/archetype/enemy.js";
 import { createDefinition as createOperator } from "../../dist/core/tactical/unit/archetype/operator.js";
-import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
+import { createInput as createRouteDefinition } from "../../dist/core/tactical/battle/creation/route.js";
 import { install } from "../../dist/core/tactical/unit/effect/operations.js";
 import { fixtureBattlefieldState } from "../helpers/battlefield.js";
 import { map, unit as combatUnit } from "../helpers/action-fixture.js";

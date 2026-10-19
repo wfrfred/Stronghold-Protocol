@@ -6,10 +6,8 @@ import {
     type Type as ElementType,
 } from "../core/tactical/unit/capability/elemental/capability.js";
 import { damageRatio, currentType } from "../core/tactical/unit/capability/elemental/query.js";
-import {
-    hasLocomotion,
-    hasRoutedLocomotion,
-} from "../core/tactical/unit/capability/locomotion/capability.js";
+import { hasLocomotion } from "../core/tactical/unit/capability/locomotion/capability.js";
+import { hasRoute } from "../core/tactical/unit/capability/route/capability.js";
 import { isSpatiallyPresent } from "../core/tactical/unit/capability/presence/capability.js";
 import { hasSpatial } from "../core/tactical/unit/capability/spatial/capability.js";
 import { hasSkill } from "../core/tactical/unit/capability/skill/capability.js";
@@ -135,7 +133,7 @@ function text(value: unknown, fallback: string): string {
 }
 
 function isEnemy(unit: Unit): boolean {
-    return hasAllegiance(unit) ? unit.allegiance.side === "ENEMY" : hasRoutedLocomotion(unit);
+    return hasAllegiance(unit) ? unit.allegiance.side === "ENEMY" : hasRoute(unit);
 }
 
 function isFlying(unit: Unit): boolean {
@@ -143,9 +141,7 @@ function isFlying(unit: Unit): boolean {
         return unit.spatial.layer === "AIR";
     }
 
-    return (
-        hasRoutedLocomotion(unit) && unit.locomotion.mainRoute.navigation.pathMotionMode === "FLY"
-    );
+    return hasRoute(unit) && unit.definition.route.pathMotionMode === "FLY";
 }
 
 function maxHp(unit: Unit): number {
@@ -526,7 +522,6 @@ export class TacticalDemoPresentation {
                 case "DEPLOYMENT_REJECTED":
                 case "UNIT_RELOCATED":
                 case "SUPPORT_LOST":
-                case "NAVIGATION":
                 case "ROUTE":
                     break;
             }

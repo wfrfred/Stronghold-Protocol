@@ -1,7 +1,4 @@
-import {
-    createRouteTiming,
-    type RouteTiming,
-} from "../../unit/capability/locomotion/route/state.js";
+import { createTiming, type Timing } from "../creation/route.js";
 import {
     addScheduleTicks,
     type EnemySpawnDefinition,
@@ -31,7 +28,7 @@ export function createScheduleSpawn({
 }: {
     readonly spawn: EnemySpawnDefinition;
     readonly tick: number;
-    readonly timing: RouteTiming;
+    readonly timing: Timing;
     readonly management: ScheduleSpawn["schedule"];
 }): ScheduleSpawn {
     return Object.freeze({
@@ -88,7 +85,7 @@ export function dispatchQueue(
         const timing =
             queued.timingSource.type === "FIXED"
                 ? queued.timingSource.timing
-                : createRouteTiming({
+                : createTiming({
                       waveStartedAtTick: main.waveStartedAtTick,
                       fragmentStartedAtTick: main.fragmentStartedAtTick,
                   });

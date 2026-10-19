@@ -23,7 +23,7 @@ import { createDefinition as createEnemyDefinition } from "../../dist/core/tacti
 import { initialize, placement } from "../helpers/unit.js";
 import { seededPlacement } from "../helpers/aura.js";
 import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
-import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
+import { createInput as createRouteDefinition } from "../../dist/core/tactical/battle/creation/route.js";
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
 import { ref as actionRef, setState } from "../../dist/core/tactical/unit/action/action.js";
 import * as actions from "../../dist/core/tactical/unit/action/operations.js";

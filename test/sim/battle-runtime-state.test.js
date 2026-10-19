@@ -6,7 +6,7 @@ import { appendEvents, removeUnit } from "../../dist/core/tactical/battle/state.
 import { closeLifetime } from "../../dist/core/tactical/battle/execution/lifetime.js";
 import { advancePredefined } from "../../dist/core/tactical/battle/steps/predefined.js";
 import { createDefinition as createEnemy } from "../../dist/core/tactical/unit/archetype/enemy.js";
-import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
+import { createInput as createRouteDefinition } from "../../dist/core/tactical/battle/creation/route.js";
 import { map } from "../helpers/action-fixture.js";
 
 const locomotion = {

@@ -8,9 +8,8 @@ import type { BlockingRelation } from "../battlefield/blocking/relations.js";
 import type { CombatEvent } from "./execution/event.js";
 import type { Mechanism } from "../battlefield/mechanism.js";
 import type { State as NavigationState } from "../battlefield/navigation/state.js";
-import type { Outcome as NavigationOutcome } from "../unit/capability/locomotion/tracking.js";
 import type { WorldPosition } from "../geometry/coordinate.js";
-import type { RouteSignal } from "../unit/capability/locomotion/route/execution.js";
+import type { Signal as RouteSignal } from "../unit/capability/route/operations.js";
 import type { Unit, Id } from "../unit/unit.js";
 import type {
     Input as DeploymentInput,
@@ -22,7 +21,7 @@ import type {
     PredefinedPresence,
 } from "./steps/predefined.js";
 import type { SpawnScheduleState } from "./schedule/state.js";
-import type { AlternativeRouteCommand } from "./steps/route-control.js";
+import type { AlternativeRouteCommand } from "./steps/movement.js";
 import type { BattleExecutionState } from "./execution/state.js";
 import type {
     DeploymentCommand,
@@ -85,12 +84,6 @@ export type Event =
           readonly unitId: Id;
           readonly signal: RouteSignal;
           readonly position: WorldPosition;
-          readonly tick: number;
-      }
-    | {
-          readonly type: "NAVIGATION";
-          readonly unitId: Id;
-          readonly outcome: NavigationOutcome;
           readonly tick: number;
       }
     | { readonly type: "ROUTE_COMPLETED"; readonly unitId: Id; readonly tick: number }

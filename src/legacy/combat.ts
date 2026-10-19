@@ -10,7 +10,7 @@ import type { DamageType } from "../core/tactical/battle/damage/contract.js";
 import { isTilePosition, Tile, type TilePosition } from "../core/tactical/geometry/coordinate.js";
 import type { Direction } from "../core/tactical/geometry/direction.js";
 import { RangeGrid } from "../core/tactical/geometry/range.js";
-import type { RouteDefinition } from "../core/tactical/unit/capability/locomotion/route/definition.js";
+import type { Input as RouteInput } from "../core/tactical/battle/creation/route.js";
 import { TICKS_PER_SECOND } from "../core/tactical/tick.js";
 import * as enemy from "../core/tactical/unit/archetype/enemy.js";
 import * as operator from "../core/tactical/unit/archetype/operator.js";
@@ -23,7 +23,7 @@ interface LegacyCombatContent {
     }[];
     readonly enemies: readonly {
         readonly definition: unknown;
-        readonly route: RouteDefinition;
+        readonly route: RouteInput;
         readonly tick?: number;
     }[];
     readonly maxTicks?: number;

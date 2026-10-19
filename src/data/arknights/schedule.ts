@@ -6,7 +6,7 @@ import type {
     SpawnActionDefinition,
     SpawnScheduleDefinition,
 } from "../../core/tactical/battle/schedule/definition.js";
-import type { RouteDefinition } from "../../core/tactical/unit/capability/locomotion/route/definition.js";
+import type { Input as RouteInput } from "../../core/tactical/battle/creation/route.js";
 import type { ArknightsEnemyMovementContent } from "./enemy.js";
 import type {
     ArknightsEnemyDbRef,
@@ -43,7 +43,7 @@ function actionPath(selection: ArknightsActionSelection): string {
 export function resolveActionSpawn(
     level: ArknightsLevelDefinition,
     action: ArknightsSpawnAction,
-    route: RouteDefinition,
+    route: RouteInput,
     resolveEnemy: ArknightsEnemyResolver,
 ): EnemySpawnDefinition {
     if (

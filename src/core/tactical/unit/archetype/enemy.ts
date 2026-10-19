@@ -12,8 +12,8 @@ import {
 import type {
     Locomotion,
     Definition as LocomotionDefinition,
-    RoutedLocomotion,
 } from "../capability/locomotion/capability.js";
+import type { Route } from "../capability/route/capability.js";
 import type {
     SpatialPresence,
     Definition as PresenceDefinition,
@@ -54,7 +54,7 @@ export type Enemy = Unit & Vitality & Locomotion;
 
 export type RoutedEnemy<D extends Definition = Definition> = Enemy &
     Product<D> &
-    RoutedLocomotion &
+    Route &
     SpatialPresence;
 
 export interface CombatDefinition extends Definition {

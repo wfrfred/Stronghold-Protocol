@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
 import { getUnit, updateUnit } from '../../dist/core/tactical/battle/state.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
-import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
+import { createInput as createRouteDefinition } from '../../dist/core/tactical/battle/creation/route.js';
 import { createDefinition as createEnemy } from '../../dist/core/tactical/unit/archetype/enemy.js';
 
 const map = createBattlefieldMap(2, 4, Array.from({ length: 8 }, () => ({

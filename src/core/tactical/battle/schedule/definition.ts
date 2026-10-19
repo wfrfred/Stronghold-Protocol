@@ -1,21 +1,17 @@
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
-import {
-    createRouteTiming,
-    type RouteTiming,
-} from "../../unit/capability/locomotion/route/state.js";
-import type { RouteDefinition } from "../../unit/capability/locomotion/route/definition.js";
+import { createTiming, type Timing, type Input as RouteInput } from "../creation/route.js";
 import type { Definition } from "../../unit/archetype/enemy.js";
 
 export interface EnemySpawnDefinition {
     readonly definition: Definition;
-    readonly route: RouteDefinition;
+    readonly route: RouteInput;
     readonly alwaysCheckCurrentPoint: boolean;
     readonly notCountInTotal: boolean;
 }
 
 export interface ScheduledEnemySpawn extends EnemySpawnDefinition {
     readonly tick: number;
-    readonly timing: RouteTiming;
+    readonly timing: Timing;
 }
 
 export interface SpawnActionDefinition {
@@ -137,7 +133,7 @@ export function createSpawnScheduleDefinition(
                 Object.freeze({
                     ...copySpawnDefinition(spawn),
                     tick: spawn.tick,
-                    timing: createRouteTiming(spawn.timing),
+                    timing: createTiming(spawn.timing),
                 }),
             );
         }

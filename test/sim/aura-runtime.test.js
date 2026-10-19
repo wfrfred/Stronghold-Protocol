@@ -9,7 +9,7 @@ import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/m
 import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
 import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
 import { createDefinition as createDeployableDefinition } from "../../dist/core/tactical/unit/capability/deployable/capability.js";
-import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
+import { createInput as createRouteDefinition } from "../../dist/core/tactical/battle/creation/route.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { effectFixtureWork } from "../helpers/effects.js";
 import {

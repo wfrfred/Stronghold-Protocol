@@ -1,159 +1,59 @@
-import { fixtureBattle, placement } from "../helpers/unit.js";
-import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
-import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
-
-import { advanceMovement } from "../../dist/core/tactical/battle/steps/movement.js";
-import { changeAlternativeRoutes } from "../../dist/core/tactical/battle/steps/route-control.js";
+import { fixtureBattle } from "../helpers/unit.js";
+import { contributionEffect, refreshContribution } from "../helpers/effects.js";
+import { initialize } from "../../dist/core/tactical/unit/initialize.js";
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
+import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import {
     battlefieldView,
-    createBattleState,
     getUnit,
+    registerUnit,
     updateUnit,
 } from "../../dist/core/tactical/battle/state.js";
-import { initializeRoutedEnemy } from "../../dist/core/tactical/battle/creation/enemy.js";
-import { create, transition } from "../../dist/core/tactical/battlefield/state.js";
-import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
-import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
-import { Map as NavigationMap } from "../../dist/core/tactical/battlefield/navigation/map.js";
-import { create as createNavigation } from "../../dist/core/tactical/battlefield/navigation/state.js";
-import { canTraverse as canTraverseNavigationSegment } from "../../dist/core/tactical/unit/capability/locomotion/segment.js";
-import { getRequest as getNavigationRequest } from "../../dist/core/tactical/unit/capability/locomotion/tracking.js";
-import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
-import { resolveMoveSpeed as resolveMoveSpeedPerTick } from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
 import {
     setMoveSpeedContribution,
     removeMoveSpeedContribution,
+    setRule,
+    removeRule,
+    resolveMoveSpeed,
 } from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
-import { stepRoutedUnit } from "../../dist/core/tactical/unit/capability/locomotion/step.js";
-import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
+import { advance } from "../../dist/core/tactical/unit/capability/locomotion/step.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { copy } from "../../dist/core/tactical/unit/snapshot.js";
-import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
 import * as modifier from "../../dist/core/tactical/unit/contribution/attribute.js";
-import { contributionEffect, refreshContribution, effectFixtureWork } from "../helpers/effects.js";
 
 const address = { host: { id: 0 }, id: 0 };
-const fixture = (name) =>
-    JSON.parse(
-        readFileSync(new URL(`../fixtures/arknights/${name}.json`, import.meta.url), "utf8"),
-    );
 const close = (actual, expected) =>
     assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} ≈ ${expected}`);
 
-function route(overrides = {}) {
-    return createRouteDefinition({
-        pathMotionMode: "WALK",
-        startPosition: [0, 0],
-        endPosition: [0, 7],
-        spawnOffset: [0, 0],
-        spawnRandomRange: [0, 0],
-        checkpoints: [],
-        allowDiagonalMove: false,
-        visitEveryTileCenter: false,
-        visitEveryNodeCenter: false,
-        visitEveryCheckPoint: true,
-        ...overrides,
-    });
-}
-
-function harness({ speed = 0.25, minimum = 0, definition = route(), maps } = {}) {
-    const battlefield = create({
-        map: createBattlefieldMap(
-            1,
-            8,
-            Array.from({ length: 8 }, () =>
-                createTile({
-                    heightType: "LOWLAND",
-                    buildableType: "ALL",
-                    passableMask: "ALL",
-                    playerSideMask: "ALL",
-                    terrain: "NORMAL",
-                    mechanism: null,
-                }),
-            ),
-        ),
-    });
-    const initialized = initializeRoutedEnemy(
-        fixtureBattle(0, { rngState: 17, nextNavigationRequestId: 0 }),
-        {
-            id: 0,
-            definition: createDefinition({
-                id: "dynamic-mover",
-                vitality: { maxHp: 100, defense: 0, resistance: 0 },
-                locomotion: {
-                    moveSpeedPerTick: speed,
-                    minimumMoveSpeedPerTick: minimum,
-                    steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 },
+function harness({ speed = 0.25, minimum = 0, steeringParameters } = {}) {
+    const initialized = initialize(fixtureBattle(0, { rngState: 17 }), {
+        id: 0,
+        position: [0, 0],
+        definition: {
+            id: "dynamic-mover",
+            vitality: { maxHp: 100, defense: 0, resistance: 0 },
+            spatialPresence: {},
+            locomotion: {
+                moveSpeedPerTick: speed,
+                minimumMoveSpeedPerTick: minimum,
+                steeringParameters: steeringParameters ?? {
+                    steeringFactor: 1,
+                    maxSteeringForce: 100,
                 },
-            }),
-            route: definition,
-            timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 },
-            alwaysCheckCurrentPoint: true,
+            },
         },
-    );
-    let work = createBattleState(
-        transition(battlefield, [{ type: "REGISTER_UNIT", unit: initialized.value.enemy }]).state,
-    );
-    let execution = {
-        rngState: initialized.state.execution.rngState,
-        nextUnitId: 1,
-        nextNavigationRequestId: initialized.state.execution.nextNavigationRequestId,
-        nextMechanismId: 0,
-        nextOverlayId: 0,
-        nextProjectileId: 0,
-    };
+    });
+    let work = registerUnit(initialized.state, initialized.value);
     return {
-        get work() {
-            return work;
-        },
-        set work(next) {
-            work = next;
-        },
-        get unit() {
+        get work() { return work; },
+        set work(next) { work = next; },
+        get unit() { return getUnit(work, 0); },
+        step(tick, target = [20, 0], multiplier = 1) {
+            work = advance({ ...work, tick }, unitRef(getUnit(work, 0)), target, multiplier);
             return getUnit(work, 0);
-        },
-        get execution() {
-            return execution;
-        },
-        step(tick, controls = {}) {
-            const unit = getUnit(work, 0);
-            const moved = stepRoutedUnit(unit, {
-                tick,
-                navigation: maps ? createNavigation(maps) : battlefieldView(work).navigation,
-                moveMultiplier: 1,
-                movementAllowed: true,
-                routeAdvanceAllowed: true,
-                waitTickAllowed: true,
-                rngState: execution.rngState,
-                nextNavigationRequestId: execution.nextNavigationRequestId,
-                queryContext: { unit, battlefield: battlefieldView(work) },
-                ...controls,
-            });
-            execution = {
-                ...execution,
-                rngState: moved.rngState,
-                nextNavigationRequestId: moved.nextNavigationRequestId,
-            };
-            work = updateUnit(work, moved.unit);
-            return moved;
-        },
-        reroute(command, tick) {
-            const changed = changeAlternativeRoutes(
-                (id) => getUnit(work, id),
-                [command],
-                execution,
-                tick,
-            );
-            execution = changed.execution;
-            for (const change of changed.changes) {
-                if (change.type === "UPDATE_UNIT") {
-                    work = updateUnit(work, change.unit);
-                }
-            }
         },
     };
 }
@@ -171,308 +71,164 @@ const install = (work, program, expiresAtTick = null) =>
         scopes: expiresAtTick === null ? [] : [{ type: "TICK", tick: expiresAtTick }],
     });
 const changeSpeed = (work, program, next) => {
-    work = effects.replaceEffect(
-        work,
-        address,
-        setData(
-            getUnit(work, address.host.id).effects.values().find(
-                (instance) => instance.id === address.id,
-            ),
-            next,
-        ),
-    );
+    work = effects.replaceEffect(work, address, setData(effects.get(work, address), next));
     return refreshContribution(work, address, program, output);
 };
-
 function speed(work) {
     const unit = getUnit(work, 0);
-    return resolveMoveSpeedPerTick(unit.definition.locomotion, unit.locomotion, {
+    return resolveMoveSpeed(unit.definition.locomotion, unit.locomotion, {
         unit,
         battlefield: battlefieldView(work),
     });
 }
 
-test("move speed: normalized minimum, arithmetic and movement permission are separate", () => {
-
+test("move speed: minimum, arithmetic and movement permission are separate", () => {
     const h = harness({ speed: 1 / 30, minimum: 0.1 / 30 });
     const program = movementEffect(modifier.create({ multiplier: -2 }));
     h.work = install(h.work, program).state;
     close(speed(h.work), 0.1 / 30);
-    const stopped = h.step(0, { moveMultiplier: 0 });
-    assert.deepEqual(stopped.unit.position, [0, 0]);
-    const denied = h.step(1, { movementAllowed: false });
-    assert.deepEqual(denied.unit.position, [0, 0]);
-    const moved = h.step(2, { moveMultiplier: 0.5 });
-    close(moved.unit.position[0], 0.1 / 60);
-    h.work = changeSpeed(h.work, program, (state) => ({
+    assert.deepEqual(h.step(0, [20, 0], 0).position, [0, 0]);
+    h.work = updateUnit(h.work, {
+        ...h.unit,
+        locomotion: setRule(h.unit.locomotion, { id: "stop", allows: () => false }),
+    });
+    assert.deepEqual(h.step(1).position, [0, 0]);
+    h.work = updateUnit(h.work, {
+        ...h.unit, locomotion: removeRule(h.unit.locomotion, "stop"),
+    });
+    close(h.step(2, [20, 0], 0.5).position[0], 0.1 / 60);
+    h.work = changeSpeed(h.work, program, state => ({
         ...state,
         value: modifier.create({
-            addition: 1 / 30,
-            multiplier: 0.5,
-            finalAddition: 1 / 30,
-            finalScaler: 2,
+            addition: 1 / 30, multiplier: 0.5,
+            finalAddition: 1 / 30, finalScaler: 2,
         }),
     }));
     close(speed(h.work), 8 / 30);
 });
 
-test("move speed: lifecycle updates preserve shared snapshots, route samples and visits", () => {
-
+test("move speed: effect lifecycle preserves shared immutable snapshots", () => {
     const program = movementEffect();
-    const h = harness({
-        definition: route({
-            checkpoints: [
-                {
-                    type: "MOVE",
-                    target: {
-                        position: [0, 6],
-                        reachOffset: [0.25, 0],
-                        randomizeReachOffset: true,
-                        reachDistance: 0,
-                    },
-                },
-            ],
-        }),
-    });
-    h.step(0);
+    const h = harness();
     const before = h.unit;
     const copied = copy(before);
     assert.equal(copied.locomotion, before.locomotion);
-    const sample = before.locomotion.mainRoute.route.progress.checkpoint.goal;
-    const cursor = before.locomotion.mainRoute.navigation.execution;
-    const randomState = h.execution.rngState;
     h.work = install(h.work, program).state;
-    assert.equal(h.unit.locomotion.mainRoute, before.locomotion.mainRoute);
-    assert.equal(h.unit.locomotion.mainRoute.route.progress.checkpoint.goal, sample);
     close(speed(h.work), 0.125);
     h.work = effects.setEnabled(h.work, address, false);
     close(speed(h.work), 0.25);
     h.work = effects.setEnabled(h.work, address, true);
     const participating = copy(h.unit);
-    assert.equal(participating.locomotion, h.unit.locomotion);
     h.work = effects.end(h.work, address);
-    assert.equal(h.unit.locomotion.mainRoute.navigation.execution, cursor);
     assert.equal(h.unit.locomotion.moveSpeed.length, 0);
-    assert.equal(h.execution.rngState, randomState);
     assert.equal(copied.locomotion.moveSpeed.length, 0);
-    assert.notEqual(h.unit.locomotion.moveSpeed, participating.locomotion.moveSpeed);
     assert.equal(participating.locomotion.moveSpeed.length, 1);
+    assert.equal(h.work.execution.rngState, 17);
 });
 
-test("move speed: in-flight acceleration, zero budget and restoration do not reset navigation", () => {
-
+test("move speed: acceleration, zero budget and restoration use current contributions", () => {
     const program = movementEffect();
     const h = harness();
-    h.step(0);
-    close(h.unit.position[0], 0.25);
-    const request = getNavigationRequest(h.unit.locomotion.mainRoute.navigation);
-    const randomState = h.execution.rngState;
+    close(h.step(0).position[0], 0.25);
     h.work = install(h.work, program).state;
-    h.step(1);
-    close(h.unit.position[0], 0.375);
-    h.work = changeSpeed(h.work, program, (state) => ({
-        ...state,
-        value: modifier.create({ multiplier: 1 }),
+    close(h.step(1).position[0], 0.375);
+    h.work = changeSpeed(h.work, program, state => ({
+        ...state, value: modifier.create({ multiplier: 1 }),
     }));
-    h.step(2);
-    close(h.unit.position[0], 0.875);
-    h.work = changeSpeed(h.work, program, (state) => ({
-        ...state,
-        value: modifier.create({ multiplier: -1 }),
+    close(h.step(2).position[0], 0.875);
+    h.work = changeSpeed(h.work, program, state => ({
+        ...state, value: modifier.create({ multiplier: -1 }),
     }));
-    h.step(3);
-    close(h.unit.position[0], 0.875);
+    close(h.step(3).position[0], 0.875);
     h.work = effects.setEnabled(h.work, address, false);
-    h.step(4);
-    close(h.unit.position[0], 1.125);
-    assert.equal(getNavigationRequest(h.unit.locomotion.mainRoute.navigation).id, request.id);
-    assert.equal(h.execution.rngState, randomState);
+    close(h.step(4).position[0], 1.125);
+    assert.equal(h.work.execution.rngState, 17);
 });
 
-test("move speed: main and alternative route share current contributions and one movement budget", () => {
-
-    const program = movementEffect();
-    const h = harness({ speed: 0.5 });
-    h.work = install(h.work, program).state;
-    h.step(0);
-    close(h.unit.position[0], 0.25);
-    const main = h.unit.locomotion.mainRoute;
-    h.reroute(
-        {
-            type: "SET_ALTERNATIVE_ROUTE",
-            unitId: 0,
-            route: route({ endPosition: [0, 4] }),
-            alwaysCheckCurrentPoint: true,
+test("move speed: live contributions read latest battle and unit facts", () => {
+    const program = contributionEffect("live-move", {}, {
+        capability: "locomotion", set: setMoveSpeedContribution,
+        remove: removeMoveSpeedContribution, dynamic: true,
+        value: (_, { unit, battlefield }) => {
+            assert.equal(battlefield.getUnit(unit.id).vitality.hp, unit.vitality.hp);
+            return [modifier.create({ finalScaler: unit.vitality.hp / 100 })];
         },
-        1,
-    );
-    h.step(1);
-    close(h.unit.position[0], 0.5);
-    assert.equal(h.unit.locomotion.mainRoute, main);
-    h.reroute({ type: "CLEAR_ALTERNATIVE_ROUTE", unitId: 0 }, 2);
-    h.work = effects.setEnabled(h.work, address, false);
-    h.step(2);
-    close(h.unit.position[0], 1);
-    assert.equal(
-        getNavigationRequest(h.unit.locomotion.mainRoute.navigation).id,
-        getNavigationRequest(main.navigation).id,
-    );
-    assert.equal(h.unit.locomotion.alternativeRoute, null);
-});
-
-test("move speed: route WAIT consumes ticks independently of a speed contribution", () => {
-
-    const program = movementEffect();
-    const h = harness({
-        definition: route({ checkpoints: [{ type: "WAIT_FOR_TICKS", durationTicks: 3 }] }),
     });
-    h.work = install(h.work, program).state;
-    h.step(0);
-    assert.equal(h.unit.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 2);
-    h.work = effects.setEnabled(h.work, address, false);
-    h.step(1);
-    assert.equal(h.unit.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 1);
-    h.work = effects.setEnabled(h.work, address, true);
-    h.step(2);
-    assert.equal(h.unit.locomotion.mainRoute.route.progress.phase, "END");
-    assert.deepEqual(h.unit.position, [0, 0]);
-    h.step(3);
-    close(h.unit.position[0], 0.125);
-});
-
-test("move speed: live contributions read phase facts without storing final speed", () => {
-
-    const program = contributionEffect(
-        "live-move",
-        {},
-        {
-            capability: "locomotion", set: setMoveSpeedContribution,
-            remove: removeMoveSpeedContribution,
-            dynamic: true,
-            value: (_, { unit, battlefield }) => {
-                assert.equal(battlefield.getUnit(unit.id).vitality.hp, unit.vitality.hp);
-                return [modifier.create({ finalScaler: unit.vitality.hp / 100 })];
-            },
-        },
-    );
     const h = harness({ speed: 0.5 });
     h.work = install(h.work, program).state;
     const fullHp = h.unit;
-    h.work = updateUnit(h.work, { ...fullHp, vitality: { ...fullHp.vitality, hp: 50 } });
-    const initial = createBattleState(h.work.battlefield, h.execution);
-    const moved = advanceMovement(initial, 0, { routeMoveMultiplier: 0.5 });
-    close(getUnit(moved, 0).position[0], 0.125);
-    assert.equal(getUnit(moved, 0).definition.locomotion.moveSpeedPerTick, 0.5);
+    h.work = updateUnit(h.work, {
+        ...fullHp, vitality: { ...fullHp.vitality, hp: 50 },
+    });
+    close(h.step(0, [20, 0], 0.5).position[0], 0.125);
+    assert.equal(h.unit.definition.locomotion.moveSpeedPerTick, 0.5);
     assert.equal(fullHp.vitality.hp, 100);
 });
 
-test("move speed: acceleration still follows the low-cost corridor and cannot cross unreachable barriers", () => {
-
-    const program = movementEffect(modifier.create({ multiplier: 1 }));
-    function maps(rows, expensive, blocked = []) {
-        const cells = Array.from({ length: rows * 8 }, (_, index) => ({
-            passable: !blocked.includes(index),
-            cost: expensive.includes(index) ? 1000 : 1,
-            departures: { UP: true, RIGHT: true, DOWN: true, LEFT: true },
-        }));
-        return {
-            WALK: new NavigationMap(rows, 8, cells),
-            FLY: new NavigationMap(rows, 8, cells.map(cell => ({ ...cell, cost: 1 }))),
-        };
-    }
-    const navigation = maps(3, [10, 11, 12, 13]);
-    const h = harness({
-        speed: 0.3,
-        maps: navigation,
-        definition: route({ startPosition: [1, 0], endPosition: [1, 7] }),
-    });
-    h.work = install(h.work, program).state;
-    const visited = [];
-    for (
-        let tick = 0;
-        tick < 60 && h.unit.locomotion.mainRoute.route.progress.phase !== "COMPLETED";
-        tick++
-    ) {
-        if (tick === 4) {
-            h.work = effects.setEnabled(h.work, address, false);
-        }
-        const previous = h.unit.position;
-        h.step(tick);
-        assert.ok(canTraverseNavigationSegment(navigation.WALK, previous, h.unit.position));
-        visited.push(h.unit.position);
-    }
-    assert.equal(h.unit.locomotion.mainRoute.route.progress.phase, "COMPLETED");
-    assert.ok(visited.some((position) => Math.abs(position[1] - 1) > 0.5));
-    const unreachable = harness({ speed: 10, maps: maps(1, [], [3]) });
-    unreachable.work = install(unreachable.work, program).state;
-    for (let tick = 0; tick < 3; tick++) {
-        unreachable.step(tick);
-        assert.deepEqual(unreachable.unit.position, [0, 0]);
-        assert.equal(
-            unreachable.unit.locomotion.mainRoute.navigation.execution.activity.type,
-            "UNREACHABLE",
-        );
-    }
+test("locomotion: one target consumes at most one movement budget without overshoot", () => {
+    const h = harness({ speed: 10 });
+    assert.deepEqual(h.step(0, [0.2, 0]).position, [0.2, 0]);
+    assert.equal(h.unit.locomotion.moving, true);
+    assert.deepEqual(h.step(1, [0.2, 0]).position, [0.2, 0]);
+    assert.equal(h.unit.locomotion.moving, false);
+    const far = harness({ speed: 0.25 });
+    close(far.step(0, [20, 0]).position[0], 0.25);
+    close(far.step(1, [20, 0]).position[0], 0.5);
+    assert.equal("route" in far.unit, false);
+    assert.equal("mainRoute" in far.unit.locomotion, false);
 });
 
-test("move speed: the native Mire modifier slows actual movement and expiry restores it", () => {
+test("locomotion: null tracking target stops inertia without drifting", () => {
+    const h = harness({
+        speed: 0.5,
+        steeringParameters: { steeringFactor: 0.2, maxSteeringForce: 0.1 },
+    });
+    close(h.step(0).position[0], 0.1);
+    const position = h.unit.position;
+    assert.equal(h.step(1, null).position, position);
+    assert.equal(h.unit.locomotion.moving, false);
+    assert.deepEqual(h.unit.locomotion.steering.lastVelocity, [0, 0]);
+    assert.equal(advance(h.work, unitRef(h.unit), null), h.work);
+});
+
+test("locomotion: lifecycle, presence and blocking gate movement", () => {
+    const h = harness();
+    h.work = updateUnit(h.work, { ...h.unit, spatialPresence: { present: false } });
+    assert.deepEqual(h.step(0).position, [0, 0]);
+    h.work = updateUnit(h.work, { ...h.unit, spatialPresence: { present: true } });
+    h.work = {
+        ...h.work,
+        battlefield: {
+            ...h.work.battlefield,
+            blockingRelations: [{ blockerUnitId: 1, blockedUnitId: 0 }],
+        },
+    };
+    assert.deepEqual(h.step(1).position, [0, 0]);
+    h.work = updateUnit(h.work, { ...h.unit, lifecycle: "LEAVING" });
+    assert.equal(advance(h.work, unitRef(h.unit), [20, 0]), h.work);
+    assert.equal(advance(h.work, { id: 99 }, [20, 0]), h.work);
+});
+
+test("move speed: native Mire modifier slows movement and expiry restores it", () => {
+    const fixture = name => JSON.parse(readFileSync(
+        new URL(`../fixtures/arknights/${name}.json`, import.meta.url), "utf8",
+    ));
     const raw = fixture("buff_mire_attr");
     const skill = fixture("skill_sktok_mire").levels[0];
     const description = raw.node._buff.attributes.attributeModifiers.find(
-        (entry) => entry.attributeType === "MOVE_SPEED",
+        entry => entry.attributeType === "MOVE_SPEED",
     );
     assert.equal(description.formulaItem, "MULTIPLIER");
-    assert.equal(description.loadFromBlackboard, true);
-    assert.equal(description.fetchBaseValueFromSourceEntity, false);
-    assert.equal(raw.node._stackCnt, 1);
-    const ratio = skill.blackboard.find((entry) => entry.key === "move_speed").value;
+    const ratio = skill.blackboard.find(entry => entry.key === "move_speed").value;
     assert.equal(ratio, -0.05);
-
-    const program = movementEffect(modifier.create({ multiplier: ratio }));
     const h = harness({ speed: 0.2 });
-    h.work = install(h.work, program, 2).state;
-    const initial = h.unit;
-    const future = {
-        definition: initial.definition,
-        tick: 50,
-        route: route(),
-        timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 },
-        alwaysCheckCurrentPoint: true,
-        notCountInTotal: false,
-    };
-    const spec = {
-        ...createLegacyCombatSpec({
-            rows: 1,
-            columns: 8,
-            operators: [],
-            enemies: [],
-            maxTicks: 4,
-            seed: 17,
-        }),
-        initialUnits: [
-            placement({
-                definition: initial.definition,
-                position: initial.position,
-                effects: initial.effects,
-                states: {
-                    locomotion: initial.locomotion,
-                    spatialPresence: initial.spatialPresence,
-                },
-            }),
-        ],
-        schedule: { type: "TIMELINE", spawns: [future] },
-    };
-    const runtime = new BattleRuntime(spec);
-    const reference = new BattleRuntime(spec);
-    const before = runtime.snapshot();
+    h.work = install(h.work, movementEffect(modifier.create({ multiplier: ratio })), 2).state;
     const positions = [];
     for (let tick = 0; tick < 4; tick++) {
-        assert.deepEqual(runtime.step(), reference.step());
-        positions.push(runtime.snapshot().units[0].position[0]);
+        h.work = effects.advance({ ...h.work, tick });
+        positions.push(h.step(tick).position[0]);
     }
     positions.forEach((position, index) => close(position, [0.19, 0.38, 0.58, 0.78][index]));
-    assert.deepEqual(runtime.snapshot(), reference.snapshot());
-    assert.deepEqual(before.units[0].position, [0, 0]);
-    assert.equal(runtime.snapshot().units[0].locomotion.moveSpeed.length, 0);
-    assert.equal(runtime.snapshot().execution.rngState, before.execution.rngState);
+    assert.equal(h.unit.locomotion.moveSpeed.length, 0);
+    assert.equal(h.work.execution.rngState, 17);
 });

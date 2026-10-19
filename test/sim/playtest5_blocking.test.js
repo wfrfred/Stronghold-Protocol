@@ -14,7 +14,7 @@ import { makeBattle, chessRec, enemyRec, checkInvariants } from '../helpers/batt
 import { BLOCK_RADIUS } from '../../server/sim/constants.js';
 import { getDefaultSource } from '../../server/sim/simdata.js';
 import { createLegacyCombatBattle } from '../../dist/legacy/combat.js';
-import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
+import { createInput as createRouteDefinition } from '../../dist/core/tactical/battle/creation/route.js';
 import { resolveVolume } from '../../dist/core/tactical/unit/capability/blocking/blockable.js';
 
 const FRONT = 'test_front_a', BACK = 'test_back_a';

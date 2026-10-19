@@ -1,6 +1,5 @@
 import type { ProjectileId } from "../../battlefield/projectile/projectile.js";
 import type { Seed } from "../../../common/rng.js";
-import type { NavigationRequestId } from "../../unit/capability/locomotion/route/request.js";
 import type { Id } from "../../unit/unit.js";
 import type { MechanismId } from "../../battlefield/mechanism.js";
 import type { Id as OverlayId } from "../../battlefield/navigation/overlay.js";
@@ -10,7 +9,6 @@ export interface BattleExecutionState {
     readonly nextCardId: number;
     readonly nextProjectileId: ProjectileId;
     readonly nextUnitId: Id;
-    readonly nextNavigationRequestId: NavigationRequestId;
     readonly nextMechanismId: MechanismId;
     readonly nextOverlayId: OverlayId;
 }

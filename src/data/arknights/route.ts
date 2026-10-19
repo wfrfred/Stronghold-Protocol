@@ -1,11 +1,11 @@
 import { assertFiniteNumber } from "../../core/common/assert.js";
 import type { TilePosition, WorldOffset } from "../../core/tactical/geometry/coordinate.js";
 import {
-    createRouteDefinition,
-    type RouteCheckpoint,
-    type RouteDefinition,
-    type RouteMoveTarget,
-} from "../../core/tactical/unit/capability/locomotion/route/definition.js";
+    createInput,
+    type Checkpoint,
+    type Input,
+    type MoveTarget,
+} from "../../core/tactical/battle/creation/route.js";
 import { secondsToTicks } from "./tick.js";
 
 function object(value: unknown, name: string, fields: readonly string[]): Record<string, unknown> {
@@ -50,16 +50,14 @@ function offset(value: unknown, name: string): WorldOffset {
     return [number(data.x, `${name}.x`), number(data.y, `${name}.y`)];
 }
 
-function moveTarget(data: Record<string, unknown>): RouteMoveTarget {
+function moveTarget(data: Record<string, unknown>): MoveTarget {
     return {
         position: position(data.position, "checkpoint.position"),
         reachOffset: offset(data.reachOffset, "checkpoint.reachOffset"),
-        randomizeReachOffset: boolean(data.randomizeReachOffset, "checkpoint.randomizeReachOffset"),
-        reachDistance: number(data.reachDistance, "checkpoint.reachDistance"),
     };
 }
 
-function checkpoint(value: unknown): RouteCheckpoint {
+function checkpoint(value: unknown): Checkpoint {
     const data = object(value, "checkpoint", [
         "type",
         "time",
@@ -72,7 +70,6 @@ function checkpoint(value: unknown): RouteCheckpoint {
     switch (data.type) {
         case "MOVE":
         case "PATROL_MOVE":
-        case "MAP_OFFSET_MOVE":
             return { type: data.type, target: moveTarget(data) };
 
         case "WAIT_FOR_SECONDS":
@@ -127,7 +124,7 @@ function checkpoint(value: unknown): RouteCheckpoint {
     }
 }
 
-export function parseRouteDefinition(value: unknown): RouteDefinition {
+export function parseRouteDefinition(value: unknown): Input {
     const data = object(value, "route", [
         "motionMode",
         "startPosition",
@@ -149,7 +146,7 @@ export function parseRouteDefinition(value: unknown): RouteDefinition {
         throw new TypeError("route.checkpoints must be an array");
     }
 
-    const checkpoints: RouteCheckpoint[] = [];
+    const checkpoints: Checkpoint[] = [];
 
     for (let index = 0; index < data.checkpoints.length; index++) {
         const value: unknown = data.checkpoints[index];
@@ -161,16 +158,13 @@ export function parseRouteDefinition(value: unknown): RouteDefinition {
         checkpoints.push(checkpoint(value));
     }
 
-    return createRouteDefinition({
+    return createInput({
         pathMotionMode,
         startPosition: position(data.startPosition, "route.startPosition"),
         endPosition: position(data.endPosition, "route.endPosition"),
         spawnOffset: offset(data.spawnOffset, "route.spawnOffset"),
         spawnRandomRange: offset(data.spawnRandomRange, "route.spawnRandomRange"),
         checkpoints,
-        allowDiagonalMove: boolean(data.allowDiagonalMove, "route.allowDiagonalMove"),
-        visitEveryTileCenter: boolean(data.visitEveryTileCenter, "route.visitEveryTileCenter"),
-        visitEveryNodeCenter: boolean(data.visitEveryNodeCenter, "route.visitEveryNodeCenter"),
         visitEveryCheckPoint: boolean(data.visitEveryCheckPoint, "route.visitEveryCheckPoint"),
     });
 }

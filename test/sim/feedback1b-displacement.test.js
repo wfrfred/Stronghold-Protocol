@@ -23,12 +23,13 @@ import { hasGeneratedData, getDefaultSource, spawnsFromTemplate } from '../../se
 import { PUSH_TILES, PULL_STOP_RADIUS } from '../../server/sim/constants.js';
 import { Map as NavigationMap } from '../../dist/core/tactical/battlefield/navigation/map.js';
 import { create as createNavigation } from '../../dist/core/tactical/battlefield/navigation/state.js';
-import { getRequest as getNavigationRequest } from '../../dist/core/tactical/unit/capability/locomotion/tracking.js';
-import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
-import { createRouteTiming } from '../../dist/core/tactical/unit/capability/locomotion/route/state.js';
+import { createInput, createTiming } from '../../dist/core/tactical/battle/creation/route.js';
 import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
 import { initializeRoutedEnemy } from "../../dist/core/tactical/battle/creation/enemy.js";
-import { stepRoutedEnemy } from "../../dist/legacy/enemy.js";
+import { registerUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
+import { ref, get } from "../../dist/core/tactical/unit/query.js";
+import * as route from "../../dist/core/tactical/unit/capability/route/operations.js";
+import { advance as advanceLocomotion } from "../../dist/core/tactical/unit/capability/locomotion/step.js";
 import { createSteeringParameters, integrateSteeringDirection } from '../../dist/core/tactical/unit/capability/locomotion/steering.js';
 import { applyMotionOverride, getNavigationRecoveryTarget, reflectNavigationMovement } from '../../dist/core/tactical/unit/capability/locomotion/motion.js';
 
@@ -513,10 +514,10 @@ test('core movement overrides: fixed direction uses steering without a route col
 });
 
 function coreDisplacedEnemy(checkpoints = [{
-  type: 'MOVE', target: { position: [1, 6], reachOffset: [0.2, 0.1], randomizeReachOffset: true, reachDistance: 0.01 },
+  type: 'MOVE', target: { position: [1, 6], reachOffset: [0.2, 0.1] },
 }]) {
   const initialized = initializeRoutedEnemy(
-    fixtureBattle(0, { rngState: 42, nextNavigationRequestId: 0 }),
+    fixtureBattle(0, { rngState: 42 }),
     {
       id: 1,
       alwaysCheckCurrentPoint: true,
@@ -525,101 +526,109 @@ function coreDisplacedEnemy(checkpoints = [{
         vitality: { maxHp: 100, defense: 0, resistance: 0 },
         locomotion: { moveSpeedPerTick: 0.1, steeringParameters: coreSteeringParameters },
       }),
-      route: createRouteDefinition({
+      route: createInput({
         pathMotionMode: 'WALK',
         startPosition: [1, 0],
         endPosition: [1, 7],
         spawnOffset: [0.1, 0.05],
         spawnRandomRange: [0, 0],
         checkpoints,
-        allowDiagonalMove: true,
-        visitEveryTileCenter: false,
-        visitEveryNodeCenter: true,
         visitEveryCheckPoint: true,
       }),
-      timing: createRouteTiming({ waveStartedAtTick: 0, fragmentStartedAtTick: 0 }),
+      timing: createTiming({ waveStartedAtTick: 0, fragmentStartedAtTick: 0 }),
     },
   );
+  const unitRef = ref(initialized.value.enemy);
+  let battle = registerUnit(initialized.state, initialized.value.enemy);
+  battle = {
+    ...battle,
+    battlefield: {
+      ...battle.battlefield,
+      navigation: createNavigation({ WALK: coreMotionMap(), FLY: coreMotionMap() }),
+    },
+  };
   return {
-    initialized,
-    context: {
-      tick: 0, moveMultiplier: 1, movementAllowed: true, waitTickAllowed: true, routeAdvanceAllowed: true,
-      navigation: createNavigation({ WALK: coreMotionMap(), FLY: coreMotionMap([], 'FLY') }),
-      rngState: initialized.state.execution.rngState, nextNavigationRequestId: initialized.state.execution.nextNavigationRequestId,
+    battle,
+    unitRef,
+    step(battle, tick) {
+      battle = route.advance({ ...battle, tick }, unitRef);
+      return advanceLocomotion(battle, unitRef, route.nextPoint(battle, unitRef));
     },
   };
 }
 
-test('core forced displacement preserves the resolved route target, navigation context and deterministic inputs', () => {
-  const { initialized, context } = coreDisplacedEnemy();
-  const walking = stepRoutedEnemy(initialized.value.enemy, context);
-  const route = walking.enemy.locomotion.mainRoute;
-  const goal = getNavigationRequest(route.navigation);
-  const before = JSON.stringify(walking.enemy);
-  const forcedContext = {
-    ...context, tick: 1, movementAllowed: false,
-    rngState: walking.rngState, nextNavigationRequestId: walking.nextNavigationRequestId,
-    motionOverride: { type: 'DISPLACEMENT', displacement: [1, 0.1] },
+test('core displacement preserves route progress, sampled definition and deterministic inputs', () => {
+  const h = coreDisplacedEnemy();
+  const walking = h.step(h.battle, 0);
+  const walkingUnit = get(walking, h.unitRef);
+  const progress = walkingUnit.route.main;
+  const before = JSON.stringify(walkingUnit);
+  const displace = battle => {
+    const self = get(battle, h.unitRef);
+    return updateUnit(battle, {
+      ...self, position: [self.position[0] + 1, self.position[1] + 0.1],
+    });
   };
-  const forced = stepRoutedEnemy(walking.enemy, forcedContext);
-  approx(forced.enemy.position[0], walking.enemy.position[0] + 1, 1e-12);
-  approx(forced.enemy.position[1], walking.enemy.position[1] + 0.1, 1e-12);
-  assert.equal(forced.enemy.locomotion.mainRoute.route.progress.checkpoint, route.route.progress.checkpoint);
-  assert.equal(getNavigationRequest(forced.enemy.locomotion.mainRoute.navigation), goal);
-  assert.deepEqual(forced.enemy.locomotion.mainRoute.navigation.execution, route.navigation.execution);
-  assert.deepEqual(forced.enemy.locomotion.steering, walking.enemy.locomotion.steering);
-  assert.equal(forced.rngState, walking.rngState);
-  assert.equal(forced.nextNavigationRequestId, walking.nextNavigationRequestId);
-  assert.equal(JSON.stringify(walking.enemy), before);
-  assert.deepEqual(stepRoutedEnemy(walking.enemy, forcedContext), forced);
-  const resumed = stepRoutedEnemy(forced.enemy, {
-    ...context, tick: 2, rngState: forced.rngState, nextNavigationRequestId: forced.nextNavigationRequestId,
-  });
-  assert.ok(resumed.enemy.position[0] > forced.enemy.position[0]);
-  assert.equal(getNavigationRequest(resumed.enemy.locomotion.mainRoute.navigation), goal);
-  assert.deepEqual(resumed.enemy.locomotion.mainRoute.navigation.execution.locatorOffset, route.navigation.execution.locatorOffset);
-  assert.equal(resumed.rngState, forced.rngState);
-  assert.equal(resumed.nextNavigationRequestId, forced.nextNavigationRequestId);
+  const forced = displace(walking);
+  const forcedUnit = get(forced, h.unitRef);
+  approx(forcedUnit.position[0], walkingUnit.position[0] + 1, 1e-12);
+  approx(forcedUnit.position[1], walkingUnit.position[1] + 0.1, 1e-12);
+  assert.equal(forcedUnit.route.main, progress);
+  assert.equal(forcedUnit.locomotion.steering, walkingUnit.locomotion.steering);
+  assert.equal(forced.execution, walking.execution);
+  assert.equal(JSON.stringify(walkingUnit), before);
+  assert.deepEqual(displace(walking), forced);
+  const resumed = h.step(forced, 2);
+  const resumedUnit = get(resumed, h.unitRef);
+  assert.ok(resumedUnit.position[0] > forcedUnit.position[0]);
+  assert.equal(resumedUnit.route.main.definition, progress.definition);
+  assert.deepEqual(resumedUnit.route.main.phase, progress.phase);
+  assert.equal(resumed.execution.rngState, forced.execution.rngState);
 });
 
-test('core forced motion substitutes self movement without suspending the route wait timer', () => {
-  const { initialized, context } = coreDisplacedEnemy([{ type: 'WAIT_FOR_TICKS', durationTicks: 3 }]);
-  const state = { lastVelocity: [0.05, 0] };
-  initialized.value.enemy.locomotion.steering = state;
-  const forced = stepRoutedEnemy(initialized.value.enemy, {
-    ...context, movementAllowed: false,
-    motionOverride: { type: 'DISPLACEMENT', displacement: [1, 0] },
+test('core displacement does not suspend the route absolute wait deadline', () => {
+  const h = coreDisplacedEnemy([{ type: 'WAIT_FOR_TICKS', durationTicks: 3 }]);
+  let battle = route.advance(h.battle, h.unitRef);
+  const initial = get(battle, h.unitRef);
+  const steering = { lastVelocity: [0.05, 0] };
+  battle = updateUnit(battle, {
+    ...initial, position: [initial.position[0] + 1, initial.position[1]],
+    locomotion: { ...initial.locomotion, steering },
   });
-  assert.deepEqual(forced.enemy.position, [1.1, 1.05]);
-  assert.deepEqual(forced.enemy.locomotion.mainRoute.route.progress.checkpoint, { type: 'WAIT', remainingTicks: 2 });
-  assert.deepEqual(forced.enemy.locomotion.steering, state);
-  const directed = stepRoutedEnemy(forced.enemy, {
-    ...context, tick: 1,
-    motionOverride: { type: 'DIRECTION', direction: [1, 0] },
+  const forced = get(battle, h.unitRef);
+  assert.deepEqual(forced.position, [1.1, 1.05]);
+  assert.deepEqual(forced.route.main.phase.checkpointState, {
+    type: 'WAITING', deadlineTick: 3,
   });
-  assert.ok(directed.enemy.position[0] > forced.enemy.position[0]);
-  assert.equal(directed.enemy.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 1);
-  assert.equal(directed.rngState, forced.rngState);
-  assert.equal(directed.nextNavigationRequestId, forced.nextNavigationRequestId);
+  assert.equal(forced.locomotion.steering, steering);
+  battle = route.advance({ ...battle, tick: 1 }, h.unitRef);
+  assert.equal(get(battle, h.unitRef).route.main, forced.route.main);
+  battle = advanceLocomotion(battle, h.unitRef, [forced.position[0] + 1, forced.position[1]]);
+  assert.ok(get(battle, h.unitRef).position[0] > forced.position[0]);
+  assert.equal(get(battle, h.unitRef).route.main.phase.checkpointState.deadlineTick, 3);
+  const sameTick = route.advance(battle, h.unitRef);
+  assert.equal(get(sameTick, h.unitRef).route.main, forced.route.main);
+  const elapsed = route.advance({ ...sameTick, tick: 3 }, h.unitRef);
+  assert.equal(get(elapsed, h.unitRef).route.main.phase.type, 'END');
 });
 
-test('core forced displacement outside the map resumes with budgeted recovery and preserved route facts', () => {
-  const { initialized, context } = coreDisplacedEnemy();
-  initialized.value.enemy.locomotion.steering = { lastVelocity: [0.02, 0.04] };
-  const forced = stepRoutedEnemy(initialized.value.enemy, {
-    ...context, motionOverride: { type: 'DISPLACEMENT', displacement: [-1, 0] },
+test('core displacement outside the map resumes with budgeted recovery and preserved route facts', () => {
+  const h = coreDisplacedEnemy();
+  let battle = route.advance(h.battle, h.unitRef);
+  const initial = get(battle, h.unitRef);
+  battle = updateUnit(battle, {
+    ...initial,
+    position: [initial.position[0] - 1, initial.position[1]],
+    locomotion: { ...initial.locomotion, steering: { lastVelocity: [0.02, 0.04] } },
   });
-  const control = forced.enemy.locomotion.mainRoute;
-  const goal = getNavigationRequest(control.navigation);
-  const before = JSON.stringify(forced.enemy);
-  const resumed = stepRoutedEnemy(forced.enemy, {
-    ...context, tick: 1, rngState: forced.rngState, nextNavigationRequestId: forced.nextNavigationRequestId,
-  });
-  assert.ok(resumed.enemy.position[0] > forced.enemy.position[0]);
-  assert.ok(Math.hypot(resumed.enemy.position[0] - forced.enemy.position[0], resumed.enemy.position[1] - forced.enemy.position[1]) <= 0.1 + 1e-12);
-  assert.equal(getNavigationRequest(resumed.enemy.locomotion.mainRoute.navigation), goal);
-  assert.deepEqual(resumed.enemy.locomotion.mainRoute.navigation.execution.locatorOffset, control.navigation.execution.locatorOffset);
-  assert.equal(resumed.rngState, forced.rngState);
-  assert.equal(resumed.nextNavigationRequestId, forced.nextNavigationRequestId);
-  assert.equal(JSON.stringify(forced.enemy), before);
+  const forced = get(battle, h.unitRef);
+  const before = JSON.stringify(forced);
+  const resumed = h.step(battle, 1);
+  const unit = get(resumed, h.unitRef);
+  assert.ok(unit.position[0] > forced.position[0]);
+  assert.ok(Math.hypot(unit.position[0] - forced.position[0], unit.position[1] - forced.position[1]) <= 0.1 + 1e-12);
+  assert.equal(unit.route.main.definition, forced.route.main.definition);
+  assert.deepEqual(unit.route.main.phase, forced.route.main.phase);
+  assert.equal(resumed.execution.rngState, battle.execution.rngState);
+  assert.equal(JSON.stringify(forced), before);
 });

@@ -9,7 +9,7 @@ import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
 import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
-import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
+import { createInput as createRouteDefinition } from "../../dist/core/tactical/battle/creation/route.js";
 import { getUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
 import { leave } from "../../dist/core/tactical/battle/execution/unit.js";
 import { setState } from "../../dist/core/tactical/unit/action/action.js";

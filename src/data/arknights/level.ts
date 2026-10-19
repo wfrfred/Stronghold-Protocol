@@ -2,7 +2,7 @@ import { assert, assertFiniteNumber, assertSafeInteger } from "../../core/common
 import type { BattlefieldMap } from "../../core/tactical/battlefield/map/map.js";
 import { createTilePosition, type TilePosition } from "../../core/tactical/geometry/coordinate.js";
 import { Direction } from "../../core/tactical/geometry/direction.js";
-import type { RouteDefinition } from "../../core/tactical/unit/capability/locomotion/route/definition.js";
+import type { Input as RouteInput } from "../../core/tactical/battle/creation/route.js";
 import { parseBlackboard, type ArknightsBlackboardEntry } from "./blackboard.js";
 import { parseBattlefieldMap, type ArknightsMapOptions } from "./map.js";
 import { parseRouteDefinition } from "./route.js";
@@ -126,8 +126,8 @@ export interface ArknightsLevelMetadata {
 
 export interface ArknightsLevelContent {
     readonly mapData: ArknightsJsonValue;
-    readonly routes: readonly RouteDefinition[];
-    readonly extraRoutes: readonly RouteDefinition[];
+    readonly routes: readonly RouteInput[];
+    readonly extraRoutes: readonly RouteInput[];
     readonly enemies: readonly never[];
     readonly enemyDbRefs: readonly ArknightsEnemyDbRef[];
     readonly waves: readonly ArknightsWave[];

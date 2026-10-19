@@ -4,7 +4,7 @@ import {
     type ScheduledEnemySpawn,
 } from "../../core/tactical/battle/schedule/definition.js";
 import type { Input } from "../../core/tactical/battle/contract.js";
-import { createRouteTiming } from "../../core/tactical/unit/capability/locomotion/route/state.js";
+import { createTiming } from "../../core/tactical/battle/creation/route.js";
 import type { ArknightsLevelDefinition } from "./level.js";
 import { resolveActionSpawn, type ArknightsEnemyResolver } from "./schedule.js";
 import { secondsToTicks } from "./tick.js";
@@ -79,7 +79,7 @@ export function compileLevelMovementFragment(
     }
 
     const fragmentStartedAtSeconds = wave.preDelay + fragment.preDelay;
-    const timing = createRouteTiming({
+    const timing = createTiming({
         waveStartedAtTick: 0,
         fragmentStartedAtTick: secondsToTicks(fragmentStartedAtSeconds),
     });

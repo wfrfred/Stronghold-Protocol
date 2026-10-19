@@ -14,7 +14,7 @@ import { create as createAttack, chooseTargets } from '../../dist/content/tactic
 import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js';
 import { start } from '../../dist/core/tactical/unit/action/operations.js';
 import { ref as unitRef } from '../../dist/core/tactical/unit/query.js';
-import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
+import { createInput as createRouteDefinition } from '../../dist/core/tactical/battle/creation/route.js';
 import { definition as createSkillDefinition } from '../helpers/skill.js';
 import { activate as activateSkill, advance as advanceSkill } from '../../dist/core/tactical/unit/capability/skill/operations.js';
 import { recover } from '../../dist/core/tactical/unit/capability/skill/sp.js';

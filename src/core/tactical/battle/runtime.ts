@@ -71,7 +71,6 @@ export class BattleRuntime {
                 rngState: input.rngState,
                 nextCardId: 0,
                 nextUnitId: 0,
-                nextNavigationRequestId: 0,
                 nextMechanismId: 0,
                 nextOverlayId: 0,
                 nextProjectileId: 0,
@@ -173,13 +172,13 @@ export class BattleRuntime {
 
         state = advanceSkills(state, commands);
 
-        state = advanceRouteCommands(state, commands, tick);
+        state = advanceRouteCommands(state, commands);
 
         state = advanceCombat(state);
 
         state = advanceProjectiles(state, tick, commands);
 
-        state = advanceMovement(state, tick, {
+        state = advanceMovement(state, {
             routeMoveMultiplier: this.#input.routeMoveMultiplier,
         });
 

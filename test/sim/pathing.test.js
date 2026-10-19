@@ -1,3 +1,7 @@
+import * as route from '../../dist/core/tactical/unit/capability/route/operations.js';
+import * as locomotion from '../../dist/core/tactical/unit/capability/locomotion/step.js';
+import * as units from '../../dist/core/tactical/unit/query.js';
+import { registerUnit, updateUnit } from '../../dist/core/tactical/battle/state.js';
 import { fixtureBattle } from "../helpers/unit.js";
 import { Effects } from "../../dist/core/tactical/unit/effect/effects.js";
 import { test } from 'node:test';
@@ -15,16 +19,6 @@ import { createMechanismDefinition, createMechanism } from '../../dist/core/tact
 import { Map as NavigationMap } from '../../dist/core/tactical/battlefield/navigation/map.js';
 import { apply, create as createOverlay } from '../../dist/core/tactical/battlefield/navigation/overlay.js';
 import { create as createNavigation, setOverlay, removeOverlay, nextPoint } from '../../dist/core/tactical/battlefield/navigation/state.js';
-import { createNavigationRequest } from '../../dist/core/tactical/unit/capability/locomotion/route/request.js';
-import { create as createNavigationState, setMotionMode as setNavigationMotionMode, query as queryNavigation, getRequest } from '../../dist/core/tactical/unit/capability/locomotion/tracking.js';
-import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
-import {
-  advanceRoute, createRouteExecution, enterRoute, nextCheckpointIndex, tickRouteWait,
-} from '../../dist/core/tactical/unit/capability/locomotion/route/execution.js';
-import { createRouteTiming, createRouteState } from '../../dist/core/tactical/unit/capability/locomotion/route/state.js';
-import { initializeRouteSpawn } from '../../dist/core/tactical/unit/capability/locomotion/route/spawn.js';
-import { predictRouteTarget } from '../../dist/core/tactical/unit/capability/locomotion/route/plan.js';
-import { initializeRouteControl } from '../../dist/core/tactical/unit/capability/locomotion/route-control.js';
 import { parseBattlefieldMap } from '../../dist/data/arknights/map.js';
 import { parseRouteDefinition } from '../../dist/data/arknights/route.js';
 import { createRng } from '../../dist/core/common/rng.js';
@@ -32,7 +26,6 @@ import { World } from '../../dist/core/tactical/geometry/coordinate.js';
 import { RangeGrid } from '../../dist/core/tactical/geometry/range.js';
 import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
 import { initializeRoutedEnemy } from "../../dist/core/tactical/battle/creation/enemy.js";
-import { stepRoutedEnemy } from "../../dist/legacy/enemy.js";
 import { copy } from '../../dist/core/tactical/unit/snapshot.js';
 import { initialize } from "../helpers/unit.js";
 import { createDefinition as createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/tile-binding/capability.js';
@@ -331,545 +324,6 @@ test('core smoothing uses the current row-major successor chain without a weight
   assert.deepEqual(build(obstacle, [0, 2]).nodes[0].next, [0, 1]);
 });
 
-const coreMove = (column, overrides = {}) => ({
-  type: 'MOVE', target: {
-    position: [0, column], reachOffset: [0, 0], randomizeReachOffset: false, reachDistance: 0, ...overrides,
-  },
-});
-
-function routedEnemyHarness({
-  seed = 42, speedPerTick = 10, checkpoints, routeOverrides = {}, alwaysCheckCurrentPoint = true,
-  initialTick = 0, timing = { waveStartedAtTick: 0, fragmentStartedAtTick: 0 },
-} = {}) {
-  const route = createRouteDefinition(coreRoute({
-    startPosition: [0, 0], endPosition: [0, 4], spawnOffset: [0, 0], spawnRandomRange: [0, 0],
-    checkpoints: checkpoints ?? [coreMove(1), { type: 'WAIT_FOR_TICKS', durationTicks: 3 }], ...routeOverrides,
-  }));
-  const initialized = initializeRoutedEnemy(
-    fixtureBattle(initialTick, { rngState: seed, nextNavigationRequestId: 0 }),
-    {
-      id: 1,
-      definition: createDefinition({
-        id: 'enemy_core_walker',
-        vitality: { maxHp: 100, defense: 0, resistance: 0 },
-        locomotion: {
-          moveSpeedPerTick: speedPerTick,
-          steeringParameters: createSteeringParameters({ steeringFactor: 2.5, maxSteeringForce: 4 }),
-        },
-      }),
-      route,
-      timing: createRouteTiming(timing),
-      alwaysCheckCurrentPoint,
-    },
-  );
-  let enemy = initialized.value.enemy, rngState = initialized.state.execution.rngState, nextNavigationRequestId = initialized.state.execution.nextNavigationRequestId, tick = initialTick;
-  let maps = Object.freeze({
-    WALK: fieldMap(1, 5, Array.from({ length: 5 }, () => fieldCell())),
-    FLY: fieldMap(1, 5, Array.from({ length: 5 }, () => fieldCell())),
-  });
-  let navigation = createNavigation(maps);
-
-  const trace = [];
-  return {
-    get enemy() { return enemy; },
-    get rngState() { return rngState; },
-    get nextNavigationRequestId() { return nextNavigationRequestId; },
-    get tick() { return tick; },
-    get maps() { return maps; },
-    get navigation() { return navigation; },
-    get initialSignals() { return initialized.value.signals; },
-    trace,
-    setMaps(next) { maps = next; navigation = createNavigation(next); },
-    setNavigation(next) { navigation = next; maps = effectiveMaps(next); },
-    displace(position) { enemy = { ...enemy, position: Object.freeze([...position]) }; },
-    setAlternative(route, alwaysCheckCurrentPoint = false) {
-      const execution = createRouteExecution(createRng(rngState), nextNavigationRequestId, tick);
-      const initial = initializeRouteControl(route, enemy.locomotion.mainRoute.route.timing,
-        alwaysCheckCurrentPoint, [0, 0], enemy.position, execution, enemy.spatialPresence.present);
-      enemy = { ...enemy, position: initial.position, spatialPresence: { present: initial.present },
-        locomotion: { ...enemy.locomotion, alternativeRoute: initial.control } };
-      ({ rngState, nextNavigationRequestId } = execution.state());
-    },
-    clearAlternative() {
-      enemy = { ...enemy, locomotion: { ...enemy.locomotion, alternativeRoute: null } };
-    },
-    setMotionMode(mode) {
-      const locomotion = enemy.locomotion, mainRoute = locomotion.mainRoute;
-      enemy = {
-        ...enemy,
-        locomotion: {
-          ...locomotion,
-          mainRoute: { ...mainRoute, navigation: setNavigationMotionMode(mainRoute.navigation, mode) },
-        },
-      };
-    },
-    step(controls = {}) {
-      const context = {
-        navigation, rngState, nextNavigationRequestId, tick,
-        moveMultiplier: controls.moveMultiplier ?? 1,
-        movementAllowed: controls.movementAllowed ?? true,
-        routeAdvanceAllowed: controls.routeAdvanceAllowed ?? true,
-        waitTickAllowed: controls.waitTickAllowed ?? true,
-        motionOverride: controls.motionOverride,
-      };
-      const before = JSON.stringify({ enemy, context });
-      const oldLocomotion = enemy.locomotion, oldMainRoute = oldLocomotion.mainRoute;
-      const result = stepRoutedEnemy(enemy, context);
-      assert.equal(JSON.stringify({ enemy, context }), before);
-      assert.equal(enemy.locomotion, oldLocomotion);
-      assert.equal(enemy.locomotion.mainRoute, oldMainRoute);
-      assert.equal(Object.hasOwn(result.enemy, 'route'), false);
-      assert.equal(Object.hasOwn(result.enemy, 'navigation'), false);
-      assert.equal(result.enemy.definition, enemy.definition);
-      if (oldLocomotion.alternativeRoute === null) assert.equal(result.enemy.locomotion.alternativeRoute, null);
-      assert.equal(Object.isFrozen(result.enemy.locomotion), false);
-      assert.equal(Object.isFrozen(result.enemy.locomotion.steering), false);
-      enemy = result.enemy;
-      rngState = result.rngState;
-      nextNavigationRequestId = result.nextNavigationRequestId;
-      trace.push(JSON.parse(JSON.stringify({ tick, enemy, rngState, nextNavigationRequestId,
-        outcomes: result.outcomes, signals: result.signals })));
-      tick++;
-      return result;
-    },
-  };
-}
-
-function routedEnemyRequest(enemy) {
-  return getRequest(enemy.locomotion.mainRoute.navigation);
-}
-
-test('core ordinary movement cannot snap across an unreachable wall even with a large budget', () => {
-  const h = routedEnemyHarness({ speedPerTick: 2, checkpoints: [], routeOverrides: { endPosition: [0, 2] } });
-  const map = fieldMap(1, 3, [fieldCell(), fieldCell({ passable: false }), fieldCell()]);
-  h.setMaps({ WALK: map, FLY: map });
-  const seed = h.rngState, nextId = h.nextNavigationRequestId;
-  const first = h.step();
-  assert.deepEqual(h.enemy.position, [0, 0]);
-  assert.equal(h.enemy.locomotion.moving, false);
-  assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'END');
-  const navigation = h.enemy.locomotion.mainRoute.navigation;
-  assert.equal(navigation.execution.activity.type, 'UNREACHABLE');
-  assert.deepEqual(queryNavigation(navigation, h.navigation, [0, 0]).decision, { type: 'UNREACHABLE', reason: 'POSITION_UNREACHABLE' });
-  assert.deepEqual(first.outcomes, [{ type: 'UNREACHABLE', requestId: 0, reason: 'POSITION_UNREACHABLE' }]);
-  assert.deepEqual(h.step().outcomes, []);
-  assert.deepEqual(h.enemy.position, [0, 0]);
-  assert.equal(h.rngState, seed);
-  assert.equal(h.nextNavigationRequestId, nextId);
-});
-
-test('core large-budget movement follows each current segment around walls and high-cost tiles', () => {
-  for (const obstacle of [{ passable: false }, { cost: 1000 }]) {
-    const cells = Array.from({ length: 6 }, () => fieldCell());
-    cells[1] = fieldCell(obstacle);
-    const map = fieldMap(2, 3, cells);
-    const h = routedEnemyHarness({ speedPerTick: 2, checkpoints: [], routeOverrides: { endPosition: [0, 2] } });
-    h.setMaps({ WALK: map, FLY: fieldMap(2, 3, cells.map(cell => ({ ...cell, cost: 1 }))) });
-    h.step();
-    assert.deepEqual(h.enemy.position, [0, 1]);
-    assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'END');
-    const positions = [h.enemy.position];
-    for (let tick = 0; tick < 10 && h.enemy.locomotion.mainRoute.route.progress.phase !== 'COMPLETED'; tick++) {
-      h.step();
-      positions.push(h.enemy.position);
-    }
-    assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'COMPLETED');
-    assert.ok(Math.hypot(h.enemy.position[0] - 2, h.enemy.position[1]) <= 0.05);
-    assert.ok(positions.some(position => position[1] >= 0.5));
-    assert.ok(positions.every(position => JSON.stringify(World.toTile(position)) !== JSON.stringify([0, 1])));
-    assert.ok(positions.slice(1).every((position, index) => canTraverseNavigationSegment(map, positions[index], position)));
-  }
-});
-
-test('core ordinary movement respects one-way departures in all four directions and permits the reverse', () => {
-  const cases = [
-    { start: [0, 2], end: [0, 0], direction: 'LEFT' },
-    { start: [0, 0], end: [0, 2], direction: 'RIGHT' },
-    { start: [2, 0], end: [0, 0], direction: 'DOWN' },
-    { start: [0, 0], end: [2, 0], direction: 'UP' },
-  ];
-  for (const { start, end, direction } of cases) {
-    const cells = Array.from({ length: 9 }, () => fieldCell());
-    cells[start[0] * 3 + start[1]] = fieldCell({ departures: { ...fieldCell().departures, [direction]: false } });
-    const map = fieldMap(3, 3, cells);
-    const h = routedEnemyHarness({ speedPerTick: 2, checkpoints: [], routeOverrides: { startPosition: start, endPosition: end } });
-    h.setMaps({ WALK: map, FLY: map });
-    const positions = [h.enemy.position];
-    for (let tick = 0; tick < 20 && h.enemy.locomotion.mainRoute.route.progress.phase !== 'COMPLETED'; tick++) {
-      h.step();
-      positions.push(h.enemy.position);
-    }
-    assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'COMPLETED', `${direction}: detour must complete`);
-    assert.ok(World.withinDistance(h.enemy.position, [end[1], end[0]], 0.05), direction);
-    assert.ok(positions.slice(1).every((position, index) => canTraverseNavigationSegment(map, positions[index], position)), direction);
-    const reverse = routedEnemyHarness({ speedPerTick: 2, checkpoints: [], routeOverrides: { startPosition: end, endPosition: start } });
-    reverse.setMaps({ WALK: map, FLY: map });
-    reverse.step();
-    assert.deepEqual(reverse.enemy.position, [start[1], start[0]], direction);
-    assert.equal(reverse.enemy.locomotion.mainRoute.route.progress.phase, 'COMPLETED');
-  }
-});
-
-test('core continuous segment permissions use actual directed crossings and rounded boundary ownership', () => {
-  const cells = Array.from({ length: 9 }, () => fieldCell());
-  cells[0] = fieldCell({ departures: { ...fieldCell().departures, RIGHT: false } });
-  const map = fieldMap(3, 3, cells);
-  assert.equal(canTraverseNavigationSegment(map, [0.5, 0], [1, 0]), false);
-  assert.equal(canTraverseNavigationSegment(map, [1, 0], [0.5, 0]), true);
-  assert.equal(canTraverseNavigationSegment(map, [0, 0], [0.5, 0]), true);
-  assert.equal(canTraverseNavigationSegment(map, [1.5, 0], [1, 0]), true);
-  assert.equal(canTraverseNavigationSegment(map, [0, 0], [0, 0]), true);
-  assert.equal(canTraverseNavigationSegment(map, [0.49, 0.1], [1, 1]), false);
-  assert.equal(canTraverseNavigationSegment(map, [1, 1], [0.49, 0.1]), true);
-  const cornerCells = Array.from({ length: 4 }, () => fieldCell());
-  cornerCells[1] = fieldCell({ departures: { ...fieldCell().departures, UP: false } });
-  const corner = fieldMap(2, 2, cornerCells);
-  assert.equal(canTraverseNavigationSegment(corner, [0, 0], [1, 1]), false);
-  assert.equal(canTraverseNavigationSegment(corner, [1, 1], [0, 0]), true);
-});
-
-test('core ordinary movement checks both world and locator segments and uses the selected motion map', () => {
-  const cells = Array.from({ length: 6 }, () => fieldCell());
-  cells[1] = fieldCell({ passable: false });
-  const walk = fieldMap(2, 3, cells);
-  const fly = fieldMap(2, 3, Array.from({ length: 6 }, () => fieldCell()), 'FLY');
-  const h = routedEnemyHarness({ speedPerTick: 10, checkpoints: [], routeOverrides: {
-    endPosition: [1, 2], spawnOffset: [0.49, 0],
-  } });
-  h.setMaps({ WALK: walk, FLY: fly });
-  h.step();
-  assert.deepEqual(h.enemy.position, [0.49, 1]);
-  for (let tick = 0; tick < 10 && h.enemy.locomotion.mainRoute.route.progress.phase !== 'COMPLETED'; tick++) h.step();
-  assert.ok(Math.hypot(h.enemy.position[0] - 2.49, h.enemy.position[1] - 1) <= 0.05);
-  assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'COMPLETED');
-  const flying = routedEnemyHarness({ speedPerTick: 2, checkpoints: [], routeOverrides: { endPosition: [0, 2], pathMotionMode: 'FLY' } });
-  flying.setMaps({ WALK: walk, FLY: fly });
-  flying.step();
-  assert.deepEqual(flying.enemy.position, [2, 0]);
-  assert.equal(flying.enemy.locomotion.mainRoute.route.progress.phase, 'COMPLETED');
-});
-
-test('core ordinary steering cannot carry old velocity through a wall to a passable landing tile', () => {
-  const cells = Array.from({ length: 15 }, () => fieldCell());
-  cells[1] = fieldCell({ passable: false });
-  const map = fieldMap(5, 3, cells);
-  const h = routedEnemyHarness({ speedPerTick: 2, checkpoints: [], routeOverrides: { endPosition: [4, 0] } });
-  h.setMaps({ WALK: map, FLY: map });
-  h.enemy.definition = createDefinition({ ...h.enemy.definition, locomotion: {
-    ...h.enemy.definition.locomotion,
-    steeringParameters: createSteeringParameters({ steeringFactor: 1, maxSteeringForce: 0 }),
-  } });
-  h.enemy.locomotion.steering.lastVelocity = [2, 0];
-  h.step();
-  assert.deepEqual(h.enemy.position, [0, 0]);
-  assert.equal(h.enemy.locomotion.moving, false);
-  assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'END');
-});
-
-test('core unreachable MOVE and wait preview targets cannot trigger a snap or checkpoint arrival', () => {
-  const map = fieldMap(1, 3, [fieldCell(), fieldCell({ passable: false }), fieldCell()]);
-  for (const checkpoints of [[coreMove(2)], [{ type: 'WAIT_FOR_TICKS', durationTicks: 10 }, coreMove(2)]]) {
-    const h = routedEnemyHarness({ speedPerTick: 2, checkpoints, routeOverrides: { endPosition: [0, 2] } });
-    h.setMaps({ WALK: map, FLY: map });
-    const nextId = h.nextNavigationRequestId, seed = h.rngState;
-    const result = h.step();
-    assert.deepEqual(h.enemy.position, [0, 0]);
-    assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'CHECKPOINTS');
-    assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpointIndex, 0);
-    assert.equal(result.outcomes.some(outcome => outcome.type === 'ARRIVED'), false);
-    assert.equal(h.nextNavigationRequestId, nextId);
-    assert.equal(h.rngState, seed);
-  }
-});
-
-test('core motion overrides and scripted appearances retain their explicit displacement semantics', () => {
-  const map = fieldMap(1, 3, [fieldCell(), fieldCell({ passable: false }), fieldCell()]);
-  const displaced = routedEnemyHarness({ speedPerTick: 2, checkpoints: [], routeOverrides: { endPosition: [0, 2] } });
-  displaced.setMaps({ WALK: map, FLY: map });
-  displaced.step({ motionOverride: { type: 'DISPLACEMENT', displacement: [2, 0] } });
-  assert.deepEqual(displaced.enemy.position, [2, 0]);
-  const appeared = routedEnemyHarness({ speedPerTick: 0, checkpoints: [
-    { type: 'APPEAR_AT_POS', position: [0, 2], reachOffset: [0, 0] },
-  ], routeOverrides: { endPosition: [0, 2] } });
-  appeared.setMaps({ WALK: map, FLY: map });
-  appeared.step();
-  assert.deepEqual(appeared.enemy.position, [2, 0]);
-});
-
-test('core serial MOVE-WAIT-END snaps once per step and waits independently of zero speed and blocking', () => {
-  const h = routedEnemyHarness();
-  assert.equal(Object.hasOwn(h.enemy, 'route'), false);
-  assert.equal(Object.hasOwn(h.enemy, 'navigation'), false);
-  const initialLocomotion = h.enemy.locomotion;
-  assert.equal(Object.hasOwn(initialLocomotion, 'controller'), false);
-  assert.equal(initialLocomotion.alternativeRoute, null);
-  assert.equal(initialLocomotion.mainRoute.route.progress.checkpoint.type, 'MOVE');
-  initialLocomotion.moving = true;
-  initialLocomotion.steering.lastVelocity = Object.freeze([0, 0]);
-  h.enemy.vitality.hp = 90;
-  h.step();
-  assert.equal(initialLocomotion.mainRoute.route.progress.checkpoint.type, 'MOVE');
-  assert.equal(h.enemy.vitality.hp, 90);
-  assert.deepEqual(h.enemy.position, [1, 0]);
-  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpointIndex, 1);
-  assert.deepEqual(h.enemy.locomotion.mainRoute.route.progress.checkpoint, { type: 'WAIT', remainingTicks: 3 });
-  assert.equal(h.enemy.locomotion.moving, true);
-  h.step({ moveMultiplier: 0 });
-  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 2);
-  assert.deepEqual(h.enemy.position, [1, 0]);
-  assert.equal(h.enemy.locomotion.moving, false);
-  h.step({ movementAllowed: false });
-  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 1);
-  assert.deepEqual(h.enemy.position, [1, 0]);
-  const elapsed = h.step();
-  assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'END');
-  assert.deepEqual(elapsed.outcomes, []);
-  const completed = h.step();
-  assert.deepEqual(h.enemy.position, [4, 0]);
-  assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'COMPLETED');
-  assert.deepEqual(completed.outcomes, [{ type: 'ARRIVED', requestId: 1 }]);
-  assert.equal(h.nextNavigationRequestId, 2);
-});
-
-test('core serial WAIT entered before movement consumes one tick and WAIT entered after snap starts next tick', () => {
-  const before = routedEnemyHarness();
-  before.step({ moveMultiplier: 0 });
-  assert.equal(before.enemy.locomotion.mainRoute.route.progress.checkpoint.type, 'MOVE');
-  before.displace([0.96, 0]);
-  before.step({ moveMultiplier: 0.001 });
-  assert.deepEqual(before.enemy.position, [0.96, 0]);
-  assert.deepEqual(before.enemy.locomotion.mainRoute.route.progress.checkpoint, { type: 'WAIT', remainingTicks: 2 });
-  const after = routedEnemyHarness();
-  after.step();
-  assert.deepEqual(after.enemy.position, [1, 0]);
-  assert.deepEqual(after.enemy.locomotion.mainRoute.route.progress.checkpoint, { type: 'WAIT', remainingTicks: 3 });
-});
-
-test('core serial route advancement can pause while wait time continues to expire', () => {
-  const h = routedEnemyHarness();
-  h.step();
-  const waiting = h.enemy;
-  waiting.locomotion.mainRoute.route.progress.checkpoint.remainingTicks = 1;
-  h.step({ movementAllowed: false, routeAdvanceAllowed: false, moveMultiplier: 0 });
-  assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'CHECKPOINTS');
-  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpointIndex, 1);
-  assert.deepEqual(h.enemy.locomotion.mainRoute.route.progress.checkpoint, { type: 'WAIT', remainingTicks: 0 });
-  assert.deepEqual(waiting.locomotion.mainRoute.route.progress.checkpoint, { type: 'WAIT', remainingTicks: 1 });
-  h.step({ routeAdvanceAllowed: false });
-  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpointIndex, 1);
-  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 0);
-  assert.deepEqual(h.enemy.position, [1, 0]);
-  h.step();
-  assert.deepEqual(h.enemy.position, [4, 0]);
-  h.step({ movementAllowed: false });
-  assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'COMPLETED');
-  assert.deepEqual(h.enemy.position, [4, 0]);
-});
-
-test('core serial reached MOVE resumes through heading before the wait tick and reports arrival once', () => {
-  const h = routedEnemyHarness({ speedPerTick: 0, checkpoints: [
-    coreMove(2, { reachDistance: 0.1 }), { type: 'WAIT_FOR_TICKS', durationTicks: 2 },
-  ] });
-  h.displace([1.95, 0]);
-  const paused = h.step({ routeAdvanceAllowed: false });
-  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpointIndex, 0);
-  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpoint.type, 'MOVE');
-  assert.equal(h.enemy.locomotion.mainRoute.navigation.execution.activity.type, 'ARRIVED');
-  assert.deepEqual(paused.outcomes, [{ type: 'ARRIVED', requestId: 0 }]);
-  const resumed = h.step();
-  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpointIndex, 1);
-  assert.deepEqual(h.enemy.locomotion.mainRoute.route.progress.checkpoint, { type: 'WAIT', remainingTicks: 1 });
-  assert.deepEqual(resumed.outcomes, []);
-  assert.deepEqual(h.enemy.position, [1.95, 0]);
-});
-
-test('core routed enemy keeps one randomized goal across map changes, motion mode changes and displacement', () => {
-  const seed = 42;
-  const h = routedEnemyHarness({ seed, checkpoints: [
-    coreMove(2, { randomizeReachOffset: true, reachOffset: [0.25, 0] }),
-    coreMove(3, { randomizeReachOffset: true, reachOffset: [0.25, 0.125] }),
-  ] });
-  const expected = createRng(seed);
-  expected.next();
-  expected.next();
-  const x = -0.25 + expected.next() * 0.5;
-  expected.next();
-  const request = routedEnemyRequest(h.enemy), goal = h.enemy.locomotion.mainRoute.route.progress.checkpoint.goal;
-  assert.deepEqual(goal.position, [2 + x, 0]);
-  assert.equal(goal.reachDistance, 0.05);
-  assert.equal(request.goal, goal);
-  assert.equal(request.id, 0);
-  assert.equal(h.rngState, expected.state());
-  assert.equal(h.nextNavigationRequestId, 1);
-  const savedRngState = h.rngState;
-  const serialExpected = createRng(savedRngState);
-  serialExpected.next();
-  serialExpected.next();
-  const secondX = -0.25 + serialExpected.next() * 0.5;
-  serialExpected.next();
-  const second = initializeRoutedEnemy(
-    fixtureBattle(h.tick, {
-      rngState: savedRngState,
-      nextNavigationRequestId: h.nextNavigationRequestId,
-    }),
-    {
-      id: 2,
-      definition: h.enemy.definition,
-      route: h.enemy.locomotion.mainRoute.route.definition,
-      timing: h.enemy.locomotion.mainRoute.route.timing,
-      alwaysCheckCurrentPoint: true,
-    },
-  );
-  const secondRequest = routedEnemyRequest(second.value.enemy), secondGoal = second.value.enemy.locomotion.mainRoute.route.progress.checkpoint.goal;
-  assert.deepEqual(secondGoal.position, [2 + secondX, 0]);
-  assert.equal(secondRequest.goal, secondGoal);
-  assert.equal(secondRequest.id, 1);
-  assert.equal(second.state.execution.rngState, serialExpected.state());
-  assert.equal(second.state.execution.nextNavigationRequestId, 2);
-  assert.equal(h.rngState, savedRngState);
-  assert.equal(routedEnemyRequest(h.enemy), request);
-  h.step({ moveMultiplier: 0 });
-  assert.equal(routedEnemyRequest(h.enemy), request);
-  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpoint.goal, goal);
-  assert.equal(h.rngState, savedRngState);
-  assert.equal(h.nextNavigationRequestId, 1);
-  const changedMaps = Object.freeze({
-    WALK: fieldMap(1, 5, Array.from({ length: 5 }, () => fieldCell())),
-    FLY: fieldMap(1, 5, Array.from({ length: 5 }, () => fieldCell())),
-  });
-  const retainedRequest = routedEnemyRequest(h.enemy);
-  h.setMaps(changedMaps);
-  h.step({ moveMultiplier: 0 });
-  assert.equal(routedEnemyRequest(h.enemy), retainedRequest);
-  const walkingLocomotion = h.enemy.locomotion, walkingMainRoute = walkingLocomotion.mainRoute;
-  h.setMotionMode('FLY');
-  assert.equal(h.enemy.locomotion.steering.lastVelocity, walkingLocomotion.steering.lastVelocity);
-  assert.equal(h.enemy.locomotion.mainRoute.route, walkingMainRoute.route);
-  assert.equal(walkingMainRoute.navigation.pathMotionMode, 'WALK');
-  h.step({ moveMultiplier: 0 });
-  assert.equal(h.enemy.locomotion.mainRoute.navigation.pathMotionMode, 'FLY');
-  const flyingLocomotion = h.enemy.locomotion;
-  h.displace([1.1, 0]);
-  assert.equal(h.enemy.locomotion, flyingLocomotion);
-  h.step({ moveMultiplier: 0 });
-  assert.equal(routedEnemyRequest(h.enemy), request);
-  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpoint.goal, goal);
-  assert.equal(h.rngState, savedRngState);
-  assert.equal(h.nextNavigationRequestId, 1);
-  const nextX = -0.25 + expected.next() * 0.5;
-  const nextY = -0.125 + expected.next() * 0.25;
-  h.step();
-  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpointIndex, 1);
-  assert.deepEqual(h.enemy.locomotion.mainRoute.route.progress.checkpoint.goal.position, [3 + nextX, nextY]);
-  assert.equal(h.rngState, expected.state());
-  assert.equal(h.nextNavigationRequestId, 2);
-  assert.notEqual(h.enemy.locomotion.mainRoute.route.progress.checkpoint.goal, goal);
-});
-
-test('core routed enemy reproduces a complete trace from the same seed and explicit controls', () => {
-  const settings = { seed: 7919, checkpoints: [
-    coreMove(1, { randomizeReachOffset: true, reachOffset: [0.2, 0.2] }),
-    { type: 'WAIT_FOR_TICKS', durationTicks: 2 }, coreMove(3),
-  ], routeOverrides: { spawnOffset: [0.1, -0.1], spawnRandomRange: [0.2, 0.2] } };
-  const first = routedEnemyHarness(settings), second = routedEnemyHarness(settings);
-  const originalRandom = Math.random;
-  Math.random = () => { throw new Error('core routed enemy consumed global randomness'); };
-  try {
-    for (const h of [first, second]) {
-      for (let step = 0; step < 16 && h.enemy.locomotion.mainRoute.route.progress.phase !== 'COMPLETED'; step++) {
-        h.step({ movementAllowed: step !== 2, moveMultiplier: step === 3 ? 0 : 1 });
-      }
-      assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'COMPLETED');
-    }
-    assert.deepEqual(first.trace, second.trace);
-    assert.deepEqual(first.enemy.position.map((coordinate, axis) => coordinate + first.enemy.locomotion.mainRoute.navigation.execution.locatorOffset[axis]), [4, 0]);
-  } finally {
-    Math.random = originalRandom;
-  }
-});
-
-test('core locomotion retains velocity history, clamps acceleration and reports actual displacement', () => {
-  const parameters = createSteeringParameters({ steeringFactor: 2.5, maxSteeringForce: 2 });
-  const state = createSteeringState(), position = [0, 0], target = [100, 0];
-  const before = JSON.stringify({ state, position, target, parameters });
-  const first = integrateSteering(state, position, target, 10, parameters);
-  assert.deepEqual(first.state.lastVelocity, [2, 0]);
-  assert.deepEqual(first.position, [2, 0]);
-  assert.equal(Object.hasOwn(first.state, 'moving'), false);
-  const next = integrateSteering(first.state, first.position, target, 10, parameters);
-  assert.deepEqual(next.state.lastVelocity, [4, 0]);
-  assert.deepEqual(next.position, [6, 0]);
-  const stopped = integrateSteering(next.state, next.position, target, 0, parameters);
-  assert.equal(stopped.position, next.position);
-  assert.equal(stopped.state.lastVelocity, next.state.lastVelocity);
-  const retained = integrateSteering(next.state, next.position, target, 10, createSteeringParameters({ steeringFactor: 2.5, maxSteeringForce: 0 }));
-  assert.deepEqual(retained.state.lastVelocity, [4, 0]);
-  assert.deepEqual(retained.position, [10, 0]);
-  assert.deepEqual(World.clampMagnitude([1e-200, 0], 0), [0, 0]);
-  const fast = integrateSteering(state, position, target, 1, createSteeringParameters({ steeringFactor: 100, maxSteeringForce: 100 }));
-  assert.deepEqual(fast.state.lastVelocity, [1, 0]);
-  assert.deepEqual(fast.position, [1, 0]);
-  const disabled = integrateSteering(state, position, target, 10, createSteeringParameters({ steeringFactor: 0, maxSteeringForce: 4 }));
-  assert.deepEqual(disabled.position, [0, 0]);
-  assert.ok(Object.isFrozen(parameters) && Object.isFrozen(first.position) && Object.isFrozen(first.state.lastVelocity));
-  assert.equal(Object.isFrozen(first.state), false);
-  assert.equal(JSON.stringify({ state, position, target, parameters }), before);
-  const h = routedEnemyHarness({ speedPerTick: 0.5 });
-  h.step();
-  assert.deepEqual(h.enemy.locomotion.steering.lastVelocity, [0.5, 0]);
-  h.step();
-  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpoint.type, 'WAIT');
-  assert.deepEqual(h.enemy.locomotion.steering.lastVelocity, [0.5, 0]);
-  h.step({ movementAllowed: false });
-  assert.equal(h.enemy.locomotion.moving, false);
-  assert.deepEqual(h.enemy.locomotion.steering.lastVelocity, [0.5, 0]);
-});
-
-test('core empty routes accept checkpoint flag combinations and complete only at the end goal', () => {
-  for (const alwaysCheckCurrentPoint of [false, true]) {
-    for (const visitEveryCheckPoint of [false, true]) {
-      const h = routedEnemyHarness({ checkpoints: [], alwaysCheckCurrentPoint, routeOverrides: { visitEveryCheckPoint } });
-      const request = routedEnemyRequest(h.enemy), rngState = h.rngState;
-      assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'END');
-      assert.equal(h.enemy.locomotion.mainRoute.route.alwaysCheckCurrentPoint, alwaysCheckCurrentPoint);
-      assert.equal(request.arrivalRule, 'TARGET_TILE_AND_DISTANCE');
-      assert.equal(request.options.visitEveryNodeStably, true);
-      h.displace([-2, 0]);
-      assert.deepEqual(h.step().outcomes, []);
-      assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'END');
-      h.displace([3.8, 0]);
-      assert.deepEqual(h.step({ movementAllowed: false }).outcomes, []);
-      assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'END');
-      h.displace([0, 0]);
-      for (let step = 0; step < 12 && h.enemy.locomotion.mainRoute.route.progress.phase !== 'COMPLETED'; step++) h.step();
-      assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'COMPLETED');
-      assert.deepEqual(h.enemy.position, [4, 0]);
-      assert.deepEqual(h.trace.flatMap(entry => entry.outcomes), [{ type: 'ARRIVED', requestId: request.id }]);
-      assert.equal(h.nextNavigationRequestId, 1);
-      assert.equal(h.rngState, rngState);
-    }
-  }
-});
-
-test('core routed enemy supports full checkpoint flag combinations and rejects invalid definition values', () => {
-  for (const visitEveryCheckPoint of [false, true]) {
-    for (const alwaysCheckCurrentPoint of [false, true]) {
-      const h = routedEnemyHarness({ checkpoints: [{ type: 'ALERT' }, coreMove(2)],
-        routeOverrides: { visitEveryCheckPoint }, alwaysCheckCurrentPoint });
-      assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpoint.type, 'ENTERED');
-      h.step();
-      assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'END');
-      assert.deepEqual(h.initialSignals.map(({ signal }) => signal.type), ['ALERT']);
-      assert.deepEqual(h.trace.flatMap(step => step.signals), []);
-    }
-  }
-  const invalid = createDefinition({ id: 'enemy_bad', vitality: { maxHp: -1, defense: 0, resistance: 0 }, locomotion: {
-    moveSpeedPerTick: 1, steeringParameters: createSteeringParameters({ steeringFactor: 2.5, maxSteeringForce: 4 }),
-  } });
-  assert.throws(() => initialize({ id: 1, position: [0, 0], definition: invalid }), RangeError);
-  assert.throws(() => createSteeringParameters({ steeringFactor: Infinity, maxSteeringForce: 4 }), RangeError);
-});
-
 const battlefieldUnit = (id, position) => ({
   effects:Effects.empty(), id, definition: Object.freeze({ id: `battlefield_unit_${id}` }), position: Object.freeze([...position]),
 });
@@ -967,7 +421,7 @@ test('core selective projection retains untouched collections, indexes and route
   const routed = routedEnemyHarness({ speedPerTick: 0.1, checkpoints: [coreMove(4)] });
   h.commit([{ type: 'REGISTER_UNIT', unit: routed.enemy }]);
   const previous = h.state;
-  const request = getRequest(previous.units.get(1).locomotion.mainRoute.navigation);
+  const progress = previous.units.get(1).route.main;
   h.commit(state => [{ type: 'UPDATE_UNIT', unit: {
     ...state.units.get(1), vitality: { ...state.units.get(1).vitality, hp: 90 },
   } }]);
@@ -977,7 +431,7 @@ test('core selective projection retains untouched collections, indexes and route
   assert.equal(h.state.supportRelations, previous.supportRelations);
   assert.equal(h.state.blockingRelations, previous.blockingRelations);
   assert.equal(h.state.navigation, previous.navigation);
-  assert.equal(getRequest(h.state.units.get(1).locomotion.mainRoute.navigation), request);
+  assert.equal(h.state.units.get(1).route.main, progress);
   assert.equal(h.state.units.get([...h.state.spatial.unitsByTile.get(0)][0]).vitality.hp, 90);
   assert.equal(previous.units.get(1).vitality.hp, 100);
 });
@@ -1117,205 +571,9 @@ test('core selective and full projection reject invalid final references and cla
   assert.deepEqual([...h.state.spatial.unitsByTile.get(0)], [12, 10]);
 });
 
-test('core selective and full projection preserve subsequent route events, RNG and identity consumption', () => {
-  const h = battlefieldProjectionHarness();
-  const routed = routedEnemyHarness({ speedPerTick: 0.2, seed: 314159,
-    checkpoints: [coreMove(2, { randomizeReachOffset: true, reachOffset: [0.2, 0.1] }),
-      { type: 'WAIT_FOR_TICKS', durationTicks: 2 }, coreMove(4)] });
-  const execution = h.branches.map(() => ({ rngState: routed.rngState, nextNavigationRequestId: routed.nextNavigationRequestId }));
-  h.commit([{ type: 'REGISTER_UNIT', unit: routed.enemy },
-    { type: 'REGISTER_MECHANISM', mechanism: battlefieldMechanism(1) }]);
-  let completed = false;
-  for (let tick = 0; tick < 60; tick++) {
-
-    const moved = h.branches.map((branch, index) => stepRoutedEnemy(branch.state.units.get(1), {
-      tick, navigation: branch.state.navigation, ...execution[index],
-      moveMultiplier: 1, movementAllowed: true, waitTickAllowed: true, routeAdvanceAllowed: true,
-    }));
-    assert.deepEqual(moved[0], moved[1]);
-    h.commit((state, index) => [{ type: 'UPDATE_UNIT', unit: moved[index].enemy }], tick);
-    moved.forEach((result, index) => {
-      execution[index] = { rngState: result.rngState, nextNavigationRequestId: result.nextNavigationRequestId };
-
-    });
-    if (h.state.units.get(1).locomotion.mainRoute.route.progress.phase === 'COMPLETED') {
-      completed = true;
-      break;
-    }
-  }
-  assert.equal(completed, true);
-  assert.deepEqual(execution[0], execution[1]);
-  assert.equal(execution[0].nextNavigationRequestId, 3);
-});
-
-test('core routed movement preserves frozen input values and shares unchanged domain branches', () => {
-  const h = routedEnemyHarness({ speedPerTick: 0.1, checkpoints: [coreMove(4)] });
-  h.step({ moveMultiplier: 0 });
-  const freeze = value => {
-    if (value === null || typeof value !== 'object' || Object.isFrozen(value)) return value;
-    for (const nested of Object.values(value)) freeze(nested);
-    return Object.freeze(value);
-  };
-  const unit = freeze(h.enemy), before = JSON.stringify(unit);
-  const moved = stepRoutedEnemy(unit, {
-    tick: h.tick, navigation: h.navigation,
-    moveMultiplier: 1, movementAllowed: true, routeAdvanceAllowed: true, waitTickAllowed: true,
-    rngState: h.rngState, nextNavigationRequestId: h.nextNavigationRequestId,
-  }).enemy;
-  assert.equal(JSON.stringify(unit), before);
-  assert.notEqual(moved, unit);
-  assert.notDeepEqual(moved.position, unit.position);
-  assert.notEqual(moved.locomotion, unit.locomotion);
-  assert.equal(moved.definition, unit.definition);
-  assert.equal(moved.vitality, unit.vitality);
-  assert.equal(moved.spatialPresence, unit.spatialPresence);
-  assert.equal(moved.locomotion.mainRoute.route, unit.locomotion.mainRoute.route);
-  assert.equal(getRequest(moved.locomotion.mainRoute.navigation), getRequest(unit.locomotion.mainRoute.navigation));
-});
-
-test('core routed movement shares the unit when position and locomotion remain unchanged', () => {
-  for (const controls of [
-    { movementAllowed: false },
-    { motionOverride: { type: 'DISPLACEMENT', displacement: [0, 0] } },
-    { motionOverride: { type: 'DIRECTION', direction: [0, 0] } },
-  ]) {
-    const h = routedEnemyHarness({ speedPerTick: 0.1, checkpoints: [coreMove(4)] });
-    const unit = h.enemy, seed = h.rngState, identity = h.nextNavigationRequestId;
-    const result = h.step(controls);
-    assert.equal(result.enemy, unit);
-    assert.equal(result.enemy.position, unit.position);
-    assert.equal(result.enemy.locomotion, unit.locomotion);
-    assert.deepEqual(result.signals, []);
-    assert.deepEqual(result.outcomes, []);
-    assert.equal(result.rngState, seed);
-    assert.equal(result.nextNavigationRequestId, identity);
-  }
-  const stopped = routedEnemyHarness({ speedPerTick: 0, checkpoints: [coreMove(4)] });
-  stopped.step();
-  const ready = stopped.enemy;
-  assert.equal(stopped.step().enemy, ready);
-  const displaced = stopped.step({ motionOverride: { type: 'DISPLACEMENT', displacement: [0.1, 0] } }).enemy;
-  assert.notEqual(displaced, ready);
-  assert.notEqual(displaced.position, ready.position);
-  assert.equal(displaced.locomotion, ready.locomotion);
-
-  const moving = routedEnemyHarness({ speedPerTick: 0.1, checkpoints: [coreMove(4)] });
-  moving.step();
-  const walking = moving.enemy;
-  const paused = moving.step({ movementAllowed: false }).enemy;
-  assert.notEqual(paused, walking);
-  assert.equal(paused.position, walking.position);
-  assert.equal(paused.locomotion.moving, false);
-  assert.equal(paused.locomotion.steering, walking.locomotion.steering);
-  assert.equal(moving.step({ movementAllowed: false }).enemy, paused);
-});
-
-test('core routed movement preserves wait progress, signals and execution consumption while stationary', () => {
-  const h = routedEnemyHarness({ speedPerTick: 0, checkpoints: [
-    { type: 'WAIT_FOR_TICKS', durationTicks: 1 }, { type: 'ALERT' },
-    coreMove(4, { randomizeReachOffset: true, reachOffset: [0.2, 0.1] }),
-  ] });
-  const waiting = h.enemy;
-  assert.equal(h.step({ movementAllowed: false, waitTickAllowed: false }).enemy, waiting);
-  const expired = h.step({ movementAllowed: false, routeAdvanceAllowed: false }).enemy;
-  assert.notEqual(expired, waiting);
-  assert.equal(expired.position, waiting.position);
-  assert.equal(expired.locomotion.steering, waiting.locomotion.steering);
-  assert.equal(expired.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 0);
-  assert.equal(h.step({ movementAllowed: false, routeAdvanceAllowed: false }).enemy, expired);
-  const alert = h.step({ movementAllowed: false });
-  assert.notEqual(alert.enemy, expired);
-  assert.deepEqual(alert.signals, [{ signal: { type: 'ALERT' }, position: expired.position }]);
-  const seed = h.rngState, identity = h.nextNavigationRequestId;
-  const entered = h.step({ movementAllowed: false });
-  assert.notEqual(entered.enemy, alert.enemy);
-  assert.equal(entered.enemy.position, expired.position);
-  assert.notEqual(entered.rngState, seed);
-  assert.equal(entered.nextNavigationRequestId, identity + 1);
-
-  const takeover = routedEnemyHarness({ checkpoints: [{ type: 'WAIT_FOR_TICKS', durationTicks: 3 }] });
-  takeover.setAlternative(createRouteDefinition(coreRoute({ checkpoints: [{ type: 'WAIT_FOR_TICKS', durationTicks: 10 }] })));
-  const controlled = takeover.enemy;
-  assert.equal(takeover.step({ movementAllowed: false, waitTickAllowed: false }).enemy, controlled);
-  const ticked = takeover.step({ movementAllowed: false, routeAdvanceAllowed: false }).enemy;
-  assert.notEqual(ticked.locomotion.mainRoute, controlled.locomotion.mainRoute);
-  assert.notEqual(ticked.locomotion.alternativeRoute, controlled.locomotion.alternativeRoute);
-});
-
-test('core blocked movement retains steering changes and shares stationary unreachable retries', () => {
-  const cells = Array.from({ length: 15 }, () => fieldCell());
-  cells[1] = fieldCell({ passable: false });
-  const map = fieldMap(5, 3, cells);
-  const blocked = routedEnemyHarness({ speedPerTick: 2, checkpoints: [], routeOverrides: { endPosition: [4, 0] } });
-  blocked.setMaps({ WALK: map, FLY: map });
-  blocked.step({ moveMultiplier: 0 });
-  blocked.enemy.definition = createDefinition({ ...blocked.enemy.definition, locomotion: {
-    ...blocked.enemy.definition.locomotion,
-    steeringParameters: createSteeringParameters({ steeringFactor: 1, maxSteeringForce: 0.25 }),
-  } });
-  blocked.enemy.locomotion.steering.lastVelocity = [2, 0];
-  const before = blocked.enemy;
-  const steered = blocked.step().enemy;
-  assert.equal(steered.position, before.position);
-  assert.notEqual(steered, before);
-  assert.notEqual(steered.locomotion, before.locomotion);
-  assert.notEqual(steered.locomotion.steering, before.locomotion.steering);
-  assert.notDeepEqual(steered.locomotion.steering.lastVelocity, before.locomotion.steering.lastVelocity);
-  assert.equal(steered.locomotion.mainRoute, before.locomotion.mainRoute);
-
-  const unreachable = routedEnemyHarness({ speedPerTick: 2, checkpoints: [], routeOverrides: { endPosition: [0, 2] } });
-  const wall = fieldMap(1, 3, [fieldCell(), fieldCell({ passable: false }), fieldCell()]);
-  unreachable.setMaps({ WALK: wall, FLY: wall });
-  const first = unreachable.step();
-  assert.deepEqual(first.outcomes, [{ type: 'UNREACHABLE', requestId: 0, reason: 'POSITION_UNREACHABLE' }]);
-  const retry = unreachable.step();
-  assert.equal(retry.enemy, first.enemy);
-  assert.deepEqual(retry.outcomes, []);
-});
-
-test('a pushed ground enemy re-plans from its tile centre: never cuts a fence corner or breaks the stage crate on it (act1 m03, tile 11,5)', REAL, () => {
-  // Regression: after Battle.displace() the enemy steered straight from its off-centre position to next[tile], cut
-  // the corner of the FLY-only fence tile (11,5), got blocked by the decorative crate standing there and broke it.
-  const cases = [[12.57, { x: -1, y: 0.2 }], [11, { x: -1, y: -1 }], [13, { x: -1, y: 1 }]];
-  for (const [at, dir] of cases) {
-    const h = makeBattle({
-      stageId: 'act1autochess_m03', routes: [{ motion: 'WALK', start: [12, 10], end: [9, 2], checkpoints: [] }],
-      enemies: [{ key: 'enemy_1267_nhpbr', route: 0 }], units: [], timeLimit: 120,
-    });
-    const b = h.b;
-    h.run(at);
-    const e = b.enemies[0];
-    const crate = b.units.find((u) => u.defId === 'trap_1105_accrate' && u.tileR === 11 && u.tileC === 5);
-    assert.ok(e && crate && crate.alive, 'enemy walking, crate on (11,5)');
-    assert.ok(b.displace(e, dir, 0.5, { force: 3 }) > 0, 'pushed');
-    const ver = b.grid.version;
-    const off = [];
-    while (e.alive && !b.finished) {
-      b.step();
-      const r = Math.round(e.y), c = Math.round(e.x);
-      if (e.alive && !b.grid.walkable(r, c, true)) off.push(`${b.time.toFixed(2)}@${r},${c}`);
-      assert.notEqual(e.blockedBy, crate, `t=${at}: blocked by the fence crate`);
-    }
-    assert.deepEqual(off, [], `t=${at} push ${JSON.stringify(dir)}: stood on a tile it cannot walk`);
-    assert.ok(crate.alive, 'the stage crate survives');
-    assert.equal(b.grid.version, ver, 'no obstacle change');
-    assert.equal(h.result().perPlayer.p1.leaked.length, 1, 'still reaches the goal');
-  }
-});
-
 const coreGround = (overrides = {}) => ({
   heightType: 'LOWLAND', buildableType: 'MELEE', passableMask: 'ALL', playerSideMask: 'ALL',
   terrain: 'NORMAL', mechanism: null, ...overrides,
-});
-const coreRequest = (overrides = {}) => ({
-  id: 1, targetTile: [0, 2], goal: { position: [2.2, 0], reachDistance: 0.05 },
-  options: { allowDiagonalMove: true, visitEveryTileCenter: false, visitEveryNodeCenter: false, visitEveryNodeStably: false },
-  arrivalRule: 'DISTANCE', ...overrides,
-});
-const coreRoute = (overrides = {}) => ({
-  pathMotionMode: 'WALK', startPosition: [3, 4], endPosition: [0, 0], spawnOffset: [0.1, -0.2],
-  spawnRandomRange: [0.5, 1], checkpoints: [], allowDiagonalMove: true,
-  visitEveryTileCenter: false, visitEveryNodeCenter: false, visitEveryCheckPoint: true, ...overrides,
 });
 const rawTile = (tileKey, overrides = {}) => ({
   tileKey, heightType: 'LOWLAND', buildableType: 'MELEE', passableMask: 'ALL',
@@ -1394,23 +652,6 @@ test('compiled range grids are shared while mutable and frozen raw inputs keep t
 
 });
 
-test('core requests snapshot effective options without quantizing the continuous goal', () => {
-  const input = coreRequest();
-  const request = createNavigationRequest(input);
-  input.options.allowDiagonalMove = false;
-  input.goal.position[0] = 9;
-  assert.equal(request.options.allowDiagonalMove, true);
-  assert.deepEqual(request.goal.position, [2.2, 0]);
-  assert.deepEqual(request.targetTile, [0, 2]);
-  assert.throws(() => createNavigationRequest(coreRequest({ targetTile: [0, 0.5] })), RangeError);
-  assert.throws(() => createNavigationRequest(coreRequest({ goal: { position: [2, 0], reachDistance: -1 } })), RangeError);
-  const offset = [0.3, -0.4];
-  const state = createNavigationState('FLY', offset);
-  offset[0] = 2;
-  assert.deepEqual(state.execution.locatorOffset, [0.3, -0.4]);
-  assert.equal(state.execution.activity.type, 'IDLE');
-});
-
 test('raw battlefield loading flips matrix rows, extracts markers and preserves static side eligibility', () => {
   const raw = {
     map: [[0, 1], [2, 0]], tiles: [rawTile('tile_road'), rawTile('tile_start'), rawTile('tile_end', { playerSideMask: 'SIDE_B' })],
@@ -1444,696 +685,176 @@ test('raw tile mechanisms require controller inputs and explicit consumption of 
   assert.deepEqual(consumed, [[[0, 0], 'isValidHand']]);
 });
 
-test('route birth resolution consumes x then y exactly once even for zero ranges', () => {
-  let calls = 0;
-  const definition = createRouteDefinition(coreRoute());
-  const before = JSON.stringify(definition);
-  const spawn = initializeRouteSpawn(definition, { next: () => [0.25, 0.75][calls++] });
-  approx(spawn.position[0], 3.85, 'spawn x');
-  approx(spawn.position[1], 3.3, 'spawn y');
-  approx(spawn.locatorOffset[0], 0.15, 'locator x');
-  approx(spawn.locatorOffset[1], -0.3, 'locator y');
-  assert.equal(calls, 2);
-  assert.equal(JSON.stringify(definition), before);
-  assert.ok(Object.isFrozen(spawn) && Object.isFrozen(spawn.position) && Object.isFrozen(spawn.locatorOffset));
-  calls = 0;
-  const exact = initializeRouteSpawn(createRouteDefinition(coreRoute({ spawnOffset: [0, 0], spawnRandomRange: [0, 0] })), { next: () => { calls++; return 0.5; } });
-  assert.equal(calls, 2);
-  assert.deepEqual(exact, { position: [4, 3], locatorOffset: [0, 0] });
-  calls = 0;
-  assert.throws(() => initializeRouteSpawn(createRouteDefinition(coreRoute({ spawnRandomRange: [Number.MAX_VALUE, 0] })), { next: () => { calls++; return 0; } }), RangeError);
-  assert.equal(calls, 0);
-});
-
-test('route constructors keep tick timing explicit, snapshots isolated and progress local to each instance', () => {
-  const input = coreRoute({ checkpoints: [{ type: 'WAIT_FOR_TICKS', durationTicks: 3 }] });
-  const definition = createRouteDefinition(input);
-  input.checkpoints[0].durationTicks = 9;
-  assert.equal(definition.checkpoints[0].durationTicks, 3);
-  const timing = createRouteTiming({ waveStartedAtTick: 10, fragmentStartedAtTick: 12 });
-  const a = createRouteState(definition, timing, false), b = createRouteState(definition, timing, true);
-  a.progress.checkpointIndex = 1;
-  assert.equal(b.progress.checkpointIndex, 0);
-  assert.equal(a.definition, definition);
-  assert.equal(b.definition, definition);
-  assert.equal(a.timing, timing);
-  assert.equal(b.timing, timing);
-  assert.ok(Object.isFrozen(definition) && Object.isFrozen(definition.checkpoints) && Object.isFrozen(timing));
-  assert.throws(() => createRouteTiming({ waveStartedAtTick: 0, fragmentStartedAtTick: NaN }), RangeError);
-  assert.throws(() => createRouteTiming({ waveStartedAtTick: -1, fragmentStartedAtTick: 0 }), RangeError);
-  assert.throws(() => createRouteTiming({ waveStartedAtTick: 0, fragmentStartedAtTick: 0.5 }), RangeError);
-  assert.throws(() => createRouteDefinition(coreRoute({ checkpoints: [{ type: 'WAIT_FOR_TICKS', durationTicks: -1 }] })), RangeError);
-  assert.throws(() => createRouteDefinition(coreRoute({ checkpoints: [{ type: 'WAIT_FOR_TICKS', durationTicks: 0.5 }] })), RangeError);
-  assert.throws(() => createRouteDefinition(coreRoute({ checkpoints: [,] })), TypeError);
-  assert.throws(() => createRouteDefinition(coreRoute({ spawnOffset: [0, Infinity] })), RangeError);
-});
-
-test('core route waits bind absolute deadlines to explicit play ticks and birth timing', () => {
-  const timing = createRouteTiming({ waveStartedAtTick: 40, fragmentStartedAtTick: 80 });
-  for (const checkpoint of [
-    { type: 'WAIT_FOR_PLAY_TICK', targetPlayTick: 110 },
-    { type: 'WAIT_CURRENT_WAVE_TICKS', targetElapsedTicks: 70 },
-    { type: 'WAIT_CURRENT_FRAGMENT_TICKS', targetElapsedTicks: 30 },
-  ]) {
-    const definition = createRouteDefinition(coreRoute({ checkpoints: [checkpoint] }));
-    const state = createRouteState(definition, timing, true);
-    const execution = createRouteExecution(createRng(42), 0, 100);
-    const entered = enterRoute(state, execution);
-    assert.deepEqual(state.progress.checkpoint, { type: 'NOT_ENTERED' });
-    assert.deepEqual(entered.state.progress.checkpoint, { type: 'WAIT', remainingTicks: 10 });
-    assert.equal(entered.request, undefined);
-    assert.equal(entered.state.timing, timing);
-    assert.equal(enterRoute(entered.state, execution).state, entered.state);
-    const refreshed = tickRouteWait(entered.state, 105);
-    assert.deepEqual(refreshed.progress.checkpoint, { type: 'WAIT', remainingTicks: 5 });
-    assert.equal(tickRouteWait(refreshed, 105), refreshed);
-    const expired = tickRouteWait(refreshed, 110);
-    assert.deepEqual(expired.progress.checkpoint, { type: 'WAIT', remainingTicks: 0 });
-    assert.equal(expired.progress.checkpointIndex, 0);
-    assert.equal(expired.timing, timing);
-    assert.equal(tickRouteWait(expired, 111), expired);
-    const alreadyDue = enterRoute(state, createRouteExecution(createRng(42), 0, 120));
-    assert.deepEqual(alreadyDue.state.progress.checkpoint, { type: 'WAIT', remainingTicks: 0 });
-    assert.deepEqual(execution.state(), { rngState: 42, nextNavigationRequestId: 0 });
-  }
-  const relative = enterRoute(createRouteState(createRouteDefinition(coreRoute({
-    checkpoints: [{ type: 'WAIT_FOR_TICKS', durationTicks: 7 }],
-  })), timing, true), createRouteExecution(createRng(42), 0, 100)).state;
-  assert.deepEqual(tickRouteWait(relative, 105).progress.checkpoint, { type: 'WAIT', remainingTicks: 6 });
-  assert.deepEqual(relative.progress.checkpoint, { type: 'WAIT', remainingTicks: 7 });
-});
-
-test('core route absolute waits reject overflow in derived wave and fragment deadlines', () => {
-  const timing = createRouteTiming({ waveStartedAtTick: Number.MAX_SAFE_INTEGER, fragmentStartedAtTick: Number.MAX_SAFE_INTEGER });
-  for (const type of ['WAIT_CURRENT_WAVE_TICKS', 'WAIT_CURRENT_FRAGMENT_TICKS']) {
-    const definition = createRouteDefinition(coreRoute({ checkpoints: [{ type, targetElapsedTicks: 1 }] }));
-    const state = createRouteState(definition, timing, true);
-    assert.throws(() => enterRoute(state, createRouteExecution(createRng(42), 0, 0)), /target tick overflow/);
-    assert.deepEqual(state.progress.checkpoint, { type: 'NOT_ENTERED' });
-    state.progress.checkpoint = { type: 'WAIT', remainingTicks: 1 };
-    assert.throws(() => tickRouteWait(state, 0), /target tick overflow/);
-    assert.deepEqual(state.progress.checkpoint, { type: 'WAIT', remainingTicks: 1 });
-  }
-});
-
-test('core routed waits distinguish ticking permission from route advancement and movement', () => {
-  const relative = routedEnemyHarness({ checkpoints: [{ type: 'WAIT_FOR_TICKS', durationTicks: 3 }] });
-  relative.step({ movementAllowed: false, waitTickAllowed: false });
-  assert.equal(relative.enemy.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 3);
-  relative.step({ movementAllowed: false, routeAdvanceAllowed: false });
-  assert.equal(relative.enemy.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 2);
-  relative.step({ movementAllowed: false, routeAdvanceAllowed: false });
-  relative.step({ movementAllowed: false, routeAdvanceAllowed: false });
-  assert.equal(relative.enemy.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 0);
-  assert.equal(relative.enemy.locomotion.mainRoute.route.progress.phase, 'CHECKPOINTS');
-  relative.step({ movementAllowed: false, waitTickAllowed: false });
-  assert.equal(relative.enemy.locomotion.mainRoute.route.progress.phase, 'END');
-
-  const absolute = routedEnemyHarness({ initialTick: 100, timing: { waveStartedAtTick: 40, fragmentStartedAtTick: 80 },
-    checkpoints: [{ type: 'WAIT_CURRENT_FRAGMENT_TICKS', targetElapsedTicks: 22 }],
-  });
-  absolute.step({ movementAllowed: false, waitTickAllowed: false });
-  absolute.step({ movementAllowed: false, waitTickAllowed: false });
-  assert.equal(absolute.enemy.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 2);
-  absolute.step({ movementAllowed: false, routeAdvanceAllowed: false });
-  assert.equal(absolute.enemy.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, 0);
-  assert.equal(absolute.enemy.locomotion.mainRoute.route.progress.checkpointIndex, 0);
-  absolute.step({ movementAllowed: false });
-  assert.equal(absolute.enemy.locomotion.mainRoute.route.progress.phase, 'END');
-  assert.deepEqual(absolute.enemy.position, [0, 0]);
-});
-
-test('core patrol successors loop only at a patrol tail with a preceding non-MOVE segment', () => {
-  const route = types => createRouteDefinition(coreRoute({ checkpoints: types.map(type => {
-    if (type === 'WAIT_FOR_TICKS') return { type, durationTicks: 1 };
-    if (type === 'ALERT' || type === 'DISAPPEAR') return { type };
-    return { ...coreMove(1), type };
-  }) }));
-  for (const [types, index, expected] of [
-    [['PATROL_MOVE'], 0, 1],
-    [['MOVE', 'PATROL_MOVE'], 1, 2],
-    [['PATROL_MOVE', 'WAIT_FOR_TICKS'], 0, 1],
-    [['PATROL_MOVE', 'WAIT_FOR_TICKS'], 1, 2],
-    [['WAIT_FOR_TICKS', 'PATROL_MOVE', 'MOVE'], 1, 0],
-    [['MOVE', 'WAIT_FOR_TICKS', 'MAP_OFFSET_MOVE', 'PATROL_MOVE', 'MOVE'], 3, 1],
-    [['ALERT', 'DISAPPEAR', 'PATROL_MOVE'], 2, 0],
-    [['PATROL_MOVE', 'PATROL_MOVE', 'PATROL_MOVE'], 2, 0],
-  ]) {
-    const definition = route(types), before = JSON.stringify(definition);
-    assert.equal(nextCheckpointIndex(definition, index), expected);
-    assert.equal(JSON.stringify(definition), before);
-  }
-});
-
-test('core MAP_OFFSET_MOVE adds fixed reach offset while MOVE and PATROL randomization replaces it', () => {
-  for (const type of ['MOVE', 'PATROL_MOVE', 'MAP_OFFSET_MOVE']) {
-    for (const randomizeReachOffset of [false, true]) {
-      const checkpoint = { ...coreMove(2, { reachOffset: [0.25, 0], randomizeReachOffset }), type };
-      const definition = createRouteDefinition(coreRoute({ checkpoints: [checkpoint] }));
-      const rng = createRng(42), expectedRng = createRng(42);
-      let calls = 0;
-      const execution = createRouteExecution({ ...rng, next() { calls++; return rng.next(); } }, 7, 0);
-      const entered = enterRoute(createRouteState(definition, createRouteTiming({ waveStartedAtTick: 0, fragmentStartedAtTick: 0 }), true), execution);
-      let x = 0.25;
-      if (randomizeReachOffset) {
-        x = -0.25 + expectedRng.next() * 0.5 + (type === 'MAP_OFFSET_MOVE' ? 0.25 : 0);
-        expectedRng.next();
-      }
-      assert.deepEqual(entered.request.goal.position, [2 + x, 0]);
-      assert.equal(entered.request.id, 7);
-      assert.equal(entered.state.progress.checkpoint.goal, entered.request.goal);
-      assert.equal(calls, randomizeReachOffset ? 2 : 0);
-      assert.deepEqual(execution.state(), { rngState: expectedRng.state(), nextNavigationRequestId: 8 });
-      assert.equal(enterRoute(entered.state, execution).state, entered.state);
-      assert.equal(calls, randomizeReachOffset ? 2 : 0);
-    }
-  }
-});
-
-test('core patrol yields with its exact successor and resumes without replaying samples', () => {
-  const definition = createRouteDefinition(coreRoute({ checkpoints: [
-    { ...coreMove(1, { randomizeReachOffset: true, reachOffset: [0.2, 0.1] }), type: 'PATROL_MOVE' },
-    { ...coreMove(2), type: 'PATROL_MOVE' },
-  ] }));
-  const execution = createRouteExecution(createRng(42), 0, 0, 3);
-  let state = enterRoute(createRouteState(definition, createRouteTiming({ waveStartedAtTick: 0, fragmentStartedAtTick: 0 }), true), execution).state;
-  const firstGoal = state.progress.checkpoint.goal;
-  state = advanceRoute(state, execution).state;
-  const before = execution.state();
-  for (let query = 0; query < 1000; query++) assert.equal(nextCheckpointIndex(definition, 1), 0);
-  assert.deepEqual(execution.state(), before);
-  state = advanceRoute(state, execution).state;
-  assert.notEqual(state.progress.checkpoint.goal, firstGoal);
-  const sampled = execution.state();
-  state = advanceRoute(state, execution).state;
-  assert.deepEqual(state.progress, { phase: 'CHECKPOINTS', checkpointIndex: 1, checkpoint: { type: 'NOT_ENTERED' } });
-  assert.equal(enterRoute(state, execution).state, state);
-  assert.deepEqual(execution.state(), sampled);
-  const nextFrame = createRouteExecution(createRng(sampled.rngState), sampled.nextNavigationRequestId, 1, 2);
-  const resumed = enterRoute(state, nextFrame);
-  state = resumed.state;
-  assert.equal(state.progress.checkpointIndex, 1);
-  assert.equal(resumed.request.id, sampled.nextNavigationRequestId);
-  assert.equal(nextFrame.state().rngState, sampled.rngState);
-  state = advanceRoute(state, nextFrame).state;
-  assert.equal(state.progress.checkpointIndex, 0);
-  assert.equal(state.progress.checkpoint.type, 'MOVE');
-});
-
-test('core route budget retains notifications and pending entry exactly once', () => {
-  const definition = createRouteDefinition(coreRoute({ checkpoints: [
-    { type: 'ALERT' }, { type: 'DISAPPEAR' },
-    { type: 'APPEAR_AT_POS', position: [0, 2], reachOffset: [0, 0] },
-    coreMove(3, { randomizeReachOffset: true, reachOffset: [0.2, 0.1] }),
-  ] }));
-  const execution = createRouteExecution(createRng(42), 0, 0, 2);
-  const first = enterRoute(createRouteState(definition, createRouteTiming({ waveStartedAtTick: 0, fragmentStartedAtTick: 0 }), true), execution);
-  const second = advanceRoute(first.state, execution);
-  const pending = advanceRoute(second.state, execution);
-  assert.deepEqual([...first.signals, ...second.signals].map(signal => signal.type), ['ALERT', 'DISAPPEAR']);
-  assert.deepEqual(pending.signals, []);
-  assert.equal(pending.state.progress.checkpointIndex, 2);
-  assert.equal(pending.state.progress.checkpoint.type, 'NOT_ENTERED');
-  assert.deepEqual(execution.state(), { rngState: 42, nextNavigationRequestId: 0 });
-  const next = createRouteExecution(createRng(42), 0, 1, 2);
-  const appeared = enterRoute(pending.state, next);
-  assert.equal(appeared.signals[0].type, 'APPEAR_AT_POS');
-  assert.deepEqual(enterRoute(appeared.state, next).signals, []);
-  const moved = advanceRoute(appeared.state, next);
-  assert.equal(moved.state.progress.checkpoint.type, 'MOVE');
-  assert.equal(next.state().nextNavigationRequestId, 1);
-  assert.notEqual(next.state().rngState, 42);
-});
-
-test('core routed patrol and MAP_OFFSET_MOVE remain active through tick movement without reentering on replanning', () => {
-  const patrol = routedEnemyHarness({ checkpoints: [
-    { ...coreMove(1), type: 'PATROL_MOVE' }, { ...coreMove(2), type: 'PATROL_MOVE' },
-  ] });
-  patrol.step();
-  assert.deepEqual(patrol.enemy.position, [1, 0]);
-  assert.equal(patrol.enemy.locomotion.mainRoute.route.progress.checkpointIndex, 1);
-  patrol.step();
-  assert.deepEqual(patrol.enemy.position, [2, 0]);
-  assert.equal(patrol.enemy.locomotion.mainRoute.route.progress.checkpointIndex, 0);
-  assert.equal(patrol.nextNavigationRequestId, 3);
-  patrol.step();
-  assert.deepEqual(patrol.enemy.position, [1, 0]);
-  assert.equal(patrol.enemy.locomotion.mainRoute.route.progress.phase, 'CHECKPOINTS');
-  const offset = routedEnemyHarness({ checkpoints: [
-    { ...coreMove(2, { reachOffset: [0.25, 0], randomizeReachOffset: true }), type: 'MAP_OFFSET_MOVE' },
-  ], routeOverrides: { spawnOffset: [0.1, 0] } });
-  const goal = offset.enemy.locomotion.mainRoute.route.progress.checkpoint.goal;
-  const saved = offset.rngState;
-  offset.setMotionMode('FLY');
-  offset.step({ moveMultiplier: 0 });
-  assert.equal(offset.enemy.locomotion.mainRoute.route.progress.checkpoint.goal, goal);
-  assert.equal(offset.rngState, saved);
-  assert.deepEqual(offset.enemy.locomotion.mainRoute.navigation.execution.locatorOffset, [-0.1, 0]);
-  offset.step();
-  approx(offset.enemy.position[0], goal.position[0] + 0.1, 'MAP_OFFSET world x');
-  assert.equal(offset.enemy.locomotion.mainRoute.route.progress.phase, 'END');
-});
-
-test('raw routes preserve APPEAR fixed offsets and reject mode-specific or unknown instructions', () => {
-  const raw = {
-    motionMode: 'WALK', startPosition: { row: 3, col: 4 }, endPosition: { row: 0, col: 0 },
-    spawnOffset: { x: 0, y: 0 }, spawnRandomRange: { x: 0, y: 0 },
-    allowDiagonalMove: true, visitEveryTileCenter: false, visitEveryNodeCenter: false, visitEveryCheckPoint: true,
-    checkpoints: [{ type: 'APPEAR_AT_POS', position: { row: 1, col: 2 }, reachOffset: { x: 0.1, y: -0.2 }, randomizeReachOffset: true }],
-  };
-  const definition = parseRouteDefinition(raw);
-  assert.deepEqual(definition.checkpoints[0], { type: 'APPEAR_AT_POS', position: [1, 2], reachOffset: [0.1, -0.2] });
-  assert.deepEqual(parseRouteDefinition({ ...raw, checkpoints: [{ type: 'WAIT_FOR_SECONDS', time: -1 }] }).checkpoints[0], { type: 'WAIT_FOR_TICKS', durationTicks: 0 });
-  assert.deepEqual(parseRouteDefinition({ ...raw, checkpoints: [{ type: 'WAIT_FOR_SECONDS', time: 0.15 }] }).checkpoints[0], { type: 'WAIT_FOR_TICKS', durationTicks: 5 });
-  assert.throws(() => parseRouteDefinition({ ...raw, motionMode: 'E_NUM' }), /motion mode/);
-  assert.throws(() => parseRouteDefinition({ ...raw, checkpoints: [{ type: 'WAIT_BOSSRUSH_WAVE', time: 1 }] }), /checkpoint type/);
-  assert.throws(() => parseRouteDefinition({ ...raw, checkpoints: [{ type: 'INVALID' }] }), /checkpoint type/);
-  assert.throws(() => parseRouteDefinition({ ...raw, unknownRule: true }), /unsupported field/);
-});
-
-test('core route instants enter once and emit fixed APPEAR without consuming RNG or request identities', () => {
-  const route = createRouteDefinition(coreRoute({ checkpoints: [
-    { type: 'DISAPPEAR' }, { type: 'APPEAR_AT_POS', position: [2, 3], reachOffset: [0.2, -0.3] },
-    { type: 'ALERT' },
-  ] }));
-  const execution = createRouteExecution(createRng(41), 9, 0);
-  const initial = createRouteState(route, createRouteTiming({ waveStartedAtTick: 0, fragmentStartedAtTick: 0 }), true);
-  const hidden = enterRoute(initial, execution);
-  assert.deepEqual(hidden.signals, [{ type: 'DISAPPEAR' }]);
-  assert.equal(hidden.state.progress.checkpoint.type, 'ENTERED');
-  const repeated = enterRoute(hidden.state, execution);
-  assert.equal(repeated.state, hidden.state);
-  assert.deepEqual(repeated.signals, []);
-  const appeared = advanceRoute(hidden.state, execution);
-  assert.deepEqual(appeared.signals, [{ type: 'APPEAR_AT_POS', position: [3.2, 1.7] }]);
-  assert.deepEqual(advanceRoute(appeared.state, execution).signals, [{ type: 'ALERT' }]);
-  assert.deepEqual(execution.state(), { rngState: 41, nextNavigationRequestId: 9 });
-  assert.equal(initial.progress.checkpoint.type, 'NOT_ENTERED');
-});
-
-test('core route lookahead crosses controls without entering, sampling or assigning identities', () => {
-  for (const type of ['MOVE', 'PATROL_MOVE', 'MAP_OFFSET_MOVE']) {
-    const route = createRouteDefinition(coreRoute({ checkpoints: [
-      { type: 'WAIT_FOR_TICKS', durationTicks: 3 }, { type: 'DISAPPEAR' },
-      { type: 'APPEAR_AT_POS', position: [1, 0], reachOffset: [0, 0] }, { type: 'ALERT' },
-      { type, target: { position: [0, 2], reachOffset: [0.2, -0.1], randomizeReachOffset: true, reachDistance: 0 } },
-    ] }));
-    const execution = createRouteExecution(createRng(73), 5, 0);
-    const state = enterRoute(createRouteState(route,
-      createRouteTiming({ waveStartedAtTick: 0, fragmentStartedAtTick: 0 }), true), execution).state;
-    const before = structuredClone(state);
-    for (let repeat = 0; repeat < 3; repeat++) {
-      assert.deepEqual(predictRouteTarget(state), {
-        type: 'CHECKPOINT_TARGET', checkpointIndex: 4, targetTile: [0, 2],
-        goal: { position: type === 'MAP_OFFSET_MOVE' ? [2.2, -0.1] : [2, 0], reachDistance: 0.05 },
-      });
-    }
-    assert.deepEqual(execution.state(), { rngState: 73, nextNavigationRequestId: 5 });
-    assert.deepEqual(state, before);
-    let entered = state;
-    for (let i = 0; i < 4; i++) entered = advanceRoute(entered, execution).state;
-    assert.equal(predictRouteTarget(entered).goal, entered.progress.checkpoint.goal);
-    assert.equal(execution.state().nextNavigationRequestId, 6);
-  }
-});
-
-test('core waits keep navigation idle without consuming visits, samples or request identities', () => {
-  const h = routedEnemyHarness({ speedPerTick: 0.1, checkpoints: [
-    { type: 'WAIT_FOR_TICKS', durationTicks: 10 }, coreMove(3, { reachOffset: [0.2, 0] }),
-  ], routeOverrides: { visitEveryNodeCenter: true } });
-  const seed = h.rngState;
-  h.step();
-  assert.equal(h.enemy.locomotion.mainRoute.navigation.execution.activity.type, 'IDLE');
-
-  const snapshot = copy(h.enemy);
-  assert.equal(snapshot.locomotion, h.enemy.locomotion);
-  const remainingTicks = snapshot.locomotion.mainRoute.route.progress.checkpoint.remainingTicks;
-  h.step();
-
-  assert.equal(snapshot.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, remainingTicks);
-  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpoint.remainingTicks, remainingTicks - 1);
-  h.setMotionMode('FLY');
-  h.step();
-  assert.equal(h.enemy.locomotion.mainRoute.navigation.execution.activity.type, 'IDLE');
-  assert.equal(h.nextNavigationRequestId, 0);
-  assert.equal(h.rngState, seed);
-});
-
-test('core zero wait advances in the heading phase while a live wait damps previous velocity', () => {
-  const zero = routedEnemyHarness({ speedPerTick: 0.1,
-    checkpoints: [{ type: 'WAIT_FOR_TICKS', durationTicks: 0 }, coreMove(3)] });
-  zero.step();
-  assert.equal(zero.enemy.locomotion.mainRoute.route.progress.checkpointIndex, 1);
-  assert.deepEqual(zero.enemy.position, [0.1, 0]);
-  const wait = routedEnemyHarness({ speedPerTick: 0.1,
-    checkpoints: [{ type: 'WAIT_FOR_TICKS', durationTicks: 3 }, coreMove(3)] });
-  wait.enemy.locomotion.steering.lastVelocity = [0.1, 0];
-  wait.enemy.definition = createDefinition({ ...wait.enemy.definition,
-    locomotion: { ...wait.enemy.definition.locomotion,
-      steeringParameters: createSteeringParameters({ steeringFactor: 0.25, maxSteeringForce: 1 }) } });
-  wait.step();
-  assert.ok(Math.abs(wait.enemy.position[0] - 0.075) < 1e-12);
-  assert.ok(Math.abs(wait.enemy.locomotion.steering.lastVelocity[0] - 0.075) < 1e-12);
-  assert.deepEqual(wait.enemy.locomotion.mainRoute.route.progress.checkpoint, { type: 'WAIT', remainingTicks: 2 });
-});
-
-test('core checkpoint spatial skipping is independent of geometric arrival and cannot skip END', () => {
-  for (const outside of [false, true]) {
-    for (const alwaysCheckCurrentPoint of [false, true]) {
-      const h = routedEnemyHarness({ alwaysCheckCurrentPoint, speedPerTick: 0,
-        checkpoints: [coreMove(2), { type: 'WAIT_FOR_TICKS', durationTicks: 2 }] });
-      if (outside) h.displace([-2, 0]);
-      else h.setMaps({ ...h.maps, WALK: fieldMap(1, 5,
-        Array.from({ length: 5 }, (_, index) => fieldCell({ passable: index !== 2 }))) });
-      const step = h.step();
-      assert.equal(step.outcomes.some(outcome => outcome.type === 'ARRIVED'), false);
-      assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpointIndex, alwaysCheckCurrentPoint ? 0 : 1);
-    }
-  }
-  const end = routedEnemyHarness({ alwaysCheckCurrentPoint: false, checkpoints: [], speedPerTick: 0 });
-  end.displace([-2, 0]);
-  end.step();
-  assert.equal(end.enemy.locomotion.mainRoute.route.progress.phase, 'END');
-});
-
-test('core visitEveryCheckPoint independently gates early END during waits and temporary takeover', () => {
-  for (const visitEveryCheckPoint of [false, true]) {
-    for (const takeover of [false, true]) {
-      const h = routedEnemyHarness({ speedPerTick: 0,
-        checkpoints: [{ type: 'WAIT_FOR_TICKS', durationTicks: 10 }, coreMove(1)],
-        routeOverrides: { visitEveryCheckPoint } });
-      if (takeover) h.setAlternative(createRouteDefinition(coreRoute({
-        checkpoints: [coreMove(2)], endPosition: [0, 3],
-      })));
-      h.displace([4, 0]);
-      const step = h.step({ movementAllowed: false });
-      assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, visitEveryCheckPoint ? 'CHECKPOINTS' : 'COMPLETED');
-      assert.equal(step.outcomes.some(outcome => outcome.type === 'ARRIVED' && outcome.requestId === 0), false);
-    }
-  }
-});
-
-test('core disappearance preserves identity and APPEAR uses fixed world position without locator compensation', () => {
-  const h = routedEnemyHarness({ speedPerTick: 0.1, checkpoints: [
-    { type: 'DISAPPEAR' }, { type: 'WAIT_FOR_TICKS', durationTicks: 2 },
-    { type: 'APPEAR_AT_POS', position: [0, 2], reachOffset: [0.4, 0.3] }, coreMove(4),
-  ], routeOverrides: { spawnOffset: [0.1, -0.2] } });
-  const seed = h.rngState;
-  assert.equal(h.enemy.spatialPresence.present, false);
-  assert.deepEqual(h.initialSignals, [{ signal: { type: 'DISAPPEAR' }, position: [0.1, -0.2] }]);
-  h.step();
-  assert.deepEqual(h.enemy.position, [0.1, -0.2]);
-  assert.deepEqual(h.enemy.locomotion.mainRoute.route.progress.checkpoint, { type: 'WAIT', remainingTicks: 2 });
-  assert.deepEqual(h.step().signals, []);
-  const appeared = h.step();
-  assert.equal(appeared.enemy.id, 1);
-  assert.equal(appeared.enemy.spatialPresence.present, true);
-  assert.equal(appeared.enemy.locomotion.moving, false);
-  assert.deepEqual(appeared.enemy.position, [2.4, 0.3]);
-  assert.deepEqual(appeared.signals, [{ signal: { type: 'APPEAR_AT_POS', position: [2.4, 0.3] }, position: [2.4, 0.3] }]);
-  assert.deepEqual(appeared.enemy.locomotion.mainRoute.navigation.execution.locatorOffset, [-0.1, 0.2]);
-  assert.equal(h.rngState, seed);
-  assert.equal(h.nextNavigationRequestId, 0);
-  assert.deepEqual(h.step({ movementAllowed: false, routeAdvanceAllowed: false }).signals, []);
-});
-
-test('core alternative route expires its own wait and the main wait without automatically releasing control', () => {
-  const h = routedEnemyHarness({ speedPerTick: 0, checkpoints: [
-    { type: 'WAIT_FOR_TICKS', durationTicks: 2 }, coreMove(3, { randomizeReachOffset: true, reachOffset: [0.2, 0.1] }),
-  ] });
-  h.setAlternative(createRouteDefinition(coreRoute({ checkpoints: [], endPosition: [0, 0] })));
-  const seed = h.rngState, nextId = h.nextNavigationRequestId;
-  h.step();
-  assert.equal(h.enemy.locomotion.alternativeRoute.route.progress.phase, 'COMPLETED');
-  h.step();
-  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpointIndex, 0);
-  assert.deepEqual(h.enemy.locomotion.mainRoute.route.progress.checkpoint, { type: 'WAIT', remainingTicks: 0 });
-  assert.equal(h.enemy.locomotion.alternativeRoute.route.progress.phase, 'COMPLETED');
-  assert.equal(h.rngState, seed);
-  assert.equal(h.nextNavigationRequestId, nextId);
-  h.clearAlternative();
-  h.step();
-  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpointIndex, 1);
-  assert.equal(h.nextNavigationRequestId, nextId + 1);
-  assert.notEqual(h.rngState, seed);
-});
-
-test('core temporary navigation preserves main intent through mode and map changes before explicit restoration', () => {
-  const h = routedEnemyHarness({ speedPerTick: 0.1, checkpoints: [
-    coreMove(3, { randomizeReachOffset: true, reachOffset: [0.2, 0.1] }),
-  ], routeOverrides: { spawnOffset: [0.1, 0.2] } });
-  h.step();
-  const main = h.enemy.locomotion.mainRoute, request = routedEnemyRequest(h.enemy);
-  h.setAlternative(createRouteDefinition(coreRoute({ checkpoints: [], endPosition: [0, 2] })));
-  const seed = h.rngState, nextId = h.nextNavigationRequestId;
-  h.step({ moveMultiplier: 0 });
-  assert.deepEqual(h.enemy.locomotion.alternativeRoute.navigation.execution.locatorOffset, [0, 0]);
-  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpoint.goal, main.route.progress.checkpoint.goal);
-  assert.equal(routedEnemyRequest(h.enemy), request);
-  h.setMotionMode('FLY');
-  h.setMaps({ ...h.maps, FLY: fieldMap(1, 5, Array.from({ length: 5 }, () => fieldCell()), 'FLY', 1) });
-  h.step({ moveMultiplier: 0 });
-  h.clearAlternative();
-  h.step({ moveMultiplier: 0 });
-  const restored = h.enemy.locomotion.mainRoute;
-  assert.equal(restored.navigation.pathMotionMode, 'FLY');
-  assert.equal(getRequest(restored.navigation), request);
-
-  assert.deepEqual(restored.navigation.execution.locatorOffset, main.navigation.execution.locatorOffset);
-  assert.equal(routedEnemyRequest(h.enemy), request);
-  assert.equal(h.rngState, seed);
-  assert.equal(h.nextNavigationRequestId, nextId);
-});
-
-test('core original h07_02 teleport and patrol routes execute their unchanged false checkpoint flags', () => {
-  const raw = JSON.parse(readFileSync(new URL('../fixtures/arknights/level_act1autochess_h07_02.json', import.meta.url), 'utf8'));
-  const map = parseBattlefieldMap(raw.mapData);
-  const navigation = createNavigation({ WALK: projectStaticNavigationMap(map, 'WALK'), FLY: projectStaticNavigationMap(map, 'FLY') });
-
-  const definition = createDefinition({ id: 'enemy_route_fixture', vitality: { maxHp: 100, defense: 0, resistance: 0 }, locomotion: {
-    moveSpeedPerTick: 0.1, steeringParameters: createSteeringParameters({ steeringFactor: 10 / 30, maxSteeringForce: 100 / 900 }),
-  } });
-  function run(routeIndex, ticks) {
-    const route = parseRouteDefinition(raw.routes[routeIndex]);
-    assert.equal(route.visitEveryCheckPoint, false);
-    const initialized = initializeRoutedEnemy(
-      fixtureBattle(0, { rngState: 31, nextNavigationRequestId: 0 }),
-      {
-        id: 1,
-        definition,
-        route,
-        alwaysCheckCurrentPoint: true,
-        timing: createRouteTiming({ waveStartedAtTick: 0, fragmentStartedAtTick: 0 }),
-      },
-    );
-    let { enemy } = initialized.value;
-    let { rngState, nextNavigationRequestId } = initialized.state.execution;
-    const trace = [];
-    for (let tick = 0; tick < ticks && enemy.locomotion.mainRoute.route.progress.phase !== 'COMPLETED'; tick++) {
-      const moved = stepRoutedEnemy(enemy, { tick, navigation, moveMultiplier: 1,
-        movementAllowed: true, waitTickAllowed: true, routeAdvanceAllowed: true, rngState, nextNavigationRequestId });
-      enemy = moved.enemy;
-      ({ rngState, nextNavigationRequestId } = moved);
-      trace.push({ tick, position: enemy.position, present: enemy.spatialPresence.present,
-        progress: enemy.locomotion.mainRoute.route.progress, signals: moved.signals });
-    }
-    return { enemy, trace };
-  }
-  const teleport = run(2, 1800);
-  assert.equal(teleport.enemy.locomotion.mainRoute.route.progress.phase, 'COMPLETED');
-  assert.deepEqual(teleport.trace.flatMap(step => step.signals.map(({ signal }) => signal.type)), ['DISAPPEAR', 'APPEAR_AT_POS']);
-  assert.ok(teleport.trace.filter(step => !step.present).length >= 90);
-  const appear = teleport.trace.find(step => step.signals.some(({ signal }) => signal.type === 'APPEAR_AT_POS'));
-  assert.deepEqual(appear.signals[0].position, [10, 5]);
-  assert.deepEqual(run(2, 1800), teleport);
-  const patrol = run(6, 500);
-  assert.equal(patrol.enemy.locomotion.mainRoute.route.progress.phase, 'CHECKPOINTS');
-  assert.deepEqual(new Set(patrol.trace.map(step => step.progress.checkpointIndex)), new Set([0, 1, 2]));
-  assert.ok(patrol.trace.filter((step, index, trace) => index > 0
-    && step.progress.checkpointIndex === 0 && trace[index - 1].progress.checkpointIndex === 2).length >= 2);
-});
-
-test('core END completes after committed motion and keeps steering toward its centre inside the arrival radius', () => {
-  const leaving = routedEnemyHarness({ speedPerTick: 0.01, checkpoints: [] });
-  leaving.enemy.definition = createDefinition({ ...leaving.enemy.definition,
-    locomotion: { ...leaving.enemy.definition.locomotion,
-      steeringParameters: createSteeringParameters({ steeringFactor: 0.25, maxSteeringForce: 0 }) } });
-  leaving.enemy.locomotion.steering.lastVelocity = [-0.01, 0];
-  leaving.displace([3.951, 0]);
-  const departed = leaving.step();
-  assert.deepEqual(departed.outcomes, []);
-  assert.ok(Math.abs(departed.enemy.position[0] - 3.941) < 1e-12);
-  assert.equal(departed.enemy.locomotion.mainRoute.route.progress.phase, 'END');
-  assert.equal(departed.enemy.locomotion.mainRoute.navigation.execution.activity.type, 'FOLLOWING');
-  leaving.displace([4, 0]);
-  const completed = leaving.step({ movementAllowed: false });
-  assert.equal(completed.enemy.locomotion.mainRoute.route.progress.phase, 'COMPLETED');
-  assert.deepEqual(completed.outcomes, [{ type: 'ARRIVED', requestId: 0 }]);
-  const approaching = routedEnemyHarness({ speedPerTick: 0.01, checkpoints: [] });
-  approaching.displace([3.96, 0]);
-  const arrived = approaching.step();
-  assert.ok(Math.abs(arrived.enemy.position[0] - 3.97) < 1e-12);
-  assert.equal(arrived.enemy.locomotion.mainRoute.route.progress.phase, 'COMPLETED');
-  assert.deepEqual(arrived.outcomes, [{ type: 'ARRIVED', requestId: 0 }]);
-});
-
-test('core actual and locator recovery use one budgeted motion policy without rerolling goals', () => {
-  for (const offset of [[-1, 0], [1, 0]]) {
-    for (const speedPerTick of [0.1, 10]) {
-      const h = routedEnemyHarness({ speedPerTick, checkpoints: [], routeOverrides: { spawnOffset: offset } });
-      if (offset[0] > 0) h.displace([0, 0]);
-      const original = h.enemy.position;
-      const seed = h.rngState, nextId = h.nextNavigationRequestId;
-      h.step();
-      assert.ok(Math.hypot(h.enemy.position[0] - original[0], h.enemy.position[1] - original[1]) <= speedPerTick + 1e-12);
-      assert.ok(h.enemy.position[0] > original[0]);
-      assert.deepEqual(h.trace[0].outcomes, []);
-      assert.equal(h.rngState, seed);
-      assert.equal(h.nextNavigationRequestId, nextId);
-      for (let tick = 0; tick < 30 && (!h.maps.WALK.contains(World.toTile(h.enemy.position)) ||
-        !h.maps.WALK.contains(World.toTile([h.enemy.position[0] - offset[0], h.enemy.position[1]]))); tick++) h.step();
-      assert.equal(h.maps.WALK.contains(World.toTile(h.enemy.position)), true);
-      assert.equal(h.maps.WALK.contains(World.toTile([h.enemy.position[0] - offset[0], h.enemy.position[1]])), true);
-    }
-  }
-});
-
-test('core outside-map recovery leaves spatial skipping to the single post-movement transition and keeps waits ticking', () => {
-  const h = routedEnemyHarness({ speedPerTick: 0.1, alwaysCheckCurrentPoint: false,
-    checkpoints: [coreMove(1), coreMove(2), coreMove(3)] });
-  h.displace([-2, 0]);
-  const moved = h.step();
-  assert.deepEqual(moved.enemy.position, [-1.9, 0]);
-  assert.equal(moved.enemy.locomotion.mainRoute.route.progress.checkpointIndex, 1);
-  assert.equal(h.nextNavigationRequestId, 2);
-  assert.deepEqual(moved.outcomes, []);
-  const waiting = routedEnemyHarness({ speedPerTick: 0.1,
-    checkpoints: [{ type: 'WAIT_FOR_TICKS', durationTicks: 3 }, coreMove(3)] });
-  waiting.displace([-1, 0]);
-  waiting.step();
-  assert.deepEqual(waiting.enemy.position, [-0.9, 0]);
-  assert.deepEqual(waiting.enemy.locomotion.mainRoute.route.progress.checkpoint, { type: 'WAIT', remainingTicks: 2 });
-  assert.equal(waiting.nextNavigationRequestId, 0);
-});
-
 test('core safe-distance overflow candidates may be replaced by a cheaper path', () => {
   const half = Math.floor(Number.MAX_SAFE_INTEGER / 2);
   const map = fieldMap(2, 2, [fieldCell(), fieldCell(), fieldCell({ cost: half + 1 }), fieldCell({ cost: half + 2 })]);
   assert.deepEqual(distances(build(map, fieldQuery([0, 0]))), [0, 1, half + 1, half + 3]);
 });
 
-test('core routed patrol yields repeatedly without exiting or completing a deferred end', () => {
-  for (const visitEveryCheckPoint of [false, true]) {
-    const h = routedEnemyHarness({ speedPerTick: 0, checkpoints: [
-      { type: 'ALERT' }, { ...coreMove(0), type: 'PATROL_MOVE' },
-    ], routeOverrides: { endPosition: [0, 0], visitEveryCheckPoint } });
-    for (let tick = 0; tick < 3; tick++) {
-      const next = h.step();
-      assert.equal(h.enemy.locomotion.mainRoute.route.progress.phase, 'CHECKPOINTS');
-      assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpoint.type, 'NOT_ENTERED');
-      assert.deepEqual(h.enemy.position, [0, 0]);
-      assert.ok(next.signals.length > 0);
+
+const coreMove = column => ({ type: 'MOVE', position: [0, column], offset: [0, 0] });
+
+function routedEnemyHarness({ speedPerTick = 0.1, checkpoints = [], routeOverrides = {}, position = [0, 0] } = {}) {
+  const configuration = {
+    pathMotionMode: 'WALK', startPosition: [0, 0], endPosition: [0, 4], offset: [0, 0],
+    requireAllCheckpoints: true, alwaysCheckCurrentPoint: true, checkpoints, ...routeOverrides,
+  };
+  const enemy = initialize({ id: 1, position, definition: {
+    id: 'route-walker', vitality: { maxHp: 100, defense: 0, resistance: 0 }, spatialPresence: {},
+    locomotion: { moveSpeedPerTick: speedPerTick,
+      steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } }, route: configuration,
+  } });
+  let battle = registerUnit(fixtureBattle(), enemy);
+  const ref = units.ref(enemy);
+  let maps = {
+    WALK: fieldMap(1, 5, Array.from({ length: 5 }, () => fieldCell())),
+    FLY: fieldMap(1, 5, Array.from({ length: 5 }, () => fieldCell())),
+  };
+  function setNavigation(navigation) {
+    battle = { ...battle, battlefield: { ...battle.battlefield, navigation } };
+  }
+  setNavigation(createNavigation(maps));
+  return {
+    get enemy() { return units.get(battle, ref); },
+    get battle() { return battle; },
+    get maps() { return maps; },
+    get navigation() { return battle.battlefield.navigation; },
+    setMaps(next) { maps = next; setNavigation(createNavigation(maps)); },
+    setNavigation,
+    displace(position) { battle = updateUnit(battle, { ...units.get(battle, ref), position }); },
+    step(multiplier = 1) {
+      battle = route.advance(battle, ref);
+      const current = units.get(battle, ref);
+      if (!route.isCompleted(current.route)) {
+        battle = locomotion.advance(battle, ref, route.nextPoint(battle, ref), multiplier);
+      }
+      const result = units.get(battle, ref);
+      battle = { ...battle, tick: battle.tick + 1 };
+      return result;
+    },
+  };
+}
+
+test('Route guidance cannot move through an unreachable wall with a large movement budget', () => {
+  const h = routedEnemyHarness({ speedPerTick: 10, routeOverrides: { endPosition: [0, 2] } });
+  const map = fieldMap(1, 3, [fieldCell(), fieldCell({ passable: false }), fieldCell()]);
+  h.setMaps({ WALK: map, FLY: map });
+  for (let tick = 0; tick < 3; tick++) h.step();
+  assert.deepEqual(h.enemy.position, [0, 0]);
+  assert.equal(h.enemy.route.main.phase.type, 'END');
+});
+
+test('Route guidance follows visible segments around walls and high-cost intermediate tiles', () => {
+  for (const obstacle of [{ passable: false }, { cost: 1000 }]) {
+    const cells = Array.from({ length: 6 }, () => fieldCell());
+    cells[1] = fieldCell(obstacle);
+    const map = fieldMap(2, 3, cells);
+    const h = routedEnemyHarness({ speedPerTick: 10, routeOverrides: { endPosition: [0, 2] } });
+    h.setMaps({ WALK: map, FLY: fieldMap(2, 3, cells.map(cell => ({ ...cell, cost: 1 }))) });
+    const positions = [h.enemy.position];
+    for (let tick = 0; tick < 12 && !route.isCompleted(h.enemy.route); tick++) {
+      h.step(); positions.push(h.enemy.position);
+    }
+    assert.equal(route.isCompleted(h.enemy.route), true);
+    assert.ok(positions.some(position => position[1] >= 0.5));
+    for (let index = 1; index < positions.length; index++) {
+      assert.ok(canTraverseNavigationSegment(map, positions[index - 1], positions[index]));
     }
   }
 });
 
-test('core paused routes retain yielded entries without sampling, allocating identities or emitting signals', () => {
-  for (const alerts of [1, 2]) {
-    const h = routedEnemyHarness({ speedPerTick: 0, checkpoints: [
-      ...Array.from({ length: alerts }, () => ({ type: 'ALERT' })),
-      { ...coreMove(0, { randomizeReachOffset: true }), type: 'PATROL_MOVE' },
-    ], routeOverrides: { endPosition: [0, 0], visitEveryCheckPoint: false } });
-    h.step();
-    const before = structuredClone(h.enemy);
-    const rngState = h.rngState, identity = h.nextNavigationRequestId;
-    assert.equal(before.locomotion.mainRoute.route.progress.checkpoint.type, 'NOT_ENTERED');
-    for (let tick = 0; tick < 3; tick++) {
-      const paused = h.step({ routeAdvanceAllowed: false });
-      assert.deepEqual(paused.signals, []);
-      assert.deepEqual(h.enemy.locomotion.mainRoute.route.progress, before.locomotion.mainRoute.route.progress);
-      assert.equal(h.rngState, rngState);
-      assert.equal(h.nextNavigationRequestId, identity);
-    }
-    assert.ok(h.step().signals.length > 0);
-  }
-});
-
-test('core alternative takeover does not enter pending main-route instructions until restored', () => {
-  const h = routedEnemyHarness({ speedPerTick: 0, checkpoints: [
-    { type: 'ALERT' }, { type: 'ALERT' }, { ...coreMove(0), type: 'PATROL_MOVE' },
-  ], routeOverrides: { endPosition: [0, 0], visitEveryCheckPoint: false } });
-  h.step();
-  const main = structuredClone(h.enemy.locomotion.mainRoute);
-  h.setAlternative(createRouteDefinition(coreRoute({ checkpoints: [
-    { type: 'WAIT_FOR_TICKS', durationTicks: 10 }, coreMove(3),
-  ] })));
-  const seed = h.rngState, identity = h.nextNavigationRequestId;
-  for (let tick = 0; tick < 3; tick++) {
-    assert.deepEqual(h.step().signals, []);
-    assert.deepEqual(h.enemy.locomotion.mainRoute, main);
-    assert.equal(h.rngState, seed);
-    assert.equal(h.nextNavigationRequestId, identity);
-  }
-  h.enemy.locomotion.alternativeRoute = null;
-  assert.ok(h.step().signals.length > 0);
-});
-
-test('core recovery preserves walls and directed crossings inside the map', () => {
-  for (const blocker of [{ passable: false }, { departures: { UP: true, RIGHT: false, DOWN: true, LEFT: true } }]) {
-    const map = fieldMap(1, 3, [fieldCell(blocker), fieldCell({ passable: false }), fieldCell()]);
-    const h = routedEnemyHarness({ speedPerTick: 10, checkpoints: [], routeOverrides: {
-      spawnOffset: [2, 0], endPosition: [0, 2],
-    } });
-    h.setMaps({ WALK: map, FLY: map });
-    h.displace([0, 0]);
+test('Route uses the selected motion map and its live overlays without changing the definition', () => {
+  for (const mode of ['WALK', 'FLY']) {
+    const h = routedEnemyHarness({ checkpoints: [coreMove(4)], routeOverrides: { pathMotionMode: mode } });
+    const definition = h.enemy.route.main.definition;
+    const original = h.navigation;
+    const blocked = setOverlay(original, mode, createOverlay({
+      id: 1, cells: [[0, 1]], denyPassage: true, denyDepartures: [],
+    }));
+    h.setNavigation(blocked);
     h.step();
     assert.deepEqual(h.enemy.position, [0, 0]);
-    assert.notEqual(h.enemy.locomotion.mainRoute.route.progress.phase, 'COMPLETED');
+    assert.equal(h.enemy.route.main.definition, definition);
+    h.setNavigation(removeOverlay(blocked, mode, { id: 1 }));
+    h.step();
+    assert.ok(h.enemy.position[0] > 0);
+    assert.equal(h.enemy.route.main.definition, definition);
   }
 });
 
-test('core disappearing during route expansion stops movement before consuming old velocity', () => {
-  const h = routedEnemyHarness({ speedPerTick: 0.1, checkpoints: [
-    coreMove(0), { type: 'DISAPPEAR' }, { type: 'WAIT_FOR_TICKS', durationTicks: 3 },
-    { type: 'APPEAR_AT_POS', position: [0, 3], reachOffset: [0, 0] },
-  ] });
-  h.enemy.locomotion.steering.lastVelocity = [0.1, 0];
-  const step = h.step();
-  assert.deepEqual(h.enemy.position, [0, 0]);
-  assert.equal(h.enemy.spatialPresence.present, false);
-  assert.deepEqual(step.signals.map(({ signal }) => signal.type), ['DISAPPEAR']);
+test('Route preserves directed departures when choosing a tracking point', () => {
+  for (const [from, to, direction] of [
+    [[0, 0], [0, 1], 'RIGHT'], [[0, 1], [0, 0], 'LEFT'],
+    [[0, 0], [1, 0], 'UP'], [[1, 0], [0, 0], 'DOWN'],
+  ]) {
+    const rows = Math.max(from[0], to[0]) + 1, columns = Math.max(from[1], to[1]) + 1;
+    const cells = Array.from({ length: rows * columns }, () => fieldCell());
+    const index = from[0] * columns + from[1];
+    cells[index] = fieldCell({ departures: { ...cells[index].departures, [direction]: false } });
+    const map = fieldMap(rows, columns, cells);
+    const h = routedEnemyHarness({ speedPerTick: 10, position: [from[1], from[0]],
+      routeOverrides: { startPosition: from, endPosition: to } });
+    h.setMaps({ WALK: map, FLY: map });
+    h.step();
+    assert.deepEqual(h.enemy.position, [from[1], from[0]]);
+    assert.equal(route.isCompleted(h.enemy.route), false);
+    const reverse = routedEnemyHarness({ speedPerTick: 10, position: [to[1], to[0]],
+      routeOverrides: { startPosition: to, endPosition: from } });
+    reverse.setMaps({ WALK: map, FLY: map });
+    reverse.step(); reverse.step();
+    assert.equal(route.isCompleted(reverse.enemy.route), true);
+  }
 });
 
-test('core movement queries current overlays without replacing its sampled route intent', () => {
-  const h = routedEnemyHarness({ speedPerTick: 0.1, alwaysCheckCurrentPoint: true,
-    checkpoints: [coreMove(3, { randomizeReachOffset: true, reachOffset: [0.2, 0.1] })] });
-  h.step({ moveMultiplier: 0 });
-  const request = routedEnemyRequest(h.enemy);
-  const goal = h.enemy.locomotion.mainRoute.route.progress.checkpoint.goal;
-  const rng = h.rngState;
-  const identity = h.nextNavigationRequestId;
-  const originalNavigation = h.navigation;
-  const originalPosition = h.enemy.position;
-  const blocked = setOverlay(originalNavigation, 'WALK', createOverlay({
-    id: 1, cells: [[0, 1]], denyPassage: true, denyDepartures: [],
-  }));
-  h.setNavigation(blocked);
-  const failed = h.step();
-  assert.deepEqual(h.enemy.position, originalPosition);
-  assert.equal(h.enemy.locomotion.mainRoute.navigation.execution.activity.type, 'UNREACHABLE');
-  assert.equal(failed.outcomes.filter(outcome => outcome.type === 'UNREACHABLE').length, 1);
-  assert.deepEqual(h.step().outcomes, []);
-  assert.equal(routedEnemyRequest(h.enemy), request);
-  assert.equal(h.enemy.locomotion.mainRoute.route.progress.checkpoint.goal, goal);
-  assert.equal(h.rngState, rng);
-  assert.equal(h.nextNavigationRequestId, identity);
-  assert.deepEqual(nextPoint(originalNavigation, 'WALK', [0, 0], goal.position), goal.position);
-  assert.equal(nextPoint(blocked, 'WALK', [0, 0], goal.position), null);
-  h.setNavigation(removeOverlay(blocked, 'WALK', { id: 1 }));
-  h.step();
-  assert.ok(h.enemy.position[0] > originalPosition[0]);
-  assert.equal(h.enemy.locomotion.mainRoute.navigation.execution.activity.type, 'FOLLOWING');
-  assert.equal(routedEnemyRequest(h.enemy), request);
-  assert.equal(h.rngState, rng);
-  assert.equal(h.nextNavigationRequestId, identity);
+test('Route and Locomotion preserve frozen inputs and share unchanged capability branches', () => {
+  const h = routedEnemyHarness({ checkpoints: [coreMove(4)] });
+  h.step(0);
+  const previous = h.enemy;
+  Object.freeze(previous.position);
+  Object.freeze(previous.locomotion.steering.lastVelocity);
+  Object.freeze(previous.locomotion.steering);
+  Object.freeze(previous.locomotion);
+  Object.freeze(previous.route.main.phase);
+  Object.freeze(previous.route.main);
+  Object.freeze(previous.route);
+  Object.freeze(previous);
+  const before = JSON.stringify(previous);
+  const next = h.step();
+  assert.equal(JSON.stringify(previous), before);
+  assert.notEqual(next.position, previous.position);
+  assert.equal(next.definition, previous.definition);
+  assert.equal(next.route, previous.route);
+  assert.equal(next.vitality, previous.vitality);
+  assert.equal(next.effects, previous.effects);
+});
+
+test('Route replays the original teleport and patrol fixtures deterministically', () => {
+  const raw = JSON.parse(readFileSync(new URL('../fixtures/arknights/level_act1autochess_h07_02.json', import.meta.url), 'utf8'));
+  const map = parseBattlefieldMap(raw.mapData);
+  const nav = createNavigation({ WALK: projectStaticNavigationMap(map, 'WALK'), FLY: projectStaticNavigationMap(map, 'FLY') });
+  const definition = createDefinition({ id: 'fixture-route-enemy', vitality: { maxHp: 100, defense: 0, resistance: 0 },
+    locomotion: { moveSpeedPerTick: 0.1, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } } });
+  function run(index, ticks) {
+    const initialized = initializeRoutedEnemy(fixtureBattle(0, { rngState: 31 }), {
+      id: 1, definition, route: parseRouteDefinition(raw.routes[index]),
+      timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 }, alwaysCheckCurrentPoint: true,
+    });
+    let battle = registerUnit({ ...initialized.state, battlefield: { ...initialized.state.battlefield, navigation: nav } }, initialized.value.enemy);
+    const ref = units.ref(initialized.value.enemy);
+    const trace = [];
+    for (let tick = 0; tick < ticks && !route.isCompleted(units.get(battle, ref).route); tick++) {
+      battle = route.advance({ ...battle, tick, events: [] }, ref);
+      battle = locomotion.advance(battle, ref, route.nextPoint(battle, ref));
+      trace.push({ unit: copy(units.get(battle, ref)), events: battle.events });
+    }
+    return { unit: units.get(battle, ref), trace };
+  }
+  const teleport = run(2, 1800);
+  assert.equal(route.isCompleted(teleport.unit.route), true);
+  assert.deepEqual(teleport.trace.flatMap(step => step.events.filter(event => event.type === 'ROUTE').map(event => event.signal.type)), ['DISAPPEAR', 'APPEAR_AT_POS']);
+  assert.ok(teleport.trace.filter(step => !step.unit.spatialPresence.present).length >= 90);
+  assert.deepEqual(run(2, 1800), teleport);
+  const patrol = run(6, 500);
+  assert.equal(route.isCompleted(patrol.unit.route), false);
+  assert.ok(new Set(patrol.trace.map(step => step.unit.route.main.phase.index)).size >= 3);
 });

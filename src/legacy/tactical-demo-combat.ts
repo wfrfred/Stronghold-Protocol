@@ -1,5 +1,5 @@
 import type { BattlefieldMap } from "../core/tactical/battlefield/map/map.js";
-import type { RouteDefinition } from "../core/tactical/unit/capability/locomotion/route/definition.js";
+import type { Input as RouteInput } from "../core/tactical/battle/creation/route.js";
 import { TICKS_PER_SECOND } from "../core/tactical/tick.js";
 import { createLegacyCombatSpec, type LegacyCombatOptions } from "./combat.js";
 import type { LegacyData } from "./tactical-demo-presentation.js";
@@ -29,7 +29,7 @@ function ordinaryAttack(operator: Record<string, unknown>) {
 
 export function createTacticalCombatDemoSpec(
     map: BattlefieldMap,
-    route: RouteDefinition,
+    route: RouteInput,
     data: LegacyData,
     seed: number,
     scenario: TacticalCombatScenario = "MIXED",

@@ -1,9 +1,6 @@
 import type { Input } from "../core/tactical/battle/contract.js";
 import type { BattlefieldMap } from "../core/tactical/battlefield/map/map.js";
-import {
-    createRouteDefinition,
-    type RouteDefinition,
-} from "../core/tactical/unit/capability/locomotion/route/definition.js";
+import { createInput, type Input as RouteInput } from "../core/tactical/battle/creation/route.js";
 import { prepare as prepareOperator, type Configuration } from "../data/arknights/operator.js";
 import { prepare as prepareEnemy } from "../data/arknights/enemy.js";
 import { TICKS_PER_SECOND } from "../core/tactical/tick.js";
@@ -43,7 +40,7 @@ export const defaults: ConfigurationInput = {
 
 export function createTacticalContentDemo(
     map: BattlefieldMap,
-    route: RouteDefinition,
+    route: RouteInput,
     tables: Tables,
     configuration: ConfigurationInput = defaults,
 ) {
@@ -89,15 +86,13 @@ export function createTacticalContentDemo(
             },
         },
     );
-    const firstLane = createRouteDefinition({
+    const firstLane = createInput({
         ...route,
-        allowDiagonalMove: false,
-        visitEveryTileCenter: true,
         checkpoints: [],
         spawnOffset: [0, 0],
         spawnRandomRange: [0, 0],
     });
-    const secondLane = createRouteDefinition({ ...firstLane, startPosition: [2, 10] });
+    const secondLane = createInput({ ...firstLane, startPosition: [2, 10] });
     const spawns: Extract<Input["schedule"], { type: "TIMELINE" }>["spawns"][number][] = [];
 
     for (let index = 0; index < 18; index++) {

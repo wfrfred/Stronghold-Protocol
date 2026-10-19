@@ -1,8 +1,6 @@
 import * as registry from "../../hook/hook.js";
 import type { State as BattleState, Result } from "../../../battle/state.js";
 import type { Context } from "../../query.js";
-import type { State as NavigationState } from "./tracking.js";
-import type { RouteState } from "./route/state.js";
 import type { Unit } from "../../unit.js";
 import { createSteeringState, type SteeringParameters, type SteeringState } from "./steering.js";
 import * as contribution from "../../contribution/contribution.js";
@@ -26,16 +24,6 @@ export interface State {
     readonly rules: readonly Rule[];
 }
 
-export interface RouteControlState {
-    readonly route: RouteState;
-    readonly navigation: NavigationState;
-}
-
-export interface RoutedLocomotionState extends State {
-    readonly mainRoute: RouteControlState;
-    readonly alternativeRoute: RouteControlState | null;
-}
-
 export interface Locomotion {
     readonly definition: {
         readonly locomotion: Definition;
@@ -43,18 +31,8 @@ export interface Locomotion {
     readonly locomotion: State;
 }
 
-export interface RoutedLocomotion extends Locomotion {
-    readonly locomotion: RoutedLocomotionState;
-}
-
-export type RoutedLocomotiveUnit = Unit & RoutedLocomotion;
-
 export function hasLocomotion<U extends Unit>(unit: U): unit is U & Locomotion {
     return "locomotion" in unit && "locomotion" in unit.definition;
-}
-
-export function hasRoutedLocomotion<U extends Unit>(unit: U): unit is U & RoutedLocomotion {
-    return hasLocomotion(unit) && "mainRoute" in unit.locomotion;
 }
 
 export const initialize: (battle: BattleState, definition: Definition) => Result<State> = (
@@ -80,17 +58,6 @@ export function removeRule(state: State, id: string): State {
 
 export function canMove(battle: BattleState, unit: Unit & Locomotion): boolean {
     return unit.locomotion.rules.every((rule) => rule.allows(battle, unit));
-}
-
-export function createRoutedLocomotionState(
-    state: State,
-    mainRoute: RouteControlState,
-): RoutedLocomotionState {
-    return {
-        ...state,
-        mainRoute,
-        alternativeRoute: null,
-    };
 }
 
 function changeMoveSpeedContributions(

@@ -1,4 +1,4 @@
-import { createRouteTiming } from "../../unit/capability/locomotion/route/state.js";
+import { createTiming } from "../creation/route.js";
 import type { Id } from "../../unit/unit.js";
 import { addScheduleTicks, countFragmentSpawns, type WaveDefinition } from "./definition.js";
 import type {
@@ -123,7 +123,7 @@ function advanceMainWaves(
 
                 if (queue === null) {
                     const fragmentStartedAtTick = addScheduleTicks(tick, fragment.preDelayTicks);
-                    const timing = createRouteTiming({
+                    const timing = createTiming({
                         waveStartedAtTick: state.waveStartedAtTick,
                         fragmentStartedAtTick,
                     });

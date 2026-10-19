@@ -1,4 +1,4 @@
-import type { RouteTiming } from "../../unit/capability/locomotion/route/state.js";
+import type { Timing } from "../creation/route.js";
 import type { Id } from "../../unit/unit.js";
 import type {
     EnemySpawnDefinition,
@@ -8,7 +8,7 @@ import type {
 } from "./definition.js";
 
 export type SpawnTimingSource =
-    { readonly type: "FIXED"; readonly timing: RouteTiming } | { readonly type: "CURRENT_MAIN" };
+    { readonly type: "FIXED"; readonly timing: Timing } | { readonly type: "CURRENT_MAIN" };
 
 export interface QueuedSpawn {
     readonly spawn: EnemySpawnDefinition;

@@ -12,7 +12,7 @@ import { leave } from "../../dist/core/tactical/battle/execution/unit.js";
 
 import { initialize } from "../helpers/unit.js";
 import { createDefinition as createEnemy } from "../../dist/core/tactical/unit/archetype/enemy.js";
-import { createRouteDefinition } from "../../dist/core/tactical/unit/capability/locomotion/route/definition.js";
+import { createInput as createRouteDefinition } from "../../dist/core/tactical/battle/creation/route.js";
 import { install } from "../../dist/core/tactical/unit/effect/operations.js";
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
 import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";

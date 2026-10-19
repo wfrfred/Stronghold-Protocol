@@ -24,7 +24,8 @@ import { setMaxHpContribution } from ${module("unit/capability/vitality/capabili
 import { setAttackContribution, type Offense } from ${module("unit/capability/offense/capability")};
 import { setCapacityContribution, canBlock, type Rule as BlockerRule, type Blocker } from ${module("unit/capability/blocking/blocker")};
 import { setVolumeContribution, canBeBlocked, type Rule as BlockableRule, type Blockable } from ${module("unit/capability/blocking/blockable")};
-import { setMoveSpeedContribution, type RoutedLocomotion, type RouteControlState } from ${module("unit/capability/locomotion/capability")};
+import { setMoveSpeedContribution, type Locomotion } from ${module("unit/capability/locomotion/capability")};
+import type { Route, Progress } from ${module("unit/capability/route/capability")};
 import type { Context, Definition } from ${module("unit/effect/definition")};
 import { install, replaceEffect, get } from ${module("unit/effect/operations")};
 import { setData, type Effect } from ${module("unit/effect/effect")};
@@ -98,7 +99,7 @@ for(const stored of mixed.values()){
 }
 // @ts-expect-error an ID alone cannot claim a private data type.
 host.effects.get<{charges:number},Vitality>(0);
-declare const capabilityHost:Unit & Vitality & Offense & Blocker & Blockable & RoutedLocomotion;
+declare const capabilityHost:Unit & Vitality & Offense & Blocker & Blockable & Locomotion & Route;
 const blockerRule:BlockerRule={id:'blocker',allows:self=>self.blocker.capacity.length===0};
 const blockableRule:BlockableRule={id:'blockable',allows:self=>self.blockable.volume.length===0};
 canBlock(capabilityHost);
@@ -121,17 +122,17 @@ const changed={...capabilityHost,vitality};
 const hp:number=changed.vitality.hp;
 const attack:number=changed.definition.offense.attack;
 const maxHp:number=changed.definition.vitality.maxHp;
-const retainedRoute:RouteControlState=changed.locomotion.mainRoute;
+const retainedRoute:Progress=changed.route.main;
 setAttackContribution(capabilityHost.offense,dynamic);
 // @ts-expect-error MaxHP cannot coordinate HP from a query-time closure.
 setMaxHpContribution(capabilityHost.vitality,capabilityHost.definition.vitality,dynamic);
 // @ts-expect-error blocking capacity requires settled static values.
 setCapacityContribution(capabilityHost.blocker,dynamic);
 const movement={
- ...capabilityHost.locomotion,
- ...setMoveSpeedContribution(capabilityHost.locomotion,dynamic),
+ ...capabilityHost,
+ locomotion:setMoveSpeedContribution(capabilityHost.locomotion,dynamic),
 };
-const mainRoute:RouteControlState=movement.mainRoute;
+const mainRoute:Progress=movement.route.main;
 const crossCapability:Definition<{bonus:number},Vitality & Offense>={
  id:'low-hp-attack',initialize:()=>({bonus:10}),
  onEnable(state,context){

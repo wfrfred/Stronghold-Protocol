@@ -20,7 +20,7 @@ import { hasOffense, type Offense, type Definition as OffenseDefinition, type St
 import { hasSkill, type Definition as SkillDefinition, type Skill } from ${sourceModule('unit/capability/skill/capability')};
 import type { Definition as ElementalDefinition, State as ElementalState } from ${sourceModule('unit/capability/elemental/capability')};
 import type { Vitality, State as VitalityState } from ${sourceModule('unit/capability/vitality/capability')};
-import type { RoutedLocomotionState, RouteControlState } from ${sourceModule('unit/capability/locomotion/capability')};
+import type { Definition as RouteDefinition, Progress } from ${sourceModule('unit/capability/route/capability')};
 import type { Definition } from ${sourceModule('unit/effect/definition')};
 import { install } from ${sourceModule('unit/effect/operations')};
 import { ref as unitRef } from ${sourceModule('unit/query')};
@@ -54,8 +54,8 @@ const staticOperatorUnit = initialize(battle, { id: 4, definition: staticOperato
 const staticCombatEnemyUnit = initializeUnit(battle, { id: 5, definition: staticCombatEnemy, position: [0, 0] }).value;
 const staticEnemyUnit = initializeUnit(battle, { id: 6, definition: staticEnemy, position: [0, 0] }).value;
 const bareOperatorUnit = initialize(battle, { id: 7, definition: operatorBase, position: [0, 0] }).value;
-declare const routed: RoutedLocomotionState;
-const preparedUnit = { ...initializeUnit(battle, { id: 8, definition: combatEnemy, position: [0, 0] }).value, locomotion: routed };
+declare const routeDefinition: RouteDefinition;
+const preparedUnit = initializeUnit(battle, { id: 8, definition: { ...combatEnemy, route: routeDefinition }, position: [0, 0] }).value;
 const snapshot = copy(preparedUnit);
 const healthAttack: Definition<{ bonus: number }, Vitality & Offense> = {
   id: 'health-attack',
@@ -78,7 +78,7 @@ const offenseStates: OffenseState[] = [staticOperatorUnit.offense, staticCombatE
 const skillStates: Skill["skill"][] = [staticOperatorUnit.skill, staticCombatEnemyUnit.skill, staticEnemyUnit.skill];
 const elementalStates: ElementalState[] = [staticOperatorUnit.elemental, staticCombatEnemyUnit.elemental, staticEnemyUnit.elemental];
 const vitalityStates: VitalityState[] = [initializedOperator.vitality, initializedCombatEnemy.vitality, initializedEnemy.vitality];
-const preparedRoute: RouteControlState = preparedUnit.locomotion.mainRoute;
+const preparedRoute: Progress = preparedUnit.route.main;
 if (operator.offense !== undefined) { const attack: number = operator.offense.attack; }
 if (enemy.skill !== undefined) { const id: string = enemy.skill.id; }
 if (hasOffense(initializedOperator)) {
@@ -90,7 +90,7 @@ if (hasSkill(initializedEnemy)) {
   const id: string = initializedEnemy.definition.skill.id;
   const sp: number = initializedEnemy.skill.sp?.value ?? 0;
 }
-if (snapshot.locomotion !== undefined) { const route: RouteControlState = snapshot.locomotion.mainRoute; }
+const route: Progress = snapshot.route.main;
 install(battle, unitRef(staticOperatorUnit), healthAttack);
 `;
   const negatives = [
