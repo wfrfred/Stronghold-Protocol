@@ -8,6 +8,7 @@ import * as locomotion from "./locomotion/capability.js";
 import * as occupancy from "./occupancy/capability.js";
 import * as offense from "./offense/capability.js";
 import * as presence from "./presence/capability.js";
+import * as route from "./route/capability.js";
 import * as skill from "./skill/capability.js";
 import * as spatial from "./spatial/capability.js";
 import * as targetable from "./targetable/capability.js";
@@ -27,6 +28,7 @@ export const initializers = {
     blocker: blocker.initialize,
     blockable: blockable.initialize,
     locomotion: locomotion.initialize,
+    route: route.initialize,
     spatialPresence: presence.initialize,
     occupancy: occupancy.initialize,
     targetable: targetable.initialize,
