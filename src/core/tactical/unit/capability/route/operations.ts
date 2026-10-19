@@ -2,13 +2,11 @@ import { assertNonnegativeSafeInteger } from "../../../../common/assert.js";
 import type { Ref } from "../../../../common/ref.js";
 import { appendEvents, updateUnit, type State as BattleState } from "../../../battle/state.js";
 import * as navigation from "../../../battlefield/navigation/state.js";
-import { effectiveMap } from "../../../battlefield/navigation/cache.js";
 import { Tile, World, type WorldPosition } from "../../../geometry/coordinate.js";
 import * as units from "../../query.js";
 import type { Unit } from "../../unit.js";
 import * as presence from "../presence/operations.js";
 import { hasSpatialPresence } from "../presence/capability.js";
-import { canRecover, canTraverse } from "../locomotion/segment.js";
 import {
     initialize,
     type Definition,
@@ -131,24 +129,7 @@ export function nextPoint(battle: BattleState, ref: Ref<Unit & Route>): WorldPos
         goal,
     );
 
-    if (point === null) {
-        return null;
-    }
-
-    const effective = effectiveMap(battle.battlefield.navigation, definition.pathMotionMode);
-    const permitted = (candidate: WorldPosition): boolean =>
-        canTraverse(effective, locator, candidate) &&
-        canRecover(effective, self.position, World.translate(candidate, definition.offset));
-
-    if (permitted(point)) {
-        return World.translate(point, definition.offset);
-    }
-
-    const center = Tile.center(World.toTile(locator));
-
-    return !World.withinDistance(locator, center, Number.EPSILON) && permitted(center)
-        ? World.translate(center, definition.offset)
-        : null;
+    return point === null ? null : World.translate(point, definition.offset);
 }
 
 function atEnd(self: Unit, progress: Progress): boolean {

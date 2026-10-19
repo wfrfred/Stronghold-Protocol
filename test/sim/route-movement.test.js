@@ -10,7 +10,9 @@ import { create } from "../../dist/core/tactical/battlefield/state.js";
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
 import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
 import { Map as NavigationMap } from "../../dist/core/tactical/battlefield/navigation/map.js";
-import { create as createNavigation } from "../../dist/core/tactical/battlefield/navigation/state.js";
+import { create as createNavigation, nextPoint as nextNavigationPoint } from "../../dist/core/tactical/battlefield/navigation/state.js";
+import * as routeOperations from "../../dist/core/tactical/unit/capability/route/operations.js";
+import { canTraverse } from "../../dist/core/tactical/unit/capability/locomotion/segment.js";
 
 const step = battle => advanceMovement(battle, { routeMoveMultiplier: 1 });
 const cell = overrides => ({
@@ -109,4 +111,49 @@ test("Main departure callbacks can remove a later candidate before its route exe
     assert.equal(getUnit(advanced, 2), undefined);
     assert.deepEqual(advanced.events.filter(event => event.type === "ROUTE_COMPLETED").map(event => event.unitId), [1]);
     assert.equal(advanced.events.some(event => event.type === "ROUTE"), false);
+});
+
+test("Route keeps the navigation tracking point when its full body ray is blocked but this Tick can move", () => {
+    const cells = Array.from({ length: 10 }, () => cell());
+    cells[6] = cell({ passable: false });
+    let state = battle(2, 5, cells);
+    const initial = unit(state, 1, {
+        locomotion: { moveSpeedPerTick: 0.01, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } },
+        route: route({
+            endPosition: [1, 4], offset: [0, 0.4],
+            checkpoints: [{ type: "MOVE", position: [0, 4], offset: [0, 0] }],
+        }),
+    }, [0, 0.8]);
+    state = registerUnit(state, initial);
+    state = routeOperations.advance(state, { id: 1 });
+    const target = nextNavigationPoint(state.battlefield.navigation, "WALK", [0, 0.4], [4, 0]);
+    assert.deepEqual(target, [4, 0]);
+    assert.equal(canTraverse(state.battlefield.navigation.baseline.WALK, initial.position, [4, 0.4]), false);
+    assert.deepEqual(routeOperations.nextPoint(state, { id: 1 }), [4, 0.4]);
+    const moved = getUnit(step(state), 1);
+    assert.ok(moved.position[0] > initial.position[0]);
+    assert.equal(moved.locomotion.moving, true);
+    assert.ok(canTraverse(state.battlefield.navigation.baseline.WALK, initial.position, moved.position));
+});
+
+test("Alternative takeover preserves Main checkpoint progress while its endpoint can still trigger departure", () => {
+    for (const requireAllCheckpoints of [false, true]) {
+        let state = battle(1, 6);
+        const initial = unit(state, 1, {
+            route: route({
+                endPosition: [0, 2], requireAllCheckpoints,
+                checkpoints: [{ type: "WAIT", tick: 100 }],
+            }),
+        }, [2, 0]);
+        state = registerUnit(state, initial);
+        state = routeOperations.setAlternative(state, { id: 1 }, route({ endPosition: [0, 5] }));
+        const advanced = step(state);
+        const remaining = getUnit(advanced, 1);
+        assert.equal(remaining === undefined, !requireAllCheckpoints);
+        assert.equal(advanced.events.filter(event => event.type === "ROUTE_COMPLETED").length, requireAllCheckpoints ? 0 : 1);
+        if (remaining !== undefined) {
+            assert.equal(remaining.route.main, initial.route.main);
+            assert.notEqual(remaining.route.alternative, null);
+        }
+    }
 });
