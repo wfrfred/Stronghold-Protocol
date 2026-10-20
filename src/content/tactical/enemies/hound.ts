@@ -20,13 +20,14 @@ export type Enemy = Unit & Product<Definition>;
 export function create(
     profile: Profile,
     timing: AttackTiming,
+    halfBodyWidth: number,
 ): { readonly definition: Definition; readonly action: Attack } {
     if (profile.id !== "enemy_1000_gopro" || profile.applyWay !== "MELEE") {
         throw new TypeError("Hound content requires its melee profile");
     }
 
     const definition: Definition = {
-        ...createGroundDefinition(profile, timing, { type: "BLOCKER" }),
+        ...createGroundDefinition(profile, timing, { type: "BLOCKER" }, halfBodyWidth),
         profile,
         attackTiming: timing,
     };

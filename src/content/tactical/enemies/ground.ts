@@ -35,6 +35,7 @@ export function createDefinition(
     profile: Profile,
     timing: AttackTiming,
     scope: DamageTargetScope,
+    halfBodyWidth: number,
 ): Definition {
     if (profile.stunImmune) {
         throw new TypeError("this enemy content does not implement stun immunity");
@@ -118,7 +119,7 @@ export function createDefinition(
                 speed: perSecondToPerTick(profile.moveSpeedPerSecond),
                 minSpeed: perSecondToPerTick(0.1),
                 steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 },
-                halfBodyWidth: timing.hitRadius,
+                halfBodyWidth,
             },
             action: { definitions: Definitions.empty().add(attack) },
         }),

@@ -89,6 +89,7 @@ export function createArrow(): ProjectileDefinition<ProjectileState> {
 export function create(
     profile: Profile,
     timing: AttackTiming,
+    halfBodyWidth: number,
 ): { readonly definition: Definition; readonly action: Attack } {
     if (profile.id !== "enemy_1003_ncbow" || profile.applyWay !== "RANGED") {
         throw new TypeError("Crossbowman content requires its ranged profile");
@@ -99,21 +100,26 @@ export function create(
     assertPositiveNumber(projectile.contactRadius, "enemy arrow contact radius");
     assertNonnegativeSafeInteger(projectile.stopDelayTicks, "enemy arrow stop delay");
 
-    const ground = createGroundDefinition(profile, timing, {
-        type: "RANGE",
-        geometry: {
-            type: "SHAPES",
+    const ground = createGroundDefinition(
+        profile,
+        timing,
+        {
+            type: "RANGE",
             geometry: {
-                shapes: [
-                    {
-                        type: "CIRCLE",
-                        offset: [0, 0],
-                        radius: profile.rangeRadius,
-                    },
-                ],
+                type: "SHAPES",
+                geometry: {
+                    shapes: [
+                        {
+                            type: "CIRCLE",
+                            offset: [0, 0],
+                            radius: profile.rangeRadius,
+                        },
+                    ],
+                },
             },
         },
-    });
+        halfBodyWidth,
+    );
     const arrow = projectile.definition;
     const action = createAttack({
         ...ground.attack.attack,

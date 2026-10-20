@@ -14,6 +14,8 @@ import { start as startAction } from '../../dist/core/tactical/unit/action/opera
 import { ref as unitRef } from '../../dist/core/tactical/unit/query.js';
 import { advance as advanceAction } from '../../dist/core/tactical/unit/action/advance.js';
 import { advanceProjectiles } from '../../dist/core/tactical/battlefield/projectile/settlement.js';
+import { setOverlay } from '../../dist/core/tactical/battlefield/navigation/state.js';
+import { advance as advanceLocomotion } from '../../dist/core/tactical/unit/capability/locomotion/operations.js';
 
 const fixture = JSON.parse(readFileSync(new URL('../fixtures/arknights/main-mode-units.json', import.meta.url), 'utf8'));
 const rawEnemy = id => fixture.enemies.find(entry => entry.Key === id);
@@ -70,16 +72,16 @@ test('unimplemented enemy mechanisms are rejected at the table and content bound
   assert.throws(() => profile('enemy_1000_gopro', 0, { skills: [{ prefabKey: 'unimplemented' }] }), /unsupported enemy skills/);
   const timing = { windupTicks: 0, recoveryTicks: 0, hitRadius: 0.2 };
 
-  assert.throws(() => createHound({ ...profile('enemy_1000_gopro'), stunImmune: true }, timing), /stun immunity/);
-  assert.throws(() => createHound(profile('enemy_1003_ncbow'), timing), /Hound content/);
+  assert.throws(() => createHound({ ...profile('enemy_1000_gopro'), stunImmune: true }, timing, 0.2), /stun immunity/);
+  assert.throws(() => createHound(profile('enemy_1003_ncbow'), timing, 0.2), /Hound content/);
   assert.throws(() => createCrossbowman(profile('enemy_1000_gopro'), {
     ...timing, projectile: { definition: createArrow(), speedPerSecond: 6, contactRadius: 0.1, stopDelayTicks: 0 },
-  }), /Crossbowman content/);
+  }, 0.2), /Crossbowman content/);
 });
 
 test('hound factory composes capabilities and attacks its retained blocker with pure state flow', () => {
 
-  const { definition, action: attack } = createHound(profile('enemy_1000_gopro'), { windupTicks: 0, recoveryTicks: 0, hitRadius: 0.2 });
+  const { definition, action: attack } = createHound(profile('enemy_1000_gopro'), { windupTicks: 0, recoveryTicks: 0, hitRadius: 0.2 }, 0.2);
   const hound = initialize({ id: 1, position: [2, 2.5], definition });
   assert.equal(hound.vitality.hp, 820);
   assert.equal(hound.locomotion.speed.length, 0);
@@ -102,7 +104,7 @@ test('crossbow uses explicit windup and arrow speed, then settles damage on cont
   const { definition, action: attack } = createCrossbowman(profile('enemy_1003_ncbow'), {
     windupTicks: 1, recoveryTicks: 1, hitRadius: 0.2,
     projectile: { definition: projectileDefinition, speedPerSecond: 6, contactRadius: 0.1, stopDelayTicks: 0 },
-  });
+  }, 0.2);
 
   const bow = initialize({ id: 1, position: [2, 3.5], definition });
   const before = registerUnit(registerUnit(emptyBattle(), guard(0, [2, 2], 0)), bow);
@@ -127,10 +129,10 @@ test('different crossbow configurations share an arrow definition in one battle'
   const projectile = { definition: createArrow(), speedPerSecond: 6, contactRadius: 0.1, stopDelayTicks: 0 };
   const base = createCrossbowman(profile('enemy_1003_ncbow'), {
     windupTicks: 1, recoveryTicks: 1, hitRadius: 0.2, projectile,
-  });
+  }, 0.2);
   const advanced = createCrossbowman(profile('enemy_1003_ncbow', 1), {
     windupTicks: 2, recoveryTicks: 1, hitRadius: 0.2, projectile,
-  });
+  }, 0.2);
 
   assert.strictEqual(base.definition.elemental.bursts.BURN, advanced.definition.elemental.bursts.BURN);
   assert.equal(base.definition.offense.attack, 240);
@@ -138,4 +140,38 @@ test('different crossbow configurations share an arrow definition in one battle'
   assert.equal(base.action.attack.windupTicks, 1);
   assert.equal(advanced.action.attack.windupTicks, 2);
   assert.strictEqual(base.definition.attackTiming.projectile.definition, advanced.definition.attackTiming.projectile.definition);
+});
+
+test('enemy content keeps hit radius and terrain avoidance width independent', () => {
+  const timing = { windupTicks: 0, recoveryTicks: 0, hitRadius: 0.4 };
+  const hound = createHound(profile('enemy_1000_gopro'), timing, 0.15).definition;
+  const crossbowman = createCrossbowman(profile('enemy_1003_ncbow'), {
+    ...timing,
+    projectile: { definition: createArrow(), speedPerSecond: 6, contactRadius: 0.1, stopDelayTicks: 0 },
+  }, 0.25).definition;
+
+  for (const [definition, halfBodyWidth] of [[hound, 0.15], [crossbowman, 0.25]]) {
+    const unit = initialize({ id: 1, position: [2, 2], definition });
+    assert.equal(unit.definition.hit.geometry.shapes[0].radius, 0.4);
+    assert.equal(unit.definition.locomotion.halfBodyWidth, halfBodyWidth);
+  }
+
+  const move = definition => {
+    const initial = emptyBattle();
+    const navigation = setOverlay(initial.battlefield.navigation, 'WALK', {
+      id: 0, cells: [[3, 3]], denyPassage: true, denyDepartures: [],
+    });
+    const before = registerUnit({ ...initial, battlefield: { ...initial.battlefield, navigation } },
+      initialize({ id: 1, position: [2.1, 2.4], definition }));
+    const goal = [2.1, 4];
+    return getUnit(advanceLocomotion(before, { id: 1 }, { nextPoint: goal, goal }, {
+      mode: 'WALK', speedMultiplier: 1,
+    }), 1);
+  };
+  const narrow = move(hound);
+  const changedHit = move(createHound(profile('enemy_1000_gopro'), { ...timing, hitRadius: 0.05 }, 0.15).definition);
+  const wider = move(createHound(profile('enemy_1000_gopro'), timing, 0.35).definition);
+  assert.deepEqual(changedHit.position, narrow.position);
+  assert.deepEqual(changedHit.locomotion.velocity, narrow.locomotion.velocity);
+  assert.ok(wider.position[0] < narrow.position[0], 'only the wider movement body begins avoiding this corner');
 });

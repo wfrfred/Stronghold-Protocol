@@ -35,6 +35,7 @@ export type LegacyCombatOptions = LegacyCombatContent &
 
 const LEGACY_OPERATOR_HIT_RADIUS = 0.25;
 const LEGACY_ENEMY_HIT_RADIUS = 0.1;
+const LEGACY_ENEMY_HALF_BODY_WIDTH = 0.1;
 
 function record(value: unknown, name: string): Record<string, unknown> {
     if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -246,7 +247,7 @@ function enemyDefinition(value: unknown) {
             speed: (numberField(stats.moveSpeed, "move speed") * 0.5) / TICKS_PER_SECOND,
             minSpeed: (0.1 * 0.5) / TICKS_PER_SECOND,
             steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 },
-            halfBodyWidth: LEGACY_ENEMY_HIT_RADIUS,
+            halfBodyWidth: LEGACY_ENEMY_HALF_BODY_WIDTH,
         },
         allegiance: { side: "ENEMY" },
         spatial: { layer: motion === "FLY" ? "AIR" : "GROUND" },
