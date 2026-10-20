@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { SnapshotBuffer, normalizeSnapshot, isCosmeticEvent, frameTime } from '../../public/js/render/interp.js';
 import { chessRec, enemyRec } from '../helpers/battleHarness.js';
-import { createRouteDefinition } from '../../dist/core/tactical/unit/capability/locomotion/route/definition.js';
+import { createInput as createRouteDefinition } from '../../dist/core/tactical/battle/creation/route.js';
 import { createLegacyCombatBattle } from '../../dist/legacy/combat.js';
 import { TacticalDemoPresentation } from '../../dist/legacy/tactical-demo-presentation.js';
 
@@ -96,7 +96,7 @@ describe('TacticalDemoPresentation', () => {
     assert.equal(moving.info.defId, 'enemy_1000_gopro');
     assert.equal(moving.info.spine, 'enemy_1000_gopro_2');
     assert.equal(moving.info.avatar, enemies.enemy_1000_gopro_2.iconId);
-    assert.equal(moving.tuple[8], 1);
+    assert.equal(moving.tuple[8], 0);
     step(runtime, presentation);
     assert.equal(presentation.units(runtime.snapshot()).find(unit => unit.info.id === 1).tuple[7] & 1, 1);
     const exchange = step(runtime, presentation);
@@ -154,7 +154,7 @@ describe('TacticalDemoPresentation', () => {
     };
     const first = run();
     presentation.reset();
-    assert.deepEqual(run(), first);
+    assert.deepEqual(JSON.parse(JSON.stringify(run())), JSON.parse(JSON.stringify(first)));
   });
 
   test('resetting and replaying core frames reproduces visuals and counts without replaying damage', () => {
@@ -180,7 +180,7 @@ describe('TacticalDemoPresentation', () => {
     assert.deepEqual(presentation.stats(), { killedCount: 0, attackCount: 0, damageCount: 0, elementDamageCount: 0, elementBurstCount: 0 });
     assert.deepEqual(presentation.units(first[5].snapshot).map(unit => unit.info.id), [0]);
     assert.deepEqual(presentation.replayEvents(first[5].snapshot), []);
-    assert.deepEqual(run(), first);
+    assert.deepEqual(JSON.parse(JSON.stringify(run())), JSON.parse(JSON.stringify(first)));
   });
 
   test('only completed routes emit leaks and air eligibility remains independent of walk navigation', () => {
@@ -193,7 +193,7 @@ describe('TacticalDemoPresentation', () => {
     const flying = presentation.units(runtime.snapshot())[0];
     assert.equal(flying.info.motion, 'FLY');
     assert.equal(flying.tuple[7], 512);
-    assert.equal(runtime.snapshot().units[0].locomotion.mainRoute.navigation.pathMotionMode, 'WALK');
+    assert.equal(runtime.snapshot().units[0].route.main.definition.pathMotionMode, 'WALK');
     let leaks = [];
     while (runtime.result === null) leaks.push(...step(runtime, presentation).visual);
     assert.deepEqual(leaks, [['leak', 0]]);

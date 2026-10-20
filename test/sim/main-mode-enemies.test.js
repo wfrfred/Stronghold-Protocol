@@ -82,8 +82,8 @@ test('hound factory composes capabilities and attacks its retained blocker with 
   const { definition, action: attack } = createHound(profile('enemy_1000_gopro'), { windupTicks: 0, recoveryTicks: 0, hitRadius: 0.2 });
   const hound = initialize({ id: 1, position: [2, 2.5], definition });
   assert.equal(hound.vitality.hp, 820);
-  assert.equal(hound.locomotion.moveSpeed.length, 0);
-  assert.equal(definition.locomotion.moveSpeedPerTick, 1.9 / 30);
+  assert.equal(hound.locomotion.speed.length, 0);
+  assert.equal(definition.locomotion.speed, 1.9 / 30);
 
   const before = registerUnit(registerUnit(emptyBattle(), guard(0, [2, 2])), hound);
   const damaged = damageElement(before, unitRef(hound), { source: null, type: 'BURN', power: 100 });

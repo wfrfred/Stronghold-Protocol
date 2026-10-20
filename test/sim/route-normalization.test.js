@@ -26,7 +26,9 @@ const enemyDefinition = createDefinition({
     id: "route-spawn-test",
     vitality: { maxHp: 100, defense: 0, resistance: 0 },
     locomotion: {
-        moveSpeedPerTick: 0.1,
+        speed: 0.1,
+        minSpeed: 0,
+        halfBodyWidth: 0,
         steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 },
     },
 });

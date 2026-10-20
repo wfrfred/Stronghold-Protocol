@@ -95,8 +95,8 @@ export function createTacticalMechanicsDemo(
         vitality: { ...spawn.definition.vitality, maxHp: 200_000 },
         locomotion: {
             ...spawn.definition.locomotion,
-            moveSpeedPerTick: 0,
-            minimumMoveSpeedPerTick: 0,
+            speed: 0,
+            minSpeed: 0,
         },
         ...(elementType === null
             ? {}

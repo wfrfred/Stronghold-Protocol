@@ -45,7 +45,7 @@ const damageEvents = state => state.events.filter(event => event.type === 'DAMAG
 function runtime(initialUnits, maxTicks = 20) {
   return new BattleRuntime({ ...createLegacyCombatSpec({ rows: 1, columns: 8, operators: [], enemies: [], maxTicks, seed: 17 }),
     initialUnits: initialUnits.map(value => ({ definition: value.definition, position: value.position })),
-    schedule: { type: 'TIMELINE', spawns: [{ definition: createDefinition({ id: 'future', vitality: { maxHp: 1, defense: 0, resistance: 0 }, locomotion: { moveSpeedPerTick: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } } }),
+    schedule: { type: 'TIMELINE', spawns: [{ definition: createDefinition({ id: 'future', vitality: { maxHp: 1, defense: 0, resistance: 0 }, locomotion: { halfBodyWidth: 0, minSpeed: 0, speed: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } } }),
       route: createRouteDefinition({ pathMotionMode: 'WALK', startPosition: [0, 7], endPosition: [0, 1], spawnOffset: [0, 0], spawnRandomRange: [0, 0], checkpoints: [], allowDiagonalMove: false, visitEveryTileCenter: false, visitEveryNodeCenter: false, visitEveryCheckPoint: true }),
       tick: 100, timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 }, alwaysCheckCurrentPoint: true, notCountInTotal: false }] },
   });

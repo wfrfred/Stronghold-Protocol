@@ -3,6 +3,7 @@ import type { Definition } from "../../../core/tactical/unit/effect/definition.j
 import * as action from "../../../core/tactical/unit/capability/action/capability.js";
 import * as blocker from "../../../core/tactical/unit/capability/blocking/blocker.js";
 import * as locomotion from "../../../core/tactical/unit/capability/locomotion/capability.js";
+import * as movement from "../../../core/tactical/unit/capability/locomotion/operations.js";
 import * as skill from "../../../core/tactical/unit/capability/skill/capability.js";
 import { cancelForUnit } from "../../../core/tactical/unit/action/operations.js";
 import { ref } from "../../../core/tactical/unit/query.js";
@@ -19,7 +20,7 @@ export const stun: Definition<object> = {
             ...(action.hasAction(unit) ? { action: action.setRule(unit.action, rule) } : {}),
             ...(blocker.hasBlocker(unit) ? { blocker: blocker.setRule(unit.blocker, rule) } : {}),
             ...(locomotion.hasLocomotion(unit)
-                ? { locomotion: locomotion.setRule(unit.locomotion, rule) }
+                ? { locomotion: movement.setRule(unit.locomotion, rule) }
                 : {}),
             ...(skill.hasSkill(unit)
                 ? { skill: skill.setRule(unit.skill, { id, allowsActivation: () => false }) }
@@ -36,7 +37,7 @@ export const stun: Definition<object> = {
             ...(action.hasAction(unit) ? { action: action.removeRule(unit.action, id) } : {}),
             ...(blocker.hasBlocker(unit) ? { blocker: blocker.removeRule(unit.blocker, id) } : {}),
             ...(locomotion.hasLocomotion(unit)
-                ? { locomotion: locomotion.removeRule(unit.locomotion, id) }
+                ? { locomotion: movement.removeRule(unit.locomotion, id) }
                 : {}),
             ...(skill.hasSkill(unit) ? { skill: skill.removeRule(unit.skill, id) } : {}),
         });

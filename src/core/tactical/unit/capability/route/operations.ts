@@ -7,6 +7,7 @@ import * as units from "../../query.js";
 import type { Unit } from "../../unit.js";
 import * as presence from "../presence/operations.js";
 import { hasSpatialPresence } from "../presence/capability.js";
+import type { MovementTarget } from "../locomotion/capability.js";
 import {
     initialize,
     type Definition,
@@ -26,6 +27,32 @@ export type Signal =
 
 export function isCompleted(state: State): boolean {
     return state.main.phase.type === "COMPLETED";
+}
+
+export function pathMotionMode(state: State): navigation.MotionMode {
+    return (state.alternative ?? state.main).pathMotionMode;
+}
+
+export function setPathMotionMode(
+    battle: BattleState,
+    ref: Ref<Unit & Route>,
+    mode: navigation.MotionMode,
+): BattleState {
+    const self = units.get(battle, ref);
+
+    if (self?.lifecycle !== "PRESENT") {
+        return battle;
+    }
+
+    const slot = self.route.alternative === null ? "main" : "alternative";
+    const progress = self.route[slot]!;
+
+    return progress.pathMotionMode === mode
+        ? battle
+        : updateUnit(battle, {
+              ...self,
+              route: { ...self.route, [slot]: { ...progress, pathMotionMode: mode } },
+          });
 }
 
 export function setAlternative(
@@ -72,12 +99,9 @@ function target(progress: Progress): WorldPosition | null {
         : null;
 }
 
-function recoveryPoint(
-    battle: BattleState,
-    self: Unit,
-    definition: Definition,
-): WorldPosition | null {
-    const map = battle.battlefield.navigation.baseline[definition.pathMotionMode];
+function recoveryPoint(battle: BattleState, self: Unit, progress: Progress): WorldPosition | null {
+    const definition = progress.definition;
+    const map = battle.battlefield.navigation.baseline[progress.pathMotionMode];
     const locator = World.translate(self.position, World.negate(definition.offset));
 
     if (map.contains(World.toTile(self.position)) && map.contains(World.toTile(locator))) {
@@ -100,7 +124,7 @@ function recoveryPoint(
           ];
 }
 
-export function nextPoint(battle: BattleState, ref: Ref<Unit & Route>): WorldPosition | null {
+export function movementTarget(battle: BattleState, ref: Ref<Unit & Route>): MovementTarget | null {
     const self = units.get(battle, ref);
 
     if (self?.lifecycle !== "PRESENT") {
@@ -115,21 +139,28 @@ export function nextPoint(battle: BattleState, ref: Ref<Unit & Route>): WorldPos
     }
 
     const definition = progress.definition;
-    const map = battle.battlefield.navigation.baseline[definition.pathMotionMode];
+    const map = battle.battlefield.navigation.baseline[progress.pathMotionMode];
     const locator = World.translate(self.position, World.negate(definition.offset));
 
     if (!map.contains(World.toTile(self.position)) || !map.contains(World.toTile(locator))) {
-        return recoveryPoint(battle, self, definition);
+        const recovery = recoveryPoint(battle, self, progress);
+
+        return recovery === null ? null : { nextPoint: recovery, goal: recovery };
     }
 
     const point = navigation.nextPoint(
         battle.battlefield.navigation,
-        definition.pathMotionMode,
+        progress.pathMotionMode,
         locator,
         goal,
     );
 
-    return point === null ? null : World.translate(point, definition.offset);
+    return point === null
+        ? null
+        : {
+              nextPoint: World.translate(point, definition.offset),
+              goal: World.translate(goal, definition.offset),
+          };
 }
 
 function atEnd(self: Unit, progress: Progress): boolean {
@@ -159,7 +190,7 @@ function replace(
 
     return updateUnit(battle, {
         ...self,
-        route: { ...self.route, [slot]: { definition: progress.definition, phase } },
+        route: { ...self.route, [slot]: { ...progress, phase } },
     });
 }
 
@@ -213,7 +244,7 @@ export function advance(battle: BattleState, ref: Ref<Unit & Route>): BattleStat
                 self.position,
                 World.negate(progress.definition.offset),
             );
-            const map = battle.battlefield.navigation.baseline[progress.definition.pathMotionMode];
+            const map = battle.battlefield.navigation.baseline[progress.pathMotionMode];
             const inside =
                 map.contains(World.toTile(self.position)) && map.contains(World.toTile(locator));
             const skipped =
@@ -221,7 +252,7 @@ export function advance(battle: BattleState, ref: Ref<Unit & Route>): BattleStat
                 inside &&
                 navigation.nextPoint(
                     battle.battlefield.navigation,
-                    progress.definition.pathMotionMode,
+                    progress.pathMotionMode,
                     locator,
                     goal,
                 ) === null;

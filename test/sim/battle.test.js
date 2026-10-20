@@ -89,7 +89,7 @@ function routeCommandBattle(checkpoints, options = {}) {
   const route = createRouteDefinition({ ...source.route, visitEveryCheckPoint: true, checkpoints,
     spawnOffset: [0, 0], spawnRandomRange: [0, 0], ...options.route });
   const definition = createDefinition({ ...source.definition,
-    locomotion: { ...source.definition.locomotion, moveSpeedPerTick: options.speed ?? 0, minimumMoveSpeedPerTick: 0 } });
+    locomotion: { ...source.definition.locomotion, speed: options.speed ?? 0, minSpeed: 0 } });
   return { ...withTimelineSpawns(spec, [{ ...source, tick: 0, definition, route, alwaysCheckCurrentPoint: true }]),
     maxTicks: options.maxTicks ?? 20, ...options.spec };
 }
@@ -669,7 +669,7 @@ test('core raw 01 slime fragment preserves map, route flags and stats; spawns at
   assert.equal(spec.schedule.spawns[0].alwaysCheckCurrentPoint, false);
   assert.deepEqual(spec.schedule.spawns[0].route.checkpoints, []);
   assert.equal(spec.schedule.spawns[0].definition.vitality.maxHp, 550);
-  assert.equal(spec.schedule.spawns[0].definition.locomotion.moveSpeedPerTick, 1 / 30);
+  assert.equal(spec.schedule.spawns[0].definition.locomotion.speed, 1 / 30);
   assert.equal(spec.routeMoveMultiplier, 0.5);
   assert.equal(spec.maxTicks, 1350);
   assert.deepEqual(omittedActions, ['waves[0].fragments[0].actions[1]', 'waves[0].fragments[0].actions[2]']);
@@ -788,7 +788,7 @@ test('core battle initializes all route waits at the birth tick and replays thei
   const { spec } = slimeMovementFragment();
   const spawn = spec.schedule.spawns[0];
   const definition = createDefinition({ ...spawn.definition,
-    locomotion: { ...spawn.definition.locomotion, moveSpeedPerTick: 0, minimumMoveSpeedPerTick: 0 },
+    locomotion: { ...spawn.definition.locomotion, speed: 0, minSpeed: 0 },
   });
   const cases = [
     [{ type: 'WAIT_FOR_TICKS', durationTicks: 3 }, 8],
@@ -839,7 +839,7 @@ test('core route absolute waits retain birth timing after the scheduler enters a
       checkpoints: [{ type, targetElapsedTicks: 8 }],
     });
     const definition = createDefinition({ ...action.spawn.definition,
-      locomotion: { ...action.spawn.definition.locomotion, moveSpeedPerTick: 0, minimumMoveSpeedPerTick: 0 },
+      locomotion: { ...action.spawn.definition.locomotion, speed: 0, minSpeed: 0 },
     });
     const runtime = new BattleRuntime({ ...spec, maxTicks: 16, schedule: { ...schedule, waves: [
       { ...firstWave, fragments: [{ ...fragment, actions: [{ ...action,
@@ -872,7 +872,7 @@ test('core patrol stays registered and pending in the spawn schedule through det
     type: 'PATROL_MOVE', target: { position: [9, column], reachOffset: [0, 0] },
   })) });
   const definition = createDefinition({ ...spawn.definition,
-    locomotion: { ...spawn.definition.locomotion, moveSpeedPerTick: 4 },
+    locomotion: { ...spawn.definition.locomotion, speed: 4 },
   });
   const input = { ...withTimelineSpawns(spec, [{ ...spawn, tick: 0, definition, route, alwaysCheckCurrentPoint: true }]), maxTicks: 24 };
   const runtime = new BattleRuntime(input), replay = new BattleRuntime(input), events = [], positions = [];
@@ -1316,22 +1316,22 @@ test('raw enemy movement levels inherit only defined values and reject sparse, u
   const profile = slimeMovementProfile();
   const parseMovement = (value, level) => parseEnemyMovementDefinition(value, level, profile);
   assert.deepEqual(parseMovement(fixture, 0), {
-    id: 'enemy_1007_slime', spatialPresence: {}, vitality: { maxHp: 550, defense: 0, resistance: 0 }, locomotion: { moveSpeedPerTick: 1 / 30, minimumMoveSpeedPerTick: 0.1 / 30, steeringParameters: profile.steeringParameters },
+    id: 'enemy_1007_slime', spatialPresence: {}, vitality: { maxHp: 550, defense: 0, resistance: 0 }, locomotion: { halfBodyWidth: profile.halfBodyWidth, speed: 1 / 30, minSpeed: 0.1 / 30, steeringParameters: profile.steeringParameters },
   });
   assert.deepEqual(parseMovement(fixture, 1), {
-    id: 'enemy_1007_slime', spatialPresence: {}, vitality: { maxHp: 2050, defense: 0, resistance: 0 }, locomotion: { moveSpeedPerTick: 1 / 30, minimumMoveSpeedPerTick: 0.1 / 30, steeringParameters: profile.steeringParameters },
+    id: 'enemy_1007_slime', spatialPresence: {}, vitality: { maxHp: 2050, defense: 0, resistance: 0 }, locomotion: { halfBodyWidth: profile.halfBodyWidth, speed: 1 / 30, minSpeed: 0.1 / 30, steeringParameters: profile.steeringParameters },
   });
   assert.deepEqual(parseMovement({ ...fixture, Value: [...fixture.Value].reverse() }, 1), parseMovement(fixture, 1));
   const ignored = structuredClone(fixture);
   ignored.Value[1].enemyData.attributes.moveSpeed.m_value = NaN;
-  assert.equal(parseMovement(ignored, 1).locomotion.moveSpeedPerTick, 1 / 30);
+  assert.equal(parseMovement(ignored, 1).locomotion.speed, 1 / 30);
   ignored.Value.push({ level: 2, enemyData: { attributes: {
     maxHp: { m_defined: false, m_value: 0 }, moveSpeed: { m_defined: false, m_value: 0 },
   } } });
   assert.equal(parseMovement(ignored, 2).vitality.maxHp, 550);
   const stationary = structuredClone(fixture);
   stationary.Value[1].enemyData.attributes.moveSpeed = { m_defined: true, m_value: 0 };
-  assert.equal(parseMovement(stationary, 1).locomotion.moveSpeedPerTick, 0);
+  assert.equal(parseMovement(stationary, 1).locomotion.speed, 0);
   assert.throws(() => parseMovement(fixture, 2), /unknown enemy level/);
   assert.throws(() => parseMovement({ ...fixture, Value: [...fixture.Value, fixture.Value[0]] }, 0), /duplicate enemy level/);
   const sparse = structuredClone(fixture);
@@ -1479,7 +1479,7 @@ test('movement scenarios resolve one enemy reference once and distinguish raw un
   assert.deepEqual(requested, ['enemy_1007_slime', 'enemy_1000_gopro']);
   assert.equal(actions[0].spawn.definition, actions[1].spawn.definition);
   assert.equal(actions[0].spawn.definition.vitality.maxHp, 1234);
-  assert.equal(actions[0].spawn.definition.locomotion.moveSpeedPerTick, 0);
+  assert.equal(actions[0].spawn.definition.locomotion.speed, 0);
   assert.equal(actions[0].spawn.notCountInTotal, true);
   assert.deepEqual(scenario.unsupportedRules, []);
   assert.deepEqual(scenario.level.unresolvedRules, parsed.unresolvedRules);
@@ -1876,6 +1876,9 @@ test('raw 01 dragon branch waits for an explicit trigger and uses its own actual
   assert.equal(dragon.definition.id, 'enemy_9012_acloon');
   assert.equal(dragon.definition.locomotion.steeringParameters.steeringFactor, 8 / 30);
   assert.equal(dragon.definition.locomotion.steeringParameters.maxSteeringForce, 10 / 900);
+  assert.equal(dragon.definition.locomotion.halfBodyWidth,
+    arknightsFixture('prefab_enemy_9012_acloon').components.find(component =>
+      Object.hasOwn(component.fields, '_halfBodyWidth')).fields._halfBodyWidth);
   assert.deepEqual(dragon.definition.route.startPosition, scenario.level.extraRoutes[0].startPosition);
   assert.strictEqual(dragon.route.main.definition, dragon.definition.route);
   assert.equal(dragon.definition.route.pathMotionMode, 'FLY');
@@ -1968,7 +1971,7 @@ test('core blocked route waits can teleport away, release their blocker and resu
     assert.equal(moving.events.some(event => event.type === 'ACTION' && event.sourceUnitId === 1), false);
     assert.deepEqual(runtime.snapshot().blockingRelations, []);
     assert.ok(runtime.snapshot().units[1].position[0] > 3);
-    assert.equal(runtime.snapshot().units[1].locomotion.moving, true);
+    assert.ok(runtime.snapshot().units[1].locomotion.velocity[0] > 0);
     assert.equal(runtime.snapshot().units[0].vitality.hp, 99);
   }
 });

@@ -20,7 +20,12 @@ import { setHook, removeHook } from "../../dist/core/tactical/battle/damage/hook
 import { activate as activateSkill, advance as advanceSkill, finish as finishSkill } from "../../dist/core/tactical/unit/capability/skill/operations.js";
 import { start, cancel } from "../../dist/core/tactical/unit/action/operations.js";
 import { advance as advanceAction } from "../../dist/core/tactical/unit/action/advance.js";
-import { canMove } from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
+import { advance as advanceLocomotion } from "../../dist/core/tactical/unit/capability/locomotion/operations.js";
+const canMove = (battle, unit) => {
+    const goal = [unit.position[0] + 0.05, unit.position[1]];
+    const moved = advanceLocomotion(battle, unitRef(unit), { nextPoint: goal, goal }, { mode: "WALK", speedMultiplier: 1 });
+    return getUnit(moved, unit.id).position !== unit.position;
+};
 import { initialize as initializeTargetable, setRule as setTargetingRule } from "../../dist/core/tactical/unit/capability/targetable/capability.js";
 import { invincible } from "../../dist/content/tactical/effects/protection.js";
 import { setAttackContribution } from "../../dist/core/tactical/unit/capability/offense/capability.js";
@@ -45,7 +50,7 @@ const profile = (fields = {}) => {
 const enemy = (id, position, fields = {}) => initialize({ id, position, definition: {
     id: `enemy-${id}`, targetable: {}, vitality: { maxHp: 10000, defense: 0, resistance: 0 }, allegiance: { side: "ENEMY" }, spatial: { layer: "GROUND" },
     hit: { geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.1 }] } },
-    locomotion: { moveSpeedPerTick: 0.1, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } },
+    locomotion: { halfBodyWidth: 0, minSpeed: 0, speed: 0.1, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } },
     ...fields,
 } });
 function setup(configuration = {}, targets = [], options = {}) {

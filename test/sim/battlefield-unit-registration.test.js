@@ -93,7 +93,7 @@ const definition = () => ({
     blocker: { capacity: 1, geometry: { radius: 0.5 } },
     blockable: { volume: 1 },
     locomotion: {
-        moveSpeedPerTick: 0.1,
+        halfBodyWidth: 0, minSpeed: 0, speed: 0.1,
         steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 },
     },
 });

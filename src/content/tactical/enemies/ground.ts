@@ -4,10 +4,8 @@ import { createArknightsElementalDefinition } from "../../../data/arknights/elem
 import { getUnit, updateUnit } from "../../../core/tactical/battle/state.js";
 import { ref as unitRef } from "../../../core/tactical/unit/query.js";
 import { isCasting } from "../../../core/tactical/unit/action/operations.js";
-import {
-    hasLocomotion,
-    setRule,
-} from "../../../core/tactical/unit/capability/locomotion/capability.js";
+import { hasLocomotion } from "../../../core/tactical/unit/capability/locomotion/capability.js";
+import { setRule } from "../../../core/tactical/unit/capability/locomotion/operations.js";
 import { Definitions } from "../../../core/tactical/unit/action/definitions.js";
 import { create as createAttack, type Attack } from "../actions/attack.js";
 import type { Profile } from "../../../data/arknights/enemy.js";
@@ -117,9 +115,10 @@ export function createDefinition(
             },
             blockable: { volume: profile.blockVolume },
             locomotion: {
-                moveSpeedPerTick: perSecondToPerTick(profile.moveSpeedPerSecond),
-                minimumMoveSpeedPerTick: perSecondToPerTick(0.1),
+                speed: perSecondToPerTick(profile.moveSpeedPerSecond),
+                minSpeed: perSecondToPerTick(0.1),
                 steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 },
+                halfBodyWidth: timing.hitRadius,
             },
             action: { definitions: Definitions.empty().add(attack) },
         }),

@@ -1,0 +1,136 @@
+import { assertNonnegativeNumber } from "../../../../common/assert.js";
+import type { Ref } from "../../../../common/ref.js";
+import { battlefieldView, updateUnit, type State as BattleState } from "../../../battle/state.js";
+import { effectiveMap } from "../../../battlefield/navigation/cache.js";
+import { World } from "../../../geometry/coordinate.js";
+import * as units from "../../query.js";
+import type { Context } from "../../query.js";
+import type { Unit } from "../../unit.js";
+import * as registry from "../../hook/hook.js";
+import * as contribution from "../../contribution/contribution.js";
+import * as attribute from "../../contribution/attribute.js";
+import { isSpatiallyPresent } from "../presence/capability.js";
+import type { Locomotion, MovementContext, MovementTarget, Rule, State } from "./capability.js";
+import { calculate as avoidance } from "./avoidance.js";
+import { reflect } from "./motion.js";
+import { integrate } from "./steering.js";
+
+export function setRule(state: State, rule: Rule): State {
+    const rules = registry.set(state.rules, rule);
+
+    return rules === state.rules ? state : { ...state, rules };
+}
+
+export function removeRule(state: State, id: string): State {
+    const rules = registry.remove(state.rules, id);
+
+    return rules === state.rules ? state : { ...state, rules };
+}
+
+export function setSpeedContribution(
+    state: State,
+    entry: contribution.Contribution<attribute.Input<Context>>,
+): State {
+    const speed = contribution.set(state.speed, entry);
+
+    return speed === state.speed ? state : { ...state, speed };
+}
+
+export function removeSpeedContribution(state: State, id: string): State {
+    const speed = contribution.remove(state.speed, id);
+
+    return speed === state.speed ? state : { ...state, speed };
+}
+
+function canMove(battle: BattleState, self: Unit & Locomotion): boolean {
+    return self.locomotion.rules.every((rule) => rule.allows(battle, self));
+}
+
+function resolveSpeed(self: Unit & Locomotion, context: Context): number {
+    const definition = self.definition.locomotion;
+
+    return Math.max(
+        definition.minSpeed,
+        attribute.apply(
+            definition.speed,
+            contribution
+                .resolve(self.locomotion.speed)
+                .flatMap((value) => attribute.evaluate(value, context)),
+        ),
+    );
+}
+
+export function advance(
+    battle: BattleState,
+    ref: Ref<Unit & Locomotion>,
+    target: MovementTarget,
+    context: MovementContext,
+): BattleState {
+    const self = units.get(battle, ref);
+
+    if (self?.lifecycle !== "PRESENT" || !isSpatiallyPresent(self) || !canMove(battle, self)) {
+        return battle;
+    }
+
+    const battlefield = battlefieldView(battle);
+
+    if (battlefield.blockerOf(self.id) !== undefined) {
+        return battle;
+    }
+
+    assertNonnegativeNumber(context.speedMultiplier, "speedMultiplier");
+    const speed = resolveSpeed(self, { unit: self, battlefield }) * context.speedMultiplier;
+    assertNonnegativeNumber(speed, "movement budget");
+
+    if (speed === 0) {
+        return battle;
+    }
+
+    let position = self.position;
+    let velocity = self.locomotion.velocity;
+
+    if (World.withinDistance(position, target.goal, speed)) {
+        position = target.goal;
+    } else {
+        const map = effectiveMap(battle.battlefield.navigation, context.mode);
+        const direction = World.difference(target.nextPoint, position);
+        const force = avoidance(
+            map,
+            context.mode,
+            position,
+            self.definition.locomotion.halfBodyWidth,
+            direction,
+            velocity,
+            speed,
+        );
+        velocity = integrate(
+            velocity,
+            direction,
+            speed,
+            force,
+            self.definition.locomotion.steeringParameters,
+        );
+        position = reflect(position, World.translate(position, velocity), map);
+    }
+
+    if (position[0] === self.position[0] && position[1] === self.position[1]) {
+        position = self.position;
+    }
+    if (
+        velocity[0] === self.locomotion.velocity[0] &&
+        velocity[1] === self.locomotion.velocity[1]
+    ) {
+        velocity = self.locomotion.velocity;
+    }
+
+    return position === self.position && velocity === self.locomotion.velocity
+        ? battle
+        : updateUnit(battle, {
+              ...self,
+              position,
+              locomotion:
+                  velocity === self.locomotion.velocity
+                      ? self.locomotion
+                      : { ...self.locomotion, velocity },
+          });
+}

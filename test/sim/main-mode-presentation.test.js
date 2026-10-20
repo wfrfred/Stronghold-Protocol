@@ -164,15 +164,15 @@ test('a buff skill keeps its status but only actual actions project attack event
   ]), [['atk', 1, 2, 'none']]);
 });
 
-test('walk animation follows position changes rather than a stale locomotion moving flag', () => {
+test('walk animation follows position changes rather than stored steering velocity', () => {
   const view = presentation();
   const crossbowman = unit(3, 'enemy_1003_ncbow', 'ENEMY', undefined, {
     locomotion: {
-      moveSpeedPerTick: 0.02,
+      halfBodyWidth: 0, minSpeed: 0, speed: 0.02,
       steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 },
     },
   });
-  const moving = { ...crossbowman, locomotion: { ...crossbowman.locomotion, moving: true } };
+  const moving = { ...crossbowman, locomotion: { ...crossbowman.locomotion, velocity: [0.02, 0] } };
   const before = snapshot([crossbowman], { tickIndex: 1 });
   assert.equal(view.units(before)[0].tuple[8], 0);
   const walked = { ...moving, position: [moving.position[0] + 0.02, moving.position[1]] };
@@ -184,8 +184,8 @@ test('walk animation follows position changes rather than a stale locomotion mov
     actions: { instances: [{ source: { id: 3 }, status: 'RUNNING', state: { releaseAtTick: 9 } }] },
   });
   assert.equal(view.units(waiting)[0].tuple[8], 0);
-  assert.equal(walked.locomotion.moving, true);
+  assert.deepEqual(walked.locomotion.velocity, [0.02, 0]);
   assert.deepEqual(before.units[0].position, crossbowman.position);
   const spawned = { ...moving, id: 4 };
-  assert.equal(view.units(snapshot([walked, spawned], { tickIndex: 4 }))[1].tuple[8], 1);
+  assert.equal(view.units(snapshot([walked, spawned], { tickIndex: 4 }))[1].tuple[8], 0);
 });

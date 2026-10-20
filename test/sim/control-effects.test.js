@@ -8,7 +8,12 @@ import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { getUnit, battlefieldView, updateUnit } from "../../dist/core/tactical/battle/state.js";
 import * as actions from "../../dist/core/tactical/unit/action/operations.js";
 import { canBlock } from "../../dist/core/tactical/unit/capability/blocking/blocker.js";
-import { canMove } from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
+import { advance as advanceLocomotion } from "../../dist/core/tactical/unit/capability/locomotion/operations.js";
+const canMove = (battle, unit) => {
+    const goal = [unit.position[0] + 0.05, unit.position[1]];
+    const moved = advanceLocomotion(battle, unitRef(unit), { nextPoint: goal, goal }, { mode: "WALK", speedMultiplier: 1 });
+    return getUnit(moved, unit.id).position !== unit.position;
+};
 import { definition as skillDefinition } from "../helpers/skill.js";
 import { activate, advance } from "../../dist/core/tactical/unit/capability/skill/operations.js";
 import { recover } from "../../dist/core/tactical/unit/capability/skill/sp.js";
@@ -25,7 +30,7 @@ function actor(action = true) {
     return unit(0, {
         action,
         blocker: { capacity: 1, geometry: { radius: 2 } },
-        locomotion: { moveSpeedPerTick: 1, steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 } },
+        locomotion: { halfBodyWidth: 0, minSpeed: 0, speed: 1, steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 } },
         skill: skillDefinition({ id: "control-test", sp: { initial: 0, capacity: 10, requirement: 10, recovery: { type: "TIME", intervalTicks: 30 } } }),
     });
 }

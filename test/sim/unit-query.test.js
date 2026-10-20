@@ -8,7 +8,7 @@ import { createBattleState, registerUnit, removeUnit, updateUnit } from "../../d
 import { fixtureBattlefieldState } from "../helpers/battlefield.js";
 
 const locomotion = {
-    moveSpeedPerTick: 1,
+    halfBodyWidth: 0, minSpeed: 0, speed: 1,
     steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 },
 };
 const unit = (id, capabilities = {}) => initialize({

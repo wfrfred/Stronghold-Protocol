@@ -73,7 +73,7 @@ test("native attack buff data builds a shared Definition and changes attacks thr
   const target = {
     id: "stationary-content-target", spatialPresence: {}, vitality: { maxHp: 1000000, defense: 0, resistance: 0 }, allegiance: { side: "ENEMY" },
     spatial: { layer: "GROUND" }, hit: { geometry },
-    locomotion: { moveSpeedPerTick: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 } },
+    locomotion: { halfBodyWidth: 0, minSpeed: 0, speed: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 } },
   };
   const base = createLegacyCombatSpec({ rows: 1, columns: 3, operators: [], enemies: [], maxTicks: 2200 });
   const runtime = new BattleRuntime({ ...base, initialUnits: [{ definition: actor, position: [0, 0] }],

@@ -107,7 +107,7 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, windupTicks = 0, o
       ...Array.from({ length: targets }, (_, index) => ({ definition: receiver, position: [index + 3, 0] }))],
     schedule: { type: "TIMELINE", spawns: [{
       definition: { id: "future", vitality: { maxHp: 1, defense: 0, resistance: 0 }, locomotion: {
-        moveSpeedPerTick: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 },
+        halfBodyWidth: 0, minSpeed: 0, speed: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 },
       } }, tick: 19,
       route: { pathMotionMode: "WALK", startPosition: [0, 7], endPosition: [0, 7],
         spawnOffset: [0, 0], spawnRandomRange: [0, 0], checkpoints: [], allowDiagonalMove: false,

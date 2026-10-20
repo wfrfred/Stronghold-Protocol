@@ -184,10 +184,7 @@ function unitInfo(unit: Unit, data: LegacyData, supplied?: LegacyUnitMetadata): 
             ? direction
             : "RIGHT");
 
-    const facing =
-        enemy && hasLocomotion(unit)
-            ? unit.locomotion.steering.lastVelocity[0] > 0
-            : dir !== "LEFT";
+    const facing = enemy && hasLocomotion(unit) ? unit.locomotion.velocity[0] > 0 : dir !== "LEFT";
     let kind: LegacyUnitInfo["kind"] = "device";
 
     if (operator) {
@@ -554,10 +551,8 @@ export class TacticalDemoPresentation {
 
                         return (
                             hasLocomotion(unit) &&
-                            (position === undefined
-                                ? unit.locomotion.moving
-                                : position[0] !== unit.position[0] ||
-                                  position[1] !== unit.position[1])
+                            position !== undefined &&
+                            (position[0] !== unit.position[0] || position[1] !== unit.position[1])
                         );
                     })
                     .map((unit) => unit.id),

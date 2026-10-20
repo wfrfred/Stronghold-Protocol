@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-    advanceBattlefield, battlefieldView, createBattleState, getUnit, registerUnit, updateUnit,
+    advanceBattlefield, battlefieldView, createBattleState, getUnit, registerUnit,
 } from "../../dist/core/tactical/battle/state.js";
 import { advanceMovement } from "../../dist/core/tactical/battle/steps/movement.js";
 import { leave } from "../../dist/core/tactical/battle/execution/unit.js";
@@ -12,7 +12,6 @@ import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
 import { Map as NavigationMap } from "../../dist/core/tactical/battlefield/navigation/map.js";
 import { create as createNavigation, nextPoint as nextNavigationPoint } from "../../dist/core/tactical/battlefield/navigation/state.js";
 import * as routeOperations from "../../dist/core/tactical/unit/capability/route/operations.js";
-import { canTraverse } from "../../dist/core/tactical/unit/capability/locomotion/segment.js";
 
 const step = battle => advanceMovement(battle, { routeMoveMultiplier: 1 });
 const cell = overrides => ({
@@ -41,27 +40,26 @@ function unit(battle, id, definition, position = [0, 0]) {
         id, position,
         definition: {
             id: `route-movement-${id}`, spatialPresence: {},
-            locomotion: { moveSpeedPerTick: 2, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } },
+            locomotion: { speed: 2, minSpeed: 0, halfBodyWidth: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } },
             route: route(), ...definition,
         },
     }).value;
 }
 
-test("Battle movement rejects an inertial wall crossing without publishing invalid spatial state", () => {
+test("Battle movement applies Locomotion's destination reflection and preserves integrated velocity", () => {
     const cells = Array.from({ length: 15 }, () => cell());
-    cells[1] = cell({ passable: false });
+    cells[8] = cell({ passable: false });
     let state = battle(5, 3, cells);
     const initial = unit(state, 1, {
-        locomotion: { moveSpeedPerTick: 2, steeringParameters: { steeringFactor: 1, maxSteeringForce: 0 } },
-    });
-    const moving = { ...initial, locomotion: { ...initial.locomotion, moving: true, steering: { lastVelocity: [2, 0] } } };
+        locomotion: { speed: 1, minSpeed: 0, halfBodyWidth: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 0 } },
+    }, [1, 2]);
+    const moving = { ...initial, locomotion: { ...initial.locomotion, velocity: [1, 0] } };
     state = registerUnit(state, moving);
     const advanced = step(state);
-    assert.deepEqual(getUnit(advanced, 1).position, [0, 0]);
-    assert.equal(getUnit(advanced, 1).locomotion.moving, false);
-    assert.deepEqual(getUnit(advanced, 1).locomotion.steering.lastVelocity, [2, 0]);
-    assert.deepEqual(battlefieldView(advanced).unitsAt([0, 0]).map(entry => entry.id), [1]);
-    assert.deepEqual(battlefieldView(advanced).unitsAt([0, 2]), []);
+    assert.deepEqual(getUnit(advanced, 1).position, [0, 2]);
+    assert.deepEqual(getUnit(advanced, 1).locomotion.velocity, [1, 0]);
+    assert.deepEqual(battlefieldView(advanced).unitsAt([2, 0]).map(entry => entry.id), [1]);
+    assert.deepEqual(battlefieldView(advanced).unitsAt([2, 1]), []);
     assert.deepEqual(advanced.events, []);
     assert.deepEqual(advanced.removedUnits, []);
     assert.equal(getUnit(state, 1), moving);
@@ -80,14 +78,13 @@ test("Main completion stops motion while blocked and produces one event only whe
     });
     state = registerUnit(state, blocker);
     state = registerUnit(state, {
-        ...enemy, locomotion: { ...enemy.locomotion, moving: true, steering: { lastVelocity: [1, 0] } },
+        ...enemy, locomotion: { ...enemy.locomotion, velocity: [1, 0] },
     });
     state = advanceBattlefield(state, [{ type: "SET_BLOCKING_RELATIONS", relations: [{ blockerUnitId: 1, blockedUnitId: 2 }] }]);
     const first = step(state);
     assert.equal(getUnit(first, 2).route.main.phase.type, "COMPLETED");
     assert.deepEqual(getUnit(first, 2).position, [0, 0]);
-    assert.equal(getUnit(first, 2).locomotion.moving, false);
-    assert.deepEqual(getUnit(first, 2).locomotion.steering.lastVelocity, [0, 0]);
+    assert.deepEqual(getUnit(first, 2).locomotion.velocity, [1, 0]);
     assert.equal(first.events.some(event => event.type === "ROUTE_COMPLETED"), false);
     const blockedAgain = step({ ...first, tick: 1 });
     assert.equal(blockedAgain.events.some(event => event.type === "ROUTE_COMPLETED"), false);
@@ -113,12 +110,28 @@ test("Main departure callbacks can remove a later candidate before its route exe
     assert.equal(advanced.events.some(event => event.type === "ROUTE"), false);
 });
 
+test("a route wait skips Locomotion without clearing its history velocity", () => {
+    let state = battle();
+    const initial = unit(state, 1, {
+        route: route({ checkpoints: [{ type: "WAIT", tick: 3 }] }),
+    });
+    state = registerUnit(state, {
+        ...initial,
+        locomotion: { ...initial.locomotion, velocity: [0.3, 0.4] },
+    });
+    const waiting = step(state);
+    assert.deepEqual(getUnit(waiting, 1).position, [0, 0]);
+    assert.deepEqual(getUnit(waiting, 1).locomotion.velocity, [0.3, 0.4]);
+    const resumed = step({ ...waiting, tick: 3 });
+    assert.notDeepEqual(getUnit(resumed, 1).position, [0, 0]);
+});
+
 test("Route keeps the navigation tracking point when its full body ray is blocked but this Tick can move", () => {
     const cells = Array.from({ length: 10 }, () => cell());
     cells[6] = cell({ passable: false });
     let state = battle(2, 5, cells);
     const initial = unit(state, 1, {
-        locomotion: { moveSpeedPerTick: 0.01, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } },
+        locomotion: { speed: 0.01, minSpeed: 0, halfBodyWidth: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } },
         route: route({
             endPosition: [1, 4], offset: [0, 0.4],
             checkpoints: [{ type: "MOVE", position: [0, 4], offset: [0, 0] }],
@@ -128,12 +141,58 @@ test("Route keeps the navigation tracking point when its full body ray is blocke
     state = routeOperations.advance(state, { id: 1 });
     const target = nextNavigationPoint(state.battlefield.navigation, "WALK", [0, 0.4], [4, 0]);
     assert.deepEqual(target, [4, 0]);
-    assert.equal(canTraverse(state.battlefield.navigation.baseline.WALK, initial.position, [4, 0.4]), false);
-    assert.deepEqual(routeOperations.nextPoint(state, { id: 1 }), [4, 0.4]);
+    assert.deepEqual(routeOperations.movementTarget(state, { id: 1 }), { nextPoint: [4, 0.4], goal: [4, 0.4] });
     const moved = getUnit(step(state), 1);
     assert.ok(moved.position[0] > initial.position[0]);
-    assert.equal(moved.locomotion.moving, true);
-    assert.ok(canTraverse(state.battlefield.navigation.baseline.WALK, initial.position, moved.position));
+    assert.ok(moved.locomotion.velocity[0] > 0);
+    assert.equal(moved.position[0] < 0.1, true);
+});
+
+test("Route returns the final MOVE goal separately from the next navigation node", () => {
+    const cells = Array.from({ length: 15 }, () => cell());
+    cells[7] = cell({ passable: false });
+    let state = battle(3, 5, cells);
+    state = registerUnit(state, unit(state, 1, {
+        route: route({
+            endPosition: [2, 4], offset: [0, 0.1],
+            checkpoints: [{ type: "MOVE", position: [1, 4], offset: [0, 0.2] }],
+        }),
+    }, [0, 1.1]));
+    state = routeOperations.advance(state, { id: 1 });
+    const target = routeOperations.movementTarget(state, { id: 1 });
+    assert.deepEqual(target.goal, [4, 1.3]);
+    assert.notDeepEqual(target.nextPoint, target.goal);
+    const next = nextNavigationPoint(state.battlefield.navigation, "WALK", [0, 1], [4, 1.2]);
+    assert.deepEqual(target.nextPoint, [next[0], next[1] + 0.1]);
+});
+
+test("Runtime consumes the current path mode without changing the unit's ground identity", () => {
+    const cells = Array.from({ length: 10 }, () => cell());
+    cells[9] = cell({ passable: false });
+    let state = battle(2, 5, cells);
+    const flyCells = Array.from({ length: 10 }, () => cell());
+    state = {
+        ...state,
+        battlefield: {
+            ...state.battlefield,
+            navigation: createNavigation({
+                WALK: state.battlefield.navigation.baseline.WALK,
+                FLY: new NavigationMap(2, 5, flyCells),
+            }),
+        },
+    };
+    state = registerUnit(state, unit(state, 1, {
+        spatial: { layer: "GROUND" },
+        route: route({ endPosition: [1, 4] }),
+        locomotion: { speed: 0.1, minSpeed: 0, halfBodyWidth: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } },
+    }, [0, 1]));
+    assert.equal(step(state), state);
+    const changed = routeOperations.setPathMotionMode(state, { id: 1 }, "FLY");
+    const moved = getUnit(step(changed), 1);
+    assert.ok(moved.position[0] > 0);
+    assert.equal(moved.spatial.layer, "GROUND");
+    assert.equal(moved.route.main.definition.pathMotionMode, "WALK");
+    assert.equal(moved.route.main.pathMotionMode, "FLY");
 });
 
 test("Alternative takeover preserves Main checkpoint progress while its endpoint can still trigger departure", () => {

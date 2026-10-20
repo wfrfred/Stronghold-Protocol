@@ -5,6 +5,7 @@ import * as offense from "../../dist/core/tactical/unit/capability/offense/capab
 import * as blocker from "../../dist/core/tactical/unit/capability/blocking/blocker.js";
 import * as blockable from "../../dist/core/tactical/unit/capability/blocking/blockable.js";
 import * as locomotion from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
+import * as movement from "../../dist/core/tactical/unit/capability/locomotion/operations.js";
 import * as action from "../../dist/core/tactical/unit/capability/action/capability.js";
 import * as vitality from "../../dist/core/tactical/unit/capability/vitality/capability.js";
 import * as damage from "../../dist/core/tactical/battle/damage/hook.js";
@@ -44,9 +45,9 @@ const entries = [
     ],
     [
         locomotion.initialize(fixtureBattle(0), fixtureDefinition("locomotion")).value,
-        "moveSpeed",
-        locomotion.setMoveSpeedContribution,
-        locomotion.removeMoveSpeedContribution,
+        "speed",
+        movement.setSpeedContribution,
+        movement.removeSpeedContribution,
     ],
     [
         action.initialize(fixtureBattle(0), fixtureDefinition("action")).value,

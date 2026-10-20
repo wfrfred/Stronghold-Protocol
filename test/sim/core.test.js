@@ -365,7 +365,7 @@ const catalogDefinition = () => Object.freeze({
   spatialPresence: Object.freeze({}),
   vitality: Object.freeze({ maxHp: 100, defense: 20, resistance: 10 }),
   locomotion: Object.freeze({
-    moveSpeedPerTick: 0.1,
+    halfBodyWidth: 0, minSpeed: 0, speed: 0.1,
     steeringParameters: Object.freeze({ steeringFactor: 1, maxSteeringForce: 100 }),
   }),
   allegiance: Object.freeze({ side: 'ALLY' }),
@@ -538,7 +538,7 @@ test('core snapshots share capabilities and retain earlier values across immutab
   const mainRoute = snapshot.route.main;
   const updated = { ...snapshot,
     vitality: { ...snapshot.vitality, hp: 25 },
-    locomotion: { ...snapshot.locomotion, moving: true },
+    locomotion: { ...snapshot.locomotion, velocity: [0.1, 0] },
     route: { ...snapshot.route, main: { ...mainRoute, phase: { ...mainRoute.phase,
       checkpointState: { ...mainRoute.phase.checkpointState, deadlineTick: 1 },
     } } },
@@ -548,7 +548,7 @@ test('core snapshots share capabilities and retain earlier values across immutab
   assert.equal(viewBattlefield(runtime).getUnit(1), updated);
   assert.equal(previous.getUnit(1), unit);
   assert.equal(snapshot.vitality.hp, 100);
-  assert.equal(snapshot.locomotion.moving, false);
+  assert.deepEqual(snapshot.locomotion.velocity, [0, 0]);
   assert.equal(snapshot.route.main.phase.checkpointState.deadlineTick, 9);
   assert.equal(updated.route.main.phase.checkpointState.deadlineTick, 1);
   assert.equal(updated.route.alternative, snapshot.route.alternative);
@@ -735,8 +735,8 @@ test('catalog products and core initializers expose standard capability pairs an
 import { initialize as initializeUnit } from ${sourceModule('initialize')};
 import type { Definitions as CapabilityDefinitions, Product } from ${sourceModule('capability/catalog')};
 import { initializeRoutedEnemy, type RoutedEnemySpawn } from ${sourceModule('../battle/creation/enemy')};
-import { advance as advanceLocomotion } from ${sourceModule('capability/locomotion/step')};
-import { advance as advanceRoute, nextPoint } from ${sourceModule('capability/route/operations')};
+import { advance as advanceLocomotion } from ${sourceModule('capability/locomotion/operations')};
+import { advance as advanceRoute, movementTarget, pathMotionMode } from ${sourceModule('capability/route/operations')};
 import { ref as unitRef, get as getUnit } from ${sourceModule('query')};
 import type { Unit, Definition as UnitDefinition } from ${sourceModule('unit')};
 import type { ImmutableData } from ${sourceModule('../../common/immutable-data')};
@@ -803,7 +803,7 @@ if (elementalReport.type === "REJECTED") {
 }
 initializeOffenseState(battleState, { attack: 1 }).value.attack;
 initializeVitalityState(battleState, { maxHp: 100, defense: 1, resistance: 0 }).value.defense;
-initializeLocomotionState(battleState, enemyDefinition.locomotion).value.moving;
+initializeLocomotionState(battleState, enemyDefinition.locomotion).value.velocity;
 declare const actionDefinition: Parameters<typeof initializeActionState>[1];
 initializeActionState(battleState, actionDefinition).value.states;
 // @ts-expect-error capability initialization requires the current BattleState.
@@ -837,7 +837,8 @@ const routedEnemy = initializeRoutedEnemy(battleState, enemySpawn).value.enemy;
 const spawnedContentId: string = routedEnemy.definition.id;
 routedEnemy.route.main.definition;
 const advancedRoute = advanceRoute(battleState, unitRef(routedEnemy));
-const movedBattle = advanceLocomotion(advancedRoute, unitRef(routedEnemy), nextPoint(advancedRoute, unitRef(routedEnemy)));
+const target = movementTarget(advancedRoute, unitRef(routedEnemy));
+const movedBattle = target === null ? advancedRoute : advanceLocomotion(advancedRoute, unitRef(routedEnemy), target, { mode: pathMotionMode(routedEnemy.route), speedMultiplier: 1 });
 const movedEnemy = getUnit(movedBattle, unitRef(routedEnemy))!;
 const movedContentId: string = movedEnemy.definition.id;
 movedEnemy.route.main.definition;
@@ -894,12 +895,12 @@ battleState.battlefield.projectiles.replace(typedProjectile);
       ['projectile-erased-transition', `transition(createBattlefieldState({ map: battlefieldMap }), [{ type: 'REGISTER_PROJECTILE', projectile: typedProjectile }]);`],
       ['state-extra-field', `initializeUnit(battleState, { id: 1, definition: { id: 'offense', offense: { attack: 1 } }, position: [0, 0], states: { offense: initializeOffenseState(battleState, { attack: 1 }).value } });`],
       ['mutable-definition', `initializeUnit(battleState, { id: 1, definition: { id: 'mutable', vitality: { maxHp: 10, defense: 0, resistance: 0 } }, position: [0, 0] }).value.definition.vitality.maxHp = 99;`],
-      ['unconfigured', `initializeUnit(battleState, { id: 1, definition: { id: 'bare' }, position: [0, 0] }).value.locomotion.moving;`],
+      ['unconfigured', `initializeUnit(battleState, { id: 1, definition: { id: 'bare' }, position: [0, 0] }).value.locomotion.velocity;`],
       ['invalid-offense-config', `initializeUnit(battleState, { id: 1, definition: { id: 'invalid', offense: { attack: [] } }, position: [0, 0] });`],
       ['extra-definition-field', `initializeUnit(battleState, { id: 1, definition: enemyDefinition, position: [0, 0] }).value.definition.enemyCode;`],
       ['routed-extra-definition-field', `initializeRoutedEnemy(battleState, enemySpawn).value.enemy.definition.enemyCode;`],
       ['optional', `declare const optionalDefinition: OptionalProbe; initializeUnit(battleState, { id: 1, definition: optionalDefinition, position: [0, 0] }).value.vitality.hp;`],
-      ['wide', `declare const wideDefinition: UnitDefinition; initializeUnit(battleState, { id: 1, definition: wideDefinition, position: [0, 0] }).value.locomotion.moving;`],
+      ['wide', `declare const wideDefinition: UnitDefinition; initializeUnit(battleState, { id: 1, definition: wideDefinition, position: [0, 0] }).value.locomotion.velocity;`],
       ['base-unit-definition', `declare const unit: Unit; unit.definition.vitality.maxHp;`],
       ['missing-route-refinement', `initializeUnit(battleState, { id: 1, definition: enemyDefinition, position: [0, 0] }).value.route.main;`],
       ['optional-normalized-occupancy', `declare const optionalPlacement: UnitPlacementDefinition<EnemyProbe>; instantiateUnitPlacement(battleState, createUnitPlacementDefinition(optionalPlacement)).value.unit.occupancy.claims;`],

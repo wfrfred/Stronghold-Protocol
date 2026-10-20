@@ -10,7 +10,7 @@ import { createInput as createRouteDefinition } from "../../dist/core/tactical/b
 import { map } from "../helpers/action-fixture.js";
 
 const locomotion = {
-    moveSpeedPerTick: 0,
+    halfBodyWidth: 0, minSpeed: 0, speed: 0,
     steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 },
 };
 const route = createRouteDefinition({

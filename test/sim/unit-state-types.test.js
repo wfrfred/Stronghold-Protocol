@@ -24,7 +24,8 @@ import { setMaxHpContribution } from ${module("unit/capability/vitality/capabili
 import { setAttackContribution, type Offense } from ${module("unit/capability/offense/capability")};
 import { setCapacityContribution, canBlock, type Rule as BlockerRule, type Blocker } from ${module("unit/capability/blocking/blocker")};
 import { setVolumeContribution, canBeBlocked, type Rule as BlockableRule, type Blockable } from ${module("unit/capability/blocking/blockable")};
-import { setMoveSpeedContribution, type Locomotion } from ${module("unit/capability/locomotion/capability")};
+import type { Locomotion } from ${module("unit/capability/locomotion/capability")};
+import { setSpeedContribution } from ${module("unit/capability/locomotion/operations")};
 import type { Route, Progress } from ${module("unit/capability/route/capability")};
 import type { Context, Definition } from ${module("unit/effect/definition")};
 import { install, replaceEffect, get } from ${module("unit/effect/operations")};
@@ -130,7 +131,7 @@ setMaxHpContribution(capabilityHost.vitality,capabilityHost.definition.vitality,
 setCapacityContribution(capabilityHost.blocker,dynamic);
 const movement={
  ...capabilityHost,
- locomotion:setMoveSpeedContribution(capabilityHost.locomotion,dynamic),
+ locomotion:setSpeedContribution(capabilityHost.locomotion,dynamic),
 };
 const mainRoute:Progress=movement.route.main;
 const crossCapability:Definition<{bonus:number},Vitality & Offense>={

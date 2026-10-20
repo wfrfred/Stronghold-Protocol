@@ -37,7 +37,7 @@ function spec(initialUnits) {
                         id: "future",
                         vitality: { maxHp: 1, defense: 0, resistance: 0 },
                         locomotion: {
-                            moveSpeedPerTick: 0,
+                            halfBodyWidth: 0, minSpeed: 0, speed: 0,
                             steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 },
                         },
                     }),

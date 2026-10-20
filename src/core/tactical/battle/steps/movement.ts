@@ -5,20 +5,11 @@ import {
 } from "../../unit/capability/route/capability.js";
 import * as route from "../../unit/capability/route/operations.js";
 import { hasLocomotion, type Locomotion } from "../../unit/capability/locomotion/capability.js";
-import * as locomotion from "../../unit/capability/locomotion/step.js";
-import { canRecover, canTraverse } from "../../unit/capability/locomotion/segment.js";
-import { effectiveMap } from "../../battlefield/navigation/cache.js";
-import { World } from "../../geometry/coordinate.js";
+import * as locomotion from "../../unit/capability/locomotion/operations.js";
 import * as units from "../../unit/query.js";
 import type { Id, Unit } from "../../unit/unit.js";
 import type { Command } from "../contract.js";
-import {
-    appendEvents,
-    battlefieldView,
-    getUnit,
-    updateUnit,
-    type State as BattleState,
-} from "../state.js";
+import { appendEvents, battlefieldView, getUnit, type State as BattleState } from "../state.js";
 import { leave } from "../execution/unit.js";
 
 function advanceLocomotion(
@@ -27,29 +18,14 @@ function advanceLocomotion(
     moveMultiplier: number,
 ): BattleState {
     const ref = units.ref(unit);
-    const moved = locomotion.advance(battle, ref, route.nextPoint(battle, ref), moveMultiplier);
-    const current = units.get(moved, ref)!;
+    const target = route.movementTarget(battle, ref);
 
-    if (current.position === unit.position) {
-        return moved;
-    }
-
-    const definition = (unit.route.alternative ?? unit.route.main).definition;
-    const map = effectiveMap(battle.battlefield.navigation, definition.pathMotionMode);
-    const locator = World.translate(unit.position, World.negate(definition.offset));
-    const nextLocator = World.translate(current.position, World.negate(definition.offset));
-    const recovering =
-        !map.contains(World.toTile(unit.position)) || !map.contains(World.toTile(locator));
-    const permitted = recovering ? canRecover : canTraverse;
-
-    if (permitted(map, unit.position, current.position) && permitted(map, locator, nextLocator)) {
-        return moved;
-    }
-
-    return updateUnit(battle, {
-        ...unit,
-        locomotion: { ...current.locomotion, moving: false },
-    });
+    return target === null
+        ? battle
+        : locomotion.advance(battle, ref, target, {
+              mode: route.pathMotionMode(unit.route),
+              speedMultiplier: moveMultiplier,
+          });
 }
 
 export type AlternativeRouteCommand =
@@ -113,8 +89,6 @@ export function advanceMovement(
                     },
                 ]);
                 battle = leave(battle, unit.id, "SCRIPT");
-            } else if (hasLocomotion(unit)) {
-                battle = locomotion.advance(battle, units.ref(unit), null, routeMoveMultiplier);
             }
         } else if (hasLocomotion(unit)) {
             battle = advanceLocomotion(battle, unit, routeMoveMultiplier);

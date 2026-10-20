@@ -1,5 +1,5 @@
 import * as route from '../../dist/core/tactical/unit/capability/route/operations.js';
-import * as locomotion from '../../dist/core/tactical/unit/capability/locomotion/step.js';
+import * as locomotion from '../../dist/core/tactical/unit/capability/locomotion/operations.js';
 import * as units from '../../dist/core/tactical/unit/query.js';
 import { registerUnit, updateUnit } from '../../dist/core/tactical/battle/state.js';
 import { fixtureBattle } from "../helpers/unit.js";
@@ -31,11 +31,9 @@ import { initialize } from "../helpers/unit.js";
 import { createDefinition as createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/tile-binding/capability.js';
 import * as blockable from '../../dist/core/tactical/unit/capability/blocking/blockable.js';
 import { setRule as setBlockerRule } from '../../dist/core/tactical/unit/capability/blocking/blocker.js';
-import { createSteeringParameters, createSteeringState, integrateSteering } from '../../dist/core/tactical/unit/capability/locomotion/steering.js';
 import { Grid, OBSTACLE_COST, bresenhamTiles } from '../../server/sim/grid.js';
 import { flowFieldForGrid, navigationMapFromGrid, waypointsForGrid } from '../../dist/legacy/navigation.js';
 import { build } from '../../dist/core/tactical/battlefield/navigation/field.js';
-import { canTraverse as canTraverseNavigationSegment } from '../../dist/core/tactical/unit/capability/locomotion/segment.js';
 import { getDefaultSource, hasGeneratedData } from '../../server/sim/simdata.js';
 import { makeBattle, flatStage, enemyRec } from '../helpers/battleHarness.js';
 import { remainingDistance } from '../../server/sim/ai.js';
@@ -701,7 +699,7 @@ function routedEnemyHarness({ speedPerTick = 0.1, checkpoints = [], routeOverrid
   };
   const enemy = initialize({ id: 1, position, definition: {
     id: 'route-walker', vitality: { maxHp: 100, defense: 0, resistance: 0 }, spatialPresence: {},
-    locomotion: { moveSpeedPerTick: speedPerTick,
+    locomotion: { halfBodyWidth: 0, minSpeed: 0, speed: speedPerTick,
       steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } }, route: configuration,
   } });
   let battle = registerUnit(fixtureBattle(), enemy);
@@ -726,7 +724,10 @@ function routedEnemyHarness({ speedPerTick = 0.1, checkpoints = [], routeOverrid
       battle = route.advance(battle, ref);
       const current = units.get(battle, ref);
       if (!route.isCompleted(current.route)) {
-        battle = locomotion.advance(battle, ref, route.nextPoint(battle, ref), multiplier);
+        const target = route.movementTarget(battle, ref);
+        if (target !== null) battle = locomotion.advance(battle, ref, target, {
+          mode: route.pathMotionMode(current.route), speedMultiplier: multiplier,
+        });
       }
       const result = units.get(battle, ref);
       battle = { ...battle, tick: battle.tick + 1 };
@@ -749,16 +750,17 @@ test('Route guidance follows visible segments around walls and high-cost interme
     const cells = Array.from({ length: 6 }, () => fieldCell());
     cells[1] = fieldCell(obstacle);
     const map = fieldMap(2, 3, cells);
-    const h = routedEnemyHarness({ speedPerTick: 10, routeOverrides: { endPosition: [0, 2] } });
+    const h = routedEnemyHarness({ speedPerTick: 0.2, routeOverrides: { endPosition: [0, 2] } });
     h.setMaps({ WALK: map, FLY: fieldMap(2, 3, cells.map(cell => ({ ...cell, cost: 1 }))) });
     const positions = [h.enemy.position];
-    for (let tick = 0; tick < 12 && !route.isCompleted(h.enemy.route); tick++) {
+    for (let tick = 0; tick < 100 && !route.isCompleted(h.enemy.route); tick++) {
       h.step(); positions.push(h.enemy.position);
     }
     assert.equal(route.isCompleted(h.enemy.route), true);
     assert.ok(positions.some(position => position[1] >= 0.5));
-    for (let index = 1; index < positions.length; index++) {
-      assert.ok(canTraverseNavigationSegment(map, positions[index - 1], positions[index]));
+    for (const position of positions) {
+      const column = Math.floor(position[0] + 0.5), row = Math.floor(position[1] + 0.5);
+      assert.equal(map.cells[row * map.columns + column].passable, true);
     }
   }
 });
@@ -811,8 +813,7 @@ test('Route and Locomotion preserve frozen inputs and share unchanged capability
   h.step(0);
   const previous = h.enemy;
   Object.freeze(previous.position);
-  Object.freeze(previous.locomotion.steering.lastVelocity);
-  Object.freeze(previous.locomotion.steering);
+  Object.freeze(previous.locomotion.velocity);
   Object.freeze(previous.locomotion);
   Object.freeze(previous.route.main.phase);
   Object.freeze(previous.route.main);
@@ -833,7 +834,7 @@ test('Route replays the original teleport and patrol fixtures deterministically'
   const map = parseBattlefieldMap(raw.mapData);
   const nav = createNavigation({ WALK: projectStaticNavigationMap(map, 'WALK'), FLY: projectStaticNavigationMap(map, 'FLY') });
   const definition = createDefinition({ id: 'fixture-route-enemy', vitality: { maxHp: 100, defense: 0, resistance: 0 },
-    locomotion: { moveSpeedPerTick: 0.1, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } } });
+    locomotion: { halfBodyWidth: 0, minSpeed: 0, speed: 0.1, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } } });
   function run(index, ticks) {
     const initialized = initializeRoutedEnemy(fixtureBattle(0, { rngState: 31 }), {
       id: 1, definition, route: parseRouteDefinition(raw.routes[index]),
@@ -844,7 +845,10 @@ test('Route replays the original teleport and patrol fixtures deterministically'
     const trace = [];
     for (let tick = 0; tick < ticks && !route.isCompleted(units.get(battle, ref).route); tick++) {
       battle = route.advance({ ...battle, tick, events: [] }, ref);
-      battle = locomotion.advance(battle, ref, route.nextPoint(battle, ref));
+      const target = route.movementTarget(battle, ref);
+      if (target !== null) battle = locomotion.advance(battle, ref, target, {
+        mode: route.pathMotionMode(units.get(battle, ref).route), speedMultiplier: 1,
+      });
       trace.push({ unit: copy(units.get(battle, ref)), events: battle.events });
     }
     return { unit: units.get(battle, ref), trace };

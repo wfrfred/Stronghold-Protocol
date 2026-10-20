@@ -27,10 +27,10 @@ import {
 } from "../../dist/core/tactical/unit/capability/action/capability.js";
 import { resolveSpeed } from "../../dist/core/tactical/unit/capability/action/timing.js";
 import {
-    setMoveSpeedContribution,
-    removeMoveSpeedContribution,
-} from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
-import { resolveMoveSpeed as resolveMoveSpeedPerTick } from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
+    setSpeedContribution as setMoveSpeedContribution,
+    removeSpeedContribution as removeMoveSpeedContribution,
+} from "../../dist/core/tactical/unit/capability/locomotion/operations.js";
+import { advance as advanceLocomotion } from "../../dist/core/tactical/unit/capability/locomotion/operations.js";
 import { initialize } from "../helpers/unit.js";
 import * as modifier from "../../dist/core/tactical/unit/contribution/attribute.js";
 import {
@@ -253,8 +253,8 @@ test("attribute modifiers: native Mire percentages affect existing ASPD and norm
         definition: {
             id: "mire-receiver",
             locomotion: {
-                moveSpeedPerTick: 1 / 30,
-                minimumMoveSpeedPerTick: 0.1 / 30,
+                halfBodyWidth: 0, speed: 1 / 30,
+                minSpeed: 0.1 / 30,
                 steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 },
             },
             action: { definitions: Definitions.empty().add(createAttack({ id: 'normal', speed: 200,
@@ -289,10 +289,9 @@ test("attribute modifiers: native Mire percentages affect existing ASPD and norm
         190,
     );
     close(
-        resolveMoveSpeedPerTick(receiver.definition.locomotion, receiver.locomotion, {
-            unit: receiver,
-            battlefield: battlefieldView(installed),
-        }),
+        getUnit(advanceLocomotion(installed, unitRef(receiver), {
+            nextPoint: [20, 0], goal: [20, 0],
+        }, { mode: "WALK", speedMultiplier: 1 }), receiver.id).position[0] - receiver.position[0],
         0.95 / 30,
     );
 });

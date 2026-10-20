@@ -65,7 +65,7 @@ function scenario(skill, { targets = 1, attackTargets = 1, windupTicks = 0, cont
       ...Array.from({ length: targets }, (_, index) => ({ definition: target(), position: [index + 1, 0] }))],
     schedule: { type: 'TIMELINE', spawns: [{
       definition: { id: 'future', vitality: { maxHp: 1, defense: 0, resistance: 0 }, locomotion: {
-        moveSpeedPerTick: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 },
+        halfBodyWidth: 0, minSpeed: 0, speed: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 },
       } }, tick: 199,
       route: { pathMotionMode: 'WALK', startPosition: [0, 7], endPosition: [0, 7],
         spawnOffset: [0, 0], spawnRandomRange: [0, 0], checkpoints: [], allowDiagonalMove: false,

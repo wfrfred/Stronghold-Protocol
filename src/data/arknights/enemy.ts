@@ -230,9 +230,10 @@ export function createEnemyMovementContent(
         id,
         vitality: { defense: 0, resistance: 0, maxHp },
         locomotion: {
-            moveSpeedPerTick: perSecondToPerTick(moveSpeed),
-            minimumMoveSpeedPerTick: perSecondToPerTick(0.1),
+            speed: perSecondToPerTick(moveSpeed),
+            minSpeed: perSecondToPerTick(0.1),
             steeringParameters: profile.steeringParameters,
+            halfBodyWidth: profile.halfBodyWidth,
         },
     });
 

@@ -1,50 +1,10 @@
-import { Tile, World, type WorldOffset, type WorldPosition } from "../../../geometry/coordinate.js";
-import { Map } from "../../../battlefield/navigation/map.js";
-import {
-    integrateSteeringDirection,
-    type SteeringParameters,
-    type SteeringResult,
-    type SteeringState,
-} from "./steering.js";
+import { Tile, World, type WorldPosition } from "../../../geometry/coordinate.js";
+import type { Map } from "../../../battlefield/navigation/map.js";
 
-export type MotionOverride =
-    | {
-          readonly type: "DISPLACEMENT";
-          readonly displacement: WorldOffset;
-      }
-    | {
-          readonly type: "DIRECTION";
-          readonly direction: WorldOffset;
-      };
-
-export function getNavigationRecoveryTarget(
-    map: Map,
-    position: WorldPosition,
-    locatorOffset: WorldOffset,
-): WorldPosition | null {
-    const margin = Number.EPSILON * Math.max(map.rows, map.columns);
-    const minimum = [-0.5 + margin, -0.5 + margin] as const;
-    const maximum = [map.columns - 0.5 - margin, map.rows - 0.5 - margin] as const;
-    const minX = Math.max(minimum[0], minimum[0] - locatorOffset[0]);
-    const maxX = Math.min(maximum[0], maximum[0] - locatorOffset[0]);
-    const minY = Math.max(minimum[1], minimum[1] - locatorOffset[1]);
-    const maxY = Math.min(maximum[1], maximum[1] - locatorOffset[1]);
-
-    if (minX > maxX || minY > maxY) {
-        return null;
-    }
-
-    return [
-        Math.max(minX, Math.min(maxX, position[0])),
-        Math.max(minY, Math.min(maxY, position[1])),
-    ];
-}
-
-export function reflectNavigationMovement(
+export function reflect(
     position: WorldPosition,
     nextPosition: WorldPosition,
     map: Map,
-    target: WorldPosition | null = null,
 ): WorldPosition {
     const origin = World.toTile(position);
 
@@ -53,16 +13,10 @@ export function reflectNavigationMovement(
     }
 
     const destination = World.toTile(nextPosition);
-    const cell = map.get(destination);
-    const targetTile = target === null ? null : World.toTile(target);
 
     if (
         (destination[0] === origin[0] && destination[1] === origin[1]) ||
-        (cell?.passable === true &&
-            (cell.cost < 1000 ||
-                (targetTile !== null &&
-                    destination[0] === targetTile[0] &&
-                    destination[1] === targetTile[1])))
+        map.get(destination)?.passable === true
     ) {
         return nextPosition;
     }
@@ -70,34 +24,8 @@ export function reflectNavigationMovement(
     const normal = World.difference(Tile.center(destination), position);
     const magnitude = Math.hypot(normal[0], normal[1]);
     const unitNormal = World.scale(normal, 1 / magnitude);
-    const displacement = World.difference(nextPosition, position);
-    const dot = displacement[0] * unitNormal[0] + displacement[1] * unitNormal[1];
+    const delta = World.difference(nextPosition, position);
+    const dot = delta[0] * unitNormal[0] + delta[1] * unitNormal[1];
 
-    return World.translate(
-        position,
-        World.difference(displacement, World.scale(unitNormal, 2 * dot)),
-    );
-}
-
-export function applyMotionOverride(
-    state: Readonly<SteeringState>,
-    position: WorldPosition,
-    override: MotionOverride,
-    moveSpeedPerTick: number,
-    parameters: SteeringParameters,
-): SteeringResult {
-    if (override.type === "DISPLACEMENT") {
-        return {
-            position: World.translate(position, override.displacement),
-            state: { lastVelocity: state.lastVelocity },
-        };
-    }
-
-    return integrateSteeringDirection(
-        state,
-        position,
-        override.direction,
-        moveSpeedPerTick,
-        parameters,
-    );
+    return World.translate(position, World.difference(delta, World.scale(unitNormal, 2 * dot)));
 }

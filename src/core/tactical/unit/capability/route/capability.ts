@@ -53,6 +53,7 @@ export type Phase =
 
 export interface Progress {
     readonly definition: Definition;
+    readonly pathMotionMode: MotionMode;
     readonly phase: Phase;
 }
 
@@ -96,6 +97,7 @@ export function initialize(battle: BattleState, definition: Definition): Result<
         value: {
             main: {
                 definition,
+                pathMotionMode: definition.pathMotionMode,
                 phase:
                     definition.checkpoints.length === 0
                         ? { type: "END" }

@@ -13,13 +13,12 @@ import {
     updateUnit,
 } from "../../dist/core/tactical/battle/state.js";
 import {
-    setMoveSpeedContribution,
-    removeMoveSpeedContribution,
+    setSpeedContribution,
+    removeSpeedContribution,
     setRule,
     removeRule,
-    resolveMoveSpeed,
-} from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
-import { advance } from "../../dist/core/tactical/unit/capability/locomotion/step.js";
+} from "../../dist/core/tactical/unit/capability/locomotion/operations.js";
+import { advance } from "../../dist/core/tactical/unit/capability/locomotion/operations.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { copy } from "../../dist/core/tactical/unit/snapshot.js";
 import * as modifier from "../../dist/core/tactical/unit/contribution/attribute.js";
@@ -37,8 +36,8 @@ function harness({ speed = 0.25, minimum = 0, steeringParameters } = {}) {
             vitality: { maxHp: 100, defense: 0, resistance: 0 },
             spatialPresence: {},
             locomotion: {
-                moveSpeedPerTick: speed,
-                minimumMoveSpeedPerTick: minimum,
+                halfBodyWidth: 0, speed: speed,
+                minSpeed: minimum,
                 steeringParameters: steeringParameters ?? {
                     steeringFactor: 1,
                     maxSteeringForce: 100,
@@ -52,15 +51,18 @@ function harness({ speed = 0.25, minimum = 0, steeringParameters } = {}) {
         set work(next) { work = next; },
         get unit() { return getUnit(work, 0); },
         step(tick, target = [20, 0], multiplier = 1) {
-            work = advance({ ...work, tick }, unitRef(getUnit(work, 0)), target, multiplier);
+            work = { ...work, tick };
+            if (target !== null) {
+                work = advance(work, unitRef(getUnit(work, 0)), { nextPoint: target, goal: target }, { mode: "WALK", speedMultiplier: multiplier });
+            }
             return getUnit(work, 0);
         },
     };
 }
 
 const output = {
-    capability: "locomotion", set: setMoveSpeedContribution,
-    remove: removeMoveSpeedContribution,
+    capability: "locomotion", set: setSpeedContribution,
+    remove: removeSpeedContribution,
     value: (instance) => [instance.data.value],
 };
 function movementEffect(value = modifier.create({ multiplier: -0.5 })) {
@@ -76,10 +78,8 @@ const changeSpeed = (work, program, next) => {
 };
 function speed(work) {
     const unit = getUnit(work, 0);
-    return resolveMoveSpeed(unit.definition.locomotion, unit.locomotion, {
-        unit,
-        battlefield: battlefieldView(work),
-    });
+    const moved = advance(work, unitRef(unit), { nextPoint: [20, 0], goal: [20, 0] }, { mode: "WALK", speedMultiplier: 1 });
+    return getUnit(moved, 0).position[0] - unit.position[0];
 }
 
 test("move speed: minimum, arithmetic and movement permission are separate", () => {
@@ -120,9 +120,9 @@ test("move speed: effect lifecycle preserves shared immutable snapshots", () => 
     h.work = effects.setEnabled(h.work, address, true);
     const participating = copy(h.unit);
     h.work = effects.end(h.work, address);
-    assert.equal(h.unit.locomotion.moveSpeed.length, 0);
-    assert.equal(copied.locomotion.moveSpeed.length, 0);
-    assert.equal(participating.locomotion.moveSpeed.length, 1);
+    assert.equal(h.unit.locomotion.speed.length, 0);
+    assert.equal(copied.locomotion.speed.length, 0);
+    assert.equal(participating.locomotion.speed.length, 1);
     assert.equal(h.work.execution.rngState, 17);
 });
 
@@ -139,7 +139,9 @@ test("move speed: acceleration, zero budget and restoration use current contribu
     h.work = changeSpeed(h.work, program, state => ({
         ...state, value: modifier.create({ multiplier: -1 }),
     }));
+    const velocity = h.unit.locomotion.velocity;
     close(h.step(3).position[0], 0.875);
+    assert.equal(h.unit.locomotion.velocity, velocity);
     h.work = effects.setEnabled(h.work, address, false);
     close(h.step(4).position[0], 1.125);
     assert.equal(h.work.execution.rngState, 17);
@@ -147,8 +149,8 @@ test("move speed: acceleration, zero budget and restoration use current contribu
 
 test("move speed: live contributions read latest battle and unit facts", () => {
     const program = contributionEffect("live-move", {}, {
-        capability: "locomotion", set: setMoveSpeedContribution,
-        remove: removeMoveSpeedContribution, dynamic: true,
+        capability: "locomotion", set: setSpeedContribution,
+        remove: removeSpeedContribution, dynamic: true,
         value: (_, { unit, battlefield }) => {
             assert.equal(battlefield.getUnit(unit.id).vitality.hp, unit.vitality.hp);
             return [modifier.create({ finalScaler: unit.vitality.hp / 100 })];
@@ -161,16 +163,16 @@ test("move speed: live contributions read latest battle and unit facts", () => {
         ...fullHp, vitality: { ...fullHp.vitality, hp: 50 },
     });
     close(h.step(0, [20, 0], 0.5).position[0], 0.125);
-    assert.equal(h.unit.definition.locomotion.moveSpeedPerTick, 0.5);
+    assert.equal(h.unit.definition.locomotion.speed, 0.5);
     assert.equal(fullHp.vitality.hp, 100);
 });
 
 test("locomotion: one target consumes at most one movement budget without overshoot", () => {
     const h = harness({ speed: 10 });
     assert.deepEqual(h.step(0, [0.2, 0]).position, [0.2, 0]);
-    assert.equal(h.unit.locomotion.moving, true);
+    assert.deepEqual(h.unit.locomotion.velocity, [0, 0]);
     assert.deepEqual(h.step(1, [0.2, 0]).position, [0.2, 0]);
-    assert.equal(h.unit.locomotion.moving, false);
+    assert.equal("moving" in h.unit.locomotion, false);
     const far = harness({ speed: 0.25 });
     close(far.step(0, [20, 0]).position[0], 0.25);
     close(far.step(1, [20, 0]).position[0], 0.5);
@@ -178,7 +180,7 @@ test("locomotion: one target consumes at most one movement budget without oversh
     assert.equal("mainRoute" in far.unit.locomotion, false);
 });
 
-test("locomotion: null tracking target stops inertia without drifting", () => {
+test("locomotion: absent tracking target skips advancement and preserves inertia", () => {
     const h = harness({
         speed: 0.5,
         steeringParameters: { steeringFactor: 0.2, maxSteeringForce: 0.1 },
@@ -186,9 +188,8 @@ test("locomotion: null tracking target stops inertia without drifting", () => {
     close(h.step(0).position[0], 0.1);
     const position = h.unit.position;
     assert.equal(h.step(1, null).position, position);
-    assert.equal(h.unit.locomotion.moving, false);
-    assert.deepEqual(h.unit.locomotion.steering.lastVelocity, [0, 0]);
-    assert.equal(advance(h.work, unitRef(h.unit), null), h.work);
+    assert.equal("moving" in h.unit.locomotion, false);
+    assert.deepEqual(h.unit.locomotion.velocity, [0.1, 0]);
 });
 
 test("locomotion: lifecycle, presence and blocking gate movement", () => {
@@ -205,8 +206,8 @@ test("locomotion: lifecycle, presence and blocking gate movement", () => {
     };
     assert.deepEqual(h.step(1).position, [0, 0]);
     h.work = updateUnit(h.work, { ...h.unit, lifecycle: "LEAVING" });
-    assert.equal(advance(h.work, unitRef(h.unit), [20, 0]), h.work);
-    assert.equal(advance(h.work, { id: 99 }, [20, 0]), h.work);
+    assert.equal(advance(h.work, unitRef(h.unit), { nextPoint: [20, 0], goal: [20, 0] }, { mode: "WALK", speedMultiplier: 1 }), h.work);
+    assert.equal(advance(h.work, { id: 99 }, { nextPoint: [20, 0], goal: [20, 0] }, { mode: "WALK", speedMultiplier: 1 }), h.work);
 });
 
 test("move speed: native Mire modifier slows movement and expiry restores it", () => {
@@ -229,6 +230,6 @@ test("move speed: native Mire modifier slows movement and expiry restores it", (
         positions.push(h.step(tick).position[0]);
     }
     positions.forEach((position, index) => close(position, [0.19, 0.38, 0.58, 0.78][index]));
-    assert.equal(h.unit.locomotion.moveSpeed.length, 0);
+    assert.equal(h.unit.locomotion.speed.length, 0);
     assert.equal(h.work.execution.rngState, 17);
 });

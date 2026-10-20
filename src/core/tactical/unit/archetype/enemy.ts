@@ -75,9 +75,9 @@ export function createDefinition(
         throw new TypeError("enemy definition id must be nonempty");
     }
 
-    assertNonnegativeNumber(definition.locomotion.moveSpeedPerTick, "enemy moveSpeedPerTick");
-    const minimumMoveSpeedPerTick = definition.locomotion.minimumMoveSpeedPerTick ?? 0;
-    assertNonnegativeNumber(minimumMoveSpeedPerTick, "enemy minimumMoveSpeedPerTick");
+    assertNonnegativeNumber(definition.locomotion.speed, "enemy speed");
+    assertNonnegativeNumber(definition.locomotion.minSpeed, "enemy minSpeed");
+    assertNonnegativeNumber(definition.locomotion.halfBodyWidth, "enemy halfBodyWidth");
 
     return Object.freeze({
         id: definition.id,
@@ -89,9 +89,10 @@ export function createDefinition(
         ...(definition.targetable === undefined ? {} : { targetable: definition.targetable }),
         ...(definition.occupancy === undefined ? {} : { occupancy: definition.occupancy }),
         locomotion: Object.freeze({
-            moveSpeedPerTick: definition.locomotion.moveSpeedPerTick,
-            minimumMoveSpeedPerTick,
+            speed: definition.locomotion.speed,
+            minSpeed: definition.locomotion.minSpeed,
             steeringParameters: Object.freeze({ ...definition.locomotion.steeringParameters }),
+            halfBodyWidth: definition.locomotion.halfBodyWidth,
         }),
         ...(definition.elemental === undefined
             ? {}

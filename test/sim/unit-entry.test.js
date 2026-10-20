@@ -57,7 +57,7 @@ test('initial entry callbacks see the whole registered batch and preceding callb
 test('factory-created enemies enter after spawning and keep immutable old snapshots', () => {
   const trace = [];
   const definition = createEnemy({ ...markEntered(trace, 'spawned'), locomotion: {
-    moveSpeedPerTick: 0, minimumMoveSpeedPerTick: 0,
+    halfBodyWidth: 0, speed: 0, minSpeed: 0,
     steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 },
   } });
   const runtime = new BattleRuntime(input({ schedule: { type: 'TIMELINE', spawns: [spawn(definition)] } }));
@@ -80,7 +80,7 @@ test('predefined appearances and deployment initialize once; relocation does not
     creation: { type: 'UNIT', definition: markEntered(trace, 'predefined'), position: [2, 0] },
   }], schedule: { type: 'TIMELINE', spawns: [spawn(createEnemy({
     id: 'later', vitality: { maxHp: 100, defense: 0, resistance: 0 }, locomotion: {
-      moveSpeedPerTick: 0, minimumMoveSpeedPerTick: 0,
+      halfBodyWidth: 0, speed: 0, minSpeed: 0,
       steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 },
     },
   }), 1000)] } }));

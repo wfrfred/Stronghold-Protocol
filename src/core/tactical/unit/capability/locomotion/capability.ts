@@ -1,93 +1,63 @@
-import * as registry from "../../hook/hook.js";
+import { assertNonnegativeNumber } from "../../../../common/assert.js";
 import type { State as BattleState, Result } from "../../../battle/state.js";
+import type { MotionMode } from "../../../battlefield/navigation/state.js";
+import {
+    createWorldOffset,
+    type WorldOffset,
+    type WorldPosition,
+} from "../../../geometry/coordinate.js";
 import type { Context } from "../../query.js";
 import type { Unit } from "../../unit.js";
-import { createSteeringState, type SteeringParameters, type SteeringState } from "./steering.js";
-import * as contribution from "../../contribution/contribution.js";
-import * as attribute from "../../contribution/attribute.js";
+import type { Contribution } from "../../contribution/contribution.js";
+import type * as attribute from "../../contribution/attribute.js";
+import type { SteeringParameters } from "./steering.js";
 
 export interface Definition {
-    readonly moveSpeedPerTick: number;
-    readonly minimumMoveSpeedPerTick?: number;
+    readonly speed: number;
+    readonly minSpeed: number;
     readonly steeringParameters: SteeringParameters;
+    readonly halfBodyWidth: number;
 }
 
 export interface Rule {
     readonly id: string;
-    readonly allows: (battle: BattleState, unit: Unit) => boolean;
+    readonly allows: (battle: BattleState, self: Unit & Locomotion) => boolean;
 }
 
 export interface State {
-    readonly moving: boolean;
-    readonly moveSpeed: readonly contribution.Contribution<attribute.Input<Context>>[];
-    readonly steering: SteeringState;
+    readonly velocity: WorldOffset;
+    readonly speed: readonly Contribution<attribute.Input<Context>>[];
     readonly rules: readonly Rule[];
 }
 
 export interface Locomotion {
-    readonly definition: {
-        readonly locomotion: Definition;
-    };
+    readonly definition: { readonly locomotion: Definition };
     readonly locomotion: State;
+}
+
+export interface MovementTarget {
+    readonly nextPoint: WorldPosition;
+    readonly goal: WorldPosition;
+}
+
+export interface MovementContext {
+    readonly mode: MotionMode;
+    readonly speedMultiplier: number;
 }
 
 export function hasLocomotion<U extends Unit>(unit: U): unit is U & Locomotion {
     return "locomotion" in unit && "locomotion" in unit.definition;
 }
 
-export const initialize: (battle: BattleState, definition: Definition) => Result<State> = (
-    battle,
-) => {
+export function initialize(battle: BattleState, definition: Definition): Result<State> {
+    assertNonnegativeNumber(definition.speed, "speed");
+    assertNonnegativeNumber(definition.minSpeed, "minSpeed");
+    assertNonnegativeNumber(definition.halfBodyWidth, "halfBodyWidth");
+    assertNonnegativeNumber(definition.steeringParameters.steeringFactor, "steeringFactor");
+    assertNonnegativeNumber(definition.steeringParameters.maxSteeringForce, "maxSteeringForce");
+
     return {
         state: battle,
-        value: { moving: false, moveSpeed: [], steering: createSteeringState(), rules: [] },
+        value: { velocity: createWorldOffset(0, 0), speed: [], rules: [] },
     };
-};
-
-export function setRule(state: State, rule: Rule): State {
-    const rules = registry.set(state.rules, rule);
-
-    return rules === state.rules ? state : { ...state, rules };
-}
-
-export function removeRule(state: State, id: string): State {
-    const rules = registry.remove(state.rules, id);
-
-    return rules === state.rules ? state : { ...state, rules };
-}
-
-export function canMove(battle: BattleState, unit: Unit & Locomotion): boolean {
-    return unit.locomotion.rules.every((rule) => rule.allows(battle, unit));
-}
-
-function changeMoveSpeedContributions(
-    state: State,
-    transition: (entries: State["moveSpeed"]) => State["moveSpeed"],
-): State {
-    const moveSpeed = transition(state.moveSpeed);
-
-    return moveSpeed === state.moveSpeed ? state : { ...state, moveSpeed };
-}
-
-export function setMoveSpeedContribution(
-    state: State,
-    entry: contribution.Contribution<attribute.Input<Context>>,
-): State {
-    return changeMoveSpeedContributions(state, (entries) => contribution.set(entries, entry));
-}
-
-export function removeMoveSpeedContribution(state: State, id: string): State {
-    return changeMoveSpeedContributions(state, (entries) => contribution.remove(entries, id));
-}
-
-export function resolveMoveSpeed(definition: Definition, state: State, context: Context): number {
-    return Math.max(
-        definition.minimumMoveSpeedPerTick ?? 0,
-        attribute.apply(
-            definition.moveSpeedPerTick,
-            contribution
-                .resolve(state.moveSpeed)
-                .flatMap((value) => attribute.evaluate(value, context)),
-        ),
-    );
 }

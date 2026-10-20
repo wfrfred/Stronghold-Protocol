@@ -29,9 +29,9 @@ import { initializeRoutedEnemy } from "../../dist/core/tactical/battle/creation/
 import { registerUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
 import { ref, get } from "../../dist/core/tactical/unit/query.js";
 import * as route from "../../dist/core/tactical/unit/capability/route/operations.js";
-import { advance as advanceLocomotion } from "../../dist/core/tactical/unit/capability/locomotion/step.js";
-import { createSteeringParameters, integrateSteeringDirection } from '../../dist/core/tactical/unit/capability/locomotion/steering.js';
-import { applyMotionOverride, getNavigationRecoveryTarget, reflectNavigationMovement } from '../../dist/core/tactical/unit/capability/locomotion/motion.js';
+import { advance as advanceLocomotion } from "../../dist/core/tactical/unit/capability/locomotion/operations.js";
+import { createSteeringParameters, integrate } from '../../dist/core/tactical/unit/capability/locomotion/steering.js';
+import { reflect as reflectNavigationMovement } from '../../dist/core/tactical/unit/capability/locomotion/motion.js';
 
 const REAL = { skip: !hasGeneratedData() };
 const approx = (a, b, eps, msg) => assert.ok(Math.abs(a - b) <= eps, `${msg ?? ''} ${a} ≈ ${b}`);
@@ -453,41 +453,15 @@ function coreMotionMap(blocked = [], mode = 'WALK') {
 
 const coreSteeringParameters = createSteeringParameters({ steeringFactor: 0.25, maxSteeringForce: 1 });
 
-test('core boundary recovery chooses a common interior target for actual position and locator', () => {
-  const map = coreMotionMap(Array.from({ length: 24 }, (_, index) => index));
-  const margin = Number.EPSILON * Math.max(map.rows, map.columns);
-  const minimum = [-0.5 + margin, -0.5 + margin];
-  const maximum = [map.columns - 0.5 - margin, map.rows - 0.5 - margin];
-  const target = position => getNavigationRecoveryTarget(map, position, [0, 0]);
-  assert.deepEqual(target([3, 1]), [3, 1]);
-  assert.deepEqual(target([-1, 1]), [minimum[0], 1]);
-  assert.deepEqual(target([8, 1]), [maximum[0], 1]);
-  assert.deepEqual(target([3, -1]), [3, minimum[1]]);
-  assert.deepEqual(target([3, 3]), [3, maximum[1]]);
-  assert.deepEqual(target([-20, 3]), [minimum[0], maximum[1]]);
-  const shifted = getNavigationRecoveryTarget(map, [-1, 3], [0.2, -0.1]);
-  assert.ok(shifted[0] >= minimum[0] && shifted[0] <= maximum[0]);
-  assert.ok(shifted[1] >= minimum[1] && shifted[1] <= maximum[1]);
-  assert.ok(shifted[0] + 0.2 >= minimum[0] && shifted[0] + 0.2 <= maximum[0]);
-  assert.ok(shifted[1] - 0.1 >= minimum[1] && shifted[1] - 0.1 <= maximum[1]);
-  assert.equal(getNavigationRecoveryTarget(map, [0, 0], [9, 0]), null);
-});
 
-test('core steering: a zero heading decelerates, while zero speed preserves its history', () => {
-  const state = { lastVelocity: [0.2, 0.1] };
-  const position = [2, 1];
-  const before = structuredClone({ state, position });
-  const waiting = integrateSteeringDirection(state, position, [0, 0], 0.4, coreSteeringParameters);
-  approx(waiting.position[0], 2.15, 1e-12);
-  approx(waiting.position[1], 1.075, 1e-12);
-  approx(waiting.state.lastVelocity[0], 0.15, 1e-12);
-  approx(waiting.state.lastVelocity[1], 0.075, 1e-12);
-  const frozen = integrateSteeringDirection(state, position, [1, 0], 0, coreSteeringParameters);
-  assert.equal(frozen.position, position);
-  assert.equal(frozen.state.lastVelocity, state.lastVelocity);
-  assert.deepEqual({ state, position }, before);
+test('core steering: a zero heading decelerates without mutating its history', () => {
+  const velocity = [0.2, 0.1];
+  const before = structuredClone(velocity);
+  const waiting = integrate(velocity, [0, 0], 0.4, [0, 0], coreSteeringParameters);
+  approx(waiting[0], 0.15, 1e-12);
+  approx(waiting[1], 0.075, 1e-12);
+  assert.deepEqual(velocity, before);
 });
-
 test('core movement: an impassable landing tile reflects the displacement around its centre', () => {
   const map = coreMotionMap([11]);
   const start = [2.4, 1], next = [2.6, 1.2];
@@ -501,17 +475,6 @@ test('core movement: an impassable landing tile reflects the displacement around
   assert.deepEqual(reflectNavigationMovement([-1, 1], [-2, 1], map), [-2, 1]);
 });
 
-test('core movement overrides: fixed direction uses steering without a route collision pass, displacement keeps steering intact', () => {
-  const state = { lastVelocity: [0.2, 0] };
-  const directed = applyMotionOverride(state, [2.4, 1], { type: 'DIRECTION', direction: [8, 0] }, 0.2, coreSteeringParameters);
-  approx(directed.position[0], 2.6, 1e-12);
-  assert.deepEqual(directed.state.lastVelocity, [0.2, 0]);
-  const displaced = applyMotionOverride(state, [2.4, 1], { type: 'DISPLACEMENT', displacement: [0.2, 0] }, 0, coreSteeringParameters);
-  assert.deepEqual(displaced.position, [2.6, 1]);
-  assert.notEqual(displaced.state, state);
-  assert.equal(displaced.state.lastVelocity, state.lastVelocity);
-  assert.deepEqual(state, { lastVelocity: [0.2, 0] });
-});
 
 function coreDisplacedEnemy(checkpoints = [{
   type: 'MOVE', target: { position: [1, 6], reachOffset: [0.2, 0.1] },
@@ -524,7 +487,7 @@ function coreDisplacedEnemy(checkpoints = [{
       definition: createDefinition({
         id: 'enemy_displacement_boundary',
         vitality: { maxHp: 100, defense: 0, resistance: 0 },
-        locomotion: { moveSpeedPerTick: 0.1, steeringParameters: coreSteeringParameters },
+        locomotion: { halfBodyWidth: 0, minSpeed: 0, speed: 0.1, steeringParameters: coreSteeringParameters },
       }),
       route: createInput({
         pathMotionMode: 'WALK',
@@ -552,7 +515,10 @@ function coreDisplacedEnemy(checkpoints = [{
     unitRef,
     step(battle, tick) {
       battle = route.advance({ ...battle, tick }, unitRef);
-      return advanceLocomotion(battle, unitRef, route.nextPoint(battle, unitRef));
+      const target = route.movementTarget(battle, unitRef);
+      return target === null ? battle : advanceLocomotion(battle, unitRef, target, {
+        mode: route.pathMotionMode(get(battle, unitRef).route), speedMultiplier: 1,
+      });
     },
   };
 }
@@ -574,7 +540,7 @@ test('core displacement preserves route progress, sampled definition and determi
   approx(forcedUnit.position[0], walkingUnit.position[0] + 1, 1e-12);
   approx(forcedUnit.position[1], walkingUnit.position[1] + 0.1, 1e-12);
   assert.equal(forcedUnit.route.main, progress);
-  assert.equal(forcedUnit.locomotion.steering, walkingUnit.locomotion.steering);
+  assert.equal(forcedUnit.locomotion.velocity, walkingUnit.locomotion.velocity);
   assert.equal(forced.execution, walking.execution);
   assert.equal(JSON.stringify(walkingUnit), before);
   assert.deepEqual(displace(walking), forced);
@@ -590,20 +556,21 @@ test('core displacement does not suspend the route absolute wait deadline', () =
   const h = coreDisplacedEnemy([{ type: 'WAIT_FOR_TICKS', durationTicks: 3 }]);
   let battle = route.advance(h.battle, h.unitRef);
   const initial = get(battle, h.unitRef);
-  const steering = { lastVelocity: [0.05, 0] };
+  const velocity = [0.05, 0];
   battle = updateUnit(battle, {
     ...initial, position: [initial.position[0] + 1, initial.position[1]],
-    locomotion: { ...initial.locomotion, steering },
+    locomotion: { ...initial.locomotion, velocity },
   });
   const forced = get(battle, h.unitRef);
   assert.deepEqual(forced.position, [1.1, 1.05]);
   assert.deepEqual(forced.route.main.phase.checkpointState, {
     type: 'WAITING', deadlineTick: 3,
   });
-  assert.equal(forced.locomotion.steering, steering);
+  assert.equal(forced.locomotion.velocity, velocity);
   battle = route.advance({ ...battle, tick: 1 }, h.unitRef);
   assert.equal(get(battle, h.unitRef).route.main, forced.route.main);
-  battle = advanceLocomotion(battle, h.unitRef, [forced.position[0] + 1, forced.position[1]]);
+  const goal = [forced.position[0] + 1, forced.position[1]];
+  battle = advanceLocomotion(battle, h.unitRef, { nextPoint: goal, goal }, { mode: "WALK", speedMultiplier: 1 });
   assert.ok(get(battle, h.unitRef).position[0] > forced.position[0]);
   assert.equal(get(battle, h.unitRef).route.main.phase.checkpointState.deadlineTick, 3);
   const sameTick = route.advance(battle, h.unitRef);
@@ -619,7 +586,7 @@ test('core displacement outside the map resumes with budgeted recovery and prese
   battle = updateUnit(battle, {
     ...initial,
     position: [initial.position[0] - 1, initial.position[1]],
-    locomotion: { ...initial.locomotion, steering: { lastVelocity: [0.02, 0.04] } },
+    locomotion: { ...initial.locomotion, velocity: [0.02, 0.04] },
   });
   const forced = get(battle, h.unitRef);
   const before = JSON.stringify(forced);

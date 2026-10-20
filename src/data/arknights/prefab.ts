@@ -14,6 +14,7 @@ export interface EnemyMovementPrefab {
     readonly delayToBornTicks: number;
     readonly onlyDelayToBornOnTileStart: boolean;
     readonly steeringParameters: SteeringParameters;
+    readonly halfBodyWidth: number;
 }
 
 export interface TileDeploymentPrefab {
@@ -147,6 +148,7 @@ export function parseEnemyMovementPrefab(value: unknown): EnemyMovementPrefab {
                 nonnegative(movement._maxSteeringForce, "movement _maxSteeringForce") /
                 TICKS_PER_SECOND ** 2,
         }),
+        halfBodyWidth: nonnegative(movement._halfBodyWidth, "movement _halfBodyWidth"),
     });
 }
 

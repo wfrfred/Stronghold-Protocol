@@ -322,7 +322,7 @@ test("factory-created enemies retain onLeave and call it only for an actual depa
   };
   const definition = createEnemyDefinition({
     id: "enemy-with-leave", vitality: { maxHp: 100, defense: 0, resistance: 0 },
-    locomotion: { moveSpeedPerTick: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 } },
+    locomotion: { halfBodyWidth: 0, minSpeed: 0, speed: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 } },
     onLeave,
   });
   assert.equal(definition.onLeave, onLeave);

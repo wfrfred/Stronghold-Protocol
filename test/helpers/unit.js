@@ -22,7 +22,7 @@ export function fixtureDefinition(capability) {
         case "vitality": return { maxHp: 100, defense: 0, resistance: 0 };
         case "action": return { definitions: Definitions.empty() };
         case "locomotion": return {
-            moveSpeedPerTick: 0,
+            halfBodyWidth: 0, minSpeed: 0, speed: 0,
             steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 },
         };
         case "targetable":

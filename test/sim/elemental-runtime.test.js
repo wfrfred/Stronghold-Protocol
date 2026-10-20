@@ -363,9 +363,9 @@ function battle(receiver, type, { moving = false, targetStates } = {}) {
     action: { definitions: Definitions.empty().add(casterAttack) } });
   const victim = definition(receiver, { id: 'victim', allegiance: { side: 'ENEMY' },
     action: { definitions: Definitions.empty().add(action(1)) },
-    ...(moving ? { locomotion: { moveSpeedPerTick: 0.001, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } }, blockable: { volume: 1 } } : {}) });
+    ...(moving ? { locomotion: { halfBodyWidth: 0, minSpeed: 0, speed: 0.001, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } }, blockable: { volume: 1 } } : {}) });
   const base = createLegacyCombatSpec({ rows: 1, columns: 8, operators: [], enemies: [], maxTicks: 600, seed: 7 });
-  const keepOpen = { id: 'future', vitality: { maxHp: 1, defense: 0, resistance: 0 }, locomotion: { moveSpeedPerTick: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } } };
+  const keepOpen = { id: 'future', vitality: { maxHp: 1, defense: 0, resistance: 0 }, locomotion: { halfBodyWidth: 0, minSpeed: 0, speed: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } } };
   const runtime = new BattleRuntime({ ...base,
     initialUnits: [{ definition: caster, position: [0, 0] }, ...(moving ? [] : [placement({ definition: victim, position: [1, 0], ...(targetStates === undefined ? {} : { states: targetStates(victim) }) })])],
     schedule: { type: 'TIMELINE', spawns: [...(moving ? [spawn(victim, 0)] : []), spawn(keepOpen, 599)] },

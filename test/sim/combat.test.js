@@ -499,7 +499,7 @@ test('core combat: the limited legacy adapter rejects unsupported content and pr
 
   assert.equal(enemy.definition.action.definitions.values()[0].intervalTicks, 60);
   assert.equal(battle.snapshot().units[0].definition.action.definitions.values()[0].speed, 200);
-  assert.equal(enemy.definition.locomotion.moveSpeedPerTick, 1 / 60);
+  assert.equal(enemy.definition.locomotion.speed, 1 / 60);
   assert.throws(() => createLegacyCombatBattle({ ...options, operators: [{ definition: guard({ skill: { spCost: 1 } }), position: [1, 5] }] }), /does not execute operator skills/);
   assert.throws(() => createLegacyCombatBattle({ ...options, operators: [{ definition: guard({ dmgType: 'heal' }), position: [1, 5] }] }), /only supports physical, arts and true damage/);
   assert.throws(() => createLegacyCombatBattle({ ...options, operators: [{ definition: guard({ attackKind: 'none' }), position: [1, 5] }] }), /ordinary attacks/);
