@@ -11,6 +11,7 @@ import type { Unit } from "../../unit.js";
 import type { Contribution } from "../../contribution/contribution.js";
 import type * as attribute from "../../contribution/attribute.js";
 import type { SteeringParameters } from "./steering.js";
+import * as registry from "../../hook/hook.js";
 
 export interface Definition {
     readonly speed: number;
@@ -60,4 +61,16 @@ export function initialize(battle: BattleState, definition: Definition): Result<
         state: battle,
         value: { velocity: createWorldOffset(0, 0), speed: [], rules: [] },
     };
+}
+
+export function setRule(state: State, rule: Rule): State {
+    const rules = registry.set(state.rules, rule);
+
+    return rules === state.rules ? state : { ...state, rules };
+}
+
+export function removeRule(state: State, id: string): State {
+    const rules = registry.remove(state.rules, id);
+
+    return rules === state.rules ? state : { ...state, rules };
 }

@@ -6,26 +6,15 @@ import { World } from "../../../geometry/coordinate.js";
 import * as units from "../../query.js";
 import type { Context } from "../../query.js";
 import type { Unit } from "../../unit.js";
-import * as registry from "../../hook/hook.js";
 import * as contribution from "../../contribution/contribution.js";
 import * as attribute from "../../contribution/attribute.js";
 import { isSpatiallyPresent } from "../presence/capability.js";
-import type { Locomotion, MovementContext, MovementTarget, Rule, State } from "./capability.js";
+import type { Locomotion, MovementContext, MovementTarget, State } from "./capability.js";
 import { calculate as avoidance } from "./avoidance.js";
 import { reflect } from "./motion.js";
 import { integrate } from "./steering.js";
 
-export function setRule(state: State, rule: Rule): State {
-    const rules = registry.set(state.rules, rule);
-
-    return rules === state.rules ? state : { ...state, rules };
-}
-
-export function removeRule(state: State, id: string): State {
-    const rules = registry.remove(state.rules, id);
-
-    return rules === state.rules ? state : { ...state, rules };
-}
+export { setRule, removeRule } from "./capability.js";
 
 export function setSpeedContribution(
     state: State,
@@ -73,10 +62,6 @@ export function advance(
     }
 
     const battlefield = battlefieldView(battle);
-
-    if (battlefield.blockerOf(self.id) !== undefined) {
-        return battle;
-    }
 
     assertNonnegativeNumber(context.speedMultiplier, "speedMultiplier");
     const speed = resolveSpeed(self, { unit: self, battlefield }) * context.speedMultiplier;

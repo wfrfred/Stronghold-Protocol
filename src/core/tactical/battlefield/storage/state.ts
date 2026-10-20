@@ -2,6 +2,7 @@ import { Projectiles } from "../projectile/projectiles.js";
 import type { State as NavigationState } from "../navigation/state.js";
 import type { Unit, Id } from "../../unit/unit.js";
 import { updateBlockingRelations, type BlockingRelation } from "../blocking/relations.js";
+import { synchronize as synchronizeMovement } from "../blocking/movement.js";
 import type { BattlefieldChangeResult } from "../contract.js";
 import {
     deriveBattlefieldDependencies,
@@ -118,10 +119,11 @@ export function settleBattlefieldState<U extends Unit>(
                   supportRelations,
               )
             : previous.blockingRelations;
+    const units = synchronizeMovement(content.units, blockingRelations);
 
     return finishSettlement(
         previous,
-        { ...content, supportRelations, blockingRelations },
+        { ...content, units, supportRelations, blockingRelations },
         spatial,
         content.units === previous.units
             ? previous.effectLifetimes
@@ -149,10 +151,11 @@ export function settleBattlefieldStateFully<U extends Unit>(
         spatial.unitsByTile,
         supportRelations,
     );
+    const units = synchronizeMovement(content.units, blockingRelations);
 
     return finishSettlement(
         previous,
-        { ...content, supportRelations, blockingRelations },
+        { ...content, units, supportRelations, blockingRelations },
         spatial,
         project(content.units.values()),
     );

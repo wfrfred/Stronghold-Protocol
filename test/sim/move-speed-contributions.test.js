@@ -27,12 +27,15 @@ const address = { host: { id: 0 }, id: 0 };
 const close = (actual, expected) =>
     assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} ≈ ${expected}`);
 
-function harness({ speed = 0.25, minimum = 0, steeringParameters } = {}) {
+function harness({ speed = 0.25, minimum = 0, steeringParameters, blockable = false } = {}) {
     const initialized = initialize(fixtureBattle(0, { rngState: 17 }), {
         id: 0,
         position: [0, 0],
         definition: {
             id: "dynamic-mover",
+            ...(blockable ? {
+                allegiance: { side: "ENEMY" }, spatial: { layer: "GROUND" }, blockable: { volume: 1 },
+            } : {}),
             vitality: { maxHp: 100, defense: 0, resistance: 0 },
             spatialPresence: {},
             locomotion: {
@@ -193,17 +196,17 @@ test("locomotion: absent tracking target skips advancement and preserves inertia
 });
 
 test("locomotion: lifecycle, presence and blocking gate movement", () => {
-    const h = harness();
+    const h = harness({ blockable: true });
     h.work = updateUnit(h.work, { ...h.unit, spatialPresence: { present: false } });
     assert.deepEqual(h.step(0).position, [0, 0]);
     h.work = updateUnit(h.work, { ...h.unit, spatialPresence: { present: true } });
-    h.work = {
-        ...h.work,
-        battlefield: {
-            ...h.work.battlefield,
-            blockingRelations: [{ blockerUnitId: 1, blockedUnitId: 0 }],
+    const blocker = initialize(h.work, {
+        id: 1, position: [0, 0], definition: {
+            id: "movement-blocker", allegiance: { side: "ALLY" },
+            blocker: { capacity: 1, geometry: { radius: 1 } },
         },
-    };
+    });
+    h.work = registerUnit(blocker.state, blocker.value);
     assert.deepEqual(h.step(1).position, [0, 0]);
     h.work = updateUnit(h.work, { ...h.unit, lifecycle: "LEAVING" });
     assert.equal(advance(h.work, unitRef(h.unit), { nextPoint: [20, 0], goal: [20, 0] }, { mode: "WALK", speedMultiplier: 1 }), h.work);
