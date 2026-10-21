@@ -1,3 +1,4 @@
+import { damage as damageTargeting, healing as healingTargeting } from "../helpers/targeting.js";
 import { damage as dealDamage, parameters } from "../helpers/vitality.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { attackBuff } from "../helpers/effects.js";
@@ -24,11 +25,11 @@ const hit = createShapeGeometry({ shapes: [{ type: 'CIRCLE', offset: [0, 0], rad
 function action(maxTargets = 1, extra = {}) {
   return createAttack({
     id: 'normal', triggerBindingId: 'main', intervalTicks: 1, recoveryTicks: 0, followUps: [],
-    targetGroups: [{ id: 'main', targeting: {
+    targetGroups: [{ id: 'main', targeting: damageTargeting({
       type: 'DAMAGE', scope: { type: 'RANGE', geometry: { type: 'SHAPES', geometry } },
       canTargetAir: true, includeBlockingRelations: false, preferBlockingRelations: false,
       ignoreTargetFree: false, ignoreInvisible: false, maxTargets,
-    }, operations: [{ type: 'DAMAGE', power: 1, damageType: 'TRUE', powerSource: 'SOURCE_ATTACK' }] }],
+    }), operations: [{ type: 'DAMAGE', power: 1, damageType: 'TRUE', powerSource: 'SOURCE_ATTACK' }] }],
     ...extra,
   });
 }
@@ -43,7 +44,7 @@ function actor(skill, { attackTargets = 1, windupTicks = 0, activeAction } = {})
   });
 }
 function target() {
-  return { id: 'target', vitality: { maxHp: 100000, defense: 0, resistance: 0 }, allegiance: { side: 'ENEMY' }, spatial: { layer: 'GROUND' }, hit: { geometry: hit } };
+  return { id: 'target', targetable: { restrictions: [] }, vitality: { maxHp: 100000, defense: 0, resistance: 0 }, allegiance: { side: 'ENEMY' }, spatial: { layer: 'GROUND' }, hit: { geometry: hit } };
 }
 function scenario(skill, { targets = 1, attackTargets = 1, windupTicks = 0, content, activeAction } = {}) {
   const buff = attackBuff('skill/attack', 100);

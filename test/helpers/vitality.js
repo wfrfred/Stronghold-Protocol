@@ -22,7 +22,7 @@ export function unit(
         definition: {
             id: `vitality-${id}`,
             vitality: { maxHp, defense, resistance },
-            targetable: {},
+            targetable: { restrictions: [] },
             offense: { attack },
         },
     });

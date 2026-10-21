@@ -14,7 +14,10 @@ import {
     type Configuration as AttackConfiguration,
 } from "../actions/attack.js";
 import { create as createSkillAttack, type State as SkillAttackState } from "../actions/skill.js";
-import { selectTargets } from "../../../core/tactical/unit/targeting/select.js";
+import { hasCandidate } from "../../../core/tactical/battle/targeting/select.js";
+import * as filters from "../../../core/tactical/battle/targeting/filter.js";
+import * as compare from "../../../core/tactical/battle/targeting/compare.js";
+import { first } from "../../../core/tactical/battle/targeting/selector.js";
 import { calculateHealing } from "../../../core/tactical/battle/healing/calculate.js";
 import { applyHealing } from "../../../core/tactical/battle/healing/apply.js";
 import type { HealingRequest } from "../../../core/tactical/battle/healing/contract.js";
@@ -59,7 +62,6 @@ import { removeHook, setHook } from "../../../core/tactical/battle/damage/hook.j
 import type { Definition as EffectDefinition } from "../../../core/tactical/unit/effect/definition.js";
 import { setData } from "../../../core/tactical/unit/effect/effect.js";
 import { get, install, replaceEffect } from "../../../core/tactical/unit/effect/operations.js";
-import { compileTargeting } from "../../../core/tactical/unit/targeting/compile.js";
 
 export interface Definition extends OperatorDefinition {
     readonly elemental: ElementalDefinition;
@@ -268,6 +270,12 @@ function attackDefinition(
     skill: boolean,
     recoveryTicks: number,
 ): AttackConfiguration {
+    const withinRange = filters.range({
+        type: "GRID",
+        offsets: skill ? profile.skillRange! : profile.range,
+        direction,
+    });
+
     return {
         id: skill ? "mudrock/s2" : "normal-attack",
         speed: profile.attributes.attackSpeed,
@@ -279,21 +287,18 @@ function attackDefinition(
             {
                 id: "primary",
                 targeting: {
-                    type: "DAMAGE",
-                    scope: {
-                        type: "RANGE",
-                        geometry: {
-                            type: "GRID",
-                            offsets: skill ? profile.skillRange! : profile.range,
-                            direction,
-                        },
-                    },
-                    canTargetAir: false,
-                    includeBlockingRelations: !skill,
-                    preferBlockingRelations: !skill,
-                    ignoreTargetFree: false,
-                    ignoreInvisible: false,
-                    maxTargets: skill ? Number.MAX_SAFE_INTEGER : 1,
+                    purposes: ["DAMAGE"],
+                    filter: filters.and(
+                        filters.damage,
+                        filters.ground,
+                        skill ? withinRange : filters.or(withinRange, filters.blocking),
+                    ),
+                    selector: first(
+                        skill ? Number.MAX_SAFE_INTEGER : 1,
+                        skill
+                            ? compare.distance
+                            : compare.combine(compare.blockedFirst, compare.distance),
+                    ),
                 },
                 operations: [
                     {
@@ -336,7 +341,7 @@ export function create(
     const shield = shieldEffect(profile);
     const activeConfiguration = attackDefinition(profile, direction, true, recoveryTicks);
     const normalAttack = createAttack(attackDefinition(profile, direction, false, recoveryTicks));
-    const targeting = compileTargeting(activeConfiguration.targetGroups[0].targeting, ["DAMAGE"]);
+    const targeting = activeConfiguration.targetGroups[0].targeting;
     const attackScale = value(profile.skill.blackboard, "atk_scale");
     const healRatio = value(profile.skill.blackboard, "hp_ratio");
     const stunChance = value(profile.skill.blackboard, "buff_prob");
@@ -370,7 +375,12 @@ export function create(
                 if (
                     target === undefined ||
                     !hasVitality(target) ||
-                    !targeting.accepts({ source: currentSource, battlefield }, target)
+                    !hasTargetable(target) ||
+                    !targeting.filter(
+                        state,
+                        { ...targeting, source: unitRef(currentSource) },
+                        target,
+                    )
                 ) {
                     continue;
                 }
@@ -416,8 +426,7 @@ export function create(
 
                 return (
                     source !== undefined &&
-                    selectTargets({ source, battlefield: battlefieldView(battle) }, targeting)
-                        .length > 0
+                    hasCandidate(battle, { ...targeting, source: unitRef(source) })
                 );
             },
             onStart(state, self) {
@@ -440,7 +449,7 @@ export function create(
         profile,
         direction,
         occupancy: {},
-        targetable: {},
+        targetable: { restrictions: [] },
         deployable: createDeployableDefinition({
             cost: profile.attributes.cost,
             redeployTicks: secondsToTicks(profile.attributes.respawnTime),

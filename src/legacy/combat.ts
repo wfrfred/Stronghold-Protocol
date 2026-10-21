@@ -1,6 +1,9 @@
 import { createArknightsElementalDefinition } from "../data/arknights/elemental.js";
 import { Definitions } from "../core/tactical/unit/action/definitions.js";
 import { create as createAttack } from "../content/tactical/actions/attack.js";
+import * as filters from "../core/tactical/battle/targeting/filter.js";
+import * as compare from "../core/tactical/battle/targeting/compare.js";
+import { first } from "../core/tactical/battle/targeting/selector.js";
 import { assertFiniteNumber, assertPositiveSafeInteger } from "../core/common/assert.js";
 import { BattleRuntime } from "../core/tactical/battle/runtime.js";
 import type { Input } from "../core/tactical/battle/contract.js";
@@ -145,7 +148,7 @@ function operatorDefinition(value: unknown, direction: Direction) {
 
     return {
         ...operator.createDefinition({
-            targetable: {},
+            targetable: { restrictions: [] },
             elemental: createArknightsElementalDefinition({ receiver: "CHARACTER" }),
             id: stringField(definition.chessId, "chessId"),
             vitality: {
@@ -180,21 +183,23 @@ function operatorDefinition(value: unknown, direction: Direction) {
                             {
                                 id: "primary",
                                 targeting: {
-                                    type: "DAMAGE",
-                                    scope: {
-                                        type: "RANGE",
-                                        geometry: {
-                                            type: "GRID",
-                                            offsets: attackRange(definition.rangeGrid),
-                                            direction,
-                                        },
-                                    },
-                                    canTargetAir,
-                                    includeBlockingRelations: true,
-                                    preferBlockingRelations: true,
-                                    ignoreTargetFree: false,
-                                    ignoreInvisible: false,
-                                    maxTargets: 1,
+                                    purposes: ["DAMAGE"],
+                                    filter: filters.and(
+                                        filters.damage,
+                                        ...(canTargetAir ? [] : [filters.ground]),
+                                        filters.or(
+                                            filters.range({
+                                                type: "GRID",
+                                                offsets: attackRange(definition.rangeGrid),
+                                                direction,
+                                            }),
+                                            filters.blocking,
+                                        ),
+                                    ),
+                                    selector: first(
+                                        1,
+                                        compare.combine(compare.blockedFirst, compare.distance),
+                                    ),
                                 },
                                 operations: [
                                     {
@@ -234,7 +239,7 @@ function enemyDefinition(value: unknown) {
     const radius = numberField(stats.rangeRadius, "enemy range radius");
 
     return enemy.createCombatDefinition({
-        targetable: {},
+        targetable: { restrictions: [] },
         elemental: createArknightsElementalDefinition({ receiver: "ENEMY" }),
         id: stringField(definition.key, "enemy key"),
         vitality: {
@@ -270,13 +275,13 @@ function enemyDefinition(value: unknown) {
                         {
                             id: "primary",
                             targeting: {
-                                type: "DAMAGE",
-                                scope:
+                                purposes: ["DAMAGE"],
+                                filter: filters.and(
+                                    filters.damage,
                                     applyWay === "MELEE"
-                                        ? { type: "BLOCKER" }
-                                        : {
-                                              type: "RANGE",
-                                              geometry: {
+                                        ? filters.blocker
+                                        : filters.or(
+                                              filters.range({
                                                   type: "SHAPES",
                                                   geometry: {
                                                       shapes: [
@@ -287,14 +292,14 @@ function enemyDefinition(value: unknown) {
                                                           },
                                                       ],
                                                   },
-                                              },
-                                          },
-                                canTargetAir: true,
-                                includeBlockingRelations: true,
-                                preferBlockingRelations: true,
-                                ignoreTargetFree: false,
-                                ignoreInvisible: false,
-                                maxTargets: 1,
+                                              }),
+                                              filters.blocking,
+                                          ),
+                                ),
+                                selector: first(
+                                    1,
+                                    compare.combine(compare.blockedFirst, compare.distance),
+                                ),
                             },
                             operations: [
                                 {

@@ -16,7 +16,13 @@ import {
     type CombatDefinition,
 } from "../../../core/tactical/unit/archetype/enemy.js";
 import type { Definition as OffenseDefinition } from "../../../core/tactical/unit/capability/offense/capability.js";
-import type { DamageTargetScope } from "../../../core/tactical/unit/targeting/definition.js";
+import type { RangeGeometry } from "../../../core/tactical/geometry/shape.js";
+import * as filters from "../../../core/tactical/battle/targeting/filter.js";
+import * as compare from "../../../core/tactical/battle/targeting/compare.js";
+import { first } from "../../../core/tactical/battle/targeting/selector.js";
+
+export type Scope =
+    { readonly type: "RANGE"; readonly geometry: RangeGeometry } | { readonly type: "BLOCKER" };
 
 export interface AttackTiming {
     readonly windupTicks: number;
@@ -34,7 +40,7 @@ export interface Definition extends CombatDefinition {
 export function createDefinition(
     profile: Profile,
     timing: AttackTiming,
-    scope: DamageTargetScope,
+    scope: Scope,
     halfBodyWidth: number,
 ): Definition {
     if (profile.stunImmune) {
@@ -59,14 +65,14 @@ export function createDefinition(
             {
                 id: "primary",
                 targeting: {
-                    type: "DAMAGE",
-                    scope,
-                    canTargetAir: true,
-                    includeBlockingRelations: true,
-                    preferBlockingRelations: true,
-                    ignoreTargetFree: false,
-                    ignoreInvisible: false,
-                    maxTargets: 1,
+                    purposes: ["DAMAGE"],
+                    filter: filters.and(
+                        filters.damage,
+                        scope.type === "BLOCKER"
+                            ? filters.blocker
+                            : filters.or(filters.range(scope.geometry), filters.blocking),
+                    ),
+                    selector: first(1, compare.combine(compare.blockedFirst, compare.distance)),
                 },
                 operations: [
                     {
@@ -124,7 +130,7 @@ export function createDefinition(
             action: { definitions: Definitions.empty().add(attack) },
         }),
         elemental,
-        targetable: {},
+        targetable: { restrictions: [] },
         offense: { attack: profile.attack },
         attack,
     };

@@ -1,3 +1,4 @@
+import { damage as damageTargeting } from "../helpers/targeting.js";
 import { damage as dealDamage, parameters } from "../helpers/vitality.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -17,16 +18,7 @@ import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/off
 import { definition as createSkillDefinition } from "../helpers/skill.js";
 import { activate, enter as enterSkill } from "../../dist/core/tactical/unit/capability/skill/operations.js";
 
-const targeting = {
-    type: "DAMAGE",
-    scope: { type: "RANGE", geometry: { type: "SHAPES", geometry } },
-    canTargetAir: true,
-    includeBlockingRelations: false,
-    preferBlockingRelations: false,
-    ignoreTargetFree: false,
-    ignoreInvisible: false,
-    maxTargets: 1,
-};
+const targeting = damageTargeting({ geometry: { type: "SHAPES", geometry }, canTargetAir: true });
 const group = (operations) => ({ id: "primary", targeting, operations });
 const start = (state, definition) => actions.start(state, unitRef(getUnit(state, 0)), definition);
 

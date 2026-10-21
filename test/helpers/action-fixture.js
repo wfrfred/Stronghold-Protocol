@@ -1,3 +1,4 @@
+import { damage as damageTargeting, healing as healingTargeting } from "./targeting.js";
 import {
     create as createBattlefield,
     transition,
@@ -35,7 +36,7 @@ export function actionDefinition(power = 7, extra = {}) {
             targetGroups: [
                 {
                     id: "primary",
-                    targeting: {
+                    targeting: damageTargeting({
                         type: "DAMAGE",
                         scope: { type: "RANGE", geometry: { type: "SHAPES", geometry } },
                         canTargetAir: true,
@@ -44,7 +45,7 @@ export function actionDefinition(power = 7, extra = {}) {
                         ignoreTargetFree: false,
                         ignoreInvisible: false,
                         maxTargets: 1,
-                    },
+                    }),
                     operations: [{ type: "DAMAGE", power, damageType: "TRUE" }],
                 },
             ],
@@ -69,7 +70,7 @@ export function unit(
     const definition = {
         id: `action-${id}`,
         vitality: { maxHp: hp, defense: 0, resistance: 0 },
-        targetable: {}, spatialPresence: {}, occupancy: {},
+        targetable: { restrictions: [] }, spatialPresence: {}, occupancy: {},
         offense: { attack: 10 },
         allegiance: { side },
         spatial: { layer: "GROUND" },

@@ -1,3 +1,4 @@
+import { damage as damageTargeting, healing as healingTargeting } from "../helpers/targeting.js";
 import { damage as dealDamage, parameters } from "../helpers/vitality.js";
 import { fixtureBattle } from "../helpers/unit.js";
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
@@ -63,15 +64,15 @@ test("native attack buff data builds a shared Definition and changes attacks thr
     allegiance: { side: "ALLY" }, spatial: { layer: "GROUND" }, skill: compiled,
     action: { definitions: Definitions.empty().add(createAttack({ id: "normal",
       triggerBindingId: "target", intervalTicks: 30, recoveryTicks: 0, followUps: [],
-      targetGroups: [{ id: "target", targeting: {
+      targetGroups: [{ id: "target", targeting: damageTargeting({
         type: "DAMAGE", scope: { type: "RANGE", geometry: { type: "SHAPES", geometry } },
         canTargetAir: true, includeBlockingRelations: false, preferBlockingRelations: false,
         ignoreTargetFree: false, ignoreInvisible: false, maxTargets: 1,
-      }, operations: [{ type: "DAMAGE", powerSource: "SOURCE_ATTACK", power: 1, damageType: "TRUE" }] }],
+      }), operations: [{ type: "DAMAGE", powerSource: "SOURCE_ATTACK", power: 1, damageType: "TRUE" }] }],
     })) },
   };
   const target = {
-    id: "stationary-content-target", spatialPresence: {}, vitality: { maxHp: 1000000, defense: 0, resistance: 0 }, allegiance: { side: "ENEMY" },
+    id: "stationary-content-target", targetable: { restrictions: [] }, spatialPresence: {}, vitality: { maxHp: 1000000, defense: 0, resistance: 0 }, allegiance: { side: "ENEMY" },
     spatial: { layer: "GROUND" }, hit: { geometry },
     locomotion: { halfBodyWidth: 0, minSpeed: 0, speed: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 } },
   };

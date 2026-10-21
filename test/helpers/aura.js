@@ -1,6 +1,6 @@
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
-import { selectTargets } from "../../dist/core/tactical/unit/targeting/select.js";
+import { select } from "../../dist/core/tactical/battle/targeting/select.js";
 import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { selectStates as selectCapabilityStates } from "../../dist/core/tactical/unit/snapshot.js";
 import { initialize as initializeUnit, placement } from "./unit.js";
@@ -15,6 +15,7 @@ export function auraUnit(id, position = [0, 0], extra = {}) {
         position,
         definition: {
             id: `aura-unit-${id}`,
+            targetable: { restrictions: [] },
             vitality: { maxHp: 100, defense: 0, resistance: 0 },
             offense: { attack: 100 },
             ...extra,
@@ -48,16 +49,15 @@ export function auraEffect(
         let self = selfOf(state, context);
         if (self?.status !== "ACTIVE") return state;
         const host = getUnit(state, context.ref.host.id);
-        const selected = selectTargets(
-            { battlefield: battlefieldView(state), host },
-            {
-                candidates: (query) => query.battlefield.unitIds,
-                accepts: (query, target) =>
-                    target.id !== query.host.id && accepts(target, query.host),
-                compare: () => 0,
-                limit: (query) => query.battlefield.unitIds.length,
-            },
-        ).map((target) => target.id);
+        const selectedResult = select(state, {
+            source: unitRef(host),
+            purposes: [],
+            filter: (_battle, request, target) =>
+                target.id !== request.source.id && accepts(target, host),
+            selector: (battle, _request, candidates) => ({ state: battle, value: candidates.map(unitRef) }),
+        });
+        state = selectedResult.state;
+        const selected = selectedResult.value.map(target => target.id);
         for (const binding of self.data.bindings) {
             if (selected.includes(binding.unitId)) continue;
             state = save(state, context, (current) => ({

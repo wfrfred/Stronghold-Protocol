@@ -3,6 +3,21 @@ import type { Definition } from "../../../core/tactical/unit/effect/definition.j
 import * as vitality from "../../../core/tactical/unit/capability/vitality/capability.js";
 import * as elemental from "../../../core/tactical/unit/capability/elemental/capability.js";
 import * as targetable from "../../../core/tactical/unit/capability/targetable/capability.js";
+import { untargetableRestriction } from "./visibility.js";
+
+export const invincibilityKind = Symbol("invincibility");
+
+export const healFreeKind = Symbol("heal-free");
+
+export const invincibleRestriction: targetable.Restriction = {
+    kind: invincibilityKind,
+    allows: untargetableRestriction.allows,
+};
+
+export const healFreeRestriction: targetable.Restriction = {
+    kind: healFreeKind,
+    allows: (_battle, request) => !request.purposes.includes("HEAL"),
+};
 
 export const invincible: Definition<object, targetable.Targetable> = {
     id: "protection/invincible",
@@ -12,9 +27,9 @@ export const invincible: Definition<object, targetable.Targetable> = {
 
         return updateUnit(state, {
             ...unit,
-            targetable: targetable.setRule(unit.targetable, {
+            targetable: targetable.setRestriction(unit.targetable, {
                 id,
-                allows: ({ selector }) => selector.type !== "DAMAGE" || selector.ignoreTargetFree,
+                value: invincibleRestriction,
             }),
             ...(elemental.hasElemental(unit)
                 ? {
@@ -39,7 +54,7 @@ export const invincible: Definition<object, targetable.Targetable> = {
 
         return updateUnit(state, {
             ...unit,
-            targetable: targetable.removeRule(unit.targetable, id),
+            targetable: targetable.removeRestriction(unit.targetable, id),
             ...(elemental.hasElemental(unit)
                 ? { elemental: elemental.removeRule(unit.elemental, id) }
                 : {}),
@@ -56,18 +71,19 @@ export const healFree: Definition<object, targetable.Targetable> = {
     onEnable(state, { unit, self }) {
         return updateUnit(state, {
             ...unit,
-            targetable: targetable.setRule(unit.targetable, {
+            targetable: targetable.setRestriction(unit.targetable, {
                 id: `@effect/${self.id}/heal-free`,
-                allows: ({ selector, purposes }) =>
-                    !purposes.includes("HEAL") ||
-                    (selector.type === "HEAL" && selector.ignoreHealFree),
+                value: healFreeRestriction,
             }),
         });
     },
     onDisable(state, { unit, self }) {
         return updateUnit(state, {
             ...unit,
-            targetable: targetable.removeRule(unit.targetable, `@effect/${self.id}/heal-free`),
+            targetable: targetable.removeRestriction(
+                unit.targetable,
+                `@effect/${self.id}/heal-free`,
+            ),
         });
     },
 };

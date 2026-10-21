@@ -1,3 +1,8 @@
+import { distance } from "../../dist/core/tactical/battle/targeting/compare.js";
+import { elementDamage, elementHealing } from "../../dist/core/tactical/battle/targeting/filter.js";
+import { and, sameSide, range as inRange } from "../../dist/core/tactical/battle/targeting/filter.js";
+import { first } from "../../dist/core/tactical/battle/targeting/selector.js";
+import { damage as damageTargeting, healing as healingTargeting } from "../helpers/targeting.js";
 import { calculateDamage } from "../../dist/core/tactical/battle/damage/calculate.js";
 import { damage as dealDamage, parameters } from "../helpers/vitality.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
@@ -34,14 +39,14 @@ const range = createShapeGeometry({ shapes: [{ type: 'CIRCLE', offset: [0, 0], r
 const hit = createShapeGeometry({ shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.1 }] });
 function action(interval = 1) {
   return createAttack({ id: 'normal-attack', triggerBindingId: 'primary', intervalTicks: interval, recoveryTicks: 0,
-    targetGroups: [{ id: 'primary', targeting: {
+    targetGroups: [{ id: 'primary', targeting: damageTargeting({
       type: 'DAMAGE', scope: { type: 'RANGE', geometry: { type: 'SHAPES', geometry: range } },
       canTargetAir: true, includeBlockingRelations: false, preferBlockingRelations: false,
       ignoreTargetFree: false, ignoreInvisible: false, maxTargets: 1,
-    }, operations: [{ type: 'DAMAGE', power: 1, damageType: 'TRUE' }] }], followUps: [] });
+    }), operations: [{ type: 'DAMAGE', power: 1, damageType: 'TRUE' }] }], followUps: [] });
 }
 function definition(receiver = 'CHARACTER', overrides = {}, elementOptions = {}) {
-  return { id: `element-${receiver}`, targetable: {}, spatialPresence: {}, vitality: { maxHp: 100000, defense: 500, resistance: 50 },
+  return { id: `element-${receiver}`, targetable: { restrictions: [] }, spatialPresence: {}, vitality: { maxHp: 100000, defense: 500, resistance: 50 },
     offense: { attack: 100 },
     allegiance: { side: receiver === 'CHARACTER' ? 'ALLY' : 'ENEMY' },
     spatial: { layer: 'GROUND' }, hit: { geometry: hit },
@@ -297,11 +302,14 @@ test('invincibility observes incoming EP damage, permits EP healing and removes 
 
 test('elemental attacks select EP receivers without Vitality', () => {
   const healingAction = createAttack({ id: 'healing', triggerBindingId: 'primary', intervalTicks: 30,
-    targetGroups: [{ id: 'primary', targeting: { type: 'HEAL', geometry: { type: 'SHAPES', geometry: range },
-      includeSelf: false, ignoreAllyTargetFree: false, ignoreHealFree: false, maxTargets: 1 },
+    targetGroups: [{ id: 'primary', targeting: { purposes: ['ELEMENT_HEAL'],
+      filter: and(sameSide, inRange({ type: 'SHAPES', geometry: range }), elementHealing({ power: 100 }),
+        (_battle, request, target) => target.id !== request.source.id), selector: first(1, distance) },
       operations: [{ type: 'ELEMENT_HEAL', power: 100 }] }],
   });
   const damageAction = createAttack({ ...action().attack, id: 'damage', targetGroups: [{ ...action().attack.targetGroups[0],
+    targeting: { purposes: ['ELEMENT_DAMAGE'], filter: and(inRange({ type: 'SHAPES', geometry: range }),
+      elementDamage({ type: 'NEURAL', power: 100 })), selector: first(1, distance) },
     operations: [{ type: 'ELEMENT_DAMAGE', elementType: 'NEURAL', power: 100 }] }],
   });
   const healer = initialize({ id: 0, position: [0, 0], definition: definition('CHARACTER', {
@@ -311,7 +319,7 @@ test('elemental attacks select EP receivers without Vitality', () => {
   let receiver = initialize({ id: 1, position: [1, 0], definition: receiverDefinition });
   let work = effectFixtureWork(healer, receiver);
   work = element(work, 'BURN', 0, 200).state;
-  assert.deepEqual(chooseTargets(work, unitRef(healer), healingAction.attack).primary.map(ref => ref.id), [1]);
+  assert.deepEqual(chooseTargets(work, unitRef(healer), healingAction.attack).value.primary.map(ref => ref.id), [1]);
   work = start(work, unitRef(healer), healingAction).state;
   receiver = getUnit(work, 1);
   assert.equal('vitality' in receiver, false);
@@ -319,7 +327,7 @@ test('elemental attacks select EP receivers without Vitality', () => {
   assert.equal(work.events.filter(event => event.type === 'ELEMENT_HEAL').length, 1);
   const hostileReceiver = { ...receiver, allegiance: { side: 'ENEMY' } };
   work = effectFixtureWork(healer, hostileReceiver);
-  assert.deepEqual(chooseTargets(work, unitRef(healer), damageAction.attack).primary.map(ref => ref.id), [1]);
+  assert.deepEqual(chooseTargets(work, unitRef(healer), damageAction.attack).value.primary.map(ref => ref.id), [1]);
   work = start(work, unitRef(healer), damageAction).state;
   assert.equal(getUnit(work, 1).elemental.ep.NEURAL, 900);
 });
@@ -327,6 +335,8 @@ test('elemental attacks select EP receivers without Vitality', () => {
 test('elemental attack targeting uses current request-specific reception Rules', () => {
   const attackFor = type => createAttack({ ...action().attack, id: `element-${type}`, targetGroups: [{
     ...action().attack.targetGroups[0],
+    targeting: { purposes: ['ELEMENT_DAMAGE'], filter: and(inRange({ type: 'SHAPES', geometry: range }),
+      elementDamage({ type, power: 100 })), selector: first(1, distance) },
     operations: [{ type: 'ELEMENT_DAMAGE', elementType: type, power: 100 }],
   }] });
   const neural = attackFor('NEURAL');
@@ -339,8 +349,8 @@ test('elemental attack targeting uses current request-specific reception Rules',
   work = transitionUnit(work, 1, current => ({ ...current, elemental: setRule(current.elemental, {
     id: 'only-burn', allowsDamage: (_battle, _self, request) => request.type === 'BURN',
   }) }));
-  assert.deepEqual(chooseTargets(work, unitRef(caster), neural.attack).primary, []);
-  assert.deepEqual(chooseTargets(work, unitRef(caster), burn.attack).primary.map(ref => ref.id), [1]);
+  assert.deepEqual(chooseTargets(work, unitRef(caster), neural.attack).value.primary, []);
+  assert.deepEqual(chooseTargets(work, unitRef(caster), burn.attack).value.primary.map(ref => ref.id), [1]);
   assert.deepEqual(work.events, []);
 });
 

@@ -1,3 +1,5 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
+import { damage as damageTargeting, healing as healingTargeting } from "../helpers/targeting.js";
 import { fixtureBattle, fixtureDefinition } from "../helpers/unit.js";
 import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js';
 import { create as createAttack } from '../../dist/content/tactical/actions/attack.js';
@@ -33,7 +35,7 @@ import { hasBlocker, resolveCapacity } from '../../dist/core/tactical/unit/capab
 import { hasBlockable } from '../../dist/core/tactical/unit/capability/blocking/blockable.js';
 import * as modifier from '../../dist/core/tactical/unit/contribution/attribute.js';
 import { createHitDefinition, hasHit, hasSpatial } from '../../dist/core/tactical/unit/capability/spatial/capability.js';
-import { initialize as initializeTargetableState, hasTargetable, setRule as setTargetableRule, removeRule as removeTargetableRule, allowsTarget } from '../../dist/core/tactical/unit/capability/targetable/capability.js';
+import { initialize as initializeTargetableState, hasTargetable, setRestriction, removeRestriction, allowsRestrictions } from '../../dist/core/tactical/unit/capability/targetable/capability.js';
 import { setHook as setHealingHook, removeHook as removeHealingHook } from '../../dist/core/tactical/battle/healing/hook.js';
 import { createBlockGeometry, createRangeGeometry, createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { geometryContainsPosition, rangeContainsPosition, rangeOverlapsHit } from '../../dist/core/tactical/geometry/intersection.js';
@@ -374,10 +376,10 @@ const catalogDefinition = () => Object.freeze({
     intervalTicks: 3, recoveryTicks: 0, followUps: [],
     targetGroups: [{ id: 'primary',
       operations: [{ type: 'DAMAGE', power: 10, damageType: 'PHYSICAL' }],
-      targeting: { type: 'DAMAGE', scope: { type: 'RANGE', geometry: {
+      targeting: damageTargeting({ type: 'DAMAGE', scope: { type: 'RANGE', geometry: {
         type: 'SHAPES', geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 1 }] },
       } }, canTargetAir: false, includeBlockingRelations: false, preferBlockingRelations: false,
-        ignoreTargetFree: false, ignoreInvisible: false, maxTargets: 1 },
+        ignoreTargetFree: false, ignoreInvisible: false, maxTargets: 1 }),
     }],
    })) }),
   spatial: Object.freeze({ layer: 'GROUND' }),
@@ -394,7 +396,7 @@ function catalogRouteState(definition) {
 }
 
 test('core unit initialization pairs every declared capability with its initializer state', () => {
-  const definition = { ...catalogDefinition(), spatialPresence: {}, occupancy: {}, targetable: {},
+  const definition = { ...catalogDefinition(), spatialPresence: {}, occupancy: {}, targetable: { restrictions: [] },
     tileBinding: createTileBindingDefinition({ buildableType: 'ALL', heightType: null }) };
   const battle = fixtureBattle(17);
   const initialized = initializeUnit(battle, { id: 1, definition, position: [2, 0] });
@@ -407,7 +409,7 @@ test('core unit initialization pairs every declared capability with its initiali
   assert.equal(unit.route.main.definition, definition.route);
   assert.equal(unit.spatialPresence.present, true);
   assert.deepEqual(unit.occupancy.claims, []);
-  assert.deepEqual(unit.targetable.rules, []);
+  assert.deepEqual(unit.targetable.restrictions, []);
   assert.deepEqual(unit.tileBinding, {});
   assert.deepEqual(unit.blocker, { capacity: [], geometry: { radius: 0.7 }, rules: [] });
   assert.equal(resolveCapacity(unit.definition.blocker, unit.blocker), 2);
@@ -632,30 +634,32 @@ test('core domain rules compose independently and preserve earlier unit states',
   const second = initialize({ id: 2, definition, position: [0, 0],
     states: { targetable: initializeTargetableState(fixtureBattle(0), fixtureDefinition("targetable")).value } });
   const source = { id: 3, definition: { id: 'query_source' }, position: [0, 0] };
-  const selector = { type: 'HEAL', ignoreHealFree: false };
-  const query = target => ({ source, target, battlefield: { getUnit: () => undefined },
-    selector, purposes: ['HEAL'] });
-  const restrictSource = { id: 'source-a', allows: context => context.source.id !== source.id };
-  const restrictPurpose = { id: 'source-b', allows: context => context.purposes.includes('DAMAGE') };
-  const one = setTargetableRule(first.targetable, restrictSource);
-  const both = setTargetableRule(one, restrictPurpose);
-  const afterOne = removeTargetableRule(both, 'source-a');
-  const afterBoth = removeTargetableRule(afterOne, 'source-b');
+  const battle = fixtureBattle();
+  const request = { source: unitRef(source), purposes: ['HEAL'], filter: () => true,
+    selector: (state, _request, candidates) => ({ state, value: candidates.map(unitRef) }) };
+  const restrictSource = { id: 'source-a', value: { kind: Symbol('source'),
+    allows: (_battle, current) => current.source.id !== source.id } };
+  const restrictPurpose = { id: 'source-b', value: { kind: Symbol('purpose'),
+    allows: (_battle, current) => current.purposes.includes('DAMAGE') } };
+  const one = setRestriction(first.targetable, restrictSource);
+  const both = setRestriction(one, restrictPurpose);
+  const afterOne = removeRestriction(both, 'source-a');
+  const afterBoth = removeRestriction(afterOne, 'source-b');
 
   assert.equal(hasTargetable(first), true);
   assert.equal(hasTargetable({ id: 4, definition, position: [0, 0] }), false);
-  assert.equal(one.rules[0], restrictSource);
-  assert.equal(both.rules[0], one.rules[0]);
-  assert.equal(setTargetableRule(both, restrictSource), both);
-  assert.equal(removeTargetableRule(both, 'missing'), both);
-  assert.equal(allowsTarget(query({ ...first, targetable: both })), false);
-  assert.equal(allowsTarget(query({ ...first, targetable: afterOne })), false);
-  assert.equal(allowsTarget(query({ ...first, targetable: afterBoth })), true);
-  assert.equal(allowsTarget(query(first)), true);
-  assert.equal(allowsTarget(query(second)), true);
+  assert.equal(one.restrictions[0], restrictSource);
+  assert.equal(both.restrictions[0], one.restrictions[0]);
+  assert.equal(setRestriction(both, restrictSource), both);
+  assert.equal(removeRestriction(both, 'missing'), both);
+  assert.equal(allowsRestrictions(battle, request, { ...first, targetable: both }), false);
+  assert.equal(allowsRestrictions(battle, request, { ...first, targetable: afterOne }), false);
+  assert.equal(allowsRestrictions(battle, request, { ...first, targetable: afterBoth }), true);
+  assert.equal(allowsRestrictions(battle, request, first), true);
+  assert.equal(allowsRestrictions(battle, request, second), true);
   assert.equal(first.definition, second.definition);
-  assert.deepEqual(first.targetable.rules, []);
-  assert.equal(both.rules.length, 2);
+  assert.deepEqual(first.targetable.restrictions, []);
+  assert.equal(both.restrictions.length, 2);
 
   const denyHealing = id => ({ id, stage: 'receiving', priority: 0,
     invoke: (state, _context, pending) => ({ state,
@@ -818,7 +822,7 @@ type EnemyCapabilities = Assert<Product<EnemyProbe> extends Vitality & Locomotio
 type ProductDefinition = Assert<Equal<Product<EnemyProbe>['definition'], Pick<CapabilityDefinitions, 'vitality' | 'locomotion' | 'spatialPresence'>>>;
 type StandardDefinition = Assert<Equal<Product<{ readonly vitality: { readonly maxHp: 100; readonly defense: 0; readonly resistance: 0 } }>['definition']['vitality'], CapabilityDefinitions['vitality']>>;
 type ExtraDefinitionFields = Assert<Equal<Extract<keyof Product<EnemyProbe>['definition'], 'kind' | 'enemyCode'>, never>>;
-type EmptyDefinitions = Assert<Product<{ readonly occupancy: {}; readonly targetable: {} }> extends Occupancy & Targetable ? true : false>;
+type EmptyDefinitions = Assert<Product<{ readonly occupancy: {}; readonly targetable: { restrictions: [] } }> extends Occupancy & Targetable ? true : false>;
 type OptionalProduct = Assert<Equal<keyof Product<OptionalProbe>, 'definition'>>;
 type MetadataIsNotCapability = Assert<Equal<keyof Product<{ readonly label: string }>, 'definition'>>;
 type OptionalHasNoRequiredCapabilities = Assert<Equal<RequiredKeys<Unit & Product<OptionalProbe>>, 'id' | 'definition' | 'position' | 'effects' | 'lifecycle'>>;

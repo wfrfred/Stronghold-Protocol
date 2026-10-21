@@ -1,24 +1,20 @@
-import * as registry from "../../hook/hook.js";
+import * as contribution from "../../contribution/contribution.js";
+import type { Contribution } from "../../contribution/contribution.js";
 import type { Unit } from "../../unit.js";
-import type { TargetingDefinition } from "../../targeting/definition.js";
-import type { CombatTargetQueryContext, QueryPurpose } from "../../targeting/query.js";
+import type { Request } from "../../../battle/targeting/contract.js";
 import type { State as BattleState, Result } from "../../../battle/state.js";
 
-export type Definition = Readonly<Record<string, never>>;
-
-export interface Context extends CombatTargetQueryContext {
-    readonly target: Unit;
-    readonly selector: TargetingDefinition;
-    readonly purposes: readonly QueryPurpose[];
+export interface Definition {
+    readonly restrictions: readonly Contribution<Restriction>[];
 }
 
-export interface Rule {
-    readonly id: string;
-    readonly allows: (context: Context) => boolean;
+export interface Restriction {
+    readonly kind: symbol;
+    readonly allows: (battle: BattleState, request: Request, owner: Unit & Targetable) => boolean;
 }
 
 export interface State {
-    readonly rules: readonly Rule[];
+    readonly restrictions: readonly Contribution<Restriction>[];
 }
 
 export interface Targetable {
@@ -30,27 +26,32 @@ export function hasTargetable<U extends Unit>(unit: U): unit is U & Targetable {
     return "targetable" in unit && "targetable" in unit.definition;
 }
 
-export const initialize: (battle: BattleState, definition: Definition) => Result<State> = (
-    battle,
-) => {
-    return { state: battle, value: { rules: [] } };
-};
-
-export function setRule(state: State, rule: Rule): State {
-    const rules = registry.set(state.rules, rule);
-
-    return rules === state.rules ? state : { rules };
+export function initialize(battle: BattleState, definition: Definition): Result<State> {
+    return { state: battle, value: { restrictions: [...definition.restrictions] } };
 }
 
-export function removeRule(state: State, id: string): State {
-    const rules = registry.remove(state.rules, id);
+export function setRestriction(state: State, entry: Contribution<Restriction>): State {
+    const restrictions = contribution.set(state.restrictions, entry);
 
-    return rules === state.rules ? state : { rules };
+    return restrictions === state.restrictions ? state : { restrictions };
 }
 
-export function allowsTarget(context: Context): boolean {
-    return (
-        !hasTargetable(context.target) ||
-        context.target.targetable.rules.every((rule) => rule.allows(context))
-    );
+export function removeRestriction(state: State, id: string): State {
+    const restrictions = contribution.remove(state.restrictions, id);
+
+    return restrictions === state.restrictions ? state : { restrictions };
+}
+
+export function allowsRestrictions(
+    battle: BattleState,
+    request: Request,
+    owner: Unit & Targetable,
+    ignore?: (kind: symbol) => boolean,
+): boolean {
+    return contribution
+        .resolve(owner.targetable.restrictions)
+        .every(
+            (restriction) =>
+                (ignore?.(restriction.kind) ?? false) || restriction.allows(battle, request, owner),
+        );
 }

@@ -1,3 +1,4 @@
+import { damage as damageTargeting, healing as healingTargeting } from "../helpers/targeting.js";
 import { definition as skillDefinition } from "../helpers/skill.js";
 import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js';
 import { create as createAttack } from '../../dist/content/tactical/actions/attack.js';
@@ -34,7 +35,7 @@ const map = () =>
 
 const definition = () => ({
     id: "paired-capabilities",
-    targetable: {}, spatialPresence: {}, occupancy: {}, tileBinding: { heightType: null, buildableType: "ALL", advancedBuildableMask: null },
+    targetable: { restrictions: [] }, spatialPresence: {}, occupancy: {}, tileBinding: { heightType: null, buildableType: "ALL", advancedBuildableMask: null },
     deployable: {
         cost: 10,
         redeployTicks: 30,
@@ -54,7 +55,7 @@ const definition = () => ({
                 {
                     id: "primary",
                     operations: [{ type: "DAMAGE", power: 10, damageType: "PHYSICAL" }],
-                    targeting: {
+                    targeting: damageTargeting({
                         type: "DAMAGE",
                         scope: {
                             type: "RANGE",
@@ -71,7 +72,7 @@ const definition = () => ({
                         ignoreTargetFree: false,
                         ignoreInvisible: false,
                         maxTargets: 1,
-                    },
+                    }),
                 },
             ],
          })) }),

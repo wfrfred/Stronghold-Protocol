@@ -26,7 +26,7 @@ const canMove = (battle, unit) => {
     const moved = advanceLocomotion(battle, unitRef(unit), { nextPoint: goal, goal }, { mode: "WALK", speedMultiplier: 1 });
     return getUnit(moved, unit.id).position !== unit.position;
 };
-import { initialize as initializeTargetable, setRule as setTargetingRule } from "../../dist/core/tactical/unit/capability/targetable/capability.js";
+import { initialize as initializeTargetable, setRestriction } from "../../dist/core/tactical/unit/capability/targetable/capability.js";
 import { invincible } from "../../dist/content/tactical/effects/protection.js";
 import { setAttackContribution } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { setMaxHpContribution } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
@@ -48,7 +48,7 @@ const profile = (fields = {}) => {
         });
 };
 const enemy = (id, position, fields = {}) => initialize({ id, position, definition: {
-    id: `enemy-${id}`, targetable: {}, vitality: { maxHp: 10000, defense: 0, resistance: 0 }, allegiance: { side: "ENEMY" }, spatial: { layer: "GROUND" },
+    id: `enemy-${id}`, targetable: { restrictions: [] }, vitality: { maxHp: 10000, defense: 0, resistance: 0 }, allegiance: { side: "ENEMY" }, spatial: { layer: "GROUND" },
     hit: { geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.1 }] } },
     locomotion: { halfBodyWidth: 0, minSpeed: 0, speed: 0.1, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } },
     ...fields,
@@ -216,8 +216,8 @@ test("Sarkaz resistance and module blocked-source reduction compose only for the
 
 test("S2 does not consume SP without an eligible ground target in its range", () => {
     for (const receiver of [enemy(1, [5, 0]), enemy(1, [1, 0], { spatial: { layer: "AIR" } }),
-        { ...enemy(1, [1, 0]), targetable: setTargetingRule(initializeTargetable(fixtureBattle(0), fixtureDefinition("targetable")).value, {
-            id: "not-selectable", allows: () => false,
+        { ...enemy(1, [1, 0]), targetable: setRestriction(initializeTargetable(fixtureBattle(0), fixtureDefinition("targetable")).value, {
+            id: "not-selectable", value: { kind: Symbol("not-selectable"), allows: () => false },
         }) }]) {
         const fixture = setup({}, [receiver]);
         const ready = sp(fixture.state, 5);

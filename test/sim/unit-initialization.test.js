@@ -15,14 +15,14 @@ test("Unit initialization pairs every declared capability, including empty defin
     const battle = fixtureBattle();
     const definition = {
         id: "paired-empty-capabilities",
-        vitality: { maxHp: 100, defense: 0, resistance: 0 }, targetable: {}, spatialPresence: {}, occupancy: {},
+        vitality: { maxHp: 100, defense: 0, resistance: 0 }, targetable: { restrictions: [] }, spatialPresence: {}, occupancy: {},
         tileBinding: { heightType: null, buildableType: "ALL", advancedBuildableMask: null },
     };
     const result = initialize(battle, { id: 7, definition, position: [2, 0] });
     const unit = result.value;
     assert.equal(result.state, battle);
     assert.equal(unit.definition, definition);
-    assert.deepEqual(unit.targetable, { rules: [] });
+    assert.deepEqual(unit.targetable, { restrictions: [] });
     assert.deepEqual(unit.spatialPresence, { present: true });
     assert.deepEqual(unit.occupancy, { claims: [] });
     assert.deepEqual(unit.tileBinding, {});

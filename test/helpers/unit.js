@@ -25,7 +25,7 @@ export function fixtureDefinition(capability) {
             halfBodyWidth: 0, minSpeed: 0, speed: 0,
             steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 },
         };
-        case "targetable":
+        case "targetable": return { restrictions: [] };
         case "spatialPresence":
         case "occupancy": return {};
         default: throw new Error(`fixture definition required for ${capability}`);
@@ -45,7 +45,7 @@ export function initialize({ states = {}, tick = 0, definition, ...input }) {
         const key = additional.join(":");
         paired = versions.get(key);
         if (paired === undefined) {
-            paired = { ...definition, ...Object.fromEntries(additional.map(key => [key, {}])) };
+            paired = { ...definition, ...Object.fromEntries(additional.map(key => [key, fixtureDefinition(key)])) };
             versions.set(key, paired);
         }
     }

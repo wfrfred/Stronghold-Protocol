@@ -23,10 +23,7 @@ import { resolveAttackPower } from "../../../core/tactical/unit/capability/offen
 import { calculateDamage } from "../../../core/tactical/battle/damage/calculate.js";
 import { applyDamage } from "../../../core/tactical/battle/damage/apply.js";
 import type { DamageRequest, DamageType } from "../../../core/tactical/battle/damage/contract.js";
-import {
-    hasVitality,
-    resolveMaxHp,
-} from "../../../core/tactical/unit/capability/vitality/capability.js";
+import { hasVitality } from "../../../core/tactical/unit/capability/vitality/capability.js";
 import { calculateHealing } from "../../../core/tactical/battle/healing/calculate.js";
 import { applyHealing } from "../../../core/tactical/battle/healing/apply.js";
 import type { HealingRequest } from "../../../core/tactical/battle/healing/contract.js";
@@ -34,22 +31,9 @@ import {
     damage as damageElement,
     heal as healElement,
 } from "../../../core/tactical/unit/capability/elemental/operations.js";
-import {
-    hasElemental,
-    type Type as ElementType,
-} from "../../../core/tactical/unit/capability/elemental/capability.js";
-import {
-    canReceiveDamage,
-    canReceiveHeal,
-    resolveDamageRatio,
-} from "../../../core/tactical/unit/capability/elemental/query.js";
-import {
-    createTargetingDefinition,
-    type TargetingDefinition,
-} from "../../../core/tactical/unit/targeting/definition.js";
-import { compileTargeting } from "../../../core/tactical/unit/targeting/compile.js";
-import { selectTargets } from "../../../core/tactical/unit/targeting/select.js";
-import type { QueryPurpose } from "../../../core/tactical/unit/targeting/query.js";
+import type { Type as ElementType } from "../../../core/tactical/unit/capability/elemental/capability.js";
+import type { Request } from "../../../core/tactical/battle/targeting/contract.js";
+import { select } from "../../../core/tactical/battle/targeting/select.js";
 
 export type Operation =
     | {
@@ -64,7 +48,7 @@ export type Operation =
 
 export interface TargetGroup {
     readonly id: string;
-    readonly targeting: TargetingDefinition;
+    readonly targeting: Omit<Request, "source">;
     readonly operations: readonly Operation[];
 }
 
@@ -130,10 +114,6 @@ export function isAttack(value: unknown): value is Stored {
     return typeof value === "object" && value !== null && "attack" in value;
 }
 
-function purposes(operation: Operation): readonly QueryPurpose[] {
-    return [operation.type];
-}
-
 function sourcePresent(battle: BattleState, source: Ref<Unit>): boolean {
     const current = units.get(battle, source);
 
@@ -144,53 +124,22 @@ export function chooseTargets(
     battle: BattleState,
     source: Ref<Unit & ActionCapability>,
     definition: Configuration,
-): State["bindings"] {
+): Result<State["bindings"]> {
     const unit = units.get(battle, source);
 
     if (unit === undefined) {
-        return {};
+        return { state: battle, value: {} };
     }
 
-    const context = { source: unit, battlefield: battlefieldView(battle) };
+    const bindings: Record<string, readonly Ref<Unit>[]> = {};
 
-    return Object.fromEntries(
-        definition.targetGroups.map((group) => [
-            group.id,
-            selectTargets(
-                context,
-                compileTargeting(
-                    group.targeting,
-                    group.operations.flatMap(purposes),
-                    (target) => resolveMaxHp(target.vitality, target.definition.vitality),
-                    {
-                        allowsDamage: (target) =>
-                            group.operations.some(
-                                (operation) =>
-                                    operation.type === "ELEMENT_DAMAGE" &&
-                                    canReceiveDamage(battle, units.ref(target), {
-                                        source,
-                                        type: operation.elementType,
-                                        power: operation.power,
-                                    }),
-                            ),
-                        allowsHeal: (target) =>
-                            group.operations.some(
-                                (operation) =>
-                                    operation.type === "ELEMENT_HEAL" &&
-                                    canReceiveHeal(battle, units.ref(target), {
-                                        source,
-                                        power: operation.power,
-                                    }),
-                            ),
-                        damageRatio: (target) =>
-                            hasElemental(target)
-                                ? (resolveDamageRatio(battle, units.ref(target)) ?? 0)
-                                : 0,
-                    },
-                ),
-            ).map(units.ref),
-        ]),
-    );
+    for (const group of definition.targetGroups) {
+        const selected = select(battle, { ...group.targeting, source });
+        battle = selected.state;
+        bindings[group.id] = selected.value;
+    }
+
+    return { state: battle, value: bindings };
 }
 
 function apply(
@@ -279,7 +228,7 @@ export function createWithState<P extends object, E extends object>(
     const groups = definition.targetGroups.map((group) =>
         Object.freeze({
             id: group.id,
-            targeting: createTargetingDefinition(group.targeting),
+            targeting: group.targeting,
             operations: Object.freeze(group.operations.map(copyOperation)),
         }),
     );
@@ -325,8 +274,10 @@ export function createWithState<P extends object, E extends object>(
         attack: configuration,
         initialize: definition.initialize,
         start(battle, source, self) {
+            const selected = chooseTargets(battle, source, definition);
+            battle = selected.state;
             const unit = units.get(battle, source);
-            const bindings = chooseTargets(battle, source, definition);
+            const bindings = selected.value;
             const target = bindings[definition.triggerBindingId]?.[0];
 
             if (unit === undefined || target === undefined) {

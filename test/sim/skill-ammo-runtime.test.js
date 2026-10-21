@@ -1,3 +1,4 @@
+import { damage as damageTargeting, healing as healingTargeting } from "../helpers/targeting.js";
 import { damage as dealDamage, parameters } from "../helpers/vitality.js";
 import { launchProjectile } from "../../dist/core/tactical/battlefield/projectile/operations.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
@@ -76,11 +77,11 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, windupTicks = 0, o
   });
   const normal = createAttack({
     id: "normal", triggerBindingId: "main", intervalTicks: 100, windupTicks, ammoPerAction: 1,
-    targetGroups: [{ id: "main", targeting: {
+    targetGroups: [{ id: "main", targeting: damageTargeting({
       type: "DAMAGE", scope: { type: "RANGE", geometry: { type: "SHAPES", geometry: range } },
       canTargetAir: true, includeBlockingRelations: false, preferBlockingRelations: false,
       ignoreTargetFree: false, ignoreInvisible: false, maxTargets: targets,
-    }, operations: [{ type: "DAMAGE", power: 1, damageType: "TRUE", powerSource: "SOURCE_ATTACK" }] }],
+    }), operations: [{ type: "DAMAGE", power: 1, damageType: "TRUE", powerSource: "SOURCE_ATTACK" }] }],
     ...(output === undefined ? {} : { output: (state, self) => output(state, self, shell) }),
   });
   const action = actionProgram === undefined ? normal : actionProgram(normal);
@@ -92,7 +93,7 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, windupTicks = 0, o
     action: { definitions: Definitions.empty().add(action) },
   });
   const receiver = {
-    id: "ammo-target", vitality: { maxHp: 10000, defense: 0, resistance: 0 }, allegiance: { side: "ENEMY" }, spatial: { layer: "GROUND" }, hit: { geometry: hit },
+    id: "ammo-target", targetable: { restrictions: [] }, vitality: { maxHp: 10000, defense: 0, resistance: 0 }, allegiance: { side: "ENEMY" }, spatial: { layer: "GROUND" }, hit: { geometry: hit },
   };
   const shell = createProjectileDefinition({
     id: "runtime-ammo-shell", initialize: () => ({}),

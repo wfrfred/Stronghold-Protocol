@@ -50,6 +50,7 @@ function spawn({ tick = 2, start = 4, end = 7, speed = 0, wait = true } = {}) {
         definition: {
             ...createDefinition({
                 id: "scheduled-receiver",
+                targetable: { restrictions: [] },
                 vitality: { maxHp: 100, defense: 0, resistance: 0 },
                 locomotion: {
                     halfBodyWidth: 0, minSpeed: 0, speed: speed,

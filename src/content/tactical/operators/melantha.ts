@@ -4,6 +4,9 @@ import type { Definition as TargetableDefinition } from "../../../core/tactical/
 import { createArknightsElementalDefinition } from "../../../data/arknights/elemental.js";
 import { Definitions } from "../../../core/tactical/unit/action/definitions.js";
 import { create as createAttack } from "../actions/attack.js";
+import * as filters from "../../../core/tactical/battle/targeting/filter.js";
+import * as compare from "../../../core/tactical/battle/targeting/compare.js";
+import { first } from "../../../core/tactical/battle/targeting/selector.js";
 import { ref as unitRef } from "../../../core/tactical/unit/query.js";
 import type { Profile } from "../../../data/arknights/operator.js";
 import { getUnit, updateUnit } from "../../../core/tactical/battle/state.js";
@@ -95,7 +98,7 @@ export function create(profile: Profile, direction: Direction = "RIGHT"): Defini
         profile,
         direction,
         occupancy: {},
-        targetable: {},
+        targetable: { restrictions: [] },
         deployable: createDeployableDefinition({
             cost: profile.attributes.cost,
             redeployTicks: secondsToTicks(profile.attributes.respawnTime),
@@ -131,21 +134,23 @@ export function create(profile: Profile, direction: Direction = "RIGHT"): Defini
                         {
                             id: "primary",
                             targeting: {
-                                type: "DAMAGE",
-                                scope: {
-                                    type: "RANGE",
-                                    geometry: {
-                                        type: "GRID",
-                                        offsets: profile.range,
-                                        direction,
-                                    },
-                                },
-                                canTargetAir: false,
-                                includeBlockingRelations: true,
-                                preferBlockingRelations: true,
-                                ignoreTargetFree: false,
-                                ignoreInvisible: false,
-                                maxTargets: 1,
+                                purposes: ["DAMAGE"],
+                                filter: filters.and(
+                                    filters.damage,
+                                    filters.ground,
+                                    filters.or(
+                                        filters.range({
+                                            type: "GRID",
+                                            offsets: profile.range,
+                                            direction,
+                                        }),
+                                        filters.blocking,
+                                    ),
+                                ),
+                                selector: first(
+                                    1,
+                                    compare.combine(compare.blockedFirst, compare.distance),
+                                ),
                             },
                             operations: [
                                 {

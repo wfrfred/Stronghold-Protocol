@@ -1,3 +1,4 @@
+import { damage as damageTargeting, healing as healingTargeting } from "../helpers/targeting.js";
 import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js';
 import { create as createAttack } from '../../dist/content/tactical/actions/attack.js';
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
@@ -264,7 +265,7 @@ test("attribute modifiers: native Mire percentages affect existing ASPD and norm
                     targetGroups: [
                         {
                             id: "unused",
-                            targeting: {
+                            targeting: damageTargeting({
                                 type: "DAMAGE",
                                 scope: { type: "BLOCKER" },
                                 canTargetAir: false,
@@ -273,7 +274,7 @@ test("attribute modifiers: native Mire percentages affect existing ASPD and norm
                                 ignoreTargetFree: false,
                                 ignoreInvisible: false,
                                 maxTargets: 1,
-                            },
+                            }),
                             operations: [{ type: "DAMAGE", power: 0, damageType: "TRUE" }],
                         },
                     ],
