@@ -132,7 +132,7 @@ function blockingHarness() {
   }, { spatialPresence: { present: true } });
   const blocked = unit(2, [2, 0], {
     vitality: { maxHp: 100, defense: 0, resistance: 0 }, allegiance: { side: 'ENEMY' },
-    blockable: { volume: 1 }, spatial: { layer: 'GROUND' },
+    blockable: { volume: 1 }, layer: { type: 'GROUND' },
   });
   h.commit(register([blocker, blocked]));
   assert.deepEqual(h.state.blockingRelations, [{ blockerUnitId: 1, blockedUnitId: 2 }]);

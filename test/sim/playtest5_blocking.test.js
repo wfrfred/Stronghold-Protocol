@@ -89,8 +89,8 @@ test('core blocking: ground eligibility comes from unit data while route motion 
   battle.step();
 
   assert.deepEqual(coreBlockedBy(battle, 0), [1]);
-  assert.equal(coreBlockingUnit(battle, 1).spatial.layer, 'GROUND');
-  assert.equal(coreBlockingUnit(battle, 2).spatial.layer, 'AIR');
+  assert.equal(coreBlockingUnit(battle, 1).layer.type, 'GROUND');
+  assert.equal(coreBlockingUnit(battle, 2).layer.type, 'AIR');
 });
 
 test('core blocking: moving enemies stop at contact and an adjacent lane remains clear', () => {

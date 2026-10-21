@@ -443,7 +443,7 @@ test('core selective and full projection release ground blocking when a blocker 
   });
   const enemy = projectionUnit(11, [0.1, 0], {
     vitality: { maxHp: 100, defense: 0, resistance: 0 }, allegiance: { side: 'ENEMY' }, blockable: { volume: 1 },
-    spatial: { layer: 'GROUND' },
+    layer: { type: 'GROUND' },
   });
   const relations = [{ blockerUnitId: 10, blockedUnitId: 11 }];
   h.commit([blocker, enemy].map(unit => ({ type: 'REGISTER_UNIT', unit })));
@@ -473,7 +473,7 @@ test('core selective and full projection preserve relation history and reacquire
     vitality: { maxHp: 100, defense: 0, resistance: 0 }, allegiance: { side: 'ALLY' }, blocker: { capacity: 2, geometry: { radius: 1 } },
   }, { spatialPresence: { present: true }, occupancy: { claims: [projectionClaim(1)] } });
   const enemy = projectionUnit(11, [1.1, 0], {
-    vitality: { maxHp: 100, defense: 0, resistance: 0 }, allegiance: { side: 'ENEMY' }, blockable: { volume: 1 }, spatial: { layer: 'GROUND' },
+    vitality: { maxHp: 100, defense: 0, resistance: 0 }, allegiance: { side: 'ENEMY' }, blockable: { volume: 1 }, layer: { type: 'GROUND' },
   }, { spatialPresence: { present: true } });
   const platform = projectionUnit(12, [1, 0], {
     tileBinding: createTileBindingDefinition({ buildableType: 'ALL', heightType: 'HIGHLAND' }),
@@ -507,7 +507,7 @@ test('core selective and full projection preserve relation history and reacquire
   const unblockableRule = { id: 'unblockable', allows: () => false };
   const mutations = [
     unit => ({ ...unit, allegiance: { side: 'ALLY' } }),
-    unit => ({ ...unit, spatial: { layer: 'AIR' } }),
+    unit => ({ ...unit, layer: { type: 'AIR' } }),
     unit => ({ ...unit, blockable: blockable.setVolumeContribution(unit.blockable, { id: 'larger', value: 2 }) }),
     unit => ({ ...unit, blockable: blockable.setRule(unit.blockable, unblockableRule) }),
   ];

@@ -465,7 +465,7 @@ export function create(
         offense: { attack: profile.attributes.attack },
 
         allegiance: { side: "ALLY" },
-        spatial: { layer: "GROUND" },
+        layer: { type: "GROUND" },
         hit: { geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.25 }] } },
         blocker: {
             capacity: profile.attributes.blockCapacity,

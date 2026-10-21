@@ -9,7 +9,7 @@ import { damageRatio, currentType } from "../core/tactical/unit/capability/eleme
 import { hasLocomotion } from "../core/tactical/unit/capability/locomotion/capability.js";
 import { hasRoute } from "../core/tactical/unit/capability/route/capability.js";
 import { isSpatiallyPresent } from "../core/tactical/unit/capability/presence/capability.js";
-import { hasSpatial } from "../core/tactical/unit/capability/spatial/capability.js";
+import { hasLayer } from "../core/tactical/unit/capability/layer/capability.js";
 import { hasSkill } from "../core/tactical/unit/capability/skill/capability.js";
 import { stun } from "../content/tactical/effects/stun.js";
 import { invincible } from "../content/tactical/effects/protection.js";
@@ -137,8 +137,8 @@ function isEnemy(unit: Unit): boolean {
 }
 
 function isFlying(unit: Unit): boolean {
-    if (hasSpatial(unit)) {
-        return unit.spatial.layer === "AIR";
+    if (hasLayer(unit)) {
+        return unit.layer.type === "AIR";
     }
 
     return hasRoute(unit) && unit.definition.route.pathMotionMode === "FLY";

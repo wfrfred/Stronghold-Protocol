@@ -116,7 +116,7 @@ export function createDefinition(
             offense: { attack: profile.attack },
 
             allegiance: { side: "ENEMY" },
-            spatial: { layer: "GROUND" },
+            layer: { type: "GROUND" },
             hit: {
                 geometry: {
                     shapes: [{ type: "CIRCLE", offset: [0, 0], radius: timing.hitRadius }],

@@ -39,12 +39,12 @@ function actor(skill, { attackTargets = 1, windupTicks = 0, activeAction } = {})
   return createDefinition({
     id: 'skill-actor', vitality: { maxHp: 100000, defense: 0, resistance: 0 }, offense: { attack: 100 },
     allegiance: { side: 'ALLY' },
-    spatial: { layer: 'GROUND' }, hit: { geometry: hit },
+    layer: { type: 'GROUND' }, hit: { geometry: hit },
     blocker: { capacity: 0, geometry: { radius: 0.1 } }, action: { definitions, select: (battle, self) => ({ state: battle, value: [self.skill.active !== null ? activeAction ?? 'normal' : 'normal'] }) }, skill,
   });
 }
 function target() {
-  return { id: 'target', targetable: { restrictions: [] }, vitality: { maxHp: 100000, defense: 0, resistance: 0 }, allegiance: { side: 'ENEMY' }, spatial: { layer: 'GROUND' }, hit: { geometry: hit } };
+  return { id: 'target', targetable: { restrictions: [] }, vitality: { maxHp: 100000, defense: 0, resistance: 0 }, allegiance: { side: 'ENEMY' }, layer: { type: 'GROUND' }, hit: { geometry: hit } };
 }
 function scenario(skill, { targets = 1, attackTargets = 1, windupTicks = 0, content, activeAction } = {}) {
   const buff = attackBuff('skill/attack', 100);

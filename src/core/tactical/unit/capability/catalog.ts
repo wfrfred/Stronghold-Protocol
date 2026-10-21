@@ -4,6 +4,7 @@ import * as blockable from "./blocking/blockable.js";
 import * as blocker from "./blocking/blocker.js";
 import * as deployable from "./deployable/capability.js";
 import * as elemental from "./elemental/capability.js";
+import * as layer from "./layer/capability.js";
 import * as locomotion from "./locomotion/capability.js";
 import * as occupancy from "./occupancy/capability.js";
 import * as offense from "./offense/capability.js";
@@ -23,7 +24,7 @@ export const initializers = {
     skill: skill.initialize,
     elemental: elemental.initialize,
     allegiance: allegiance.initialize,
-    spatial: spatial.initializeSpatialState,
+    layer: layer.initialize,
     hit: spatial.initializeHitState,
     blocker: blocker.initialize,
     blockable: blockable.initialize,

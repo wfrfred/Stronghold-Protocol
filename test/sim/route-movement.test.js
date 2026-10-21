@@ -69,12 +69,12 @@ test("Main completion stops motion while blocked and produces one event only whe
     let state = battle();
     const blocker = initialize(state, { id: 1, position: [0, 0], definition: {
         id: "route-movement-blocker", spatialPresence: {},
-        allegiance: { side: "ALLY" }, spatial: { layer: "GROUND" },
+        allegiance: { side: "ALLY" }, layer: { type: "GROUND" },
         blocker: { capacity: 1, geometry: { radius: 1 } },
     } }).value;
     const enemy = unit(state, 2, {
         route: route({ endPosition: [0, 0] }), allegiance: { side: "ENEMY" },
-        spatial: { layer: "GROUND" }, blockable: { volume: 1 },
+        layer: { type: "GROUND" }, blockable: { volume: 1 },
     });
     state = registerUnit(state, blocker);
     state = registerUnit(state, {
@@ -182,7 +182,7 @@ test("Runtime consumes the current path mode without changing the unit's ground 
         },
     };
     state = registerUnit(state, unit(state, 1, {
-        spatial: { layer: "GROUND" },
+        layer: { type: "GROUND" },
         route: route({ endPosition: [1, 4] }),
         locomotion: { speed: 0.1, minSpeed: 0, halfBodyWidth: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } },
     }, [0, 1]));
@@ -190,7 +190,7 @@ test("Runtime consumes the current path mode without changing the unit's ground 
     const changed = routeOperations.setPathMotionMode(state, { id: 1 }, "FLY");
     const moved = getUnit(step(changed), 1);
     assert.ok(moved.position[0] > 0);
-    assert.equal(moved.spatial.layer, "GROUND");
+    assert.equal(moved.layer.type, "GROUND");
     assert.equal(moved.route.main.definition.pathMotionMode, "WALK");
     assert.equal(moved.route.main.pathMotionMode, "FLY");
 });

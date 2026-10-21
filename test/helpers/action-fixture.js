@@ -73,7 +73,7 @@ export function unit(
         targetable: { restrictions: [] }, spatialPresence: {}, occupancy: {},
         offense: { attack: 10 },
         allegiance: { side },
-        spatial: { layer: "GROUND" },
+        layer: { type: "GROUND" },
         hit: { geometry: hit },
         ...(capability === undefined ? {} : { action: capability }),
         ...fields,

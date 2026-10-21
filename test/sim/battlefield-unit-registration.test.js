@@ -89,7 +89,7 @@ const definition = () => ({
         sp: { initial: 0, capacity: 10, requirement: 10, recovery: { type: "TIME", intervalTicks: 30 } },
     }),
     allegiance: { side: "ALLY" },
-    spatial: { layer: "GROUND" },
+    layer: { type: "GROUND" },
     hit: { geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.25 }] } },
     blocker: { capacity: 1, geometry: { radius: 0.5 } },
     blockable: { volume: 1 },

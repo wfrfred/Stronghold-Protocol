@@ -34,7 +34,7 @@ function harness({ speed = 0.25, minimum = 0, steeringParameters, blockable = fa
         definition: {
             id: "dynamic-mover",
             ...(blockable ? {
-                allegiance: { side: "ENEMY" }, spatial: { layer: "GROUND" }, blockable: { volume: 1 },
+                allegiance: { side: "ENEMY" }, layer: { type: "GROUND" }, blockable: { volume: 1 },
             } : {}),
             vitality: { maxHp: 100, defense: 0, resistance: 0 },
             spatialPresence: {},

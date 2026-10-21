@@ -61,7 +61,7 @@ test("native attack buff data builds a shared Definition and changes attacks thr
   const geometry = { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 2 }] };
   const actor = {
     id: "native-skill-actor", vitality: { maxHp: 1000, defense: 0, resistance: 0 }, offense: { attack: 100 },
-    allegiance: { side: "ALLY" }, spatial: { layer: "GROUND" }, skill: compiled,
+    allegiance: { side: "ALLY" }, layer: { type: "GROUND" }, skill: compiled,
     action: { definitions: Definitions.empty().add(createAttack({ id: "normal",
       triggerBindingId: "target", intervalTicks: 30, recoveryTicks: 0, followUps: [],
       targetGroups: [{ id: "target", targeting: damageTargeting({
@@ -73,7 +73,7 @@ test("native attack buff data builds a shared Definition and changes attacks thr
   };
   const target = {
     id: "stationary-content-target", targetable: { restrictions: [] }, spatialPresence: {}, vitality: { maxHp: 1000000, defense: 0, resistance: 0 }, allegiance: { side: "ENEMY" },
-    spatial: { layer: "GROUND" }, hit: { geometry },
+    layer: { type: "GROUND" }, hit: { geometry },
     locomotion: { halfBodyWidth: 0, minSpeed: 0, speed: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 } },
   };
   const base = createLegacyCombatSpec({ rows: 1, columns: 3, operators: [], enemies: [], maxTicks: 2200 });

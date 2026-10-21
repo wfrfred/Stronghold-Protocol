@@ -50,7 +50,7 @@ const mover = (id = 20, { position = [2.25, 1], volume = 1, rules = [] } = {}) =
         id, position, definition: {
             id: `movement-rule-target-${id}`,
             allegiance: { side: "ENEMY" }, spatialPresence: {},
-            spatial: { layer: "GROUND" }, blockable: { volume },
+            layer: { type: "GROUND" }, blockable: { volume },
             locomotion: {
                 speed: 0.125, minSpeed: 0, halfBodyWidth: 0,
                 steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 },
@@ -149,11 +149,11 @@ test("Removing a blocker transfers the relation without losing the rule, then re
 test("Changing a blocked target to AIR removes the movement rule and landing reacquires it", () => {
     let battle = fixture([holder(), mover()]);
     const rule = blockingRule(getUnit(battle, 20));
-    battle = change(battle, 20, (unit) => ({ ...unit, spatial: { layer: "AIR" } }));
+    battle = change(battle, 20, (unit) => ({ ...unit, layer: { type: "AIR" } }));
     assert.equal(battlefieldView(battle).blockerOf(20), undefined);
     assert.equal(blockingRule(getUnit(battle, 20)), undefined);
     assertMoves(battle, 20, "FLY");
-    battle = change(battle, 20, (unit) => ({ ...unit, spatial: { layer: "GROUND" } }));
+    battle = change(battle, 20, (unit) => ({ ...unit, layer: { type: "GROUND" } }));
     assert.equal(blockingRule(getUnit(battle, 20)), rule);
     assertStopped(battle);
 });
@@ -296,7 +296,7 @@ test("Incremental and full settlement publish the same rules and movement across
                 const unit = getUnit(branches[index], id);
                 assert.equal(blockingRule(unit) !== undefined, blockedIds.includes(id));
                 if (blockedIds.includes(id)) assertStopped(branches[index], id);
-                else assertMoves(branches[index], id, unit.spatial.layer === "AIR" ? "FLY" : "WALK");
+                else assertMoves(branches[index], id, unit.layer.type === "AIR" ? "FLY" : "WALK");
             }
         }
         assert.deepEqual(branches[0].battlefield, branches[1].battlefield);
@@ -307,8 +307,8 @@ test("Incremental and full settlement publish the same rules and movement across
     commit(register([holder(10, { capacity: 2 }), mover(20), mover(21)]), [20, 21]);
     commit(update(20, (unit) => ({ ...unit, locomotion: { ...unit.locomotion, rules: [] } })), [20, 21]);
     commit([{ type: "RELEASE_BLOCKING_RELATIONS", unitId: 10 }], [20, 21]);
-    commit(update(20, (unit) => ({ ...unit, spatial: { layer: "AIR" } })), [21]);
-    commit(update(20, (unit) => ({ ...unit, spatial: { layer: "GROUND" } })), [20, 21]);
+    commit(update(20, (unit) => ({ ...unit, layer: { type: "AIR" } })), [21]);
+    commit(update(20, (unit) => ({ ...unit, layer: { type: "GROUND" } })), [20, 21]);
     commit(update(10, (unit) => ({
         ...unit, blocker: blocker.setCapacityContribution(unit.blocker, {
             id: "less-capacity", value: [modifier({ addition: -1 })],

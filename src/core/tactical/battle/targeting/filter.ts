@@ -1,6 +1,7 @@
 import { areHostile, hasAllegiance } from "../../unit/capability/allegiance/capability.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";
-import { hasHit, hasSpatial } from "../../unit/capability/spatial/capability.js";
+import { hasHit } from "../../unit/capability/spatial/capability.js";
+import { hasLayer } from "../../unit/capability/layer/capability.js";
 import { hasVitality, resolveMaxHp } from "../../unit/capability/vitality/capability.js";
 import { allowsRestrictions } from "../../unit/capability/targetable/capability.js";
 import { hasElemental } from "../../unit/capability/elemental/capability.js";
@@ -58,7 +59,7 @@ export const sameSide: Filter = (battle, request, target) => {
 };
 
 export const ground: Filter = (_battle, _request, target) =>
-    hasSpatial(target) && target.spatial.layer === "GROUND";
+    hasLayer(target) && target.layer.type === "GROUND";
 
 export function range(geometry: RangeGeometry): Filter {
     return (battle, request, target) => {

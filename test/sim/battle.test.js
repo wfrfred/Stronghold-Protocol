@@ -2052,7 +2052,7 @@ function deploymentBattleInput(overrides = {}, cards = []) {
 const deployableDefinition = (id = 'test_deployable') => Object.freeze({
   id, occupancy: {}, deployable: createDeployableDefinition({ cost: 0, redeployTicks: 0, slots: 1, buildableType: 'ALL' }),
   vitality: Object.freeze({ maxHp: 100, defense: 0, resistance: 0 }), allegiance: Object.freeze({ side: 'ALLY' }),
-  spatial: Object.freeze({ layer: 'GROUND' }),
+  layer: Object.freeze({ type: 'GROUND' }),
   blocker: Object.freeze({ capacity: 1, geometry: Object.freeze({ radius: 0.7 }) }),
 });
 
@@ -2207,7 +2207,7 @@ test('core elevated support disables blocking without changing target layer and 
   const definition = deployableDefinition();
   const enemyDefinition = Object.freeze({ id: 'standing_enemy',
     vitality: Object.freeze({ maxHp: 100, defense: 0, resistance: 0 }), allegiance: Object.freeze({ side: 'ENEMY' }),
-    spatial: Object.freeze({ layer: 'GROUND' }), blockable: Object.freeze({ volume: 1 }),
+    layer: Object.freeze({ type: 'GROUND' }), blockable: Object.freeze({ volume: 1 }),
   });
   const occupancy = { claims: [{ position: [0, 1], slot: 'SUPPORT', type: 'PRESENT' }] };
   const recipe = createPredefinedDefinition({ id: 50, alias: 'test_platform', initiallyPresent: true, creation: {
@@ -2238,7 +2238,7 @@ test('core elevated support disables blocking without changing target layer and 
   const supported = runtime.snapshot();
   assert.deepEqual(supported.supportRelations, [{ supportedUnitId: occupantId, supportUnitId: platformId }]);
   assert.deepEqual(supported.blockingRelations, []);
-  assert.equal(supported.units.find(unit => unit.id === occupantId).spatial.layer, 'GROUND');
+  assert.equal(supported.units.find(unit => unit.id === occupantId).layer.type, 'GROUND');
   const removed = runtime.step([{ type: 'REMOVE_PREDEFINED', definitionId: 50, reason: 'SCRIPT' }]);
   assert.deepEqual(removed.events.filter(event => event.type === 'SUPPORT_LOST').map(event => [event.supportedUnitId, event.supportUnitId]),
     [[occupantId, platformId]]);
@@ -2247,7 +2247,7 @@ test('core elevated support disables blocking without changing target layer and 
   assert.equal(after.units.find(unit => unit.id === occupantId).definition, definition);
   assert.deepEqual(after.units.find(unit => unit.id === occupantId).position, [1, 0]);
   assert.equal(after.units.find(unit => unit.id === occupantId).vitality.hp, 100);
-  assert.equal(after.units.find(unit => unit.id === occupantId).spatial.layer, 'GROUND');
+  assert.equal(after.units.find(unit => unit.id === occupantId).layer.type, 'GROUND');
   assert.deepEqual(after.blockingRelations, [{ blockerUnitId: occupantId,
     blockedUnitId: after.units.find(unit => unit.definition === enemyDefinition).id }]);
 });

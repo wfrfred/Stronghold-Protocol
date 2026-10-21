@@ -67,7 +67,7 @@ function passive(id, hp = 100) {
         vitality: { maxHp: hp, defense: 0, resistance: 0 },
         offense: { attack: 10 },
         allegiance: { side: "ENEMY" },
-        spatial: { layer: "GROUND" },
+        layer: { type: "GROUND" },
         hit: { geometry: hit },
     };
 }

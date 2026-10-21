@@ -28,7 +28,7 @@ const blocker = (id, position = [1, 1], capacity = 1, radius = 1) => initialize(
 const enemy = (id, position = [1.25, 1], volume = 1) => initialize({
   id, position, definition: {
     id: `enemy-${id}`, allegiance: { side: 'ENEMY' }, vitality: { maxHp: 100, defense: 0, resistance: 0 },
-    blockable: { volume }, spatial: { layer: 'GROUND' },
+    blockable: { volume }, layer: { type: 'GROUND' },
   },
 });
 const view = viewBattlefield;

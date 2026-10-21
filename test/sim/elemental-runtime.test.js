@@ -49,7 +49,7 @@ function definition(receiver = 'CHARACTER', overrides = {}, elementOptions = {})
   return { id: `element-${receiver}`, targetable: { restrictions: [] }, spatialPresence: {}, vitality: { maxHp: 100000, defense: 500, resistance: 50 },
     offense: { attack: 100 },
     allegiance: { side: receiver === 'CHARACTER' ? 'ALLY' : 'ENEMY' },
-    spatial: { layer: 'GROUND' }, hit: { geometry: hit },
+    layer: { type: 'GROUND' }, hit: { geometry: hit },
     action: { definitions: Definitions.empty().add(action()) },
     elemental: createArknightsElementalDefinition({ receiver, ...elementOptions }), ...overrides };
 }

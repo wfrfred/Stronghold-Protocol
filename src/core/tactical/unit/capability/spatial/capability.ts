@@ -2,19 +2,6 @@ import { createShapeGeometry, type HitGeometry } from "../../../geometry/shape.j
 import type { Unit } from "../../unit.js";
 import type { State as BattleState, Result } from "../../../battle/state.js";
 
-export type SpatialLayer = "GROUND" | "AIR";
-
-export interface SpatialDefinition {
-    readonly layer: SpatialLayer;
-}
-
-export type SpatialState = SpatialDefinition;
-
-export interface Spatial {
-    readonly definition: { readonly spatial: SpatialDefinition };
-    readonly spatial: SpatialState;
-}
-
 export interface HitDefinition {
     readonly geometry: HitGeometry;
 }
@@ -26,23 +13,12 @@ export interface Hit {
     readonly hit: HitState;
 }
 
-export function hasSpatial<U extends Unit>(unit: U): unit is U & Spatial {
-    return "spatial" in unit && "spatial" in unit.definition;
-}
-
 export function hasHit<U extends Unit>(unit: U): unit is U & Hit {
     return "hit" in unit && "hit" in unit.definition;
 }
 
 export function createHitDefinition(definition: HitDefinition): HitDefinition {
     return Object.freeze({ geometry: createShapeGeometry(definition.geometry) });
-}
-
-export function initializeSpatialState(
-    battle: BattleState,
-    definition: SpatialDefinition,
-): Result<SpatialState> {
-    return { state: battle, value: { layer: definition.layer } };
 }
 
 export function initializeHitState(

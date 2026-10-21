@@ -9,13 +9,10 @@ import {
     createDefinition as createOffenseDefinition,
     type Definition as OffenseDefinition,
 } from "../capability/offense/capability.js";
-import {
-    createHitDefinition,
-    type HitDefinition,
-    type SpatialDefinition,
-} from "../capability/spatial/capability.js";
+import { createHitDefinition, type HitDefinition } from "../capability/spatial/capability.js";
 import type { Definition as VitalityDefinition } from "../capability/vitality/capability.js";
 import type { Definition as DeployableDefinition } from "../capability/deployable/capability.js";
+import type { Definition as LayerDefinition } from "../capability/layer/capability.js";
 import type { Unit, Definition as UnitDefinition } from "../unit.js";
 import * as initialization from "../initialize.js";
 import type { Product } from "../capability/catalog.js";
@@ -36,7 +33,7 @@ export interface Definition extends UnitDefinition {
     readonly vitality: VitalityDefinition;
     readonly action: ActionCapabilityDefinition;
     readonly allegiance: AllegianceDefinition;
-    readonly spatial: SpatialDefinition;
+    readonly layer: LayerDefinition;
     readonly hit: HitDefinition;
     readonly blocker: BlockerDefinition;
     readonly offense?: OffenseDefinition;
@@ -71,7 +68,7 @@ export function createDefinition(definition: Definition): Definition {
         vitality: Object.freeze({ ...definition.vitality }),
         action: createActionCapabilityDefinition(definition.action),
         allegiance: definition.allegiance,
-        spatial: definition.spatial,
+        layer: definition.layer,
         hit: createHitDefinition(definition.hit),
         ...(definition.offense === undefined
             ? {}

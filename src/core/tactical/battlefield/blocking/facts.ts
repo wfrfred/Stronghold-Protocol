@@ -8,7 +8,7 @@ import {
 import { canBlock, hasBlocker, resolveCapacity } from "../../unit/capability/blocking/blocker.js";
 import { hasTileBinding } from "../../unit/capability/tile-binding/capability.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";
-import { hasSpatial } from "../../unit/capability/spatial/capability.js";
+import { hasLayer } from "../../unit/capability/layer/capability.js";
 import { hasVitality } from "../../unit/capability/vitality/capability.js";
 import type { Unit } from "../../unit/unit.js";
 import { BattlefieldMap } from "../map/map.js";
@@ -56,7 +56,7 @@ export function readBlockingFacts(unit: Unit): BlockingFacts {
     return {
         position: unit.position,
         active,
-        ground: !hasSpatial(unit) || unit.spatial.layer === "GROUND",
+        ground: !hasLayer(unit) || unit.layer.type === "GROUND",
         highland: hasTileBinding(unit) && unit.definition.tileBinding.heightType === "HIGHLAND",
         side: hasAllegiance(unit) ? unit.allegiance.side : undefined,
         blocker,

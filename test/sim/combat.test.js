@@ -377,7 +377,7 @@ test('core combat: air targeting follows unit data independently of the route mo
 
   assert.deepEqual(events.filter(event => event.type === 'ACTION').map(event => event.sourceUnitId), [1]);
   assert.equal(battle.snapshot().blockingRelations.length, 0);
-  assert.equal(battle.snapshot().units.find(unit => unit.id === 2).spatial.layer, 'AIR');
+  assert.equal(battle.snapshot().units.find(unit => unit.id === 2).layer.type, 'AIR');
 });
 
 test('core combat: damage formulas retain the 5% floor and immutable vitality transitions', () => {
@@ -427,7 +427,7 @@ test('core combat: snapshots share capabilities while immutable battlefield upda
   const actionId = operator.definition.action.definitions.values()[0].id;
   const readyAtTick = operator.action.states.get(actionId).cooldown.readyAtTick;
   const hp = operator.vitality.hp;
-  for (const key of ['action', 'allegiance', 'spatial', 'hit', 'effects', 'blocker', 'vitality']) {
+  for (const key of ['action', 'allegiance', 'layer', 'hit', 'effects', 'blocker', 'vitality']) {
     assert.equal(sharedOperator[key], operator[key], key);
   }
   assert.equal(repeated.blockingRelations, snapshot.blockingRelations);
@@ -443,7 +443,7 @@ test('core combat: snapshots share capabilities while immutable battlefield upda
     ...operator,
     action: { ...operator.action, states: new Map(operator.action.states).set(actionId, { ...operator.action.states.get(actionId), cooldown: { ...operator.action.states.get(actionId).cooldown, readyAtTick: 999999 } }) },
     allegiance: { ...operator.allegiance, side: 'ENEMY' },
-    spatial: { ...operator.spatial, layer: 'AIR' },
+    layer: { ...operator.layer, type: 'AIR' },
     hit: { ...operator.hit, geometry: createShapeGeometry({ shapes: [
       { type: 'CIRCLE', offset: [0, 0], radius: 100 },
     ] }) },
@@ -467,7 +467,7 @@ test('core combat: snapshots share capabilities while immutable battlefield upda
   assert.deepEqual(previous.blockingRelations, [{ blockerUnitId: 0, blockedUnitId: 1 }]);
   assert.equal(operator.action.states.get(actionId).cooldown.readyAtTick, readyAtTick);
   assert.equal(operator.allegiance.side, 'ALLY');
-  assert.equal(operator.spatial.layer, 'GROUND');
+  assert.equal(operator.layer.type, 'GROUND');
   assert.equal(operator.hit.geometry.shapes[0].radius, 0.25);
   assert.equal(allowsRestrictions({ battlefield: previous }, targetingRequest, operator), true);
   assert.deepEqual(operator.blocker.capacity, []);
@@ -1128,7 +1128,7 @@ const attackDefinition = (targetGroups, followUps = []) => createAttack({
 function actionUnit(id, side, position, { hp = 100, effects: initialEffects = [], action, skill } = {}) {
   const definition = createDefinition({
     id: `action_unit_${id}`, targetable: { restrictions: [] }, vitality: { maxHp: 100, defense: 0, resistance: 0 }, allegiance: { side },
-    spatial: { layer: 'GROUND' }, hit: { geometry: {
+    layer: { type: 'GROUND' }, hit: { geometry: {
       shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.1 }],
     } }, blocker: { capacity: 0, geometry: { radius: 0 } },
     ...(skill === undefined ? {} : { skill }),
@@ -1279,8 +1279,8 @@ test('core targeting: current hit geometry and spatial classification override d
   ] }) } };
   assert.deepEqual(select(expanded).map(unit => unit.id), [1]);
   assert.equal(target.definition.hit.geometry.shapes[0].radius, 0.1);
-  assert.deepEqual(select({ ...expanded, spatial: { layer: 'AIR' } }), []);
-  assert.equal(target.definition.spatial.layer, 'GROUND');
+  assert.deepEqual(select({ ...expanded, layer: { type: 'AIR' } }), []);
+  assert.equal(target.definition.layer.type, 'GROUND');
 });
 
 test('core targeting: default healing eligibility and ordering use effective MaxHP', () => {

@@ -18,11 +18,8 @@ import type {
     SpatialPresence,
     Definition as PresenceDefinition,
 } from "../capability/presence/capability.js";
-import {
-    createHitDefinition,
-    type HitDefinition,
-    type SpatialDefinition,
-} from "../capability/spatial/capability.js";
+import { createHitDefinition, type HitDefinition } from "../capability/spatial/capability.js";
+import type { Definition as LayerDefinition } from "../capability/layer/capability.js";
 import type { Unit, Definition as UnitDefinition } from "../unit.js";
 import type {
     Vitality,
@@ -60,7 +57,7 @@ export type RoutedEnemy<D extends Definition = Definition> = Enemy &
 export interface CombatDefinition extends Definition {
     readonly action: ActionCapabilityDefinition;
     readonly allegiance: AllegianceDefinition;
-    readonly spatial: SpatialDefinition;
+    readonly layer: LayerDefinition;
     readonly hit: HitDefinition;
     readonly blockable: BlockableDefinition;
     readonly offense?: OffenseDefinition;
@@ -111,7 +108,7 @@ export function createCombatDefinition(
         ...createDefinition(definition),
         action: createActionCapabilityDefinition(definition.action),
         allegiance: definition.allegiance,
-        spatial: definition.spatial,
+        layer: definition.layer,
         hit: createHitDefinition(definition.hit),
         ...(definition.offense === undefined
             ? {}

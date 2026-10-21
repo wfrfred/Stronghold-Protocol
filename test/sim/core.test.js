@@ -34,7 +34,8 @@ import { areHostile, hasAllegiance } from '../../dist/core/tactical/unit/capabil
 import { hasBlocker, resolveCapacity } from '../../dist/core/tactical/unit/capability/blocking/blocker.js';
 import { hasBlockable } from '../../dist/core/tactical/unit/capability/blocking/blockable.js';
 import * as modifier from '../../dist/core/tactical/unit/contribution/attribute.js';
-import { createHitDefinition, hasHit, hasSpatial } from '../../dist/core/tactical/unit/capability/spatial/capability.js';
+import { createHitDefinition, hasHit } from '../../dist/core/tactical/unit/capability/spatial/capability.js';
+import { hasLayer } from '../../dist/core/tactical/unit/capability/layer/capability.js';
 import { initialize as initializeTargetableState, hasTargetable, setRestriction, removeRestriction, allowsRestrictions } from '../../dist/core/tactical/unit/capability/targetable/capability.js';
 import { setHook as setHealingHook, removeHook as removeHealingHook } from '../../dist/core/tactical/battle/healing/hook.js';
 import { createBlockGeometry, createRangeGeometry, createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
@@ -382,7 +383,7 @@ const catalogDefinition = () => Object.freeze({
         ignoreTargetFree: false, ignoreInvisible: false, maxTargets: 1 }),
     }],
    })) }),
-  spatial: Object.freeze({ layer: 'GROUND' }),
+  layer: Object.freeze({ type: 'GROUND' }),
   hit: createHitDefinition({ geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.25 }] } }),
   blocker: { capacity: 2, geometry: { radius: 0.7 } },
   blockable: Object.freeze({ volume: 1 }),
@@ -450,7 +451,7 @@ test('archetype definitions share passive configuration while current allegiance
   for (const createDefinition of [createOperatorDefinition, createCombatDefinition]) {
     const definition = createDefinition(input);
     assert.equal(definition.allegiance, input.allegiance);
-    assert.equal(definition.spatial, input.spatial);
+    assert.equal(definition.layer, input.layer);
     assert.equal(definition.hit.geometry, input.hit.geometry);
     const unit = initialize({ id: 1, definition, position: [0, 0] });
     assert.equal(unit.allegiance, definition.allegiance);
@@ -497,7 +498,7 @@ test('core capability guards inspect composition independently of shared snapsho
     states: { route: catalogRouteState(definition.route) } });
   for (const [key, guard] of [
     ['vitality', hasVitality], ['locomotion', hasLocomotion], ['route', hasRoute], ['allegiance', hasAllegiance],
-    ['action', hasAction], ['spatial', hasSpatial], ['hit', hasHit], ['blocker', hasBlocker],
+    ['action', hasAction], ['layer', hasLayer], ['hit', hasHit], ['blocker', hasBlocker],
     ['blockable', hasBlockable],
   ]) {
     const missingState = { ...unit };
@@ -528,7 +529,7 @@ test('core snapshots share capabilities and retain earlier values across immutab
   assert.equal(Object.hasOwn(snapshot, 'extension'), false);
   assert.equal(snapshot.definition, unit.definition);
   assert.equal(snapshot.position, unit.position);
-  for (const key of ['vitality', 'allegiance', 'action', 'spatial', 'hit', 'targetable',
+  for (const key of ['vitality', 'allegiance', 'action', 'layer', 'hit', 'targetable',
     'blocker', 'blockable', 'spatialPresence', 'locomotion', 'route']) {
     assert.equal(snapshot[key], unit[key], key);
   }
@@ -687,7 +688,7 @@ test('core blocking uses current state radius and includes center-distance equal
     allegiance: { side: 'ALLY' }, blocker: { capacity: 1, geometry: { radius: 0.5 } },
   }), position: [0, 0] });
   const blocked = initialize({ id: 2, definition: Object.freeze({ id: 'radius_enemy',
-    allegiance: { side: 'ENEMY' }, blockable: { volume: 1 }, spatial: { layer: 'GROUND' },
+    allegiance: { side: 'ENEMY' }, blockable: { volume: 1 }, layer: { type: 'GROUND' },
     hit: createHitDefinition({ geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 10 }] } }),
   }), position: [1, 0] });
   const update = current => {
