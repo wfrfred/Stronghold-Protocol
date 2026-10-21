@@ -51,7 +51,7 @@ export function auraEffect(
         const host = getUnit(state, context.ref.host.id);
         const selectedResult = select(state, {
             source: unitRef(host),
-            purposes: [],
+            purposes: ["EFFECT"],
             filter: (_battle, request, target) =>
                 target.id !== request.source.id && accepts(target, host),
             selector: (battle, _request, candidates) => ({ state: battle, value: candidates.map(unitRef) }),

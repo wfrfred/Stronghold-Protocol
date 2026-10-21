@@ -158,7 +158,7 @@ test("visibility content distinguishes different sides from hostile sides indepe
     const enemy = owner(3, "ENEMY");
     const battle = effectFixtureWork(ally, neutral, enemy);
 
-    for (const purposes of [[], ["DAMAGE"], ["HEAL"], ["ELEMENT_DAMAGE", "ELEMENT_HEAL"]]) {
+    for (const purposes of [[], ["DAMAGE"], ["HEAL"], ["ELEMENT_DAMAGE", "ELEMENT_HEAL"], ["EFFECT"]]) {
         const input = request(ally, purposes);
         assert.equal(invisibleRestriction.allows(battle, input, neutral), false);
         assert.equal(untargetableRestriction.allows(battle, input, neutral), false);
@@ -178,6 +178,7 @@ test("heal-free content only restricts requests explicitly containing HEAL", () 
     assert.equal(targetable.allowsRestrictions(battle, request(source, ["HEAL"]), target), false);
     assert.equal(targetable.allowsRestrictions(battle, request(source, ["DAMAGE", "HEAL"]), target), false);
     assert.equal(targetable.allowsRestrictions(battle, request(source, ["ELEMENT_HEAL"]), target), true);
+    assert.equal(targetable.allowsRestrictions(battle, request(source, ["EFFECT"]), target), true);
     assert.equal(targetable.allowsRestrictions(battle, request(source, []), target), true);
 });
 
