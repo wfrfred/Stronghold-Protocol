@@ -76,7 +76,7 @@ test('ordinary attacks read current talent and skill contributions instead of ca
   const attack = definition.action.definitions.values()[0];
   const receiver = initialize({ id: 1, position: [1, 0], definition: {
     id: 'receiver', targetable: { restrictions: [] }, vitality: { maxHp: 10000, defense: 0, resistance: 0 }, allegiance: { side: 'ENEMY' }, layer: { type: 'GROUND' },
-    hit: { geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: .1 }] } },
+    hitbox: { geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: .1 }] } },
   } });
   let state = createBattleState(fixtureBattlefieldState([initialize({ id: 0, position: [0, 0], definition }), receiver]));
   state = enter(state, [0]);
@@ -94,7 +94,7 @@ test('the ordinary ground block radius catches a target 0.6 units from Melantha'
   const receiver = initialize({ id: 1, position: [0.6, 0], definition: {
     id: 'nearby-enemy', targetable: { restrictions: [] }, vitality: { maxHp: 1000, defense: 0, resistance: 0 }, blockable: { volume: 1 },
     allegiance: { side: 'ENEMY' }, layer: { type: 'GROUND' },
-    hit: { geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: .1 }] } },
+    hitbox: { geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: .1 }] } },
   } });
   const state = createBattleState(fixtureBattlefieldState([initialize({ id: 0, position: [0, 0], definition }), receiver]));
   assert.deepEqual(battlefieldView(state).blockingRelations, [{ blockerUnitId: 0, blockedUnitId: 1 }]);
@@ -108,7 +108,7 @@ test('Melantha still checks active targeting restrictions on enemies she is bloc
       id: 'hidden-blocked-enemy', targetable: { restrictions: [{ id: 'innate', value }] },
       vitality: { maxHp: 1000, defense: 0, resistance: 0 }, blockable: { volume: 1 },
       allegiance: { side: 'ENEMY' }, layer: { type: 'GROUND' },
-      hit: { geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: .1 }] } },
+      hitbox: { geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: .1 }] } },
     } });
     const source = initialize({ id: 0, position: [0, 0], definition });
     const state = createBattleState(fixtureBattlefieldState([source, receiver]));

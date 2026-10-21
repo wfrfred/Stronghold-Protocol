@@ -427,7 +427,7 @@ test('core combat: snapshots share capabilities while immutable battlefield upda
   const actionId = operator.definition.action.definitions.values()[0].id;
   const readyAtTick = operator.action.states.get(actionId).cooldown.readyAtTick;
   const hp = operator.vitality.hp;
-  for (const key of ['action', 'allegiance', 'layer', 'hit', 'effects', 'blocker', 'vitality']) {
+  for (const key of ['action', 'allegiance', 'layer', 'hitbox', 'effects', 'blocker', 'vitality']) {
     assert.equal(sharedOperator[key], operator[key], key);
   }
   assert.equal(repeated.blockingRelations, snapshot.blockingRelations);
@@ -444,9 +444,6 @@ test('core combat: snapshots share capabilities while immutable battlefield upda
     action: { ...operator.action, states: new Map(operator.action.states).set(actionId, { ...operator.action.states.get(actionId), cooldown: { ...operator.action.states.get(actionId).cooldown, readyAtTick: 999999 } }) },
     allegiance: { ...operator.allegiance, side: 'ENEMY' },
     layer: { ...operator.layer, type: 'AIR' },
-    hit: { ...operator.hit, geometry: createShapeGeometry({ shapes: [
-      { type: 'CIRCLE', offset: [0, 0], radius: 100 },
-    ] }) },
     targetable: setRestriction(operator.targetable,
       { id: 'changed-targeting', value: { kind: Symbol('changed-targeting'), allows: () => false } }),
     blocker: { ...operator.blocker, capacity: contribution.set([], { id: 'disabled-capacity', value: [modifier.create({ finalScaler: 0 })],
@@ -468,7 +465,7 @@ test('core combat: snapshots share capabilities while immutable battlefield upda
   assert.equal(operator.action.states.get(actionId).cooldown.readyAtTick, readyAtTick);
   assert.equal(operator.allegiance.side, 'ALLY');
   assert.equal(operator.layer.type, 'GROUND');
-  assert.equal(operator.hit.geometry.shapes[0].radius, 0.25);
+  assert.equal(operator.definition.hitbox.geometry.shapes[0].radius, 0.25);
   assert.equal(allowsRestrictions({ battlefield: previous }, targetingRequest, operator), true);
   assert.deepEqual(operator.blocker.capacity, []);
   assert.equal(operator.vitality.hp, hp);
@@ -1128,7 +1125,7 @@ const attackDefinition = (targetGroups, followUps = []) => createAttack({
 function actionUnit(id, side, position, { hp = 100, effects: initialEffects = [], action, skill } = {}) {
   const definition = createDefinition({
     id: `action_unit_${id}`, targetable: { restrictions: [] }, vitality: { maxHp: 100, defense: 0, resistance: 0 }, allegiance: { side },
-    layer: { type: 'GROUND' }, hit: { geometry: {
+    layer: { type: 'GROUND' }, hitbox: { geometry: {
       shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.1 }],
     } }, blocker: { capacity: 0, geometry: { radius: 0 } },
     ...(skill === undefined ? {} : { skill }),
@@ -1267,18 +1264,20 @@ test('core vitality: a selected target remains directly healable after gaining a
   assert.equal(target.vitality.hp, 40);
 });
 
-test('core targeting: current hit geometry and spatial classification override definition initial values', () => {
+test('core targeting uses static definition hitboxes and current layer', () => {
   const source = actionUnit(0, 'ALLY', [0, 0]);
   const target = actionUnit(1, 'ENEMY', [1.6, 0]);
   const request = { source: unitRef(source), ...damageTargeting({ geometry: actionRange(1) }) };
   const select = current => selectTargets(createBattleState(fixtureBattlefieldState([source, current])), request).value;
 
   assert.deepEqual(select(target), []);
-  const expanded = { ...target, hit: { geometry: createShapeGeometry({ shapes: [
-    { type: 'CIRCLE', offset: [0, 0], radius: 0.7 },
-  ] }) } };
+  const expanded = initialize({ id: target.id, position: target.position, definition: {
+    ...target.definition, hitbox: { geometry: createShapeGeometry({ shapes: [
+      { type: 'CIRCLE', offset: [0, 0], radius: 0.7 },
+    ] }) },
+  } });
   assert.deepEqual(select(expanded).map(unit => unit.id), [1]);
-  assert.equal(target.definition.hit.geometry.shapes[0].radius, 0.1);
+  assert.equal(target.definition.hitbox.geometry.shapes[0].radius, 0.1);
   assert.deepEqual(select({ ...expanded, layer: { type: 'AIR' } }), []);
   assert.equal(target.definition.layer.type, 'GROUND');
 });

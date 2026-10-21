@@ -68,7 +68,7 @@ function passive(id, hp = 100) {
         offense: { attack: 10 },
         allegiance: { side: "ENEMY" },
         layer: { type: "GROUND" },
-        hit: { geometry: hit },
+        hitbox: { geometry: hit },
     };
 }
 

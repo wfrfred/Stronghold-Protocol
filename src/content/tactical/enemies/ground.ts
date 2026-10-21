@@ -117,7 +117,7 @@ export function createDefinition(
 
             allegiance: { side: "ENEMY" },
             layer: { type: "GROUND" },
-            hit: {
+            hitbox: {
                 geometry: {
                     shapes: [{ type: "CIRCLE", offset: [0, 0], radius: timing.hitRadius }],
                 },

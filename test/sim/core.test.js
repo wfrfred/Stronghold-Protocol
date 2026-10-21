@@ -34,7 +34,7 @@ import { areHostile, hasAllegiance } from '../../dist/core/tactical/unit/capabil
 import { hasBlocker, resolveCapacity } from '../../dist/core/tactical/unit/capability/blocking/blocker.js';
 import { hasBlockable } from '../../dist/core/tactical/unit/capability/blocking/blockable.js';
 import * as modifier from '../../dist/core/tactical/unit/contribution/attribute.js';
-import { createHitDefinition, hasHit } from '../../dist/core/tactical/unit/capability/spatial/capability.js';
+import { hasHitbox } from '../../dist/core/tactical/unit/capability/hitbox/capability.js';
 import { hasLayer } from '../../dist/core/tactical/unit/capability/layer/capability.js';
 import { initialize as initializeTargetableState, hasTargetable, setRestriction, removeRestriction, allowsRestrictions } from '../../dist/core/tactical/unit/capability/targetable/capability.js';
 import { setHook as setHealingHook, removeHook as removeHealingHook } from '../../dist/core/tactical/battle/healing/hook.js';
@@ -384,7 +384,7 @@ const catalogDefinition = () => Object.freeze({
     }],
    })) }),
   layer: Object.freeze({ type: 'GROUND' }),
-  hit: createHitDefinition({ geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.25 }] } }),
+  hitbox: { geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.25 }] } },
   blocker: { capacity: 2, geometry: { radius: 0.7 } },
   blockable: Object.freeze({ volume: 1 }),
 });
@@ -452,7 +452,7 @@ test('archetype definitions share passive configuration while current allegiance
     const definition = createDefinition(input);
     assert.equal(definition.allegiance, input.allegiance);
     assert.equal(definition.layer, input.layer);
-    assert.equal(definition.hit.geometry, input.hit.geometry);
+    assert.equal(definition.hitbox, input.hitbox);
     const unit = initialize({ id: 1, definition, position: [0, 0] });
     assert.equal(unit.allegiance, definition.allegiance);
     const changed = { ...unit, allegiance: { side: 'ENEMY' } };
@@ -498,7 +498,7 @@ test('core capability guards inspect composition independently of shared snapsho
     states: { route: catalogRouteState(definition.route) } });
   for (const [key, guard] of [
     ['vitality', hasVitality], ['locomotion', hasLocomotion], ['route', hasRoute], ['allegiance', hasAllegiance],
-    ['action', hasAction], ['layer', hasLayer], ['hit', hasHit], ['blocker', hasBlocker],
+    ['action', hasAction], ['layer', hasLayer], ['hitbox', hasHitbox], ['blocker', hasBlocker],
     ['blockable', hasBlockable],
   ]) {
     const missingState = { ...unit };
@@ -529,7 +529,7 @@ test('core snapshots share capabilities and retain earlier values across immutab
   assert.equal(Object.hasOwn(snapshot, 'extension'), false);
   assert.equal(snapshot.definition, unit.definition);
   assert.equal(snapshot.position, unit.position);
-  for (const key of ['vitality', 'allegiance', 'action', 'layer', 'hit', 'targetable',
+  for (const key of ['vitality', 'allegiance', 'action', 'layer', 'hitbox', 'targetable',
     'blocker', 'blockable', 'spatialPresence', 'locomotion', 'route']) {
     assert.equal(snapshot[key], unit[key], key);
   }
@@ -557,7 +557,7 @@ test('core snapshots share capabilities and retain earlier values across immutab
   assert.equal(updated.route.alternative, snapshot.route.alternative);
   assert.equal(updated.route.alternative.phase.checkpointState.deadlineTick, 9);
   assert.equal(updated.route.main.definition, snapshot.route.main.definition);
-  assert.equal(updated.hit, snapshot.hit);
+  assert.equal(updated.hitbox, snapshot.hitbox);
   assert.equal(updated.targetable, snapshot.targetable);
 });
 
@@ -580,14 +580,30 @@ test('core geometry boundaries own shape values and share them across snapshots'
   assert.throws(() => createShapeGeometry({ shapes: [] }), /at least one/);
   assert.throws(() => createBlockGeometry({ radius: -1 }), /nonnegative/);
 
-  const definition = Object.freeze({ id: 'shared_geometry', hit: createHitDefinition({ geometry }) });
+  const definition = Object.freeze({ id: 'shared_geometry', hitbox: { geometry } });
   const first = initialize({ id: 1, definition, position: [0, 0] });
   const second = initialize({ id: 2, definition, position: [1, 0] });
   const snapshot = copy(first);
-  assert.equal(snapshot.hit.geometry, geometry);
-  assert.equal(second.hit.geometry, geometry);
-  assert.notEqual(first.hit, second.hit);
-  assert.equal(snapshot.hit, first.hit);
+  assert.equal(snapshot.definition.hitbox.geometry, geometry);
+  assert.equal(second.definition.hitbox.geometry, geometry);
+  assert.deepEqual(first.hitbox, {});
+  assert.notEqual(first.hitbox, second.hitbox);
+  assert.equal(snapshot.hitbox, first.hitbox);
+});
+
+test('core unit initialization validates static hitbox geometry', () => {
+  const invalid = [
+    [{ shapes: [] }, /at least one/],
+    [{ shapes: Array(1) }, /dense/],
+    [{ shapes: [{ type: 'CIRCLE', offset: [NaN, 0], radius: 1 }] }, /finite/],
+    [{ shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: -1 }] }, /nonnegative/],
+    [{ shapes: [{ type: 'BOX', offset: [0, 0], halfExtents: [1, -1] }] }, /nonnegative/],
+  ];
+  for (const [geometry, error] of invalid) {
+    assert.throws(() => initialize({ id: 1, position: [0, 0],
+      definition: { id: 'invalid_hitbox', hitbox: { geometry } },
+    }), error);
+  }
 });
 
 test('core range geometry includes tangent contacts and excludes circle-box corner gaps', () => {
@@ -689,7 +705,7 @@ test('core blocking uses current state radius and includes center-distance equal
   }), position: [0, 0] });
   const blocked = initialize({ id: 2, definition: Object.freeze({ id: 'radius_enemy',
     allegiance: { side: 'ENEMY' }, blockable: { volume: 1 }, layer: { type: 'GROUND' },
-    hit: createHitDefinition({ geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 10 }] } }),
+    hitbox: { geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 10 }] } },
   }), position: [1, 0] });
   const update = current => {
     const units = new Map([[1, current], [2, blocked]]);

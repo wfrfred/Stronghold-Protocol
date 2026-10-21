@@ -9,7 +9,7 @@ import {
     type State as BattleState,
 } from "../../battle/state.js";
 import type { Unit, Id } from "../../unit/unit.js";
-import { hasHit } from "../../unit/capability/spatial/capability.js";
+import { hasHitbox } from "../../unit/capability/hitbox/capability.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";
 import type { ProjectileQueryContext } from "./context.js";
 import type { Definition } from "./definition.js";
@@ -49,12 +49,12 @@ function signalFacts(projectile: StoredProjectile, tick: number): Omit<Projectil
 function inContactArea(projectile: StoredProjectile, target: Unit): boolean {
     return (
         isSpatiallyPresent(target) &&
-        hasHit(target) &&
+        hasHitbox(target) &&
         rangeOverlapsHit(
             projectile.contactRange,
             projectile.position,
             target.position,
-            target.hit.geometry,
+            target.definition.hitbox.geometry,
         )
     );
 }

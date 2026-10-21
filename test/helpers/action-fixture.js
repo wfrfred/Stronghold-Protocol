@@ -74,7 +74,7 @@ export function unit(
         offense: { attack: 10 },
         allegiance: { side },
         layer: { type: "GROUND" },
-        hit: { geometry: hit },
+        hitbox: { geometry: hit },
         ...(capability === undefined ? {} : { action: capability }),
         ...fields,
     };

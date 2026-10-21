@@ -1,6 +1,6 @@
 import { areHostile, hasAllegiance } from "../../unit/capability/allegiance/capability.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";
-import { hasHit } from "../../unit/capability/spatial/capability.js";
+import { hasHitbox } from "../../unit/capability/hitbox/capability.js";
 import { hasLayer } from "../../unit/capability/layer/capability.js";
 import { hasVitality, resolveMaxHp } from "../../unit/capability/vitality/capability.js";
 import { allowsRestrictions } from "../../unit/capability/targetable/capability.js";
@@ -67,8 +67,13 @@ export function range(geometry: RangeGeometry): Filter {
 
         return (
             source !== undefined &&
-            hasHit(target) &&
-            rangeOverlapsHit(geometry, source.position, target.position, target.hit.geometry)
+            hasHitbox(target) &&
+            rangeOverlapsHit(
+                geometry,
+                source.position,
+                target.position,
+                target.definition.hitbox.geometry,
+            )
         );
     };
 }

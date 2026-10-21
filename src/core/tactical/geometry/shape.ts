@@ -1,4 +1,4 @@
-import { assertNonnegativeNumber } from "../../common/assert.js";
+import { assertFiniteNumber, assertNonnegativeNumber } from "../../common/assert.js";
 import { createWorldOffset, type WorldOffset } from "./coordinate.js";
 import type { Direction } from "./direction.js";
 import { RangeGrid } from "./range.js";
@@ -45,8 +45,6 @@ function createLocalShape(shape: LocalShape): LocalShape {
 
     switch (shape.type) {
         case "CIRCLE":
-            assertNonnegativeNumber(shape.radius, "circle radius");
-
             return Object.freeze({
                 type: shape.type,
                 offset,
@@ -54,9 +52,6 @@ function createLocalShape(shape: LocalShape): LocalShape {
             });
 
         case "BOX": {
-            assertNonnegativeNumber(shape.halfExtents[0], "box half width");
-            assertNonnegativeNumber(shape.halfExtents[1], "box half height");
-
             const halfExtents: readonly [halfWidth: number, halfHeight: number] = Object.freeze([
                 shape.halfExtents[0],
                 shape.halfExtents[1],
@@ -67,23 +62,41 @@ function createLocalShape(shape: LocalShape): LocalShape {
     }
 }
 
-export function createShapeGeometry(geometry: ShapeGeometry): ShapeGeometry {
-    if (ownedShapes.has(geometry)) {
-        return geometry;
-    }
+export function validateShapeGeometry(geometry: ShapeGeometry): void {
     if (geometry.shapes.length === 0) {
         throw new RangeError("shape geometry must contain at least one shape");
     }
-
-    const shapes: LocalShape[] = [];
 
     for (let index = 0; index < geometry.shapes.length; index++) {
         if (!Object.hasOwn(geometry.shapes, index)) {
             throw new RangeError("shape geometry must be dense");
         }
 
-        shapes.push(createLocalShape(geometry.shapes[index]!));
+        const shape = geometry.shapes[index]!;
+        assertFiniteNumber(shape.offset[0], "dx");
+        assertFiniteNumber(shape.offset[1], "dy");
+
+        switch (shape.type) {
+            case "CIRCLE":
+                assertNonnegativeNumber(shape.radius, "circle radius");
+                break;
+
+            case "BOX":
+                assertNonnegativeNumber(shape.halfExtents[0], "box half width");
+                assertNonnegativeNumber(shape.halfExtents[1], "box half height");
+                break;
+        }
     }
+}
+
+export function createShapeGeometry(geometry: ShapeGeometry): ShapeGeometry {
+    if (ownedShapes.has(geometry)) {
+        return geometry;
+    }
+
+    validateShapeGeometry(geometry);
+
+    const shapes = geometry.shapes.map(createLocalShape);
 
     const owned = Object.freeze({
         shapes: Object.freeze(shapes) as readonly [LocalShape, ...LocalShape[]],

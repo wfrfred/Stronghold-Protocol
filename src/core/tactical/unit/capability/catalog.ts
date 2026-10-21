@@ -4,6 +4,7 @@ import * as blockable from "./blocking/blockable.js";
 import * as blocker from "./blocking/blocker.js";
 import * as deployable from "./deployable/capability.js";
 import * as elemental from "./elemental/capability.js";
+import * as hitbox from "./hitbox/capability.js";
 import * as layer from "./layer/capability.js";
 import * as locomotion from "./locomotion/capability.js";
 import * as occupancy from "./occupancy/capability.js";
@@ -11,7 +12,6 @@ import * as offense from "./offense/capability.js";
 import * as presence from "./presence/capability.js";
 import * as route from "./route/capability.js";
 import * as skill from "./skill/capability.js";
-import * as spatial from "./spatial/capability.js";
 import * as targetable from "./targetable/capability.js";
 import * as tileBinding from "./tile-binding/capability.js";
 import * as vitality from "./vitality/capability.js";
@@ -25,7 +25,7 @@ export const initializers = {
     elemental: elemental.initialize,
     allegiance: allegiance.initialize,
     layer: layer.initialize,
-    hit: spatial.initializeHitState,
+    hitbox: hitbox.initialize,
     blocker: blocker.initialize,
     blockable: blockable.initialize,
     locomotion: locomotion.initialize,

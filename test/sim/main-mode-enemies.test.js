@@ -34,7 +34,7 @@ function emptyBattle() {
 function guard(id, position, blockCapacity = 1, restrictions = []) {
   return initialize({ id, position, definition: {
     id: 'test-guard', targetable: { restrictions }, vitality: { maxHp: 1000, defense: 40, resistance: 0 }, allegiance: { side: 'ALLY' }, layer: { type: 'GROUND' },
-    hit: { geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.2 }] } },
+    hitbox: { geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.2 }] } },
     blocker: { capacity: blockCapacity, geometry: { radius: 0.70709997 } },
   } });
 }
@@ -220,7 +220,7 @@ test('enemy content keeps hit radius and terrain avoidance width independent', (
 
   for (const [definition, halfBodyWidth] of [[hound, 0.15], [crossbowman, 0.25]]) {
     const unit = initialize({ id: 1, position: [2, 2], definition });
-    assert.equal(unit.definition.hit.geometry.shapes[0].radius, 0.4);
+    assert.equal(unit.definition.hitbox.geometry.shapes[0].radius, 0.4);
     assert.equal(unit.definition.locomotion.halfBodyWidth, halfBodyWidth);
   }
 

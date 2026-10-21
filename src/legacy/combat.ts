@@ -159,7 +159,7 @@ function operatorDefinition(value: unknown, direction: Direction) {
             offense: { attack: numberField(stats.atk, "attack") },
             allegiance: { side: "ALLY" },
             layer: { type: "GROUND" },
-            hit: {
+            hitbox: {
                 geometry: {
                     shapes: [
                         { type: "CIRCLE", offset: [0, 0], radius: LEGACY_OPERATOR_HIT_RADIUS },
@@ -257,7 +257,7 @@ function enemyDefinition(value: unknown) {
         },
         allegiance: { side: "ENEMY" },
         layer: { type: motion === "FLY" ? "AIR" : "GROUND" },
-        hit: {
+        hitbox: {
             geometry: {
                 shapes: [{ type: "CIRCLE", offset: [0, 0], radius: LEGACY_ENEMY_HIT_RADIUS }],
             },

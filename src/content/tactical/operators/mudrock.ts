@@ -466,7 +466,7 @@ export function create(
 
         allegiance: { side: "ALLY" },
         layer: { type: "GROUND" },
-        hit: { geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.25 }] } },
+        hitbox: { geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.25 }] } },
         blocker: {
             capacity: profile.attributes.blockCapacity,
             geometry: createBlockGeometry({ radius: 0.70709997 }),

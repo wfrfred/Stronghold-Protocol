@@ -88,12 +88,12 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, windupTicks = 0, o
   const definition = createDefinition({
     id: "ammo-actor", spatialPresence: {}, vitality: { maxHp: 10000, defense: 0, resistance: 0 }, offense: { attack: 100 },
     allegiance: { side: "ALLY" },
-    layer: { type: "GROUND" }, hit: { geometry: hit },
+    layer: { type: "GROUND" }, hitbox: { geometry: hit },
     blocker: { capacity: 0, geometry: { radius: 0.1 } }, skill,
     action: { definitions: Definitions.empty().add(action) },
   });
   const receiver = {
-    id: "ammo-target", targetable: { restrictions: [] }, vitality: { maxHp: 10000, defense: 0, resistance: 0 }, allegiance: { side: "ENEMY" }, layer: { type: "GROUND" }, hit: { geometry: hit },
+    id: "ammo-target", targetable: { restrictions: [] }, vitality: { maxHp: 10000, defense: 0, resistance: 0 }, allegiance: { side: "ENEMY" }, layer: { type: "GROUND" }, hitbox: { geometry: hit },
   };
   const shell = createProjectileDefinition({
     id: "runtime-ammo-shell", initialize: () => ({}),
