@@ -21,11 +21,11 @@ export function reflect(
         return nextPosition;
     }
 
-    const normal = World.difference(Tile.center(destination), position);
+    const normal = World.sub(Tile.center(destination), position);
     const magnitude = Math.hypot(normal[0], normal[1]);
     const unitNormal = World.scale(normal, 1 / magnitude);
-    const delta = World.difference(nextPosition, position);
+    const delta = World.sub(nextPosition, position);
     const dot = delta[0] * unitNormal[0] + delta[1] * unitNormal[1];
 
-    return World.translate(position, World.difference(delta, World.scale(unitNormal, 2 * dot)));
+    return World.add(position, World.sub(delta, World.scale(unitNormal, 2 * dot)));
 }

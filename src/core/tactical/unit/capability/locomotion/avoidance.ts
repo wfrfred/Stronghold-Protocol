@@ -1,16 +1,15 @@
 import type { Map } from "../../../battlefield/navigation/map.js";
 import type { MotionMode } from "../../../battlefield/navigation/state.js";
 import {
-    createWorldOffset,
+    createWorldPosition,
     Tile,
     World,
-    type TileOffset,
-    type WorldOffset,
+    type TilePosition,
     type WorldPosition,
 } from "../../../geometry/coordinate.js";
 import { TICKS_PER_SECOND } from "../../../tick.js";
 
-const NEIGHBORS: readonly TileOffset[] = [
+const NEIGHBORS: readonly TilePosition[] = [
     [1, 0],
     [1, 1],
     [0, 1],
@@ -26,19 +25,19 @@ function terrainForce(
     mode: MotionMode,
     position: WorldPosition,
     halfBodyWidth: number,
-): WorldOffset {
+): WorldPosition {
     const tile = World.toTile(position);
     const current = map.get(tile);
 
     if (current === undefined) {
-        return createWorldOffset(0, 0);
+        return createWorldPosition(0, 0);
     }
     if (!current.passable) {
         let nearest = Number.POSITIVE_INFINITY;
-        let force = createWorldOffset(0, 0);
+        let force = createWorldPosition(0, 0);
 
         for (const offset of NEIGHBORS) {
-            const neighbor = Tile.translate(tile, offset);
+            const neighbor = Tile.add(tile, offset);
 
             if (map.get(neighbor)?.passable !== true) {
                 continue;
@@ -48,7 +47,7 @@ function terrainForce(
 
             if (distance < nearest) {
                 nearest = distance;
-                force = createWorldOffset(offset[1], offset[0]);
+                force = createWorldPosition(offset[1], offset[0]);
             }
         }
 
@@ -60,7 +59,7 @@ function terrainForce(
     let y = 0;
 
     for (const [row, col] of NEIGHBORS) {
-        const neighbor = map.get(Tile.translate(tile, [row, col]));
+        const neighbor = map.get(Tile.add(tile, [row, col]));
 
         if (
             neighbor === undefined ||
@@ -88,8 +87,8 @@ function terrainForce(
     const magnitude = Math.hypot(x, y);
 
     return magnitude > 0.00001
-        ? createWorldOffset(x / magnitude, y / magnitude)
-        : createWorldOffset(0, 0);
+        ? createWorldPosition(x / magnitude, y / magnitude)
+        : createWorldPosition(0, 0);
 }
 
 export function calculate(
@@ -97,22 +96,22 @@ export function calculate(
     mode: MotionMode,
     position: WorldPosition,
     halfBodyWidth: number,
-    direction: WorldOffset,
-    velocity: WorldOffset,
+    direction: WorldPosition,
+    velocity: WorldPosition,
     speed: number,
-): WorldOffset {
+): WorldPosition {
     if (speed <= 0) {
-        return createWorldOffset(0, 0);
+        return createWorldPosition(0, 0);
     }
 
     const magnitude = Math.hypot(direction[0], direction[1]);
     const heading =
-        magnitude > 0.00001 ? World.scale(direction, 1 / magnitude) : createWorldOffset(0, 0);
+        magnitude > 0.00001 ? World.scale(direction, 1 / magnitude) : createWorldPosition(0, 0);
     const force = terrainForce(map, mode, position, halfBodyWidth);
     const projection = force[0] * heading[0] + force[1] * heading[1];
     const scale = Math.max(0.5, Math.hypot(velocity[0], velocity[1]) / speed);
 
-    return createWorldOffset(
+    return createWorldPosition(
         ((force[0] - projection * heading[0]) * scale) / TICKS_PER_SECOND ** 2,
         ((force[1] - projection * heading[1]) * scale) / TICKS_PER_SECOND ** 2,
     );

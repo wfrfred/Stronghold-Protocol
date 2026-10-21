@@ -1,5 +1,5 @@
 import { assertFiniteNumber } from "../../core/common/assert.js";
-import type { TilePosition, WorldOffset } from "../../core/tactical/geometry/coordinate.js";
+import type { TilePosition, WorldPosition } from "../../core/tactical/geometry/coordinate.js";
 import {
     createInput,
     type Checkpoint,
@@ -44,7 +44,7 @@ function position(value: unknown, name: string): TilePosition {
     return [number(data.row, `${name}.row`), number(data.col, `${name}.col`)];
 }
 
-function offset(value: unknown, name: string): WorldOffset {
+function offset(value: unknown, name: string): WorldPosition {
     const data = object(value, name, ["x", "y"]);
 
     return [number(data.x, `${name}.x`), number(data.y, `${name}.y`)];

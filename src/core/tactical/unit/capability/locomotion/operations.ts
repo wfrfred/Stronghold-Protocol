@@ -74,11 +74,11 @@ export function advance(
     let position = self.position;
     let velocity = self.locomotion.velocity;
 
-    if (World.withinDistance(position, target.goal, speed)) {
+    if (World.distanceSquared(position, target.goal) <= speed * speed) {
         position = target.goal;
     } else {
         const map = effectiveMap(battle.battlefield.navigation, context.mode);
-        const direction = World.difference(target.nextPoint, position);
+        const direction = World.sub(target.nextPoint, position);
         const force = avoidance(
             map,
             context.mode,
@@ -95,7 +95,7 @@ export function advance(
             force,
             self.definition.locomotion.steeringParameters,
         );
-        position = reflect(position, World.translate(position, velocity), map);
+        position = reflect(position, World.add(position, velocity), map);
     }
 
     if (position[0] === self.position[0] && position[1] === self.position[1]) {

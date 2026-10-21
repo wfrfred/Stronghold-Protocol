@@ -95,14 +95,14 @@ function target(progress: Progress): WorldPosition | null {
     const checkpoint = progress.definition.checkpoints[phase.index]!;
 
     return checkpoint.type === "MOVE"
-        ? World.translate(Tile.center(checkpoint.position), checkpoint.offset)
+        ? World.add(Tile.center(checkpoint.position), checkpoint.offset)
         : null;
 }
 
 function recoveryPoint(battle: BattleState, self: Unit, progress: Progress): WorldPosition | null {
     const definition = progress.definition;
     const map = battle.battlefield.navigation.baseline[progress.pathMotionMode];
-    const locator = World.translate(self.position, World.negate(definition.offset));
+    const locator = World.add(self.position, World.negate(definition.offset));
 
     if (map.contains(World.toTile(self.position)) && map.contains(World.toTile(locator))) {
         return null;
@@ -140,7 +140,7 @@ export function movementTarget(battle: BattleState, ref: Ref<Unit & Route>): Mov
 
     const definition = progress.definition;
     const map = battle.battlefield.navigation.baseline[progress.pathMotionMode];
-    const locator = World.translate(self.position, World.negate(definition.offset));
+    const locator = World.add(self.position, World.negate(definition.offset));
 
     if (!map.contains(World.toTile(self.position)) || !map.contains(World.toTile(locator))) {
         const recovery = recoveryPoint(battle, self, progress);
@@ -158,8 +158,8 @@ export function movementTarget(battle: BattleState, ref: Ref<Unit & Route>): Mov
     return point === null
         ? null
         : {
-              nextPoint: World.translate(point, definition.offset),
-              goal: World.translate(goal, definition.offset),
+              nextPoint: World.add(point, definition.offset),
+              goal: World.add(goal, definition.offset),
           };
 }
 
@@ -173,10 +173,12 @@ function atEnd(self: Unit, progress: Progress): boolean {
         return false;
     }
 
-    return World.withinDistance(
-        World.translate(self.position, World.negate(progress.definition.offset)),
-        Tile.center(progress.definition.endPosition),
-        RADIUS,
+    return (
+        World.distanceSquared(
+            World.add(self.position, World.negate(progress.definition.offset)),
+            Tile.center(progress.definition.endPosition),
+        ) <=
+        RADIUS * RADIUS
     );
 }
 
@@ -240,10 +242,7 @@ export function advance(battle: BattleState, ref: Ref<Unit & Route>): BattleStat
             battle = replace(battle, self, progress, following(progress, phase.index + 1));
         } else if (state.type === "MOVING") {
             const goal = target(progress)!;
-            const locator = World.translate(
-                self.position,
-                World.negate(progress.definition.offset),
-            );
+            const locator = World.add(self.position, World.negate(progress.definition.offset));
             const map = battle.battlefield.navigation.baseline[progress.pathMotionMode];
             const inside =
                 map.contains(World.toTile(self.position)) && map.contains(World.toTile(locator));
@@ -257,7 +256,7 @@ export function advance(battle: BattleState, ref: Ref<Unit & Route>): BattleStat
                     goal,
                 ) === null;
 
-            if (!World.withinDistance(locator, goal, RADIUS) && !skipped) {
+            if (!(World.distanceSquared(locator, goal) <= RADIUS * RADIUS) && !skipped) {
                 return battle;
             }
 
@@ -292,10 +291,7 @@ export function advance(battle: BattleState, ref: Ref<Unit & Route>): BattleStat
                     battle = presence.disappear(battle, units.ref(self));
                 }
             } else if (checkpoint.type === "APPEAR_AT_POS") {
-                const position = World.translate(
-                    Tile.center(checkpoint.position),
-                    checkpoint.offset,
-                );
+                const position = World.add(Tile.center(checkpoint.position), checkpoint.offset);
                 signal = { type: "APPEAR_AT_POS", position };
                 battle = hasSpatialPresence(self)
                     ? presence.appear(battle, units.ref(self), position)

@@ -1,4 +1,4 @@
-import type { TileOffset } from "./coordinate.js";
+import type { TilePosition } from "./coordinate.js";
 
 export const DIRECTIONS = Object.freeze(["UP", "RIGHT", "DOWN", "LEFT"] as const);
 
@@ -9,7 +9,7 @@ const DIRECTION_VECTOR = Object.freeze({
     RIGHT: Object.freeze([0, 1] as const),
     DOWN: Object.freeze([-1, 0] as const),
     LEFT: Object.freeze([0, -1] as const),
-} satisfies Record<Direction, TileOffset>);
+} satisfies Record<Direction, TilePosition>);
 
 const OPPOSITE_DIRECTION = {
     UP: "DOWN",
@@ -26,7 +26,7 @@ const MIRROR_DIRECTION = {
 } as const satisfies Record<Direction, Direction>;
 
 export const Direction = {
-    vector(direction: Direction): TileOffset {
+    vector(direction: Direction): TilePosition {
         return DIRECTION_VECTOR[direction];
     },
 

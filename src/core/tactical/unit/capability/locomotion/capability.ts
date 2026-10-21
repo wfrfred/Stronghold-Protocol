@@ -1,11 +1,7 @@
 import { assertNonnegativeNumber } from "../../../../common/assert.js";
 import type { State as BattleState, Result } from "../../../battle/state.js";
 import type { MotionMode } from "../../../battlefield/navigation/state.js";
-import {
-    createWorldOffset,
-    type WorldOffset,
-    type WorldPosition,
-} from "../../../geometry/coordinate.js";
+import { createWorldPosition, type WorldPosition } from "../../../geometry/coordinate.js";
 import type { Context } from "../../query.js";
 import type { Unit } from "../../unit.js";
 import type { Contribution } from "../../contribution/contribution.js";
@@ -26,7 +22,7 @@ export interface Rule {
 }
 
 export interface State {
-    readonly velocity: WorldOffset;
+    readonly velocity: WorldPosition;
     readonly speed: readonly Contribution<attribute.Input<Context>>[];
     readonly rules: readonly Rule[];
 }
@@ -59,7 +55,7 @@ export function initialize(battle: BattleState, definition: Definition): Result<
 
     return {
         state: battle,
-        value: { velocity: createWorldOffset(0, 0), speed: [], rules: [] },
+        value: { velocity: createWorldPosition(0, 0), speed: [], rules: [] },
     };
 }
 

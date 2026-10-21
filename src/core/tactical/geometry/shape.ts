@@ -1,17 +1,17 @@
 import { assertFiniteNumber, assertNonnegativeNumber } from "../../common/assert.js";
-import { createWorldOffset, type WorldOffset } from "./coordinate.js";
+import { createWorldPosition, type WorldPosition } from "./coordinate.js";
 import type { Direction } from "./direction.js";
 import { RangeGrid } from "./range.js";
 
 export type LocalShape =
     | {
           readonly type: "CIRCLE";
-          readonly offset: WorldOffset;
+          readonly offset: WorldPosition;
           readonly radius: number;
       }
     | {
           readonly type: "BOX";
-          readonly offset: WorldOffset;
+          readonly offset: WorldPosition;
           readonly halfExtents: readonly [halfWidth: number, halfHeight: number];
       };
 
@@ -41,7 +41,7 @@ const ownedBlocks = new WeakSet<BlockGeometry>();
 const ownedRanges = new WeakSet<RangeGeometry>();
 
 function createLocalShape(shape: LocalShape): LocalShape {
-    const offset = createWorldOffset(shape.offset[0], shape.offset[1]);
+    const offset = createWorldPosition(shape.offset[0], shape.offset[1]);
 
     switch (shape.type) {
         case "CIRCLE":

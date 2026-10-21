@@ -172,17 +172,15 @@ function advanceProjectile(
                         target !== undefined && isSpatiallyPresent(target)
                             ? target.position
                             : current.destination;
-                    const reached = World.withinDistance(
-                        current.position,
-                        destination,
-                        current.speedPerTick,
-                    );
+                    const reached =
+                        World.distanceSquared(current.position, destination) <=
+                        current.speedPerTick * current.speedPerTick;
                     const position = reached
                         ? destination
-                        : World.translate(
+                        : World.add(
                               current.position,
-                              World.clampMagnitude(
-                                  World.difference(destination, current.position),
+                              World.clampLength(
+                                  World.sub(destination, current.position),
                                   current.speedPerTick,
                               ),
                           );

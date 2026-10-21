@@ -23,7 +23,7 @@ export function create(map: BattlefieldMap, mode: MotionMode): Map {
             continue;
         }
 
-        const adjacent = Tile.translate(edge.position, Direction.vector(edge.direction));
+        const adjacent = Tile.add(edge.position, Direction.vector(edge.direction));
 
         for (const [position, direction] of [
             [edge.position, edge.direction],

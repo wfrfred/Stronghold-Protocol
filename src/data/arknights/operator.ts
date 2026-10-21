@@ -3,7 +3,7 @@ import {
     assertNonnegativeSafeInteger,
     assertPositiveSafeInteger,
 } from "../../core/common/assert.js";
-import { createTileOffset } from "../../core/tactical/geometry/coordinate.js";
+import { createTilePosition } from "../../core/tactical/geometry/coordinate.js";
 import { RangeGrid } from "../../core/tactical/geometry/range.js";
 import { parseBlackboard, type ArknightsBlackboardEntry } from "./blackboard.js";
 import { parseArknightsSkillLevel, type ArknightsSkillLevel } from "./skill-definition.js";
@@ -342,7 +342,7 @@ function range(value: unknown, id: unknown): RangeGrid {
         array(source.grids, "range grids").map((value) => {
             const grid = record(value, "range grid");
 
-            return createTileOffset(
+            return createTilePosition(
                 number(grid.row, "range row"),
                 number(grid.col, "range column"),
             );

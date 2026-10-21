@@ -1,18 +1,18 @@
-import { Tile, createTileOffset, type TileOffset, type TilePosition } from "./coordinate.js";
+import { Tile, createTilePosition, type TilePosition } from "./coordinate.js";
 import type { Direction } from "./direction.js";
 
-export type RangeGrid = readonly TileOffset[];
+export type RangeGrid = readonly TilePosition[];
 
 const compiledRanges = new WeakSet<RangeGrid>();
 
 export const RangeGrid = {
-    create(offsets: readonly TileOffset[]): RangeGrid {
+    create(offsets: readonly TilePosition[]): RangeGrid {
         if (compiledRanges.has(offsets)) {
             return offsets;
         }
 
         const seen = new Set<string>();
-        const snapshot: TileOffset[] = [];
+        const snapshot: TilePosition[] = [];
 
         for (let index = 0; index < offsets.length; index++) {
             if (!Object.hasOwn(offsets, index)) {
@@ -25,7 +25,7 @@ export const RangeGrid = {
                 throw new RangeError(`missing range coordinate at index ${index}`);
             }
 
-            const copy = createTileOffset(offset[0], offset[1]);
+            const copy = createTilePosition(offset[0], offset[1]);
             const key = `${copy[0]},${copy[1]}`;
 
             if (seen.has(key)) {
@@ -48,7 +48,7 @@ export const RangeGrid = {
             range.map((offset) => {
                 const rotated = Tile.rotate(offset, direction);
 
-                return Tile.translate(origin, rotated);
+                return Tile.add(origin, rotated);
             }),
         );
     },

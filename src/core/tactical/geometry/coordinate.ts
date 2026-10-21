@@ -1,13 +1,13 @@
-import { assertFiniteNumber, assertSafeInteger } from "../../common/assert.js";
+import {
+    assertFiniteNumber,
+    assertNonnegativeNumber,
+    assertSafeInteger,
+} from "../../common/assert.js";
 import { Direction } from "./direction.js";
 
 export type TilePosition = readonly [row: number, col: number];
 
-export type TileOffset = readonly [dRow: number, dCol: number];
-
 export type WorldPosition = readonly [x: number, y: number];
-
-export type WorldOffset = readonly [dx: number, dy: number];
 
 export function isTilePosition(value: unknown): value is TilePosition {
     return (
@@ -31,20 +31,8 @@ export function isWorldPosition(value: unknown): value is WorldPosition {
     );
 }
 
-function requireFinite(value: number, name: string): number {
-    assertFiniteNumber(value, name);
-
-    return value === 0 ? 0 : value;
-}
-
-function requireSafeInteger(value: number, name: string): number {
-    assertSafeInteger(value, name);
-
-    return value === 0 ? 0 : value;
-}
-
 function roundTiesToEven(value: number): number {
-    requireFinite(value, "world coordinate");
+    assertFiniteNumber(value, "world coordinate");
 
     const lower = Math.floor(value);
     const fraction = value - lower;
@@ -60,38 +48,36 @@ function roundTiesToEven(value: number): number {
 }
 
 export function createTilePosition(row: number, col: number): TilePosition {
-    return Object.freeze([requireSafeInteger(row, "row"), requireSafeInteger(col, "col")]);
-}
+    assertSafeInteger(row, "row");
+    assertSafeInteger(col, "col");
 
-export function createTileOffset(dRow: number, dCol: number): TileOffset {
-    return Object.freeze([requireSafeInteger(dRow, "dRow"), requireSafeInteger(dCol, "dCol")]);
+    return [row, col];
 }
 
 export function createWorldPosition(x: number, y: number): WorldPosition {
-    return Object.freeze([requireFinite(x, "x"), requireFinite(y, "y")]);
-}
+    assertFiniteNumber(x, "x");
+    assertFiniteNumber(y, "y");
 
-export function createWorldOffset(dx: number, dy: number): WorldOffset {
-    return Object.freeze([requireFinite(dx, "dx"), requireFinite(dy, "dy")]);
+    return [x, y];
 }
 
 export const Tile = {
-    translate(position: TilePosition, offset: TileOffset): TilePosition {
-        return createTilePosition(position[0] + offset[0], position[1] + offset[1]);
+    add(a: TilePosition, b: TilePosition): TilePosition {
+        return createTilePosition(a[0] + b[0], a[1] + b[1]);
     },
 
-    difference(a: TilePosition, b: TilePosition): TileOffset {
-        return createTileOffset(a[0] - b[0], a[1] - b[1]);
+    sub(a: TilePosition, b: TilePosition): TilePosition {
+        return createTilePosition(a[0] - b[0], a[1] - b[1]);
     },
 
-    rotate(offset: TileOffset, direction: Direction): TileOffset {
-        const [dRow, dCol] = offset;
+    rotate(vector: TilePosition, direction: Direction): TilePosition {
+        const [dRow, dCol] = vector;
         const [forwardRow, forwardCol] = Direction.vector(direction);
 
         const row = dRow * forwardCol + dCol * forwardRow;
         const col = -dRow * forwardRow + dCol * forwardCol;
 
-        return createTileOffset(row, col);
+        return createTilePosition(row, col);
     },
 
     center(position: TilePosition): WorldPosition {
@@ -100,44 +86,45 @@ export const Tile = {
 };
 
 export const World = {
-    translate(position: WorldPosition, offset: WorldOffset): WorldPosition {
-        return createWorldPosition(position[0] + offset[0], position[1] + offset[1]);
+    add(a: WorldPosition, b: WorldPosition): WorldPosition {
+        return createWorldPosition(a[0] + b[0], a[1] + b[1]);
     },
 
-    difference(a: WorldPosition, b: WorldPosition): WorldOffset {
-        return createWorldOffset(a[0] - b[0], a[1] - b[1]);
+    sub(a: WorldPosition, b: WorldPosition): WorldPosition {
+        return createWorldPosition(a[0] - b[0], a[1] - b[1]);
     },
 
-    negate(offset: WorldOffset): WorldOffset {
-        return createWorldOffset(-offset[0], -offset[1]);
+    negate(v: WorldPosition): WorldPosition {
+        return createWorldPosition(-v[0], -v[1]);
     },
 
-    add(a: WorldOffset, b: WorldOffset): WorldOffset {
-        return createWorldOffset(a[0] + b[0], a[1] + b[1]);
+    scale(v: WorldPosition, factor: number): WorldPosition {
+        return createWorldPosition(v[0] * factor, v[1] * factor);
     },
 
-    scale(offset: WorldOffset, factor: number): WorldOffset {
-        return createWorldOffset(offset[0] * factor, offset[1] * factor);
-    },
+    length(v: WorldPosition): number {
+        const length = Math.hypot(v[0], v[1]);
+        assertFiniteNumber(length, "world length");
 
-    clampMagnitude(offset: WorldOffset, maximum: number): WorldOffset {
-        const magnitude = requireFinite(Math.hypot(offset[0], offset[1]), "world magnitude");
-
-        return magnitude > maximum ? World.scale(offset, maximum / magnitude) : offset;
+        return length;
     },
 
     distanceSquared(a: WorldPosition, b: WorldPosition): number {
         const dx = a[0] - b[0];
         const dy = a[1] - b[1];
 
-        return requireFinite(dx * dx + dy * dy, "squared world distance");
+        const distanceSquared = dx * dx + dy * dy;
+        assertFiniteNumber(distanceSquared, "squared world distance");
+
+        return distanceSquared;
     },
 
-    withinDistance(a: WorldPosition, b: WorldPosition, radius: number): boolean {
-        const distanceSquared = World.distanceSquared(a, b);
-        const radiusSquared = requireFinite(radius * radius, "squared radius");
+    clampLength(v: WorldPosition, maxLength: number): WorldPosition {
+        assertNonnegativeNumber(maxLength, "maxLength");
 
-        return distanceSquared <= radiusSquared;
+        const length = World.length(v);
+
+        return length > maxLength ? World.scale(v, maxLength / length) : v;
     },
 
     toTile(position: WorldPosition): TilePosition {

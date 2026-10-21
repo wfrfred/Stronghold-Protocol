@@ -1,9 +1,9 @@
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import {
     createTilePosition,
-    createWorldOffset,
+    createWorldPosition,
     type TilePosition,
-    type WorldOffset,
+    type WorldPosition,
 } from "../../geometry/coordinate.js";
 import type { MotionMode } from "../../battlefield/navigation/state.js";
 import type {
@@ -13,7 +13,7 @@ import type {
 
 export interface MoveTarget {
     readonly position: TilePosition;
-    readonly reachOffset: WorldOffset;
+    readonly reachOffset: WorldPosition;
 }
 
 export type Checkpoint =
@@ -27,7 +27,7 @@ export type Checkpoint =
     | {
           readonly type: "APPEAR_AT_POS";
           readonly position: TilePosition;
-          readonly reachOffset: WorldOffset;
+          readonly reachOffset: WorldPosition;
       }
     | { readonly type: "DISAPPEAR" | "ALERT" };
 
@@ -35,8 +35,8 @@ export interface Input {
     readonly pathMotionMode: MotionMode;
     readonly startPosition: TilePosition;
     readonly endPosition: TilePosition;
-    readonly spawnOffset: WorldOffset;
-    readonly spawnRandomRange: WorldOffset;
+    readonly spawnOffset: WorldPosition;
+    readonly spawnRandomRange: WorldPosition;
     readonly checkpoints: readonly Checkpoint[];
     readonly visitEveryCheckPoint: boolean;
 }
@@ -61,7 +61,7 @@ function copyCheckpoint(checkpoint: Checkpoint): Checkpoint {
                 type: checkpoint.type,
                 target: Object.freeze({
                     position: createTilePosition(...checkpoint.target.position),
-                    reachOffset: createWorldOffset(...checkpoint.target.reachOffset),
+                    reachOffset: createWorldPosition(...checkpoint.target.reachOffset),
                 }),
             });
 
@@ -85,7 +85,7 @@ function copyCheckpoint(checkpoint: Checkpoint): Checkpoint {
             return Object.freeze({
                 type: checkpoint.type,
                 position: createTilePosition(...checkpoint.position),
-                reachOffset: createWorldOffset(...checkpoint.reachOffset),
+                reachOffset: createWorldPosition(...checkpoint.reachOffset),
             });
 
         case "DISAPPEAR":
@@ -109,8 +109,8 @@ export function createInput(input: Input): Input {
         pathMotionMode: input.pathMotionMode,
         startPosition: createTilePosition(...input.startPosition),
         endPosition: createTilePosition(...input.endPosition),
-        spawnOffset: createWorldOffset(...input.spawnOffset),
-        spawnRandomRange: createWorldOffset(...input.spawnRandomRange),
+        spawnOffset: createWorldPosition(...input.spawnOffset),
+        spawnRandomRange: createWorldPosition(...input.spawnRandomRange),
         checkpoints: Object.freeze(checkpoints),
         visitEveryCheckPoint: input.visitEveryCheckPoint,
     });
@@ -126,7 +126,7 @@ function deadline(start: number, elapsed: number): number {
 export function normalize(
     input: Input,
     timing: Timing,
-    offset: WorldOffset,
+    offset: WorldPosition,
     alwaysCheckCurrentPoint: boolean,
 ): Definition {
     const checkpoints: RouteCheckpoint[] = [];
@@ -204,7 +204,7 @@ export function normalize(
         pathMotionMode: input.pathMotionMode,
         startPosition: input.startPosition,
         endPosition: input.endPosition,
-        offset: createWorldOffset(...offset),
+        offset: createWorldPosition(...offset),
         checkpoints: Object.freeze(checkpoints.map((checkpoint) => Object.freeze(checkpoint))),
         requireAllCheckpoints: input.visitEveryCheckPoint,
         alwaysCheckCurrentPoint,

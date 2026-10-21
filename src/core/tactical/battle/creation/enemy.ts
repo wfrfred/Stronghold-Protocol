@@ -1,6 +1,6 @@
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import { createRng } from "../../../common/rng.js";
-import { createWorldOffset, Tile, World, type WorldOffset } from "../../geometry/coordinate.js";
+import { createWorldPosition, Tile, World, type WorldPosition } from "../../geometry/coordinate.js";
 import type { Definition, RoutedEnemy } from "../../unit/archetype/enemy.js";
 import type { Id } from "../../unit/unit.js";
 import { initialize } from "../../unit/initialize.js";
@@ -19,7 +19,7 @@ export interface RoutedEnemyInitialization<D extends Definition = Definition> {
     readonly enemy: RoutedEnemy<D>;
 }
 
-function sampleOffset(input: Input, next: () => number): WorldOffset {
+function sampleOffset(input: Input, next: () => number): WorldPosition {
     const center = Tile.center(input.startPosition);
 
     for (let axis = 0; axis < 2; axis++) {
@@ -38,7 +38,7 @@ function sampleOffset(input: Input, next: () => number): WorldOffset {
         }
     }
 
-    return createWorldOffset(
+    return createWorldPosition(
         input.spawnOffset[0] +
             (-input.spawnRandomRange[0] + next() * (2 * input.spawnRandomRange[0])),
         input.spawnOffset[1] +
@@ -65,7 +65,7 @@ export function initializeRoutedEnemy(
     const initialized = initialize(battle, {
         id: spawn.id,
         definition: { ...spawn.definition, route },
-        position: World.translate(Tile.center(route.startPosition), route.offset),
+        position: World.add(Tile.center(route.startPosition), route.offset),
     });
 
     return {

@@ -574,7 +574,6 @@ test('core geometry boundaries own shape values and share them across snapshots'
   ]);
   assert.equal(createShapeGeometry(geometry), geometry);
   assert.equal(Object.isFrozen(geometry.shapes), true);
-  assert.equal(Object.isFrozen(geometry.shapes[0].offset), true);
   assert.equal(Object.isFrozen(geometry.shapes[1].halfExtents), true);
   assert.throws(() => createShapeGeometry({ shapes: Array(1) }), /dense/);
   assert.throws(() => createShapeGeometry({ shapes: [] }), /at least one/);

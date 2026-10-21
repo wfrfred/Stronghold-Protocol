@@ -5,7 +5,7 @@ import {
     isTilePosition,
     isWorldPosition,
     type TilePosition,
-    type WorldOffset,
+    type WorldPosition,
 } from "../../../geometry/coordinate.js";
 import type { Unit } from "../../unit.js";
 
@@ -13,7 +13,7 @@ export interface Definition {
     readonly pathMotionMode: MotionMode;
     readonly startPosition: TilePosition;
     readonly endPosition: TilePosition;
-    readonly offset: WorldOffset;
+    readonly offset: WorldPosition;
     readonly checkpoints: readonly Checkpoint[];
     readonly requireAllCheckpoints: boolean;
     readonly alwaysCheckCurrentPoint: boolean;
@@ -23,14 +23,14 @@ export type Checkpoint =
     | {
           readonly type: "MOVE";
           readonly position: TilePosition;
-          readonly offset: WorldOffset;
+          readonly offset: WorldPosition;
       }
     | { readonly type: "WAIT"; readonly tick: number }
     | { readonly type: "WAIT_UNTIL"; readonly tick: number }
     | {
           readonly type: "APPEAR_AT_POS";
           readonly position: TilePosition;
-          readonly offset: WorldOffset;
+          readonly offset: WorldPosition;
       }
     | { readonly type: "DISAPPEAR" }
     | { readonly type: "ALERT" }

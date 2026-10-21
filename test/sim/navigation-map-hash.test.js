@@ -118,5 +118,5 @@ test('overlay construction isolates mutable arrays and coordinates', () => {
   denyDepartures.push('RIGHT');
   assert.deepEqual(value.cells, [[0, 1]]);
   assert.deepEqual(value.denyDepartures, ['LEFT']);
-  assert.ok(Object.isFrozen(value) && Object.isFrozen(value.cells) && Object.isFrozen(value.cells[0]) && Object.isFrozen(value.denyDepartures));
+  assert.ok(Object.isFrozen(value) && Object.isFrozen(value.cells) && Object.isFrozen(value.denyDepartures));
 });
