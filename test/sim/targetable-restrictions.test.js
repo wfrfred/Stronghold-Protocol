@@ -34,15 +34,41 @@ const restriction = (kind, allows = () => false) => ({ kind, allows });
 
 test("Targetable initializes innate restrictions in a new container while sharing immutable entries", () => {
     const entry = { id: "native-invisibility", value: invisibleRestriction };
-    const definition = { restrictions: [entry] };
+    const second = { id: "another-invisibility", value: invisibleRestriction };
+    const definition = { restrictions: Object.freeze([entry, second]) };
     const battle = fixtureBattle();
     const result = targetable.initialize(battle, definition);
 
     assert.strictEqual(result.state, battle);
     assert.notStrictEqual(result.value.restrictions, definition.restrictions);
     assert.strictEqual(result.value.restrictions[0], entry);
+    assert.strictEqual(result.value.restrictions[1], second);
+    assert.deepEqual(definition.restrictions, [entry, second]);
     assert.equal(targetable.hasTargetable(owner()), true);
     assert.equal(targetable.hasTargetable(initialize({ id: 3, position: [0, 0], definition: { id: "plain" } })), false);
+});
+
+test("Targetable initialization rejects different contributions with the same ID", () => {
+    const first = { id: "duplicate", value: invisibleRestriction };
+    const second = { id: "duplicate", value: untargetableRestriction };
+    const definition = { restrictions: Object.freeze([first, second]) };
+
+    assert.throws(
+        () => targetable.initialize(fixtureBattle(), definition),
+        { name: "TypeError", message: "duplicate targetable restriction identity: duplicate" },
+    );
+    assert.deepEqual(definition.restrictions, [first, second]);
+});
+
+test("Targetable initialization rejects a repeated reference to the same contribution", () => {
+    const entry = { id: "duplicate", value: invisibleRestriction };
+    const definition = { restrictions: Object.freeze([entry, entry]) };
+
+    assert.throws(
+        () => targetable.initialize(fixtureBattle(), definition),
+        { name: "TypeError", message: "duplicate targetable restriction identity: duplicate" },
+    );
+    assert.deepEqual(definition.restrictions, [entry, entry]);
 });
 
 test("restriction registration shares ID replacement and no-change semantics with Contribution", () => {

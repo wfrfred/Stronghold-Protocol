@@ -27,6 +27,16 @@ export function hasTargetable<U extends Unit>(unit: U): unit is U & Targetable {
 }
 
 export function initialize(battle: BattleState, definition: Definition): Result<State> {
+    const ids = new Set<string>();
+
+    for (const entry of definition.restrictions) {
+        if (ids.has(entry.id)) {
+            throw new TypeError(`duplicate targetable restriction identity: ${entry.id}`);
+        }
+
+        ids.add(entry.id);
+    }
+
     return { state: battle, value: { restrictions: [...definition.restrictions] } };
 }
 
