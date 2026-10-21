@@ -111,6 +111,44 @@ test('projectile runtime: frozen candidate identities read latest eligibility an
   assert.deepEqual(reached.events.filter(event => event.type === 'PROJECTILE_HIT').map(event => event.targetUnitId), [1, 2]);
 });
 
+test('projectile contact uses hitboxes independently of targetability and source identity', () => {
+  const observed = [];
+  const shell = program({
+    contact: (state, context) => { observed.push(context.targetUnitId); return state; },
+  });
+  const initial = battle(
+    unit(1, { targetable: undefined }),
+    { ...unit(2), position: [1, 0], spatialPresence: { present: false } },
+    { ...unit(3, { hitbox: undefined }), position: [1, 0] },
+  );
+  const launched = launch(initial, shell, { source: null, traceTarget: null }).state;
+
+  advanceProjectiles(launched, 1);
+  assert.deepEqual(observed, [1]);
+});
+
+test('projectile contact rechecks geometry after earlier contacts move later candidates', () => {
+  const observed = [];
+  const shell = program({
+    contact: (state, context) => {
+      observed.push(context.targetUnitId);
+      if (context.targetUnitId !== 1) return state;
+      state = updateUnit(state, { ...getUnit(state, 2), position: [1, 0] });
+      return updateUnit(state, { ...getUnit(state, 3), position: [4, 0] });
+    },
+  });
+  const initial = launch(battle(
+    unit(0), unit(1),
+    { ...unit(2), position: [4, 0] },
+    { ...unit(3), position: [1, 0] },
+  ), shell).state;
+
+  const reached = advanceProjectiles(initial, 1);
+  assert.deepEqual(observed, [1, 2]);
+  assert.deepEqual(getUnit(initial, 2).position, [4, 0]);
+  assert.deepEqual(getUnit(reached, 3).position, [4, 0]);
+});
+
 test('projectile runtime: live source attack, cached-only attack and missing-source fallback remain distinct', () => {
   for (const missing of [false, true]) {
 

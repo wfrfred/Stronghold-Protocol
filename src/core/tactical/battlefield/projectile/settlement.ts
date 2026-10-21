@@ -1,7 +1,7 @@
 import { all, getProjectile, ref, replaceProjectile } from "./operations.js";
 import type { Ref } from "../../../common/ref.js";
 import { World, type WorldPosition } from "../../geometry/coordinate.js";
-import { rangeOverlapsHit } from "../../geometry/intersection.js";
+import { overlaps } from "../spatial/query.js";
 import {
     appendEvents,
     battlefieldView,
@@ -50,12 +50,7 @@ function inContactArea(projectile: StoredProjectile, target: Unit): boolean {
     return (
         isSpatiallyPresent(target) &&
         hasHitbox(target) &&
-        rangeOverlapsHit(
-            projectile.contactRange,
-            projectile.position,
-            target.position,
-            target.definition.hitbox.geometry,
-        )
+        overlaps(projectile.contactRange, projectile.position, target)
     );
 }
 

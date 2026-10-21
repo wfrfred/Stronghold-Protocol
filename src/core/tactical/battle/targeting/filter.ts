@@ -12,7 +12,7 @@ import {
 } from "../../unit/capability/elemental/query.js";
 import type { DamageRequest, HealRequest } from "../../unit/capability/elemental/operations.js";
 import { get, ref } from "../../unit/query.js";
-import { rangeOverlapsHit } from "../../geometry/intersection.js";
+import { overlaps } from "../../battlefield/spatial/query.js";
 import type { RangeGeometry } from "../../geometry/shape.js";
 import type { Filter } from "./contract.js";
 
@@ -66,14 +66,7 @@ export function range(geometry: RangeGeometry): Filter {
         const source = get(battle, request.source);
 
         return (
-            source !== undefined &&
-            hasHitbox(target) &&
-            rangeOverlapsHit(
-                geometry,
-                source.position,
-                target.position,
-                target.definition.hitbox.geometry,
-            )
+            source !== undefined && hasHitbox(target) && overlaps(geometry, source.position, target)
         );
     };
 }

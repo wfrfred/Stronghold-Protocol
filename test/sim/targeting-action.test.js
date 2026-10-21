@@ -6,7 +6,7 @@ import { random } from "../../dist/core/tactical/battle/targeting/selector.js";
 import { getUnit } from "../../dist/core/tactical/battle/state.js";
 import { ref } from "../../dist/core/tactical/unit/query.js";
 import * as actions from "../../dist/core/tactical/unit/action/operations.js";
-import { damage, healing } from "../../dist/core/tactical/battle/targeting/filter.js";
+import { and, damage, healing, range } from "../../dist/core/tactical/battle/targeting/filter.js";
 import { unit, battle } from "../helpers/action-fixture.js";
 
 function definition(groups, start = state => ({ state, value: {} })) {
@@ -80,4 +80,20 @@ test("standard damage and healing filters exclude departing and spatially absent
         assert.equal(filter(initial, request, { ...target, lifecycle: "LEAVING" }), false);
         assert.equal(filter(initial, request, { ...target, spatialPresence: { present: false } }), false);
     }
+});
+
+test("targeting only requires a hitbox when a geometric range filter is composed", () => {
+    const source = unit(0);
+    const target = unit(1, { hitbox: undefined });
+    const initial = battle(source, target);
+    const request = { source: ref(source), purposes: ["DAMAGE"], filter: damage, selector: random(1) };
+
+    assert.deepEqual(select(initial, request).value, [ref(target)]);
+    assert.deepEqual(select(initial, {
+        ...request,
+        filter: and(damage, range({
+            type: "SHAPES",
+            geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 10 }] },
+        })),
+    }).value, []);
 });
