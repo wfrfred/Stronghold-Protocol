@@ -34,9 +34,9 @@ const counted = createWithState({
     initialize: current => ({ state: current, value: { count: 0 } }),
     start: (current, source, self): Result<{ sampled: number }> => ({ state: current, value: { sampled: self.data.count } }),
     output(current, self) {
-        const persistent = getState(current, self.source, self.definition)!;
+        const persistent = getState(current, self.host, self.definition)!;
         const count: number = persistent.data.count;
-        current = replaceState(current, self.source, { ...persistent, data: { count: count + 1 } });
+        current = replaceState(current, self.host, { ...persistent, data: { count: count + 1 } });
         return replace(current, setState(self, { ...self.state, data: { sampled: count } }));
     },
     afterOutput(current, self) {
@@ -48,7 +48,7 @@ const counted = createWithState({
         return current;
     },
     onEnd(current, self) {
-        const count: number = getState(current, self.source, self.definition)!.data.count;
+        const count: number = getState(current, self.host, self.definition)!.data.count;
         return current;
     },
 });

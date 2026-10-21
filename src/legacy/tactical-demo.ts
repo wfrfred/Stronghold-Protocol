@@ -21,6 +21,7 @@ import {
 } from "./tactical-demo-presentation.js";
 import { createTacticalProjectileDemo } from "./projectile-demo.js";
 import { hasAllegiance } from "../core/tactical/unit/capability/allegiance/capability.js";
+import { hasAction } from "../core/tactical/unit/capability/action/capability.js";
 import { hasSkill } from "../core/tactical/unit/capability/skill/capability.js";
 import {
     createTacticalMechanicsDemo,
@@ -527,7 +528,10 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
             elementType: mechanics?.elementType ?? null,
             element: elementStats(),
             blockingCount: snapshot.blockingRelations.length,
-            activeActionCount: snapshot.actions.instances.length,
+            activeActionCount: snapshot.units.reduce(
+                (total, unit) => total + (hasAction(unit) ? unit.action.instances.size : 0),
+                0,
+            ),
             projectileCount: snapshot.projectiles.instances.length,
             projectileActions,
             sourcePresent: snapshot.units.some(

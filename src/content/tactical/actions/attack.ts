@@ -306,11 +306,11 @@ export function createWithState<P extends object, E extends object>(
             const identity = ref(self);
 
             if (!self.state.cooldownAdjusted) {
-                const persistent = actions.getState(battle, self.source, self.definition);
+                const persistent = actions.getState(battle, self.host, self.definition);
                 const overdue = self.startedAtTick - self.state.previousReadyAtTick;
 
                 if (persistent !== undefined && overdue >= 0 && overdue < 1) {
-                    battle = actions.replaceState(battle, self.source, {
+                    battle = actions.replaceState(battle, self.host, {
                         ...persistent,
                         cooldown: {
                             ...persistent.cooldown,
@@ -325,7 +325,7 @@ export function createWithState<P extends object, E extends object>(
                 battle = appendEvents(battle, [
                     {
                         type: "ACTION",
-                        sourceUnitId: self.source.id,
+                        sourceUnitId: self.host.id,
                         targetUnitId: self.state.target.id,
                         tick: battle.tick,
                     },
@@ -338,17 +338,17 @@ export function createWithState<P extends object, E extends object>(
                 battle = permission.state;
                 const current = actions.get(battle, identity);
 
-                if (current?.status !== "RUNNING" || !sourcePresent(battle, current.source)) {
+                if (current?.status !== "RUNNING" || !sourcePresent(battle, current.host)) {
                     return {
                         state: actions.cancel(battle, identity, "SOURCE_ABSENT"),
                         value: true,
                     };
                 }
                 if (permission.value.type === "INTERRUPT") {
-                    const persistent = actions.getState(battle, self.source, self.definition);
+                    const persistent = actions.getState(battle, self.host, self.definition);
 
                     if (persistent !== undefined) {
-                        battle = actions.replaceState(battle, self.source, {
+                        battle = actions.replaceState(battle, self.host, {
                             ...persistent,
                             cooldown: {
                                 ...persistent.cooldown,
@@ -367,7 +367,7 @@ export function createWithState<P extends object, E extends object>(
                     {
                         type: "ACTION_RELEASED",
                         executionId: self.id,
-                        sourceUnitId: self.source.id,
+                        sourceUnitId: self.host.id,
                         tick: battle.tick,
                         markerId: definition.markerId ?? "normal-attack",
                     },
@@ -377,7 +377,7 @@ export function createWithState<P extends object, E extends object>(
 
                 const output = actions.get(battle, identity);
 
-                if (output?.status !== "RUNNING" || !sourcePresent(battle, output.source)) {
+                if (output?.status !== "RUNNING" || !sourcePresent(battle, output.host)) {
                     return {
                         state: actions.cancel(battle, identity, "SOURCE_ABSENT"),
                         value: true,
@@ -394,19 +394,19 @@ export function createWithState<P extends object, E extends object>(
                                     return { state: battle, value: true };
                                 }
 
-                                battle = apply(battle, output.source, target, operation);
+                                battle = apply(battle, output.host, target, operation);
                             }
                         }
                     }
                     for (const followUp of definition.followUps ?? []) {
                         for (const target of followUp.receiver.type === "SOURCE"
-                            ? [output.source]
+                            ? [output.host]
                             : (output.state.bindings[followUp.receiver.bindingId] ?? [])) {
                             if (actions.get(battle, identity)?.status !== "RUNNING") {
                                 return { state: battle, value: true };
                             }
 
-                            battle = apply(battle, output.source, target, followUp.operation);
+                            battle = apply(battle, output.host, target, followUp.operation);
                         }
                     }
                 }

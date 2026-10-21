@@ -29,7 +29,7 @@ export function beforeRelease(battle: BattleState, ref: Ref<StoredAction>): Resu
         return { state: battle, value: { type: "CONTINUE" } };
     }
 
-    const context: Context = { action: ref, source: action.source };
+    const context: Context = { action: ref, source: action.host };
     const result = hook.dispatch<Context, Directive>(
         battle,
         context,
@@ -60,7 +60,7 @@ export function released(battle: BattleState, ref: Ref<StoredAction>): BattleSta
         return battle;
     }
 
-    const context: Context = { action: ref, source: action.source };
+    const context: Context = { action: ref, source: action.host };
 
     return hook.dispatch(battle, context, undefined, {
         candidates: (current) =>

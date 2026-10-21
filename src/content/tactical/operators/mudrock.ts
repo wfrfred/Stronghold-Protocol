@@ -350,7 +350,7 @@ export function create(
         ...activeConfiguration,
         markerId: "mudrock/s2",
         output(state, self) {
-            const source = getUnit(state, self.source.id);
+            const source = getUnit(state, self.host.id);
 
             if (source === undefined || !hasSkill(source) || source.skill.active === null) {
                 return state;

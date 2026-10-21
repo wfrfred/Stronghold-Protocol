@@ -5,7 +5,6 @@ import { create as createBattlefield } from "../battlefield/state.js";
 import { view as createBattlefieldView } from "../battlefield/view.js";
 import type { State as NavigationState } from "../battlefield/navigation/state.js";
 import { copy } from "../unit/snapshot.js";
-import { Actions } from "../unit/action/actions.js";
 import {
     predefinedIdsForAlias,
     reconcilePredefinedPresence,
@@ -64,7 +63,6 @@ export class BattleRuntime {
         const scheduleDefinition = createSpawnScheduleDefinition(input.schedule);
 
         const battlefield = createBattlefield({ map: this.#input.map });
-        const actions = Actions.empty();
         let initial = createBattleState(
             battlefield,
             {
@@ -75,7 +73,6 @@ export class BattleRuntime {
                 nextOverlayId: 0,
                 nextProjectileId: 0,
             },
-            actions,
             0,
             initializeDeployment(input.deployment?.definition),
             createSpawnScheduleExecution(scheduleDefinition),
@@ -111,7 +108,6 @@ export class BattleRuntime {
             battlefield,
             tick: tickIndex,
             schedule,
-            actions,
             deployment,
             predefinedPresence,
             execution,
@@ -126,7 +122,6 @@ export class BattleRuntime {
             tickIndex,
             spawning: snapshotSchedule(schedule),
             predefinedPresence,
-            actions: actions.toJSON(),
             projectiles: {
                 nextProjectileId: execution.nextProjectileId,
                 instances: battlefield.projectiles.values(),

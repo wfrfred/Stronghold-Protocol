@@ -2,7 +2,7 @@ import type { Ref } from "../../../common/ref.js";
 import { updateUnit, type State as BattleState, type Result } from "../../battle/state.js";
 import * as units from "../query.js";
 import type { Unit } from "../unit.js";
-import type { Action as ActionCapability } from "../capability/action/capability.js";
+import { hasAction, type Action as ActionCapability } from "../capability/action/capability.js";
 import { isSpatiallyPresent } from "../capability/presence/capability.js";
 import { hasVitality } from "../capability/vitality/capability.js";
 import { resolveInterval } from "../capability/action/timing.js";
@@ -25,18 +25,19 @@ export type StartOutcome<P extends object, E extends object> =
       };
 
 export function all(battle: BattleState): Ref<StoredAction>[] {
-    return battle.actions.values().map(ref);
+    return units
+        .filter(battle, hasAction)
+        .flatMap((host) => units.get(battle, host)!.action.instances.values().map(ref));
 }
 
 export function forUnit(battle: BattleState, source: Ref<Unit>): Ref<StoredAction>[] {
-    return battle.actions
-        .values()
-        .filter((self) => self.source.id === source.id)
-        .map(ref);
+    const unit = units.get(battle, source);
+
+    return unit !== undefined && hasAction(unit) ? unit.action.instances.values().map(ref) : [];
 }
 
 export function get<A extends StoredAction>(battle: BattleState, reference: Ref<A>): A | undefined {
-    return battle.actions.get(reference.id) as A | undefined;
+    return units.get(battle, reference.host)?.action.instances.get(reference.id) as A | undefined;
 }
 
 export function isCasting(
@@ -44,13 +45,15 @@ export function isCasting(
     source: Ref<Unit>,
     definitionId?: DefinitionId,
 ): boolean {
-    return battle.actions
-        .values()
-        .some(
-            (self) =>
-                self.source.id === source.id &&
-                (definitionId === undefined || self.definition.id === definitionId),
-        );
+    const unit = units.get(battle, source);
+
+    return (
+        unit !== undefined &&
+        hasAction(unit) &&
+        unit.action.instances
+            .values()
+            .some((self) => definitionId === undefined || self.definition.id === definitionId)
+    );
 }
 
 export function getState<P extends object, E extends object>(
@@ -151,18 +154,21 @@ export function start<P extends object, E extends object>(
     }
 
     const self: Action<P, E> = {
-        id: battle.actions.nextId,
-        source,
+        id: latest.action.instances.nextId,
+        host: source,
         definition,
         startedAtTick: battle.tick,
         status: "RUNNING",
         state: initialized.value,
     };
-    battle = replaceState(battle, source, {
+    const states = new Map(latest.action.states).set(definition.id, {
         ...latestState,
         cooldown: cooldown.reset(acceptedCooldown, battle.tick),
     });
-    battle = { ...battle, actions: battle.actions.add(self) };
+    battle = updateUnit(battle, {
+        ...latest,
+        action: { ...latest.action, states, instances: latest.action.instances.add(self) },
+    });
     const reference = ref(self);
 
     return { state: advance(battle, reference), value: { type: "STARTED", ref: reference } };
@@ -172,16 +178,25 @@ export function replace<P extends object, E extends object>(
     battle: BattleState,
     self: Action<P, E>,
 ): BattleState {
-    const current = battle.actions.get(self.id);
+    const unit = units.get(battle, self.host);
+    const current = unit?.action.instances.get(self.id);
 
-    if (current === undefined || current.status === "ENDING" || current === self) {
+    if (
+        unit === undefined ||
+        current === undefined ||
+        current.status === "ENDING" ||
+        current === self
+    ) {
         return battle;
     }
     if (self.status !== current.status) {
         throw new TypeError("action lifecycle is managed by execution");
     }
 
-    return { ...battle, actions: battle.actions.replace(self) };
+    return updateUnit(battle, {
+        ...unit,
+        action: { ...unit.action, instances: unit.action.instances.replace(self) },
+    });
 }
 
 export function cancel(

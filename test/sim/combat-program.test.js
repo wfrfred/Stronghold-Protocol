@@ -255,7 +255,7 @@ test("ACTION recovery callbacks may cancel the releasing attack before its outpu
     const result = start(original, attack);
     assert.equal(getUnit(result.state, 0).skill.sp.value, 1);
     assert.equal(getUnit(result.state, 1).vitality.hp, 100);
-    assert.equal(result.state.actions.size, 0);
+    assert.equal(getUnit(result.state, 0).action.instances.size, 0);
     assert.equal(result.state.events.filter(event => event.type === "ACTION_RELEASED").length, 1);
     assert.equal(getUnit(original, 0).skill.sp.value, 0);
 });

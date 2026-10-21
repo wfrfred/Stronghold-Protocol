@@ -132,7 +132,7 @@ export function createTacticalProjectileDemo(
                     recoveryTicks: 6,
                     markerId: "demo-shell",
                     output: (state, self) => {
-                        const source = getUnit(state, self.source.id);
+                        const source = getUnit(state, self.host.id);
                         const targetId = self.state.target.id;
                         const target = getUnit(state, targetId);
 

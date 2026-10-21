@@ -57,27 +57,27 @@ for (const nested of ["cancel", "advance", "advance complete", "advance waiting"
         const before = state;
         state = leave(state, 0, "RETREAT");
         assert.equal(executions, 0);
-        assert.equal(state.actions.size, 0);
+        assert.equal(actions.all(state).length, 0);
         assert.equal(
             state.events.filter(
-                event => event.executionId === secondRef.id && event.type === "ACTION_CANCELLED",
+                event => event.sourceUnitId === secondRef.host.id && event.executionId === secondRef.id && event.type === "ACTION_CANCELLED",
             ).length,
             1,
         );
         assert.equal(
             state.events.filter(
-                event => event.executionId === secondRef.id && event.type === "ACTION_FINISHED",
+                event => event.sourceUnitId === secondRef.host.id && event.executionId === secondRef.id && event.type === "ACTION_FINISHED",
             ).length,
             0,
         );
         assert.equal(
             state.events.filter(
-                event => event.executionId === firstRef.id && event.type === "ACTION_CANCELLED",
+                event => event.sourceUnitId === firstRef.host.id && event.executionId === firstRef.id && event.type === "ACTION_CANCELLED",
             ).length,
             1,
         );
         assert.equal(getUnit(state, 0), undefined);
-        assert.equal(before.actions.size, 2);
+        assert.equal(actions.all(before).length, 2);
         assert.equal(getUnit(before, 0).lifecycle, "PRESENT");
     });
 }

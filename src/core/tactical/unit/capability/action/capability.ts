@@ -7,6 +7,7 @@ import type {
 } from "../../action/definition.js";
 import type { Definitions } from "../../action/definitions.js";
 import type { State as ActionState } from "../../action/state.js";
+import { Actions } from "../../action/actions.js";
 import * as cooldown from "../../action/cooldown.js";
 import * as contribution from "../../contribution/contribution.js";
 import type * as attribute from "../../contribution/attribute.js";
@@ -34,6 +35,7 @@ export interface Rule {
 
 export interface State {
     readonly states: ReadonlyMap<DefinitionId, StoredState>;
+    readonly instances: Actions;
     readonly interval: readonly contribution.Contribution<attribute.Input<Context>>[];
     readonly speed: readonly contribution.Contribution<attribute.Input<Context>>[];
     readonly rules: readonly Rule[];
@@ -82,6 +84,7 @@ export function initialize(battle: BattleState, definition: Definition): Result<
         state: battle,
         value: {
             states,
+            instances: Actions.empty(),
             interval: [],
             speed: [],
             rules: [],

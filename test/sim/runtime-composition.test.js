@@ -382,15 +382,15 @@ function scenario({ failure = null, cancelled = false } = {}) {
     const installation = (state, context, program) =>
         installEffect(
             state,
-            unitRef(getUnit(state, context.source.id)),
+            unitRef(getUnit(state, context.host.id)),
             program,
             {
-                source: context.source.id,
+                source: context.host.id,
                 scopes: [{ type: "ACTION", ref: actionRef(context) }],
             },
         ).state;
     const launch = (state, context, targetUnitId) => {
-        const source = getUnit(state, context.source.id);
+        const source = getUnit(state, context.host.id);
         const target = getUnit(state, targetUnitId);
         const launched = launchProjectile(state, shell, {
             source: source.id,
@@ -403,7 +403,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
             stopDelayTicks: 0,
             expiresAtTick: null,
         }, state.tick);
-        launches.push({ id: launched.value.id, executionId: context.id, targetUnitId });
+        launches.push({ id: launched.value.id, hostId: context.host.id, executionId: context.id, targetUnitId });
         return launched.state;
     };
     const runtime = new BattleRuntime(
@@ -479,7 +479,7 @@ test("runtime composition: late exceptions and invalid settlement propagate with
         failed.runtime.step();
         const before = failed.runtime.snapshot();
         const maps = failed.runtime.navigation;
-        assert.equal(before.actions.nextId, 1);
+        assert.equal(before.units.find(unit => unit.id === 0).action.instances.nextId, 1);
         assert.equal(before.projectiles.nextProjectileId, 1);
         assert.equal(before.execution.nextUnitId, 3);
         assert.equal(before.spawning.spawnedCount, 0);
@@ -496,11 +496,11 @@ test("runtime composition: late exceptions and invalid settlement propagate with
         assert.deepEqual(failed.runtime.snapshot(), before);
         assert.equal(failed.runtime.navigation, maps);
         assert.deepEqual(
-            failed.launches.map((launch) => [launch.id, launch.executionId]),
+            failed.launches.map((launch) => [launch.id, launch.hostId, launch.executionId]),
             [
-                [0, 0],
-                [1, 0],
-                [2, 1],
+                [0, 0, 0],
+                [1, 0, 0],
+                [2, 2, 0],
             ],
         );
         assert.deepEqual(failed.attempts, [
@@ -534,8 +534,8 @@ test("runtime composition: a successful battle preserves identities, snapshots a
     assert.equal(after.spawning.cursor, 1);
     assert.equal(after.spawning.spawnedCount, 1);
     assert.deepEqual(after.spawning.managedFinalUnitIds, [3]);
-    assert.equal(after.actions.nextId, 2);
-    assert.equal(after.actions.instances[0].state.emitted, 2);
+    assert.equal(after.units.find(unit => unit.id === 2).action.instances.nextId, 1);
+    assert.equal(after.units.find(unit => unit.id === 0).action.instances.values()[0].state.emitted, 2);
     assert.equal(after.projectiles.nextProjectileId, 3);
     assert.deepEqual(
         after.projectiles.instances.map((projectile) => projectile.id),
@@ -668,7 +668,7 @@ test("runtime composition: content conditions skip installation while cancelled 
     assert.equal(after.tickIndex, 2);
     assert.equal(after.execution.nextUnitId, 4);
     assert.equal(after.spawning.spawnedCount, 1);
-    assert.equal(after.actions.nextId, 2);
+    assert.equal(after.units.find(unit => unit.id === 2).action.instances.nextId, 1);
     assert.equal(after.projectiles.nextProjectileId, 3);
     assert.equal(effect(after, 0, run.aura).data.remaining, 2);
     assert.equal(effect(after, 0, run.aura).data.consumed, 1);

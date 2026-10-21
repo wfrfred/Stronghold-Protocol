@@ -82,7 +82,7 @@ test("action release: hiding the source in a continuing hook cancels before rele
     assert.equal(started.value.type, "STARTED");
     assert.equal(getUnit(started.state, 0).spatialPresence.present, false);
     assert.equal(getUnit(started.state, 1).vitality.hp, 100);
-    assert.equal(started.state.actions.size, 0);
+    assert.equal(getUnit(started.state, 0).action.instances.size, 0);
     assert.equal(started.state.events.some(event => event.type === "ACTION_RELEASED" || event.type === "DAMAGE"), false);
     assert.deepEqual(started.state.events.filter(event => event.type === "ACTION_CANCELLED").map(event => event.reason), ["SOURCE_ABSENT"]);
     assert.equal(getUnit(installed.state, 0).spatialPresence.present, true);

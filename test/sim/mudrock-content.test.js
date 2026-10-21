@@ -276,16 +276,16 @@ test("S2 stays active through configured recovery and finishes on completion or 
         let state = activateSkill({ ...sp(fixture.state, 5), tick: 0 }, unitRef(getUnit(sp(fixture.state, 5), 0)), "AUTO" ).state;
         state = start(state, unitRef(getUnit(state, 0)), fixture.action).state;
         assert.notEqual(getUnit(state, 0).skill.active, null);
-        assert.equal(state.actions.size, 1);
+        assert.equal(getUnit(state, 0).action.instances.size, 1);
         if (cancellation) {
-            state = cancel({ ...state, tick: 1 }, { id: 0 });
+            state = cancel({ ...state, tick: 1 }, { host: { id: 0 }, id: 0 });
         } else {
-            state = advanceAction({ ...state, tick: 1 }, { id: 0 });
+            state = advanceAction({ ...state, tick: 1 }, { host: { id: 0 }, id: 0 });
             assert.notEqual(getUnit(state, 0).skill.active, null);
-            state = advanceAction({ ...state, tick: 2 }, { id: 0 });
+            state = advanceAction({ ...state, tick: 2 }, { host: { id: 0 }, id: 0 });
         }
         assert.equal(getUnit(state, 0).skill.active, null);
-        assert.equal(state.actions.size, 0);
+        assert.equal(getUnit(state, 0).action.instances.size, 0);
         assert.equal(state.events.filter(event => event.type === "SKILL_FINISHED").length, 1);
         assert.equal(readShield(getUnit(state, 0)).layers, 1);
     }
@@ -307,10 +307,10 @@ test("an old S2 recovery cannot close a newer skill activation", () => {
     assert.ok(getUnit(state, 0).effects.values().every(effect => effect.definition.id !== "mudrock/skill-attack"));
     state = activateSkill({ ...sp(state, 5), tick: 1 }, unitRef(getUnit(sp(state, 5), 0)), "AUTO" ).state;
     assert.equal(getUnit(state, 0).skill.active.id, 1);
-    state = advanceAction(state, { id: 0 });
+    state = advanceAction(state, { host: { id: 0 }, id: 0 });
     const before = state;
-    state = advanceAction({ ...state, tick: 2 }, { id: 0 });
-    assert.equal(state.actions.size, 0);
+    state = advanceAction({ ...state, tick: 2 }, { host: { id: 0 }, id: 0 });
+    assert.equal(getUnit(state, 0).action.instances.size, 0);
     assert.equal(getUnit(state, 0).skill.active.id, 1);
     assert.equal(getUnit(before, 0).skill.active.id, 1);
     assert.deepEqual(state.events.filter(event => event.type === "SKILL_FINISHED").map(event => event.activationId), [0]);

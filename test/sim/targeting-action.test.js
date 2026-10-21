@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { createWithState, chooseTargets } from "../../dist/content/tactical/actions/attack.js";
 import { select } from "../../dist/core/tactical/battle/targeting/select.js";
 import { random } from "../../dist/core/tactical/battle/targeting/selector.js";
+import { getUnit } from "../../dist/core/tactical/battle/state.js";
 import { ref } from "../../dist/core/tactical/unit/query.js";
 import * as actions from "../../dist/core/tactical/unit/action/operations.js";
 import { damage, healing } from "../../dist/core/tactical/battle/targeting/filter.js";
@@ -64,7 +65,7 @@ test("an attack rejected for an empty trigger binding retains completed target-s
     assert.notEqual(selected.state.execution.rngState, initial.execution.rngState);
     assert.deepEqual(started.value, { type: "REJECTED", reason: "CONDITION" });
     assert.equal(started.state.execution.rngState, selected.state.execution.rngState);
-    assert.equal(started.state.actions.size, 0);
+    assert.equal(getUnit(started.state, 0).action.instances.size, 0);
 });
 
 test("standard damage and healing filters exclude departing and spatially absent candidates explicitly", () => {

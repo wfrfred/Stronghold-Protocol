@@ -1159,7 +1159,7 @@ test('core battle propagates nested settlement errors without publishing battlef
       assert.equal(getUnit(state, 1).vitality.hp, 93);
       assert.equal(getUnit(state, 2).definition.id, 'nested-created');
       assert.equal(state.execution.nextUnitId, 3);
-      assert.equal(state.actions.size, 1);
+      assert.equal(getUnit(state, 0).action.instances.size, 1);
       assert.ok(state.events.some(event => event.type === 'DAMAGE'));
       assert.deepEqual(observedRuntime.snapshot(), observedSnapshot);
       assert.equal(observedRuntime.navigation, observedMaps);
@@ -1206,7 +1206,7 @@ test('core battle propagates nested settlement errors without publishing battlef
   expected.step();
   assert.equal(observations, 2);
   assert.equal(expected.snapshot().execution.nextUnitId, 3);
-  assert.equal(expected.snapshot().actions.instances.length, 1);
+  assert.equal(expected.snapshot().units.find(unit => unit.id === 0).action.instances.size, 1);
   assert.equal(expected.snapshot().units.find(unit => unit.id === 1).vitality.hp, 93);
 });
 

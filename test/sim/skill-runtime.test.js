@@ -133,7 +133,7 @@ test('skill runtime: ACTION recovery counts a multi-target release once', () => 
 test('skill runtime: cancelled windup earns no ACTION SP', () => {
   const { runtime } = scenario(skill({ recovery: { type: 'ACTION', amount: 1 }, initial: 0 }), { windupTicks: 2 });
   runtime.step();
-  runtime.step([{ type: 'CANCEL_ACTION_EXECUTION', executionId: 0 }]);
+  runtime.step([{ type: 'CANCEL_ACTION_EXECUTION', ref: { host: { id: 0 }, id: 0 } }]);
   assert.equal(source(runtime).skill.sp.value, 0);
 });
 

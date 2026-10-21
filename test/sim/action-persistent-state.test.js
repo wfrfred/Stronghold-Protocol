@@ -46,7 +46,7 @@ test("Action initializes every configured persistent state before any start and 
     assert.deepEqual(calls, [["first", 12], ["second", 13], ["first", 14], ["second", 15]]);
     assert.equal(b.state.execution.rngState, 16);
     assert.equal(initial.execution.rngState, 12);
-    assert.equal(b.state.actions.size, 0);
+    assert.equal(getUnit(b.state, 0).action.instances.size, 0);
     for (const [definition, count] of [[first, 12], [second, 13]]) {
         const stored = actions.getState(b.state, a.source, definition);
         assert.equal(stored.definition, definition);
@@ -65,8 +65,8 @@ test("Action completion and cancellation discard execution state while preservin
             return { state, value: { count: 0 } };
         },
         step(state, self) {
-            const current = actions.getState(state, self.source, self.definition);
-            state = actions.replaceState(state, self.source, {
+            const current = actions.getState(state, self.host, self.definition);
+            state = actions.replaceState(state, self.host, {
                 ...current, data: { count: current.data.count + 1 },
             });
             return { state, value: current.data.count === 0 };

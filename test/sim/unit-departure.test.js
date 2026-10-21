@@ -100,7 +100,7 @@ for (const domain of ["deployment", "predefined"]) {
     test(`${domain}: successive departures share effect updates from skill finish damage`, () => {
         const { battlefield, execution } = fixture();
         const before = battlefieldView(createBattleState(battlefield));
-        let state = createBattleState(battlefield, execution, undefined, 1);
+        let state = createBattleState(battlefield, execution, 1);
         if (domain === "deployment") {
             state = resolveDeploymentCommands(
                 state,

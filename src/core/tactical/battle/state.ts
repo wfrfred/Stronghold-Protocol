@@ -8,7 +8,6 @@ import { transition, type State as BattlefieldState } from "../battlefield/state
 import { view } from "../battlefield/view.js";
 import type { MechanismId, Mechanism } from "../battlefield/mechanism.js";
 import type { Unit, Id } from "../unit/unit.js";
-import { Actions } from "../unit/action/actions.js";
 import type { Event, Result as BattleResult } from "./contract.js";
 import type { BattleExecutionState } from "./execution/state.js";
 import type { PredefinedPresence } from "./steps/predefined.js";
@@ -32,7 +31,6 @@ export interface State {
     readonly battlefield: BattlefieldState;
     readonly tick: number;
     readonly execution: BattleExecutionState;
-    readonly actions: Actions;
     readonly deployment: DeploymentState;
     readonly schedule: SpawnScheduleExecution;
     readonly predefinedPresence: readonly PredefinedPresence[];
@@ -51,7 +49,6 @@ export interface Result<A> {
 export function createBattleState(
     battlefield: BattlefieldState,
     execution: BattleExecutionState = defaultExecution,
-    actions: Actions = Actions.empty(),
     tick = 0,
     deployment: DeploymentState = initializeDeployment(),
     schedule: SpawnScheduleExecution = createSpawnScheduleExecution(
@@ -62,7 +59,6 @@ export function createBattleState(
         battlefield,
         tick,
         execution,
-        actions,
         deployment,
         schedule,
         predefinedPresence: [],

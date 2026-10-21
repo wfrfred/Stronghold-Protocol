@@ -9,12 +9,12 @@ type StoredAction = ReturnType<Actions["values"]>[number];
 
 export function advance(battle: BattleState, reference: Ref<StoredAction>): BattleState {
     return (
-        battle.actions.read(reference.id, (self) => {
+        getUnit(battle, reference.host)?.action.instances.read(reference.id, (self) => {
             if (self.status !== "RUNNING") {
                 return battle;
             }
 
-            const source = getUnit(battle, self.source);
+            const source = getUnit(battle, self.host);
 
             if (source?.lifecycle !== "PRESENT" || !isSpatiallyPresent(source)) {
                 return end(battle, reference, { type: "CANCELLED", reason: "SOURCE_ABSENT" });

@@ -193,12 +193,12 @@ test("ammo runtime: hiding the source after damage still pays for the sampled ac
 test("ammo runtime: cancellation during windup spends no ammunition", () => {
   const runtime = scenario({ ammo: 3, windupTicks: 2 });
   runtime.step([{ type: "ACTIVATE_SKILL", unitId: 0 }]);
-  const executionId = runtime.snapshot().actions.instances[0].id;
-  const cancelled = runtime.step([{ type: "CANCEL_ACTION_EXECUTION", executionId }]);
+  const ref = actionRef(runtime.snapshot().units.find(unit => unit.id === 0).action.instances.values()[0]);
+  const cancelled = runtime.step([{ type: "CANCEL_ACTION_EXECUTION", ref }]);
   assert.deepEqual(cancelled.events.filter(({ type }) => type === "ACTION_CANCELLED").map(({ reason }) => reason), ["CANCELLED"]);
   assert.deepEqual(damageEvents(cancelled), []);
   assert.equal(source(runtime).skill.active.sustain.remaining, 3);
-  assert.deepEqual(runtime.snapshot().actions.instances, []);
+  assert.deepEqual(runtime.snapshot().units.find(unit => unit.id === 0).action.instances.values(), []);
   assert.equal(runtime.step().events.some(({ type }) => type === "ACTION_RELEASED"), false);
   assert.equal(source(runtime).skill.active.sustain.remaining, 3);
 });
@@ -213,7 +213,7 @@ test("ammo runtime: release interruption cancels windup without spending ammunit
   assert.deepEqual(damageEvents(interrupted), []);
   assert.equal(source(runtime).skill.active.sustain.remaining, 3);
   assert.ok(source(runtime).action.states.get("normal").cooldown.readyAtTick >= 17);
-  assert.deepEqual(runtime.snapshot().actions.instances, []);
+  assert.deepEqual(runtime.snapshot().units.find(unit => unit.id === 0).action.instances.values(), []);
 });
 
 test("ammo runtime: a content-defined follow-up preserves one ammunition payment across ticks", () => {
@@ -231,7 +231,7 @@ test("ammo runtime: a content-defined follow-up preserves one ammunition payment
         return { state: actions.replace(state, setState(current, { ...current.state, emitted: 1 })), value: false };
       }
       for (const target of self.state.bindings.main) {
-        state = dealDamage(state, { source: { id: self.source.id }, target: { id: target.id }, parameters: parameters(resolveAttackPower(self.source.id, battlefieldView(state)), "TRUE") }).state;
+        state = dealDamage(state, { source: { id: self.host.id }, target: { id: target.id }, parameters: parameters(resolveAttackPower(self.host.id, battlefieldView(state)), "TRUE") }).state;
       }
       return { state, value: true };
     },
@@ -243,12 +243,12 @@ test("ammo runtime: a content-defined follow-up preserves one ammunition payment
   assert.deepEqual(damageEvents(followUp).map(({ amount }) => amount), [200, 200]);
   assert.equal(source(runtime).skill.active.sustain.remaining, 2);
   assert.equal(followUp.events.filter(({ type }) => type === "ACTION_FINISHED").length, 1);
-  assert.deepEqual(runtime.snapshot().actions.instances, []);
+  assert.deepEqual(runtime.snapshot().units.find(unit => unit.id === 0).action.instances.values(), []);
 });
 
 test("ammo runtime: the last released projectile survives skill completion and retains buffed attack", () => {
   const runtime = scenario({ output: (state, self, shell) => {
-    const actor = getUnit(state, self.source.id);
+    const actor = getUnit(state, self.host.id);
     const targetUnitId = self.state.bindings.main[0].id;
     const target = getUnit(state, targetUnitId);
     return launchProjectile(state, shell, {

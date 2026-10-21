@@ -74,7 +74,7 @@ test('projectile runtime: actions launch independent state and do not move on th
   rt.step();
   assert.deepEqual(observed, [0, 1]);
   assert.deepEqual(rt.snapshot().projectiles.instances.map(value => value.position), [[1, 0], [0, 0]]);
-  assert.equal(rt.snapshot().actions.instances.length, 0);
+  assert.equal(rt.snapshot().units.reduce((sum, unit) => sum + (unit.action?.instances.size ?? 0), 0), 0);
 });
 
 test('projectile runtime: missing trace targets preserve the last destination and query current receivers', () => {

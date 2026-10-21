@@ -81,7 +81,7 @@ export function key(scope: Scope): string {
             return `UNIT:${scope.unitId}`;
 
         case "ACTION":
-            return `ACTION:${scope.ref.id}`;
+            return `ACTION:${scope.ref.host.id}:${scope.ref.id}`;
 
         case "SKILL":
             return `SKILL:${scope.ref.host.id}:${scope.ref.id}`;

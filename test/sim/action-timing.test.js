@@ -137,8 +137,8 @@ test("action timing: startup rejects a cooldown introduced by its callback and r
     const source = unitRef(getUnit(initial, 0));
     const rejected = actions.start(initial, source, definition);
     assert.deepEqual(rejected.value, { type: "REJECTED", reason: "COOLDOWN" });
-    assert.equal(rejected.state.actions.size, 0);
-    assert.equal(rejected.state.actions.nextId, initial.actions.nextId);
+    assert.equal(getUnit(rejected.state, 0).action.instances.size, 0);
+    assert.equal(getUnit(rejected.state, 0).action.instances.nextId, getUnit(initial, 0).action.instances.nextId);
     assert.equal(actions.getState(rejected.state, source, definition).cooldown.readyAtTick, 100);
     assert.deepEqual(actions.getState(rejected.state, source, definition).data, { attempts: 1 });
     assert.equal(actions.getState(initial, source, definition).cooldown.readyAtTick, 0);

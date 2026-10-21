@@ -50,7 +50,7 @@ const startSingleAction = (source, definition, context) => {
   battleState = actionState;
   return { units: [...battleState.battlefield.units.values()],
     removedUnitIds: battleState.removedUnits.map(value => value.unitId),
-    events: battleState.events, execution: battleState.execution, state: actionState.actions };
+    events: battleState.events, execution: battleState.execution, state: getUnit(actionState, source.id).action.instances };
 };
 
 const approx = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);

@@ -39,7 +39,7 @@ const supply = (fields = {}) => ({
 });
 const fixture = (inputs, fields = {}) => {
     let state = createBattleState(
-        createBattlefield({ map }), undefined, undefined, 0,
+        createBattlefield({ map }), undefined, 0,
         initializeDeployment(budget(fields)),
     );
     for (const input of inputs) state = addCard(state, input).state;
@@ -207,7 +207,7 @@ test("preset Units without a Card do not recycle; refund eligibility is a separa
         states: { deployable: { ...initializeDeployable(fixtureBattle(0), unit.deployable).value, refundAllowed: true } },
     });
     let state = createBattleState(
-        fixtureBattlefieldState([ordinary, refundable]), undefined, undefined, 0,
+        fixtureBattlefieldState([ordinary, refundable]), undefined, 0,
         initializeDeployment(budget({ initialDp: 20 })),
     );
     state = retreat(state, ordinary.id);

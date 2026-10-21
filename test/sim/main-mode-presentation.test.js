@@ -18,7 +18,7 @@ const unit = (id, definitionId, side = 'ALLY', skill, fields = {}) => initialize
 });
 const snapshot = (units, fields = {}) => ({
   tickIndex: 1, units, blockingRelations: [],
-  actions: { instances: [] }, projectiles: { instances: [] }, ...fields,
+  projectiles: { instances: [] }, ...fields,
 });
 const metadata = new Map([
   ['char_311_mudrok', { kind: 'op', name: '泥岩', spine: 'char_311_mudrok', avatar: 'char_311_mudrok_2', skillIndex: 1,
@@ -72,9 +72,10 @@ test('death tombstones preserve main-mode metadata after the unit leaves the bat
 
 test('resumable attacks animate once on release and preserve each AoE damage event', () => {
   const view = presentation();
-  const during = snapshot([], {
-    actions: { instances: [{ source: { id: 0 }, status: 'RUNNING' }] },
-  });
+  const during = snapshot([{ ...unit(0, 'char_208_melan'),
+    definition: { ...unit(0, 'char_208_melan').definition, action: {} },
+    action: { instances: { size: 1 } },
+  }]);
   assert.deepEqual(view.advance(during, [
     { type: 'ACTION', sourceUnitId: 0, targetUnitId: 2, tick: 0 },
   ]), []);
@@ -179,10 +180,10 @@ test('walk animation follows position changes rather than stored steering veloci
   const movingSnapshot = snapshot([walked], { tickIndex: 2 });
   assert.equal(view.units(movingSnapshot)[0].tuple[8], 1);
   assert.equal(view.units(movingSnapshot)[0].tuple[8], 1);
-  const waiting = snapshot([walked], {
-    tickIndex: 3,
-    actions: { instances: [{ source: { id: 3 }, status: 'RUNNING', state: { releaseAtTick: 9 } }] },
-  });
+  const waiting = snapshot([{ ...walked,
+    definition: { ...walked.definition, action: {} },
+    action: { instances: { size: 1 } },
+  }], { tickIndex: 3 });
   assert.equal(view.units(waiting)[0].tuple[8], 0);
   assert.deepEqual(walked.locomotion.velocity, [0.02, 0]);
   assert.deepEqual(before.units[0].position, crossbowman.position);

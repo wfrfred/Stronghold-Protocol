@@ -10,6 +10,7 @@ import { hasLocomotion } from "../core/tactical/unit/capability/locomotion/capab
 import { hasRoute } from "../core/tactical/unit/capability/route/capability.js";
 import { isSpatiallyPresent } from "../core/tactical/unit/capability/presence/capability.js";
 import { hasLayer } from "../core/tactical/unit/capability/layer/capability.js";
+import { hasAction } from "../core/tactical/unit/capability/action/capability.js";
 import { hasSkill } from "../core/tactical/unit/capability/skill/capability.js";
 import { stun } from "../content/tactical/effects/stun.js";
 import { invincible } from "../content/tactical/effects/protection.js";
@@ -327,8 +328,10 @@ export class TacticalDemoPresentation {
         const resumableSources = new Set<Id>();
 
         if (this.#projectileActions) {
-            for (const execution of after.actions.instances) {
-                resumableSources.add(execution.source.id);
+            for (const unit of after.units) {
+                if (hasAction(unit) && unit.action.instances.size > 0) {
+                    resumableSources.add(unit.id);
+                }
             }
             for (const event of events) {
                 if (event.type === "ACTION_RELEASED" || event.type === "ACTION_CANCELLED") {

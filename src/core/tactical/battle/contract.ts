@@ -28,7 +28,7 @@ import type {
     Rejection as DeploymentRejection,
 } from "./deployment/operations.js";
 import type { SupportRelation } from "../battlefield/support/relations.js";
-import type { Id as ActionId } from "../unit/action/action.js";
+import type { Ref } from "../../common/ref.js";
 import type { Signal as ActionSignal } from "../unit/action/event.js";
 import type { Actions } from "../unit/action/actions.js";
 import type { ProjectileId, ProjectileState } from "../battlefield/projectile/projectile.js";
@@ -55,7 +55,10 @@ export type Command =
     | DeploymentCommand
     | { readonly type: "ACTIVATE_SKILL"; readonly unitId: Id }
     | { readonly type: "FINISH_SKILL"; readonly unitId: Id }
-    | { readonly type: "CANCEL_ACTION_EXECUTION"; readonly executionId: ActionId }
+    | {
+          readonly type: "CANCEL_ACTION_EXECUTION";
+          readonly ref: Ref<ReturnType<Actions["values"]>[number]>;
+      }
     | { readonly type: "STOP_PROJECTILE"; readonly projectileId: ProjectileId }
     | { readonly type: "TRIGGER_BRANCH"; readonly branchId: string; readonly isLoop: boolean };
 
@@ -107,7 +110,6 @@ export interface Snapshot {
     readonly spawning: SpawnScheduleState;
     readonly execution: BattleExecutionState;
     readonly predefinedPresence: readonly PredefinedPresence[];
-    readonly actions: ReturnType<Actions["toJSON"]>;
     readonly projectiles: ProjectileState;
     readonly units: readonly Unit[];
     readonly blockingRelations: readonly BlockingRelation[];

@@ -1,6 +1,5 @@
 import * as actions from "../../unit/action/operations.js";
 import { advance as advanceAction } from "../../unit/action/advance.js";
-import { ref as actionRef } from "../../unit/action/action.js";
 import * as units from "../../unit/query.js";
 import { hasAction } from "../../unit/capability/action/capability.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";
@@ -12,11 +11,7 @@ import type { Command } from "../contract.js";
 export function prepare(battle: BattleState, commands: readonly Command[]): BattleState {
     for (const command of commands) {
         if (command.type === "CANCEL_ACTION_EXECUTION") {
-            const self = battle.actions.get(command.executionId);
-
-            if (self !== undefined) {
-                battle = actions.cancel(battle, actionRef(self), "CANCELLED");
-            }
+            battle = actions.cancel(battle, command.ref, "CANCELLED");
         }
     }
 
@@ -24,16 +19,12 @@ export function prepare(battle: BattleState, commands: readonly Command[]): Batt
 }
 
 export function advance(battle: BattleState): BattleState {
-    const candidates = [
-        ...new Map(
-            [...units.all(battle), ...battle.actions.values().map((self) => self.source)].map(
-                (source) => [source.id, source],
-            ),
-        ).values(),
-    ].sort((left, right) => left.id - right.id);
-    const instances = actions.all(battle);
+    const candidates = units
+        .all(battle)
+        .sort((left, right) => left.id - right.id)
+        .map((source) => ({ source, instances: actions.forUnit(battle, source) }));
 
-    for (const source of candidates) {
+    for (const { source } of candidates) {
         const unit = units.get(battle, source);
 
         if (unit !== undefined && hasVitality(unit) && unit.vitality.hp <= 0) {
@@ -41,11 +32,11 @@ export function advance(battle: BattleState): BattleState {
         }
     }
 
-    for (const source of candidates) {
+    for (const { source, instances } of candidates) {
         for (const reference of instances) {
             const self = actions.get(battle, reference);
 
-            if (self?.source.id === source.id && self.startedAtTick < battle.tick) {
+            if (self !== undefined && self.startedAtTick < battle.tick) {
                 battle = advanceAction(battle, reference);
             }
         }

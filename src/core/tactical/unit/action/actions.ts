@@ -93,8 +93,8 @@ export class Actions {
         if (previous.definition !== action.definition) {
             throw new TypeError("action definition cannot change");
         }
-        if (previous.source.id !== action.source.id) {
-            throw new TypeError("action source cannot change");
+        if (previous.host.id !== action.host.id) {
+            throw new TypeError("action host cannot change");
         }
         if (previous.startedAtTick !== action.startedAtTick) {
             throw new TypeError("action start tick cannot change");

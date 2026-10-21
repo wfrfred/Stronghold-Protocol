@@ -47,6 +47,10 @@ if (started.value.type === "STARTED") {
     type Current = Assert<Equal<typeof current, Action<object, { count: number }> | undefined>>;
 }
 const known = ref(action);
+const host: Ref<Unit & ActionCapability> = known.host;
+type Host = Assert<Equal<typeof known.host, Ref<Unit & ActionCapability>>>;
+// @ts-expect-error
+const hostless: Pick<typeof known, "host" | "id"> = { id: 0 };
 type Known = Assert<Equal<typeof known, Ref<Action<object, { count: number }>>>>;
 const weaker: Ref<Action<object, { count: number }>> = specialized;
 const erased: Ref<Stored> = weaker;
@@ -81,7 +85,7 @@ const persistent: Definition<{ uses: number }, { target: string }> = {
         value: { target: "sampled" },
     }),
     step: (current, self) => {
-        const stored = getState(current, self.source, self.definition)!;
+        const stored = getState(current, self.host, self.definition)!;
         const uses: number = stored.data.uses;
         const target: string = self.state.target;
         // @ts-expect-error
@@ -89,7 +93,7 @@ const persistent: Definition<{ uses: number }, { target: string }> = {
         // @ts-expect-error
         const wrongExecution: number = self.state.target;
         // @ts-expect-error
-        replaceState(current, self.source, { ...stored, data: { uses: "invalid" } });
+        replaceState(current, self.host, { ...stored, data: { uses: "invalid" } });
         return { state: current, value: false };
     },
 };
