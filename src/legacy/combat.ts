@@ -237,6 +237,7 @@ function enemyDefinition(value: unknown) {
     }
 
     const radius = numberField(stats.rangeRadius, "enemy range radius");
+    const combat = filters.and(filters.present, filters.alive, filters.hostile, filters.blocker);
 
     return enemy.createCombatDefinition({
         targetable: { restrictions: [] },
@@ -276,26 +277,27 @@ function enemyDefinition(value: unknown) {
                             id: "primary",
                             targeting: {
                                 purposes: ["DAMAGE"],
-                                filter: filters.and(
-                                    filters.damage,
+                                filter:
                                     applyWay === "MELEE"
-                                        ? filters.blocker
+                                        ? combat
                                         : filters.or(
-                                              filters.range({
-                                                  type: "SHAPES",
-                                                  geometry: {
-                                                      shapes: [
-                                                          {
-                                                              type: "CIRCLE",
-                                                              offset: [0, 0],
-                                                              radius,
-                                                          },
-                                                      ],
-                                                  },
-                                              }),
-                                              filters.blocking,
+                                              combat,
+                                              filters.and(
+                                                  filters.damage,
+                                                  filters.range({
+                                                      type: "SHAPES",
+                                                      geometry: {
+                                                          shapes: [
+                                                              {
+                                                                  type: "CIRCLE",
+                                                                  offset: [0, 0],
+                                                                  radius,
+                                                              },
+                                                          ],
+                                                      },
+                                                  }),
+                                              ),
                                           ),
-                                ),
                                 selector: first(
                                     1,
                                     compare.combine(compare.blockedFirst, compare.distance),

@@ -12,6 +12,11 @@ import { create as createBattlefield } from '../../dist/core/tactical/battlefiel
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { start as startAction } from '../../dist/core/tactical/unit/action/operations.js';
 import { ref as unitRef } from '../../dist/core/tactical/unit/query.js';
+import { select } from '../../dist/core/tactical/battle/targeting/select.js';
+import { allowsRestrictions } from '../../dist/core/tactical/unit/capability/targetable/capability.js';
+import { invisibleRestriction, camouflageRestriction, untargetableRestriction } from '../../dist/content/tactical/effects/visibility.js';
+import { invincibleRestriction } from '../../dist/content/tactical/effects/protection.js';
+import { range } from '../../dist/core/tactical/battle/targeting/filter.js';
 import { advance as advanceAction } from '../../dist/core/tactical/unit/action/advance.js';
 import { advanceProjectiles } from '../../dist/core/tactical/battlefield/projectile/settlement.js';
 import { setOverlay } from '../../dist/core/tactical/battlefield/navigation/state.js';
@@ -26,9 +31,9 @@ function emptyBattle() {
   return createBattleState(createBattlefield({ map: createBattlefieldMap(5, 5, Array.from({ length: 25 }, () => tile)) }));
 }
 
-function guard(id, position, blockCapacity = 1) {
+function guard(id, position, blockCapacity = 1, restrictions = []) {
   return initialize({ id, position, definition: {
-    id: 'test-guard', targetable: { restrictions: [] }, vitality: { maxHp: 1000, defense: 40, resistance: 0 }, allegiance: { side: 'ALLY' }, spatial: { layer: 'GROUND' },
+    id: 'test-guard', targetable: { restrictions }, vitality: { maxHp: 1000, defense: 40, resistance: 0 }, allegiance: { side: 'ALLY' }, spatial: { layer: 'GROUND' },
     hit: { geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.2 }] } },
     blocker: { capacity: blockCapacity, geometry: { radius: 0.70709997 } },
   } });
@@ -96,6 +101,69 @@ test('hound factory composes capabilities and attacks its retained blocker with 
   assert.equal(getUnit(before, 0).vitality.hp, 1000);
   assert.deepEqual(before.events, []);
   assert.ok(after.events.some(event => event.type === 'DAMAGE'));
+});
+
+test('a blocked hound selects its blocker directly despite normal targeting restrictions', () => {
+  const { definition, action } = createHound(profile('enemy_1000_gopro'), {
+    windupTicks: 0, recoveryTicks: 0, hitRadius: 0.2,
+  }, 0.2);
+
+  for (const value of [invisibleRestriction, camouflageRestriction, untargetableRestriction]) {
+    const blocker = guard(0, [2, 2], 1, [{ id: 'innate', value }]);
+    const hound = initialize({ id: 1, position: [2, 2.5], definition });
+    const before = registerUnit(registerUnit(emptyBattle(), blocker), hound);
+    const request = { ...action.attack.targetGroups[0].targeting, source: unitRef(hound) };
+
+    assert.deepEqual(before.battlefield.blockingRelations, [{ blockerUnitId: 0, blockedUnitId: 1 }]);
+    assert.equal(allowsRestrictions(before, request, getUnit(before, 0)), false);
+    assert.deepEqual(select(before, request).value.map(ref => ref.id), [0]);
+    const started = startAction(before, unitRef(hound), action);
+    assert.equal(started.value.type, 'STARTED');
+    assert.ok(getUnit(started.state, 0).vitality.hp < 1000);
+    assert.equal(getUnit(before, 0).vitality.hp, 1000);
+  }
+});
+
+test('enemy ranged selection exempts only its actual blocker, including outside ordinary range', () => {
+  const narrow = { type: 'SHAPES', geometry: {
+    shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.01 }],
+  } };
+  const projectile = { definition: createArrow(), speedPerSecond: 6, contactRadius: 0.1, stopDelayTicks: 0 };
+  const { definition, action } = createCrossbowman({ ...profile('enemy_1003_ncbow'), rangeRadius: 0.01 }, {
+    windupTicks: 1, recoveryTicks: 1, hitRadius: 0.2, projectile,
+  }, 0.2);
+  const blocker = guard(0, [2, 2], 1, [{ id: 'innate', value: invisibleRestriction }]);
+  const bow = initialize({ id: 1, position: [2, 2.5], definition });
+  const state = registerUnit(registerUnit(emptyBattle(), blocker), bow);
+  const request = { ...action.attack.targetGroups[0].targeting, source: unitRef(bow) };
+
+  assert.equal(range(narrow)(state, request, getUnit(state, 0)), false);
+  assert.equal(allowsRestrictions(state, request, getUnit(state, 0)), false);
+  assert.deepEqual(select(state, request).value.map(ref => ref.id), [0]);
+
+  const unblocked = registerUnit(registerUnit(emptyBattle(), guard(0, [2, 2.5], 0, [
+    { id: 'innate', value: invisibleRestriction },
+  ])), bow);
+  assert.deepEqual(unblocked.battlefield.blockingRelations, []);
+  assert.equal(range(narrow)(unblocked, request, getUnit(unblocked, 0)), true);
+  assert.deepEqual(select(unblocked, request).value, []);
+});
+
+test('directly selecting an invincible blocker still preserves damage reception rules', () => {
+  const { definition, action } = createHound(profile('enemy_1000_gopro'), {
+    windupTicks: 0, recoveryTicks: 0, hitRadius: 0.2,
+  }, 0.2);
+  const base = guard(0, [2, 2], 1, [{ id: 'invincible', value: invincibleRestriction }]);
+  const blocker = { ...base, vitality: { ...base.vitality,
+    damageReceptionRules: [{ id: 'invincible', allows: () => false }],
+  } };
+  const hound = initialize({ id: 1, position: [2, 2.5], definition });
+  const state = registerUnit(registerUnit(emptyBattle(), blocker), hound);
+  const started = startAction(state, unitRef(hound), action);
+
+  assert.equal(started.value.type, 'STARTED');
+  assert.equal(getUnit(started.state, 0).vitality.hp, 1000);
+  assert.equal(started.state.events.some(event => event.type === 'ACTION_RELEASED'), true);
 });
 
 test('crossbow uses explicit windup and arrow speed, then settles damage on contact', () => {

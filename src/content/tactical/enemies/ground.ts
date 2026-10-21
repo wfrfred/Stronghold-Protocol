@@ -54,6 +54,7 @@ export function createDefinition(
     assertNonnegativeSafeInteger(timing.recoveryTicks, "enemy attack recovery");
     assertPositiveNumber(timing.hitRadius, "enemy hit radius");
 
+    const combat = filters.and(filters.present, filters.alive, filters.hostile, filters.blocker);
     const attack = createAttack({
         id: "normal-attack",
         speed: profile.attackSpeed,
@@ -66,12 +67,13 @@ export function createDefinition(
                 id: "primary",
                 targeting: {
                     purposes: ["DAMAGE"],
-                    filter: filters.and(
-                        filters.damage,
+                    filter:
                         scope.type === "BLOCKER"
-                            ? filters.blocker
-                            : filters.or(filters.range(scope.geometry), filters.blocking),
-                    ),
+                            ? combat
+                            : filters.or(
+                                  combat,
+                                  filters.and(filters.damage, filters.range(scope.geometry)),
+                              ),
                     selector: first(1, compare.combine(compare.blockedFirst, compare.distance)),
                 },
                 operations: [
