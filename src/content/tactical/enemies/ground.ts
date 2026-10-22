@@ -16,13 +16,13 @@ import {
     type CombatDefinition,
 } from "../../../core/tactical/unit/archetype/enemy.js";
 import type { Definition as OffenseDefinition } from "../../../core/tactical/unit/capability/offense/capability.js";
-import type { RangeGeometry } from "../../../core/tactical/geometry/shape.js";
+import type { Range } from "../../../core/tactical/geometry/range.js";
 import * as filters from "../../../core/tactical/battle/targeting/filter.js";
 import * as compare from "../../../core/tactical/battle/targeting/compare.js";
 import { first } from "../../../core/tactical/battle/targeting/selector.js";
 
 export type Scope =
-    { readonly type: "RANGE"; readonly geometry: RangeGeometry } | { readonly type: "BLOCKER" };
+    { readonly type: "RANGE"; readonly geometry: Range } | { readonly type: "BLOCKER" };
 
 export interface AttackTiming {
     readonly windupTicks: number;
@@ -118,9 +118,7 @@ export function createDefinition(
             allegiance: { side: "ENEMY" },
             layer: { type: "GROUND" },
             hitbox: {
-                geometry: {
-                    shapes: [{ type: "CIRCLE", offset: [0, 0], radius: timing.hitRadius }],
-                },
+                shape: { type: "CIRCLE", offset: [0, 0], radius: timing.hitRadius },
             },
             blockable: { volume: profile.blockVolume },
             locomotion: {

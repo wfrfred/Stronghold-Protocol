@@ -29,7 +29,6 @@ import { start as startAction } from "../../dist/core/tactical/unit/action/opera
 import { damage as damageFixture, healing as healingFixture } from "../helpers/targeting.js";
 import { topK } from "../../dist/core/common/collection.js";
 import { setMaxHpContribution } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
-import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { select as selectTargets } from '../../dist/core/tactical/battle/targeting/select.js';
 import { setRestriction, allowsRestrictions } from '../../dist/core/tactical/unit/capability/targetable/capability.js';
 import { invincible, healFree } from '../../dist/content/tactical/effects/protection.js';
@@ -465,7 +464,7 @@ test('core combat: snapshots share capabilities while immutable battlefield upda
   assert.equal(operator.action.states.get(actionId).cooldown.readyAtTick, readyAtTick);
   assert.equal(operator.allegiance.side, 'ALLY');
   assert.equal(operator.layer.type, 'GROUND');
-  assert.equal(operator.definition.hitbox.geometry.shapes[0].radius, 0.25);
+  assert.equal(operator.definition.hitbox.shape.radius, 0.25);
   assert.equal(allowsRestrictions({ battlefield: previous }, targetingRequest, operator), true);
   assert.deepEqual(operator.blocker.capacity, []);
   assert.equal(operator.vitality.hp, hp);
@@ -1103,9 +1102,7 @@ test('core targeting: a small multi-target query selects across a large unordere
   assert.deepEqual(result.value.map(ref => getUnit(result.state, ref.id).position[0]), [0, 1, 2]);
 });
 
-const actionRange = radius => ({ type: 'SHAPES', geometry: {
-  shapes: [{ type: 'CIRCLE', offset: [0, 0], radius }],
-} });
+const actionRange = radius => [{ type: 'CIRCLE', offset: [0, 0], radius }];
 
 const damageTargeting = (overrides = {}) => damageFixture({
   geometry: actionRange(10), ...overrides,
@@ -1125,9 +1122,7 @@ const attackDefinition = (targetGroups, followUps = []) => createAttack({
 function actionUnit(id, side, position, { hp = 100, effects: initialEffects = [], action, skill } = {}) {
   const definition = createDefinition({
     id: `action_unit_${id}`, targetable: { restrictions: [] }, vitality: { maxHp: 100, defense: 0, resistance: 0 }, allegiance: { side },
-    layer: { type: 'GROUND' }, hitbox: { geometry: {
-      shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.1 }],
-    } }, blocker: { capacity: 0, geometry: { radius: 0 } },
+    layer: { type: 'GROUND' }, hitbox: { shape: { type: 'CIRCLE', offset: [0, 0], radius: 0.1 } }, blocker: { capacity: 0, geometry: { radius: 0 } },
     ...(skill === undefined ? {} : { skill }),
     action: { definitions: Definitions.empty().add(action ?? attackDefinition([
       { id: 'primary', targeting: damageTargeting(), operations: [damageEffect(0)] },
@@ -1272,12 +1267,10 @@ test('core targeting uses static definition hitboxes and current layer', () => {
 
   assert.deepEqual(select(target), []);
   const expanded = initialize({ id: target.id, position: target.position, definition: {
-    ...target.definition, hitbox: { geometry: createShapeGeometry({ shapes: [
-      { type: 'CIRCLE', offset: [0, 0], radius: 0.7 },
-    ] }) },
+    ...target.definition, hitbox: { shape: { type: 'CIRCLE', offset: [0, 0], radius: 0.7 } },
   } });
   assert.deepEqual(select(expanded).map(unit => unit.id), [1]);
-  assert.equal(target.definition.hitbox.geometry.shapes[0].radius, 0.1);
+  assert.equal(target.definition.hitbox.shape.radius, 0.1);
   assert.deepEqual(select({ ...expanded, layer: { type: 'AIR' } }), []);
   assert.equal(target.definition.layer.type, 'GROUND');
 });

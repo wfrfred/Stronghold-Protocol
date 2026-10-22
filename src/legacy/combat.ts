@@ -10,9 +10,14 @@ import type { Input } from "../core/tactical/battle/contract.js";
 import { createBattlefieldMap, type BattlefieldMap } from "../core/tactical/battlefield/map/map.js";
 import { createTile } from "../core/tactical/battlefield/map/tile.js";
 import type { DamageType } from "../core/tactical/battle/damage/contract.js";
-import { isTilePosition, Tile, type TilePosition } from "../core/tactical/geometry/coordinate.js";
+import {
+    createTilePosition,
+    isTilePosition,
+    Tile,
+    type TilePosition,
+} from "../core/tactical/geometry/coordinate.js";
 import type { Direction } from "../core/tactical/geometry/direction.js";
-import { RangeGrid } from "../core/tactical/geometry/range.js";
+import { fromTiles } from "../core/tactical/geometry/range.js";
 import type { Input as RouteInput } from "../core/tactical/battle/creation/route.js";
 import { TICKS_PER_SECOND } from "../core/tactical/tick.js";
 import * as enemy from "../core/tactical/unit/archetype/enemy.js";
@@ -91,20 +96,29 @@ function attackTiming(stats: Record<string, unknown>) {
     return { baseAttackTimeTicks: bat * TICKS_PER_SECOND, attackSpeed };
 }
 
-function attackRange(value: unknown): RangeGrid {
+function attackRange(value: unknown): readonly TilePosition[] {
     if (!Array.isArray(value)) {
         throw new TypeError("legacy operator attack range must be an array");
     }
 
-    const offsets = value.map((offset: unknown) => {
+    const seen = new Set<string>();
+
+    return Array.from(value, (offset: unknown) => {
         if (!isTilePosition(offset)) {
             throw new TypeError("legacy attack offsets must contain two integer coordinates");
         }
 
-        return offset;
-    });
+        const tile = createTilePosition(offset[0], offset[1]);
+        const key = `${tile[0]},${tile[1]}`;
 
-    return RangeGrid.create(offsets);
+        if (seen.has(key)) {
+            throw new RangeError("legacy attack range must not contain duplicate tiles");
+        }
+
+        seen.add(key);
+
+        return tile;
+    });
 }
 
 function rejectContent(definition: Record<string, unknown>): void {
@@ -160,11 +174,7 @@ function operatorDefinition(value: unknown, direction: Direction) {
             allegiance: { side: "ALLY" },
             layer: { type: "GROUND" },
             hitbox: {
-                geometry: {
-                    shapes: [
-                        { type: "CIRCLE", offset: [0, 0], radius: LEGACY_OPERATOR_HIT_RADIUS },
-                    ],
-                },
+                shape: { type: "CIRCLE", offset: [0, 0], radius: LEGACY_OPERATOR_HIT_RADIUS },
             },
 
             blocker: {
@@ -188,11 +198,12 @@ function operatorDefinition(value: unknown, direction: Direction) {
                                         filters.damage,
                                         ...(canTargetAir ? [] : [filters.ground]),
                                         filters.or(
-                                            filters.range({
-                                                type: "GRID",
-                                                offsets: attackRange(definition.rangeGrid),
-                                                direction,
-                                            }),
+                                            filters.range(
+                                                fromTiles(
+                                                    attackRange(definition.rangeGrid),
+                                                    direction,
+                                                ),
+                                            ),
                                             filters.blocking,
                                         ),
                                     ),
@@ -258,9 +269,7 @@ function enemyDefinition(value: unknown) {
         allegiance: { side: "ENEMY" },
         layer: { type: motion === "FLY" ? "AIR" : "GROUND" },
         hitbox: {
-            geometry: {
-                shapes: [{ type: "CIRCLE", offset: [0, 0], radius: LEGACY_ENEMY_HIT_RADIUS }],
-            },
+            shape: { type: "CIRCLE", offset: [0, 0], radius: LEGACY_ENEMY_HIT_RADIUS },
         },
 
         blockable: { volume: numberField(stats.blockCnt, "block volume") },
@@ -284,18 +293,13 @@ function enemyDefinition(value: unknown) {
                                               combat,
                                               filters.and(
                                                   filters.damage,
-                                                  filters.range({
-                                                      type: "SHAPES",
-                                                      geometry: {
-                                                          shapes: [
-                                                              {
-                                                                  type: "CIRCLE",
-                                                                  offset: [0, 0],
-                                                                  radius,
-                                                              },
-                                                          ],
+                                                  filters.range([
+                                                      {
+                                                          type: "CIRCLE",
+                                                          offset: [0, 0],
+                                                          radius,
                                                       },
-                                                  }),
+                                                  ]),
                                               ),
                                           ),
                                 selector: first(

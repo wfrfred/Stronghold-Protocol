@@ -105,18 +105,13 @@ export function create(
         timing,
         {
             type: "RANGE",
-            geometry: {
-                type: "SHAPES",
-                geometry: {
-                    shapes: [
-                        {
-                            type: "CIRCLE",
-                            offset: [0, 0],
-                            radius: profile.rangeRadius,
-                        },
-                    ],
+            geometry: [
+                {
+                    type: "CIRCLE",
+                    offset: [0, 0],
+                    radius: profile.rangeRadius,
                 },
-            },
+            ],
         },
         halfBodyWidth,
     );
@@ -148,18 +143,13 @@ export function create(
                     destination: target.position,
                     cachedAtk,
                     speedPerTick: perSecondToPerTick(projectile.speedPerSecond),
-                    contactRange: {
-                        type: "SHAPES",
-                        geometry: {
-                            shapes: [
-                                {
-                                    type: "CIRCLE",
-                                    offset: [0, 0],
-                                    radius: projectile.contactRadius,
-                                },
-                            ],
+                    contactRange: [
+                        {
+                            type: "CIRCLE",
+                            offset: [0, 0],
+                            radius: projectile.contactRadius,
                         },
-                    },
+                    ],
                     stopDelayTicks: projectile.stopDelayTicks,
                     initialState: { source: units.ref(source) },
                 },

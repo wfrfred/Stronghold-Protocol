@@ -12,8 +12,8 @@ import {
 } from "../../unit/capability/elemental/query.js";
 import type { DamageRequest, HealRequest } from "../../unit/capability/elemental/operations.js";
 import { get, ref } from "../../unit/query.js";
-import { overlaps } from "../../battlefield/spatial/query.js";
-import type { RangeGeometry } from "../../geometry/shape.js";
+import { overlaps } from "../../geometry/intersection.js";
+import type { Range } from "../../geometry/range.js";
 import type { Filter } from "./contract.js";
 
 export function and(...filters: readonly Filter[]): Filter {
@@ -61,12 +61,14 @@ export const sameSide: Filter = (battle, request, target) => {
 export const ground: Filter = (_battle, _request, target) =>
     hasLayer(target) && target.layer.type === "GROUND";
 
-export function range(geometry: RangeGeometry): Filter {
+export function range(range: Range): Filter {
     return (battle, request, target) => {
         const source = get(battle, request.source);
 
         return (
-            source !== undefined && hasHitbox(target) && overlaps(geometry, source.position, target)
+            source !== undefined &&
+            hasHitbox(target) &&
+            overlaps(range, source.position, target.definition.hitbox.shape, target.position)
         );
     };
 }

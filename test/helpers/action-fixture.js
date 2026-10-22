@@ -7,14 +7,11 @@ import { createBattleState } from "../../dist/core/tactical/battle/state.js";
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
 import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
 import { initialize } from "./unit.js";
-import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
 import { create as createAttack } from "../../dist/content/tactical/actions/attack.js";
 
-export const geometry = createShapeGeometry({
-    shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 10 }],
-});
-const hit = createShapeGeometry({ shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.1 }] });
+export const geometry = [{ type: "CIRCLE", offset: [0, 0], radius: 10 }];
+const hit = { type: "CIRCLE", offset: [0, 0], radius: 0.1 };
 const tile = createTile({
     heightType: "LOWLAND",
     buildableType: "ALL",
@@ -38,7 +35,7 @@ export function actionDefinition(power = 7, extra = {}) {
                     id: "primary",
                     targeting: damageTargeting({
                         type: "DAMAGE",
-                        scope: { type: "RANGE", geometry: { type: "SHAPES", geometry } },
+                        scope: { type: "RANGE", geometry },
                         canTargetAir: true,
                         includeBlockingRelations: false,
                         preferBlockingRelations: false,
@@ -74,7 +71,7 @@ export function unit(
         offense: { attack: 10 },
         allegiance: { side },
         layer: { type: "GROUND" },
-        hitbox: { geometry: hit },
+        hitbox: { shape: hit },
         ...(capability === undefined ? {} : { action: capability }),
         ...fields,
     };

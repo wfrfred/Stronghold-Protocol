@@ -91,9 +91,6 @@ test("targeting only requires a hitbox when a geometric range filter is composed
     assert.deepEqual(select(initial, request).value, [ref(target)]);
     assert.deepEqual(select(initial, {
         ...request,
-        filter: and(damage, range({
-            type: "SHAPES",
-            geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 10 }] },
-        })),
+        filter: and(damage, range([{ type: "CIRCLE", offset: [0, 0], radius: 10 }])),
     }).value, []);
 });

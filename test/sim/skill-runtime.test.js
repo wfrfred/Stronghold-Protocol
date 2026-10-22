@@ -12,7 +12,6 @@ import { createDefinition } from '../../dist/core/tactical/unit/archetype/operat
 import { createDefinition as createSkillDefinition } from '../../dist/core/tactical/unit/capability/skill/capability.js';
 import * as skills from '../../dist/core/tactical/unit/capability/skill/operations.js';
 import { ref as activationRef } from '../../dist/core/tactical/unit/capability/skill/activation.js';
-import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { create as createAttack } from '../../dist/content/tactical/actions/attack.js';
 import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js';
 import { initialize } from "../helpers/unit.js";
@@ -20,13 +19,13 @@ import { createBattleState, getUnit } from '../../dist/core/tactical/battle/stat
 import { setDamageReceptionRule } from '../../dist/core/tactical/unit/capability/vitality/capability.js';
 import { setHook } from '../../dist/core/tactical/battle/damage/hook.js';
 
-const geometry = createShapeGeometry({ shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 5 }] });
-const hit = createShapeGeometry({ shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.1 }] });
+const geometry = [{ type: 'CIRCLE', offset: [0, 0], radius: 5 }];
+const hit = { type: 'CIRCLE', offset: [0, 0], radius: 0.1 };
 function action(maxTargets = 1, extra = {}) {
   return createAttack({
     id: 'normal', triggerBindingId: 'main', intervalTicks: 1, recoveryTicks: 0, followUps: [],
     targetGroups: [{ id: 'main', targeting: damageTargeting({
-      type: 'DAMAGE', scope: { type: 'RANGE', geometry: { type: 'SHAPES', geometry } },
+      type: 'DAMAGE', scope: { type: 'RANGE', geometry },
       canTargetAir: true, includeBlockingRelations: false, preferBlockingRelations: false,
       ignoreTargetFree: false, ignoreInvisible: false, maxTargets,
     }), operations: [{ type: 'DAMAGE', power: 1, damageType: 'TRUE', powerSource: 'SOURCE_ATTACK' }] }],
@@ -39,12 +38,12 @@ function actor(skill, { attackTargets = 1, windupTicks = 0, activeAction } = {})
   return createDefinition({
     id: 'skill-actor', vitality: { maxHp: 100000, defense: 0, resistance: 0 }, offense: { attack: 100 },
     allegiance: { side: 'ALLY' },
-    layer: { type: 'GROUND' }, hitbox: { geometry: hit },
+    layer: { type: 'GROUND' }, hitbox: { shape: hit },
     blocker: { capacity: 0, geometry: { radius: 0.1 } }, action: { definitions, select: (battle, self) => ({ state: battle, value: [self.skill.active !== null ? activeAction ?? 'normal' : 'normal'] }) }, skill,
   });
 }
 function target() {
-  return { id: 'target', targetable: { restrictions: [] }, vitality: { maxHp: 100000, defense: 0, resistance: 0 }, allegiance: { side: 'ENEMY' }, layer: { type: 'GROUND' }, hitbox: { geometry: hit } };
+  return { id: 'target', targetable: { restrictions: [] }, vitality: { maxHp: 100000, defense: 0, resistance: 0 }, allegiance: { side: 'ENEMY' }, layer: { type: 'GROUND' }, hitbox: { shape: hit } };
 }
 function scenario(skill, { targets = 1, attackTargets = 1, windupTicks = 0, content, activeAction } = {}) {
   const buff = attackBuff('skill/attack', 100);

@@ -58,14 +58,15 @@ test("native Attack Enhancement Alpha level 1 charges, buffs attack for 20 secon
 
 test("native attack buff data builds a shared Definition and changes attacks through BattleRuntime", () => {
   const compiled = compileArknightsAttackBuffSkill(attackBuff, 1);
-  const geometry = { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 2 }] };
+  const shape = { type: "CIRCLE", offset: [0, 0], radius: 2 };
+  const geometry = [shape];
   const actor = {
     id: "native-skill-actor", vitality: { maxHp: 1000, defense: 0, resistance: 0 }, offense: { attack: 100 },
     allegiance: { side: "ALLY" }, layer: { type: "GROUND" }, skill: compiled,
     action: { definitions: Definitions.empty().add(createAttack({ id: "normal",
       triggerBindingId: "target", intervalTicks: 30, recoveryTicks: 0, followUps: [],
       targetGroups: [{ id: "target", targeting: damageTargeting({
-        type: "DAMAGE", scope: { type: "RANGE", geometry: { type: "SHAPES", geometry } },
+        type: "DAMAGE", scope: { type: "RANGE", geometry },
         canTargetAir: true, includeBlockingRelations: false, preferBlockingRelations: false,
         ignoreTargetFree: false, ignoreInvisible: false, maxTargets: 1,
       }), operations: [{ type: "DAMAGE", powerSource: "SOURCE_ATTACK", power: 1, damageType: "TRUE" }] }],
@@ -73,7 +74,7 @@ test("native attack buff data builds a shared Definition and changes attacks thr
   };
   const target = {
     id: "stationary-content-target", targetable: { restrictions: [] }, spatialPresence: {}, vitality: { maxHp: 1000000, defense: 0, resistance: 0 }, allegiance: { side: "ENEMY" },
-    layer: { type: "GROUND" }, hitbox: { geometry },
+    layer: { type: "GROUND" }, hitbox: { shape },
     locomotion: { halfBodyWidth: 0, minSpeed: 0, speed: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 } },
   };
   const base = createLegacyCombatSpec({ rows: 1, columns: 3, operators: [], enemies: [], maxTicks: 2200 });

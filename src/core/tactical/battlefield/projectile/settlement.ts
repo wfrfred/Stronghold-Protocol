@@ -1,7 +1,8 @@
 import { all, getProjectile, ref, replaceProjectile } from "./operations.js";
 import type { Ref } from "../../../common/ref.js";
+import { sort } from "../../../common/collection.js";
 import { World, type WorldPosition } from "../../geometry/coordinate.js";
-import { overlaps } from "../spatial/query.js";
+import { overlaps } from "../../geometry/intersection.js";
 import {
     appendEvents,
     battlefieldView,
@@ -11,6 +12,7 @@ import {
 import type { Unit, Id } from "../../unit/unit.js";
 import { hasHitbox } from "../../unit/capability/hitbox/capability.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";
+import * as units from "../../unit/query.js";
 import type { ProjectileQueryContext } from "./context.js";
 import type { Definition } from "./definition.js";
 import type { ProjectileId, Projectile, ProjectileStopReason } from "./projectile.js";
@@ -50,7 +52,12 @@ function inContactArea(projectile: StoredProjectile, target: Unit): boolean {
     return (
         isSpatiallyPresent(target) &&
         hasHitbox(target) &&
-        overlaps(projectile.contactRange, projectile.position, target)
+        overlaps(
+            projectile.contactRange,
+            projectile.position,
+            target.definition.hitbox.shape,
+            target.position,
+        )
     );
 }
 
@@ -64,12 +71,13 @@ function contact<S extends object>(
         return state;
     }
 
-    const candidates = [...battlefieldView(state).unitIds].sort((left, right) => left - right);
+    const candidates = sort(units.all(state).map(units.ref), (left, right) => left.id - right.id);
     const reference = ref(projectile);
 
-    for (const targetUnitId of candidates) {
+    for (const targetRef of candidates) {
+        const targetUnitId = targetRef.id;
         const current = getProjectile(state, reference);
-        const target = getUnit(state, targetUnitId);
+        const target = units.get(state, targetRef);
 
         if (current === undefined || current.progress.type === "STOPPED") {
             return state;

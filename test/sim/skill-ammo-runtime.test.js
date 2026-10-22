@@ -11,7 +11,6 @@ import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/state.js";
 import { createDefinition as createProjectileDefinition } from "../../dist/core/tactical/battlefield/projectile/definition.js";
-import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
 import { createDefinition } from "../../dist/core/tactical/unit/archetype/operator.js";
 import { create as createAttack } from "../../dist/content/tactical/actions/skill.js";
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
@@ -26,12 +25,8 @@ import { unit as fixtureUnit, battle as fixtureBattle, actionDefinition } from "
 import { definition as skillDefinition } from "../helpers/skill.js";
 import { activate } from "../../dist/core/tactical/unit/capability/skill/operations.js";
 
-const hit = createShapeGeometry({
-  shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.1 }],
-});
-const range = createShapeGeometry({
-  shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 8 }],
-});
+const hit = { type: "CIRCLE", offset: [0, 0], radius: 0.1 };
+const range = [{ type: "CIRCLE", offset: [0, 0], radius: 8 }];
 
 function scenario({ ammo = 1, targets = 1, interrupt = false, windupTicks = 0, output, actionProgram, hideAfterDamage = false } = {}) {
   const buff = attackBuff("runtime-ammo-attack", 100, {
@@ -78,7 +73,7 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, windupTicks = 0, o
   const normal = createAttack({
     id: "normal", triggerBindingId: "main", intervalTicks: 100, windupTicks, ammoPerAction: 1,
     targetGroups: [{ id: "main", targeting: damageTargeting({
-      type: "DAMAGE", scope: { type: "RANGE", geometry: { type: "SHAPES", geometry: range } },
+      type: "DAMAGE", scope: { type: "RANGE", geometry: range },
       canTargetAir: true, includeBlockingRelations: false, preferBlockingRelations: false,
       ignoreTargetFree: false, ignoreInvisible: false, maxTargets: targets,
     }), operations: [{ type: "DAMAGE", power: 1, damageType: "TRUE", powerSource: "SOURCE_ATTACK" }] }],
@@ -88,12 +83,12 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, windupTicks = 0, o
   const definition = createDefinition({
     id: "ammo-actor", spatialPresence: {}, vitality: { maxHp: 10000, defense: 0, resistance: 0 }, offense: { attack: 100 },
     allegiance: { side: "ALLY" },
-    layer: { type: "GROUND" }, hitbox: { geometry: hit },
+    layer: { type: "GROUND" }, hitbox: { shape: hit },
     blocker: { capacity: 0, geometry: { radius: 0.1 } }, skill,
     action: { definitions: Definitions.empty().add(action) },
   });
   const receiver = {
-    id: "ammo-target", targetable: { restrictions: [] }, vitality: { maxHp: 10000, defense: 0, resistance: 0 }, allegiance: { side: "ENEMY" }, layer: { type: "GROUND" }, hitbox: { geometry: hit },
+    id: "ammo-target", targetable: { restrictions: [] }, vitality: { maxHp: 10000, defense: 0, resistance: 0 }, allegiance: { side: "ENEMY" }, layer: { type: "GROUND" }, hitbox: { shape: hit },
   };
   const shell = createProjectileDefinition({
     id: "runtime-ammo-shell", initialize: () => ({}),
@@ -254,7 +249,7 @@ test("ammo runtime: the last released projectile survives skill completion and r
     return launchProjectile(state, shell, {
       source: actor.id, traceTarget: targetUnitId, position: actor.position, destination: target.position,
       cachedAtk: resolveAttackPower(actor.id, battlefieldView(state)),
-      speedPerTick: 1, contactRange: { type: "SHAPES", geometry: hit }, stopDelayTicks: 0,
+      speedPerTick: 1, contactRange: [hit], stopDelayTicks: 0,
     }, state.tick).state;
   } });
   const launched = runtime.step([{ type: "ACTIVATE_SKILL", unitId: 0 }]);

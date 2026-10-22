@@ -16,7 +16,7 @@ import {
     resolveProjectileAttackPower,
 } from "../core/tactical/battlefield/projectile/operations.js";
 import { createDefinition as createProjectileDefinition } from "../core/tactical/battlefield/projectile/definition.js";
-import { createShapeGeometry, type RangeGeometry } from "../core/tactical/geometry/shape.js";
+import type { Range } from "../core/tactical/geometry/range.js";
 import * as attribute from "../core/tactical/unit/contribution/attribute.js";
 import { hasAllegiance } from "../core/tactical/unit/capability/allegiance/capability.js";
 import { install } from "../core/tactical/unit/effect/operations.js";
@@ -60,12 +60,7 @@ export function createTacticalProjectileDemo(
             });
         },
     };
-    const contactRange: RangeGeometry = Object.freeze({
-        type: "SHAPES",
-        geometry: createShapeGeometry({
-            shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.2 }],
-        }),
-    });
+    const contactRange: Range = [{ type: "CIRCLE", offset: [0, 0], radius: 0.2 }];
     const shell = createProjectileDefinition({
         id: cachedOnly ? "cached-atk-shell" : "live-atk-shell",
         initialize: (): { readonly source: Ref<Unit> | null } => ({ source: null }),

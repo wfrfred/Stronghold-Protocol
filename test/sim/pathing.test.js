@@ -23,7 +23,6 @@ import { parseBattlefieldMap } from '../../dist/data/arknights/map.js';
 import { parseRouteDefinition } from '../../dist/data/arknights/route.js';
 import { createRng } from '../../dist/core/common/rng.js';
 import { World } from '../../dist/core/tactical/geometry/coordinate.js';
-import { RangeGrid } from '../../dist/core/tactical/geometry/range.js';
 import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
 import { initializeRoutedEnemy } from "../../dist/core/tactical/battle/creation/enemy.js";
 import { copy } from '../../dist/core/tactical/unit/snapshot.js';
@@ -257,9 +256,9 @@ test('core fields charge departing cells and publish only immutable smoothed suc
   assert.deepEqual(Object.keys(field.nodes[0]).sort(), ['distance', 'next']);
   assert.equal(Object.hasOwn(field, 'map'), false);
   assert.equal(JSON.stringify({ map, target }), before);
-  assert.ok(Object.isFrozen(field) && Object.isFrozen(field.nodes) && Object.isFrozen(field.target));
+  assert.ok(Object.isFrozen(field) && Object.isFrozen(field.nodes));
   assert.ok(field.nodes.every(Object.isFrozen));
-  assert.ok(Object.isFrozen(field.nodes[0].next));
+  assert.notStrictEqual(field.target, target);
   assert.deepEqual(build(map, target), field);
 });
 
@@ -279,7 +278,8 @@ test('core fields preserve directed search, target qualification and disconnecte
     assert.deepEqual(field.target, target);
     assert.equal(field.rows, 2);
     assert.equal(field.columns, 3);
-    assert.ok(Object.isFrozen(field) && Object.isFrozen(field.nodes) && Object.isFrozen(field.target));
+    assert.ok(Object.isFrozen(field) && Object.isFrozen(field.nodes));
+    assert.notStrictEqual(field.target, target);
   }
 });
 
@@ -629,24 +629,6 @@ test('core static navigation projects mode-specific passability, costs and both 
   assert.equal(walk.get([0, 0]).departures.UP, true);
   assert.ok(Object.isFrozen(walk) && Object.isFrozen(walk.cells));
   assert.ok(walk.cells.every(cell => Object.isFrozen(cell) && Object.isFrozen(cell.departures)));
-
-});
-
-test('compiled range grids are shared while mutable and frozen raw inputs keep their boundaries', () => {
-  const raw = [[0, -0], [0, 1]];
-  const range = RangeGrid.create(raw);
-  assert.equal(RangeGrid.create(range), range);
-  assert.equal(Object.is(range[0][1], -0), false);
-
-  raw[1][1] = 2;
-  assert.deepEqual(range, [[0, 0], [0, 1]]);
-  assert.deepEqual(RangeGrid.create(raw), [[0, 0], [0, 2]]);
-  const frozenRaw = Object.freeze([Object.freeze([0, -0])]);
-  const compiled = RangeGrid.create(frozenRaw);
-  assert.notEqual(compiled, frozenRaw);
-  assert.equal(Object.is(compiled[0][1], -0), false);
-  assert.throws(() => RangeGrid.create(Object.freeze([[0, 0], [0, -0]])), /duplicate/);
-  assert.throws(() => RangeGrid.create(Object.freeze(Array(1))), /missing range offset/);
 
 });
 

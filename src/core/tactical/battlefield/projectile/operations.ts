@@ -3,7 +3,7 @@ import type { Ref } from "../../../common/ref.js";
 import { battlefieldView, type State as BattleState, type Result } from "../../battle/state.js";
 import { resolveAttackPower } from "../../unit/capability/offense/query.js";
 import type { WorldPosition } from "../../geometry/coordinate.js";
-import type { RangeGeometry } from "../../geometry/shape.js";
+import type { Range } from "../../geometry/range.js";
 import type { Id } from "../../unit/unit.js";
 import type { Definition } from "./definition.js";
 import type { Projectile } from "./projectile.js";
@@ -18,7 +18,7 @@ export interface ProjectileLaunchInput<S extends object = object> {
     readonly destination: WorldPosition;
     readonly cachedAtk: number;
     readonly speedPerTick: number;
-    readonly contactRange: RangeGeometry;
+    readonly contactRange: Range;
     readonly stopDelayTicks: number;
     readonly expiresAtTick?: number | null;
     readonly initialState?: S;

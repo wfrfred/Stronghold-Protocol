@@ -18,7 +18,7 @@ import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/off
 import { definition as createSkillDefinition } from "../helpers/skill.js";
 import { activate, enter as enterSkill } from "../../dist/core/tactical/unit/capability/skill/operations.js";
 
-const targeting = damageTargeting({ geometry: { type: "SHAPES", geometry }, canTargetAir: true });
+const targeting = damageTargeting({ geometry, canTargetAir: true });
 const group = (operations) => ({ id: "primary", targeting, operations });
 const start = (state, definition) => actions.start(state, unitRef(getUnit(state, 0)), definition);
 

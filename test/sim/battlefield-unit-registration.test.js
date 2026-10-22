@@ -59,12 +59,7 @@ const definition = () => ({
                         type: "DAMAGE",
                         scope: {
                             type: "RANGE",
-                            geometry: {
-                                type: "SHAPES",
-                                geometry: {
-                                    shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 1 }],
-                                },
-                            },
+                            geometry: [{ type: "CIRCLE", offset: [0, 0], radius: 1 }],
                         },
                         canTargetAir: false,
                         includeBlockingRelations: false,
@@ -90,7 +85,7 @@ const definition = () => ({
     }),
     allegiance: { side: "ALLY" },
     layer: { type: "GROUND" },
-    hitbox: { geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.25 }] } },
+    hitbox: { shape: { type: "CIRCLE", offset: [0, 0], radius: 0.25 } },
     blocker: { capacity: 1, geometry: { radius: 0.5 } },
     blockable: { volume: 1 },
     locomotion: {

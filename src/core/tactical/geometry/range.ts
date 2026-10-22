@@ -1,55 +1,13 @@
-import { Tile, createTilePosition, type TilePosition } from "./coordinate.js";
+import { Tile, type TilePosition } from "./coordinate.js";
 import type { Direction } from "./direction.js";
+import type { Shape } from "./shape.js";
 
-export type RangeGrid = readonly TilePosition[];
+export type Range = readonly Shape[];
 
-const compiledRanges = new WeakSet<RangeGrid>();
-
-export const RangeGrid = {
-    create(offsets: readonly TilePosition[]): RangeGrid {
-        if (compiledRanges.has(offsets)) {
-            return offsets;
-        }
-
-        const seen = new Set<string>();
-        const snapshot: TilePosition[] = [];
-
-        for (let index = 0; index < offsets.length; index++) {
-            if (!Object.hasOwn(offsets, index)) {
-                throw new RangeError(`missing range offset at index ${index}`);
-            }
-
-            const offset = offsets[index]!;
-
-            if (!Object.hasOwn(offset, 0) || !Object.hasOwn(offset, 1)) {
-                throw new RangeError(`missing range coordinate at index ${index}`);
-            }
-
-            const copy = createTilePosition(offset[0], offset[1]);
-            const key = `${copy[0]},${copy[1]}`;
-
-            if (seen.has(key)) {
-                throw new RangeError(`duplicate range offset at index ${index}`);
-            }
-
-            seen.add(key);
-            snapshot.push(copy);
-        }
-
-        const range = Object.freeze(snapshot);
-
-        compiledRanges.add(range);
-
-        return range;
-    },
-
-    project(range: RangeGrid, origin: TilePosition, direction: Direction): readonly TilePosition[] {
-        return Object.freeze(
-            range.map((offset) => {
-                const rotated = Tile.rotate(offset, direction);
-
-                return Tile.add(origin, rotated);
-            }),
-        );
-    },
-};
+export function fromTiles(tiles: readonly TilePosition[], direction: Direction): Range {
+    return tiles.map((tile) => ({
+        type: "BOX",
+        offset: Tile.center(Tile.rotate(tile, direction)),
+        halfExtents: [0.5, 0.5],
+    }));
+}

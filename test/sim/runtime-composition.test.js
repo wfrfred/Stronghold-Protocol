@@ -22,7 +22,6 @@ import { createDefinition } from "../../dist/core/tactical/unit/archetype/operat
 import { createDefinition as createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
 import { initialize, placement } from "../helpers/unit.js";
 import { seededPlacement } from "../helpers/aura.js";
-import { createShapeGeometry } from "../../dist/core/tactical/geometry/shape.js";
 import { createInput as createRouteDefinition } from "../../dist/core/tactical/battle/creation/route.js";
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
 import { ref as actionRef, setState } from "../../dist/core/tactical/unit/action/action.js";
@@ -45,21 +44,9 @@ import {
 } from "../../dist/core/tactical/battlefield/projectile/operations.js";
 import { stopProjectile } from "../../dist/core/tactical/battlefield/projectile/settlement.js";
 
-const hit = createShapeGeometry({
-    shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.1 }],
-});
-const range = {
-    type: "SHAPES",
-    geometry: createShapeGeometry({
-        shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 12 }],
-    }),
-};
-const contactRange = {
-    type: "SHAPES",
-    geometry: createShapeGeometry({
-        shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.3 }],
-    }),
-};
+const hit = { type: "CIRCLE", offset: [0, 0], radius: 0.1 };
+const range = [{ type: "CIRCLE", offset: [0, 0], radius: 12 }];
+const contactRange = [{ type: "CIRCLE", offset: [0, 0], radius: 0.3 }];
 
 function passive(id, hp = 100) {
     return {
@@ -68,7 +55,7 @@ function passive(id, hp = 100) {
         offense: { attack: 10 },
         allegiance: { side: "ENEMY" },
         layer: { type: "GROUND" },
-        hitbox: { geometry: hit },
+        hitbox: { shape: hit },
     };
 }
 

@@ -3,8 +3,7 @@ import {
     assertNonnegativeSafeInteger,
     assertPositiveSafeInteger,
 } from "../../core/common/assert.js";
-import { createTilePosition } from "../../core/tactical/geometry/coordinate.js";
-import { RangeGrid } from "../../core/tactical/geometry/range.js";
+import { createTilePosition, type TilePosition } from "../../core/tactical/geometry/coordinate.js";
 import { parseBlackboard, type ArknightsBlackboardEntry } from "./blackboard.js";
 import { parseArknightsSkillLevel, type ArknightsSkillLevel } from "./skill-definition.js";
 
@@ -39,9 +38,9 @@ export interface Profile {
     readonly id: string;
     readonly configuration: Configuration;
     readonly attributes: Readonly<Attributes>;
-    readonly range: RangeGrid;
+    readonly range: readonly TilePosition[];
     readonly skill: ArknightsSkillLevel;
-    readonly skillRange: RangeGrid | null;
+    readonly skillRange: readonly TilePosition[] | null;
     readonly talents: readonly Talent[];
     readonly moduleTrait: readonly ArknightsBlackboardEntry[];
 }
@@ -330,7 +329,7 @@ function selectedSkill(
     };
 }
 
-function range(value: unknown, id: unknown): RangeGrid {
+function range(value: unknown, id: unknown): readonly TilePosition[] {
     const key = text(id, "operator range identity");
     const source = record(record(value, "range table")[key], `range ${key}`);
 
@@ -338,16 +337,24 @@ function range(value: unknown, id: unknown): RangeGrid {
         throw new TypeError("operator range must use its matching identity and default direction");
     }
 
-    return RangeGrid.create(
-        array(source.grids, "range grids").map((value) => {
-            const grid = record(value, "range grid");
+    const seen = new Set<string>();
 
-            return createTilePosition(
-                number(grid.row, "range row"),
-                number(grid.col, "range column"),
-            );
-        }),
-    );
+    return Array.from(array(source.grids, "range grids"), (value) => {
+        const grid = record(value, "range grid");
+        const tile = createTilePosition(
+            number(grid.row, "range row"),
+            number(grid.col, "range column"),
+        );
+        const key = `${tile[0]},${tile[1]}`;
+
+        if (seen.has(key)) {
+            throw new RangeError("operator range must not contain duplicate tiles");
+        }
+
+        seen.add(key);
+
+        return tile;
+    });
 }
 
 function selectCandidate(

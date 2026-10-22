@@ -8,7 +8,6 @@ import { all, ref, launchProjectile, getProjectile, replaceProjectile, resolvePr
 import { advanceProjectiles, stopProjectile } from '../../dist/core/tactical/battlefield/projectile/settlement.js';
 import { advanceProjectiles as advanceBattleProjectiles } from '../../dist/core/tactical/battle/steps/projectiles.js';
 import { getUnit, updateUnit, removeUnit, registerUnit, battlefieldView } from '../../dist/core/tactical/battle/state.js';
-import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { setAttackContribution } from '../../dist/core/tactical/unit/capability/offense/capability.js';
 import { create as modifier } from '../../dist/core/tactical/unit/contribution/attribute.js';
 import { transition } from '../../dist/core/tactical/battlefield/state.js';
@@ -19,7 +18,7 @@ import { createInput as createRouteDefinition } from '../../dist/core/tactical/b
 import * as actions from '../../dist/core/tactical/unit/action/operations.js';
 import { setState } from '../../dist/core/tactical/unit/action/action.js';
 
-const contactRange = { type: 'SHAPES', geometry: createShapeGeometry({ shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.3 }] }) };
+const contactRange = [{ type: 'CIRCLE', offset: [0, 0], radius: 0.3 }];
 const launchInput = {
   source: 0, traceTarget: 1, position: [0, 0], destination: [1, 0], cachedAtk: 10,
   speedPerTick: 1, contactRange, stopDelayTicks: 0,

@@ -14,7 +14,6 @@ import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
 import { createLegacyCombatSpec } from '../../dist/legacy/combat.js';
 import { battlefieldView, getUnit, transitionUnit } from '../../dist/core/tactical/battle/state.js';
 import { initialize, placement } from "../helpers/unit.js";
-import { createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
 import { create as createAttack, chooseTargets } from '../../dist/content/tactical/actions/attack.js';
 import { Definitions } from '../../dist/core/tactical/unit/action/definitions.js';
 import { start } from '../../dist/core/tactical/unit/action/operations.js';
@@ -35,12 +34,12 @@ import { createArknightsElementalDefinition } from '../../dist/data/arknights/el
 import { invincible } from '../../dist/content/tactical/effects/protection.js';
 import { effectFixtureWork } from '../helpers/effects.js';
 
-const range = createShapeGeometry({ shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 20 }] });
-const hit = createShapeGeometry({ shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.1 }] });
+const range = [{ type: 'CIRCLE', offset: [0, 0], radius: 20 }];
+const hit = { type: 'CIRCLE', offset: [0, 0], radius: 0.1 };
 function action(interval = 1) {
   return createAttack({ id: 'normal-attack', triggerBindingId: 'primary', intervalTicks: interval, recoveryTicks: 0,
     targetGroups: [{ id: 'primary', targeting: damageTargeting({
-      type: 'DAMAGE', scope: { type: 'RANGE', geometry: { type: 'SHAPES', geometry: range } },
+      type: 'DAMAGE', scope: { type: 'RANGE', geometry: range },
       canTargetAir: true, includeBlockingRelations: false, preferBlockingRelations: false,
       ignoreTargetFree: false, ignoreInvisible: false, maxTargets: 1,
     }), operations: [{ type: 'DAMAGE', power: 1, damageType: 'TRUE' }] }], followUps: [] });
@@ -49,7 +48,7 @@ function definition(receiver = 'CHARACTER', overrides = {}, elementOptions = {})
   return { id: `element-${receiver}`, targetable: { restrictions: [] }, spatialPresence: {}, vitality: { maxHp: 100000, defense: 500, resistance: 50 },
     offense: { attack: 100 },
     allegiance: { side: receiver === 'CHARACTER' ? 'ALLY' : 'ENEMY' },
-    layer: { type: 'GROUND' }, hitbox: { geometry: hit },
+    layer: { type: 'GROUND' }, hitbox: { shape: hit },
     action: { definitions: Definitions.empty().add(action()) },
     elemental: createArknightsElementalDefinition({ receiver, ...elementOptions }), ...overrides };
 }
@@ -303,12 +302,12 @@ test('invincibility observes incoming EP damage, permits EP healing and removes 
 test('elemental attacks select EP receivers without Vitality', () => {
   const healingAction = createAttack({ id: 'healing', triggerBindingId: 'primary', intervalTicks: 30,
     targetGroups: [{ id: 'primary', targeting: { purposes: ['ELEMENT_HEAL'],
-      filter: and(sameSide, inRange({ type: 'SHAPES', geometry: range }), elementHealing({ power: 100 }),
+      filter: and(sameSide, inRange(range), elementHealing({ power: 100 }),
         (_battle, request, target) => target.id !== request.source.id), selector: first(1, distance) },
       operations: [{ type: 'ELEMENT_HEAL', power: 100 }] }],
   });
   const damageAction = createAttack({ ...action().attack, id: 'damage', targetGroups: [{ ...action().attack.targetGroups[0],
-    targeting: { purposes: ['ELEMENT_DAMAGE'], filter: and(inRange({ type: 'SHAPES', geometry: range }),
+    targeting: { purposes: ['ELEMENT_DAMAGE'], filter: and(inRange(range),
       elementDamage({ type: 'NEURAL', power: 100 })), selector: first(1, distance) },
     operations: [{ type: 'ELEMENT_DAMAGE', elementType: 'NEURAL', power: 100 }] }],
   });
@@ -335,7 +334,7 @@ test('elemental attacks select EP receivers without Vitality', () => {
 test('elemental attack targeting uses current request-specific reception Rules', () => {
   const attackFor = type => createAttack({ ...action().attack, id: `element-${type}`, targetGroups: [{
     ...action().attack.targetGroups[0],
-    targeting: { purposes: ['ELEMENT_DAMAGE'], filter: and(inRange({ type: 'SHAPES', geometry: range }),
+    targeting: { purposes: ['ELEMENT_DAMAGE'], filter: and(inRange(range),
       elementDamage({ type, power: 100 })), selector: first(1, distance) },
     operations: [{ type: 'ELEMENT_DAMAGE', elementType: type, power: 100 }],
   }] });

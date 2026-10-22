@@ -1,54 +1,73 @@
 import type { Ref } from "../../../common/ref.js";
+import { sort } from "../../../common/collection.js";
 import type { State as BattleState } from "../../battle/state.js";
 import type { WorldPosition } from "../../geometry/coordinate.js";
-import { geometrySweepsHit, rangeOverlapsHit } from "../../geometry/intersection.js";
-import type { RangeGeometry, ShapeGeometry } from "../../geometry/shape.js";
+import * as intersection from "../../geometry/intersection.js";
+import type { Range } from "../../geometry/range.js";
+import type { Shape } from "../../geometry/shape.js";
 import { hasHitbox, type Hitbox } from "../../unit/capability/hitbox/capability.js";
 import { isSpatiallyPresent } from "../../unit/capability/presence/capability.js";
-import { ref } from "../../unit/query.js";
+import * as units from "../../unit/query.js";
 import type { Unit } from "../../unit/unit.js";
 
-export function overlaps(
-    range: RangeGeometry,
+export function within(
+    battle: BattleState,
+    range: Range,
     origin: WorldPosition,
-    self: Unit & Hitbox,
-): boolean {
-    return rangeOverlapsHit(range, origin, self.position, self.definition.hitbox.geometry);
+): readonly Ref<Unit>[] {
+    return units
+        .all(battle)
+        .filter((unit) => unit.lifecycle === "PRESENT" && isSpatiallyPresent(unit))
+        .filter((unit) => intersection.contains(range, origin, unit.position))
+        .map(units.ref)
+        .toArray();
 }
 
 export function overlap(
     battle: BattleState,
-    range: RangeGeometry,
+    range: Range,
     origin: WorldPosition,
-): Ref<Unit & Hitbox>[] {
-    const matches: Ref<Unit & Hitbox>[] = [];
+): readonly Ref<Unit & Hitbox>[] {
+    return units
+        .all(battle)
+        .filter((unit) => unit.lifecycle === "PRESENT" && isSpatiallyPresent(unit))
+        .filter(hasHitbox)
+        .filter((unit) =>
+            intersection.overlaps(range, origin, unit.definition.hitbox.shape, unit.position),
+        )
+        .map(units.ref)
+        .toArray();
+}
 
-    for (const self of battle.battlefield.units.values()) {
-        if (hasHitbox(self) && isSpatiallyPresent(self) && overlaps(range, origin, self)) {
-            matches.push(ref(self));
-        }
-    }
-
-    return matches;
+export interface Contact {
+    readonly target: Ref<Unit & Hitbox>;
+    readonly fraction: number;
 }
 
 export function sweep(
     battle: BattleState,
-    geometry: ShapeGeometry,
+    shape: Shape,
     from: WorldPosition,
     to: WorldPosition,
-): Ref<Unit & Hitbox>[] {
-    const matches: Ref<Unit & Hitbox>[] = [];
+): readonly Contact[] {
+    const contacts = units
+        .all(battle)
+        .filter((unit) => unit.lifecycle === "PRESENT" && isSpatiallyPresent(unit))
+        .filter(hasHitbox)
+        .map((unit) => ({
+            target: units.ref(unit),
+            fraction: intersection.sweep(
+                shape,
+                from,
+                to,
+                unit.definition.hitbox.shape,
+                unit.position,
+            ),
+        }))
+        .filter((contact): contact is Contact => contact.fraction !== null);
 
-    for (const self of battle.battlefield.units.values()) {
-        if (
-            hasHitbox(self) &&
-            isSpatiallyPresent(self) &&
-            geometrySweepsHit(geometry, from, to, self.position, self.definition.hitbox.geometry)
-        ) {
-            matches.push(ref(self));
-        }
-    }
-
-    return matches;
+    return sort(
+        contacts,
+        (left, right) => left.fraction - right.fraction || left.target.id - right.target.id,
+    );
 }

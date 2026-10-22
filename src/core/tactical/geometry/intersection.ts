@@ -1,11 +1,8 @@
-import { Tile, type WorldPosition } from "./coordinate.js";
-import type { HitGeometry, LocalShape, RangeGeometry, ShapeGeometry } from "./shape.js";
+import type { WorldPosition } from "./coordinate.js";
+import type { Range } from "./range.js";
+import type { Shape } from "./shape.js";
 
-function shapeContainsPosition(
-    shape: LocalShape,
-    origin: WorldPosition,
-    position: WorldPosition,
-): boolean {
+function containsShape(shape: Shape, origin: WorldPosition, position: WorldPosition): boolean {
     const dx = Math.abs(position[0] - origin[0] - shape.offset[0]);
     const dy = Math.abs(position[1] - origin[1] - shape.offset[1]);
 
@@ -19,9 +16,9 @@ function shapeContainsPosition(
 }
 
 function circleOverlapsShape(
-    circle: Extract<LocalShape, { readonly type: "CIRCLE" }>,
+    circle: Extract<Shape, { readonly type: "CIRCLE" }>,
     circleOrigin: WorldPosition,
-    shape: LocalShape,
+    shape: Shape,
     shapeOrigin: WorldPosition,
 ): boolean {
     let dx = Math.abs(circleOrigin[0] + circle.offset[0] - shapeOrigin[0] - shape.offset[0]);
@@ -42,10 +39,10 @@ function circleOverlapsShape(
     return dx * dx + dy * dy <= radius * radius;
 }
 
-function shapesOverlap(
-    left: LocalShape,
+function overlapsShapes(
+    left: Shape,
     leftOrigin: WorldPosition,
-    right: LocalShape,
+    right: Shape,
     rightOrigin: WorldPosition,
 ): boolean {
     if (left.type === "CIRCLE") {
@@ -64,11 +61,11 @@ function shapesOverlap(
     );
 }
 
-function segmentOverlapsBox(
+function sweepBox(
     from: WorldPosition,
     to: WorldPosition,
-    halfExtents: readonly [number, number],
-): boolean {
+    halfExtents: WorldPosition,
+): number | null {
     let first = 0;
     let last = 1;
 
@@ -78,7 +75,7 @@ function segmentOverlapsBox(
 
         if (delta === 0) {
             if (Math.abs(from[axis]) > extent) {
-                return false;
+                return null;
             }
 
             continue;
@@ -91,136 +88,114 @@ function segmentOverlapsBox(
         last = Math.min(last, Math.max(enter, exit));
 
         if (first > last) {
-            return false;
+            return null;
         }
     }
 
-    return true;
+    return first;
 }
 
-function segmentOverlapsCircle(
+function sweepCircle(
     from: WorldPosition,
     to: WorldPosition,
     center: WorldPosition,
     radius: number,
-): boolean {
+): number | null {
+    const x = from[0] - center[0];
+    const y = from[1] - center[1];
+
+    if (x * x + y * y <= radius * radius) {
+        return 0;
+    }
+
     const dx = to[0] - from[0];
     const dy = to[1] - from[1];
     const lengthSquared = dx * dx + dy * dy;
-    const projection = (center[0] - from[0]) * dx + (center[1] - from[1]) * dy;
-    const t = lengthSquared === 0 ? 0 : Math.max(0, Math.min(1, projection / lengthSquared));
-    const x = from[0] + t * dx - center[0];
-    const y = from[1] + t * dy - center[1];
 
-    return x * x + y * y <= radius * radius;
+    if (lengthSquared === 0) {
+        return null;
+    }
+
+    const projection = -(x * dx + y * dy);
+    const cross = x * dy - y * dx;
+    const discriminant = radius * radius * lengthSquared - cross * cross;
+
+    if (discriminant < 0) {
+        return null;
+    }
+
+    const first = (projection - Math.sqrt(discriminant)) / lengthSquared;
+
+    return first >= 0 && first <= 1 ? first : null;
 }
 
-function shapesSweep(
-    shape: LocalShape,
+export function contains(range: Range, origin: WorldPosition, point: WorldPosition): boolean {
+    return range.some((shape) => containsShape(shape, origin, point));
+}
+
+export function overlaps(
+    range: Range,
+    origin: WorldPosition,
+    shape: Shape,
+    shapeOrigin: WorldPosition,
+): boolean {
+    return range.some((entry) => overlapsShapes(entry, origin, shape, shapeOrigin));
+}
+
+export function sweep(
+    moving: Shape,
     from: WorldPosition,
     to: WorldPosition,
-    hit: LocalShape,
-    targetPosition: WorldPosition,
-): boolean {
-    const x = shape.offset[0] - targetPosition[0] - hit.offset[0];
-    const y = shape.offset[1] - targetPosition[1] - hit.offset[1];
-    const start: WorldPosition = [from[0] + x, from[1] + y];
-    const end: WorldPosition = [to[0] + x, to[1] + y];
-    const width =
-        (shape.type === "BOX" ? shape.halfExtents[0] : 0) +
-        (hit.type === "BOX" ? hit.halfExtents[0] : 0);
-    const height =
-        (shape.type === "BOX" ? shape.halfExtents[1] : 0) +
-        (hit.type === "BOX" ? hit.halfExtents[1] : 0);
-    const radius =
-        (shape.type === "CIRCLE" ? shape.radius : 0) + (hit.type === "CIRCLE" ? hit.radius : 0);
+    target: Shape,
+    targetOrigin: WorldPosition,
+): number | null {
+    if (overlapsShapes(moving, from, target, targetOrigin)) {
+        return 0;
+    }
 
-    if (
-        segmentOverlapsBox(start, end, [width + radius, height]) ||
-        segmentOverlapsBox(start, end, [width, height + radius])
-    ) {
-        return true;
+    if (from[0] === to[0] && from[1] === to[1]) {
+        return null;
+    }
+
+    const x = targetOrigin[0] + target.offset[0];
+    const y = targetOrigin[1] + target.offset[1];
+    const start: WorldPosition = [from[0] + moving.offset[0] - x, from[1] + moving.offset[1] - y];
+    const end: WorldPosition = [to[0] + moving.offset[0] - x, to[1] + moving.offset[1] - y];
+    const width =
+        (moving.type === "BOX" ? moving.halfExtents[0] : 0) +
+        (target.type === "BOX" ? target.halfExtents[0] : 0);
+    const height =
+        (moving.type === "BOX" ? moving.halfExtents[1] : 0) +
+        (target.type === "BOX" ? target.halfExtents[1] : 0);
+    const radius =
+        (moving.type === "CIRCLE" ? moving.radius : 0) +
+        (target.type === "CIRCLE" ? target.radius : 0);
+
+    if (radius === 0) {
+        return sweepBox(start, end, [width, height]);
+    }
+
+    if (width === 0 && height === 0) {
+        return sweepCircle(start, end, [0, 0], radius);
+    }
+
+    const horizontal = sweepBox(start, end, [width + radius, height]);
+    const vertical = sweepBox(start, end, [width, height + radius]);
+    let first = horizontal;
+
+    if (vertical !== null && (first === null || vertical < first)) {
+        first = vertical;
     }
 
     for (const cx of [-width, width]) {
         for (const cy of [-height, height]) {
-            if (segmentOverlapsCircle(start, end, [cx, cy], radius)) {
-                return true;
+            const contact = sweepCircle(start, end, [cx, cy], radius);
+
+            if (contact !== null && (first === null || contact < first)) {
+                first = contact;
             }
         }
     }
 
-    return false;
-}
-
-function* rangeShapes(range: RangeGeometry): Generator<LocalShape> {
-    switch (range.type) {
-        case "SHAPES":
-            yield* range.geometry.shapes;
-            break;
-
-        case "GRID":
-            for (const offset of range.offsets) {
-                const rotated = Tile.rotate(offset, range.direction);
-
-                yield {
-                    type: "BOX",
-                    offset: [rotated[1], rotated[0]],
-                    halfExtents: [0.5, 0.5],
-                };
-            }
-
-            break;
-    }
-}
-
-export function geometryContainsPosition(
-    geometry: ShapeGeometry,
-    origin: WorldPosition,
-    position: WorldPosition,
-): boolean {
-    return geometry.shapes.some((shape) => shapeContainsPosition(shape, origin, position));
-}
-
-export function rangeContainsPosition(
-    range: RangeGeometry,
-    origin: WorldPosition,
-    position: WorldPosition,
-): boolean {
-    for (const shape of rangeShapes(range)) {
-        if (shapeContainsPosition(shape, origin, position)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-export function rangeOverlapsHit(
-    range: RangeGeometry,
-    sourcePosition: WorldPosition,
-    targetPosition: WorldPosition,
-    hitGeometry: HitGeometry,
-): boolean {
-    for (const shape of rangeShapes(range)) {
-        for (const hit of hitGeometry.shapes) {
-            if (shapesOverlap(shape, sourcePosition, hit, targetPosition)) {
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
-export function geometrySweepsHit(
-    geometry: ShapeGeometry,
-    from: WorldPosition,
-    to: WorldPosition,
-    targetPosition: WorldPosition,
-    hitGeometry: HitGeometry,
-): boolean {
-    return geometry.shapes.some((shape) =>
-        hitGeometry.shapes.some((hit) => shapesSweep(shape, from, to, hit, targetPosition)),
-    );
+    return first;
 }

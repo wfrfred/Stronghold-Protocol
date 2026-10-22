@@ -34,7 +34,7 @@ function emptyBattle() {
 function guard(id, position, blockCapacity = 1, restrictions = []) {
   return initialize({ id, position, definition: {
     id: 'test-guard', targetable: { restrictions }, vitality: { maxHp: 1000, defense: 40, resistance: 0 }, allegiance: { side: 'ALLY' }, layer: { type: 'GROUND' },
-    hitbox: { geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.2 }] } },
+    hitbox: { shape: { type: 'CIRCLE', offset: [0, 0], radius: 0.2 } },
     blocker: { capacity: blockCapacity, geometry: { radius: 0.70709997 } },
   } });
 }
@@ -125,9 +125,7 @@ test('a blocked hound selects its blocker directly despite normal targeting rest
 });
 
 test('enemy ranged selection exempts only its actual blocker, including outside ordinary range', () => {
-  const narrow = { type: 'SHAPES', geometry: {
-    shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.01 }],
-  } };
+  const narrow = [{ type: 'CIRCLE', offset: [0, 0], radius: 0.01 }];
   const projectile = { definition: createArrow(), speedPerSecond: 6, contactRadius: 0.1, stopDelayTicks: 0 };
   const { definition, action } = createCrossbowman({ ...profile('enemy_1003_ncbow'), rangeRadius: 0.01 }, {
     windupTicks: 1, recoveryTicks: 1, hitRadius: 0.2, projectile,
@@ -220,7 +218,7 @@ test('enemy content keeps hit radius and terrain avoidance width independent', (
 
   for (const [definition, halfBodyWidth] of [[hound, 0.15], [crossbowman, 0.25]]) {
     const unit = initialize({ id: 1, position: [2, 2], definition });
-    assert.equal(unit.definition.hitbox.geometry.shapes[0].radius, 0.4);
+    assert.equal(unit.definition.hitbox.shape.radius, 0.4);
     assert.equal(unit.definition.locomotion.halfBodyWidth, halfBodyWidth);
   }
 

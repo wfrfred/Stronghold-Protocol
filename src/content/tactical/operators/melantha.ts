@@ -27,7 +27,7 @@ import type { Definition as EffectDefinition } from "../../../core/tactical/unit
 import { install } from "../../../core/tactical/unit/effect/operations.js";
 import * as attribute from "../../../core/tactical/unit/contribution/attribute.js";
 import type { Direction } from "../../../core/tactical/geometry/direction.js";
-import { createBlockGeometry } from "../../../core/tactical/geometry/shape.js";
+import { fromTiles } from "../../../core/tactical/geometry/range.js";
 import { secondsToTicks } from "../../../data/arknights/tick.js";
 
 export interface Definition extends OperatorDefinition {
@@ -116,10 +116,10 @@ export function create(profile: Profile, direction: Direction = "RIGHT"): Defini
 
         allegiance: { side: "ALLY" },
         layer: { type: "GROUND" },
-        hitbox: { geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.25 }] } },
+        hitbox: { shape: { type: "CIRCLE", offset: [0, 0], radius: 0.25 } },
         blocker: {
             capacity: profile.attributes.blockCapacity,
-            geometry: createBlockGeometry({ radius: 0.70709997 }),
+            geometry: { radius: 0.70709997 },
         },
         action: {
             definitions: Definitions.empty().add(
@@ -139,11 +139,7 @@ export function create(profile: Profile, direction: Direction = "RIGHT"): Defini
                                     filters.damage,
                                     filters.ground,
                                     filters.or(
-                                        filters.range({
-                                            type: "GRID",
-                                            offsets: profile.range,
-                                            direction,
-                                        }),
+                                        filters.range(fromTiles(profile.range, direction)),
                                         filters.blocking,
                                     ),
                                 ),

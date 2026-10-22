@@ -4,14 +4,13 @@ import {
     assertNonnegativeNumber,
     assertNonnegativeSafeInteger,
 } from "../../../../common/assert.js";
-import type { BlockGeometry } from "../../../geometry/shape.js";
 import * as contribution from "../../contribution/contribution.js";
 import * as attribute from "../../contribution/attribute.js";
 import type { Unit } from "../../unit.js";
 
 export interface Definition {
     readonly capacity: number;
-    readonly geometry: BlockGeometry;
+    readonly geometry: { readonly radius: number };
 }
 
 export interface Rule {
@@ -21,7 +20,7 @@ export interface Rule {
 
 export interface State {
     readonly capacity: readonly contribution.Contribution<readonly attribute.Modifier[]>[];
-    readonly geometry: BlockGeometry;
+    readonly geometry: { readonly radius: number };
     readonly rules: readonly Rule[];
 }
 

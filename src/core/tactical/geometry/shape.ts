@@ -1,9 +1,7 @@
 import { assertFiniteNumber, assertNonnegativeNumber } from "../../common/assert.js";
-import { createWorldPosition, type WorldPosition } from "./coordinate.js";
-import type { Direction } from "./direction.js";
-import { RangeGrid } from "./range.js";
+import type { WorldPosition } from "./coordinate.js";
 
-export type LocalShape =
+export type Shape =
     | {
           readonly type: "CIRCLE";
           readonly offset: WorldPosition;
@@ -12,140 +10,21 @@ export type LocalShape =
     | {
           readonly type: "BOX";
           readonly offset: WorldPosition;
-          readonly halfExtents: readonly [halfWidth: number, halfHeight: number];
+          readonly halfExtents: WorldPosition;
       };
 
-export interface ShapeGeometry {
-    readonly shapes: readonly [LocalShape, ...LocalShape[]];
-}
-
-export type HitGeometry = ShapeGeometry;
-
-export interface BlockGeometry {
-    readonly radius: number;
-}
-
-export type RangeGeometry =
-    | {
-          readonly type: "SHAPES";
-          readonly geometry: ShapeGeometry;
-      }
-    | {
-          readonly type: "GRID";
-          readonly offsets: RangeGrid;
-          readonly direction: Direction;
-      };
-
-const ownedShapes = new WeakSet<ShapeGeometry>();
-const ownedBlocks = new WeakSet<BlockGeometry>();
-const ownedRanges = new WeakSet<RangeGeometry>();
-
-function createLocalShape(shape: LocalShape): LocalShape {
-    const offset = createWorldPosition(shape.offset[0], shape.offset[1]);
+export function validateShape(shape: Shape): void {
+    assertFiniteNumber(shape.offset[0], "shape offset x");
+    assertFiniteNumber(shape.offset[1], "shape offset y");
 
     switch (shape.type) {
         case "CIRCLE":
-            return Object.freeze({
-                type: shape.type,
-                offset,
-                radius: shape.radius,
-            });
-
-        case "BOX": {
-            const halfExtents: readonly [halfWidth: number, halfHeight: number] = Object.freeze([
-                shape.halfExtents[0],
-                shape.halfExtents[1],
-            ]);
-
-            return Object.freeze({ type: shape.type, offset, halfExtents });
-        }
-    }
-}
-
-export function validateShapeGeometry(geometry: ShapeGeometry): void {
-    if (geometry.shapes.length === 0) {
-        throw new RangeError("shape geometry must contain at least one shape");
-    }
-
-    for (let index = 0; index < geometry.shapes.length; index++) {
-        if (!Object.hasOwn(geometry.shapes, index)) {
-            throw new RangeError("shape geometry must be dense");
-        }
-
-        const shape = geometry.shapes[index]!;
-        assertFiniteNumber(shape.offset[0], "dx");
-        assertFiniteNumber(shape.offset[1], "dy");
-
-        switch (shape.type) {
-            case "CIRCLE":
-                assertNonnegativeNumber(shape.radius, "circle radius");
-                break;
-
-            case "BOX":
-                assertNonnegativeNumber(shape.halfExtents[0], "box half width");
-                assertNonnegativeNumber(shape.halfExtents[1], "box half height");
-                break;
-        }
-    }
-}
-
-export function createShapeGeometry(geometry: ShapeGeometry): ShapeGeometry {
-    if (ownedShapes.has(geometry)) {
-        return geometry;
-    }
-
-    validateShapeGeometry(geometry);
-
-    const shapes = geometry.shapes.map(createLocalShape);
-
-    const owned = Object.freeze({
-        shapes: Object.freeze(shapes) as readonly [LocalShape, ...LocalShape[]],
-    });
-
-    ownedShapes.add(owned);
-
-    return owned;
-}
-
-export function createBlockGeometry(geometry: BlockGeometry): BlockGeometry {
-    if (ownedBlocks.has(geometry)) {
-        return geometry;
-    }
-
-    assertNonnegativeNumber(geometry.radius, "block radius");
-
-    const owned = Object.freeze({ radius: geometry.radius });
-
-    ownedBlocks.add(owned);
-
-    return owned;
-}
-
-export function createRangeGeometry(range: RangeGeometry): RangeGeometry {
-    if (ownedRanges.has(range)) {
-        return range;
-    }
-
-    let owned: RangeGeometry;
-
-    switch (range.type) {
-        case "SHAPES":
-            owned = Object.freeze({
-                type: range.type,
-                geometry: createShapeGeometry(range.geometry),
-            });
+            assertNonnegativeNumber(shape.radius, "circle radius");
             break;
 
-        case "GRID":
-            owned = Object.freeze({
-                type: range.type,
-                offsets: RangeGrid.create(range.offsets),
-                direction: range.direction,
-            });
+        case "BOX":
+            assertNonnegativeNumber(shape.halfExtents[0], "box half width");
+            assertNonnegativeNumber(shape.halfExtents[1], "box half height");
             break;
     }
-
-    ownedRanges.add(owned);
-
-    return owned;
 }

@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Tile as CoreTile, World, createTilePosition, createWorldPosition } from '../../dist/core/tactical/geometry/coordinate.js';
-import { RangeGrid } from '../../dist/core/tactical/geometry/range.js';
+import { fromTiles } from '../../dist/core/tactical/geometry/range.js';
 import {
   DIRS, DIR_VEC, normDir, rotateOffset, toLocal, hSign, mirrorDir, oppositeDir, perpendicular, dirFromDelta, frontOf, offsetTile,
 } from '../../server/sim/dir.js';
@@ -221,17 +221,13 @@ test('core coordinate conversion uses row/y, col/x and ties-to-even without clip
   assert.deepEqual(World.toTile([-8.2, 12.7]), [13, -8]);
   assert.throws(() => createWorldPosition(0, Infinity), RangeError);
   assert.throws(() => createTilePosition(Number.MAX_SAFE_INTEGER + 1, 0), RangeError);
-  assert.throws(() => CoreTile.translate([Number.MAX_SAFE_INTEGER, 0], [1, 0]), RangeError);
+  assert.throws(() => CoreTile.add([Number.MAX_SAFE_INTEGER, 0], [1, 0]), RangeError);
 });
 
-test('core ranges preserve ordered rotation in a snapshot and reject sparse or ambiguous offsets', () => {
-  const offsets = [[0, 0], [0, 2], [1, 1]];
-  const range = RangeGrid.create(offsets);
-  offsets[1][1] = 9;
-  assert.deepEqual(RangeGrid.project(range, [2, 3], 'UP'), [[2, 3], [4, 3], [3, 2]]);
-  assert.deepEqual(RangeGrid.project(range, [0, 0], 'LEFT'), [[0, 0], [0, -2], [-1, -1]]);
-  assert.ok(Object.isFrozen(range) && range.every(Object.isFrozen));
-  assert.throws(() => RangeGrid.create([[0, 0], [0, -0]]), RangeError);
-  assert.throws(() => RangeGrid.create([[0, 0], , [0, 1]]), RangeError);
-  assert.throws(() => RangeGrid.create([[0.5, 0]]), RangeError);
+test('tile-derived ranges preserve input order and rotate into world-coordinate boxes', () => {
+  const tiles = [[0, 0], [0, 2], [1, 1]];
+  const boxes = offsets => offsets.map(offset => ({ type: 'BOX', offset, halfExtents: [0.5, 0.5] }));
+  assert.deepEqual(fromTiles(tiles, 'UP'), boxes([[0, 0], [0, 2], [-1, 1]]));
+  assert.deepEqual(fromTiles(tiles, 'LEFT'), boxes([[-0, 0], [-2, 0], [-1, -1]]));
+  assert.deepEqual(tiles, [[0, 0], [0, 2], [1, 1]]);
 });

@@ -38,8 +38,9 @@ import { hasHitbox } from '../../dist/core/tactical/unit/capability/hitbox/capab
 import { hasLayer } from '../../dist/core/tactical/unit/capability/layer/capability.js';
 import { initialize as initializeTargetableState, hasTargetable, setRestriction, removeRestriction, allowsRestrictions } from '../../dist/core/tactical/unit/capability/targetable/capability.js';
 import { setHook as setHealingHook, removeHook as removeHealingHook } from '../../dist/core/tactical/battle/healing/hook.js';
-import { createBlockGeometry, createRangeGeometry, createShapeGeometry } from '../../dist/core/tactical/geometry/shape.js';
-import { geometryContainsPosition, rangeContainsPosition, rangeOverlapsHit } from '../../dist/core/tactical/geometry/intersection.js';
+import { validateShape } from '../../dist/core/tactical/geometry/shape.js';
+import { fromTiles } from '../../dist/core/tactical/geometry/range.js';
+import { contains, overlaps } from '../../dist/core/tactical/geometry/intersection.js';
 import { updateBlockingRelations } from '../../dist/core/tactical/battlefield/blocking/relations.js';
 import { projectUnitsByTile } from '../../dist/core/tactical/battlefield/storage/indexes.js';
 import { hasLocomotion } from "../../dist/core/tactical/unit/capability/locomotion/capability.js";
@@ -377,14 +378,14 @@ const catalogDefinition = () => Object.freeze({
     intervalTicks: 3, recoveryTicks: 0, followUps: [],
     targetGroups: [{ id: 'primary',
       operations: [{ type: 'DAMAGE', power: 10, damageType: 'PHYSICAL' }],
-      targeting: damageTargeting({ type: 'DAMAGE', scope: { type: 'RANGE', geometry: {
-        type: 'SHAPES', geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 1 }] },
-      } }, canTargetAir: false, includeBlockingRelations: false, preferBlockingRelations: false,
+      targeting: damageTargeting({ type: 'DAMAGE', scope: { type: 'RANGE', geometry: [
+        { type: 'CIRCLE', offset: [0, 0], radius: 1 },
+      ] }, canTargetAir: false, includeBlockingRelations: false, preferBlockingRelations: false,
         ignoreTargetFree: false, ignoreInvisible: false, maxTargets: 1 }),
     }],
    })) }),
   layer: Object.freeze({ type: 'GROUND' }),
-  hitbox: { geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.25 }] } },
+  hitbox: { shape: { type: 'CIRCLE', offset: [0, 0], radius: 0.25 } },
   blocker: { capacity: 2, geometry: { radius: 0.7 } },
   blockable: Object.freeze({ volume: 1 }),
 });
@@ -561,86 +562,88 @@ test('core snapshots share capabilities and retain earlier values across immutab
   assert.equal(updated.targetable, snapshot.targetable);
 });
 
-test('core geometry boundaries own shape values and share them across snapshots', () => {
-  const circle = { type: 'CIRCLE', offset: [0.25, 0], radius: 0.125 };
-  const box = { type: 'BOX', offset: [0, 1], halfExtents: [0.5, 0.25] };
-  const geometry = createShapeGeometry({ shapes: [circle, box] });
-  circle.radius = 10;
-  circle.offset[0] = 10;
-  box.halfExtents[0] = 10;
-  assert.deepEqual(geometry.shapes, [
-    { type: 'CIRCLE', offset: [0.25, 0], radius: 0.125 },
-    { type: 'BOX', offset: [0, 1], halfExtents: [0.5, 0.25] },
-  ]);
-  assert.equal(createShapeGeometry(geometry), geometry);
-  assert.equal(Object.isFrozen(geometry.shapes), true);
-  assert.equal(Object.isFrozen(geometry.shapes[1].halfExtents), true);
-  assert.throws(() => createShapeGeometry({ shapes: Array(1) }), /dense/);
-  assert.throws(() => createShapeGeometry({ shapes: [] }), /at least one/);
-  assert.throws(() => createBlockGeometry({ radius: -1 }), /nonnegative/);
-
-  const definition = Object.freeze({ id: 'shared_geometry', hitbox: { geometry } });
+test('static hitbox shapes are shared across unit instances and snapshots', () => {
+  const shape = { type: 'CIRCLE', offset: [0.25, 0], radius: 0.125 };
+  const definition = { id: 'shared_shape', hitbox: { shape } };
   const first = initialize({ id: 1, definition, position: [0, 0] });
   const second = initialize({ id: 2, definition, position: [1, 0] });
   const snapshot = copy(first);
-  assert.equal(snapshot.definition.hitbox.geometry, geometry);
-  assert.equal(second.definition.hitbox.geometry, geometry);
+  assert.equal(snapshot.definition.hitbox.shape, shape);
+  assert.equal(second.definition.hitbox.shape, shape);
   assert.deepEqual(first.hitbox, {});
   assert.notEqual(first.hitbox, second.hitbox);
   assert.equal(snapshot.hitbox, first.hitbox);
 });
 
-test('core unit initialization validates static hitbox geometry', () => {
+test('validateShape accepts finite offsets and nonnegative dimensions without replacing the value', () => {
+  for (const shape of [
+    { type: 'CIRCLE', offset: [0.25, -1.5], radius: 0 },
+    { type: 'BOX', offset: [-3, 2], halfExtents: [0, 0.25] },
+  ]) {
+    assert.equal(validateShape(shape), undefined);
+  }
+});
+
+test('shape validation and unit initialization reject invalid numeric hitbox values', () => {
   const invalid = [
-    [{ shapes: [] }, /at least one/],
-    [{ shapes: Array(1) }, /dense/],
-    [{ shapes: [{ type: 'CIRCLE', offset: [NaN, 0], radius: 1 }] }, /finite/],
-    [{ shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: -1 }] }, /nonnegative/],
-    [{ shapes: [{ type: 'BOX', offset: [0, 0], halfExtents: [1, -1] }] }, /nonnegative/],
+    { type: 'CIRCLE', offset: [NaN, 0], radius: 1 },
+    { type: 'CIRCLE', offset: [0, Infinity], radius: 1 },
+    { type: 'CIRCLE', offset: [0, 0], radius: -1 },
+    { type: 'CIRCLE', offset: [0, 0], radius: Infinity },
+    { type: 'BOX', offset: [0, 0], halfExtents: [1, -1] },
+    { type: 'BOX', offset: [0, 0], halfExtents: [NaN, 1] },
+    { type: 'BOX', offset: [0, 0], halfExtents: [1, Infinity] },
   ];
-  for (const [geometry, error] of invalid) {
+  for (const shape of invalid) {
+    assert.throws(() => validateShape(shape), RangeError);
     assert.throws(() => initialize({ id: 1, position: [0, 0],
-      definition: { id: 'invalid_hitbox', hitbox: { geometry } },
-    }), error);
+      definition: { id: 'invalid_hitbox', hitbox: { shape } },
+    }), RangeError);
   }
 });
 
-test('core range geometry includes tangent contacts and excludes circle-box corner gaps', () => {
-  const shapes = shape => createShapeGeometry({ shapes: [shape] });
-  const circle = radius => shapes({ type: 'CIRCLE', offset: [0, 0], radius });
-  const box = (halfWidth, halfHeight) => shapes({ type: 'BOX', offset: [0, 0], halfExtents: [halfWidth, halfHeight] });
-  const range = geometry => createRangeGeometry({ type: 'SHAPES', geometry });
-  assert.equal(rangeOverlapsHit(range(circle(1)), [0, 0], [1.25, 0], circle(0.25)), true);
-  assert.equal(rangeOverlapsHit(range(circle(1)), [0, 0], [1.251, 0], circle(0.25)), false);
-  assert.equal(rangeOverlapsHit(range(box(0.5, 0.5)), [0, 0], [0.875, 1], circle(0.625)), true);
-  assert.equal(rangeOverlapsHit(range(box(0.5, 0.5)), [0, 0], [1, 1], circle(0.625)), false);
-  assert.equal(rangeOverlapsHit(range(circle(0.625)), [1, 1], [0, 0], box(0.5, 0.5)), false);
-  assert.equal(rangeOverlapsHit(range(box(0.5, 0.5)), [0, 0], [0.75, 0.75], box(0.25, 0.25)), true);
-  assert.equal(rangeOverlapsHit(range(box(0.5, 0.5)), [0, 0], [0.751, 0.75], box(0.25, 0.25)), false);
-  assert.equal(rangeOverlapsHit(range(circle(1)), [0, 0], [4, 0], shapes({
+test('ranges include tangent contacts and exclude circle-box corner gaps', () => {
+  const circle = radius => ({ type: 'CIRCLE', offset: [0, 0], radius });
+  const box = (halfWidth, halfHeight) => ({ type: 'BOX', offset: [0, 0], halfExtents: [halfWidth, halfHeight] });
+  assert.equal(overlaps([circle(1)], [0, 0], circle(0.25), [1.25, 0]), true);
+  assert.equal(overlaps([circle(1)], [0, 0], circle(0.25), [1.251, 0]), false);
+  assert.equal(overlaps([box(0.5, 0.5)], [0, 0], circle(0.625), [0.875, 1]), true);
+  assert.equal(overlaps([box(0.5, 0.5)], [0, 0], circle(0.625), [1, 1]), false);
+  assert.equal(overlaps([circle(0.625)], [1, 1], box(0.5, 0.5), [0, 0]), false);
+  assert.equal(overlaps([box(0.5, 0.5)], [0, 0], box(0.25, 0.25), [0.75, 0.75]), true);
+  assert.equal(overlaps([box(0.5, 0.5)], [0, 0], box(0.25, 0.25), [0.751, 0.75]), false);
+  assert.equal(overlaps([circle(1)], [0, 0], {
     type: 'CIRCLE', offset: [-3, 0], radius: 0.125,
-  })), true);
-  assert.equal(geometryContainsPosition(shapes({ type: 'CIRCLE', offset: [0.5, -0.5], radius: 1 }),
+  }, [4, 0]), true);
+  assert.equal(contains([{ type: 'CIRCLE', offset: [0.5, -0.5], radius: 1 }],
     [2, 3], [3.5, 2.5]), true);
-  assert.equal(geometryContainsPosition(box(0.5, 0.5), [2, 3], [2.5, 3.5]), true);
+  assert.equal(contains([box(0.5, 0.5)], [2, 3], [2.5, 3.5]), true);
 });
 
-test('core grid ranges rotate all four directions around continuous source positions', () => {
+test('tile-derived ranges rotate all four directions around continuous source positions', () => {
   const source = [0.25, 0.25];
-  const hit = createShapeGeometry({ shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 0.125 }] });
+  const hit = { type: 'CIRCLE', offset: [0, 0], radius: 0.125 };
   for (const [direction, axis] of [['RIGHT', [1, 0]], ['UP', [0, 1]], ['LEFT', [-1, 0]], ['DOWN', [0, -1]]]) {
-    const range = createRangeGeometry({ type: 'GRID', offsets: [[0, 1], [0, 3]], direction });
+    const range = fromTiles([[0, 1], [0, 3]], direction);
     const at = distance => source.map((value, index) => value + axis[index] * distance);
-    assert.equal(rangeOverlapsHit(range, source, at(1.625), hit), true, `${direction}: tangent`);
-    assert.equal(rangeOverlapsHit(range, source, at(1.626), hit), false, `${direction}: beyond edge`);
-    assert.equal(rangeOverlapsHit(range, source, at(2), hit), false, `${direction}: gap in union`);
-    assert.equal(rangeContainsPosition(range, source, at(3)), true, `${direction}: second box`);
+    assert.equal(overlaps(range, source, hit, at(1.625)), true, `${direction}: tangent`);
+    assert.equal(overlaps(range, source, hit, at(1.626)), false, `${direction}: beyond edge`);
+    assert.equal(overlaps(range, source, hit, at(2)), false, `${direction}: gap in union`);
+    assert.equal(contains(range, source, at(3)), true, `${direction}: second box`);
   }
-  const originCell = createRangeGeometry({ type: 'GRID', offsets: [[0, 0]], direction: 'RIGHT' });
-  assert.equal(rangeOverlapsHit(originCell, source, [0.875, 0.25], hit), true);
-  assert.equal(rangeOverlapsHit(originCell, [0, 0], [0.875, 0.25], hit), false);
-  assert.equal(rangeContainsPosition(originCell, source, [0.75, 0.25]), true);
-  assert.equal(rangeContainsPosition(originCell, [0, 0], [0.75, 0.25]), false);
+  const originCell = fromTiles([[0, 0]], 'RIGHT');
+  assert.equal(overlaps(originCell, source, hit, [0.875, 0.25]), true);
+  assert.equal(overlaps(originCell, [0, 0], hit, [0.875, 0.25]), false);
+  assert.equal(contains(originCell, source, [0.75, 0.25]), true);
+  assert.equal(contains(originCell, [0, 0], [0.75, 0.25]), false);
+});
+
+test('empty ranges never contain a position or overlap a hitbox', () => {
+  assert.deepEqual(fromTiles([], 'UP'), []);
+  assert.equal(contains([], [0, 0], [0, 0]), false);
+  assert.equal(overlaps([], [0, 0], {
+    type: 'CIRCLE', offset: [0, 0], radius: 1,
+  }, [0, 0]), false);
 });
 
 test('core domain rules compose independently and preserve earlier unit states', () => {
@@ -704,16 +707,16 @@ test('core blocking uses current state radius and includes center-distance equal
   }), position: [0, 0] });
   const blocked = initialize({ id: 2, definition: Object.freeze({ id: 'radius_enemy',
     allegiance: { side: 'ENEMY' }, blockable: { volume: 1 }, layer: { type: 'GROUND' },
-    hitbox: { geometry: { shapes: [{ type: 'CIRCLE', offset: [0, 0], radius: 10 }] } },
+    hitbox: { shape: { type: 'CIRCLE', offset: [0, 0], radius: 10 } },
   }), position: [1, 0] });
   const update = current => {
     const units = new Map([[1, current], [2, blocked]]);
     return updateBlockingRelations(map, units, [], projectUnitsByTile(map, units).unitsByTile);
   };
   assert.deepEqual(update(blocker), []);
-  const enlarged = { ...blocker, blocker: { ...blocker.blocker, geometry: createBlockGeometry({ radius: 1 }) } };
+  const enlarged = { ...blocker, blocker: { ...blocker.blocker, geometry: ({ radius: 1 }) } };
   assert.deepEqual(update(enlarged), [{ blockerUnitId: 1, blockedUnitId: 2 }]);
-  assert.deepEqual(update({ ...enlarged, blocker: { ...enlarged.blocker, geometry: createBlockGeometry({ radius: 0.999 }) } }), []);
+  assert.deepEqual(update({ ...enlarged, blocker: { ...enlarged.blocker, geometry: ({ radius: 0.999 }) } }), []);
   assert.equal(enlarged.definition.blocker.geometry.radius, 0.5);
 });
 

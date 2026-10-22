@@ -36,7 +36,7 @@ import {
 } from "../../../core/tactical/battle/state.js";
 import { modify } from "../../../core/tactical/unit/capability/skill/sp.js";
 import type { Direction } from "../../../core/tactical/geometry/direction.js";
-import { createBlockGeometry } from "../../../core/tactical/geometry/shape.js";
+import { fromTiles } from "../../../core/tactical/geometry/range.js";
 import type { Unit, Id } from "../../../core/tactical/unit/unit.js";
 import type { Definition as OperatorDefinition } from "../../../core/tactical/unit/archetype/operator.js";
 import { hasAction } from "../../../core/tactical/unit/capability/action/capability.js";
@@ -270,11 +270,9 @@ function attackDefinition(
     skill: boolean,
     recoveryTicks: number,
 ): AttackConfiguration {
-    const withinRange = filters.range({
-        type: "GRID",
-        offsets: skill ? profile.skillRange! : profile.range,
-        direction,
-    });
+    const withinRange = filters.range(
+        fromTiles(skill ? profile.skillRange! : profile.range, direction),
+    );
 
     return {
         id: skill ? "mudrock/s2" : "normal-attack",
@@ -466,10 +464,10 @@ export function create(
 
         allegiance: { side: "ALLY" },
         layer: { type: "GROUND" },
-        hitbox: { geometry: { shapes: [{ type: "CIRCLE", offset: [0, 0], radius: 0.25 }] } },
+        hitbox: { shape: { type: "CIRCLE", offset: [0, 0], radius: 0.25 } },
         blocker: {
             capacity: profile.attributes.blockCapacity,
-            geometry: createBlockGeometry({ radius: 0.70709997 }),
+            geometry: { radius: 0.70709997 },
         },
         action: {
             definitions: Definitions.empty().add(normalAttack).add(action),
