@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sort, topK } from "../../dist/core/common/collection.js";
+import { create } from "../../dist/core/common/query.js";
 
 test("sort leaves its input intact and preserves the order of equal values", () => {
     const candidates = Object.freeze([
@@ -45,4 +46,71 @@ test("topK retains the earlier candidate when the cutoff crosses equal values", 
 
     assert.deepEqual(topK(candidates, 3, (left, right) => left.value - right.value).map(value => value.id),
         ["best", "middle", "first"]);
+});
+
+test("sort and topK accept iterable queries without changing stable tie order", () => {
+    const candidates = [
+        { id: "a", value: 2 },
+        { id: "b", value: 1 },
+        { id: "c", value: 2 },
+        { id: "d", value: 1 },
+    ];
+    const query = create(() => candidates[Symbol.iterator]()).filter(value => value.id !== "c");
+    const compare = (left, right) => left.value - right.value;
+
+    assert.deepEqual(sort(query, compare).map(value => value.id), ["b", "d", "a"]);
+    assert.deepEqual(topK(query, 2, compare).map(value => value.id), ["b", "d"]);
+    assert.deepEqual(topK(new Set([3, 1, 2]), 9, (left, right) => left - right), [1, 2, 3]);
+});
+
+test("topK skips the source entirely for zero and processes it incrementally otherwise", () => {
+    const unavailable = {
+        [Symbol.iterator]() {
+            throw new Error("source opened");
+        },
+    };
+
+    assert.deepEqual(topK(unavailable, 0, () => 0), []);
+
+    const consumed = [];
+    const comparisons = [];
+    const candidates = {
+        *[Symbol.iterator]() {
+            for (const value of [9, 3, 7, 1, 5]) {
+                consumed.push(value);
+                yield value;
+            }
+        },
+    };
+    const best = topK(candidates, 2, (left, right) => {
+        comparisons.push(consumed.length);
+        return left - right;
+    });
+
+    assert.deepEqual(best, [1, 3]);
+    assert.deepEqual(consumed, [9, 3, 7, 1, 5]);
+    assert.equal(comparisons[0], 2);
+
+    for (const k of [-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+        assert.throws(() => topK(unavailable, k, () => 0), RangeError);
+    }
+});
+
+test("topK closes an iterable source if its comparator throws", () => {
+    let closed = false;
+    const failure = new Error("comparison failed");
+    const candidates = {
+        *[Symbol.iterator]() {
+            try {
+                yield 3;
+                yield 2;
+                yield 1;
+            } finally {
+                closed = true;
+            }
+        },
+    };
+
+    assert.throws(() => topK(candidates, 2, () => { throw failure; }), error => error === failure);
+    assert.equal(closed, true);
 });

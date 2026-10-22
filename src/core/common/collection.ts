@@ -1,29 +1,31 @@
 import { assertNonnegativeSafeInteger } from "./assert.js";
 
-export function sort<T>(candidates: readonly T[], compare: (left: T, right: T) => number): T[] {
+export function sort<T>(
+    candidates: Iterable<T>,
+    compare: (left: T, right: T) => number,
+): readonly T[] {
     return [...candidates].sort(compare);
 }
 
 export function topK<T>(
-    candidates: readonly T[],
+    candidates: Iterable<T>,
     k: number,
     compare: (left: T, right: T) => number,
-): T[] {
+): readonly T[] {
     assertNonnegativeSafeInteger(k, "k");
 
     if (k === 0) {
         return [];
-    }
-    if (k >= candidates.length) {
-        return sort(candidates, compare);
     }
 
     const heap: { readonly value: T; readonly index: number }[] = [];
     const order = (left: (typeof heap)[number], right: (typeof heap)[number]) =>
         compare(left.value, right.value) || left.index - right.index;
 
-    for (const [index, value] of candidates.entries()) {
-        const entry = { value, index };
+    let index = 0;
+
+    for (const value of candidates) {
+        const entry = { value, index: index++ };
 
         if (heap.length < k) {
             heap.push(entry);
