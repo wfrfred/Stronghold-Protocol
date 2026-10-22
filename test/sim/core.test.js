@@ -752,7 +752,7 @@ test('catalog products and core initializers expose standard capability pairs an
   const imports = `
 import { initialize as initializeUnit } from ${sourceModule('initialize')};
 import type { Definitions as CapabilityDefinitions, Product } from ${sourceModule('capability/catalog')};
-import { initializeRoutedEnemy, type RoutedEnemySpawn } from ${sourceModule('../battle/creation/enemy')};
+import { initialize as initializeRoutedUnit, type Input as RoutedUnitInput } from ${sourceModule('../battle/creation/routed-unit')};
 import { advance as advanceLocomotion } from ${sourceModule('capability/locomotion/operations')};
 import { advance as advanceRoute, movementTarget, pathMotionMode } from ${sourceModule('capability/route/operations')};
 import { ref as unitRef, get as getUnit } from ${sourceModule('query')};
@@ -786,7 +786,7 @@ type RequiredKeys<T> = { [K in keyof T]-?: {} extends Pick<T, K> ? never : K }[k
 interface EnemyProbe extends EnemyDefinition { readonly kind: 'enemy'; readonly enemyCode: 17; }
 interface OptionalProbe extends UnitDefinition { readonly vitality?: VitalityDefinition; }
 declare const enemyDefinition: EnemyProbe;
-declare const enemySpawn: RoutedEnemySpawn<EnemyProbe>;
+declare const enemySpawn: RoutedUnitInput<EnemyProbe>;
 declare const battlefieldMap: BattlefieldMap;
 declare const execution: BattleExecutionState;
 declare const battleState: BattleState;
@@ -851,7 +851,7 @@ const contentId: string = baseUnit.definition.id;
 const plainDefinition: UnitDefinition & Product<EnemyProbe>['definition'] = enemy.definition;
 const acceptedDefinition: typeof enemy.definition = enemyDefinition;
 type PlainUnit = Assert<Equal<typeof enemy, Unit & Product<EnemyProbe>>>;
-const routedEnemy = initializeRoutedEnemy(battleState, enemySpawn).value.enemy;
+const routedEnemy = initializeRoutedUnit(battleState, enemySpawn).value.unit;
 const spawnedContentId: string = routedEnemy.definition.id;
 routedEnemy.route.main.definition;
 const advancedRoute = advanceRoute(battleState, unitRef(routedEnemy));
@@ -916,7 +916,7 @@ battleState.battlefield.projectiles.replace(projectileRef(typedProjectile), type
       ['unconfigured', `initializeUnit(battleState, { id: 1, definition: { id: 'bare' }, position: [0, 0] }).value.locomotion.velocity;`],
       ['invalid-offense-config', `initializeUnit(battleState, { id: 1, definition: { id: 'invalid', offense: { attack: [] } }, position: [0, 0] });`],
       ['extra-definition-field', `initializeUnit(battleState, { id: 1, definition: enemyDefinition, position: [0, 0] }).value.definition.enemyCode;`],
-      ['routed-extra-definition-field', `initializeRoutedEnemy(battleState, enemySpawn).value.enemy.definition.enemyCode;`],
+      ['routed-extra-definition-field', `initializeRoutedUnit(battleState, enemySpawn).value.unit.definition.enemyCode;`],
       ['optional', `declare const optionalDefinition: OptionalProbe; initializeUnit(battleState, { id: 1, definition: optionalDefinition, position: [0, 0] }).value.vitality.hp;`],
       ['wide', `declare const wideDefinition: UnitDefinition; initializeUnit(battleState, { id: 1, definition: wideDefinition, position: [0, 0] }).value.locomotion.velocity;`],
       ['base-unit-definition', `declare const unit: Unit; unit.definition.vitality.maxHp;`],

@@ -1,4 +1,4 @@
-import { initializeRoutedEnemy } from "../creation/enemy.js";
+import { initialize as initializeRoutedUnit } from "../creation/routed-unit.js";
 import type { Unit } from "../../unit/unit.js";
 import type { Command } from "../contract.js";
 import {
@@ -26,7 +26,7 @@ function spawnEnemies(
         }
 
         state = { ...state, execution: { ...state.execution, nextUnitId } };
-        const initialized = initializeRoutedEnemy(state, {
+        const initialized = initializeRoutedUnit(state, {
             id,
             definition: spawn.definition,
             route: spawn.route,
@@ -34,7 +34,7 @@ function spawnEnemies(
             alwaysCheckCurrentPoint: spawn.alwaysCheckCurrentPoint,
         });
         state = initialized.state;
-        enemies.push(initialized.value.enemy);
+        enemies.push(initialized.value.unit);
     }
 
     return { state, value: enemies };

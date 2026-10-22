@@ -25,7 +25,7 @@ import { Map as NavigationMap } from '../../dist/core/tactical/battlefield/navig
 import { create as createNavigation } from '../../dist/core/tactical/battlefield/navigation/state.js';
 import { createInput, createTiming } from '../../dist/core/tactical/battle/creation/route.js';
 
-import { initializeRoutedEnemy } from "../../dist/core/tactical/battle/creation/enemy.js";
+import { initialize as initializeRoutedUnit } from "../../dist/core/tactical/battle/creation/routed-unit.js";
 import { registerUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
 import { ref, get } from "../../dist/core/tactical/unit/query.js";
 import * as route from "../../dist/core/tactical/unit/capability/route/operations.js";
@@ -479,7 +479,7 @@ test('core movement: an impassable landing tile reflects the displacement around
 function coreDisplacedEnemy(checkpoints = [{
   type: 'MOVE', target: { position: [1, 6], reachOffset: [0.2, 0.1] },
 }]) {
-  const initialized = initializeRoutedEnemy(
+  const initialized = initializeRoutedUnit(
     fixtureBattle(0, { rngState: 42 }),
     {
       id: 1,
@@ -502,8 +502,8 @@ function coreDisplacedEnemy(checkpoints = [{
       timing: createTiming({ waveStartedAtTick: 0, fragmentStartedAtTick: 0 }),
     },
   );
-  const unitRef = ref(initialized.value.enemy);
-  let battle = registerUnit(initialized.state, initialized.value.enemy);
+  const unitRef = ref(initialized.value.unit);
+  let battle = registerUnit(initialized.state, initialized.value.unit);
   battle = {
     ...battle,
     battlefield: {

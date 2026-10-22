@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createRng } from "../../dist/core/common/rng.js";
-import { initializeRoutedEnemy } from "../../dist/core/tactical/battle/creation/enemy.js";
+import { initialize as initializeRoutedUnit } from "../../dist/core/tactical/battle/creation/routed-unit.js";
 import { createInput, normalize } from "../../dist/core/tactical/battle/creation/route.js";
 
 import { parseRouteDefinition } from "../../dist/data/arknights/route.js";
@@ -121,10 +121,10 @@ test("Enemy initialization uses one sampled offset for its Route Definition and 
         raw.spawnOffset[1] + (-raw.spawnRandomRange[1] + rng.next() * (2 * raw.spawnRandomRange[1])),
     ];
     const before = fixtureBattle(9, { rngState: seed });
-    const result = initializeRoutedEnemy(before, {
+    const result = initializeRoutedUnit(before, {
         id: 3, definition: enemyDefinition, route: raw, timing, alwaysCheckCurrentPoint: true,
     });
-    const enemy = result.value.enemy;
+    const enemy = result.value.unit;
 
     assert.equal(result.state.execution.rngState, rng.state());
     assert.equal(before.execution.rngState, seed);
@@ -140,17 +140,17 @@ test("Enemy initialization uses one sampled offset for its Route Definition and 
 test("Repeated enemy births share the Enemy Definition without sharing per-birth route context", () => {
     const raw = input({ checkpoints: [{ type: "WAIT_CURRENT_WAVE_TICKS", targetElapsedTicks: 2 }] });
     const before = fixtureBattle(0, { rngState: 42 });
-    const first = initializeRoutedEnemy(before, {
+    const first = initializeRoutedUnit(before, {
         id: 0, definition: enemyDefinition, route: raw, timing, alwaysCheckCurrentPoint: true,
     });
-    const second = initializeRoutedEnemy(first.state, {
+    const second = initializeRoutedUnit(first.state, {
         id: 1, definition: enemyDefinition, route: raw,
         timing: { waveStartedAtTick: 100, fragmentStartedAtTick: 120 }, alwaysCheckCurrentPoint: false,
     });
 
-    assert.equal(first.value.enemy.definition.route.checkpoints[0].tick, 22);
-    assert.equal(second.value.enemy.definition.route.checkpoints[0].tick, 102);
-    assert.notDeepEqual(first.value.enemy.definition.route.offset, second.value.enemy.definition.route.offset);
+    assert.equal(first.value.unit.definition.route.checkpoints[0].tick, 22);
+    assert.equal(second.value.unit.definition.route.checkpoints[0].tick, 102);
+    assert.notDeepEqual(first.value.unit.definition.route.offset, second.value.unit.definition.route.offset);
     assert.equal("route" in enemyDefinition, false);
     assert.equal("alwaysCheckCurrentPoint" in raw, false);
 });
@@ -160,7 +160,7 @@ test("Spawn rejects unrepresentable absolute deadlines and spawn bounds before p
         { type: "WAIT_CURRENT_WAVE_TICKS", targetElapsedTicks: 1 },
     ] }), { waveStartedAtTick: Number.MAX_SAFE_INTEGER, fragmentStartedAtTick: 0 }, [0, 0], true), RangeError);
     const before = fixtureBattle(0, { rngState: 42 });
-    assert.throws(() => initializeRoutedEnemy(before, {
+    assert.throws(() => initializeRoutedUnit(before, {
         id: 0, definition: enemyDefinition, route: input({ spawnRandomRange: [Number.MAX_VALUE, 0] }),
         timing, alwaysCheckCurrentPoint: true,
     }), RangeError);

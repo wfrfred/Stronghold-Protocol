@@ -29,7 +29,7 @@ import { snapshotSchedule, createSpawnScheduleExecution } from "../../dist/core/
 import { createSpawnScheduleDefinition } from "../../dist/core/tactical/battle/schedule/definition.js";
 import { createSteeringParameters } from '../../dist/core/tactical/unit/capability/locomotion/steering.js';
 
-import { initializeRoutedEnemy } from "../../dist/core/tactical/battle/creation/enemy.js";
+import { initialize as initializeRoutedUnit } from "../../dist/core/tactical/battle/creation/routed-unit.js";
 import { createInput as createRouteDefinition, normalize as normalizeRoute } from '../../dist/core/tactical/battle/creation/route.js';
 import { TICKS_PER_SECOND } from '../../dist/core/tactical/tick.js';
 import { secondsToTicks } from '../../dist/data/arknights/tick.js';

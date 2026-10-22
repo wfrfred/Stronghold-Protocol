@@ -4,25 +4,23 @@ import { createWorldPosition, Tile, World, type WorldPosition } from "../../geom
 import type { Definition, Id, Unit } from "../../unit/unit.js";
 import type { Definitions, Product } from "../../unit/capability/catalog.js";
 import type { Route } from "../../unit/capability/route/capability.js";
-import { initialize } from "../../unit/initialize.js";
+import { initialize as initializeUnit } from "../../unit/initialize.js";
 import type { Result, State as BattleState } from "../state.js";
-import { createInput, normalize, type Input, type Timing } from "./route.js";
+import { createInput, normalize, type Input as RouteInput, type Timing } from "./route.js";
 
-export interface RoutedEnemySpawn<D extends Definition & Partial<Definitions> = Definition> {
+export interface Input<D extends Definition & Partial<Definitions> = Definition> {
     readonly id: Id;
     readonly definition: D;
-    readonly route: Input;
+    readonly route: RouteInput;
     readonly timing: Timing;
     readonly alwaysCheckCurrentPoint: boolean;
 }
 
-export interface RoutedEnemyInitialization<
-    D extends Definition & Partial<Definitions> = Definition,
-> {
-    readonly enemy: Unit & Product<D> & Route;
+export interface Initialization<D extends Definition & Partial<Definitions> = Definition> {
+    readonly unit: Unit & Product<D> & Route;
 }
 
-function sampleOffset(input: Input, next: () => number): WorldPosition {
+function sampleOffset(input: RouteInput, next: () => number): WorldPosition {
     const center = Tile.center(input.startPosition);
 
     for (let axis = 0; axis < 2; axis++) {
@@ -49,15 +47,12 @@ function sampleOffset(input: Input, next: () => number): WorldPosition {
     );
 }
 
-export function initializeRoutedEnemy<D extends Definition & Partial<Definitions>>(
+export function initialize<D extends Definition & Partial<Definitions>>(
     battle: BattleState,
-    spawn: RoutedEnemySpawn<D>,
-): Result<RoutedEnemyInitialization<D>>;
-export function initializeRoutedEnemy(
-    battle: BattleState,
-    spawn: RoutedEnemySpawn,
-): Result<RoutedEnemyInitialization> {
-    assertNonnegativeSafeInteger(spawn.id, "enemy id");
+    spawn: Input<D>,
+): Result<Initialization<D>>;
+export function initialize(battle: BattleState, spawn: Input): Result<Initialization> {
+    assertNonnegativeSafeInteger(spawn.id, "unit id");
 
     const input = createInput(spawn.route);
     const rng = createRng(battle.execution.rngState);
@@ -65,7 +60,7 @@ export function initializeRoutedEnemy(
     const route = normalize(input, spawn.timing, offset, spawn.alwaysCheckCurrentPoint);
 
     battle = { ...battle, execution: { ...battle.execution, rngState: rng.state() } };
-    const initialized = initialize(battle, {
+    const initialized = initializeUnit(battle, {
         id: spawn.id,
         definition: { ...spawn.definition, route },
         position: World.add(Tile.center(route.startPosition), route.offset),
@@ -73,6 +68,6 @@ export function initializeRoutedEnemy(
 
     return {
         state: initialized.state,
-        value: { enemy: initialized.value },
+        value: { unit: initialized.value },
     };
 }

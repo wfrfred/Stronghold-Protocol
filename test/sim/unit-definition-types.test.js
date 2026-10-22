@@ -23,7 +23,7 @@ import type { Elemental } from ${source('unit/capability/elemental/capability')}
 import type { Definition as EffectDefinition } from ${source('unit/effect/definition')};
 import { install } from ${source('unit/effect/operations')};
 import { ref } from ${source('unit/query')};
-import { initializeRoutedEnemy } from ${source('battle/creation/enemy')};
+import { initialize as initializeRoutedUnit } from ${source('battle/creation/routed-unit')};
 import type { EnemySpawnDefinition } from ${source('battle/schedule/definition')};
 import type { Input as RouteInput } from ${source('battle/creation/route')};
 import type { State as BattleState } from ${source('battle/state')};
@@ -45,10 +45,10 @@ const captured: Unit & Vitality & Offense & Skill & Elemental & Route = copy(rou
 const generic = <D extends UnitDefinition & Partial<Definitions>>(definition: D): Unit & Product<D> =>
   initialize(battle, { id: 4, definition, position: [0, 0] }).value;
 const genericComplete: Unit & Vitality & Offense & Skill & Elemental = generic(selected);
-const spawned = initializeRoutedEnemy(battle, {
+const spawned = initializeRoutedUnit(battle, {
   id: 5, definition: { id: 'route-only' }, route: routeInput,
   timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 }, alwaysCheckCurrentPoint: true,
-}).value.enemy;
+}).value.unit;
 const routeOnly: Unit & Route = spawned;
 const scheduled: EnemySpawnDefinition = {
   definition: { id: 'route-only' }, route: routeInput,

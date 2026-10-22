@@ -24,7 +24,7 @@ import { parseRouteDefinition } from '../../dist/data/arknights/route.js';
 import { createRng } from '../../dist/core/common/rng.js';
 import { World } from '../../dist/core/tactical/geometry/coordinate.js';
 
-import { initializeRoutedEnemy } from "../../dist/core/tactical/battle/creation/enemy.js";
+import { initialize as initializeRoutedUnit } from "../../dist/core/tactical/battle/creation/routed-unit.js";
 import { copy } from '../../dist/core/tactical/unit/snapshot.js';
 import { initialize } from "../helpers/unit.js";
 import { createDefinition as createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/tile-binding/capability.js';
@@ -818,12 +818,12 @@ test('Route replays the original teleport and patrol fixtures deterministically'
   const definition = { spatialPresence: {}, id: 'fixture-route-enemy', vitality: { maxHp: 100, defense: 0, resistance: 0 },
     locomotion: { halfBodyWidth: 0, minSpeed: 0, speed: 0.1, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } } };
   function run(index, ticks) {
-    const initialized = initializeRoutedEnemy(fixtureBattle(0, { rngState: 31 }), {
+    const initialized = initializeRoutedUnit(fixtureBattle(0, { rngState: 31 }), {
       id: 1, definition, route: parseRouteDefinition(raw.routes[index]),
       timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 }, alwaysCheckCurrentPoint: true,
     });
-    let battle = registerUnit({ ...initialized.state, battlefield: { ...initialized.state.battlefield, navigation: nav } }, initialized.value.enemy);
-    const ref = units.ref(initialized.value.enemy);
+    let battle = registerUnit({ ...initialized.state, battlefield: { ...initialized.state.battlefield, navigation: nav } }, initialized.value.unit);
+    const ref = units.ref(initialized.value.unit);
     const trace = [];
     for (let tick = 0; tick < ticks && !route.isCompleted(units.get(battle, ref).route); tick++) {
       battle = route.advance({ ...battle, tick, events: [] }, ref);
