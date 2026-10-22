@@ -10,7 +10,7 @@ import type { DamageRequest } from "../core/tactical/battle/damage/contract.js";
 import type { Ref } from "../core/common/ref.js";
 import { ref as unitRef } from "../core/tactical/unit/query.js";
 
-import { battlefieldView, getUnit, updateUnit } from "../core/tactical/battle/state.js";
+import { getUnit, updateUnit } from "../core/tactical/battle/state.js";
 import {
     launchProjectile,
     resolveProjectileAttackPower,
@@ -27,7 +27,7 @@ import {
     removeAttackContribution,
     type Offense,
 } from "../core/tactical/unit/capability/offense/capability.js";
-import { resolveAttackPower } from "../core/tactical/unit/capability/offense/query.js";
+import { resolveAttack } from "../core/tactical/unit/capability/offense/query.js";
 import { healFree } from "../content/tactical/effects/protection.js";
 import { hasVitality } from "../core/tactical/unit/capability/vitality/capability.js";
 import { hasTargetable } from "../core/tactical/unit/capability/targetable/capability.js";
@@ -135,11 +135,11 @@ export function createTacticalProjectileDemo(
                             return state;
                         }
 
-                        const cachedAtk = resolveAttackPower(source.id, battlefieldView(state));
-
-                        if (cachedAtk === undefined || !hasOffense(source)) {
+                        if (!hasOffense(source)) {
                             throw new Error("projectile demo source requires Offense capability");
                         }
+
+                        const cachedAtk = resolveAttack(state, unitRef(source))!;
 
                         const launched = launchProjectile(
                             state,

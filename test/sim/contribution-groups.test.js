@@ -1,3 +1,5 @@
+import { getUnit } from "../../dist/core/tactical/battle/state.js";
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initialize } from "../helpers/unit.js";
@@ -10,7 +12,7 @@ import {
     removeAttackContribution,
 } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { setDefenseContribution, resolveDefense } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
-import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
+import { resolveAttack } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { create } from "../../dist/core/tactical/unit/contribution/attribute.js";
 import { effectFixtureWork } from "../helpers/effects.js";
 const base = (id) =>
@@ -34,32 +36,34 @@ test("attribute selection keeps weaker candidates while independent attributes s
     unit = ({ ...unit, vitality: setDefenseContribution(unit.vitality, { id: "a", value: [create({ finalAddition: 10 })] }) });
     unit = ({ ...unit, vitality: setDefenseContribution(unit.vitality, { id: "b", value: [create({ finalAddition: 20 })] }) });
     let battle = effectFixtureWork(unit);
-    const before = battlefieldView(battle);
-    assert.equal(resolveAttackPower(1, before), 160);
-    const current = before.getUnit(1);
-    assert.equal(resolveDefense(current.vitality, current.definition.vitality, { unit: current, battlefield: before }).defense, 30);
+    const before = battle;
+    assert.equal(resolveAttack(before, unitRef(getUnit(before, 1))), 160);
+    const current = getUnit(before, 1);
+    assert.equal(resolveDefense(current.vitality, current.definition.vitality, { unit: current, battlefield: battlefieldView(before) }).defense, 30);
     battle = transitionUnit(battle, 1, (current) => ({ ...current, offense: removeAttackContribution(current.offense, "b") }));
-    assert.equal(resolveAttackPower(1, battlefieldView(battle)), 400);
-    assert.equal(resolveAttackPower(1, before), 160);
+    assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 1))), 400);
+    assert.equal(resolveAttack(before, unitRef(getUnit(before, 1))), 160);
 });
 test("dynamic values read current sources while selection changes explicitly", () => {
+    const sourceA = base(2);
+    const sourceB = base(3);
     const dynamic = (id, source, coefficient) => ({
         id,
         group: { id: "inspiration", priority: coefficient },
-        value: ({ battlefield }) => [
-            create({ finalAddition: resolveAttackPower(source, battlefield) * coefficient }),
+        value: (battle) => [
+            create({ finalAddition: resolveAttack(battle, source) * coefficient }),
         ],
     });
-    let unit = ({ ...base(1), offense: setAttackContribution(base(1).offense, dynamic("a", 2, 0.3)) });
-    unit = ({ ...unit, offense: setAttackContribution(unit.offense, dynamic("b", 3, 0.6)) });
-    let battle = effectFixtureWork(unit, base(2), base(3));
-    assert.equal(resolveAttackPower(1, battlefieldView(battle)), 160);
+    let unit = ({ ...base(1), offense: setAttackContribution(base(1).offense, dynamic("a", unitRef(sourceA), 0.3)) });
+    unit = ({ ...unit, offense: setAttackContribution(unit.offense, dynamic("b", unitRef(sourceB), 0.6)) });
+    let battle = effectFixtureWork(unit, sourceA, sourceB);
+    assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 1))), 160);
     battle = transitionUnit(battle, 3, (current) =>
         ({ ...current, offense: setAttackContribution(current.offense, { id: "source", value: [create({ finalAddition: 100 })] }) }),
     );
-    assert.equal(resolveAttackPower(1, battlefieldView(battle)), 220);
-    const before = battlefieldView(battle);
-    battle = transitionUnit(battle, 1, (current) => ({ ...current, offense: setAttackContribution(current.offense, dynamic("a", 2, 0.7)) }));
-    assert.equal(resolveAttackPower(1, battlefieldView(battle)), 170);
-    assert.equal(resolveAttackPower(1, before), 220);
+    assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 1))), 220);
+    const before = battle;
+    battle = transitionUnit(battle, 1, (current) => ({ ...current, offense: setAttackContribution(current.offense, dynamic("a", unitRef(sourceA), 0.7)) }));
+    assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 1))), 170);
+    assert.equal(resolveAttack(before, unitRef(getUnit(before, 1))), 220);
 });

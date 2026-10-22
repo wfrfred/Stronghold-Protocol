@@ -6,7 +6,6 @@ import {
 } from "../../../core/common/assert.js";
 import {
     appendEvents,
-    battlefieldView,
     type State as BattleState,
     type Result,
 } from "../../../core/tactical/battle/state.js";
@@ -19,7 +18,8 @@ import * as actions from "../../../core/tactical/unit/action/operations.js";
 import type { Action as ActionCapability } from "../../../core/tactical/unit/capability/action/capability.js";
 import { isSpatiallyPresent } from "../../../core/tactical/unit/capability/presence/capability.js";
 import { beforeRelease, released } from "../../../core/tactical/unit/capability/action/release.js";
-import { resolveAttackPower } from "../../../core/tactical/unit/capability/offense/query.js";
+import { hasOffense } from "../../../core/tactical/unit/capability/offense/capability.js";
+import { resolveAttack } from "../../../core/tactical/unit/capability/offense/query.js";
 import { calculateDamage } from "../../../core/tactical/battle/damage/calculate.js";
 import { applyDamage } from "../../../core/tactical/battle/damage/apply.js";
 import type { DamageRequest, DamageType } from "../../../core/tactical/battle/damage/contract.js";
@@ -148,15 +148,22 @@ function apply(
     target: Ref<Unit>,
     operation: Operation,
 ): BattleState {
-    const sourceUnitId = source.id;
-
     switch (operation.type) {
         case "DAMAGE": {
             const receiver = units.get(battle, target);
-            const power =
-                operation.powerSource === "SOURCE_ATTACK"
-                    ? resolveAttackPower(sourceUnitId, battlefieldView(battle))
-                    : operation.power;
+            let power: number | undefined = operation.power;
+
+            if (operation.powerSource === "SOURCE_ATTACK") {
+                const current = units.get(battle, source);
+
+                if (current === undefined) {
+                    power = undefined;
+                } else if (hasOffense(current)) {
+                    power = resolveAttack(battle, units.ref(current));
+                } else {
+                    power = 0;
+                }
+            }
 
             if (power === undefined || receiver === undefined || !hasVitality(receiver)) {
                 return battle;

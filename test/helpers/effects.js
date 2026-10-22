@@ -135,7 +135,14 @@ export function contributionEffect(
                 ...(group === undefined
                     ? {}
                     : { group: typeof group === "function" ? group(context.self) : group }),
-                value: dynamic
+                value: capability === "offense"
+                    ? dynamic
+                        ? (battle, host) => {
+                              const current = get(battle, context.ref);
+                              return current === undefined ? [] : value(current, battle, host);
+                          }
+                        : value(context.self, state, unit)
+                    : dynamic
                     ? (query) => {
                           const current = query.unit.effects
                               .values()
@@ -179,7 +186,9 @@ export function refreshContribution(state, ref, content, { capability, set, valu
             ...(group === undefined
                 ? {}
                 : { group: typeof group === "function" ? group(current) : group }),
-            value: value(current, { unit, battlefield: battlefieldView(state) }),
+            value: capability === "offense"
+                ? value(current, state, unit)
+                : value(current, { unit, battlefield: battlefieldView(state) }),
         }),
     }));
 }

@@ -1,12 +1,12 @@
+import { getUnit } from "../../dist/core/tactical/battle/state.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
-import { battlefieldView } from "../../dist/core/tactical/battle/state.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initialize } from "../helpers/unit.js";
 import * as effect from "../../dist/core/tactical/unit/effect/operations.js";
 import { get } from "../../dist/core/tactical/unit/effect/operations.js";
-import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
+import { resolveAttack } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { effectFixtureWork, install, definition, attackBuff } from "../helpers/effects.js";
 
 const unit = () =>
@@ -53,7 +53,7 @@ test("effect groups: replacing the selected rule withdraws old output and restor
     assert.equal(get(battle, first).status, "INACTIVE");
     assert.equal(get(battle, first).enabled, true);
     assert.equal(get(battle, second).status, "ACTIVE");
-    assert.equal(resolveAttackPower(0, battlefieldView(battle)), 150);
+    assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 0))), 150);
     battle = effect.replaceEffect(
         battle,
         first,
@@ -62,7 +62,7 @@ test("effect groups: replacing the selected rule withdraws old output and restor
     battle = effect.end(battle, second);
     assert.equal(get(battle, first).status, "ACTIVE");
     assert.equal(get(battle, first).data.amount, 30);
-    assert.equal(resolveAttackPower(0, battlefieldView(battle)), 130);
+    assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 0))), 130);
     assert.deepEqual(trace, [["weak+", 20], ["weak-"], ["strong+"], ["strong-"], ["weak+", 30]]);
 });
 
@@ -96,10 +96,10 @@ test("effect groups: disabling the strongest rule does not select a weaker fallb
     battle = effect.setEnabled(battle, strong, false);
     assert.equal(get(battle, strong).status, "INACTIVE");
     assert.equal(get(battle, weak).status, "INACTIVE");
-    assert.equal(resolveAttackPower(0, battlefieldView(battle)), 100);
+    assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 0))), 100);
     battle = effect.end(battle, strong);
     assert.equal(get(battle, weak).status, "ACTIVE");
-    assert.equal(resolveAttackPower(0, battlefieldView(battle)), 120);
+    assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 0))), 120);
 });
 
 test("effect groups: unrelated groups and ungrouped Effects provide their outputs together", () => {
@@ -107,7 +107,7 @@ test("effect groups: unrelated groups and ungrouped Effects provide their output
     battle = install(battle, attackBuff("plain", 5)).state;
     battle = install(battle, attackBuff("one", 20, { group: { id: "one", priority: 1 } })).state;
     battle = install(battle, attackBuff("two", 30, { group: { id: "two", priority: 1 } })).state;
-    assert.equal(resolveAttackPower(0, battlefieldView(battle)), 155);
+    assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 0))), 155);
 });
 
 test("effect groups: a stronger rule installed during withdrawal supersedes the outer selection", () => {
@@ -132,5 +132,5 @@ test("effect groups: a stronger rule installed during withdrawal supersedes the 
     assert.equal(get(battle, weakRef).status, "INACTIVE");
     assert.equal(get(battle, middleRef).status, "INACTIVE");
     assert.equal(get(battle, replacementRef).status, "ACTIVE");
-    assert.equal(resolveAttackPower(0, battlefieldView(battle)), 400);
+    assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 0))), 400);
 });

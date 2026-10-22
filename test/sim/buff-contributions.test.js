@@ -15,7 +15,7 @@ import {
     setAttackContribution,
     removeAttackContribution,
 } from "../../dist/core/tactical/unit/capability/offense/capability.js";
-import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
+import { resolveAttack } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import {
     setDefenseContribution,
     removeDefenseContribution,
@@ -185,7 +185,7 @@ test("Buff contribution integration: only effective layer growth resamples the r
     });
     work = installed.state;
     const address = installed.value;
-    const power = () => resolveAttackPower(0, battlefieldView(work));
+    const power = () => resolveAttack(work, unitRef(getUnit(work, 0)));
     assert.equal(power(), 150);
     const apply = (currentSourceAttack, tick, expiresAtTick) => {
         const current = getUnit(work, 0).effects.values()[0];

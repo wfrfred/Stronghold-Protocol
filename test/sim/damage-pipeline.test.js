@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { invincible } from "../../dist/content/tactical/effects/protection.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -8,7 +9,7 @@ import { contributionEffect } from "../helpers/effects.js";
 import * as modifier from "../../dist/core/tactical/unit/contribution/attribute.js";
 import { setAttackContribution, removeAttackContribution } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { setResistanceContribution, removeResistanceContribution } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
-import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
+import { resolveAttack } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { calculateDamage } from "../../dist/core/tactical/battle/damage/calculate.js";
 import { applyDamage } from "../../dist/core/tactical/battle/damage/apply.js";
 import { healing } from "../helpers/vitality.js";
@@ -41,17 +42,17 @@ test("damage pipeline: dynamic low HP attack reads current state and stable prio
     const lowHp = contributionEffect("low-hp", {}, {
         capability: "offense", set: setAttackContribution, remove: removeAttackContribution,
         dynamic: true,
-        value: (_self, { unit }) => unit.vitality.hp < unit.definition.vitality.maxHp / 2
+        value: (_effect, _battle, self) => self.vitality.hp < self.definition.vitality.maxHp / 2
             ? [modifier.create({ multiplier: 1 })] : [],
     });
     const source = attach(unit(1, { hp: 750, maxHp: 1000 }), lowHp);
     let battle = settle(workFor(source, unit(2)), trueRequest(500, { source: { id: 2 }, target: { id: 1 } })).state;
-    const damaged = view(battle);
+    const damaged = battle;
     battle = heal(battle, 1, 400).state;
-    assert.equal(resolveAttackPower(1, damaged), 200);
-    assert.equal(damaged.getUnit(1).vitality.hp, 250);
+    assert.equal(resolveAttack(damaged, unitRef(getUnit(damaged, 1))), 200);
+    assert.equal(getUnit(damaged, 1).vitality.hp, 250);
     assert.equal(getUnit(battle, 1).vitality.hp, 650);
-    assert.equal(resolveAttackPower(1, view(battle)), 100);
+    assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 1))), 100);
     assert.equal(source.vitality.hp, 750);
 });
 
@@ -132,7 +133,7 @@ test("damage pipeline: Contribution groups and Effect groups have separate respo
     const weak = rule("weak", "receiving", scaleReceived(2), 0, { group: { id: "shared", priority: 1 } });
     const strong = rule("strong", "receiving", scaleReceived(3), 0, { group: { id: "shared", priority: 2 } });
     const battle = workFor(unit(1), attach(attach(attach(unit(2), attack), weak), strong));
-    assert.equal(resolveAttackPower(2, view(battle)), 200);
+    assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 2))), 200);
     assert.equal(settle(battle, request(100)).value.application.hpLoss, 300);
 });
 

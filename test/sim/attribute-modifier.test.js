@@ -11,7 +11,6 @@ import {
     compileAttributeModifiers,
 } from "../../dist/data/arknights/modifier.js";
 import {
-    battlefieldView,
     getUnit,
     removeUnit,
     transitionUnit,
@@ -21,7 +20,7 @@ import {
     setAttackContribution,
     removeAttackContribution,
 } from "../../dist/core/tactical/unit/capability/offense/capability.js";
-import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
+import { resolveAttack } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import {
     setSpeedContribution,
     removeSpeedContribution,
@@ -334,24 +333,25 @@ test("attribute modifiers: inspiration samples belong to the Effect input and re
             position: [id, 0],
             definition: { id: `inspiration-${id}`, offense: { attack: power } },
         });
-    let work = effectFixtureWork(unit(0, 100), unit(1, 20));
-    const resolve = (work, id) => resolveAttackPower(id, battlefieldView(work));
-    const sampleInput = (work) => ({ sourceAttack: resolve(work, 0), ratio: 0.6 });
+    const source = unit(0, 100);
+    const receiver = unit(1, 20);
+    let work = effectFixtureWork(source, receiver);
+    const sampleInput = (work) => ({ sourceAttack: resolveAttack(work, unitRef(source)), ratio: 0.6 });
     const installed = effects.install(work, unitRef(getUnit(work, 1)), program, {
         source: 0,
         data: sampleInput(work),
     });
     work = installed.state;
     const ref = installed.value;
-    assert.equal(resolve(work, 1), 80);
+    assert.equal(resolveAttack(work, unitRef(receiver)), 80);
     const copied = getUnit(work, 1);
     work = effects.install(work, unitRef(getUnit(work, 0)), amplify).state;
-    assert.equal(resolve(work, 0), 200);
-    assert.equal(resolve(work, 1), 80);
+    assert.equal(resolveAttack(work, unitRef(source)), 200);
+    assert.equal(resolveAttack(work, unitRef(receiver)), 80);
     work = effects.setEnabled(work, ref, false);
-    assert.equal(resolve(work, 1), 20);
+    assert.equal(resolveAttack(work, unitRef(receiver)), 20);
     work = effects.setEnabled(work, ref, true);
-    assert.equal(resolve(work, 1), 80);
+    assert.equal(resolveAttack(work, unitRef(receiver)), 80);
     work = effects.replaceEffect(
         work,
         ref,
@@ -361,10 +361,10 @@ test("attribute modifiers: inspiration samples belong to the Effect input and re
         ),
     );
     work = refreshContribution(work, ref, program, output);
-    assert.equal(resolve(work, 1), 140);
+    assert.equal(resolveAttack(work, unitRef(receiver)), 140);
     work = removeUnit(work, 0, "RETREAT");
-    assert.equal(resolve(work, 1), 140);
+    assert.equal(resolveAttack(work, unitRef(receiver)), 140);
     assert.equal(copied.effects.values()[0].data.sourceAttack, 100);
     work = effects.end(work, ref);
-    assert.equal(resolve(work, 1), 20);
+    assert.equal(resolveAttack(work, unitRef(receiver)), 20);
 });

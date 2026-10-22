@@ -1,5 +1,4 @@
 import type { State as BattleState, Result } from "../../../battle/state.js";
-import type { Context } from "../../query.js";
 import { assertNonnegativeNumber } from "../../../../common/assert.js";
 import * as contribution from "../../contribution/contribution.js";
 import * as attribute from "../../contribution/attribute.js";
@@ -9,8 +8,12 @@ export interface Definition {
     readonly attack: number;
 }
 
+export type Input =
+    | readonly attribute.Modifier[]
+    | ((battle: BattleState, self: Unit & Offense) => readonly attribute.Modifier[]);
+
 export interface State {
-    readonly attack: readonly contribution.Contribution<attribute.Input<Context>>[];
+    readonly attack: readonly contribution.Contribution<Input>[];
 }
 
 export interface Offense {
@@ -30,17 +33,11 @@ export function hasOffenseDefinition(
     return "offense" in definition;
 }
 
-export function createDefinition(definition: Definition): Definition {
+export function initialize(battle: BattleState, definition: Definition): Result<State> {
     assertNonnegativeNumber(definition.attack, "attack");
 
-    return Object.freeze({ attack: definition.attack });
-}
-
-export const initialize: (battle: BattleState, definition: Definition) => Result<State> = (
-    battle,
-) => {
     return { state: battle, value: { attack: [] } };
-};
+}
 
 function changeAttackContributions(
     state: State,
@@ -53,23 +50,11 @@ function changeAttackContributions(
 
 export function setAttackContribution(
     state: State,
-    entry: contribution.Contribution<attribute.Input<Context>>,
+    entry: contribution.Contribution<Input>,
 ): State {
     return changeAttackContributions(state, (entries) => contribution.set(entries, entry));
 }
 
 export function removeAttackContribution(state: State, id: string): State {
     return changeAttackContributions(state, (entries) => contribution.remove(entries, id));
-}
-
-export function resolveAttack(definition: Definition, state: State, context: Context): number {
-    return Math.max(
-        0,
-        attribute.apply(
-            definition.attack,
-            contribution
-                .resolve(state.attack)
-                .flatMap((value) => attribute.evaluate(value, context)),
-        ),
-    );
 }

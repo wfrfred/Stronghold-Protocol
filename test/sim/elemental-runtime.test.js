@@ -24,7 +24,7 @@ import { activate as activateSkill, advance as advanceSkill } from '../../dist/c
 import { recover } from '../../dist/core/tactical/unit/capability/skill/sp.js';
 import { setHook as setHealingHook } from '../../dist/core/tactical/battle/healing/hook.js';
 import { resolveDefense } from '../../dist/core/tactical/unit/capability/vitality/capability.js';
-import { resolveAttackPower } from '../../dist/core/tactical/unit/capability/offense/query.js';
+import { resolveAttack } from '../../dist/core/tactical/unit/capability/offense/query.js';
 import { create as modifier } from '../../dist/core/tactical/unit/contribution/attribute.js';
 import { healing } from '../helpers/vitality.js';
 import * as elemental from '../../dist/core/tactical/unit/capability/elemental/operations.js';
@@ -67,7 +67,7 @@ function defense(work) {
   return resolveDefense(unit.vitality, unit.definition.vitality, { unit, battlefield: battlefieldView(work) });
 }
 function power(work) {
-  return resolveAttackPower(1, battlefieldView(work));
+  return resolveAttack(work, unitRef(getUnit(work, 1)));
 }
 function near(actual, expected) { assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} != ${expected}`); }
 

@@ -5,10 +5,7 @@ import {
 } from "../capability/action/capability.js";
 import type { Definition as AllegianceDefinition } from "../capability/allegiance/capability.js";
 import type { Definition as BlockableDefinition } from "../capability/blocking/blockable.js";
-import {
-    createDefinition as createOffenseDefinition,
-    type Definition as OffenseDefinition,
-} from "../capability/offense/capability.js";
+import type { Definition as OffenseDefinition } from "../capability/offense/capability.js";
 import type {
     Locomotion,
     Definition as LocomotionDefinition,
@@ -110,9 +107,7 @@ export function createCombatDefinition(
         allegiance: definition.allegiance,
         layer: definition.layer,
         hitbox: definition.hitbox,
-        ...(definition.offense === undefined
-            ? {}
-            : { offense: createOffenseDefinition(definition.offense) }),
+        ...(definition.offense === undefined ? {} : { offense: definition.offense }),
         blockable: definition.blockable,
     });
 }

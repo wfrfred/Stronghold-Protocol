@@ -10,10 +10,9 @@ import {
 } from "../../dist/core/tactical/battle/state.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { get } from "../../dist/core/tactical/unit/effect/operations.js";
-import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
+import { resolveAttack } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { definition, effectFixtureWork, install, at } from "../helpers/effects.js";
 import { attackEffect, auraUnit, auraEffect } from "../helpers/aura.js";
-const power = (battle, id) => resolveAttackPower(id, battlefieldView(battle));
 const move = (battle, id, x) =>
     transitionUnit(battle, id, (unit) => ({ ...unit, position: [x, 0] }));
 
@@ -27,7 +26,7 @@ test("aura membership persists after a child ends until leave and reentry", () =
     const before = battlefieldView(battle);
     battle = effects.end(battle, child);
     battle = effects.advance(at(battle, 1));
-    assert.equal(power(battle, 1), 100);
+    assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 1))), 100);
     assert.deepEqual(get(battle, ref).data.bindings[0].refs, [child]);
     battle = move(battle, 1, 3);
     battle = effects.advance(at(battle, 2));
@@ -35,7 +34,7 @@ test("aura membership persists after a child ends until leave and reentry", () =
     battle = move(battle, 1, 1);
     battle = effects.advance(at(battle, 3));
     assert.notDeepEqual(get(battle, ref).data.bindings[0].refs[0], child);
-    assert.equal(power(battle, 1), 120);
+    assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 1))), 120);
     assert.equal(before.getUnit(1).effects.values()[0].status, "ACTIVE");
 });
 
@@ -52,12 +51,12 @@ test("aura refresh frequency belongs to its tick callback", () => {
     battle = move(battle, 2, 1);
     for (const tick of [1, 2]) {
         battle = effects.advance(at(battle, tick));
-        assert.equal(power(battle, 1), 120);
-        assert.equal(power(battle, 2), 100);
+        assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 1))), 120);
+        assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 2))), 100);
     }
     battle = effects.advance(at(battle, 3));
-    assert.equal(power(battle, 1), 100);
-    assert.equal(power(battle, 2), 120);
+    assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 1))), 100);
+    assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 2))), 120);
     assert.equal(get(battle, ref).data.nextRefreshTick, 6);
 });
 
@@ -71,7 +70,7 @@ test("host lifetime closes remote children only when explicitly bound", () => {
         battle = closeLifetime(battle, { type: "UNIT", unitId: 0 }, "RETREAT");
         assert.equal(get(battle, ref), undefined);
         assert.equal(get(battle, child) === undefined, bindLifetime);
-        assert.equal(power(battle, 1), bindLifetime ? 100 : 120);
+        assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 1))), bindLifetime ? 100 : 120);
     }
 });
 
@@ -131,8 +130,8 @@ test("ordinary end policies decide each receiver against current state", () => {
         ["end", 1],
         ["decide", 2, true],
     ]);
-    assert.equal(power(battle, 1), 100);
-    assert.equal(power(battle, 2), 120);
+    assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 1))), 100);
+    assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 2))), 120);
 });
 
 test("group suppression preserves aura members and child identities", () => {
@@ -155,10 +154,10 @@ test("group suppression preserves aura members and child identities", () => {
         ),
     ));
     assert.equal(get(battle, ref).status, "INACTIVE");
-    assert.equal(power(battle, 1), 100);
+    assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 1))), 100);
     battle = effects.end(battle, winner);
     assert.deepEqual(get(battle, ref).data.bindings[0], binding);
-    assert.equal(power(battle, 1), 120);
+    assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 1))), 120);
     assert.equal(getUnit(battle, 1).effects.nextId, 1);
 });
 
@@ -184,8 +183,8 @@ test("reenabling refreshes departed receivers before restoring child outputs", (
     battle = effects.setEnabled(battle, ref, true);
     assert.deepEqual(enabled, [2]);
     assert.equal(get(battle, child), undefined);
-    assert.equal(power(battle, 1), 100);
-    assert.equal(power(battle, 2), 120);
+    assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 1))), 100);
+    assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 2))), 120);
 });
 
 test("nested installation can disable an aura before later receivers enter", () => {
@@ -201,7 +200,7 @@ test("nested installation can disable an aura before later receivers enter", () 
     ({ state: battle, value: ref } = install(battle, auraEffect(receiver), 0));
     assert.deepEqual(starts, [1]);
     assert.equal(get(battle, ref).status, "INACTIVE");
-    assert.equal(power(battle, 1), 100);
+    assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 1))), 100);
     assert.equal(getUnit(battle, 2).effects.values().length, 0);
 });
 
@@ -219,5 +218,5 @@ test("nested child installation ending the aura does not revive parent or child"
     assert.equal(get(battle, ref), undefined);
     assert.deepEqual(starts, [1]);
     assert.deepEqual(getUnit(battle, 1).effects.values(), []);
-    assert.equal(power(battle, 1), 100);
+    assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 1))), 100);
 });

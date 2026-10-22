@@ -21,7 +21,7 @@ import type { Unit } from ${module("unit/unit")};
 import type { State as BattleState } from ${module("battle/state")};
 import type { Vitality } from ${module("unit/capability/vitality/capability")};
 import { setMaxHpContribution } from ${module("unit/capability/vitality/capability")};
-import { setAttackContribution, type Offense } from ${module("unit/capability/offense/capability")};
+import { setAttackContribution, type Input as AttackInput, type Offense } from ${module("unit/capability/offense/capability")};
 import { setCapacityContribution, canBlock, type Rule as BlockerRule, type Blocker } from ${module("unit/capability/blocking/blocker")};
 import { setVolumeContribution, canBeBlocked, type Rule as BlockableRule, type Blockable } from ${module("unit/capability/blocking/blockable")};
 import type { Locomotion } from ${module("unit/capability/locomotion/capability")};
@@ -124,7 +124,8 @@ const hp:number=changed.vitality.hp;
 const attack:number=changed.definition.offense.attack;
 const maxHp:number=changed.definition.vitality.maxHp;
 const retainedRoute:Progress=changed.route.main;
-setAttackContribution(capabilityHost.offense,dynamic);
+const dynamicAttack:Contribution<AttackInput>={id:'dynamic',value:(_battle,self)=>[]};
+setAttackContribution(capabilityHost.offense,dynamicAttack);
 // @ts-expect-error MaxHP cannot coordinate HP from a query-time closure.
 setMaxHpContribution(capabilityHost.vitality,capabilityHost.definition.vitality,dynamic);
 // @ts-expect-error blocking capacity requires settled static values.

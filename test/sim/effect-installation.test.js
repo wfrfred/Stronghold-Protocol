@@ -1,13 +1,13 @@
+import { getUnit } from "../../dist/core/tactical/battle/state.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { closeLifetime } from "../../dist/core/tactical/battle/execution/lifetime.js";
 import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
-import { battlefieldView } from "../../dist/core/tactical/battle/state.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initialize } from "../helpers/unit.js";
 import * as effect from "../../dist/core/tactical/unit/effect/operations.js";
 import { get } from "../../dist/core/tactical/unit/effect/operations.js";
-import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
+import { resolveAttack } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { effectFixtureWork, install, definition, attackBuff } from "../helpers/effects.js";
 
 const host = () =>
@@ -22,7 +22,7 @@ const host = () =>
     });
 
 const group = (priority) => ({ id: "installation-rules", priority });
-const attack = (battle) => resolveAttackPower(0, battlefieldView(battle));
+const attack = (battle) => resolveAttack(battle, unitRef(getUnit(battle, 0)));
 
 test("effect installation: a nested weaker rule does not enable its parent before installation completes", () => {
     const trace = [];

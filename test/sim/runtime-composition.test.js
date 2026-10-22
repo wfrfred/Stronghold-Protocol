@@ -21,6 +21,7 @@ import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
 import { createDefinition } from "../../dist/core/tactical/unit/archetype/operator.js";
 import { createDefinition as createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
 import { initialize, placement } from "../helpers/unit.js";
+import { effectFixtureWork } from "../helpers/effects.js";
 import { seededPlacement } from "../helpers/aura.js";
 import { createInput as createRouteDefinition } from "../../dist/core/tactical/battle/creation/route.js";
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
@@ -29,7 +30,7 @@ import * as actions from "../../dist/core/tactical/unit/action/operations.js";
 import { install as installEffect, replaceEffect, end as endEffect } from "../../dist/core/tactical/unit/effect/operations.js";
 import * as modifier from "../../dist/core/tactical/unit/contribution/attribute.js";
 import { initialize as initializeVitalityState } from "../../dist/core/tactical/unit/capability/vitality/capability.js";
-import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
+import { resolveAttack } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import {
     battlefieldView,
     getUnit,
@@ -68,13 +69,12 @@ function actor(id, program) {
     });
 }
 
-function view(snapshot) {
-    const units = new Map(snapshot.units.map((unit) => [unit.id, unit]));
+function battleOf(snapshot) {
+    const battle = effectFixtureWork(...snapshot.units);
     return {
-        unitIds: [...units.keys()],
-        getUnit: (id) => units.get(id),
-        blockerOf: () => undefined,
-        blockedBy: () => [],
+        ...battle,
+        tick: snapshot.tickIndex,
+        execution: snapshot.execution,
     };
 }
 
@@ -384,7 +384,7 @@ function scenario({ failure = null, cancelled = false } = {}) {
             traceTarget: targetUnitId,
             position: source.position,
             destination: target.position,
-            cachedAtk: resolveAttackPower(source.id, battlefieldView(state)),
+            cachedAtk: resolveAttack(state, unitRef(source)),
             speedPerTick: 1,
             contactRange,
             stopDelayTicks: 0,
@@ -471,7 +471,7 @@ test("runtime composition: late exceptions and invalid settlement propagate with
         assert.equal(before.execution.nextUnitId, 3);
         assert.equal(before.spawning.spawnedCount, 0);
         assert.equal(effect(before, 0, failed.scoped).data.starts, 1);
-        assert.equal(resolveAttackPower(0, view(before)), 17);
+        assert.equal(resolveAttack(battleOf(before), unitRef(before.units.find((unit) => unit.id === 0))), 17);
 
         assert.throws(
             () => failed.runtime.step(),
@@ -532,7 +532,7 @@ test("runtime composition: a successful battle preserves identities, snapshots a
         after.projectiles.instances.map((projectile) => projectile.cachedAtk),
         [18, 17],
     );
-    assert.equal(resolveAttackPower(0, view(after)), 18);
+    assert.equal(resolveAttack(battleOf(after), unitRef(after.units.find((unit) => unit.id === 0))), 18);
     assert.equal(effect(after, 0, run.aura).data.remaining, 2);
     assert.equal(effect(after, 0, run.aura).data.consumed, 1);
     assert.deepEqual(
@@ -584,7 +584,7 @@ test("runtime composition: a successful battle preserves identities, snapshots a
                 effect(cleaned, 1, run.marker)?.status === "ACTIVE",
                 false,
             );
-            assert.equal(resolveAttackPower(0, view(cleaned)), 10);
+            assert.equal(resolveAttack(battleOf(cleaned), unitRef(cleaned.units.find((unit) => unit.id === 0))), 10);
             assert.equal(effect(cleaned, 0, run.scoped), undefined);
             assert.equal(effect(cleaned, 0, run.pulse), undefined);
         }
@@ -665,7 +665,7 @@ test("runtime composition: content conditions skip installation while cancelled 
         effect(after, 1, run.marker)?.status === "ACTIVE",
         false,
     );
-    assert.equal(resolveAttackPower(1, view(after)), 15);
+    assert.equal(resolveAttack(battleOf(after), unitRef(after.units.find((unit) => unit.id === 1))), 15);
     assert.equal(after.units.find((unit) => unit.id === 1).effects.nextId, 1);
     while (run.runtime.result === null) run.runtime.step();
     const final = run.runtime.snapshot();
@@ -675,5 +675,5 @@ test("runtime composition: content conditions skip installation while cancelled 
         effect(final, 1, run.marker)?.status === "ACTIVE",
         false,
     );
-    assert.equal(resolveAttackPower(1, view(final)), 10);
+    assert.equal(resolveAttack(battleOf(final), unitRef(final.units.find((unit) => unit.id === 1))), 10);
 });

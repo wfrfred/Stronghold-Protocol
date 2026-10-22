@@ -5,7 +5,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initialize } from "../helpers/unit.js";
 import {
-    battlefieldView,
     getUnit,
     updateUnit,
 } from "../../dist/core/tactical/battle/state.js";
@@ -17,7 +16,7 @@ import {
 import * as effect from "../../dist/core/tactical/unit/effect/operations.js";
 import { get } from "../../dist/core/tactical/unit/effect/operations.js";
 import { effectFixtureWork, install, definition, attackBuff } from "../helpers/effects.js";
-import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
+import { resolveAttack } from "../../dist/core/tactical/unit/capability/offense/query.js";
 
 const unit = (id) =>
     initialize({
@@ -200,7 +199,7 @@ test("effect lifetimes: ending the same instance in its disable callback remains
     battle = effect.end(battle, ref);
     assert.deepEqual(calls, ["disable", "end"]);
     assert.equal(get(battle, ref), undefined);
-    assert.equal(resolveAttackPower(0, battlefieldView(battle)), 100);
+    assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 0))), 100);
 });
 
 test("effect lifetimes: closing a host never reenables its suppressed effects", () => {

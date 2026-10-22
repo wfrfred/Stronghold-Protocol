@@ -40,12 +40,15 @@ import { fromTiles } from "../../../core/tactical/geometry/range.js";
 import type { Unit, Id } from "../../../core/tactical/unit/unit.js";
 import type { Definition as OperatorDefinition } from "../../../core/tactical/unit/archetype/operator.js";
 import { hasAction } from "../../../core/tactical/unit/capability/action/capability.js";
-import type { Definition as OffenseDefinition } from "../../../core/tactical/unit/capability/offense/capability.js";
+import {
+    hasOffense,
+    type Definition as OffenseDefinition,
+} from "../../../core/tactical/unit/capability/offense/capability.js";
 import {
     createDefinition as createDeployableDefinition,
     type Definition as DeployableDefinition,
 } from "../../../core/tactical/unit/capability/deployable/capability.js";
-import { resolveAttackPower } from "../../../core/tactical/unit/capability/offense/query.js";
+import { resolveAttack } from "../../../core/tactical/unit/capability/offense/query.js";
 import {
     hasSkill,
     type Definition as SkillDefinition,
@@ -354,7 +357,7 @@ export function create(
                 return state;
             }
 
-            const power = resolveAttackPower(source.id, battlefieldView(state))!;
+            const power = hasOffense(source) ? resolveAttack(state, unitRef(source))! : 0;
             state = healSelf(state, source.id, healRatio);
 
             for (const targetRef of self.state.bindings.primary ?? []) {

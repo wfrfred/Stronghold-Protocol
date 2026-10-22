@@ -8,13 +8,13 @@ import { createWithState } from "../../dist/content/tactical/actions/attack.js";
 import * as actions from "../../dist/core/tactical/unit/action/operations.js";
 import { advance } from "../../dist/core/tactical/unit/action/advance.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
-import { getUnit, updateUnit, battlefieldView } from "../../dist/core/tactical/battle/state.js";
+import { getUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
 
 import { setHook } from "../../dist/core/tactical/battle/damage/hook.js";
 import { setHook as setHealingHook } from "../../dist/core/tactical/battle/healing/hook.js";
 import { setAttackContribution } from "../../dist/core/tactical/unit/capability/offense/capability.js";
 import { create as modifier } from "../../dist/core/tactical/unit/contribution/attribute.js";
-import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
+import { resolveAttack } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { definition as createSkillDefinition } from "../helpers/skill.js";
 import { activate, enter as enterSkill } from "../../dist/core/tactical/unit/capability/skill/operations.js";
 
@@ -233,7 +233,7 @@ test("action: generic non-attack programs do not earn attack SP or consume skill
     const result = start(state, definition);
     assert.equal(getUnit(result.state, 0).skill.active.sustain.remaining, 3);
     assert.equal(getUnit(result.state, 0).skill.sp.value, 0);
-    assert.equal(resolveAttackPower(0, battlefieldView(result.state)), 10);
+    assert.equal(resolveAttack(result.state, unitRef(getUnit(result.state, 0))), 10);
 });
 
 test("ACTION recovery callbacks may cancel the releasing attack before its output", () => {

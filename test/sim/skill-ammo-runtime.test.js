@@ -9,14 +9,14 @@ import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
-import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/state.js";
+import { getUnit } from "../../dist/core/tactical/battle/state.js";
 import { createDefinition as createProjectileDefinition } from "../../dist/core/tactical/battlefield/projectile/definition.js";
 import { createDefinition } from "../../dist/core/tactical/unit/archetype/operator.js";
 import { create as createAttack } from "../../dist/content/tactical/actions/skill.js";
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
 import { ref as actionRef, setState } from "../../dist/core/tactical/unit/action/action.js";
 import * as actions from "../../dist/core/tactical/unit/action/operations.js";
-import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
+import { resolveAttack } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { createDefinition as createSkillDefinition } from "../../dist/core/tactical/unit/capability/skill/capability.js";
 import { ref as activationRef } from "../../dist/core/tactical/unit/capability/skill/activation.js";
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
@@ -226,7 +226,7 @@ test("ammo runtime: a content-defined follow-up preserves one ammunition payment
         return { state: actions.replace(state, setState(current, { ...current.state, emitted: 1 })), value: false };
       }
       for (const target of self.state.bindings.main) {
-        state = dealDamage(state, { source: { id: self.host.id }, target: { id: target.id }, parameters: parameters(resolveAttackPower(self.host.id, battlefieldView(state)), "TRUE") }).state;
+        state = dealDamage(state, { source: { id: self.host.id }, target: { id: target.id }, parameters: parameters(resolveAttack(state, self.host), "TRUE") }).state;
       }
       return { state, value: true };
     },
@@ -248,7 +248,7 @@ test("ammo runtime: the last released projectile survives skill completion and r
     const target = getUnit(state, targetUnitId);
     return launchProjectile(state, shell, {
       source: actor.id, traceTarget: targetUnitId, position: actor.position, destination: target.position,
-      cachedAtk: resolveAttackPower(actor.id, battlefieldView(state)),
+      cachedAtk: resolveAttack(state, unitRef(actor)),
       speedPerTick: 1, contactRange: [hit], stopDelayTicks: 0,
     }, state.tick).state;
   } });

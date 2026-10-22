@@ -5,10 +5,7 @@ import {
 } from "../capability/action/capability.js";
 import type { Definition as AllegianceDefinition } from "../capability/allegiance/capability.js";
 import type { Definition as BlockerDefinition } from "../capability/blocking/blocker.js";
-import {
-    createDefinition as createOffenseDefinition,
-    type Definition as OffenseDefinition,
-} from "../capability/offense/capability.js";
+import type { Definition as OffenseDefinition } from "../capability/offense/capability.js";
 import type { Definition as HitboxDefinition } from "../capability/hitbox/capability.js";
 import type { Definition as VitalityDefinition } from "../capability/vitality/capability.js";
 import type { Definition as DeployableDefinition } from "../capability/deployable/capability.js";
@@ -70,9 +67,7 @@ export function createDefinition(definition: Definition): Definition {
         allegiance: definition.allegiance,
         layer: definition.layer,
         hitbox: definition.hitbox,
-        ...(definition.offense === undefined
-            ? {}
-            : { offense: createOffenseDefinition(definition.offense) }),
+        ...(definition.offense === undefined ? {} : { offense: definition.offense }),
         blocker: definition.blocker,
         ...(definition.elemental === undefined
             ? {}

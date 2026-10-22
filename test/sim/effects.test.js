@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { setData } from "../../dist/core/tactical/unit/effect/effect.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -17,7 +18,7 @@ import {
     attackBuff,
     refreshAttack,
 } from "../helpers/effects.js";
-import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
+import { resolveAttack } from "../../dist/core/tactical/unit/capability/offense/query.js";
 
 const unit = (id = 0) =>
     initialize({
@@ -104,7 +105,7 @@ test("effects: disabling withdraws output while preserving private state and ide
     let battle = effectFixtureWork(unit());
     let ref;
     ({ state: battle, value: ref } = install(battle, value));
-    const attack = () => resolveAttackPower(0, battlefieldView(battle));
+    const attack = () => resolveAttack(battle, unitRef(getUnit(battle, 0)));
     assert.equal(attack(), 120);
     battle = effect.setEnabled(battle, ref, false);
     assert.equal(attack(), 100);
@@ -125,16 +126,16 @@ test("effects: content explicitly refreshes a static contribution after changing
     let battle = effectFixtureWork(unit());
     let ref;
     ({ state: battle, value: ref } = install(battle, value));
-    const previous = battlefieldView(battle);
+    const previous = battle;
     battle = effect.replaceEffect(
         battle,
         ref,
         setData(get(battle, ref), { amount: 50 }),
     );
-    assert.equal(resolveAttackPower(0, battlefieldView(battle)), 120);
+    assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 0))), 120);
     battle = refreshAttack(battle, ref);
-    assert.equal(resolveAttackPower(0, battlefieldView(battle)), 150);
-    assert.equal(resolveAttackPower(0, previous), 120);
+    assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 0))), 150);
+    assert.equal(resolveAttack(previous, unitRef(getUnit(previous, 0))), 120);
 });
 
 test("effects: ending withdraws outputs before terminal business and repeated ending does nothing", () => {
@@ -145,7 +146,7 @@ test("effects: ending withdraws outputs before terminal business and repeated en
             return state;
         },
         onEnd(state, context) {
-            seen.push(["end", context.reason, resolveAttackPower(0, battlefieldView(state))]);
+            seen.push(["end", context.reason, resolveAttack(state, unitRef(getUnit(state, 0)))]);
             return effect.end(state, context.ref, "REENTRANT");
         },
     });
@@ -159,7 +160,7 @@ test("effects: ending withdraws outputs before terminal business and repeated en
         ["disable", "end"],
     );
     assert.deepEqual(seen[1], ["end", "DISPELLED", 100]);
-    assert.equal(resolveAttackPower(0, battlefieldView(battle)), 100);
+    assert.equal(resolveAttack(battle, unitRef(getUnit(battle, 0))), 100);
 });
 
 test("effects: callbacks read current Unit state after a preceding nested operation", () => {

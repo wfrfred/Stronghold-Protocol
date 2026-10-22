@@ -8,13 +8,13 @@ import {
     compileAttributeModifiers,
     parseAttributeModifiers,
 } from "../../dist/data/arknights/modifier.js";
-import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/state.js";
+import { getUnit } from "../../dist/core/tactical/battle/state.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import {
     setAttackContribution,
     removeAttackContribution,
 } from "../../dist/core/tactical/unit/capability/offense/capability.js";
-import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
+import { resolveAttack } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import { initialize } from "../helpers/unit.js";
 import {
     contributionEffect,
@@ -43,8 +43,8 @@ const refresh = (stackCount, expiresAtTick, reloadModifiers) => ({
     expiresAtTick,
     reloadModifiers,
 });
-const instance = (view) => view.getUnit(0).effects.values()[0];
-const power = (view) => resolveAttackPower(0, view);
+const instance = (battle) => getUnit(battle, 0).effects.values()[0];
+const power = (battle) => resolveAttack(battle, unitRef(getUnit(battle, 0)));
 const address = { host: { id: 0 }, id: 0 };
 
 test("buff expiry: a native STACK descriptor peels one layer and resets the caller's fixed lifetime", () => {
@@ -180,20 +180,20 @@ function harness({ stackCount = 3, maxValidStackCnt = -1 } = {}) {
 
 test("buff expiry content renews private layers and refreshes static contribution at its tick callback", () => {
     const buff = harness();
-    const before = battlefieldView(buff.work);
+    const before = buff.work;
     const id = instance(before).id;
     assert.equal(power(before), 250);
     buff.work = effects.advance(at(buff.work, 29));
-    assert.equal(power(battlefieldView(buff.work)), 250);
+    assert.equal(power(buff.work), 250);
     buff.work = effects.advance(at(buff.work, 30));
-    assert.equal(instance(battlefieldView(buff.work)).id, id);
-    assert.equal(deadline(instance(battlefieldView(buff.work))), 60);
-    assert.equal(power(battlefieldView(buff.work)), 200);
+    assert.equal(instance(buff.work).id, id);
+    assert.equal(deadline(instance(buff.work)), 60);
+    assert.equal(power(buff.work), 200);
     buff.work = effects.advance(at(buff.work, 60));
-    assert.equal(power(battlefieldView(buff.work)), 150);
+    assert.equal(power(buff.work), 150);
     buff.work = effects.advance(at(buff.work, 90));
-    assert.equal(instance(battlefieldView(buff.work)), undefined);
-    assert.equal(power(battlefieldView(buff.work)), 100);
+    assert.equal(instance(buff.work), undefined);
+    assert.equal(power(buff.work), 100);
     assert.equal(power(before), 250);
     assert.equal(instance(before).data.stackCount, 3);
 });
@@ -201,22 +201,22 @@ test("inactive layered buffs reach deadline without executing their active tick 
     const buff = harness({ stackCount: 2 });
     buff.work = effects.setEnabled(buff.work, buff.ref, false);
     buff.work = effects.advance(at(buff.work, 30));
-    assert.equal(instance(battlefieldView(buff.work)), undefined);
-    assert.equal(power(battlefieldView(buff.work)), 100);
+    assert.equal(instance(buff.work), undefined);
+    assert.equal(power(buff.work), 100);
     assert.deepEqual(buff.samples, [100]);
 });
 test("native effective cap preserves sampled input until a renewal requires resampling", () => {
     const buff = harness({ stackCount: 4, maxValidStackCnt: 2 });
-    const original = battlefieldView(buff.work);
+    const original = buff.work;
     buff.source(200);
     buff.work = effects.advance(at(buff.work, 30));
-    assert.equal(instance(battlefieldView(buff.work)).data.stackCount, 3);
+    assert.equal(instance(buff.work).data.stackCount, 3);
     assert.deepEqual(buff.samples, [100]);
-    assert.equal(power(battlefieldView(buff.work)), 200);
+    assert.equal(power(buff.work), 200);
     buff.source(400);
     buff.work = effects.advance(at(buff.work, 60));
-    assert.equal(instance(battlefieldView(buff.work)).data.stackCount, 2);
+    assert.equal(instance(buff.work).data.stackCount, 2);
     assert.deepEqual(buff.samples, [100, 400]);
-    assert.equal(power(battlefieldView(buff.work)), 500);
+    assert.equal(power(buff.work), 500);
     assert.equal(power(original), 200);
 });

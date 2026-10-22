@@ -1,7 +1,9 @@
 import { assertNonnegativeNumber, assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import type { Ref } from "../../../common/ref.js";
-import { battlefieldView, type State as BattleState, type Result } from "../../battle/state.js";
-import { resolveAttackPower } from "../../unit/capability/offense/query.js";
+import { getUnit, type State as BattleState, type Result } from "../../battle/state.js";
+import { hasOffense } from "../../unit/capability/offense/capability.js";
+import { resolveAttack } from "../../unit/capability/offense/query.js";
+import * as units from "../../unit/query.js";
 import type { WorldPosition } from "../../geometry/coordinate.js";
 import type { Range } from "../../geometry/range.js";
 import type { Id } from "../../unit/unit.js";
@@ -58,11 +60,15 @@ export function resolveProjectileAttackPower(
     state: BattleState,
     projectile: StoredProjectile,
 ): number {
-    return (
-        (projectile.source === null
-            ? undefined
-            : resolveAttackPower(projectile.source, battlefieldView(state))) ?? projectile.cachedAtk
-    );
+    const source = projectile.source === null ? undefined : getUnit(state, projectile.source);
+
+    if (source === undefined) {
+        return projectile.cachedAtk;
+    }
+
+    return hasOffense(source)
+        ? (resolveAttack(state, units.ref(source)) ?? projectile.cachedAtk)
+        : 0;
 }
 
 export function launchProjectile<S extends object>(

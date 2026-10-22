@@ -1,3 +1,4 @@
+import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { effectFixtureWork as workFor } from "../helpers/effects.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -8,9 +9,8 @@ import { copy } from "../../dist/core/tactical/unit/snapshot.js";
 import {
     setAttackContribution,
     removeAttackContribution,
-    resolveAttack as resolveOffenseAttack,
 } from "../../dist/core/tactical/unit/capability/offense/capability.js";
-import { resolveAttackPower } from "../../dist/core/tactical/unit/capability/offense/query.js";
+import { resolveAttack } from "../../dist/core/tactical/unit/capability/offense/query.js";
 import {
     setResistanceContribution,
     resolveDefense,
@@ -131,35 +131,35 @@ test("contributions: capability set, remove and replacement preserve prior snaps
     const sample = { id: "inspiration", value: [value(150)] };
     const sampled = ({ ...initial, offense: setAttackContribution(initial.offense, sample) });
     let work = workFor(sampled);
-    assert.equal(resolveAttackPower(1, battlefieldView(work)), 250);
+    assert.equal(resolveAttack(work, unitRef(getUnit(work, 1))), 250);
     work = transitionUnit(work, 1, (current) => ({ ...current, offense: removeAttackContribution(current.offense, "inspiration") }));
-    assert.equal(resolveAttackPower(1, battlefieldView(work)), 100);
+    assert.equal(resolveAttack(work, unitRef(getUnit(work, 1))), 100);
     work = transitionUnit(work, 1, (current) => ({ ...current, offense: setAttackContribution(current.offense, sample) }));
-    assert.equal(resolveAttackPower(1, battlefieldView(work)), 250);
+    assert.equal(resolveAttack(work, unitRef(getUnit(work, 1))), 250);
     const copied = copy(getUnit(work, 1));
     assert.equal(copied.offense.attack, getUnit(work, 1).offense.attack);
-    const resumedSnapshot = battlefieldView(work);
+    const resumedSnapshot = work;
     work = transitionUnit(work, 1, (current) =>
         ({ ...current, offense: setAttackContribution(current.offense, { id: "inspiration", value: [value(200)] }) }),
     );
-    assert.equal(resolveAttackPower(1, battlefieldView(work)), 300);
-    assert.equal(resolveAttackPower(1, resumedSnapshot), 250);
+    assert.equal(resolveAttack(work, unitRef(getUnit(work, 1))), 300);
+    assert.equal(resolveAttack(resumedSnapshot, unitRef(getUnit(resumedSnapshot, 1))), 250);
 });
 
 test("contributions: direct capability closures read current facts and retain previous snapshots", () => {
     const initial = ({ ...unit(1), offense: setAttackContribution(unit(1).offense, {
         id: "dynamic",
-        value: ({ unit }) => [value(unit.vitality.hp < 50 ? 100 : 0)],
+        value: (_battle, self) => [value(self.vitality.hp < 50 ? 100 : 0)],
     }) });
     let work = workFor(initial);
-    const original = battlefieldView(work);
-    assert.equal(resolveAttackPower(1, original), 100);
+    const original = work;
+    assert.equal(resolveAttack(original, unitRef(getUnit(original, 1))), 100);
     work = transitionUnit(work, 1, (current) => ({
         ...current,
         vitality: { ...current.vitality, hp: 30 },
     }));
-    assert.equal(resolveAttackPower(1, battlefieldView(work)), 200);
-    assert.equal(resolveAttackPower(1, original), 100);
+    assert.equal(resolveAttack(work, unitRef(getUnit(work, 1))), 200);
+    assert.equal(resolveAttack(original, unitRef(getUnit(original, 1))), 100);
     assert.equal(getUnit(work, 1).offense.attack, initial.offense.attack);
 });
 

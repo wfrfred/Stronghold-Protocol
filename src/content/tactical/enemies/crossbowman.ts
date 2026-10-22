@@ -8,7 +8,7 @@ import * as units from "../../../core/tactical/unit/query.js";
 import type { Profile } from "../../../data/arknights/enemy.js";
 import { perSecondToPerTick } from "../../../data/arknights/tick.js";
 import { assertNonnegativeSafeInteger, assertPositiveNumber } from "../../../core/common/assert.js";
-import { battlefieldView, getUnit } from "../../../core/tactical/battle/state.js";
+import { getUnit } from "../../../core/tactical/battle/state.js";
 import {
     createDefinition as createProjectileDefinition,
     type Definition as ProjectileDefinition,
@@ -18,7 +18,8 @@ import {
     resolveProjectileAttackPower,
 } from "../../../core/tactical/battlefield/projectile/operations.js";
 import { hasAllegiance } from "../../../core/tactical/unit/capability/allegiance/capability.js";
-import { resolveAttackPower } from "../../../core/tactical/unit/capability/offense/query.js";
+import { hasOffense } from "../../../core/tactical/unit/capability/offense/capability.js";
+import { resolveAttack } from "../../../core/tactical/unit/capability/offense/query.js";
 import { hasVitality } from "../../../core/tactical/unit/capability/vitality/capability.js";
 import type { Unit } from "../../../core/tactical/unit/unit.js";
 import type { Product } from "../../../core/tactical/unit/capability/catalog.js";
@@ -127,7 +128,7 @@ export function create(
                 return state;
             }
 
-            const cachedAtk = resolveAttackPower(source.id, battlefieldView(state));
+            const cachedAtk = hasOffense(source) ? resolveAttack(state, units.ref(source)) : 0;
 
             if (cachedAtk === undefined) {
                 throw new Error("enemy arrow action requires Offense");
