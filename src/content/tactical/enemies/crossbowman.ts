@@ -42,8 +42,9 @@ export type Enemy = Unit & Product<Definition>;
 export function createArrow(): tracking.Definition {
     const hit = (battle: BattleState, self: ProjectileInstance<tracking.State>): BattleState =>
         tracking.hit(battle, self, (state, current, target) => {
+            const source = current.state.source;
             const request: DamageRequest = {
-                source: current.state.source,
+                source: source !== null && units.get(state, source) !== undefined ? source : null,
                 target: units.ref(target),
                 parameters: {
                     type: "PHYSICAL",

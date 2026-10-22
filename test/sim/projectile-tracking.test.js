@@ -7,10 +7,14 @@ import { advance } from '../../dist/core/tactical/battlefield/projectile/advance
 import { ref } from '../../dist/core/tactical/unit/query.js';
 import { createArrow } from '../../dist/content/tactical/enemies/crossbowman.js';
 import * as tracking from '../../dist/content/tactical/projectiles/tracking.js';
+import { unit as actionUnit } from '../helpers/action-fixture.js';
+import { createTacticalProjectileDemo } from '../../dist/legacy/projectile-demo.js';
+import { start as startAction } from '../../dist/core/tactical/unit/action/operations.js';
+import { advance as advanceAction } from '../../dist/core/tactical/unit/action/advance.js';
 
-function setup() {
+function setup(sourceCapabilities = {}) {
   const source = initialize({ id: 0, position: [0, 0], definition: {
-    id: 'source', offense: { attack: 40 },
+    id: 'source', offense: { attack: 40 }, ...sourceCapabilities,
   } });
   const target = initialize({ id: 1, position: [1, 0], definition: {
     id: 'target', vitality: { maxHp: 1000, defense: 0, resistance: 0 },
@@ -106,10 +110,58 @@ test('tracking reads current source attack and falls back to its launch sample a
   const self = projectiles.get(launched.state, launched.value);
 
   assert.equal(tracking.attackPower(launched.state, self), 40);
+  const withSource = step(launched.state, 1);
+  assert.equal(withSource.events.find(event => event.type === 'DAMAGE').sourceUnitId, fixture.source.id);
+  assert.equal(getUnit(withSource, 1).vitality.hp, 960);
   const withoutSource = removeUnit(launched.state, fixture.source.id);
   assert.equal(tracking.attackPower(withoutSource, self), 20);
-  const after = step(withoutSource, 1);
-  assert.equal(getUnit(after, 1).vitality.hp, 980);
+  for (const after of [step(withoutSource, 1), projectiles.stop(withoutSource, launched.value)]) {
+    assert.equal(getUnit(after, 1).vitality.hp, 980);
+    assert.equal(after.events.find(event => event.type === 'DAMAGE').sourceUnitId, null);
+    assert.equal(after.events.find(event => event.type === 'PROJECTILE_HIT').source, fixture.source.id);
+  }
+});
+
+test('arrow damage retains an existing source identity even when its HP is zero and it is spatially absent', () => {
+  const fixture = setup({ vitality: { maxHp: 100, defense: 0, resistance: 0 }, spatialPresence: {} });
+  const launched = projectiles.create(fixture.battle, createArrow(), { position: [0, 0], state: fixture.state });
+  const inactiveSource = updateUnit(launched.state, {
+    ...fixture.source,
+    vitality: { ...fixture.source.vitality, hp: 0 },
+    spatialPresence: { present: false },
+  });
+  const after = step(inactiveSource, 1);
+
+  assert.equal(after.events.find(event => event.type === 'DAMAGE').sourceUnitId, fixture.source.id);
+  assert.equal(getUnit(after, 1).vitality.hp, 960);
+});
+
+test('demo projectile damage clears removed sources for both live and cached attack policies', () => {
+  for (const cachedOnly of [false, true]) {
+    const actor = actionUnit(0, { action: true });
+    const { input } = createTacticalProjectileDemo({
+      initialUnits: [{ definition: actor.definition, position: actor.position }],
+      schedule: { type: 'TIMELINE', spawns: [] },
+    }, cachedOnly);
+    const source = initialize({ id: 0, ...input.initialUnits[0] });
+    const target = actionUnit(1);
+    const battle = registerUnit(registerUnit(fixtureBattle(), source), target);
+    const started = startAction(battle, ref(source), source.definition.action.definitions.get('primary'));
+    assert.equal(started.value.type, 'STARTED');
+    const launched = advanceAction({ ...started.state, tick: 6 }, started.value.ref);
+    const self = launched.battlefield.projectiles.values().toArray()[0];
+    assert.ok(self);
+    const existing = projectiles.stop(launched, projectiles.ref(self));
+    const withoutSource = projectiles.stop(removeUnit(launched, source.id), projectiles.ref(self));
+    const liveDamage = existing.events.find(event => event.type === 'DAMAGE');
+    const cachedDamage = withoutSource.events.find(event => event.type === 'DAMAGE');
+
+    assert.equal(liveDamage.sourceUnitId, source.id);
+    assert.equal(liveDamage.amount, cachedOnly ? 10 : 70);
+    assert.equal(cachedDamage.sourceUnitId, null);
+    assert.equal(cachedDamage.amount, 10);
+    assert.equal(self.state.source.id, source.id);
+  }
 });
 
 test('a missing locked target does not redirect its arrow to another nearby unit', () => {

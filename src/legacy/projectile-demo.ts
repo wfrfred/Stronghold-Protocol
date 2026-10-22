@@ -74,8 +74,9 @@ export function createTacticalProjectileDemo(
                 return state;
             }
 
+            const source = current.state.source;
             const request: DamageRequest = {
-                source: current.state.source,
+                source: source !== null && getUnit(state, source.id) !== undefined ? source : null,
                 target: unitRef(receiver),
                 parameters: {
                     type: "ARTS",
