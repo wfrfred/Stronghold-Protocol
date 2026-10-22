@@ -1,5 +1,5 @@
 import { initializeRoutedEnemy } from "../creation/enemy.js";
-import type { RoutedEnemy } from "../../unit/archetype/enemy.js";
+import type { Unit } from "../../unit/unit.js";
 import type { Command } from "../contract.js";
 import {
     advanceBattlefield,
@@ -14,8 +14,8 @@ import { enter } from "../execution/unit.js";
 function spawnEnemies(
     state: BattleState,
     spawns: readonly ScheduledEnemySpawn[],
-): Result<readonly RoutedEnemy[]> {
-    const enemies: RoutedEnemy[] = [];
+): Result<readonly Unit[]> {
+    const enemies: Unit[] = [];
 
     for (const spawn of spawns) {
         const id = state.execution.nextUnitId;

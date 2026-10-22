@@ -6,7 +6,7 @@ import {
 } from "../../dist/core/tactical/battle/state.js";
 import { enter, leave } from "../../dist/core/tactical/battle/execution/unit.js";
 import { initialize } from "../helpers/unit.js";
-import { createDefinition as createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
+
 import { createMechanism, createMechanismDefinition } from "../../dist/core/tactical/battlefield/mechanism.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
 import { createDefinition as createSkillDefinition, setEndedHook } from "../../dist/core/tactical/unit/capability/skill/capability.js";
@@ -312,7 +312,7 @@ test("mechanism leave responses keep their candidate IDs and reread current regi
   assert.deepEqual(battlefieldView(original).mechanismIds, [0, 1, 2]);
 });
 
-test("factory-created enemies retain onLeave and call it only for an actual departure", () => {
+test("initialized Units retain onLeave and call it only for an actual departure", () => {
   let notifications = 0;
   const onLeave = (state, departure) => {
     notifications++;
@@ -320,12 +320,12 @@ test("factory-created enemies retain onLeave and call it only for an actual depa
     assert.equal(departure.reason, "DEATH");
     return state;
   };
-  const definition = createEnemyDefinition({
+  const definition = {
+    spatialPresence: {},
     id: "enemy-with-leave", vitality: { maxHp: 100, defense: 0, resistance: 0 },
     locomotion: { halfBodyWidth: 0, minSpeed: 0, speed: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 } },
     onLeave,
-  });
-  assert.equal(definition.onLeave, onLeave);
+  };
   let state = createBattleState(fixtureBattlefield([
     initialize({ id: 0, position: [0, 0], definition }),
   ]));

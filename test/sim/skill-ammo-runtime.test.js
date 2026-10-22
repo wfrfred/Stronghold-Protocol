@@ -11,7 +11,7 @@ import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { getUnit } from "../../dist/core/tactical/battle/state.js";
 import * as tracking from "../../dist/content/tactical/projectiles/tracking.js";
-import { createDefinition } from "../../dist/core/tactical/unit/archetype/operator.js";
+
 import { create as createAttack } from "../../dist/content/tactical/actions/skill.js";
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
 import { ref as actionRef } from "../../dist/core/tactical/unit/action/action.js";
@@ -80,13 +80,13 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, windupTicks = 0, o
     ...(output === undefined ? {} : { output: (state, self) => output(state, self, shell) }),
   });
   const action = actionProgram === undefined ? normal : actionProgram(normal);
-  const definition = createDefinition({
+  const definition = {
     id: "ammo-actor", spatialPresence: {}, vitality: { maxHp: 10000, defense: 0, resistance: 0 }, offense: { attack: 100 },
     allegiance: { side: "ALLY" },
     layer: { type: "GROUND" }, hitbox: { shape: hit },
     blocker: { capacity: 0, geometry: { radius: 0.1 } }, skill,
     action: { definitions: Definitions.empty().add(action) },
-  });
+  };
   const receiver = {
     id: "ammo-target", targetable: { restrictions: [] }, vitality: { maxHp: 10000, defense: 0, resistance: 0 }, allegiance: { side: "ENEMY" }, layer: { type: "GROUND" }, hitbox: { shape: hit },
   };

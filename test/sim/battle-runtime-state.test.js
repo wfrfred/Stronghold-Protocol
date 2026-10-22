@@ -5,7 +5,7 @@ import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { appendEvents, removeUnit } from "../../dist/core/tactical/battle/state.js";
 import { closeLifetime } from "../../dist/core/tactical/battle/execution/lifetime.js";
 import { advancePredefined } from "../../dist/core/tactical/battle/steps/predefined.js";
-import { createDefinition as createEnemy } from "../../dist/core/tactical/unit/archetype/enemy.js";
+
 import { createInput as createRouteDefinition } from "../../dist/core/tactical/battle/creation/route.js";
 import { map } from "../helpers/action-fixture.js";
 
@@ -27,7 +27,7 @@ const spawn = (definition, tick) => ({
 function input(overrides = {}) {
     return {
         map, initialUnits: [], predefines: [], initialMechanisms: [], schedule: { type: "TIMELINE", spawns: [
-            spawn(createEnemy({ id: "later", vitality: { maxHp: 100, defense: 0, resistance: 0 }, locomotion }), 100),
+            spawn({ spatialPresence: {}, id: "later", vitality: { maxHp: 100, defense: 0, resistance: 0 }, locomotion }, 100),
         ] },
         maxTicks: 10, routeMoveMultiplier: 1, rngState: 123,
         ...overrides,
@@ -63,7 +63,8 @@ test("initial entry receives the complete battle state and its returned facts pe
 
 test("spawn entry observes recorded schedule progress before running content", () => {
     let observed;
-    const definition = createEnemy({
+    const definition = {
+        spatialPresence: {},
         id: "spawned", vitality: { maxHp: 100, defense: 0, resistance: 0 }, locomotion,
         onEnter(state, id) {
             observed = state;
@@ -73,7 +74,7 @@ test("spawn entry observes recorded schedule progress before running content", (
             assert.deepEqual(state.schedule.managedFinalUnitIds, [id]);
             return { ...state, completedRouteCount: 4 };
         },
-    });
+    };
     const battle = new BattleRuntime(input({
         schedule: { type: "TIMELINE", spawns: [spawn(definition, 0)] },
     }));
@@ -148,14 +149,15 @@ test("a failed tick publishes neither schedule nor predefined or statistics chan
     const failure = new Error("late state failure");
     let fail = true;
     let failedState;
-    const definition = createEnemy({
+    const definition = {
+        spatialPresence: {},
         id: "spawned", vitality: { maxHp: 100, defense: 0, resistance: 0 }, locomotion,
         onTick(state) {
             failedState = state;
             if (fail) throw failure;
             return state;
         },
-    });
+    };
     const battle = new BattleRuntime(input({
         predefines: [predefined(5, { id: "appearing", onEnter: state => ({ ...state, completedRouteCount: 3 }) })],
         schedule: { type: "TIMELINE", spawns: [spawn(definition, 0)] },

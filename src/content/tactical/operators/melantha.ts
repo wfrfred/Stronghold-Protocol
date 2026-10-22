@@ -1,6 +1,3 @@
-import type { Definition as ElementalDefinition } from "../../../core/tactical/unit/capability/elemental/capability.js";
-import type { Definition as OccupancyDefinition } from "../../../core/tactical/unit/capability/occupancy/capability.js";
-import type { Definition as TargetableDefinition } from "../../../core/tactical/unit/capability/targetable/capability.js";
 import { createArknightsElementalDefinition } from "../../../data/arknights/elemental.js";
 import { Definitions } from "../../../core/tactical/unit/action/definitions.js";
 import { create as createAttack } from "../actions/attack.js";
@@ -10,13 +7,11 @@ import { first } from "../../../core/tactical/battle/targeting/selector.js";
 import { ref as unitRef } from "../../../core/tactical/unit/query.js";
 import type { Profile } from "../../../data/arknights/operator.js";
 import { getUnit, updateUnit } from "../../../core/tactical/battle/state.js";
-import type { Definition as OperatorDefinition } from "../../../core/tactical/unit/archetype/operator.js";
+import type { Definition as UnitDefinition } from "../../../core/tactical/unit/unit.js";
+import type { Definitions as CapabilityDefinitions } from "../../../core/tactical/unit/capability/catalog.js";
 import type { Definition as SkillDefinition } from "../../../core/tactical/unit/capability/skill/capability.js";
 import { ref as activationRef } from "../../../core/tactical/unit/capability/skill/activation.js";
-import {
-    createDefinition as createDeployableDefinition,
-    type Definition as DeployableDefinition,
-} from "../../../core/tactical/unit/capability/deployable/capability.js";
+import { createDefinition as createDeployableDefinition } from "../../../core/tactical/unit/capability/deployable/capability.js";
 import {
     hasOffense,
     setAttackContribution,
@@ -30,13 +25,24 @@ import type { Direction } from "../../../core/tactical/geometry/direction.js";
 import { fromTiles } from "../../../core/tactical/geometry/range.js";
 import { secondsToTicks } from "../../../data/arknights/tick.js";
 
-export interface Definition extends OperatorDefinition {
-    readonly elemental: ElementalDefinition;
-    readonly deployable: DeployableDefinition;
-    readonly occupancy: OccupancyDefinition;
-    readonly targetable: TargetableDefinition;
-    readonly offense: Offense["definition"]["offense"];
-    readonly skill: SkillDefinition;
+export interface Definition
+    extends
+        UnitDefinition,
+        Pick<
+            CapabilityDefinitions,
+            | "action"
+            | "allegiance"
+            | "blocker"
+            | "deployable"
+            | "elemental"
+            | "hitbox"
+            | "layer"
+            | "occupancy"
+            | "offense"
+            | "skill"
+            | "targetable"
+            | "vitality"
+        > {
     readonly profile: Profile;
     readonly direction: Direction;
 }

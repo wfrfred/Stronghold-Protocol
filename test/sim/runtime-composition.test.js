@@ -17,8 +17,6 @@ import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
-import { createDefinition } from "../../dist/core/tactical/unit/archetype/operator.js";
-import { createDefinition as createEnemyDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
 import { initialize, placement } from "../helpers/unit.js";
 import { effectFixtureWork } from "../helpers/effects.js";
 import { seededPlacement } from "../helpers/aura.js";
@@ -58,12 +56,12 @@ function passive(id, hp = 100) {
 }
 
 function actor(id, program) {
-    return createDefinition({
+    return {
         ...passive(id),
         allegiance: { side: "ALLY" },
         blocker: { capacity: 0, geometry: { radius: 0.1 } },
         action: { definitions: Definitions.empty().add(program) },
-    });
+    };
 }
 
 function battleOf(snapshot) {
@@ -313,14 +311,13 @@ function scenario({ failure = null, cancelled = false } = {}) {
         })),
     };
     const scheduled = {
-        ...createEnemyDefinition({
-            id: "managed-target",
-            vitality: { maxHp: 17, defense: 0, resistance: 0 },
-            locomotion: {
-                halfBodyWidth: 0, minSpeed: 0, speed: 0,
-                steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 },
-            },
-        }),
+        spatialPresence: {},
+        id: "managed-target",
+        vitality: { maxHp: 17, defense: 0, resistance: 0 },
+        locomotion: {
+            halfBodyWidth: 0, minSpeed: 0, speed: 0,
+            steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 },
+        },
         ...passive("managed-target", 17),
     };
     const route = createRouteDefinition({

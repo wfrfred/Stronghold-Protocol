@@ -23,7 +23,7 @@ import { parseBattlefieldMap } from '../../dist/data/arknights/map.js';
 import { parseRouteDefinition } from '../../dist/data/arknights/route.js';
 import { createRng } from '../../dist/core/common/rng.js';
 import { World } from '../../dist/core/tactical/geometry/coordinate.js';
-import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
+
 import { initializeRoutedEnemy } from "../../dist/core/tactical/battle/creation/enemy.js";
 import { copy } from '../../dist/core/tactical/unit/snapshot.js';
 import { initialize } from "../helpers/unit.js";
@@ -815,8 +815,8 @@ test('Route replays the original teleport and patrol fixtures deterministically'
   const raw = JSON.parse(readFileSync(new URL('../fixtures/arknights/level_act1autochess_h07_02.json', import.meta.url), 'utf8'));
   const map = parseBattlefieldMap(raw.mapData);
   const nav = createNavigation({ WALK: projectStaticNavigationMap(map, 'WALK'), FLY: projectStaticNavigationMap(map, 'FLY') });
-  const definition = createDefinition({ id: 'fixture-route-enemy', vitality: { maxHp: 100, defense: 0, resistance: 0 },
-    locomotion: { halfBodyWidth: 0, minSpeed: 0, speed: 0.1, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } } });
+  const definition = { spatialPresence: {}, id: 'fixture-route-enemy', vitality: { maxHp: 100, defense: 0, resistance: 0 },
+    locomotion: { halfBodyWidth: 0, minSpeed: 0, speed: 0.1, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } } };
   function run(index, ticks) {
     const initialized = initializeRoutedEnemy(fixtureBattle(0, { rngState: 31 }), {
       id: 1, definition, route: parseRouteDefinition(raw.routes[index]),

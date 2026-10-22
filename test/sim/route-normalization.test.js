@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { createRng } from "../../dist/core/common/rng.js";
 import { initializeRoutedEnemy } from "../../dist/core/tactical/battle/creation/enemy.js";
 import { createInput, normalize } from "../../dist/core/tactical/battle/creation/route.js";
-import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
+
 import { parseRouteDefinition } from "../../dist/data/arknights/route.js";
 import { fixtureBattle } from "../helpers/unit.js";
 
@@ -22,7 +22,8 @@ const input = (overrides = {}) => createInput({
     ...overrides,
 });
 const timing = { waveStartedAtTick: 20, fragmentStartedAtTick: 45 };
-const enemyDefinition = createDefinition({
+const enemyDefinition = {
+    spatialPresence: {},
     id: "route-spawn-test",
     vitality: { maxHp: 100, defense: 0, resistance: 0 },
     locomotion: {
@@ -31,7 +32,7 @@ const enemyDefinition = createDefinition({
         halfBodyWidth: 0,
         steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 },
     },
-});
+};
 
 test("Spawn binds wave and fragment waits while keeping relative waits relative", () => {
     const raw = input({ checkpoints: [

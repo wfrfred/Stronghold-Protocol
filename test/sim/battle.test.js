@@ -28,7 +28,7 @@ import { advanceSpawnSchedule, getSpawnedCount, getUnspawnedCount, isSpawnSchedu
 import { snapshotSchedule, createSpawnScheduleExecution } from "../../dist/core/tactical/battle/schedule/state.js";
 import { createSpawnScheduleDefinition } from "../../dist/core/tactical/battle/schedule/definition.js";
 import { createSteeringParameters } from '../../dist/core/tactical/unit/capability/locomotion/steering.js';
-import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
+
 import { initializeRoutedEnemy } from "../../dist/core/tactical/battle/creation/enemy.js";
 import { createInput as createRouteDefinition, normalize as normalizeRoute } from '../../dist/core/tactical/battle/creation/route.js';
 import { TICKS_PER_SECOND } from '../../dist/core/tactical/tick.js';
@@ -88,8 +88,8 @@ function routeCommandBattle(checkpoints, options = {}) {
   const source = spec.schedule.spawns[0];
   const route = createRouteDefinition({ ...source.route, visitEveryCheckPoint: true, checkpoints,
     spawnOffset: [0, 0], spawnRandomRange: [0, 0], ...options.route });
-  const definition = createDefinition({ ...source.definition,
-    locomotion: { ...source.definition.locomotion, speed: options.speed ?? 0, minSpeed: 0 } });
+  const definition = { spatialPresence: {}, ...source.definition,
+    locomotion: { ...source.definition.locomotion, speed: options.speed ?? 0, minSpeed: 0 } };
   return { ...withTimelineSpawns(spec, [{ ...source, tick: 0, definition, route, alwaysCheckCurrentPoint: true }]),
     maxTicks: options.maxTicks ?? 20, ...options.spec };
 }
@@ -787,9 +787,9 @@ test('core battle snapshots share immutable values and retain the published tick
 test('core battle initializes all route waits at the birth tick and replays their exact completion edges', () => {
   const { spec } = slimeMovementFragment();
   const spawn = spec.schedule.spawns[0];
-  const definition = createDefinition({ ...spawn.definition,
+  const definition = { spatialPresence: {}, ...spawn.definition,
     locomotion: { ...spawn.definition.locomotion, speed: 0, minSpeed: 0 },
-  });
+  };
   const cases = [
     [{ type: 'WAIT_FOR_TICKS', durationTicks: 3 }, 8],
     [{ type: 'WAIT_FOR_PLAY_TICK', targetPlayTick: 10 }, 10],
@@ -838,9 +838,9 @@ test('core route absolute waits retain birth timing after the scheduler enters a
     const route = createRouteDefinition({ ...action.spawn.route, visitEveryCheckPoint: true,
       checkpoints: [{ type, targetElapsedTicks: 8 }],
     });
-    const definition = createDefinition({ ...action.spawn.definition,
+    const definition = { spatialPresence: {}, ...action.spawn.definition,
       locomotion: { ...action.spawn.definition.locomotion, speed: 0, minSpeed: 0 },
-    });
+    };
     const runtime = new BattleRuntime({ ...spec, maxTicks: 16, schedule: { ...schedule, waves: [
       { ...firstWave, fragments: [{ ...fragment, actions: [{ ...action,
         spawn: { ...action.spawn, definition, route, alwaysCheckCurrentPoint: true },
@@ -871,9 +871,9 @@ test('core patrol stays registered and pending in the spawn schedule through det
   const route = createRouteDefinition({ ...spawn.route, visitEveryCheckPoint: true, checkpoints: [10, 9].map(column => ({
     type: 'PATROL_MOVE', target: { position: [9, column], reachOffset: [0, 0] },
   })) });
-  const definition = createDefinition({ ...spawn.definition,
+  const definition = { spatialPresence: {}, ...spawn.definition,
     locomotion: { ...spawn.definition.locomotion, speed: 4 },
-  });
+  };
   const input = { ...withTimelineSpawns(spec, [{ ...spawn, tick: 0, definition, route, alwaysCheckCurrentPoint: true }]), maxTicks: 24 };
   const runtime = new BattleRuntime(input), replay = new BattleRuntime(input), events = [], positions = [];
   while (runtime.result === null) {

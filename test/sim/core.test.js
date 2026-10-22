@@ -49,8 +49,6 @@ import { createUnitPlacementDefinition, instantiateUnitPlacement } from '../../d
 import { createDefinition as createDeployableDefinition } from '../../dist/core/tactical/unit/capability/deployable/capability.js';
 import { createDefinition as createTileBindingDefinition } from '../../dist/core/tactical/unit/capability/tile-binding/capability.js';
 import { validateState as validateOccupancyState } from '../../dist/core/tactical/unit/capability/occupancy/capability.js';
-import { createDefinition as createOperatorDefinition } from '../../dist/core/tactical/unit/archetype/operator.js';
-import { createCombatDefinition } from '../../dist/core/tactical/unit/archetype/enemy.js';
 import { evaluateDeployment } from '../../dist/core/tactical/battlefield/deployment/query.js';
 
 const approx = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
@@ -447,20 +445,17 @@ test('core initialization and snapshots share immutable definitions', () => {
   assert.deepEqual(snapshot.definition.metadata.labels, ['a']);
 });
 
-test('archetype definitions share passive configuration while current allegiance changes independently', () => {
-  const input = catalogDefinition();
-  for (const createDefinition of [createOperatorDefinition, createCombatDefinition]) {
-    const definition = createDefinition(input);
-    assert.equal(definition.allegiance, input.allegiance);
-    assert.equal(definition.layer, input.layer);
-    assert.equal(definition.hitbox, input.hitbox);
-    const unit = initialize({ id: 1, definition, position: [0, 0] });
-    assert.equal(unit.allegiance, definition.allegiance);
-    const changed = { ...unit, allegiance: { side: 'ENEMY' } };
-    assert.equal(unit.allegiance.side, 'ALLY');
-    assert.equal(changed.allegiance.side, 'ENEMY');
-    assert.equal(changed.definition.allegiance.side, 'ALLY');
-  }
+test('explicit Unit definitions share passive configuration while current allegiance changes independently', () => {
+  const definition = catalogDefinition();
+  const unit = initialize({ id: 1, definition, position: [0, 0] });
+  assert.equal(unit.definition, definition);
+  assert.equal(unit.allegiance, definition.allegiance);
+  assert.equal(unit.definition.layer, definition.layer);
+  assert.equal(unit.definition.hitbox, definition.hitbox);
+  const changed = { ...unit, allegiance: { side: 'ENEMY' } };
+  assert.equal(unit.allegiance.side, 'ALLY');
+  assert.equal(changed.allegiance.side, 'ENEMY');
+  assert.equal(changed.definition.allegiance.side, 'ALLY');
 });
 
 test('core allegiance: opposing sides include enemies and neutral units and use current state', () => {
@@ -767,7 +762,7 @@ import type { Ref } from ${sourceModule('../../common/ref')};
 import { initialize as initializeOffenseState } from ${sourceModule('capability/offense/capability')};
 import { initialize as initializeVitalityState } from ${sourceModule('capability/vitality/capability')};
 import { initialize as initializeActionState } from ${sourceModule('capability/action/capability')};
-import type { Definition as EnemyDefinition } from ${sourceModule('archetype/enemy')};
+type EnemyDefinition = UnitDefinition & Pick<CapabilityDefinitions, 'vitality' | 'locomotion' | 'spatialPresence'>;
 import { hasVitality, type Vitality, type Definition as VitalityDefinition } from ${sourceModule('capability/vitality/capability')};
 import { initialize as initializeLocomotionState, type Locomotion, type State as LocomotionState } from ${sourceModule('capability/locomotion/capability')};
 import { hasRoute } from ${sourceModule('capability/route/capability')};

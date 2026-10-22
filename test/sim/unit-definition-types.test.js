@@ -5,123 +5,97 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-test('definition factories return standard shapes while static definitions retain capability composition', async () => {
+test('Unit initialization derives capability pairs directly from the supplied definition', async () => {
   const { default: ts } = await import('typescript');
   const directory = mkdtempSync(join(tmpdir(), 'stronghold-unit-definition-types-'));
-  const sourceModule = name => JSON.stringify(fileURLToPath(new URL(`../../src/core/tactical/${name}.js`, import.meta.url)));
-  const positivePath = join(directory, 'positive.mts');
-  const negativePath = join(directory, 'negative.mts');
-  const declarations = `
-import { createDefinition, initialize, type Definition as OperatorDefinition } from ${sourceModule('unit/archetype/operator')};
-import { createDefinition as createEnemyDefinition, createCombatDefinition, type Definition as EnemyDefinition, type CombatDefinition } from ${sourceModule('unit/archetype/enemy')};
-import { initialize as initializeUnit } from ${sourceModule('unit/initialize')};
-import { copy } from ${sourceModule('unit/snapshot')};
-import { hasOffense, type Offense, type Definition as OffenseDefinition, type State as OffenseState } from ${sourceModule('unit/capability/offense/capability')};
-import { hasSkill, type Definition as SkillDefinition, type Skill } from ${sourceModule('unit/capability/skill/capability')};
-import type { Definition as ElementalDefinition, State as ElementalState } from ${sourceModule('unit/capability/elemental/capability')};
-import type { Vitality, State as VitalityState } from ${sourceModule('unit/capability/vitality/capability')};
-import type { Definition as RouteDefinition, Progress } from ${sourceModule('unit/capability/route/capability')};
-import type { Definition } from ${sourceModule('unit/effect/definition')};
-import { install } from ${sourceModule('unit/effect/operations')};
-import { ref as unitRef } from ${sourceModule('unit/query')};
-import type { State as BattleState } from ${sourceModule('battle/state')};
-type OptionalKey = 'offense' | 'skill' | 'elemental';
-type OperatorBase = Omit<OperatorDefinition, OptionalKey>;
-type CombatEnemyBase = Omit<CombatDefinition, OptionalKey>;
-type EnemyBase = Omit<EnemyDefinition, 'skill' | 'elemental'>;
-declare const operatorBase: OperatorBase;
-declare const combatEnemyBase: CombatEnemyBase;
-declare const enemyBase: EnemyBase;
-declare const skillInput: SkillDefinition;
-declare const elementalInput: ElementalDefinition;
+  const source = name => JSON.stringify(fileURLToPath(new URL(`../../src/core/tactical/${name}.js`, import.meta.url)));
+  const path = join(directory, 'definition.mts');
+  writeFileSync(path, `
+import type { Unit, Definition as UnitDefinition } from ${source('unit/unit')};
+import type { Definitions, Product } from ${source('unit/capability/catalog')};
+import { initialize } from ${source('unit/initialize')};
+import { copy } from ${source('unit/snapshot')};
+import { hasOffense, type Offense } from ${source('unit/capability/offense/capability')};
+import { hasSkill, type Definition as SkillDefinition, type Skill } from ${source('unit/capability/skill/capability')};
+import type { Vitality } from ${source('unit/capability/vitality/capability')};
+import type { Route, Definition as RouteDefinition } from ${source('unit/capability/route/capability')};
+import type { Elemental } from ${source('unit/capability/elemental/capability')};
+import type { Definition as EffectDefinition } from ${source('unit/effect/definition')};
+import { install } from ${source('unit/effect/operations')};
+import { ref } from ${source('unit/query')};
+import { initializeRoutedEnemy } from ${source('battle/creation/enemy')};
+import type { EnemySpawnDefinition } from ${source('battle/schedule/definition')};
+import type { Input as RouteInput } from ${source('battle/creation/route')};
+import type { State as BattleState } from ${source('battle/state')};
+type Configuration = UnitDefinition & Pick<Definitions, 'vitality'> &
+  Partial<Pick<Definitions, 'offense' | 'skill' | 'elemental'>>;
+declare const configuration: Configuration;
+declare const skill: SkillDefinition;
+declare const elemental: Definitions['elemental'];
 declare const battle: BattleState;
-const staticOperator = {
-  ...operatorBase, offense: { attack: 10 }, skill: skillInput, elemental: elementalInput,
-} satisfies OperatorDefinition;
-const staticCombatEnemy = {
-  ...combatEnemyBase, offense: { attack: 10 }, skill: skillInput, elemental: elementalInput,
-} satisfies CombatDefinition;
-const staticEnemy = {
-  ...enemyBase, skill: skillInput, elemental: elementalInput,
-} satisfies EnemyDefinition;
-const operator = createDefinition(staticOperator);
-const combatEnemy = createCombatDefinition(staticCombatEnemy);
-const enemy = createEnemyDefinition(staticEnemy);
-const initializedOperator = initialize(battle, { id: 1, definition: operator, position: [0, 0] }).value;
-const initializedCombatEnemy = initializeUnit(battle, { id: 2, definition: combatEnemy, position: [0, 0] }).value;
-const initializedEnemy = initializeUnit(battle, { id: 3, definition: enemy, position: [0, 0] }).value;
-const staticOperatorUnit = initialize(battle, { id: 4, definition: staticOperator, position: [0, 0] }).value;
-const staticCombatEnemyUnit = initializeUnit(battle, { id: 5, definition: staticCombatEnemy, position: [0, 0] }).value;
-const staticEnemyUnit = initializeUnit(battle, { id: 6, definition: staticEnemy, position: [0, 0] }).value;
-const bareOperatorUnit = initialize(battle, { id: 7, definition: operatorBase, position: [0, 0] }).value;
-declare const routeDefinition: RouteDefinition;
-const preparedUnit = initializeUnit(battle, { id: 8, definition: { ...combatEnemy, route: routeDefinition }, position: [0, 0] }).value;
-const snapshot = copy(preparedUnit);
-const healthAttack: Definition<{ bonus: number }, Vitality & Offense> = {
-  id: 'health-attack',
-  initialize: () => ({ bonus: 0 }),
+declare const route: RouteDefinition;
+declare const routeInput: RouteInput;
+const selected = { ...configuration, offense: { attack: 10 }, skill, elemental } satisfies Configuration;
+const plain = initialize(battle, { id: 0, definition: configuration, position: [0, 0] }).value;
+const complete = initialize(battle, { id: 1, definition: selected, position: [0, 0] }).value;
+const bare = initialize(battle, { id: 2, definition: { id: 'bare' }, position: [0, 0] }).value;
+const routed = initialize(battle, { id: 3, definition: { ...selected, route }, position: [0, 0] }).value;
+const paired: Unit & Vitality & Offense & Skill & Elemental = complete;
+const captured: Unit & Vitality & Offense & Skill & Elemental & Route = copy(routed);
+const generic = <D extends UnitDefinition & Partial<Definitions>>(definition: D): Unit & Product<D> =>
+  initialize(battle, { id: 4, definition, position: [0, 0] }).value;
+const genericComplete: Unit & Vitality & Offense & Skill & Elemental = generic(selected);
+const spawned = initializeRoutedEnemy(battle, {
+  id: 5, definition: { id: 'route-only' }, route: routeInput,
+  timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 }, alwaysCheckCurrentPoint: true,
+}).value.enemy;
+const routeOnly: Unit & Route = spawned;
+const scheduled: EnemySpawnDefinition = {
+  definition: { id: 'route-only' }, route: routeInput,
+  alwaysCheckCurrentPoint: true, notCountInTotal: false,
+};
+const healthAttack: EffectDefinition<{ bonus: number }, Vitality & Offense> = {
+  id: 'health-attack', initialize: () => ({ bonus: 0 }),
   onEnable(state, context) {
     const hp: number = context.unit.vitality.hp;
-    const maxHp: number = context.unit.definition.vitality.maxHp;
     const attack: number = context.unit.definition.offense.attack;
-    const offense: OffenseState = context.unit.offense;
     return state;
   },
 };
-`;
-  const positive = `
-const standardOperator: OperatorDefinition = operator;
-const standardCombatEnemy: CombatDefinition = combatEnemy;
-const standardEnemy: EnemyDefinition = enemy;
-const offenseDefinitions: OffenseDefinition[] = [staticOperator.offense, staticCombatEnemy.offense];
-const offenseStates: OffenseState[] = [staticOperatorUnit.offense, staticCombatEnemyUnit.offense];
-const skillStates: Skill["skill"][] = [staticOperatorUnit.skill, staticCombatEnemyUnit.skill, staticEnemyUnit.skill];
-const elementalStates: ElementalState[] = [staticOperatorUnit.elemental, staticCombatEnemyUnit.elemental, staticEnemyUnit.elemental];
-const vitalityStates: VitalityState[] = [initializedOperator.vitality, initializedCombatEnemy.vitality, initializedEnemy.vitality];
-const preparedRoute: Progress = preparedUnit.route.main;
-if (operator.offense !== undefined) { const attack: number = operator.offense.attack; }
-if (enemy.skill !== undefined) { const id: string = enemy.skill.id; }
-if (hasOffense(initializedOperator)) {
-  const attack: number = initializedOperator.definition.offense.attack;
-  const offense: OffenseState = initializedOperator.offense;
-  install(battle, unitRef(initializedOperator), healthAttack);
+install(battle, ref(complete), healthAttack);
+if (hasOffense(plain)) install(battle, ref(plain), healthAttack);
+if (hasSkill(plain)) {
+  const id: string = plain.definition.skill.id;
+  const sp: number = plain.skill.sp?.value ?? 0;
 }
-if (hasSkill(initializedEnemy)) {
-  const id: string = initializedEnemy.definition.skill.id;
-  const sp: number = initializedEnemy.skill.sp?.value ?? 0;
-}
-const route: Progress = snapshot.route.main;
-install(battle, unitRef(staticOperatorUnit), healthAttack);
-`;
-  const negatives = [
-    "const requiredOperatorOffense: OffenseDefinition = operator.offense;",
-    "const requiredCombatOffense: OffenseDefinition = combatEnemy.offense;",
-    "const requiredOperatorSkill: SkillDefinition = operator.skill;",
-    "const requiredEnemySkill: SkillDefinition = enemy.skill;",
-    "const requiredEnemyElemental: ElementalDefinition = enemy.elemental;",
-    "const requiredOperatorOffenseState: OffenseState = initializedOperator.offense;",
-    "const requiredEnemySkillState: Skill['skill'] = initializedEnemy.skill;",
-    "install(battle, unitRef(initializedOperator), healthAttack);",
-    "install(battle, unitRef(bareOperatorUnit), healthAttack);",
-  ];
+// @ts-expect-error optional configuration is not proof of an installed Capability.
+plain.offense;
+// @ts-expect-error optional configuration does not expose Skill State.
+plain.skill;
+// @ts-expect-error a plain Unit has no default Vitality.
+bare.vitality;
+// @ts-expect-error a plain Unit has no default Allegiance.
+bare.allegiance;
+// @ts-expect-error no implicit Capability is added to a route-only spawn.
+spawned.locomotion;
+// @ts-expect-error route initialization does not require or install Vitality.
+spawned.vitality;
+// @ts-expect-error spatial presence is explicit content configuration.
+spawned.spatialPresence;
+// @ts-expect-error the host must prove both required capabilities.
+install(battle, ref(plain), healthAttack);
+// @ts-expect-error arbitrary Capability values are rejected at the Unit initialization entry.
+initialize(battle, { id: 6, definition: { id: 'invalid', vitality: { maxHp: 'wrong', defense: 0, resistance: 0 } }, position: [0, 0] });
+`);
   try {
-    writeFileSync(positivePath, declarations + positive);
-    writeFileSync(negativePath, declarations + negatives.join('\n'));
-    const program = ts.createProgram([positivePath, negativePath], {
+    const program = ts.createProgram([path], {
       noEmit: true, strict: true, exactOptionalPropertyTypes: true, noUncheckedIndexedAccess: true,
       target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.NodeNext,
       moduleResolution: ts.ModuleResolutionKind.NodeNext, skipLibCheck: true, types: [],
     });
-    const diagnostics = ts.getPreEmitDiagnostics(program);
-    const firstNegativeLine = declarations.split('\n').length - 1;
-    assert.deepEqual(diagnostics.map(diagnostic => ({
-      path: diagnostic.file?.fileName,
-      line: diagnostic.file?.getLineAndCharacterOfPosition(diagnostic.start).line,
-    })), negatives.map((_, index) => ({ path: negativePath, line: firstNegativeLine + index })),
-    diagnostics.map(diagnostic => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')).join('\n'));
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
+    assert.deepEqual(ts.getPreEmitDiagnostics(program).map(diagnostic =>
+      ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')), []);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
 test('base Unit has common fields while concrete content and guards provide capability pairs', async () => {

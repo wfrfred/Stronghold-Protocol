@@ -1,9 +1,10 @@
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import { createTiming, type Timing, type Input as RouteInput } from "../creation/route.js";
-import type { Definition } from "../../unit/archetype/enemy.js";
+import type { Definition } from "../../unit/unit.js";
+import type { Definitions } from "../../unit/capability/catalog.js";
 
 export interface EnemySpawnDefinition {
-    readonly definition: Definition;
+    readonly definition: Definition & Partial<Definitions>;
     readonly route: RouteInput;
     readonly alwaysCheckCurrentPoint: boolean;
     readonly notCountInTotal: boolean;

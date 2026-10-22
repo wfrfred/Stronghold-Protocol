@@ -11,7 +11,7 @@ import { createDefinition as createDeployable } from "../../dist/core/tactical/u
 import { leave } from "../../dist/core/tactical/battle/execution/unit.js";
 
 import { initialize } from "../helpers/unit.js";
-import { createDefinition as createEnemy } from "../../dist/core/tactical/unit/archetype/enemy.js";
+
 import { createInput as createRouteDefinition } from "../../dist/core/tactical/battle/creation/route.js";
 import { install } from "../../dist/core/tactical/unit/effect/operations.js";
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
@@ -31,7 +31,8 @@ const route = createRouteDefinition({
     allowDiagonalMove: false, visitEveryTileCenter: false,
     visitEveryNodeCenter: false, visitEveryCheckPoint: true,
 });
-const enemy = (fields = {}) => createEnemy({
+const enemy = (fields = {}) => ({
+    spatialPresence: {},
     id: "enemy", vitality: { maxHp: 100, defense: 0, resistance: 0 }, locomotion: {
         halfBodyWidth: 0, speed: 0, minSpeed: 0,
         steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 },

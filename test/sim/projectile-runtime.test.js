@@ -8,7 +8,7 @@ import { advanceProjectiles } from "../../dist/core/tactical/battle/steps/projec
 import { getUnit, removeUnit } from "../../dist/core/tactical/battle/state.js";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
-import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
+
 import { createInput as createRouteDefinition } from "../../dist/core/tactical/battle/creation/route.js";
 
 const candidates = battle => battle.battlefield.projectiles.values().map(projectiles.ref).toArray();
@@ -21,7 +21,7 @@ const tick = (battle, number) => advance({ ...battle, tick: number }, candidates
 function runtime(initialUnits, maxTicks = 20) {
     return new BattleRuntime({ ...createLegacyCombatSpec({ rows: 1, columns: 8, operators: [], enemies: [], maxTicks, seed: 17 }),
         initialUnits: initialUnits.map(value => ({ definition: value.definition, position: value.position })),
-        schedule: { type: "TIMELINE", spawns: [{ definition: createDefinition({ id: "future", vitality: { maxHp: 1, defense: 0, resistance: 0 }, locomotion: { halfBodyWidth: 0, minSpeed: 0, speed: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } } }),
+        schedule: { type: "TIMELINE", spawns: [{ definition: { spatialPresence: {}, id: "future", vitality: { maxHp: 1, defense: 0, resistance: 0 }, locomotion: { halfBodyWidth: 0, minSpeed: 0, speed: 0, steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 } } },
             route: createRouteDefinition({ pathMotionMode: "WALK", startPosition: [0, 7], endPosition: [0, 1], spawnOffset: [0, 0], spawnRandomRange: [0, 0], checkpoints: [], allowDiagonalMove: false, visitEveryTileCenter: false, visitEveryNodeCenter: false, visitEveryCheckPoint: true }),
             tick: 100, timing: { waveStartedAtTick: 0, fragmentStartedAtTick: 0 }, alwaysCheckCurrentPoint: true, notCountInTotal: false }] },
     });

@@ -8,7 +8,7 @@ import { unit } from "../helpers/action-fixture.js";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 
 import { createLegacyCombatSpec } from "../../dist/legacy/combat.js";
-import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
+
 import { createInput as createRouteDefinition } from "../../dist/core/tactical/battle/creation/route.js";
 import { getUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
 import { leave } from "../../dist/core/tactical/battle/execution/unit.js";
@@ -33,14 +33,15 @@ function spec(initialUnits) {
             type: "TIMELINE",
             spawns: [
                 {
-                    definition: createDefinition({
+                    definition: {
+                        spatialPresence: {},
                         id: "future",
                         vitality: { maxHp: 1, defense: 0, resistance: 0 },
                         locomotion: {
                             halfBodyWidth: 0, minSpeed: 0, speed: 0,
                             steeringParameters: { steeringFactor: 1, maxSteeringForce: 100 },
                         },
-                    }),
+                    },
                     route: createRouteDefinition({
                         pathMotionMode: "WALK",
                         startPosition: [0, 7],

@@ -1,9 +1,4 @@
-import type { Definition as ElementalDefinition } from "../../../core/tactical/unit/capability/elemental/capability.js";
-import type { Definition as OccupancyDefinition } from "../../../core/tactical/unit/capability/occupancy/capability.js";
-import {
-    hasTargetable,
-    type Definition as TargetableDefinition,
-} from "../../../core/tactical/unit/capability/targetable/capability.js";
+import { hasTargetable } from "../../../core/tactical/unit/capability/targetable/capability.js";
 import { createArknightsElementalDefinition } from "../../../data/arknights/elemental.js";
 import { Definitions } from "../../../core/tactical/unit/action/definitions.js";
 import { clearCooldown, get as getAction } from "../../../core/tactical/unit/action/operations.js";
@@ -37,17 +32,11 @@ import {
 import { modify } from "../../../core/tactical/unit/capability/skill/sp.js";
 import type { Direction } from "../../../core/tactical/geometry/direction.js";
 import { fromTiles } from "../../../core/tactical/geometry/range.js";
-import type { Unit, Id } from "../../../core/tactical/unit/unit.js";
-import type { Definition as OperatorDefinition } from "../../../core/tactical/unit/archetype/operator.js";
+import type { Unit, Id, Definition as UnitDefinition } from "../../../core/tactical/unit/unit.js";
+import type { Definitions as CapabilityDefinitions } from "../../../core/tactical/unit/capability/catalog.js";
 import { hasAction } from "../../../core/tactical/unit/capability/action/capability.js";
-import {
-    hasOffense,
-    type Definition as OffenseDefinition,
-} from "../../../core/tactical/unit/capability/offense/capability.js";
-import {
-    createDefinition as createDeployableDefinition,
-    type Definition as DeployableDefinition,
-} from "../../../core/tactical/unit/capability/deployable/capability.js";
+import { hasOffense } from "../../../core/tactical/unit/capability/offense/capability.js";
+import { createDefinition as createDeployableDefinition } from "../../../core/tactical/unit/capability/deployable/capability.js";
 import { resolveAttack } from "../../../core/tactical/unit/capability/offense/query.js";
 import {
     hasSkill,
@@ -65,13 +54,24 @@ import { removeHook, setHook } from "../../../core/tactical/battle/damage/hook.j
 import type { Definition as EffectDefinition } from "../../../core/tactical/unit/effect/definition.js";
 import { get, install, update } from "../../../core/tactical/unit/effect/operations.js";
 
-export interface Definition extends OperatorDefinition {
-    readonly elemental: ElementalDefinition;
-    readonly deployable: DeployableDefinition;
-    readonly occupancy: OccupancyDefinition;
-    readonly targetable: TargetableDefinition;
-    readonly offense: OffenseDefinition;
-    readonly skill: SkillDefinition;
+export interface Definition
+    extends
+        UnitDefinition,
+        Pick<
+            CapabilityDefinitions,
+            | "action"
+            | "allegiance"
+            | "blocker"
+            | "deployable"
+            | "elemental"
+            | "hitbox"
+            | "layer"
+            | "occupancy"
+            | "offense"
+            | "skill"
+            | "targetable"
+            | "vitality"
+        > {
     readonly profile: Profile;
     readonly direction: Direction;
 }

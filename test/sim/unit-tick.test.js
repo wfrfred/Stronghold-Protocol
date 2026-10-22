@@ -7,10 +7,6 @@ import {
 } from "../../dist/core/tactical/battle/state.js";
 import { advance } from "../../dist/core/tactical/battle/execution/unit.js";
 import { initialize } from "../helpers/unit.js";
-import {
-    createDefinition as createEnemy, createCombatDefinition,
-} from "../../dist/core/tactical/unit/archetype/enemy.js";
-import { createDefinition as createOperator } from "../../dist/core/tactical/unit/archetype/operator.js";
 import { createInput as createRouteDefinition } from "../../dist/core/tactical/battle/creation/route.js";
 import { install } from "../../dist/core/tactical/unit/effect/operations.js";
 import { fixtureBattlefieldState } from "../helpers/battlefield.js";
@@ -46,7 +42,7 @@ function runtime(definitions, spawns = []) {
         map,
         schedule: { type: "TIMELINE", spawns: [
             ...spawns,
-            spawn(createEnemy({ id: "later", vitality: { maxHp: 100, defense: 0, resistance: 0 }, locomotion }), 100),
+            spawn({ spatialPresence: {}, id: "later", vitality: { maxHp: 100, defense: 0, resistance: 0 }, locomotion }, 100),
         ] },
         initialUnits: definitions.map((definition, id) => ({ definition, position: [id, 0] })),
         predefines: [], initialMechanisms: [], maxTicks: 10, routeMoveMultiplier: 1, rngState: 123,
@@ -136,28 +132,46 @@ test("Runtime advances Unit content once per Tick before Effect callbacks", () =
     assert.deepEqual(original.state, { phase: 0 });
 });
 
-test("Factory-created enemies tick in their spawning Tick after entering", () => {
+test("Scheduled Units tick after entering without mandatory combat or movement capabilities", () => {
     const trace = [];
-    const definition = createEnemy({
-        id: "spawned", vitality: { maxHp: 100, defense: 0, resistance: 0 }, locomotion,
+    const definition = {
+        id: "scripted-spawn",
         onEnter(state, id) { trace.push(["enter", state.tick, id]); return state; },
         onTick(state, self) { trace.push(["tick", state.tick, self.id]); return state; },
-    });
+    };
     const battle = runtime([], [spawn(definition, 0)]);
     battle.step();
     battle.step();
 
     assert.deepEqual(trace, [["enter", 0, 0], ["tick", 0, 0], ["tick", 1, 0]]);
+    const [spawned] = battle.snapshot().units;
+    assert.equal(spawned.definition.onEnter, definition.onEnter);
+    assert.equal(spawned.definition.onTick, definition.onTick);
+    assert.equal("vitality" in spawned, false);
+    assert.equal("locomotion" in spawned, false);
+    assert.equal("spatialPresence" in spawned, false);
 });
 
-test("Operator and combat enemy definition factories retain the Unit tick callback", () => {
-    const onTick = state => state;
+test("Unit initialization preserves tick callbacks across independent capability combinations", () => {
+    const trace = [];
+    const onTick = (state, self) => {
+        trace.push(self.id);
+        return state;
+    };
     const base = combatUnit(0, { action: true }).definition;
-    const operator = createOperator({ ...base, onTick, blocker: { capacity: 1, geometry: { radius: 0.5 } } });
-    const enemy = createCombatDefinition({ ...base, onTick, locomotion, blockable: { volume: 1 } });
+    const definitions = [
+        { ...base, onTick, blocker: { capacity: 1, geometry: { radius: 0.5 } } },
+        { spatialPresence: {}, ...base, onTick, locomotion, blockable: { volume: 1 } },
+        { id: "scripted", onTick },
+    ];
+    const units = definitions.map((definition, id) => initialize({ id, position: [id, 0], definition }));
+    const before = createBattleState(fixtureBattlefieldState(units));
 
-    assert.equal(operator.onTick, onTick);
-    assert.equal(enemy.onTick, onTick);
+    assert.equal(advance(before), before);
+    assert.deepEqual(trace, [0, 1, 2]);
+    for (const [id, definition] of definitions.entries()) {
+        assert.equal(getUnit(before, id).definition, definition);
+    }
 });
 
 test("Unit tick errors propagate without publishing an incomplete Tick", () => {

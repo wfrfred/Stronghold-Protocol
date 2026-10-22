@@ -3,7 +3,8 @@ import {
     assertNonnegativeSafeInteger,
     assertPositiveNumber,
 } from "../../core/common/assert.js";
-import { createDefinition, type Definition } from "../../core/tactical/unit/archetype/enemy.js";
+import type { Definitions } from "../../core/tactical/unit/capability/catalog.js";
+import type { Definition as UnitDefinition } from "../../core/tactical/unit/unit.js";
 import type { EnemyMovementPrefab } from "./prefab.js";
 import { perSecondToPerTick } from "./tick.js";
 
@@ -22,8 +23,11 @@ export interface ArknightsResolvedEnemyMovement {
     readonly notCountInTotal: boolean;
 }
 
+export type MovementDefinition = UnitDefinition &
+    Pick<Definitions, "vitality" | "locomotion" | "spatialPresence">;
+
 export interface ArknightsEnemyMovementContent {
-    readonly definition: Definition;
+    readonly definition: MovementDefinition;
     readonly alwaysCheckCurrentPoint: boolean;
     readonly notCountInTotal: boolean;
     readonly delayToBornTicks: number;
@@ -226,8 +230,9 @@ export function createEnemyMovementContent(
         throw new TypeError(`enemy movement prefab does not match ${prefabKey}`);
     }
 
-    const definition = createDefinition({
+    const definition = {
         id,
+        spatialPresence: {},
         vitality: { defense: 0, resistance: 0, maxHp },
         locomotion: {
             speed: perSecondToPerTick(moveSpeed),
@@ -235,7 +240,7 @@ export function createEnemyMovementContent(
             steeringParameters: profile.steeringParameters,
             halfBodyWidth: profile.halfBodyWidth,
         },
-    });
+    } satisfies MovementDefinition;
 
     return Object.freeze({
         definition,
@@ -263,7 +268,7 @@ export function parseEnemyMovementDefinition(
     level: number,
     profile: EnemyMovementPrefab,
     overwrittenData?: unknown,
-): Definition {
+): MovementDefinition {
     return parseEnemyMovementContent(value, level, profile, overwrittenData).definition;
 }
 

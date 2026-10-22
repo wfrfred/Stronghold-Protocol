@@ -24,7 +24,7 @@ import { PUSH_TILES, PULL_STOP_RADIUS } from '../../server/sim/constants.js';
 import { Map as NavigationMap } from '../../dist/core/tactical/battlefield/navigation/map.js';
 import { create as createNavigation } from '../../dist/core/tactical/battlefield/navigation/state.js';
 import { createInput, createTiming } from '../../dist/core/tactical/battle/creation/route.js';
-import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
+
 import { initializeRoutedEnemy } from "../../dist/core/tactical/battle/creation/enemy.js";
 import { registerUnit, updateUnit } from "../../dist/core/tactical/battle/state.js";
 import { ref, get } from "../../dist/core/tactical/unit/query.js";
@@ -484,11 +484,12 @@ function coreDisplacedEnemy(checkpoints = [{
     {
       id: 1,
       alwaysCheckCurrentPoint: true,
-      definition: createDefinition({
+      definition: {
+        spatialPresence: {},
         id: 'enemy_displacement_boundary',
         vitality: { maxHp: 100, defense: 0, resistance: 0 },
         locomotion: { halfBodyWidth: 0, minSpeed: 0, speed: 0.1, steeringParameters: coreSteeringParameters },
-      }),
+      },
       route: createInput({
         pathMotionMode: 'WALK',
         startPosition: [1, 0],

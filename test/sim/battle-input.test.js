@@ -10,8 +10,6 @@ import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/m
 import { definition } from "../helpers/effects.js";
 import { initialize } from "../helpers/unit.js";
 import { seededPlacement } from "../helpers/aura.js";
-import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
-
 import { createInput as createRouteDefinition } from "../../dist/core/tactical/battle/creation/route.js";
 
 test("runtime accepts the battle contract Input directly with factory-owned maps and creation references", async () => {
@@ -108,14 +106,15 @@ function fixture({ spawnTick = 100 } = {}) {
     );
 
     const initial = definition("initial-state", { quota: { remaining: 3 }, marks: [1, 2] });
-    const enemy = createDefinition({
+    const enemy = {
+        spatialPresence: {},
         id: "scheduled-enemy",
         vitality: { maxHp: 100, defense: 0, resistance: 0 },
         locomotion: {
             halfBodyWidth: 0, minSpeed: 0, speed: 0,
             steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 },
         },
-    });
+    };
     const route = createRouteDefinition({
         pathMotionMode: "WALK",
         startPosition: [0, 7],

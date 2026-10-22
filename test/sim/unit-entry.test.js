@@ -8,7 +8,7 @@ import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
 import { getUnit, updateUnit } from '../../dist/core/tactical/battle/state.js';
 import { createBattlefieldMap } from '../../dist/core/tactical/battlefield/map/map.js';
 import { createInput as createRouteDefinition } from '../../dist/core/tactical/battle/creation/route.js';
-import { createDefinition as createEnemy } from '../../dist/core/tactical/unit/archetype/enemy.js';
+
 
 const map = createBattlefieldMap(2, 4, Array.from({ length: 8 }, () => ({
   heightType: 'LOWLAND', buildableType: 'ALL', passableMask: 'ALL',
@@ -54,12 +54,12 @@ test('initial entry callbacks see the whole registered batch and preceding callb
   assert.equal(second.vitality.maxHp, 100);
 });
 
-test('factory-created enemies enter after spawning and keep immutable old snapshots', () => {
+test('scheduled Units enter after spawning and keep immutable old snapshots', () => {
   const trace = [];
-  const definition = createEnemy({ ...markEntered(trace, 'spawned'), locomotion: {
+  const definition = { spatialPresence: {}, ...markEntered(trace, 'spawned'), locomotion: {
     halfBodyWidth: 0, speed: 0, minSpeed: 0,
     steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 },
-  } });
+  } };
   const runtime = new BattleRuntime(input({ schedule: { type: 'TIMELINE', spawns: [spawn(definition)] } }));
   const before = runtime.snapshot();
   runtime.step();
@@ -78,12 +78,13 @@ test('predefined appearances and deployment initialize once; relocation does not
   }, predefines: [{
     id: 9, alias: null, initiallyPresent: true,
     creation: { type: 'UNIT', definition: markEntered(trace, 'predefined'), position: [2, 0] },
-  }], schedule: { type: 'TIMELINE', spawns: [spawn(createEnemy({
+  }], schedule: { type: 'TIMELINE', spawns: [spawn({
+    spatialPresence: {},
     id: 'later', vitality: { maxHp: 100, defense: 0, resistance: 0 }, locomotion: {
       halfBodyWidth: 0, speed: 0, minSpeed: 0,
       steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 },
     },
-  }), 1000)] } }));
+  }, 1000)] } }));
   runtime.step([{ type: 'DEPLOY_UNIT', cardId: 0, tilePosition: [0, 0], playerSide: 'SIDE_A' }]);
   const before = runtime.snapshot();
   runtime.step([{ type: 'RELOCATE_UNIT', unitId: 1, tilePosition: [0, 1], playerSide: 'SIDE_A' }]);

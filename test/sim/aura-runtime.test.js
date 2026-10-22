@@ -6,7 +6,7 @@ import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { battlefieldView, getUnit } from "../../dist/core/tactical/battle/state.js";
 import { createBattlefieldMap } from "../../dist/core/tactical/battlefield/map/map.js";
 import { createTile } from "../../dist/core/tactical/battlefield/map/tile.js";
-import { createDefinition } from "../../dist/core/tactical/unit/archetype/enemy.js";
+
 import { createDefinition as createDeployableDefinition } from "../../dist/core/tactical/unit/capability/deployable/capability.js";
 import { createInput as createRouteDefinition } from "../../dist/core/tactical/battle/creation/route.js";
 import * as effects from "../../dist/core/tactical/unit/effect/operations.js";
@@ -47,15 +47,14 @@ function route({ start = 4, end = 7, wait = true } = {}) {
 function spawn({ tick = 2, start = 4, end = 7, speed = 0, wait = true } = {}) {
     return {
         definition: {
-            ...createDefinition({
-                id: "scheduled-receiver",
-                targetable: { restrictions: [] },
-                vitality: { maxHp: 100, defense: 0, resistance: 0 },
-                locomotion: {
-                    halfBodyWidth: 0, minSpeed: 0, speed: speed,
-                    steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 },
-                },
-            }),
+            spatialPresence: {},
+            id: "scheduled-receiver",
+            targetable: { restrictions: [] },
+            vitality: { maxHp: 100, defense: 0, resistance: 0 },
+            locomotion: {
+                halfBodyWidth: 0, minSpeed: 0, speed: speed,
+                steeringParameters: { steeringFactor: 1, maxSteeringForce: 1 },
+            },
             offense: Object.freeze({ attack: 100 }),
         },
         route: route({ start, end, wait }),

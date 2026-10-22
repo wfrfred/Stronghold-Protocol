@@ -20,8 +20,8 @@ import type { Direction } from "../core/tactical/geometry/direction.js";
 import { fromTiles } from "../core/tactical/geometry/range.js";
 import type { Input as RouteInput } from "../core/tactical/battle/creation/route.js";
 import { TICKS_PER_SECOND } from "../core/tactical/tick.js";
-import * as enemy from "../core/tactical/unit/archetype/enemy.js";
-import * as operator from "../core/tactical/unit/archetype/operator.js";
+import type { Definitions as CapabilityDefinitions } from "../core/tactical/unit/capability/catalog.js";
+import type { Definition as UnitDefinition } from "../core/tactical/unit/unit.js";
 
 interface LegacyCombatContent {
     readonly operators: readonly {
@@ -161,74 +161,81 @@ function operatorDefinition(value: unknown, direction: Direction) {
     }
 
     return {
-        ...operator.createDefinition({
-            targetable: { restrictions: [] },
-            elemental: createArknightsElementalDefinition({ receiver: "CHARACTER" }),
-            id: stringField(definition.chessId, "chessId"),
-            vitality: {
-                maxHp: numberField(stats.maxHp, "maxHp"),
-                defense: numberField(stats.def, "defense"),
-                resistance: numberField(stats.res, "resistance"),
-            },
-            offense: { attack: numberField(stats.atk, "attack") },
-            allegiance: { side: "ALLY" },
-            layer: { type: "GROUND" },
-            hitbox: {
-                shape: { type: "CIRCLE", offset: [0, 0], radius: LEGACY_OPERATOR_HIT_RADIUS },
-            },
+        targetable: { restrictions: [] },
+        elemental: createArknightsElementalDefinition({ receiver: "CHARACTER" }),
+        id: stringField(definition.chessId, "chessId"),
+        vitality: {
+            maxHp: numberField(stats.maxHp, "maxHp"),
+            defense: numberField(stats.def, "defense"),
+            resistance: numberField(stats.res, "resistance"),
+        },
+        offense: { attack: numberField(stats.atk, "attack") },
+        allegiance: { side: "ALLY" },
+        layer: { type: "GROUND" },
+        hitbox: {
+            shape: { type: "CIRCLE", offset: [0, 0], radius: LEGACY_OPERATOR_HIT_RADIUS },
+        },
 
-            blocker: {
-                capacity: numberField(stats.blockCnt, "block capacity"),
-                geometry: { radius: 0.70709997 },
-            },
-            action: {
-                definitions: Definitions.empty().add(
-                    createAttack({
-                        id: "normal-attack",
-                        speed: timing.attackSpeed,
-                        triggerBindingId: "primary",
-                        intervalTicks: timing.baseAttackTimeTicks,
-                        recoveryTicks: 0,
-                        targetGroups: [
-                            {
-                                id: "primary",
-                                targeting: {
-                                    purposes: ["DAMAGE"],
-                                    filter: filters.and(
-                                        filters.damage,
-                                        ...(canTargetAir ? [] : [filters.ground]),
-                                        filters.or(
-                                            filters.range(
-                                                fromTiles(
-                                                    attackRange(definition.rangeGrid),
-                                                    direction,
-                                                ),
-                                            ),
-                                            filters.blocking,
+        blocker: {
+            capacity: numberField(stats.blockCnt, "block capacity"),
+            geometry: { radius: 0.70709997 },
+        },
+        action: {
+            definitions: Definitions.empty().add(
+                createAttack({
+                    id: "normal-attack",
+                    speed: timing.attackSpeed,
+                    triggerBindingId: "primary",
+                    intervalTicks: timing.baseAttackTimeTicks,
+                    recoveryTicks: 0,
+                    targetGroups: [
+                        {
+                            id: "primary",
+                            targeting: {
+                                purposes: ["DAMAGE"],
+                                filter: filters.and(
+                                    filters.damage,
+                                    ...(canTargetAir ? [] : [filters.ground]),
+                                    filters.or(
+                                        filters.range(
+                                            fromTiles(attackRange(definition.rangeGrid), direction),
                                         ),
+                                        filters.blocking,
                                     ),
-                                    selector: first(
-                                        1,
-                                        compare.combine(compare.blockedFirst, compare.distance),
-                                    ),
-                                },
-                                operations: [
-                                    {
-                                        type: "DAMAGE",
-                                        power: numberField(stats.atk, "attack"),
-                                        powerSource: "SOURCE_ATTACK",
-                                        damageType: damageType(definition.dmgType),
-                                    },
-                                ],
+                                ),
+                                selector: first(
+                                    1,
+                                    compare.combine(compare.blockedFirst, compare.distance),
+                                ),
                             },
-                        ],
-                        followUps: [],
-                    }),
-                ),
-            },
-        }),
+                            operations: [
+                                {
+                                    type: "DAMAGE",
+                                    power: numberField(stats.atk, "attack"),
+                                    powerSource: "SOURCE_ATTACK",
+                                    damageType: damageType(definition.dmgType),
+                                },
+                            ],
+                        },
+                    ],
+                    followUps: [],
+                }),
+            ),
+        },
         direction,
-    };
+    } satisfies UnitDefinition &
+        Pick<
+            CapabilityDefinitions,
+            | "targetable"
+            | "elemental"
+            | "vitality"
+            | "offense"
+            | "allegiance"
+            | "layer"
+            | "hitbox"
+            | "blocker"
+            | "action"
+        > & { readonly direction: Direction };
 }
 
 function enemyDefinition(value: unknown) {
@@ -250,7 +257,8 @@ function enemyDefinition(value: unknown) {
     const radius = numberField(stats.rangeRadius, "enemy range radius");
     const combat = filters.and(filters.present, filters.alive, filters.hostile, filters.blocker);
 
-    return enemy.createCombatDefinition({
+    return {
+        spatialPresence: {},
         targetable: { restrictions: [] },
         elemental: createArknightsElementalDefinition({ receiver: "ENEMY" }),
         id: stringField(definition.key, "enemy key"),
@@ -321,7 +329,21 @@ function enemyDefinition(value: unknown) {
                 }),
             ),
         },
-    });
+    } satisfies UnitDefinition &
+        Pick<
+            CapabilityDefinitions,
+            | "spatialPresence"
+            | "targetable"
+            | "elemental"
+            | "vitality"
+            | "offense"
+            | "locomotion"
+            | "allegiance"
+            | "layer"
+            | "hitbox"
+            | "blockable"
+            | "action"
+        >;
 }
 
 function combatMap(options: LegacyCombatOptions): BattlefieldMap {

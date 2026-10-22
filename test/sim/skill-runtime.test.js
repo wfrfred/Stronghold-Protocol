@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BattleRuntime } from '../../dist/core/tactical/battle/runtime.js';
 import { createLegacyCombatSpec } from '../../dist/legacy/combat.js';
-import { createDefinition } from '../../dist/core/tactical/unit/archetype/operator.js';
+
 import { createDefinition as createSkillDefinition } from '../../dist/core/tactical/unit/capability/skill/capability.js';
 import * as skills from '../../dist/core/tactical/unit/capability/skill/operations.js';
 import { ref as activationRef } from '../../dist/core/tactical/unit/capability/skill/activation.js';
@@ -35,12 +35,12 @@ function action(maxTargets = 1, extra = {}) {
 function actor(skill, { attackTargets = 1, windupTicks = 0, activeAction } = {}) {
   let definitions = Definitions.empty().add(action(attackTargets, { windupTicks }));
   if (activeAction !== undefined) definitions = definitions.add(action(2, { id: activeAction, windupTicks }));
-  return createDefinition({
+  return {
     id: 'skill-actor', vitality: { maxHp: 100000, defense: 0, resistance: 0 }, offense: { attack: 100 },
     allegiance: { side: 'ALLY' },
     layer: { type: 'GROUND' }, hitbox: { shape: hit },
     blocker: { capacity: 0, geometry: { radius: 0.1 } }, action: { definitions, select: (battle, self) => ({ state: battle, value: [self.skill.active !== null ? activeAction ?? 'normal' : 'normal'] }) }, skill,
-  });
+  };
 }
 function target() {
   return { id: 'target', targetable: { restrictions: [] }, vitality: { maxHp: 100000, defense: 0, resistance: 0 }, allegiance: { side: 'ENEMY' }, layer: { type: 'GROUND' }, hitbox: { shape: hit } };

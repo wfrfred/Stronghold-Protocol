@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { initialize } from "../helpers/unit.js";
 import { createDefinition as createDeployableDefinition, initialize as initializeDeployable, hasDeployable } from '../../dist/core/tactical/unit/capability/deployable/capability.js';
-import { createDefinition as createOperator } from '../../dist/core/tactical/unit/archetype/operator.js';
+
 import { unit as actionUnit } from '../helpers/action-fixture.js';
 
 const definition = {
@@ -33,19 +33,19 @@ test('deployable state is initialized before deployment associates a Card', () =
   assert.equal(unit.deployable.cardId, null);
 });
 
-test('operator content factories preserve an optional deployable capability', () => {
-  const operator = createOperator({
+test('Unit initialization preserves deployable alongside independent capabilities', () => {
+  const operator = {
     ...actionUnit(0, { action: true }).definition,
     blocker: { capacity: 0, geometry: { radius: 0.1 } },
     deployable: definition.deployable,
-  });
+  };
   const created = initialize({ id: 0, position: [0, 0], definition: operator });
-  assert.equal(operator.deployable, definition.deployable);
+  assert.equal(created.definition, operator);
   assert.equal(hasDeployable(created), true);
   assert.deepEqual(created.deployable, initializeDeployable(fixtureBattle(0), definition.deployable).value);
 });
 
-test('factory inference and the deployable guard retain capability and caller types', async () => {
+test('Unit initialization inference and the deployable guard retain capability and caller types', async () => {
   const { default: ts } = await import('typescript');
   const directory = mkdtempSync(join(tmpdir(), 'stronghold-deployable-types-'));
   const module = (path) => JSON.stringify(fileURLToPath(new URL(path, import.meta.url)));

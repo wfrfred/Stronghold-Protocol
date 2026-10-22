@@ -1,13 +1,14 @@
 import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import { createRng } from "../../../common/rng.js";
 import { createWorldPosition, Tile, World, type WorldPosition } from "../../geometry/coordinate.js";
-import type { Definition, RoutedEnemy } from "../../unit/archetype/enemy.js";
-import type { Id } from "../../unit/unit.js";
+import type { Definition, Id, Unit } from "../../unit/unit.js";
+import type { Definitions, Product } from "../../unit/capability/catalog.js";
+import type { Route } from "../../unit/capability/route/capability.js";
 import { initialize } from "../../unit/initialize.js";
 import type { Result, State as BattleState } from "../state.js";
 import { createInput, normalize, type Input, type Timing } from "./route.js";
 
-export interface RoutedEnemySpawn<D extends Definition = Definition> {
+export interface RoutedEnemySpawn<D extends Definition & Partial<Definitions> = Definition> {
     readonly id: Id;
     readonly definition: D;
     readonly route: Input;
@@ -15,8 +16,10 @@ export interface RoutedEnemySpawn<D extends Definition = Definition> {
     readonly alwaysCheckCurrentPoint: boolean;
 }
 
-export interface RoutedEnemyInitialization<D extends Definition = Definition> {
-    readonly enemy: RoutedEnemy<D>;
+export interface RoutedEnemyInitialization<
+    D extends Definition & Partial<Definitions> = Definition,
+> {
+    readonly enemy: Unit & Product<D> & Route;
 }
 
 function sampleOffset(input: Input, next: () => number): WorldPosition {
@@ -46,7 +49,7 @@ function sampleOffset(input: Input, next: () => number): WorldPosition {
     );
 }
 
-export function initializeRoutedEnemy<D extends Definition>(
+export function initializeRoutedEnemy<D extends Definition & Partial<Definitions>>(
     battle: BattleState,
     spawn: RoutedEnemySpawn<D>,
 ): Result<RoutedEnemyInitialization<D>>;

@@ -22,7 +22,7 @@ import { World } from '../../dist/core/tactical/geometry/coordinate.js';
 import { loadMovementScenario } from '../../dist/data/arknights/movement-scenario.js';
 import { createTacticalCombatDemoSpec } from '../../dist/legacy/tactical-demo-combat.js';
 import { createTacticalDemo } from '../../dist/legacy/tactical-demo.js';
-import { createDefinition } from '../../dist/core/tactical/unit/archetype/operator.js';
+
 import { initialize } from "../helpers/unit.js";
 import { start as startAction } from "../../dist/core/tactical/unit/action/operations.js";
 
@@ -1121,14 +1121,14 @@ const attackDefinition = (targetGroups, followUps = []) => createAttack({
 });
 
 function actionUnit(id, side, position, { hp = 100, effects: initialEffects = [], action, skill } = {}) {
-  const definition = createDefinition({
+  const definition = {
     id: `action_unit_${id}`, targetable: { restrictions: [] }, vitality: { maxHp: 100, defense: 0, resistance: 0 }, allegiance: { side },
     layer: { type: 'GROUND' }, hitbox: { shape: { type: 'CIRCLE', offset: [0, 0], radius: 0.1 } }, blocker: { capacity: 0, geometry: { radius: 0 } },
     ...(skill === undefined ? {} : { skill }),
     action: { definitions: Definitions.empty().add(action ?? attackDefinition([
       { id: 'primary', targeting: damageTargeting(), operations: [damageEffect(0)] },
     ])) },
-  });
+  };
   let unit = initialize({ id, definition, position });
   unit = { ...unit, vitality: { ...unit.vitality, hp } };
   for (const effect of initialEffects) unit = installFixtureEffect(unit, effect);

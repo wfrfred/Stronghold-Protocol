@@ -8,8 +8,6 @@ import type { Input } from "../core/tactical/battle/contract.js";
 
 import type { BattlefieldMap } from "../core/tactical/battlefield/map/map.js";
 import { TICKS_PER_SECOND } from "../core/tactical/tick.js";
-import * as enemy from "../core/tactical/unit/archetype/enemy.js";
-import * as operator from "../core/tactical/unit/archetype/operator.js";
 import type { Type as ElementType } from "../core/tactical/unit/capability/elemental/capability.js";
 import { createInput, type Input as RouteInput } from "../core/tactical/battle/creation/route.js";
 import { createArknightsElementalDefinition } from "../data/arknights/elemental.js";
@@ -61,11 +59,11 @@ export function createTacticalMechanicsDemo(
     const group = action.targetGroups[0];
     const definition =
         scenario === "SKILL"
-            ? operator.createDefinition({
+            ? {
                   ...sourceDefinition,
                   skill: compileArknightsAttackBuffSkill(rawSkill, 4),
-              })
-            : operator.createDefinition({
+              }
+            : {
                   ...sourceDefinition,
                   action: {
                       ...sourceDefinition.action,
@@ -88,9 +86,9 @@ export function createTacticalMechanicsDemo(
                           }),
                       ),
                   },
-              });
+              };
 
-    const target = enemy.createCombatDefinition({
+    const target = {
         ...spawn.definition,
         vitality: { ...spawn.definition.vitality, maxHp: 200_000 },
         locomotion: {
@@ -101,7 +99,7 @@ export function createTacticalMechanicsDemo(
         ...(elementType === null
             ? {}
             : { elemental: createArknightsElementalDefinition({ receiver: "ENEMY" }) }),
-    });
+    };
     const targetRoute = createInput({
         ...route,
         startPosition: [5, 6],
