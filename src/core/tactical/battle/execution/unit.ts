@@ -36,7 +36,7 @@ export function enter(state: BattleState, unitIds: readonly Id[]): BattleState {
 }
 
 export function advance(battle: BattleState): BattleState {
-    const candidates = units.all(battle);
+    const candidates = units.all(battle).map(units.ref).toArray();
 
     for (const ref of candidates) {
         const self = units.get(battle, ref);

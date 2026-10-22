@@ -185,14 +185,15 @@ export function recycleUnitCard(
 export function notifyDeployed(state: BattleState, deployed: Deployed): BattleState {
     const candidates = new Map(
         units
-            .filter(state, hasDeployable)
-            .flatMap((ref) =>
-                units
-                    .get(state, ref)!
-                    .deployable.deployedHooks.map(
-                        ({ id }) => [JSON.stringify([ref.id, id]), { ref, id }] as const,
-                    ),
-            ),
+            .all(state)
+            .filter(hasDeployable)
+            .flatMap((unit) => {
+                const ref = units.ref(unit);
+
+                return unit.deployable.deployedHooks.map(
+                    ({ id }) => [JSON.stringify([ref.id, id]), { ref, id }] as const,
+                );
+            }),
     );
 
     return hook.dispatch(state, deployed, undefined, {

@@ -2,6 +2,7 @@ import type { BattlefieldView } from "../battlefield/contract.js";
 import type { State as BattleState } from "../battle/state.js";
 import type { Unit } from "./unit.js";
 import type { Ref } from "../../common/ref.js";
+import { create, type Query } from "../../common/query.js";
 
 export interface Context {
     readonly unit: Unit;
@@ -12,15 +13,8 @@ export function ref<U extends Unit>(unit: U): Ref<U> {
     return { id: unit.id } as Ref<U>;
 }
 
-export function all(battle: BattleState): Ref<Unit>[] {
-    return [...battle.battlefield.units.values()].map(ref);
-}
-
-export function filter<U extends Unit>(
-    battle: BattleState,
-    guard: (unit: Unit) => unit is U,
-): Ref<U>[] {
-    return [...battle.battlefield.units.values()].filter(guard).map(ref);
+export function all(battle: BattleState): Query<Unit> {
+    return create(() => battle.battlefield.units.values());
 }
 
 export function get<U extends Unit>(battle: BattleState, reference: Ref<U>): U | undefined {

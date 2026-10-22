@@ -25,9 +25,12 @@ export type StartOutcome<P extends object, E extends object> =
       };
 
 export function all(battle: BattleState): Ref<StoredAction>[] {
-    return units
-        .filter(battle, hasAction)
-        .flatMap((host) => units.get(battle, host)!.action.instances.values().map(ref));
+    return [
+        ...units
+            .all(battle)
+            .filter(hasAction)
+            .flatMap((host) => host.action.instances.values().map(ref)),
+    ];
 }
 
 export function forUnit(battle: BattleState, source: Ref<Unit>): Ref<StoredAction>[] {

@@ -212,7 +212,8 @@ export function endDependents(
 export function advance(battle: BattleState): BattleState {
     const candidates = units
         .all(battle)
-        .flatMap((host) => units.get(battle, host)!.effects.values().map(effectRef));
+        .flatMap((host) => host.effects.values().map(effectRef))
+        .toArray();
 
     for (const ref of candidates) {
         battle =

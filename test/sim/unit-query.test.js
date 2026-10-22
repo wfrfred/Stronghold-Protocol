@@ -16,32 +16,74 @@ const unit = (id, capabilities = {}) => initialize({
 });
 const battle = (...values) => createBattleState(fixtureBattlefieldState(values));
 
-test("all Unit identities preserve collection order regardless of capabilities or tick callbacks", () => {
+test("all yields Unit objects in registration order without capability or lifecycle filtering", () => {
     const initial = battle(
         unit(8, { locomotion }),
         unit(2, { vitality: { maxHp: 100, defense: 0, resistance: 0 }, onTick: state => state }),
         { ...unit(5), lifecycle: "LEAVING" },
     );
-    const candidates = units.all(initial);
+    const query = units.all(initial);
+    const values = query.toArray();
 
-    assert.deepEqual(candidates, [{ id: 8 }, { id: 2 }, { id: 5 }]);
-    assert.deepEqual(candidates.map(reference => Reflect.ownKeys(reference)), [["id"], ["id"], ["id"]]);
-    assert.strictEqual(units.get(initial, candidates[0]), initial.battlefield.units.get(8));
-    assert.equal(units.get(initial, candidates[2]).lifecycle, "LEAVING");
-    assert.deepEqual(units.all(battle()), []);
+    assert.deepEqual(values.map(value => value.id), [8, 2, 5]);
+    assert.strictEqual(values[0], initial.battlefield.units.get(8));
+    assert.strictEqual(values[1], initial.battlefield.units.get(2));
+    assert.equal(values[2].lifecycle, "LEAVING");
+    assert.deepEqual(query.map(units.ref).toArray(), [{ id: 8 }, { id: 2 }, { id: 5 }]);
+    assert.deepEqual(units.all(battle()).toArray(), []);
 });
 
-test("Unit filtering returns identities for matching capabilities in collection order", () => {
+test("Unit filters retain matching objects until identity extraction is explicitly requested", () => {
     const initial = battle(
         unit(8, { locomotion }),
         unit(2, { vitality: { maxHp: 100, defense: 0, resistance: 0 } }),
         unit(5, { locomotion, vitality: { maxHp: 100, defense: 0, resistance: 0 } }),
     );
-    assert.deepEqual(units.filter(initial, hasLocomotion), [{ id: 8 }, { id: 5 }]);
-    const combined = units.filter(initial, value => hasLocomotion(value) && hasVitality(value));
-    assert.deepEqual(combined, [{ id: 5 }]);
-    assert.equal(units.get(initial, combined[0]).vitality.hp, 100);
-    assert.deepEqual(units.filter(initial, () => false), []);
+    const moving = units.all(initial).filter(hasLocomotion);
+    assert.deepEqual(moving.map(value => value.id).toArray(), [8, 5]);
+    assert.strictEqual(moving.toArray()[0], initial.battlefield.units.get(8));
+    const combined = moving.filter(hasVitality);
+    assert.equal(combined.toArray()[0].vitality.hp, 100);
+    assert.deepEqual(combined.map(units.ref).toArray(), [{ id: 5 }]);
+    assert.deepEqual(units.all(initial).filter(value => value.id > 4).map(value => value.id).toArray(), [8, 5]);
+    assert.deepEqual(units.all(initial).filter(() => false).toArray(), []);
+});
+
+test("Unit queries remain bound to their battle snapshot across repeated and interleaved enumeration", () => {
+    const original = unit(3, { vitality: { maxHp: 100, defense: 0, resistance: 0 } });
+    const second = unit(1);
+    const initial = battle(original, second);
+    const query = units.all(initial);
+    const changed = { ...original, position: [7, 0], vitality: { ...original.vitality, hp: 40 } };
+    let current = updateUnit(initial, changed);
+    current = removeUnit(current, second.id, "SCRIPT");
+    current = registerUnit(current, unit(5));
+
+    const firstCursor = query[Symbol.iterator]();
+    const secondCursor = query[Symbol.iterator]();
+    assert.strictEqual(firstCursor.next().value, original);
+    assert.strictEqual(secondCursor.next().value, original);
+    assert.strictEqual(firstCursor.next().value, second);
+    assert.strictEqual(secondCursor.next().value, second);
+    assert.equal(firstCursor.next().done, true);
+    assert.equal(secondCursor.next().done, true);
+    assert.deepEqual(query.toArray(), [original, second]);
+    assert.deepEqual(query.map(value => value.id).toArray(), [3, 1]);
+    assert.strictEqual(units.all(current).toArray()[0], changed);
+    assert.deepEqual(units.all(current).map(value => value.id).toArray(), [3, 5]);
+});
+
+test("Unit query preserves registration order through replacement and moves a re-registered identity to the end", () => {
+    const first = unit(8);
+    const second = unit(2);
+    const third = unit(5);
+    const initial = battle(first, second, third);
+    const replaced = updateUnit(initial, { ...second, position: [9, 0] });
+    const restored = registerUnit(removeUnit(replaced, first.id, "SCRIPT"), first);
+
+    assert.deepEqual(units.all(replaced).map(value => value.id).toArray(), [8, 2, 5]);
+    assert.deepEqual(units.all(restored).map(value => value.id).toArray(), [2, 5, 8]);
+    assert.deepEqual(units.all(initial).map(value => value.id).toArray(), [8, 2, 5]);
 });
 
 test("a Unit Ref reads the supplied battle version without retaining the old snapshot", () => {
@@ -65,7 +107,7 @@ test("fixed Unit candidates read preceding updates, skip removal and defer new i
         unit(1, { locomotion, vitality: { maxHp: 100, defense: 0, resistance: 0 } }),
         unit(2, { locomotion, vitality: { maxHp: 100, defense: 0, resistance: 0 } }),
     );
-    const candidates = units.filter(initial, hasLocomotion);
+    const candidates = units.all(initial).filter(hasLocomotion).map(units.ref).toArray();
     const observed = [];
     let current = initial;
 
@@ -83,7 +125,7 @@ test("fixed Unit candidates read preceding updates, skip removal and defer new i
 
     assert.deepEqual(observed, [[0, 100], [1, 40]]);
     assert.deepEqual(candidates.map(reference => reference.id), [0, 1, 2]);
-    assert.deepEqual(units.filter(current, hasLocomotion).map(reference => reference.id), [0, 1, 3]);
+    assert.deepEqual(units.all(current).filter(hasLocomotion).map(value => value.id).toArray(), [0, 1, 3]);
     assert.equal(units.get(initial, candidates[1]).vitality.hp, 100);
     assert.equal(units.get(initial, candidates[2]).id, 2);
 });

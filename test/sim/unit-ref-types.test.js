@@ -14,6 +14,7 @@ test("Unit Refs preserve guard proofs, permit covariance and reject forged or st
         writeFileSync(path, `
 import type { Unit, Definition } from ${source("unit/unit")};
 import type { Ref, Identity } from ${source("../common/ref")};
+import type { Query } from ${source("../common/query")};
 import type { State as BattleState } from ${source("battle/state")};
 import * as units from ${source("unit/query")};
 import { hasLocomotion, type Locomotion } from ${source("unit/capability/locomotion/capability")};
@@ -44,7 +45,11 @@ type Preserved = Assert<Equal<typeof preserved, Ref<Unit & Locomotion & Vitality
 const current = units.get(battle, strong);
 type Current = Assert<Equal<typeof current, (Unit & Locomotion & Vitality) | undefined>>;
 const candidates = units.all(battle);
-type Candidates = Assert<Equal<typeof candidates, Ref<Unit>[]>>;
+type Candidates = Assert<Equal<typeof candidates, Query<Unit>>>;
+const candidateValues = candidates.toArray();
+type CandidateValues = Assert<Equal<typeof candidateValues, readonly Unit[]>>;
+const candidateRefs = candidates.map(units.ref).toArray();
+type CandidateRefs = Assert<Equal<typeof candidateRefs, readonly Ref<Unit>[]>>;
 type TickParameters = Assert<Equal<Parameters<NonNullable<Definition["onTick"]>>, [BattleState, Unit]>>;
 const tick: NonNullable<Definition["onTick"]> = (state, self) => {
     const reference: Ref<Unit> = units.ref(self);
@@ -53,13 +58,21 @@ const tick: NonNullable<Definition["onTick"]> = (state, self) => {
 declare const tickById: (state: BattleState, unitId: number) => BattleState;
 // @ts-expect-error Unit tick callbacks receive the current Unit rather than its ID.
 const invalidTick: Definition = { id: "invalid", onTick: tickById };
-const locomotives = units.filter(battle, hasLocomotion);
-type Locomotives = Assert<Equal<typeof locomotives, Ref<Unit & Locomotion>[]>>;
-const skills = units.filter(battle, hasSkill);
-type Skills = Assert<Equal<typeof skills, Ref<Unit & Skill>[]>>;
-const both = units.filter(battle, (unit): unit is Unit & Locomotion & Vitality =>
+const locomotives = candidates.filter(hasLocomotion);
+type Locomotives = Assert<Equal<typeof locomotives, Query<Unit & Locomotion>>>;
+const movingRefs = locomotives.map(units.ref).toArray();
+type MovingRefs = Assert<Equal<typeof movingRefs, readonly Ref<Unit & Locomotion>[]>>;
+const skills = candidates.filter(hasSkill);
+type Skills = Assert<Equal<typeof skills, Query<Unit & Skill>>>;
+const both = candidates.filter((unit): unit is Unit & Locomotion & Vitality =>
     hasLocomotion(unit) && hasVitality(unit));
-type Both = Assert<Equal<typeof both, Ref<Unit & Locomotion & Vitality>[]>>;
+type Both = Assert<Equal<typeof both, Query<Unit & Locomotion & Vitality>>>;
+const sequential = locomotives.filter(hasVitality);
+type Sequential = Assert<Equal<typeof sequential, Query<Unit & Locomotion & Vitality>>>;
+const ordinary = candidates.filter(unit => unit.id > 0);
+type Ordinary = Assert<Equal<typeof ordinary, Query<Unit>>>;
+// @ts-expect-error An ordinary condition does not prove an additional Capability.
+const unproven: Query<Unit & Locomotion> = ordinary;
 type Address = Assert<Equal<Identity<Unit & Locomotion>, { readonly id: number }>>;
 interface HostedUnit extends Unit { readonly host: string }
 declare const hosted: HostedUnit;
@@ -67,8 +80,6 @@ const hostedRef = units.ref(hosted);
 type HostedAddress = Assert<Equal<Identity<HostedUnit>, { readonly id: number }>>;
 // @ts-expect-error Business fields do not become identity fields.
 hostedRef.host;
-// @ts-expect-error An ordinary condition does not prove a Unit structure.
-units.filter(battle, unit => unit.id > 0);
 `);
         const program = ts.createProgram([path], {
             noEmit: true, strict: true, exactOptionalPropertyTypes: true,

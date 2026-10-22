@@ -7,6 +7,7 @@ import { hasVitality } from "../../unit/capability/vitality/capability.js";
 import { leave } from "../execution/unit.js";
 import type { State as BattleState } from "../state.js";
 import type { Command } from "../contract.js";
+import { sort } from "../../../common/collection.js";
 
 export function prepare(battle: BattleState, commands: readonly Command[]): BattleState {
     for (const command of commands) {
@@ -19,10 +20,10 @@ export function prepare(battle: BattleState, commands: readonly Command[]): Batt
 }
 
 export function advance(battle: BattleState): BattleState {
-    const candidates = units
-        .all(battle)
-        .sort((left, right) => left.id - right.id)
-        .map((source) => ({ source, instances: actions.forUnit(battle, source) }));
+    const candidates = sort(
+        units.all(battle).map(units.ref),
+        (left, right) => left.id - right.id,
+    ).map((source) => ({ source, instances: actions.forUnit(battle, source) }));
 
     for (const { source } of candidates) {
         const unit = units.get(battle, source);

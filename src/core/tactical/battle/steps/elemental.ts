@@ -4,7 +4,7 @@ import * as units from "../../unit/query.js";
 import type { State as BattleState } from "../state.js";
 
 export function advanceElements(battle: BattleState): BattleState {
-    const candidates = units.filter(battle, hasElemental);
+    const candidates = units.all(battle).filter(hasElemental).map(units.ref).toArray();
 
     for (const ref of candidates) {
         battle = advance(battle, ref);

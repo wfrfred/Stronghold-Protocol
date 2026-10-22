@@ -11,6 +11,7 @@ import type { Id, Unit } from "../../unit/unit.js";
 import type { Command } from "../contract.js";
 import { appendEvents, battlefieldView, getUnit, type State as BattleState } from "../state.js";
 import { leave } from "../execution/unit.js";
+import { sort } from "../../../common/collection.js";
 
 function advanceLocomotion(
     battle: BattleState,
@@ -70,7 +71,10 @@ export function advanceMovement(
     battle: BattleState,
     { routeMoveMultiplier }: { readonly routeMoveMultiplier: number },
 ): BattleState {
-    const candidates = units.filter(battle, hasRoute).sort((left, right) => left.id - right.id);
+    const candidates = sort(
+        units.all(battle).filter(hasRoute).map(units.ref),
+        (left, right) => left.id - right.id,
+    );
 
     for (const ref of candidates) {
         battle = route.advance(battle, ref);

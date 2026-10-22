@@ -77,8 +77,8 @@ type Known = Assert<Equal<typeof known, Ref<Activation<Active>>>>;
 const weaker: Ref<Activation<Active>> = specialized;
 const erased: Ref<Activation> = weaker;
 cancel(battle, erased, "SCRIPT");
-const candidates = units.filter(battle, hasSkill);
-type Candidates = Assert<Equal<typeof candidates, Ref<Unit & Skill>[]>>;
+const candidates = units.all(battle).filter(hasSkill).map(units.ref).toArray();
+type Candidates = Assert<Equal<typeof candidates, readonly Ref<Unit & Skill>[]>>;
 const host = units.get(battle, self.host);
 // @ts-expect-error a typed activation does not type its host's private persistent state.
 host?.skill.data.count;
