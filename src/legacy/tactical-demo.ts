@@ -20,6 +20,7 @@ import {
     type LegacyVisualEvent,
 } from "./tactical-demo-presentation.js";
 import { createTacticalProjectileDemo } from "./projectile-demo.js";
+import { project as projectTrackingProjectile } from "../content/tactical/projectiles/tracking.js";
 import { hasAllegiance } from "../core/tactical/unit/capability/allegiance/capability.js";
 import { hasAction } from "../core/tactical/unit/capability/action/capability.js";
 import { hasSkill } from "../core/tactical/unit/capability/skill/capability.js";
@@ -342,7 +343,13 @@ export async function createTacticalDemo(view: LegacyView, options: TacticalDemo
             killed: presentation.stats().killedCount,
             total: runtime.spawnCounts.spawnedCount + runtime.spawnCounts.unspawnedCount,
         });
-        view.setProjectiles?.(snapshot.projectiles.instances);
+        view.setProjectiles?.(
+            snapshot.projectiles.instances.flatMap((projectile) => {
+                const presented = projectTrackingProjectile(projectile);
+
+                return presented === undefined ? [] : [presented];
+            }),
+        );
 
         for (const event of events) {
             if (event.type === "UNIT_REMOVED") {

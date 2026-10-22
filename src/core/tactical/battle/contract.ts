@@ -31,8 +31,8 @@ import type { SupportRelation } from "../battlefield/support/relations.js";
 import type { Ref } from "../../common/ref.js";
 import type { Signal as ActionSignal } from "../unit/action/event.js";
 import type { View as ActionView } from "../unit/action/action.js";
-import type { ProjectileId, ProjectileState } from "../battlefield/projectile/projectile.js";
-import type { ProjectileSignal } from "../battlefield/projectile/settlement.js";
+import type { Id as ProjectileId, ProjectileState } from "../battlefield/projectile/projectile.js";
+import type { Signal as ProjectileSignal } from "../battlefield/projectile/event.js";
 import type { Signal as ElementalSignal } from "../unit/capability/elemental/operations.js";
 import type { Signal as SkillSignal } from "../unit/capability/skill/operations.js";
 

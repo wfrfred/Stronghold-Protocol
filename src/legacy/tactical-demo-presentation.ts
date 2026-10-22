@@ -14,6 +14,7 @@ import { hasAction } from "../core/tactical/unit/capability/action/capability.js
 import { hasSkill } from "../core/tactical/unit/capability/skill/capability.js";
 import { stun } from "../content/tactical/effects/stun.js";
 import { invincible } from "../content/tactical/effects/protection.js";
+import { project as projectTrackingProjectile } from "../content/tactical/projectiles/tracking.js";
 import {
     hasVitality,
     hasVitalityDefinition,
@@ -372,11 +373,13 @@ export class TacticalDemoPresentation {
                         break;
                     }
 
-                    const projectile = after.projectiles.instances.find(
-                        (instance) =>
-                            instance.source === event.sourceUnitId &&
-                            instance.launchedAtTick === event.tick,
-                    );
+                    const projectile = after.projectiles.instances
+                        .map(projectTrackingProjectile)
+                        .find(
+                            (instance) =>
+                                instance?.source === event.sourceUnitId &&
+                                instance.launchedAtTick === event.tick,
+                        );
                     const target =
                         projectile?.traceTarget ??
                         this.#pendingAttackTargets.get(event.sourceUnitId);

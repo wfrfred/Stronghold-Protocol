@@ -1,24 +1,19 @@
 import type { Input } from "../core/tactical/battle/contract.js";
 import type { FragmentDefinition } from "../core/tactical/battle/schedule/definition.js";
-import type { Definition as UnitDefinition, Unit } from "../core/tactical/unit/unit.js";
+import type { Definition as UnitDefinition } from "../core/tactical/unit/unit.js";
 import { Definitions } from "../core/tactical/unit/action/definitions.js";
 import { hasActionDefinition } from "../core/tactical/unit/capability/action/capability.js";
 import { create as createAttack, isAttack } from "../content/tactical/actions/attack.js";
 import { calculateDamage } from "../core/tactical/battle/damage/calculate.js";
 import { applyDamage } from "../core/tactical/battle/damage/apply.js";
 import type { DamageRequest } from "../core/tactical/battle/damage/contract.js";
-import type { Ref } from "../core/common/ref.js";
 import { ref as unitRef } from "../core/tactical/unit/query.js";
+import * as tracking from "../content/tactical/projectiles/tracking.js";
 
-import { getUnit, updateUnit } from "../core/tactical/battle/state.js";
-import {
-    launchProjectile,
-    resolveProjectileAttackPower,
-} from "../core/tactical/battlefield/projectile/operations.js";
-import { createDefinition as createProjectileDefinition } from "../core/tactical/battlefield/projectile/definition.js";
-import type { Range } from "../core/tactical/geometry/range.js";
+import { getUnit, updateUnit, type State as BattleState } from "../core/tactical/battle/state.js";
+import type { Projectile } from "../core/tactical/battlefield/projectile/projectile.js";
+import { create as createProjectile } from "../core/tactical/battlefield/projectile/operations.js";
 import * as attribute from "../core/tactical/unit/contribution/attribute.js";
-import { hasAllegiance } from "../core/tactical/unit/capability/allegiance/capability.js";
 import { install } from "../core/tactical/unit/effect/operations.js";
 import type { Definition } from "../core/tactical/unit/effect/definition.js";
 import {
@@ -60,41 +55,34 @@ export function createTacticalProjectileDemo(
             });
         },
     };
-    const contactRange: Range = [{ type: "CIRCLE", offset: [0, 0], radius: 0.2 }];
-    const shell = createProjectileDefinition({
-        id: cachedOnly ? "cached-atk-shell" : "live-atk-shell",
-        initialize: (): { readonly source: Ref<Unit> | null } => ({ source: null }),
-        acceptsContact: (context, target) =>
-            target.id === context.projectile.traceTarget &&
-            hasAllegiance(target) &&
-            target.allegiance.side === "ENEMY" &&
-            hasVitality(target) &&
-            target.vitality.hp > 0,
-        contact: (state, context) => {
-            const target = getUnit(state, context.targetUnitId);
-
-            if (target !== undefined && hasTargetable(target)) {
+    const hit = (battle: BattleState, self: Projectile<tracking.State>): BattleState =>
+        tracking.hit(battle, self, (state, current, target) => {
+            if (hasTargetable(target)) {
                 state = install(state, unitRef(target), marker, {
-                    source: context.projectile.source,
-                    scopes: [{ type: "TICK", tick: context.tick + 45 }],
+                    source: current.state.source?.id ?? null,
+                    scopes: [{ type: "TICK", tick: state.tick + 45 }],
                 }).state;
             }
 
-            const receiver = getUnit(state, context.targetUnitId);
+            const receiver = getUnit(state, target.id);
 
-            if (receiver === undefined || !hasVitality(receiver)) {
+            if (
+                receiver?.lifecycle !== "PRESENT" ||
+                !hasVitality(receiver) ||
+                receiver.vitality.hp <= 0
+            ) {
                 return state;
             }
 
             const request: DamageRequest = {
-                source: context.projectile.state.source,
+                source: current.state.source,
                 target: unitRef(receiver),
                 parameters: {
                     type: "ARTS",
                     attack: {
                         power: cachedOnly
-                            ? context.projectile.cachedAtk
-                            : resolveProjectileAttackPower(state, context.projectile),
+                            ? current.state.cachedAtk
+                            : tracking.attackPower(state, current),
                         multiplier: 1,
                         addition: 0,
                     },
@@ -103,8 +91,13 @@ export function createTacticalProjectileDemo(
             };
 
             return applyDamage(request, calculateDamage(state, request)).state;
-        },
-    });
+        });
+    const shell: tracking.Definition = {
+        id: cachedOnly ? "cached-atk-shell" : "live-atk-shell",
+        tracking: true,
+        onAdvance: (battle, self) => tracking.advance(battle, self, hit),
+        onTerminate: (battle, self, reason) => (reason === "DISPEL" ? battle : hit(battle, self)),
+    };
 
     function transform<D extends UnitDefinition>(definition: D): D {
         if (!hasActionDefinition(definition)) {
@@ -131,7 +124,7 @@ export function createTacticalProjectileDemo(
                         const targetId = self.state.target.id;
                         const target = getUnit(state, targetId);
 
-                        if (source === undefined || target === undefined) {
+                        if (source === undefined || target === undefined || !hasVitality(target)) {
                             return state;
                         }
 
@@ -141,22 +134,20 @@ export function createTacticalProjectileDemo(
 
                         const cachedAtk = resolveAttack(state, unitRef(source))!;
 
-                        const launched = launchProjectile(
-                            state,
-                            shell,
-                            {
-                                source: source.id,
-                                traceTarget: target.id,
-                                position: source.position,
+                        const launched = createProjectile(state, shell, {
+                            position: source.position,
+                            state: {
+                                source: unitRef(source),
+                                target: unitRef(target),
                                 destination: target.position,
                                 cachedAtk,
                                 speedPerTick: 0.12,
-                                contactRange,
                                 stopDelayTicks: 6,
-                                initialState: { source: unitRef(source) },
+                                stopAtTick: null,
+                                hitAttempted: false,
+                                launchedAtTick: state.tick,
                             },
-                            state.tick,
-                        );
+                        });
                         state = install(launched.state, unitRef(source), boost, {
                             source: source.id,
                             scopes: [{ type: "TICK", tick: state.tick + 70 }],

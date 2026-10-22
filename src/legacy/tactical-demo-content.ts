@@ -82,7 +82,6 @@ export function createTacticalContentDemo(
             projectile: {
                 definition: createArrow(),
                 speedPerSecond: 6,
-                contactRadius: 0.15,
                 stopDelayTicks: 0,
             },
         },

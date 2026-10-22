@@ -18,7 +18,8 @@ import { invisibleRestriction, camouflageRestriction, untargetableRestriction } 
 import { invincibleRestriction } from '../../dist/content/tactical/effects/protection.js';
 import { range } from '../../dist/core/tactical/battle/targeting/filter.js';
 import { advance as advanceAction } from '../../dist/core/tactical/unit/action/advance.js';
-import { advanceProjectiles } from '../../dist/core/tactical/battlefield/projectile/settlement.js';
+import { advance as advanceProjectiles } from '../../dist/core/tactical/battlefield/projectile/advance.js';
+import * as projectiles from '../../dist/core/tactical/battlefield/projectile/operations.js';
 import { setOverlay } from '../../dist/core/tactical/battlefield/navigation/state.js';
 import { advance as advanceLocomotion } from '../../dist/core/tactical/unit/capability/locomotion/operations.js';
 
@@ -80,7 +81,7 @@ test('unimplemented enemy mechanisms are rejected at the table and content bound
   assert.throws(() => createHound({ ...profile('enemy_1000_gopro'), stunImmune: true }, timing, 0.2), /stun immunity/);
   assert.throws(() => createHound(profile('enemy_1003_ncbow'), timing, 0.2), /Hound content/);
   assert.throws(() => createCrossbowman(profile('enemy_1000_gopro'), {
-    ...timing, projectile: { definition: createArrow(), speedPerSecond: 6, contactRadius: 0.1, stopDelayTicks: 0 },
+    ...timing, projectile: { definition: createArrow(), speedPerSecond: 6, stopDelayTicks: 0 },
   }, 0.2), /Crossbowman content/);
 });
 
@@ -126,7 +127,7 @@ test('a blocked hound selects its blocker directly despite normal targeting rest
 
 test('enemy ranged selection exempts only its actual blocker, including outside ordinary range', () => {
   const narrow = [{ type: 'CIRCLE', offset: [0, 0], radius: 0.01 }];
-  const projectile = { definition: createArrow(), speedPerSecond: 6, contactRadius: 0.1, stopDelayTicks: 0 };
+  const projectile = { definition: createArrow(), speedPerSecond: 6, stopDelayTicks: 0 };
   const { definition, action } = createCrossbowman({ ...profile('enemy_1003_ncbow'), rangeRadius: 0.01 }, {
     windupTicks: 1, recoveryTicks: 1, hitRadius: 0.2, projectile,
   }, 0.2);
@@ -169,7 +170,7 @@ test('crossbow uses explicit windup and arrow speed, then settles damage on cont
   const projectileDefinition = createArrow();
   const { definition, action: attack } = createCrossbowman(profile('enemy_1003_ncbow'), {
     windupTicks: 1, recoveryTicks: 1, hitRadius: 0.2,
-    projectile: { definition: projectileDefinition, speedPerSecond: 6, contactRadius: 0.1, stopDelayTicks: 0 },
+    projectile: { definition: projectileDefinition, speedPerSecond: 6, stopDelayTicks: 0 },
   }, 0.2);
 
   const bow = initialize({ id: 1, position: [2, 3.5], definition });
@@ -182,7 +183,7 @@ test('crossbow uses explicit windup and arrow speed, then settles damage on cont
   assert.equal(state.battlefield.projectiles.size, 1);
   assert.equal(getUnit(state, 0).vitality.hp, 1000);
   for (let tick = 2; tick <= 10; tick++) {
-    state = advanceProjectiles({ ...state, tick }, tick, []);
+    state = advanceProjectiles({ ...state, tick }, state.battlefield.projectiles.values().map(projectiles.ref).toArray());
   }
   assert.equal(getUnit(state, 0).vitality.hp, 800);
   assert.ok(state.events.some(event => event.type === 'PROJECTILE_HIT' && event.targetUnitId === 0));
@@ -192,7 +193,7 @@ test('crossbow uses explicit windup and arrow speed, then settles damage on cont
 
 test('different crossbow configurations share an arrow definition in one battle', () => {
 
-  const projectile = { definition: createArrow(), speedPerSecond: 6, contactRadius: 0.1, stopDelayTicks: 0 };
+  const projectile = { definition: createArrow(), speedPerSecond: 6, stopDelayTicks: 0 };
   const base = createCrossbowman(profile('enemy_1003_ncbow'), {
     windupTicks: 1, recoveryTicks: 1, hitRadius: 0.2, projectile,
   }, 0.2);
@@ -213,7 +214,7 @@ test('enemy content keeps hit radius and terrain avoidance width independent', (
   const hound = createHound(profile('enemy_1000_gopro'), timing, 0.15).definition;
   const crossbowman = createCrossbowman(profile('enemy_1003_ncbow'), {
     ...timing,
-    projectile: { definition: createArrow(), speedPerSecond: 6, contactRadius: 0.1, stopDelayTicks: 0 },
+    projectile: { definition: createArrow(), speedPerSecond: 6, stopDelayTicks: 0 },
   }, 0.25).definition;
 
   for (const [definition, halfBodyWidth] of [[hound, 0.15], [crossbowman, 0.25]]) {

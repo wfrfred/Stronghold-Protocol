@@ -1,122 +1,128 @@
-import { assertNonnegativeNumber, assertNonnegativeSafeInteger } from "../../../common/assert.js";
+import { assertNonnegativeSafeInteger } from "../../../common/assert.js";
 import type { Ref } from "../../../common/ref.js";
-import { getUnit, type State as BattleState, type Result } from "../../battle/state.js";
-import { hasOffense } from "../../unit/capability/offense/capability.js";
-import { resolveAttack } from "../../unit/capability/offense/query.js";
-import * as units from "../../unit/query.js";
+import { appendEvents, type State as BattleState, type Result } from "../../battle/state.js";
 import type { WorldPosition } from "../../geometry/coordinate.js";
-import type { Range } from "../../geometry/range.js";
-import type { Id } from "../../unit/unit.js";
-import type { Definition } from "./definition.js";
+import type { Definition, StopReason } from "./definition.js";
 import type { Projectile, View } from "./projectile.js";
 
-export interface ProjectileLaunchInput<S extends object = object> {
-    readonly source: Id | null;
-    readonly traceTarget: Id | null;
+export interface CreateInput<S extends object> {
     readonly position: WorldPosition;
-    readonly destination: WorldPosition;
-    readonly cachedAtk: number;
-    readonly speedPerTick: number;
-    readonly contactRange: Range;
-    readonly stopDelayTicks: number;
-    readonly expiresAtTick?: number | null;
-    readonly initialState?: S;
+    readonly state: S;
 }
 
-export function ref<P extends View>(projectile: P): Ref<P> {
-    return { id: projectile.id } as Ref<P>;
+export function ref<P extends View>(self: P): Ref<P> {
+    return { id: self.id } as Ref<P>;
 }
 
-export function all(state: BattleState): Ref<View>[] {
-    return [...state.battlefield.projectiles.values().map(ref)];
+export function get<P extends View>(battle: BattleState, reference: Ref<P>): P | undefined {
+    return battle.battlefield.projectiles.get(reference);
 }
 
-export function getProjectile<P extends View>(
-    state: BattleState,
-    reference: Ref<P>,
-): P | undefined {
-    return state.battlefield.projectiles.get(reference);
-}
-
-export function replaceProjectile<S extends object>(
-    state: BattleState,
-    projectile: Projectile<S>,
-): BattleState {
-    const current = getProjectile(state, ref(projectile));
-
-    if (current === undefined || current === projectile) {
-        return state;
-    }
-
-    const projectiles = state.battlefield.projectiles.replace(ref(projectile), projectile);
-
-    return { ...state, battlefield: { ...state.battlefield, projectiles } };
-}
-
-export function resolveProjectileAttackPower(state: BattleState, projectile: View): number {
-    const source = projectile.source === null ? undefined : getUnit(state, projectile.source);
-
-    if (source === undefined) {
-        return projectile.cachedAtk;
-    }
-
-    return hasOffense(source)
-        ? (resolveAttack(state, units.ref(source)) ?? projectile.cachedAtk)
-        : 0;
-}
-
-export function launchProjectile<S extends object>(
-    state: BattleState,
+export function create<S extends object>(
+    battle: BattleState,
     definition: Definition<S>,
-    input: ProjectileLaunchInput<NoInfer<S>>,
-    tick: number,
+    input: CreateInput<NoInfer<S>>,
 ): Result<Ref<Projectile<S>>> {
-    const id = state.execution.nextProjectileId;
+    const id = battle.execution.nextProjectileId;
     const nextProjectileId = id + 1;
     assertNonnegativeSafeInteger(id, "projectile identity");
 
     if (!Number.isSafeInteger(nextProjectileId)) {
         throw new RangeError("projectile identity overflow");
     }
-
-    assertNonnegativeSafeInteger(tick, "projectile launch tick");
-    assertNonnegativeNumber(input.cachedAtk, "projectile cached attack");
-    assertNonnegativeNumber(input.speedPerTick, "projectile speed per tick");
-    assertNonnegativeSafeInteger(input.stopDelayTicks, "projectile stop delay");
-
-    if (input.source !== null) {
-        assertNonnegativeSafeInteger(input.source, "projectile source identity");
-    }
-    if (input.traceTarget !== null) {
-        assertNonnegativeSafeInteger(input.traceTarget, "projectile target identity");
-    }
-    if (input.expiresAtTick !== undefined && input.expiresAtTick !== null) {
-        assertNonnegativeSafeInteger(input.expiresAtTick, "projectile expiration tick");
+    if (definition.id.length === 0) {
+        throw new TypeError("projectile definition identity must be nonempty");
     }
 
-    const projectile: Projectile<S> = {
+    const self: Projectile<S> = {
         id,
         definition,
-        source: input.source,
-        traceTarget: input.traceTarget,
+        lifecycle: "ACTIVE",
         position: input.position,
-        destination: input.destination,
-        cachedAtk: input.cachedAtk,
-        speedPerTick: input.speedPerTick,
-        contactRange: input.contactRange,
-        stopDelayTicks: input.stopDelayTicks,
-        launchedAtTick: tick,
-        lastAdvancedTick: tick,
-        expiresAtTick: input.expiresAtTick ?? null,
-        progress: { type: "FLYING" },
-        hitUnitIds: [],
-        state: input.initialState ?? definition.initialize(),
+        state: input.state,
     };
-    const projectiles = state.battlefield.projectiles.add(projectile);
-    state = { ...state, battlefield: { ...state.battlefield, projectiles } };
+    const reference = ref(self);
+    battle = {
+        ...battle,
+        execution: { ...battle.execution, nextProjectileId },
+        battlefield: {
+            ...battle.battlefield,
+            projectiles: battle.battlefield.projectiles.add(self),
+        },
+    };
 
     return {
-        state: { ...state, execution: { ...state.execution, nextProjectileId } },
-        value: ref(projectile),
+        state: definition.onCreate?.(battle, self) ?? battle,
+        value: reference,
     };
+}
+
+export function update<S extends object>(
+    battle: BattleState,
+    reference: Ref<Projectile<S>>,
+    transform: (current: Projectile<NoInfer<S>>) => {
+        readonly position?: WorldPosition;
+        readonly state?: NoInfer<S>;
+    },
+): BattleState {
+    const current = get(battle, reference);
+
+    if (current === undefined) {
+        return battle;
+    }
+
+    const changes = transform(current);
+    const position = changes.position ?? current.position;
+    const state = changes.state ?? current.state;
+
+    if (position === current.position && state === current.state) {
+        return battle;
+    }
+
+    const projectiles = battle.battlefield.projectiles.replace(reference, {
+        ...current,
+        position,
+        state,
+    });
+
+    return { ...battle, battlefield: { ...battle.battlefield, projectiles } };
+}
+
+export function stop(
+    battle: BattleState,
+    reference: Ref<View>,
+    reason: StopReason = "EXPLICIT",
+): BattleState {
+    return (
+        battle.battlefield.projectiles.read(reference.id, (current) => {
+            if (current.lifecycle !== "ACTIVE") {
+                return battle;
+            }
+
+            const self: Projectile<typeof current.state> = {
+                ...current,
+                lifecycle: "ENDING",
+            };
+            const projectiles = battle.battlefield.projectiles.replace(ref(current), self);
+            battle = { ...battle, battlefield: { ...battle.battlefield, projectiles } };
+            battle = appendEvents(battle, [
+                {
+                    type: "PROJECTILE_STOPPED",
+                    projectileId: self.id,
+                    position: self.position,
+                    tick: battle.tick,
+                    reason,
+                },
+            ]);
+            battle = self.definition.onTerminate?.(battle, self, reason) ?? battle;
+
+            return {
+                ...battle,
+                battlefield: {
+                    ...battle.battlefield,
+                    projectiles: battle.battlefield.projectiles.remove(reference.id),
+                },
+            };
+        }) ?? battle
+    );
 }

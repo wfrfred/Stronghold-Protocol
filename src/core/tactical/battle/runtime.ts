@@ -16,6 +16,7 @@ import { advanceSpawning } from "./steps/spawning.js";
 import { resolveDeploymentCommands } from "./deployment/operations.js";
 import { advanceMovement, advanceRouteCommands } from "./steps/movement.js";
 import { advanceProjectiles } from "./steps/projectiles.js";
+import { ref as projectileRef } from "../battlefield/projectile/operations.js";
 import { advanceElements } from "./steps/elemental.js";
 import { advanceSkills } from "./steps/skills.js";
 import { finishBattleEvents } from "./events.js";
@@ -143,6 +144,10 @@ export class BattleRuntime {
         }
 
         const tick = this.#state.tick;
+        const projectileCandidates = this.#state.battlefield.projectiles
+            .values()
+            .map(projectileRef)
+            .toArray();
         let state: State = {
             ...this.#state,
             events: [],
@@ -171,7 +176,7 @@ export class BattleRuntime {
 
         state = advanceCombat(state);
 
-        state = advanceProjectiles(state, tick, commands);
+        state = advanceProjectiles(state, projectileCandidates, commands);
 
         state = advanceMovement(state, {
             routeMoveMultiplier: this.#input.routeMoveMultiplier,

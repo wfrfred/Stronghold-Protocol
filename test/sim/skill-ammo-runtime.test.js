@@ -1,6 +1,6 @@
 import { damage as damageTargeting, healing as healingTargeting } from "../helpers/targeting.js";
 import { damage as dealDamage, parameters } from "../helpers/vitality.js";
-import { launchProjectile } from "../../dist/core/tactical/battlefield/projectile/operations.js";
+import { create as createProjectile } from "../../dist/core/tactical/battlefield/projectile/operations.js";
 import { ref as unitRef } from "../../dist/core/tactical/unit/query.js";
 import { transitionUnit } from "../../dist/core/tactical/battle/state.js";
 import { setBeforeReleaseHook, removeBeforeReleaseHook } from "../../dist/core/tactical/unit/capability/action/capability.js";
@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BattleRuntime } from "../../dist/core/tactical/battle/runtime.js";
 import { getUnit } from "../../dist/core/tactical/battle/state.js";
-import { createDefinition as createProjectileDefinition } from "../../dist/core/tactical/battlefield/projectile/definition.js";
+import * as tracking from "../../dist/content/tactical/projectiles/tracking.js";
 import { createDefinition } from "../../dist/core/tactical/unit/archetype/operator.js";
 import { create as createAttack } from "../../dist/content/tactical/actions/skill.js";
 import { Definitions } from "../../dist/core/tactical/unit/action/definitions.js";
@@ -90,13 +90,17 @@ function scenario({ ammo = 1, targets = 1, interrupt = false, windupTicks = 0, o
   const receiver = {
     id: "ammo-target", targetable: { restrictions: [] }, vitality: { maxHp: 10000, defense: 0, resistance: 0 }, allegiance: { side: "ENEMY" }, layer: { type: "GROUND" }, hitbox: { shape: hit },
   };
-  const shell = createProjectileDefinition({
-    id: "runtime-ammo-shell", initialize: () => ({}),
-    acceptsContact: (_context, unit) => unit.allegiance?.side === "ENEMY",
-    contact: (state, context) => {
-      return dealDamage(state, { source: { id: context.projectile.source }, target: { id: context.targetUnitId }, parameters: parameters(context.projectile.cachedAtk, "TRUE") }).state;
-    },
-  });
+  const shell = {
+    id: "runtime-ammo-shell", tracking: true,
+    onAdvance: (state, self) => tracking.advance(state, self, (state, self) =>
+      tracking.hit(state, self, (state, self, target) =>
+        dealDamage(state, { source: self.state.source, target: unitRef(target),
+          parameters: parameters(self.state.cachedAtk, "TRUE") }).state)),
+    onTerminate: (state, self, reason) => reason === "DISPEL" ? state :
+      tracking.hit(state, self, (state, self, target) =>
+        dealDamage(state, { source: self.state.source, target: unitRef(target),
+          parameters: parameters(self.state.cachedAtk, "TRUE") }).state),
+  };
   const base = createLegacyCombatSpec({ rows: 1, columns: 8, operators: [], enemies: [], maxTicks: 20, seed: 7 });
   const runtime = new BattleRuntime({ ...base,
     initialUnits: [{ definition, position: [0, 0] },
@@ -246,11 +250,15 @@ test("ammo runtime: the last released projectile survives skill completion and r
     const actor = getUnit(state, self.host.id);
     const targetUnitId = self.state.bindings.main[0].id;
     const target = getUnit(state, targetUnitId);
-    return launchProjectile(state, shell, {
-      source: actor.id, traceTarget: targetUnitId, position: actor.position, destination: target.position,
-      cachedAtk: resolveAttack(state, unitRef(actor)),
-      speedPerTick: 1, contactRange: [hit], stopDelayTicks: 0,
-    }, state.tick).state;
+    return createProjectile(state, shell, {
+      position: actor.position,
+      state: {
+        source: unitRef(actor), target: unitRef(target), destination: target.position,
+        cachedAtk: resolveAttack(state, unitRef(actor)),
+        speedPerTick: 1, stopDelayTicks: 0, stopAtTick: null,
+        hitAttempted: false, launchedAtTick: state.tick,
+      },
+    }).state;
   } });
   const launched = runtime.step([{ type: "ACTIVATE_SKILL", unitId: 0 }]);
   assert.deepEqual(damageEvents(launched), []);
@@ -258,7 +266,7 @@ test("ammo runtime: the last released projectile survives skill completion and r
   assert.equal(source(runtime).skill.active, null);
   assert.equal(source(runtime).effects.values().toArray().length === 0, true);
   assert.equal(runtime.snapshot().projectiles.instances.length, 1);
-  assert.equal(runtime.snapshot().projectiles.instances[0].cachedAtk, 200);
+  assert.equal(runtime.snapshot().projectiles.instances[0].state.cachedAtk, 200);
   assert.deepEqual(runtime.snapshot().projectiles.instances[0].position, [0, 0]);
   runtime.step();
   assert.equal(runtime.snapshot().projectiles.instances.length, 1);

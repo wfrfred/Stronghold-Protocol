@@ -778,7 +778,7 @@ import type { BattlefieldView } from ${sourceModule('../battlefield/contract')};
 import type { BattlefieldMap } from ${sourceModule('../battlefield/map/map')};
 import { createUnitPlacementDefinition, instantiateUnitPlacement, type UnitPlacementDefinition } from ${sourceModule('../battle/creation/placement')};
 import type { BattleExecutionState } from ${sourceModule('../battle/execution/state')};
-import { launchProjectile, getProjectile, ref as projectileRef, type ProjectileLaunchInput } from ${sourceModule('../battlefield/projectile/operations')};
+import { create as createProjectile, get as getProjectile, ref as projectileRef, type CreateInput as ProjectileCreateInput } from ${sourceModule('../battlefield/projectile/operations')};
 import type { Definition as ProjectileDefinition } from ${sourceModule('../battlefield/projectile/definition')};
 import type { Projectile } from ${sourceModule('../battlefield/projectile/projectile')};
 import type { State as BattleState } from ${sourceModule('../battle/state')};
@@ -796,7 +796,7 @@ declare const battlefieldMap: BattlefieldMap;
 declare const execution: BattleExecutionState;
 declare const battleState: BattleState;
 declare const projectileDefinition: ProjectileDefinition<{ readonly charges: number }>;
-declare const projectileInput: ProjectileLaunchInput<{ readonly charges: number }>;
+declare const projectileInput: ProjectileCreateInput<{ readonly charges: number }>;
 declare const typedProjectile: Projectile<{ readonly charges: number }>;
 declare const placement: { readonly definition: EnemyProbe & { readonly occupancy: Readonly<Record<string, never>> }; readonly position: readonly [number, number]; readonly claims: readonly OccupancyState['claims'][number][] };
 `;
@@ -900,7 +900,7 @@ if (hasRoute(guarded)) {
 const battlefield = createBattlefieldState({ map: battlefieldMap });
 const battlefieldView: BattlefieldView = view(battlefield);
 type HiddenFieldCache = Assert<Equal<Extract<keyof BattlefieldView, 'fieldCache' | 'navigationMaps'>, never>>;
-const projectileResult = launchProjectile(battleState, projectileDefinition, projectileInput, 0);
+const projectileResult = createProjectile(battleState, projectileDefinition, projectileInput);
 type ProjectileIdentity = Assert<Equal<typeof projectileResult.value, Ref<Projectile<{ readonly charges: number }>>>>;
 type ProjectileState = Assert<Equal<typeof projectileResult.state, BattleState>>;
 const recoveredProjectile = getProjectile(projectileResult.state, projectileResult.value);
@@ -911,10 +911,10 @@ battleState.battlefield.projectiles.replace(projectileRef(typedProjectile), type
     assert.deepEqual(positive, []);
 
     for (const [name, source] of [
-      ['projectile-false-definition', `battleState.battlefield.projectiles.add({ ...typedProjectile, definition: { id: 'fake' } });`],
-      ['projectile-wrong-initial-state', `launchProjectile(battleState, projectileDefinition, { ...projectileInput, initialState: { charges: 'wrong' } }, 0);`],
+      ['projectile-wrong-callback', `battleState.battlefield.projectiles.add({ ...typedProjectile, definition: { id: 'fake', onAdvance: (battle: BattleState, self: Projectile<{ label: string }>) => battle } });`],
+      ['projectile-wrong-initial-state', `createProjectile(battleState, projectileDefinition, { ...projectileInput, state: { charges: 'wrong' } });`],
       ['projectile-wrong-state-pairing', `battleState.battlefield.projectiles.replace(projectileRef(typedProjectile), { ...typedProjectile, state: { charges: 'wrong' } });`],
-      ['projectile-untyped-callback', `getProjectile(battleState, 0)!.definition.acceptsContact;`],
+      ['projectile-untyped-callback', `getProjectile(battleState, 0)!.definition.onAdvance;`],
       ['projectile-erased-transition', `transition(createBattlefieldState({ map: battlefieldMap }), [{ type: 'REGISTER_PROJECTILE', projectile: typedProjectile }]);`],
       ['state-extra-field', `initializeUnit(battleState, { id: 1, definition: { id: 'offense', offense: { attack: 1 } }, position: [0, 0], states: { offense: initializeOffenseState(battleState, { attack: 1 }).value } });`],
       ['mutable-definition', `initializeUnit(battleState, { id: 1, definition: { id: 'mutable', vitality: { maxHp: 10, defense: 0, resistance: 0 } }, position: [0, 0] }).value.definition.vitality.maxHp = 99;`],

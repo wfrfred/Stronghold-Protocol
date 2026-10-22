@@ -35,18 +35,16 @@ import {
     getUnit,
     transitionUnit,
 } from "../../dist/core/tactical/battle/state.js";
-import { createDefinition as createProjectileDefinition } from "../../dist/core/tactical/battlefield/projectile/definition.js";
+import * as tracking from "../../dist/content/tactical/projectiles/tracking.js";
 import {
-    launchProjectile,
-    getProjectile,
+    create as createProjectile,
     ref as projectileRef,
-    replaceProjectile,
+    update as updateProjectile,
+    stop as stopProjectile,
 } from "../../dist/core/tactical/battlefield/projectile/operations.js";
-import { stopProjectile } from "../../dist/core/tactical/battlefield/projectile/settlement.js";
 
 const hit = { type: "CIRCLE", offset: [0, 0], radius: 0.1 };
 const range = [{ type: "CIRCLE", offset: [0, 0], radius: 12 }];
-const contactRange = [{ type: "CIRCLE", offset: [0, 0], radius: 0.3 }];
 
 function passive(id, hp = 100) {
     return {
@@ -251,25 +249,17 @@ function scenario({ failure = null, cancelled = false } = {}) {
             return state;
         },
     };
-    const shell = createProjectileDefinition({
-        id: "combined-shell",
-        initialize: () => ({ contacts: 0 }),
-        acceptsContact: (context, unit) =>
-            unit.id === context.projectile.traceTarget && !marked(unit),
-        contact: (state, context) => {
-            scopes.push(context);
-            const current = getProjectile(state, projectileRef(context.projectile));
-            state = replaceProjectile(state, {
-                ...current,
-                state: { contacts: current.state.contacts + 1 },
-            });
-            const damaged = dealDamage(state, { source: { id: context.projectile.source }, target: { id: context.targetUnitId }, parameters: parameters(context.projectile.cachedAtk, "TRUE") });
+    const hitShell = (state, self) => tracking.hit(state, self, (state, self, target) => {
+            scopes.push({ projectile: self, targetUnitId: target.id, tick: state.tick });
+            state = updateProjectile(state, projectileRef(self), current => ({
+                state: { ...current.state, contacts: current.state.contacts + 1 },
+            }));
+            const damaged = dealDamage(state, { source: self.state.source, target: unitRef(target), parameters: parameters(self.state.cachedAtk, "TRUE") });
             state = damaged.state;
             reports.push(damaged.value);
             state = stopProjectile(
                 state,
-                projectileRef(context.projectile),
-                context.tick,
+                projectileRef(self),
                 "EXPLICIT",
                             );
             if (fault.enabled && failure === "late-projectile") {
@@ -286,8 +276,12 @@ function scenario({ failure = null, cancelled = false } = {}) {
                 throw new Error("late composition failure");
             }
             return state;
-        },
     });
+    const shell = {
+        id: "combined-shell", tracking: true,
+        onAdvance: (state, self) => tracking.advance(state, self, hitShell),
+        onTerminate: (state, self, reason) => reason === "DISPEL" ? state : hitShell(state, self),
+    };
     const program = primary => ({
         id: "launch", intervalTicks: 100, speed: 100,
         initialize: state => ({ state, value: {} }),
@@ -354,17 +348,16 @@ function scenario({ failure = null, cancelled = false } = {}) {
     const launch = (state, context, targetUnitId) => {
         const source = getUnit(state, context.host.id);
         const target = getUnit(state, targetUnitId);
-        const launched = launchProjectile(state, shell, {
-            source: source.id,
-            traceTarget: targetUnitId,
+        const launched = createProjectile(state, shell, {
             position: source.position,
-            destination: target.position,
-            cachedAtk: resolveAttack(state, unitRef(source)),
-            speedPerTick: 1,
-            contactRange,
-            stopDelayTicks: 0,
-            expiresAtTick: null,
-        }, state.tick);
+            state: {
+                source: unitRef(source), target: unitRef(target),
+                destination: target.position,
+                cachedAtk: resolveAttack(state, unitRef(source)),
+                speedPerTick: 1, stopDelayTicks: 0, stopAtTick: null,
+                hitAttempted: false, launchedAtTick: state.tick, contacts: 0,
+            },
+        });
         launches.push({ id: launched.value.id, hostId: context.host.id, executionId: context.id, targetUnitId });
         return launched.state;
     };
@@ -504,7 +497,7 @@ test("runtime composition: a successful battle preserves identities, snapshots a
         [1, 2],
     );
     assert.deepEqual(
-        after.projectiles.instances.map((projectile) => projectile.cachedAtk),
+        after.projectiles.instances.map((projectile) => projectile.state.cachedAtk),
         [18, 17],
     );
     assert.equal(resolveAttack(battleOf(after), unitRef(after.units.find((unit) => unit.id === 0))), 18);

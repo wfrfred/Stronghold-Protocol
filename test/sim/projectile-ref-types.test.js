@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-test("Projectile Refs preserve private state types through creation, queries and covariance", async () => {
+test("Projectile Refs preserve private state types through creation, updates and public queries", async () => {
     const { default: ts } = await import("typescript");
     const directory = mkdtempSync(join(tmpdir(), "stronghold-projectile-ref-types-"));
     const source = name => JSON.stringify(fileURLToPath(new URL(`../../src/core/${name}.js`, import.meta.url)));
@@ -19,47 +19,74 @@ import { battlefieldView } from ${source("tactical/battle/state")};
 import type { Unit } from ${source("tactical/unit/unit")};
 import type { Projectile, View } from ${source("tactical/battlefield/projectile/projectile")};
 import { Projectiles } from ${source("tactical/battlefield/projectile/projectiles")};
-import { createDefinition } from ${source("tactical/battlefield/projectile/definition")};
-import { all, ref, getProjectile, launchProjectile, replaceProjectile, type ProjectileLaunchInput } from ${source("tactical/battlefield/projectile/operations")};
-import { stopProjectile } from ${source("tactical/battlefield/projectile/settlement")};
+import type { Definition } from ${source("tactical/battlefield/projectile/definition")};
+import { ref, get, create, update, stop, type CreateInput } from ${source("tactical/battlefield/projectile/operations")};
+import { advance } from ${source("tactical/battlefield/projectile/advance")};
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
 type Assert<T extends true> = T;
 declare const battle: BattleState;
-declare const input: ProjectileLaunchInput<{ charges: number }>;
+declare const input: CreateInput<{ charges: number }>;
 declare const unit: Ref<Unit>;
 declare const projectile: Projectile<{ charges: number }>;
 declare const specialized: Ref<Projectile<{ charges: number }> & { readonly marker: 17 }>;
-const definition = createDefinition({
-    id: "charges", initialize: () => ({ charges: 2 }), acceptsContact: () => false,
-    contact: (current, context) => {
-        const charges: number = context.projectile.state.charges;
-        return replaceProjectile(current, { ...context.projectile, state: { charges: charges - 1 } });
+const definition: Definition<{ charges: number }> = {
+    id: "charges",
+    onCreate(current, self) {
+        const charges: number = self.state.charges;
+        return update(current, ref(self), latest => ({ state: { charges: latest.state.charges + charges } }));
     },
-});
-const launched = launchProjectile(battle, definition, input, 0);
-type Launched = Assert<Equal<typeof launched.value, Ref<Projectile<{ charges: number }>>>>;
-const current = getProjectile(launched.state, launched.value);
+    onAdvance(current, self) {
+        return update(current, ref(self), latest => ({ position: [latest.position[0] + 1, 0] }));
+    },
+    onTerminate(current, self, reason) {
+        const charges: number = self.state.charges;
+        const ending: "ACTIVE" | "ENDING" = self.lifecycle;
+        if (reason === "DISPEL") return current;
+        return update(current, ref(self), latest => ({ state: { charges: latest.state.charges - charges } }));
+    },
+};
+const created = create(battle, definition, input);
+type Created = Assert<Equal<typeof created.value, Ref<Projectile<{ charges: number }>>>>;
+const current = get(created.state, created.value);
 type Current = Assert<Equal<typeof current, Projectile<{ charges: number }> | undefined>>;
 const known = ref(projectile);
 type Known = Assert<Equal<typeof known, Ref<Projectile<{ charges: number }>>>>;
 const weaker: Ref<Projectile<{ charges: number }>> = specialized;
 const erased: Ref<View> = weaker;
-const candidates = all(battle);
-type Candidates = Assert<Equal<typeof candidates, Ref<View>[]>>;
 const entries = Projectiles.empty().add(projectile);
 const publicEntries: Query<View> = entries.values();
+const candidates = entries.values().map(ref).toArray();
+type Candidates = Assert<Equal<typeof candidates, readonly Ref<View>[]>>;
+advance(battle, candidates);
 entries.replace(known, projectile);
+entries.read(known.id, self => {
+    self.definition.onCreate?.(battle, self);
+    self.definition.onAdvance?.(battle, self);
+    self.definition.onTerminate?.(battle, self, "EXPLICIT");
+    update(battle, ref(self), latest => ({ state: latest.state, position: latest.position }));
+});
+update(battle, known, latest => {
+    const charges: number = latest.state.charges;
+    // @ts-expect-error snapshots supplied to transform are read-only.
+    latest.position = [1, 0];
+    // @ts-expect-error private state values retain the precise Ref's type.
+    const wrong: string = latest.state.charges;
+    return { state: { charges: charges - 1 } };
+});
+update(battle, known, () => ({}));
+update(battle, known, latest => ({ position: latest.position }));
 // @ts-expect-error a precise reference fixes replacement state inference.
 entries.replace(known, { ...projectile, state: { charges: "wrong" } });
 // @ts-expect-error public references do not prove writable private state types.
 entries.replace(erased, projectile);
 // @ts-expect-error public views cannot be inserted as complete instances.
-entries.add(getProjectile(battle, erased)!);
+entries.add(get(battle, erased)!);
 // @ts-expect-error snapshots retain unknown payloads, not writable type proofs.
 entries.replace(known, entries.snapshot()[0]!);
 const fromView = battlefieldView(battle).getProjectile(known);
 type FromView = Assert<Equal<typeof fromView, Projectile<{ charges: number }> | undefined>>;
-stopProjectile(battle, weaker, 1);
+stop(battle, erased);
+stop(battle, weaker, "DISPEL");
 // @ts-expect-error
 const forged: Ref<Projectile<{ charges: number }>> = { id: 0 };
 // @ts-expect-error
@@ -67,23 +94,29 @@ const strengthened: Ref<Projectile<{ charges: number }> & { readonly marker: 17 
 // @ts-expect-error
 const mismatched: Ref<Projectile<{ label: string }>> = weaker;
 // @ts-expect-error
-getProjectile(battle, unit);
+get(battle, unit);
 // @ts-expect-error
-getProjectile(battle, 0);
+get(battle, 0);
 // @ts-expect-error
-getProjectile(battle, projectile);
+get(battle, projectile);
 // @ts-expect-error
-getProjectile(battle, weaker, definition);
+get(battle, weaker, definition);
 // @ts-expect-error
-stopProjectile(battle, 0, 1);
+stop(battle, 0);
 // @ts-expect-error
 ref(0);
 // @ts-expect-error
-getProjectile(battle, erased)!.definition.contact;
+get(battle, erased)!.definition.onAdvance;
 // @ts-expect-error
-replaceProjectile(battle, { ...projectile, state: { charges: "wrong" } });
+get(battle, erased)!.state;
 // @ts-expect-error
-launchProjectile(battle, definition, { ...input, initialState: { charges: "wrong" } }, 0);
+update(battle, erased, () => ({ state: {} }));
+// @ts-expect-error
+update(battle, known, () => ({ state: { charges: "wrong" } }));
+// @ts-expect-error
+update(battle, unit, () => ({ position: [0, 0] }));
+// @ts-expect-error
+create(battle, definition, { ...input, state: { charges: "wrong" } });
 `);
         const program = ts.createProgram([path], {
             noEmit: true, strict: true, exactOptionalPropertyTypes: true,
